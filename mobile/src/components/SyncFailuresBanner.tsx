@@ -4,6 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useOfflineContext } from '../store/OfflineContext';
 import { useAuth } from '../store/AuthContext';
+import { useSSEContext } from '../store/SSEContext';
 import { useTheme } from '../theme/ThemeContext';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import Banner from './Banner';
@@ -27,11 +28,12 @@ export default function SyncFailuresBanner() {
     dismissSyncFailuresBanner,
   } = useOfflineContext();
   const { revalidationFailed } = useAuth();
+  const { sseReconnecting } = useSSEContext();
   const { colors } = useTheme();
   const { t } = useTranslation();
   const navigation = useNavigation<NavigationProp>();
 
-  const otherBannerAbove = !isConnected || syncError || revalidationFailed;
+  const otherBannerAbove = !isConnected || sseReconnecting || syncError || revalidationFailed;
 
   return (
     <Banner

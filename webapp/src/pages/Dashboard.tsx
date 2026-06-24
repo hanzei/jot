@@ -4,8 +4,6 @@ import { useTranslation } from 'react-i18next';
 import { notes, users as usersApi } from '@/utils/api';
 import { getUser, getSettings, setSettings } from '@/utils/auth';
 import type { Note, User, SSEEvent, NoteSort } from '@jot/shared';
-import { useSSE } from '@/hooks/useSSE';
-import { SSEStatusIndicator } from '@/components/SSEStatusIndicator';
 import { useSearchParams, useParams, useNavigate } from 'react-router';
 import PageContent from '@/components/PageContent';
 import SearchBar from '@/components/SearchBar';
@@ -52,6 +50,7 @@ export default function Dashboard() {
     loadLabels,
     loadLabelCounts,
     registerLabelCallbacks,
+    registerSSECallbacks,
     setSearchBar,
   } = useAuthenticatedLayout();
   const [notesList, setNotesList] = useState<Note[]>([]);
@@ -442,10 +441,10 @@ export default function Dashboard() {
     }
   }, [editingNote, sharingNote, loadNotes, loadLabels, loadLabelCounts, setSearchParams, user?.id, restoreReturnUrl]);
 
-  const sseStatus = useSSE({
-    onEvent: handleSSEEvent,
-    onConnected: loadNotes,
-  });
+  useEffect(() => {
+    registerSSECallbacks({ onEvent: handleSSEEvent, onConnected: loadNotes });
+    return () => registerSSECallbacks({});
+  }, [registerSSECallbacks, handleSSEEvent, loadNotes]);
 
   const handleCreateNote = useCallback(() => {
     lastFocusedElementRef.current = document.activeElement;
@@ -996,7 +995,6 @@ export default function Dashboard() {
 
   return (
     <PageContent>
-        <SSEStatusIndicator status={sseStatus} />
         {/* Create note button — hidden in bin view */}
         {!showBin && (
           <div className="mb-8">

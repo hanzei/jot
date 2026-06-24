@@ -8,6 +8,7 @@ export const CLIENT_ID = crypto.randomUUID();
 const api = axios.create({
   baseURL: '/api/v1',
   withCredentials: true,
+  timeout: 10_000,
   headers: { 'X-Client-Id': CLIENT_ID },
 });
 

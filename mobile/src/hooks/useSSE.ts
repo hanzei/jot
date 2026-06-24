@@ -18,8 +18,12 @@ import {
 } from './queryKeys';
 
 export type SSENotificationCallback = (event: SSEEvent) => void;
+export type SSEStatusChangeCallback = (connected: boolean) => void;
 
-export function useSSE(onNoteUpdatedByOther?: SSENotificationCallback): void {
+export function useSSE(
+  onNoteUpdatedByOther?: SSENotificationCallback,
+  onStatusChange?: SSEStatusChangeCallback,
+): void {
   const { user, isAuthenticated } = useAuth();
   const { isConnected } = useNetworkStatus();
   const queryClient = useQueryClient();
@@ -27,6 +31,8 @@ export function useSSE(onNoteUpdatedByOther?: SSENotificationCallback): void {
   const managerRef = useRef<SSEConnectionManager | null>(null);
   const onNoteUpdatedRef = useRef(onNoteUpdatedByOther);
   onNoteUpdatedRef.current = onNoteUpdatedByOther;
+  const onStatusChangeRef = useRef(onStatusChange);
+  onStatusChangeRef.current = onStatusChange;
   const dbRef = useRef(db);
   dbRef.current = db;
   const userIdRef = useRef(user?.id);
@@ -160,7 +166,7 @@ export function useSSE(onNoteUpdatedByOther?: SSENotificationCallback): void {
           }
         }
       })();
-    });
+    }, (connected) => onStatusChangeRef.current?.(connected));
     // No catch-up invalidation here: startConnection runs on every reconnect,
     // foreground, and server-switch, and a blanket invalidate only re-reads the
     // (still-stale) local SQLite — it doesn't fetch from the server. The actual

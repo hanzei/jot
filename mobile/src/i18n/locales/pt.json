@@ -356,6 +356,7 @@
   },
   "offline": {
     "message": "Você está offline. As alterações serão sincronizadas quando você se reconectar.",
+    "serverConnecting": "Conectando ao servidor…",
     "syncError": "Algumas alterações ainda não foram sincronizadas. Será feita uma nova tentativa automaticamente.",
     "revalidationError": "Não foi possível verificar a sessão com o servidor. Os dados locais estão sendo usados."
   },

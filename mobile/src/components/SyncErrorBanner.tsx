@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useOfflineContext } from '../store/OfflineContext';
+import { useSSEContext } from '../store/SSEContext';
 import { useTheme } from '../theme/ThemeContext';
 import Banner from './Banner';
 
@@ -11,12 +12,14 @@ import Banner from './Banner';
  */
 export default function SyncErrorBanner() {
   const { isConnected, syncError } = useOfflineContext();
+  const { sseReconnecting } = useSSEContext();
   const { colors } = useTheme();
   const { t } = useTranslation();
 
   return (
     <Banner
       visible={isConnected && syncError}
+      applyTopInset={!sseReconnecting}
       icon="warning-outline"
       text={t('offline.syncError')}
       backgroundColor={colors.warning}

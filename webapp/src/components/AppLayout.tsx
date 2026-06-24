@@ -3,8 +3,10 @@ import { useTranslation } from 'react-i18next';
 import NavigationHeader from '@/components/NavigationHeader';
 import KeyboardShortcutsDialog from '@/components/KeyboardShortcutsDialog';
 import Sidebar, { type SidebarTab } from '@/components/Sidebar';
+import { SSEStatusIndicator } from '@/components/SSEStatusIndicator';
 import { useSidebarCollapsed } from '@/hooks/useSidebarCollapsed';
 import { isAnyModalDialogOpen, isEditableElementFocused, isOverlayControlFocused } from '@/utils/keyboardShortcuts';
+import type { SSEStatus } from '@/hooks/useSSE';
 
 interface AppLayoutProps {
   onLogout: () => void;
@@ -17,6 +19,7 @@ interface AppLayoutProps {
   sidebarBottomTabs?: SidebarTab[];
   sidebarChildren?: ReactNode;
   searchBar?: ReactNode;
+  sseStatus?: SSEStatus | null;
   children: ReactNode;
 }
 
@@ -31,6 +34,7 @@ const AppLayout = ({
   sidebarBottomTabs,
   sidebarChildren,
   searchBar,
+  sseStatus,
   children,
 }: AppLayoutProps) => {
   const { t } = useTranslation();
@@ -84,6 +88,8 @@ const AppLayout = ({
       >
         {searchBar}
       </NavigationHeader>
+
+      <SSEStatusIndicator status={sseStatus ?? 'connected'} />
 
       <div className="relative flex flex-1 min-h-0">
         <Sidebar

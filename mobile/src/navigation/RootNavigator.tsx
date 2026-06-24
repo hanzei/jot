@@ -5,6 +5,7 @@ import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { SSEProvider } from '../store/SSEContext';
 import OfflineBanner from '../components/OfflineBanner';
+import SSEReconnectBanner from '../components/SSEReconnectBanner';
 import SyncErrorBanner from '../components/SyncErrorBanner';
 import RevalidationErrorBanner from '../components/RevalidationErrorBanner';
 import SyncFailuresBanner from '../components/SyncFailuresBanner';
@@ -46,6 +47,7 @@ function AuthenticatedStack() {
     <SSEProvider>
       <View style={styles.flex}>
         <OfflineBanner />
+        <SSEReconnectBanner />
         <SyncErrorBanner />
         <RevalidationErrorBanner />
         <SyncFailuresBanner />

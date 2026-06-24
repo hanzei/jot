@@ -356,6 +356,7 @@
   },
   "offline": {
     "message": "You're offline. Changes will sync when you reconnect.",
+    "serverConnecting": "Connecting to server…",
     "syncError": "Some changes haven't synced yet. They'll retry automatically.",
     "revalidationError": "Couldn't verify your session with the server. Using local data."
   },

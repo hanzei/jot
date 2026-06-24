@@ -8,8 +8,7 @@ import Dashboard from '../Dashboard'
 import type { AuthResponse, Note, Label, NoteSort, UserSettings } from '@jot/shared'
 import { notes, labels, users } from '@/utils/api'
 import * as auth from '@/utils/auth'
-import { useSSE } from '@/hooks/useSSE'
-import { useAuthenticatedLayout } from '@/components/AuthenticatedLayout'
+import { useAuthenticatedLayout, type AuthenticatedLayoutContext } from '@/components/AuthenticatedLayout'
 import { createMockNote, createMockListNote } from '@/utils/__tests__/test-helpers'
 import { ToastProvider } from '@/components/Toast'
 
@@ -195,9 +194,12 @@ const renderDashboard = (initialEntries = ['/']) => {
   )
 }
 
+let mockRegisterSSECallbacks: ReturnType<typeof vi.fn>
+
 describe('Dashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockRegisterSSECallbacks = vi.fn()
     localStorage.setItem('sidebar-collapsed', 'false')
     vi.mocked(auth.getUser).mockReturnValue({
       id: 'user1',
@@ -259,6 +261,7 @@ describe('Dashboard', () => {
         handleRenameLabel: vi.fn().mockResolvedValue(true),
         handleDeleteLabel: vi.fn().mockResolvedValue(true),
         registerLabelCallbacks: vi.fn(),
+        registerSSECallbacks: mockRegisterSSECallbacks as unknown as AuthenticatedLayoutContext['registerSSECallbacks'],
         setSearchBar: (content: ReactNode) => captureSearchBarRef.current(content),
       }
     })
@@ -1395,15 +1398,15 @@ describe('Dashboard', () => {
       renderDashboard()
 
       await waitFor(() => {
-        expect(useSSE).toHaveBeenCalled()
+        expect(mockRegisterSSECallbacks).toHaveBeenCalled()
         expect(labels.getAll).toHaveBeenCalledTimes(1)
       })
 
-      const sseOptions = vi.mocked(useSSE).mock.calls[0]?.[0]
-      expect(sseOptions).toBeDefined()
+      const sseCallbacks = mockRegisterSSECallbacks.mock.calls[0]?.[0]
+      expect(sseCallbacks).toBeDefined()
 
       await act(async () => {
-        sseOptions?.onEvent({
+        sseCallbacks?.onEvent({
           type: 'note_created',
           source_user_id: 'user1',
           data: { note_id: 'note-1', note: createMockNote({ id: 'note-1', labels: [realtimeLabel] }) },
@@ -1415,7 +1418,7 @@ describe('Dashboard', () => {
       })
 
       await act(async () => {
-        sseOptions?.onEvent({
+        sseCallbacks?.onEvent({
           type: 'note_updated',
           source_user_id: 'user1',
           data: { note_id: 'note-1', note: createMockNote({ id: 'note-1', labels: [realtimeLabel] }) },
@@ -1438,16 +1441,16 @@ describe('Dashboard', () => {
       renderDashboard()
 
       await waitFor(() => {
-        expect(useSSE).toHaveBeenCalled()
+        expect(mockRegisterSSECallbacks).toHaveBeenCalled()
         expect(labels.getAll).toHaveBeenCalledTimes(1)
         expect(labels.getCounts).toHaveBeenCalledTimes(1)
       })
 
-      const sseOptions = vi.mocked(useSSE).mock.calls[0]?.[0]
-      expect(sseOptions).toBeDefined()
+      const sseCallbacks = mockRegisterSSECallbacks.mock.calls[0]?.[0]
+      expect(sseCallbacks).toBeDefined()
 
       await act(async () => {
-        sseOptions?.onEvent({
+        sseCallbacks?.onEvent({
           type: 'labels_changed',
           source_user_id: 'user1',
           data: { label: realtimeLabel },
@@ -1492,11 +1495,15 @@ describe('Dashboard', () => {
         expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-realtime', false)
       })
 
-      const sseOptions = vi.mocked(useSSE).mock.calls[0]?.[0]
-      expect(sseOptions).toBeDefined()
+      await waitFor(() => {
+        expect(mockRegisterSSECallbacks).toHaveBeenCalled()
+      })
+
+      const sseCallbacks = mockRegisterSSECallbacks.mock.calls[0]?.[0]
+      expect(sseCallbacks).toBeDefined()
 
       await act(async () => {
-        sseOptions?.onEvent({
+        sseCallbacks?.onEvent({
           type: 'labels_changed',
           source_user_id: 'user1',
           data: { label: realtimeLabel },

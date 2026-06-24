@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../store/AuthContext';
 import { useOfflineContext } from '../store/OfflineContext';
+import { useSSEContext } from '../store/SSEContext';
 import { useTheme } from '../theme/ThemeContext';
 import Banner from './Banner';
 
@@ -15,10 +16,11 @@ import Banner from './Banner';
 export default function RevalidationErrorBanner() {
   const { revalidationFailed } = useAuth();
   const { isConnected, syncError } = useOfflineContext();
+  const { sseReconnecting } = useSSEContext();
   const { colors } = useTheme();
   const { t } = useTranslation();
 
-  const otherBannerAbove = !isConnected || syncError;
+  const otherBannerAbove = !isConnected || sseReconnecting || syncError;
 
   return (
     <Banner
