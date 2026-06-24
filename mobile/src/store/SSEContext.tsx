@@ -4,7 +4,7 @@ import type { SSEEvent } from '@jot/shared';
 
 // How long the SSE must be disconnected before we surface the banner. Matches
 // the webapp's SHOW_DELAY_MS so brief self-healing reconnects don't flash it.
-const SSE_BANNER_DELAY_MS = 3000;
+const SSE_BANNER_DELAY_MS = 2000;
 
 interface SSEContextValue {
   subscribe: (listener: (event: SSEEvent) => void) => () => void;
