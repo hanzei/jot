@@ -10,10 +10,12 @@ const WATCHDOG_INTERVAL_MS = 15_000;
 const STALL_TIMEOUT_MS = 75_000;
 
 type SSECallback = (event: SSEEvent) => void;
+type StatusChangeCallback = (connected: boolean) => void;
 
 export class SSEConnectionManager {
   private es: EventSource | null = null;
   private callback: SSECallback | null = null;
+  private statusChangeCallback: StatusChangeCallback | undefined;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private watchdogTimer: ReturnType<typeof setInterval> | null = null;
   private lastEventAt = Date.now();
@@ -26,8 +28,9 @@ export class SSEConnectionManager {
   isConnected(): boolean { return this._isConnected; }
   getReconnectAttempts(): number { return this._reconnectAttempts; }
 
-  async connect(onEvent: SSECallback): Promise<void> {
+  async connect(onEvent: SSECallback, onStatusChange?: StatusChangeCallback): Promise<void> {
     this.callback = onEvent;
+    this.statusChangeCallback = onStatusChange;
     this.closed = false;
     this.reconnectDelay = BASE_RECONNECT_DELAY_MS;
     this._reconnectAttempts = 0;
@@ -59,6 +62,7 @@ export class SSEConnectionManager {
         this._reconnectAttempts = 0;
         this.reconnectDelay = BASE_RECONNECT_DELAY_MS;
         this.lastEventAt = Date.now();
+        this.statusChangeCallback?.(true);
       });
 
       this.es.addEventListener('message', (event) => {
@@ -79,6 +83,7 @@ export class SSEConnectionManager {
 
       this.es.addEventListener('error', (event) => {
         this._isConnected = false;
+        this.statusChangeCallback?.(false);
         const status = (event as { status?: number })?.status;
         if (status === 401) {
           // Session expired — do not reconnect
@@ -113,6 +118,7 @@ export class SSEConnectionManager {
   disconnect(): void {
     this.closed = true;
     this._isConnected = false;
+    this.statusChangeCallback?.(false);
     this.callback = null;
     this.cleanup();
   }
@@ -142,6 +148,7 @@ export class SSEConnectionManager {
       if (this.reconnectTimer !== null) return;
       if (Date.now() - this.lastEventAt > STALL_TIMEOUT_MS) {
         this._isConnected = false;
+        this.statusChangeCallback?.(false);
         this.cleanup();
         this.scheduleReconnect();
       }

@@ -18,6 +18,10 @@ jest.mock('../src/store/OfflineContext', () => ({
   useOfflineContext: jest.fn(),
 }));
 
+jest.mock('../src/store/SSEContext', () => ({
+  useSSEContext: jest.fn(() => ({ sseReconnecting: false })),
+}));
+
 const mockUseOfflineContext = useOfflineContext as jest.MockedFunction<typeof useOfflineContext>;
 
 describe('SyncErrorBanner', () => {

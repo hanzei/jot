@@ -1,15 +1,33 @@
-import React, { createContext, useContext, useRef, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useRef, useCallback, useMemo, useState, useEffect } from 'react';
 import { useSSE, SSENotificationCallback } from '../hooks/useSSE';
 import type { SSEEvent } from '@jot/shared';
 
+// How long the SSE must be disconnected before we surface the banner. Matches
+// the webapp's SHOW_DELAY_MS so brief self-healing reconnects don't flash it.
+const SSE_BANNER_DELAY_MS = 3000;
+
 interface SSEContextValue {
   subscribe: (listener: (event: SSEEvent) => void) => () => void;
+  /** True once SSE has been disconnected for SSE_BANNER_DELAY_MS. */
+  sseReconnecting: boolean;
 }
 
 const SSEContext = createContext<SSEContextValue | undefined>(undefined);
 
 export function SSEProvider({ children }: { children: React.ReactNode }) {
   const listenersRef = useRef<Set<(event: SSEEvent) => void>>(new Set());
+  const [sseConnected, setSseConnected] = useState(false);
+  const [sseReconnecting, setSseReconnecting] = useState(false);
+
+  // Delay surfacing the banner so brief, self-healing reconnects don't flash it.
+  useEffect(() => {
+    if (sseConnected) {
+      setSseReconnecting(false);
+      return;
+    }
+    const timer = setTimeout(() => setSseReconnecting(true), SSE_BANNER_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [sseConnected]);
 
   const handleNoteUpdated: SSENotificationCallback = useCallback((event) => {
     for (const listener of listenersRef.current) {
@@ -17,7 +35,7 @@ export function SSEProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  useSSE(handleNoteUpdated);
+  useSSE(handleNoteUpdated, setSseConnected);
 
   const value = useMemo<SSEContextValue>(() => ({
     subscribe: (listener: (event: SSEEvent) => void) => {
@@ -26,9 +44,16 @@ export function SSEProvider({ children }: { children: React.ReactNode }) {
         listenersRef.current.delete(listener);
       };
     },
-  }), []);
+    sseReconnecting,
+  }), [sseReconnecting]);
 
   return <SSEContext.Provider value={value}>{children}</SSEContext.Provider>;
+}
+
+export function useSSEContext(): SSEContextValue {
+  const context = useContext(SSEContext);
+  if (!context) throw new Error('useSSEContext must be used within SSEProvider');
+  return context;
 }
 
 export function useSSESubscription(noteId: string | null, onUpdated: () => void): void {
