@@ -1072,6 +1072,9 @@ export default function NoteEditorScreen() {
       });
       commitMetadataBaseline({ archived: newArchived });
       if (newArchived) {
+        // Archiving from the single-note view returns the user to the dashboard.
+        intentionalExitRef.current = true;
+        navigation.goBack();
         showToast(t('dashboard.noteArchived'), 'success', {
           label: t('dashboard.undo'),
           onPress: async () => {
@@ -1095,7 +1098,7 @@ export default function NoteEditorScreen() {
       setArchived(!newArchived);
       Alert.alert(t('common.error'), t('note.failedUpdate'));
     }
-  }, [buildMetadataUpdateData, commitMetadataBaseline, flushPendingChanges, noteId, showToast, t, updateMutation]);
+  }, [buildMetadataUpdateData, commitMetadataBaseline, flushPendingChanges, navigation, noteId, showToast, t, updateMutation]);
 
   const handleColorSelect = useCallback(async (selectedColor: string) => {
     const saveSucceeded = await flushPendingChanges();
