@@ -1,19 +1,15 @@
-import { useOfflineContext } from '../store/OfflineContext';
-import { useAuth } from '../store/AuthContext';
+import { useVisibleTopBanners } from './useTopBanners';
 
 /**
- * Returns true when any top-of-screen banner is currently rendered (offline
- * banner, sync-error banner, revalidation-error banner, or the sync-failures
- * review banner). Screens use this to skip their own paddingTop: insets.top,
- * since the banner already occupies that space.
+ * Returns true when any top-of-screen banner is currently rendered (offline,
+ * SSE reconnect, sync-error, revalidation-error, or sync-failures review).
+ * Screens read this to skip their own `paddingTop: insets.top`, since the
+ * topmost banner already occupies and pads the safe area.
+ *
+ * Derived from {@link useVisibleTopBanners} — the same source of truth the
+ * banner renderer uses — so the header inset and the banner stack can never
+ * disagree about whether a banner is showing.
  */
 export function useBannerShown(): boolean {
-  const { isConnected, syncError, syncFailureCount, syncFailuresBannerDismissed } = useOfflineContext();
-  const { revalidationFailed } = useAuth();
-  return (
-    !isConnected ||
-    syncError ||
-    revalidationFailed ||
-    (syncFailureCount > 0 && !syncFailuresBannerDismissed)
-  );
+  return useVisibleTopBanners().length > 0;
 }

@@ -91,6 +91,7 @@ jest.mock('../src/hooks/useOfflineNotes', () => ({
 jest.mock('../src/store/SSEContext', () => ({
   __esModule: true,
   useSSESubscription: jest.fn(),
+  useSSEContext: jest.fn(() => ({ sseReconnecting: false })),
 }));
 
 jest.mock('../src/components/LabelPicker', () => ({

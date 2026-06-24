@@ -3,10 +3,9 @@ import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useOfflineContext } from '../store/OfflineContext';
-import { useAuth } from '../store/AuthContext';
-import { useSSEContext } from '../store/SSEContext';
 import { useTheme } from '../theme/ThemeContext';
 import type { RootStackParamList } from '../navigation/RootNavigator';
+import type { TopBannerProps } from '../hooks/useTopBanners';
 import Banner from './Banner';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -16,29 +15,19 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
  * ops, #492) as a dismissible, tappable banner that opens the review screen
  * (#493). Tapping links to the per-failure resolution list; dismissing hides it
  * until a new failure arrives (OfflineContext re-surfaces it when the count
- * grows). Stacks below the offline / sync-error banners, so it skips the top
- * safe-area inset when one of those is already shown.
+ * grows). Visibility and safe-area ownership are decided centrally by
+ * {@link useVisibleTopBanners}; the count and dismiss action come from context.
  */
-export default function SyncFailuresBanner() {
-  const {
-    isConnected,
-    syncError,
-    syncFailureCount,
-    syncFailuresBannerDismissed,
-    dismissSyncFailuresBanner,
-  } = useOfflineContext();
-  const { revalidationFailed } = useAuth();
-  const { sseReconnecting } = useSSEContext();
+export default function SyncFailuresBanner({ visible, applyTopInset }: TopBannerProps) {
+  const { syncFailureCount, dismissSyncFailuresBanner } = useOfflineContext();
   const { colors } = useTheme();
   const { t } = useTranslation();
   const navigation = useNavigation<NavigationProp>();
 
-  const otherBannerAbove = !isConnected || sseReconnecting || syncError || revalidationFailed;
-
   return (
     <Banner
-      visible={syncFailureCount > 0 && !syncFailuresBannerDismissed}
-      applyTopInset={!otherBannerAbove}
+      visible={visible}
+      applyTopInset={applyTopInset}
       icon="alert-circle-outline"
       text={t('syncFailures.bannerCount', { count: syncFailureCount })}
       backgroundColor={colors.warning}
