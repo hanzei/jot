@@ -5,7 +5,6 @@ import { notes, users as usersApi } from '@/utils/api';
 import { getUser, getSettings, setSettings } from '@/utils/auth';
 import type { Note, User, SSEEvent, NoteSort } from '@jot/shared';
 import { useSSE } from '@/hooks/useSSE';
-import { SSEStatusIndicator } from '@/components/SSEStatusIndicator';
 import { useSearchParams, useParams, useNavigate } from 'react-router';
 import PageContent from '@/components/PageContent';
 import SearchBar from '@/components/SearchBar';
@@ -53,6 +52,7 @@ export default function Dashboard() {
     loadLabelCounts,
     registerLabelCallbacks,
     setSearchBar,
+    setSseStatus,
   } = useAuthenticatedLayout();
   const [notesList, setNotesList] = useState<Note[]>([]);
   const [noteSort, setNoteSort] = useState<NoteSort>(() => normalizeNoteSort(getSettings()?.note_sort));
@@ -446,6 +446,11 @@ export default function Dashboard() {
     onEvent: handleSSEEvent,
     onConnected: loadNotes,
   });
+
+  useEffect(() => {
+    setSseStatus(sseStatus);
+    return () => setSseStatus(null);
+  }, [sseStatus, setSseStatus]);
 
   const handleCreateNote = useCallback(() => {
     lastFocusedElementRef.current = document.activeElement;
@@ -996,7 +1001,6 @@ export default function Dashboard() {
 
   return (
     <PageContent>
-        <SSEStatusIndicator status={sseStatus} />
         {/* Create note button — hidden in bin view */}
         {!showBin && (
           <div className="mb-8">

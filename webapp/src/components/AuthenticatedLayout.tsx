@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo, type ReactNode } from 'react';
+import type { SSEStatus } from '@/hooks/useSSE';
 import { Outlet, useOutletContext, useMatch, useNavigate, useSearchParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import {
@@ -29,6 +30,8 @@ export interface AuthenticatedLayoutContext {
   handleDeleteLabel: (label: Label) => Promise<boolean>;
   registerLabelCallbacks: (callbacks: LabelCallbacks) => void;
   setSearchBar: (content: ReactNode) => void;
+  sseStatus: SSEStatus | null;
+  setSseStatus: (status: SSEStatus | null) => void;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -52,6 +55,10 @@ const AuthenticatedLayout = ({ onLogout }: AuthenticatedLayoutProps) => {
 
   // Search bar slot: Dashboard injects its search bar via setSearchBar
   const [searchBar, setSearchBar] = useState<ReactNode>(null);
+
+  // SSE status: Dashboard pushes its connection state up so AppLayout can show
+  // a banner inline below the header when the server is unreachable.
+  const [sseStatus, setSseStatus] = useState<SSEStatus | null>(null);
 
   // Label callbacks registered by Dashboard so it can react to label changes
   const labelCallbacksRef = useRef<LabelCallbacks>({});
@@ -171,6 +178,8 @@ const AuthenticatedLayout = ({ onLogout }: AuthenticatedLayoutProps) => {
     handleDeleteLabel,
     registerLabelCallbacks,
     setSearchBar,
+    sseStatus,
+    setSseStatus,
   }), [
     labels,
     labelCounts,
@@ -180,6 +189,7 @@ const AuthenticatedLayout = ({ onLogout }: AuthenticatedLayoutProps) => {
     handleRenameLabel,
     handleDeleteLabel,
     registerLabelCallbacks,
+    sseStatus,
   ]);
 
   return (
@@ -193,6 +203,7 @@ const AuthenticatedLayout = ({ onLogout }: AuthenticatedLayoutProps) => {
       sidebarBottomTabs={bottomTabs}
       sidebarChildren={sidebarChildren}
       searchBar={searchBar}
+      sseStatus={sseStatus}
     >
       <Outlet context={context} />
     </AppLayout>

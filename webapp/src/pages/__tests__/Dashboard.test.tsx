@@ -260,6 +260,8 @@ describe('Dashboard', () => {
         handleDeleteLabel: vi.fn().mockResolvedValue(true),
         registerLabelCallbacks: vi.fn(),
         setSearchBar: (content: ReactNode) => captureSearchBarRef.current(content),
+        sseStatus: null,
+        setSseStatus: vi.fn(),
       }
     })
   })
