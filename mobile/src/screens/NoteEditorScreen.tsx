@@ -24,6 +24,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, useDuplicateNote, useCreateNoteItem, useUpdateNoteItem, useDeleteNoteItem, useReorderNoteItems, useToggleNoteItemCompleted } from '../hooks/useNotes';
 import { useOfflineNote } from '../hooks/useOfflineNotes';
+import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { isLocalId } from '../db/noteQueries';
 import { useFailedNoteIds } from '../store/OfflineContext';
 import { useSSESubscription } from '../store/SSEContext';
@@ -114,6 +115,13 @@ export default function NoteEditorScreen() {
 
   const { colors, isDark } = useTheme();
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
+  const keyboardHeight = useKeyboardHeight();
+  // On Android the window is edge-to-edge and is NOT resized for the keyboard,
+  // so lift the whole editor (scroll area + toolbars) above it manually. iOS
+  // relies on KeyboardAvoidingView's "padding" behavior instead. Subtracting the
+  // bottom inset lets the toolbar's own safe-area padding fill the gap so its
+  // buttons sit flush against the top of the keyboard.
+  const androidKeyboardInset = Platform.OS === 'android' ? Math.max(keyboardHeight - insets.bottom, 0) : 0;
   const bannerShown = useBannerShown();
   const { data: existingNote } = useOfflineNote(noteId);
   const createMutation = useCreateNote();
@@ -1361,7 +1369,7 @@ export default function NoteEditorScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.container, { backgroundColor: noteBackground }]}
+      style={[styles.container, { backgroundColor: noteBackground, paddingBottom: androidKeyboardInset }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? IOS_KEYBOARD_VERTICAL_OFFSET : 0}
     >
