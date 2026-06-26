@@ -71,6 +71,9 @@ export default function Dashboard() {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [sharingNote, setSharingNote] = useState<Note | null>(null);
   const [usersById, setUsersById] = useState<Map<string, User>>(new Map());
+  // Whether each grid section still has cards rendered (live or animating out),
+  // so the last card can finish its exit animation before the section unmounts.
+  const [sectionActive, setSectionActive] = useState({ pinned: false, other: false, archived: false });
   const user = getUser();
   const isMountedRef = useRef(true);
   const selectedLabelIdRef = useRef<string | null>(initialLabel);
@@ -867,9 +870,23 @@ export default function Dashboard() {
     return [...pinned, ...other];
   }, [archivedMatches, noteSort]);
   const dragReorderingDisabled = showArchived || showBin || showMyTasks || isSearching || isFilteringByLabel || noteSort !== 'manual';
-  // Remount the grids when the active view/filter changes so the new set of
-  // cards staggers in cleanly instead of cross-fading the previous one.
+  // Signature of the active view/filter/search. The grids swap instantly when it
+  // changes, so only in-view card changes (create, delete, archive, …) animate.
   const viewKey = `${showArchived ? 'archive' : showBin ? 'bin' : showMyTasks ? 'my-tasks' : 'notes'}|${selectedLabelId ?? ''}|${debouncedSearchQuery}`;
+  const handlePinnedActive = useCallback((active: boolean) => {
+    setSectionActive(prev => (prev.pinned === active ? prev : { ...prev, pinned: active }));
+  }, []);
+  const handleOtherActive = useCallback((active: boolean) => {
+    setSectionActive(prev => (prev.other === active ? prev : { ...prev, other: active }));
+  }, []);
+  const handleArchivedActive = useCallback((active: boolean) => {
+    setSectionActive(prev => (prev.archived === active ? prev : { ...prev, archived: active }));
+  }, []);
+  // Keep a section (and the grid as a whole) rendered while its last card is
+  // still animating out, even though the live note list is already empty.
+  const renderPinnedSection = displayedPinned.length > 0 || sectionActive.pinned;
+  const renderOtherSection = displayedOther.length > 0 || sectionActive.other;
+  const renderArchivedSection = displayedArchived.length > 0 || sectionActive.archived;
   const activeSortLabel = t(`dashboard.sortOption.${noteSort}`);
   const focusSearchShortcutHint = isApplePlatform() ? '⌘ + F' : t('keyboardShortcuts.focusSearchKey');
   const showCreateFirstNoteCta =
@@ -1049,7 +1066,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {displayedPinned.length === 0 && displayedOther.length === 0 && displayedArchived.length === 0 ? (
+        {!renderPinnedSection && !renderOtherSection && !renderArchivedSection ? (
           <div className="py-12">
             <div
               data-testid="dashboard-empty-state"
@@ -1088,16 +1105,20 @@ export default function Dashboard() {
           >
             <div className="space-y-8">
               {/* Pinned notes section */}
-              {displayedPinned.length > 0 && (
+              {renderPinnedSection && (
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-                    <svg className="h-4 w-4 text-blue-500 dark:text-blue-400 mr-2" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
-                    </svg>
-                    {t('dashboard.pinned')}
-                  </h2>
+                  {displayedPinned.length > 0 && (
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+                      <svg className="h-4 w-4 text-blue-500 dark:text-blue-400 mr-2" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
+                      </svg>
+                      {t('dashboard.pinned')}
+                    </h2>
+                  )}
                   <AnimatedNoteGrid
-                    key={`${viewKey}|pinned`}
+                    key="pinned"
+                    viewKey={viewKey}
+                    onActiveChange={handlePinnedActive}
                     notes={displayedPinned}
                     onEdit={handleEditNote}
                     onDelete={handleDeleteNote}
@@ -1116,15 +1137,17 @@ export default function Dashboard() {
               )}
 
               {/* Other notes section */}
-              {displayedOther.length > 0 && (
+              {renderOtherSection && (
                 <div>
-                  {displayedPinned.length > 0 && (
+                  {displayedOther.length > 0 && displayedPinned.length > 0 && (
                     <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                       {t('dashboard.otherNotes')}
                     </h2>
                   )}
                   <AnimatedNoteGrid
-                    key={`${viewKey}|other`}
+                    key="other"
+                    viewKey={viewKey}
+                    onActiveChange={handleOtherActive}
                     notes={displayedOther}
                     onEdit={handleEditNote}
                     onDelete={handleDeleteNote}
@@ -1143,14 +1166,18 @@ export default function Dashboard() {
               )}
 
               {/* Archived search results section */}
-              {displayedArchived.length > 0 && (
+              {renderArchivedSection && (
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-                    <ArchiveBoxIcon aria-hidden="true" className="h-4 w-4 text-gray-500 dark:text-gray-400 mr-2" />
-                    {t('dashboard.archivedResults')}
-                  </h2>
+                  {displayedArchived.length > 0 && (
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+                      <ArchiveBoxIcon aria-hidden="true" className="h-4 w-4 text-gray-500 dark:text-gray-400 mr-2" />
+                      {t('dashboard.archivedResults')}
+                    </h2>
+                  )}
                   <AnimatedNoteGrid
-                    key={`${viewKey}|archived`}
+                    key="archived"
+                    viewKey={viewKey}
+                    onActiveChange={handleArchivedActive}
                     notes={displayedArchived}
                     onEdit={handleEditNote}
                     onDelete={handleDeleteNote}

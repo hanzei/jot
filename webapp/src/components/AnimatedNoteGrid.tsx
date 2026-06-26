@@ -9,14 +9,11 @@ const COLUMN_CLASS = 'columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 spa
 
 const ENTER_DURATION_MS = 200;
 const LEAVE_DURATION_MS = 150;
-// Cap the staggered enter so a large grid still settles quickly on first load.
-const STAGGER_STEP_MS = 25;
-const STAGGER_MAX_MS = 250;
 
 interface AnimatedCardProps {
+  /** Animate the card in on mount (only for cards genuinely added to a stable view). */
+  animateEnter: boolean;
   leaving: boolean;
-  /** Delay before the enter animation starts (used to stagger initial load). */
-  enterDelay: number;
   onLeaveComplete: () => void;
   children: ReactNode;
 }
@@ -27,35 +24,38 @@ interface AnimatedCardProps {
  * reduced or unavailable the card simply appears/disappears, and leaves resolve
  * immediately so the parent can drop it from the list.
  */
-function AnimatedCard({ leaving, enterDelay, onLeaveComplete, children }: AnimatedCardProps) {
+function AnimatedCard({ animateEnter, leaving, onLeaveComplete, children }: AnimatedCardProps) {
   const ref = useRef<HTMLDivElement | null>(null);
   const animationRef = useRef<Animation | null>(null);
   const leaveStartedRef = useRef(false);
 
-  // Animate in once when the card first mounts.
+  // Animate in once when a freshly added card mounts. Cards that appear on the
+  // first populate or a view/filter switch mount with `animateEnter = false` and
+  // simply show, so navigation never animates a whole list in.
   useLayoutEffect(() => {
     const element = ref.current;
-    if (!canAnimate(element)) return;
+    if (!animateEnter || !canAnimate(element)) return;
 
     animationRef.current = element.animate(
       [
         { opacity: 0, transform: 'translateY(8px) scale(0.98)' },
         { opacity: 1, transform: 'none' },
       ],
-      { duration: ENTER_DURATION_MS, delay: enterDelay, easing: 'ease-out', fill: 'backwards' },
+      { duration: ENTER_DURATION_MS, easing: 'ease-out' },
     );
 
     return () => {
       animationRef.current?.cancel();
       animationRef.current = null;
     };
-    // Enter runs a single time on mount; enterDelay is fixed per card.
+    // Enter runs a single time on mount; animateEnter is fixed per card.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Animate out once the parent marks the card as leaving, then notify so it can
-  // be removed from the rendered list.
-  useEffect(() => {
+  // be removed from the rendered list. Runs as a layout effect so the
+  // non-animated removal is flushed before paint (no lingering frame).
+  useLayoutEffect(() => {
     if (!leaving) {
       // The card was re-added while leaving (e.g. delete then "Undo"). Cancel
       // the in-flight exit so it snaps back to fully visible.
@@ -96,17 +96,38 @@ function AnimatedCard({ leaving, enterDelay, onLeaveComplete, children }: Animat
 
 interface Entry {
   note: Note;
+  /** True only while the card animates out; otherwise it is a live card. */
   leaving: boolean;
+  /** True for cards added to a stable view, so they animate in on mount. */
+  entering: boolean;
+}
+
+interface ReconcileResult {
+  entries: Entry[];
+  /** Ids considered "established" — used to detect genuinely new cards next time. */
+  knownIds: Set<string>;
+}
+
+/** Build the entry list for an instant swap (first populate or view change). */
+function swap(notes: Note[]): ReconcileResult {
+  return {
+    entries: notes.map((note) => ({ note, leaving: false, entering: false })),
+    knownIds: new Set(notes.map((note) => note.id)),
+  };
 }
 
 /**
- * Reconcile the currently rendered entries against the incoming notes. Notes
- * that disappeared are kept around (marked `leaving`) at their previous index so
- * they can animate out before being dropped.
+ * Reconcile rendered entries against incoming notes within the *same* view.
+ * Cards whose ids are new animate in; cards that disappeared are kept around
+ * (marked `leaving`) at their previous index so they can animate out.
  */
-function reconcile(previous: Entry[], notes: Note[]): Entry[] {
+function reconcile(previous: Entry[], notes: Note[], knownIds: Set<string>): ReconcileResult {
   const nextIds = new Set(notes.map((note) => note.id));
-  const result: Entry[] = notes.map((note) => ({ note, leaving: false }));
+  const result: Entry[] = notes.map((note) => ({
+    note,
+    leaving: false,
+    entering: !knownIds.has(note.id),
+  }));
 
   const previousIndex = new Map(previous.map((entry, index) => [entry.note.id, index]));
   const departed = previous.filter((entry) => !nextIds.has(entry.note.id));
@@ -117,14 +138,20 @@ function reconcile(previous: Entry[], notes: Note[]): Entry[] {
     .sort((a, b) => (previousIndex.get(a.note.id) ?? 0) - (previousIndex.get(b.note.id) ?? 0))
     .forEach((entry) => {
       const index = Math.min(previousIndex.get(entry.note.id) ?? result.length, result.length);
-      result.splice(index, 0, { note: entry.note, leaving: true });
+      result.splice(index, 0, { note: entry.note, leaving: true, entering: false });
     });
 
-  return result;
+  return { entries: result, knownIds: nextIds };
 }
 
 interface AnimatedNoteGridProps {
   notes: Note[];
+  /**
+   * Signature of the active view/filter/search. When it changes the grid swaps
+   * instantly (no enter/leave), so only in-view changes (create, delete,
+   * archive, restore, duplicate, pin, SSE sync) animate.
+   */
+  viewKey: string;
   disabled: boolean;
   inBin: boolean;
   currentUserId?: string;
@@ -137,19 +164,23 @@ interface AnimatedNoteGridProps {
   onPermanentlyDelete?: (noteId: string) => void;
   onRefresh?: () => void;
   onLabelClick?: (labelId: string) => void;
+  /**
+   * Notifies when the grid goes from rendering cards to rendering none (and
+   * back). Lets the parent keep the section mounted while the last card animates
+   * out, then drop it once the exit finishes.
+   */
+  onActiveChange?: (active: boolean) => void;
 }
 
 /**
- * Renders a sortable grid of note cards that animate as they enter and leave.
- * Cards present on first mount are staggered in; cards added or removed later
- * fade individually. Reordering is still handled by dnd-kit via SortableContext.
- *
- * Switching views/filters should remount this grid (give it a `key` that
- * encodes the active view) so the new set staggers in cleanly instead of
- * cross-fading the whole list.
+ * Renders a sortable grid of note cards that animate as individual cards enter
+ * and leave a stable view. The first populate and any view/filter/search change
+ * swap instantly (guarded by `viewKey`); reordering is handled by dnd-kit via
+ * SortableContext and never triggers an enter/leave.
  */
 export default function AnimatedNoteGrid({
   notes,
+  viewKey,
   disabled,
   inBin,
   currentUserId,
@@ -162,36 +193,47 @@ export default function AnimatedNoteGrid({
   onPermanentlyDelete,
   onRefresh,
   onLabelClick,
+  onActiveChange,
 }: AnimatedNoteGridProps) {
-  const [entries, setEntries] = useState<Entry[]>(() => notes.map((note) => ({ note, leaving: false })));
-  // Only cards present on first mount stagger in; later additions fade with no delay.
-  const [initialIds] = useState<Set<string>>(() => new Set(notes.map((note) => note.id)));
-
-  // Reconcile entries against incoming notes during render (React's recommended
-  // pattern for deriving state from props), keeping departed cards around to
-  // animate out.
+  const [state, setState] = useState<ReconcileResult>(() => swap(notes));
+  // Track the inputs the current `state` was derived from so we can reconcile
+  // during render (React's recommended pattern for deriving state from props).
   const [renderedNotes, setRenderedNotes] = useState(notes);
-  if (renderedNotes !== notes) {
+  const [renderedViewKey, setRenderedViewKey] = useState(viewKey);
+
+  if (renderedViewKey !== viewKey) {
+    // View/filter/search changed: swap instantly, no enter/leave.
+    setRenderedViewKey(viewKey);
     setRenderedNotes(notes);
-    setEntries((previous) => reconcile(previous, notes));
+    setState(swap(notes));
+  } else if (renderedNotes !== notes) {
+    // Same view, notes changed: animate the delta.
+    setRenderedNotes(notes);
+    setState((previous) => reconcile(previous.entries, notes, previous.knownIds));
   }
 
   const handleLeaveComplete = useCallback((id: string) => {
-    setEntries((previous) => previous.filter((entry) => !(entry.leaving && entry.note.id === id)));
+    setState((previous) => ({
+      ...previous,
+      entries: previous.entries.filter((entry) => !(entry.leaving && entry.note.id === id)),
+    }));
   }, []);
 
+  // Tell the parent whether any card (live or still animating out) is rendered,
+  // so it can keep the section mounted until the last exit finishes.
+  const active = state.entries.length > 0;
+  useEffect(() => {
+    onActiveChange?.(active);
+  }, [active, onActiveChange]);
+
   return (
-    <SortableContext items={entries.map((entry) => entry.note.id)} strategy={rectSortingStrategy}>
+    <SortableContext items={state.entries.map((entry) => entry.note.id)} strategy={rectSortingStrategy}>
       <div className={COLUMN_CLASS}>
-        {entries.map((entry, index) => (
+        {state.entries.map((entry) => (
           <AnimatedCard
             key={entry.note.id}
+            animateEnter={entry.entering}
             leaving={entry.leaving}
-            enterDelay={
-              initialIds.has(entry.note.id)
-                ? Math.min(index * STAGGER_STEP_MS, STAGGER_MAX_MS)
-                : 0
-            }
             onLeaveComplete={() => handleLeaveComplete(entry.note.id)}
           >
             <SortableNoteCard

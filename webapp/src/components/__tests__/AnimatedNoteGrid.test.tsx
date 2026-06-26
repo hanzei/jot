@@ -23,20 +23,21 @@ const baseProps = {
   onShare: vi.fn(),
 }
 
-const renderGrid = (notes: Note[]) =>
+const renderGrid = (notes: Note[], viewKey = 'notes') =>
   render(
     <DndContext>
-      <AnimatedNoteGrid notes={notes} {...baseProps} />
+      <AnimatedNoteGrid notes={notes} viewKey={viewKey} {...baseProps} />
     </DndContext>,
   )
 
 const rerenderGrid = (
   rerender: ReturnType<typeof renderGrid>['rerender'],
   notes: Note[],
+  viewKey = 'notes',
 ) =>
   rerender(
     <DndContext>
-      <AnimatedNoteGrid notes={notes} {...baseProps} />
+      <AnimatedNoteGrid notes={notes} viewKey={viewKey} {...baseProps} />
     </DndContext>,
   )
 
@@ -70,12 +71,28 @@ describe('AnimatedNoteGrid', () => {
     expect(screen.getByTestId('card-b')).toBeInTheDocument()
   })
 
+  it('swaps instantly when the view changes', () => {
+    const { rerender } = renderGrid([note('a'), note('b')], 'notes')
+
+    rerenderGrid(rerender, [note('c'), note('d')], 'archive')
+
+    // The new view's cards render and the old ones are gone right away — no
+    // card is held back to animate out.
+    expect(screen.getByTestId('card-c')).toBeInTheDocument()
+    expect(screen.getByTestId('card-d')).toBeInTheDocument()
+    expect(screen.queryByTestId('card-a')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('card-b')).not.toBeInTheDocument()
+  })
+
   describe('with the Web Animations API available', () => {
     let animations: Array<{ onfinish: null | (() => void); cancel: ReturnType<typeof vi.fn> }>
+    let originalAnimate: typeof HTMLElement.prototype.animate
 
     beforeEach(() => {
       animations = []
-      // @ts-expect-error jsdom does not provide animate; install a controllable stub.
+      // jsdom does not implement animate; install a controllable stub and keep
+      // the original (undefined) reference so afterEach can restore it.
+      originalAnimate = HTMLElement.prototype.animate
       HTMLElement.prototype.animate = function animate() {
         const animation = { onfinish: null as null | (() => void), cancel: vi.fn() }
         animations.push(animation)
@@ -84,8 +101,31 @@ describe('AnimatedNoteGrid', () => {
     })
 
     afterEach(() => {
-      // @ts-expect-error remove the stub installed above.
-      delete HTMLElement.prototype.animate
+      HTMLElement.prototype.animate = originalAnimate
+    })
+
+    it('does not animate cards in on the first populate', () => {
+      renderGrid([note('a'), note('b')])
+
+      expect(animations).toHaveLength(0)
+    })
+
+    it('does not animate cards in when the view changes', () => {
+      const { rerender } = renderGrid([note('a')], 'notes')
+
+      rerenderGrid(rerender, [note('b'), note('c')], 'archive')
+
+      expect(animations).toHaveLength(0)
+    })
+
+    it('animates in only cards added to a stable view', () => {
+      const { rerender } = renderGrid([note('a')])
+      expect(animations).toHaveLength(0)
+
+      rerenderGrid(rerender, [note('a'), note('b')])
+
+      // Exactly one enter animation: the newly added card 'b'.
+      expect(animations).toHaveLength(1)
     })
 
     it('keeps a leaving card mounted (and non-draggable) until its exit animation finishes', async () => {
