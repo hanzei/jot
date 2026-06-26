@@ -18,6 +18,7 @@ import { AuthStackParamList } from '../navigation/AuthStack';
 import { VALIDATION } from '@jot/shared';
 import { displayMessage } from '../i18n/utils';
 import ServerSetupGate from '../components/ServerSetupGate';
+import FadeInView from '../components/FadeInView';
 
 type RegisterScreenProps = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'Register'>;
@@ -94,13 +95,15 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
 
         <ServerSetupGate testPrefix="register">
         {error ? (
-          <Text
-            style={[styles.error, { color: colors.error }]}
-            accessibilityRole="alert"
-            accessibilityLiveRegion="polite"
-          >
-            {error}
-          </Text>
+          <FadeInView>
+            <Text
+              style={[styles.error, { color: colors.error }]}
+              accessibilityRole="alert"
+              accessibilityLiveRegion="polite"
+            >
+              {error}
+            </Text>
+          </FadeInView>
         ) : null}
 
           <TextInput

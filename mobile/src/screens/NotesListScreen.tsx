@@ -42,6 +42,8 @@ import { styles } from './notesList/styles';
 import { buildUpdateRequest, buildNoteSections, type LocalReorderState, type NoteSection } from './notesList/noteListUtils';
 import NoteListItem from './notesList/NoteListItem';
 import NotesListHeader from './notesList/NotesListHeader';
+import FadeInView from '../components/FadeInView';
+import { animateListReflow } from '../utils/layoutAnimation';
 
 interface NotesListScreenProps {
   variant?: 'notes' | 'archived' | 'trash' | 'my-tasks';
@@ -200,11 +202,15 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   }, [sortMode]);
 
   const handleDismissSortWarning = useCallback(() => {
+    animateListReflow();
     setSortWarningDismissed(true);
     void dismissSortWarning(sortMode);
   }, [sortMode]);
 
-  const handleToggleSort = useCallback(() => setIsSortControlsOpen((open) => !open), []);
+  const handleToggleSort = useCallback(() => {
+    animateListReflow();
+    setIsSortControlsOpen((open) => !open);
+  }, []);
 
   const handleNotePress = useCallback(
     (noteId: string) => {
@@ -490,7 +496,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : debouncedSearch || labelId ? (
-        <View style={styles.emptySearchContainer}>
+        <FadeInView style={styles.emptySearchContainer} scaleFrom={0.97}>
           <Ionicons
             name={debouncedSearch ? 'search-outline' : 'pricetag-outline'}
             size={48}
@@ -506,10 +512,16 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
               {t('dashboard.tryDifferentKeywords')}
             </Text>
           )}
-        </View>
+        </FadeInView>
       ) : null,
     [isSearchLoading, debouncedSearch, labelId, colors, t],
   );
+
+  // True only while a manual-sort drag is actively in progress. The reflow
+  // settle is suppressed during a drag (and through the drop's optimistic
+  // re-render) so the drag library owns that motion, but re-enabled afterwards
+  // so pin/archive/etc. in manual-sort mode still settle.
+  const isDraggingRef = useRef(false);
 
   const handleDragEnd = useCallback(
     async (newData: Note[], isPinnedSection: boolean) => {
@@ -519,6 +531,12 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         : { ...prev, unpinned: newData },
       );
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      // Clear the flag after the optimistic reorder has rendered, so the drop
+      // itself isn't settled (the drag library already animates it) while later
+      // changes are.
+      setTimeout(() => {
+        isDraggingRef.current = false;
+      }, 0);
 
       // Build full reorder payload: pinned first, then unpinned
       const pinnedIds = isPinnedSection
@@ -554,6 +572,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   );
 
   const handleDragStart = useCallback(() => {
+    isDraggingRef.current = true;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   }, []);
 
@@ -591,6 +610,31 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   // active and no search is in progress (search results mix in archived notes
   // and reordering a filtered list is not meaningful).
   const isDraggable = variant === 'notes' && sortMode === 'manual' && !debouncedSearch;
+
+  // Settle the list when its membership or order changes — pin/unpin moving a
+  // card between sections, archive/trash/restore/delete removing one, duplicate
+  // adding one, search narrowing/widening the matches, or a background sync from
+  // another device — instead of letting the remaining cards snap into place. The
+  // signature is derived from the displayed ids, so unrelated re-renders (color
+  // edits, a refetch returning identical data, isRefetching toggles) don't
+  // trigger it. Scheduling during render means the settle also covers async
+  // (refetch/SSE) removals, not just the synchronous optimistic ones. Search is
+  // debounced, so this fires once per settled query rather than per keystroke.
+  // Skipped only during manual-sort drag, where the drag library drives its own
+  // motion.
+  const listSignature = useMemo(
+    () => noteSections.map((section) => section.data.map((n) => n.id).join(',')).join('|'),
+    [noteSections],
+  );
+  const prevListSignatureRef = useRef<string | null>(null);
+  if (prevListSignatureRef.current !== listSignature) {
+    // Skip the first populate (skeleton → list) and remounts so navigation
+    // doesn't animate a full list in.
+    if (prevListSignatureRef.current !== null && !isDraggingRef.current) {
+      animateListReflow();
+    }
+    prevListSignatureRef.current = listSignature;
+  }
 
   const header = (
     <NotesListHeader
