@@ -24,7 +24,7 @@ type LoginScreenProps = {
 };
 
 export default function LoginScreen({ navigation }: LoginScreenProps) {
-  const { login } = useAuth();
+  const { login, enableLocalMode } = useAuth();
   const { colors } = useTheme();
   const { t } = useTranslation();
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
@@ -32,6 +32,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [localModeLoading, setLocalModeLoading] = useState(false);
 
   const handleLogin = async () => {
     if (!username.trim() || !password.trim()) {
@@ -57,6 +58,18 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleUseLocalMode = async () => {
+    setError('');
+    setLocalModeLoading(true);
+    try {
+      await enableLocalMode();
+    } catch {
+      setError(t('auth.localModeFailed'));
+    } finally {
+      setLocalModeLoading(false);
     }
   };
 
@@ -133,6 +146,31 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
             <Text style={[styles.linkText, { color: colors.primary }]}>{t('auth.createAccountLink')}</Text>
           </TouchableOpacity>
         </ServerSetupGate>
+
+        <View style={styles.localModeSection}>
+          <View style={styles.dividerRow}>
+            <View style={[styles.dividerLine, { backgroundColor: colors.inputBorder }]} />
+            <Text style={[styles.dividerText, { color: colors.textSecondary }]}>{t('common.or')}</Text>
+            <View style={[styles.dividerLine, { backgroundColor: colors.inputBorder }]} />
+          </View>
+
+          <TouchableOpacity
+            onPress={handleUseLocalMode}
+            disabled={localModeLoading}
+            style={[styles.localModeButton, { borderColor: colors.primary }, localModeLoading && styles.buttonDisabled]}
+            testID="use-local-mode-button"
+            accessibilityRole="button"
+            accessibilityLabel={t('auth.localModeLink')}
+            accessibilityState={{ disabled: localModeLoading, busy: localModeLoading }}
+          >
+            {localModeLoading ? (
+              <ActivityIndicator color={colors.primary} />
+            ) : (
+              <Text style={[styles.localModeButtonText, { color: colors.primary }]}>{t('auth.localModeLink')}</Text>
+            )}
+          </TouchableOpacity>
+          <Text style={[styles.localModeHint, { color: colors.textSecondary }]}>{t('auth.localModeHint')}</Text>
+        </View>
       </View>
     </KeyboardAvoidingView>
   );
@@ -191,5 +229,37 @@ const styles = StyleSheet.create({
   },
   linkText: {
     fontSize: 14,
+  },
+  localModeSection: {
+    marginTop: 24,
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  dividerLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+  },
+  dividerText: {
+    marginHorizontal: 12,
+    fontSize: 13,
+  },
+  localModeButton: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  localModeButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  localModeHint: {
+    textAlign: 'center',
+    marginTop: 8,
+    fontSize: 13,
+    lineHeight: 18,
   },
 });

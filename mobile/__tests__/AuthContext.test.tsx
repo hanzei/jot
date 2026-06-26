@@ -3,10 +3,17 @@ import { render, waitFor, act, fireEvent, cleanup, configure } from '@testing-li
 import { Text, TouchableOpacity } from 'react-native';
 import { AuthProvider, useAuth } from '../src/store/AuthContext';
 import { auth, getStoredSession, setOnUnauthorized, clearStoredSession, cacheAuthProfile, getCachedAuthProfile, clearCachedProfile } from '../src/api/client';
+import { getLocalIdentity, enableLocalMode as persistEnableLocalMode, disableLocalMode } from '../src/store/localMode';
 
 const mockQueryClient = { clear: jest.fn() };
 jest.mock('@tanstack/react-query', () => ({
   useQueryClient: () => mockQueryClient,
+}));
+
+jest.mock('../src/store/localMode', () => ({
+  getLocalIdentity: jest.fn().mockResolvedValue(null),
+  enableLocalMode: jest.fn(),
+  disableLocalMode: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('../src/api/client', () => ({
@@ -44,6 +51,9 @@ const mockClientModule = jest.requireMock('../src/api/client') as {
   restoreServerUrl: jest.Mock;
   initializeServerContext: jest.Mock;
 };
+const mockGetLocalIdentity = getLocalIdentity as jest.Mock;
+const mockPersistEnableLocalMode = persistEnableLocalMode as jest.Mock;
+const mockDisableLocalMode = disableLocalMode as jest.Mock;
 
 function TestConsumer() {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
@@ -92,6 +102,24 @@ function RevalidateConsumer() {
 const mockUser = { id: '1', username: 'testuser', first_name: '', last_name: '', role: 'user', has_profile_icon: false, created_at: '', updated_at: '' };
 const mockSettings = { user_id: '1', language: 'en', theme: 'system' as const, note_sort: 'manual' as const, updated_at: '' };
 
+const localUser = { ...mockUser, id: 'local-id', username: 'local' };
+const localSettings = { ...mockSettings, user_id: 'local-id' };
+const localIdentity = { user: localUser, settings: localSettings };
+
+function LocalModeConsumer() {
+  const { user, isAuthenticated, isLoading, isLocalMode, enableLocalMode, logout } = useAuth();
+  return (
+    <>
+      <Text testID="loading">{String(isLoading)}</Text>
+      <Text testID="authenticated">{String(isAuthenticated)}</Text>
+      <Text testID="local-mode">{String(isLocalMode)}</Text>
+      <Text testID="username">{user?.username || 'none'}</Text>
+      <TouchableOpacity testID="enable-local-button" onPress={() => enableLocalMode().catch(() => {})} />
+      <TouchableOpacity testID="logout-button" onPress={() => logout().catch(() => {})} />
+    </>
+  );
+}
+
 describe('AuthContext', () => {
   beforeAll(() => {
     configure({ asyncUtilTimeout: CI_WAIT_TIMEOUT_MS });
@@ -101,6 +129,8 @@ describe('AuthContext', () => {
     jest.clearAllMocks();
     mockGetStoredSession.mockResolvedValue(null);
     mockClientModule.getStoredServerUrl.mockResolvedValue(null);
+    mockGetLocalIdentity.mockResolvedValue(null);
+    mockDisableLocalMode.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -489,6 +519,80 @@ describe('AuthContext', () => {
     // User stays authenticated on network error
     expect(getByTestId('authenticated').props.children).toBe('true');
     expect(getByTestId('username').props.children).toBe('testuser');
+    unmount();
+  });
+
+  it('restores local mode on mount without calling /me', async () => {
+    mockGetLocalIdentity.mockResolvedValue(localIdentity);
+
+    const { getByTestId, unmount } = render(
+      <AuthProvider>
+        <LocalModeConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('loading').props.children).toBe('false');
+    });
+
+    expect(getByTestId('authenticated').props.children).toBe('true');
+    expect(getByTestId('local-mode').props.children).toBe('true');
+    expect(getByTestId('username').props.children).toBe('local');
+    expect(mockAuth.me).not.toHaveBeenCalled();
+    expect(mockClientModule.initializeServerContext).not.toHaveBeenCalled();
+    unmount();
+  });
+
+  it('enableLocalMode signs in with the on-device identity', async () => {
+    mockPersistEnableLocalMode.mockResolvedValue(localIdentity);
+
+    const { getByTestId, unmount } = render(
+      <AuthProvider>
+        <LocalModeConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('loading').props.children).toBe('false');
+    });
+    expect(getByTestId('authenticated').props.children).toBe('false');
+
+    await act(async () => {
+      fireEvent.press(getByTestId('enable-local-button'));
+    });
+
+    await waitFor(() => {
+      expect(getByTestId('local-mode').props.children).toBe('true');
+    });
+    expect(getByTestId('authenticated').props.children).toBe('true');
+    expect(getByTestId('username').props.children).toBe('local');
+    expect(mockPersistEnableLocalMode).toHaveBeenCalled();
+    unmount();
+  });
+
+  it('logout from local mode disables local mode and does not call server logout', async () => {
+    mockGetLocalIdentity.mockResolvedValue(localIdentity);
+
+    const { getByTestId, unmount } = render(
+      <AuthProvider>
+        <LocalModeConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('local-mode').props.children).toBe('true');
+    });
+
+    await act(async () => {
+      fireEvent.press(getByTestId('logout-button'));
+    });
+
+    await waitFor(() => {
+      expect(getByTestId('authenticated').props.children).toBe('false');
+    });
+    expect(getByTestId('local-mode').props.children).toBe('false');
+    expect(mockDisableLocalMode).toHaveBeenCalled();
+    expect(mockAuth.logout).not.toHaveBeenCalled();
     unmount();
   });
 });

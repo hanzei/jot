@@ -10,7 +10,8 @@
     "error": "Error",
     "unknown": "desconocido",
     "loading": "Cargando...",
-    "done": "Listo"
+    "done": "Listo",
+    "or": "o"
   },
   "nav": {
     "settings": "Ajustes",
@@ -82,7 +83,10 @@
     "serverSetupInputA11yLabel": "Campo de URL del servidor",
     "serverSetupSubmitA11yLabel": "Validar servidor y continuar",
     "serverSetupConnectionFailed": "No se pudo conectar con ese servidor. Revisa la URL y tu conexión, y vuelve a intentarlo.",
-    "serverSetupConnectionInvalidServer": "Se pudo conectar, pero no parece un endpoint API de Jot compatible."
+    "serverSetupConnectionInvalidServer": "Se pudo conectar, pero no parece un endpoint API de Jot compatible.",
+    "localModeLink": "Usar sin servidor",
+    "localModeHint": "Tus notas permanecen solo en este dispositivo.",
+    "localModeFailed": "No se pudo iniciar el modo local. Inténtalo de nuevo."
   },
   "dashboard": {
     "newNote": "Nueva nota",
