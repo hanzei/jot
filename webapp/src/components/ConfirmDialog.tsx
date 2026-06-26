@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Dialog, DialogPanel, DialogTitle } from '@headlessui/react';
+import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
 
@@ -40,9 +40,9 @@ export default function ConfirmDialog({
 
   return (
     <Dialog open={open} onClose={isSubmitting ? () => {} : onCancel} className="relative z-[60]">
-      <div className="fixed inset-0 bg-black/30 dark:bg-black/50" aria-hidden="true" />
+      <DialogBackdrop transition aria-hidden="true" className="fixed inset-0 bg-black/30 dark:bg-black/50 transition duration-200 ease-out data-[closed]:opacity-0 motion-reduce:transition-none" />
       <div className="fixed inset-0 flex items-center justify-center p-4">
-        <DialogPanel className="mx-auto w-full max-w-sm rounded-lg bg-white dark:bg-slate-800 shadow-xl border border-gray-200 dark:border-slate-700">
+        <DialogPanel transition className="mx-auto w-full max-w-sm rounded-lg bg-white dark:bg-slate-800 shadow-xl border border-gray-200 dark:border-slate-700 transition duration-200 ease-out data-[closed]:scale-95 data-[closed]:opacity-0 motion-reduce:transition-none">
           <form onSubmit={(e) => { e.preventDefault(); handleConfirm(); }}>
             <div className="p-6">
               <div className="flex items-start gap-3">

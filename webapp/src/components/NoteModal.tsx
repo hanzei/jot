@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback, type ReactElement } from 'react';
 import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, UserPlusIcon, CheckIcon, TagIcon, DocumentDuplicateIcon, DevicePhoneMobileIcon, PaintBrushIcon } from '@heroicons/react/24/outline';
-import { Dialog, DialogPanel } from '@headlessui/react';
+import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, NOTE_COLORS, buildCollaborators, generateId, type Note, type NoteItem, type NoteType, type CreateNoteRequest, type UpdateNoteRequest, type PatchNoteItemRequest, type Label, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
@@ -1753,7 +1753,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         }}
         className="relative z-50"
       >
-        <div className="fixed inset-0 bg-black/30 dark:bg-black/50" aria-hidden="true" />
+        <DialogBackdrop transition aria-hidden="true" className="fixed inset-0 bg-black/30 dark:bg-black/50 transition duration-200 ease-out data-[closed]:opacity-0 motion-reduce:transition-none" />
 
         {/* Backdrop mousedown: two-step dismiss matching Dialog.onClose.
             Using onMouseDown (not onClick) so both this handler and HeadlessUI's
@@ -1776,7 +1776,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         >
         <DialogPanel
           ref={panelRef}
-          className={`mx-auto w-full max-w-lg max-h-[90vh] overflow-hidden rounded-lg shadow-xl relative ${
+          transition
+          className={`mx-auto w-full max-w-lg max-h-[90vh] overflow-hidden rounded-lg shadow-xl relative transition duration-200 ease-out data-[closed]:scale-95 data-[closed]:opacity-0 motion-reduce:transition-none ${
             colors.find(c => c.value === color)?.class || 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600'
           }`}
         >

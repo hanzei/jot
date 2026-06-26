@@ -65,7 +65,11 @@ vi.mock('@headlessui/react', () => {
     <h2 className={className}>{children}</h2>
   )
 
-  return { Dialog, DialogPanel, DialogTitle }
+  const DialogBackdrop = ({ className }: { className?: string }) => (
+    <div className={className} data-testid="dialog-backdrop" />
+  )
+
+  return { Dialog, DialogPanel, DialogTitle, DialogBackdrop }
 })
 
 // Mock @dnd-kit components

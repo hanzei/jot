@@ -126,6 +126,9 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
       left,
       width,
       maxHeight: `${Math.max(spaceAbove, spaceBelow) - GAP - VIEWPORT_MARGIN}px`,
+      // Grow from the edge nearest the trigger so the entrance animation reads as
+      // the menu unfolding out of the labels row.
+      transformOrigin: openUpward ? 'bottom left' : 'top left',
       ...(openUpward
         ? { bottom: window.innerHeight - rect.top + GAP }
         : { top: rect.bottom + GAP }),
@@ -262,7 +265,9 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
     <div
       ref={containerRef}
       style={menuStyle ?? { position: 'fixed', visibility: 'hidden' }}
-      className="z-[1000] flex flex-col overflow-hidden bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-md shadow-lg"
+      // Animate in only once positioned (menuStyle set), so it grows from the
+      // trigger rather than flashing at its hidden 0,0 origin.
+      className={`z-[1000] flex flex-col overflow-hidden bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-md shadow-lg ${menuStyle ? 'animate-pop-in motion-reduce:animate-none' : ''}`}
     >
       <div className="flex-none px-2 pt-1 pb-1.5 border-b border-gray-200 dark:border-slate-600">
         <input
