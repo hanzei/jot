@@ -42,6 +42,7 @@ import { styles } from './notesList/styles';
 import { buildUpdateRequest, buildNoteSections, type LocalReorderState, type NoteSection } from './notesList/noteListUtils';
 import NoteListItem from './notesList/NoteListItem';
 import NotesListHeader from './notesList/NotesListHeader';
+import FadeInView from '../components/FadeInView';
 import { animateListReflow } from '../utils/layoutAnimation';
 
 interface NotesListScreenProps {
@@ -495,7 +496,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : debouncedSearch || labelId ? (
-        <View style={styles.emptySearchContainer}>
+        <FadeInView style={styles.emptySearchContainer} scaleFrom={0.97}>
           <Ionicons
             name={debouncedSearch ? 'search-outline' : 'pricetag-outline'}
             size={48}
@@ -511,7 +512,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
               {t('dashboard.tryDifferentKeywords')}
             </Text>
           )}
-        </View>
+        </FadeInView>
       ) : null,
     [isSearchLoading, debouncedSearch, labelId, colors, t],
   );

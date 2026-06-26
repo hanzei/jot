@@ -16,6 +16,7 @@ import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { AuthStackParamList } from '../navigation/AuthStack';
 import ServerSetupGate from '../components/ServerSetupGate';
+import FadeInView from '../components/FadeInView';
 import { displayMessage } from '../i18n/utils';
 
 type LoginScreenProps = {
@@ -70,13 +71,15 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
 
         <ServerSetupGate testPrefix="login">
           {error ? (
-            <Text
-              style={[styles.error, { color: colors.error }]}
-              accessibilityRole="alert"
-              accessibilityLiveRegion="polite"
-            >
-              {error}
-            </Text>
+            <FadeInView>
+              <Text
+                style={[styles.error, { color: colors.error }]}
+                accessibilityRole="alert"
+                accessibilityLiveRegion="polite"
+              >
+                {error}
+              </Text>
+            </FadeInView>
           ) : null}
 
           <TextInput

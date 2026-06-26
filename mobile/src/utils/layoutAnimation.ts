@@ -26,6 +26,15 @@ AccessibilityInfo.addEventListener('reduceMotionChanged', (enabled) => {
 });
 
 /**
+ * Synchronously reports the cached OS "Reduce Motion" setting. Lets entrance
+ * animations (e.g. FadeInView) decide at mount whether to animate without each
+ * one re-querying AccessibilityInfo or reaching into this module's internals.
+ */
+export function isReduceMotionEnabledSync(): boolean {
+  return reduceMotionEnabled;
+}
+
+/**
  * Queue a subtle, quick animation for the next layout commit so list items
  * settle into place instead of jumping — e.g. when an item is checked off and
  * moves into the completed section, or the completed section is collapsed.
