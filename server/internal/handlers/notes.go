@@ -495,6 +495,18 @@ type DuplicateNoteRequest struct {
 	ItemIDs map[string]string `json:"item_ids"`
 }
 
+func validateDuplicateItemIDs(itemIDs map[string]string) error {
+	for srcID, newID := range itemIDs {
+		if !models.IsValidID(srcID) {
+			return errors.New("invalid source item ID format in item_ids")
+		}
+		if !models.IsValidID(newID) {
+			return errors.New("invalid new item ID format in item_ids")
+		}
+	}
+	return nil
+}
+
 // DuplicateNote godoc
 //
 //	@Summary	Duplicate an existing note
@@ -534,13 +546,8 @@ func (h *NotesHandler) DuplicateNote(w http.ResponseWriter, r *http.Request) (in
 	if req.ID != "" && !models.IsValidID(req.ID) {
 		return http.StatusBadRequest, nil, errors.New("invalid duplicate note ID format")
 	}
-	for srcID, newID := range req.ItemIDs {
-		if !models.IsValidID(srcID) {
-			return http.StatusBadRequest, nil, errors.New("invalid source item ID format in item_ids")
-		}
-		if !models.IsValidID(newID) {
-			return http.StatusBadRequest, nil, errors.New("invalid new item ID format in item_ids")
-		}
+	if err := validateDuplicateItemIDs(req.ItemIDs); err != nil {
+		return http.StatusBadRequest, nil, err
 	}
 
 	sourceNote, err := h.noteStore.GetByID(r.Context(), id, user.ID)
