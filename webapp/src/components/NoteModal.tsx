@@ -10,6 +10,7 @@ import LetterAvatar from '@/components/LetterAvatar';
 import AssigneePicker from '@/components/AssigneePicker';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
+import { useSizeTransition } from '@/hooks/useSizeTransition';
 import { buildShareAvatars } from '@/utils/shareAvatars';
 import { buildMobileDeepLink } from '@/utils/deepLink';
 import { isEditableElementFocused } from '@/utils/keyboardShortcuts';
@@ -708,6 +709,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
     return { uncompletedItems, completedItems, completedItemTexts };
   }, [items]);
+
+  // Softly animate the modal's height when its contents structurally change
+  // (an item checked off, added/removed, or the completed section toggled), so
+  // the panel resizes smoothly instead of jumping. Keyed on structural counts
+  // only, so typing inside an item doesn't trigger a height animation.
+  const sizeTransitionKey =
+    `${uncompletedItems.length}:${completedItems.length}:${checkedItemsCollapsed}:${noteType}:${isEditingContent}`;
+  const panelRef = useSizeTransition<HTMLDivElement>(sizeTransitionKey);
 
   const colorMeta: Record<string, { name: string; class: string }> = {
     '#ffffff': { name: t('note.colorWhite'), class: 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600' },
@@ -1766,6 +1775,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
           }}
         >
         <DialogPanel
+          ref={panelRef}
           className={`mx-auto w-full max-w-lg max-h-[90vh] overflow-hidden rounded-lg shadow-xl relative ${
             colors.find(c => c.value === color)?.class || 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600'
           }`}

@@ -3,6 +3,7 @@ import { Dialog, DialogPanel, DialogTitle } from '@headlessui/react';
 import { XMarkIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
 import { notes, isAxiosError } from '@/utils/api';
+import { useSizeTransition } from '@/hooks/useSizeTransition';
 import type { ImportResponse } from '@jot/shared';
 
 type ImportType = 'jot_json' | 'google_keep' | 'usememos';
@@ -23,6 +24,12 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
   const [error, setError] = useState('');
   const [result, setResult] = useState<ImportResponse | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Softly animate the modal's height when its contents change (import type
+  // switched, a file selected, or an error/result block shown).
+  const sizeTransitionKey =
+    `${importType}:${!!selectedFile}:${!!error}:${!!result}`;
+  const panelRef = useSizeTransition<HTMLDivElement>(sizeTransitionKey);
 
   const isFileType = importType !== 'usememos';
   const acceptedFileTypes = importType === 'jot_json' ? '.json' : '.json,.zip';
@@ -119,7 +126,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
 
       <div className="fixed inset-0 overflow-y-auto">
         <div className="flex min-h-full items-center justify-center p-4">
-          <DialogPanel className="mx-auto max-w-md w-full rounded bg-white dark:bg-slate-800 p-6 shadow-xl border border-gray-200 dark:border-slate-700">
+          <DialogPanel ref={panelRef} className="mx-auto max-w-md w-full rounded bg-white dark:bg-slate-800 p-6 shadow-xl border border-gray-200 dark:border-slate-700">
             <div className="flex items-center justify-between mb-4">
               <DialogTitle className="text-lg font-medium text-gray-900 dark:text-white">
                 {t('import.title')}

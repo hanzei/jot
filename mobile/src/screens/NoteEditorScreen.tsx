@@ -59,6 +59,7 @@ import {
 import { MarkdownToolbarContent, ListIndentToolbarContent } from './noteEditor/EditorToolbars';
 import CheckedItemsSection, { type ListItemHandlers } from './noteEditor/CheckedItemsSection';
 import { styles } from './noteEditor/styles';
+import { animateListReflow } from '../utils/layoutAnimation';
 
 type EditorRouteProp = RouteProp<RootStackParamList, 'NoteEditor'>;
 type EditorNavProp = NativeStackNavigationProp<RootStackParamList, 'NoteEditor'>;
@@ -676,8 +677,10 @@ export default function NoteEditorScreen() {
       const target = before.find((item) => item.id === itemId);
       if (!target || target.completed === completed) return;
 
-      // Optimistic cascade applied immediately
+      // Optimistic cascade applied immediately, with a subtle settle as the
+      // item moves between the active list and the completed section.
       const cascaded = applyCompletedCascade(before, itemId, completed);
+      animateListReflow();
       setItems(cascaded);
 
       // For unsaved new notes, let the bulk-create carry completed flags
@@ -967,6 +970,7 @@ export default function NoteEditorScreen() {
   }, [markDirtyAndScheduleUpdate, getItemRef]);
 
   const handleToggleCollapsed = useCallback(() => {
+    animateListReflow();
     setCheckedItemsCollapsed((prev) => !prev);
     markDirtyAndScheduleUpdate();
   }, [markDirtyAndScheduleUpdate]);

@@ -4,6 +4,7 @@ import { XMarkIcon, TrashIcon, ChevronDownIcon } from '@heroicons/react/24/outli
 import { useTranslation } from 'react-i18next';
 import { ROLES, type Note, type NoteShare, type User } from '@jot/shared';
 import { notes, users as usersApi } from '@/utils/api';
+import { useSizeTransition } from '@/hooks/useSizeTransition';
 
 interface ShareModalProps {
   note: Note | null;
@@ -24,6 +25,12 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
   const [success, setSuccess] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
+
+  // Softly animate the modal's height when its contents change (a collaborator
+  // added/removed, suggestions toggled, or a status message shown/hidden).
+  const sizeTransitionKey =
+    `${shares.length}:${showSuggestions}:${filteredUsers.length}:${!!error}:${!!success}`;
+  const panelRef = useSizeTransition<HTMLDivElement>(sizeTransitionKey);
 
   const loadShares = useCallback(async () => {
     if (!note) return;
@@ -188,7 +195,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
       
       <div className="fixed inset-0 overflow-y-auto">
         <div className="flex min-h-full items-center justify-center p-4">
-          <DialogPanel className="mx-auto max-w-md rounded bg-white dark:bg-slate-800 p-6 shadow-xl border border-gray-200 dark:border-slate-700">
+          <DialogPanel ref={panelRef} className="mx-auto max-w-md rounded bg-white dark:bg-slate-800 p-6 shadow-xl border border-gray-200 dark:border-slate-700">
             <div className="flex justify-end mb-4">
               <button
                 onClick={handleClose}
