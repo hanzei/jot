@@ -261,6 +261,11 @@ func duplicateItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteI
 			 VALUES (?, ?, ?, ?, ?, ?, ?)`),
 			itemID, noteID, item.Text, item.Completed, item.Position, newParent, nullableAssignedTo(""),
 		); err != nil {
+			// Two concurrent replays with the same client-supplied ID can both pass
+			// the existence check above; map the constraint violation to ErrNoteItemExists.
+			if itemIDs[item.ID] != "" && d.IsUniqueConstraintError(err) {
+				return ErrNoteItemExists
+			}
 			return fmt.Errorf("failed to duplicate note item: %w", err)
 		}
 	}
