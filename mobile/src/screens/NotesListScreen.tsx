@@ -597,6 +597,29 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   // and reordering a filtered list is not meaningful).
   const isDraggable = variant === 'notes' && sortMode === 'manual' && !debouncedSearch;
 
+  // Settle the list when its membership or order changes — pin/unpin moving a
+  // card between sections, archive/trash/restore/delete removing one, duplicate
+  // adding one, or a background sync from another device — instead of letting the
+  // remaining cards snap into place. The signature is derived from the displayed
+  // ids, so unrelated re-renders (color edits, a refetch returning identical
+  // data, isRefetching toggles) don't trigger it. Scheduling during render means
+  // the settle also covers async (refetch/SSE) removals, not just the synchronous
+  // optimistic ones. Skipped during manual-sort drag (the drag library drives its
+  // own motion) and while searching (filter churn shouldn't animate).
+  const listSignature = useMemo(
+    () => noteSections.map((section) => section.data.map((n) => n.id).join(',')).join('|'),
+    [noteSections],
+  );
+  const prevListSignatureRef = useRef<string | null>(null);
+  if (prevListSignatureRef.current !== listSignature) {
+    // Skip the first populate (skeleton → list) and remounts so navigation
+    // doesn't animate a full list in.
+    if (prevListSignatureRef.current !== null && !isDraggable && !debouncedSearch) {
+      animateListReflow();
+    }
+    prevListSignatureRef.current = listSignature;
+  }
+
   const header = (
     <NotesListHeader
       variant={variant}
