@@ -38,7 +38,6 @@ import {
   markLocalNoteRestored,
   permanentDeleteLocalNote,
   updateLocalNote,
-  generateLocalId,
   generateClientNoteId,
   markNotePendingCreate,
   isNotePendingCreate,
@@ -178,6 +177,18 @@ export function useCreateNote() {
       const now = new Date().toISOString();
       const labels: Label[] = [];
       const shared_with: NoteShare[] = [];
+
+      // Pre-assign a permanent, server-format ID to every list item so the *same*
+      // ID backs the local row and is sent in the create body. The server honors
+      // client-supplied item IDs (see createBulkListItem), so the item's identity
+      // is stable from creation — no `local_* → server ID` reconciliation on drain
+      // (issues #513/#475), and a later per-item edit queued before the create
+      // drains still references a valid ID. In local mode there is no server to
+      // reconcile against, so this permanent ID is simply terminal.
+      const itemsWithIds =
+        data.note_type === 'list'
+          ? (data.items ?? []).map((item) => ({ ...item, id: item.id ?? generateId() }))
+          : undefined;
       const baseLocalNote = {
         id: clientId,
         user_id: user?.id ?? '',
@@ -203,15 +214,12 @@ export function useCreateNote() {
             checked_items_collapsed: false,
             items: (() => {
               let lastTopLevelId: string | null = null;
-              return data.items?.map((item, i) => {
-                // Honor the client-supplied item ID so it stays stable when the
-                // note create is replayed and items are later edited granularly.
-                const id = item.id ?? generateLocalId();
+              return (itemsWithIds ?? []).map((item, i) => {
                 const isChild = (item.indent_level ?? 0) === 1;
                 const parentId = isChild ? lastTopLevelId : null;
-                if (!isChild) lastTopLevelId = id;
+                if (!isChild) lastTopLevelId = item.id;
                 return {
-                  id,
+                  id: item.id,
                   note_id: clientId,
                   text: item.text,
                   completed: item.completed ?? false,
@@ -237,7 +245,14 @@ export function useCreateNote() {
         operation: 'create',
         endpoint: '/notes',
         method: 'POST',
-        body: { ...data, id: clientId } as Record<string, unknown>,
+        // Carry the pre-assigned item IDs so the server keeps them (no
+        // reconciliation) and the local rows stay valid for any per-item edit
+        // queued behind this create (#513).
+        body: {
+          ...data,
+          ...(itemsWithIds ? { items: itemsWithIds } : {}),
+          id: clientId,
+        } as Record<string, unknown>,
       });
       return localNote;
     },
@@ -579,14 +594,16 @@ export function useDuplicateNote() {
             ...source,
             ...resetFields,
             items: (() => {
-              // Build a map from old item IDs to new local IDs so that parent_id
-              // references within the duplicate point to the new items, not to items
-              // in the source note. Items arrive in position order, so parents are
-              // always mapped before their children are processed. Item IDs are
-              // temporary and replaced by the server's canonical IDs on drain.
+              // Build a map from old item IDs to new server-format IDs so that
+              // parent_id references within the duplicate point to the new items,
+              // not to items in the source note. Items arrive in position order, so
+              // parents are always mapped before their children are processed. The
+              // /duplicate endpoint clones items server-side and returns canonical
+              // IDs (adopted on drain) in server mode; in local mode there is no
+              // server, so these permanent server-format IDs are terminal (#513).
               const idRemap = new Map<string, string>();
               return (source.items ?? []).map((item) => {
-                const newId = generateLocalId();
+                const newId = generateId();
                 idRemap.set(item.id, newId);
                 return {
                   ...item,
