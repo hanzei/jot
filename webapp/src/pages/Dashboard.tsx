@@ -1031,7 +1031,7 @@ export default function Dashboard() {
         {noteSort !== 'manual' && !sortWarningDismissed && (
           <div
             data-testid="manual-reorder-disabled-notice"
-            className="mb-6 flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900/70 dark:bg-blue-950/40 dark:text-blue-200"
+            className="mb-6 flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900/70 dark:bg-blue-950/40 dark:text-blue-200 animate-fade-in motion-reduce:animate-none"
           >
             <ArrowsUpDownIcon className="mt-0.5 h-4 w-4 shrink-0" />
             <div className="flex-1">
@@ -1052,7 +1052,7 @@ export default function Dashboard() {
           <div className="py-12">
             <div
               data-testid="dashboard-empty-state"
-              className="mx-auto flex max-w-2xl flex-col items-center rounded-2xl border border-gray-200 bg-white px-6 py-10 text-center shadow-sm dark:border-slate-700 dark:bg-slate-800"
+              className="mx-auto flex max-w-2xl flex-col items-center rounded-2xl border border-gray-200 bg-white px-6 py-10 text-center shadow-sm dark:border-slate-700 dark:bg-slate-800 animate-pop-in motion-reduce:animate-none"
             >
               <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-100 text-gray-500 dark:bg-slate-700 dark:text-slate-200">
                 {emptyState.icon}
