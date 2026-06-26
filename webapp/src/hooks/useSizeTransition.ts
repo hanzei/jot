@@ -31,6 +31,7 @@ export function useSizeTransition<T extends HTMLElement>(
 ) {
   const ref = useRef<T | null>(null);
   const previousHeight = useRef<number | null>(null);
+  const animationRef = useRef<Animation | null>(null);
 
   useLayoutEffect(() => {
     const element = ref.current;
@@ -49,10 +50,18 @@ export function useSizeTransition<T extends HTMLElement>(
       return;
     }
 
-    element.animate(
+    // Cancel any in-flight height animation so rapid trigger changes don't
+    // stack overlapping animations (which causes jitter).
+    animationRef.current?.cancel();
+    animationRef.current = element.animate(
       [{ height: `${prevHeight}px` }, { height: `${nextHeight}px` }],
       { duration, easing: 'ease-out' },
     );
+
+    return () => {
+      animationRef.current?.cancel();
+      animationRef.current = null;
+    };
   }, [trigger, duration]);
 
   return ref;
