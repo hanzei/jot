@@ -42,6 +42,7 @@ import { styles } from './notesList/styles';
 import { buildUpdateRequest, buildNoteSections, type LocalReorderState, type NoteSection } from './notesList/noteListUtils';
 import NoteListItem from './notesList/NoteListItem';
 import NotesListHeader from './notesList/NotesListHeader';
+import { animateListReflow } from '../utils/layoutAnimation';
 
 interface NotesListScreenProps {
   variant?: 'notes' | 'archived' | 'trash' | 'my-tasks';
@@ -200,11 +201,15 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   }, [sortMode]);
 
   const handleDismissSortWarning = useCallback(() => {
+    animateListReflow();
     setSortWarningDismissed(true);
     void dismissSortWarning(sortMode);
   }, [sortMode]);
 
-  const handleToggleSort = useCallback(() => setIsSortControlsOpen((open) => !open), []);
+  const handleToggleSort = useCallback(() => {
+    animateListReflow();
+    setIsSortControlsOpen((open) => !open);
+  }, []);
 
   const handleNotePress = useCallback(
     (noteId: string) => {

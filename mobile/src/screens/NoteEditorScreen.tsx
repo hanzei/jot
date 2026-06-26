@@ -802,6 +802,8 @@ export default function NoteEditorScreen() {
   const handleDeleteItem = useCallback(
     (index: number) => {
       const removedItemId = itemsRef.current[index]?.id;
+      // Settle the surrounding rows as this one is removed instead of snapping.
+      animateListReflow();
       setItems((prev) => prev.filter((_, i) => i !== index));
       if (removedItemId) {
         itemInputRefsMap.current.delete(removedItemId);
@@ -814,6 +816,8 @@ export default function NoteEditorScreen() {
   const handleAddItem = useCallback(() => {
     const newId = nextTempId();
     const newItemRef = getItemRef(newId);
+    // Ease the new row in rather than having the list jump to make room.
+    animateListReflow();
     setItems((prev) => [
       ...prev,
       { id: newId, text: '', completed: false, position: prev.length, parentId: null, assigned_to: '' },
@@ -875,6 +879,8 @@ export default function NoteEditorScreen() {
         newParentId = null;
       }
 
+      // Slide the row to its new indent rather than snapping sideways/vertically.
+      animateListReflow();
       setItems((prev) =>
         normalizeItemOrder(
           prev.map((item) => (item.id === target.id ? { ...item, parentId: newParentId } : item)),
