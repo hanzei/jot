@@ -517,6 +517,12 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     [isSearchLoading, debouncedSearch, labelId, colors, t],
   );
 
+  // True only while a manual-sort drag is actively in progress. The reflow
+  // settle is suppressed during a drag (and through the drop's optimistic
+  // re-render) so the drag library owns that motion, but re-enabled afterwards
+  // so pin/archive/etc. in manual-sort mode still settle.
+  const isDraggingRef = useRef(false);
+
   const handleDragEnd = useCallback(
     async (newData: Note[], isPinnedSection: boolean) => {
       // Optimistically update local order
@@ -525,6 +531,12 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         : { ...prev, unpinned: newData },
       );
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      // Clear the flag after the optimistic reorder has rendered, so the drop
+      // itself isn't settled (the drag library already animates it) while later
+      // changes are.
+      setTimeout(() => {
+        isDraggingRef.current = false;
+      }, 0);
 
       // Build full reorder payload: pinned first, then unpinned
       const pinnedIds = isPinnedSection
@@ -560,6 +572,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   );
 
   const handleDragStart = useCallback(() => {
+    isDraggingRef.current = true;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   }, []);
 
@@ -617,7 +630,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   if (prevListSignatureRef.current !== listSignature) {
     // Skip the first populate (skeleton → list) and remounts so navigation
     // doesn't animate a full list in.
-    if (prevListSignatureRef.current !== null && !isDraggable) {
+    if (prevListSignatureRef.current !== null && !isDraggingRef.current) {
       animateListReflow();
     }
     prevListSignatureRef.current = listSignature;
