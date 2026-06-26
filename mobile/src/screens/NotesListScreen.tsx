@@ -599,13 +599,15 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
   // Settle the list when its membership or order changes — pin/unpin moving a
   // card between sections, archive/trash/restore/delete removing one, duplicate
-  // adding one, or a background sync from another device — instead of letting the
-  // remaining cards snap into place. The signature is derived from the displayed
-  // ids, so unrelated re-renders (color edits, a refetch returning identical
-  // data, isRefetching toggles) don't trigger it. Scheduling during render means
-  // the settle also covers async (refetch/SSE) removals, not just the synchronous
-  // optimistic ones. Skipped during manual-sort drag (the drag library drives its
-  // own motion) and while searching (filter churn shouldn't animate).
+  // adding one, search narrowing/widening the matches, or a background sync from
+  // another device — instead of letting the remaining cards snap into place. The
+  // signature is derived from the displayed ids, so unrelated re-renders (color
+  // edits, a refetch returning identical data, isRefetching toggles) don't
+  // trigger it. Scheduling during render means the settle also covers async
+  // (refetch/SSE) removals, not just the synchronous optimistic ones. Search is
+  // debounced, so this fires once per settled query rather than per keystroke.
+  // Skipped only during manual-sort drag, where the drag library drives its own
+  // motion.
   const listSignature = useMemo(
     () => noteSections.map((section) => section.data.map((n) => n.id).join(',')).join('|'),
     [noteSections],
@@ -614,7 +616,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   if (prevListSignatureRef.current !== listSignature) {
     // Skip the first populate (skeleton → list) and remounts so navigation
     // doesn't animate a full list in.
-    if (prevListSignatureRef.current !== null && !isDraggable && !debouncedSearch) {
+    if (prevListSignatureRef.current !== null && !isDraggable) {
       animateListReflow();
     }
     prevListSignatureRef.current = listSignature;
