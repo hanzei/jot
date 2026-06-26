@@ -97,7 +97,7 @@ export default function AssigneePicker({ collaborators, currentAssigneeId, onAss
   return (
     <div
       ref={containerRef}
-      className="absolute z-30 right-0 mt-1 w-52 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-md shadow-lg py-1"
+      className="absolute z-30 right-0 mt-1 w-52 origin-top-right bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-md shadow-lg py-1 animate-pop-in motion-reduce:animate-none"
     >
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-200 dark:border-slate-600">
         <span className="text-sm font-medium text-gray-700 dark:text-gray-200" id={labelId}>
