@@ -191,11 +191,11 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
 
   return (
     <Dialog open={isOpen} onClose={handleClose} aria-label={t('note.share')} className="relative z-50">
-      <DialogBackdrop transition className="fixed inset-0 bg-black/25 duration-200 ease-out data-[closed]:opacity-0 motion-reduce:transition-none" />
+      <DialogBackdrop transition className="fixed inset-0 bg-black/25 transition duration-200 ease-out data-[closed]:opacity-0 motion-reduce:transition-none" />
 
       <div className="fixed inset-0 overflow-y-auto">
         <div className="flex min-h-full items-center justify-center p-4">
-          <DialogPanel ref={panelRef} transition className="mx-auto max-w-md rounded bg-white dark:bg-slate-800 p-6 shadow-xl border border-gray-200 dark:border-slate-700 duration-200 ease-out data-[closed]:scale-95 data-[closed]:opacity-0 motion-reduce:transition-none">
+          <DialogPanel ref={panelRef} transition className="mx-auto max-w-md rounded bg-white dark:bg-slate-800 p-6 shadow-xl border border-gray-200 dark:border-slate-700 transition duration-200 ease-out data-[closed]:scale-95 data-[closed]:opacity-0 motion-reduce:transition-none">
             <div className="flex justify-end mb-4">
               <button
                 onClick={handleClose}

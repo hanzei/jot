@@ -233,7 +233,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
         <MenuButton aria-label={t('note.menuOptions')} className="p-1 rounded-full hover:bg-gray-200 transition-colors">
           <EllipsisVerticalIcon className="h-4 w-4 text-gray-600" />
         </MenuButton>
-        <MenuItems transition onKeyDownCapture={handleMenuKeyDown} className="absolute right-0 mt-1 w-52 origin-top-right bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black dark:ring-slate-600 ring-opacity-5 focus:outline-none z-10 border border-gray-200 dark:border-slate-600 transition duration-100 ease-out data-[closed]:scale-95 data-[closed]:opacity-0 motion-reduce:transition-none">
+        <MenuItems transition onKeyDownCapture={handleMenuKeyDown} className="absolute right-0 mt-1 w-52 origin-top-right bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black/5 dark:ring-slate-600/20 focus:outline-none z-10 border border-gray-200 dark:border-slate-600 transition duration-100 ease-out data-[closed]:scale-95 data-[closed]:opacity-0 motion-reduce:transition-none">
           <div className="py-1">
             {inBin ? (
               <>

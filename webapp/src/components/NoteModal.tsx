@@ -1753,7 +1753,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         }}
         className="relative z-50"
       >
-        <DialogBackdrop transition aria-hidden="true" className="fixed inset-0 bg-black/30 dark:bg-black/50 duration-200 ease-out data-[closed]:opacity-0 motion-reduce:transition-none" />
+        <DialogBackdrop transition aria-hidden="true" className="fixed inset-0 bg-black/30 dark:bg-black/50 transition duration-200 ease-out data-[closed]:opacity-0 motion-reduce:transition-none" />
 
         {/* Backdrop mousedown: two-step dismiss matching Dialog.onClose.
             Using onMouseDown (not onClick) so both this handler and HeadlessUI's
@@ -1777,7 +1777,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         <DialogPanel
           ref={panelRef}
           transition
-          className={`mx-auto w-full max-w-lg max-h-[90vh] overflow-hidden rounded-lg shadow-xl relative duration-200 ease-out data-[closed]:scale-95 data-[closed]:opacity-0 motion-reduce:transition-none ${
+          className={`mx-auto w-full max-w-lg max-h-[90vh] overflow-hidden rounded-lg shadow-xl relative transition duration-200 ease-out data-[closed]:scale-95 data-[closed]:opacity-0 motion-reduce:transition-none ${
             colors.find(c => c.value === color)?.class || 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600'
           }`}
         >
