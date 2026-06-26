@@ -51,7 +51,7 @@ const ProfileMenu = ({ iconSrc, displayUsername, firstName, baseUsername, showAd
             <LetterAvatar firstName={firstName} username={baseUsername} className="h-8 w-8" />
           )}
         </MenuButton>
-        <MenuItems className="absolute right-0 mt-2 w-44 bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black/5 dark:ring-slate-600/20 focus:outline-none z-10 border border-gray-200 dark:border-slate-600">
+        <MenuItems transition className="absolute right-0 mt-2 w-44 origin-top-right bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black/5 dark:ring-slate-600/20 focus:outline-none z-10 border border-gray-200 dark:border-slate-600 transition duration-100 ease-out data-[closed]:scale-95 data-[closed]:opacity-0 motion-reduce:transition-none">
           <div className="py-1">
             <MenuItem>
               <Link
