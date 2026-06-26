@@ -1,14 +1,7 @@
 import { useLayoutEffect, useRef } from 'react';
+import { canAnimate } from '@/utils/motion';
 
 const DEFAULT_DURATION = 200;
-
-function prefersReducedMotion(): boolean {
-  return (
-    typeof window !== 'undefined' &&
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  );
-}
 
 interface SizeTransitionOptions {
   /** Animation duration in milliseconds. */
@@ -43,8 +36,7 @@ export function useSizeTransition<T extends HTMLElement>(
 
     if (
       prevHeight === null ||
-      prefersReducedMotion() ||
-      typeof element.animate !== 'function' ||
+      !canAnimate(element) ||
       Math.abs(prevHeight - nextHeight) <= 1
     ) {
       return;

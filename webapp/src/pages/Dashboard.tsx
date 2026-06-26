@@ -7,7 +7,7 @@ import type { Note, User, SSEEvent, NoteSort } from '@jot/shared';
 import { useSearchParams, useParams, useNavigate } from 'react-router';
 import PageContent from '@/components/PageContent';
 import SearchBar from '@/components/SearchBar';
-import SortableNoteCard from '@/components/SortableNoteCard';
+import AnimatedNoteGrid from '@/components/AnimatedNoteGrid';
 import NoteModal from '@/components/NoteModal';
 import ShareModal from '@/components/ShareModal';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -28,9 +28,7 @@ import {
 } from '@dnd-kit/core';
 import {
   arrayMove,
-  SortableContext,
   sortableKeyboardCoordinates,
-  rectSortingStrategy,
 } from '@dnd-kit/sortable';
 import {
   restrictToWindowEdges,
@@ -869,6 +867,9 @@ export default function Dashboard() {
     return [...pinned, ...other];
   }, [archivedMatches, noteSort]);
   const dragReorderingDisabled = showArchived || showBin || showMyTasks || isSearching || isFilteringByLabel || noteSort !== 'manual';
+  // Remount the grids when the active view/filter changes so the new set of
+  // cards staggers in cleanly instead of cross-fading the previous one.
+  const viewKey = `${showArchived ? 'archive' : showBin ? 'bin' : showMyTasks ? 'my-tasks' : 'notes'}|${selectedLabelId ?? ''}|${debouncedSearchQuery}`;
   const activeSortLabel = t(`dashboard.sortOption.${noteSort}`);
   const focusSearchShortcutHint = isApplePlatform() ? '⌘ + F' : t('keyboardShortcuts.focusSearchKey');
   const showCreateFirstNoteCta =
@@ -1095,31 +1096,22 @@ export default function Dashboard() {
                     </svg>
                     {t('dashboard.pinned')}
                   </h2>
-                  <SortableContext
-                    items={displayedPinned.map(note => note.id)}
-                    strategy={rectSortingStrategy}
-                  >
-                    <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-0">
-                      {displayedPinned.map((note) => (
-                        <SortableNoteCard
-                          key={note.id}
-                          note={note}
-                          onEdit={handleEditNote}
-                          onDelete={handleDeleteNote}
-                          onDuplicate={handleDuplicateNote}
-                          onShare={handleShareNote}
-                          onRestore={handleRestoreNote}
-                          onPermanentlyDelete={handlePermanentlyDeleteNote}
-                          currentUserId={user?.id}
-                          usersById={usersById}
-                          disabled={dragReorderingDisabled}
-                          inBin={showBin}
-                          onRefresh={loadNotes}
-                          onLabelClick={!showBin ? handleLabelClick : undefined}
-                        />
-                      ))}
-                    </div>
-                  </SortableContext>
+                  <AnimatedNoteGrid
+                    key={`${viewKey}|pinned`}
+                    notes={displayedPinned}
+                    onEdit={handleEditNote}
+                    onDelete={handleDeleteNote}
+                    onDuplicate={handleDuplicateNote}
+                    onShare={handleShareNote}
+                    onRestore={handleRestoreNote}
+                    onPermanentlyDelete={handlePermanentlyDeleteNote}
+                    currentUserId={user?.id}
+                    usersById={usersById}
+                    disabled={dragReorderingDisabled}
+                    inBin={showBin}
+                    onRefresh={loadNotes}
+                    onLabelClick={!showBin ? handleLabelClick : undefined}
+                  />
                 </div>
               )}
 
@@ -1131,31 +1123,22 @@ export default function Dashboard() {
                       {t('dashboard.otherNotes')}
                     </h2>
                   )}
-                  <SortableContext
-                    items={displayedOther.map(note => note.id)}
-                    strategy={rectSortingStrategy}
-                  >
-                    <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-0">
-                      {displayedOther.map((note) => (
-                        <SortableNoteCard
-                          key={note.id}
-                          note={note}
-                          onEdit={handleEditNote}
-                          onDelete={handleDeleteNote}
-                          onDuplicate={handleDuplicateNote}
-                          onShare={handleShareNote}
-                          onRestore={handleRestoreNote}
-                          onPermanentlyDelete={handlePermanentlyDeleteNote}
-                          currentUserId={user?.id}
-                          usersById={usersById}
-                          disabled={dragReorderingDisabled}
-                          inBin={showBin}
-                          onRefresh={loadNotes}
-                          onLabelClick={!showBin ? handleLabelClick : undefined}
-                        />
-                      ))}
-                    </div>
-                  </SortableContext>
+                  <AnimatedNoteGrid
+                    key={`${viewKey}|other`}
+                    notes={displayedOther}
+                    onEdit={handleEditNote}
+                    onDelete={handleDeleteNote}
+                    onDuplicate={handleDuplicateNote}
+                    onShare={handleShareNote}
+                    onRestore={handleRestoreNote}
+                    onPermanentlyDelete={handlePermanentlyDeleteNote}
+                    currentUserId={user?.id}
+                    usersById={usersById}
+                    disabled={dragReorderingDisabled}
+                    inBin={showBin}
+                    onRefresh={loadNotes}
+                    onLabelClick={!showBin ? handleLabelClick : undefined}
+                  />
                 </div>
               )}
 
@@ -1166,31 +1149,22 @@ export default function Dashboard() {
                     <ArchiveBoxIcon aria-hidden="true" className="h-4 w-4 text-gray-500 dark:text-gray-400 mr-2" />
                     {t('dashboard.archivedResults')}
                   </h2>
-                  <SortableContext
-                    items={displayedArchived.map(note => note.id)}
-                    strategy={rectSortingStrategy}
-                  >
-                    <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-0">
-                      {displayedArchived.map((note) => (
-                        <SortableNoteCard
-                          key={note.id}
-                          note={note}
-                          onEdit={handleEditNote}
-                          onDelete={handleDeleteNote}
-                          onDuplicate={handleDuplicateNote}
-                          onShare={handleShareNote}
-                          onRestore={handleRestoreNote}
-                          onPermanentlyDelete={handlePermanentlyDeleteNote}
-                          currentUserId={user?.id}
-                          usersById={usersById}
-                          disabled={true}
-                          inBin={showBin}
-                          onRefresh={loadNotes}
-                          onLabelClick={!showBin ? handleLabelClick : undefined}
-                        />
-                      ))}
-                    </div>
-                  </SortableContext>
+                  <AnimatedNoteGrid
+                    key={`${viewKey}|archived`}
+                    notes={displayedArchived}
+                    onEdit={handleEditNote}
+                    onDelete={handleDeleteNote}
+                    onDuplicate={handleDuplicateNote}
+                    onShare={handleShareNote}
+                    onRestore={handleRestoreNote}
+                    onPermanentlyDelete={handlePermanentlyDeleteNote}
+                    currentUserId={user?.id}
+                    usersById={usersById}
+                    disabled={true}
+                    inBin={showBin}
+                    onRefresh={loadNotes}
+                    onLabelClick={!showBin ? handleLabelClick : undefined}
+                  />
                 </div>
               )}
             </div>
