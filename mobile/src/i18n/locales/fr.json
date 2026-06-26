@@ -10,7 +10,8 @@
     "error": "Erreur",
     "unknown": "inconnu",
     "loading": "Chargement...",
-    "done": "Terminé"
+    "done": "Terminé",
+    "or": "ou"
   },
   "nav": {
     "settings": "Paramètres",
@@ -53,7 +54,10 @@
     "serverSetupInputA11yLabel": "Champ URL du serveur",
     "serverSetupSubmitA11yLabel": "Valider le serveur et continuer",
     "serverSetupConnectionFailed": "Impossible d'atteindre ce serveur. Vérifiez l'URL et votre connexion, puis réessayez.",
-    "serverSetupConnectionInvalidServer": "Connexion établie, mais ce point de terminaison ne semble pas être une API Jot compatible."
+    "serverSetupConnectionInvalidServer": "Connexion établie, mais ce point de terminaison ne semble pas être une API Jot compatible.",
+    "localModeLink": "Utiliser sans serveur",
+    "localModeHint": "Vos notes restent uniquement sur cet appareil.",
+    "localModeFailed": "Impossible de démarrer le mode local. Veuillez réessayer."
   },
   "dashboard": {
     "newNote": "Nouvelle note",

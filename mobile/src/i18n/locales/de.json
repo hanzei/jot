@@ -10,7 +10,8 @@
     "error": "Fehler",
     "unknown": "unbekannt",
     "loading": "Lädt...",
-    "done": "Fertig"
+    "done": "Fertig",
+    "or": "oder"
   },
   "nav": {
     "settings": "Einstellungen",
@@ -53,7 +54,10 @@
     "serverSetupInputA11yLabel": "Eingabe für Server-URL",
     "serverSetupSubmitA11yLabel": "Server prüfen und fortfahren",
     "serverSetupConnectionFailed": "Server nicht erreichbar. Prüfe URL und Verbindung und versuche es erneut.",
-    "serverSetupConnectionInvalidServer": "Verbindung hergestellt, aber dies scheint kein kompatibler Jot-API-Endpunkt zu sein."
+    "serverSetupConnectionInvalidServer": "Verbindung hergestellt, aber dies scheint kein kompatibler Jot-API-Endpunkt zu sein.",
+    "localModeLink": "Ohne Server verwenden",
+    "localModeHint": "Deine Notizen bleiben nur auf diesem Gerät.",
+    "localModeFailed": "Lokaler Modus konnte nicht gestartet werden. Bitte versuche es erneut."
   },
   "dashboard": {
     "newNote": "Neue Notiz",

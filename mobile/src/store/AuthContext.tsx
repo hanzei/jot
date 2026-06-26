@@ -14,12 +14,19 @@ import {
   initializeServerContext,
 } from '../api/client';
 import { isTransientHttpStatus } from '../db/syncQueue';
+import { getLocalIdentity, enableLocalMode as persistEnableLocalMode, disableLocalMode } from './localMode';
 
 interface AuthState {
   user: User | null;
   settings: UserSettings | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  /**
+   * True when the app is running in serverless "local mode" (epic #511): the
+   * user is signed in with an on-device identity and no server session exists.
+   * Consumers use this to gate inherently multi-user / server-backed UI.
+   */
+  isLocalMode: boolean;
   /**
    * True when `revalidateSession` received a permanent non-401 HTTP error
    * (e.g. 403, 422) from the server. Network errors and 5xx/timeout are
@@ -29,6 +36,8 @@ interface AuthState {
   revalidationFailed: boolean;
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, password: string) => Promise<void>;
+  /** Enter serverless local mode, provisioning a persistent on-device identity. */
+  enableLocalMode: () => Promise<void>;
   logout: () => Promise<void>;
   clearAuth: () => void;
   revalidateSession: () => Promise<boolean>;
@@ -55,12 +64,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [revalidationFailed, setRevalidationFailed] = useState(false);
+  const [isLocalMode, setIsLocalMode] = useState(false);
   const queryClient = useQueryClient();
 
   const clearAuth = useCallback(() => {
     setUser(null);
     setSettings(null);
     setRevalidationFailed(false);
+    setIsLocalMode(false);
     queryClient.clear();
   }, [queryClient]);
 
@@ -76,6 +87,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     async function restoreSession() {
       try {
+        // Local mode is a first-class persistent state: when enabled, sign in
+        // with the on-device identity and skip server context / session restore
+        // entirely (no `GET /me`).
+        const localIdentity = await getLocalIdentity();
+        if (localIdentity) {
+          if (!cancelled) {
+            setUser(localIdentity.user);
+            setSettings(localIdentity.settings);
+            setIsLocalMode(true);
+          }
+          return;
+        }
+
         await initializeServerContext();
         const storedUrl = await getStoredServerUrl();
         if (storedUrl) restoreServerUrl(storedUrl);
@@ -131,15 +155,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await cacheAuthProfile(response);
   }, []);
 
+  const enableLocalMode = useCallback(async () => {
+    const identity = await persistEnableLocalMode();
+    setUser(identity.user);
+    setSettings(identity.settings);
+    setIsLocalMode(true);
+  }, []);
+
   const logout = useCallback(async () => {
+    // In local mode there is no server session to invalidate; leaving local mode
+    // drops the persisted identity and returns the user to the login/setup flow.
+    if (isLocalMode) {
+      try {
+        await disableLocalMode();
+      } finally {
+        clearAuth();
+      }
+      return;
+    }
     try {
       await auth.logout();
     } finally {
       clearAuth();
     }
-  }, [clearAuth]);
+  }, [clearAuth, isLocalMode]);
 
   const revalidateSession = useCallback(async (): Promise<boolean> => {
+    // No server to revalidate against in local mode; the local identity is
+    // always valid.
+    if (isLocalMode) {
+      return true;
+    }
     try {
       const response = await auth.me();
       setUser(response.user);
@@ -164,7 +210,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       return true;
     }
-  }, [clearAuth]);
+  }, [clearAuth, isLocalMode]);
 
   const value = useMemo<AuthState>(
     () => ({
@@ -172,16 +218,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       settings,
       isAuthenticated: user !== null,
       isLoading,
+      isLocalMode,
       revalidationFailed,
       login,
       register,
+      enableLocalMode,
       logout,
       clearAuth,
       revalidateSession,
       setUser,
       setSettings,
     }),
-    [user, settings, isLoading, revalidationFailed, login, register, logout, clearAuth, revalidateSession],
+    [user, settings, isLoading, isLocalMode, revalidationFailed, login, register, enableLocalMode, logout, clearAuth, revalidateSession],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

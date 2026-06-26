@@ -10,7 +10,8 @@
     "error": "Fout",
     "unknown": "onbekend",
     "loading": "Laden...",
-    "done": "Klaar"
+    "done": "Klaar",
+    "or": "of"
   },
   "nav": {
     "settings": "Instellingen",
@@ -82,7 +83,10 @@
     "serverSetupInputA11yLabel": "Invoer server-URL",
     "serverSetupSubmitA11yLabel": "Server valideren en doorgaan",
     "serverSetupConnectionFailed": "Kon die server niet bereiken. Controleer de URL en je verbinding en probeer het opnieuw.",
-    "serverSetupConnectionInvalidServer": "Verbonden, maar dit lijkt geen compatibel Jot API-eindpunt."
+    "serverSetupConnectionInvalidServer": "Verbonden, maar dit lijkt geen compatibel Jot API-eindpunt.",
+    "localModeLink": "Gebruiken zonder server",
+    "localModeHint": "Je notities blijven alleen op dit apparaat.",
+    "localModeFailed": "Kan lokale modus niet starten. Probeer het opnieuw."
   },
   "dashboard": {
     "newNote": "Nieuwe notitie",

@@ -10,7 +10,8 @@
     "error": "Błąd",
     "unknown": "nieznany",
     "loading": "Ładowanie...",
-    "done": "Gotowe"
+    "done": "Gotowe",
+    "or": "lub"
   },
   "nav": {
     "settings": "Ustawienia",
@@ -53,7 +54,10 @@
     "serverSetupInputA11yLabel": "Pole URL serwera",
     "serverSetupSubmitA11yLabel": "Zweryfikuj serwer i kontynuuj",
     "serverSetupConnectionFailed": "Nie udało się połączyć z tym serwerem. Sprawdź adres URL i połączenie, a następnie spróbuj ponownie.",
-    "serverSetupConnectionInvalidServer": "Połączono, ale to nie wygląda na zgodny punkt API Jot."
+    "serverSetupConnectionInvalidServer": "Połączono, ale to nie wygląda na zgodny punkt API Jot.",
+    "localModeLink": "Użyj bez serwera",
+    "localModeHint": "Twoje notatki pozostają tylko na tym urządzeniu.",
+    "localModeFailed": "Nie udało się uruchomić trybu lokalnego. Spróbuj ponownie."
   },
   "dashboard": {
     "newNote": "Nowa notatka",
