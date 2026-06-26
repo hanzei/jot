@@ -23,10 +23,10 @@ const baseProps = {
   onShare: vi.fn(),
 }
 
-const renderGrid = (notes: Note[], viewKey = 'notes') =>
+const renderGrid = (notes: Note[], viewKey = 'notes', presentElsewhere?: Set<string>) =>
   render(
     <DndContext>
-      <AnimatedNoteGrid notes={notes} viewKey={viewKey} {...baseProps} />
+      <AnimatedNoteGrid notes={notes} viewKey={viewKey} presentElsewhere={presentElsewhere} {...baseProps} />
     </DndContext>,
   )
 
@@ -34,10 +34,11 @@ const rerenderGrid = (
   rerender: ReturnType<typeof renderGrid>['rerender'],
   notes: Note[],
   viewKey = 'notes',
+  presentElsewhere?: Set<string>,
 ) =>
   rerender(
     <DndContext>
-      <AnimatedNoteGrid notes={notes} viewKey={viewKey} {...baseProps} />
+      <AnimatedNoteGrid notes={notes} viewKey={viewKey} presentElsewhere={presentElsewhere} {...baseProps} />
     </DndContext>,
   )
 
@@ -126,6 +127,17 @@ describe('AnimatedNoteGrid', () => {
 
       // Exactly one enter animation: the newly added card 'b'.
       expect(animations).toHaveLength(1)
+    })
+
+    it('drops a card instantly (no exit animation) when it moves to another section', () => {
+      // 'b' leaves this section but is still shown elsewhere (e.g. pin/unpin
+      // between the pinned and other sections), so it must not linger here.
+      const { rerender } = renderGrid([note('a'), note('b')], 'notes')
+
+      rerenderGrid(rerender, [note('a')], 'notes', new Set(['a', 'b']))
+
+      expect(screen.queryByTestId('card-b')).not.toBeInTheDocument()
+      expect(animations).toHaveLength(0)
     })
 
     it('keeps a leaving card mounted (and non-draggable) until its exit animation finishes', async () => {

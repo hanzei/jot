@@ -887,6 +887,13 @@ export default function Dashboard() {
   const renderPinnedSection = displayedPinned.length > 0 || sectionActive.pinned;
   const renderOtherSection = displayedOther.length > 0 || sectionActive.other;
   const renderArchivedSection = displayedArchived.length > 0 || sectionActive.archived;
+  // Every note id currently shown across all sections. Lets each grid tell a
+  // genuine removal (animate out) apart from a section move like pin/unpin
+  // (drop instantly, since the note re-appears in another section).
+  const displayedIds = useMemo(
+    () => new Set([...displayedPinned, ...displayedOther, ...displayedArchived].map(note => note.id)),
+    [displayedPinned, displayedOther, displayedArchived],
+  );
   const activeSortLabel = t(`dashboard.sortOption.${noteSort}`);
   const focusSearchShortcutHint = isApplePlatform() ? '⌘ + F' : t('keyboardShortcuts.focusSearchKey');
   const showCreateFirstNoteCta =
@@ -1118,6 +1125,7 @@ export default function Dashboard() {
                   <AnimatedNoteGrid
                     key="pinned"
                     viewKey={viewKey}
+                    presentElsewhere={displayedIds}
                     onActiveChange={handlePinnedActive}
                     notes={displayedPinned}
                     onEdit={handleEditNote}
@@ -1147,6 +1155,7 @@ export default function Dashboard() {
                   <AnimatedNoteGrid
                     key="other"
                     viewKey={viewKey}
+                    presentElsewhere={displayedIds}
                     onActiveChange={handleOtherActive}
                     notes={displayedOther}
                     onEdit={handleEditNote}
@@ -1177,6 +1186,7 @@ export default function Dashboard() {
                   <AnimatedNoteGrid
                     key="archived"
                     viewKey={viewKey}
+                    presentElsewhere={displayedIds}
                     onActiveChange={handleArchivedActive}
                     notes={displayedArchived}
                     onEdit={handleEditNote}

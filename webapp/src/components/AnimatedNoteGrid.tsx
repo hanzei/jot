@@ -10,6 +10,8 @@ const COLUMN_CLASS = 'columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 spa
 const ENTER_DURATION_MS = 200;
 const LEAVE_DURATION_MS = 150;
 
+const EMPTY_IDS: ReadonlySet<string> = new Set();
+
 interface AnimatedCardProps {
   /** Animate the card in on mount (only for cards genuinely added to a stable view). */
   animateEnter: boolean;
@@ -119,9 +121,16 @@ function swap(notes: Note[]): ReconcileResult {
 /**
  * Reconcile rendered entries against incoming notes within the *same* view.
  * Cards whose ids are new animate in; cards that disappeared are kept around
- * (marked `leaving`) at their previous index so they can animate out.
+ * (marked `leaving`) at their previous index so they can animate out — unless
+ * they merely moved to another section (`presentElsewhere`), in which case they
+ * are dropped instantly so the note never renders in two places at once.
  */
-function reconcile(previous: Entry[], notes: Note[], knownIds: Set<string>): ReconcileResult {
+function reconcile(
+  previous: Entry[],
+  notes: Note[],
+  knownIds: Set<string>,
+  presentElsewhere: ReadonlySet<string>,
+): ReconcileResult {
   const nextIds = new Set(notes.map((note) => note.id));
   const result: Entry[] = notes.map((note) => ({
     note,
@@ -130,7 +139,9 @@ function reconcile(previous: Entry[], notes: Note[], knownIds: Set<string>): Rec
   }));
 
   const previousIndex = new Map(previous.map((entry, index) => [entry.note.id, index]));
-  const departed = previous.filter((entry) => !nextIds.has(entry.note.id));
+  const departed = previous.filter(
+    (entry) => !nextIds.has(entry.note.id) && !presentElsewhere.has(entry.note.id),
+  );
 
   // Re-insert departed cards in their original order so positions stay stable
   // while they fade out.
@@ -152,6 +163,13 @@ interface AnimatedNoteGridProps {
    * archive, restore, duplicate, pin, SSE sync) animate.
    */
   viewKey: string;
+  /**
+   * Ids of every note currently shown across all sections. A card that leaves
+   * this section but is still in this set merely moved (e.g. pin/unpin between
+   * the pinned and other sections) and is dropped instantly instead of
+   * animating out, so it never appears in two sections at once.
+   */
+  presentElsewhere?: Set<string>;
   disabled: boolean;
   inBin: boolean;
   currentUserId?: string;
@@ -181,6 +199,7 @@ interface AnimatedNoteGridProps {
 export default function AnimatedNoteGrid({
   notes,
   viewKey,
+  presentElsewhere,
   disabled,
   inBin,
   currentUserId,
@@ -209,7 +228,8 @@ export default function AnimatedNoteGrid({
   } else if (renderedNotes !== notes) {
     // Same view, notes changed: animate the delta.
     setRenderedNotes(notes);
-    setState((previous) => reconcile(previous.entries, notes, previous.knownIds));
+    const elsewhere = presentElsewhere ?? EMPTY_IDS;
+    setState((previous) => reconcile(previous.entries, notes, previous.knownIds, elsewhere));
   }
 
   const handleLeaveComplete = useCallback((id: string) => {
