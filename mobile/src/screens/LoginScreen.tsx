@@ -68,6 +68,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
       await enableLocalMode();
     } catch {
       setError(t('auth.localModeFailed'));
+    } finally {
       setLocalModeLoading(false);
     }
   };
