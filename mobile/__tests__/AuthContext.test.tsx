@@ -14,6 +14,7 @@ jest.mock('../src/store/localMode', () => ({
   getLocalIdentity: jest.fn().mockResolvedValue(null),
   enableLocalMode: jest.fn(),
   disableLocalMode: jest.fn().mockResolvedValue(undefined),
+  setLocalModeActive: jest.fn(),
 }));
 
 jest.mock('../src/api/client', () => ({

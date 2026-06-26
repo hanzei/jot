@@ -14,6 +14,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { drainQueue, getPendingCount, getDeadLetterCount, subscribeToEnqueue } from '../db/syncQueue';
 import { getPendingCreateNoteIds, getFailedNoteIds } from '../db/noteQueries';
 import { useAuth } from './AuthContext';
+import { isLocalModeActive } from './localMode';
 import { isSyncDrainPaused } from './serverSwitchLifecycle';
 import { labelCountsQueryKey, labelsQueryKey, noteLocalQueryKey, noteLocalQueryScopeKey, notesLocalQueryScopeKey } from '../hooks/queryKeys';
 
@@ -189,6 +190,11 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     // only stall and reschedule. A timer scheduled while online can fire after we
     // go offline; the offline NetInfo handler also clears it, this is a backstop.
     if (!isConnectedRef.current) return;
+    // Local mode has no server and never enqueues server ops, so the drain loop
+    // stays parked (issue #514). This single guard covers every drain trigger
+    // (mount, reconnect, foreground, post-enqueue), keeping the online sync engine
+    // otherwise untouched.
+    if (isLocalModeActive()) return;
     if (isSyncDrainPaused()) return;
     if (isDrainingRef.current) {
       // A drain is already running; remember to run again once it finishes so
@@ -259,6 +265,9 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   performDrainRef.current = performDrain;
 
   const handleReconnect = useCallback(async () => {
+    // In local mode there is no server session to revalidate and no queue to
+    // drain, so skip the whole reconnect path (issue #514).
+    if (isLocalModeActive()) return;
     if (isSyncDrainPaused()) return;
     // A NetInfo offline→online transition and an AppState foreground commonly fire
     // together when the device wakes, and each would otherwise re-validate the

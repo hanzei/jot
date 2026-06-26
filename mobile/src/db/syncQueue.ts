@@ -15,6 +15,7 @@ import {
   setLocalNoteVersion,
   updateLocalNoteShares,
 } from './noteQueries';
+import { isLocalModeActive } from '../store/localMode';
 
 export type QueueOperation =
   | 'create'
@@ -131,6 +132,14 @@ function notifyEnqueueListeners(): void {
 }
 
 export async function enqueueOperation(db: SQLiteDatabase, params: EnqueueParams): Promise<void> {
+  // Local mode has no server to sync to, so local writes are terminal the moment
+  // they land in SQLite (issue #514). Short-circuit before touching `sync_queue`
+  // so no ops ever accumulate there — and, by extension, nothing can dead-letter
+  // purely because a server is absent. The drain loop is also gated off in local
+  // mode (OfflineContext), so a stray queued op would otherwise sit pending forever.
+  if (isLocalModeActive()) {
+    return;
+  }
   await db.runAsync(
     `INSERT INTO sync_queue (operation, endpoint, method, body, created_at)
      VALUES (?, ?, ?, ?, ?)`,

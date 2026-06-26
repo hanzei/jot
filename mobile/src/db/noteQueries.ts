@@ -2,6 +2,7 @@ import { SQLiteDatabase } from 'expo-sqlite';
 import type { Note, NoteItem, GetNotesParams, Label, NoteShare } from '@jot/shared';
 import { getRandomBytes, getStrongRandomBytes } from '../utils/random';
 import { withSerializedTransaction } from './transaction';
+import { isLocalModeActive } from '../store/localMode';
 
 interface NoteRow {
   id: string;
@@ -275,6 +276,13 @@ export async function getFailedNoteIds(db: SQLiteDatabase): Promise<Set<string>>
  * (issue #475).
  */
 export async function markNotePendingCreate(db: SQLiteDatabase, id: string): Promise<void> {
+  // Local mode has no server to confirm the create against, so a locally-created
+  // note is already terminal ('synced', the column default). Skipping the pending
+  // marker keeps local writes terminal and prevents the note from being gated as
+  // "not on the server yet" forever (issue #514).
+  if (isLocalModeActive()) {
+    return;
+  }
   await db.runAsync(`UPDATE notes SET sync_state = 'pending' WHERE id = ?`, [id]);
 }
 

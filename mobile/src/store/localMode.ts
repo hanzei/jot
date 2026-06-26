@@ -19,6 +19,31 @@ const LOCAL_MODE_KEY = 'jot_local_mode_v1';
 /** The default username for the on-device identity. Display-only; never sent anywhere. */
 const LOCAL_USERNAME = 'local';
 
+/**
+ * Synchronous mirror of the persisted local-mode flag, kept in lockstep with
+ * AuthContext's `isLocalMode` state (see AuthProvider). The persisted record is
+ * the source of truth, but reading it is async (SecureStore); the sync queue,
+ * the offline drain loop, the SSE manager, and the write hooks need a *synchronous*
+ * answer to short-circuit all server/sync machinery while local mode is active
+ * (epic #511, issue #514). It is intentionally a single module-global: there is
+ * exactly one active identity per app process.
+ */
+let localModeActive = false;
+
+/** True when the app is currently running in serverless local mode. */
+export function isLocalModeActive(): boolean {
+  return localModeActive;
+}
+
+/**
+ * Update the synchronous local-mode flag. Driven by AuthContext whenever its
+ * `isLocalMode` state changes, so every synchronous reader stays consistent with
+ * the authenticated session.
+ */
+export function setLocalModeActive(active: boolean): void {
+  localModeActive = active;
+}
+
 export interface LocalIdentity {
   user: User;
   settings: UserSettings;

@@ -7,6 +7,7 @@ import { getProtectedNoteIds, saveServerNote, saveServerNotesScope } from '../db
 import { getNotes, getNote } from '../api/notes';
 import type { GetNotesParams, Note } from '@jot/shared';
 import { useNetworkStatus } from './useNetworkStatus';
+import { isLocalModeActive } from '../store/localMode';
 import { retrySync, SyncAbortedError, SyncCanceller } from '../utils/retryWithBackoff';
 import {
   noteLocalQueryKey,
@@ -35,6 +36,9 @@ export function useOfflineNotes(params?: GetNotesParams, options?: { enabled?: b
   });
 
   const syncFromServer = useCallback(async (canceller?: SyncCanceller) => {
+    // No server to sync against in local mode — also guards the manual `refetch`
+    // (pull-to-refresh) path, not just the background effect (#514).
+    if (isLocalModeActive()) return;
     try {
       const serverNotes = await retrySync(() => getNotes(paramsRef.current), {
         isConnected: () => isConnectedRef.current,
@@ -56,7 +60,8 @@ export function useOfflineNotes(params?: GetNotesParams, options?: { enabled?: b
 
   // Background sync when online: fetch from server (with retry/backoff) and update local DB
   useEffect(() => {
-    if (!enabled || !isConnected) return;
+    // Local mode is the source of truth: there is no server to resync from (#514).
+    if (!enabled || !isConnected || isLocalModeActive()) return;
     const canceller = new SyncCanceller();
     syncFromServer(canceller).catch(() => {});
     return () => canceller.cancel();
@@ -98,7 +103,8 @@ export function useOfflineNote(id: string | null) {
 
   // Background fetch from server when online (with retry/backoff) to keep local cache fresh
   useEffect(() => {
-    if (!id || !isConnected) return;
+    // Local mode is the source of truth: there is no server to refresh from (#514).
+    if (!id || !isConnected || isLocalModeActive()) return;
     const canceller = new SyncCanceller();
     (async () => {
       try {
