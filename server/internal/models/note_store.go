@@ -125,7 +125,9 @@ func duplicateNoteTitle(title string) string {
 // it is used as the new note's primary key so the operation is idempotent on
 // replay; when empty a server-side ID is generated. Returns ErrNoteExists when
 // clientID is already taken (e.g. a replayed duplicate whose original committed).
-func (s *noteStore) Duplicate(ctx context.Context, source *Note, userID, clientID string) (*Note, error) {
+// itemIDs maps each source item ID to the caller-supplied new item ID; entries
+// missing from the map fall back to server-side generation.
+func (s *noteStore) Duplicate(ctx context.Context, source *Note, userID, clientID string, itemIDs map[string]string) (*Note, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
@@ -187,7 +189,7 @@ func (s *noteStore) Duplicate(ctx context.Context, source *Note, userID, clientI
 		return nil, fmt.Errorf("failed to create duplicated note user state: %w", err)
 	}
 
-	if err = duplicateItemsTx(ctx, tx, s.d, noteID, source.Items); err != nil {
+	if err = duplicateItemsTx(ctx, tx, s.d, noteID, source.Items, itemIDs); err != nil {
 		return nil, fmt.Errorf("duplicate note items: %w", err)
 	}
 
@@ -207,7 +209,7 @@ func (s *noteStore) Duplicate(ctx context.Context, source *Note, userID, clientI
 	return duplicated, nil
 }
 
-func duplicateItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string, items []NoteItem) error {
+func duplicateItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string, items []NoteItem, itemIDs map[string]string) error {
 	// Process in position order so a parent (lower position than its children,
 	// since children form a contiguous block beneath it) is always inserted
 	// before its children and present in idMap when they are remapped.
@@ -217,9 +219,30 @@ func duplicateItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteI
 
 	idMap := make(map[string]string, len(ordered))
 	for _, item := range ordered {
-		itemID, err := generateID()
-		if err != nil {
-			return fmt.Errorf("failed to generate note item ID: %w", err)
+		var (
+			itemID string
+			err    error
+		)
+		if supplied := itemIDs[item.ID]; supplied != "" {
+			// Validate and existence-check the caller-supplied ID so a replayed
+			// duplicate returns ErrNoteItemExists (→ 409) instead of a raw
+			// constraint violation, matching CreateItemWithID semantics.
+			var exists int
+			if err = tx.QueryRowContext(ctx,
+				d.RewritePlaceholders(`SELECT COUNT(*) FROM note_items WHERE id = ?`),
+				supplied,
+			).Scan(&exists); err != nil {
+				return fmt.Errorf("failed to check item existence: %w", err)
+			}
+			if exists > 0 {
+				return ErrNoteItemExists
+			}
+			itemID = supplied
+		} else {
+			itemID, err = generateID()
+			if err != nil {
+				return fmt.Errorf("failed to generate note item ID: %w", err)
+			}
 		}
 		idMap[item.ID] = itemID
 

@@ -241,4 +241,107 @@ func TestDuplicateNoteIdempotency(t *testing.T) {
 		status, _ := postDuplicateRaw(t, user.Client.HTTPClient(), ts.HTTPServer.URL, source.ID, map[string]any{"id": "too-short"})
 		assert.Equal(t, http.StatusBadRequest, status)
 	})
+
+	t.Run("client-supplied item ids are used and parent_id remapping still works", func(t *testing.T) {
+		ts := setupTestServer(t)
+		user := ts.createTestUser(t, "dupitemid-user", "password123", false)
+
+		source, err := user.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
+			Title: "Task list",
+			Items: []client.CreateNoteItem{
+				{Text: "Parent", Position: 0, IndentLevel: 0},
+				{Text: "Child", Position: 1, IndentLevel: 1},
+			},
+		})
+		require.NoError(t, err)
+
+		sourceItems := getNoteItems(t, user, source.ID)
+		require.Len(t, sourceItems, 2)
+
+		newItemID0 := "DupItem0000000000000Ab"
+		newItemID1 := "DupItem1000000000000Ab"
+		status, note := postDuplicateRaw(t, user.Client.HTTPClient(), ts.HTTPServer.URL, source.ID, map[string]any{
+			"item_ids": map[string]string{
+				sourceItems[0].ID: newItemID0,
+				sourceItems[1].ID: newItemID1,
+			},
+		})
+		require.Equal(t, http.StatusCreated, status)
+		require.NotNil(t, note)
+		require.Len(t, note.Items, 2)
+
+		assert.Equal(t, newItemID0, note.Items[0].ID)
+		assert.Equal(t, newItemID1, note.Items[1].ID)
+		// parent_id of the child must point at the duplicated parent, not the source parent.
+		require.NotNil(t, note.Items[1].ParentID)
+		assert.Equal(t, newItemID0, *note.Items[1].ParentID)
+	})
+
+	t.Run("replaying a duplicate with the same item ids returns 409", func(t *testing.T) {
+		ts := setupTestServer(t)
+		user := ts.createTestUser(t, "dupitemid-replay", "password123", false)
+
+		source, err := user.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
+			Title: "List",
+			Items: []client.CreateNoteItem{
+				{Text: "Item", Position: 0, IndentLevel: 0},
+			},
+		})
+		require.NoError(t, err)
+
+		sourceItems := getNoteItems(t, user, source.ID)
+		require.Len(t, sourceItems, 1)
+
+		newItemID := "DupItemReplay0000000Ab"
+		body := map[string]any{
+			"id": "DupReplayNote0000000Ab",
+			"item_ids": map[string]string{
+				sourceItems[0].ID: newItemID,
+			},
+		}
+		status, _ := postDuplicateRaw(t, user.Client.HTTPClient(), ts.HTTPServer.URL, source.ID, body)
+		require.Equal(t, http.StatusCreated, status)
+
+		replayStatus, _ := postDuplicateRaw(t, user.Client.HTTPClient(), ts.HTTPServer.URL, source.ID, body)
+		assert.Equal(t, http.StatusConflict, replayStatus)
+	})
+
+	t.Run("invalid item id format returns 400", func(t *testing.T) {
+		ts := setupTestServer(t)
+		user := ts.createTestUser(t, "dupitemid-badid", "password123", false)
+
+		source, err := user.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
+			Title: "List",
+			Items: []client.CreateNoteItem{{Text: "Item", Position: 0}},
+		})
+		require.NoError(t, err)
+
+		sourceItems := getNoteItems(t, user, source.ID)
+		require.Len(t, sourceItems, 1)
+
+		status, _ := postDuplicateRaw(t, user.Client.HTTPClient(), ts.HTTPServer.URL, source.ID, map[string]any{
+			"item_ids": map[string]string{sourceItems[0].ID: "bad"},
+		})
+		assert.Equal(t, http.StatusBadRequest, status)
+	})
+
+	t.Run("omitting item_ids generates server-side ids (backward-compatible)", func(t *testing.T) {
+		ts := setupTestServer(t)
+		user := ts.createTestUser(t, "dupitemid-omit", "password123", false)
+
+		source, err := user.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
+			Title: "List",
+			Items: []client.CreateNoteItem{{Text: "Item", Position: 0}},
+		})
+		require.NoError(t, err)
+
+		sourceItems := getNoteItems(t, user, source.ID)
+		require.Len(t, sourceItems, 1)
+
+		duplicated, err := user.Client.DuplicateNote(t.Context(), source.ID)
+		require.NoError(t, err)
+		require.Len(t, duplicated.Items, 1)
+		assert.NotEmpty(t, duplicated.Items[0].ID)
+		assert.NotEqual(t, sourceItems[0].ID, duplicated.Items[0].ID)
+	})
 }

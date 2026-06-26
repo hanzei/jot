@@ -486,8 +486,13 @@ func (h *NotesHandler) GetNote(w http.ResponseWriter, r *http.Request) (int, any
 // When ID is supplied the caller's value is used as the new note's primary key
 // so the operation is idempotent on replay (same ID → 409, no second copy).
 // Omitting the body or leaving ID empty falls back to server-side ID generation.
+// ItemIDs maps each source item ID to the caller-supplied new item ID, allowing
+// offline clients to keep stable item IDs across sync so queued per-item edits
+// still target valid IDs after the duplicate drains. Entries absent from the map
+// fall back to server-side generation. Invalid values → 400; conflicts → 409.
 type DuplicateNoteRequest struct {
-	ID string `json:"id"`
+	ID      string            `json:"id"`
+	ItemIDs map[string]string `json:"item_ids"`
 }
 
 // DuplicateNote godoc
@@ -529,6 +534,14 @@ func (h *NotesHandler) DuplicateNote(w http.ResponseWriter, r *http.Request) (in
 	if req.ID != "" && !models.IsValidID(req.ID) {
 		return http.StatusBadRequest, nil, errors.New("invalid duplicate note ID format")
 	}
+	for srcID, newID := range req.ItemIDs {
+		if !models.IsValidID(srcID) {
+			return http.StatusBadRequest, nil, errors.New("invalid source item ID format in item_ids")
+		}
+		if !models.IsValidID(newID) {
+			return http.StatusBadRequest, nil, errors.New("invalid new item ID format in item_ids")
+		}
+	}
 
 	sourceNote, err := h.noteStore.GetByID(r.Context(), id, user.ID)
 	if err != nil {
@@ -538,9 +551,12 @@ func (h *NotesHandler) DuplicateNote(w http.ResponseWriter, r *http.Request) (in
 		return http.StatusInternalServerError, nil, fmt.Errorf("get note: %w", err)
 	}
 
-	duplicatedNote, err := h.noteStore.Duplicate(r.Context(), sourceNote, user.ID, req.ID)
+	duplicatedNote, err := h.noteStore.Duplicate(r.Context(), sourceNote, user.ID, req.ID, req.ItemIDs)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteExists) {
+			return http.StatusConflict, nil, err
+		}
+		if errors.Is(err, models.ErrNoteItemExists) {
 			return http.StatusConflict, nil, err
 		}
 		return http.StatusInternalServerError, nil, fmt.Errorf("duplicate note: %w", err)
