@@ -29,7 +29,6 @@ jest.mock('../src/db/noteQueries', () => ({
   markLocalNoteRestored: jest.fn().mockResolvedValue(undefined),
   permanentDeleteLocalNote: jest.fn().mockResolvedValue(undefined),
   updateLocalNote: jest.fn().mockResolvedValue(undefined),
-  generateLocalId: jest.fn(() => 'local_test_id'),
   generateClientNoteId: jest.fn(() => 'ClientNoteId000000000A'),
   markNotePendingCreate: jest.fn().mockResolvedValue(undefined),
   isNotePendingCreate: jest.fn().mockResolvedValue(false),
@@ -200,6 +199,74 @@ describe('useNotes hooks', () => {
         }),
       );
       expect(result.current.data?.id).toBe('ClientNoteId000000000A');
+    });
+  });
+
+  describe('permanent server-format item IDs in local/offline creates (#513)', () => {
+    const ID_RE = /^[0-9a-zA-Z]{22}$/;
+
+    it('assigns inline list items a permanent server-format ID and sends it in the create body', async () => {
+      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+
+      const { result } = renderHook(() => useCreateNote(), { wrapper: createWrapper() });
+
+      const created = await result.current.mutateAsync({
+        title: 'Groceries',
+        note_type: 'list',
+        items: [
+          { text: 'Fruit', position: 0 },
+          { text: 'Apples', position: 1, indent_level: 1 },
+        ],
+      });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      // The local rows carry permanent server-format IDs, never a `local_*`
+      // placeholder that would need server reconciliation.
+      const localItems = created.note_type === 'list' ? created.items ?? [] : [];
+      expect(localItems).toHaveLength(2);
+      for (const item of localItems) {
+        expect(item.id).toMatch(ID_RE);
+      }
+      // The indented item is parented to the preceding top-level item by its new ID.
+      expect(localItems[1].parent_id).toBe(localItems[0].id);
+
+      // The queued create carries the *same* IDs so the server keeps them (no
+      // `local_* → server ID` reconciliation on drain).
+      const enqueueCall = mockSyncQueue.enqueueOperation.mock.calls.find(
+        (call) => call[1].operation === 'create',
+      );
+      expect(enqueueCall).toBeDefined();
+      const body = enqueueCall?.[1].body as { id: string; items: { id: string }[] };
+      expect(body.id).toBe('ClientNoteId000000000A');
+      expect(body.items.map((i) => i.id)).toEqual(localItems.map((i) => i.id));
+    });
+
+    it('assigns duplicated list items a permanent server-format ID with remapped parents', async () => {
+      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce({
+        id: 'src', title: 'List', content: '', note_type: 'list', version: 1,
+        color: '#ffffff', pinned: false, archived: false, position: 0,
+        checked_items_collapsed: false, is_shared: false, deleted_at: null,
+        user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
+        items: [
+          { id: 'srcItem1', note_id: 'src', text: 'A', completed: false, position: 0, parent_id: null, assigned_to: '', created_at: '', updated_at: '' },
+          { id: 'srcItem2', note_id: 'src', text: 'B', completed: false, position: 1, parent_id: 'srcItem1', assigned_to: '', created_at: '', updated_at: '' },
+        ],
+      } as never);
+
+      const { result } = renderHook(() => useDuplicateNote(), { wrapper: createWrapper() });
+      const dup = await result.current.mutateAsync('src');
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      const dupItems = dup.note_type === 'list' ? dup.items ?? [] : [];
+      expect(dupItems).toHaveLength(2);
+      for (const item of dupItems) {
+        expect(item.id).toMatch(ID_RE);
+      }
+      // New IDs, not the source's, and parent_id is remapped to the new top-level ID.
+      expect(dupItems[0].id).not.toBe('srcItem1');
+      expect(dupItems[1].parent_id).toBe(dupItems[0].id);
     });
   });
 
@@ -765,7 +832,8 @@ describe('useNotes hooks', () => {
         items: Array<{ id: string; note_id: string; text: string; parent_id: string | null }>;
       };
       expect(dupList.items).toHaveLength(2);
-      // Item ids are regenerated (local_*); note_id points to the client-id duplicate.
+      // Item ids are regenerated (permanent server-format, #513); note_id points to
+      // the client-id duplicate.
       expect(dupList.items[0].note_id).toBe('ClientNoteId000000000A');
       expect(dupList.items[0].text).toBe('Item A');
       expect(dupList.items[0].parent_id).toBeNull();
