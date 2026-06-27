@@ -11,7 +11,7 @@ import { displayMessage, extractApiError } from '../../i18n/utils';
 import { styles } from './styles';
 
 export default function AccountSection() {
-  const { user, settings, setUser, setSettings } = useAuth();
+  const { user, settings, setUser, setSettings, isLocalMode } = useAuth();
   const { colors } = useTheme();
   const { t } = useTranslation();
   const db = useSQLiteContext();
@@ -46,6 +46,15 @@ export default function AccountSection() {
       if (settings) void cacheAuthProfile({ user: optimisticUser, settings });
     }
 
+    // In local mode there is no server: the optimistic update is terminal and is
+    // persisted to the on-device identity by AuthContext. Skip the `PATCH /users/me`
+    // round-trip (and the offline-queue fallback, which never drains in local mode).
+    if (isLocalMode) {
+      setProfileSuccess(t('settings.profileUpdated'));
+      setProfileSaving(false);
+      return;
+    }
+
     try {
       const { user: updatedUser, settings: updatedSettings } = await updateMe(profileUpdate);
       setUser(updatedUser);
@@ -71,7 +80,7 @@ export default function AccountSection() {
     } finally {
       setProfileSaving(false);
     }
-  }, [firstName, lastName, setSettings, setUser, t, username, user, settings, db]);
+  }, [firstName, lastName, setSettings, setUser, t, username, user, settings, db, isLocalMode]);
 
   return (
     <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>

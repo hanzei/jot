@@ -4,6 +4,8 @@ import {
   enableLocalMode,
   getLocalIdentity,
   isLocalModeEnabled,
+  updateLocalSettings,
+  updateLocalUser,
 } from '../src/store/localMode';
 
 const mockSecureStore = SecureStore as unknown as {
@@ -61,6 +63,38 @@ describe('localMode store', () => {
     await disableLocalMode();
 
     expect(await isLocalModeEnabled()).toBe(false);
+    expect(await getLocalIdentity()).toBeNull();
+  });
+
+  it('updateLocalUser persists profile edits without disturbing settings', async () => {
+    const identity = await enableLocalMode();
+
+    const renamed = { ...identity.user, first_name: 'Renamed', last_name: 'User' };
+    await updateLocalUser(renamed);
+
+    const stored = await getLocalIdentity();
+    expect(stored?.user).toEqual(renamed);
+    expect(stored?.settings).toEqual(identity.settings);
+  });
+
+  it('updateLocalUser and updateLocalSettings do not clobber each other', async () => {
+    const identity = await enableLocalMode();
+
+    await Promise.all([
+      updateLocalUser({ ...identity.user, first_name: 'Renamed' }),
+      updateLocalSettings({ ...identity.settings, language: 'de' }),
+    ]);
+
+    const stored = await getLocalIdentity();
+    expect(stored?.user.first_name).toBe('Renamed');
+    expect(stored?.settings.language).toBe('de');
+  });
+
+  it('updateLocalUser is a no-op when local mode is disabled', async () => {
+    await updateLocalUser({
+      id: 'x', username: 'local', first_name: '', last_name: '',
+      role: 'user', has_profile_icon: false, created_at: '', updated_at: '',
+    });
     expect(await getLocalIdentity()).toBeNull();
   });
 
