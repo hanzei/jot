@@ -82,6 +82,8 @@ describe('AccountSection', () => {
         expect.objectContaining({ first_name: 'Renamed' }),
       );
     });
+    // Server-backed updates are mirrored into the offline auth cache.
+    expect(mockCacheAuthProfile).toHaveBeenCalled();
   });
 
   it('does not touch the server or sync queue in local mode', async () => {
@@ -98,9 +100,10 @@ describe('AccountSection', () => {
     expect(setUser).toHaveBeenCalledWith(
       expect.objectContaining({ first_name: 'Renamed' }),
     );
-    // ...but no server call and nothing enqueued onto the never-draining queue.
+    // ...but no server call, nothing enqueued onto the never-draining queue, and
+    // no write to the server-keyed offline auth cache.
     expect(mockUpdateMe).not.toHaveBeenCalled();
     expect(mockEnqueueOperation).not.toHaveBeenCalled();
-    expect(mockCacheAuthProfile).toHaveBeenCalled();
+    expect(mockCacheAuthProfile).not.toHaveBeenCalled();
   });
 });

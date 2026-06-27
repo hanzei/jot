@@ -43,7 +43,10 @@ export default function AccountSection() {
     if (user) {
       const optimisticUser = { ...user, ...profileUpdate };
       setUser(optimisticUser);
-      if (settings) void cacheAuthProfile({ user: optimisticUser, settings });
+      // Only mirror server-backed profiles into the offline auth cache (keyed by
+      // active server). In local mode AuthProvider persists the profile to the
+      // on-device identity instead, so writing here would pollute a server's cache.
+      if (settings && !isLocalMode) void cacheAuthProfile({ user: optimisticUser, settings });
     }
 
     // In local mode there is no server: the optimistic update is terminal and is
