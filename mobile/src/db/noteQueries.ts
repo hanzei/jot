@@ -193,8 +193,8 @@ export async function getLocalNotes(db: SQLiteDatabase, params?: GetNotesParams)
   }
 
   if (params?.search) {
-    sql += ' AND ((note_type = \'list\' AND title LIKE ?) OR (note_type = \'text\' AND content LIKE ?))';
-    args.push(`%${params.search}%`, `%${params.search}%`);
+    sql += ' AND (title LIKE ? OR content LIKE ? OR id IN (SELECT note_id FROM note_items WHERE text LIKE ?))';
+    args.push(`%${params.search}%`, `%${params.search}%`, `%${params.search}%`);
   }
 
   sql += ' ORDER BY pinned DESC, position ASC';
@@ -612,8 +612,8 @@ async function removeLocalNotesNotInTx(
   }
 
   if (params?.search) {
-    scopedWhereSql += ' AND (title LIKE ? OR content LIKE ?)';
-    scopeArgs.push(`%${params.search}%`, `%${params.search}%`);
+    scopedWhereSql += ' AND (title LIKE ? OR content LIKE ? OR id IN (SELECT note_id FROM note_items WHERE text LIKE ?))';
+    scopeArgs.push(`%${params.search}%`, `%${params.search}%`, `%${params.search}%`);
   }
 
   if (params?.label) {

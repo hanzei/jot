@@ -2,7 +2,7 @@
  * Tests for offline support: local note queries, sync queue, and ID utilities.
  */
 
-import { generateLocalId, generateClientNoteId, isLocalId, isUnsyncedNoteId, removeLocalNotesNotIn, getLocalLabels, getLocalLabelCounts, saveNote, addLabelToLocalNote, removeLabelFromLocalNote } from '../src/db/noteQueries';
+import { generateLocalId, generateClientNoteId, isLocalId, isUnsyncedNoteId, removeLocalNotesNotIn, getLocalLabels, getLocalLabelCounts, saveNote, addLabelToLocalNote, removeLabelFromLocalNote, getLocalNotes } from '../src/db/noteQueries';
 import { drainQueue, isTransientHttpStatus } from '../src/db/syncQueue';
 import api from '../src/api/client';
 
@@ -831,6 +831,54 @@ describe('removeLocalNotesNotIn', () => {
     );
 
     expect(db.runAsync).not.toHaveBeenCalled();
+  });
+});
+
+// ── getLocalNotes search ───────────────────────────────────────────────────
+
+describe('getLocalNotes search', () => {
+  it('searches title, content, and item text when search param is provided', async () => {
+    const db = { getAllAsync: jest.fn().mockResolvedValue([]) };
+
+    await getLocalNotes(db as never, { search: 'hello' });
+
+    const [sql, args] = (db.getAllAsync as jest.Mock).mock.calls[0] as [string, unknown[]];
+    expect(sql).toContain('title LIKE ?');
+    expect(sql).toContain('content LIKE ?');
+    expect(sql).toContain('id IN (SELECT note_id FROM note_items WHERE text LIKE ?)');
+    expect(args).toEqual(['%hello%', '%hello%', '%hello%']);
+  });
+
+  it('does not add a LIKE condition when no search param is given', async () => {
+    const db = { getAllAsync: jest.fn().mockResolvedValue([]) };
+
+    await getLocalNotes(db as never);
+
+    const [sql] = (db.getAllAsync as jest.Mock).mock.calls[0] as [string, unknown[]];
+    expect(sql).not.toContain('LIKE');
+  });
+});
+
+// ── removeLocalNotesNotIn search scope ────────────────────────────────────────
+
+describe('removeLocalNotesNotIn with search', () => {
+  it('includes item-text subquery in pruning scope when search param is provided', async () => {
+    const db = {
+      getAllAsync: jest.fn().mockResolvedValue([]),
+      runAsync: jest.fn().mockResolvedValue(undefined),
+    };
+
+    await removeLocalNotesNotIn(db as never, new Set<string>(), { search: 'hello' });
+
+    const deleteCall = (db.runAsync as jest.Mock).mock.calls.find(
+      (c: unknown[]) => String(c[0]).startsWith('DELETE'),
+    ) as [string, unknown[]] | undefined;
+    expect(deleteCall).toBeDefined();
+    const [sql, args] = deleteCall!;
+    expect(sql).toContain('title LIKE ?');
+    expect(sql).toContain('content LIKE ?');
+    expect(sql).toContain('id IN (SELECT note_id FROM note_items WHERE text LIKE ?)');
+    expect(args).toContain('%hello%');
   });
 });
 
