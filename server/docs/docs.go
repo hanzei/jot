@@ -2775,6 +2775,12 @@ const docTemplate = `{
             "properties": {
                 "id": {
                     "type": "string"
+                },
+                "item_ids": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
                 }
             }
         },
