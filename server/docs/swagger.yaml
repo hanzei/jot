@@ -105,6 +105,10 @@ definitions:
     properties:
       id:
         type: string
+      item_ids:
+        additionalProperties:
+          type: string
+        type: object
     type: object
   handlers.EmptyTrashResponse:
     properties:

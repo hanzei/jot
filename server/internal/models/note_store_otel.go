@@ -31,10 +31,10 @@ func (s *NoteStore) Create(ctx context.Context, userID, noteID, title, content s
 	return s.inner.Create(ctx, userID, noteID, title, content, noteType, color)
 }
 
-func (s *NoteStore) Duplicate(ctx context.Context, source *Note, userID, clientID string) (_ *Note, err error) {
+func (s *NoteStore) Duplicate(ctx context.Context, source *Note, userID, clientID string, itemIDs map[string]string) (_ *Note, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.Duplicate", &err)
 	defer end()
-	return s.inner.Duplicate(ctx, source, userID, clientID)
+	return s.inner.Duplicate(ctx, source, userID, clientID, itemIDs)
 }
 
 func (s *NoteStore) GetByUserID(ctx context.Context, userID string, archived bool, trashed bool, search string, labelID string, myTasks bool) (_ []*Note, err error) {

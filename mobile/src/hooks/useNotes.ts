@@ -589,42 +589,38 @@ export function useDuplicateNote() {
         created_at: now,
         updated_at: now,
       };
+      // Build a source→new item ID map for list notes. This is captured here
+      // (outside the items spread) so we can send it to the server, letting it
+      // honor the same IDs. That way any per-item edits queued after this
+      // duplicate—but before it drains—still target valid server item IDs.
+      const idRemap = new Map<string, string>();
       const localDuplicate: Note = source.note_type === 'list'
         ? {
             ...source,
             ...resetFields,
-            items: (() => {
-              // Build a map from old item IDs to new server-format IDs so that
-              // parent_id references within the duplicate point to the new items,
-              // not to items in the source note. Items arrive in position order, so
-              // parents are always mapped before their children are processed. The
-              // /duplicate endpoint clones items server-side and returns canonical
-              // IDs (adopted on drain) in server mode; in local mode there is no
-              // server, so these permanent server-format IDs are terminal (#513).
-              const idRemap = new Map<string, string>();
-              return (source.items ?? []).map((item) => {
-                const newId = generateId();
-                idRemap.set(item.id, newId);
-                return {
-                  ...item,
-                  id: newId,
-                  note_id: clientId,
-                  parent_id: item.parent_id !== null ? (idRemap.get(item.parent_id) ?? item.parent_id) : null,
-                  created_at: now,
-                  updated_at: now,
-                };
-              });
-            })(),
+            items: (source.items ?? []).map((item) => {
+              const newId = generateId();
+              idRemap.set(item.id, newId);
+              return {
+                ...item,
+                id: newId,
+                note_id: clientId,
+                parent_id: item.parent_id !== null ? (idRemap.get(item.parent_id) ?? item.parent_id) : null,
+                created_at: now,
+                updated_at: now,
+              };
+            }),
           }
         : { ...source, ...resetFields };
 
+      const itemIds = idRemap.size > 0 ? Object.fromEntries(idRemap) : undefined;
       await saveNote(db, localDuplicate);
       await markNotePendingCreate(db, clientId);
       await enqueueOperation(db, {
         operation: 'duplicate',
         endpoint: `/notes/${id}/duplicate`,
         method: 'POST',
-        body: { id: clientId } as Record<string, unknown>,
+        body: { id: clientId, ...(itemIds ? { item_ids: itemIds } : {}) } as Record<string, unknown>,
       });
       return localDuplicate;
     },

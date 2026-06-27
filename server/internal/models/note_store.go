@@ -125,7 +125,9 @@ func duplicateNoteTitle(title string) string {
 // it is used as the new note's primary key so the operation is idempotent on
 // replay; when empty a server-side ID is generated. Returns ErrNoteExists when
 // clientID is already taken (e.g. a replayed duplicate whose original committed).
-func (s *noteStore) Duplicate(ctx context.Context, source *Note, userID, clientID string) (*Note, error) {
+// itemIDs maps each source item ID to the caller-supplied new item ID; entries
+// missing from the map fall back to server-side generation.
+func (s *noteStore) Duplicate(ctx context.Context, source *Note, userID, clientID string, itemIDs map[string]string) (*Note, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
@@ -187,7 +189,7 @@ func (s *noteStore) Duplicate(ctx context.Context, source *Note, userID, clientI
 		return nil, fmt.Errorf("failed to create duplicated note user state: %w", err)
 	}
 
-	if err = duplicateItemsTx(ctx, tx, s.d, noteID, source.Items); err != nil {
+	if err = duplicateItemsTx(ctx, tx, s.d, noteID, source.Items, itemIDs); err != nil {
 		return nil, fmt.Errorf("duplicate note items: %w", err)
 	}
 
@@ -207,7 +209,7 @@ func (s *noteStore) Duplicate(ctx context.Context, source *Note, userID, clientI
 	return duplicated, nil
 }
 
-func duplicateItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string, items []NoteItem) error {
+func duplicateItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string, items []NoteItem, itemIDs map[string]string) error {
 	// Process in position order so a parent (lower position than its children,
 	// since children form a contiguous block beneath it) is always inserted
 	// before its children and present in idMap when they are remapped.
@@ -217,31 +219,58 @@ func duplicateItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteI
 
 	idMap := make(map[string]string, len(ordered))
 	for _, item := range ordered {
-		itemID, err := generateID()
+		newID, err := resolveItemIDTx(ctx, tx, d, itemIDs[item.ID])
 		if err != nil {
-			return fmt.Errorf("failed to generate note item ID: %w", err)
+			return err
 		}
-		idMap[item.ID] = itemID
-
-		// Re-point parent_id at the duplicated parent's new ID. A child whose
-		// parent was not yet seen (shouldn't happen for contiguous groups) is
-		// promoted to top-level rather than left dangling.
-		var newParent sql.NullString
-		if item.ParentID != nil {
-			if mapped, ok := idMap[*item.ParentID]; ok {
-				newParent = sql.NullString{String: mapped, Valid: true}
+		idMap[item.ID] = newID
+		if err = insertDuplicateItemTx(ctx, tx, d, noteID, item, newID, idMap); err != nil {
+			// Two concurrent replays with the same client-supplied ID can both pass
+			// the existence check above; map the constraint violation to ErrNoteItemExists.
+			if itemIDs[item.ID] != "" && d.IsUniqueConstraintError(err) {
+				return ErrNoteItemExists
 			}
-		}
-
-		if _, err = tx.ExecContext(ctx,
-			d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to)
-			 VALUES (?, ?, ?, ?, ?, ?, ?)`),
-			itemID, noteID, item.Text, item.Completed, item.Position, newParent, nullableAssignedTo(""),
-		); err != nil {
 			return fmt.Errorf("failed to duplicate note item: %w", err)
 		}
 	}
 	return nil
+}
+
+// resolveItemIDTx returns the ID to use for a duplicated item. When supplied is
+// non-empty the item is existence-checked and the caller's value is returned;
+// otherwise a fresh server-side ID is generated.
+func resolveItemIDTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, supplied string) (string, error) {
+	if supplied == "" {
+		return generateID()
+	}
+	var exists int
+	if err := tx.QueryRowContext(ctx,
+		d.RewritePlaceholders(`SELECT COUNT(*) FROM note_items WHERE id = ?`),
+		supplied,
+	).Scan(&exists); err != nil {
+		return "", fmt.Errorf("failed to check item existence: %w", err)
+	}
+	if exists > 0 {
+		return "", ErrNoteItemExists
+	}
+	return supplied, nil
+}
+
+// insertDuplicateItemTx inserts one cloned item into noteID, remapping its
+// parent_id through idMap (which must already contain the duplicated parent).
+func insertDuplicateItemTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string, item NoteItem, itemID string, idMap map[string]string) error {
+	var newParent sql.NullString
+	if item.ParentID != nil {
+		if mapped, ok := idMap[*item.ParentID]; ok {
+			newParent = sql.NullString{String: mapped, Valid: true}
+		}
+	}
+	_, err := tx.ExecContext(ctx,
+		d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`),
+		itemID, noteID, item.Text, item.Completed, item.Position, newParent, nullableAssignedTo(""),
+	)
+	return err
 }
 
 func duplicateLabelsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, userID string, labels []Label) error {
