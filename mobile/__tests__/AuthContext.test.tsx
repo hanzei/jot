@@ -3,7 +3,7 @@ import { render, waitFor, act, fireEvent, cleanup, configure } from '@testing-li
 import { Text, TouchableOpacity } from 'react-native';
 import { AuthProvider, useAuth } from '../src/store/AuthContext';
 import { auth, getStoredSession, setOnUnauthorized, clearStoredSession, cacheAuthProfile, getCachedAuthProfile, clearCachedProfile } from '../src/api/client';
-import { getLocalIdentity, enableLocalMode as persistEnableLocalMode, disableLocalMode } from '../src/store/localMode';
+import { getLocalIdentity, enableLocalMode as persistEnableLocalMode, disableLocalMode, updateLocalSettings } from '../src/store/localMode';
 
 const mockQueryClient = { clear: jest.fn() };
 jest.mock('@tanstack/react-query', () => ({
@@ -56,6 +56,7 @@ const mockClientModule = jest.requireMock('../src/api/client') as {
 const mockGetLocalIdentity = getLocalIdentity as jest.Mock;
 const mockPersistEnableLocalMode = persistEnableLocalMode as jest.Mock;
 const mockDisableLocalMode = disableLocalMode as jest.Mock;
+const mockUpdateLocalSettings = updateLocalSettings as jest.Mock;
 
 function TestConsumer() {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
@@ -118,6 +119,20 @@ function LocalModeConsumer() {
       <Text testID="username">{user?.username || 'none'}</Text>
       <TouchableOpacity testID="enable-local-button" onPress={() => enableLocalMode().catch(() => {})} />
       <TouchableOpacity testID="logout-button" onPress={() => logout().catch(() => {})} />
+    </>
+  );
+}
+
+function SettingsConsumer() {
+  const { isLocalMode, settings, setSettings } = useAuth();
+  return (
+    <>
+      <Text testID="local-mode">{String(isLocalMode)}</Text>
+      <Text testID="language">{settings?.language ?? 'none'}</Text>
+      <TouchableOpacity
+        testID="change-settings"
+        onPress={() => setSettings({ ...localSettings, language: 'de' })}
+      />
     </>
   );
 }
@@ -569,6 +584,57 @@ describe('AuthContext', () => {
     expect(getByTestId('authenticated').props.children).toBe('true');
     expect(getByTestId('username').props.children).toBe('local');
     expect(mockPersistEnableLocalMode).toHaveBeenCalled();
+    unmount();
+  });
+
+  it('calls updateLocalSettings when settings change in local mode', async () => {
+    mockGetLocalIdentity.mockResolvedValue(localIdentity);
+
+    const { getByTestId, unmount } = render(
+      <AuthProvider>
+        <SettingsConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('local-mode').props.children).toBe('true');
+    });
+
+    mockUpdateLocalSettings.mockClear();
+
+    await act(async () => {
+      fireEvent.press(getByTestId('change-settings'));
+    });
+
+    await waitFor(() => {
+      expect(mockUpdateLocalSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ language: 'de' }),
+      );
+    });
+    unmount();
+  });
+
+  it('does not call updateLocalSettings when settings change in server mode', async () => {
+    mockGetStoredSession.mockResolvedValue('token');
+    mockAuth.me.mockResolvedValue({ user: mockUser, settings: mockSettings });
+
+    const { getByTestId, unmount } = render(
+      <AuthProvider>
+        <SettingsConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('local-mode').props.children).toBe('false');
+    });
+
+    mockUpdateLocalSettings.mockClear();
+
+    await act(async () => {
+      fireEvent.press(getByTestId('change-settings'));
+    });
+
+    expect(mockUpdateLocalSettings).not.toHaveBeenCalled();
     unmount();
   });
 
