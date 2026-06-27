@@ -14,6 +14,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
+import { useAuth } from '../store/AuthContext';
 import { useBannerShown } from '../hooks/useBannerShown';
 import { styles } from './settings/styles';
 import ProfileIconSection from './settings/ProfileIconSection';
@@ -32,6 +33,7 @@ export default function SettingsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'Settings'>>();
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const { isLocalMode } = useAuth();
 
   return (
     <View style={[styles.container, { paddingTop: bannerShown ? 0 : insets.top, backgroundColor: colors.background }]}>
@@ -58,11 +60,11 @@ export default function SettingsScreen() {
           contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, 24) + 24 }]}
           keyboardShouldPersistTaps="handled"
         >
-          <ProfileIconSection />
+          {!isLocalMode && <ProfileIconSection />}
           <AccountSection />
-          <ChangePasswordSection />
-          <SessionsSection />
-          <PATsSection />
+          {!isLocalMode && <ChangePasswordSection />}
+          {!isLocalMode && <SessionsSection />}
+          {!isLocalMode && <PATsSection />}
           <ImportSection />
           <AppearanceSection />
           <DeveloperSection />

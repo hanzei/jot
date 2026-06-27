@@ -13,6 +13,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 import type { Note } from '@jot/shared';
 import { useTheme } from '../theme/ThemeContext';
+import { useAuth } from '../store/AuthContext';
 import { isLocalId } from '../db/noteQueries';
 import { formatNoteForShare } from '../utils/noteTextFormatter';
 
@@ -61,6 +62,7 @@ export default function NoteContextMenu({
 }: NoteContextMenuProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const { isLocalMode } = useAuth();
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
 
   if (!note) return null;
@@ -100,8 +102,9 @@ export default function NoteContextMenu({
       },
       testId: 'context-send',
     });
-    // is_shared means the current user is a recipient, not the owner — hide Share for non-owners
-    if (!note.is_shared && !isLocalId(note.id)) {
+    // is_shared means the current user is a recipient, not the owner — hide Share for non-owners.
+    // Sharing requires a central server and is not available in local mode.
+    if (!isLocalMode && !note.is_shared && !isLocalId(note.id)) {
       actions.push({
         icon: 'person-add-outline',
         label: t('note.share'),

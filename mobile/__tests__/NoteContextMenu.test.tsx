@@ -45,8 +45,15 @@ jest.mock('../src/store/OfflineContext', () => ({
   usePendingNoteIds: () => mockPendingNoteIds,
 }));
 
+let mockIsLocalMode = false;
+jest.mock('../src/store/AuthContext', () => ({
+  __esModule: true,
+  useAuth: () => ({ isLocalMode: mockIsLocalMode }),
+}));
+
 afterEach(() => {
   mockPendingNoteIds = new Set<string>();
+  mockIsLocalMode = false;
 });
 
 const baseNote: Note = {
@@ -246,6 +253,32 @@ describe('NoteContextMenu labels action', () => {
     expect(queryByTestId('context-share')).toBeTruthy();
     expect(queryByTestId('context-label')).toBeTruthy();
     expect(queryByTestId('context-duplicate')).toBeTruthy();
+  });
+
+  it('hides share action in local mode', () => {
+    mockIsLocalMode = true;
+    const { queryByTestId } = render(
+      <NoteContextMenu
+        visible
+        note={baseNote}
+        viewContext="notes"
+        onClose={jest.fn()}
+        onPin={jest.fn()}
+        onArchive={jest.fn()}
+        onUnarchive={jest.fn()}
+        onDuplicate={jest.fn()}
+        onMoveToTrash={jest.fn()}
+        onRestore={jest.fn()}
+        onDeletePermanently={jest.fn()}
+        onChangeColor={jest.fn()}
+        onShare={jest.fn()}
+        onManageLabels={jest.fn()}
+      />,
+    );
+
+    expect(queryByTestId('context-share')).toBeNull();
+    expect(queryByTestId('context-duplicate')).toBeTruthy();
+    expect(queryByTestId('context-label')).toBeTruthy();
   });
 
   it('does not render label action when callback is omitted', () => {
