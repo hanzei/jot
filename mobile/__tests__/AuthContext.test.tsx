@@ -3,7 +3,7 @@ import { render, waitFor, act, fireEvent, cleanup, configure } from '@testing-li
 import { Text, TouchableOpacity } from 'react-native';
 import { AuthProvider, useAuth } from '../src/store/AuthContext';
 import { auth, getStoredSession, setOnUnauthorized, clearStoredSession, cacheAuthProfile, getCachedAuthProfile, clearCachedProfile } from '../src/api/client';
-import { getLocalIdentity, enableLocalMode as persistEnableLocalMode, disableLocalMode, updateLocalSettings } from '../src/store/localMode';
+import { getLocalIdentity, enableLocalMode as persistEnableLocalMode, disableLocalMode, updateLocalSettings, updateLocalUser } from '../src/store/localMode';
 
 const mockQueryClient = { clear: jest.fn() };
 jest.mock('@tanstack/react-query', () => ({
@@ -16,6 +16,7 @@ jest.mock('../src/store/localMode', () => ({
   disableLocalMode: jest.fn().mockResolvedValue(undefined),
   setLocalModeActive: jest.fn(),
   updateLocalSettings: jest.fn().mockResolvedValue(undefined),
+  updateLocalUser: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('../src/api/client', () => ({
@@ -57,6 +58,7 @@ const mockGetLocalIdentity = getLocalIdentity as jest.Mock;
 const mockPersistEnableLocalMode = persistEnableLocalMode as jest.Mock;
 const mockDisableLocalMode = disableLocalMode as jest.Mock;
 const mockUpdateLocalSettings = updateLocalSettings as jest.Mock;
+const mockUpdateLocalUser = updateLocalUser as jest.Mock;
 
 function TestConsumer() {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
@@ -102,7 +104,7 @@ function RevalidateConsumer() {
   );
 }
 
-const mockUser = { id: '1', username: 'testuser', first_name: '', last_name: '', role: 'user', has_profile_icon: false, created_at: '', updated_at: '' };
+const mockUser = { id: '1', username: 'testuser', first_name: '', last_name: '', role: 'user' as const, has_profile_icon: false, created_at: '', updated_at: '' };
 const mockSettings = { user_id: '1', language: 'en', theme: 'system' as const, note_sort: 'manual' as const, updated_at: '' };
 
 const localUser = { ...mockUser, id: 'local-id', username: 'local' };
@@ -124,7 +126,7 @@ function LocalModeConsumer() {
 }
 
 function SettingsConsumer() {
-  const { isLocalMode, settings, setSettings } = useAuth();
+  const { isLocalMode, settings, setSettings, setUser } = useAuth();
   return (
     <>
       <Text testID="local-mode">{String(isLocalMode)}</Text>
@@ -132,6 +134,10 @@ function SettingsConsumer() {
       <TouchableOpacity
         testID="change-settings"
         onPress={() => setSettings({ ...localSettings, language: 'de' })}
+      />
+      <TouchableOpacity
+        testID="change-user"
+        onPress={() => setUser({ ...localUser, first_name: 'Renamed' })}
       />
     </>
   );
@@ -635,6 +641,57 @@ describe('AuthContext', () => {
     });
 
     expect(mockUpdateLocalSettings).not.toHaveBeenCalled();
+    unmount();
+  });
+
+  it('calls updateLocalUser when the profile changes in local mode', async () => {
+    mockGetLocalIdentity.mockResolvedValue(localIdentity);
+
+    const { getByTestId, unmount } = render(
+      <AuthProvider>
+        <SettingsConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('local-mode').props.children).toBe('true');
+    });
+
+    mockUpdateLocalUser.mockClear();
+
+    await act(async () => {
+      fireEvent.press(getByTestId('change-user'));
+    });
+
+    await waitFor(() => {
+      expect(mockUpdateLocalUser).toHaveBeenCalledWith(
+        expect.objectContaining({ first_name: 'Renamed' }),
+      );
+    });
+    unmount();
+  });
+
+  it('does not call updateLocalUser when the profile changes in server mode', async () => {
+    mockGetStoredSession.mockResolvedValue('token');
+    mockAuth.me.mockResolvedValue({ user: mockUser, settings: mockSettings });
+
+    const { getByTestId, unmount } = render(
+      <AuthProvider>
+        <SettingsConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('local-mode').props.children).toBe('false');
+    });
+
+    mockUpdateLocalUser.mockClear();
+
+    await act(async () => {
+      fireEvent.press(getByTestId('change-user'));
+    });
+
+    expect(mockUpdateLocalUser).not.toHaveBeenCalled();
     unmount();
   });
 

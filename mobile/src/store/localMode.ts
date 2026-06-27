@@ -176,3 +176,24 @@ export function updateLocalSettings(newSettings: UserSettings): Promise<void> {
     }
   });
 }
+
+/**
+ * Persist updated profile fields into the local identity so they survive app
+ * restarts (epic #511). In local mode there is no `PATCH /users/me`, so the
+ * on-device record is the only durable home for profile edits. No-op when local
+ * mode is not enabled. Serialized with disableLocalMode() and updateLocalSettings()
+ * via the shared key-mutation lock so concurrent writes cannot clobber each other.
+ */
+export function updateLocalUser(newUser: User): Promise<void> {
+  return withKeyMutationLock(async () => {
+    const raw = await SecureStore.getItemAsync(LOCAL_MODE_KEY);
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (!isLocalIdentity(parsed)) return;
+      await SecureStore.setItemAsync(LOCAL_MODE_KEY, JSON.stringify({ ...parsed, user: newUser }));
+    } catch {
+      // Corrupt record: silently ignore; the new profile stays in memory.
+    }
+  });
+}

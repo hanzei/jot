@@ -14,7 +14,7 @@ import {
   initializeServerContext,
 } from '../api/client';
 import { isTransientHttpStatus } from '../db/syncQueue';
-import { getLocalIdentity, enableLocalMode as persistEnableLocalMode, disableLocalMode, setLocalModeActive, updateLocalSettings } from './localMode';
+import { getLocalIdentity, enableLocalMode as persistEnableLocalMode, disableLocalMode, setLocalModeActive, updateLocalSettings, updateLocalUser } from './localMode';
 
 interface AuthState {
   user: User | null;
@@ -95,6 +95,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!isLocalMode || !settings) return;
     void updateLocalSettings(settings);
   }, [isLocalMode, settings]);
+
+  // Persist profile changes to the local identity when in local mode so they
+  // survive app restarts. Unlike server mode, there is no `PATCH /users/me` to
+  // round-trip through, so the on-device record is the source of truth (epic #511).
+  useEffect(() => {
+    if (!isLocalMode || !user) return;
+    void updateLocalUser(user);
+  }, [isLocalMode, user]);
 
   useEffect(() => {
     let cancelled = false;

@@ -11,7 +11,7 @@ import { displayMessage, extractApiError } from '../../i18n/utils';
 import { styles } from './styles';
 
 export default function AccountSection() {
-  const { user, settings, setUser, setSettings } = useAuth();
+  const { user, settings, setUser, setSettings, isLocalMode } = useAuth();
   const { colors } = useTheme();
   const { t } = useTranslation();
   const db = useSQLiteContext();
@@ -43,7 +43,19 @@ export default function AccountSection() {
     if (user) {
       const optimisticUser = { ...user, ...profileUpdate };
       setUser(optimisticUser);
-      if (settings) void cacheAuthProfile({ user: optimisticUser, settings });
+      // Only mirror server-backed profiles into the offline auth cache (keyed by
+      // active server). In local mode AuthProvider persists the profile to the
+      // on-device identity instead, so writing here would pollute a server's cache.
+      if (settings && !isLocalMode) void cacheAuthProfile({ user: optimisticUser, settings });
+    }
+
+    // In local mode there is no server: the optimistic update is terminal and is
+    // persisted to the on-device identity by AuthContext. Skip the `PATCH /users/me`
+    // round-trip (and the offline-queue fallback, which never drains in local mode).
+    if (isLocalMode) {
+      setProfileSuccess(t('settings.profileUpdated'));
+      setProfileSaving(false);
+      return;
     }
 
     try {
@@ -71,7 +83,7 @@ export default function AccountSection() {
     } finally {
       setProfileSaving(false);
     }
-  }, [firstName, lastName, setSettings, setUser, t, username, user, settings, db]);
+  }, [firstName, lastName, setSettings, setUser, t, username, user, settings, db, isLocalMode]);
 
   return (
     <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>

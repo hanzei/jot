@@ -65,7 +65,7 @@ export default function SettingsScreen() {
           {!isLocalMode && <ChangePasswordSection />}
           {!isLocalMode && <SessionsSection />}
           {!isLocalMode && <PATsSection />}
-          <ImportSection />
+          {!isLocalMode && <ImportSection />}
           <AppearanceSection />
           <DeveloperSection />
           <AboutSection />
