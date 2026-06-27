@@ -878,7 +878,7 @@ describe('removeLocalNotesNotIn with search', () => {
     expect(sql).toContain('title LIKE ?');
     expect(sql).toContain('content LIKE ?');
     expect(sql).toContain('id IN (SELECT note_id FROM note_items WHERE text LIKE ?)');
-    expect(args).toContain('%hello%');
+    expect(args).toEqual(['%hello%', '%hello%', '%hello%']);
   });
 });
 
