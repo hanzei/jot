@@ -142,3 +142,19 @@ export async function enableLocalMode(): Promise<LocalIdentity> {
 export async function disableLocalMode(): Promise<void> {
   await SecureStore.deleteItemAsync(LOCAL_MODE_KEY);
 }
+
+/**
+ * Persist updated settings into the local identity so they survive app restarts
+ * (issue #516). No-op when local mode is not enabled (the identity record is absent).
+ */
+export async function updateLocalSettings(newSettings: UserSettings): Promise<void> {
+  const raw = await SecureStore.getItemAsync(LOCAL_MODE_KEY);
+  if (!raw) return;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!isLocalIdentity(parsed)) return;
+    await SecureStore.setItemAsync(LOCAL_MODE_KEY, JSON.stringify({ ...parsed, settings: newSettings }));
+  } catch {
+    // Corrupt record: silently ignore; the new settings stay in memory.
+  }
+}

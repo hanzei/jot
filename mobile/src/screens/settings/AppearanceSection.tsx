@@ -22,7 +22,7 @@ import type { ThemePreference } from '@jot/shared';
 import { styles } from './styles';
 
 export default function AppearanceSection() {
-  const { user, settings, setSettings } = useAuth();
+  const { user, settings, setSettings, isLocalMode } = useAuth();
   const { colors } = useTheme();
   const { t } = useTranslation();
   const db = useSQLiteContext();
@@ -54,29 +54,31 @@ export default function AppearanceSection() {
       if (user) void cacheAuthProfile({ user, settings: newSettings });
     }
 
-    try {
-      const { settings: updatedSettings } = await updateMe({ language });
-      setSettings(updatedSettings);
-      if (user) void cacheAuthProfile({ user, settings: updatedSettings });
-    } catch (err: unknown) {
-      if (isQueueableError(err)) {
-        await enqueueOperation(db, {
-          operation: 'updateSettings',
-          endpoint: '/users/me',
-          method: 'PATCH',
-          body: { language },
-        });
-      } else {
-        setLanguagePref(previousLanguage);
-        void i18n.changeLanguage(resolveLanguage(previousLanguage));
-        if (previousSettings) {
-          setSettings(previousSettings);
-          if (user) void cacheAuthProfile({ user, settings: previousSettings });
+    if (!isLocalMode) {
+      try {
+        const { settings: updatedSettings } = await updateMe({ language });
+        setSettings(updatedSettings);
+        if (user) void cacheAuthProfile({ user, settings: updatedSettings });
+      } catch (err: unknown) {
+        if (isQueueableError(err)) {
+          await enqueueOperation(db, {
+            operation: 'updateSettings',
+            endpoint: '/users/me',
+            method: 'PATCH',
+            body: { language },
+          });
+        } else {
+          setLanguagePref(previousLanguage);
+          void i18n.changeLanguage(resolveLanguage(previousLanguage));
+          if (previousSettings) {
+            setSettings(previousSettings);
+            if (user) void cacheAuthProfile({ user, settings: previousSettings });
+          }
+          setLanguageError(extractApiError(err) ?? 'settings.failedUpdateLanguage');
         }
-        setLanguageError(extractApiError(err) ?? 'settings.failedUpdateLanguage');
       }
     }
-  }, [languagePref, settings, user, setSettings, db]);
+  }, [languagePref, settings, user, setSettings, isLocalMode, db]);
 
   const handleThemeChange = useCallback(async (theme: ThemePreference) => {
     const prev = themePref;
@@ -90,28 +92,30 @@ export default function AppearanceSection() {
       if (user) void cacheAuthProfile({ user, settings: newSettings });
     }
 
-    try {
-      const { settings: updatedSettings } = await updateMe({ theme });
-      setSettings(updatedSettings);
-      if (user) void cacheAuthProfile({ user, settings: updatedSettings });
-    } catch (err: unknown) {
-      if (isQueueableError(err)) {
-        await enqueueOperation(db, {
-          operation: 'updateSettings',
-          endpoint: '/users/me',
-          method: 'PATCH',
-          body: { theme },
-        });
-      } else {
-        setThemePref(prev);
-        if (previousSettings) {
-          setSettings(previousSettings);
-          if (user) void cacheAuthProfile({ user, settings: previousSettings });
+    if (!isLocalMode) {
+      try {
+        const { settings: updatedSettings } = await updateMe({ theme });
+        setSettings(updatedSettings);
+        if (user) void cacheAuthProfile({ user, settings: updatedSettings });
+      } catch (err: unknown) {
+        if (isQueueableError(err)) {
+          await enqueueOperation(db, {
+            operation: 'updateSettings',
+            endpoint: '/users/me',
+            method: 'PATCH',
+            body: { theme },
+          });
+        } else {
+          setThemePref(prev);
+          if (previousSettings) {
+            setSettings(previousSettings);
+            if (user) void cacheAuthProfile({ user, settings: previousSettings });
+          }
+          setThemeError(extractApiError(err) ?? 'settings.failedUpdateTheme');
         }
-        setThemeError(extractApiError(err) ?? 'settings.failedUpdateTheme');
       }
     }
-  }, [settings, user, setSettings, themePref, db]);
+  }, [settings, user, setSettings, isLocalMode, themePref, db]);
 
   const languageOptions: { value: LanguagePreference; label: string }[] = [
     { value: 'system', label: t('settings.languageSystem') },
