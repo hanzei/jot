@@ -38,7 +38,7 @@ interface NavItem {
 }
 
 export default function DrawerContent(props: DrawerContentComponentProps) {
-  const { user, logout, clearAuth, revalidateSession } = useAuth();
+  const { user, logout, clearAuth, revalidateSession, isLocalMode } = useAuth();
   const { data: labels } = useLabels();
   const { data: labelCounts } = useLabelCounts();
   const createLabel = useCreateLabel();
@@ -49,7 +49,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
   const insets = useSafeAreaInsets();
   const topItems: NavItem[] = [
     { name: 'Notes', label: t('dashboard.tabNotes'), icon: 'document-text-outline', activeIcon: 'document-text' },
-    { name: 'MyTasks', label: t('dashboard.tabMyTasks'), icon: 'clipboard-outline', activeIcon: 'clipboard' },
+    ...(!isLocalMode ? [{ name: 'MyTasks' as const, label: t('dashboard.tabMyTasks'), icon: 'clipboard-outline' as const, activeIcon: 'clipboard' as const }] : []),
   ];
   const bottomItems: NavItem[] = [
     { name: 'Archived', label: t('dashboard.tabArchive'), icon: 'archive-outline', activeIcon: 'archive' },
@@ -402,31 +402,46 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
         {...props}
         contentContainerStyle={{ paddingTop: insets.top + 8 }}
       >
-        <TouchableOpacity
-          style={styles.profileSection}
-          onPress={handleOpenServerPicker}
-          accessibilityRole="button"
-          accessibilityLabel={t('serverPicker.open')}
-          testID="drawer-profile-button"
-        >
-          <UserAvatar
-            userId={user?.id ?? ''}
-            username={user?.username ?? ''}
-            hasProfileIcon={user?.has_profile_icon}
-            iconVersion={user?.updated_at}
-            size="large"
-          />
-          <View style={styles.profileTextWrap}>
-            <Text style={[styles.displayName, { color: colors.text }]} numberOfLines={1}>{displayName}</Text>
-            {user && displayName !== user.username && (
-              <Text style={[styles.username, { color: colors.textSecondary }]} numberOfLines={1}>@{user.username}</Text>
-            )}
-            <Text style={[styles.serverPickerHint, { color: colors.textSecondary }]} numberOfLines={1}>
-              {t('serverPicker.open')}
-            </Text>
+        {isLocalMode ? (
+          <View style={styles.profileSection} testID="drawer-profile-button">
+            <UserAvatar
+              userId={user?.id ?? ''}
+              username={user?.username ?? ''}
+              hasProfileIcon={user?.has_profile_icon}
+              iconVersion={user?.updated_at}
+              size="large"
+            />
+            <View style={styles.profileTextWrap}>
+              <Text style={[styles.displayName, { color: colors.text }]} numberOfLines={1}>{displayName}</Text>
+            </View>
           </View>
-          <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
-        </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={styles.profileSection}
+            onPress={handleOpenServerPicker}
+            accessibilityRole="button"
+            accessibilityLabel={t('serverPicker.open')}
+            testID="drawer-profile-button"
+          >
+            <UserAvatar
+              userId={user?.id ?? ''}
+              username={user?.username ?? ''}
+              hasProfileIcon={user?.has_profile_icon}
+              iconVersion={user?.updated_at}
+              size="large"
+            />
+            <View style={styles.profileTextWrap}>
+              <Text style={[styles.displayName, { color: colors.text }]} numberOfLines={1}>{displayName}</Text>
+              {user && displayName !== user.username && (
+                <Text style={[styles.username, { color: colors.textSecondary }]} numberOfLines={1}>@{user.username}</Text>
+              )}
+              <Text style={[styles.serverPickerHint, { color: colors.textSecondary }]} numberOfLines={1}>
+                {t('serverPicker.open')}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+          </TouchableOpacity>
+        )}
 
         <View style={[styles.divider, { backgroundColor: colors.divider }]} />
 

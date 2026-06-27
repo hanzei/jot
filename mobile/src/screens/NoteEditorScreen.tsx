@@ -110,7 +110,7 @@ export default function NoteEditorScreen() {
   const pendingShare = usePendingShare();
   const redirectInitiatedRef = useRef(false);
   const focusedListItemIdRef = useRef<string | null>(null);
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, isLocalMode } = useAuth();
   const { usersById } = useUsers();
   const { showToast } = useToast();
 
@@ -1627,10 +1627,10 @@ export default function NoteEditorScreen() {
         )}
 
         {/* Share with collaborators (when the note is saved and owned by the current
-            user). An offline-created note can be shared: its create drains FIFO
-            before the queued share (#475). Notes with a local_* id (offline labels)
-            are excluded since they have no server id yet. */}
-        {noteId && !isLocalId(noteId) && existingNote && existingNote.user_id === currentUser?.id && (
+            user). Sharing requires a central server and is not available in local mode.
+            An offline-created note can be shared: its create drains FIFO before the
+            queued share (#475). Notes with a local_* id are excluded (no server id). */}
+        {!isLocalMode && noteId && !isLocalId(noteId) && existingNote && existingNote.user_id === currentUser?.id && (
           <TouchableOpacity
             onPress={() => navigation.navigate('Share', { noteId })}
             style={styles.toolbarBtn}
