@@ -59,7 +59,7 @@ const EMPTY_LOCAL_ORDER: LocalReorderState = { pinned: null, unpinned: null };
 export default function NotesListScreen({ variant = 'notes', labelId }: NotesListScreenProps) {
   const [searchText, setSearchText] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const { user, settings, setSettings } = useAuth();
+  const { user, settings, setSettings, isLocalMode } = useAuth();
   const [trashCount, setTrashCount] = useState(0);
   const [isEmptyingTrash, setIsEmptyingTrash] = useState(false);
   const db = useSQLiteContext();
@@ -167,6 +167,10 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
       setSettings({ ...previousSettings, note_sort: nextSort });
     }
 
+    if (isLocalMode) {
+      return;
+    }
+
     try {
       const response = await updateMe({ note_sort: nextSort });
       if (requestId !== sortRequestIdRef.current) {
@@ -183,7 +187,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
       }
       Alert.alert(t('common.error'), t('dashboard.sortUpdateFailed'));
     }
-  }, [setSettings, settings, sortMode, t]);
+  }, [setSettings, settings, sortMode, isLocalMode, t]);
 
   const handleSortChipPress = useCallback((nextSort: NoteSort) => {
     setIsSortControlsOpen(false);

@@ -14,7 +14,7 @@ import {
   initializeServerContext,
 } from '../api/client';
 import { isTransientHttpStatus } from '../db/syncQueue';
-import { getLocalIdentity, enableLocalMode as persistEnableLocalMode, disableLocalMode, setLocalModeActive } from './localMode';
+import { getLocalIdentity, enableLocalMode as persistEnableLocalMode, disableLocalMode, setLocalModeActive, updateLocalSettings } from './localMode';
 
 interface AuthState {
   user: User | null;
@@ -88,6 +88,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setLocalModeActive(isLocalMode);
   }, [isLocalMode]);
+
+  // Persist settings changes to the local identity when in local mode so they
+  // survive app restarts (issue #516).
+  useEffect(() => {
+    if (!isLocalMode || !settings) return;
+    void updateLocalSettings(settings);
+  }, [isLocalMode, settings]);
 
   useEffect(() => {
     let cancelled = false;

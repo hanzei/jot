@@ -16,6 +16,20 @@ import { generateId, ROLES } from '@jot/shared';
 
 const LOCAL_MODE_KEY = 'jot_local_mode_v1';
 
+// Serialize all writes/deletes of LOCAL_MODE_KEY so updateLocalSettings cannot
+// recreate the identity record after disableLocalMode has deleted it.
+let keyMutationChain: Promise<unknown> = Promise.resolve();
+
+function withKeyMutationLock<T>(fn: () => Promise<T>): Promise<T> {
+  const next = keyMutationChain.then(fn);
+  // Swallow errors on the shared chain so one failure doesn't block subsequent ops.
+  keyMutationChain = next.then(
+    () => undefined,
+    () => undefined,
+  );
+  return next;
+}
+
 /** The default username for the on-device identity. Display-only; never sent anywhere. */
 const LOCAL_USERNAME = 'local';
 
@@ -139,6 +153,26 @@ export async function enableLocalMode(): Promise<LocalIdentity> {
 }
 
 /** Disable local mode and drop the persisted identity. */
-export async function disableLocalMode(): Promise<void> {
-  await SecureStore.deleteItemAsync(LOCAL_MODE_KEY);
+export function disableLocalMode(): Promise<void> {
+  return withKeyMutationLock(() => SecureStore.deleteItemAsync(LOCAL_MODE_KEY));
+}
+
+/**
+ * Persist updated settings into the local identity so they survive app restarts
+ * (issue #516). No-op when local mode is not enabled (the identity record is absent).
+ * Serialized with disableLocalMode() so a concurrent logout cannot leave a
+ * stale record behind after the key has been deleted.
+ */
+export function updateLocalSettings(newSettings: UserSettings): Promise<void> {
+  return withKeyMutationLock(async () => {
+    const raw = await SecureStore.getItemAsync(LOCAL_MODE_KEY);
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (!isLocalIdentity(parsed)) return;
+      await SecureStore.setItemAsync(LOCAL_MODE_KEY, JSON.stringify({ ...parsed, settings: newSettings }));
+    } catch {
+      // Corrupt record: silently ignore; the new settings stay in memory.
+    }
+  });
 }
