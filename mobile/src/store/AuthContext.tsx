@@ -14,7 +14,7 @@ import {
   initializeServerContext,
 } from '../api/client';
 import { isTransientHttpStatus } from '../db/syncQueue';
-import { getLocalIdentity, enableLocalMode as persistEnableLocalMode, disableLocalMode } from './localMode';
+import { getLocalIdentity, enableLocalMode as persistEnableLocalMode, disableLocalMode, setLocalModeActive } from './localMode';
 
 interface AuthState {
   user: User | null;
@@ -81,6 +81,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setOnUnauthorized(null);
     };
   }, [clearAuth]);
+
+  // Mirror the local-mode flag into a synchronous module-global so the non-React
+  // sync machinery (queue enqueue/drain, SSE, write hooks) can short-circuit on it
+  // without an async SecureStore read (epic #511, issue #514).
+  useEffect(() => {
+    setLocalModeActive(isLocalMode);
+  }, [isLocalMode]);
 
   useEffect(() => {
     let cancelled = false;

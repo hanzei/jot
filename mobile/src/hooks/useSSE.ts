@@ -24,7 +24,7 @@ export function useSSE(
   onNoteUpdatedByOther?: SSENotificationCallback,
   onStatusChange?: SSEStatusChangeCallback,
 ): void {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isLocalMode } = useAuth();
   const { isConnected } = useNetworkStatus();
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
@@ -186,7 +186,9 @@ export function useSSE(
 
   // Manage connection based on auth state, network status, and app lifecycle
   useEffect(() => {
-    if (!isAuthenticated || !isConnected) {
+    // Real-time cross-device sync requires a central server, so SSE never starts
+    // in local mode (epic #511, issue #514).
+    if (!isAuthenticated || !isConnected || isLocalMode) {
       stopConnection();
       return;
     }
@@ -204,7 +206,7 @@ export function useSSE(
 
     const subscription = AppState.addEventListener('change', handleAppStateChange);
     const lifecycleUnsubscribe = subscribeToServerSwitchLifecycle((state) => {
-      if (!isAuthenticated || !isConnected) {
+      if (!isAuthenticated || !isConnected || isLocalMode) {
         return;
       }
       if (!state.isSwitching && !state.isSseQuiesced) {
@@ -217,5 +219,5 @@ export function useSSE(
       lifecycleUnsubscribe();
       stopConnection();
     };
-  }, [isAuthenticated, isConnected, startConnection, stopConnection]);
+  }, [isAuthenticated, isConnected, isLocalMode, startConnection, stopConnection]);
 }

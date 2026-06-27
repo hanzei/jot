@@ -11,6 +11,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import NetInfo from '@react-native-community/netinfo';
 import { OfflineProvider, useOfflineContext } from '../src/store/OfflineContext';
 import { drainQueue, getPendingCount } from '../src/db/syncQueue';
+import { setLocalModeActive } from '../src/store/localMode';
 
 // Capture the enqueue listener registered by the provider so tests can fire it.
 let enqueueListener: (() => void) | null = null;
@@ -89,6 +90,33 @@ describe('OfflineProvider queue draining', () => {
     jest.runOnlyPendingTimers();
     jest.useRealTimers();
     jest.restoreAllMocks();
+    setLocalModeActive(false);
+  });
+
+  it('never drains the queue in local mode (mount, foreground, or enqueue)', async () => {
+    setLocalModeActive(true);
+    renderProvider();
+    await flush();
+    // Mount must not drain.
+    expect(mockDrainQueue).not.toHaveBeenCalled();
+
+    // A foreground transition must not drain either.
+    const handler = getAppStateHandler();
+    await act(async () => {
+      handler('active');
+    });
+    await flush();
+
+    // Nor an enqueue signal after its debounce window elapses.
+    act(() => {
+      enqueueListener?.();
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+    });
+    await flush();
+
+    expect(mockDrainQueue).not.toHaveBeenCalled();
   });
 
   it('drains once on mount when starting online', async () => {
