@@ -114,8 +114,7 @@ export default function ConnectToServerScreen() {
       } else if (code === 'INVALID_URL' || code === 'NO_SESSION') {
         setStep({ name: 'error', reason: 'UNREACHABLE' });
       } else {
-        const msg = (err as { message?: string })?.message;
-        setStep({ name: 'error', reason: msg ?? 'REGISTRATION_FAILED' });
+        setStep({ name: 'error', reason: 'REGISTRATION_FAILED' });
       }
     } finally {
       setBusy(false);

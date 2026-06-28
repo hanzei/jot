@@ -197,7 +197,10 @@ export async function checkEmptinessGate(client: UpgradeClient): Promise<Preflig
   if (!notesRes || notesRes.status !== 200) {
     return { ok: false, reason: 'FETCH_FAILED' };
   }
-  if (Array.isArray(notesRes.data) && notesRes.data.length > 0) {
+  if (!Array.isArray(notesRes.data)) {
+    return { ok: false, reason: 'FETCH_FAILED' };
+  }
+  if (notesRes.data.length > 0) {
     return { ok: false, reason: 'NOTES_NOT_EMPTY' };
   }
 
@@ -205,7 +208,10 @@ export async function checkEmptinessGate(client: UpgradeClient): Promise<Preflig
   if (!labelsRes || labelsRes.status !== 200) {
     return { ok: false, reason: 'FETCH_FAILED' };
   }
-  if (Array.isArray(labelsRes.data) && labelsRes.data.length > 0) {
+  if (!Array.isArray(labelsRes.data)) {
+    return { ok: false, reason: 'FETCH_FAILED' };
+  }
+  if (labelsRes.data.length > 0) {
     return { ok: false, reason: 'LABELS_NOT_EMPTY' };
   }
 

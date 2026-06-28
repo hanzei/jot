@@ -282,6 +282,16 @@ describe('checkEmptinessGate', () => {
     expect(result).toEqual({ ok: false, reason: 'FETCH_FAILED' });
   });
 
+  it('fails with FETCH_FAILED when GET /notes returns a non-array payload', async () => {
+    const result = await checkEmptinessGate(makeEmptyClient({ notesData: { notes: [], total: 0 } }));
+    expect(result).toEqual({ ok: false, reason: 'FETCH_FAILED' });
+  });
+
+  it('fails with FETCH_FAILED when GET /labels returns a non-array payload', async () => {
+    const result = await checkEmptinessGate(makeEmptyClient({ labelsData: { labels: [], total: 0 } }));
+    expect(result).toEqual({ ok: false, reason: 'FETCH_FAILED' });
+  });
+
   it('does not mutate local mode on emptiness failure', async () => {
     memory.set('jot_local_mode_v1', JSON.stringify({
       user: { id: 'aaaaaaaaaaaaaaaaaaaaaaaa', username: 'local', first_name: '', last_name: '', role: 'user', has_profile_icon: false, created_at: '', updated_at: '' },
