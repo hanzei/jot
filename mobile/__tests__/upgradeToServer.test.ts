@@ -768,6 +768,10 @@ describe('configureMigrationApiClient', () => {
     expect(mockAddServer).toHaveBeenCalledWith(MIGRATION_SESSION.serverUrl);
     expect(mockSetServerStorageValue).toHaveBeenCalledWith('server-abc', 'session', MIGRATION_SESSION.sessionToken);
     expect(mockSwitchActiveServer).toHaveBeenCalledWith('server-abc');
+    // Storage must be written before the server switch so the session is available
+    // when switchActiveServer triggers the auth handshake.
+    expect(mockSetServerStorageValue.mock.invocationCallOrder[0])
+      .toBeLessThan(mockSwitchActiveServer.mock.invocationCallOrder[0]);
   });
 
   it('reuses the existing server ID when addServer returns DUPLICATE', async () => {
@@ -797,6 +801,7 @@ describe('configureMigrationApiClient', () => {
     await expect(configureMigrationApiClient(MIGRATION_SESSION)).rejects.toThrow(
       'Failed to register migration server',
     );
+    expect(mockSetServerStorageValue).not.toHaveBeenCalled();
     expect(mockSwitchActiveServer).not.toHaveBeenCalled();
   });
 
@@ -810,6 +815,17 @@ describe('configureMigrationApiClient', () => {
 
     await expect(configureMigrationApiClient(MIGRATION_SESSION)).rejects.toThrow(
       'Failed to register migration server',
+    );
+    expect(mockSetServerStorageValue).not.toHaveBeenCalled();
+    expect(mockSwitchActiveServer).not.toHaveBeenCalled();
+  });
+
+  it('throws when switchActiveServer returns false', async () => {
+    mockAddServer.mockResolvedValue({ success: true, serverId: 'server-abc' });
+    mockSwitchActiveServer.mockResolvedValue(false);
+
+    await expect(configureMigrationApiClient(MIGRATION_SESSION)).rejects.toThrow(
+      'Failed to switch active server for migration',
     );
   });
 });

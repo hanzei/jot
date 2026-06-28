@@ -425,7 +425,10 @@ export async function configureMigrationApiClient(session: UpgradeSession): Prom
     throw new Error(`Failed to register migration server: ${addResult.message}`);
   }
   await setServerStorageValue(serverId, 'session', session.sessionToken);
-  await switchActiveServer(serverId);
+  const switched = await switchActiveServer(serverId);
+  if (!switched) {
+    throw new Error('Failed to switch active server for migration');
+  }
   return serverId;
 }
 

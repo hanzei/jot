@@ -248,7 +248,14 @@ export default function ConnectToServerScreen() {
     if (count > 0 || !isMountedRef.current) return;
     const { session, processed, total } = step;
     setStep({ name: 'migrating', session, processed, total });
-    await runDrainLoop(session, total);
+    try {
+      await runDrainLoop(session, total);
+    } catch (err) {
+      console.warn('Migration retry failed unexpectedly:', err);
+      if (isMountedRef.current) {
+        setStep({ name: 'deadLetter', session, processed, total, deadLetterCount: 0 });
+      }
+    }
   }, [step, db, runDrainLoop]);
 
   function preflightErrorMessage(reason: string): string {
