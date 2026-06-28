@@ -1,4 +1,4 @@
-# Feature Spec: File Attachments / Uploads
+# Feature Spec: Note Images
 
 Status: **Draft / proposal** — for discussion before implementation.
 Owner: TBD · Target: Jot (self-hosted note app)
@@ -7,38 +7,43 @@ Owner: TBD · Target: Jot (self-hosted note app)
 
 ## 1. Summary
 
-Let users attach files (images, PDFs, arbitrary documents) to notes. Images can
-be embedded inline in a note's markdown body; all files appear as an attachment
-list on the note and travel with it through sharing, export, and trash.
+Let users attach **images** to notes. Images render in a **gallery above the
+note body** (Google Keep style) — a single image as a full-width banner, two or
+more as a thumbnail grid. They are *not* embedded into the markdown body; they
+are a first-class part of the note that travels with it through sharing, export,
+and trash.
 
-This builds directly on the binary-handling pattern Jot already ships for
-**profile icons** (`UploadProfileIcon` / `GetUserProfileIcon` in
+This builds on the binary-handling pattern Jot already ships for **profile
+icons** (`UploadProfileIcon` / `GetUserProfileIcon` in
 `server/internal/handlers/auth.go`): `MaxBytesReader` + multipart parse +
-`http.DetectContentType` + content-type allowlist + `X-Content-Type-Options:
-nosniff` on serve. The main new decisions are **where the bytes live** (the
-profile-icon BLOB-in-DB approach does not scale to many large files) and **how
-attachments bind to notes, sharing, and the markdown body**.
+`http.DetectContentType` + image-type allowlist + image decode/resize +
+`X-Content-Type-Options: nosniff` on serve. The main new decisions are **where
+the bytes live** (the profile-icon BLOB-in-DB approach does not scale to many
+images) and **how images bind to a note and render in order**.
+
+Scope is deliberately narrow: **images only** (no PDFs/documents), **rendered as
+a gallery** (no markdown embedding), **max 10 per note**.
 
 ---
 
 ## 2. Goals / Non-goals
 
 **Goals (v1)**
-- Attach one or more files to a note (owner or a user the note is shared with).
-- Inline image embedding into the markdown body (drag/drop, paste, file picker).
-- Non-image files shown as a downloadable attachment list with name/size/type.
-- Attachments inherit the note's access rules (owner **or** shared user).
-- Attachments survive sharing, trash/restore, export, and import where feasible.
+- Attach up to **10 images** to a note (owner or a user the note is shared with).
+- Images render **above the note title/body**: one image = banner, 2+ = grid
+  gallery; tap to open a full-screen lightbox/carousel.
+- Images inherit the note's access rules (owner **or** shared user).
+- Images survive sharing, trash/restore, export, and import where feasible.
 - Sensible limits + validation; protect against accidental internal overload
   (per the project threat model), not malicious insiders.
 - Works on both supported DB backends (SQLite default, Postgres).
 
 **Non-goals (v1)**
-- Image editing/cropping (beyond the existing avatar resize), OCR, virus
-  scanning, full‑text indexing of file contents.
-- External object stores (S3/GCS). Designed so a backend can be added later.
-- Per-attachment ACLs distinct from the note's sharing.
-- Versioning of attachments.
+- Non-image files (PDF, documents, arbitrary uploads) — images only.
+- Markdown/inline embedding of images into the note body.
+- Image editing/cropping (beyond decode + thumbnail), OCR, full-text indexing.
+- External object stores (S3/GCS) — designed so a backend can be added later.
+- Per-image ACLs distinct from the note's sharing; image versioning.
 
 ---
 
@@ -46,107 +51,110 @@ attachments bind to notes, sharing, and the markdown body**.
 
 ### 3.1 Webapp (primary surface — `NoteModal.tsx`)
 
-Notes are markdown today (`marked` renders content; `NoteCard` shows a markdown
-preview). Attachments slot into the existing editor:
+**Adding images**
+- **Drag & drop** image files onto the open note modal → upload starts, a
+  progress placeholder appears in the gallery.
+- **Paste** (`Ctrl/Cmd+V`) an image from the clipboard → uploads and appends to
+  the note's image set (no markdown is inserted).
+- **Toolbar button** (🖼 image icon) → native file picker, image types only,
+  multi-select.
 
-**Adding files**
-- **Drag & drop** anywhere onto the open note modal → upload starts immediately,
-  a progress chip appears.
-- **Paste** (`Ctrl/Cmd+V`) an image from clipboard → uploads and, for images,
-  inserts a markdown image reference at the cursor.
-- **Toolbar button** (📎 paperclip) → native file picker (multi-select).
-
-**Display**
-- An **Attachments** strip at the bottom of the note modal: image thumbnails +
-  file-type chips (icon, filename, size). Click an image → lightbox; click a
-  file → download.
-- Inline images: when a user inserts an image, the markdown body gets
-  `![alt](/api/attachments/{id})` and the markdown renderer resolves it. Image
-  URLs are same-origin and credentialed.
-- **NoteCard** preview: if a note has an image attachment, show one thumbnail
-  badge (count "+N") so attachments are visible in the grid.
+**Rendering** (matches the supplied mockups)
+- Images render in a **header region above the note title**:
+  - **1 image** → full-width banner.
+  - **2+ images** → responsive thumbnail grid (e.g. 2 columns), cropped to
+    uniform tiles; the last tile shows a "+N" overlay if more exist than fit.
+- Tap/click any image → full-screen **lightbox** with swipe/arrow navigation
+  (keyboard-dismissable, consistent with existing `@headlessui` modals).
+- **NoteCard** in the grid shows the **first image as a cover thumbnail** at the
+  top of the card (Keep-style), with a small "+N" badge when there are more.
 
 **Managing**
-- Hover an attachment → remove (✕). Removing an inline-embedded image also
-  offers to strip the markdown reference.
+- Hover a gallery tile → remove (✕). No markdown cleanup needed since images are
+  not referenced from the body.
+- Images keep a stable order (upload order by default); drag-to-reorder within
+  the gallery is a fast-follow (an `order`/`position` column supports it from
+  day one).
 - Upload states: queued → uploading (progress %) → done / error (retry).
 
-**Errors (inline, non-blocking toast + chip state)**
-- Too large: "File exceeds the 25 MB limit."
-- Unsupported type: "This file type isn't allowed."
-- Too many: "Notes can have up to 20 attachments."
+**Errors (inline toast + tile state)**
+- Too large: "Image exceeds the 25 MB limit."
+- Wrong type: "Only images can be attached."
+- Too many: "Notes can have up to 10 images."
 
-**Accessibility**: paperclip button has a label; thumbnails have `alt` derived
-from filename; lightbox is keyboard-dismissable (matches `@headlessui` usage).
+**Accessibility**: image button has a label; tiles get `alt` from the original
+filename; lightbox is keyboard navigable/closeable.
 
 ### 3.2 Mobile (`mobile/`)
 
-- "Attach" action in the note screen → choose **Camera**, **Photo Library**, or
-  **Files** (Expo pickers).
-- Thumbnails in a horizontal scroller; tap to view/download.
+- "Add image" action in the note screen → **Camera**, **Photo Library**, or
+  **Files** (Expo pickers, images only).
+- Gallery renders above the note body, same banner/grid rules; tap → full-screen
+  viewer.
 - Uploads queue through the existing React Query mutation layer; offline =
-  queued and flushed by the sync hook when back online (consistent with the
-  app's offline-first design). Pending attachments render with a spinner.
-- Local cache of downloaded attachments via Expo FileSystem to avoid re-fetch.
+  queued and flushed by the sync hook when back online (offline-first design).
+  Pending images render with a spinner.
+- Downloaded images cached via Expo FileSystem to avoid re-fetch.
 
 ### 3.3 Empty/limit states
-- A note with no attachments shows nothing extra (no empty strip).
-- Storage/limit copy is localized — add keys to all 8 locales and run
+- A note with no images shows no gallery region.
+- Limit/error copy is localized — add keys to all 8 locales and run
   `task check-translations`.
 
 ---
 
 ## 4. Data model
 
-New `attachments` table. Bytes are stored on disk (see §5); the row holds
-metadata + a content hash. Mirror migrations in **both**
+New `note_images` table. Bytes are stored on disk (see §5); the row holds
+metadata + a content hash + gallery position. Mirror migrations in **both**
 `server/internal/database/migrations/sqlite/` and `.../postgres/` as the next
-sequential number (`000004_add_attachments.up.sql` / `.down.sql`).
+sequential number (`000004_add_note_images.up.sql` / `.down.sql`).
 
 ```sql
 -- sqlite
-CREATE TABLE attachments (
+CREATE TABLE note_images (
     id            TEXT PRIMARY KEY,              -- 22-char crypto id (models.NewID)
     note_id       TEXT NOT NULL,
     uploader_id   TEXT NOT NULL,                 -- who uploaded (owner or shared user)
-    filename      TEXT NOT NULL,                 -- original, sanitized for display
-    content_type  TEXT NOT NULL,                 -- validated server-side
+    filename      TEXT NOT NULL,                 -- original, for display/alt text
+    content_type  TEXT NOT NULL,                 -- validated image/* type
     size_bytes    INTEGER NOT NULL,
     sha256        TEXT NOT NULL,                 -- content hash (storage key + dedup)
-    width         INTEGER,                       -- nullable, images only
-    height        INTEGER,                       -- nullable, images only
+    width         INTEGER NOT NULL,              -- captured at upload
+    height        INTEGER NOT NULL,
+    position      INTEGER NOT NULL,              -- gallery order within the note
     created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (note_id)     REFERENCES notes (id) ON DELETE CASCADE,
     FOREIGN KEY (uploader_id) REFERENCES users (id) ON DELETE CASCADE
 );
-CREATE INDEX idx_attachments_note_id ON attachments(note_id);
-CREATE INDEX idx_attachments_sha256  ON attachments(sha256);
+CREATE INDEX idx_note_images_note_id ON note_images(note_id, position);
+CREATE INDEX idx_note_images_sha256  ON note_images(sha256);
 ```
 
-(Postgres variant: `TIMESTAMPTZ`, `BIGINT` for sizes, `INTEGER` for dims.)
+(Postgres variant: `TIMESTAMPTZ`, `BIGINT` for size, `INTEGER` for dims/position.)
 
 `ON DELETE CASCADE` from `notes` means permanently deleting a note (post-trash)
-drops its attachment rows automatically; on-disk blobs are reclaimed by the
-orphan sweep in §10.
+drops its image rows automatically; on-disk blobs are reclaimed by the orphan
+sweep in §10.
 
-A `Note` response gains an `attachments []Attachment` field (omitempty), built
-alongside `Items`/`Labels`/`SharedWith` in the note store, and a matching
-`Attachment` interface in `shared/src/types.ts` (single source of truth — do not
-redefine in webapp).
+A `Note` response gains an `images []NoteImage` field (omitempty, ordered by
+`position`), built alongside `Items`/`Labels`/`SharedWith` in the note store,
+and a matching `NoteImage` interface in `shared/src/types.ts` (single source of
+truth — do not redefine in webapp).
 
 ---
 
 ## 5. Storage backend
 
-**Decision: store bytes on the filesystem, content-addressed by SHA-256, with a
-small pluggable interface. Do not extend the profile-icon BLOB-in-DB approach to
-attachments.**
+**Decision: store bytes on the filesystem, content-addressed by SHA-256, behind
+a small pluggable interface. Do not extend the profile-icon BLOB-in-DB approach
+to note images.**
 
 Rationale:
-- Profile icons are one small (resized) image per user — fine as a BLOB.
-  Attachments are many, potentially up to tens of MB, and would bloat the SQLite
-  file / Postgres rows, hurt backups, and stream poorly.
-- Content addressing gives free dedup (same file attached twice = one blob) and
+- Profile icons are one small resized image per user — fine as a BLOB. Up to 10
+  full-size images per note across many notes would bloat the SQLite file /
+  Postgres rows, hurt backups, and stream poorly.
+- Content addressing gives free dedup (same image attached twice = one blob) and
   immutable, traversal-proof storage keys.
 
 ```go
@@ -162,16 +170,19 @@ type Blobstore interface {
   the mounted `/data` volume). Layout: `UPLOAD_DIR/<sha[0:2]>/<sha[2:4]>/<sha>`
   to keep directories shallow. The path is derived solely from the validated hex
   hash, so user input never reaches the filesystem path (no traversal).
+- Thumbnails: generate a resized derivative (reusing the avatar resize pipeline)
+  and store it under a `thumb/` keyspace, or generate lazily on first request
+  and cache. Grid tiles use the thumbnail; the lightbox uses the original.
 - The interface leaves room for an S3 backend later without touching handlers.
 
-**Backup note for operators**: with this design a full backup is now *DB + the
-upload dir* (previously DB-only). This is a documentation change — call it out in
-README and the PR description per the project's compatibility rules.
+**Backup note for operators**: a full backup is now *DB + the upload dir*
+(previously DB-only). This is a documentation change — call it out in README and
+the PR description per the project's compatibility rules.
 
 > Alternative considered — keep everything in the DB as a BLOB for "one-file
-> backup" parity with profile icons. Rejected for v1 on size/scaling grounds, but
-> the `Blobstore` interface could trivially get a `dbBlobstore` if single-artifact
-> backup is later judged more important than scale.
+> backup" parity with profile icons. Rejected for v1 on size/scaling grounds; the
+> `Blobstore` interface could trivially get a `dbBlobstore` later if single-file
+> backup is judged more important than scale.
 
 ---
 
@@ -185,36 +196,35 @@ annotations.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/api/notes/{noteId}/attachments` | Upload a file to a note (multipart `file`). 201 → `Attachment`. Requires note write access (owner or shared). |
-| `GET` | `/api/notes/{noteId}/attachments` | List a note's attachments (metadata). |
-| `GET` | `/api/attachments/{id}` | Download/stream the bytes. Requires access to the parent note. |
-| `GET` | `/api/attachments/{id}/thumbnail` | Resized image thumbnail (images only; 404 for non-images). |
-| `DELETE` | `/api/attachments/{id}` | Detach + delete. Requires note access. |
+| `POST` | `/api/notes/{noteId}/images` | Upload an image to a note (multipart `file`). 201 → `NoteImage`. Requires note write access (owner or shared). |
+| `GET` | `/api/notes/{noteId}/images` | List a note's images (metadata, ordered). |
+| `GET` | `/api/images/{id}` | Stream the full-size image bytes. Requires access to the parent note. |
+| `GET` | `/api/images/{id}/thumbnail` | Resized thumbnail for grid tiles. |
+| `DELETE` | `/api/images/{id}` | Remove the image from the note. Requires note access. |
+| `PATCH` | `/api/notes/{noteId}/images/order` | Reorder gallery (array of image IDs). *Fast-follow.* |
 
-**Authorization**: every attachment route resolves the parent note and reuses
-the existing "owner **or** shared-with" check (same predicate used by note
-read/update). No new permission concept — an attachment is exactly as accessible
-as its note. PAT-authenticated requests work identically.
+**Authorization**: every route resolves the parent note and reuses the existing
+"owner **or** shared-with" check (same predicate as note read/update). No new
+permission concept — an image is exactly as accessible as its note. PAT-auth
+works identically.
 
 **Upload handler** (mirrors `UploadProfileIcon`):
 1. `r.Body = http.MaxBytesReader(w, r.Body, limit+overhead)`; `ParseMultipartForm`.
-2. Read `file`, enforce per-note count cap, compute SHA-256 while reading.
-3. `http.DetectContentType` → check against allowlist (§7). Reject mismatch with
-   the declared type.
-4. For images, decode to capture width/height (reuse the avatar image pipeline;
-   optionally generate a thumbnail eagerly or lazily on first request).
-5. `Blobstore.Put` (no-op if hash already present → dedup), insert metadata row.
-6. Emit SSE event (§8), return `Attachment`.
+2. Read `file`, enforce the **10-per-note** cap, compute SHA-256 while reading.
+3. `http.DetectContentType` → must be in the **image allowlist** (§7); reject
+   anything else (this is what enforces "images only").
+4. **Decode the image** to confirm it's valid and capture width/height (reuse the
+   avatar pipeline). Generate/queue a thumbnail.
+5. `Blobstore.Put` (no-op if hash already present → dedup), insert the row with
+   `position = max(position)+1` for the note.
+6. Emit SSE event (§8), return `NoteImage`.
 
 **Download handler** (mirrors `GetUserProfileIcon`):
-- Set `Content-Type` from the stored type, **`X-Content-Type-Options: nosniff`**,
-  and `Content-Disposition`:
-  - `inline` for image types (so inline markdown embeds render),
-  - `attachment; filename="..."` for everything else (force download, never
-    execute in the browser context — important since arbitrary types are
-    allowed).
-- Use `http.ServeContent` with the blob's `ReadSeeker` + `created_at` for range
-  requests, `ETag` (= sha256), and caching. Content is immutable per hash, so
+- Set `Content-Type` from the stored image type and **`X-Content-Type-Options:
+  nosniff`**. Serve **inline** (images are safe to render; no forced-download
+  branch needed since only images exist).
+- Use `http.ServeContent` with the blob's `ReadSeeker` for range requests,
+  `ETag` (= sha256) and caching. Content is immutable per hash, so
   `Cache-Control: private, max-age=...` is safe.
 
 ---
@@ -224,124 +234,122 @@ as its note. PAT-authenticated requests work identically.
 Add to `shared/src/constants.ts` (and a server-side mirror in
 `internal/handlers/validation.go`) so client and server agree:
 
-- `ATTACHMENT_MAX_BYTES` — default **25 MB** per file. Configurable via env
-  `ATTACHMENT_MAX_BYTES` using the existing `parseIntRangeEnv` helper.
-- `ATTACHMENT_MAX_PER_NOTE` — default **20**.
-- `ATTACHMENT_ALLOWED_TYPES` — allowlist. Suggested v1: images
-  (`image/png`, `image/jpeg`, `image/webp`, `image/gif`), `application/pdf`,
-  plain text/markdown/csv, common office docs. Configurable for operators who
-  want to broaden/narrow it.
+- `IMAGE_MAX_BYTES` — default **25 MB** per image. Configurable via env
+  `IMAGE_MAX_BYTES` using the existing `parseIntRangeEnv` helper.
+- `IMAGE_MAX_PER_NOTE` — **10**.
+- `IMAGE_ALLOWED_TYPES` — `image/png`, `image/jpeg`, `image/webp`, `image/gif`.
 
 Security posture (consistent with the project threat model — guard against
-accidental internal overload, baseline authz mandatory):
-- **Content sniffing**: validate with `http.DetectContentType`, store the
-  detected type, serve with `nosniff`.
-- **Never inline-render untrusted HTML/SVG**: exclude `image/svg+xml` and
-  `text/html` from the allowlist by default (SVG can carry script). If SVG is
-  later wanted, serve it `Content-Disposition: attachment` only.
-- **Path safety**: storage key is the hex hash; original filename is stored for
-  display only and is never used as a filesystem path.
-- **Authz**: parent-note access check on every read/write/delete; no
-  enumeration (IDs are 22-char crypto-random, and access is still checked).
-- **Rate limiting / overload protection**: cap concurrent uploads and apply a
-  per-user upload rate limit (align with existing middleware), plus the size and
-  per-note caps above. This is the priority defense per `CLAUDE.md`.
-- A per-user/global storage quota is a candidate follow-up (see §15).
+accidental internal overload; baseline authz mandatory):
+- **Type enforcement**: validate with `http.DetectContentType` *and* a successful
+  image decode; store the detected type; serve with `nosniff`.
+- **Exclude `image/svg+xml`** from the allowlist — SVG can carry script and would
+  be a stored-XSS vector when rendered inline. (If SVG is ever wanted, it must be
+  served `Content-Disposition: attachment`, never inline.)
+- **Path safety**: storage key is the hex hash; the original filename is stored
+  for display/alt only and never used as a filesystem path.
+- **Authz**: parent-note access check on every read/write/delete; IDs are
+  22-char crypto-random and access is still verified (no enumeration).
+- **Overload protection** (priority per `CLAUDE.md`): the 10-per-note cap, the
+  size cap, plus a per-user upload rate limit / concurrent-upload cap aligned
+  with existing middleware.
+- A per-user/instance storage quota is a candidate follow-up (§15).
 
 ---
 
 ## 8. Realtime (SSE)
 
-Add an `EventType` in `internal/sse/hub.go` (the hub already has
-`note_updated`, `profile_icon_updated`, etc.):
-- `attachment_added` / `attachment_removed`, payload `{ note_id, attachment }` /
-  `{ note_id, attachment_id }`.
-- Fan-out audience = the note's owner + shared users (same audience logic used
-  for `note_updated`). Webapp/mobile update the note's attachment list live, so a
-  collaborator sees a new image appear without reload.
+Add `EventType`s in `internal/sse/hub.go` (the hub already has `note_updated`,
+`profile_icon_updated`, etc.):
+- `note_image_added` / `note_image_removed` (and `note_image_reordered` when
+  reorder ships), payloads `{ note_id, image }` / `{ note_id, image_id }`.
+- Fan-out audience = the note's owner + shared users (same logic as
+  `note_updated`), so a collaborator sees a new image appear without reload.
 
-Simpler alternative: piggyback on `note_updated` and let clients refetch
-attachments. Dedicated events are cheaper and match existing granularity.
+Simpler alternative: piggyback on `note_updated` and have clients refetch images.
+Dedicated events are cheaper and match existing granularity.
 
 ---
 
 ## 9. Sharing, trash, export/import
 
-- **Sharing**: nothing extra to store — attachments are reachable by anyone with
-  note access. A shared user can add/remove attachments (write access), matching
-  how shared notes already allow content edits.
-- **Trash/restore**: attachments stay attached through soft-delete (note
-  `deleted_at`). They become eligible for blob cleanup only after the note is
-  *permanently* deleted (cascade removes rows; §10 reclaims bytes).
-- **Export** (`handlers/export.go`): include attachment metadata in the note
-  export and bundle blobs (e.g. a zip with a `attachments/` folder, or
-  base64-inline for the JSON export — decide based on current export format).
-- **Import** (`handlers/import.go`): re-create attachments from the bundle,
-  re-hashing and de-duping on the way in. If a referenced blob is missing, import
-  the note without it and warn.
+- **Sharing**: nothing extra to store — images are reachable by anyone with note
+  access. A shared user can add/remove images (write access), matching how
+  shared notes already allow content edits.
+- **Trash/restore**: images stay attached through soft-delete (note
+  `deleted_at`); blobs become reclaimable only after the note is *permanently*
+  deleted (cascade removes rows; §10 reclaims bytes).
+- **Export** (`handlers/export.go`): include image metadata and bundle blobs
+  (e.g. an `images/` folder in a zip, or base64-inline for JSON export — decide
+  per the current export format).
+- **Import** (`handlers/import.go`): re-create images from the bundle, re-hashing
+  and de-duping on the way in; if a blob is missing, import the note without it
+  and warn.
 
 ---
 
 ## 10. Lifecycle & orphan cleanup
 
-- Dedup means a blob may be referenced by multiple attachment rows (same file on
-  several notes). **Reference count = `COUNT(*) FROM attachments WHERE sha256=?`**.
-- On attachment delete or note hard-delete: remove the row; if no rows reference
-  that `sha256`, `Blobstore.Delete` the blob.
+- Dedup means a blob may be referenced by multiple rows (same image on several
+  notes). **Reference count = `COUNT(*) FROM note_images WHERE sha256=?`**.
+- On image delete or note hard-delete: remove the row; if no rows reference that
+  `sha256`, `Blobstore.Delete` the blob (and its thumbnail).
 - A periodic **sweep** (startup + daily) deletes on-disk blobs with zero
-  referencing rows, covering crash-after-row-delete races. Conversely, a row
-  whose blob is missing is logged and surfaced as a broken attachment.
-- Deleting the sole inline image leaves a dangling markdown ref; the webapp
-  offers to strip it (§3), but a broken `![]()` is otherwise harmless.
+  referencing rows, covering crash-after-row-delete races. A row whose blob is
+  missing is logged and surfaced as a broken tile.
+- Deleting an image just removes its gallery tile — no markdown references to
+  clean up.
 
 ---
 
 ## 11. Migrations & backward compatibility
 
-- Additive only: new table + new `UPLOAD_DIR`. Existing installs migrate cleanly
-  with no data changes; `attachments` starts empty.
+- Additive only: new `note_images` table + new `UPLOAD_DIR`. Existing installs
+  migrate cleanly with no data changes; the table starts empty.
 - New env `UPLOAD_DIR` (default `./uploads`); document in README + Docker (ensure
   it resolves under the `/data` volume so it persists and is backed up).
-- API change is additive (`Note.attachments`), but per `CLAUDE.md` the
-  **backup-surface change (DB → DB + upload dir)** must be called out explicitly
-  in the PR description with operator upgrade guidance.
+- API change is additive (`Note.images`), but per `CLAUDE.md` the **backup-surface
+  change (DB → DB + upload dir)** must be called out explicitly in the PR
+  description with operator upgrade guidance.
 
 ---
 
 ## 12. Telemetry
 
-- Wrap the attachment store with an `_otel.go` variant like the existing stores
+- Wrap the image store with an `_otel.go` variant like existing stores
   (`note_store_otel.go`, etc.).
 - Metrics: upload count/bytes, dedup hit rate, total blob bytes on disk, sweep
-  reclaimed bytes. Trace spans on upload (read → validate → put → insert) and
-  download.
+  reclaimed bytes. Trace spans on upload (read → validate → decode → put →
+  insert) and download.
 
 ---
 
 ## 13. Phasing
 
-- **MVP**: table + `fsBlobstore`, upload/list/download/delete, size+type+count
-  limits, webapp paperclip + drag/drop + inline image paste, download serving
-  with `nosniff`/`Content-Disposition`, auth via note access. SSE + thumbnails
-  can be fast-follow.
-- **v1.1**: thumbnails, SSE live updates, NoteCard thumbnail badge, mobile
-  camera/library/files + offline queue.
-- **Later**: export/import bundling, storage quotas, S3 backend, drag-to-reorder.
+- **MVP**: `note_images` table + `fsBlobstore`, upload/list/get/delete,
+  size+type+count limits, image decode/validation, webapp picker + drag/drop +
+  paste, gallery-above-body rendering (banner + grid), lightbox, inline serving
+  with `nosniff`, auth via note access.
+- **v1.1**: thumbnails endpoint + grid tiles using them, SSE live updates,
+  NoteCard cover thumbnail, mobile camera/library/files + offline queue,
+  drag-to-reorder (`PATCH .../images/order`).
+- **Later**: export/import bundling, storage quotas, S3 backend.
 
 ---
 
 ## 14. Testing
 
-- **Server integration** (new `server/http_attachments_test.go`, following the
-  `http_profile_icon_test.go` style): upload happy path, oversize → 413,
-  disallowed type → 400, count cap, download content-type/disposition/nosniff,
-  access control (non-shared user → 403/404, shared user → 200), dedup, delete +
-  blob reclamation, cascade on note hard-delete.
-- **Store unit tests** for refcount/cleanup logic.
-- **Webapp** (Vitest + RTL): drag/drop, paste-to-inline, error states, list
-  rendering.
+- **Server integration** (new `server/http_note_images_test.go`, following
+  `http_profile_icon_test.go`): upload happy path, oversize → 413, non-image →
+  400, 11th image → rejected, ordering, download content-type + nosniff, access
+  control (non-shared → 403/404, shared → 200), dedup, delete + blob reclamation,
+  cascade on note hard-delete.
+- **Store unit tests** for position assignment and refcount/cleanup logic.
+- **Webapp** (Vitest + RTL): drag/drop, paste, banner vs grid rendering, lightbox,
+  error states, NoteCard cover.
 - **E2E** (Playwright, required for user-facing features per `CLAUDE.md`): upload
-  an image to a note, see it inline + in the strip, reload, download, delete.
+  one image → banner above body; upload several → grid; open lightbox; reload;
+  delete.
 - **i18n**: add keys to all locales, run `task check-translations`.
 - Run `task test`, `task lint`, `task test-e2e`, `task gen-docs` before PR.
 
@@ -350,13 +358,14 @@ attachments. Dedicated events are cheaper and match existing granularity.
 ## 15. Open questions
 
 1. **Storage**: confirm filesystem (content-addressed) over DB-BLOB for v1.
-2. **Type allowlist**: strict images+PDF only, or broad with `nosniff`+forced
-   download? (Leaning broad-but-downloaded.)
-3. **Quotas**: per-user / per-instance storage cap in v1, or defer? (Threat model
+2. **Thumbnails**: generate eagerly at upload vs lazily on first request? (Lazy is
+   simpler; eager gives predictable grid latency.)
+3. **Animated GIFs**: keep animation (serve original in grid) or freeze to a
+   static thumbnail tile? (Leaning: static thumbnail, animate in lightbox.)
+4. **Reorder in MVP** or fast-follow? (Spec assumes the `position` column ships in
+   MVP, the reorder endpoint/UX follows in v1.1.)
+5. **Quotas**: per-user / per-instance storage cap in v1, or defer? (Threat model
    prioritizes overload protection, so a cap may be worth MVP inclusion.)
-4. **Export format**: zip bundle vs base64-inline — depends on current export.
-5. **Attachment without a note**: always require a `note_id`, or allow a
-   "draft/orphan" upload that gets bound on note save? (Simpler: require note_id;
-   create the note first.)
-6. **Inline embed URL**: route-based (`/api/attachments/{id}`) vs a stable
-   per-note path — route-based is simplest and chosen above.
+6. **Export format**: zip bundle vs base64-inline — depends on current export.
+7. **Image without a note**: require a `note_id` (create the note first) vs allow
+   a draft upload bound on save? (Leaning: require `note_id`.)
