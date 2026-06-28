@@ -16,6 +16,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSQLiteContext } from 'expo-sqlite';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '../theme/ThemeContext';
 import { probeServerReachability } from '../api/client';
 import type { RootStackParamList } from '../navigation/RootNavigator';
@@ -27,10 +28,16 @@ import {
   seedReplayQueue,
   configureMigrationApiClient,
   runMigrationDrainPass,
+  flipToServerMode,
+  runBackgroundReconcileScopes,
 } from '../store/upgradeToServer';
 import type { PreflightFailReason, UpgradeSession } from '../store/upgradeToServer';
 import { getLocalIdentity } from '../store/localMode';
 import { getDeadLetterCount } from '../db/syncQueue';
+import { useAuth } from '../store/AuthContext';
+import { useNetworkStatus } from '../hooks/useNetworkStatus';
+import { retrySync, SyncAbortedError } from '../utils/retryWithBackoff';
+import { notesLocalQueryScopeKey, labelsQueryKey } from '../hooks/queryKeys';
 import FadeInView from '../components/FadeInView';
 
 const DRAIN_BACKOFF_BASE_MS = 1000;
@@ -47,12 +54,19 @@ type Step =
   | { name: 'migrationComplete' }
   | { name: 'error'; reason: PreflightFailReason | 'REGISTRATION_FAILED' | 'UNREACHABLE' | 'INVALID_SERVER' | 'MIGRATION_FAILED' | string };
 
+type ReconcileState = 'pending' | 'success' | 'failed';
+
 export default function ConnectToServerScreen() {
   const { colors } = useTheme();
   const { t } = useTranslation();
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const db = useSQLiteContext();
+  const queryClient = useQueryClient();
+  const { completeServerUpgrade } = useAuth();
+  const { isConnected } = useNetworkStatus();
+  const isConnectedRef = useRef(isConnected);
+  isConnectedRef.current = isConnected;
 
   const [step, setStep] = useState<Step>({ name: 'serverUrl' });
   const [serverUrlInput, setServerUrlInput] = useState('');
@@ -60,6 +74,7 @@ export default function ConnectToServerScreen() {
   const [password, setPassword] = useState('');
   const [fieldError, setFieldError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [reconcileState, setReconcileState] = useState<ReconcileState>('pending');
 
   const isMountedRef = useRef(true);
   useEffect(() => {
@@ -90,6 +105,22 @@ export default function ConnectToServerScreen() {
     }, [step.name, db]),
   );
 
+  const performBackgroundReconcile = useCallback(async () => {
+    try {
+      await retrySync(() => runBackgroundReconcileScopes(db), {
+        isConnected: () => isConnectedRef.current,
+      });
+      if (!isMountedRef.current) return;
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
+      setReconcileState('success');
+    } catch (err) {
+      if (!isMountedRef.current) return;
+      if (err instanceof SyncAbortedError) return;
+      setReconcileState('failed');
+    }
+  }, [db, queryClient]);
+
   const runDrainLoop = useCallback(
     async (session: UpgradeSession, total: number) => {
       let retryDelay = DRAIN_BACKOFF_BASE_MS;
@@ -102,7 +133,20 @@ export default function ConnectToServerScreen() {
         if (!isMountedRef.current) return;
 
         if (result.status === 'success') {
+          // Phase 4a: verify clean drain and flip to server mode.
+          const flipResult = await flipToServerMode(db);
+          if (!isMountedRef.current) return;
+          if (!flipResult.ok) {
+            setStep({ name: 'error', reason: 'MIGRATION_FAILED' });
+            return;
+          }
+          // Update React auth state with the real server profile.
+          await completeServerUpgrade();
+          if (!isMountedRef.current) return;
           setStep({ name: 'migrationComplete' });
+          // Phase 4b: background reconcile to adopt server-canonical fields.
+          setReconcileState('pending');
+          void performBackgroundReconcile();
           return;
         }
 
@@ -130,7 +174,7 @@ export default function ConnectToServerScreen() {
         setStep({ name: 'error', reason: 'MIGRATION_FAILED' });
       }
     },
-    [db],
+    [db, completeServerUpgrade, performBackgroundReconcile],
   );
 
   const startMigration = useCallback(
@@ -468,6 +512,30 @@ export default function ConnectToServerScreen() {
           <Ionicons name="checkmark-circle" size={64} color={colors.success} style={styles.resultIcon} />
           <Text style={[styles.resultTitle, { color: colors.text }]}>{t('upgrade.migrationCompleteTitle')}</Text>
           <Text style={[styles.resultSubtitle, { color: colors.textSecondary }]}>{t('upgrade.migrationCompleteSubtitle')}</Text>
+
+          {reconcileState === 'pending' && (
+            <View style={styles.reconcileRow}>
+              <ActivityIndicator size="small" color={colors.primary} style={styles.reconcileSpinner} />
+              <Text style={[styles.reconcileText, { color: colors.textSecondary }]}>{t('upgrade.reconciling')}</Text>
+            </View>
+          )}
+          {reconcileState === 'failed' && (
+            <View style={styles.reconcileRow}>
+              <Text style={[styles.reconcileText, { color: colors.textSecondary }]}>{t('upgrade.reconcileFailed')}</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setReconcileState('pending');
+                  void performBackgroundReconcile();
+                }}
+                testID="upgrade-resync-button"
+                accessibilityRole="button"
+                accessibilityLabel={t('upgrade.resync')}
+              >
+                <Text style={[styles.resyncLink, { color: colors.primary }]}>{t('upgrade.resync')}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           <TouchableOpacity
             style={[styles.primaryButton, { backgroundColor: colors.primary }]}
             onPress={() => navigation.goBack()}
@@ -652,5 +720,26 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 4,
     minWidth: 4,
+  },
+  reconcileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+    paddingHorizontal: 16,
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  reconcileSpinner: {
+    marginRight: 6,
+  },
+  reconcileText: {
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  resyncLink: {
+    fontSize: 13,
+    fontWeight: '600',
   },
 });

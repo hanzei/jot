@@ -6,16 +6,19 @@ import {
   seedReplayQueue,
   configureMigrationApiClient,
   runMigrationDrainPass,
+  flipToServerMode,
+  runBackgroundReconcileScopes,
 } from '../src/store/upgradeToServer';
 import type { UpgradeClient, UpgradeSession, SeedResult } from '../src/store/upgradeToServer';
-import { isLocalModeEnabled } from '../src/store/localMode';
+import { isLocalModeEnabled, isLocalModeActive } from '../src/store/localMode';
 import * as SecureStore from 'expo-secure-store';
 import type { SQLiteDatabase } from 'expo-sqlite';
-import type { ListNote, TextNote } from '@jot/shared';
+import type { ListNote, TextNote, Note } from '@jot/shared';
 import * as noteQueries from '../src/db/noteQueries';
 import * as syncQueue from '../src/db/syncQueue';
 import * as apiClient from '../src/api/client';
 import * as serverAccounts from '../src/store/serverAccounts';
+import * as notesApi from '../src/api/notes';
 
 // ------------------------------------------------------------------
 // SecureStore mock — used to verify local mode is never mutated
@@ -405,6 +408,11 @@ jest.mock('../src/db/syncQueue', () => ({
   drainQueue: jest.fn().mockResolvedValue(undefined),
   getPendingCount: jest.fn().mockResolvedValue(0),
   getDeadLetterCount: jest.fn().mockResolvedValue(0),
+  saveServerNotesScope: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('../src/api/notes', () => ({
+  getNotes: jest.fn().mockResolvedValue([]),
 }));
 
 jest.mock('../src/api/client', () => ({
@@ -422,10 +430,12 @@ const mockInsertQueueEntry = syncQueue.insertQueueEntry as jest.MockedFunction<t
 const mockDrainQueue = syncQueue.drainQueue as jest.MockedFunction<typeof syncQueue.drainQueue>;
 const mockGetPendingCount = syncQueue.getPendingCount as jest.MockedFunction<typeof syncQueue.getPendingCount>;
 const mockGetDeadLetterCount = syncQueue.getDeadLetterCount as jest.MockedFunction<typeof syncQueue.getDeadLetterCount>;
+const mockSaveServerNotesScope = syncQueue.saveServerNotesScope as jest.MockedFunction<typeof syncQueue.saveServerNotesScope>;
 const mockInitializeServerContext = apiClient.initializeServerContext as jest.MockedFunction<typeof apiClient.initializeServerContext>;
 const mockSwitchActiveServer = apiClient.switchActiveServer as jest.MockedFunction<typeof apiClient.switchActiveServer>;
 const mockAddServer = serverAccounts.addServer as jest.MockedFunction<typeof serverAccounts.addServer>;
 const mockSetServerStorageValue = serverAccounts.setServerStorageValue as jest.MockedFunction<typeof serverAccounts.setServerStorageValue>;
+const mockGetNotes = notesApi.getNotes as jest.MockedFunction<typeof notesApi.getNotes>;
 
 const BASE_IDENTITY = {
   user: {
@@ -896,5 +906,122 @@ describe('runMigrationDrainPass', () => {
     const result = await runMigrationDrainPass(mockDb, 10);
 
     expect(result.status).toBe('dead_letter');
+  });
+});
+
+// ------------------------------------------------------------------
+// flipToServerMode
+// ------------------------------------------------------------------
+
+describe('flipToServerMode', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    // Seed a local identity so disableLocalMode has something to delete.
+    memory.set('jot_local_mode_v1', JSON.stringify({
+      user: { id: 'aaaaaaaaaaaaaaaaaaaaaaaa', username: 'local', first_name: '', last_name: '', role: 'user', has_profile_icon: false, created_at: '', updated_at: '' },
+      settings: { user_id: 'aaaaaaaaaaaaaaaaaaaaaaaa', language: 'en', theme: 'system', note_sort: 'manual', updated_at: '' },
+    }));
+    mockSecureStore.getItemAsync.mockImplementation(async (key: string) => memory.get(key) ?? null);
+    mockSecureStore.deleteItemAsync.mockImplementation(async (key: string) => {
+      memory.delete(key);
+    });
+  });
+
+  it('returns DIRTY_DRAIN when pending queue items exist', async () => {
+    mockGetPendingCount.mockResolvedValue(3);
+    mockGetDeadLetterCount.mockResolvedValue(0);
+
+    const result = await flipToServerMode(mockDb);
+
+    expect(result).toEqual({ ok: false, reason: 'DIRTY_DRAIN' });
+    expect(await isLocalModeEnabled()).toBe(true);
+    expect(mockSecureStore.deleteItemAsync).not.toHaveBeenCalled();
+  });
+
+  it('returns DIRTY_DRAIN when dead-letter items exist', async () => {
+    mockGetPendingCount.mockResolvedValue(0);
+    mockGetDeadLetterCount.mockResolvedValue(2);
+
+    const result = await flipToServerMode(mockDb);
+
+    expect(result).toEqual({ ok: false, reason: 'DIRTY_DRAIN' });
+    expect(await isLocalModeEnabled()).toBe(true);
+    expect(mockSecureStore.deleteItemAsync).not.toHaveBeenCalled();
+  });
+
+  it('returns DIRTY_DRAIN when both pending and dead-letter items exist', async () => {
+    mockGetPendingCount.mockResolvedValue(1);
+    mockGetDeadLetterCount.mockResolvedValue(1);
+
+    const result = await flipToServerMode(mockDb);
+
+    expect(result).toEqual({ ok: false, reason: 'DIRTY_DRAIN' });
+  });
+
+  it('returns ok and disables local mode when drain is clean', async () => {
+    mockGetPendingCount.mockResolvedValue(0);
+    mockGetDeadLetterCount.mockResolvedValue(0);
+
+    const result = await flipToServerMode(mockDb);
+
+    expect(result).toEqual({ ok: true });
+    expect(await isLocalModeEnabled()).toBe(false);
+    expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it('updates the synchronous local-mode flag to false on success', async () => {
+    mockGetPendingCount.mockResolvedValue(0);
+    mockGetDeadLetterCount.mockResolvedValue(0);
+
+    await flipToServerMode(mockDb);
+
+    expect(isLocalModeActive()).toBe(false);
+  });
+});
+
+// ------------------------------------------------------------------
+// runBackgroundReconcileScopes
+// ------------------------------------------------------------------
+
+describe('runBackgroundReconcileScopes', () => {
+  const NOTE_A = { id: 'noteaaaaaaaaaaaaaaaaaaa1', note_type: 'text', content: 'hello' } as unknown as Note;
+  const NOTE_B = { id: 'noteaaaaaaaaaaaaaaaaaaa2', note_type: 'text', content: 'archived' } as unknown as Note;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockSaveServerNotesScope.mockResolvedValue(undefined);
+  });
+
+  it('fetches all three scopes and reconciles each into local SQLite', async () => {
+    mockGetNotes
+      .mockResolvedValueOnce([NOTE_A])     // active
+      .mockResolvedValueOnce([NOTE_B])     // archived
+      .mockResolvedValueOnce([]);          // trashed
+
+    await runBackgroundReconcileScopes(mockDb);
+
+    expect(mockGetNotes).toHaveBeenCalledTimes(3);
+    // Active scope (undefined params)
+    expect(mockGetNotes).toHaveBeenNthCalledWith(1, undefined);
+    // Archived scope
+    expect(mockGetNotes).toHaveBeenNthCalledWith(2, { archived: true });
+    // Trashed scope
+    expect(mockGetNotes).toHaveBeenNthCalledWith(3, { trashed: true });
+
+    expect(mockSaveServerNotesScope).toHaveBeenCalledTimes(3);
+    expect(mockSaveServerNotesScope).toHaveBeenNthCalledWith(1, mockDb, [NOTE_A], undefined);
+    expect(mockSaveServerNotesScope).toHaveBeenNthCalledWith(2, mockDb, [NOTE_B], { archived: true });
+    expect(mockSaveServerNotesScope).toHaveBeenNthCalledWith(3, mockDb, [], { trashed: true });
+  });
+
+  it('throws when a scope fetch fails, without reconciling subsequent scopes', async () => {
+    mockGetNotes
+      .mockResolvedValueOnce([NOTE_A])     // active — succeeds
+      .mockRejectedValueOnce(new Error('network error')); // archived — fails
+
+    await expect(runBackgroundReconcileScopes(mockDb)).rejects.toThrow('network error');
+
+    expect(mockGetNotes).toHaveBeenCalledTimes(2);
+    expect(mockSaveServerNotesScope).toHaveBeenCalledTimes(1);
   });
 });

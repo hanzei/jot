@@ -38,6 +38,14 @@ interface AuthState {
   register: (username: string, password: string) => Promise<void>;
   /** Enter serverless local mode, provisioning a persistent on-device identity. */
   enableLocalMode: () => Promise<void>;
+  /**
+   * Called after the local→server upgrade drain succeeds and `flipToServerMode`
+   * has already disabled local mode on disk + in the sync flag. Fetches the real
+   * server profile, updates React auth state (user, settings, isLocalMode=false),
+   * and caches the profile. If the profile fetch fails the React state still
+   * transitions out of local mode so the app is not left in an inconsistent state.
+   */
+  completeServerUpgrade: () => Promise<void>;
   logout: () => Promise<void>;
   clearAuth: () => void;
   revalidateSession: () => Promise<boolean>;
@@ -184,6 +192,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLocalMode(true);
   }, []);
 
+  const completeServerUpgrade = useCallback(async () => {
+    try {
+      const response = await auth.me();
+      setUser(response.user);
+      setSettings(response.settings);
+      await cacheAuthProfile(response);
+    } catch {
+      // Profile fetch failed — keep existing user/settings as a temporary
+      // placeholder; the next revalidateSession or app restart will correct them.
+    } finally {
+      setIsLocalMode(false);
+    }
+  }, []);
+
   const logout = useCallback(async () => {
     // In local mode there is no server session to invalidate; leaving local mode
     // drops the persisted identity and returns the user to the login/setup flow.
@@ -245,13 +267,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       login,
       register,
       enableLocalMode,
+      completeServerUpgrade,
       logout,
       clearAuth,
       revalidateSession,
       setUser,
       setSettings,
     }),
-    [user, settings, isLoading, isLocalMode, revalidationFailed, login, register, enableLocalMode, logout, clearAuth, revalidateSession],
+    [user, settings, isLoading, isLocalMode, revalidationFailed, login, register, enableLocalMode, completeServerUpgrade, logout, clearAuth, revalidateSession],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -433,7 +433,10 @@
     "deadLetterSubtitle_other": "{{count}} cambios no se pudieron sincronizar con el servidor.",
     "reviewFailedChanges": "Revisar cambios fallidos",
     "retryMigration": "Reintentar migración",
-    "migrationFailed": "La migración falló. Comprueba tu conexión e inténtalo de nuevo."
+    "migrationFailed": "La migración falló. Comprueba tu conexión e inténtalo de nuevo.",
+    "reconciling": "Sincronizando notas con el servidor…",
+    "reconcileFailed": "Es posible que las notas no reflejen los últimos datos del servidor. Actualiza la lista de notas.",
+    "resync": "Volver a sincronizar"
   },
   "diagnostics": {
     "title": "Diagnóstico",
