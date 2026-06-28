@@ -422,7 +422,18 @@
     "fetchFailed": "Kan de server niet bereiken. Controleer je verbinding en probeer het opnieuw.",
     "successTitle": "Alle controles geslaagd",
     "successSubtitle": "Je server is compatibel en klaar. De migratie begint in een volgende stap.",
-    "errorTitle": "Kan niet verbinden"
+    "errorTitle": "Kan niet verbinden",
+    "seedingTitle": "Migratie voorbereiden",
+    "migratingTitle": "Je notities migreren",
+    "migratingProgress": "{{processed}} van {{total}} synchroniseren",
+    "migrationCompleteTitle": "Migratie voltooid",
+    "migrationCompleteSubtitle": "Je notities zijn geüpload naar de server.",
+    "deadLetterTitle": "Migratie gepauzeerd",
+    "deadLetterSubtitle_one": "{{count}} wijziging kon niet worden gesynchroniseerd met de server.",
+    "deadLetterSubtitle_other": "{{count}} wijzigingen konden niet worden gesynchroniseerd met de server.",
+    "reviewFailedChanges": "Mislukte wijzigingen bekijken",
+    "retryMigration": "Migratie opnieuw proberen",
+    "migrationFailed": "Migratie mislukt. Controleer je verbinding en probeer het opnieuw."
   },
   "diagnostics": {
     "title": "Diagnose",

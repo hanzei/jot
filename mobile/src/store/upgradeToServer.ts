@@ -2,8 +2,10 @@ import axios from 'axios';
 import { generateId, canonicalizeServerOrigin } from '@jot/shared';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { getAllLocalNotes } from '../db/noteQueries';
-import { insertQueueEntry } from '../db/syncQueue';
+import { drainQueue, getPendingCount, getDeadLetterCount, insertQueueEntry } from '../db/syncQueue';
 import type { LocalIdentity } from './localMode';
+import { initializeServerContext, switchActiveServer } from '../api/client';
+import { addServer, setServerStorageValue } from './serverAccounts';
 
 export interface UpgradeSession {
   serverUrl: string;
@@ -398,4 +400,63 @@ export async function seedReplayQueue(
   });
 
   return { totalEnqueued };
+}
+
+/**
+ * Register the migration server in the server account registry and configure
+ * the main api singleton to authenticate against it. Must be called once before
+ * running the migration drain so drainQueue sends requests to the right server
+ * under the right session.
+ *
+ * If the server was already registered (e.g. from a previous aborted migration
+ * attempt), the existing registration is reused and the session token is updated.
+ *
+ * Returns the registered serverId.
+ */
+export async function configureMigrationApiClient(session: UpgradeSession): Promise<string> {
+  await initializeServerContext();
+  const addResult = await addServer(session.serverUrl);
+  let serverId: string;
+  if (addResult.success) {
+    serverId = addResult.serverId;
+  } else if (addResult.code === 'DUPLICATE' && addResult.existingServerId) {
+    serverId = addResult.existingServerId;
+  } else {
+    throw new Error(`Failed to register migration server: ${addResult.message}`);
+  }
+  await setServerStorageValue(serverId, 'session', session.sessionToken);
+  await switchActiveServer(serverId);
+  return serverId;
+}
+
+export type MigrationDrainStatus = 'success' | 'dead_letter' | 'stalled';
+
+export interface MigrationDrainPassResult {
+  status: MigrationDrainStatus;
+  processed: number;
+  remaining: number;
+  deadLetterCount: number;
+}
+
+/**
+ * Run one pass of the sync-queue drain during a local→server migration.
+ * Calls drainQueue to process whatever the queue currently holds, then inspects
+ * the remaining depth and dead-letter count to determine the outcome.
+ *
+ * The caller is responsible for:
+ *   - retrying on 'stalled' (transient failure, retry with backoff)
+ *   - halting on 'dead_letter' to surface the resolution UX
+ *   - proceeding to Phase 4 on 'success'
+ */
+export async function runMigrationDrainPass(
+  db: SQLiteDatabase,
+  total: number,
+): Promise<MigrationDrainPassResult> {
+  await drainQueue(db);
+  const remaining = await getPendingCount(db);
+  const deadLetterCount = await getDeadLetterCount(db);
+  const processed = total - remaining;
+  const status: MigrationDrainStatus =
+    deadLetterCount > 0 ? 'dead_letter' : remaining === 0 ? 'success' : 'stalled';
+  return { status, processed, remaining, deadLetterCount };
 }

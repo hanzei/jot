@@ -422,7 +422,18 @@
     "fetchFailed": "Could not reach the server. Check your connection and try again.",
     "successTitle": "All checks passed",
     "successSubtitle": "Your server is compatible and ready. Migration will start in a future step.",
-    "errorTitle": "Cannot connect"
+    "errorTitle": "Cannot connect",
+    "seedingTitle": "Preparing migration",
+    "migratingTitle": "Migrating your notes",
+    "migratingProgress": "Syncing {{processed}} of {{total}}",
+    "migrationCompleteTitle": "Migration complete",
+    "migrationCompleteSubtitle": "Your notes have been uploaded to the server.",
+    "deadLetterTitle": "Migration paused",
+    "deadLetterSubtitle_one": "{{count}} change couldn't be synced to the server.",
+    "deadLetterSubtitle_other": "{{count}} changes couldn't be synced to the server.",
+    "reviewFailedChanges": "Review failed changes",
+    "retryMigration": "Retry migration",
+    "migrationFailed": "Migration failed. Check your connection and try again."
   },
   "diagnostics": {
     "title": "Diagnostics",
