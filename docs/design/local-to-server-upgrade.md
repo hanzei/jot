@@ -39,9 +39,11 @@ offline path already exercises in production — not a new sync engine.
 ## Non-goals (this iteration)
 
 - **Merging into an existing, non-empty account.** First iteration targets a
-  **newly registered account only** (guaranteed empty → client-supplied IDs
-  never collide). Merging into an account that may already contain notes is
-  deferred (see "Future work").
+  **newly registered account only**. Even then, emptiness is **verified in
+  pre-flight** (Phase 0, `GET /notes`/`GET /labels` return empty) — never
+  assumed — because client-supplied IDs are only collision-safe against a
+  *confirmed*-empty target. Merging into an account that may already contain
+  notes is deferred (see "Future work").
 - Multi-device convergence beyond what normal server mode already provides.
 - A reverse path (server → local export). That is tracked separately as
   local-mode backup/export.
@@ -50,7 +52,7 @@ offline path already exercises in production — not a new sync engine.
 
 | Decision | Choice | Rationale |
 |---|---|---|
-| Target account | **New registration only** | Empty target guarantees no client-ID collisions; the push is a straight replay with IDs preserved. |
+| Target account | **New registration only** | An empty target avoids client-ID collisions; emptiness is **verified in pre-flight** (Phase 0), not assumed, and then the push is a straight replay with IDs preserved. |
 | User identity | **Do not adopt the local user ID** | `POST /notes` sets `owner = authenticated user` regardless of the local user ID, so only note/label/item IDs need to survive — and they do. The server-assigned user ID becomes the real one. |
 | Post-upgrade local data | **Keep the local DB as the server cache**, but only flip after a clean drain, then background-reconcile | Local rows already carry server-valid IDs and `sync_state='synced'`, so reuse is instant and needs no re-download. Gating on a fully-drained queue (zero dead-letters) closes the data-loss / drift window; a background refetch makes the server canonical right after. |
 
@@ -65,6 +67,13 @@ is. That handoff is the risk:
   by (a) only flipping after the queue drains to **zero with no dead-letters**
   and (b) kicking a **background reconcile/refetch** immediately after the flip,
   so any server-side drift self-heals without a blocking reload.
+  - **If that post-flip reconcile itself fails** (we are now in server-backed
+    mode): retry with backoff like any normal server fetch, and if it keeps
+    failing, surface a non-blocking "re-sync" prompt so the cache cannot remain
+    silently stale. Because the cache is exactly what we just pushed, a failed
+    reconcile degrades to "may be missing server-canonical fields," **not** data
+    loss — the next successful reconcile (or a manual pull-to-refresh) repairs
+    it.
 - **Wipe-and-re-fetch** makes the server canonical immediately but requires a
   full re-download (visible reload, needs connectivity) and is dangerous on
   partial failure: wiping local data that never reached the server would lose
@@ -74,6 +83,23 @@ is. That handoff is the risk:
 
 Entry point: a **"Connect to a server"** action in Settings, visible only in
 local mode (mirrors the existing "Use without a server" link on `LoginScreen`).
+
+### Phase 0 — Pre-flight checks (mandatory; gate seeding and the flip)
+No data is moved and the mode is never flipped unless **both** checks pass.
+A failure here aborts the upgrade cleanly with the user still in local mode.
+
+- **Server capability / version.** Confirm the target server provides the
+  guarantees this flow depends on *before* offering or starting the upgrade:
+  client-supplied IDs honored on `POST /notes`, `POST /labels`, and
+  `POST /notes/{id}/items`; the expected endpoint shapes; and 409-on-duplicate
+  idempotency. If the server is too old or missing a capability, refuse the
+  upgrade up front rather than failing mid-migration. (This is a hard
+  requirement, not an open question — see "Open questions".)
+- **Server emptiness.** On the freshly authenticated account, `GET /notes` and
+  `GET /labels` must return empty. A new registration is *expected* to be
+  empty, but we verify rather than assume, since client-supplied IDs are only
+  collision-safe against a confirmed-empty target. If non-empty, abort (no
+  merge support this iteration; see "Future work").
 
 ### Phase 1 — Authenticate against the target server
 - User enters server URL + chooses **register a new account** (only option this
@@ -107,13 +133,22 @@ local mode (mirrors the existing "Use without a server" link on `LoginScreen`).
   migration. If anything dead-lettered, surface it and let the user retry;
   do **not** flip.
 - On a clean drain:
-  1. Persist the real session as the active server context.
+  1. Persist the real session via the existing server-context path —
+     `initializeServerContext` (`mobile/src/api/client.ts`), the same mechanism
+     `AuthContext` uses on a normal server login — so the axios client and SSE
+     pick up the authenticated session.
   2. `disableLocalMode()` — drop the on-device local identity record.
   3. Set `isLocalMode = false` (and the synchronous mirror via
      `setLocalModeActive(false)`).
   4. The **same local DB stays** as the server cache.
-  5. Kick a background `GET /notes` + labels reconcile to adopt any
-     server-canonical fields.
+  5. Kick a background reconcile that reuses the offline read-sync path:
+     `reconcileServerNotesScope` (`mobile/src/db/noteQueries.ts`) over
+     `GET /notes`, plus a `GET /labels` refetch, then invalidate the React
+     Query scopes (`notesLocalQueryScopeKey()`, `labelsQueryKey()` from
+     `mobile/src/hooks/queryKeys.ts`) — the same prefetch/invalidate pattern
+     `syncQueue.ts` already uses. Reconciling per-scope atomically preserves
+     optimistic state instead of wiping. On failure, apply the keep-as-cache
+     failure policy above (retry with backoff + a non-blocking re-sync prompt).
 
 ## Reused machinery
 
@@ -121,8 +156,17 @@ local mode (mirrors the existing "Use without a server" link on `LoginScreen`).
 - `mobile/src/store/OfflineContext.tsx` — `performDrain`, reconnect handling.
 - `mobile/src/store/localMode.ts` — `disableLocalMode`, `setLocalModeActive`,
   the on-device identity record.
-- Server endpoints (unchanged): `POST /notes`, `POST /labels`,
-  `POST /notes/{id}/labels/{label_id}`, `PATCH /users/me`, `POST /register`.
+- `mobile/src/api/client.ts` — `initializeServerContext` (activates the
+  authenticated server session in Phase 4).
+- `mobile/src/db/noteQueries.ts` — `reconcileServerNotesScope` (atomic
+  server-list → SQLite reconcile, reused for the Phase 4 background refetch).
+- `mobile/src/hooks/queryKeys.ts` — `notesLocalQueryScopeKey`, `labelsQueryKey`
+  for the post-flip React Query invalidation.
+- Server endpoints (all unchanged):
+  - writes: `POST /notes`, `POST /notes/{id}/items`, `POST /labels`,
+    `POST /notes/{id}/labels/{label_id}`, `PATCH /users/me`, `POST /register`.
+  - reads (Phase 0 emptiness check + Phase 4 reconcile): `GET /notes`,
+    `GET /labels`.
 
 ## Risks / edge cases
 
@@ -130,6 +174,16 @@ local mode (mirrors the existing "Use without a server" link on `LoginScreen`).
   local mode until a clean flip.
 - **Dead-lettered op** → block the flip, surface a retry/resolution UX (an MVP
   for this already exists for offline writes).
+- **Partial-success migration (note created, label link dead-lettered)** → the
+  note exists server-side but is missing its label until the retry/resolution
+  path completes, leaving server data incomplete. The flip is blocked while any
+  such op sits in `dead_letter`, so the user can't land in server mode with a
+  half-linked dataset.
+- **Best-effort settings/profile push fails silently** → preferences like
+  `note_sort` or `theme` may not reach the server if their push isn't gated on
+  the drain (see the open question). Until that's decided, treat a failed
+  settings/profile push as a **visible warning**, not a silent drop, so a
+  preference can't disappear unnoticed.
 - **Large datasets** → drain is incremental; consider a progress indicator
   driven off queue depth.
 - **Server-side field divergence** → handled by the post-flip background
@@ -143,7 +197,9 @@ local mode (mirrors the existing "Use without a server" link on `LoginScreen`).
 - Do we want a visible **progress UI** (queue depth) or just a spinner + success?
 - Should profile/settings push be best-effort (don't block the flip) or part of
   the gated drain?
-- Minimum server version / capability check before offering the upgrade?
+
+(The server capability / version check is **not** open — it is a mandatory
+pre-flight gate; see Phase 0.)
 
 ## Future work
 
