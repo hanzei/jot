@@ -131,15 +131,14 @@ function notifyEnqueueListeners(): void {
   }
 }
 
-export async function enqueueOperation(db: SQLiteDatabase, params: EnqueueParams): Promise<void> {
-  // Local mode has no server to sync to, so local writes are terminal the moment
-  // they land in SQLite (issue #514). Short-circuit before touching `sync_queue`
-  // so no ops ever accumulate there — and, by extension, nothing can dead-letter
-  // purely because a server is absent. The drain loop is also gated off in local
-  // mode (OfflineContext), so a stray queued op would otherwise sit pending forever.
-  if (isLocalModeActive()) {
-    return;
-  }
+/**
+ * Insert a single entry directly into the sync queue, bypassing the local-mode
+ * guard and enqueue listeners. Used exclusively by the local→server upgrade seed
+ * path (seedReplayQueue): local mode is still active while the queue is being
+ * pre-populated for replay, so the normal `enqueueOperation` guard would be a
+ * no-op. Do NOT call this from any other code path.
+ */
+export async function insertQueueEntry(db: SQLiteDatabase, params: EnqueueParams): Promise<void> {
   await db.runAsync(
     `INSERT INTO sync_queue (operation, endpoint, method, body, created_at)
      VALUES (?, ?, ?, ?, ?)`,
@@ -151,6 +150,18 @@ export async function enqueueOperation(db: SQLiteDatabase, params: EnqueueParams
       new Date().toISOString(),
     ],
   );
+}
+
+export async function enqueueOperation(db: SQLiteDatabase, params: EnqueueParams): Promise<void> {
+  // Local mode has no server to sync to, so local writes are terminal the moment
+  // they land in SQLite (issue #514). Short-circuit before touching `sync_queue`
+  // so no ops ever accumulate there — and, by extension, nothing can dead-letter
+  // purely because a server is absent. The drain loop is also gated off in local
+  // mode (OfflineContext), so a stray queued op would otherwise sit pending forever.
+  if (isLocalModeActive()) {
+    return;
+  }
+  await insertQueueEntry(db, params);
   notifyEnqueueListeners();
 }
 
