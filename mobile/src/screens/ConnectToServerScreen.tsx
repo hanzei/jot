@@ -1,4 +1,4 @@
-import React, { useContext, useState } from 'react';
+import React, { useContext, useState, useRef, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,31 +11,48 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useSQLiteContext } from 'expo-sqlite';
 import { useTheme } from '../theme/ThemeContext';
 import { probeServerReachability } from '../api/client';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { VALIDATION } from '@jot/shared';
 import { displayMessage } from '../i18n/utils';
-import { registerOnServer, runPreflightChecks } from '../store/upgradeToServer';
-import type { PreflightFailReason } from '../store/upgradeToServer';
+import {
+  registerOnServer,
+  runPreflightChecks,
+  seedReplayQueue,
+  configureMigrationApiClient,
+  runMigrationDrainPass,
+} from '../store/upgradeToServer';
+import type { PreflightFailReason, UpgradeSession } from '../store/upgradeToServer';
+import { getLocalIdentity } from '../store/localMode';
+import { getDeadLetterCount } from '../db/syncQueue';
 import FadeInView from '../components/FadeInView';
+
+const DRAIN_BACKOFF_BASE_MS = 1000;
+const DRAIN_BACKOFF_MAX_MS = 60000;
+const MAX_DRAIN_RETRIES = 6;
 
 type Step =
   | { name: 'serverUrl' }
   | { name: 'register'; serverUrl: string }
   | { name: 'checking'; serverUrl: string }
-  | { name: 'success' }
-  | { name: 'error'; reason: PreflightFailReason | 'REGISTRATION_FAILED' | 'UNREACHABLE' | 'INVALID_SERVER' | string };
+  | { name: 'seeding'; session: UpgradeSession }
+  | { name: 'migrating'; session: UpgradeSession; processed: number; total: number }
+  | { name: 'deadLetter'; session: UpgradeSession; processed: number; total: number; deadLetterCount: number }
+  | { name: 'migrationComplete' }
+  | { name: 'error'; reason: PreflightFailReason | 'REGISTRATION_FAILED' | 'UNREACHABLE' | 'INVALID_SERVER' | 'MIGRATION_FAILED' | string };
 
 export default function ConnectToServerScreen() {
   const { colors } = useTheme();
   const { t } = useTranslation();
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const db = useSQLiteContext();
 
   const [step, setStep] = useState<Step>({ name: 'serverUrl' });
   const [serverUrlInput, setServerUrlInput] = useState('');
@@ -43,6 +60,109 @@ export default function ConnectToServerScreen() {
   const [password, setPassword] = useState('');
   const [fieldError, setFieldError] = useState('');
   const [busy, setBusy] = useState(false);
+
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  // Whether the user can dismiss the screen (not during active migration).
+  const isDismissable =
+    step.name !== 'seeding' &&
+    step.name !== 'migrating' &&
+    step.name !== 'deadLetter';
+
+  // Re-read the dead-letter count whenever the screen regains focus so the
+  // "Retry migration" button reflects resolutions made in SyncFailuresScreen.
+  useFocusEffect(
+    useCallback(() => {
+      if (step.name !== 'deadLetter') return;
+      getDeadLetterCount(db)
+        .then((count) => {
+          if (!isMountedRef.current) return;
+          setStep((prev) =>
+            prev.name === 'deadLetter' ? { ...prev, deadLetterCount: count } : prev,
+          );
+        })
+        .catch(() => {});
+    }, [step.name, db]),
+  );
+
+  const runDrainLoop = useCallback(
+    async (session: UpgradeSession, total: number) => {
+      let retryDelay = DRAIN_BACKOFF_BASE_MS;
+
+      for (let attempt = 0; attempt < MAX_DRAIN_RETRIES; attempt++) {
+        if (!isMountedRef.current) return;
+
+        const result = await runMigrationDrainPass(db, total);
+
+        if (!isMountedRef.current) return;
+
+        if (result.status === 'success') {
+          setStep({ name: 'migrationComplete' });
+          return;
+        }
+
+        if (result.status === 'dead_letter') {
+          setStep({
+            name: 'deadLetter',
+            session,
+            processed: result.processed,
+            total,
+            deadLetterCount: result.deadLetterCount,
+          });
+          return;
+        }
+
+        // Stalled (transient failure) — update progress and retry with backoff.
+        setStep({ name: 'migrating', session, processed: result.processed, total });
+
+        if (attempt < MAX_DRAIN_RETRIES - 1) {
+          await new Promise<void>((resolve) => setTimeout(resolve, retryDelay));
+          retryDelay = Math.min(retryDelay * 2, DRAIN_BACKOFF_MAX_MS);
+        }
+      }
+
+      if (isMountedRef.current) {
+        setStep({ name: 'error', reason: 'MIGRATION_FAILED' });
+      }
+    },
+    [db],
+  );
+
+  const startMigration = useCallback(
+    async (session: UpgradeSession) => {
+      try {
+        const identity = await getLocalIdentity();
+        if (!identity) {
+          if (isMountedRef.current) setStep({ name: 'error', reason: 'MIGRATION_FAILED' });
+          return;
+        }
+
+        await configureMigrationApiClient(session);
+        const { totalEnqueued } = await seedReplayQueue(db, identity);
+
+        if (!isMountedRef.current) return;
+
+        if (totalEnqueued === 0) {
+          setStep({ name: 'migrationComplete' });
+          return;
+        }
+
+        setStep({ name: 'migrating', session, processed: 0, total: totalEnqueued });
+        await runDrainLoop(session, totalEnqueued);
+      } catch (err) {
+        console.warn('Migration failed during setup or seeding:', err);
+        if (isMountedRef.current) {
+          setStep({ name: 'error', reason: 'MIGRATION_FAILED' });
+        }
+      }
+    },
+    [db, runDrainLoop],
+  );
 
   const handleCheckServer = async () => {
     setFieldError('');
@@ -102,7 +222,8 @@ export default function ConnectToServerScreen() {
       setStep({ name: 'checking', serverUrl });
       const result = await runPreflightChecks(session);
       if (result.ok) {
-        setStep({ name: 'success' });
+        setStep({ name: 'seeding', session });
+        void startMigration(session);
       } else {
         setStep({ name: 'error', reason: result.reason });
       }
@@ -121,6 +242,22 @@ export default function ConnectToServerScreen() {
     }
   };
 
+  const handleRetryMigration = useCallback(async () => {
+    if (step.name !== 'deadLetter') return;
+    const count = await getDeadLetterCount(db).catch(() => 1);
+    if (count > 0 || !isMountedRef.current) return;
+    const { session, processed, total } = step;
+    setStep({ name: 'migrating', session, processed, total });
+    try {
+      await runDrainLoop(session, total);
+    } catch (err) {
+      console.warn('Migration retry failed unexpectedly:', err);
+      if (isMountedRef.current) {
+        setStep({ name: 'deadLetter', session, processed, total, deadLetterCount: 0 });
+      }
+    }
+  }, [step, db, runDrainLoop]);
+
   function preflightErrorMessage(reason: string): string {
     switch (reason) {
       case 'CLIENT_ID_NOT_HONORED':
@@ -136,6 +273,8 @@ export default function ConnectToServerScreen() {
         return t('auth.serverSetupConnectionFailed');
       case 'INVALID_SERVER':
         return t('auth.serverSetupConnectionInvalidServer');
+      case 'MIGRATION_FAILED':
+        return t('upgrade.migrationFailed');
       default:
         return displayMessage(t, reason);
     }
@@ -248,26 +387,91 @@ export default function ConnectToServerScreen() {
       );
     }
 
-    if (step.name === 'checking') {
+    if (step.name === 'checking' || step.name === 'seeding') {
       return (
         <View style={styles.centeredState}>
           <ActivityIndicator size="large" color={colors.primary} style={styles.checkingSpinner} />
-          <Text style={[styles.checkingTitle, { color: colors.text }]}>{t('upgrade.checkingTitle')}</Text>
-          <Text style={[styles.checkingSubtitle, { color: colors.textSecondary }]}>{step.serverUrl}</Text>
+          <Text style={[styles.checkingTitle, { color: colors.text }]}>
+            {step.name === 'seeding' ? t('upgrade.seedingTitle') : t('upgrade.checkingTitle')}
+          </Text>
+          <Text style={[styles.checkingSubtitle, { color: colors.textSecondary }]}>
+            {step.name === 'seeding' ? step.session.serverUrl : step.serverUrl}
+          </Text>
         </View>
       );
     }
 
-    if (step.name === 'success') {
+    if (step.name === 'migrating') {
+      const progress = step.total > 0 ? step.processed / step.total : 0;
       return (
         <View style={styles.centeredState}>
-          <Ionicons name="checkmark-circle" size={64} color={colors.success ?? colors.primary} style={styles.resultIcon} />
-          <Text style={[styles.resultTitle, { color: colors.text }]}>{t('upgrade.successTitle')}</Text>
-          <Text style={[styles.resultSubtitle, { color: colors.textSecondary }]}>{t('upgrade.successSubtitle')}</Text>
+          <Text style={[styles.checkingTitle, { color: colors.text }]}>{t('upgrade.migratingTitle')}</Text>
+          <Text style={[styles.checkingSubtitle, { color: colors.textSecondary }]}>
+            {t('upgrade.migratingProgress', { processed: step.processed, total: step.total })}
+          </Text>
+          <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
+            <View
+              style={[
+                styles.progressFill,
+                {
+                  width: `${Math.min(Math.round(progress * 100), 100)}%`,
+                  backgroundColor: colors.primary,
+                },
+              ]}
+            />
+          </View>
+        </View>
+      );
+    }
+
+    if (step.name === 'deadLetter') {
+      const allResolved = step.deadLetterCount === 0;
+      return (
+        <View style={styles.centeredState}>
+          <Ionicons name="warning" size={64} color={colors.warningText} style={styles.resultIcon} />
+          <Text style={[styles.resultTitle, { color: colors.text }]}>{t('upgrade.deadLetterTitle')}</Text>
+          <Text style={[styles.resultSubtitle, { color: colors.textSecondary }]}>
+            {t('upgrade.deadLetterSubtitle', { count: step.deadLetterCount })}
+          </Text>
+          <TouchableOpacity
+            style={[styles.primaryButton, { backgroundColor: colors.primary }]}
+            onPress={() => navigation.navigate('SyncFailures')}
+            testID="upgrade-review-failures"
+            accessibilityRole="button"
+            accessibilityLabel={t('upgrade.reviewFailedChanges')}
+          >
+            <Text style={styles.primaryButtonText}>{t('upgrade.reviewFailedChanges')}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.primaryButton,
+              styles.retryButton,
+              { borderColor: colors.primary },
+              !allResolved && styles.buttonDisabled,
+            ]}
+            onPress={() => { void handleRetryMigration(); }}
+            disabled={!allResolved}
+            testID="upgrade-retry-migration"
+            accessibilityRole="button"
+            accessibilityLabel={t('upgrade.retryMigration')}
+            accessibilityState={{ disabled: !allResolved }}
+          >
+            <Text style={[styles.retryButtonText, { color: colors.primary }]}>{t('upgrade.retryMigration')}</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    if (step.name === 'migrationComplete') {
+      return (
+        <View style={styles.centeredState}>
+          <Ionicons name="checkmark-circle" size={64} color={colors.success} style={styles.resultIcon} />
+          <Text style={[styles.resultTitle, { color: colors.text }]}>{t('upgrade.migrationCompleteTitle')}</Text>
+          <Text style={[styles.resultSubtitle, { color: colors.textSecondary }]}>{t('upgrade.migrationCompleteSubtitle')}</Text>
           <TouchableOpacity
             style={[styles.primaryButton, { backgroundColor: colors.primary }]}
             onPress={() => navigation.goBack()}
-            testID="upgrade-success-done"
+            testID="upgrade-migration-done"
             accessibilityRole="button"
             accessibilityLabel={t('common.done')}
           >
@@ -305,13 +509,14 @@ export default function ConnectToServerScreen() {
     >
       <View style={[styles.header, { paddingTop: insets.top, borderBottomColor: colors.borderLight, backgroundColor: colors.surface }]}>
         <TouchableOpacity
-          onPress={() => navigation.goBack()}
+          onPress={isDismissable ? () => navigation.goBack() : undefined}
           style={styles.closeButton}
           testID="upgrade-close"
           accessibilityRole="button"
           accessibilityLabel={t('common.close')}
+          disabled={!isDismissable}
         >
-          <Ionicons name="close" size={24} color={colors.text} />
+          <Ionicons name="close" size={24} color={isDismissable ? colors.text : colors.iconMuted} />
         </TouchableOpacity>
       </View>
       <ScrollView
@@ -379,7 +584,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   buttonDisabled: {
-    opacity: 0.6,
+    opacity: 0.4,
+  },
+  retryButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+  },
+  retryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
   error: {
     textAlign: 'center',
@@ -427,5 +640,17 @@ const styles = StyleSheet.create({
     marginBottom: 32,
     lineHeight: 22,
     paddingHorizontal: 16,
+  },
+  progressTrack: {
+    width: '100%',
+    height: 8,
+    borderRadius: 4,
+    marginTop: 24,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 4,
+    minWidth: 4,
   },
 });

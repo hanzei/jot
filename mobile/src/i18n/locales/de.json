@@ -422,7 +422,18 @@
     "fetchFailed": "Der Server ist nicht erreichbar. Überprüfe deine Verbindung und versuche es erneut.",
     "successTitle": "Alle Prüfungen bestanden",
     "successSubtitle": "Dein Server ist kompatibel und bereit. Die Migration wird in einem späteren Schritt gestartet.",
-    "errorTitle": "Verbindung nicht möglich"
+    "errorTitle": "Verbindung nicht möglich",
+    "seedingTitle": "Migration wird vorbereitet",
+    "migratingTitle": "Notizen werden migriert",
+    "migratingProgress": "{{processed}} von {{total}} wird synchronisiert",
+    "migrationCompleteTitle": "Migration abgeschlossen",
+    "migrationCompleteSubtitle": "Deine Notizen wurden auf den Server hochgeladen.",
+    "deadLetterTitle": "Migration angehalten",
+    "deadLetterSubtitle_one": "{{count}} Änderung konnte nicht mit dem Server synchronisiert werden.",
+    "deadLetterSubtitle_other": "{{count}} Änderungen konnten nicht mit dem Server synchronisiert werden.",
+    "reviewFailedChanges": "Fehlgeschlagene Änderungen überprüfen",
+    "retryMigration": "Migration erneut versuchen",
+    "migrationFailed": "Migration fehlgeschlagen. Überprüfe deine Verbindung und versuche es erneut."
   },
   "diagnostics": {
     "title": "Diagnose",

@@ -422,7 +422,18 @@
     "fetchFailed": "Nie można połączyć się z serwerem. Sprawdź połączenie i spróbuj ponownie.",
     "successTitle": "Wszystkie sprawdzenia zakończone pomyślnie",
     "successSubtitle": "Twój serwer jest zgodny i gotowy. Migracja rozpocznie się w kolejnym kroku.",
-    "errorTitle": "Nie można połączyć"
+    "errorTitle": "Nie można połączyć",
+    "seedingTitle": "Przygotowanie migracji",
+    "migratingTitle": "Migrowanie Twoich notatek",
+    "migratingProgress": "Synchronizowanie {{processed}} z {{total}}",
+    "migrationCompleteTitle": "Migracja zakończona",
+    "migrationCompleteSubtitle": "Twoje notatki zostały przesłane na serwer.",
+    "deadLetterTitle": "Migracja wstrzymana",
+    "deadLetterSubtitle_one": "{{count}} zmiana nie mogła zostać zsynchronizowana z serwerem.",
+    "deadLetterSubtitle_other": "{{count}} zmian nie mogło zostać zsynchronizowanych z serwerem.",
+    "reviewFailedChanges": "Przeglądaj nieudane zmiany",
+    "retryMigration": "Ponów migrację",
+    "migrationFailed": "Migracja nie powiodła się. Sprawdź połączenie i spróbuj ponownie."
   },
   "diagnostics": {
     "title": "Diagnostyka",

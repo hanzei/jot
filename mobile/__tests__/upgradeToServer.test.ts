@@ -4,6 +4,8 @@ import {
   checkEmptinessGate,
   runPreflightChecks,
   seedReplayQueue,
+  configureMigrationApiClient,
+  runMigrationDrainPass,
 } from '../src/store/upgradeToServer';
 import type { UpgradeClient, UpgradeSession, SeedResult } from '../src/store/upgradeToServer';
 import { isLocalModeEnabled } from '../src/store/localMode';
@@ -12,6 +14,8 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import type { ListNote, TextNote } from '@jot/shared';
 import * as noteQueries from '../src/db/noteQueries';
 import * as syncQueue from '../src/db/syncQueue';
+import * as apiClient from '../src/api/client';
+import * as serverAccounts from '../src/store/serverAccounts';
 
 // ------------------------------------------------------------------
 // SecureStore mock — used to verify local mode is never mutated
@@ -398,10 +402,30 @@ jest.mock('../src/db/noteQueries', () => ({
 
 jest.mock('../src/db/syncQueue', () => ({
   insertQueueEntry: jest.fn().mockResolvedValue(undefined),
+  drainQueue: jest.fn().mockResolvedValue(undefined),
+  getPendingCount: jest.fn().mockResolvedValue(0),
+  getDeadLetterCount: jest.fn().mockResolvedValue(0),
+}));
+
+jest.mock('../src/api/client', () => ({
+  initializeServerContext: jest.fn().mockResolvedValue(undefined),
+  switchActiveServer: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('../src/store/serverAccounts', () => ({
+  addServer: jest.fn(),
+  setServerStorageValue: jest.fn().mockResolvedValue(undefined),
 }));
 
 const mockGetAllLocalNotes = noteQueries.getAllLocalNotes as jest.MockedFunction<typeof noteQueries.getAllLocalNotes>;
 const mockInsertQueueEntry = syncQueue.insertQueueEntry as jest.MockedFunction<typeof syncQueue.insertQueueEntry>;
+const mockDrainQueue = syncQueue.drainQueue as jest.MockedFunction<typeof syncQueue.drainQueue>;
+const mockGetPendingCount = syncQueue.getPendingCount as jest.MockedFunction<typeof syncQueue.getPendingCount>;
+const mockGetDeadLetterCount = syncQueue.getDeadLetterCount as jest.MockedFunction<typeof syncQueue.getDeadLetterCount>;
+const mockInitializeServerContext = apiClient.initializeServerContext as jest.MockedFunction<typeof apiClient.initializeServerContext>;
+const mockSwitchActiveServer = apiClient.switchActiveServer as jest.MockedFunction<typeof apiClient.switchActiveServer>;
+const mockAddServer = serverAccounts.addServer as jest.MockedFunction<typeof serverAccounts.addServer>;
+const mockSetServerStorageValue = serverAccounts.setServerStorageValue as jest.MockedFunction<typeof serverAccounts.setServerStorageValue>;
 
 const BASE_IDENTITY = {
   user: {
@@ -714,5 +738,163 @@ describe('seedReplayQueue', () => {
     await seedReplayQueue(mockDb, BASE_IDENTITY);
 
     expect(mockInsertQueueEntry).toHaveBeenCalled();
+  });
+});
+
+// ------------------------------------------------------------------
+// configureMigrationApiClient
+// ------------------------------------------------------------------
+
+const MIGRATION_SESSION: UpgradeSession = {
+  serverUrl: 'http://jot.example.com',
+  sessionToken: 'migration-token-abc',
+};
+
+describe('configureMigrationApiClient', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockInitializeServerContext.mockResolvedValue(undefined);
+    mockSwitchActiveServer.mockResolvedValue(true);
+    mockSetServerStorageValue.mockResolvedValue(undefined);
+  });
+
+  it('registers the server, stores the session token, and switches the active server on success', async () => {
+    mockAddServer.mockResolvedValue({ success: true, serverId: 'server-abc' });
+
+    const serverId = await configureMigrationApiClient(MIGRATION_SESSION);
+
+    expect(serverId).toBe('server-abc');
+    expect(mockInitializeServerContext).toHaveBeenCalledTimes(1);
+    expect(mockAddServer).toHaveBeenCalledWith(MIGRATION_SESSION.serverUrl);
+    expect(mockSetServerStorageValue).toHaveBeenCalledWith('server-abc', 'session', MIGRATION_SESSION.sessionToken);
+    expect(mockSwitchActiveServer).toHaveBeenCalledWith('server-abc');
+    // Storage must be written before the server switch so the session is available
+    // when switchActiveServer triggers the auth handshake.
+    expect(mockSetServerStorageValue.mock.invocationCallOrder[0])
+      .toBeLessThan(mockSwitchActiveServer.mock.invocationCallOrder[0]);
+  });
+
+  it('reuses the existing server ID when addServer returns DUPLICATE', async () => {
+    mockAddServer.mockResolvedValue({
+      success: false,
+      code: 'DUPLICATE',
+      existingServerId: 'server-existing',
+      message: 'already registered',
+      retryable: false,
+    });
+
+    const serverId = await configureMigrationApiClient(MIGRATION_SESSION);
+
+    expect(serverId).toBe('server-existing');
+    expect(mockSetServerStorageValue).toHaveBeenCalledWith('server-existing', 'session', MIGRATION_SESSION.sessionToken);
+    expect(mockSwitchActiveServer).toHaveBeenCalledWith('server-existing');
+  });
+
+  it('throws when addServer returns a non-DUPLICATE failure', async () => {
+    mockAddServer.mockResolvedValue({
+      success: false,
+      code: 'NETWORK_ERROR',
+      message: 'connection refused',
+      retryable: true,
+    });
+
+    await expect(configureMigrationApiClient(MIGRATION_SESSION)).rejects.toThrow(
+      'Failed to register migration server',
+    );
+    expect(mockSetServerStorageValue).not.toHaveBeenCalled();
+    expect(mockSwitchActiveServer).not.toHaveBeenCalled();
+  });
+
+  it('throws when addServer returns DUPLICATE without an existingServerId', async () => {
+    mockAddServer.mockResolvedValue({
+      success: false,
+      code: 'DUPLICATE',
+      message: 'duplicate but no id',
+      retryable: false,
+    });
+
+    await expect(configureMigrationApiClient(MIGRATION_SESSION)).rejects.toThrow(
+      'Failed to register migration server',
+    );
+    expect(mockSetServerStorageValue).not.toHaveBeenCalled();
+    expect(mockSwitchActiveServer).not.toHaveBeenCalled();
+  });
+
+  it('throws when switchActiveServer returns false', async () => {
+    mockAddServer.mockResolvedValue({ success: true, serverId: 'server-abc' });
+    mockSwitchActiveServer.mockResolvedValue(false);
+
+    await expect(configureMigrationApiClient(MIGRATION_SESSION)).rejects.toThrow(
+      'Failed to switch active server for migration',
+    );
+  });
+});
+
+// ------------------------------------------------------------------
+// runMigrationDrainPass
+// ------------------------------------------------------------------
+
+const DRAIN_RESULT_EMPTY = { idMappings: [], discardedOperations: [], syncedSettings: false };
+
+describe('runMigrationDrainPass', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockDrainQueue.mockResolvedValue(DRAIN_RESULT_EMPTY);
+  });
+
+  it('returns success status when queue is empty and no dead letters', async () => {
+    mockGetPendingCount.mockResolvedValue(0);
+    mockGetDeadLetterCount.mockResolvedValue(0);
+
+    const result = await runMigrationDrainPass(mockDb, 10);
+
+    expect(result.status).toBe('success');
+    expect(result.processed).toBe(10);
+    expect(result.remaining).toBe(0);
+    expect(result.deadLetterCount).toBe(0);
+    expect(mockDrainQueue).toHaveBeenCalledWith(mockDb);
+  });
+
+  it('returns dead_letter status when dead-letter count is non-zero', async () => {
+    mockGetPendingCount.mockResolvedValue(3);
+    mockGetDeadLetterCount.mockResolvedValue(2);
+
+    const result = await runMigrationDrainPass(mockDb, 10);
+
+    expect(result.status).toBe('dead_letter');
+    expect(result.deadLetterCount).toBe(2);
+    expect(result.remaining).toBe(3);
+    expect(result.processed).toBe(7);
+  });
+
+  it('returns stalled status when items remain but no dead letters', async () => {
+    mockGetPendingCount.mockResolvedValue(4);
+    mockGetDeadLetterCount.mockResolvedValue(0);
+
+    const result = await runMigrationDrainPass(mockDb, 10);
+
+    expect(result.status).toBe('stalled');
+    expect(result.remaining).toBe(4);
+    expect(result.processed).toBe(6);
+    expect(result.deadLetterCount).toBe(0);
+  });
+
+  it('computes processed as total minus remaining', async () => {
+    mockGetPendingCount.mockResolvedValue(3);
+    mockGetDeadLetterCount.mockResolvedValue(0);
+
+    const result = await runMigrationDrainPass(mockDb, 15);
+
+    expect(result.processed).toBe(12);
+    expect(result.remaining).toBe(3);
+  });
+
+  it('prioritises dead_letter over stalled when both conditions hold', async () => {
+    mockGetPendingCount.mockResolvedValue(5);
+    mockGetDeadLetterCount.mockResolvedValue(1);
+
+    const result = await runMigrationDrainPass(mockDb, 10);
+
+    expect(result.status).toBe('dead_letter');
   });
 });

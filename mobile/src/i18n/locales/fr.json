@@ -422,7 +422,18 @@
     "fetchFailed": "Impossible de joindre le serveur. Vérifiez votre connexion et réessayez.",
     "successTitle": "Toutes les vérifications réussies",
     "successSubtitle": "Votre serveur est compatible et prêt. La migration débutera lors d'une prochaine étape.",
-    "errorTitle": "Impossible de se connecter"
+    "errorTitle": "Impossible de se connecter",
+    "seedingTitle": "Préparation de la migration",
+    "migratingTitle": "Migration de vos notes",
+    "migratingProgress": "Synchronisation de {{processed}} sur {{total}}",
+    "migrationCompleteTitle": "Migration terminée",
+    "migrationCompleteSubtitle": "Vos notes ont été envoyées sur le serveur.",
+    "deadLetterTitle": "Migration suspendue",
+    "deadLetterSubtitle_one": "{{count}} modification n'a pas pu être synchronisée avec le serveur.",
+    "deadLetterSubtitle_other": "{{count}} modifications n'ont pas pu être synchronisées avec le serveur.",
+    "reviewFailedChanges": "Examiner les modifications échouées",
+    "retryMigration": "Réessayer la migration",
+    "migrationFailed": "La migration a échoué. Vérifiez votre connexion et réessayez."
   },
   "diagnostics": {
     "title": "Diagnostic",
