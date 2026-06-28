@@ -404,6 +404,26 @@
     "importing": "Importation...",
     "importButton": "Importer"
   },
+  "upgrade": {
+    "settingsSectionTitle": "Se connecter à un serveur",
+    "settingsSectionDescription": "Synchronisez vos notes avec un serveur Jot. Vos notes locales seront migrées vers le serveur.",
+    "connectToServer": "Se connecter à un serveur",
+    "title": "Se connecter à un serveur",
+    "subtitle": "Entrez l'URL de votre serveur Jot pour créer un nouveau compte et migrer vos notes.",
+    "serverUrlLabel": "URL du serveur",
+    "serverUrlPlaceholder": "https://jot.exemple.fr",
+    "continue": "Continuer",
+    "registerTitle": "Créer votre compte",
+    "changeServer": "Changer de serveur",
+    "usernameTaken": "Ce nom d'utilisateur est déjà pris. Choisissez-en un autre.",
+    "checkingTitle": "Vérification de la compatibilité",
+    "capabilityFailed": "Ce serveur ne prend pas en charge la migration des notes. Assurez-vous d'utiliser une version récente de Jot.",
+    "emptinessFailed": "Le compte contient déjà des notes ou des étiquettes. La migration nécessite un compte vide.",
+    "fetchFailed": "Impossible de joindre le serveur. Vérifiez votre connexion et réessayez.",
+    "successTitle": "Toutes les vérifications réussies",
+    "successSubtitle": "Votre serveur est compatible et prêt. La migration débutera lors d'une prochaine étape.",
+    "errorTitle": "Impossible de se connecter"
+  },
   "diagnostics": {
     "title": "Diagnostic",
     "developerSection": "Développeur",

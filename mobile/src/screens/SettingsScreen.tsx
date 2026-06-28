@@ -26,6 +26,7 @@ import ImportSection from './settings/ImportSection';
 import AppearanceSection from './settings/AppearanceSection';
 import DeveloperSection from './settings/DeveloperSection';
 import AboutSection from './settings/AboutSection';
+import ConnectToServerSection from './settings/ConnectToServerSection';
 
 export default function SettingsScreen() {
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
@@ -60,6 +61,7 @@ export default function SettingsScreen() {
           contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, 24) + 24 }]}
           keyboardShouldPersistTaps="handled"
         >
+          {isLocalMode && <ConnectToServerSection />}
           {!isLocalMode && <ProfileIconSection />}
           <AccountSection />
           {!isLocalMode && <ChangePasswordSection />}

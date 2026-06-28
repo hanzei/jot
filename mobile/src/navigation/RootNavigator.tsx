@@ -13,6 +13,7 @@ import SettingsScreen from '../screens/SettingsScreen';
 import SyncFailuresScreen from '../screens/SyncFailuresScreen';
 import DiagnosticsScreen from '../screens/DiagnosticsScreen';
 import LogsFullscreenScreen from '../screens/LogsFullscreenScreen';
+import ConnectToServerScreen from '../screens/ConnectToServerScreen';
 
 export type RootStackParamList = {
   MainDrawer: undefined;
@@ -24,6 +25,7 @@ export type RootStackParamList = {
   SyncFailures: undefined;
   Diagnostics: undefined;
   LogsFullscreen: undefined;
+  ConnectToServer: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -90,6 +92,14 @@ function AuthenticatedStack() {
           <Stack.Screen
             name="LogsFullscreen"
             component={LogsFullscreenScreen}
+            options={{
+              headerShown: false,
+              presentation: 'modal',
+            }}
+          />
+          <Stack.Screen
+            name="ConnectToServer"
+            component={ConnectToServerScreen}
             options={{
               headerShown: false,
               presentation: 'modal',

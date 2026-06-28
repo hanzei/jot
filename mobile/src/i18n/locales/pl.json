@@ -404,6 +404,26 @@
     "importing": "Importowanie...",
     "importButton": "Importuj"
   },
+  "upgrade": {
+    "settingsSectionTitle": "Połącz z serwerem",
+    "settingsSectionDescription": "Synchronizuj notatki z serwerem Jot. Twoje lokalne notatki zostaną przeniesione na serwer.",
+    "connectToServer": "Połącz z serwerem",
+    "title": "Połącz z serwerem",
+    "subtitle": "Wprowadź adres URL serwera Jot, aby utworzyć nowe konto i przenieść swoje notatki.",
+    "serverUrlLabel": "Adres URL serwera",
+    "serverUrlPlaceholder": "https://jot.przyklad.pl",
+    "continue": "Kontynuuj",
+    "registerTitle": "Utwórz konto",
+    "changeServer": "Zmień serwer",
+    "usernameTaken": "Ta nazwa użytkownika jest już zajęta. Wybierz inną.",
+    "checkingTitle": "Sprawdzanie zgodności",
+    "capabilityFailed": "Ten serwer nie obsługuje migracji notatek. Upewnij się, że używasz najnowszej wersji Jot.",
+    "emptinessFailed": "Konto zawiera już notatki lub etykiety. Migracja wymaga pustego konta.",
+    "fetchFailed": "Nie można połączyć się z serwerem. Sprawdź połączenie i spróbuj ponownie.",
+    "successTitle": "Wszystkie sprawdzenia zakończone pomyślnie",
+    "successSubtitle": "Twój serwer jest zgodny i gotowy. Migracja rozpocznie się w kolejnym kroku.",
+    "errorTitle": "Nie można połączyć"
+  },
   "diagnostics": {
     "title": "Diagnostyka",
     "developerSection": "Deweloper",
