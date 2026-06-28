@@ -404,6 +404,26 @@
     "importing": "Importieren...",
     "importButton": "Importieren"
   },
+  "upgrade": {
+    "settingsSectionTitle": "Mit einem Server verbinden",
+    "settingsSectionDescription": "Synchronisiere deine Notizen mit einem Jot-Server. Deine lokalen Notizen werden auf den Server übertragen.",
+    "connectToServer": "Mit einem Server verbinden",
+    "title": "Mit einem Server verbinden",
+    "subtitle": "Gib deine Jot-Server-URL ein, um ein neues Konto zu erstellen und deine Notizen zu migrieren.",
+    "serverUrlLabel": "Server-URL",
+    "serverUrlPlaceholder": "https://jot.beispiel.de",
+    "continue": "Weiter",
+    "registerTitle": "Konto erstellen",
+    "changeServer": "Server ändern",
+    "usernameTaken": "Dieser Benutzername ist bereits vergeben. Wähle einen anderen.",
+    "checkingTitle": "Kompatibilität prüfen",
+    "capabilityFailed": "Dieser Server unterstützt keine Notizmigration. Stelle sicher, dass du eine aktuelle Version von Jot verwendest.",
+    "emptinessFailed": "Das Konto enthält bereits Notizen oder Labels. Für die Migration wird ein leeres Konto benötigt.",
+    "fetchFailed": "Der Server ist nicht erreichbar. Überprüfe deine Verbindung und versuche es erneut.",
+    "successTitle": "Alle Prüfungen bestanden",
+    "successSubtitle": "Dein Server ist kompatibel und bereit. Die Migration wird in einem späteren Schritt gestartet.",
+    "errorTitle": "Verbindung nicht möglich"
+  },
   "diagnostics": {
     "title": "Diagnose",
     "developerSection": "Entwickler",

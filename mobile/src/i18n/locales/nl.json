@@ -404,6 +404,26 @@
     "importing": "Importeren...",
     "importButton": "Importeren"
   },
+  "upgrade": {
+    "settingsSectionTitle": "Verbinden met een server",
+    "settingsSectionDescription": "Synchroniseer je notities met een Jot-server. Je lokale notities worden naar de server gemigreerd.",
+    "connectToServer": "Verbinden met een server",
+    "title": "Verbinden met een server",
+    "subtitle": "Voer je Jot-server-URL in om een nieuw account te maken en je notities te migreren.",
+    "serverUrlLabel": "Server-URL",
+    "serverUrlPlaceholder": "https://jot.voorbeeld.nl",
+    "continue": "Doorgaan",
+    "registerTitle": "Maak je account aan",
+    "changeServer": "Server wijzigen",
+    "usernameTaken": "Deze gebruikersnaam is al in gebruik. Kies een andere.",
+    "checkingTitle": "Compatibiliteit controleren",
+    "capabilityFailed": "Deze server ondersteunt geen notitemigratie. Zorg dat je een recente versie van Jot gebruikt.",
+    "emptinessFailed": "Het account bevat al notities of labels. Migratie vereist een leeg account.",
+    "fetchFailed": "Kan de server niet bereiken. Controleer je verbinding en probeer het opnieuw.",
+    "successTitle": "Alle controles geslaagd",
+    "successSubtitle": "Je server is compatibel en klaar. De migratie begint in een volgende stap.",
+    "errorTitle": "Kan niet verbinden"
+  },
   "diagnostics": {
     "title": "Diagnose",
     "developerSection": "Ontwikkelaar",
