@@ -468,7 +468,9 @@ function makeListNote(overrides: Partial<ListNote> = {}): ListNote {
   };
 }
 
-const mockDb = {} as unknown as SQLiteDatabase;
+const mockDb = {
+  withTransactionAsync: jest.fn((task: () => Promise<void>) => task()),
+} as unknown as SQLiteDatabase;
 
 describe('seedReplayQueue', () => {
   beforeEach(() => {
