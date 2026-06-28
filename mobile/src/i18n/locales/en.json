@@ -404,6 +404,26 @@
     "importing": "Importing...",
     "importButton": "Import"
   },
+  "upgrade": {
+    "settingsSectionTitle": "Connect to a server",
+    "settingsSectionDescription": "Sync your notes with a Jot server. Your local notes will be migrated to the server.",
+    "connectToServer": "Connect to a server",
+    "title": "Connect to a server",
+    "subtitle": "Enter your Jot server URL to create a new account and migrate your notes.",
+    "serverUrlLabel": "Server URL",
+    "serverUrlPlaceholder": "https://jot.example.com",
+    "continue": "Continue",
+    "registerTitle": "Create your account",
+    "changeServer": "Change server",
+    "usernameTaken": "This username is already taken. Choose a different one.",
+    "checkingTitle": "Checking compatibility",
+    "capabilityFailed": "This server does not support note migration. Make sure you are using a recent version of Jot.",
+    "emptinessFailed": "The account already has notes or labels. Migration requires a fresh, empty account.",
+    "fetchFailed": "Could not reach the server. Check your connection and try again.",
+    "successTitle": "All checks passed",
+    "successSubtitle": "Your server is compatible and ready. Migration will start in a future step.",
+    "errorTitle": "Cannot connect"
+  },
   "diagnostics": {
     "title": "Diagnostics",
     "developerSection": "Developer",
