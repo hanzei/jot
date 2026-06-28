@@ -55,6 +55,8 @@ offline path already exercises in production — not a new sync engine.
 | Target account | **New registration only** | An empty target avoids client-ID collisions; emptiness is **verified in pre-flight** (Phase 0), not assumed, and then the push is a straight replay with IDs preserved. |
 | User identity | **Do not adopt the local user ID** | `POST /notes` sets `owner = authenticated user` regardless of the local user ID, so only note/label/item IDs need to survive — and they do. The server-assigned user ID becomes the real one. |
 | Post-upgrade local data | **Keep the local DB as the server cache**, but only flip after a clean drain, then background-reconcile | Local rows already carry server-valid IDs and `sync_state='synced'`, so reuse is instant and needs no re-download. Gating on a fully-drained queue (zero dead-letters) closes the data-loss / drift window; a background refetch makes the server canonical right after. |
+| Settings/profile push | **Part of the gated drain — blocks the flip** | Settings (`note_sort`, `theme`, language) and profile are user data too; treating them as best-effort risks silently losing preferences. Enqueued alongside notes/labels (Phase 2) and required to drain before the flip (Phase 4). |
+| Progress feedback | **Visible progress UI, driven off queue depth** | Migrations can be large; a determinate indicator (items remaining / total) is clearer than an indefinite spinner and gives the user confidence the move is proceeding. |
 
 ### Why "keep DB as cache" and not "wipe + re-fetch"
 
@@ -117,7 +119,9 @@ A failure here aborts the upgrade cleanly with the user still in local mode.
   2. **notes** (`POST /notes`, client ID + inline item IDs honored)
   3. **note items** not covered by the inline create, if any
   4. **note↔label links** (`POST /notes/{id}/labels/{label_id}`)
-  5. **settings / profile** (`PATCH /users/me`, settings update)
+  5. **settings / profile** (`PATCH /users/me`, settings update) — enqueued like
+     any other op so it is **part of the gated drain**, not best-effort. If it
+     dead-letters, the flip is blocked (Phase 4) just like a note/label op.
 - Because IDs are preserved and the server honors them, this is a straight
   replay with **no id-remapping**.
 
@@ -127,6 +131,13 @@ A failure here aborts the upgrade cleanly with the user still in local mode.
   dead-letters.
 - Migration progress = queue depth draining to zero. A mid-way failure is
   **resumable**, not corrupting.
+- **Progress UI.** Show a determinate indicator driven off queue depth: capture
+  the total enqueued op count at the start of Phase 2, then render
+  `processed / total` (e.g. a progress bar + "syncing N of M") as `sync_queue`
+  drains. The count is already cheap to read (`SELECT COUNT(*) FROM sync_queue`,
+  used by `enqueueOperation`/drain today). The screen stays in a non-dismissable
+  "migrating" state until the queue is empty (success → Phase 4) or an op
+  dead-letters (surface the retry/resolution UX).
 
 ### Phase 4 — Flip to server-backed mode (point of no return)
 - Precondition: `sync_queue` empty **and** `dead_letter` empty for this
@@ -179,13 +190,13 @@ A failure here aborts the upgrade cleanly with the user still in local mode.
   path completes, leaving server data incomplete. The flip is blocked while any
   such op sits in `dead_letter`, so the user can't land in server mode with a
   half-linked dataset.
-- **Best-effort settings/profile push fails silently** → preferences like
-  `note_sort` or `theme` may not reach the server if their push isn't gated on
-  the drain (see the open question). Until that's decided, treat a failed
-  settings/profile push as a **visible warning**, not a silent drop, so a
-  preference can't disappear unnoticed.
-- **Large datasets** → drain is incremental; consider a progress indicator
-  driven off queue depth.
+- **Settings/profile push fails** → no longer silent: the push is part of the
+  gated drain, so a failure dead-letters and **blocks the flip** (same as a
+  note/label op), surfacing the retry/resolution UX. Preferences like
+  `note_sort` or `theme` cannot be lost unnoticed.
+- **Large datasets** → drain is incremental and the progress UI is determinate
+  (queue depth → `processed / total`, see Phase 3), so the user sees forward
+  motion rather than an indefinite spinner.
 - **Server-side field divergence** → handled by the post-flip background
   reconcile.
 - **Re-running migration** → idempotent by construction (client IDs + server
@@ -194,12 +205,14 @@ A failure here aborts the upgrade cleanly with the user still in local mode.
 
 ## Open questions
 
-- Do we want a visible **progress UI** (queue depth) or just a spinner + success?
-- Should profile/settings push be best-effort (don't block the flip) or part of
-  the gated drain?
+_None outstanding for the first iteration._ Previously open and now resolved:
 
-(The server capability / version check is **not** open — it is a mandatory
-pre-flight gate; see Phase 0.)
+- **Progress UI** — yes, show a visible progress indicator driven off queue
+  depth (see Phase 3), not just a spinner.
+- **Settings/profile push** — part of the **gated drain**; it blocks the flip
+  rather than being best-effort (see Phase 2 / Phase 4).
+- **Server capability / version check** — a mandatory pre-flight gate, never
+  optional (see Phase 0).
 
 ## Future work
 
@@ -214,5 +227,6 @@ pre-flight gate; see Phase 0.)
 1. "Connect to a server" entry point + new-account registration in local mode
    (Phase 1).
 2. Local-data → queue seeding in dependency order (Phase 2).
-3. Migration drain orchestration + progress/failure UX (Phase 3).
+3. Migration drain orchestration + determinate progress UI (queue depth) and
+   failure/retry UX (Phase 3).
 4. Clean-drain flip to server mode + background reconcile (Phase 4).
