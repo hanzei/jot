@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
+  Keyboard,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import DraggableFlatList, { ScaleDecorator, NestableDraggableFlatList, NestableScrollContainer } from 'react-native-draggable-flatlist';
@@ -219,6 +220,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const handleNotePress = useCallback(
     (noteId: string) => {
       if (variant === 'trash') return; // read-only
+      Keyboard.dismiss();
       navigation.navigate('NoteEditor', { noteId });
     },
     [navigation, variant],
@@ -811,6 +813,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
             refreshControl={
               <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
             }
+            keyboardShouldPersistTaps="always"
             contentContainerStyle={{ paddingBottom: listBottomPadding }}
             testID="notes-section-list"
           >
@@ -851,6 +854,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
             renderItem={renderNonDraggableNoteCard}
             renderSectionHeader={renderSectionHeader}
             stickySectionHeadersEnabled={false}
+            keyboardShouldPersistTaps="always"
             refreshControl={
               <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
             }
@@ -867,6 +871,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           onDragBegin={handleDragStart}
           onDragEnd={handleDragEndUnpinned}
           activationDistance={20}
+          keyboardShouldPersistTaps="always"
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
           }
@@ -881,6 +886,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           renderItem={renderNonDraggableNoteCard}
           renderSectionHeader={renderSectionHeader}
           stickySectionHeadersEnabled={false}
+          keyboardShouldPersistTaps="always"
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
           }
@@ -893,6 +899,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           data={displayUnpinned}
           keyExtractor={(item) => item.id}
           renderItem={renderNonDraggableNoteCard}
+          keyboardShouldPersistTaps="always"
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
           }
