@@ -1,5 +1,9 @@
 import axios from 'axios';
 import { generateId, canonicalizeServerOrigin } from '@jot/shared';
+import type { SQLiteDatabase } from 'expo-sqlite';
+import { getAllLocalNotes } from '../db/noteQueries';
+import { insertQueueEntry } from '../db/syncQueue';
+import type { LocalIdentity } from './localMode';
 
 export interface UpgradeSession {
   serverUrl: string;
@@ -229,4 +233,165 @@ export async function runPreflightChecks(session: UpgradeSession): Promise<Prefl
   if (!capResult.ok) return capResult;
 
   return checkEmptinessGate(client);
+}
+
+export interface SeedResult {
+  totalEnqueued: number;
+}
+
+/**
+ * Phase 2 of the local→server upgrade: walk local SQLite and seed the sync
+ * queue with a `create` op per entity in dependency order so the drain (Phase 3)
+ * can replay every piece of local data onto the freshly registered server account.
+ *
+ * Dependency order:
+ *   1. Labels           — must exist before note↔label links can reference them.
+ *   2. Notes            — must exist before items, label links, or state changes.
+ *   3. Note items       — items are included inline in the note create body; this
+ *                         step covers any items not handled there (none in practice).
+ *   4. Note↔label links — note and label must both already exist.
+ *   5. Note state       — archived / pinned / checked_items_collapsed / trashed
+ *                         states are applied after label links so labels can be
+ *                         associated before a note is moved to trash.
+ *   6. Settings/profile — enqueued as a normal op, not best-effort, so it drains
+ *                         under the same gated flow as everything else.
+ *
+ * `insertQueueEntry` bypasses the local-mode guard (local mode is still active
+ * at seeding time) and does NOT notify enqueue listeners (the drain will be
+ * triggered by Phase 3 once local mode is disabled).
+ *
+ * Returns the total number of ops enqueued, for the Phase 3 progress UI.
+ */
+export async function seedReplayQueue(
+  db: SQLiteDatabase,
+  identity: LocalIdentity,
+): Promise<SeedResult> {
+  let totalEnqueued = 0;
+
+  const allNotes = await getAllLocalNotes(db);
+
+  // Step 1: collect unique labels across all notes and enqueue createLabel ops first.
+  const labelsById = new Map<string, { id: string; name: string }>();
+  for (const note of allNotes) {
+    for (const label of note.labels) {
+      if (!labelsById.has(label.id)) {
+        labelsById.set(label.id, { id: label.id, name: label.name });
+      }
+    }
+  }
+
+  for (const label of labelsById.values()) {
+    await insertQueueEntry(db, {
+      operation: 'createLabel',
+      endpoint: '/labels',
+      method: 'POST',
+      body: { id: label.id, name: label.name },
+    });
+    totalEnqueued++;
+  }
+
+  // Step 2: enqueue a create op per note. List-note items are included inline so
+  // the note body always satisfies the server's "title or content or items"
+  // requirement even when a list note has no title. Client-supplied item IDs are
+  // honored by the server (issue #475/#513). parent_id is converted to indent_level
+  // (0 = top-level, 1 = nested) because the bulk-create path uses the positional
+  // indent_level convention; the granular POST /notes/{id}/items endpoint (step 3)
+  // uses parent_id directly and handles any items that need exact parent wiring.
+  for (const note of allNotes) {
+    const body: Record<string, unknown> = {
+      id: note.id,
+      note_type: note.note_type,
+      color: note.color,
+    };
+
+    if (note.note_type === 'text') {
+      body.content = note.content;
+    } else {
+      body.title = note.title;
+      const items = note.items ?? [];
+      if (items.length > 0) {
+        body.items = items.map((item) => ({
+          id: item.id,
+          text: item.text,
+          position: item.position,
+          completed: item.completed,
+          indent_level: item.parent_id !== null ? 1 : 0,
+        }));
+      }
+    }
+
+    await insertQueueEntry(db, {
+      operation: 'create',
+      endpoint: '/notes',
+      method: 'POST',
+      body,
+    });
+    totalEnqueued++;
+  }
+
+  // Step 3: note items not covered by the inline create above (none in practice,
+  // since all items are included in the note body). Left as an explicit empty
+  // step to match the design document's numbered sequence.
+
+  // Step 4: enqueue note↔label links after both notes and labels exist.
+  for (const note of allNotes) {
+    for (const label of note.labels) {
+      await insertQueueEntry(db, {
+        operation: 'addLabelToNote',
+        endpoint: `/notes/${note.id}/labels/${label.id}`,
+        method: 'POST',
+      });
+      totalEnqueued++;
+    }
+  }
+
+  // Step 5: apply note state (pinned / archived / checked_items_collapsed / trashed)
+  // after label links so labels can be associated before a note is soft-deleted.
+  for (const note of allNotes) {
+    const patch: Record<string, unknown> = {};
+    if (note.pinned) patch.pinned = true;
+    if (note.archived) patch.archived = true;
+    if (note.note_type === 'list' && note.checked_items_collapsed) {
+      patch.checked_items_collapsed = true;
+    }
+
+    if (Object.keys(patch).length > 0) {
+      await insertQueueEntry(db, {
+        operation: 'update',
+        endpoint: `/notes/${note.id}`,
+        method: 'PATCH',
+        body: patch,
+      });
+      totalEnqueued++;
+    }
+
+    if (note.deleted_at !== null) {
+      await insertQueueEntry(db, {
+        operation: 'delete',
+        endpoint: `/notes/${note.id}`,
+        method: 'DELETE',
+      });
+      totalEnqueued++;
+    }
+  }
+
+  // Step 6: settings / profile — part of the gated drain, not best-effort.
+  const { user, settings } = identity;
+  const settingsBody: Record<string, unknown> = {
+    language: settings.language,
+    theme: settings.theme,
+    note_sort: settings.note_sort,
+  };
+  if (user.first_name) settingsBody.first_name = user.first_name;
+  if (user.last_name) settingsBody.last_name = user.last_name;
+
+  await insertQueueEntry(db, {
+    operation: 'updateSettings',
+    endpoint: '/users/me',
+    method: 'PATCH',
+    body: settingsBody,
+  });
+  totalEnqueued++;
+
+  return { totalEnqueued };
 }

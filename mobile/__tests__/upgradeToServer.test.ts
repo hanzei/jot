@@ -3,10 +3,15 @@ import {
   checkCapabilityGate,
   checkEmptinessGate,
   runPreflightChecks,
+  seedReplayQueue,
 } from '../src/store/upgradeToServer';
-import type { UpgradeClient, UpgradeSession } from '../src/store/upgradeToServer';
+import type { UpgradeClient, UpgradeSession, SeedResult } from '../src/store/upgradeToServer';
 import { isLocalModeEnabled } from '../src/store/localMode';
 import * as SecureStore from 'expo-secure-store';
+import type { SQLiteDatabase } from 'expo-sqlite';
+import type { ListNote, TextNote } from '@jot/shared';
+import * as noteQueries from '../src/db/noteQueries';
+import * as syncQueue from '../src/db/syncQueue';
 
 // ------------------------------------------------------------------
 // SecureStore mock — used to verify local mode is never mutated
@@ -380,5 +385,332 @@ describe('runPreflightChecks', () => {
     expect(await isLocalModeEnabled()).toBe(true);
     expect(mockSecureStore.setItemAsync).not.toHaveBeenCalled();
     expect(mockSecureStore.deleteItemAsync).not.toHaveBeenCalled();
+  });
+});
+
+// ------------------------------------------------------------------
+// seedReplayQueue
+// ------------------------------------------------------------------
+
+jest.mock('../src/db/noteQueries', () => ({
+  getAllLocalNotes: jest.fn(),
+}));
+
+jest.mock('../src/db/syncQueue', () => ({
+  insertQueueEntry: jest.fn().mockResolvedValue(undefined),
+}));
+
+const mockGetAllLocalNotes = noteQueries.getAllLocalNotes as jest.MockedFunction<typeof noteQueries.getAllLocalNotes>;
+const mockInsertQueueEntry = syncQueue.insertQueueEntry as jest.MockedFunction<typeof syncQueue.insertQueueEntry>;
+
+const BASE_IDENTITY = {
+  user: {
+    id: 'aaaaaaaaaaaaaaaaaaaaaaaa',
+    username: 'local',
+    first_name: 'Alice',
+    last_name: 'Smith',
+    role: 'user' as const,
+    has_profile_icon: false,
+    created_at: '2025-01-01T00:00:00.000Z',
+    updated_at: '2025-01-01T00:00:00.000Z',
+  },
+  settings: {
+    user_id: 'aaaaaaaaaaaaaaaaaaaaaaaa',
+    language: 'en',
+    theme: 'dark' as const,
+    note_sort: 'updated_at' as const,
+    updated_at: '2025-01-01T00:00:00.000Z',
+  },
+};
+
+const LABEL_A = { id: 'labelaaaaaaaaaaaaaaaaaa', user_id: 'aaaaaaaaaaaaaaaaaaaaaaaa', name: 'Work', created_at: '', updated_at: '' };
+const LABEL_B = { id: 'labelbbbbbbbbbbbbbbbbbb', user_id: 'aaaaaaaaaaaaaaaaaaaaaaaa', name: 'Personal', created_at: '', updated_at: '' };
+
+function makeTextNote(overrides: Partial<TextNote> = {}): TextNote {
+  return {
+    id: 'noteaaaaaaaaaaaaaaaaaaa1',
+    user_id: 'aaaaaaaaaaaaaaaaaaaaaaaa',
+    note_type: 'text',
+    content: 'Hello world',
+    version: 1,
+    color: '#ffffff',
+    pinned: false,
+    archived: false,
+    position: 0,
+    is_shared: false,
+    labels: [],
+    deleted_at: null,
+    created_at: '2025-01-01T00:00:00.000Z',
+    updated_at: '2025-01-01T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
+function makeListNote(overrides: Partial<ListNote> = {}): ListNote {
+  return {
+    id: 'noteaaaaaaaaaaaaaaaaaaa2',
+    user_id: 'aaaaaaaaaaaaaaaaaaaaaaaa',
+    note_type: 'list',
+    title: 'Shopping',
+    items: [],
+    checked_items_collapsed: false,
+    version: 1,
+    color: '#ffffff',
+    pinned: false,
+    archived: false,
+    position: 1,
+    is_shared: false,
+    labels: [],
+    deleted_at: null,
+    created_at: '2025-01-01T00:00:00.000Z',
+    updated_at: '2025-01-01T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
+const mockDb = {} as unknown as SQLiteDatabase;
+
+describe('seedReplayQueue', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockInsertQueueEntry.mockResolvedValue(undefined);
+  });
+
+  it('returns zero totalEnqueued when there are no local notes', async () => {
+    mockGetAllLocalNotes.mockResolvedValue([]);
+
+    const result: SeedResult = await seedReplayQueue(mockDb, BASE_IDENTITY);
+
+    // Only the settings op is enqueued when there are no notes.
+    expect(result.totalEnqueued).toBe(1);
+    expect(mockInsertQueueEntry).toHaveBeenCalledTimes(1);
+    const [, params] = mockInsertQueueEntry.mock.calls[0];
+    expect(params.operation).toBe('updateSettings');
+  });
+
+  it('enqueues labels before notes', async () => {
+    const note = makeTextNote({ labels: [LABEL_A] });
+    mockGetAllLocalNotes.mockResolvedValue([note]);
+
+    await seedReplayQueue(mockDb, BASE_IDENTITY);
+
+    const calls = mockInsertQueueEntry.mock.calls.map(([, p]) => p.operation);
+    const labelIdx = calls.indexOf('createLabel');
+    const createIdx = calls.indexOf('create');
+    expect(labelIdx).toBeGreaterThanOrEqual(0);
+    expect(createIdx).toBeGreaterThan(labelIdx);
+  });
+
+  it('enqueues note creates before note↔label links', async () => {
+    const note = makeTextNote({ labels: [LABEL_A] });
+    mockGetAllLocalNotes.mockResolvedValue([note]);
+
+    await seedReplayQueue(mockDb, BASE_IDENTITY);
+
+    const calls = mockInsertQueueEntry.mock.calls.map(([, p]) => p.operation);
+    const createIdx = calls.indexOf('create');
+    const linkIdx = calls.indexOf('addLabelToNote');
+    expect(createIdx).toBeGreaterThanOrEqual(0);
+    expect(linkIdx).toBeGreaterThan(createIdx);
+  });
+
+  it('enqueues settings/profile last', async () => {
+    const note = makeTextNote({ labels: [LABEL_A] });
+    mockGetAllLocalNotes.mockResolvedValue([note]);
+
+    await seedReplayQueue(mockDb, BASE_IDENTITY);
+
+    const calls = mockInsertQueueEntry.mock.calls.map(([, p]) => p.operation);
+    const settingsIdx = calls.lastIndexOf('updateSettings');
+    expect(settingsIdx).toBe(calls.length - 1);
+  });
+
+  it('enqueues one createLabel op per unique label', async () => {
+    const note1 = makeTextNote({ id: 'noteaaaaaaaaaaaaaaaaaaa1', labels: [LABEL_A, LABEL_B] });
+    const note2 = makeTextNote({ id: 'noteaaaaaaaaaaaaaaaaaaa3', labels: [LABEL_A] });
+    mockGetAllLocalNotes.mockResolvedValue([note1, note2]);
+
+    await seedReplayQueue(mockDb, BASE_IDENTITY);
+
+    const labelCalls = mockInsertQueueEntry.mock.calls
+      .map(([, p]) => p)
+      .filter((p) => p.operation === 'createLabel');
+    expect(labelCalls).toHaveLength(2);
+    const names = labelCalls.map((p) => (p.body as Record<string, unknown>).name);
+    expect(names).toContain('Work');
+    expect(names).toContain('Personal');
+  });
+
+  it('includes client-supplied note ID in the create body', async () => {
+    const note = makeTextNote({ id: 'noteaaaaaaaaaaaaaaaaaaa1' });
+    mockGetAllLocalNotes.mockResolvedValue([note]);
+
+    await seedReplayQueue(mockDb, BASE_IDENTITY);
+
+    const createCall = mockInsertQueueEntry.mock.calls
+      .map(([, p]) => p)
+      .find((p) => p.operation === 'create');
+    expect((createCall?.body as Record<string, unknown>).id).toBe('noteaaaaaaaaaaaaaaaaaaa1');
+  });
+
+  it('includes inline items with client-supplied IDs for list notes', async () => {
+    const note = makeListNote({
+      items: [
+        { id: 'item1aaaaaaaaaaaaaaaaaaaa', note_id: 'noteaaaaaaaaaaaaaaaaaaa2', text: 'Milk', completed: false, position: 0, parent_id: null, assigned_to: '', created_at: '', updated_at: '' },
+        { id: 'item2aaaaaaaaaaaaaaaaaaaa', note_id: 'noteaaaaaaaaaaaaaaaaaaa2', text: 'Eggs', completed: true, position: 1, parent_id: null, assigned_to: '', created_at: '', updated_at: '' },
+      ],
+    });
+    mockGetAllLocalNotes.mockResolvedValue([note]);
+
+    await seedReplayQueue(mockDb, BASE_IDENTITY);
+
+    const createCall = mockInsertQueueEntry.mock.calls
+      .map(([, p]) => p)
+      .find((p) => p.operation === 'create');
+    const body = createCall?.body as Record<string, unknown>;
+    const items = body.items as Array<Record<string, unknown>>;
+    expect(items).toHaveLength(2);
+    expect(items[0].id).toBe('item1aaaaaaaaaaaaaaaaaaaa');
+    expect(items[1].id).toBe('item2aaaaaaaaaaaaaaaaaaaa');
+  });
+
+  it('sets indent_level=1 for nested items and indent_level=0 for top-level items', async () => {
+    const note = makeListNote({
+      items: [
+        { id: 'item1aaaaaaaaaaaaaaaaaaaa', note_id: 'noteaaaaaaaaaaaaaaaaaaa2', text: 'Parent', completed: false, position: 0, parent_id: null, assigned_to: '', created_at: '', updated_at: '' },
+        { id: 'item2aaaaaaaaaaaaaaaaaaaa', note_id: 'noteaaaaaaaaaaaaaaaaaaa2', text: 'Child', completed: false, position: 1, parent_id: 'item1aaaaaaaaaaaaaaaaaaaa', assigned_to: '', created_at: '', updated_at: '' },
+      ],
+    });
+    mockGetAllLocalNotes.mockResolvedValue([note]);
+
+    await seedReplayQueue(mockDb, BASE_IDENTITY);
+
+    const createCall = mockInsertQueueEntry.mock.calls
+      .map(([, p]) => p)
+      .find((p) => p.operation === 'create');
+    const items = (createCall?.body as Record<string, unknown>).items as Array<Record<string, unknown>>;
+    expect(items[0].indent_level).toBe(0);
+    expect(items[1].indent_level).toBe(1);
+  });
+
+  it('enqueues addLabelToNote for each note-label pair', async () => {
+    const note = makeTextNote({ labels: [LABEL_A, LABEL_B] });
+    mockGetAllLocalNotes.mockResolvedValue([note]);
+
+    await seedReplayQueue(mockDb, BASE_IDENTITY);
+
+    const linkCalls = mockInsertQueueEntry.mock.calls
+      .map(([, p]) => p)
+      .filter((p) => p.operation === 'addLabelToNote');
+    expect(linkCalls).toHaveLength(2);
+    const endpoints = linkCalls.map((p) => p.endpoint);
+    expect(endpoints).toContain(`/notes/${note.id}/labels/${LABEL_A.id}`);
+    expect(endpoints).toContain(`/notes/${note.id}/labels/${LABEL_B.id}`);
+  });
+
+  it('enqueues a PATCH update for archived notes after the label links', async () => {
+    const note = makeTextNote({ archived: true, labels: [LABEL_A] });
+    mockGetAllLocalNotes.mockResolvedValue([note]);
+
+    await seedReplayQueue(mockDb, BASE_IDENTITY);
+
+    const calls = mockInsertQueueEntry.mock.calls.map(([, p]) => p);
+    const linkIdx = calls.findIndex((p) => p.operation === 'addLabelToNote');
+    const updateIdx = calls.findIndex((p) => p.operation === 'update');
+    expect(updateIdx).toBeGreaterThan(linkIdx);
+    expect((calls[updateIdx].body as Record<string, unknown>).archived).toBe(true);
+  });
+
+  it('enqueues a PATCH update for pinned notes', async () => {
+    const note = makeTextNote({ pinned: true });
+    mockGetAllLocalNotes.mockResolvedValue([note]);
+
+    await seedReplayQueue(mockDb, BASE_IDENTITY);
+
+    const updateCall = mockInsertQueueEntry.mock.calls
+      .map(([, p]) => p)
+      .find((p) => p.operation === 'update');
+    expect((updateCall?.body as Record<string, unknown>).pinned).toBe(true);
+  });
+
+  it('enqueues a PATCH update for checked_items_collapsed list notes', async () => {
+    const note = makeListNote({ checked_items_collapsed: true });
+    mockGetAllLocalNotes.mockResolvedValue([note]);
+
+    await seedReplayQueue(mockDb, BASE_IDENTITY);
+
+    const updateCall = mockInsertQueueEntry.mock.calls
+      .map(([, p]) => p)
+      .find((p) => p.operation === 'update');
+    expect((updateCall?.body as Record<string, unknown>).checked_items_collapsed).toBe(true);
+  });
+
+  it('enqueues a DELETE op for trashed notes after label links', async () => {
+    const note = makeTextNote({ deleted_at: '2025-06-01T00:00:00.000Z', labels: [LABEL_A] });
+    mockGetAllLocalNotes.mockResolvedValue([note]);
+
+    await seedReplayQueue(mockDb, BASE_IDENTITY);
+
+    const calls = mockInsertQueueEntry.mock.calls.map(([, p]) => p);
+    const linkIdx = calls.findIndex((p) => p.operation === 'addLabelToNote');
+    const deleteIdx = calls.findIndex((p) => p.operation === 'delete');
+    expect(deleteIdx).toBeGreaterThan(linkIdx);
+    expect(calls[deleteIdx].method).toBe('DELETE');
+    expect(calls[deleteIdx].endpoint).toBe(`/notes/${note.id}`);
+  });
+
+  it('includes settings and profile in the updateSettings body', async () => {
+    mockGetAllLocalNotes.mockResolvedValue([]);
+
+    await seedReplayQueue(mockDb, BASE_IDENTITY);
+
+    const settingsCall = mockInsertQueueEntry.mock.calls
+      .map(([, p]) => p)
+      .find((p) => p.operation === 'updateSettings');
+    const body = settingsCall?.body as Record<string, unknown>;
+    expect(body.language).toBe('en');
+    expect(body.theme).toBe('dark');
+    expect(body.note_sort).toBe('updated_at');
+    expect(body.first_name).toBe('Alice');
+    expect(body.last_name).toBe('Smith');
+  });
+
+  it('returns the correct total op count', async () => {
+    const note1 = makeTextNote({ id: 'noteaaaaaaaaaaaaaaaaaaa1', labels: [LABEL_A] });
+    const note2 = makeListNote({
+      id: 'noteaaaaaaaaaaaaaaaaaaa2',
+      labels: [LABEL_B],
+      archived: true,
+      items: [
+        { id: 'item1aaaaaaaaaaaaaaaaaaaa', note_id: 'noteaaaaaaaaaaaaaaaaaaa2', text: 'Task', completed: false, position: 0, parent_id: null, assigned_to: '', created_at: '', updated_at: '' },
+      ],
+    });
+    mockGetAllLocalNotes.mockResolvedValue([note1, note2]);
+
+    const result = await seedReplayQueue(mockDb, BASE_IDENTITY);
+
+    // 2 createLabel + 2 create (items inline) + 2 addLabelToNote + 1 update (archived) + 1 updateSettings = 8
+    expect(result.totalEnqueued).toBe(8);
+    expect(mockInsertQueueEntry).toHaveBeenCalledTimes(8);
+  });
+
+  it('does not enqueue a state update for default-state notes', async () => {
+    const note = makeTextNote({ pinned: false, archived: false, deleted_at: null });
+    mockGetAllLocalNotes.mockResolvedValue([note]);
+
+    await seedReplayQueue(mockDb, BASE_IDENTITY);
+
+    const updateCalls = mockInsertQueueEntry.mock.calls
+      .map(([, p]) => p)
+      .filter((p) => p.operation === 'update' || p.operation === 'delete');
+    expect(updateCalls).toHaveLength(0);
+  });
+
+  it('uses insertQueueEntry (not enqueueOperation) so local mode does not block seeding', async () => {
+    mockGetAllLocalNotes.mockResolvedValue([]);
+
+    await seedReplayQueue(mockDb, BASE_IDENTITY);
+
+    expect(mockInsertQueueEntry).toHaveBeenCalled();
   });
 });

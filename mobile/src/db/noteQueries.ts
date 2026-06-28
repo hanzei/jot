@@ -810,6 +810,29 @@ export function generateClientLabelId(): string {
   return generateClientId();
 }
 
+export async function getAllLocalNotes(db: SQLiteDatabase): Promise<Note[]> {
+  const rows = await db.getAllAsync<NoteRow>('SELECT * FROM notes ORDER BY position ASC');
+
+  if (rows.length === 0) return [];
+
+  const listIds = rows.filter((r) => r.note_type === 'list').map((r) => r.id);
+  const itemsByNoteId = new Map<string, NoteItem[]>();
+  if (listIds.length > 0) {
+    const placeholders = listIds.map(() => '?').join(', ');
+    const itemRows = await db.getAllAsync<NoteItemRow>(
+      `SELECT * FROM note_items WHERE note_id IN (${placeholders}) ORDER BY note_id ASC, position ASC`,
+      listIds,
+    );
+    for (const itemRow of itemRows) {
+      const existing = itemsByNoteId.get(itemRow.note_id) ?? [];
+      existing.push(itemRowToNoteItem(itemRow));
+      itemsByNoteId.set(itemRow.note_id, existing);
+    }
+  }
+
+  return rows.map((row) => rowToNote(row, itemsByNoteId.get(row.id) ?? []));
+}
+
 export function isLocalId(id: string): boolean {
   return id.startsWith('local_');
 }
