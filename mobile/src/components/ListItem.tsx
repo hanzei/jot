@@ -6,6 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   PanResponder,
+  Animated,
   type TextInputProps,
   type TextInput as TextInputType,
   type PanResponderGestureState,
@@ -15,6 +16,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 import UserAvatar from './UserAvatar';
 import { useTheme } from '../theme/ThemeContext';
+import { isReduceMotionEnabledSync } from '../utils/layoutAnimation';
 import { VALIDATION, type Collaborator } from '@jot/shared';
 
 interface ListItemProps {
@@ -31,6 +33,12 @@ interface ListItemProps {
   inputAccessoryViewID?: string;
   hasNoteColor?: boolean;
   completedItemTexts?: string[];
+  /**
+   * When true, the checkbox pops (scales up from small) once on mount. Set only
+   * for the item the user just checked off, so the completed-section row it
+   * mounts into animates — without popping every completed row on load/expand.
+   */
+  popOnMount?: boolean;
   onDrag?: () => void;
   onToggle?: () => void;
   onChangeText?: (text: string) => void;
@@ -65,6 +73,7 @@ function ListItem({
   inputAccessoryViewID,
   hasNoteColor = false,
   completedItemTexts,
+  popOnMount = false,
   onDrag,
   onToggle,
   onChangeText,
@@ -86,6 +95,24 @@ function ListItem({
     return () => {
       if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
     };
+  }, []);
+
+  // Pop the checkbox in on mount when this row is the one the user just checked
+  // off. Runs once (mount-only) so re-renders don't re-trigger it; respects the
+  // OS Reduce Motion setting like the rest of the editor's animations.
+  const checkScale = useRef(new Animated.Value(popOnMount && !isReduceMotionEnabledSync() ? 0.5 : 1)).current;
+  useEffect(() => {
+    if (!popOnMount || isReduceMotionEnabledSync()) return;
+    const animation = Animated.spring(checkScale, {
+      toValue: 1,
+      friction: 4,
+      tension: 160,
+      useNativeDriver: true,
+    });
+    animation.start();
+    return () => animation.stop();
+    // Mount-only: popOnMount/checkScale are fixed for this row's lifetime.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const suggestions = useMemo(() => {
@@ -156,11 +183,13 @@ function ListItem({
         accessibilityState={{ checked: completed, disabled: !editable }}
         accessibilityLabel={t('note.itemCheckbox', { item: text || t('note.listItemLabel') })}
       >
-        <Ionicons
-          name={completed ? 'checkbox' : 'square-outline'}
-          size={22}
-          color={completed ? colors.primary : effectiveIconMuted}
-        />
+        <Animated.View style={{ transform: [{ scale: checkScale }] }}>
+          <Ionicons
+            name={completed ? 'checkbox' : 'square-outline'}
+            size={22}
+            color={completed ? colors.primary : effectiveIconMuted}
+          />
+        </Animated.View>
       </TouchableOpacity>
       <View style={styles.inputColumn}>
         <View style={styles.inputRow}>

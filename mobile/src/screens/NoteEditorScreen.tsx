@@ -88,6 +88,11 @@ export default function NoteEditorScreen() {
   const [noteType, setNoteType] = useState<NoteType>('text');
   const [items, setItems] = useState<LocalItem[]>([]);
   const [checkedItemsCollapsed, setCheckedItemsCollapsed] = useState(false);
+  // Id of the item the user just checked off, so its completed-section row pops
+  // on mount. Cleared shortly after so a later collapse/expand doesn't re-pop.
+  const [popItemId, setPopItemId] = useState<string | null>(null);
+  const popClearRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (popClearRef.current) clearTimeout(popClearRef.current); }, []);
   const [pinned, setPinned] = useState(false);
   const [archived, setArchived] = useState(false);
   const [color, setColor] = useState('#ffffff');
@@ -682,6 +687,15 @@ export default function NoteEditorScreen() {
       // item moves between the active list and the completed section.
       const cascaded = applyCompletedCascade(before, itemId, completed);
       animateListReflow();
+      // Flag the just-checked item so its completed-section row pops on mount,
+      // then clear the flag so a later collapse/expand doesn't replay the pop.
+      if (popClearRef.current) clearTimeout(popClearRef.current);
+      if (completed) {
+        setPopItemId(itemId);
+        popClearRef.current = setTimeout(() => setPopItemId(null), 400);
+      } else {
+        setPopItemId(null);
+      }
       setItems(cascaded);
 
       // For unsaved new notes, let the bulk-create carry completed flags
@@ -1599,6 +1613,7 @@ export default function NoteEditorScreen() {
               hasNoteColor={hasNoteColor}
               dividerColor={completedSectionDividerColor}
               handlers={listItemHandlers}
+              popItemId={popItemId}
             />
           </View>
         )}

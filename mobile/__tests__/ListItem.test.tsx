@@ -1,9 +1,10 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
-import { PanResponder, StyleSheet } from 'react-native';
+import { Animated, PanResponder, StyleSheet } from 'react-native';
 import type { GestureResponderEvent, PanResponderGestureState } from 'react-native';
 import { VALIDATION } from '@jot/shared';
 import ListItem from '../src/components/ListItem';
+import * as layoutAnimation from '../src/utils/layoutAnimation';
 import type { Collaborator } from '@jot/shared';
 
 const collaborators: Collaborator[] = [
@@ -265,5 +266,35 @@ describe('ListItem', () => {
     );
 
     expect(getByTestId('list-item-assignee')).toBeTruthy();
+  });
+
+  describe('checkbox pop animation', () => {
+    it('pops the checkbox on mount when popOnMount is set', () => {
+      jest.spyOn(layoutAnimation, 'isReduceMotionEnabledSync').mockReturnValue(false);
+      const springSpy = jest.spyOn(Animated, 'spring');
+
+      render(<ListItem text="Done" completed={true} popOnMount />);
+
+      expect(springSpy).toHaveBeenCalledTimes(1);
+      expect(springSpy.mock.calls[0][1]).toMatchObject({ toValue: 1 });
+    });
+
+    it('does not pop when popOnMount is not set', () => {
+      jest.spyOn(layoutAnimation, 'isReduceMotionEnabledSync').mockReturnValue(false);
+      const springSpy = jest.spyOn(Animated, 'spring');
+
+      render(<ListItem text="Done" completed={true} />);
+
+      expect(springSpy).not.toHaveBeenCalled();
+    });
+
+    it('does not pop when Reduce Motion is enabled', () => {
+      jest.spyOn(layoutAnimation, 'isReduceMotionEnabledSync').mockReturnValue(true);
+      const springSpy = jest.spyOn(Animated, 'spring');
+
+      render(<ListItem text="Done" completed={true} popOnMount />);
+
+      expect(springSpy).not.toHaveBeenCalled();
+    });
   });
 });
