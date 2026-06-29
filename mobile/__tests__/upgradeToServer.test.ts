@@ -10,7 +10,7 @@ import {
   runBackgroundReconcileScopes,
 } from '../src/store/upgradeToServer';
 import type { UpgradeClient, UpgradeSession, SeedResult } from '../src/store/upgradeToServer';
-import { isLocalModeEnabled, isLocalModeActive } from '../src/store/localMode';
+import { isLocalModeEnabled, isLocalModeActive, setLocalModeActive } from '../src/store/localMode';
 import * as SecureStore from 'expo-secure-store';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import type { ListNote, TextNote, Note } from '@jot/shared';
@@ -916,6 +916,8 @@ describe('runMigrationDrainPass', () => {
 describe('flipToServerMode', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Start in local mode so the success test validates the transition, not a no-op.
+    setLocalModeActive(true);
     // Seed a local identity so disableLocalMode has something to delete.
     memory.set('jot_local_mode_v1', JSON.stringify({
       user: { id: 'aaaaaaaaaaaaaaaaaaaaaaaa', username: 'local', first_name: '', last_name: '', role: 'user', has_profile_icon: false, created_at: '', updated_at: '' },

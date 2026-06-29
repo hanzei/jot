@@ -36,7 +36,7 @@ import { getLocalIdentity } from '../store/localMode';
 import { getDeadLetterCount } from '../db/syncQueue';
 import { useAuth } from '../store/AuthContext';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
-import { retrySync, SyncAbortedError } from '../utils/retryWithBackoff';
+import { retrySync } from '../utils/retryWithBackoff';
 import { notesLocalQueryScopeKey, labelsQueryKey } from '../hooks/queryKeys';
 import FadeInView from '../components/FadeInView';
 
@@ -114,12 +114,28 @@ export default function ConnectToServerScreen() {
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
       queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
       setReconcileState('success');
-    } catch (err) {
+    } catch {
       if (!isMountedRef.current) return;
-      if (err instanceof SyncAbortedError) return;
       setReconcileState('failed');
     }
   }, [db, queryClient]);
+
+  // Shared Phase 4 completion: verify clean drain, flip, update auth, and
+  // kick off background reconcile. Used by both the drain-loop success path
+  // and the zero-enqueued fast path.
+  const performCompletionFlow = useCallback(async () => {
+    const flipResult = await flipToServerMode(db);
+    if (!isMountedRef.current) return;
+    if (!flipResult.ok) {
+      setStep({ name: 'error', reason: 'MIGRATION_FAILED' });
+      return;
+    }
+    await completeServerUpgrade();
+    if (!isMountedRef.current) return;
+    setStep({ name: 'migrationComplete' });
+    setReconcileState('pending');
+    void performBackgroundReconcile();
+  }, [db, completeServerUpgrade, performBackgroundReconcile]);
 
   const runDrainLoop = useCallback(
     async (session: UpgradeSession, total: number) => {
@@ -133,20 +149,7 @@ export default function ConnectToServerScreen() {
         if (!isMountedRef.current) return;
 
         if (result.status === 'success') {
-          // Phase 4a: verify clean drain and flip to server mode.
-          const flipResult = await flipToServerMode(db);
-          if (!isMountedRef.current) return;
-          if (!flipResult.ok) {
-            setStep({ name: 'error', reason: 'MIGRATION_FAILED' });
-            return;
-          }
-          // Update React auth state with the real server profile.
-          await completeServerUpgrade();
-          if (!isMountedRef.current) return;
-          setStep({ name: 'migrationComplete' });
-          // Phase 4b: background reconcile to adopt server-canonical fields.
-          setReconcileState('pending');
-          void performBackgroundReconcile();
+          await performCompletionFlow();
           return;
         }
 
@@ -174,7 +177,7 @@ export default function ConnectToServerScreen() {
         setStep({ name: 'error', reason: 'MIGRATION_FAILED' });
       }
     },
-    [db, completeServerUpgrade, performBackgroundReconcile],
+    [db, performCompletionFlow],
   );
 
   const startMigration = useCallback(
@@ -192,7 +195,8 @@ export default function ConnectToServerScreen() {
         if (!isMountedRef.current) return;
 
         if (totalEnqueued === 0) {
-          setStep({ name: 'migrationComplete' });
+          // Nothing to drain — still run Phase 4 (flip + auth update + reconcile).
+          await performCompletionFlow();
           return;
         }
 
@@ -205,7 +209,7 @@ export default function ConnectToServerScreen() {
         }
       }
     },
-    [db, runDrainLoop],
+    [db, runDrainLoop, performCompletionFlow],
   );
 
   const handleCheckServer = async () => {

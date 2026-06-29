@@ -198,13 +198,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(response.user);
       setSettings(response.settings);
       await cacheAuthProfile(response);
-    } catch {
-      // Profile fetch failed — keep existing user/settings as a temporary
+    } catch (err) {
+      if (isUnauthorizedError(err)) {
+        // Invalid session — clear auth state so the user lands on the login screen.
+        clearAuth();
+        throw err;
+      }
+      // Transient error — keep existing user/settings as a temporary
       // placeholder; the next revalidateSession or app restart will correct them.
     } finally {
       setIsLocalMode(false);
     }
-  }, []);
+  }, [clearAuth]);
 
   const logout = useCallback(async () => {
     // In local mode there is no server session to invalidate; leaving local mode
