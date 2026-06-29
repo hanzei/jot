@@ -16,7 +16,14 @@ import {
   type TextInput as TextInputType,
 } from 'react-native';
 import Markdown from 'react-native-markdown-display';
-import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
+import {
+  NestedReorderableList,
+  ScrollViewContainer,
+  reorderItems,
+  type ReorderableListReorderEvent,
+  type ReorderableListRenderItemInfo,
+} from 'react-native-reorderable-list';
+import { LinearTransition } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -29,7 +36,6 @@ import { isLocalId } from '../db/noteQueries';
 import { useFailedNoteIds } from '../store/OfflineContext';
 import { useSSESubscription } from '../store/SSEContext';
 import { useToast } from '../hooks/useToast';
-import ListItem from '../components/ListItem';
 import ColorPicker from '../components/ColorPicker';
 import LabelPicker from '../components/LabelPicker';
 import AssigneePicker from '../components/AssigneePicker';
@@ -59,7 +65,8 @@ import {
 import { MarkdownToolbarContent, ListIndentToolbarContent } from './noteEditor/EditorToolbars';
 import CheckedItemsSection, { type ListItemHandlers } from './noteEditor/CheckedItemsSection';
 import { styles } from './noteEditor/styles';
-import { animateListReflow } from '../utils/layoutAnimation';
+import { animateListReflow, isReduceMotionEnabledSync } from '../utils/layoutAnimation';
+import ActiveListRow from './noteEditor/ActiveListRow';
 
 type EditorRouteProp = RouteProp<RootStackParamList, 'NoteEditor'>;
 type EditorNavProp = NativeStackNavigationProp<RootStackParamList, 'NoteEditor'>;
@@ -68,6 +75,8 @@ const IOS_KEYBOARD_VERTICAL_OFFSET = 88;
 const FOCUSED_INPUT_KEYBOARD_MARGIN = 120;
 const MARKDOWN_TOOLBAR_ID = 'markdown-formatting-toolbar';
 const LIST_INDENT_TOOLBAR_ID = 'list-indent-toolbar';
+// Duration (ms) of the row slide when the active list reflows after a toggle/delete.
+const LIST_REFLOW_ANIM_MS = 150;
 const MAX_EXIT_SAVE_RETRIES = 3;
 
 export default function NoteEditorScreen() {
@@ -1222,24 +1231,24 @@ export default function NoteEditorScreen() {
     return texts;
   }, [checkedItems]);
 
-  // Use ref to avoid recreating handleListReorder on every items change
+  // Refs to avoid recreating handleListReorder on every items change
   const checkedItemsRef = useRef(checkedItems);
   checkedItemsRef.current = checkedItems;
+  const uncheckedItemsRef = useRef(uncheckedItems);
+  uncheckedItemsRef.current = uncheckedItems;
 
   const handleListReorder = useCallback(
-    (reorderedUnchecked: LocalItem[]) => {
+    ({ from, to }: ReorderableListReorderEvent) => {
+      if (from === to) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-      // Merge reordered unchecked with existing checked items, then normalize
-      // so that each parent's children stay contiguous in the combined array.
+      // Apply the move to the unchecked list, then merge with existing checked
+      // items and normalize so each parent's children stay contiguous.
+      const reorderedUnchecked = reorderItems(uncheckedItemsRef.current, from, to);
       setItems(normalizeItemOrder([...reorderedUnchecked, ...checkedItemsRef.current]));
       markDirtyAndScheduleUpdate();
     },
     [markDirtyAndScheduleUpdate],
   );
-
-  const handleListDragStart = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-  }, []);
 
   const handleListItemFocus = useCallback<NonNullable<TextInputProps['onFocus']>>((event) => {
     const nativeTarget = event.nativeEvent.target;
@@ -1316,41 +1325,37 @@ export default function NoteEditorScreen() {
     [handleItemCompletedToggle, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, openAssigneePicker, handleFocusListItem, handleBlurListItem, handleIndentItem],
   );
 
-  const renderListItem = useCallback(
-    ({ item, drag, isActive }: { item: LocalItem; drag: () => void; isActive: boolean }) => {
+  const renderActiveRow = useCallback(
+    ({ item }: ReorderableListRenderItemInfo<LocalItem>) => {
       const originalIndex = itemIndexMapRef.current.get(item.id);
       if (originalIndex === undefined) return null;
-      const itemRef = getItemRef(item.id);
       return (
-        <ScaleDecorator>
-          <View style={isActive ? [styles.draggingListItem, { shadowColor: isDark ? colors.border : '#000' }] : undefined}>
-            <ListItem
-              inputRef={itemRef}
-              text={item.text}
-              completed={item.completed}
-              isActive={isActive}
-              indentLevel={item.parentId ? 1 : 0}
-              showDragHandle
-              assignedTo={item.assigned_to}
-              isShared={!!isNoteShared}
-              collaborators={collaborators}
-              hasNoteColor={hasNoteColor}
-              completedItemTexts={completedItemTexts}
-              onDrag={drag}
-              onToggle={() => listItemHandlers.onToggle(item.id, !item.completed)}
-              onChangeText={(text) => listItemHandlers.onChangeText(originalIndex, text)}
-              onDelete={() => listItemHandlers.onDelete(originalIndex)}
-              onSubmitEditing={() => listItemHandlers.onInsertAfter(originalIndex)}
-              onBackspaceOnEmpty={() => listItemHandlers.onBackspaceOnEmpty(originalIndex)}
-              onAssignPress={() => listItemHandlers.onAssignPress(item.id)}
-              onFocus={(event) => listItemHandlers.onFocus(item.id, event)}
-              onBlur={listItemHandlers.onBlur}
-              onIndent={(delta) => listItemHandlers.onIndent(originalIndex, delta)}
-              onAcceptSuggestion={(text) => handleAcceptSuggestion(item.id, text)}
-              inputAccessoryViewID={Platform.OS === 'ios' ? LIST_INDENT_TOOLBAR_ID : undefined}
-            />
-          </View>
-        </ScaleDecorator>
+        <ActiveListRow
+          draggingShadowColor={isDark ? colors.border : '#000'}
+          listItemProps={{
+            inputRef: getItemRef(item.id),
+            text: item.text,
+            completed: item.completed,
+            indentLevel: item.parentId ? 1 : 0,
+            showDragHandle: true,
+            assignedTo: item.assigned_to,
+            isShared: !!isNoteShared,
+            collaborators,
+            hasNoteColor,
+            completedItemTexts,
+            onToggle: () => listItemHandlers.onToggle(item.id, !item.completed),
+            onChangeText: (text) => listItemHandlers.onChangeText(originalIndex, text),
+            onDelete: () => listItemHandlers.onDelete(originalIndex),
+            onSubmitEditing: () => listItemHandlers.onInsertAfter(originalIndex),
+            onBackspaceOnEmpty: () => listItemHandlers.onBackspaceOnEmpty(originalIndex),
+            onAssignPress: () => listItemHandlers.onAssignPress(item.id),
+            onFocus: (event) => listItemHandlers.onFocus(item.id, event),
+            onBlur: listItemHandlers.onBlur,
+            onIndent: (delta) => listItemHandlers.onIndent(originalIndex, delta),
+            onAcceptSuggestion: (text) => handleAcceptSuggestion(item.id, text),
+            inputAccessoryViewID: Platform.OS === 'ios' ? LIST_INDENT_TOOLBAR_ID : undefined,
+          }}
+        />
       );
     },
     [getItemRef, listItemHandlers, isNoteShared, collaborators, isDark, colors, hasNoteColor, completedItemTexts, handleAcceptSuggestion],
@@ -1491,7 +1496,12 @@ export default function NoteEditorScreen() {
         </TouchableOpacity>
       )}
 
-      <ScrollView
+      {/*
+        ScrollViewContainer (from react-native-reorderable-list) wraps the editor
+        so the NestedReorderableList below can drive drag-to-reorder and autoscroll
+        while still scrolling as one page with the title and completed section.
+      */}
+      <ScrollViewContainer
         ref={scrollViewRef}
         style={styles.scrollContent}
         contentContainerStyle={styles.scrollContentContainer}
@@ -1575,13 +1585,17 @@ export default function NoteEditorScreen() {
           </>
         ) : (
           <View style={styles.listContainer}>
-            <DraggableFlatList
+            <NestedReorderableList
               data={uncheckedItems}
               keyExtractor={(item) => item.id}
-              scrollEnabled={false}
-              onDragBegin={handleListDragStart}
-              onDragEnd={({ data }) => handleListReorder(data)}
-              renderItem={renderListItem}
+              scrollable={false}
+              shouldUpdateActiveItem
+              onReorder={handleListReorder}
+              renderItem={renderActiveRow}
+              // Slide remaining rows into place when an item is checked off (and
+              // moves to the completed section) or deleted. Skipped under the OS
+              // Reduce Motion setting, like the editor's other animations.
+              itemLayoutAnimation={isReduceMotionEnabledSync() ? undefined : LinearTransition.duration(LIST_REFLOW_ANIM_MS)}
             />
 
             <TouchableOpacity style={styles.addItemRow} onPress={handleAddItem} testID="add-list-item">
@@ -1605,7 +1619,7 @@ export default function NoteEditorScreen() {
             />
           </View>
         )}
-      </ScrollView>
+      </ScrollViewContainer>
 
       {/* Android: show toolbar when a list item is focused (state-gated since no native focus binding) */}
       {Platform.OS === 'android' && listItemFocused && listIndentToolbarContent}
