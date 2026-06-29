@@ -96,6 +96,8 @@
       "created_at": "Date de création"
     },
     "sortAccessibilityLabel": "Trier par {{sortLabel}}",
+    "layoutToggleToGrid": "Passer à la vue en grille",
+    "layoutToggleToList": "Passer à la vue en liste",
     "sortDisabledNotice": "Le tri manuel est désactivé. Les notes sont triées par {{sortLabel}}, le glisser-déposer n'est donc pas disponible.",
     "noteArchived": "Note archivée",
     "noteUnarchived": "Note désarchivée",

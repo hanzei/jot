@@ -243,8 +243,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 12,
     padding: 12,
-    marginHorizontal: 16,
-    marginVertical: 5,
+    // The masonry layout (both the single-column list and the two-column grid)
+    // owns the spacing between cards, so the card itself carries no margins.
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
@@ -278,13 +278,13 @@ const styles = StyleSheet.create({
     marginRight: -4,
   },
   title: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     marginBottom: 4,
   },
   contentText: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 18,
   },
   listPreview: {
     marginTop: 4,
@@ -296,12 +296,12 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
   },
   listText: {
-    fontSize: 14,
+    fontSize: 13,
     flex: 1,
     flexShrink: 1,
   },
   completedCount: {
-    fontSize: 13,
+    fontSize: 12,
     marginTop: 2,
   },
   footer: {

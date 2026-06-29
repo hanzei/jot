@@ -96,6 +96,8 @@
       "created_at": "Data utworzenia"
     },
     "sortAccessibilityLabel": "Sortuj według {{sortLabel}}",
+    "layoutToggleToGrid": "Przełącz na widok siatki",
+    "layoutToggleToList": "Przełącz na widok listy",
     "sortDisabledNotice": "Ręczne sortowanie jest wyłączone. Notatki są posortowane według {{sortLabel}}, więc przeciąganie i upuszczanie jest niedostępne.",
     "noteArchived": "Notatka zarchiwizowana",
     "noteUnarchived": "Notatka przywrócona z archiwum",
