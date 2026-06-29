@@ -2,8 +2,6 @@ import React, { useState, useCallback, useMemo, useEffect, useRef, useContext } 
 import {
   View,
   Text,
-  FlatList,
-  SectionList,
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
@@ -12,7 +10,6 @@ import {
   Keyboard,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import DraggableFlatList, { ScaleDecorator, NestableDraggableFlatList, NestableScrollContainer } from 'react-native-draggable-flatlist';
 import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { DrawerActions, useNavigation } from '@react-navigation/native';
@@ -40,8 +37,7 @@ import { getLocalNotes, permanentDeleteLocalNote } from '../db/noteQueries';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { useBannerShown } from '../hooks/useBannerShown';
 import { styles } from './notesList/styles';
-import { buildUpdateRequest, buildNoteSections, type LocalReorderState, type NoteSection } from './notesList/noteListUtils';
-import NoteListItem from './notesList/NoteListItem';
+import { buildUpdateRequest, buildNoteSections, type LocalReorderState } from './notesList/noteListUtils';
 import NotesListHeader from './notesList/NotesListHeader';
 import MasonryGrid from './notesList/MasonryGrid';
 import DraggableMasonry from './notesList/DraggableMasonry';
@@ -521,14 +517,6 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     [displayPinned, displayUnpinned, displayedArchived, hasPinned, t],
   );
 
-  const renderSectionHeader = useCallback(
-    ({ section }: { section: NoteSection }) =>
-      section.title ? (
-        <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>{section.title}</Text>
-      ) : null,
-    [colors.textMuted],
-  );
-
   const listEmptyComponent = useMemo(
     () =>
       isSearchLoading ? (
@@ -557,12 +545,6 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     [isSearchLoading, debouncedSearch, labelId, colors, t],
   );
 
-  // True only while a manual-sort drag is actively in progress. The reflow
-  // settle is suppressed during a drag (and through the drop's optimistic
-  // re-render) so the drag library owns that motion, but re-enabled afterwards
-  // so pin/archive/etc. in manual-sort mode still settle.
-  const isDraggingRef = useRef(false);
-
   const handleDragEnd = useCallback(
     async (newData: Note[], isPinnedSection: boolean) => {
       // Optimistically update local order
@@ -571,12 +553,6 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         : { ...prev, unpinned: newData },
       );
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-      // Clear the flag after the optimistic reorder has rendered, so the drop
-      // itself isn't settled (the drag library already animates it) while later
-      // changes are.
-      setTimeout(() => {
-        isDraggingRef.current = false;
-      }, 0);
 
       // Build full reorder payload: pinned first, then unpinned
       const pinnedIds = isPinnedSection
@@ -601,55 +577,15 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     [reorderNotes, t],
   );
 
-  const handleDragEndPinned = useCallback(
-    ({ data }: { data: Note[] }) => handleDragEnd(data, true),
-    [handleDragEnd],
-  );
-
-  const handleDragEndUnpinned = useCallback(
-    ({ data }: { data: Note[] }) => handleDragEnd(data, false),
-    [handleDragEnd],
-  );
-
   const handleDragStart = useCallback(() => {
-    isDraggingRef.current = true;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   }, []);
 
-  const renderDraggableNoteCard = useCallback(
-    ({ item, drag, isActive }: { item: Note; drag: () => void; isActive: boolean }) => (
-      <ScaleDecorator>
-        <View style={isActive ? styles.draggingCard : undefined}>
-          <NoteCard
-            note={item}
-            onPress={() => handleNotePress(item.id)}
-            onLongPress={drag}
-            onMenuPress={() => handleOpenMenu(item)}
-            onLabelPress={variant === 'notes' ? handleLabelPress : undefined}
-          />
-        </View>
-      </ScaleDecorator>
-    ),
-    [handleNotePress, handleOpenMenu, handleLabelPress, variant],
-  );
-
-  const renderNonDraggableNoteCard = useCallback(
-    ({ item }: { item: Note }) => (
-      <NoteListItem
-        note={item}
-        onPress={handleNotePress}
-        onMenuPress={variant !== 'trash' ? handleOpenMenu : undefined}
-        onLongPress={variant === 'trash' ? handleOpenMenu : undefined}
-        onLabelPress={variant === 'notes' ? handleLabelPress : undefined}
-      />
-    ),
-    [handleNotePress, handleOpenMenu, variant, handleLabelPress],
-  );
-
-  // Two-column (grid) card renderers. The draggable variant omits onLongPress so
-  // the masonry's drag gesture owns the long press; the static variant uses it to
-  // open the context menu in the read-only trash view.
-  const renderGridCardStatic = useCallback(
+  // Masonry card renderers, shared by the list (1 column) and grid (2 columns)
+  // layouts. The draggable variant omits onLongPress so the masonry's drag
+  // gesture owns the long press; the static variant uses it to open the context
+  // menu in the read-only trash view.
+  const renderMasonryCardStatic = useCallback(
     (note: Note) => (
       <NoteCard
         layout="grid"
@@ -663,7 +599,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     [handleNotePress, handleOpenMenu, variant, handleLabelPress],
   );
 
-  const renderGridCardDraggable = useCallback(
+  const renderMasonryCardDraggable = useCallback(
     (note: Note) => (
       <NoteCard
         layout="grid"
@@ -687,31 +623,6 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     },
     [handleDragEnd],
   );
-
-  // Settle the list when its membership or order changes — pin/unpin moving a
-  // card between sections, archive/trash/restore/delete removing one, duplicate
-  // adding one, search narrowing/widening the matches, or a background sync from
-  // another device — instead of letting the remaining cards snap into place. The
-  // signature is derived from the displayed ids, so unrelated re-renders (color
-  // edits, a refetch returning identical data, isRefetching toggles) don't
-  // trigger it. Scheduling during render means the settle also covers async
-  // (refetch/SSE) removals, not just the synchronous optimistic ones. Search is
-  // debounced, so this fires once per settled query rather than per keystroke.
-  // Skipped only during manual-sort drag, where the drag library drives its own
-  // motion.
-  const listSignature = useMemo(
-    () => noteSections.map((section) => section.data.map((n) => n.id).join(',')).join('|'),
-    [noteSections],
-  );
-  const prevListSignatureRef = useRef<string | null>(null);
-  if (prevListSignatureRef.current !== listSignature) {
-    // Skip the first populate (skeleton → list) and remounts so navigation
-    // doesn't animate a full list in.
-    if (prevListSignatureRef.current !== null && !isDraggingRef.current) {
-      animateListReflow();
-    }
-    prevListSignatureRef.current = listSignature;
-  }
 
   const header = (
     <NotesListHeader
@@ -879,130 +790,33 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
       {header}
 
-      {/* Notes list */}
-      {layout === 'grid' ? (
-        isDraggable ? (
-          <DraggableMasonry
-            sections={noteSections}
-            onSectionReorder={handleGridSectionReorder}
-            onDragStart={handleDragStart}
-            renderCard={renderGridCardDraggable}
-            refreshControl={
-              <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
-            }
-            contentBottomPadding={listBottomPadding}
-            topInset={insets.top}
-          />
-        ) : (
-          <MasonryGrid
-            sections={noteSections}
-            renderCard={renderGridCardStatic}
-            refreshControl={
-              <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
-            }
-            contentBottomPadding={listBottomPadding}
-            ListEmptyComponent={listEmptyComponent}
-          />
-        )
-      ) : hasPinned ? (
-        isDraggable ? (
-          <NestableScrollContainer
-            refreshControl={
-              <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
-            }
-            keyboardShouldPersistTaps="always"
-            contentContainerStyle={{ paddingBottom: listBottomPadding }}
-            testID="notes-section-list"
-          >
-            {displayPinned.length > 0 && (
-              <>
-                <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>{t('dashboard.pinned')}</Text>
-                <NestableDraggableFlatList
-                  data={displayPinned}
-                  keyExtractor={(item) => item.id}
-                  renderItem={renderDraggableNoteCard}
-                  onDragBegin={handleDragStart}
-                  onDragEnd={handleDragEndPinned}
-                  testID="pinned-draggable-list"
-                />
-              </>
-            )}
-            {displayUnpinned.length > 0 && (
-              <>
-                {displayPinned.length > 0 && (
-                  <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>{t('dashboard.otherNotes')}</Text>
-                )}
-                <NestableDraggableFlatList
-                  data={displayUnpinned}
-                  keyExtractor={(item) => item.id}
-                  renderItem={renderDraggableNoteCard}
-                  onDragBegin={handleDragStart}
-                  onDragEnd={handleDragEndUnpinned}
-                  testID="unpinned-draggable-list"
-                />
-              </>
-            )}
-            {displayPinned.length === 0 && displayUnpinned.length === 0 && listEmptyComponent}
-          </NestableScrollContainer>
-        ) : (
-          <SectionList
-            sections={noteSections}
-            keyExtractor={(item) => item.id}
-            renderItem={renderNonDraggableNoteCard}
-            renderSectionHeader={renderSectionHeader}
-            stickySectionHeadersEnabled={false}
-            keyboardShouldPersistTaps="always"
-            refreshControl={
-              <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
-            }
-            contentContainerStyle={{ paddingBottom: listBottomPadding }}
-            ListEmptyComponent={listEmptyComponent}
-            testID="notes-section-list"
-          />
-        )
-      ) : isDraggable ? (
-        <DraggableFlatList
-          data={displayUnpinned}
-          keyExtractor={(item) => item.id}
-          renderItem={renderDraggableNoteCard}
-          onDragBegin={handleDragStart}
-          onDragEnd={handleDragEndUnpinned}
-          activationDistance={20}
-          keyboardShouldPersistTaps="always"
-          refreshControl={
-            <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
-          }
-          contentContainerStyle={{ paddingBottom: listBottomPadding }}
-          ListEmptyComponent={listEmptyComponent}
-          testID="notes-flat-list"
-        />
-      ) : showArchivedSplit ? (
-        <SectionList
+      {/* Notes list — both the single-column list and the two-column grid are
+          rendered by the same masonry engine; only the column count differs.
+          The draggable masonry has nothing to drag (and no empty state) when
+          there are no notes, so fall back to the static grid in that case. */}
+      {isDraggable && noteSections.some((section) => section.data.length > 0) ? (
+        <DraggableMasonry
+          columns={layout === 'grid' ? 2 : 1}
           sections={noteSections}
-          keyExtractor={(item) => item.id}
-          renderItem={renderNonDraggableNoteCard}
-          renderSectionHeader={renderSectionHeader}
-          stickySectionHeadersEnabled={false}
-          keyboardShouldPersistTaps="always"
+          onSectionReorder={handleGridSectionReorder}
+          onDragStart={handleDragStart}
+          renderCard={renderMasonryCardDraggable}
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
           }
-          contentContainerStyle={{ paddingBottom: listBottomPadding }}
-          ListEmptyComponent={listEmptyComponent}
-          testID="notes-section-list"
+          contentBottomPadding={listBottomPadding}
+          topInset={insets.top}
         />
       ) : (
-        <FlatList
-          data={displayUnpinned}
-          keyExtractor={(item) => item.id}
-          renderItem={renderNonDraggableNoteCard}
-          keyboardShouldPersistTaps="always"
+        <MasonryGrid
+          columns={layout === 'grid' ? 2 : 1}
+          sections={noteSections}
+          renderCard={renderMasonryCardStatic}
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
           }
-          contentContainerStyle={{ paddingBottom: listBottomPadding }}
+          contentBottomPadding={listBottomPadding}
           ListEmptyComponent={listEmptyComponent}
-          testID="notes-flat-list"
         />
       )}
 

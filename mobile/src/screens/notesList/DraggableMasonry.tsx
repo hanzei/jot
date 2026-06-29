@@ -31,7 +31,7 @@ import {
   MASONRY_HORIZONTAL_PADDING,
 } from './MasonryGrid';
 
-const COLUMNS = 2;
+const DEFAULT_COLUMNS = 2;
 const ESTIMATED_CARD_HEIGHT = 140;
 const LONG_PRESS_MS = 220;
 // Edge band (in screen px) within which dragging auto-scrolls, and the per-frame
@@ -62,6 +62,8 @@ interface DraggableMasonryProps {
   refreshControl?: React.ReactElement<RefreshControlProps>;
   contentBottomPadding: number;
   topInset: number;
+  /** Number of columns: 1 for the list layout, 2 for the grid. Defaults to 2. */
+  columns?: number;
 }
 
 export default function DraggableMasonry({
@@ -72,6 +74,7 @@ export default function DraggableMasonry({
   refreshControl,
   contentBottomPadding,
   topInset,
+  columns = DEFAULT_COLUMNS,
 }: DraggableMasonryProps) {
   const { colors } = useTheme();
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
@@ -82,7 +85,10 @@ export default function DraggableMasonry({
   const section1Ref = useAnimatedRef<Animated.View>();
   const sectionRefs = useMemo(() => [section0Ref, section1Ref], [section0Ref, section1Ref]);
 
-  const [contentWidth, setContentWidth] = useState(0);
+  // Seed from the window width (the content container spans the full width) so
+  // cards render correctly on the very first frame instead of flashing blank
+  // until onLayout fires; the layout pass then refines it.
+  const [contentWidth, setContentWidth] = useState(() => Dimensions.get('window').width);
   const [heights, setHeights] = useState<Record<string, number>>({});
   const [orders, setOrders] = useState<Record<string, string[]>>({});
   const [isDragging, setIsDragging] = useState(false);
@@ -105,7 +111,7 @@ export default function DraggableMasonry({
   // subtract the horizontal padding on both sides to get the usable width that
   // the absolutely-positioned cards actually live in.
   const usableWidth = contentWidth - MASONRY_HORIZONTAL_PADDING * 2;
-  const columnWidth = usableWidth > 0 ? (usableWidth - MASONRY_COLUMN_GAP * (COLUMNS - 1)) / COLUMNS : 0;
+  const columnWidth = usableWidth > 0 ? (usableWidth - MASONRY_COLUMN_GAP * (columns - 1)) / columns : 0;
 
   // Map id -> Note for rendering by id, and sync per-section order from props
   // (skipped mid-drag so an in-flight reorder isn't clobbered by a re-render).
@@ -133,12 +139,12 @@ export default function DraggableMasonry({
         columnWidth,
         columnGap: MASONRY_COLUMN_GAP,
         rowGap: MASONRY_ROW_GAP,
-        columns: COLUMNS,
+        columns,
         estimatedHeight: ESTIMATED_CARD_HEIGHT,
       });
     });
     return result;
-  }, [sections, orders, heights, columnWidth]);
+  }, [sections, orders, heights, columnWidth, columns]);
 
   const placedRef = useRef(packedBySection);
   placedRef.current = packedBySection;
@@ -147,6 +153,8 @@ export default function DraggableMasonry({
   const activeIdRef = useRef<string | null>(null);
   const columnWidthRef = useRef(columnWidth);
   columnWidthRef.current = columnWidth;
+  const columnsRef = useRef(columns);
+  columnsRef.current = columns;
   const sectionKeysRef = useRef(sections.map((s) => s.key));
   sectionKeysRef.current = sections.map((s) => s.key);
 
@@ -170,7 +178,7 @@ export default function DraggableMasonry({
     const nextOrder = reorderForPointer(order, packed.placed, activeId, cx, cy, {
       columnWidth: columnWidthRef.current,
       columnGap: MASONRY_COLUMN_GAP,
-      columns: COLUMNS,
+      columns: columnsRef.current,
     });
     const changed = nextOrder.length !== order.length || nextOrder.some((v, i) => v !== order[i]);
     if (changed) {
@@ -223,7 +231,7 @@ export default function DraggableMasonry({
       keyboardShouldPersistTaps="always"
       refreshControl={refreshControl}
       contentContainerStyle={{ paddingBottom: contentBottomPadding }}
-      testID="notes-masonry-grid"
+      testID="notes-masonry-draggable"
     >
       <View style={styles.content} onLayout={handleContentLayout}>
         {columnWidth > 0 &&

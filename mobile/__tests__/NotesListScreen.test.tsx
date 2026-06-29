@@ -35,46 +35,6 @@ jest.mock('expo-haptics', () => ({
   },
 }));
 
-jest.mock('react-native-draggable-flatlist', () => {
-  const ReactNative = jest.requireActual<typeof import('react-native')>('react-native');
-
-  function MockDraggableFlatList({
-    data,
-    renderItem,
-    testID,
-  }: {
-    data: unknown[];
-    renderItem: (args: { item: unknown; drag: () => void; isActive: boolean }) => React.ReactNode;
-    testID?: string;
-  }) {
-    return (
-      <ReactNative.View testID={testID}>
-        {data.map((item, index) => (
-          <ReactNative.View key={(item as { id?: string }).id ?? index.toString()}>
-            {renderItem({ item, drag: jest.fn(), isActive: false })}
-          </ReactNative.View>
-        ))}
-      </ReactNative.View>
-    );
-  }
-
-  function MockScaleDecorator({ children }: { children: React.ReactNode }) {
-    return children;
-  }
-
-  function MockNestableScrollContainer(props: Record<string, unknown>) {
-    return <ReactNative.ScrollView {...props} />;
-  }
-
-  return {
-    __esModule: true,
-    default: MockDraggableFlatList,
-    ScaleDecorator: MockScaleDecorator,
-    NestableDraggableFlatList: MockDraggableFlatList,
-    NestableScrollContainer: MockNestableScrollContainer,
-  };
-});
-
 jest.mock('../src/hooks/useOfflineNotes', () => ({
   useOfflineNotes: jest.fn(),
   useOfflineNote: jest.fn(),
@@ -283,7 +243,7 @@ describe('NotesListScreen sorting', () => {
     expect(screen.queryByTestId('sort-controls')).toBeNull();
     expect(screen.getByTestId('drawer-toggle')).toBeTruthy();
     expect(screen.getByTestId('sort-toggle')).toBeTruthy();
-    expect(screen.getByTestId('pinned-draggable-list')).toBeTruthy();
+    expect(screen.getByTestId('notes-masonry-draggable')).toBeTruthy();
     expect(screen.getByText('Pinned')).toBeTruthy();
     expect(screen.getByText('sort-demo-zulu')).toBeTruthy();
     expect(screen.getByText('sort-demo-alpha')).toBeTruthy();
@@ -316,8 +276,8 @@ describe('NotesListScreen sorting', () => {
     render(<NotesListScreen variant="notes" />);
 
     expect(screen.queryByTestId('sort-disabled-notice')).toBeNull();
-    expect(screen.getByTestId('notes-section-list')).toBeTruthy();
-    expect(screen.getByTestId('unpinned-draggable-list')).toBeTruthy();
+    // Manual sort is draggable; a non-manual sort drops to the static masonry.
+    expect(screen.getByTestId('notes-masonry-draggable')).toBeTruthy();
     openSortControls();
     fireEvent.press(screen.getByTestId('sort-chip-created_at'));
 
@@ -327,7 +287,8 @@ describe('NotesListScreen sorting', () => {
     });
 
     expect(setSettings).toHaveBeenCalledWith(expect.objectContaining({ note_sort: 'created_at' }));
-    expect(screen.queryByTestId('unpinned-draggable-list')).toBeNull();
+    expect(screen.queryByTestId('notes-masonry-draggable')).toBeNull();
+    expect(screen.getByTestId('notes-masonry-grid')).toBeTruthy();
   });
 
   it('rolls back the selected sort when persistence fails', async () => {
@@ -665,9 +626,10 @@ describe('NotesListScreen layout toggle', () => {
     mockUseOfflineNote.mockReturnValue({ data: null });
   });
 
-  it('switches to a two-column grid layout and persists the choice', async () => {
+  it('switches between one- and two-column layouts and persists the choice', async () => {
     // A non-manual sort keeps the static (non-draggable) masonry, which renders
-    // its cards without needing a measured layout pass.
+    // its cards without needing a measured layout pass. The list layout renders a
+    // single column; the grid layout adds a second.
     mockUseAuth.mockReturnValue({
       user: mockUser,
       settings: { ...baseSettings, note_sort: 'created_at' as NoteSort },
@@ -686,15 +648,17 @@ describe('NotesListScreen layout toggle', () => {
 
     render(<NotesListScreen variant="notes" />);
 
-    expect(screen.queryByTestId('notes-masonry-grid')).toBeNull();
-    expect(screen.getByTestId('notes-flat-list')).toBeTruthy();
+    // List layout: a single masonry column.
+    expect(screen.getByTestId('notes-masonry-grid')).toBeTruthy();
+    expect(screen.getByTestId('masonry-column-0')).toBeTruthy();
+    expect(screen.queryByTestId('masonry-column-1')).toBeNull();
 
     fireEvent.press(screen.getByTestId('layout-toggle'));
 
+    // Grid layout: a second column appears.
     await waitFor(() => {
-      expect(screen.getByTestId('notes-masonry-grid')).toBeTruthy();
+      expect(screen.getByTestId('masonry-column-1')).toBeTruthy();
     });
-    expect(screen.queryByTestId('notes-flat-list')).toBeNull();
     expect(screen.getByText('grid-note-1')).toBeTruthy();
     expect(screen.getByText('grid-note-2')).toBeTruthy();
     expect(SecureStore.setItemAsync).toHaveBeenCalledWith('jot_dashboard_layout', 'grid');
@@ -702,7 +666,7 @@ describe('NotesListScreen layout toggle', () => {
     // Toggling back returns to the single-column list.
     fireEvent.press(screen.getByTestId('layout-toggle'));
     await waitFor(() => {
-      expect(screen.getByTestId('notes-flat-list')).toBeTruthy();
+      expect(screen.queryByTestId('masonry-column-1')).toBeNull();
     });
     expect(SecureStore.setItemAsync).toHaveBeenLastCalledWith('jot_dashboard_layout', 'list');
   });

@@ -15,15 +15,18 @@ interface MasonryGridProps {
   refreshControl?: React.ReactElement<RefreshControlProps>;
   contentBottomPadding: number;
   ListEmptyComponent?: React.ReactNode;
+  /** Number of columns: 1 for the list layout, 2 for the grid. Defaults to 2. */
+  columns?: number;
 }
 
 /**
  * Distributes a section's notes round-robin across the columns so each row
  * holds one card per column (a lightweight staggered layout that needs no
  * height measurement). Used for the non-draggable layouts (sorted modes,
- * archived/trash/search, and the My Tasks view).
+ * archived/trash/search, and the My Tasks view). With a single column this is
+ * the classic one-note-per-row list.
  */
-function splitIntoColumns(notes: Note[], columns = 2): Note[][] {
+function splitIntoColumns(notes: Note[], columns: number): Note[][] {
   const result: Note[][] = Array.from({ length: columns }, () => []);
   notes.forEach((note, index) => {
     result[index % columns].push(note);
@@ -37,6 +40,7 @@ export default function MasonryGrid({
   refreshControl,
   contentBottomPadding,
   ListEmptyComponent,
+  columns = 2,
 }: MasonryGridProps) {
   const { colors } = useTheme();
   const isEmpty = sections.every((section) => section.data.length === 0);
@@ -52,15 +56,15 @@ export default function MasonryGrid({
         ? ListEmptyComponent
         : sections.map((section) => {
             if (section.data.length === 0) return null;
-            const columns = splitIntoColumns(section.data);
+            const columnNotesList = splitIntoColumns(section.data, columns);
             return (
               <View key={section.key}>
                 {section.title ? (
                   <Text style={[listStyles.sectionHeader, { color: colors.textMuted }]}>{section.title}</Text>
                 ) : null}
                 <View style={styles.row}>
-                  {columns.map((columnNotes, columnIndex) => (
-                    <View key={columnIndex} style={styles.column}>
+                  {columnNotesList.map((columnNotes, columnIndex) => (
+                    <View key={columnIndex} style={styles.column} testID={`masonry-column-${columnIndex}`}>
                       {columnNotes.map((note) => (
                         <View key={note.id} style={styles.cardSlot}>
                           {renderCard(note)}
