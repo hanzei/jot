@@ -174,7 +174,12 @@ export default function DraggableMasonry({
     });
     const changed = nextOrder.length !== order.length || nextOrder.some((v, i) => v !== order[i]);
     if (changed) {
-      setOrders((prev) => ({ ...prev, [key]: nextOrder }));
+      // Write back synchronously so a drop (or a subsequent hover) that fires
+      // before React re-renders sees the latest ordering rather than the stale
+      // ref value.
+      const updated = { ...ordersRef.current, [key]: nextOrder };
+      ordersRef.current = updated;
+      setOrders(updated);
     }
   }, []);
 

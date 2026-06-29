@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef, useContext } from 'react';
 import {
   View,
   Text,
@@ -17,7 +17,7 @@ import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { DrawerActions, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { updateMe } from '../api/settings';
 import { useTranslation } from 'react-i18next';
 import { useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useReorderNotes, useDuplicateNote } from '../hooks/useNotes';
@@ -77,7 +77,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const { colors } = useTheme();
   const { t } = useTranslation();
   const { showToast } = useToast();
-  const insets = useSafeAreaInsets();
+  const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
   const fabBottom = Math.max(insets.bottom + 20, 20);
   const listBottomPadding = variant === 'notes' ? fabBottom + 60 : insets.bottom + 80;
 
@@ -239,14 +239,16 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     };
   }, []);
 
+  // Persist the layout only after the user toggles it (not for the initial load,
+  // which just reflects what was already stored).
+  useEffect(() => {
+    if (layoutToggledRef.current) void setDashboardLayout(layout);
+  }, [layout]);
+
   const handleToggleLayout = useCallback(() => {
     animateListReflow();
     layoutToggledRef.current = true;
-    setLayout((prev) => {
-      const next: DashboardLayout = prev === 'list' ? 'grid' : 'list';
-      void setDashboardLayout(next);
-      return next;
-    });
+    setLayout((prev) => (prev === 'list' ? 'grid' : 'list'));
   }, []);
 
   const handleNotePress = useCallback(
