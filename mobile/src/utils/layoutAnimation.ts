@@ -40,9 +40,9 @@ export function isReduceMotionEnabledSync(): boolean {
  * moves into the completed section, or the completed section is collapsed.
  *
  * Note: this drives the completed-section (plain View) reflow and the overall
- * container resize. It does not animate row repositioning inside the active
- * DraggableFlatList — those cells are Reanimated-controlled and don't
- * participate in legacy LayoutAnimation.
+ * container resize. The active list (a react-native-reorderable-list) animates
+ * its own row repositioning via `itemLayoutAnimation` (Reanimated), since those
+ * Reanimated-controlled cells don't participate in legacy LayoutAnimation.
  *
  * Call this immediately before the `setState` that changes the list layout.
  */

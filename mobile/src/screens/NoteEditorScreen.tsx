@@ -1254,7 +1254,10 @@ export default function NoteEditorScreen() {
     const nativeTarget = event.nativeEvent.target;
     if (nativeTarget == null) return;
 
-    // Use ScrollView's native keyboard helper so focused list item inputs stay visible.
+    // Use ScrollView's native keyboard helper so focused list item inputs stay
+    // visible. scrollViewRef now points at the library's ScrollViewContainer
+    // (a Reanimated ScrollView); if its forwarded ref doesn't expose
+    // getScrollResponder this degrades to a no-op rather than crashing.
     const responder = scrollViewRef.current?.getScrollResponder?.();
     if (
       responder &&
