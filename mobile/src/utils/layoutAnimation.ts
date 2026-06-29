@@ -35,21 +35,14 @@ export function isReduceMotionEnabledSync(): boolean {
 }
 
 /**
- * Duration (ms) of the subtle list "settle" animation. Shared by the legacy
- * LayoutAnimation reflow below and the Reanimated `LinearTransition` applied to
- * the active checklist rows, so both halves of a toggle settle in lockstep.
- */
-export const LIST_REFLOW_DURATION_MS = 150;
-
-/**
  * Queue a subtle, quick animation for the next layout commit so list items
  * settle into place instead of jumping — e.g. when an item is checked off and
  * moves into the completed section, or the completed section is collapsed.
  *
- * Note: legacy LayoutAnimation does not animate row repositioning inside a
- * virtualized list (DraggableFlatList); the active checklist rows pair this with
- * a Reanimated `LinearTransition` to slide into place. This call still drives the
- * completed-section (plain View) reflow and overall container resize.
+ * Note: this drives the completed-section (plain View) reflow and the overall
+ * container resize. It does not animate row repositioning inside the active
+ * DraggableFlatList — those cells are Reanimated-controlled and don't
+ * participate in legacy LayoutAnimation.
  *
  * Call this immediately before the `setState` that changes the list layout.
  */
@@ -57,7 +50,7 @@ export function animateListReflow(): void {
   if (reduceMotionEnabled) return;
   LayoutAnimation.configureNext(
     LayoutAnimation.create(
-      LIST_REFLOW_DURATION_MS,
+      150,
       LayoutAnimation.Types.easeInEaseOut,
       LayoutAnimation.Properties.opacity,
     ),

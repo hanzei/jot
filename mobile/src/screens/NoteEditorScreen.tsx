@@ -17,7 +17,6 @@ import {
 } from 'react-native';
 import Markdown from 'react-native-markdown-display';
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
-import { LinearTransition } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -60,7 +59,7 @@ import {
 import { MarkdownToolbarContent, ListIndentToolbarContent } from './noteEditor/EditorToolbars';
 import CheckedItemsSection, { type ListItemHandlers } from './noteEditor/CheckedItemsSection';
 import { styles } from './noteEditor/styles';
-import { animateListReflow, isReduceMotionEnabledSync, LIST_REFLOW_DURATION_MS } from '../utils/layoutAnimation';
+import { animateListReflow } from '../utils/layoutAnimation';
 
 type EditorRouteProp = RouteProp<RootStackParamList, 'NoteEditor'>;
 type EditorNavProp = NativeStackNavigationProp<RootStackParamList, 'NoteEditor'>;
@@ -1583,15 +1582,6 @@ export default function NoteEditorScreen() {
               onDragBegin={handleListDragStart}
               onDragEnd={({ data }) => handleListReorder(data)}
               renderItem={renderListItem}
-              // Slide remaining rows into place when an item is checked off (and
-              // moves to the completed section) or deleted. The animation is applied
-              // to the library's own cell wrapper — the view that actually
-              // repositions — via itemLayoutAnimation; the legacy LayoutAnimation in
-              // animateListReflow can't animate repositioning inside this list. The
-              // library disables it automatically during an active drag. Skipped
-              // under the OS Reduce Motion setting, like the editor's other animations.
-              enableLayoutAnimationExperimental={!isReduceMotionEnabledSync()}
-              itemLayoutAnimation={isReduceMotionEnabledSync() ? undefined : LinearTransition.duration(LIST_REFLOW_DURATION_MS)}
             />
 
             <TouchableOpacity style={styles.addItemRow} onPress={handleAddItem} testID="add-list-item">
