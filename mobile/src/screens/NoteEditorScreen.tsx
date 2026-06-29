@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import Markdown from 'react-native-markdown-display';
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
+import Animated, { LinearTransition } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -59,7 +60,7 @@ import {
 import { MarkdownToolbarContent, ListIndentToolbarContent } from './noteEditor/EditorToolbars';
 import CheckedItemsSection, { type ListItemHandlers } from './noteEditor/CheckedItemsSection';
 import { styles } from './noteEditor/styles';
-import { animateListReflow } from '../utils/layoutAnimation';
+import { animateListReflow, isReduceMotionEnabledSync, LIST_REFLOW_DURATION_MS } from '../utils/layoutAnimation';
 
 type EditorRouteProp = RouteProp<RootStackParamList, 'NoteEditor'>;
 type EditorNavProp = NativeStackNavigationProp<RootStackParamList, 'NoteEditor'>;
@@ -1309,7 +1310,18 @@ export default function NoteEditorScreen() {
       const itemRef = getItemRef(item.id);
       return (
         <ScaleDecorator>
-          <View style={isActive ? [styles.draggingListItem, { shadowColor: isDark ? colors.border : '#000' }] : undefined}>
+          {/*
+            Reanimated layout transition so sibling rows slide to their new
+            position when an item is checked off (and moves to the completed
+            section) or deleted. The legacy LayoutAnimation in animateListReflow
+            doesn't animate repositioning inside the virtualized DraggableFlatList,
+            so the rows would otherwise teleport. Disabled mid-drag (DraggableFlatList
+            drives its own transform then) and when Reduce Motion is on.
+          */}
+          <Animated.View
+            layout={isActive || isReduceMotionEnabledSync() ? undefined : LinearTransition.duration(LIST_REFLOW_DURATION_MS)}
+            style={isActive ? [styles.draggingListItem, { shadowColor: isDark ? colors.border : '#000' }] : undefined}
+          >
             <ListItem
               inputRef={itemRef}
               text={item.text}
@@ -1335,7 +1347,7 @@ export default function NoteEditorScreen() {
               onAcceptSuggestion={(text) => handleAcceptSuggestion(item.id, text)}
               inputAccessoryViewID={Platform.OS === 'ios' ? LIST_INDENT_TOOLBAR_ID : undefined}
             />
-          </View>
+          </Animated.View>
         </ScaleDecorator>
       );
     },
