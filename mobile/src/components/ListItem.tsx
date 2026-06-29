@@ -54,6 +54,8 @@ interface ListItemProps {
 
 const INDENT_SWIPE_THRESHOLD_PX = 50;
 const SWIPE_ACTIVATION_PX = 10;
+// Press-and-hold duration on the drag handle before a reorder drag begins.
+const DRAG_HANDLE_LONG_PRESS_MS = 180;
 
 function isHorizontalSwipe(gestureState: PanResponderGestureState): boolean {
   return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) >= SWIPE_ACTIVATION_PX;
@@ -167,6 +169,9 @@ function ListItem({
       {showDragHandle && onDrag && (
         <TouchableOpacity
           onLongPress={onDrag}
+          // Shorten the press-and-hold before a drag starts; the default (~500ms)
+          // feels sluggish for a dedicated drag handle.
+          delayLongPress={DRAG_HANDLE_LONG_PRESS_MS}
           disabled={isActive}
           style={styles.dragHandle}
           testID="list-item-drag-handle"
