@@ -101,7 +101,11 @@ export default function DraggableMasonry({
     scrollOffset,
   };
 
-  const columnWidth = contentWidth > 0 ? (contentWidth - MASONRY_COLUMN_GAP * (COLUMNS - 1)) / COLUMNS : 0;
+  // contentWidth is the measured border-box width of the padded container, so
+  // subtract the horizontal padding on both sides to get the usable width that
+  // the absolutely-positioned cards actually live in.
+  const usableWidth = contentWidth - MASONRY_HORIZONTAL_PADDING * 2;
+  const columnWidth = usableWidth > 0 ? (usableWidth - MASONRY_COLUMN_GAP * (COLUMNS - 1)) / COLUMNS : 0;
 
   // Map id -> Note for rendering by id, and sync per-section order from props
   // (skipped mid-drag so an in-flight reorder isn't clobbered by a re-render).
