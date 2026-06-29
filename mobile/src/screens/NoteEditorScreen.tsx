@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, useContext } from 'react';
 import {
+  Animated,
+  Easing,
   View,
   Text,
   TextInput,
@@ -12,6 +14,8 @@ import {
   Keyboard,
   Modal,
   Share,
+  StyleSheet,
+  useWindowDimensions,
   type TextInputProps,
   type TextInput as TextInputType,
 } from 'react-native';
@@ -59,7 +63,7 @@ import {
 import { MarkdownToolbarContent, ListIndentToolbarContent } from './noteEditor/EditorToolbars';
 import CheckedItemsSection, { type ListItemHandlers } from './noteEditor/CheckedItemsSection';
 import { styles } from './noteEditor/styles';
-import { animateListReflow } from '../utils/layoutAnimation';
+import { animateListReflow, isReduceMotionEnabledSync } from '../utils/layoutAnimation';
 
 type EditorRouteProp = RouteProp<RootStackParamList, 'NoteEditor'>;
 type EditorNavProp = NativeStackNavigationProp<RootStackParamList, 'NoteEditor'>;
@@ -69,11 +73,13 @@ const FOCUSED_INPUT_KEYBOARD_MARGIN = 120;
 const MARKDOWN_TOOLBAR_ID = 'markdown-formatting-toolbar';
 const LIST_INDENT_TOOLBAR_ID = 'list-indent-toolbar';
 const MAX_EXIT_SAVE_RETRIES = 3;
+// Duration of the zoom-open / zoom-closed transform animation.
+const ZOOM_MS = 280;
 
 export default function NoteEditorScreen() {
   const navigation = useNavigation<EditorNavProp>();
   const route = useRoute<EditorRouteProp>();
-  const { noteId: initialNoteId, sharedText } = route.params;
+  const { noteId: initialNoteId, sharedText, originRect } = route.params;
   const { t, i18n } = useTranslation();
   const failedNoteIds = useFailedNoteIds();
 
@@ -193,6 +199,79 @@ export default function NoteEditorScreen() {
   archivedRef.current = archived;
   const colorRef = useRef(color);
   colorRef.current = color;
+
+  // Zoom transition: animate the whole editor from the tapped card's rect up to
+  // full screen on open, and back down on close. Decided once at mount; the
+  // native present/dismiss is disabled so this transform is the only motion.
+  const { width: screenW, height: screenH } = useWindowDimensions();
+  const zoomEnabled = useRef(!!originRect && !isReduceMotionEnabledSync()).current;
+  // 0 = scaled/positioned onto the card, 1 = full screen.
+  const zoom = useRef(new Animated.Value(zoomEnabled ? 0 : 1)).current;
+
+  // Zoom open from the card once on mount.
+  useEffect(() => {
+    if (!zoomEnabled) return;
+    const anim = Animated.timing(zoom, {
+      toValue: 1,
+      duration: ZOOM_MS,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    });
+    anim.start();
+    return () => anim.stop();
+    // Mount-only; zoom/zoomEnabled are stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Zoom the editor back down onto the card, resolving when done. Instant when
+  // the note wasn't opened from a card or Reduce Motion is on.
+  const animateClose = useCallback(() => {
+    if (!zoomEnabled) return Promise.resolve();
+    // Blur any focused input first. A focused TextInput and its input-accessory
+    // toolbar render outside the transformed view, so without this they "hang"
+    // in place while the editor scales away. Wait a frame so the blur takes
+    // effect before the zoom starts.
+    Keyboard.dismiss();
+    return new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        Animated.timing(zoom, {
+          toValue: 0,
+          duration: ZOOM_MS,
+          easing: Easing.in(Easing.cubic),
+          useNativeDriver: true,
+        }).start(() => resolve());
+      });
+    });
+  }, [zoom, zoomEnabled]);
+
+  // Mark the exit as intentional (so beforeRemove doesn't re-handle it), zoom
+  // back onto the card, then pop. Used by archive/delete before they mutate so
+  // the dashboard's removal reflow plays on the still-present card.
+  const zoomCloseAndExit = useCallback(async () => {
+    intentionalExitRef.current = true;
+    await animateClose();
+    navigation.goBack();
+  }, [animateClose, navigation]);
+
+  // Maps the fullscreen editor onto the originating card at zoom 0 and to its
+  // natural position/size at zoom 1. A short opacity ramp softens the first
+  // (most distorted) frames of the non-uniform scale.
+  const zoomStyle = useMemo(() => {
+    if (!originRect) return null;
+    const centerX = originRect.x + originRect.width / 2;
+    const centerY = originRect.y + originRect.height / 2;
+    return {
+      // Fade fully out at the card end so the pop after the close zoom isn't a
+      // visible snap; fade in quickly on open.
+      opacity: zoom.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0, 1, 1] }),
+      transform: [
+        { translateX: zoom.interpolate({ inputRange: [0, 1], outputRange: [centerX - screenW / 2, 0] }) },
+        { translateY: zoom.interpolate({ inputRange: [0, 1], outputRange: [centerY - screenH / 2, 0] }) },
+        { scaleX: zoom.interpolate({ inputRange: [0, 1], outputRange: [originRect.width / screenW, 1] }) },
+        { scaleY: zoom.interpolate({ inputRange: [0, 1], outputRange: [originRect.height / screenH, 1] }) },
+      ],
+    };
+  }, [originRect, zoom, screenW, screenH]);
   const createMutateRef = useRef(createMutation.mutateAsync);
   createMutateRef.current = createMutation.mutateAsync;
   const updateMutateRef = useRef(updateMutation.mutateAsync);
@@ -580,16 +659,45 @@ export default function NoteEditorScreen() {
     }
   }, [items]);
 
-  // Intercept navigation away to flush pending edits before leaving the screen.
+  // Intercept navigation away to flush pending edits before leaving, and to play
+  // the zoom-back-onto-the-card animation for back navigation.
   useEffect(() => {
     const unsubscribe = navigation.addListener('beforeRemove', (event) => {
-      if (intentionalExitRef.current || !hasPendingChangesRef.current) {
+      // Programmatic exits (delete/archive/duplicate) already set this and run
+      // their own zoom/goBack, so don't re-handle them here.
+      if (intentionalExitRef.current) {
+        return;
+      }
+      const action = event.data.action;
+      const isBack = action.type === 'GO_BACK' || action.type === 'POP';
+      // Zoom back onto the card for any back navigation (header button or
+      // hardware back; the swipe gesture is disabled). Other removals fall
+      // through to an instant dispatch.
+      const wantsZoom = isBack && zoomEnabled;
+      const hasPending = hasPendingChangesRef.current;
+      if (!hasPending && !wantsZoom) {
         return;
       }
       event.preventDefault();
       if (debounceRef.current) {
         clearTimeout(debounceRef.current);
         debounceRef.current = null;
+      }
+
+      // Run the actual removal, zooming back onto the card when appropriate.
+      const finishExit = () => {
+        intentionalExitRef.current = true;
+        const dispatch = () => navigation.dispatch(action);
+        if (wantsZoom) {
+          void animateClose().then(dispatch);
+        } else {
+          dispatch();
+        }
+      };
+
+      if (!hasPending) {
+        finishExit();
+        return;
       }
 
       const showSaveFailedAlert = (retriesLeft = MAX_EXIT_SAVE_RETRIES) => {
@@ -600,10 +708,7 @@ export default function NoteEditorScreen() {
             {
               text: t('note.discardAndLeave'),
               style: 'destructive',
-              onPress: () => {
-                intentionalExitRef.current = true;
-                navigation.dispatch(event.data.action);
-              },
+              onPress: finishExit,
             },
             ...(retriesLeft > 0
               ? [
@@ -612,8 +717,7 @@ export default function NoteEditorScreen() {
                     onPress: async () => {
                       const retrySucceeded = await flushSave();
                       if (retrySucceeded) {
-                        intentionalExitRef.current = true;
-                        navigation.dispatch(event.data.action);
+                        finishExit();
                       } else {
                         showSaveFailedAlert(retriesLeft - 1);
                       }
@@ -631,12 +735,11 @@ export default function NoteEditorScreen() {
           showSaveFailedAlert();
           return;
         }
-        intentionalExitRef.current = true;
-        navigation.dispatch(event.data.action);
+        finishExit();
       })();
     });
     return unsubscribe;
-  }, [flushSave, navigation, t]);
+  }, [animateClose, flushSave, navigation, t, zoomEnabled]);
 
   // Flush pending save on unmount (prevent data loss), skip if intentionally exiting
   useEffect(() => {
@@ -1024,15 +1127,17 @@ export default function NoteEditorScreen() {
         text: t('common.delete'),
         style: 'destructive',
         onPress: async () => {
+          if (debounceRef.current) {
+            clearTimeout(debounceRef.current);
+            debounceRef.current = null;
+          }
+          if (saveInFlightRef.current) {
+            try { await saveInFlightRef.current; } catch { /* already handled */ }
+          }
+          // Zoom back onto the card first, then delete so the dashboard plays
+          // its removal reflow on the still-present card.
+          await zoomCloseAndExit();
           try {
-            if (debounceRef.current) {
-              clearTimeout(debounceRef.current);
-              debounceRef.current = null;
-            }
-            intentionalExitRef.current = true;
-            if (saveInFlightRef.current) {
-              try { await saveInFlightRef.current; } catch { /* already handled */ }
-            }
             await deleteMutation.mutateAsync(noteId);
             showToast(t('dashboard.noteDeleted'), 'success', {
               label: t('dashboard.undo'),
@@ -1045,15 +1150,14 @@ export default function NoteEditorScreen() {
                 }
               },
             });
-            navigation.goBack();
           } catch {
-            intentionalExitRef.current = false;
-            Alert.alert(t('common.error'), t('note.failedDelete'));
+            // The editor is already gone, so surface the failure as a toast.
+            showToast(t('note.failedDelete'), 'error');
           }
         },
       },
     ]);
-  }, [deleteMutation, navigation, noteId, restoreMutation, showToast, t]);
+  }, [zoomCloseAndExit, deleteMutation, navigation, noteId, restoreMutation, showToast, t]);
 
   const handleTogglePin = useCallback(async () => {
     if (!noteId) return;
@@ -1083,40 +1187,52 @@ export default function NoteEditorScreen() {
     }
     const newArchived = !archivedRef.current;
     setArchived(newArchived);
+
+    if (!newArchived) {
+      // Unarchiving keeps the user on the note.
+      try {
+        await updateMutation.mutateAsync({
+          id: noteId,
+          data: buildMetadataUpdateData({ archived: false }),
+        });
+        commitMetadataBaseline({ archived: false });
+        showToast(t('dashboard.noteUnarchived'));
+      } catch {
+        setArchived(true);
+        Alert.alert(t('common.error'), t('note.failedUpdate'));
+      }
+      return;
+    }
+
+    // Archiving from the single-note view returns the user to the dashboard.
+    // Zoom back onto the card first, then archive so the dashboard plays its
+    // removal reflow on the still-present card. The editor is unmounted by the
+    // time we mutate, so failures surface as a toast rather than an alert.
+    commitMetadataBaseline({ archived: true });
+    await zoomCloseAndExit();
     try {
       await updateMutation.mutateAsync({
         id: noteId,
-        data: buildMetadataUpdateData({ archived: newArchived }),
+        data: buildMetadataUpdateData({ archived: true }),
       });
-      commitMetadataBaseline({ archived: newArchived });
-      if (newArchived) {
-        // Archiving from the single-note view returns the user to the dashboard.
-        intentionalExitRef.current = true;
-        navigation.goBack();
-        showToast(t('dashboard.noteArchived'), 'success', {
-          label: t('dashboard.undo'),
-          onPress: async () => {
-            try {
-              await updateMutation.mutateAsync({
-                id: noteId,
-                data: buildMetadataUpdateData({ archived: false }),
-              });
-              commitMetadataBaseline({ archived: false });
-              setArchived(false);
-              showToast(t('dashboard.noteUnarchived'));
-            } catch {
-              showToast(t('note.failedUnarchive'), 'error');
-            }
-          },
-        });
-      } else {
-        showToast(t('dashboard.noteUnarchived'));
-      }
+      showToast(t('dashboard.noteArchived'), 'success', {
+        label: t('dashboard.undo'),
+        onPress: async () => {
+          try {
+            await updateMutation.mutateAsync({
+              id: noteId,
+              data: buildMetadataUpdateData({ archived: false }),
+            });
+            showToast(t('dashboard.noteUnarchived'));
+          } catch {
+            showToast(t('note.failedUnarchive'), 'error');
+          }
+        },
+      });
     } catch {
-      setArchived(!newArchived);
-      Alert.alert(t('common.error'), t('note.failedUpdate'));
+      showToast(t('note.failedArchive'), 'error');
     }
-  }, [buildMetadataUpdateData, commitMetadataBaseline, flushPendingChanges, navigation, noteId, showToast, t, updateMutation]);
+  }, [buildMetadataUpdateData, zoomCloseAndExit, commitMetadataBaseline, flushPendingChanges, noteId, showToast, t, updateMutation]);
 
   const handleColorSelect = useCallback(async (selectedColor: string) => {
     const saveSucceeded = await flushPendingChanges();
@@ -1175,6 +1291,8 @@ export default function NoteEditorScreen() {
       const duplicatedNote = await duplicateMutation.mutateAsync(currentNoteId);
       intentionalExitRef.current = true;
       Alert.alert(t('note.duplicate'), t('note.duplicated'));
+      // No originRect: the duplicate isn't tied to a card, so it opens without a
+      // zoom (and leaving it won't zoom onto the original's card).
       navigation.replace('NoteEditor', { noteId: duplicatedNote.id });
     } catch {
       Alert.alert(t('common.error'), t('note.failedDuplicate'));
@@ -1378,6 +1496,7 @@ export default function NoteEditorScreen() {
     : colors.borderLight;
 
   return (
+    <Animated.View style={[StyleSheet.absoluteFill, zoomStyle]}>
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: noteBackground, paddingBottom: androidKeyboardInset }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -1772,5 +1891,6 @@ export default function NoteEditorScreen() {
         </TouchableOpacity>
       </Modal>
     </KeyboardAvoidingView>
+    </Animated.View>
   );
 }

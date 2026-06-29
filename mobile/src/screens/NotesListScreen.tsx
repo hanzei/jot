@@ -29,7 +29,7 @@ import NoteContextMenu, { ContextMenuViewContext } from '../components/NoteConte
 import ColorPicker from '../components/ColorPicker';
 import LabelPicker from '../components/LabelPicker';
 import type { Note, NoteSort } from '@jot/shared';
-import type { RootStackParamList } from '../navigation/RootNavigator';
+import type { RootStackParamList, LayoutRect } from '../navigation/RootNavigator';
 import { normalizeNoteSort, sortNotesForDisplay } from '../utils/noteSort';
 import { isSortWarningDismissed, dismissSortWarning } from '../utils/sortWarningDismissed';
 import { emptyTrash as emptyTrashNotes } from '../api/notes';
@@ -248,10 +248,11 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   }, []);
 
   const handleNotePress = useCallback(
-    (noteId: string) => {
+    (noteId: string, rect?: LayoutRect) => {
       if (variant === 'trash') return; // read-only
       Keyboard.dismiss();
-      navigation.navigate('NoteEditor', { noteId });
+      // Pass the card's rect so the editor can zoom open from it.
+      navigation.navigate('NoteEditor', { noteId, originRect: rect });
     },
     [navigation, variant],
   );
@@ -589,7 +590,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     (note: Note) => (
       <NoteCard
         note={note}
-        onPress={() => handleNotePress(note.id)}
+        onPress={(rect) => handleNotePress(note.id, rect)}
         onMenuPress={variant !== 'trash' ? () => handleOpenMenu(note) : undefined}
         onLongPress={variant === 'trash' ? () => handleOpenMenu(note) : undefined}
         onLabelPress={variant === 'notes' ? handleLabelPress : undefined}
@@ -602,7 +603,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     (note: Note) => (
       <NoteCard
         note={note}
-        onPress={() => handleNotePress(note.id)}
+        onPress={(rect) => handleNotePress(note.id, rect)}
         onMenuPress={() => handleOpenMenu(note)}
         onLabelPress={handleLabelPress}
       />
