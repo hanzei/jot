@@ -93,19 +93,36 @@ export default function DraggableMasonry({
   const [orders, setOrders] = useState<Record<string, string[]>>({});
   const [isDragging, setIsDragging] = useState(false);
 
-  const shared: SharedDragState = {
-    activeId: useSharedValue<string | null>(null),
-    activeSection: useSharedValue(-1),
-    dragTX: useSharedValue(0),
-    dragTY: useSharedValue(0),
-    startX: useSharedValue(0),
-    startY: useSharedValue(0),
-    startAbsX: useSharedValue(0),
-    startAbsY: useSharedValue(0),
-    startScroll: useSharedValue(0),
-    fingerAbsY: useSharedValue(0),
-    scrollOffset,
-  };
+  // Shared values are stable across renders, but the wrapper object passed to
+  // each card must be too — otherwise the cards' gesture handlers (which depend
+  // on `shared`) get rebuilt on every hover-driven re-render and can interrupt
+  // an active drag.
+  const activeId = useSharedValue<string | null>(null);
+  const activeSection = useSharedValue(-1);
+  const dragTX = useSharedValue(0);
+  const dragTY = useSharedValue(0);
+  const startX = useSharedValue(0);
+  const startY = useSharedValue(0);
+  const startAbsX = useSharedValue(0);
+  const startAbsY = useSharedValue(0);
+  const startScroll = useSharedValue(0);
+  const fingerAbsY = useSharedValue(0);
+  const shared: SharedDragState = useMemo(
+    () => ({
+      activeId,
+      activeSection,
+      dragTX,
+      dragTY,
+      startX,
+      startY,
+      startAbsX,
+      startAbsY,
+      startScroll,
+      fingerAbsY,
+      scrollOffset,
+    }),
+    [activeId, activeSection, dragTX, dragTY, startX, startY, startAbsX, startAbsY, startScroll, fingerAbsY, scrollOffset],
+  );
 
   // contentWidth is the measured border-box width of the padded container, so
   // subtract the horizontal padding on both sides to get the usable width that

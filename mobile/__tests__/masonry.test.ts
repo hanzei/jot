@@ -90,6 +90,15 @@ describe('reorderForPointer', () => {
     const solo = packColumns(['a'], { a: 50 }, oneCol).placed;
     expect(reorderForPointer(['a'], solo, 'a', 10, 10, oneCol)).toEqual(['a']);
   });
+
+  it('reorders across columns when the pointer is closest to a card in the other column', () => {
+    // Two columns: a(col0,y0) b(col1,y0) c(col0,y58) d(col1,y58), all h50.
+    const twoCol = { columnWidth: 100, columnGap: 10, rowGap: 8, columns: 2 };
+    const twoColPlaced = packColumns(order, { a: 50, b: 50, c: 50, d: 50 }, twoCol).placed;
+    // Lift 'a' (col0) and drag into column 1 below d's center (83) -> a lands
+    // after d, the last card in that column.
+    expect(reorderForPointer(order, twoColPlaced, 'a', 160, 200, twoCol)).toEqual(['b', 'c', 'd', 'a']);
+  });
 });
 
 describe('moveToIndex', () => {

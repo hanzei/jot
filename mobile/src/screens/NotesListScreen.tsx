@@ -588,7 +588,6 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const renderMasonryCardStatic = useCallback(
     (note: Note) => (
       <NoteCard
-        layout="grid"
         note={note}
         onPress={() => handleNotePress(note.id)}
         onMenuPress={variant !== 'trash' ? () => handleOpenMenu(note) : undefined}
@@ -602,7 +601,6 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const renderMasonryCardDraggable = useCallback(
     (note: Note) => (
       <NoteCard
-        layout="grid"
         note={note}
         onPress={() => handleNotePress(note.id)}
         onMenuPress={() => handleOpenMenu(note)}
@@ -612,10 +610,11 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     [handleNotePress, handleOpenMenu, handleLabelPress],
   );
 
-  // Drag-and-drop is only available in the notes variant while manual sorting is
-  // active and no search is in progress (search results mix in archived notes
-  // and reordering a filtered list is not meaningful).
-  const isDraggable = variant === 'notes' && sortMode === 'manual' && !debouncedSearch;
+  // Drag-and-drop is only available in the unfiltered notes variant while manual
+  // sorting is active. Search and label filters both show a filtered subset
+  // (and mix in archived matches), so reordering them would persist a partial
+  // or misclassified manual order — disable dragging there.
+  const isDraggable = variant === 'notes' && sortMode === 'manual' && !debouncedSearch && !labelId;
 
   const handleGridSectionReorder = useCallback(
     (sectionKey: string, newData: Note[]) => {

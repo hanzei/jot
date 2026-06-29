@@ -18,12 +18,6 @@ interface NoteCardProps {
   onLongPress?: () => void;
   onMenuPress?: () => void;
   onLabelPress?: (labelId: string, labelName: string) => void;
-  /**
-   * 'list' (default) keeps the classic full-width card with its own margins.
-   * 'grid' drops the horizontal/vertical margins so the two-column masonry can
-   * own the spacing between cards.
-   */
-  layout?: 'list' | 'grid';
 }
 
 const MAX_PREVIEW_ITEMS = 10;
@@ -142,7 +136,7 @@ function ListPreview({ items, hasColor }: { items: NoteItem[]; hasColor?: boolea
   );
 }
 
-function NoteCard({ note, onPress, onLongPress, onMenuPress, onLabelPress, layout = 'list' }: NoteCardProps) {
+function NoteCard({ note, onPress, onLongPress, onMenuPress, onLabelPress }: NoteCardProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
   const failedNoteIds = useFailedNoteIds();
@@ -157,7 +151,6 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress, onLabelPress, layou
     <TouchableOpacity
       style={[
         styles.card,
-        layout === 'grid' && styles.gridCard,
         { backgroundColor: colors.cardBackground, borderColor: colors.cardBorder },
         hasColor && { backgroundColor: note.color, borderColor: note.color },
       ]}
@@ -250,19 +243,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 12,
     padding: 12,
-    marginHorizontal: 16,
-    marginVertical: 5,
+    // The masonry layout (both the single-column list and the two-column grid)
+    // owns the spacing between cards, so the card itself carries no margins.
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 3,
     elevation: 1,
-  },
-  // In the two-column masonry the surrounding layout owns the spacing, so the
-  // card itself carries no margins.
-  gridCard: {
-    marginHorizontal: 0,
-    marginVertical: 0,
   },
   cardHeader: {
     flexDirection: 'row',
