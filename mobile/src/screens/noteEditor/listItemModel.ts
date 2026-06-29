@@ -82,6 +82,25 @@ export function itemHasChildren(items: LocalItem[], itemId: string): boolean {
   return items.some((it) => it.parentId === itemId);
 }
 
+// droppedParentId decides which group a just-dragged item should belong to,
+// based on the row it landed directly below (`above`). Supports moving items
+// between groups by dragging. Rules for the 1-level hierarchy:
+//   - an item that has children always stays top-level (can't nest a parent);
+//   - a leaf joins the same parent as the row above it if that row is a child;
+//   - a leaf dropped right under a top-level group head becomes its child;
+//   - otherwise (top-level row above, or dropped at the very top) it is top-level.
+export function droppedParentId(
+  allItems: LocalItem[],
+  moved: LocalItem,
+  above: LocalItem | null,
+): string | null {
+  if (itemHasChildren(allItems, moved.id)) return null;
+  if (!above) return null;
+  if (above.parentId !== null) return above.parentId;
+  if (itemHasChildren(allItems, above.id)) return above.id;
+  return null;
+}
+
 export function precedingTopLevelId(items: LocalItem[], itemId: string): string | null {
   let last: string | null = null;
   for (const it of items) {

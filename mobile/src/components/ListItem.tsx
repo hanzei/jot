@@ -5,13 +5,12 @@ import {
   TextInput,
   ScrollView,
   StyleSheet,
-  PanResponder,
   Animated,
   type TextInputProps,
   type TextInput as TextInputType,
-  type PanResponderGestureState,
 } from 'react-native';
-import { TouchableOpacity } from 'react-native-gesture-handler';
+import { TouchableOpacity, Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { runOnJS } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 import UserAvatar from './UserAvatar';
@@ -56,10 +55,6 @@ const INDENT_SWIPE_THRESHOLD_PX = 50;
 const SWIPE_ACTIVATION_PX = 10;
 // Press-and-hold duration on the drag handle before a reorder drag begins.
 const DRAG_HANDLE_LONG_PRESS_MS = 180;
-
-function isHorizontalSwipe(gestureState: PanResponderGestureState): boolean {
-  return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) >= SWIPE_ACTIVATION_PX;
-}
 
 function ListItem({
   text,
@@ -143,28 +138,29 @@ function ListItem({
   useEffect(() => {
     onIndentRef.current = onIndent;
   }, [onIndent]);
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_event, gestureState) => {
-          if (!editable || !onIndentRef.current) return false;
-          return isHorizontalSwipe(gestureState);
-        },
-        onPanResponderRelease: (_event, gestureState) => {
-          if (!editable || !onIndentRef.current) return;
-          if (!isHorizontalSwipe(gestureState)) return;
-          if (Math.abs(gestureState.dx) < INDENT_SWIPE_THRESHOLD_PX) return;
-          onIndentRef.current(gestureState.dx > 0 ? 1 : -1);
-        },
-      }),
-    [editable],
-  );
+  // Swipe horizontally to indent/outdent. An RNGH Pan (rather than a legacy
+  // PanResponder) is required so it coordinates with the reorderable list's own
+  // pan gesture: activeOffsetX/failOffsetY make it claim only clearly-horizontal
+  // swipes, while the list's drag pan is constrained to the vertical axis.
+  const canIndent = editable && !!onIndent;
+  const indentGesture = useMemo(() => {
+    const triggerIndent = (delta: 1 | -1) => onIndentRef.current?.(delta);
+    return Gesture.Pan()
+      .enabled(canIndent)
+      .activeOffsetX([-SWIPE_ACTIVATION_PX, SWIPE_ACTIVATION_PX])
+      .failOffsetY([-SWIPE_ACTIVATION_PX, SWIPE_ACTIVATION_PX])
+      .onEnd((event) => {
+        'worklet';
+        if (Math.abs(event.translationX) < INDENT_SWIPE_THRESHOLD_PX) return;
+        runOnJS(triggerIndent)(event.translationX > 0 ? 1 : -1);
+      });
+  }, [canIndent]);
 
   return (
+    <GestureDetector gesture={indentGesture}>
     <View
       style={[styles.container, { marginLeft: normalizedIndentLevel * VALIDATION.INDENT_PX_PER_LEVEL }]}
       testID="list-item-row"
-      {...panResponder.panHandlers}
     >
       {showDragHandle && onDrag && (
         <TouchableOpacity
@@ -296,6 +292,7 @@ function ListItem({
         )}
       </View>
     </View>
+    </GestureDetector>
   );
 }
 

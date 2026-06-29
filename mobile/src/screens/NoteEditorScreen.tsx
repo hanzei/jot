@@ -23,6 +23,7 @@ import {
   type ReorderableListReorderEvent,
   type ReorderableListRenderItemInfo,
 } from 'react-native-reorderable-list';
+import { Gesture } from 'react-native-gesture-handler';
 import { LinearTransition } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -61,6 +62,7 @@ import {
   itemHasChildren,
   precedingTopLevelId,
   applyCompletedCascade,
+  droppedParentId,
 } from './noteEditor/listItemModel';
 import { MarkdownToolbarContent, ListIndentToolbarContent } from './noteEditor/EditorToolbars';
 import CheckedItemsSection, { type ListItemHandlers } from './noteEditor/CheckedItemsSection';
@@ -1241,13 +1243,31 @@ export default function NoteEditorScreen() {
     ({ from, to }: ReorderableListReorderEvent) => {
       if (from === to) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-      // Apply the move to the unchecked list, then merge with existing checked
-      // items and normalize so each parent's children stay contiguous.
+      // Apply the move to the unchecked list, then re-parent the dropped item
+      // based on where it landed so dragging can move items between groups.
       const reorderedUnchecked = reorderItems(uncheckedItemsRef.current, from, to);
+      const moved = reorderedUnchecked[to];
+      if (moved) {
+        const above = to > 0 ? reorderedUnchecked[to - 1] : null;
+        const newParentId = droppedParentId(itemsRef.current, moved, above);
+        if (newParentId !== moved.parentId) {
+          reorderedUnchecked[to] = { ...moved, parentId: newParentId };
+        }
+      }
+      // Merge with existing checked items and normalize so each parent's
+      // children stay contiguous.
       setItems(normalizeItemOrder([...reorderedUnchecked, ...checkedItemsRef.current]));
       markDirtyAndScheduleUpdate();
     },
     [markDirtyAndScheduleUpdate],
+  );
+
+  // Constrain the reorder drag to the vertical axis so a horizontal swipe on a
+  // row is left for the swipe-to-indent gesture instead of being captured by the
+  // list's pan. The library chains its own drag handlers onto this gesture.
+  const listDragGesture = useMemo(
+    () => Gesture.Pan().activeOffsetY([-10, 10]).failOffsetX([-12, 12]),
+    [],
   );
 
   const handleListItemFocus = useCallback<NonNullable<TextInputProps['onFocus']>>((event) => {
@@ -1593,6 +1613,7 @@ export default function NoteEditorScreen() {
               keyExtractor={(item) => item.id}
               scrollable={false}
               shouldUpdateActiveItem
+              panGesture={listDragGesture}
               onReorder={handleListReorder}
               renderItem={renderActiveRow}
               // Slide remaining rows into place when an item is checked off (and

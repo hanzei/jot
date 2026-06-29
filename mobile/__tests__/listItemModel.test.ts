@@ -8,6 +8,7 @@ import {
   itemHasChildren,
   precedingTopLevelId,
   applyCompletedCascade,
+  droppedParentId,
 } from '../src/screens/noteEditor/listItemModel';
 
 function local(partial: Partial<LocalItem> & { id: string }): LocalItem {
@@ -132,5 +133,36 @@ describe('applyCompletedCascade', () => {
 
   it('returns the input unchanged for an unknown id', () => {
     expect(applyCompletedCascade(items, 'missing', true)).toBe(items);
+  });
+});
+
+describe('droppedParentId', () => {
+  // Groups: p1 (with child c1) and p2 (with child c2), plus a top-level leaf t.
+  const items = [
+    local({ id: 'p1' }),
+    local({ id: 'c1', parentId: 'p1' }),
+    local({ id: 'p2' }),
+    local({ id: 'c2', parentId: 'p2' }),
+    local({ id: 't' }),
+  ];
+
+  it('keeps an item with children top-level (cannot nest a parent)', () => {
+    expect(droppedParentId(items, local({ id: 'p1' }), local({ id: 'c2', parentId: 'p2' }))).toBeNull();
+  });
+
+  it('is top-level when dropped at the very top (no row above)', () => {
+    expect(droppedParentId(items, local({ id: 't' }), null)).toBeNull();
+  });
+
+  it('joins the same parent as a child row above it', () => {
+    expect(droppedParentId(items, local({ id: 't' }), local({ id: 'c2', parentId: 'p2' }))).toBe('p2');
+  });
+
+  it('becomes a child when dropped right under a group head', () => {
+    expect(droppedParentId(items, local({ id: 't' }), local({ id: 'p1' }))).toBe('p1');
+  });
+
+  it('stays top-level when the row above is a top-level leaf', () => {
+    expect(droppedParentId(items, local({ id: 't' }), local({ id: 'solo' }))).toBeNull();
   });
 });
