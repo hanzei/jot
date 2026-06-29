@@ -1,4 +1,10 @@
-import { packColumns, computeInsertionIndex, moveToIndex, type PlacedItem } from '../src/screens/notesList/masonry';
+import {
+  packColumns,
+  nearestCard,
+  moveToIndex,
+  reorderForPointer,
+  type PlacedItem,
+} from '../src/screens/notesList/masonry';
 
 const opts = { columnWidth: 100, columnGap: 10, rowGap: 8, columns: 2 };
 
@@ -31,7 +37,7 @@ describe('packColumns', () => {
   });
 });
 
-describe('computeInsertionIndex', () => {
+describe('nearestCard', () => {
   const placed: PlacedItem[] = packColumns(
     ['a', 'b', 'c', 'd'],
     { a: 50, b: 50, c: 50, d: 50 },
@@ -39,27 +45,50 @@ describe('computeInsertionIndex', () => {
   ).placed;
   // col0: a(y0,h50), c(y58,h50); col1: b(y0,h50), d(y58,h50)
 
-  it('returns 0 for an empty list', () => {
-    expect(computeInsertionIndex([], 5, 5, opts)).toBe(0);
+  it('returns null for an empty list', () => {
+    expect(nearestCard([], 5, 5, opts)).toBeNull();
   });
 
-  it('inserts before the nearest card when the pointer is above its center', () => {
-    // Pointer over column 0, just above card a's center (25).
-    const idx = computeInsertionIndex(placed, 10, 10, opts);
-    expect(idx).toBe(0);
-  });
-
-  it('inserts after the nearest column-0 card when the pointer is below its center', () => {
-    // Pointer over column 0, well below card c (the last col-0 card, index 2),
-    // so the active card is inserted right after it.
-    const idx = computeInsertionIndex(placed, 10, 200, opts);
-    expect(idx).toBe(3);
+  it('returns the card nearest the pointer in its column', () => {
+    expect(nearestCard(placed, 10, 10, opts)?.id).toBe('a');
+    expect(nearestCard(placed, 10, 200, opts)?.id).toBe('c');
   });
 
   it('prefers the column the pointer is over', () => {
-    // Pointer over column 1 near card b -> nearest should be b (index 1).
-    const idx = computeInsertionIndex(placed, 160, 10, opts);
-    expect(idx).toBe(1);
+    expect(nearestCard(placed, 160, 10, opts)?.id).toBe('b');
+    expect(nearestCard(placed, 160, 200, opts)?.id).toBe('d');
+  });
+});
+
+describe('reorderForPointer', () => {
+  // Single column to keep the slot math obvious: a(y0,h50), b(y58), c(y116), d(y174)
+  const oneCol = { columnWidth: 100, columnGap: 10, rowGap: 8, columns: 1 };
+  const order = ['a', 'b', 'c', 'd'];
+  const placed = packColumns(order, { a: 50, b: 50, c: 50, d: 50 }, oneCol).placed;
+
+  it('keeps the order unchanged while the pointer stays over the lifted card', () => {
+    // Lift 'b' (center at 58 + 25 = 83) and hover its own slot.
+    expect(reorderForPointer(order, placed, 'b', 10, 83, oneCol)).toEqual(order);
+  });
+
+  it('does not reorder for tiny movements that stay nearest the lifted card', () => {
+    // Pointer drifts a little but is still closest to b's center.
+    expect(reorderForPointer(order, placed, 'b', 10, 95, oneCol)).toEqual(order);
+  });
+
+  it('moves the lifted card up when the pointer is closest to an earlier card', () => {
+    // Hover above card a's center (25) -> b should move before a.
+    expect(reorderForPointer(order, placed, 'b', 10, 5, oneCol)).toEqual(['b', 'a', 'c', 'd']);
+  });
+
+  it('moves the lifted card down when the pointer is closest to a later card', () => {
+    // Hover below card d's center -> b moves to the end.
+    expect(reorderForPointer(order, placed, 'b', 10, 400, oneCol)).toEqual(['a', 'c', 'd', 'b']);
+  });
+
+  it('returns the original order when there is nothing else to compare to', () => {
+    const solo = packColumns(['a'], { a: 50 }, oneCol).placed;
+    expect(reorderForPointer(['a'], solo, 'a', 10, 10, oneCol)).toEqual(['a']);
   });
 });
 

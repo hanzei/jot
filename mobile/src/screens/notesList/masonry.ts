@@ -63,21 +63,19 @@ export function packColumns(
 }
 
 /**
- * Given the placed cards (excluding the one being dragged, in flat order) and a
- * pointer position in content space, returns the index at which the dragged
- * card should be inserted into that "without active" ordering.
- *
- * Preference is given to the column the pointer is over so dragging within a
- * column feels stable; if the pointer's column has no cards, the nearest card
- * overall is used.
+ * Returns the placed card whose center is nearest the pointer, preferring cards
+ * in the column the pointer is over so dragging within a column feels stable.
+ * If the pointer's column has no cards, the nearest card overall is returned.
+ * The active card is included so that "still hovering my own slot" is
+ * detectable by the caller.
  */
-export function computeInsertionIndex(
-  placedExclActive: PlacedItem[],
+export function nearestCard(
+  placed: PlacedItem[],
   pointerX: number,
   pointerY: number,
   options: Pick<PackOptions, 'columnWidth' | 'columnGap' | 'columns'>,
-): number {
-  if (placedExclActive.length === 0) return 0;
+): PlacedItem | null {
+  if (placed.length === 0) return null;
 
   const columns = Math.max(1, options.columns ?? DEFAULT_COLUMNS);
   const colSpan = options.columnWidth + options.columnGap;
@@ -85,45 +83,66 @@ export function computeInsertionIndex(
   if (pointerCol < 0) pointerCol = 0;
   if (pointerCol > columns - 1) pointerCol = columns - 1;
 
-  let bestIdx = -1;
+  let best: PlacedItem | null = null;
   let bestDist = Infinity;
   let restrictedToColumn = false;
 
-  for (let i = 0; i < placedExclActive.length; i++) {
-    const card = placedExclActive[i];
+  for (const card of placed) {
     const sameColumn = card.column === pointerCol;
-
     if (restrictedToColumn && !sameColumn) continue;
     if (sameColumn && !restrictedToColumn) {
       // First same-column card: discard cross-column candidates and only
       // compare against this column from here on.
       restrictedToColumn = true;
-      bestIdx = -1;
+      best = null;
       bestDist = Infinity;
     }
-
     const centerY = card.y + card.height / 2;
     const dist = Math.abs(pointerY - centerY);
     if (dist < bestDist) {
       bestDist = dist;
-      bestIdx = i;
+      best = card;
     }
   }
 
-  if (bestIdx === -1) return placedExclActive.length;
-  const nearest = placedExclActive[bestIdx];
-  const nearestCenterY = nearest.y + nearest.height / 2;
-  return pointerY < nearestCenterY ? bestIdx : bestIdx + 1;
+  return best;
 }
 
 /**
  * Returns a new ordering with `id` moved to `targetIndex`, where `targetIndex`
- * is expressed in the ordering that excludes `id` (i.e. the value returned by
- * {@link computeInsertionIndex}).
+ * is expressed in the ordering that excludes `id`.
  */
 export function moveToIndex(order: string[], id: string, targetIndex: number): string[] {
   const without = order.filter((x) => x !== id);
   const clamped = Math.max(0, Math.min(targetIndex, without.length));
   without.splice(clamped, 0, id);
   return without;
+}
+
+/**
+ * Given the current order, the cards' placements (including the dragged card),
+ * the dragged card id, and the pointer position, returns the order the list
+ * should adopt.
+ *
+ * Crucially, while the pointer is still closest to the dragged card's own slot
+ * the order is returned unchanged — the lifted card keeps occupying its space
+ * until the pointer moves onto a different card.
+ */
+export function reorderForPointer(
+  order: string[],
+  placed: PlacedItem[],
+  activeId: string,
+  pointerX: number,
+  pointerY: number,
+  options: Pick<PackOptions, 'columnWidth' | 'columnGap' | 'columns'>,
+): string[] {
+  const target = nearestCard(placed, pointerX, pointerY, options);
+  if (!target || target.id === activeId) return order;
+
+  const without = order.filter((id) => id !== activeId);
+  const targetIdx = without.indexOf(target.id);
+  if (targetIdx === -1) return order;
+
+  const insertBefore = pointerY < target.y + target.height / 2;
+  return moveToIndex(order, activeId, insertBefore ? targetIdx : targetIdx + 1);
 }

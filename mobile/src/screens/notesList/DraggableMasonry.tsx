@@ -24,7 +24,7 @@ import type { Note } from '@jot/shared';
 import { useTheme } from '../../theme/ThemeContext';
 import { styles as listStyles } from './styles';
 import type { NoteSection } from './noteListUtils';
-import { packColumns, computeInsertionIndex, moveToIndex, type PlacedItem } from './masonry';
+import { packColumns, reorderForPointer, type PlacedItem } from './masonry';
 import {
   MASONRY_COLUMN_GAP,
   MASONRY_ROW_GAP,
@@ -167,13 +167,11 @@ export default function DraggableMasonry({
     const packed = placedRef.current[key];
     const order = ordersRef.current[key];
     if (!packed || !order) return;
-    const placedExcl = packed.placed.filter((p) => p.id !== activeId);
-    const index = computeInsertionIndex(placedExcl, cx, cy, {
+    const nextOrder = reorderForPointer(order, packed.placed, activeId, cx, cy, {
       columnWidth: columnWidthRef.current,
       columnGap: MASONRY_COLUMN_GAP,
       columns: COLUMNS,
     });
-    const nextOrder = moveToIndex(order, activeId, index);
     const changed = nextOrder.length !== order.length || nextOrder.some((v, i) => v !== order[i]);
     if (changed) {
       setOrders((prev) => ({ ...prev, [key]: nextOrder }));
