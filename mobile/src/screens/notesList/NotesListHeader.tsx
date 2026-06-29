@@ -96,7 +96,7 @@ export default function NotesListHeader({
             styles.sortToggleButton,
             {
               borderColor: colors.searchBorder,
-              backgroundColor: isGrid ? colors.primaryLight : colors.surface,
+              backgroundColor: colors.surface,
             },
           ]}
           onPress={onToggleLayout}
@@ -108,7 +108,7 @@ export default function NotesListHeader({
           <Ionicons
             name={isGrid ? 'list-outline' : 'grid-outline'}
             size={18}
-            color={isGrid ? colors.primary : colors.iconMuted}
+            color={colors.iconMuted}
           />
         </TouchableOpacity>
         <TouchableOpacity
