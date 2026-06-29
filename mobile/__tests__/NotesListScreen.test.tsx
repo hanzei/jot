@@ -1,5 +1,6 @@
 import React from 'react';
 import { Alert } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import NotesListScreen from '../src/screens/NotesListScreen';
 import { lightColors } from '../src/theme/colors';
@@ -640,6 +641,64 @@ describe('NotesListScreen label picker', () => {
     // LabelPicker stays open with the accurate (now-empty) label list from per-note cache
     expect(screen.getByTestId('label-picker')).toBeTruthy();
     expect(screen.queryByTestId('label-picker-label-l1')).toBeNull();
+  });
+});
+
+describe('NotesListScreen layout toggle', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockUseToast.mockReturnValue({ showToast: jest.fn() });
+    notesHooks.useUpdateNote.mockReturnValue({ mutateAsync: mockMutateAsync });
+    notesHooks.useDeleteNote.mockReturnValue({ mutateAsync: mockMutateAsync });
+    notesHooks.useRestoreNote.mockReturnValue({ mutateAsync: mockMutateAsync });
+    notesHooks.usePermanentDeleteNote.mockReturnValue({ mutateAsync: mockMutateAsync });
+    notesHooks.useReorderNotes.mockReturnValue({ mutateAsync: mockMutateAsync });
+    notesHooks.useDuplicateNote.mockReturnValue({ mutateAsync: mockMutateAsync });
+    mockUseUsers.mockReturnValue({ refreshUsers: jest.fn() });
+    mockUseTheme.mockReturnValue({ colors: lightColors });
+    mockUseOfflineNote.mockReturnValue({ data: null });
+  });
+
+  it('switches to a two-column grid layout and persists the choice', async () => {
+    // A non-manual sort keeps the static (non-draggable) masonry, which renders
+    // its cards without needing a measured layout pass.
+    mockUseAuth.mockReturnValue({
+      user: mockUser,
+      settings: { ...baseSettings, note_sort: 'created_at' as NoteSort },
+      setSettings: jest.fn(),
+    });
+    mockUseOfflineNotes.mockReturnValue({
+      data: [
+        buildNote({ id: 'n1', title: 'grid-note-1' }),
+        buildNote({ id: 'n2', title: 'grid-note-2' }),
+      ],
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn(),
+      isRefetching: false,
+    });
+
+    render(<NotesListScreen variant="notes" />);
+
+    expect(screen.queryByTestId('notes-masonry-grid')).toBeNull();
+    expect(screen.getByTestId('notes-flat-list')).toBeTruthy();
+
+    fireEvent.press(screen.getByTestId('layout-toggle'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('notes-masonry-grid')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('notes-flat-list')).toBeNull();
+    expect(screen.getByText('grid-note-1')).toBeTruthy();
+    expect(screen.getByText('grid-note-2')).toBeTruthy();
+    expect(SecureStore.setItemAsync).toHaveBeenCalledWith('jot_dashboard_layout', 'grid');
+
+    // Toggling back returns to the single-column list.
+    fireEvent.press(screen.getByTestId('layout-toggle'));
+    await waitFor(() => {
+      expect(screen.getByTestId('notes-flat-list')).toBeTruthy();
+    });
+    expect(SecureStore.setItemAsync).toHaveBeenLastCalledWith('jot_dashboard_layout', 'list');
   });
 });
 

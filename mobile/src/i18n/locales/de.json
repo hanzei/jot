@@ -102,6 +102,8 @@
       "created_at": "Erstellungsdatum"
     },
     "sortAccessibilityLabel": "Sortieren nach {{sortLabel}}",
+    "layoutToggleToGrid": "Zur Rasteransicht wechseln",
+    "layoutToggleToList": "Zur Listenansicht wechseln",
     "sortDisabledNotice": "Manuelles Sortieren ist aus. Notizen sind nach {{sortLabel}} sortiert, daher ist Drag-and-drop deaktiviert."
   },
   "settings": {

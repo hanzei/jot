@@ -125,6 +125,8 @@
       "created_at": "Aanmaakdatum"
     },
     "sortAccessibilityLabel": "Sorteren op {{sortLabel}}",
+    "layoutToggleToGrid": "Overschakelen naar rasterweergave",
+    "layoutToggleToList": "Overschakelen naar lijstweergave",
     "sortDisabledNotice": "Handmatig sorteren is uitgeschakeld. Notities zijn gesorteerd op {{sortLabel}}, dus slepen en neerzetten is niet beschikbaar.",
     "noteArchived": "Notitie gearchiveerd",
     "noteUnarchived": "Notitie uit archief gehaald",

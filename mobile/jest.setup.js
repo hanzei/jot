@@ -63,7 +63,7 @@ jest.mock('expo-haptics', () => ({
 }));
 
 jest.mock('react-native-reanimated', () => {
-  const View = require('react-native').View;
+  const RN = require('react-native');
   return {
     __esModule: true,
     default: {
@@ -71,11 +71,21 @@ jest.mock('react-native-reanimated', () => {
       createAnimatedComponent: (component) => component,
       addWhitelistedNativeProps: jest.fn(),
       addWhitelistedUIProps: jest.fn(),
+      View: RN.View,
+      ScrollView: RN.ScrollView,
     },
     useAnimatedStyle: () => ({}),
     useSharedValue: (init) => ({ value: init }),
+    useAnimatedRef: () => ({ current: null }),
+    useScrollViewOffset: () => ({ value: 0 }),
+    useFrameCallback: () => ({ setActive: jest.fn(), isActive: false }),
+    useDerivedValue: (fn) => ({ value: typeof fn === 'function' ? undefined : fn }),
     withTiming: (val) => val,
     withSpring: (val) => val,
+    runOnJS: (fn) => fn,
+    scrollTo: jest.fn(),
+    measure: jest.fn(() => null),
+    cancelAnimation: jest.fn(),
     Easing: { linear: jest.fn(), ease: jest.fn() },
     FadeIn: { duration: () => ({ build: () => ({}) }) },
     FadeOut: { duration: () => ({ build: () => ({}) }) },
@@ -85,8 +95,32 @@ jest.mock('react-native-reanimated', () => {
 
 jest.mock('react-native-gesture-handler', () => {
   const RN = require('react-native');
+  const createGesture = () => {
+    const gesture = {};
+    const chain = () => gesture;
+    [
+      'activateAfterLongPress',
+      'onBegin',
+      'onStart',
+      'onUpdate',
+      'onChange',
+      'onEnd',
+      'onFinalize',
+      'enabled',
+      'minDistance',
+    ].forEach((method) => {
+      gesture[method] = chain;
+    });
+    return gesture;
+  };
   return {
     GestureHandlerRootView: RN.View,
+    GestureDetector: ({ children }) => children,
+    Gesture: {
+      Pan: createGesture,
+      Tap: createGesture,
+      LongPress: createGesture,
+    },
     Swipeable: RN.View,
     DrawerLayout: RN.View,
     State: {},

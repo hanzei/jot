@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import type { NoteSort } from '@jot/shared';
 import { useTheme } from '../../theme/ThemeContext';
 import { NOTE_SORT_OPTIONS, getNoteSortLabel } from '../../utils/noteSort';
+import type { DashboardLayout } from '../../utils/dashboardLayout';
 import { styles } from './styles';
 
 interface NotesListHeaderProps {
@@ -21,6 +22,8 @@ interface NotesListHeaderProps {
   sortWarningDismissed: boolean | null;
   onDismissSortWarning: () => void;
   onToggleDrawer: () => void;
+  layout: DashboardLayout;
+  onToggleLayout: () => void;
 }
 
 export default function NotesListHeader({
@@ -37,10 +40,13 @@ export default function NotesListHeader({
   sortWarningDismissed,
   onDismissSortWarning,
   onToggleDrawer,
+  layout,
+  onToggleLayout,
 }: NotesListHeaderProps) {
   const { t } = useTranslation();
   const { colors } = useTheme();
   const activeSortLabel = getNoteSortLabel(sortMode, t);
+  const isGrid = layout === 'grid';
 
   return (
     <>
@@ -85,6 +91,26 @@ export default function NotesListHeader({
             </TouchableOpacity>
           )}
         </View>
+        <TouchableOpacity
+          style={[
+            styles.sortToggleButton,
+            {
+              borderColor: colors.searchBorder,
+              backgroundColor: isGrid ? colors.primaryLight : colors.surface,
+            },
+          ]}
+          onPress={onToggleLayout}
+          testID="layout-toggle"
+          accessibilityRole="button"
+          accessibilityLabel={t(isGrid ? 'dashboard.layoutToggleToList' : 'dashboard.layoutToggleToGrid')}
+          accessibilityState={{ selected: isGrid }}
+        >
+          <Ionicons
+            name={isGrid ? 'list-outline' : 'grid-outline'}
+            size={18}
+            color={isGrid ? colors.primary : colors.iconMuted}
+          />
+        </TouchableOpacity>
         <TouchableOpacity
           style={[
             styles.sortToggleButton,

@@ -18,6 +18,12 @@ interface NoteCardProps {
   onLongPress?: () => void;
   onMenuPress?: () => void;
   onLabelPress?: (labelId: string, labelName: string) => void;
+  /**
+   * 'list' (default) keeps the classic full-width card with its own margins.
+   * 'grid' drops the horizontal/vertical margins so the two-column masonry can
+   * own the spacing between cards.
+   */
+  layout?: 'list' | 'grid';
 }
 
 const MAX_PREVIEW_ITEMS = 10;
@@ -136,7 +142,7 @@ function ListPreview({ items, hasColor }: { items: NoteItem[]; hasColor?: boolea
   );
 }
 
-function NoteCard({ note, onPress, onLongPress, onMenuPress, onLabelPress }: NoteCardProps) {
+function NoteCard({ note, onPress, onLongPress, onMenuPress, onLabelPress, layout = 'list' }: NoteCardProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
   const failedNoteIds = useFailedNoteIds();
@@ -151,6 +157,7 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress, onLabelPress }: Not
     <TouchableOpacity
       style={[
         styles.card,
+        layout === 'grid' && styles.gridCard,
         { backgroundColor: colors.cardBackground, borderColor: colors.cardBorder },
         hasColor && { backgroundColor: note.color, borderColor: note.color },
       ]}
@@ -251,6 +258,12 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 1,
   },
+  // In the two-column masonry the surrounding layout owns the spacing, so the
+  // card itself carries no margins.
+  gridCard: {
+    marginHorizontal: 0,
+    marginVertical: 0,
+  },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -278,13 +291,13 @@ const styles = StyleSheet.create({
     marginRight: -4,
   },
   title: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     marginBottom: 4,
   },
   contentText: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 18,
   },
   listPreview: {
     marginTop: 4,
@@ -296,12 +309,12 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
   },
   listText: {
-    fontSize: 14,
+    fontSize: 13,
     flex: 1,
     flexShrink: 1,
   },
   completedCount: {
-    fontSize: 13,
+    fontSize: 12,
     marginTop: 2,
   },
   footer: {

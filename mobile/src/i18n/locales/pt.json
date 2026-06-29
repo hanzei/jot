@@ -131,6 +131,8 @@
       "created_at": "Data de criação"
     },
     "sortAccessibilityLabel": "Ordenar por {{sortLabel}}",
+    "layoutToggleToGrid": "Mudar para a vista de grelha",
+    "layoutToggleToList": "Mudar para a vista de lista",
     "sortDisabledNotice": "A reordenação manual está desativada. As notas estão ordenadas por {{sortLabel}}, portanto arrastar e soltar não está disponível."
   },
   "settings": {

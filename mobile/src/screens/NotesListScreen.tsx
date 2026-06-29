@@ -43,8 +43,16 @@ import { styles } from './notesList/styles';
 import { buildUpdateRequest, buildNoteSections, type LocalReorderState, type NoteSection } from './notesList/noteListUtils';
 import NoteListItem from './notesList/NoteListItem';
 import NotesListHeader from './notesList/NotesListHeader';
+import MasonryGrid from './notesList/MasonryGrid';
+import DraggableMasonry from './notesList/DraggableMasonry';
 import FadeInView from '../components/FadeInView';
 import { animateListReflow } from '../utils/layoutAnimation';
+import {
+  getDashboardLayout,
+  setDashboardLayout,
+  DEFAULT_DASHBOARD_LAYOUT,
+  type DashboardLayout,
+} from '../utils/dashboardLayout';
 
 interface NotesListScreenProps {
   variant?: 'notes' | 'archived' | 'trash' | 'my-tasks';
@@ -79,6 +87,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const [localOrder, setLocalOrder] = useState<LocalReorderState>({ pinned: null, unpinned: null });
   const [sortMode, setSortMode] = useState<NoteSort>(() => normalizeNoteSort(settings?.note_sort));
   const [isSortControlsOpen, setIsSortControlsOpen] = useState(false);
+  const [layout, setLayout] = useState<DashboardLayout>(DEFAULT_DASHBOARD_LAYOUT);
   const [sortWarningDismissed, setSortWarningDismissed] = useState<boolean | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sortRequestIdRef = useRef(0);
@@ -215,6 +224,29 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const handleToggleSort = useCallback(() => {
     animateListReflow();
     setIsSortControlsOpen((open) => !open);
+  }, []);
+
+  // Dashboard layout is a device-only preference, loaded once on mount. If the
+  // user toggles before the async read resolves, their choice wins.
+  const layoutToggledRef = useRef(false);
+  useEffect(() => {
+    let cancelled = false;
+    void getDashboardLayout().then((stored) => {
+      if (!cancelled && !layoutToggledRef.current) setLayout(stored);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleToggleLayout = useCallback(() => {
+    animateListReflow();
+    layoutToggledRef.current = true;
+    setLayout((prev) => {
+      const next: DashboardLayout = prev === 'list' ? 'grid' : 'list';
+      void setDashboardLayout(next);
+      return next;
+    });
   }, []);
 
   const handleNotePress = useCallback(
@@ -612,10 +644,47 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     [handleNotePress, handleOpenMenu, variant, handleLabelPress],
   );
 
+  // Two-column (grid) card renderers. The draggable variant omits onLongPress so
+  // the masonry's drag gesture owns the long press; the static variant uses it to
+  // open the context menu in the read-only trash view.
+  const renderGridCardStatic = useCallback(
+    (note: Note) => (
+      <NoteCard
+        layout="grid"
+        note={note}
+        onPress={() => handleNotePress(note.id)}
+        onMenuPress={variant !== 'trash' ? () => handleOpenMenu(note) : undefined}
+        onLongPress={variant === 'trash' ? () => handleOpenMenu(note) : undefined}
+        onLabelPress={variant === 'notes' ? handleLabelPress : undefined}
+      />
+    ),
+    [handleNotePress, handleOpenMenu, variant, handleLabelPress],
+  );
+
+  const renderGridCardDraggable = useCallback(
+    (note: Note) => (
+      <NoteCard
+        layout="grid"
+        note={note}
+        onPress={() => handleNotePress(note.id)}
+        onMenuPress={() => handleOpenMenu(note)}
+        onLabelPress={handleLabelPress}
+      />
+    ),
+    [handleNotePress, handleOpenMenu, handleLabelPress],
+  );
+
   // Drag-and-drop is only available in the notes variant while manual sorting is
   // active and no search is in progress (search results mix in archived notes
   // and reordering a filtered list is not meaningful).
   const isDraggable = variant === 'notes' && sortMode === 'manual' && !debouncedSearch;
+
+  const handleGridSectionReorder = useCallback(
+    (sectionKey: string, newData: Note[]) => {
+      void handleDragEnd(newData, sectionKey === 'pinned');
+    },
+    [handleDragEnd],
+  );
 
   // Settle the list when its membership or order changes — pin/unpin moving a
   // card between sections, archive/trash/restore/delete removing one, duplicate
@@ -657,6 +726,8 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
       sortWarningDismissed={sortWarningDismissed}
       onDismissSortWarning={handleDismissSortWarning}
       onToggleDrawer={handleToggleDrawer}
+      layout={layout}
+      onToggleLayout={handleToggleLayout}
     />
   );
 
@@ -807,7 +878,31 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
       {header}
 
       {/* Notes list */}
-      {hasPinned ? (
+      {layout === 'grid' ? (
+        isDraggable ? (
+          <DraggableMasonry
+            sections={noteSections}
+            onSectionReorder={handleGridSectionReorder}
+            onDragStart={handleDragStart}
+            renderCard={renderGridCardDraggable}
+            refreshControl={
+              <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
+            }
+            contentBottomPadding={listBottomPadding}
+            topInset={insets.top}
+          />
+        ) : (
+          <MasonryGrid
+            sections={noteSections}
+            renderCard={renderGridCardStatic}
+            refreshControl={
+              <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
+            }
+            contentBottomPadding={listBottomPadding}
+            ListEmptyComponent={listEmptyComponent}
+          />
+        )
+      ) : hasPinned ? (
         isDraggable ? (
           <NestableScrollContainer
             refreshControl={
