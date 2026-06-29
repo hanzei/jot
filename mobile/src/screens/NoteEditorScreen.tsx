@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import Markdown from 'react-native-markdown-display';
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
-import Animated, { LinearTransition } from 'react-native-reanimated';
+import { LinearTransition } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -1324,18 +1324,7 @@ export default function NoteEditorScreen() {
       const itemRef = getItemRef(item.id);
       return (
         <ScaleDecorator>
-          {/*
-            Reanimated layout transition so sibling rows slide to their new
-            position when an item is checked off (and moves to the completed
-            section) or deleted. The legacy LayoutAnimation in animateListReflow
-            doesn't animate repositioning inside the virtualized DraggableFlatList,
-            so the rows would otherwise teleport. Disabled mid-drag (DraggableFlatList
-            drives its own transform then) and when Reduce Motion is on.
-          */}
-          <Animated.View
-            layout={isActive || isReduceMotionEnabledSync() ? undefined : LinearTransition.duration(LIST_REFLOW_DURATION_MS)}
-            style={isActive ? [styles.draggingListItem, { shadowColor: isDark ? colors.border : '#000' }] : undefined}
-          >
+          <View style={isActive ? [styles.draggingListItem, { shadowColor: isDark ? colors.border : '#000' }] : undefined}>
             <ListItem
               inputRef={itemRef}
               text={item.text}
@@ -1361,7 +1350,7 @@ export default function NoteEditorScreen() {
               onAcceptSuggestion={(text) => handleAcceptSuggestion(item.id, text)}
               inputAccessoryViewID={Platform.OS === 'ios' ? LIST_INDENT_TOOLBAR_ID : undefined}
             />
-          </Animated.View>
+          </View>
         </ScaleDecorator>
       );
     },
@@ -1594,6 +1583,15 @@ export default function NoteEditorScreen() {
               onDragBegin={handleListDragStart}
               onDragEnd={({ data }) => handleListReorder(data)}
               renderItem={renderListItem}
+              // Slide remaining rows into place when an item is checked off (and
+              // moves to the completed section) or deleted. The animation is applied
+              // to the library's own cell wrapper — the view that actually
+              // repositions — via itemLayoutAnimation; the legacy LayoutAnimation in
+              // animateListReflow can't animate repositioning inside this list. The
+              // library disables it automatically during an active drag. Skipped
+              // under the OS Reduce Motion setting, like the editor's other animations.
+              enableLayoutAnimationExperimental={!isReduceMotionEnabledSync()}
+              itemLayoutAnimation={isReduceMotionEnabledSync() ? undefined : LinearTransition.duration(LIST_REFLOW_DURATION_MS)}
             />
 
             <TouchableOpacity style={styles.addItemRow} onPress={handleAddItem} testID="add-list-item">
