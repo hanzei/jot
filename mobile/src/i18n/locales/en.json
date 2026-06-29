@@ -433,7 +433,10 @@
     "deadLetterSubtitle_other": "{{count}} changes couldn't be synced to the server.",
     "reviewFailedChanges": "Review failed changes",
     "retryMigration": "Retry migration",
-    "migrationFailed": "Migration failed. Check your connection and try again."
+    "migrationFailed": "Migration failed. Check your connection and try again.",
+    "reconciling": "Syncing notes with server…",
+    "reconcileFailed": "Notes may not reflect the latest server data. Pull to refresh in the notes list.",
+    "resync": "Re-sync"
   },
   "diagnostics": {
     "title": "Diagnostics",

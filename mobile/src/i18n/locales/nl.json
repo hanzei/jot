@@ -433,7 +433,10 @@
     "deadLetterSubtitle_other": "{{count}} wijzigingen konden niet worden gesynchroniseerd met de server.",
     "reviewFailedChanges": "Mislukte wijzigingen bekijken",
     "retryMigration": "Migratie opnieuw proberen",
-    "migrationFailed": "Migratie mislukt. Controleer je verbinding en probeer het opnieuw."
+    "migrationFailed": "Migratie mislukt. Controleer je verbinding en probeer het opnieuw.",
+    "reconciling": "Notities synchroniseren met server…",
+    "reconcileFailed": "Notities weerspiegelen mogelijk niet de meest recente servergegevens. Vernieuw de notitieslijst.",
+    "resync": "Opnieuw synchroniseren"
   },
   "diagnostics": {
     "title": "Diagnose",

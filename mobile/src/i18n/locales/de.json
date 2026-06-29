@@ -433,7 +433,10 @@
     "deadLetterSubtitle_other": "{{count}} Änderungen konnten nicht mit dem Server synchronisiert werden.",
     "reviewFailedChanges": "Fehlgeschlagene Änderungen überprüfen",
     "retryMigration": "Migration erneut versuchen",
-    "migrationFailed": "Migration fehlgeschlagen. Überprüfe deine Verbindung und versuche es erneut."
+    "migrationFailed": "Migration fehlgeschlagen. Überprüfe deine Verbindung und versuche es erneut.",
+    "reconciling": "Notizen werden mit dem Server synchronisiert…",
+    "reconcileFailed": "Notizen spiegeln möglicherweise nicht die neuesten Serverdaten wider. Aktualisiere die Notizliste.",
+    "resync": "Neu synchronisieren"
   },
   "diagnostics": {
     "title": "Diagnose",

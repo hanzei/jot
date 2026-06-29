@@ -433,7 +433,10 @@
     "deadLetterSubtitle_other": "{{count}} modifications n'ont pas pu être synchronisées avec le serveur.",
     "reviewFailedChanges": "Examiner les modifications échouées",
     "retryMigration": "Réessayer la migration",
-    "migrationFailed": "La migration a échoué. Vérifiez votre connexion et réessayez."
+    "migrationFailed": "La migration a échoué. Vérifiez votre connexion et réessayez.",
+    "reconciling": "Synchronisation des notes avec le serveur…",
+    "reconcileFailed": "Les notes peuvent ne pas refléter les dernières données du serveur. Actualisez la liste des notes.",
+    "resync": "Resynchroniser"
   },
   "diagnostics": {
     "title": "Diagnostic",

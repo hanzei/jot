@@ -46,6 +46,7 @@ describe('Auth first-run server setup flow', () => {
       revalidateSession: jest.fn(),
       setUser: jest.fn(),
       setSettings: jest.fn(),
+      completeServerUpgrade: jest.fn(),
     });
 
     mockGetBaseUrl.mockReturnValue('http://localhost:8080');

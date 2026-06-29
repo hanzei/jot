@@ -1,11 +1,14 @@
 import axios from 'axios';
 import { generateId, canonicalizeServerOrigin } from '@jot/shared';
+import type { GetNotesParams } from '@jot/shared';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { getAllLocalNotes } from '../db/noteQueries';
-import { drainQueue, getPendingCount, getDeadLetterCount, insertQueueEntry } from '../db/syncQueue';
+import { drainQueue, getPendingCount, getDeadLetterCount, insertQueueEntry, saveServerNotesScope } from '../db/syncQueue';
 import type { LocalIdentity } from './localMode';
+import { disableLocalMode, setLocalModeActive } from './localMode';
 import { initializeServerContext, switchActiveServer } from '../api/client';
 import { addServer, setServerStorageValue } from './serverAccounts';
+import { getNotes } from '../api/notes';
 
 export interface UpgradeSession {
   serverUrl: string;
@@ -462,4 +465,61 @@ export async function runMigrationDrainPass(
   const status: MigrationDrainStatus =
     deadLetterCount > 0 ? 'dead_letter' : remaining === 0 ? 'success' : 'stalled';
   return { status, processed, remaining, deadLetterCount };
+}
+
+export type FlipResult =
+  | { ok: true }
+  | { ok: false; reason: 'DIRTY_DRAIN' };
+
+/**
+ * Phase 4a: Flip from local mode to server mode once the drain is verified clean.
+ *
+ * Precondition: both `sync_queue` and `dead_letter` must be empty. Returns
+ * `{ ok: false, reason: 'DIRTY_DRAIN' }` without making any changes if either
+ * table is non-empty, so the caller can surface a blocking error rather than
+ * leaving the app in an inconsistent state.
+ *
+ * On a clean drain:
+ *   1. Drops the on-device local identity via `disableLocalMode()`.
+ *   2. Updates the synchronous in-process flag via `setLocalModeActive(false)`
+ *      so the sync queue, SSE manager, and write hooks immediately see server mode.
+ *
+ * React auth state (`isLocalMode`) is updated separately by `completeServerUpgrade`
+ * in AuthContext, which fetches the real server profile and replaces the local one.
+ */
+export async function flipToServerMode(db: SQLiteDatabase): Promise<FlipResult> {
+  const [pendingCount, deadLetterCount] = await Promise.all([
+    getPendingCount(db),
+    getDeadLetterCount(db),
+  ]);
+  if (pendingCount > 0 || deadLetterCount > 0) {
+    return { ok: false, reason: 'DIRTY_DRAIN' };
+  }
+  await disableLocalMode();
+  setLocalModeActive(false);
+  return { ok: true };
+}
+
+const RECONCILE_SCOPES: (GetNotesParams | undefined)[] = [
+  undefined,
+  { archived: true },
+  { trashed: true },
+];
+
+/**
+ * Phase 4b: Background reconcile after flipping to server mode.
+ *
+ * Fetches notes for each scope (active, archived, trashed) from the server and
+ * atomically reconciles them into the local SQLite cache via
+ * `saveServerNotesScope`. Notes with unsynced local edits are skipped so
+ * optimistic state is preserved.
+ *
+ * The caller is responsible for invalidating React Query scopes after this
+ * returns, and for retrying/surfacing a prompt on failure.
+ */
+export async function runBackgroundReconcileScopes(db: SQLiteDatabase): Promise<void> {
+  for (const scope of RECONCILE_SCOPES) {
+    const notes = await getNotes(scope);
+    await saveServerNotesScope(db, notes, scope);
+  }
 }
