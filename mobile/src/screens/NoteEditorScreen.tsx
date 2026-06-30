@@ -149,10 +149,15 @@ export default function NoteEditorScreen() {
   const dragTranslateX = useSharedValue(0);
   // On Android the window is edge-to-edge and is NOT resized for the keyboard,
   // so lift the whole editor (scroll area + toolbars) above it manually. iOS
-  // relies on KeyboardAvoidingView's "padding" behavior instead. Subtracting the
-  // bottom inset lets the toolbar's own safe-area padding fill the gap so its
-  // buttons sit flush against the top of the keyboard.
-  const androidKeyboardInset = Platform.OS === 'android' ? Math.max(keyboardHeight - insets.bottom, 0) : 0;
+  // relies on KeyboardAvoidingView's "padding" behavior instead.
+  //
+  // Android reports the keyboard height excluding the bottom navigation inset:
+  // the keyboard draws over that inset, so endCoordinates.height is measured from
+  // the top of the navigation bar, not the bottom edge of the screen. Reserve the
+  // full keyboardHeight here; the toolbar's own safe-area bottom padding
+  // (insets.bottom) then bridges the navigation-inset region so its buttons sit
+  // flush against the top of the keyboard instead of behind it.
+  const androidKeyboardInset = Platform.OS === 'android' ? keyboardHeight : 0;
   const bannerShown = useBannerShown();
   const { data: existingNote } = useOfflineNote(noteId);
   const createMutation = useCreateNote();
@@ -317,6 +322,8 @@ export default function NoteEditorScreen() {
   const contentInputRef = useRef<TextInputType>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   const itemInputRefsMap = useRef(new Map<string, React.RefObject<TextInputType | null>>());
+  const autoFocusItemIdRef = useRef<string | null>(null);
+  const autoFocusClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const getItemRef = useCallback((id: string): React.RefObject<TextInputType | null> => {
     if (!itemInputRefsMap.current.has(id)) {
@@ -793,13 +800,33 @@ export default function NoteEditorScreen() {
 
   const handleItemCompletedToggle = useCallback(
     async (itemId: string, completed: boolean) => {
+      // itemsRef.current is the authoritative latest state here: each branch
+      // below writes the new array back to it synchronously, so a rapid
+      // follow-up toggle (fired before React re-renders) composes on the most
+      // recent optimistic state rather than a stale render snapshot. Without
+      // this, rows flicker back into the active list and an overlapping
+      // parent/child toggle captures a stale prior snapshot, corrupting its
+      // rollback and save baseline (issue: mobile item flicker).
       const before = itemsRef.current;
       const target = before.find((item) => item.id === itemId);
       if (!target || target.completed === completed) return;
 
+      // Capture the prior completed state of just the items this toggle touches
+      // (the item plus, for a top-level item, its children) from that latest
+      // state. Used to advance the save baseline and to revert precisely on
+      // failure — without clobbering any other item whose state may change
+      // before this async call settles.
+      const cascadeToChildren = target.parentId === null;
+      const priorCompletedById = new Map(
+        before
+          .filter((item) => item.id === itemId || (cascadeToChildren && item.parentId === itemId))
+          .map((item) => [item.id, item.completed]),
+      );
+
       // Optimistic cascade applied immediately, with a subtle settle as the
       // item moves between the active list and the completed section.
-      const cascaded = applyCompletedCascade(before, itemId, completed);
+      const optimisticItems = applyCompletedCascade(before, itemId, completed);
+      itemsRef.current = optimisticItems;
       animateListReflow();
       // Flag the just-checked item so its completed-section row pops on mount,
       // then clear the flag so a later collapse/expand doesn't replay the pop.
@@ -810,7 +837,7 @@ export default function NoteEditorScreen() {
       } else {
         setPopItemId(null);
       }
-      setItems(cascaded);
+      setItems(optimisticItems);
 
       // For unsaved new notes, let the bulk-create carry completed flags
       if (!noteIdRef.current) {
@@ -831,14 +858,16 @@ export default function NoteEditorScreen() {
           completed,
         });
         if (serverItems.length > 0) {
-          // Online: reconcile only completed flags from server response
+          // Online: reconcile only completed flags from server response,
+          // composing on (and writing back) the latest state so a concurrent
+          // toggle's optimistic change is preserved.
           const completedById = new Map(serverItems.map((item) => [item.id, item.completed]));
-          setItems((prev) =>
-            prev.map((item) => {
-              const serverCompleted = completedById.get(item.id);
-              return serverCompleted === undefined ? item : { ...item, completed: serverCompleted };
-            }),
-          );
+          const reconciled = itemsRef.current.map((item) => {
+            const serverCompleted = completedById.get(item.id);
+            return serverCompleted === undefined ? item : { ...item, completed: serverCompleted };
+          });
+          itemsRef.current = reconciled;
+          setItems(reconciled);
           // Advance the baseline so the diff engine does not re-patch completed
           for (const [id, comp] of completedById) {
             const snap = savedItemsRef.current.get(id);
@@ -846,15 +875,22 @@ export default function NoteEditorScreen() {
           }
         } else {
           // Offline: cascade was applied to local DB; advance baseline here too
-          for (const item of cascaded) {
-            const snap = savedItemsRef.current.get(item.id);
-            if (snap && snap.completed !== item.completed) {
-              savedItemsRef.current.set(item.id, { ...snap, completed: item.completed });
-            }
+          for (const [id, prior] of priorCompletedById) {
+            if (prior === completed) continue;
+            const snap = savedItemsRef.current.get(id);
+            if (snap) savedItemsRef.current.set(id, { ...snap, completed });
           }
         }
       } catch {
-        setItems(before);
+        // Revert only the items this toggle changed, restoring their prior
+        // completed values, so a concurrent toggle's optimistic state survives.
+        const reverted = itemsRef.current.map((item) =>
+          priorCompletedById.has(item.id)
+            ? { ...item, completed: priorCompletedById.get(item.id)! }
+            : item,
+        );
+        itemsRef.current = reverted;
+        setItems(reverted);
         setSaveError(t('note.failedSaveChanges'));
       }
     },
@@ -931,12 +967,15 @@ export default function NoteEditorScreen() {
   const handleDeleteItem = useCallback(
     (index: number) => {
       const removedItemId = itemsRef.current[index]?.id;
+      if (removedItemId) {
+        if (itemInputRefsMap.current.get(removedItemId)?.current?.isFocused()) {
+          Keyboard.dismiss();
+        }
+        itemInputRefsMap.current.delete(removedItemId);
+      }
       // Settle the surrounding rows as this one is removed instead of snapping.
       animateListReflow();
       setItems((prev) => prev.filter((_, i) => i !== index));
-      if (removedItemId) {
-        itemInputRefsMap.current.delete(removedItemId);
-      }
       markDirtyAndScheduleUpdate();
     },
     [markDirtyAndScheduleUpdate],
@@ -944,7 +983,10 @@ export default function NoteEditorScreen() {
 
   const handleAddItem = useCallback(() => {
     const newId = nextTempId();
-    const newItemRef = getItemRef(newId);
+    // Mark before setItems so the item mounts with autoFocus={true}, which
+    // reliably opens the soft keyboard (programmatic focus() doesn't always
+    // trigger the IME on Android for newly mounted inputs).
+    autoFocusItemIdRef.current = newId;
     // Ease the new row in rather than having the list jump to make room.
     animateListReflow();
     setItems((prev) => [
@@ -952,8 +994,12 @@ export default function NoteEditorScreen() {
       { id: newId, text: '', completed: false, position: prev.length, parentId: null, assigned_to: '' },
     ]);
     markDirtyAndScheduleUpdate();
-    setTimeout(() => newItemRef.current?.focus(), 50);
-  }, [markDirtyAndScheduleUpdate, getItemRef]);
+    // autoFocus is only consumed at mount; clear after a short delay so a
+    // later unmount/remount of the same ID doesn't re-open the keyboard.
+    // Cancel any pending clear from a previous rapid tap before rescheduling.
+    if (autoFocusClearTimerRef.current !== null) clearTimeout(autoFocusClearTimerRef.current);
+    autoFocusClearTimerRef.current = setTimeout(() => { autoFocusItemIdRef.current = null; }, 500);
+  }, [markDirtyAndScheduleUpdate]);
 
   const handleInsertItemAfter = useCallback((index: number) => {
     const newId = nextTempId();
@@ -1362,7 +1408,10 @@ export default function NoteEditorScreen() {
           changed = true;
         }
       }
-      dragTranslateX.value = 0;
+      // Note: dragTranslateX is intentionally not reset here. Each active row now
+      // holds its dropped indent in its own `displayLevel` until the committed
+      // re-render lands; zeroing the shared value mid-drop could clobber that hold
+      // and reintroduce the snap-back flash. The drag start resets it instead.
       if (!changed) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       // Merge with existing checked items and normalize so each parent's
@@ -1474,6 +1523,7 @@ export default function NoteEditorScreen() {
           canOutdent={baseLevel === 1}
           listItemProps={{
             inputRef: getItemRef(item.id),
+            autoFocus: item.id === autoFocusItemIdRef.current,
             text: item.text,
             completed: item.completed,
             indentLevel: item.parentId ? 1 : 0,

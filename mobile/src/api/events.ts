@@ -10,7 +10,19 @@ const WATCHDOG_INTERVAL_MS = 15_000;
 const STALL_TIMEOUT_MS = 75_000;
 
 type SSECallback = (event: SSEEvent) => void;
-type StatusChangeCallback = (connected: boolean) => void;
+
+/**
+ * Connection lifecycle state reported to {@link StatusChangeCallback}.
+ *
+ * The distinction between `connecting` and `reconnecting` is what lets the UI
+ * avoid flashing a "Connecting…" banner on every launch: an initial connect
+ * (`connecting`) is expected to take a moment — especially on a cold start that
+ * has to wake the radio and redo the TLS handshake — and is never an error,
+ * whereas `reconnecting` means a connection attempt actually failed and a retry
+ * is pending, which is the only state worth surfacing to the user.
+ */
+export type SSEStatus = 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
+type StatusChangeCallback = (status: SSEStatus) => void;
 
 export class SSEConnectionManager {
   private es: EventSource | null = null;
@@ -35,6 +47,10 @@ export class SSEConnectionManager {
     this.reconnectDelay = BASE_RECONNECT_DELAY_MS;
     this._reconnectAttempts = 0;
     this.generationId = getCurrentSwitchGenerationId();
+
+    // Fresh connection lifecycle: this is an initial connect, not a retry, so
+    // it must never surface the reconnect banner no matter how long it takes.
+    this.statusChangeCallback?.('connecting');
 
     await this.openConnection();
   }
@@ -62,7 +78,7 @@ export class SSEConnectionManager {
         this._reconnectAttempts = 0;
         this.reconnectDelay = BASE_RECONNECT_DELAY_MS;
         this.lastEventAt = Date.now();
-        this.statusChangeCallback?.(true);
+        this.statusChangeCallback?.('connected');
       });
 
       this.es.addEventListener('message', (event) => {
@@ -83,14 +99,15 @@ export class SSEConnectionManager {
 
       this.es.addEventListener('error', (event) => {
         this._isConnected = false;
-        this.statusChangeCallback?.(false);
         const status = (event as { status?: number })?.status;
         if (status === 401) {
           // Session expired — do not reconnect
           this.disconnect();
           return;
         }
-        // Schedule reconnect with exponential backoff
+        // Schedule reconnect with exponential backoff; scheduleReconnect emits the
+        // 'reconnecting' status so the UI can distinguish this genuine failure from
+        // an in-progress initial connect.
         this.scheduleReconnect();
       });
 
@@ -104,6 +121,9 @@ export class SSEConnectionManager {
   private scheduleReconnect(): void {
     if (this.closed) return;
     if (isSseQuiesced()) return;
+    // A connection attempt failed and a retry is pending — this, not the initial
+    // 'connecting', is what the reconnect banner keys off of.
+    this.statusChangeCallback?.('reconnecting');
     this._reconnectAttempts++;
     this.clearReconnectTimer();
     const delay = this.reconnectDelay;
@@ -118,7 +138,7 @@ export class SSEConnectionManager {
   disconnect(): void {
     this.closed = true;
     this._isConnected = false;
-    this.statusChangeCallback?.(false);
+    this.statusChangeCallback?.('disconnected');
     this.callback = null;
     this.cleanup();
   }
@@ -148,8 +168,8 @@ export class SSEConnectionManager {
       if (this.reconnectTimer !== null) return;
       if (Date.now() - this.lastEventAt > STALL_TIMEOUT_MS) {
         this._isConnected = false;
-        this.statusChangeCallback?.(false);
         this.cleanup();
+        // scheduleReconnect emits the 'reconnecting' status.
         this.scheduleReconnect();
       }
     }, WATCHDOG_INTERVAL_MS);
