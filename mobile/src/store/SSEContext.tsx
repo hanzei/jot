@@ -2,9 +2,17 @@ import React, { createContext, useContext, useRef, useCallback, useMemo, useStat
 import { useSSE, SSENotificationCallback } from '../hooks/useSSE';
 import type { SSEEvent } from '@jot/shared';
 
-// How long the SSE must be disconnected before we surface the banner. Matches
-// the webapp's SHOW_DELAY_MS so brief self-healing reconnects don't flash it.
-const SSE_BANNER_DELAY_MS = 2000;
+// How long the SSE must be disconnected before we surface the banner so brief,
+// self-healing reconnects don't flash it. This is intentionally longer than the
+// webapp's 2s SHOW_DELAY_MS: a mobile cold start or return-to-foreground has to
+// wake the radio, re-resolve DNS, and redo the TLS handshake, so a perfectly
+// healthy reconnect routinely takes a few seconds. It must also clear the SSE
+// reconnect backoff (BASE_RECONNECT_DELAY_MS = 3s in api/events) — if the first
+// connect attempt errors before the network is ready, the retry can't land
+// until ~3s, so a 2s threshold guaranteed the "Connecting to server…" flash on
+// every launch. 5s comfortably covers one backoff-plus-connect cycle while
+// still surfacing genuine outages quickly.
+const SSE_BANNER_DELAY_MS = 5000;
 
 interface SSEContextValue {
   subscribe: (listener: (event: SSEEvent) => void) => () => void;
