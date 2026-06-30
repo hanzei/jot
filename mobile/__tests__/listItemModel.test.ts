@@ -6,7 +6,6 @@ import {
   itemSnapshot,
   normalizeItemOrder,
   itemHasChildren,
-  precedingTopLevelId,
   applyCompletedCascade,
   droppedParentId,
   indentLevelFromDrag,
@@ -130,7 +129,7 @@ describe('normalizeItemOrder', () => {
   });
 });
 
-describe('itemHasChildren / precedingTopLevelId', () => {
+describe('itemHasChildren', () => {
   const items = [
     local({ id: 'p1' }),
     local({ id: 'c1', parentId: 'p1' }),
@@ -140,11 +139,6 @@ describe('itemHasChildren / precedingTopLevelId', () => {
   it('detects children', () => {
     expect(itemHasChildren(items, 'p1')).toBe(true);
     expect(itemHasChildren(items, 'p2')).toBe(false);
-  });
-
-  it('finds the nearest preceding top-level item', () => {
-    expect(precedingTopLevelId(items, 'p2')).toBe('p1');
-    expect(precedingTopLevelId(items, 'p1')).toBeNull();
   });
 });
 

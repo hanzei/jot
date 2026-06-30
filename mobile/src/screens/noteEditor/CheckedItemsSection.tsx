@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Platform, type TextInputProps, type TextInput as TextInputType } from 'react-native';
+import { View, Text, TouchableOpacity, type TextInputProps, type TextInput as TextInputType } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 import type { Collaborator } from '@jot/shared';
@@ -7,8 +7,6 @@ import { useTheme } from '../../theme/ThemeContext';
 import ListItem from '../../components/ListItem';
 import { styles } from './styles';
 import type { LocalItem } from './listItemModel';
-
-const LIST_INDENT_TOOLBAR_ID = 'list-indent-toolbar';
 
 /**
  * Per-item callbacks shared by the active list and the completed-items section.
@@ -23,7 +21,6 @@ export interface ListItemHandlers {
   onBackspaceOnEmpty: (index: number) => void;
   onAssignPress: (itemId: string) => void;
   onFocus: (itemId: string, event: Parameters<NonNullable<TextInputProps['onFocus']>>[0]) => void;
-  onBlur: () => void;
 }
 
 interface CheckedItemsSectionProps {
@@ -118,8 +115,6 @@ export default function CheckedItemsSection({
           onBackspaceOnEmpty={() => handlers.onBackspaceOnEmpty(originalIndex)}
           onAssignPress={() => handlers.onAssignPress(item.id)}
           onFocus={(event) => handlers.onFocus(item.id, event)}
-          onBlur={handlers.onBlur}
-          inputAccessoryViewID={Platform.OS === 'ios' ? LIST_INDENT_TOOLBAR_ID : undefined}
         />,
       );
     });

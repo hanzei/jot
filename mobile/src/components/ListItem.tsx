@@ -46,7 +46,6 @@ interface ListItemProps {
   onBackspaceOnEmpty?: () => void;
   onAssignPress?: () => void;
   onFocus?: TextInputProps['onFocus'];
-  onBlur?: TextInputProps['onBlur'];
   onAcceptSuggestion?: (text: string) => void;
 }
 
@@ -76,7 +75,6 @@ function ListItem({
   onBackspaceOnEmpty,
   onAssignPress,
   onFocus,
-  onBlur,
   onAcceptSuggestion,
 }: ListItemProps) {
   const { colors } = useTheme();
@@ -150,6 +148,9 @@ function ListItem({
           // feels sluggish for a dedicated drag handle.
           delayLongPress={DRAG_HANDLE_LONG_PRESS_MS}
           disabled={isActive}
+          // Don't dim on press: the long-press hands off to the reorder drag
+          // without a press-out, which otherwise leaves the handle stuck faded.
+          activeOpacity={1}
           style={styles.dragHandle}
           testID="list-item-drag-handle"
           accessibilityLabel={t('note.dragToReorderIndent')}
@@ -195,8 +196,7 @@ function ListItem({
               onFocus?.(event);
               if (!completed) setShowSuggestions(true);
             }}
-            onBlur={(event) => {
-              onBlur?.(event);
+            onBlur={() => {
               blurTimeoutRef.current = setTimeout(() => setShowSuggestions(false), 200);
             }}
             multiline

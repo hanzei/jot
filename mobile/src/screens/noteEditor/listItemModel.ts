@@ -131,15 +131,6 @@ export function droppedParentId(
   return null;
 }
 
-export function precedingTopLevelId(items: LocalItem[], itemId: string): string | null {
-  let last: string | null = null;
-  for (const it of items) {
-    if (it.id === itemId) return last;
-    if (it.parentId === null) last = it.id;
-  }
-  return null;
-}
-
 // applyCompletedCascade mirrors the server: toggling a top-level item also
 // toggles all its children; toggling a child touches only that item.
 //

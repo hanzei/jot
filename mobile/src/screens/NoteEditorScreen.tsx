@@ -61,12 +61,11 @@ import {
   itemSnapshot,
   normalizeItemOrder,
   itemHasChildren,
-  precedingTopLevelId,
   applyCompletedCascade,
   droppedParentId,
   indentLevelFromDrag,
 } from './noteEditor/listItemModel';
-import { MarkdownToolbarContent, ListIndentToolbarContent } from './noteEditor/EditorToolbars';
+import { MarkdownToolbarContent } from './noteEditor/EditorToolbars';
 import CheckedItemsSection, { type ListItemHandlers } from './noteEditor/CheckedItemsSection';
 import { styles } from './noteEditor/styles';
 import { animateListReflow, isReduceMotionEnabledSync } from '../utils/layoutAnimation';
@@ -78,15 +77,15 @@ type EditorNavProp = NativeStackNavigationProp<RootStackParamList, 'NoteEditor'>
 const IOS_KEYBOARD_VERTICAL_OFFSET = 88;
 const FOCUSED_INPUT_KEYBOARD_MARGIN = 120;
 const MARKDOWN_TOOLBAR_ID = 'markdown-formatting-toolbar';
-const LIST_INDENT_TOOLBAR_ID = 'list-indent-toolbar';
 // Duration (ms) of the row slide when the active list reflows after a toggle/delete.
 const LIST_REFLOW_ANIM_MS = 150;
 const MAX_EXIT_SAVE_RETRIES = 3;
-// Override the reorderable list's default cell animation to keep the dragged row
-// at full opacity (the library otherwise dims it, which could stick after a drop
-// and leave the row greyed out). Scale is left to the library for a subtle lift.
-// Module-scoped so the reference stays stable across renders.
-const DRAG_CELL_ANIMATIONS = { opacity: 1 };
+// Override the reorderable list's default cell animation so the dragged row is
+// fully static apart from following the finger: opacity stays 1 and no scale is
+// applied. The library's default opacity/scale animations could otherwise stick
+// after a drop and leave the row greyed out or enlarged. Module-scoped so the
+// reference stays stable across renders.
+const DRAG_CELL_ANIMATIONS = { opacity: 1, transform: [] };
 
 export default function NoteEditorScreen() {
   const navigation = useNavigation<EditorNavProp>();
@@ -122,7 +121,6 @@ export default function NoteEditorScreen() {
   const [assigningItemId, setAssigningItemId] = useState<string | null>(null);
   const [syncToast, setSyncToast] = useState<string | null>(null);
   const [isEditingContent, setIsEditingContent] = useState(initialNoteId === null);
-  const [listItemFocused, setListItemFocused] = useState(false);
   // Share-target picker: lets a share be redirected to another server before it
   // is saved (only relevant when opened from a share and 2+ servers exist).
   const [shareServers, setShareServers] = useState<ServerAccountEntry[]>([]);
@@ -132,7 +130,6 @@ export default function NoteEditorScreen() {
   // (e.g. the server switch failed) can be rolled back while still mounted.
   const pendingShare = usePendingShare();
   const redirectInitiatedRef = useRef(false);
-  const focusedListItemIdRef = useRef<string | null>(null);
   const { user: currentUser, isLocalMode } = useAuth();
   const { usersById } = useUsers();
   const { showToast } = useToast();
@@ -183,12 +180,6 @@ export default function NoteEditorScreen() {
   useEffect(() => {
     const sub = Keyboard.addListener('keyboardDidHide', () => {
       setIsEditingContent(false);
-      if (listItemBlurTimerRef.current) {
-        clearTimeout(listItemBlurTimerRef.current);
-        listItemBlurTimerRef.current = null;
-      }
-      setListItemFocused(false);
-      focusedListItemIdRef.current = null;
     });
     return () => sub.remove();
   }, []);
@@ -247,7 +238,6 @@ export default function NoteEditorScreen() {
   const contentInputRef = useRef<TextInputType>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   const itemInputRefsMap = useRef(new Map<string, React.RefObject<TextInputType | null>>());
-  const listItemBlurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const getItemRef = useCallback((id: string): React.RefObject<TextInputType | null> => {
     if (!itemInputRefsMap.current.has(id)) {
@@ -897,36 +887,6 @@ export default function NoteEditorScreen() {
     }, 50);
   }, [markDirtyAndScheduleUpdate]);
 
-  const handleIndentItem = useCallback(
-    (index: number, delta: 1 | -1) => {
-      const currentItems = itemsRef.current;
-      const target = currentItems[index];
-      if (!target) return;
-
-      let newParentId: string | null = target.parentId;
-      if (delta === 1) {
-        if (target.parentId !== null) return; // already nested
-        if (itemHasChildren(currentItems, target.id)) return; // would create a grandchild
-        const parentId = precedingTopLevelId(currentItems, target.id);
-        if (!parentId) return; // nothing to nest under
-        newParentId = parentId;
-      } else {
-        if (target.parentId === null) return; // already top-level
-        newParentId = null;
-      }
-
-      // Slide the row to its new indent rather than snapping sideways/vertically.
-      animateListReflow();
-      setItems((prev) =>
-        normalizeItemOrder(
-          prev.map((item) => (item.id === target.id ? { ...item, parentId: newParentId } : item)),
-        ),
-      );
-      markDirtyAndScheduleUpdate();
-    },
-    [markDirtyAndScheduleUpdate],
-  );
-
   const handleAcceptSuggestion = useCallback(
     (itemId: string, suggestionText: string) => {
       // Capture the completed item ID from the ref snapshot so we can focus it after setItems
@@ -1356,43 +1316,13 @@ export default function NoteEditorScreen() {
   }, []);
 
   const handleFocusListItem = useCallback(
-    (itemId: string, event: Parameters<NonNullable<TextInputProps['onFocus']>>[0]) => {
-      if (listItemBlurTimerRef.current) {
-        clearTimeout(listItemBlurTimerRef.current);
-        listItemBlurTimerRef.current = null;
-      }
-      focusedListItemIdRef.current = itemId;
-      setListItemFocused(true);
+    (_itemId: string, event: Parameters<NonNullable<TextInputProps['onFocus']>>[0]) => {
       handleListItemFocus(event);
     },
     [handleListItemFocus],
   );
 
-  const handleBlurListItem = useCallback(() => {
-    // Delay so toolbar button onPress fires before state clears (Android blur-before-press ordering)
-    listItemBlurTimerRef.current = setTimeout(() => {
-      listItemBlurTimerRef.current = null;
-      focusedListItemIdRef.current = null;
-      setListItemFocused(false);
-    }, 200);
-  }, []);
-
-  const handleListIndent = useCallback(
-    (delta: 1 | -1) => {
-      const id = focusedListItemIdRef.current;
-      if (!id) return;
-      const index = itemIndexMapRef.current.get(id);
-      if (index === undefined) return;
-      handleIndentItem(index, delta);
-    },
-    [handleIndentItem],
-  );
-
   const hasNoteColor = !!color && !isWhiteHexColor(color);
-
-  const listIndentToolbarContent = noteType === 'list' ? (
-    <ListIndentToolbarContent onIndent={handleListIndent} />
-  ) : null;
 
   // Per-item callbacks shared by the active list (renderListItem) and the
   // completed-items section, so both wire ListItem the same way.
@@ -1405,9 +1335,8 @@ export default function NoteEditorScreen() {
       onBackspaceOnEmpty: handleBackspaceOnEmpty,
       onAssignPress: openAssigneePicker,
       onFocus: handleFocusListItem,
-      onBlur: handleBlurListItem,
     }),
-    [handleItemCompletedToggle, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, openAssigneePicker, handleFocusListItem, handleBlurListItem],
+    [handleItemCompletedToggle, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, openAssigneePicker, handleFocusListItem],
   );
 
   const renderActiveRow = useCallback(
@@ -1441,9 +1370,7 @@ export default function NoteEditorScreen() {
             onBackspaceOnEmpty: () => listItemHandlers.onBackspaceOnEmpty(originalIndex),
             onAssignPress: () => listItemHandlers.onAssignPress(item.id),
             onFocus: (event) => listItemHandlers.onFocus(item.id, event),
-            onBlur: listItemHandlers.onBlur,
             onAcceptSuggestion: (text) => handleAcceptSuggestion(item.id, text),
-            inputAccessoryViewID: Platform.OS === 'ios' ? LIST_INDENT_TOOLBAR_ID : undefined,
           }}
         />
       );
@@ -1714,20 +1641,6 @@ export default function NoteEditorScreen() {
         )}
       </ScrollViewContainer>
 
-      {/* Android: show toolbar when a list item is focused (state-gated since no native focus binding) */}
-      {Platform.OS === 'android' && listItemFocused && listIndentToolbarContent}
-
-      {/* iOS: InputAccessoryView is implicitly focus-gated via inputAccessoryViewID on the TextInput */}
-      {Platform.OS === 'ios' && listIndentToolbarContent !== null && (
-        <InputAccessoryView nativeID={LIST_INDENT_TOOLBAR_ID}>
-          {listIndentToolbarContent}
-        </InputAccessoryView>
-      )}
-
-      {/* While a list item is focused the keyboard is up and the slim indent
-          toolbar docks above it; hide the bottom action bar so it doesn't collide
-          with (or hide behind) the keyboard. */}
-      {!listItemFocused && (
       <View style={[styles.toolbar, { backgroundColor: noteBackground, borderTopColor: hasNoteColor ? 'transparent' : colors.border, paddingBottom: insets.bottom || 8 }]}>
         {/* Color picker button */}
         <TouchableOpacity
@@ -1828,7 +1741,6 @@ export default function NoteEditorScreen() {
           <Ionicons name="trash-outline" size={22} color={colors.error} />
         </TouchableOpacity>
       </View>
-      )}
 
       <ColorPicker
         visible={colorPickerVisible}

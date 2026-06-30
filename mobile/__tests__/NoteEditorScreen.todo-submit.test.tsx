@@ -1,6 +1,5 @@
 import React from 'react';
-import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
-import { StyleSheet } from 'react-native';
+import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { VALIDATION } from '@jot/shared';
 import NoteEditorScreen from '../src/screens/NoteEditorScreen';
 
@@ -304,41 +303,6 @@ describe('NoteEditorScreen list submit behavior', () => {
 
     await waitFor(() => {
       expect(mockUpdateMutateAsync).not.toHaveBeenCalled();
-    });
-  });
-
-  it('indents and outdents list item via toolbar buttons', async () => {
-    const { getByTestId, getAllByTestId } = render(<NoteEditorScreen />);
-
-    fireEvent.press(getByTestId('toggle-note-type'));
-    // Add two items so the second can be nested under the first
-    fireEvent.press(getByTestId('add-list-item'));
-    fireEvent.press(getByTestId('add-list-item'));
-
-    const secondItemRow = getAllByTestId('list-item-row')[1];
-    expect(StyleSheet.flatten(secondItemRow.props.style)?.marginLeft).toBe(0);
-
-    // Focus the second list item input to set focusedListItemId
-    fireEvent(getAllByTestId('list-item-text')[1], 'focus', { nativeEvent: { target: 2 } });
-
-    // Tap indent button — nests second item under first
-    await act(async () => {
-      fireEvent.press(getByTestId('list-indent-btn'));
-    });
-
-    await waitFor(() => {
-      expect(StyleSheet.flatten(getAllByTestId('list-item-row')[1].props.style)?.marginLeft).toBe(
-        VALIDATION.INDENT_PX_PER_LEVEL,
-      );
-    });
-
-    // Tap outdent button — promotes back to top-level
-    await act(async () => {
-      fireEvent.press(getByTestId('list-outdent-btn'));
-    });
-
-    await waitFor(() => {
-      expect(StyleSheet.flatten(getAllByTestId('list-item-row')[1].props.style)?.marginLeft).toBe(0);
     });
   });
 
