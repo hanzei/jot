@@ -697,13 +697,33 @@ export default function NoteEditorScreen() {
 
   const handleItemCompletedToggle = useCallback(
     async (itemId: string, completed: boolean) => {
+      // itemsRef.current is the authoritative latest state here: each branch
+      // below writes the new array back to it synchronously, so a rapid
+      // follow-up toggle (fired before React re-renders) composes on the most
+      // recent optimistic state rather than a stale render snapshot. Without
+      // this, rows flicker back into the active list and an overlapping
+      // parent/child toggle captures a stale prior snapshot, corrupting its
+      // rollback and save baseline (issue: mobile item flicker).
       const before = itemsRef.current;
       const target = before.find((item) => item.id === itemId);
       if (!target || target.completed === completed) return;
 
+      // Capture the prior completed state of just the items this toggle touches
+      // (the item plus, for a top-level item, its children) from that latest
+      // state. Used to advance the save baseline and to revert precisely on
+      // failure — without clobbering any other item whose state may change
+      // before this async call settles.
+      const cascadeToChildren = target.parentId === null;
+      const priorCompletedById = new Map(
+        before
+          .filter((item) => item.id === itemId || (cascadeToChildren && item.parentId === itemId))
+          .map((item) => [item.id, item.completed]),
+      );
+
       // Optimistic cascade applied immediately, with a subtle settle as the
       // item moves between the active list and the completed section.
-      const cascaded = applyCompletedCascade(before, itemId, completed);
+      const optimisticItems = applyCompletedCascade(before, itemId, completed);
+      itemsRef.current = optimisticItems;
       animateListReflow();
       // Flag the just-checked item so its completed-section row pops on mount,
       // then clear the flag so a later collapse/expand doesn't replay the pop.
@@ -714,7 +734,7 @@ export default function NoteEditorScreen() {
       } else {
         setPopItemId(null);
       }
-      setItems(cascaded);
+      setItems(optimisticItems);
 
       // For unsaved new notes, let the bulk-create carry completed flags
       if (!noteIdRef.current) {
@@ -735,14 +755,16 @@ export default function NoteEditorScreen() {
           completed,
         });
         if (serverItems.length > 0) {
-          // Online: reconcile only completed flags from server response
+          // Online: reconcile only completed flags from server response,
+          // composing on (and writing back) the latest state so a concurrent
+          // toggle's optimistic change is preserved.
           const completedById = new Map(serverItems.map((item) => [item.id, item.completed]));
-          setItems((prev) =>
-            prev.map((item) => {
-              const serverCompleted = completedById.get(item.id);
-              return serverCompleted === undefined ? item : { ...item, completed: serverCompleted };
-            }),
-          );
+          const reconciled = itemsRef.current.map((item) => {
+            const serverCompleted = completedById.get(item.id);
+            return serverCompleted === undefined ? item : { ...item, completed: serverCompleted };
+          });
+          itemsRef.current = reconciled;
+          setItems(reconciled);
           // Advance the baseline so the diff engine does not re-patch completed
           for (const [id, comp] of completedById) {
             const snap = savedItemsRef.current.get(id);
@@ -750,15 +772,22 @@ export default function NoteEditorScreen() {
           }
         } else {
           // Offline: cascade was applied to local DB; advance baseline here too
-          for (const item of cascaded) {
-            const snap = savedItemsRef.current.get(item.id);
-            if (snap && snap.completed !== item.completed) {
-              savedItemsRef.current.set(item.id, { ...snap, completed: item.completed });
-            }
+          for (const [id, prior] of priorCompletedById) {
+            if (prior === completed) continue;
+            const snap = savedItemsRef.current.get(id);
+            if (snap) savedItemsRef.current.set(id, { ...snap, completed });
           }
         }
       } catch {
-        setItems(before);
+        // Revert only the items this toggle changed, restoring their prior
+        // completed values, so a concurrent toggle's optimistic state survives.
+        const reverted = itemsRef.current.map((item) =>
+          priorCompletedById.has(item.id)
+            ? { ...item, completed: priorCompletedById.get(item.id)! }
+            : item,
+        );
+        itemsRef.current = reverted;
+        setItems(reverted);
         setSaveError(t('note.failedSaveChanges'));
       }
     },
