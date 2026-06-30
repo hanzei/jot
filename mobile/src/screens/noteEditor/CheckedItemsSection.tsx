@@ -24,7 +24,6 @@ export interface ListItemHandlers {
   onAssignPress: (itemId: string) => void;
   onFocus: (itemId: string, event: Parameters<NonNullable<TextInputProps['onFocus']>>[0]) => void;
   onBlur: () => void;
-  onIndent: (index: number, delta: 1 | -1) => void;
 }
 
 interface CheckedItemsSectionProps {
@@ -120,7 +119,6 @@ export default function CheckedItemsSection({
           onAssignPress={() => handlers.onAssignPress(item.id)}
           onFocus={(event) => handlers.onFocus(item.id, event)}
           onBlur={handlers.onBlur}
-          onIndent={(delta) => handlers.onIndent(originalIndex, delta)}
           inputAccessoryViewID={Platform.OS === 'ios' ? LIST_INDENT_TOOLBAR_ID : undefined}
         />,
       );

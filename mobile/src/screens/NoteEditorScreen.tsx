@@ -1282,16 +1282,17 @@ export default function NoteEditorScreen() {
     [markDirtyAndScheduleUpdate, dragTranslateX],
   );
 
-  // The reorder drag activates on vertical movement (so a tap or a horizontal
-  // swipe on an idle row is left for the swipe-to-indent gesture), but once it is
-  // active we no longer reject horizontal movement: onChange feeds translationX
-  // into dragTranslateX so the lifted row can follow the finger sideways and
-  // indent/outdent as it is dragged (Google Keep style). The library chains its
-  // own onBegin/onUpdate/onEnd/onFinalize handlers onto this gesture; onChange is
-  // free for us to use.
+  // The reorder drag activates on movement along either axis: vertical to
+  // reorder, horizontal to indent/outdent (Google Keep style). onChange feeds
+  // translationX into dragTranslateX so the lifted row can follow the finger
+  // sideways and snap to an indent step as it is dragged. (There is no longer a
+  // separate swipe-to-indent gesture competing for the horizontal axis.) The
+  // library chains its own onBegin/onUpdate/onEnd/onFinalize handlers onto this
+  // gesture; onChange is free for us to use.
   const listDragGesture = useMemo(
     () =>
       Gesture.Pan()
+        .activeOffsetX([-10, 10])
         .activeOffsetY([-10, 10])
         .onChange((event) => {
           'worklet';
@@ -1373,9 +1374,8 @@ export default function NoteEditorScreen() {
       onAssignPress: openAssigneePicker,
       onFocus: handleFocusListItem,
       onBlur: handleBlurListItem,
-      onIndent: handleIndentItem,
     }),
-    [handleItemCompletedToggle, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, openAssigneePicker, handleFocusListItem, handleBlurListItem, handleIndentItem],
+    [handleItemCompletedToggle, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, openAssigneePicker, handleFocusListItem, handleBlurListItem],
   );
 
   const renderActiveRow = useCallback(
@@ -1411,7 +1411,6 @@ export default function NoteEditorScreen() {
             onAssignPress: () => listItemHandlers.onAssignPress(item.id),
             onFocus: (event) => listItemHandlers.onFocus(item.id, event),
             onBlur: listItemHandlers.onBlur,
-            onIndent: (delta) => listItemHandlers.onIndent(originalIndex, delta),
             onAcceptSuggestion: (text) => handleAcceptSuggestion(item.id, text),
             inputAccessoryViewID: Platform.OS === 'ios' ? LIST_INDENT_TOOLBAR_ID : undefined,
           }}
