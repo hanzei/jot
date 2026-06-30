@@ -239,6 +239,7 @@ export default function NoteEditorScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
   const itemInputRefsMap = useRef(new Map<string, React.RefObject<TextInputType | null>>());
   const autoFocusItemIdRef = useRef<string | null>(null);
+  const autoFocusClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const getItemRef = useCallback((id: string): React.RefObject<TextInputType | null> => {
     if (!itemInputRefsMap.current.has(id)) {
@@ -855,7 +856,9 @@ export default function NoteEditorScreen() {
     markDirtyAndScheduleUpdate();
     // autoFocus is only consumed at mount; clear after a short delay so a
     // later unmount/remount of the same ID doesn't re-open the keyboard.
-    setTimeout(() => { autoFocusItemIdRef.current = null; }, 500);
+    // Cancel any pending clear from a previous rapid tap before rescheduling.
+    if (autoFocusClearTimerRef.current !== null) clearTimeout(autoFocusClearTimerRef.current);
+    autoFocusClearTimerRef.current = setTimeout(() => { autoFocusItemIdRef.current = null; }, 500);
   }, [markDirtyAndScheduleUpdate]);
 
   const handleInsertItemAfter = useCallback((index: number) => {
