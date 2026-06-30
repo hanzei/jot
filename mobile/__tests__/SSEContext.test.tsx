@@ -5,7 +5,7 @@ import { SSEProvider, useSSEContext } from '../src/store/SSEContext';
 import type { SSEStatusChangeCallback } from '../src/hooks/useSSE';
 
 // Capture the status-change callback useSSE receives so the test can drive the
-// SSE connected/disconnected transitions that gate the reconnect banner.
+// SSE connection lifecycle that gates the reconnect banner.
 let capturedStatusChange: SSEStatusChangeCallback | undefined;
 jest.mock('../src/hooks/useSSE', () => ({
   useSSE: (
@@ -16,8 +16,8 @@ jest.mock('../src/hooks/useSSE', () => ({
   },
 }));
 
-// Mirrors SSE_BANNER_DELAY_MS in SSEContext: the banner must stay hidden for a
-// brief, self-healing reconnect and only appear once the outage outlasts this.
+// Mirrors SSE_BANNER_DELAY_MS in SSEContext: a 'reconnecting' state must outlast
+// this before the banner appears, so a quick self-healing retry stays silent.
 const SSE_BANNER_DELAY_MS = 5000;
 
 function Probe() {
@@ -33,6 +33,20 @@ function renderProbe() {
   );
 }
 
+// Drive a status change and flush the resulting effect (which arms/clears the
+// banner timer) before any subsequent timer advance.
+function emitStatus(status: Parameters<SSEStatusChangeCallback>[0]) {
+  act(() => {
+    capturedStatusChange?.(status);
+  });
+}
+
+function advance(ms: number) {
+  act(() => {
+    jest.advanceTimersByTime(ms);
+  });
+}
+
 describe('SSEProvider reconnect banner gating', () => {
   beforeEach(() => {
     jest.useFakeTimers();
@@ -44,39 +58,46 @@ describe('SSEProvider reconnect banner gating', () => {
     jest.useRealTimers();
   });
 
-  it('does not surface the banner for a reconnect that completes before the delay', () => {
+  it('never surfaces the banner for a slow initial connect, however long it takes', () => {
+    // The "closed for a while" cold start: a fresh connect reports 'connecting'
+    // the whole time it wakes the radio / redoes the TLS handshake. No matter how
+    // long that takes, it must not flash the "Connecting to server…" banner.
     const { getByText } = renderProbe();
 
-    // Connection drops, then re-establishes well within the threshold.
-    act(() => {
-      capturedStatusChange?.(false);
-      jest.advanceTimersByTime(SSE_BANNER_DELAY_MS - 1000);
-      capturedStatusChange?.(true);
-    });
+    emitStatus('connecting');
+    advance(SSE_BANNER_DELAY_MS * 3);
+    expect(getByText('idle')).toBeTruthy();
+
+    // It eventually connects — still no banner, no flash.
+    emitStatus('connected');
+    expect(getByText('idle')).toBeTruthy();
+  });
+
+  it('does not surface the banner for a reconnect that recovers before the delay', () => {
+    const { getByText } = renderProbe();
+
+    // A connection attempt fails and a retry is pending, but it recovers well
+    // within the threshold.
+    emitStatus('reconnecting');
+    advance(SSE_BANNER_DELAY_MS - 1000);
+    emitStatus('connected');
 
     // Even after the original timer would have fired, the banner stays hidden.
-    act(() => {
-      jest.advanceTimersByTime(SSE_BANNER_DELAY_MS);
-    });
+    advance(SSE_BANNER_DELAY_MS);
 
     expect(getByText('idle')).toBeTruthy();
   });
 
-  it('surfaces the banner once the outage outlasts the delay', () => {
+  it('surfaces the banner once a reconnect outlasts the delay', () => {
     const { getByText } = renderProbe();
 
-    act(() => {
-      capturedStatusChange?.(false);
-      jest.advanceTimersByTime(SSE_BANNER_DELAY_MS);
-    });
+    emitStatus('reconnecting');
+    advance(SSE_BANNER_DELAY_MS);
 
     expect(getByText('reconnecting')).toBeTruthy();
 
     // Recovering clears the banner immediately.
-    act(() => {
-      capturedStatusChange?.(true);
-    });
-
+    emitStatus('connected');
     expect(getByText('idle')).toBeTruthy();
   });
 });

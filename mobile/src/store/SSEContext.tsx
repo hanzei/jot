@@ -1,17 +1,17 @@
 import React, { createContext, useContext, useRef, useCallback, useMemo, useState, useEffect } from 'react';
 import { useSSE, SSENotificationCallback } from '../hooks/useSSE';
+import type { SSEStatus } from '../api/events';
 import type { SSEEvent } from '@jot/shared';
 
-// How long the SSE must be disconnected before we surface the banner so brief,
-// self-healing reconnects don't flash it. This is intentionally longer than the
-// webapp's 2s SHOW_DELAY_MS: a mobile cold start or return-to-foreground has to
-// wake the radio, re-resolve DNS, and redo the TLS handshake, so a perfectly
-// healthy reconnect routinely takes a few seconds. It must also clear the SSE
-// reconnect backoff (BASE_RECONNECT_DELAY_MS = 3s in api/events) — if the first
-// connect attempt errors before the network is ready, the retry can't land
-// until ~3s, so a 2s threshold guaranteed the "Connecting to server…" flash on
-// every launch. 5s comfortably covers one backoff-plus-connect cycle while
-// still surfacing genuine outages quickly.
+// How long the SSE must stay in the 'reconnecting' state before we surface the
+// banner, so a single self-healing retry doesn't flash it. The banner is gated
+// on 'reconnecting' (a connection attempt that actually failed and is retrying),
+// not on a bare "not connected": an initial connect — including a slow cold
+// start that has to wake the radio and redo the TLS handshake — reports
+// 'connecting' and never trips the banner no matter how long it takes. That
+// status distinction, not this delay, is what fixes the launch flash; the delay
+// only needs to outlast one reconnect backoff (BASE_RECONNECT_DELAY_MS = 3s in
+// api/events) so a quick retry-and-recover stays silent.
 const SSE_BANNER_DELAY_MS = 5000;
 
 interface SSEContextValue {
@@ -31,18 +31,21 @@ const SSEContext = createContext<SSEContextValue>({
 
 export function SSEProvider({ children }: { children: React.ReactNode }) {
   const listenersRef = useRef<Set<(event: SSEEvent) => void>>(new Set());
-  const [sseConnected, setSseConnected] = useState(false);
+  const [sseStatus, setSseStatus] = useState<SSEStatus>('connecting');
   const [sseReconnecting, setSseReconnecting] = useState(false);
 
-  // Delay surfacing the banner so brief, self-healing reconnects don't flash it.
+  // Only a genuine reconnect (a connection attempt that failed and is retrying)
+  // can surface the banner — an in-progress initial connect never does — and
+  // even then only once it outlasts the delay, so a quick self-healing retry
+  // stays silent.
   useEffect(() => {
-    if (sseConnected) {
+    if (sseStatus !== 'reconnecting') {
       setSseReconnecting(false);
       return;
     }
     const timer = setTimeout(() => setSseReconnecting(true), SSE_BANNER_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [sseConnected]);
+  }, [sseStatus]);
 
   const handleNoteUpdated: SSENotificationCallback = useCallback((event) => {
     for (const listener of listenersRef.current) {
@@ -50,7 +53,7 @@ export function SSEProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  useSSE(handleNoteUpdated, setSseConnected);
+  useSSE(handleNoteUpdated, setSseStatus);
 
   const value = useMemo<SSEContextValue>(() => ({
     subscribe: (listener: (event: SSEEvent) => void) => {

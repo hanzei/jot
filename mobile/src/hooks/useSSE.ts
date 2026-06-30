@@ -3,7 +3,7 @@ import { AppState, AppStateStatus } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useAuth } from '../store/AuthContext';
-import { SSEConnectionManager } from '../api/events';
+import { SSEConnectionManager, type SSEStatus } from '../api/events';
 import { setActiveSseManager } from '../api/sseState';
 import { CLIENT_ID } from '../api/client';
 import type { SSEEvent } from '@jot/shared';
@@ -18,7 +18,7 @@ import {
 } from './queryKeys';
 
 export type SSENotificationCallback = (event: SSEEvent) => void;
-export type SSEStatusChangeCallback = (connected: boolean) => void;
+export type SSEStatusChangeCallback = (status: SSEStatus) => void;
 
 export function useSSE(
   onNoteUpdatedByOther?: SSENotificationCallback,
@@ -166,7 +166,7 @@ export function useSSE(
           }
         }
       })();
-    }, (connected) => onStatusChangeRef.current?.(connected));
+    }, (status) => onStatusChangeRef.current?.(status));
     // No catch-up invalidation here: startConnection runs on every reconnect,
     // foreground, and server-switch, and a blanket invalidate only re-reads the
     // (still-stale) local SQLite — it doesn't fetch from the server. The actual
