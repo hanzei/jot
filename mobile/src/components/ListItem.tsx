@@ -133,9 +133,9 @@ function ListItem({
   const assignedUser = assignedTo ? collaborators?.find((c) => c.userId === assignedTo) : undefined;
   const normalizedIndentLevel = Math.max(0, indentLevel);
 
-  // Indenting/outdenting is driven by dragging the row sideways (handled by the
-  // reorderable list in NoteEditorScreen) and by the indent toolbar buttons —
-  // this component no longer hosts a swipe-to-indent gesture of its own.
+  // Indenting/outdenting is driven entirely by dragging the row sideways
+  // (handled by the reorderable list in NoteEditorScreen); this component hosts
+  // no indent gesture or control of its own.
   return (
     <View
       style={[styles.container, { marginLeft: normalizedIndentLevel * VALIDATION.INDENT_PX_PER_LEVEL }]}

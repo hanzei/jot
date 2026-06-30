@@ -1340,7 +1340,7 @@ export default function NoteEditorScreen() {
   );
 
   const renderActiveRow = useCallback(
-    ({ item }: ReorderableListRenderItemInfo<LocalItem>) => {
+    ({ item, index }: ReorderableListRenderItemInfo<LocalItem>) => {
       const originalIndex = itemIndexMapRef.current.get(item.id);
       if (originalIndex === undefined) return null;
       const baseLevel = item.parentId ? 1 : 0;
@@ -1348,9 +1348,11 @@ export default function NoteEditorScreen() {
         <ActiveListRow
           dragTranslateX={dragTranslateX}
           indentBaseLevel={baseLevel}
-          // A parent (item with children) can't be nested; outdenting only
-          // applies to an already-nested item.
-          canIndent={!itemHasChildren(itemsRef.current, item.id)}
+          // Mirror commitDrag: an item can only nest if it has no children and
+          // there is a row above it to nest under (index > 0 in the active list).
+          // Keeping this in step stops the preview showing an indent that the
+          // drop would reject.
+          canIndent={!itemHasChildren(itemsRef.current, item.id) && index > 0}
           canOutdent={baseLevel === 1}
           listItemProps={{
             inputRef: getItemRef(item.id),
