@@ -21,10 +21,11 @@ import {
   ScrollViewContainer,
   reorderItems,
   type ReorderableListReorderEvent,
+  type ReorderableListDragEndEvent,
   type ReorderableListRenderItemInfo,
 } from 'react-native-reorderable-list';
 import { Gesture } from 'react-native-gesture-handler';
-import { LinearTransition, useSharedValue } from 'react-native-reanimated';
+import { LinearTransition, useSharedValue, runOnJS } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -1244,8 +1245,12 @@ export default function NoteEditorScreen() {
   const uncheckedItemsRef = useRef(uncheckedItems);
   uncheckedItemsRef.current = uncheckedItems;
 
-  const handleListReorder = useCallback(
-    ({ from, to }: ReorderableListReorderEvent) => {
+  // Commits a finished drag: applies the vertical move (if any) and the indent
+  // implied by the horizontal drag distance, then persists. Called from both
+  // onReorder (fires only when the row changed slots) and onDragEnd (fires on
+  // every drop, which is how a purely sideways indent gets committed at all).
+  const commitDrag = useCallback(
+    (from: number, to: number) => {
       // Apply the move to the unchecked list (a no-op when from === to, e.g. a
       // purely sideways drag that only changed the indent).
       const reorderedUnchecked = reorderItems(uncheckedItemsRef.current, from, to);
@@ -1253,19 +1258,22 @@ export default function NoteEditorScreen() {
       let changed = from !== to;
       if (moved) {
         const above = to > 0 ? reorderedUnchecked[to - 1] : null;
-        // The horizontal drag distance is the explicit indent intent. When the
-        // user dragged sideways past a step, honor it; otherwise fall back to the
-        // position-based reparent so dropping into a group still nests as before.
         const baseLevel = moved.parentId ? 1 : 0;
         const canIndent = !itemHasChildren(itemsRef.current, moved.id) && !!above;
         const canOutdent = baseLevel === 1;
         const targetLevel = indentLevelFromDrag(dragTranslateX.value, baseLevel, canIndent, canOutdent);
-        const newParentId =
-          targetLevel !== baseLevel
-            ? targetLevel === 1 && above
-              ? above.parentId ?? above.id
-              : null
-            : droppedParentId(itemsRef.current, moved, above);
+        let newParentId: string | null;
+        if (targetLevel !== baseLevel) {
+          // The horizontal drag past a step is an explicit indent intent.
+          newParentId = targetLevel === 1 && above ? above.parentId ?? above.id : null;
+        } else if (from !== to) {
+          // No sideways intent but the row moved: fall back to the position-based
+          // reparent so dropping into a group still nests as before.
+          newParentId = droppedParentId(itemsRef.current, moved, above);
+        } else {
+          // Released in place with no sideways intent: leave the parent untouched.
+          newParentId = moved.parentId;
+        }
         if (newParentId !== moved.parentId) {
           reorderedUnchecked[to] = { ...moved, parentId: newParentId };
           changed = true;
@@ -1280,6 +1288,25 @@ export default function NoteEditorScreen() {
       markDirtyAndScheduleUpdate();
     },
     [markDirtyAndScheduleUpdate, dragTranslateX],
+  );
+
+  const handleListReorder = useCallback(
+    ({ from, to }: ReorderableListReorderEvent) => commitDrag(from, to),
+    [commitDrag],
+  );
+
+  // onReorder never fires for a purely sideways drag (the library only calls it
+  // when from !== to). onDragEnd fires on every drop — inside a UI-thread
+  // worklet — so we hop back to JS to commit the indent for that case. The
+  // from !== to drops are already handled by onReorder above.
+  const handleListDragEnd = useCallback(
+    ({ from, to }: ReorderableListDragEndEvent) => {
+      'worklet';
+      if (from === to) {
+        runOnJS(commitDrag)(from, to);
+      }
+    },
+    [commitDrag],
   );
 
   // The reorder drag activates on movement along either axis: vertical to
@@ -1651,6 +1678,7 @@ export default function NoteEditorScreen() {
               shouldUpdateActiveItem
               panGesture={listDragGesture}
               onReorder={handleListReorder}
+              onDragEnd={handleListDragEnd}
               renderItem={renderActiveRow}
               // Slide remaining rows into place when an item is checked off (and
               // moves to the completed section) or deleted. Skipped under the OS
