@@ -690,13 +690,26 @@ export default function NoteEditorScreen() {
 
   const handleItemCompletedToggle = useCallback(
     async (itemId: string, completed: boolean) => {
-      const before = itemsRef.current;
-      const target = before.find((item) => item.id === itemId);
+      const target = itemsRef.current.find((item) => item.id === itemId);
       if (!target || target.completed === completed) return;
 
+      // Capture the prior completed state of just the items this toggle touches
+      // (the item plus, for a top-level item, its children). Used to advance the
+      // save baseline and to revert precisely on failure — without clobbering any
+      // other item whose state may change before this async call settles.
+      const cascadeToChildren = target.parentId === null;
+      const priorCompletedById = new Map(
+        itemsRef.current
+          .filter((item) => item.id === itemId || (cascadeToChildren && item.parentId === itemId))
+          .map((item) => [item.id, item.completed]),
+      );
+
       // Optimistic cascade applied immediately, with a subtle settle as the
-      // item moves between the active list and the completed section.
-      const cascaded = applyCompletedCascade(before, itemId, completed);
+      // item moves between the active list and the completed section. Use a
+      // functional update so rapid successive toggles compose on the latest
+      // committed state instead of a stale snapshot — otherwise a second toggle
+      // fired before this one re-renders would revert the first, making rows
+      // flicker back into the active list (issue: mobile item flicker).
       animateListReflow();
       // Flag the just-checked item so its completed-section row pops on mount,
       // then clear the flag so a later collapse/expand doesn't replay the pop.
@@ -707,7 +720,7 @@ export default function NoteEditorScreen() {
       } else {
         setPopItemId(null);
       }
-      setItems(cascaded);
+      setItems((prev) => applyCompletedCascade(prev, itemId, completed));
 
       // For unsaved new notes, let the bulk-create carry completed flags
       if (!noteIdRef.current) {
@@ -743,15 +756,22 @@ export default function NoteEditorScreen() {
           }
         } else {
           // Offline: cascade was applied to local DB; advance baseline here too
-          for (const item of cascaded) {
-            const snap = savedItemsRef.current.get(item.id);
-            if (snap && snap.completed !== item.completed) {
-              savedItemsRef.current.set(item.id, { ...snap, completed: item.completed });
-            }
+          for (const [id, prior] of priorCompletedById) {
+            if (prior === completed) continue;
+            const snap = savedItemsRef.current.get(id);
+            if (snap) savedItemsRef.current.set(id, { ...snap, completed });
           }
         }
       } catch {
-        setItems(before);
+        // Revert only the items this toggle changed, restoring their prior
+        // completed values, so a concurrent toggle's optimistic state survives.
+        setItems((prev) =>
+          prev.map((item) =>
+            priorCompletedById.has(item.id)
+              ? { ...item, completed: priorCompletedById.get(item.id)! }
+              : item,
+          ),
+        );
         setSaveError(t('note.failedSaveChanges'));
       }
     },
