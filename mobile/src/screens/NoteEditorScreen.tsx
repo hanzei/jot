@@ -1244,7 +1244,10 @@ export default function NoteEditorScreen() {
           changed = true;
         }
       }
-      dragTranslateX.value = 0;
+      // Note: dragTranslateX is intentionally not reset here. Each active row now
+      // holds its dropped indent in its own `displayLevel` until the committed
+      // re-render lands; zeroing the shared value mid-drop could clobber that hold
+      // and reintroduce the snap-back flash. The drag start resets it instead.
       if (!changed) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       // Merge with existing checked items and normalize so each parent's
