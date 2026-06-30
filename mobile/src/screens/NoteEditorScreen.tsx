@@ -143,10 +143,15 @@ export default function NoteEditorScreen() {
   const dragTranslateX = useSharedValue(0);
   // On Android the window is edge-to-edge and is NOT resized for the keyboard,
   // so lift the whole editor (scroll area + toolbars) above it manually. iOS
-  // relies on KeyboardAvoidingView's "padding" behavior instead. Subtracting the
-  // bottom inset lets the toolbar's own safe-area padding fill the gap so its
-  // buttons sit flush against the top of the keyboard.
-  const androidKeyboardInset = Platform.OS === 'android' ? Math.max(keyboardHeight - insets.bottom, 0) : 0;
+  // relies on KeyboardAvoidingView's "padding" behavior instead.
+  //
+  // Android reports the keyboard height excluding the bottom navigation inset:
+  // the keyboard draws over that inset, so endCoordinates.height is measured from
+  // the top of the navigation bar, not the bottom edge of the screen. Reserve the
+  // full keyboardHeight here; the toolbar's own safe-area bottom padding
+  // (insets.bottom) then bridges the navigation-inset region so its buttons sit
+  // flush against the top of the keyboard instead of behind it.
+  const androidKeyboardInset = Platform.OS === 'android' ? keyboardHeight : 0;
   const bannerShown = useBannerShown();
   const { data: existingNote } = useOfflineNote(noteId);
   const createMutation = useCreateNote();
