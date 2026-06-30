@@ -29,6 +29,7 @@ interface ListItemProps {
   isShared?: boolean;
   collaborators?: Collaborator[];
   inputRef?: React.RefObject<TextInputType | null>;
+  autoFocus?: boolean;
   inputAccessoryViewID?: string;
   hasNoteColor?: boolean;
   completedItemTexts?: string[];
@@ -63,6 +64,7 @@ function ListItem({
   isShared,
   collaborators,
   inputRef,
+  autoFocus = false,
   inputAccessoryViewID,
   hasNoteColor = false,
   completedItemTexts,
@@ -180,6 +182,7 @@ function ListItem({
         <View style={styles.inputRow}>
           <TextInput
             ref={inputRef}
+            autoFocus={autoFocus}
             style={[styles.textInput, { color: completed ? effectiveTextMuted : effectiveText }, completed && styles.completedText]}
             value={text}
             onChangeText={(newText) => {

@@ -143,10 +143,15 @@ export default function NoteEditorScreen() {
   const dragTranslateX = useSharedValue(0);
   // On Android the window is edge-to-edge and is NOT resized for the keyboard,
   // so lift the whole editor (scroll area + toolbars) above it manually. iOS
-  // relies on KeyboardAvoidingView's "padding" behavior instead. Subtracting the
-  // bottom inset lets the toolbar's own safe-area padding fill the gap so its
-  // buttons sit flush against the top of the keyboard.
-  const androidKeyboardInset = Platform.OS === 'android' ? Math.max(keyboardHeight - insets.bottom, 0) : 0;
+  // relies on KeyboardAvoidingView's "padding" behavior instead.
+  //
+  // Android reports the keyboard height excluding the bottom navigation inset:
+  // the keyboard draws over that inset, so endCoordinates.height is measured from
+  // the top of the navigation bar, not the bottom edge of the screen. Reserve the
+  // full keyboardHeight here; the toolbar's own safe-area bottom padding
+  // (insets.bottom) then bridges the navigation-inset region so its buttons sit
+  // flush against the top of the keyboard instead of behind it.
+  const androidKeyboardInset = Platform.OS === 'android' ? keyboardHeight : 0;
   const bannerShown = useBannerShown();
   const { data: existingNote } = useOfflineNote(noteId);
   const createMutation = useCreateNote();
@@ -238,6 +243,8 @@ export default function NoteEditorScreen() {
   const contentInputRef = useRef<TextInputType>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   const itemInputRefsMap = useRef(new Map<string, React.RefObject<TextInputType | null>>());
+  const autoFocusItemIdRef = useRef<string | null>(null);
+  const autoFocusClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const getItemRef = useCallback((id: string): React.RefObject<TextInputType | null> => {
     if (!itemInputRefsMap.current.has(id)) {
@@ -828,12 +835,15 @@ export default function NoteEditorScreen() {
   const handleDeleteItem = useCallback(
     (index: number) => {
       const removedItemId = itemsRef.current[index]?.id;
+      if (removedItemId) {
+        if (itemInputRefsMap.current.get(removedItemId)?.current?.isFocused()) {
+          Keyboard.dismiss();
+        }
+        itemInputRefsMap.current.delete(removedItemId);
+      }
       // Settle the surrounding rows as this one is removed instead of snapping.
       animateListReflow();
       setItems((prev) => prev.filter((_, i) => i !== index));
-      if (removedItemId) {
-        itemInputRefsMap.current.delete(removedItemId);
-      }
       markDirtyAndScheduleUpdate();
     },
     [markDirtyAndScheduleUpdate],
@@ -841,7 +851,10 @@ export default function NoteEditorScreen() {
 
   const handleAddItem = useCallback(() => {
     const newId = nextTempId();
-    const newItemRef = getItemRef(newId);
+    // Mark before setItems so the item mounts with autoFocus={true}, which
+    // reliably opens the soft keyboard (programmatic focus() doesn't always
+    // trigger the IME on Android for newly mounted inputs).
+    autoFocusItemIdRef.current = newId;
     // Ease the new row in rather than having the list jump to make room.
     animateListReflow();
     setItems((prev) => [
@@ -849,8 +862,12 @@ export default function NoteEditorScreen() {
       { id: newId, text: '', completed: false, position: prev.length, parentId: null, assigned_to: '' },
     ]);
     markDirtyAndScheduleUpdate();
-    setTimeout(() => newItemRef.current?.focus(), 50);
-  }, [markDirtyAndScheduleUpdate, getItemRef]);
+    // autoFocus is only consumed at mount; clear after a short delay so a
+    // later unmount/remount of the same ID doesn't re-open the keyboard.
+    // Cancel any pending clear from a previous rapid tap before rescheduling.
+    if (autoFocusClearTimerRef.current !== null) clearTimeout(autoFocusClearTimerRef.current);
+    autoFocusClearTimerRef.current = setTimeout(() => { autoFocusItemIdRef.current = null; }, 500);
+  }, [markDirtyAndScheduleUpdate]);
 
   const handleInsertItemAfter = useCallback((index: number) => {
     const newId = nextTempId();
@@ -1244,7 +1261,10 @@ export default function NoteEditorScreen() {
           changed = true;
         }
       }
-      dragTranslateX.value = 0;
+      // Note: dragTranslateX is intentionally not reset here. Each active row now
+      // holds its dropped indent in its own `displayLevel` until the committed
+      // re-render lands; zeroing the shared value mid-drop could clobber that hold
+      // and reintroduce the snap-back flash. The drag start resets it instead.
       if (!changed) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       // Merge with existing checked items and normalize so each parent's
@@ -1356,6 +1376,7 @@ export default function NoteEditorScreen() {
           canOutdent={baseLevel === 1}
           listItemProps={{
             inputRef: getItemRef(item.id),
+            autoFocus: item.id === autoFocusItemIdRef.current,
             text: item.text,
             completed: item.completed,
             indentLevel: item.parentId ? 1 : 0,
