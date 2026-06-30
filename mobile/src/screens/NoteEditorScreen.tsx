@@ -243,6 +243,8 @@ export default function NoteEditorScreen() {
   const contentInputRef = useRef<TextInputType>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   const itemInputRefsMap = useRef(new Map<string, React.RefObject<TextInputType | null>>());
+  const autoFocusItemIdRef = useRef<string | null>(null);
+  const autoFocusClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const getItemRef = useCallback((id: string): React.RefObject<TextInputType | null> => {
     if (!itemInputRefsMap.current.has(id)) {
@@ -833,12 +835,15 @@ export default function NoteEditorScreen() {
   const handleDeleteItem = useCallback(
     (index: number) => {
       const removedItemId = itemsRef.current[index]?.id;
+      if (removedItemId) {
+        if (itemInputRefsMap.current.get(removedItemId)?.current?.isFocused()) {
+          Keyboard.dismiss();
+        }
+        itemInputRefsMap.current.delete(removedItemId);
+      }
       // Settle the surrounding rows as this one is removed instead of snapping.
       animateListReflow();
       setItems((prev) => prev.filter((_, i) => i !== index));
-      if (removedItemId) {
-        itemInputRefsMap.current.delete(removedItemId);
-      }
       markDirtyAndScheduleUpdate();
     },
     [markDirtyAndScheduleUpdate],
@@ -846,7 +851,10 @@ export default function NoteEditorScreen() {
 
   const handleAddItem = useCallback(() => {
     const newId = nextTempId();
-    const newItemRef = getItemRef(newId);
+    // Mark before setItems so the item mounts with autoFocus={true}, which
+    // reliably opens the soft keyboard (programmatic focus() doesn't always
+    // trigger the IME on Android for newly mounted inputs).
+    autoFocusItemIdRef.current = newId;
     // Ease the new row in rather than having the list jump to make room.
     animateListReflow();
     setItems((prev) => [
@@ -854,8 +862,12 @@ export default function NoteEditorScreen() {
       { id: newId, text: '', completed: false, position: prev.length, parentId: null, assigned_to: '' },
     ]);
     markDirtyAndScheduleUpdate();
-    setTimeout(() => newItemRef.current?.focus(), 50);
-  }, [markDirtyAndScheduleUpdate, getItemRef]);
+    // autoFocus is only consumed at mount; clear after a short delay so a
+    // later unmount/remount of the same ID doesn't re-open the keyboard.
+    // Cancel any pending clear from a previous rapid tap before rescheduling.
+    if (autoFocusClearTimerRef.current !== null) clearTimeout(autoFocusClearTimerRef.current);
+    autoFocusClearTimerRef.current = setTimeout(() => { autoFocusItemIdRef.current = null; }, 500);
+  }, [markDirtyAndScheduleUpdate]);
 
   const handleInsertItemAfter = useCallback((index: number) => {
     const newId = nextTempId();
@@ -1361,6 +1373,7 @@ export default function NoteEditorScreen() {
           canOutdent={baseLevel === 1}
           listItemProps={{
             inputRef: getItemRef(item.id),
+            autoFocus: item.id === autoFocusItemIdRef.current,
             text: item.text,
             completed: item.completed,
             indentLevel: item.parentId ? 1 : 0,
