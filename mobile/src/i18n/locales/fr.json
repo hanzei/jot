@@ -250,7 +250,7 @@
     "updatedByAnotherUser": "Cette note a été mise à jour par un autre utilisateur",
     "listItemLabel": "Élément de liste",
     "itemCheckbox": "Case à cocher {{item}}",
-    "dragToReorder": "Glisser pour réorganiser",
+    "dragToReorderIndent": "Glisser pour réorganiser ou indenter",
     "colorWhite": "Blanc",
     "colorCoral": "Corail",
     "colorYellow": "Jaune",

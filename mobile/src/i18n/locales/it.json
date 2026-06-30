@@ -279,7 +279,7 @@
     "updatedByAnotherUser": "Questa nota è stata aggiornata da un altro utente",
     "listItemLabel": "Elemento dell'elenco",
     "itemCheckbox": "Casella di controllo {{item}}",
-    "dragToReorder": "Trascina per riordinare",
+    "dragToReorderIndent": "Trascina per riordinare o rientrare",
     "colorWhite": "Bianco",
     "colorCoral": "Corallo",
     "colorYellow": "Giallo",

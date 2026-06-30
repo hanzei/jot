@@ -279,7 +279,7 @@
     "updatedByAnotherUser": "This note was updated by another user",
     "listItemLabel": "List item",
     "itemCheckbox": "{{item}} checkbox",
-    "dragToReorder": "Drag to reorder",
+    "dragToReorderIndent": "Drag to reorder or indent",
     "colorWhite": "White",
     "colorCoral": "Coral",
     "colorYellow": "Yellow",

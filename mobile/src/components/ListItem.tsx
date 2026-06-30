@@ -9,9 +9,9 @@ import {
   type TextInputProps,
   type TextInput as TextInputType,
 } from 'react-native';
-import { TouchableOpacity, Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { runOnJS } from 'react-native-reanimated';
+import { TouchableOpacity } from 'react-native-gesture-handler';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useTranslation } from 'react-i18next';
 import UserAvatar from './UserAvatar';
 import { useTheme } from '../theme/ThemeContext';
@@ -46,27 +46,11 @@ interface ListItemProps {
   onBackspaceOnEmpty?: () => void;
   onAssignPress?: () => void;
   onFocus?: TextInputProps['onFocus'];
-  onBlur?: TextInputProps['onBlur'];
-  onIndent?: (delta: 1 | -1) => void;
   onAcceptSuggestion?: (text: string) => void;
 }
 
-const INDENT_SWIPE_THRESHOLD_PX = 50;
-const SWIPE_ACTIVATION_PX = 10;
 // Press-and-hold duration on the drag handle before a reorder drag begins.
 const DRAG_HANDLE_LONG_PRESS_MS = 180;
-
-/**
- * Maps a horizontal swipe distance to an indent delta: +1 (indent) for a
- * rightward swipe past the threshold, -1 (outdent) for a leftward one, or null
- * when the swipe is too short to act on. Exported (and a worklet) so the indent
- * gesture can call it on the UI thread and unit tests can verify the threshold.
- */
-export function indentDeltaFromSwipeX(translationX: number): 1 | -1 | null {
-  'worklet';
-  if (Math.abs(translationX) < INDENT_SWIPE_THRESHOLD_PX) return null;
-  return translationX > 0 ? 1 : -1;
-}
 
 function ListItem({
   text,
@@ -91,8 +75,6 @@ function ListItem({
   onBackspaceOnEmpty,
   onAssignPress,
   onFocus,
-  onBlur,
-  onIndent,
   onAcceptSuggestion,
 }: ListItemProps) {
   const { colors } = useTheme();
@@ -150,30 +132,11 @@ function ListItem({
   const showAssignUI = isShared && collaborators && collaborators.length > 0 && onAssignPress;
   const assignedUser = assignedTo ? collaborators?.find((c) => c.userId === assignedTo) : undefined;
   const normalizedIndentLevel = Math.max(0, indentLevel);
-  const onIndentRef = useRef(onIndent);
-  useEffect(() => {
-    onIndentRef.current = onIndent;
-  }, [onIndent]);
-  // Swipe horizontally to indent/outdent. An RNGH Pan (rather than a legacy
-  // PanResponder) is required so it coordinates with the reorderable list's own
-  // pan gesture: activeOffsetX/failOffsetY make it claim only clearly-horizontal
-  // swipes, while the list's drag pan is constrained to the vertical axis.
-  const canIndent = editable && !!onIndent;
-  const indentGesture = useMemo(() => {
-    const triggerIndent = (delta: 1 | -1) => onIndentRef.current?.(delta);
-    return Gesture.Pan()
-      .enabled(canIndent)
-      .activeOffsetX([-SWIPE_ACTIVATION_PX, SWIPE_ACTIVATION_PX])
-      .failOffsetY([-SWIPE_ACTIVATION_PX, SWIPE_ACTIVATION_PX])
-      .onEnd((event) => {
-        'worklet';
-        const delta = indentDeltaFromSwipeX(event.translationX);
-        if (delta !== null) runOnJS(triggerIndent)(delta);
-      });
-  }, [canIndent]);
 
+  // Indenting/outdenting is driven entirely by dragging the row sideways
+  // (handled by the reorderable list in NoteEditorScreen); this component hosts
+  // no indent gesture or control of its own.
   return (
-    <GestureDetector gesture={indentGesture}>
     <View
       style={[styles.container, { marginLeft: normalizedIndentLevel * VALIDATION.INDENT_PX_PER_LEVEL }]}
       testID="list-item-row"
@@ -185,11 +148,16 @@ function ListItem({
           // feels sluggish for a dedicated drag handle.
           delayLongPress={DRAG_HANDLE_LONG_PRESS_MS}
           disabled={isActive}
+          // Don't dim on press: the long-press hands off to the reorder drag
+          // without a press-out, which otherwise leaves the handle stuck faded.
+          activeOpacity={1}
           style={styles.dragHandle}
           testID="list-item-drag-handle"
-          accessibilityLabel={t('note.dragToReorder')}
+          accessibilityLabel={t('note.dragToReorderIndent')}
         >
-          <Ionicons name="reorder-three" size={20} color={effectiveIconMuted} />
+          {/* Six-dot drag-handle glyph: the conventional "grab to drag" affordance
+              (drag vertically to reorder, horizontally to indent/outdent). */}
+          <MaterialIcons name="drag-indicator" size={22} color={effectiveIconMuted} />
         </TouchableOpacity>
       )}
       <TouchableOpacity
@@ -228,8 +196,7 @@ function ListItem({
               onFocus?.(event);
               if (!completed) setShowSuggestions(true);
             }}
-            onBlur={(event) => {
-              onBlur?.(event);
+            onBlur={() => {
               blurTimeoutRef.current = setTimeout(() => setShowSuggestions(false), 200);
             }}
             multiline
@@ -308,7 +275,6 @@ function ListItem({
         )}
       </View>
     </View>
-    </GestureDetector>
   );
 }
 

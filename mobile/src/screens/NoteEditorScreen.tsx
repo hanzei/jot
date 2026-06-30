@@ -21,10 +21,11 @@ import {
   ScrollViewContainer,
   reorderItems,
   type ReorderableListReorderEvent,
+  type ReorderableListDragEndEvent,
   type ReorderableListRenderItemInfo,
 } from 'react-native-reorderable-list';
 import { Gesture } from 'react-native-gesture-handler';
-import { LinearTransition } from 'react-native-reanimated';
+import { LinearTransition, useSharedValue, runOnJS } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -60,11 +61,11 @@ import {
   itemSnapshot,
   normalizeItemOrder,
   itemHasChildren,
-  precedingTopLevelId,
   applyCompletedCascade,
   droppedParentId,
+  indentLevelFromDrag,
 } from './noteEditor/listItemModel';
-import { MarkdownToolbarContent, ListIndentToolbarContent } from './noteEditor/EditorToolbars';
+import { MarkdownToolbarContent } from './noteEditor/EditorToolbars';
 import CheckedItemsSection, { type ListItemHandlers } from './noteEditor/CheckedItemsSection';
 import { styles } from './noteEditor/styles';
 import { animateListReflow, isReduceMotionEnabledSync } from '../utils/layoutAnimation';
@@ -76,10 +77,15 @@ type EditorNavProp = NativeStackNavigationProp<RootStackParamList, 'NoteEditor'>
 const IOS_KEYBOARD_VERTICAL_OFFSET = 88;
 const FOCUSED_INPUT_KEYBOARD_MARGIN = 120;
 const MARKDOWN_TOOLBAR_ID = 'markdown-formatting-toolbar';
-const LIST_INDENT_TOOLBAR_ID = 'list-indent-toolbar';
 // Duration (ms) of the row slide when the active list reflows after a toggle/delete.
 const LIST_REFLOW_ANIM_MS = 150;
 const MAX_EXIT_SAVE_RETRIES = 3;
+// Override the reorderable list's default cell animation so the dragged row is
+// fully static apart from following the finger: opacity stays 1 and no scale is
+// applied. The library's default opacity/scale animations could otherwise stick
+// after a drop and leave the row greyed out or enlarged. Module-scoped so the
+// reference stays stable across renders.
+const DRAG_CELL_ANIMATIONS = { opacity: 1, transform: [] };
 
 export default function NoteEditorScreen() {
   const navigation = useNavigation<EditorNavProp>();
@@ -115,7 +121,6 @@ export default function NoteEditorScreen() {
   const [assigningItemId, setAssigningItemId] = useState<string | null>(null);
   const [syncToast, setSyncToast] = useState<string | null>(null);
   const [isEditingContent, setIsEditingContent] = useState(initialNoteId === null);
-  const [listItemFocused, setListItemFocused] = useState(false);
   // Share-target picker: lets a share be redirected to another server before it
   // is saved (only relevant when opened from a share and 2+ servers exist).
   const [shareServers, setShareServers] = useState<ServerAccountEntry[]>([]);
@@ -125,14 +130,17 @@ export default function NoteEditorScreen() {
   // (e.g. the server switch failed) can be rolled back while still mounted.
   const pendingShare = usePendingShare();
   const redirectInitiatedRef = useRef(false);
-  const focusedListItemIdRef = useRef<string | null>(null);
   const { user: currentUser, isLocalMode } = useAuth();
   const { usersById } = useUsers();
   const { showToast } = useToast();
 
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
   const keyboardHeight = useKeyboardHeight();
+  // Live horizontal travel of the row currently being dragged. The list pan's
+  // onChange writes translationX here; the active row snaps it to an indent step
+  // for Keep-style drag-to-indent, and the drop handler reads it to commit.
+  const dragTranslateX = useSharedValue(0);
   // On Android the window is edge-to-edge and is NOT resized for the keyboard,
   // so lift the whole editor (scroll area + toolbars) above it manually. iOS
   // relies on KeyboardAvoidingView's "padding" behavior instead. Subtracting the
@@ -172,12 +180,6 @@ export default function NoteEditorScreen() {
   useEffect(() => {
     const sub = Keyboard.addListener('keyboardDidHide', () => {
       setIsEditingContent(false);
-      if (listItemBlurTimerRef.current) {
-        clearTimeout(listItemBlurTimerRef.current);
-        listItemBlurTimerRef.current = null;
-      }
-      setListItemFocused(false);
-      focusedListItemIdRef.current = null;
     });
     return () => sub.remove();
   }, []);
@@ -236,7 +238,6 @@ export default function NoteEditorScreen() {
   const contentInputRef = useRef<TextInputType>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   const itemInputRefsMap = useRef(new Map<string, React.RefObject<TextInputType | null>>());
-  const listItemBlurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const getItemRef = useCallback((id: string): React.RefObject<TextInputType | null> => {
     if (!itemInputRefsMap.current.has(id)) {
@@ -886,36 +887,6 @@ export default function NoteEditorScreen() {
     }, 50);
   }, [markDirtyAndScheduleUpdate]);
 
-  const handleIndentItem = useCallback(
-    (index: number, delta: 1 | -1) => {
-      const currentItems = itemsRef.current;
-      const target = currentItems[index];
-      if (!target) return;
-
-      let newParentId: string | null = target.parentId;
-      if (delta === 1) {
-        if (target.parentId !== null) return; // already nested
-        if (itemHasChildren(currentItems, target.id)) return; // would create a grandchild
-        const parentId = precedingTopLevelId(currentItems, target.id);
-        if (!parentId) return; // nothing to nest under
-        newParentId = parentId;
-      } else {
-        if (target.parentId === null) return; // already top-level
-        newParentId = null;
-      }
-
-      // Slide the row to its new indent rather than snapping sideways/vertically.
-      animateListReflow();
-      setItems((prev) =>
-        normalizeItemOrder(
-          prev.map((item) => (item.id === target.id ? { ...item, parentId: newParentId } : item)),
-        ),
-      );
-      markDirtyAndScheduleUpdate();
-    },
-    [markDirtyAndScheduleUpdate],
-  );
-
   const handleAcceptSuggestion = useCallback(
     (itemId: string, suggestionText: string) => {
       // Capture the completed item ID from the ref snapshot so we can focus it after setItems
@@ -1239,35 +1210,87 @@ export default function NoteEditorScreen() {
   const uncheckedItemsRef = useRef(uncheckedItems);
   uncheckedItemsRef.current = uncheckedItems;
 
-  const handleListReorder = useCallback(
-    ({ from, to }: ReorderableListReorderEvent) => {
-      if (from === to) return;
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-      // Apply the move to the unchecked list, then re-parent the dropped item
-      // based on where it landed so dragging can move items between groups.
+  // Commits a finished drag: applies the vertical move (if any) and the indent
+  // implied by the horizontal drag distance, then persists. Called from both
+  // onReorder (fires only when the row changed slots) and onDragEnd (fires on
+  // every drop, which is how a purely sideways indent gets committed at all).
+  const commitDrag = useCallback(
+    (from: number, to: number) => {
+      // Apply the move to the unchecked list (a no-op when from === to, e.g. a
+      // purely sideways drag that only changed the indent).
       const reorderedUnchecked = reorderItems(uncheckedItemsRef.current, from, to);
       const moved = reorderedUnchecked[to];
+      let changed = from !== to;
       if (moved) {
         const above = to > 0 ? reorderedUnchecked[to - 1] : null;
-        const newParentId = droppedParentId(itemsRef.current, moved, above);
+        const baseLevel = moved.parentId ? 1 : 0;
+        const canIndent = !itemHasChildren(itemsRef.current, moved.id) && !!above;
+        const canOutdent = baseLevel === 1;
+        const targetLevel = indentLevelFromDrag(dragTranslateX.value, baseLevel, canIndent, canOutdent);
+        let newParentId: string | null;
+        if (targetLevel !== baseLevel) {
+          // The horizontal drag past a step is an explicit indent intent.
+          newParentId = targetLevel === 1 && above ? above.parentId ?? above.id : null;
+        } else if (from !== to) {
+          // No sideways intent but the row moved: fall back to the position-based
+          // reparent so dropping into a group still nests as before.
+          newParentId = droppedParentId(itemsRef.current, moved, above);
+        } else {
+          // Released in place with no sideways intent: leave the parent untouched.
+          newParentId = moved.parentId;
+        }
         if (newParentId !== moved.parentId) {
           reorderedUnchecked[to] = { ...moved, parentId: newParentId };
+          changed = true;
         }
       }
+      dragTranslateX.value = 0;
+      if (!changed) return;
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       // Merge with existing checked items and normalize so each parent's
       // children stay contiguous.
       setItems(normalizeItemOrder([...reorderedUnchecked, ...checkedItemsRef.current]));
       markDirtyAndScheduleUpdate();
     },
-    [markDirtyAndScheduleUpdate],
+    [markDirtyAndScheduleUpdate, dragTranslateX],
   );
 
-  // Constrain the reorder drag to the vertical axis so a horizontal swipe on a
-  // row is left for the swipe-to-indent gesture instead of being captured by the
-  // list's pan. The library chains its own drag handlers onto this gesture.
+  const handleListReorder = useCallback(
+    ({ from, to }: ReorderableListReorderEvent) => commitDrag(from, to),
+    [commitDrag],
+  );
+
+  // onReorder never fires for a purely sideways drag (the library only calls it
+  // when from !== to). onDragEnd fires on every drop — inside a UI-thread
+  // worklet — so we hop back to JS to commit the indent for that case. The
+  // from !== to drops are already handled by onReorder above.
+  const handleListDragEnd = useCallback(
+    ({ from, to }: ReorderableListDragEndEvent) => {
+      'worklet';
+      if (from === to) {
+        runOnJS(commitDrag)(from, to);
+      }
+    },
+    [commitDrag],
+  );
+
+  // The reorder drag activates on movement along either axis: vertical to
+  // reorder, horizontal to indent/outdent (Google Keep style). onChange feeds
+  // translationX into dragTranslateX so the lifted row can follow the finger
+  // sideways and snap to an indent step as it is dragged. (There is no longer a
+  // separate swipe-to-indent gesture competing for the horizontal axis.) The
+  // library chains its own onBegin/onUpdate/onEnd/onFinalize handlers onto this
+  // gesture; onChange is free for us to use.
   const listDragGesture = useMemo(
-    () => Gesture.Pan().activeOffsetY([-10, 10]).failOffsetX([-12, 12]),
-    [],
+    () =>
+      Gesture.Pan()
+        .activeOffsetX([-10, 10])
+        .activeOffsetY([-10, 10])
+        .onChange((event) => {
+          'worklet';
+          dragTranslateX.value = event.translationX;
+        }),
+    [dragTranslateX],
   );
 
   const handleListItemFocus = useCallback<NonNullable<TextInputProps['onFocus']>>((event) => {
@@ -1293,43 +1316,13 @@ export default function NoteEditorScreen() {
   }, []);
 
   const handleFocusListItem = useCallback(
-    (itemId: string, event: Parameters<NonNullable<TextInputProps['onFocus']>>[0]) => {
-      if (listItemBlurTimerRef.current) {
-        clearTimeout(listItemBlurTimerRef.current);
-        listItemBlurTimerRef.current = null;
-      }
-      focusedListItemIdRef.current = itemId;
-      setListItemFocused(true);
+    (_itemId: string, event: Parameters<NonNullable<TextInputProps['onFocus']>>[0]) => {
       handleListItemFocus(event);
     },
     [handleListItemFocus],
   );
 
-  const handleBlurListItem = useCallback(() => {
-    // Delay so toolbar button onPress fires before state clears (Android blur-before-press ordering)
-    listItemBlurTimerRef.current = setTimeout(() => {
-      listItemBlurTimerRef.current = null;
-      focusedListItemIdRef.current = null;
-      setListItemFocused(false);
-    }, 200);
-  }, []);
-
-  const handleListIndent = useCallback(
-    (delta: 1 | -1) => {
-      const id = focusedListItemIdRef.current;
-      if (!id) return;
-      const index = itemIndexMapRef.current.get(id);
-      if (index === undefined) return;
-      handleIndentItem(index, delta);
-    },
-    [handleIndentItem],
-  );
-
   const hasNoteColor = !!color && !isWhiteHexColor(color);
-
-  const listIndentToolbarContent = noteType === 'list' ? (
-    <ListIndentToolbarContent onIndent={handleListIndent} />
-  ) : null;
 
   // Per-item callbacks shared by the active list (renderListItem) and the
   // completed-items section, so both wire ListItem the same way.
@@ -1342,19 +1335,25 @@ export default function NoteEditorScreen() {
       onBackspaceOnEmpty: handleBackspaceOnEmpty,
       onAssignPress: openAssigneePicker,
       onFocus: handleFocusListItem,
-      onBlur: handleBlurListItem,
-      onIndent: handleIndentItem,
     }),
-    [handleItemCompletedToggle, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, openAssigneePicker, handleFocusListItem, handleBlurListItem, handleIndentItem],
+    [handleItemCompletedToggle, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, openAssigneePicker, handleFocusListItem],
   );
 
   const renderActiveRow = useCallback(
-    ({ item }: ReorderableListRenderItemInfo<LocalItem>) => {
+    ({ item, index }: ReorderableListRenderItemInfo<LocalItem>) => {
       const originalIndex = itemIndexMapRef.current.get(item.id);
       if (originalIndex === undefined) return null;
+      const baseLevel = item.parentId ? 1 : 0;
       return (
         <ActiveListRow
-          draggingShadowColor={isDark ? colors.border : '#000'}
+          dragTranslateX={dragTranslateX}
+          indentBaseLevel={baseLevel}
+          // Mirror commitDrag: an item can only nest if it has no children and
+          // there is a row above it to nest under (index > 0 in the active list).
+          // Keeping this in step stops the preview showing an indent that the
+          // drop would reject.
+          canIndent={!itemHasChildren(itemsRef.current, item.id) && index > 0}
+          canOutdent={baseLevel === 1}
           listItemProps={{
             inputRef: getItemRef(item.id),
             text: item.text,
@@ -1373,15 +1372,12 @@ export default function NoteEditorScreen() {
             onBackspaceOnEmpty: () => listItemHandlers.onBackspaceOnEmpty(originalIndex),
             onAssignPress: () => listItemHandlers.onAssignPress(item.id),
             onFocus: (event) => listItemHandlers.onFocus(item.id, event),
-            onBlur: listItemHandlers.onBlur,
-            onIndent: (delta) => listItemHandlers.onIndent(originalIndex, delta),
             onAcceptSuggestion: (text) => handleAcceptSuggestion(item.id, text),
-            inputAccessoryViewID: Platform.OS === 'ios' ? LIST_INDENT_TOOLBAR_ID : undefined,
           }}
         />
       );
     },
-    [getItemRef, listItemHandlers, isNoteShared, collaborators, isDark, colors, hasNoteColor, completedItemTexts, handleAcceptSuggestion],
+    [getItemRef, listItemHandlers, isNoteShared, collaborators, hasNoteColor, completedItemTexts, handleAcceptSuggestion, dragTranslateX],
   );
 
   const applyToolbarEdit = useCallback((updater: (prev: string) => string) => {
@@ -1615,6 +1611,8 @@ export default function NoteEditorScreen() {
               shouldUpdateActiveItem
               panGesture={listDragGesture}
               onReorder={handleListReorder}
+              onDragEnd={handleListDragEnd}
+              cellAnimations={DRAG_CELL_ANIMATIONS}
               renderItem={renderActiveRow}
               // Slide remaining rows into place when an item is checked off (and
               // moves to the completed section) or deleted. Skipped under the OS
@@ -1644,16 +1642,6 @@ export default function NoteEditorScreen() {
           </View>
         )}
       </ScrollViewContainer>
-
-      {/* Android: show toolbar when a list item is focused (state-gated since no native focus binding) */}
-      {Platform.OS === 'android' && listItemFocused && listIndentToolbarContent}
-
-      {/* iOS: InputAccessoryView is implicitly focus-gated via inputAccessoryViewID on the TextInput */}
-      {Platform.OS === 'ios' && listIndentToolbarContent !== null && (
-        <InputAccessoryView nativeID={LIST_INDENT_TOOLBAR_ID}>
-          {listIndentToolbarContent}
-        </InputAccessoryView>
-      )}
 
       <View style={[styles.toolbar, { backgroundColor: noteBackground, borderTopColor: hasNoteColor ? 'transparent' : colors.border, paddingBottom: insets.bottom || 8 }]}>
         {/* Color picker button */}

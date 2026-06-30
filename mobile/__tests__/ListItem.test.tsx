@@ -2,7 +2,7 @@ import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { Animated, StyleSheet } from 'react-native';
 import { VALIDATION } from '@jot/shared';
-import ListItem, { indentDeltaFromSwipeX } from '../src/components/ListItem';
+import ListItem from '../src/components/ListItem';
 import * as layoutAnimation from '../src/utils/layoutAnimation';
 import type { Collaborator } from '@jot/shared';
 
@@ -217,23 +217,5 @@ describe('ListItem', () => {
 
       expect(springSpy).not.toHaveBeenCalled();
     });
-  });
-});
-
-describe('indentDeltaFromSwipeX', () => {
-  it('indents (+1) on a rightward swipe past the threshold', () => {
-    expect(indentDeltaFromSwipeX(60)).toBe(1);
-    expect(indentDeltaFromSwipeX(50)).toBe(1);
-  });
-
-  it('outdents (-1) on a leftward swipe past the threshold', () => {
-    expect(indentDeltaFromSwipeX(-60)).toBe(-1);
-    expect(indentDeltaFromSwipeX(-50)).toBe(-1);
-  });
-
-  it('does nothing for swipes shorter than the threshold', () => {
-    expect(indentDeltaFromSwipeX(49)).toBeNull();
-    expect(indentDeltaFromSwipeX(-49)).toBeNull();
-    expect(indentDeltaFromSwipeX(0)).toBeNull();
   });
 });
