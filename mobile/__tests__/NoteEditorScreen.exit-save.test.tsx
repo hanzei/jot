@@ -57,34 +57,7 @@ jest.mock('expo-haptics', () => ({
   NotificationFeedbackType: { Error: 'error' },
 }));
 
-jest.mock('react-native-reorderable-list', () => {
-  const ReactNative = jest.requireActual('react-native') as typeof import('react-native');
-  const ReactModule = jest.requireActual('react') as typeof import('react');
-  const ReorderableList = ({ data, renderItem }: { data: Array<{ id: string }>; renderItem: (args: { item: { id: string }; index: number }) => React.ReactNode }) => (
-    <ReactNative.View>
-      {data.map((item, index) => (
-        <ReactModule.Fragment key={item.id}>{renderItem({ item, index })}</ReactModule.Fragment>
-      ))}
-    </ReactNative.View>
-  );
-  return {
-    __esModule: true,
-    default: ReorderableList,
-    ReorderableList,
-    NestedReorderableList: ReorderableList,
-    ScrollViewContainer: ReactModule.forwardRef(function ScrollViewContainer(props: Record<string, unknown>, ref: React.Ref<unknown>) {
-      return <ReactNative.ScrollView ref={ref as never} {...props} />;
-    }),
-    useReorderableDrag: () => () => {},
-    useIsActive: () => false,
-    reorderItems: (arr: Array<{ id: string }>, from: number, to: number) => {
-      const copy = [...arr];
-      const [moved] = copy.splice(from, 1);
-      copy.splice(to, 0, moved);
-      return copy;
-    },
-  };
-});
+// react-native-reorderable-list is mocked once globally in jest.setup.js.
 
 jest.mock('../src/hooks/useNotes', () => ({
   __esModule: true,

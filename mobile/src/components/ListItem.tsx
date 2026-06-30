@@ -56,6 +56,18 @@ const SWIPE_ACTIVATION_PX = 10;
 // Press-and-hold duration on the drag handle before a reorder drag begins.
 const DRAG_HANDLE_LONG_PRESS_MS = 180;
 
+/**
+ * Maps a horizontal swipe distance to an indent delta: +1 (indent) for a
+ * rightward swipe past the threshold, -1 (outdent) for a leftward one, or null
+ * when the swipe is too short to act on. Exported (and a worklet) so the indent
+ * gesture can call it on the UI thread and unit tests can verify the threshold.
+ */
+export function indentDeltaFromSwipeX(translationX: number): 1 | -1 | null {
+  'worklet';
+  if (Math.abs(translationX) < INDENT_SWIPE_THRESHOLD_PX) return null;
+  return translationX > 0 ? 1 : -1;
+}
+
 function ListItem({
   text,
   completed,
@@ -97,7 +109,11 @@ function ListItem({
   // Pop the checkbox in on mount when this row is the one the user just checked
   // off. Runs once (mount-only) so re-renders don't re-trigger it; respects the
   // OS Reduce Motion setting like the rest of the editor's animations.
-  const checkScale = useRef(new Animated.Value(popOnMount && !isReduceMotionEnabledSync() ? 0.5 : 1)).current;
+  const checkScaleRef = useRef<Animated.Value | null>(null);
+  if (checkScaleRef.current === null) {
+    checkScaleRef.current = new Animated.Value(popOnMount && !isReduceMotionEnabledSync() ? 0.5 : 1);
+  }
+  const checkScale = checkScaleRef.current;
   useEffect(() => {
     if (!popOnMount || isReduceMotionEnabledSync()) return;
     const animation = Animated.spring(checkScale, {
@@ -151,8 +167,8 @@ function ListItem({
       .failOffsetY([-SWIPE_ACTIVATION_PX, SWIPE_ACTIVATION_PX])
       .onEnd((event) => {
         'worklet';
-        if (Math.abs(event.translationX) < INDENT_SWIPE_THRESHOLD_PX) return;
-        runOnJS(triggerIndent)(event.translationX > 0 ? 1 : -1);
+        const delta = indentDeltaFromSwipeX(event.translationX);
+        if (delta !== null) runOnJS(triggerIndent)(delta);
       });
   }, [canIndent]);
 

@@ -138,14 +138,21 @@ jest.mock('react-native-gesture-handler', () => {
   };
 });
 
+// Single source of truth for the react-native-reorderable-list mock, used by
+// every test that renders the note editor. Renders each row synchronously so
+// tests can query list items without FlatList virtualization timing.
 jest.mock('react-native-reorderable-list', () => {
   const React = require('react');
-  const { FlatList, ScrollView } = require('react-native');
+  const { View, ScrollView } = require('react-native');
   function ReorderableList(props) {
-    return React.createElement(FlatList, {
-      ...props,
-      renderItem: (info) => props.renderItem({ item: info.item, index: info.index }),
-    });
+    const data = props.data || [];
+    return React.createElement(
+      View,
+      null,
+      data.map((item, index) =>
+        React.createElement(React.Fragment, { key: item.id }, props.renderItem({ item, index })),
+      ),
+    );
   }
   ReorderableList.displayName = 'ReorderableList';
   const ScrollViewContainer = React.forwardRef(function ScrollViewContainer(props, ref) {
