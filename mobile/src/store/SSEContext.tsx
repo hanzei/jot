@@ -8,11 +8,11 @@ import type { SSEEvent } from '@jot/shared';
 // on 'reconnecting' (a connection attempt that actually failed and is retrying),
 // not on a bare "not connected": an initial connect — including a slow cold
 // start that has to wake the radio and redo the TLS handshake — reports
-// 'connecting' and never trips the banner no matter how long it takes. That
-// status distinction, not this delay, is what fixes the launch flash; the delay
-// only needs to outlast one reconnect backoff (BASE_RECONNECT_DELAY_MS = 3s in
-// api/events) so a quick retry-and-recover stays silent.
-const SSE_BANNER_DELAY_MS = 5000;
+// 'connecting' and never trips the banner no matter how long it takes, and a
+// (re)connect that ultimately succeeds never shows it either. That status
+// distinction, not this delay, is what keeps the launch silent; the delay just
+// suppresses the banner for reconnects that recover within a few seconds.
+const SSE_BANNER_DELAY_MS = 3000;
 
 interface SSEContextValue {
   subscribe: (listener: (event: SSEEvent) => void) => () => void;

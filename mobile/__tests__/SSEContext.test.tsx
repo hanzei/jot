@@ -18,7 +18,7 @@ jest.mock('../src/hooks/useSSE', () => ({
 
 // Mirrors SSE_BANNER_DELAY_MS in SSEContext: a 'reconnecting' state must outlast
 // this before the banner appears, so a quick self-healing retry stays silent.
-const SSE_BANNER_DELAY_MS = 5000;
+const SSE_BANNER_DELAY_MS = 3000;
 
 function Probe() {
   const { sseReconnecting } = useSSEContext();
