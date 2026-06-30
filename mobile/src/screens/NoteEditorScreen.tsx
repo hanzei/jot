@@ -830,12 +830,15 @@ export default function NoteEditorScreen() {
   const handleDeleteItem = useCallback(
     (index: number) => {
       const removedItemId = itemsRef.current[index]?.id;
+      if (removedItemId) {
+        if (itemInputRefsMap.current.get(removedItemId)?.current?.isFocused()) {
+          Keyboard.dismiss();
+        }
+        itemInputRefsMap.current.delete(removedItemId);
+      }
       // Settle the surrounding rows as this one is removed instead of snapping.
       animateListReflow();
       setItems((prev) => prev.filter((_, i) => i !== index));
-      if (removedItemId) {
-        itemInputRefsMap.current.delete(removedItemId);
-      }
       markDirtyAndScheduleUpdate();
     },
     [markDirtyAndScheduleUpdate],
