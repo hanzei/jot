@@ -39,6 +39,8 @@ interface CheckedItemsSectionProps {
   hasNoteColor: boolean;
   dividerColor: string;
   handlers: ListItemHandlers;
+  /** Id of the item the user just checked off, so only that row pops on mount. */
+  popItemId: string | null;
 }
 
 /**
@@ -58,6 +60,7 @@ export default function CheckedItemsSection({
   hasNoteColor,
   dividerColor,
   handlers,
+  popItemId,
 }: CheckedItemsSectionProps) {
   const { t } = useTranslation();
   const { colors } = useTheme();
@@ -108,6 +111,7 @@ export default function CheckedItemsSection({
           isShared={!!isNoteShared}
           collaborators={collaborators}
           hasNoteColor={hasNoteColor}
+          popOnMount={item.id === popItemId}
           onToggle={() => { handlers.onToggle(item.id, !item.completed); }}
           onChangeText={(text) => handlers.onChangeText(originalIndex, text)}
           onDelete={() => handlers.onDelete(originalIndex)}

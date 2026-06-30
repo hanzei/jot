@@ -39,6 +39,11 @@ export function isReduceMotionEnabledSync(): boolean {
  * settle into place instead of jumping — e.g. when an item is checked off and
  * moves into the completed section, or the completed section is collapsed.
  *
+ * Note: this drives the completed-section (plain View) reflow and the overall
+ * container resize. The active list (a react-native-reorderable-list) animates
+ * its own row repositioning via `itemLayoutAnimation` (Reanimated), since those
+ * Reanimated-controlled cells don't participate in legacy LayoutAnimation.
+ *
  * Call this immediately before the `setState` that changes the list layout.
  */
 export function animateListReflow(): void {
