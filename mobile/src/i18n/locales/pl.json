@@ -250,7 +250,7 @@
     "updatedByAnotherUser": "Ta notatka została zaktualizowana przez innego użytkownika",
     "listItemLabel": "Element listy",
     "itemCheckbox": "Pole wyboru {{item}}",
-    "dragToReorder": "Przeciągnij, aby zmienić kolejność",
+    "dragToReorderIndent": "Przeciągnij, aby zmienić kolejność lub wciąć",
     "colorWhite": "Biały",
     "colorCoral": "Koral",
     "colorYellow": "Żółty",

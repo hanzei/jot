@@ -24,7 +24,7 @@ import {
   type ReorderableListRenderItemInfo,
 } from 'react-native-reorderable-list';
 import { Gesture } from 'react-native-gesture-handler';
-import { LinearTransition } from 'react-native-reanimated';
+import { LinearTransition, useSharedValue } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -63,6 +63,7 @@ import {
   precedingTopLevelId,
   applyCompletedCascade,
   droppedParentId,
+  indentLevelFromDrag,
 } from './noteEditor/listItemModel';
 import { MarkdownToolbarContent, ListIndentToolbarContent } from './noteEditor/EditorToolbars';
 import CheckedItemsSection, { type ListItemHandlers } from './noteEditor/CheckedItemsSection';
@@ -133,6 +134,10 @@ export default function NoteEditorScreen() {
   const { colors, isDark } = useTheme();
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
   const keyboardHeight = useKeyboardHeight();
+  // Live horizontal travel of the row currently being dragged. The list pan's
+  // onChange writes translationX here; the active row snaps it to an indent step
+  // for Keep-style drag-to-indent, and the drop handler reads it to commit.
+  const dragTranslateX = useSharedValue(0);
   // On Android the window is edge-to-edge and is NOT resized for the keyboard,
   // so lift the whole editor (scroll area + toolbars) above it manually. iOS
   // relies on KeyboardAvoidingView's "padding" behavior instead. Subtracting the
@@ -1241,33 +1246,58 @@ export default function NoteEditorScreen() {
 
   const handleListReorder = useCallback(
     ({ from, to }: ReorderableListReorderEvent) => {
-      if (from === to) return;
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-      // Apply the move to the unchecked list, then re-parent the dropped item
-      // based on where it landed so dragging can move items between groups.
+      // Apply the move to the unchecked list (a no-op when from === to, e.g. a
+      // purely sideways drag that only changed the indent).
       const reorderedUnchecked = reorderItems(uncheckedItemsRef.current, from, to);
       const moved = reorderedUnchecked[to];
+      let changed = from !== to;
       if (moved) {
         const above = to > 0 ? reorderedUnchecked[to - 1] : null;
-        const newParentId = droppedParentId(itemsRef.current, moved, above);
+        // The horizontal drag distance is the explicit indent intent. When the
+        // user dragged sideways past a step, honor it; otherwise fall back to the
+        // position-based reparent so dropping into a group still nests as before.
+        const baseLevel = moved.parentId ? 1 : 0;
+        const canIndent = !itemHasChildren(itemsRef.current, moved.id) && !!above;
+        const canOutdent = baseLevel === 1;
+        const targetLevel = indentLevelFromDrag(dragTranslateX.value, baseLevel, canIndent, canOutdent);
+        const newParentId =
+          targetLevel !== baseLevel
+            ? targetLevel === 1 && above
+              ? above.parentId ?? above.id
+              : null
+            : droppedParentId(itemsRef.current, moved, above);
         if (newParentId !== moved.parentId) {
           reorderedUnchecked[to] = { ...moved, parentId: newParentId };
+          changed = true;
         }
       }
+      dragTranslateX.value = 0;
+      if (!changed) return;
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       // Merge with existing checked items and normalize so each parent's
       // children stay contiguous.
       setItems(normalizeItemOrder([...reorderedUnchecked, ...checkedItemsRef.current]));
       markDirtyAndScheduleUpdate();
     },
-    [markDirtyAndScheduleUpdate],
+    [markDirtyAndScheduleUpdate, dragTranslateX],
   );
 
-  // Constrain the reorder drag to the vertical axis so a horizontal swipe on a
-  // row is left for the swipe-to-indent gesture instead of being captured by the
-  // list's pan. The library chains its own drag handlers onto this gesture.
+  // The reorder drag activates on vertical movement (so a tap or a horizontal
+  // swipe on an idle row is left for the swipe-to-indent gesture), but once it is
+  // active we no longer reject horizontal movement: onChange feeds translationX
+  // into dragTranslateX so the lifted row can follow the finger sideways and
+  // indent/outdent as it is dragged (Google Keep style). The library chains its
+  // own onBegin/onUpdate/onEnd/onFinalize handlers onto this gesture; onChange is
+  // free for us to use.
   const listDragGesture = useMemo(
-    () => Gesture.Pan().activeOffsetY([-10, 10]).failOffsetX([-12, 12]),
-    [],
+    () =>
+      Gesture.Pan()
+        .activeOffsetY([-10, 10])
+        .onChange((event) => {
+          'worklet';
+          dragTranslateX.value = event.translationX;
+        }),
+    [dragTranslateX],
   );
 
   const handleListItemFocus = useCallback<NonNullable<TextInputProps['onFocus']>>((event) => {
@@ -1352,9 +1382,16 @@ export default function NoteEditorScreen() {
     ({ item }: ReorderableListRenderItemInfo<LocalItem>) => {
       const originalIndex = itemIndexMapRef.current.get(item.id);
       if (originalIndex === undefined) return null;
+      const baseLevel = item.parentId ? 1 : 0;
       return (
         <ActiveListRow
           draggingShadowColor={isDark ? colors.border : '#000'}
+          dragTranslateX={dragTranslateX}
+          indentBaseLevel={baseLevel}
+          // A parent (item with children) can't be nested; outdenting only
+          // applies to an already-nested item.
+          canIndent={!itemHasChildren(itemsRef.current, item.id)}
+          canOutdent={baseLevel === 1}
           listItemProps={{
             inputRef: getItemRef(item.id),
             text: item.text,
@@ -1381,7 +1418,7 @@ export default function NoteEditorScreen() {
         />
       );
     },
-    [getItemRef, listItemHandlers, isNoteShared, collaborators, isDark, colors, hasNoteColor, completedItemTexts, handleAcceptSuggestion],
+    [getItemRef, listItemHandlers, isNoteShared, collaborators, isDark, colors, hasNoteColor, completedItemTexts, handleAcceptSuggestion, dragTranslateX],
   );
 
   const applyToolbarEdit = useCallback((updater: (prev: string) => string) => {

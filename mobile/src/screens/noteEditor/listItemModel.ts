@@ -1,4 +1,8 @@
-import type { NoteItem } from '@jot/shared';
+import { VALIDATION, type NoteItem } from '@jot/shared';
+
+// Captured as a module-level number so the worklet form of indentLevelFromDrag
+// can reference it on the UI thread without a property access on an import.
+const INDENT_PX = VALIDATION.INDENT_PX_PER_LEVEL;
 
 /**
  * Editor-local representation of a list item. Mirrors the server's {@link NoteItem}
@@ -76,6 +80,32 @@ export function normalizeItemOrder(items: LocalItem[]): LocalItem[] {
     if (!placed.has(it.id)) ordered.push({ ...it, parentId: null });
   }
   return ordered.map((it, index) => ({ ...it, position: index }));
+}
+
+// indentLevelFromDrag maps a horizontal drag distance to a target indent level
+// (0 = top-level, 1 = nested) for the one-level hierarchy, snapping every
+// INDENT_PX of travel to one level and clamping to what the dragged item is
+// allowed to do. It is a worklet so the active row's animated style can call it
+// on the UI thread for live visual feedback; it is also called from JS on drop
+// to commit the change, so both paths stay in agreement.
+//   - baseLevel: the item's level when the drag began.
+//   - canIndent: false when the item already has children (a parent can't nest)
+//     or there is no row above it to nest under.
+//   - canOutdent: false when the item is already top-level.
+export function indentLevelFromDrag(
+  translationX: number,
+  baseLevel: number,
+  canIndent: boolean,
+  canOutdent: boolean,
+): number {
+  'worklet';
+  const steps = Math.round(translationX / INDENT_PX);
+  let level = baseLevel + steps;
+  if (level < 0) level = 0;
+  if (level > 1) level = 1;
+  if (level > baseLevel && !canIndent) level = baseLevel;
+  if (level < baseLevel && !canOutdent) level = baseLevel;
+  return level;
 }
 
 export function itemHasChildren(items: LocalItem[], itemId: string): boolean {

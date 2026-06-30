@@ -158,7 +158,10 @@ function ListItem({
   // PanResponder) is required so it coordinates with the reorderable list's own
   // pan gesture: activeOffsetX/failOffsetY make it claim only clearly-horizontal
   // swipes, while the list's drag pan is constrained to the vertical axis.
-  const canIndent = editable && !!onIndent;
+  // The quick swipe-to-indent gesture is disabled while the row is being dragged
+  // (isActive): during a reorder drag the horizontal axis belongs to the list's
+  // pan, which handles drag-to-indent directly, so the two never fight.
+  const canIndent = editable && !!onIndent && !isActive;
   const indentGesture = useMemo(() => {
     const triggerIndent = (delta: 1 | -1) => onIndentRef.current?.(delta);
     return Gesture.Pan()
@@ -187,9 +190,11 @@ function ListItem({
           disabled={isActive}
           style={styles.dragHandle}
           testID="list-item-drag-handle"
-          accessibilityLabel={t('note.dragToReorder')}
+          accessibilityLabel={t('note.dragToReorderIndent')}
         >
-          <Ionicons name="reorder-three" size={20} color={effectiveIconMuted} />
+          {/* Four-way "move" arrows signal that the row can be dragged in any
+              direction: vertically to reorder, horizontally to indent/outdent. */}
+          <Ionicons name="move" size={20} color={effectiveIconMuted} />
         </TouchableOpacity>
       )}
       <TouchableOpacity
