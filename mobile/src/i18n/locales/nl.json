@@ -279,7 +279,7 @@
     "updatedByAnotherUser": "Deze notitie is bijgewerkt door een andere gebruiker",
     "listItemLabel": "Lijstitem",
     "itemCheckbox": "Selectievakje {{item}}",
-    "dragToReorder": "Sleep om te sorteren",
+    "dragToReorderIndent": "Sleep om te sorteren of in te springen",
     "colorWhite": "Wit",
     "colorCoral": "Koraal",
     "colorYellow": "Geel",

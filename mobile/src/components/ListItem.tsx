@@ -5,16 +5,17 @@ import {
   TextInput,
   ScrollView,
   StyleSheet,
-  PanResponder,
+  Animated,
   type TextInputProps,
   type TextInput as TextInputType,
-  type PanResponderGestureState,
 } from 'react-native';
 import { TouchableOpacity } from 'react-native-gesture-handler';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useTranslation } from 'react-i18next';
 import UserAvatar from './UserAvatar';
 import { useTheme } from '../theme/ThemeContext';
+import { isReduceMotionEnabledSync } from '../utils/layoutAnimation';
 import { VALIDATION, type Collaborator } from '@jot/shared';
 
 interface ListItemProps {
@@ -31,6 +32,12 @@ interface ListItemProps {
   inputAccessoryViewID?: string;
   hasNoteColor?: boolean;
   completedItemTexts?: string[];
+  /**
+   * When true, the checkbox pops (scales up from small) once on mount. Set only
+   * for the item the user just checked off, so the completed-section row it
+   * mounts into animates — without popping every completed row on load/expand.
+   */
+  popOnMount?: boolean;
   onDrag?: () => void;
   onToggle?: () => void;
   onChangeText?: (text: string) => void;
@@ -39,17 +46,11 @@ interface ListItemProps {
   onBackspaceOnEmpty?: () => void;
   onAssignPress?: () => void;
   onFocus?: TextInputProps['onFocus'];
-  onBlur?: TextInputProps['onBlur'];
-  onIndent?: (delta: 1 | -1) => void;
   onAcceptSuggestion?: (text: string) => void;
 }
 
-const INDENT_SWIPE_THRESHOLD_PX = 50;
-const SWIPE_ACTIVATION_PX = 10;
-
-function isHorizontalSwipe(gestureState: PanResponderGestureState): boolean {
-  return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) >= SWIPE_ACTIVATION_PX;
-}
+// Press-and-hold duration on the drag handle before a reorder drag begins.
+const DRAG_HANDLE_LONG_PRESS_MS = 180;
 
 function ListItem({
   text,
@@ -65,6 +66,7 @@ function ListItem({
   inputAccessoryViewID,
   hasNoteColor = false,
   completedItemTexts,
+  popOnMount = false,
   onDrag,
   onToggle,
   onChangeText,
@@ -73,8 +75,6 @@ function ListItem({
   onBackspaceOnEmpty,
   onAssignPress,
   onFocus,
-  onBlur,
-  onIndent,
   onAcceptSuggestion,
 }: ListItemProps) {
   const { colors } = useTheme();
@@ -86,6 +86,28 @@ function ListItem({
     return () => {
       if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
     };
+  }, []);
+
+  // Pop the checkbox in on mount when this row is the one the user just checked
+  // off. Runs once (mount-only) so re-renders don't re-trigger it; respects the
+  // OS Reduce Motion setting like the rest of the editor's animations.
+  const checkScaleRef = useRef<Animated.Value | null>(null);
+  if (checkScaleRef.current === null) {
+    checkScaleRef.current = new Animated.Value(popOnMount && !isReduceMotionEnabledSync() ? 0.5 : 1);
+  }
+  const checkScale = checkScaleRef.current;
+  useEffect(() => {
+    if (!popOnMount || isReduceMotionEnabledSync()) return;
+    const animation = Animated.spring(checkScale, {
+      toValue: 1,
+      friction: 4,
+      tension: 160,
+      useNativeDriver: true,
+    });
+    animation.start();
+    return () => animation.stop();
+    // Mount-only: popOnMount/checkScale are fixed for this row's lifetime.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const suggestions = useMemo(() => {
@@ -110,42 +132,32 @@ function ListItem({
   const showAssignUI = isShared && collaborators && collaborators.length > 0 && onAssignPress;
   const assignedUser = assignedTo ? collaborators?.find((c) => c.userId === assignedTo) : undefined;
   const normalizedIndentLevel = Math.max(0, indentLevel);
-  const onIndentRef = useRef(onIndent);
-  useEffect(() => {
-    onIndentRef.current = onIndent;
-  }, [onIndent]);
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_event, gestureState) => {
-          if (!editable || !onIndentRef.current) return false;
-          return isHorizontalSwipe(gestureState);
-        },
-        onPanResponderRelease: (_event, gestureState) => {
-          if (!editable || !onIndentRef.current) return;
-          if (!isHorizontalSwipe(gestureState)) return;
-          if (Math.abs(gestureState.dx) < INDENT_SWIPE_THRESHOLD_PX) return;
-          onIndentRef.current(gestureState.dx > 0 ? 1 : -1);
-        },
-      }),
-    [editable],
-  );
 
+  // Indenting/outdenting is driven entirely by dragging the row sideways
+  // (handled by the reorderable list in NoteEditorScreen); this component hosts
+  // no indent gesture or control of its own.
   return (
     <View
       style={[styles.container, { marginLeft: normalizedIndentLevel * VALIDATION.INDENT_PX_PER_LEVEL }]}
       testID="list-item-row"
-      {...panResponder.panHandlers}
     >
       {showDragHandle && onDrag && (
         <TouchableOpacity
           onLongPress={onDrag}
+          // Shorten the press-and-hold before a drag starts; the default (~500ms)
+          // feels sluggish for a dedicated drag handle.
+          delayLongPress={DRAG_HANDLE_LONG_PRESS_MS}
           disabled={isActive}
+          // Don't dim on press: the long-press hands off to the reorder drag
+          // without a press-out, which otherwise leaves the handle stuck faded.
+          activeOpacity={1}
           style={styles.dragHandle}
           testID="list-item-drag-handle"
-          accessibilityLabel={t('note.dragToReorder')}
+          accessibilityLabel={t('note.dragToReorderIndent')}
         >
-          <Ionicons name="reorder-three" size={20} color={effectiveIconMuted} />
+          {/* Six-dot drag-handle glyph: the conventional "grab to drag" affordance
+              (drag vertically to reorder, horizontally to indent/outdent). */}
+          <MaterialIcons name="drag-indicator" size={22} color={effectiveIconMuted} />
         </TouchableOpacity>
       )}
       <TouchableOpacity
@@ -156,11 +168,13 @@ function ListItem({
         accessibilityState={{ checked: completed, disabled: !editable }}
         accessibilityLabel={t('note.itemCheckbox', { item: text || t('note.listItemLabel') })}
       >
-        <Ionicons
-          name={completed ? 'checkbox' : 'square-outline'}
-          size={22}
-          color={completed ? colors.primary : effectiveIconMuted}
-        />
+        <Animated.View style={{ transform: [{ scale: checkScale }] }}>
+          <Ionicons
+            name={completed ? 'checkbox' : 'square-outline'}
+            size={22}
+            color={completed ? colors.primary : effectiveIconMuted}
+          />
+        </Animated.View>
       </TouchableOpacity>
       <View style={styles.inputColumn}>
         <View style={styles.inputRow}>
@@ -182,8 +196,7 @@ function ListItem({
               onFocus?.(event);
               if (!completed) setShowSuggestions(true);
             }}
-            onBlur={(event) => {
-              onBlur?.(event);
+            onBlur={() => {
               blurTimeoutRef.current = setTimeout(() => setShowSuggestions(false), 200);
             }}
             multiline

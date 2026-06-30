@@ -1,7 +1,5 @@
 import React from 'react';
-import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
-import { PanResponder, StyleSheet } from 'react-native';
-import type { GestureResponderEvent, PanResponderGestureState } from 'react-native';
+import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { VALIDATION } from '@jot/shared';
 import NoteEditorScreen from '../src/screens/NoteEditorScreen';
 
@@ -21,20 +19,6 @@ const mockUpdateItemMutateAsync = jest.fn();
 const mockDeleteItemMutateAsync = jest.fn();
 const mockReorderItemsMutateAsync = jest.fn();
 const mockUseOfflineNote = jest.fn();
-const mockGestureResponderEvent = {} as GestureResponderEvent;
-const createPanState = (dx: number, dy: number): PanResponderGestureState => ({
-  stateID: 1,
-  moveX: 0,
-  moveY: 0,
-  x0: 0,
-  y0: 0,
-  dx,
-  dy,
-  vx: 0,
-  vy: 0,
-  numberActiveTouches: 1,
-  _accountsForMovesUpTo: 0,
-});
 
 jest.mock('@react-navigation/native', () => ({
   __esModule: true,
@@ -73,23 +57,7 @@ jest.mock('expo-haptics', () => ({
   NotificationFeedbackType: { Error: 'error' },
 }));
 
-jest.mock('react-native-draggable-flatlist', () => {
-  const ReactNative = jest.requireActual('react-native') as typeof import('react-native');
-  const ReactModule = jest.requireActual('react') as typeof import('react');
-  return {
-    __esModule: true,
-    default: ({ data, renderItem }: { data: Array<{ id: string }>; renderItem: (args: { item: { id: string }; drag: () => void; isActive: boolean }) => React.ReactNode }) => (
-      <ReactNative.View>
-        {data.map((item) => (
-          <ReactModule.Fragment key={item.id}>
-            {renderItem({ item, drag: () => {}, isActive: false })}
-          </ReactModule.Fragment>
-        ))}
-      </ReactNative.View>
-    ),
-    ScaleDecorator: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  };
-});
+// react-native-reorderable-list is mocked once globally in jest.setup.js.
 
 jest.mock('../src/hooks/useNotes', () => ({
   __esModule: true,
@@ -207,14 +175,6 @@ jest.mock('../src/i18n', () => ({
 }));
 
 describe('NoteEditorScreen list submit behavior', () => {
-  function getLastPanResponderConfig(createSpy: jest.SpiedFunction<typeof PanResponder.create>, callsBefore: number) {
-    const configs = createSpy.mock.calls
-      .slice(callsBefore)
-      .map(([config]) => config)
-      .filter((config) => typeof config.onPanResponderRelease === 'function');
-    return configs[configs.length - 1];
-  }
-
   afterEach(() => {
     jest.restoreAllMocks();
   });
@@ -343,82 +303,6 @@ describe('NoteEditorScreen list submit behavior', () => {
 
     await waitFor(() => {
       expect(mockUpdateMutateAsync).not.toHaveBeenCalled();
-    });
-  });
-
-  it('updates list item indentation from horizontal swipe gesture', async () => {
-    const panResponderSpy = jest.spyOn(PanResponder, 'create');
-    const callsBefore = panResponderSpy.mock.calls.length;
-    const { getByTestId, getAllByTestId } = render(<NoteEditorScreen />);
-
-    fireEvent.press(getByTestId('toggle-note-type'));
-    // Add two items so the second can be nested under the first
-    fireEvent.press(getByTestId('add-list-item'));
-    fireEvent.press(getByTestId('add-list-item'));
-
-    // Both items start with no indentation
-    expect(StyleSheet.flatten(getAllByTestId('list-item-row')[1].props.style)?.marginLeft).toBe(0);
-
-    // Get the last PanResponder created — belongs to the second (to-be-indented) item
-    const secondItemConfig = getLastPanResponderConfig(panResponderSpy, callsBefore);
-    expect(secondItemConfig).toBeDefined();
-
-    // Swipe right on the second item to nest it under the first
-    await act(async () => {
-      secondItemConfig?.onPanResponderRelease?.(mockGestureResponderEvent, createPanState(60, 0));
-    });
-
-    await waitFor(() => {
-      expect(StyleSheet.flatten(getAllByTestId('list-item-row')[1].props.style)?.marginLeft).toBe(
-        VALIDATION.INDENT_PX_PER_LEVEL,
-      );
-    });
-
-    // Re-query the latest configs after re-render
-    const secondItemConfigAfter = getLastPanResponderConfig(panResponderSpy, callsBefore);
-
-    // Swipe left to outdent
-    await act(async () => {
-      secondItemConfigAfter?.onPanResponderRelease?.(mockGestureResponderEvent, createPanState(-60, 0));
-    });
-
-    await waitFor(() => {
-      expect(StyleSheet.flatten(getAllByTestId('list-item-row')[1].props.style)?.marginLeft).toBe(0);
-    });
-  });
-
-  it('indents and outdents list item via toolbar buttons', async () => {
-    const { getByTestId, getAllByTestId } = render(<NoteEditorScreen />);
-
-    fireEvent.press(getByTestId('toggle-note-type'));
-    // Add two items so the second can be nested under the first
-    fireEvent.press(getByTestId('add-list-item'));
-    fireEvent.press(getByTestId('add-list-item'));
-
-    const secondItemRow = getAllByTestId('list-item-row')[1];
-    expect(StyleSheet.flatten(secondItemRow.props.style)?.marginLeft).toBe(0);
-
-    // Focus the second list item input to set focusedListItemId
-    fireEvent(getAllByTestId('list-item-text')[1], 'focus', { nativeEvent: { target: 2 } });
-
-    // Tap indent button — nests second item under first
-    await act(async () => {
-      fireEvent.press(getByTestId('list-indent-btn'));
-    });
-
-    await waitFor(() => {
-      expect(StyleSheet.flatten(getAllByTestId('list-item-row')[1].props.style)?.marginLeft).toBe(
-        VALIDATION.INDENT_PX_PER_LEVEL,
-      );
-    });
-
-    // Tap outdent button — promotes back to top-level
-    await act(async () => {
-      fireEvent.press(getByTestId('list-outdent-btn'));
-    });
-
-    await waitFor(() => {
-      expect(StyleSheet.flatten(getAllByTestId('list-item-row')[1].props.style)?.marginLeft).toBe(0);
     });
   });
 

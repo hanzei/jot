@@ -1,6 +1,5 @@
 import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../theme/ThemeContext';
 import { styles } from './styles';
@@ -39,23 +38,3 @@ export function MarkdownToolbarContent({ onBold, onItalic, onHeading, onBullet }
   );
 }
 
-interface ListIndentToolbarProps {
-  onIndent: (delta: 1 | -1) => void;
-}
-
-/** Outdent/indent buttons for the focused list item. */
-export function ListIndentToolbarContent({ onIndent }: ListIndentToolbarProps) {
-  const { t } = useTranslation();
-  const { colors } = useTheme();
-  return (
-    <View style={[styles.formattingToolbar, { backgroundColor: colors.surfaceVariant, borderTopColor: colors.border }]}>
-      <TouchableOpacity onPress={() => onIndent(-1)} style={styles.fmtBtn} accessibilityLabel={t('note.outdentItem')} testID="list-outdent-btn">
-        <Ionicons name="arrow-back-outline" size={18} color={colors.text} />
-      </TouchableOpacity>
-      <View style={[styles.fmtSep, { backgroundColor: colors.border }]} />
-      <TouchableOpacity onPress={() => onIndent(1)} style={styles.fmtBtn} accessibilityLabel={t('note.indentItem')} testID="list-indent-btn">
-        <Ionicons name="arrow-forward-outline" size={18} color={colors.text} />
-      </TouchableOpacity>
-    </View>
-  );
-}

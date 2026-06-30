@@ -166,14 +166,6 @@ export const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
   },
-  draggingListItem: {
-    borderRadius: 8,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-  },
   contentPreview: {
     flex: 1,
     paddingHorizontal: 0,

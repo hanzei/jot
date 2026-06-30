@@ -6,9 +6,13 @@ import {
   itemSnapshot,
   normalizeItemOrder,
   itemHasChildren,
-  precedingTopLevelId,
   applyCompletedCascade,
+  droppedParentId,
+  indentLevelFromDrag,
 } from '../src/screens/noteEditor/listItemModel';
+import { VALIDATION } from '@jot/shared';
+
+const STEP = VALIDATION.INDENT_PX_PER_LEVEL;
 
 function local(partial: Partial<LocalItem> & { id: string }): LocalItem {
   return {
@@ -49,6 +53,38 @@ describe('toLocalItems', () => {
     const [item] = toLocalItems([server({ id: 'a', parent_id: null })]);
     expect(item.parentId).toBeNull();
     expect(item.assigned_to).toBe('');
+  });
+});
+
+describe('indentLevelFromDrag', () => {
+  it('snaps a rightward drag of one step to the next indent level', () => {
+    expect(indentLevelFromDrag(STEP, 0, true, false)).toBe(1);
+    // Rounds at the half-step boundary.
+    expect(indentLevelFromDrag(STEP * 0.6, 0, true, false)).toBe(1);
+    expect(indentLevelFromDrag(STEP * 0.4, 0, true, false)).toBe(0);
+  });
+
+  it('snaps a leftward drag back to top-level when nested', () => {
+    expect(indentLevelFromDrag(-STEP, 1, false, true)).toBe(0);
+    expect(indentLevelFromDrag(-STEP * 0.6, 1, false, true)).toBe(0);
+  });
+
+  it('clamps to the one-level hierarchy [0, 1]', () => {
+    expect(indentLevelFromDrag(STEP * 5, 0, true, false)).toBe(1);
+    expect(indentLevelFromDrag(-STEP * 5, 1, false, true)).toBe(0);
+  });
+
+  it('refuses to indent when the item may not be nested (has children / no row above)', () => {
+    expect(indentLevelFromDrag(STEP * 3, 0, false, false)).toBe(0);
+  });
+
+  it('refuses to outdent when the item is already top-level', () => {
+    expect(indentLevelFromDrag(-STEP * 3, 0, true, false)).toBe(0);
+  });
+
+  it('keeps the base level when the drag is too small to cross a step', () => {
+    expect(indentLevelFromDrag(0, 0, true, false)).toBe(0);
+    expect(indentLevelFromDrag(STEP * 0.3, 1, true, true)).toBe(1);
   });
 });
 
@@ -93,7 +129,7 @@ describe('normalizeItemOrder', () => {
   });
 });
 
-describe('itemHasChildren / precedingTopLevelId', () => {
+describe('itemHasChildren', () => {
   const items = [
     local({ id: 'p1' }),
     local({ id: 'c1', parentId: 'p1' }),
@@ -103,11 +139,6 @@ describe('itemHasChildren / precedingTopLevelId', () => {
   it('detects children', () => {
     expect(itemHasChildren(items, 'p1')).toBe(true);
     expect(itemHasChildren(items, 'p2')).toBe(false);
-  });
-
-  it('finds the nearest preceding top-level item', () => {
-    expect(precedingTopLevelId(items, 'p2')).toBe('p1');
-    expect(precedingTopLevelId(items, 'p1')).toBeNull();
   });
 });
 
@@ -132,5 +163,36 @@ describe('applyCompletedCascade', () => {
 
   it('returns the input unchanged for an unknown id', () => {
     expect(applyCompletedCascade(items, 'missing', true)).toBe(items);
+  });
+});
+
+describe('droppedParentId', () => {
+  // Groups: p1 (with child c1) and p2 (with child c2), plus a top-level leaf t.
+  const items = [
+    local({ id: 'p1' }),
+    local({ id: 'c1', parentId: 'p1' }),
+    local({ id: 'p2' }),
+    local({ id: 'c2', parentId: 'p2' }),
+    local({ id: 't' }),
+  ];
+
+  it('keeps an item with children top-level (cannot nest a parent)', () => {
+    expect(droppedParentId(items, local({ id: 'p1' }), local({ id: 'c2', parentId: 'p2' }))).toBeNull();
+  });
+
+  it('is top-level when dropped at the very top (no row above)', () => {
+    expect(droppedParentId(items, local({ id: 't' }), null)).toBeNull();
+  });
+
+  it('joins the same parent as a child row above it', () => {
+    expect(droppedParentId(items, local({ id: 't' }), local({ id: 'c2', parentId: 'p2' }))).toBe('p2');
+  });
+
+  it('becomes a child when dropped right under a group head', () => {
+    expect(droppedParentId(items, local({ id: 't' }), local({ id: 'p1' }))).toBe('p1');
+  });
+
+  it('stays top-level when the row above is a top-level leaf', () => {
+    expect(droppedParentId(items, local({ id: 't' }), local({ id: 'solo' }))).toBeNull();
   });
 });

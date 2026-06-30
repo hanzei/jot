@@ -250,7 +250,7 @@
     "updatedByAnotherUser": "Diese Notiz wurde von einem anderen Benutzer aktualisiert",
     "listItemLabel": "Listenelement",
     "itemCheckbox": "{{item}} Checkbox",
-    "dragToReorder": "Zum Neuordnen ziehen",
+    "dragToReorderIndent": "Zum Neuordnen oder Einrücken ziehen",
     "colorWhite": "Weiß",
     "colorCoral": "Koralle",
     "colorYellow": "Gelb",

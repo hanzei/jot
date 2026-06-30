@@ -279,7 +279,7 @@
     "updatedByAnotherUser": "Esta nota fue actualizada por otro usuario",
     "listItemLabel": "Elemento de lista",
     "itemCheckbox": "Casilla {{item}}",
-    "dragToReorder": "Arrastra para reordenar",
+    "dragToReorderIndent": "Arrastra para reordenar o sangrar",
     "colorWhite": "Blanco",
     "colorCoral": "Coral",
     "colorYellow": "Amarillo",

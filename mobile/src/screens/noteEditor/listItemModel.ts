@@ -1,4 +1,8 @@
-import type { NoteItem } from '@jot/shared';
+import { VALIDATION, type NoteItem } from '@jot/shared';
+
+// Captured as a module-level number so the worklet form of indentLevelFromDrag
+// can reference it on the UI thread without a property access on an import.
+const INDENT_PX = VALIDATION.INDENT_PX_PER_LEVEL;
 
 /**
  * Editor-local representation of a list item. Mirrors the server's {@link NoteItem}
@@ -78,16 +82,52 @@ export function normalizeItemOrder(items: LocalItem[]): LocalItem[] {
   return ordered.map((it, index) => ({ ...it, position: index }));
 }
 
+// indentLevelFromDrag maps a horizontal drag distance to a target indent level
+// (0 = top-level, 1 = nested) for the one-level hierarchy, snapping every
+// INDENT_PX of travel to one level and clamping to what the dragged item is
+// allowed to do. It is a worklet so the active row's animated style can call it
+// on the UI thread for live visual feedback; it is also called from JS on drop
+// to commit the change, so both paths stay in agreement.
+//   - baseLevel: the item's level when the drag began.
+//   - canIndent: false when the item already has children (a parent can't nest)
+//     or there is no row above it to nest under.
+//   - canOutdent: false when the item is already top-level.
+export function indentLevelFromDrag(
+  translationX: number,
+  baseLevel: number,
+  canIndent: boolean,
+  canOutdent: boolean,
+): number {
+  'worklet';
+  const steps = Math.round(translationX / INDENT_PX);
+  let level = baseLevel + steps;
+  if (level < 0) level = 0;
+  if (level > 1) level = 1;
+  if (level > baseLevel && !canIndent) level = baseLevel;
+  if (level < baseLevel && !canOutdent) level = baseLevel;
+  return level;
+}
+
 export function itemHasChildren(items: LocalItem[], itemId: string): boolean {
   return items.some((it) => it.parentId === itemId);
 }
 
-export function precedingTopLevelId(items: LocalItem[], itemId: string): string | null {
-  let last: string | null = null;
-  for (const it of items) {
-    if (it.id === itemId) return last;
-    if (it.parentId === null) last = it.id;
-  }
+// droppedParentId decides which group a just-dragged item should belong to,
+// based on the row it landed directly below (`above`). Supports moving items
+// between groups by dragging. Rules for the 1-level hierarchy:
+//   - an item that has children always stays top-level (can't nest a parent);
+//   - a leaf joins the same parent as the row above it if that row is a child;
+//   - a leaf dropped right under a top-level group head becomes its child;
+//   - otherwise (top-level row above, or dropped at the very top) it is top-level.
+export function droppedParentId(
+  allItems: LocalItem[],
+  moved: LocalItem,
+  above: LocalItem | null,
+): string | null {
+  if (itemHasChildren(allItems, moved.id)) return null;
+  if (!above) return null;
+  if (above.parentId !== null) return above.parentId;
+  if (itemHasChildren(allItems, above.id)) return above.id;
   return null;
 }
 
