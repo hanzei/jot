@@ -5,7 +5,6 @@ import * as Haptics from 'expo-haptics';
 import { VALIDATION } from '@jot/shared';
 import ListItem from '../../components/ListItem';
 import { indentLevelFromDrag } from './listItemModel';
-import { styles } from './styles';
 
 // Local number copy so the animated-style worklet can multiply by it on the UI
 // thread without a property access on the imported VALIDATION object.
@@ -16,8 +15,6 @@ type ListItemProps = ComponentProps<typeof ListItem>;
 interface ActiveListRowProps {
   /** Everything ListItem needs except the drag wiring, which this row supplies. */
   listItemProps: Omit<ListItemProps, 'onDrag' | 'isActive'>;
-  /** Shadow color applied to the lifted row while it is being dragged. */
-  draggingShadowColor: string;
   /** Live horizontal drag distance, written by the list pan's onChange. */
   dragTranslateX: SharedValue<number>;
   /** Indent level of this item when a drag begins (0 top-level, 1 nested). */
@@ -39,10 +36,12 @@ interface ActiveListRowProps {
  * onChange records translationX into `dragTranslateX`, and this row snaps that to
  * an indent step so it visibly shifts as you drag sideways (Google Keep style).
  * The drag start resets the shared value so each drag begins from zero.
+ *
+ * The lift cue (a subtle scale) comes from the reorderable list's own cell
+ * animation, so this row adds no shadow/box of its own.
  */
 function ActiveListRow({
   listItemProps,
-  draggingShadowColor,
   dragTranslateX,
   indentBaseLevel,
   canIndent,
@@ -68,12 +67,7 @@ function ActiveListRow({
   });
 
   return (
-    <Reanimated.View
-      style={[
-        isActive ? [styles.draggingListItem, { shadowColor: draggingShadowColor }] : null,
-        animatedStyle,
-      ]}
-    >
+    <Reanimated.View style={animatedStyle}>
       <ListItem {...listItemProps} onDrag={handleDrag} isActive={isActive} />
     </Reanimated.View>
   );

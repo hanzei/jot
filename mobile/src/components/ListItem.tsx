@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { TouchableOpacity } from 'react-native-gesture-handler';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useTranslation } from 'react-i18next';
 import UserAvatar from './UserAvatar';
 import { useTheme } from '../theme/ThemeContext';
@@ -153,9 +154,9 @@ function ListItem({
           testID="list-item-drag-handle"
           accessibilityLabel={t('note.dragToReorderIndent')}
         >
-          {/* Four-way "move" arrows signal that the row can be dragged in any
-              direction: vertically to reorder, horizontally to indent/outdent. */}
-          <Ionicons name="move" size={20} color={effectiveIconMuted} />
+          {/* Six-dot drag-handle glyph: the conventional "grab to drag" affordance
+              (drag vertically to reorder, horizontally to indent/outdent). */}
+          <MaterialIcons name="drag-indicator" size={22} color={effectiveIconMuted} />
         </TouchableOpacity>
       )}
       <TouchableOpacity

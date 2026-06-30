@@ -82,6 +82,11 @@ const LIST_INDENT_TOOLBAR_ID = 'list-indent-toolbar';
 // Duration (ms) of the row slide when the active list reflows after a toggle/delete.
 const LIST_REFLOW_ANIM_MS = 150;
 const MAX_EXIT_SAVE_RETRIES = 3;
+// Override the reorderable list's default cell animation to keep the dragged row
+// at full opacity (the library otherwise dims it, which could stick after a drop
+// and leave the row greyed out). Scale is left to the library for a subtle lift.
+// Module-scoped so the reference stays stable across renders.
+const DRAG_CELL_ANIMATIONS = { opacity: 1 };
 
 export default function NoteEditorScreen() {
   const navigation = useNavigation<EditorNavProp>();
@@ -132,7 +137,7 @@ export default function NoteEditorScreen() {
   const { usersById } = useUsers();
   const { showToast } = useToast();
 
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
   const keyboardHeight = useKeyboardHeight();
   // Live horizontal travel of the row currently being dragged. The list pan's
@@ -1412,7 +1417,6 @@ export default function NoteEditorScreen() {
       const baseLevel = item.parentId ? 1 : 0;
       return (
         <ActiveListRow
-          draggingShadowColor={isDark ? colors.border : '#000'}
           dragTranslateX={dragTranslateX}
           indentBaseLevel={baseLevel}
           // A parent (item with children) can't be nested; outdenting only
@@ -1444,7 +1448,7 @@ export default function NoteEditorScreen() {
         />
       );
     },
-    [getItemRef, listItemHandlers, isNoteShared, collaborators, isDark, colors, hasNoteColor, completedItemTexts, handleAcceptSuggestion, dragTranslateX],
+    [getItemRef, listItemHandlers, isNoteShared, collaborators, hasNoteColor, completedItemTexts, handleAcceptSuggestion, dragTranslateX],
   );
 
   const applyToolbarEdit = useCallback((updater: (prev: string) => string) => {
@@ -1679,6 +1683,7 @@ export default function NoteEditorScreen() {
               panGesture={listDragGesture}
               onReorder={handleListReorder}
               onDragEnd={handleListDragEnd}
+              cellAnimations={DRAG_CELL_ANIMATIONS}
               renderItem={renderActiveRow}
               // Slide remaining rows into place when an item is checked off (and
               // moves to the completed section) or deleted. Skipped under the OS
@@ -1719,6 +1724,10 @@ export default function NoteEditorScreen() {
         </InputAccessoryView>
       )}
 
+      {/* While a list item is focused the keyboard is up and the slim indent
+          toolbar docks above it; hide the bottom action bar so it doesn't collide
+          with (or hide behind) the keyboard. */}
+      {!listItemFocused && (
       <View style={[styles.toolbar, { backgroundColor: noteBackground, borderTopColor: hasNoteColor ? 'transparent' : colors.border, paddingBottom: insets.bottom || 8 }]}>
         {/* Color picker button */}
         <TouchableOpacity
@@ -1819,6 +1828,7 @@ export default function NoteEditorScreen() {
           <Ionicons name="trash-outline" size={22} color={colors.error} />
         </TouchableOpacity>
       </View>
+      )}
 
       <ColorPicker
         visible={colorPickerVisible}
