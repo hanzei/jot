@@ -1,6 +1,11 @@
-import React, { type ComponentProps, useCallback } from 'react';
+import React, { type ComponentProps, useCallback, useEffect } from 'react';
 import { useReorderableDrag, useIsActive, useReorderableDragStart } from 'react-native-reorderable-list';
-import Reanimated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
+import Reanimated, {
+  useAnimatedReaction,
+  useAnimatedStyle,
+  useSharedValue,
+  type SharedValue,
+} from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { VALIDATION } from '@jot/shared';
 import ListItem from '../../components/ListItem';
@@ -37,6 +42,14 @@ interface ActiveListRowProps {
  * an indent step so it visibly shifts as you drag sideways (Google Keep style).
  * The drag start resets the shared value so each drag begins from zero.
  *
+ * The displayed indent is the sum of the committed level (ListItem's marginLeft,
+ * from `indentBaseLevel`) plus a transform for the still-uncommitted delta. The
+ * delta is held in `displayLevel`: while dragging it tracks the live drag, and on
+ * drop it keeps the committed level until this row re-renders with its new
+ * `indentBaseLevel`. Without that hold the transform would snap to zero a frame
+ * before the new marginLeft lands, making the row flash back to its pre-drag
+ * level and then jump to the dropped level.
+ *
  * The lift cue (a subtle scale) comes from the reorderable list's own cell
  * animation, so this row adds no shadow/box of its own.
  */
@@ -50,21 +63,45 @@ function ActiveListRow({
   const drag = useReorderableDrag();
   const isActive = useIsActive();
 
+  // The level this row should currently display. Seeded from (and kept in step
+  // with) the committed level, but free to lead it during and right after a drag.
+  const displayLevel = useSharedValue(indentBaseLevel);
+
   useReorderableDragStart(() => {
     'worklet';
     dragTranslateX.value = 0;
   });
+
+  // While this row is the lifted one, snap the live horizontal drag distance to a
+  // target indent level. When the drag ends `isActive` flips false and this stops
+  // updating, so `displayLevel` freezes at the dropped level until the committed
+  // re-render catches up (see the effect below) — that hold is what removes the
+  // snap-back flash on release.
+  useAnimatedReaction(
+    () => dragTranslateX.value,
+    (translateX) => {
+      if (!isActive) return;
+      displayLevel.value = indentLevelFromDrag(translateX, indentBaseLevel, canIndent, canOutdent);
+    },
+    [isActive, indentBaseLevel, canIndent, canOutdent],
+  );
+
+  // Once the drop is committed (or the indent changes outside a drag, e.g. via
+  // normalization or sync), the new committed level arrives as `indentBaseLevel`
+  // and ListItem's marginLeft renders it. Bring `displayLevel` back in step so the
+  // transform contributes nothing and the two never disagree.
+  useEffect(() => {
+    displayLevel.value = indentBaseLevel;
+  }, [indentBaseLevel, displayLevel]);
 
   const handleDrag = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     drag();
   }, [drag]);
 
-  const animatedStyle = useAnimatedStyle(() => {
-    if (!isActive) return { transform: [{ translateX: 0 }] };
-    const level = indentLevelFromDrag(dragTranslateX.value, indentBaseLevel, canIndent, canOutdent);
-    return { transform: [{ translateX: (level - indentBaseLevel) * INDENT_PX }] };
-  });
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: (displayLevel.value - indentBaseLevel) * INDENT_PX }],
+  }));
 
   return (
     <Reanimated.View style={animatedStyle}>
