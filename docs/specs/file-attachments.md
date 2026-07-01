@@ -187,11 +187,13 @@ type Blobstore interface {
   filesystem path (no traversal).
 - **Thumbnails are a derived cache, not an entity.** A thumbnail is deterministic
   from `(original sha256, target size)`, so it is keyed by the *original's* sha
-  and gets **no `note_images` row and no refcount of its own**. Generate it with
-  the avatar resize pipeline (output JPEG, so the thumbnail response is always
-  `image/jpeg`); regenerate on demand if the file is missing since it is
-  disposable. Grid tiles use the thumbnail; the lightbox uses the original. A
-  future multi-size need extends the key to `<sha>_<w>.jpg` with no schema change.
+  and gets **no `note_images` row and no refcount of its own**. It is generated
+  **eagerly during the upload request** with the avatar resize pipeline (output
+  JPEG, so the thumbnail response is always `image/jpeg`) — the grid never waits
+  on a first-request miss. It is still regenerated on demand if the file ever goes
+  missing, since it is disposable. Grid tiles use the thumbnail; the lightbox uses
+  the original. A future multi-size need extends the key to `<sha>_<w>.jpg` with
+  no schema change.
 - **Thumbnail lifecycle rides on the original.** When an original's refcount hits
   zero and it is GC'd (§10), delete its `thumb/<sha>.jpg` in the same step — no
   separate sweep.
@@ -268,7 +270,8 @@ clients.
 3. `http.DetectContentType` → must be in the **image allowlist** (§7); reject
    anything else (this is what enforces "images only").
 4. **Decode the image** to confirm it's valid and capture width/height (reuse the
-   avatar pipeline). Generate/queue a thumbnail.
+   avatar pipeline), then **generate the thumbnail eagerly** and store it under
+   the `thumb/` keyspace (§5).
 5. `Blobstore.Put` (no-op if hash already present → dedup), insert the row.
 6. Emit SSE event (§8), return `NoteImage`.
 
@@ -389,12 +392,13 @@ Dedicated events are cheaper and match existing granularity.
 
 ## 13. Phasing
 
-- **MVP**: `note_images` table + `fsBlobstore`, upload/list/get + soft-delete +
-  restore (undo toast), size+type+count limits, image decode/validation, webapp
-  picker + drag/drop + paste, gallery-above-body rendering (banner + grid),
-  lightbox, inline serving with `nosniff`, auth via note access.
-- **v1.1**: thumbnails endpoint + grid tiles using them, SSE live updates,
-  NoteCard cover thumbnail, mobile camera/library/files + offline queue.
+- **MVP**: `note_images` table + `fsBlobstore`, upload/get + soft-delete +
+  restore (undo toast), size+type+count limits, image decode/validation,
+  eager thumbnail generation + thumbnail endpoint, webapp picker + drag/drop +
+  paste, gallery-above-body rendering (banner + grid using thumbnails), lightbox,
+  inline serving with `nosniff`, auth via note access.
+- **v1.1**: SSE live updates, NoteCard cover thumbnail, mobile
+  camera/library/files + offline queue.
 - **Later**: export/import bundling, storage quotas, S3 backend.
 
 ---
@@ -422,15 +426,13 @@ Dedicated events are cheaper and match existing granularity.
 ## 15. Open questions
 
 1. **Storage**: confirm filesystem (content-addressed) over DB-BLOB for v1.
-2. **Thumbnails**: generate eagerly at upload vs lazily on first request? (Lazy is
-   simpler; eager gives predictable grid latency.)
-3. **Animated GIFs**: keep animation (serve original in grid) or freeze to a
+2. **Animated GIFs**: keep animation (serve original in grid) or freeze to a
    static thumbnail tile? (Leaning: static thumbnail, animate in lightbox.)
-4. **Undo grace window** length before the sweep finalizes a removal (e.g. 30s
+3. **Undo grace window** length before the sweep finalizes a removal (e.g. 30s
    toast vs a few minutes server-side)? Client toast and server grace should be
    configured together.
-5. **Quotas**: per-user / per-instance storage cap in v1, or defer? (Threat model
+4. **Quotas**: per-user / per-instance storage cap in v1, or defer? (Threat model
    prioritizes overload protection, so a cap may be worth MVP inclusion.)
-6. **Export format**: zip bundle vs base64-inline — depends on current export.
-7. **Image without a note**: require a `note_id` (create the note first) vs allow
+5. **Export format**: zip bundle vs base64-inline — depends on current export.
+6. **Image without a note**: require a `note_id` (create the note first) vs allow
    a draft upload bound on save? (Leaning: require `note_id`.)
