@@ -202,7 +202,6 @@ annotations.
 | Method | Path | Purpose |
 |---|---|---|
 | `POST` | `/api/notes/{noteId}/images` | Upload an image to a note (multipart `file`). 201 → `NoteImage`. Requires note write access (owner or shared). |
-| `GET` | `/api/notes/{noteId}/images` | List a note's images (metadata, ordered). |
 | `GET` | `/api/images/{id}` | Stream the full-size image bytes. Requires access to the parent note. |
 | `GET` | `/api/images/{id}/thumbnail` | Resized thumbnail for grid tiles. |
 | `DELETE` | `/api/images/{id}` | **Soft-remove** the image (sets `deleted_at`, hides it). Requires note access. |
@@ -215,11 +214,16 @@ works identically.
 
 ### 6.1 How clients fetch the note list
 
+**Decided**: image metadata is **embedded in every `Note`** (list and single-note
+`GET /notes/{id}` alike), just like the existing embedded `items` / `labels` /
+`shared_with`. Because clients always receive the full image list with the note,
+there is **no separate `GET /api/notes/{noteId}/images` endpoint** — it would be
+redundant.
+
 `GET /api/notes` (and its `?trashed` / `?archived` / `?search` / `?label` /
 `?my_tasks` variants) is **unchanged in shape**: it still returns an array of
-`Note` objects. Each note simply gains an `images` array, exactly like the
-existing embedded `items` / `labels` / `shared_with`. No new list endpoint, no
-pagination change, no extra round-trip to discover a note's images.
+`Note` objects. Each note simply gains an `images` array. No new list endpoint,
+no pagination change, no extra round-trip to discover a note's images.
 
 - **Metadata only in the JSON.** Each embedded `NoteImage` is
   `{ id, filename, content_type, width, height, created_at }` (a few hundred
@@ -237,11 +241,9 @@ pagination change, no extra round-trip to discover a note's images.
 - **Stays live via SSE.** `note_image_added` / `note_image_removed` (§8) patch the
   already-loaded list without a refetch.
 
-Design fork (open question): embed **all** image metadata per note in list
-responses (simple, lets the grid render a full gallery directly — **recommended**,
-since ≤10 tiny entries/note is cheap) vs. return only the **cover** image in list
-mode and the full set on the single-note `GET /notes/{id}` (leaner list payload,
-but a gallery needs a second fetch). See §15.
+After an upload (`POST` → `NoteImage`) or a remove/restore, clients patch the
+note's embedded `images` array locally; SSE delivers the same change to other
+clients.
 
 **Upload handler** (mirrors `UploadProfileIcon`):
 1. `r.Body = http.MaxBytesReader(w, r.Body, limit+overhead)`; `ParseMultipartForm`.
@@ -415,6 +417,3 @@ Dedicated events are cheaper and match existing granularity.
 6. **Export format**: zip bundle vs base64-inline — depends on current export.
 7. **Image without a note**: require a `note_id` (create the note first) vs allow
    a draft upload bound on save? (Leaning: require `note_id`.)
-8. **List payload**: embed all image metadata per note in `GET /notes` vs. only
-   the cover in list mode + full set on `GET /notes/{id}` (§6.1). Leaning: embed
-   all — cheap and lets the grid render galleries without a second fetch.
