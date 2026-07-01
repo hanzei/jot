@@ -227,6 +227,34 @@ func TestNoteGrouping(t *testing.T) {
 		_ = parentAID
 	})
 
+	t.Run("re-parenting an incomplete child under a completed parent un-completes it, even without a completed patch", func(t *testing.T) {
+		ts := setupTestServer(t)
+		user := ts.createTestUser(t, "grpuser4g", "password123", false)
+
+		note, err := user.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
+			Title: "Move Only",
+			Items: []client.CreateNoteItem{
+				{Text: "Parent", Position: 0, IndentLevel: 0, Completed: true},
+				{Text: "Loner", Position: 1, IndentLevel: 0, Completed: false},
+			},
+		})
+		require.NoError(t, err)
+		parentID := itemByText(t, note.Items, "Parent").ID
+		lonerID := itemByText(t, note.Items, "Loner").ID
+
+		// Re-parent Loner (still incomplete) under the already-completed Parent,
+		// without touching `completed` in the request at all.
+		_, err = user.Client.UpdateNoteItem(t.Context(), note.ID, lonerID, &client.PatchNoteItemRequest{
+			ParentID: &parentID,
+		})
+		require.NoError(t, err)
+
+		updated, err := user.Client.GetNote(t.Context(), note.ID)
+		require.NoError(t, err)
+		assert.False(t, itemByText(t, updated.Items, "Parent").Completed, "parent can't stay completed once it gains an incomplete child")
+		assert.False(t, itemByText(t, updated.Items, "Loner").Completed, "the moved item's own completed flag is untouched")
+	})
+
 	t.Run("toggle without completed field is rejected", func(t *testing.T) {
 		ts := setupTestServer(t)
 		user := ts.createTestUser(t, "grpuser5b", "password123", false)

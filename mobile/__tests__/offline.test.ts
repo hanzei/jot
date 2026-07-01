@@ -576,11 +576,11 @@ describe('drainQueue', () => {
 
     expect(db.runAsync).toHaveBeenCalledWith(
       expect.stringContaining('parent_id = ?'),
-      expect.arrayContaining(['Replace faucet', 'kitchen', 'i1', 'n1']),
+      expect.arrayContaining(['Replace faucet', 1, 'kitchen', 'i1', 'n1']),
     );
     expect(db.runAsync).toHaveBeenCalledWith(
       expect.stringContaining('parent_id = ?'),
-      expect.arrayContaining(['Hgg', 'mirror', 'i2', 'n1']),
+      expect.arrayContaining(['Hgg', 4, 'mirror', 'i2', 'n1']),
     );
   });
 

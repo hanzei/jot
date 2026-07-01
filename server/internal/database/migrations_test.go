@@ -144,31 +144,49 @@ func TestMigration000004FixCompletedParentWithIncompleteChild(t *testing.T) {
 
 	_, err = db.ExecContext(ctx, `INSERT INTO users (id, username, password_hash) VALUES ('user000000000000000002', 'bob', 'x')`)
 	require.NoError(t, err)
-	_, err = db.ExecContext(ctx, `INSERT INTO notes (id, user_id, note_type) VALUES ('note000000000000000003', 'user000000000000000002', 'list')`)
+	// A deliberately stale updated_at, so the assertions below can tell whether
+	// the migration bumped it (every other note_items mutation path does, via
+	// touchNoteTx — this backfill should be no exception).
+	const staleTimestamp = "2000-01-01 00:00:00"
+	_, err = db.ExecContext(ctx, `INSERT INTO notes (id, user_id, note_type, updated_at) VALUES ('note000000000000000003', 'user000000000000000002', 'list', ?)`, staleTimestamp)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `INSERT INTO notes (id, user_id, note_type, updated_at) VALUES ('note000000000000000004', 'user000000000000000002', 'list', ?)`, staleTimestamp)
 	require.NoError(t, err)
 
 	// "Done" is completed but has an incomplete child "Undone child" — the
-	// invalid state. "Fine" is completed with only completed children, and
-	// "Untouched" is a plain incomplete top-level item; neither should change.
+	// invalid state, on note 3. "Fine" is completed with only completed
+	// children, and "Untouched" is a plain incomplete top-level item — neither
+	// should change — placed on note 4 so its updated_at serves as a control:
+	// only note 3 (which actually gets healed) should be bumped.
 	seed := []struct {
 		id        string
+		noteID    string
 		parentID  sql.NullString
 		completed bool
 	}{
-		{"itemDone0000000000001", sql.NullString{}, true},
-		{"itemDoneChild000000001", sql.NullString{String: "itemDone0000000000001", Valid: true}, true},
-		{"itemUndoneChild0000001", sql.NullString{String: "itemDone0000000000001", Valid: true}, false},
-		{"itemFine0000000000001", sql.NullString{}, true},
-		{"itemFineChild000000001", sql.NullString{String: "itemFine0000000000001", Valid: true}, true},
-		{"itemUntouched000000001", sql.NullString{}, false},
+		{"itemDone0000000000001", "note000000000000000003", sql.NullString{}, true},
+		{"itemDoneChild000000001", "note000000000000000003", sql.NullString{String: "itemDone0000000000001", Valid: true}, true},
+		{"itemUndoneChild0000001", "note000000000000000003", sql.NullString{String: "itemDone0000000000001", Valid: true}, false},
+		{"itemFine0000000000001", "note000000000000000004", sql.NullString{}, true},
+		{"itemFineChild000000001", "note000000000000000004", sql.NullString{String: "itemFine0000000000001", Valid: true}, true},
+		{"itemUntouched000000001", "note000000000000000004", sql.NullString{}, false},
 	}
 	for _, it := range seed {
 		_, err = db.ExecContext(ctx,
 			`INSERT INTO note_items (id, note_id, text, position, parent_id, completed) VALUES (?, ?, ?, 0, ?, ?)`,
-			it.id, "note000000000000000003", it.id, it.parentID, it.completed,
+			it.id, it.noteID, it.id, it.parentID, it.completed,
 		)
 		require.NoError(t, err)
 	}
+
+	noteUpdatedAt := func(id string) string {
+		var updatedAt string
+		require.NoError(t, db.QueryRowContext(ctx, `SELECT updated_at FROM notes WHERE id = ?`, id).Scan(&updatedAt))
+		return updatedAt
+	}
+	// Read back the stale timestamp as sqlite actually stored/normalized it,
+	// rather than comparing against the literal string inserted above.
+	staleAsStored := noteUpdatedAt("note000000000000000003")
 
 	require.NoError(t, m.Migrate(4))
 
@@ -184,4 +202,7 @@ func TestMigration000004FixCompletedParentWithIncompleteChild(t *testing.T) {
 	assert.True(t, completedOf("itemFine0000000000001"), "a parent whose children are all completed is untouched")
 	assert.True(t, completedOf("itemFineChild000000001"))
 	assert.False(t, completedOf("itemUntouched000000001"))
+
+	assert.NotEqual(t, staleAsStored, noteUpdatedAt("note000000000000000003"), "the healed note's updated_at is bumped, like any other note_items mutation")
+	assert.Equal(t, staleAsStored, noteUpdatedAt("note000000000000000004"), "a note with no invariant violation is left untouched")
 }

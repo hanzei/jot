@@ -1409,15 +1409,19 @@ func (s *noteStore) PatchItem(ctx context.Context, noteID, itemID string, patch 
 		return nil, fmt.Errorf("failed to update note item: %w", err)
 	}
 
-	// Keep the same parent/child completion invariant as ToggleItemCompleted:
-	// this is the only other path that can change `completed`. Cascades off of
-	// the item's *resolved* (post-patch) parent, so a request that changes
-	// parent_id and completed together enforces the invariant against the
-	// group the item ends up in, not the one it's leaving. This matters in
-	// practice: the webapp's autosave diff can send both fields in one patch
-	// (e.g. a drag-to-reparent that lands before an in-flight checkbox toggle's
-	// own request has advanced the local baseline).
-	if patch.Completed != nil {
+	// Keep the same parent/child completion invariant as ToggleItemCompleted.
+	// Runs whenever completed or parent_id changes: a plain re-parent (no
+	// Completed in the request) can just as easily violate the invariant —
+	// moving an incomplete child under an already-completed parent — even
+	// though this item's own completed flag isn't part of the patch. Cascades
+	// off of the item's *resolved* (post-patch) parent and completed value, so
+	// a request that changes parent_id and completed together enforces the
+	// invariant against the group the item ends up in, not the one it's
+	// leaving. This matters in practice: the webapp's autosave diff can send
+	// both fields in one patch (e.g. a drag-to-reparent that lands before an
+	// in-flight checkbox toggle's own request has advanced the local
+	// baseline).
+	if patch.Completed != nil || patch.ParentID != nil {
 		if err = cascadeItemCompletion(ctx, tx, s.d, noteID, itemID, nullableParentID(resolvedParent), resolvedCompleted); err != nil {
 			return nil, err
 		}
