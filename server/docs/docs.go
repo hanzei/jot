@@ -3208,6 +3208,12 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
+                "images": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.NoteImage"
+                    }
+                },
                 "is_shared": {
                     "type": "boolean"
                 },
@@ -3249,6 +3255,29 @@ const docTemplate = `{
                 },
                 "version": {
                     "description": "Version is an optimistic-concurrency counter bumped on every shared-content\n(title/content) change. Clients echo the version their edit was based on as\nbase_version on update so a stale write can be rejected (issue #489).",
+                    "type": "integer"
+                }
+            }
+        },
+        "models.NoteImage": {
+            "type": "object",
+            "properties": {
+                "content_type": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "filename": {
+                    "type": "string"
+                },
+                "height": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "width": {
                     "type": "integer"
                 }
             }

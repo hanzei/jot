@@ -372,7 +372,7 @@ func (s *noteStore) GetByUserID(ctx context.Context, userID string, archived boo
 		return nil, err
 	}
 
-	if err := s.batchLoadSharesAndLabels(ctx, notes, userID); err != nil {
+	if err := s.batchLoadNoteAssociations(ctx, notes, userID); err != nil {
 		return nil, err
 	}
 
@@ -395,13 +395,15 @@ func (s *noteStore) populateNoteItemsAndDefaults(ctx context.Context, scannedNot
 		note.SharedWith = []NoteShare{}
 		note.IsShared = false
 		note.Labels = []Label{}
+		note.Images = []NoteImage{}
 		notes = append(notes, note)
 	}
 	return notes, nil
 }
 
-// batchLoadSharesAndLabels batch-loads shares and labels for a slice of notes, updating each note in place.
-func (s *noteStore) batchLoadSharesAndLabels(ctx context.Context, notes []*Note, userID string) error {
+// batchLoadNoteAssociations batch-loads shares, labels, and images for a
+// slice of notes, updating each note in place.
+func (s *noteStore) batchLoadNoteAssociations(ctx context.Context, notes []*Note, userID string) error {
 	if len(notes) == 0 {
 		return nil
 	}
@@ -429,6 +431,16 @@ func (s *noteStore) batchLoadSharesAndLabels(ctx context.Context, notes []*Note,
 	for _, n := range notes {
 		if lbls, ok := labelsMap[n.ID]; ok {
 			n.Labels = lbls
+		}
+	}
+
+	imagesMap, err := s.getNoteImagesByNoteIDs(ctx, noteIDs)
+	if err != nil {
+		return fmt.Errorf("failed to batch-load note images: %w", err)
+	}
+	for _, n := range notes {
+		if imgs, ok := imagesMap[n.ID]; ok {
+			n.Images = imgs
 		}
 	}
 
@@ -528,6 +540,12 @@ func (s *noteStore) populateNoteDetails(ctx context.Context, note *Note, userID 
 		return fmt.Errorf("failed to get note labels: %w", err)
 	}
 	note.Labels = labels
+
+	images, err := s.GetNoteImagesByNoteID(ctx, note.ID)
+	if err != nil {
+		return fmt.Errorf("failed to get note images: %w", err)
+	}
+	note.Images = images
 
 	return nil
 }

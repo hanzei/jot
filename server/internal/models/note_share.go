@@ -198,7 +198,10 @@ func (s *noteStore) ClearUserAssignmentsTx(ctx context.Context, tx *sql.Tx, user
 	return nil
 }
 
-const sharesBatchSize = 500
+// noteIDsQueryBatchSize caps how many note IDs go into a single `note_id IN
+// (...)` query, so a large note list can't exceed the driver's bound-parameter
+// limit (e.g. SQLite's default ~999 variables per statement).
+const noteIDsQueryBatchSize = 500
 
 // getSharesByNoteIDs batch-loads note shares for a set of note IDs, returning a map of noteID -> []NoteShare.
 func (s *noteStore) getSharesByNoteIDs(ctx context.Context, noteIDs []string) (map[string][]NoteShare, error) {
@@ -208,7 +211,7 @@ func (s *noteStore) getSharesByNoteIDs(ctx context.Context, noteIDs []string) (m
 
 	result := map[string][]NoteShare{}
 
-	for chunk := range slices.Chunk(noteIDs, sharesBatchSize) {
+	for chunk := range slices.Chunk(noteIDs, noteIDsQueryBatchSize) {
 		placeholders := strings.Join(slices.Repeat([]string{"?"}, len(chunk)), ",")
 		args := make([]any, len(chunk))
 		for i, id := range chunk {
