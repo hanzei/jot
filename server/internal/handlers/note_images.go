@@ -90,10 +90,10 @@ func (h *NotesHandler) reclaimNoteImageBlob(ctx context.Context, sha string) {
 	if count > 0 {
 		return
 	}
-	if err := h.blobstore.Delete(ctx, sha); err != nil {
+	if err := h.imageStore.Delete(ctx, sha); err != nil {
 		logutil.FromContext(ctx).WithError(err).WithField("sha256", sha).Error("Failed to reclaim orphaned note image blob")
 	}
-	if err := h.blobstore.DeleteThumbnail(ctx, sha); err != nil {
+	if err := h.thumbStore.Delete(ctx, sha); err != nil {
 		logutil.FromContext(ctx).WithError(err).WithField("sha256", sha).Error("Failed to reclaim orphaned note image thumbnail")
 	}
 }
@@ -177,14 +177,14 @@ func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (
 	sum := sha256.Sum256(data)
 	sha := hex.EncodeToString(sum[:])
 
-	if putErr := h.blobstore.Put(r.Context(), sha, bytes.NewReader(data)); putErr != nil {
+	if putErr := h.imageStore.Put(r.Context(), sha, bytes.NewReader(data)); putErr != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("store image blob: %w", putErr)
 	}
 
 	// Generated eagerly here (rather than on first thumbnail request) so the
 	// grid never waits on a first-request miss; a no-op if a dedup hit means
 	// this hash's thumbnail already exists.
-	if putErr := h.blobstore.PutThumbnail(r.Context(), sha, bytes.NewReader(thumbnail)); putErr != nil {
+	if putErr := h.thumbStore.Put(r.Context(), sha, bytes.NewReader(thumbnail)); putErr != nil {
 		h.reclaimNoteImageBlob(r.Context(), sha)
 		return http.StatusInternalServerError, nil, fmt.Errorf("store thumbnail: %w", putErr)
 	}
@@ -240,7 +240,7 @@ func (h *NotesHandler) GetNoteImage(w http.ResponseWriter, r *http.Request) (int
 		return http.StatusInternalServerError, nil, err
 	}
 
-	blob, err := h.blobstore.Open(r.Context(), img.SHA256)
+	blob, err := h.imageStore.Open(r.Context(), img.SHA256)
 	if err != nil {
 		if errors.Is(err, blobstore.ErrNotFound) {
 			logutil.FromContext(r.Context()).WithField("image_id", img.ID).WithField("sha256", img.SHA256).
@@ -296,7 +296,7 @@ func (h *NotesHandler) GetNoteImageThumbnail(w http.ResponseWriter, r *http.Requ
 		return http.StatusInternalServerError, nil, err
 	}
 
-	thumb, err := h.blobstore.OpenThumbnail(r.Context(), img.SHA256)
+	thumb, err := h.thumbStore.Open(r.Context(), img.SHA256)
 	if err != nil {
 		if !errors.Is(err, blobstore.ErrNotFound) {
 			return http.StatusInternalServerError, nil, fmt.Errorf("open thumbnail: %w", err)
@@ -334,7 +334,7 @@ func (h *NotesHandler) GetNoteImageThumbnail(w http.ResponseWriter, r *http.Requ
 // blobstore.ErrNotFound (unwrapped, so callers can match it with errors.Is)
 // if the original blob itself is missing on disk.
 func (h *NotesHandler) regenerateNoteImageThumbnail(ctx context.Context, img *models.NoteImage) (io.ReadSeekCloser, error) {
-	original, err := h.blobstore.Open(ctx, img.SHA256)
+	original, err := h.imageStore.Open(ctx, img.SHA256)
 	if err != nil {
 		if errors.Is(err, blobstore.ErrNotFound) {
 			return nil, err
@@ -353,7 +353,7 @@ func (h *NotesHandler) regenerateNoteImageThumbnail(ctx context.Context, img *mo
 		return nil, fmt.Errorf("regenerate thumbnail: %w", err)
 	}
 
-	if putErr := h.blobstore.PutThumbnail(ctx, img.SHA256, bytes.NewReader(thumbnail)); putErr != nil {
+	if putErr := h.thumbStore.Put(ctx, img.SHA256, bytes.NewReader(thumbnail)); putErr != nil {
 		logutil.FromContext(ctx).WithError(putErr).WithField("sha256", img.SHA256).
 			Error("Failed to persist regenerated note image thumbnail")
 	}
