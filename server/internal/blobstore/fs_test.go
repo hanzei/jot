@@ -60,7 +60,7 @@ func TestFSBlobstorePutLayout(t *testing.T) {
 
 	require.NoError(t, store.Put(ctx, sha, strings.NewReader(content)))
 
-	wantPath := filepath.Join(store.root, "blobs", sha[0:2], sha[2:4], sha)
+	wantPath := filepath.Join(store.root.Name(), "blobs", sha[0:2], sha[2:4], sha)
 	got, err := os.ReadFile(wantPath) // #nosec G304 -- test-controlled path
 	require.NoError(t, err)
 	assert.Equal(t, content, string(got))
@@ -111,6 +111,11 @@ func TestFSBlobstoreDelete(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
+func TestFSBlobstoreClose(t *testing.T) {
+	store := newTestStore(t)
+	require.NoError(t, store.Close())
+}
+
 func TestFSBlobstoreDeleteMissingIsNoOp(t *testing.T) {
 	store := newTestStore(t)
 	ctx := t.Context()
@@ -151,9 +156,20 @@ func TestFSBlobstorePathSafety(t *testing.T) {
 	}
 
 	// Nothing must have escaped the store root.
-	entries, err := os.ReadDir(store.root)
+	entries, err := os.ReadDir(store.root.Name())
 	require.NoError(t, err)
 	for _, e := range entries {
 		assert.Equal(t, "blobs", e.Name())
 	}
+}
+
+// TestFSBlobstoreRootRejectsEscape exercises the os.Root layer directly,
+// bypassing relPath's own hash validation, to confirm it is a genuine second
+// line of defense rather than dead code: even a hypothetical bug that let a
+// "../"-containing name through relPath would still be rejected here.
+func TestFSBlobstoreRootRejectsEscape(t *testing.T) {
+	store := newTestStore(t)
+
+	_, err := store.root.OpenFile(filepath.Join("..", "escaped"), os.O_CREATE|os.O_WRONLY, 0o640)
+	require.Error(t, err)
 }
