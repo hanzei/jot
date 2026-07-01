@@ -709,14 +709,21 @@ export default function NoteEditorScreen() {
       if (!target || target.completed === completed) return;
 
       // Capture the prior completed state of just the items this toggle touches
-      // (the item plus, for a top-level item, its children) from that latest
-      // state. Used to advance the save baseline and to revert precisely on
-      // failure — without clobbering any other item whose state may change
-      // before this async call settles.
+      // (the item plus, for a top-level item, its children — or, for a child
+      // being unchecked, its parent) from that latest state. Used to advance
+      // the save baseline and to revert precisely on failure — without
+      // clobbering any other item whose state may change before this async
+      // call settles.
       const cascadeToChildren = target.parentId === null;
+      const uncompleteParent = target.parentId !== null && !completed;
       const priorCompletedById = new Map(
         before
-          .filter((item) => item.id === itemId || (cascadeToChildren && item.parentId === itemId))
+          .filter(
+            (item) =>
+              item.id === itemId ||
+              (cascadeToChildren && item.parentId === itemId) ||
+              (uncompleteParent && item.id === target.parentId),
+          )
           .map((item) => [item.id, item.completed]),
       );
 

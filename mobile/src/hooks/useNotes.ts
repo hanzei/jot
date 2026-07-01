@@ -65,9 +65,12 @@ function assertSwitchWriteAllowed(): void {
 
 /**
  * Collects the item ids a completed-toggle should cascade to, mirroring the
- * server: toggling a top-level item also toggles its direct children. Only ids
- * whose `completed` actually changes are returned. Shared by the optimistic
- * cache update and the offline local-DB write so the two stay in agreement.
+ * server: a top-level item's completed state cascades to all of its direct
+ * children (in either direction), and unchecking a child also un-completes
+ * its parent — a parent can never stay "done" with an incomplete child.
+ * Completing every child does not auto-complete the parent. Only ids whose
+ * `completed` actually changes are returned. Shared by the optimistic cache
+ * update and the offline local-DB write so the two stay in agreement.
  *
  * (NoteEditorScreen keeps a parallel `applyCompletedCascade` over its own
  * `LocalItem[]` editor state; keep the cascade rule here in sync with it.)
@@ -76,10 +79,13 @@ function collectToggleCascade(items: NoteItem[], itemId: string, completed: bool
   const target = items.find((i) => i.id === itemId);
   if (!target) return [];
   const cascadeToChildren = target.parent_id === null;
+  const uncompleteParent = target.parent_id !== null && !completed;
   return items
     .filter(
       (i) =>
-        (i.id === itemId || (cascadeToChildren && i.parent_id === itemId)) &&
+        (i.id === itemId ||
+          (cascadeToChildren && i.parent_id === itemId) ||
+          (uncompleteParent && i.id === target.parent_id)) &&
         i.completed !== completed,
     )
     .map((i) => i.id);

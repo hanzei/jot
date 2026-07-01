@@ -1409,6 +1409,17 @@ func (s *noteStore) PatchItem(ctx context.Context, noteID, itemID string, patch 
 		return nil, fmt.Errorf("failed to update note item: %w", err)
 	}
 
+	// Keep the same parent/child completion invariant as ToggleItemCompleted:
+	// this is the only other path that can change `completed`. Cascades off of
+	// currentParent (the item's parent before this patch), so a request that
+	// changes parent_id and completed together is evaluated against its old
+	// group, not the one it's moving into.
+	if patch.Completed != nil {
+		if err = cascadeItemCompletion(ctx, tx, s.d, noteID, itemID, currentParent, resolvedCompleted); err != nil {
+			return nil, err
+		}
+	}
+
 	if err = touchNoteTx(ctx, tx, s.d, noteID); err != nil {
 		return nil, err
 	}
@@ -1495,12 +1506,39 @@ func (s *noteStore) ReorderItems(ctx context.Context, noteID string, itemIDs []s
 	return nil
 }
 
-// ToggleItemCompleted sets an item's completed flag and, when the item is a
-// top-level (parent) item, cascades the same value to all of its children in a
-// single transaction. The cascade is one-directional (parent -> children only):
-// completing the last child never auto-completes the parent. It returns the
-// note's full item list so callers reconcile every affected item from one
-// response. Returns ErrNoteItemNotFound if the item does not belong to the note.
+// cascadeItemCompletion enforces the checklist invariant that a parent item
+// can never be marked completed while one of its children is not: completing a
+// top-level item cascades the same value to all of its children (checking or
+// unchecking a group never splits it), while unchecking a child also
+// un-completes its parent. The reverse does not happen: completing the last
+// incomplete child never auto-completes the parent — that still requires
+// checking the parent itself. parentID is the item's parent_id as it stood
+// before this change.
+func cascadeItemCompletion(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, itemID string, parentID sql.NullString, newCompleted bool) error {
+	if !parentID.Valid {
+		if _, err := tx.ExecContext(ctx,
+			d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = CURRENT_TIMESTAMP WHERE note_id = ? AND parent_id = ?`),
+			newCompleted, noteID, itemID,
+		); err != nil {
+			return fmt.Errorf("failed to cascade completion to children: %w", err)
+		}
+		return nil
+	}
+	if !newCompleted {
+		if _, err := tx.ExecContext(ctx,
+			d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND note_id = ?`),
+			false, parentID.String, noteID,
+		); err != nil {
+			return fmt.Errorf("failed to cascade completion to parent: %w", err)
+		}
+	}
+	return nil
+}
+
+// ToggleItemCompleted sets an item's completed flag and cascades per
+// cascadeItemCompletion in a single transaction. It returns the note's full
+// item list so callers reconcile every affected item from one response.
+// Returns ErrNoteItemNotFound if the item does not belong to the note.
 func (s *noteStore) ToggleItemCompleted(ctx context.Context, noteID, itemID string, completed bool) ([]NoteItem, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -1527,14 +1565,8 @@ func (s *noteStore) ToggleItemCompleted(ctx context.Context, noteID, itemID stri
 		return nil, fmt.Errorf("failed to update note item: %w", err)
 	}
 
-	// Cascade only from a top-level item to its children.
-	if !parentID.Valid {
-		if _, err = tx.ExecContext(ctx,
-			s.d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = CURRENT_TIMESTAMP WHERE note_id = ? AND parent_id = ?`),
-			completed, noteID, itemID,
-		); err != nil {
-			return nil, fmt.Errorf("failed to cascade completion to children: %w", err)
-		}
+	if err = cascadeItemCompletion(ctx, tx, s.d, noteID, itemID, parentID, completed); err != nil {
+		return nil, err
 	}
 
 	if err = touchNoteTx(ctx, tx, s.d, noteID); err != nil {

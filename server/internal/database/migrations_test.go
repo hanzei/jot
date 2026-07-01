@@ -122,3 +122,66 @@ func TestMigration000002Backfill(t *testing.T) {
 	require.Error(t, err, "indent_level column should be dropped")
 	assert.Contains(t, err.Error(), "indent_level")
 }
+
+// TestMigration000004FixCompletedParentWithIncompleteChild seeds data in the
+// invalid state the checklist invariant now forbids (a completed top-level
+// item with an incomplete child — e.g. left behind by unchecking a child
+// before the cascade-up fix in ToggleItemCompleted/PatchItem), then applies
+// 000004 and asserts it's healed without touching unrelated items.
+func TestMigration000004FixCompletedParentWithIncompleteChild(t *testing.T) {
+	dsn := t.TempDir() + "/backfill4.db"
+	db, err := sql.Open("sqlite", dsn)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+
+	db.SetMaxOpenConns(1)
+	ctx := t.Context()
+	_, err = db.ExecContext(ctx, `PRAGMA foreign_keys = ON`)
+	require.NoError(t, err)
+
+	m := newMigrator(t, db)
+	require.NoError(t, m.Migrate(3))
+
+	_, err = db.ExecContext(ctx, `INSERT INTO users (id, username, password_hash) VALUES ('user000000000000000002', 'bob', 'x')`)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `INSERT INTO notes (id, user_id, note_type) VALUES ('note000000000000000003', 'user000000000000000002', 'list')`)
+	require.NoError(t, err)
+
+	// "Done" is completed but has an incomplete child "Undone child" — the
+	// invalid state. "Fine" is completed with only completed children, and
+	// "Untouched" is a plain incomplete top-level item; neither should change.
+	seed := []struct {
+		id        string
+		parentID  sql.NullString
+		completed bool
+	}{
+		{"itemDone0000000000001", sql.NullString{}, true},
+		{"itemDoneChild000000001", sql.NullString{String: "itemDone0000000000001", Valid: true}, true},
+		{"itemUndoneChild0000001", sql.NullString{String: "itemDone0000000000001", Valid: true}, false},
+		{"itemFine0000000000001", sql.NullString{}, true},
+		{"itemFineChild000000001", sql.NullString{String: "itemFine0000000000001", Valid: true}, true},
+		{"itemUntouched000000001", sql.NullString{}, false},
+	}
+	for _, it := range seed {
+		_, err = db.ExecContext(ctx,
+			`INSERT INTO note_items (id, note_id, text, position, parent_id, completed) VALUES (?, ?, ?, 0, ?, ?)`,
+			it.id, "note000000000000000003", it.id, it.parentID, it.completed,
+		)
+		require.NoError(t, err)
+	}
+
+	require.NoError(t, m.Migrate(4))
+
+	completedOf := func(id string) bool {
+		var completed bool
+		require.NoError(t, db.QueryRowContext(ctx, `SELECT completed FROM note_items WHERE id = ?`, id).Scan(&completed))
+		return completed
+	}
+
+	assert.False(t, completedOf("itemDone0000000000001"), "parent with an incomplete child is un-completed")
+	assert.False(t, completedOf("itemUndoneChild0000001"), "the incomplete child is untouched")
+	assert.True(t, completedOf("itemDoneChild000000001"), "the completed sibling is untouched")
+	assert.True(t, completedOf("itemFine0000000000001"), "a parent whose children are all completed is untouched")
+	assert.True(t, completedOf("itemFineChild000000001"))
+	assert.False(t, completedOf("itemUntouched000000001"))
+}

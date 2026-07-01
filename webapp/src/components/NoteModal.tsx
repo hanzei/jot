@@ -1237,15 +1237,20 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
   };
 
-  // applyCompletedCascade mirrors the server's cascade locally: toggling a
-  // top-level item also toggles its children; toggling a child touches only it.
+  // applyCompletedCascade mirrors the server's cascade locally: a top-level
+  // item's completed state cascades to all of its children (in either
+  // direction), while unchecking a child also un-completes its parent — a
+  // parent can never stay "done" with an incomplete child. Completing every
+  // child does not auto-complete the parent; that still requires checking it.
   const applyCompletedCascade = (items: ListItem[], itemId: string, completed: boolean): ListItem[] => {
     const target = items.find(item => item.id === itemId);
     if (!target) return items;
     const cascadeToChildren = target.parentId === null;
+    const uncompleteParent = target.parentId !== null && !completed;
     return items.map(item => {
       if (item.id === itemId) return { ...item, completed };
       if (cascadeToChildren && item.parentId === itemId) return { ...item, completed };
+      if (uncompleteParent && item.id === target.parentId) return { ...item, completed: false };
       return item;
     });
   };
@@ -1262,13 +1267,17 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     if (!target || target.completed === completed) return;
 
     // Remember the pre-toggle completed state of just the items this toggle
-    // touches (the target and, for a parent, its children), so an error reverts
-    // only those flags without clobbering edits made to other items meanwhile.
+    // touches (the target and, for a parent, its children — or, for a child
+    // being unchecked, its parent), so an error reverts only those flags
+    // without clobbering edits made to other items meanwhile.
     const revertCompleted = new Map<string, boolean>([[target.id, target.completed]]);
     if (target.parentId === null) {
       for (const item of before) {
         if (item.parentId === itemId) revertCompleted.set(item.id, item.completed);
       }
+    } else if (!completed) {
+      const parent = before.find(item => item.id === target.parentId);
+      if (parent) revertCompleted.set(parent.id, parent.completed);
     }
 
     commitItems(applyCompletedCascade(before, itemId, completed));
