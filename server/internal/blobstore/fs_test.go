@@ -197,6 +197,116 @@ func TestFSBlobstorePathSafety(t *testing.T) {
 	}
 }
 
+func TestFSBlobstoreThumbnailRoundTrip(t *testing.T) {
+	store := newTestStore(t)
+	ctx := t.Context()
+	sha := shaOf("original bytes")
+	thumbContent := "resized jpeg bytes"
+
+	require.NoError(t, store.PutThumbnail(ctx, sha, strings.NewReader(thumbContent)))
+
+	rc, err := store.OpenThumbnail(ctx, sha)
+	require.NoError(t, err)
+	defer rc.Close()
+
+	got, err := io.ReadAll(rc)
+	require.NoError(t, err)
+	assert.Equal(t, thumbContent, string(got))
+}
+
+func TestFSBlobstoreThumbnailLayout(t *testing.T) {
+	store := newTestStore(t)
+	ctx := t.Context()
+	sha := shaOf("original bytes")
+
+	require.NoError(t, store.PutThumbnail(ctx, sha, strings.NewReader("thumb")))
+
+	wantPath := filepath.Join(store.root.Name(), "thumb", sha[0:2], sha[2:4], sha+".jpg")
+	got, err := os.ReadFile(wantPath) // #nosec G304 -- test-controlled path
+	require.NoError(t, err)
+	assert.Equal(t, "thumb", string(got))
+}
+
+func TestFSBlobstoreThumbnailDoesNotAffectOriginalBlob(t *testing.T) {
+	store := newTestStore(t)
+	ctx := t.Context()
+	content := "hello, blob"
+	sha := shaOf(content)
+
+	require.NoError(t, store.Put(ctx, sha, strings.NewReader(content)))
+	require.NoError(t, store.PutThumbnail(ctx, sha, strings.NewReader("thumb bytes")))
+
+	rc, err := store.Open(ctx, sha)
+	require.NoError(t, err)
+	defer rc.Close()
+	got, err := io.ReadAll(rc)
+	require.NoError(t, err)
+	assert.Equal(t, content, string(got), "putting a thumbnail must not touch the original blob stored under the same hash")
+}
+
+func TestFSBlobstorePutThumbnailIsNoOpIfAlreadyPresent(t *testing.T) {
+	store := newTestStore(t)
+	ctx := t.Context()
+	sha := shaOf("original bytes")
+
+	require.NoError(t, store.PutThumbnail(ctx, sha, strings.NewReader("first")))
+	require.NoError(t, store.PutThumbnail(ctx, sha, strings.NewReader("second")))
+
+	rc, err := store.OpenThumbnail(ctx, sha)
+	require.NoError(t, err)
+	defer rc.Close()
+	got, err := io.ReadAll(rc)
+	require.NoError(t, err)
+	assert.Equal(t, "first", string(got))
+}
+
+func TestFSBlobstoreOpenThumbnailMissing(t *testing.T) {
+	store := newTestStore(t)
+	ctx := t.Context()
+
+	_, err := store.OpenThumbnail(ctx, shaOf("never stored"))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestFSBlobstoreDeleteThumbnail(t *testing.T) {
+	store := newTestStore(t)
+	ctx := t.Context()
+	sha := shaOf("original bytes")
+
+	require.NoError(t, store.PutThumbnail(ctx, sha, strings.NewReader("thumb")))
+	require.NoError(t, store.DeleteThumbnail(ctx, sha))
+
+	_, err := store.OpenThumbnail(ctx, sha)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestFSBlobstoreDeleteThumbnailMissingIsNoOp(t *testing.T) {
+	store := newTestStore(t)
+	ctx := t.Context()
+
+	err := store.DeleteThumbnail(ctx, shaOf("was never here"))
+	require.NoError(t, err)
+}
+
+func TestFSBlobstoreThumbnailPathSafety(t *testing.T) {
+	store := newTestStore(t)
+	ctx := t.Context()
+
+	invalidSHA := "../../../../etc/passwd"
+
+	err := store.PutThumbnail(ctx, invalidSHA, strings.NewReader("payload"))
+	require.Error(t, err)
+
+	_, err = store.OpenThumbnail(ctx, invalidSHA)
+	require.Error(t, err)
+	require.NotErrorIs(t, err, ErrNotFound, "invalid hashes must be rejected before the not-found lookup")
+
+	err = store.DeleteThumbnail(ctx, invalidSHA)
+	require.Error(t, err)
+}
+
 // TestFSBlobstoreRootRejectsEscape exercises the os.Root layer directly,
 // bypassing relPath's own hash validation, to confirm it is a genuine second
 // line of defense rather than dead code: even a hypothetical bug that let a

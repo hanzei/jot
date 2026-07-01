@@ -73,6 +73,17 @@ func relPath(sha string) (string, error) {
 	return filepath.Join("blobs", canon[0:2], canon[2:4], canon), nil
 }
 
+// thumbRelPath returns the path of sha's derived thumbnail relative to the
+// store root, using the same fanout as relPath plus a .jpg suffix (thumbnails
+// are always re-encoded as JPEG regardless of the original's type).
+func thumbRelPath(sha string) (string, error) {
+	canon, err := canonicalSHA(sha)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join("thumb", canon[0:2], canon[2:4], canon+".jpg"), nil
+}
+
 // randomHex returns n random bytes hex-encoded, used for temp file names.
 func randomHex(n int) (string, error) {
 	b := make([]byte, n)
@@ -164,6 +175,87 @@ func (s *FSBlobstore) Delete(ctx context.Context, sha string) error {
 
 	if err := s.root.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("delete blob: %w", err)
+	}
+	return nil
+}
+
+// PutThumbnail implements Blobstore.
+func (s *FSBlobstore) PutThumbnail(ctx context.Context, sha string, r io.Reader) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	p, err := thumbRelPath(sha)
+	if err != nil {
+		return err
+	}
+
+	if _, statErr := s.root.Stat(p); statErr == nil {
+		return nil // already generated
+	} else if !errors.Is(statErr, fs.ErrNotExist) {
+		return fmt.Errorf("stat thumbnail: %w", statErr)
+	}
+
+	dir := filepath.Dir(p)
+	if mkdirErr := s.root.MkdirAll(dir, 0o750); mkdirErr != nil {
+		return fmt.Errorf("create thumbnail directory: %w", mkdirErr)
+	}
+
+	suffix, err := randomHex(8)
+	if err != nil {
+		return err
+	}
+	tmpPath := filepath.Join(dir, ".upload-"+suffix)
+	tmp, err := s.root.OpenFile(tmpPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o640)
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+	defer func() { _ = s.root.Remove(tmpPath) }() // no-op once the rename below succeeds
+
+	if _, err := io.Copy(tmp, r); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("write thumbnail: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close temp file: %w", err)
+	}
+	if err := s.root.Rename(tmpPath, p); err != nil {
+		return fmt.Errorf("finalize thumbnail: %w", err)
+	}
+	return nil
+}
+
+// OpenThumbnail implements Blobstore.
+func (s *FSBlobstore) OpenThumbnail(ctx context.Context, sha string) (io.ReadSeekCloser, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	p, err := thumbRelPath(sha)
+	if err != nil {
+		return nil, err
+	}
+
+	f, err := s.root.Open(p)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("open thumbnail: %w", err)
+	}
+	return f, nil
+}
+
+// DeleteThumbnail implements Blobstore.
+func (s *FSBlobstore) DeleteThumbnail(ctx context.Context, sha string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	p, err := thumbRelPath(sha)
+	if err != nil {
+		return err
+	}
+
+	if err := s.root.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("delete thumbnail: %w", err)
 	}
 	return nil
 }

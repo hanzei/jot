@@ -239,6 +239,7 @@ func (s *Server) setupRoutes() error {
 
 			r.Post("/notes/{id}/images", s.wrapHandler(s.notesHandler.UploadNoteImage))
 			r.Get("/images/{id}", s.wrapHandler(s.notesHandler.GetNoteImage))
+			r.Get("/images/{id}/thumbnail", s.wrapHandler(s.notesHandler.GetNoteImageThumbnail))
 			r.Delete("/images/{id}", s.wrapHandler(s.notesHandler.DeleteNoteImage))
 
 			r.Post("/notes/{id}/items", s.wrapHandler(s.notesHandler.CreateNoteItem))

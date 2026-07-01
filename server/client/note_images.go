@@ -22,6 +22,12 @@ func (c *Client) GetNoteImage(ctx context.Context, imageID string) ([]byte, stri
 	return c.doGetBytes(ctx, fmt.Sprintf("/api/v1/images/%s", imageID))
 }
 
+// GetNoteImageThumbnail fetches a note image's thumbnail bytes and content
+// type (always image/jpeg).
+func (c *Client) GetNoteImageThumbnail(ctx context.Context, imageID string) ([]byte, string, error) {
+	return c.doGetBytes(ctx, fmt.Sprintf("/api/v1/images/%s/thumbnail", imageID))
+}
+
 // DeleteNoteImage removes a note image, reclaiming its blob if no other image
 // row references the same content hash.
 func (c *Client) DeleteNoteImage(ctx context.Context, imageID string) error {
