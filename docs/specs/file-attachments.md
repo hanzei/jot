@@ -244,8 +244,8 @@ the grace window. The blob is untouched until the sweep finalizes the delete
 Add to `shared/src/constants.ts` (and a server-side mirror in
 `internal/handlers/validation.go`) so client and server agree:
 
-- `IMAGE_MAX_BYTES` — default **25 MB** per image. Configurable via env
-  `IMAGE_MAX_BYTES` using the existing `parseIntRangeEnv` helper.
+- `UPLOAD_MAX_BYTES` — default **25 MB** per image. Configurable via env
+  `UPLOAD_MAX_BYTES` using the existing `parseIntRangeEnv` helper.
 - `IMAGE_MAX_PER_NOTE` — **10**.
 - `IMAGE_ALLOWED_TYPES` — `image/png`, `image/jpeg`, `image/webp`, `image/gif`.
 
