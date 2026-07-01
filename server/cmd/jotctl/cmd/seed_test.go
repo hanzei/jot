@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/hanzei/jot/server/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -42,6 +43,33 @@ func TestSeedCmd(t *testing.T) {
 		require.NoError(t, json.Unmarshal([]byte(res.Stdout), &summary))
 		assert.Equal(t, 3, summary.UsersCreated)
 		assert.Positive(t, summary.NotesCreated)
+		assert.Positive(t, summary.ImagesCreated)
+	})
+
+	t.Run("creates notes with varying numbers of images", func(t *testing.T) {
+		ts := setupTestServer(t)
+		admin := ts.createAdmin(t, "admin", "adminp")
+
+		res := runJotCTL(t, ts, admin, "seed")
+		require.NoError(t, res.Err)
+
+		alice := client.New(ts.httpServer.URL)
+		_, err := alice.Login(t.Context(), "alice", seedPassword)
+		require.NoError(t, err)
+
+		notes, err := alice.ListNotes(t.Context(), nil)
+		require.NoError(t, err)
+
+		counts := make(map[int]int) // image count -> number of notes with that count
+		for _, n := range notes {
+			counts[len(n.Images)]++
+		}
+
+		assert.Positive(t, counts[0], "most notes should have no images")
+		assert.Equal(t, 1, counts[1], "exactly one note should have a single (banner) image")
+		assert.Equal(t, 1, counts[2], "exactly one note should have two images")
+		assert.Equal(t, 1, counts[3], "exactly one note should have three images")
+		assert.Equal(t, 1, counts[imageMaxPerNoteSeed], "exactly one note should be at the per-note image cap")
 	})
 
 	t.Run("is idempotent", func(t *testing.T) {
