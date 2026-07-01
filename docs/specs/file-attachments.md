@@ -172,12 +172,29 @@ type Blobstore interface {
 
 - **v1 backend: `fsBlobstore`** rooted at a new config `UPLOAD_DIR`
   (default `./uploads`, sibling of the `./jot.db` DSN; in Docker this lives under
-  the mounted `/data` volume). Layout: `UPLOAD_DIR/<sha[0:2]>/<sha[2:4]>/<sha>`
-  to keep directories shallow. The path is derived solely from the validated hex
-  hash, so user input never reaches the filesystem path (no traversal).
-- Thumbnails: generate a resized derivative (reusing the avatar resize pipeline)
-  and store it under a `thumb/` keyspace, or generate lazily on first request
-  and cache. Grid tiles use the thumbnail; the lightbox uses the original.
+  the mounted `/data` volume). Both originals and thumbnails live under this one
+  root — **not** a separate top-level `./thumbnails` — so there is a single
+  config value, a single volume to mount, and a single thing to back up:
+
+  ```
+  UPLOAD_DIR/
+    blobs/  <sha[0:2]>/<sha[2:4]>/<sha>        # originals (source of truth)
+    thumb/  <sha[0:2]>/<sha[2:4]>/<sha>.jpg    # derived tiles
+  ```
+
+  Directories are fanned out by hash prefix to stay shallow. Every path is
+  derived solely from the validated hex hash, so user input never reaches the
+  filesystem path (no traversal).
+- **Thumbnails are a derived cache, not an entity.** A thumbnail is deterministic
+  from `(original sha256, target size)`, so it is keyed by the *original's* sha
+  and gets **no `note_images` row and no refcount of its own**. Generate it with
+  the avatar resize pipeline (output JPEG, so the thumbnail response is always
+  `image/jpeg`); regenerate on demand if the file is missing since it is
+  disposable. Grid tiles use the thumbnail; the lightbox uses the original. A
+  future multi-size need extends the key to `<sha>_<w>.jpg` with no schema change.
+- **Thumbnail lifecycle rides on the original.** When an original's refcount hits
+  zero and it is GC'd (§10), delete its `thumb/<sha>.jpg` in the same step — no
+  separate sweep.
 - The interface leaves room for an S3 backend later without touching handlers.
 
 **Backup note for operators**: a full backup is now *DB + the upload dir*
