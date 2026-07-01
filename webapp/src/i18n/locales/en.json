@@ -309,7 +309,9 @@
         "noteAssociations": "Label assignments",
         "completed": "Completed",
         "assigned": "Assigned",
-        "databaseSize": "Database size"
+        "databaseSize": "Database size",
+        "imageCount": "Image count",
+        "imagesSize": "Image storage"
       }
     }
   },

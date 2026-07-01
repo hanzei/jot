@@ -649,7 +649,7 @@ describe('API Module', () => {
           sharing: { shared_notes: 1, share_links: 2 },
           labels: { total: 2, note_associations: 3 },
           list_items: { total: 3, completed: 1, assigned: 2 },
-          storage: { database_size_bytes: 2048 },
+          storage: { database_size_bytes: 2048, image_count: 2, images_size_bytes: 4096 },
         }
         mockGet.mockResolvedValue({ data: mockResponse })
 

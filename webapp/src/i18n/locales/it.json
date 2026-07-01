@@ -309,7 +309,9 @@
         "noteAssociations": "Assegnazioni etichette",
         "completed": "Completate",
         "assigned": "Assegnate",
-        "databaseSize": "Dimensione database"
+        "databaseSize": "Dimensione database",
+        "imageCount": "Numero di immagini",
+        "imagesSize": "Spazio immagini"
       }
     }
   },
