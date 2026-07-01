@@ -118,6 +118,7 @@ Configure the application using environment variables or `.env` file:
 # Database configuration
 DB_DRIVER=sqlite                    # Database driver: "sqlite" (default) or "postgres"
 DB_DSN=./jot.db                     # Database connection string (SQLite file path or Postgres DSN)
+UPLOAD_DIR=./uploads                # Directory for uploaded blob storage (optional)
 
 # Server configuration
 PORT=8080                           # Server port (optional)
@@ -126,6 +127,21 @@ STATIC_DIR=../webapp/build/         # Frontend build directory (optional)
 # Access control
 REGISTRATION_ENABLED=true           # Set to "false" to disable public registration; admins can still create users (optional)
 ```
+
+### Backups
+
+Uploaded blobs (e.g. note images) are stored on the filesystem under
+`UPLOAD_DIR`, content-addressed by hash, not in the database — `UPLOAD_DIR`
+must always be included in backups alongside the database, regardless of
+`DB_DRIVER`.
+
+- **SQLite (default)**: a full backup is the `DB_DSN` file + `UPLOAD_DIR`. In
+  Docker, both live under the mounted `/data` volume by default, so backing up
+  `./data` covers everything.
+- **Postgres**: `DB_DSN` is a connection string, not a file — back up the
+  database itself using Postgres's own tooling (e.g. `pg_dump`/WAL archiving),
+  and separately back up `UPLOAD_DIR` (still local/volume-mounted, since blob
+  storage does not follow `DB_DRIVER`).
 
 ## API Reference
 

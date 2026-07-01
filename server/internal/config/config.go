@@ -16,6 +16,7 @@ type Config struct {
 	DBDriver            string
 	DBDSN               string
 	StaticDir           string
+	UploadDir           string
 	CORSAllowedOrigin   string
 	CookieSecure        bool
 	RegistrationEnabled bool
@@ -65,6 +66,7 @@ func Load() (*Config, error) {
 		MetricsHost:         "127.0.0.1",
 		DBDriver:            "sqlite",
 		DBDSN:               "./jot.db",
+		UploadDir:           "./uploads",
 		CookieSecure:        true,
 		RegistrationEnabled: true,
 		OTelServiceName:     "jot",
@@ -97,6 +99,10 @@ func Load() (*Config, error) {
 	}
 	if v := os.Getenv("DB_DSN"); v != "" {
 		cfg.DBDSN = v
+	}
+
+	if v := os.Getenv("UPLOAD_DIR"); v != "" {
+		cfg.UploadDir = filepath.Clean(v)
 	}
 
 	if v := os.Getenv("STATIC_DIR"); v != "" {

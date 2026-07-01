@@ -87,6 +87,7 @@ Jot is a self-hosted note-taking application. The backend is a Go HTTP API and t
 │   │       └── cmd/     # Cobra command definitions
 │   ├── internal/
 │   │   ├── auth/        # Session-cookie + PAT auth middleware and utilities
+│   │   ├── blobstore/   # Content-addressed blob storage (Blobstore interface, fsBlobstore)
 │   │   ├── config/      # Server configuration (env vars, defaults)
 │   │   ├── database/    # Database bootstrap and migration runner
 │   │   │   └── migrations/  # Sequential SQL migration files (embedded into binary)
@@ -161,6 +162,8 @@ They return an HTTP status code, a response body (serialized to JSON by `wrapHan
 **MCP server** — `internal/mcphandler` exposes note and label CRUD as Model Context Protocol tools over the streamable-HTTP transport. It is mounted behind auth middleware so every MCP session is scoped to the authenticated user.
 
 **Observability** — `internal/telemetry` sets up optional OpenTelemetry traces (OTLP gRPC) and Prometheus metrics (separate port). Structured logs are integrated with the OTel LoggerProvider.
+
+**Blob storage** — `internal/blobstore` defines a `Blobstore` interface (`Put`/`Open`/`Delete`) for content-addressed binary storage, keyed by hex-encoded SHA-256 hash. `FSBlobstore` is the v1 implementation, rooted at config `UPLOAD_DIR` (default `./uploads`), laid out as `UPLOAD_DIR/blobs/<sha[0:2]>/<sha[2:4]>/<sha>`. All paths are derived solely from the validated hash, never from caller-supplied filenames, so there is no path traversal risk; filesystem access additionally goes through `os.Root` (opened on `UPLOAD_DIR`, same traversal-resistant pattern used for static file serving in `server.go`) as defense-in-depth. `Put` is a no-op when the hash already exists (dedup). A full backup is now **DB + `UPLOAD_DIR`**.
 
 ### API Specification
 
