@@ -565,6 +565,8 @@ definitions:
         type: integer
       registration_enabled:
         type: boolean
+      upload_max_bytes:
+        type: integer
     type: object
 info:
   contact:

@@ -252,6 +252,25 @@ func TestConfigEndpoint(t *testing.T) {
 		assert.Equal(t, 4, cfg.PasswordMinLength)
 	})
 
+	t.Run("returns default upload_max_bytes", func(t *testing.T) {
+		ts := setupTestServer(t)
+		c := ts.newClient()
+
+		cfg, err := c.Config(t.Context())
+		require.NoError(t, err)
+		assert.Equal(t, 25<<20, cfg.UploadMaxBytes)
+	})
+
+	t.Run("returns configured upload_max_bytes so the client can match the server's actual cap", func(t *testing.T) {
+		ts := setupTestServerWithConfig(t, func(cfg *config.Config) {
+			cfg.UploadMaxBytes = 10 << 20
+		})
+		c := ts.newClient()
+
+		cfg, err := c.Config(t.Context())
+		require.NoError(t, err)
+		assert.Equal(t, 10<<20, cfg.UploadMaxBytes)
+	})
 }
 
 // Auth endpoint tests

@@ -80,6 +80,28 @@ test.describe('Note image gallery', () => {
     await expect(page.getByRole('dialog').last().getByAltText('test-icon.png')).toBeVisible();
   });
 
+  test('still shows an uploaded image after closing and reopening the note, without a page reload', async ({ page, dashboardPage }) => {
+    // Regression test: closing the modal destroys NoteModal's local
+    // optimistic-image overlay, so reopening the note relies entirely on
+    // Dashboard's own note list having been corrected — which only happens
+    // if the upload success handler explicitly refreshes it (the uploader's
+    // own note_image_added SSE event is dropped by self-echo suppression).
+    await dashboardPage.goto();
+    const title = `Reopen upload note ${Date.now()}`;
+    await dashboardPage.createNote(title);
+    await dashboardPage.openNote(title);
+
+    const dialog = page.getByRole('dialog').last();
+    await dialog.getByTestId('note-image-file-input').setInputFiles(path.join(__dirname, '../fixtures/test-icon.png'));
+    await expect(dialog.getByAltText('test-icon.png')).toBeVisible();
+    await expect(dialog.getByTestId('image-upload-tile')).not.toBeAttached();
+
+    // Close and reopen the SAME note — deliberately no page.reload() here.
+    await dashboardPage.closeNoteModal();
+    await dashboardPage.openNote(title);
+    await expect(page.getByRole('dialog').last().getByAltText('test-icon.png')).toBeVisible();
+  });
+
   test('removes an image via the bin icon and undo restores it', async ({ page, dashboardPage }) => {
     await dashboardPage.goto();
     const title = `Remove undo note ${Date.now()}`;

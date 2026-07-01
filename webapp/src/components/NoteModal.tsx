@@ -35,9 +35,6 @@ import { CSS } from '@dnd-kit/utilities';
 
 // Undo window for a client-deferred note image removal (spec: ~10s).
 const IMAGE_REMOVE_UNDO_MS = 10_000;
-// Human-readable max upload size, shared by the client-side pre-check and the
-// 413-from-server fallback message.
-const IMAGE_MAX_MB = Math.round(UPLOAD_MAX_BYTES / (1024 * 1024));
 
 // Validation functions
 type TFunction = (key: string, opts?: Record<string, unknown>) => string;
@@ -108,6 +105,10 @@ interface NoteModalProps {
   isOwner?: boolean;
   usersById?: Map<string, User>;
   currentUserId?: string;
+  // Server-configured image upload cap, fetched via GET /config. Falls back
+  // to the shared default so this component still works if a caller (e.g. a
+  // test) doesn't pass it.
+  uploadMaxBytes?: number;
 }
 
 interface ListItem {
@@ -482,7 +483,7 @@ function SortableItem({ id, index, item, onUpdateListItem, onRemoveListItem, isC
   );
 }
 
-export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, onDelete, onDuplicate, isOwner = true, usersById, currentUserId }: NoteModalProps) {
+export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, onDelete, onDuplicate, isOwner = true, usersById, currentUserId, uploadMaxBytes = UPLOAD_MAX_BYTES }: NoteModalProps) {
   const { t, i18n } = useTranslation();
   const { showToast } = useToast();
   const [title, setTitle] = useState('');
@@ -537,6 +538,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     const merged = extra.length > 0 ? [...base, ...extra] : base;
     return hiddenImageIds.size > 0 ? merged.filter(img => !hiddenImageIds.has(img.id)) : merged;
   }, [note, optimisticImages, hiddenImageIds]);
+  // Human-readable max upload size for error copy, derived from the
+  // server-configured cap (falls back to the shared default) rather than a
+  // hardcoded value, so the message matches what the server will actually
+  // accept even when an admin has overridden UPLOAD_MAX_BYTES.
+  const imageMaxMB = useMemo(() => Math.round(uploadMaxBytes / (1024 * 1024)), [uploadMaxBytes]);
   const [isDraggingImage, setIsDraggingImage] = useState(false);
   const imageFileInputRef = useRef<HTMLInputElement>(null);
   const imageUploadsRef = useRef<PendingImageUpload[]>([]);
@@ -1029,11 +1035,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     if (!(IMAGE_ALLOWED_TYPES as readonly string[]).includes(file.type)) {
       return t('images.errorWrongType');
     }
-    if (file.size > UPLOAD_MAX_BYTES) {
-      return t('images.errorTooLarge', { maxMB: IMAGE_MAX_MB });
+    if (file.size > uploadMaxBytes) {
+      return t('images.errorTooLarge', { maxMB: imageMaxMB });
     }
     return null;
-  }, [t]);
+  }, [t, uploadMaxBytes, imageMaxMB]);
 
   // Removes a completed or dismissed upload tile and revokes its local
   // preview URL so the object URL doesn't leak.
@@ -1066,16 +1072,23 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       // vanishing until an unrelated refresh or reload catches it up.
       setOptimisticImages(prev => (prev.some(e => e.image.id === image.id) ? prev : [...prev, { noteId, image }]));
       removeUploadTile(uploadId);
+      // optimisticImages only lives as long as this NoteModal instance does.
+      // Closing the modal unmounts it entirely, so without also correcting
+      // Dashboard's own note list here, reopening the same note would read
+      // the same stale note.images (missing this upload) all over again —
+      // the same dropped-SSE-echo gap the deferred delete already guards
+      // against below, just on the add side instead of the remove side.
+      onRefresh?.();
     }).catch((error) => {
       activeUploadIdsRef.current.delete(uploadId);
       console.error('Failed to upload image:', error);
       const status = (error as { response?: { status?: number } })?.response?.status;
       const message = status === 413
-        ? t('images.errorTooLarge', { maxMB: IMAGE_MAX_MB })
+        ? t('images.errorTooLarge', { maxMB: imageMaxMB })
         : t('images.uploadFailed');
       setImageUploads(prev => prev.map(u => (u.id === uploadId ? { ...u, status: 'error', errorMessage: message } : u)));
     });
-  }, [removeUploadTile, t]);
+  }, [removeUploadTile, t, imageMaxMB, onRefresh]);
 
   const startImageUpload = useCallback((file: File) => {
     const id = generateId();

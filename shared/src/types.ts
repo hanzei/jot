@@ -1,6 +1,7 @@
 export interface ServerConfig {
   registration_enabled: boolean;
   password_min_length: number;
+  upload_max_bytes: number;
 }
 
 export interface AboutInfo {

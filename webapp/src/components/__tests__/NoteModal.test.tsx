@@ -386,6 +386,18 @@ describe('NoteModal', () => {
       expect(screen.getByText('Image exceeds the 25 MB limit.')).toBeInTheDocument()
     })
 
+    it('uses the server-configured upload cap (from /config) instead of a hardcoded 25 MB', async () => {
+      const note = createMockNote({ images: [] })
+      renderNoteModal({ ...defaultProps, note, uploadMaxBytes: 10 * 1024 * 1024 })
+
+      // 15 MB is under the hardcoded 25 MB default but over this server's
+      // actual configured 10 MB cap.
+      await uploadViaPicker(makeImageFile('medium.png', 'image/png', 15 * 1024 * 1024))
+
+      expect(mockImagesUpload).not.toHaveBeenCalled()
+      expect(screen.getByText('Image exceeds the 10 MB limit.')).toBeInTheDocument()
+    })
+
     it('combines validation errors from every invalid file in one batch instead of only the last one', async () => {
       const note = createMockNote({ images: [] })
       renderNoteModal({ ...defaultProps, note })

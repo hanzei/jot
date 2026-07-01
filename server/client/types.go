@@ -336,6 +336,7 @@ type SessionInfo struct {
 type ServerConfig struct {
 	RegistrationEnabled bool `json:"registration_enabled"`
 	PasswordMinLength   int  `json:"password_min_length"`
+	UploadMaxBytes      int  `json:"upload_max_bytes"`
 }
 
 // Ptr returns a pointer to v; useful for building UpdateUserRequest fields.

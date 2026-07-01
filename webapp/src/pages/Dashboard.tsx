@@ -3,7 +3,7 @@ import { PlusIcon, DocumentTextIcon, ArchiveBoxIcon, TrashIcon, ClipboardDocumen
 import { useTranslation } from 'react-i18next';
 import { notes, users as usersApi } from '@/utils/api';
 import { getUser, getSettings, setSettings } from '@/utils/auth';
-import type { Note, NoteImage, User, SSEEvent, NoteSort } from '@jot/shared';
+import { UPLOAD_MAX_BYTES, type Note, type NoteImage, type User, type SSEEvent, type NoteSort } from '@jot/shared';
 import { useSearchParams, useParams, useNavigate } from 'react-router';
 import PageContent from '@/components/PageContent';
 import SearchBar from '@/components/SearchBar';
@@ -37,7 +37,13 @@ import {
 const SEARCH_DEBOUNCE_MS = 300;
 const isApplePlatform = () => typeof navigator !== 'undefined' && /mac|iphone|ipad|ipod/i.test(navigator.platform);
 
-export default function Dashboard() {
+interface DashboardProps {
+  // Server-configured upload cap (falls back to the shared default if the
+  // parent hasn't fetched /config yet, or the route is used without it).
+  uploadMaxBytes?: number;
+}
+
+export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: DashboardProps) {
   const { t } = useTranslation();
   const { showToast } = useToast();
   const { noteId: noteIdParam } = useParams<{ noteId?: string }>();
@@ -1259,6 +1265,7 @@ export default function Dashboard() {
             isOwner={!editingNote || editingNote.user_id === user?.id}
             usersById={usersById}
             currentUserId={user?.id}
+            uploadMaxBytes={uploadMaxBytes}
           />
         )}
 
