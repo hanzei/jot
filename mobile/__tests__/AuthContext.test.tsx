@@ -424,7 +424,7 @@ describe('AuthContext', () => {
     unmount();
   });
 
-  it('does not restore cached profile on 403 during session restore', async () => {
+  it('clears the optimistically-rendered cached profile on 403 during session restore', async () => {
     mockGetStoredSession.mockResolvedValue('existing-token');
     mockAuth.me.mockRejectedValue({ response: { status: 403 } });
     mockGetCachedAuthProfile.mockResolvedValue({ user: { ...mockUser, username: 'cached' }, settings: mockSettings });
@@ -441,7 +441,40 @@ describe('AuthContext', () => {
 
     expect(getByTestId('authenticated').props.children).toBe('false');
     expect(getByTestId('username').props.children).toBe('none');
-    expect(mockGetCachedAuthProfile).not.toHaveBeenCalled();
+    unmount();
+  });
+
+  it('renders the cached profile immediately while auth.me() revalidates in the background', async () => {
+    mockGetStoredSession.mockResolvedValue('existing-token');
+    mockGetCachedAuthProfile.mockResolvedValue({ user: { ...mockUser, username: 'cached' }, settings: mockSettings });
+    let resolveMe!: (value: { user: typeof mockUser; settings: typeof mockSettings }) => void;
+    mockAuth.me.mockReturnValue(
+      new Promise((resolve) => {
+        resolveMe = resolve;
+      }),
+    );
+
+    const { getByTestId, unmount } = render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    );
+
+    // Renders from cache without waiting for auth.me() to resolve.
+    await waitFor(() => {
+      expect(getByTestId('loading').props.children).toBe('false');
+    });
+    expect(getByTestId('authenticated').props.children).toBe('true');
+    expect(getByTestId('username').props.children).toBe('cached');
+
+    await act(async () => {
+      resolveMe({ user: { ...mockUser, username: 'revalidated' }, settings: mockSettings });
+    });
+
+    await waitFor(() => {
+      expect(getByTestId('username').props.children).toBe('revalidated');
+    });
+    expect(mockCacheAuthProfile).toHaveBeenCalledWith({ user: { ...mockUser, username: 'revalidated' }, settings: mockSettings });
     unmount();
   });
 

@@ -718,6 +718,36 @@ describe('useNotes hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
     });
 
+    it('useToggleNoteItemCompleted un-completes an already-completed parent when a child is unchecked', async () => {
+      const { wrapper, queryClient } = createWrapperWithClient();
+      const completedListNote = {
+        ...listNote,
+        items: [
+          { ...listNote.items[0], completed: true },
+          { ...listNote.items[1], completed: true },
+        ],
+      };
+      queryClient.setQueryData(noteLocalQueryKey('n1'), completedListNote);
+
+      const pending = deferred<unknown[]>();
+      mockNotesApi.toggleItemCompleted.mockReset();
+      mockNotesApi.toggleItemCompleted.mockReturnValueOnce(pending.promise as never);
+
+      const { result } = renderHook(() => useToggleNoteItemCompleted(), { wrapper });
+      result.current.mutate({ noteId: 'n1', itemId: 'c', completed: false });
+
+      await waitFor(() => {
+        const cached = queryClient.getQueryData(noteLocalQueryKey('n1')) as { items: Array<{ id: string; completed: boolean }> };
+        expect(cached.items.find((i) => i.id === 'c')!.completed).toBe(false);
+        // A parent can never stay "done" while one of its children is not.
+        expect(cached.items.find((i) => i.id === 'p')!.completed).toBe(false);
+      });
+      expect(mockNotesApi.toggleItemCompleted).toHaveBeenCalledWith('n1', 'c', false);
+
+      pending.resolve([]);
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    });
+
     it('useToggleNoteItemCompleted rolls back the optimistic toggle on a permanent failure', async () => {
       const { wrapper, queryClient } = createWrapperWithClient();
       queryClient.setQueryData(noteLocalQueryKey('n1'), listNote);
