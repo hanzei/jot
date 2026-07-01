@@ -177,7 +177,7 @@ type Blobstore interface {
   root — **not** a separate top-level `./thumbnails` — so there is a single
   config value, a single volume to mount, and a single thing to back up:
 
-  ```
+  ```text
   UPLOAD_DIR/
     blobs/  <sha[0:2]>/<sha[2:4]>/<sha>        # originals (source of truth)
     thumb/  <sha[0:2]>/<sha[2:4]>/<sha>.jpg    # derived tiles
@@ -199,8 +199,8 @@ type Blobstore interface {
   uses the original. A future multi-size need extends the key to `<sha>_<w>.jpg`
   with no schema change.
 - **Thumbnail lifecycle rides on the original.** When an original's refcount hits
-  zero and it is GC'd (§10), delete its `thumb/<sha>.jpg` in the same step — no
-  separate sweep.
+  zero and it is GC'd (§10), delete its thumbnail at the matching prefixed path
+  (`thumb/<sha[0:2]>/<sha[2:4]>/<sha>.jpg`) in the same step — no separate sweep.
 - The interface leaves room for an S3 backend later without touching handlers.
 
 **Backup note for operators**: a full backup is now *DB + the upload dir*
@@ -224,7 +224,7 @@ annotations.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/api/notes/{noteId}/images` | Upload an image to a note (multipart `file`). 201 → `NoteImage`. Requires note write access (owner or shared). |
+| `POST` | `/api/notes/{id}/images` | Upload an image to a note (multipart `file`). 201 → `NoteImage`. Requires note write access (owner or shared). |
 | `GET` | `/api/images/{id}` | Stream the full-size image bytes. Requires access to the parent note. |
 | `GET` | `/api/images/{id}/thumbnail` | Resized thumbnail for grid tiles. *(v1.1)* |
 | `DELETE` | `/api/images/{id}` | **Soft-remove** the image (sets `deleted_at`, hides it). Requires note access. |
@@ -240,7 +240,7 @@ works identically.
 **Decided**: image metadata is **embedded in every `Note`** (list and single-note
 `GET /notes/{id}` alike), just like the existing embedded `items` / `labels` /
 `shared_with`. Because clients always receive the full image list with the note,
-there is **no separate `GET /api/notes/{noteId}/images` endpoint** — it would be
+there is **no separate `GET /api/notes/{id}/images` endpoint** — it would be
 redundant.
 
 `GET /api/notes` (and its `?trashed` / `?archived` / `?search` / `?label` /
@@ -351,6 +351,10 @@ Dedicated events are cheaper and match existing granularity.
 - **Trash/restore**: images stay attached through soft-delete (note
   `deleted_at`); blobs become reclaimable only after the note is *permanently*
   deleted (cascade removes rows; §10 reclaims bytes).
+**Export/import bundling is deferred to a "Later" phase (§13)** — the design below
+is the intended shape, not MVP scope. Until it lands, export/import simply omits
+images (notes still round-trip; images are re-added afterward):
+
 - **Export** (`handlers/export.go`): produce a **zip bundle** — the notes JSON
   plus an `images/` folder of the original blobs (named by id/sha). Chosen over
   base64-inlining so large binaries don't bloat the JSON.
