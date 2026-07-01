@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // shaHexLen is the length of a lowercase hex-encoded SHA-256 hash.
@@ -46,17 +47,30 @@ func (s *FSBlobstore) Close() error {
 	return s.root.Close()
 }
 
+// canonicalSHA validates that sha is a well-formed hex-encoded SHA-256 hash
+// and returns its lowercase canonical form, so that every caller of
+// FSBlobstore resolves to the same on-disk path regardless of the input's
+// letter case.
+func canonicalSHA(sha string) (string, error) {
+	if len(sha) != shaHexLen {
+		return "", fmt.Errorf("invalid sha256 hash %q: must be %d hex characters", sha, shaHexLen)
+	}
+	lower := strings.ToLower(sha)
+	if _, err := hex.DecodeString(lower); err != nil {
+		return "", fmt.Errorf("invalid sha256 hash %q: %w", sha, err)
+	}
+	return lower, nil
+}
+
 // relPath returns the path of sha relative to the store root, validating
 // that sha is a well-formed hex-encoded SHA-256 hash first so that caller
 // input never reaches the filesystem path (no traversal).
 func relPath(sha string) (string, error) {
-	if len(sha) != shaHexLen {
-		return "", fmt.Errorf("invalid sha256 hash %q: must be %d hex characters", sha, shaHexLen)
+	canon, err := canonicalSHA(sha)
+	if err != nil {
+		return "", err
 	}
-	if _, err := hex.DecodeString(sha); err != nil {
-		return "", fmt.Errorf("invalid sha256 hash %q: %w", sha, err)
-	}
-	return filepath.Join("blobs", sha[0:2], sha[2:4], sha), nil
+	return filepath.Join("blobs", canon[0:2], canon[2:4], canon), nil
 }
 
 // randomHex returns n random bytes hex-encoded, used for temp file names.
@@ -73,10 +87,11 @@ func (s *FSBlobstore) Put(ctx context.Context, sha string, r io.Reader) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	p, err := relPath(sha)
+	canon, err := canonicalSHA(sha)
 	if err != nil {
 		return err
 	}
+	p := filepath.Join("blobs", canon[0:2], canon[2:4], canon)
 
 	if _, statErr := s.root.Stat(p); statErr == nil {
 		return nil // dedup: a blob with this hash is already stored
@@ -100,12 +115,16 @@ func (s *FSBlobstore) Put(ctx context.Context, sha string, r io.Reader) error {
 	}
 	defer func() { _ = s.root.Remove(tmpPath) }() // no-op once the rename below succeeds
 
-	if _, err := io.Copy(tmp, r); err != nil {
+	h := sha256.New()
+	if _, err := io.Copy(tmp, io.TeeReader(r, h)); err != nil {
 		_ = tmp.Close()
 		return fmt.Errorf("write blob: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
 		return fmt.Errorf("close temp file: %w", err)
+	}
+	if got := hex.EncodeToString(h.Sum(nil)); got != canon {
+		return fmt.Errorf("content sha256 %q does not match claimed hash %q", got, canon)
 	}
 	if err := s.root.Rename(tmpPath, p); err != nil {
 		return fmt.Errorf("finalize blob: %w", err)

@@ -16,7 +16,8 @@ var ErrNotFound = errors.New("blob not found")
 // Implementations must derive any on-disk or remote location solely from the
 // validated hash, never from caller-supplied metadata such as filenames.
 type Blobstore interface {
-	// Put stores the bytes read from r under sha. It is a no-op if a blob
+	// Put stores the bytes read from r under sha, verifying that they
+	// actually hash to sha before committing them. It is a no-op if a blob
 	// with that hash already exists.
 	Put(ctx context.Context, sha string, r io.Reader) error
 	// Open returns a reader for the blob stored under sha. It returns

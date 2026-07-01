@@ -130,11 +130,18 @@ REGISTRATION_ENABLED=true           # Set to "false" to disable public registrat
 
 ### Backups
 
-A full backup is **the database file + `UPLOAD_DIR`**. Uploaded blobs (e.g.
-note images) are stored on the filesystem, content-addressed by hash, not in
-the database — back up both locations together. In Docker, both `DB_DSN` and
-`UPLOAD_DIR` live under the mounted `/data` volume by default, so backing up
-`./data` covers everything.
+Uploaded blobs (e.g. note images) are stored on the filesystem under
+`UPLOAD_DIR`, content-addressed by hash, not in the database — `UPLOAD_DIR`
+must always be included in backups alongside the database, regardless of
+`DB_DRIVER`.
+
+- **SQLite (default)**: a full backup is the `DB_DSN` file + `UPLOAD_DIR`. In
+  Docker, both live under the mounted `/data` volume by default, so backing up
+  `./data` covers everything.
+- **Postgres**: `DB_DSN` is a connection string, not a file — back up the
+  database itself using Postgres's own tooling (e.g. `pg_dump`/WAL archiving),
+  and separately back up `UPLOAD_DIR` (still local/volume-mounted, since blob
+  storage does not follow `DB_DRIVER`).
 
 ## API Reference
 

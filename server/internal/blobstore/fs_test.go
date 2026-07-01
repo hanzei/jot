@@ -88,6 +88,40 @@ func TestFSBlobstorePutDedupNoOp(t *testing.T) {
 	assert.Equal(t, content, string(got))
 }
 
+func TestFSBlobstoreHashIsCaseInsensitive(t *testing.T) {
+	store := newTestStore(t)
+	ctx := t.Context()
+	content := "case insensitivity check"
+	sha := shaOf(content)
+
+	require.NoError(t, store.Put(ctx, strings.ToUpper(sha), strings.NewReader(content)))
+
+	rc, err := store.Open(ctx, sha)
+	require.NoError(t, err)
+	defer rc.Close()
+
+	got, err := io.ReadAll(rc)
+	require.NoError(t, err)
+	assert.Equal(t, content, string(got))
+
+	wantPath := filepath.Join(store.root.Name(), "blobs", sha[0:2], sha[2:4], sha)
+	_, err = os.Stat(wantPath) // #nosec G304 -- test-controlled path
+	require.NoError(t, err, "an uppercase hash must resolve to the same canonical lowercase path")
+}
+
+func TestFSBlobstorePutRejectsContentHashMismatch(t *testing.T) {
+	store := newTestStore(t)
+	ctx := t.Context()
+	claimedSha := shaOf("this is not the content that follows")
+
+	err := store.Put(ctx, claimedSha, strings.NewReader("actual content"))
+	require.Error(t, err)
+
+	// A rejected write must not leave a blob behind under the claimed hash.
+	_, err = store.Open(ctx, claimedSha)
+	require.ErrorIs(t, err, ErrNotFound)
+}
+
 func TestFSBlobstoreOpenMissing(t *testing.T) {
 	store := newTestStore(t)
 	ctx := t.Context()
