@@ -460,6 +460,19 @@ func flattenAlpha(img image.Image) image.Image {
 	return opaque
 }
 
+// validateImageBounds rejects image dimensions that are too large before a
+// full decode allocates memory for them (decompression-bomb protection).
+// Shared by the profile-icon and note-image upload pipelines.
+func validateImageBounds(cfg image.Config) error {
+	if cfg.Width > maxSourceDimension || cfg.Height > maxSourceDimension {
+		return fmt.Errorf("image dimensions %dx%d exceed maximum %d", cfg.Width, cfg.Height, maxSourceDimension)
+	}
+	if cfg.Width*cfg.Height > maxSourcePixels {
+		return fmt.Errorf("image pixel count %d exceeds maximum %d", cfg.Width*cfg.Height, maxSourcePixels)
+	}
+	return nil
+}
+
 // resizeImage decodes the given image bytes, resizes to fit within
 // maxProfileIconDimension x maxProfileIconDimension (preserving aspect ratio),
 // and re-encodes as JPEG. If the image is already small enough it is still
@@ -470,11 +483,8 @@ func resizeImage(data []byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("decode image config: %w", err)
 	}
-	if cfg.Width > maxSourceDimension || cfg.Height > maxSourceDimension {
-		return nil, fmt.Errorf("image dimensions %dx%d exceed maximum %d", cfg.Width, cfg.Height, maxSourceDimension)
-	}
-	if cfg.Width*cfg.Height > maxSourcePixels {
-		return nil, fmt.Errorf("image pixel count %d exceeds maximum %d", cfg.Width*cfg.Height, maxSourcePixels)
+	if boundsErr := validateImageBounds(cfg); boundsErr != nil {
+		return nil, boundsErr
 	}
 
 	img, _, err := image.Decode(bytes.NewReader(data))

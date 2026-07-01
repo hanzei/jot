@@ -66,9 +66,24 @@ type Note struct {
 	SharedWith            []NoteShare `json:"shared_with,omitempty"`
 	IsShared              bool        `json:"is_shared"`
 	Labels                []Label     `json:"labels"`
+	Images                []NoteImage `json:"images,omitempty"`
 	DeletedAt             *time.Time  `json:"deleted_at"`
 	CreatedAt             time.Time   `json:"created_at"`
 	UpdatedAt             time.Time   `json:"updated_at"`
+}
+
+// NoteImage is a single image attached to a note. It intentionally mirrors
+// only the metadata fields embedded in Note.images (matching the server's
+// narrow response contract); size, hash, and uploader are server-internal
+// and are not exposed here. Image bytes are fetched out-of-band via
+// GetNoteImage, never inlined here.
+type NoteImage struct {
+	ID          string    `json:"id"`
+	Filename    string    `json:"filename"`
+	ContentType string    `json:"content_type"`
+	Width       int       `json:"width"`
+	Height      int       `json:"height"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 // NoteItem is a single checklist entry within a list note.

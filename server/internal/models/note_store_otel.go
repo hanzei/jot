@@ -246,12 +246,20 @@ func (s *NoteStore) RemoveLabelFromNote(ctx context.Context, noteID, labelID, us
 	return s.inner.RemoveLabelFromNote(ctx, noteID, labelID, userID)
 }
 
-func (s *NoteStore) CreateNoteImage(ctx context.Context, noteID, uploaderID, filename, contentType string, sizeBytes int64, sha256 string, width, height int) (_ *NoteImage, err error) {
+func (s *NoteStore) CreateNoteImage(ctx context.Context, noteID, uploaderID, filename, contentType string, sizeBytes int64, sha256 string, width, height, maxImages int) (_ *NoteImage, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.CreateNoteImage", &err,
 		attribute.String("note.id", noteID),
 	)
 	defer end()
-	return s.inner.CreateNoteImage(ctx, noteID, uploaderID, filename, contentType, sizeBytes, sha256, width, height)
+	return s.inner.CreateNoteImage(ctx, noteID, uploaderID, filename, contentType, sizeBytes, sha256, width, height, maxImages)
+}
+
+func (s *NoteStore) GetNoteImageByID(ctx context.Context, imageID string) (_ *NoteImage, err error) {
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.GetNoteImageByID", &err,
+		attribute.String("image.id", imageID),
+	)
+	defer end()
+	return s.inner.GetNoteImageByID(ctx, imageID)
 }
 
 func (s *NoteStore) GetNoteImagesByNoteID(ctx context.Context, noteID string) (_ []NoteImage, err error) {

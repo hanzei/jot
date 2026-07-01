@@ -23,12 +23,23 @@ const (
 	EventNoteUnshared       EventType = "note_unshared"
 	EventLabelsChanged      EventType = "labels_changed"
 	EventProfileIconUpdated EventType = "profile_icon_updated"
+	EventNoteImageAdded     EventType = "note_image_added"
+	EventNoteImageRemoved   EventType = "note_image_removed"
 )
 
 // NoteEventData is the Data payload for note-related events.
 type NoteEventData struct {
 	NoteID string `json:"note_id"`
 	Note   any    `json:"note"` // nil for deleted/unshared
+}
+
+// NoteImageEventData is the Data payload for note_image_added/note_image_removed
+// events. Image is set for note_image_added; ImageID is set for
+// note_image_removed (the row is already gone by the time that event fires).
+type NoteImageEventData struct {
+	NoteID  string `json:"note_id"`
+	Image   any    `json:"image,omitempty"`
+	ImageID string `json:"image_id,omitempty"`
 }
 
 // ProfileIconEventData is the Data payload for profile_icon_updated events.
