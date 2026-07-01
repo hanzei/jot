@@ -2,7 +2,7 @@
 
 ## Naming Conventions (Go)
 
-- Packages: `internal/{auth,config,database,handlers,logutil,mcphandler,models,server,sse,telemetry}`
+- Packages: `internal/{auth,blobstore,config,database,handlers,logutil,mcphandler,models,server,sse,telemetry}`
 - Go types: PascalCase when exported (`UserStore`, `NoteStore`, `PATStore`); variables: camelCase (`noteStore`, `userID`)
 - Database columns: snake_case (`note_type`, `user_id`)
 - JSON fields: snake_case (`note_type`, `user_id`)
