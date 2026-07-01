@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/cookiejar"
 	"strings"
@@ -149,4 +150,79 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any, resu
 
 func (c *Client) doNoContent(ctx context.Context, method, path string, body any) error {
 	return c.doJSON(ctx, method, path, body, nil)
+}
+
+// doMultipartUpload POSTs a single-file multipart form to path (field name
+// "file", named filename) and decodes a JSON response into result. data is
+// read fully. Shared by every single-file upload endpoint (profile icon,
+// note images).
+func (c *Client) doMultipartUpload(ctx context.Context, path, filename string, data io.Reader, result any) error {
+	if data == nil {
+		return fmt.Errorf("data reader must not be nil")
+	}
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	part, err := mw.CreateFormFile("file", filename)
+	if err != nil {
+		return fmt.Errorf("create form file: %w", err)
+	}
+	if _, err = io.Copy(part, data); err != nil {
+		return fmt.Errorf("copy file data: %w", err)
+	}
+	contentType := mw.FormDataContentType()
+	if err = mw.Close(); err != nil {
+		return fmt.Errorf("close multipart writer: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.url(path), &buf)
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", contentType)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("execute request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read response: %w", err)
+	}
+	if resp.StatusCode >= 400 {
+		return &Error{StatusCode: resp.StatusCode, Body: string(respBody)}
+	}
+
+	if result != nil && len(respBody) > 0 {
+		if err := json.Unmarshal(respBody, result); err != nil {
+			return fmt.Errorf("unmarshal response: %w", err)
+		}
+	}
+	return nil
+}
+
+// doGetBytes performs a GET against path and returns the raw response body
+// and its Content-Type header. Shared by every binary-download endpoint
+// (profile icon, note images).
+func (c *Client) doGetBytes(ctx context.Context, path string) ([]byte, string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url(path), nil)
+	if err != nil {
+		return nil, "", fmt.Errorf("create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, "", fmt.Errorf("execute request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, "", fmt.Errorf("read response: %w", err)
+	}
+	if resp.StatusCode >= 400 {
+		return nil, "", &Error{StatusCode: resp.StatusCode, Body: string(body)}
+	}
+	return body, resp.Header.Get("Content-Type"), nil
 }

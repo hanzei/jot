@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -162,6 +163,45 @@ func TestLoadCORSAllowedOriginSet(t *testing.T) {
 	cfg, err := Load()
 	require.NoError(t, err)
 	assert.Equal(t, "https://app.example.com", cfg.CORSAllowedOrigin)
+}
+
+func TestLoadUploadMaxBytes(t *testing.T) {
+	t.Setenv("STATIC_DIR", "/tmp/static")
+
+	t.Run("default", func(t *testing.T) {
+		t.Setenv("UPLOAD_MAX_BYTES", "")
+		cfg, err := Load()
+		require.NoError(t, err)
+		assert.Equal(t, 25<<20, cfg.UploadMaxBytes)
+	})
+
+	t.Run("custom", func(t *testing.T) {
+		t.Setenv("UPLOAD_MAX_BYTES", "1048576")
+		cfg, err := Load()
+		require.NoError(t, err)
+		assert.Equal(t, 1<<20, cfg.UploadMaxBytes)
+	})
+
+	t.Run("non-numeric", func(t *testing.T) {
+		t.Setenv("UPLOAD_MAX_BYTES", "notanumber")
+		_, err := Load()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid UPLOAD_MAX_BYTES value")
+	})
+
+	t.Run("too low", func(t *testing.T) {
+		t.Setenv("UPLOAD_MAX_BYTES", "1")
+		_, err := Load()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must be between")
+	})
+
+	t.Run("too high", func(t *testing.T) {
+		t.Setenv("UPLOAD_MAX_BYTES", fmt.Sprint(501<<20))
+		_, err := Load()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must be between")
+	})
 }
 
 func TestLoadPasswordMinLength(t *testing.T) {

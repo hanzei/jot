@@ -20,6 +20,7 @@ type seedNote struct {
 	items                 []seedItem
 	labels                []string
 	shareWith             []string // usernames to share this note with
+	imageCount            int      // number of generated sample images to attach
 }
 
 type seedUser struct {
@@ -54,8 +55,9 @@ var seedDataset = []seedUser{
 				content: "# Project Notes\n\n**Important:** Check the _deadline_ before Thursday.\n\n" +
 					"Install with `npm install`:\n\n```bash\nnpm install\nnpm start\n```\n\n" +
 					"See [the docs](https://example.com) for full reference.",
-				labels:    []string{"work"},
-				shareWith: []string{"bob"},
+				labels:     []string{"work"},
+				shareWith:  []string{"bob"},
+				imageCount: 1, // banner
 			},
 			{
 				noteType:  "text",
@@ -65,10 +67,11 @@ var seedDataset = []seedUser{
 				shareWith: []string{"bob"},
 			},
 			{
-				noteType: client.NoteTypeText,
-				content:  "Build a note-taking app with offline support and mobile sync",
-				color:    "#aecbfa",
-				labels:   []string{"ideas"},
+				noteType:   client.NoteTypeText,
+				content:    "Build a note-taking app with offline support and mobile sync",
+				color:      "#aecbfa",
+				labels:     []string{"ideas"},
+				imageCount: 3, // grid
 			},
 			{
 				noteType: client.NoteTypeText,
@@ -76,10 +79,11 @@ var seedDataset = []seedUser{
 			},
 			// active list notes (3)
 			{
-				noteType:  "list",
-				title:     "Sprint tasks",
-				labels:    []string{"urgent"},
-				shareWith: []string{"bob"},
+				noteType:   "list",
+				title:      "Sprint tasks",
+				labels:     []string{"urgent"},
+				shareWith:  []string{"bob"},
+				imageCount: 2, // grid
 				items: []seedItem{
 					{text: "Review pull requests", completed: true},
 					{text: "Update documentation", completed: false},
@@ -106,9 +110,10 @@ var seedDataset = []seedUser{
 				},
 			},
 			{
-				noteType: client.NoteTypeList,
-				title:    "Home renovation",
-				color:    "#e6c9a8",
+				noteType:   client.NoteTypeList,
+				title:      "Home renovation",
+				color:      "#e6c9a8",
+				imageCount: imageMaxPerNoteSeed, // at the per-note cap
 				items: []seedItem{
 					{text: "Kitchen"},
 					{text: "Replace faucet", completed: true, indentLevel: 1},

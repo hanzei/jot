@@ -17,6 +17,7 @@ type Config struct {
 	DBDSN               string
 	StaticDir           string
 	UploadDir           string
+	UploadMaxBytes      int
 	CORSAllowedOrigin   string
 	CookieSecure        bool
 	RegistrationEnabled bool
@@ -104,6 +105,13 @@ func Load() (*Config, error) {
 	if v := os.Getenv("UPLOAD_DIR"); v != "" {
 		cfg.UploadDir = filepath.Clean(v)
 	}
+
+	// Keep default and bounds in sync with shared/src/constants.ts UPLOAD_MAX_BYTES.
+	uploadMaxBytes, err := parseIntRangeEnv("UPLOAD_MAX_BYTES", 25<<20, 1<<20, 500<<20)
+	if err != nil {
+		return nil, err
+	}
+	cfg.UploadMaxBytes = uploadMaxBytes
 
 	if v := os.Getenv("STATIC_DIR"); v != "" {
 		cfg.StaticDir = filepath.Clean(v)

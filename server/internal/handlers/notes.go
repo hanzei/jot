@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/auth"
+	"github.com/hanzei/jot/server/internal/blobstore"
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/sse"
@@ -21,19 +22,21 @@ import (
 const queryTrue = "true"
 
 type NotesHandler struct {
-	noteStore     *models.NoteStore
-	userStore     *models.UserStore
-	labelStore    *models.LabelStore
-	hub           *sse.Hub
-	notesCreated  metric.Int64Counter
-	notesUpdated  metric.Int64Counter
-	notesDeleted  metric.Int64Counter
-	notesRestored metric.Int64Counter
+	noteStore      *models.NoteStore
+	userStore      *models.UserStore
+	labelStore     *models.LabelStore
+	hub            *sse.Hub
+	blobstore      blobstore.Blobstore
+	uploadMaxBytes int64
+	notesCreated   metric.Int64Counter
+	notesUpdated   metric.Int64Counter
+	notesDeleted   metric.Int64Counter
+	notesRestored  metric.Int64Counter
 }
 
 // NewNotesHandler creates a NotesHandler with OTel instruments initialized from
 // the global MeterProvider. Returns an error if any instrument cannot be created.
-func NewNotesHandler(noteStore *models.NoteStore, userStore *models.UserStore, labelStore *models.LabelStore, hub *sse.Hub) (*NotesHandler, error) {
+func NewNotesHandler(noteStore *models.NoteStore, userStore *models.UserStore, labelStore *models.LabelStore, hub *sse.Hub, imageBlobstore blobstore.Blobstore, uploadMaxBytes int64) (*NotesHandler, error) {
 	meter := otel.GetMeterProvider().Meter("github.com/hanzei/jot/server")
 
 	notesCreated, err := meter.Int64Counter(
@@ -69,14 +72,16 @@ func NewNotesHandler(noteStore *models.NoteStore, userStore *models.UserStore, l
 	}
 
 	return &NotesHandler{
-		noteStore:     noteStore,
-		userStore:     userStore,
-		labelStore:    labelStore,
-		hub:           hub,
-		notesCreated:  notesCreated,
-		notesUpdated:  notesUpdated,
-		notesDeleted:  notesDeleted,
-		notesRestored: notesRestored,
+		noteStore:      noteStore,
+		userStore:      userStore,
+		labelStore:     labelStore,
+		hub:            hub,
+		blobstore:      imageBlobstore,
+		uploadMaxBytes: uploadMaxBytes,
+		notesCreated:   notesCreated,
+		notesUpdated:   notesUpdated,
+		notesDeleted:   notesDeleted,
+		notesRestored:  notesRestored,
 	}, nil
 }
 

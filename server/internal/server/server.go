@@ -18,6 +18,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/hanzei/jot/server/internal/auth"
+	"github.com/hanzei/jot/server/internal/blobstore"
 	"github.com/hanzei/jot/server/internal/config"
 	"database/sql"
 
@@ -53,6 +54,7 @@ type Server struct {
 	httpServer      *http.Server
 	metricsServer   *http.Server
 	staticRoot      *os.Root
+	imageBlobstore  *blobstore.FSBlobstore
 	startErr        error
 	startReady      chan struct{}
 	startReadyOnce  sync.Once
@@ -110,10 +112,18 @@ func New(cfg *config.Config) (*Server, error) {
 		return nil, fmt.Errorf("initialize SSE hub: %w", err)
 	}
 
-	authHandler := handlers.NewAuthHandler(userStore, noteStore, sessionService, userSettingsStore, hub, cfg.RegistrationEnabled, cfg.PasswordMinLength)
-	notesHandler, err := handlers.NewNotesHandler(noteStore, userStore, labelStore, hub)
+	imageBlobstore, err := blobstore.NewFSBlobstore(cfg.UploadDir)
 	if err != nil {
 		cancel()
+		_ = db.Close()
+		return nil, fmt.Errorf("initialize image blobstore: %w", err)
+	}
+
+	authHandler := handlers.NewAuthHandler(userStore, noteStore, sessionService, userSettingsStore, hub, cfg.RegistrationEnabled, cfg.PasswordMinLength)
+	notesHandler, err := handlers.NewNotesHandler(noteStore, userStore, labelStore, hub, imageBlobstore, int64(cfg.UploadMaxBytes))
+	if err != nil {
+		cancel()
+		_ = imageBlobstore.Close()
 		_ = db.Close()
 		return nil, fmt.Errorf("initialize notes handler: %w", err)
 	}
@@ -141,6 +151,7 @@ func New(cfg *config.Config) (*Server, error) {
 		patsHandler:     patsHandler,
 		noteStore:       noteStore,
 		labelStore:      labelStore,
+		imageBlobstore:  imageBlobstore,
 	}
 
 	startPeriodicTask(&s.bgWg, ctx, time.Hour, false, func() error {
@@ -152,6 +163,7 @@ func New(cfg *config.Config) (*Server, error) {
 
 	if err := s.setupRoutes(); err != nil {
 		cancel()
+		_ = imageBlobstore.Close()
 		_ = db.Close()
 		return nil, fmt.Errorf("setup routes: %w", err)
 	}
@@ -224,6 +236,10 @@ func (s *Server) setupRoutes() error {
 			r.Patch("/notes/{id}", s.wrapHandler(s.notesHandler.UpdateNote))
 			r.Delete("/notes/{id}", s.wrapHandler(s.notesHandler.DeleteNote))
 			r.Post("/notes/{id}/duplicate", s.wrapHandler(s.notesHandler.DuplicateNote))
+
+			r.Post("/notes/{id}/images", s.wrapHandler(s.notesHandler.UploadNoteImage))
+			r.Get("/images/{id}", s.wrapHandler(s.notesHandler.GetNoteImage))
+			r.Delete("/images/{id}", s.wrapHandler(s.notesHandler.DeleteNoteImage))
 
 			r.Post("/notes/{id}/items", s.wrapHandler(s.notesHandler.CreateNoteItem))
 			r.Post("/notes/{id}/items/reorder", s.wrapHandler(s.notesHandler.ReorderNoteItems))
@@ -632,6 +648,12 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	if s.staticRoot != nil {
 		if err := s.staticRoot.Close(); err != nil {
 			return fmt.Errorf("close static root: %w", err)
+		}
+	}
+
+	if s.imageBlobstore != nil {
+		if err := s.imageBlobstore.Close(); err != nil {
+			return fmt.Errorf("close image blobstore: %w", err)
 		}
 	}
 

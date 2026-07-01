@@ -1,6 +1,7 @@
 package models
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/hanzei/jot/server/internal/database"
@@ -38,7 +39,7 @@ func TestNoteImageStore(t *testing.T) {
 		store, userID, noteID := newTestNoteImageStore(t)
 		ctx := t.Context()
 
-		img, err := store.CreateNoteImage(ctx, noteID, userID, "cat.png", "image/png", 1234, "deadbeef", 100, 200)
+		img, err := store.CreateNoteImage(ctx, noteID, userID, "cat.png", "image/png", 1234, "deadbeef", 100, 200, 0)
 		require.NoError(t, err)
 		assert.True(t, IsValidID(img.ID))
 		assert.Equal(t, noteID, img.NoteID)
@@ -56,9 +57,9 @@ func TestNoteImageStore(t *testing.T) {
 		store, userID, noteID := newTestNoteImageStore(t)
 		ctx := t.Context()
 
-		first, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "sha-a", 1, 1)
+		first, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "sha-a", 1, 1, 0)
 		require.NoError(t, err)
-		second, err := store.CreateNoteImage(ctx, noteID, userID, "b.png", "image/png", 1, "sha-b", 1, 1)
+		second, err := store.CreateNoteImage(ctx, noteID, userID, "b.png", "image/png", 1, "sha-b", 1, 1, 0)
 		require.NoError(t, err)
 
 		images, err := store.GetNoteImagesByNoteID(ctx, noteID)
@@ -66,6 +67,26 @@ func TestNoteImageStore(t *testing.T) {
 		require.Len(t, images, 2)
 		assert.Equal(t, first.ID, images[0].ID)
 		assert.Equal(t, second.ID, images[1].ID)
+	})
+
+	t.Run("GetNoteImageByID fetches a single image by ID", func(t *testing.T) {
+		store, userID, noteID := newTestNoteImageStore(t)
+		ctx := t.Context()
+
+		created, err := store.CreateNoteImage(ctx, noteID, userID, "cat.png", "image/png", 1234, "deadbeef", 100, 200, 0)
+		require.NoError(t, err)
+
+		fetched, err := store.GetNoteImageByID(ctx, created.ID)
+		require.NoError(t, err)
+		assert.Equal(t, created.ID, fetched.ID)
+		assert.Equal(t, noteID, fetched.NoteID)
+		assert.Equal(t, "deadbeef", fetched.SHA256)
+	})
+
+	t.Run("GetNoteImageByID returns ErrNoteImageNotFound for an unknown ID", func(t *testing.T) {
+		store, _, _ := newTestNoteImageStore(t)
+		_, err := store.GetNoteImageByID(t.Context(), "doesnotexist0000000000")
+		require.ErrorIs(t, err, ErrNoteImageNotFound)
 	})
 
 	t.Run("GetNoteImagesByNoteID returns empty slice for a note with no images", func(t *testing.T) {
@@ -80,7 +101,7 @@ func TestNoteImageStore(t *testing.T) {
 		store, userID, noteID := newTestNoteImageStore(t)
 		ctx := t.Context()
 
-		img, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "sha-a", 1, 1)
+		img, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "sha-a", 1, 1, 0)
 		require.NoError(t, err)
 
 		deleted, err := store.DeleteNoteImage(ctx, img.ID)
@@ -105,7 +126,7 @@ func TestNoteImageStore(t *testing.T) {
 		_, err := store.DeleteNoteImage(ctx, "doesnotexist0000000000")
 		require.ErrorIs(t, err, ErrNoteImageNotFound)
 
-		img, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "sha-a", 1, 1)
+		img, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "sha-a", 1, 1, 0)
 		require.NoError(t, err)
 		_, err = store.DeleteNoteImage(ctx, img.ID)
 		require.NoError(t, err)
@@ -122,12 +143,12 @@ func TestNoteImageStore(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, 0, count)
 
-		img1, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "shared-hash", 1, 1)
+		img1, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "shared-hash", 1, 1, 0)
 		require.NoError(t, err)
 
 		_, err = store.db.ExecContext(ctx, `INSERT INTO notes (id, user_id, note_type) VALUES ('note000000000000000im2', ?, 'text')`, userID)
 		require.NoError(t, err)
-		img2, err := store.CreateNoteImage(ctx, "note000000000000000im2", userID, "a-dup.png", "image/png", 1, "shared-hash", 1, 1)
+		img2, err := store.CreateNoteImage(ctx, "note000000000000000im2", userID, "a-dup.png", "image/png", 1, "shared-hash", 1, 1, 0)
 		require.NoError(t, err)
 
 		count, err = store.GetNoteImageRefCount(ctx, "shared-hash")
@@ -156,12 +177,12 @@ func TestNoteImageStore(t *testing.T) {
 		_, err := store.db.ExecContext(ctx, `INSERT INTO notes (id, user_id, note_type) VALUES ('note000000000000000im2', ?, 'text')`, userID)
 		require.NoError(t, err)
 
-		img1, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "sha-a", 1, 1)
+		img1, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "sha-a", 1, 1, 0)
 		require.NoError(t, err)
-		img2, err := store.CreateNoteImage(ctx, "note000000000000000im2", userID, "b.png", "image/png", 1, "sha-b", 1, 1)
+		img2, err := store.CreateNoteImage(ctx, "note000000000000000im2", userID, "b.png", "image/png", 1, "sha-b", 1, 1, 0)
 		require.NoError(t, err)
 		// A deleted image must not appear in the batch load either.
-		deletedImg, err := store.CreateNoteImage(ctx, noteID, userID, "c.png", "image/png", 1, "sha-c", 1, 1)
+		deletedImg, err := store.CreateNoteImage(ctx, noteID, userID, "c.png", "image/png", 1, "sha-c", 1, 1, 0)
 		require.NoError(t, err)
 		_, err = store.DeleteNoteImage(ctx, deletedImg.ID)
 		require.NoError(t, err)
@@ -174,6 +195,37 @@ func TestNoteImageStore(t *testing.T) {
 		require.Len(t, notes[1].Images, 1)
 		assert.Equal(t, img2.ID, notes[1].Images[0].ID)
 		assert.Empty(t, notes[2].Images)
+	})
+
+	t.Run("CreateNoteImage enforces maxImages atomically", func(t *testing.T) {
+		store, userID, noteID := newTestNoteImageStore(t)
+		ctx := t.Context()
+
+		for i := range 3 {
+			_, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, fmt.Sprintf("sha-%d", i), 1, 1, 3)
+			require.NoError(t, err)
+		}
+
+		_, err := store.CreateNoteImage(ctx, noteID, userID, "over.png", "image/png", 1, "sha-over", 1, 1, 3)
+		require.ErrorIs(t, err, ErrNoteImageCapExceeded)
+
+		images, err := store.GetNoteImagesByNoteID(ctx, noteID)
+		require.NoError(t, err)
+		assert.Len(t, images, 3, "the rejected insert must not have committed")
+	})
+
+	t.Run("CreateNoteImage does not enforce a cap when maxImages is 0", func(t *testing.T) {
+		store, userID, noteID := newTestNoteImageStore(t)
+		ctx := t.Context()
+
+		for i := range 5 {
+			_, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, fmt.Sprintf("sha-%d", i), 1, 1, 0)
+			require.NoError(t, err)
+		}
+
+		images, err := store.GetNoteImagesByNoteID(ctx, noteID)
+		require.NoError(t, err)
+		assert.Len(t, images, 5)
 	})
 }
 
@@ -188,7 +240,7 @@ func TestNoteImageEmbeddedInNote(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, note.Images)
 
-	img, err := store.CreateNoteImage(ctx, noteID, userID, "cat.png", "image/png", 1234, "deadbeef", 100, 200)
+	img, err := store.CreateNoteImage(ctx, noteID, userID, "cat.png", "image/png", 1234, "deadbeef", 100, 200, 0)
 	require.NoError(t, err)
 
 	note, err = store.GetByID(ctx, noteID, userID)
@@ -209,4 +261,22 @@ func TestNoteImageEmbeddedInNote(t *testing.T) {
 	note, err = store.GetByID(ctx, noteID, userID)
 	require.NoError(t, err)
 	assert.Empty(t, note.Images, "a deleted image drops out of the note immediately")
+}
+
+func TestGetNoteImageCountByNoteID(t *testing.T) {
+	store, userID, noteID := newTestNoteImageStore(t)
+	ctx := t.Context()
+
+	count, err := store.GetNoteImageCountByNoteID(ctx, noteID)
+	require.NoError(t, err)
+	assert.Equal(t, 0, count)
+
+	_, err = store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "sha-a", 1, 1, 0)
+	require.NoError(t, err)
+	_, err = store.CreateNoteImage(ctx, noteID, userID, "b.png", "image/png", 1, "sha-b", 1, 1, 0)
+	require.NoError(t, err)
+
+	count, err = store.GetNoteImageCountByNoteID(ctx, noteID)
+	require.NoError(t, err)
+	assert.Equal(t, 2, count)
 }

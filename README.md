@@ -119,6 +119,7 @@ Configure the application using environment variables or `.env` file:
 DB_DRIVER=sqlite                    # Database driver: "sqlite" (default) or "postgres"
 DB_DSN=./jot.db                     # Database connection string (SQLite file path or Postgres DSN)
 UPLOAD_DIR=./uploads                # Directory for uploaded blob storage (optional)
+UPLOAD_MAX_BYTES=26214400           # Max upload size in bytes per note image (optional, default 25 MB)
 
 # Server configuration
 PORT=8080                           # Server port (optional)
