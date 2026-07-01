@@ -308,6 +308,8 @@ func TestGetNoteImageThumbnail(t *testing.T) {
 	img, err := user.Client.UploadNoteImage(t.Context(), note.ID, "cat.png", bytes.NewReader(testPNG(t, 800, 600)))
 	require.NoError(t, err)
 
+	thumbDir := filepath.Join(uploadDir, "thumb")
+
 	t.Run("served after upload with correct type and nosniff", func(t *testing.T) {
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/images/"+img.ID+"/thumbnail", nil)
 		require.NoError(t, err)
@@ -321,21 +323,21 @@ func TestGetNoteImageThumbnail(t *testing.T) {
 		assert.Equal(t, "nosniff", resp.Header.Get("X-Content-Type-Options"))
 		assert.NotEmpty(t, resp.Header.Get("ETag"))
 
-		assert.Positive(t, countRegularFiles(t, filepath.Join(uploadDir, "thumb")), "thumbnail should be generated eagerly at upload time")
+		assert.Positive(t, countRegularFiles(t, thumbDir), "thumbnail should be generated eagerly at upload time")
 	})
 
 	t.Run("regenerated after the cached thumbnail file is removed", func(t *testing.T) {
 		// Thumbnails are a disposable cache with no DB row or refcount; wipe
 		// the whole thumb/ tree to simulate it going missing and confirm the
 		// endpoint regenerates on demand rather than erroring.
-		require.NoError(t, os.RemoveAll(filepath.Join(uploadDir, "thumb")))
+		require.NoError(t, os.RemoveAll(thumbDir))
 
 		data, contentType, err := user.Client.GetNoteImageThumbnail(t.Context(), img.ID)
 		require.NoError(t, err)
 		assert.NotEmpty(t, data)
 		assert.Equal(t, "image/jpeg", contentType)
 
-		assert.Positive(t, countRegularFiles(t, filepath.Join(uploadDir, "thumb")), "a regenerated thumbnail should be persisted back to disk")
+		assert.Positive(t, countRegularFiles(t, thumbDir), "a regenerated thumbnail should be persisted back to disk")
 	})
 
 	t.Run("unauthenticated returns 401", func(t *testing.T) {
@@ -352,7 +354,7 @@ func TestGetNoteImageThumbnail(t *testing.T) {
 	t.Run("removed from disk once the original is fully reclaimed", func(t *testing.T) {
 		require.NoError(t, user.Client.DeleteNoteImage(t.Context(), img.ID))
 
-		assert.Zero(t, countRegularFiles(t, filepath.Join(uploadDir, "thumb")), "thumbnail must be reclaimed alongside its now-orphaned original blob")
+		assert.Zero(t, countRegularFiles(t, thumbDir), "thumbnail must be reclaimed alongside its now-orphaned original blob")
 
 		_, _, err := user.Client.GetNoteImageThumbnail(t.Context(), img.ID)
 		assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
