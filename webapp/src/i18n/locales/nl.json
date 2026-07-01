@@ -309,7 +309,9 @@
         "noteAssociations": "Labelkoppelingen",
         "completed": "Voltooid",
         "assigned": "Toegewezen",
-        "databaseSize": "Databasegrootte"
+        "databaseSize": "Databasegrootte",
+        "imageCount": "Aantal afbeeldingen",
+        "imagesSize": "Afbeeldingsopslag"
       }
     }
   },

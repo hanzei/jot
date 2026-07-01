@@ -3329,6 +3329,12 @@ const docTemplate = `{
             "properties": {
                 "database_size_bytes": {
                     "type": "integer"
+                },
+                "image_count": {
+                    "type": "integer"
+                },
+                "images_size_bytes": {
+                    "type": "integer"
                 }
             }
         },

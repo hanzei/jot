@@ -592,6 +592,18 @@ func TestAdminStatsEndpoint(t *testing.T) {
 	_, err = adminUser.Client.AddLabel(t.Context(), archivedListNote.ID, "work")
 	require.NoError(t, err)
 
+	uniqueImageData := testPNG(t, 4, 4)
+	_, err = adminUser.Client.UploadNoteImage(t.Context(), sharedTextNote.ID, "unique.png", bytes.NewReader(uniqueImageData))
+	require.NoError(t, err)
+
+	// Same bytes uploaded to two different notes: dedup by sha256 means this
+	// blob is counted once even though two note_images rows reference it.
+	dupImageData := testPNG(t, 6, 6)
+	_, err = adminUser.Client.UploadNoteImage(t.Context(), archivedListNote.ID, "dup1.png", bytes.NewReader(dupImageData))
+	require.NoError(t, err)
+	_, err = adminUser.Client.UploadNoteImage(t.Context(), activeListNote.ID, "dup2.png", bytes.NewReader(dupImageData))
+	require.NoError(t, err)
+
 	t.Run("returns aggregated stats for admins", func(t *testing.T) {
 		stats, err := adminUser.Client.AdminGetStats(t.Context())
 		require.NoError(t, err)
@@ -617,6 +629,9 @@ func TestAdminStatsEndpoint(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, fileInfo.Size(), stats.Storage.DatabaseSizeBytes)
 		assert.Positive(t, stats.Storage.DatabaseSizeBytes)
+
+		assert.Equal(t, int64(2), stats.Storage.ImageCount)
+		assert.Equal(t, int64(len(uniqueImageData)+len(dupImageData)), stats.Storage.ImagesSizeBytes)
 	})
 
 	t.Run("returns 403 for non-admin users", func(t *testing.T) {

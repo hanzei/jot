@@ -309,7 +309,9 @@
         "noteAssociations": "Label-Zuweisungen",
         "completed": "Erledigt",
         "assigned": "Zugewiesen",
-        "databaseSize": "Datenbankgröße"
+        "databaseSize": "Datenbankgröße",
+        "imageCount": "Bilderanzahl",
+        "imagesSize": "Bilderspeicher"
       }
     }
   },

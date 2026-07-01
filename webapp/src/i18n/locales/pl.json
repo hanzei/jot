@@ -309,7 +309,9 @@
         "noteAssociations": "Przypisania etykiet",
         "completed": "Ukończone",
         "assigned": "Przypisane",
-        "databaseSize": "Rozmiar bazy danych"
+        "databaseSize": "Rozmiar bazy danych",
+        "imageCount": "Liczba obrazów",
+        "imagesSize": "Miejsce na obrazy"
       }
     }
   },

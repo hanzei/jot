@@ -309,7 +309,9 @@
         "noteAssociations": "Atribuições de etiquetas",
         "completed": "Concluídas",
         "assigned": "Atribuídas",
-        "databaseSize": "Tamanho do banco de dados"
+        "databaseSize": "Tamanho do banco de dados",
+        "imageCount": "Quantidade de imagens",
+        "imagesSize": "Armazenamento de imagens"
       }
     }
   },
