@@ -71,10 +71,11 @@ a gallery** (no markdown embedding), **max 10 per note**.
 
 **Managing**
 - Hover a gallery tile → remove via a **trash/bin icon** (🗑). Removing hides the
-  image immediately and shows an **undo toast** ("Image removed — Undo"). Clicking
-  Undo restores it instantly; letting the toast expire finalizes the removal. See
-  §6/§10 for the soft-delete + restore mechanics behind this. No markdown cleanup
-  needed since images are not referenced from the body.
+  image immediately and shows an **undo toast** ("Image removed — Undo") for
+  **~10s**. Clicking Undo restores it instantly. Note the server keeps the image
+  restorable for **7 days** regardless (§6/§10), so the toast is a convenience,
+  not the deadline — a removal is a soft-delete, not an immediate purge. No
+  markdown cleanup needed since images are not referenced from the body.
 - Images display in **upload order** (no user reordering in v1).
 - Upload states: queued → uploading (progress %) → done / error (retry).
 
@@ -276,10 +277,13 @@ clients.
 6. Emit SSE event (§8), return `NoteImage`.
 
 **Remove/undo**: `DELETE` sets `deleted_at` and emits `note_image_removed`; the
-image drops out of note responses immediately, powering the undo toast.
-`POST .../restore` clears `deleted_at` (emits `note_image_added`) if still within
-the grace window. The blob is untouched until the sweep finalizes the delete
-(§10), so restore is instant and needs no re-upload.
+image drops out of note responses immediately, powering the undo toast. The
+webapp/mobile toast surfaces Undo for **~10s**, but the server keeps the row
+restorable for a **7-day grace window** (`IMAGE_TRASH_RETENTION`, default `168h`).
+`POST .../restore` clears `deleted_at` (emits `note_image_added`) any time within
+that window; after the sweep finalizes the delete it returns `410 Gone`. The blob
+is untouched until finalization (§10), so restore is instant and needs no
+re-upload.
 
 **Download handler** (mirrors `GetUserProfileIcon`):
 - Set `Content-Type` from the stored image type and **`X-Content-Type-Options:
@@ -300,6 +304,9 @@ Add to `shared/src/constants.ts` (and a server-side mirror in
   `UPLOAD_MAX_BYTES` using the existing `parseIntRangeEnv` helper.
 - `IMAGE_MAX_PER_NOTE` — **10**.
 - `IMAGE_ALLOWED_TYPES` — `image/png`, `image/jpeg`, `image/webp`, `image/gif`.
+- `IMAGE_TRASH_RETENTION` — how long a removed (soft-deleted) image stays
+  restorable before the sweep finalizes it. Default **`168h` (7 days)**. The
+  client undo toast (~10s) is independent and shorter.
 
 Security posture (consistent with the project threat model — guard against
 accidental internal overload; baseline authz mandatory):
@@ -341,9 +348,9 @@ Dedicated events are cheaper and match existing granularity.
 - **Trash/restore**: images stay attached through soft-delete (note
   `deleted_at`); blobs become reclaimable only after the note is *permanently*
   deleted (cascade removes rows; §10 reclaims bytes).
-- **Export** (`handlers/export.go`): include image metadata and bundle blobs
-  (e.g. an `images/` folder in a zip, or base64-inline for JSON export — decide
-  per the current export format).
+- **Export** (`handlers/export.go`): produce a **zip bundle** — the notes JSON
+  plus an `images/` folder of the original blobs (named by id/sha). Chosen over
+  base64-inlining so large binaries don't bloat the JSON.
 - **Import** (`handlers/import.go`): re-create images from the bundle, re-hashing
   and de-duping on the way in; if a blob is missing, import the note without it
   and warn.
@@ -352,9 +359,11 @@ Dedicated events are cheaper and match existing granularity.
 
 ## 10. Lifecycle & orphan cleanup
 
-- **Soft-delete finalization**: rows whose `deleted_at` is older than the undo
-  grace window (config, e.g. a few minutes) are hard-deleted by the sweep. Until
-  then they can be restored (§6).
+- **Soft-delete finalization**: rows whose `deleted_at` is older than the grace
+  window (`IMAGE_TRASH_RETENTION`, default 7 days) are hard-deleted by the sweep.
+  Until then they can be restored (§6). Consequence: a removed image keeps
+  occupying disk for up to 7 days, and its blob still counts toward storage
+  totals (§12) during that window.
 - Dedup means a blob may be referenced by multiple rows (same image on several
   notes). **Reference count = `COUNT(*) FROM note_images WHERE sha256=?`** (rows
   pending soft-delete still count, so their blob survives for undo).
@@ -380,13 +389,42 @@ Dedicated events are cheaper and match existing granularity.
 
 ---
 
-## 12. Telemetry
+## 12. Telemetry & admin stats
 
+**OpenTelemetry**
 - Wrap the image store with an `_otel.go` variant like existing stores
   (`note_store_otel.go`, etc.).
 - Metrics: upload count/bytes, dedup hit rate, total blob bytes on disk, sweep
   reclaimed bytes. Trace spans on upload (read → validate → decode → put →
   insert) and download.
+
+**Admin stats page** (`GET /api/admin/stats` → `models.AdminStats`, rendered on
+`webapp/src/pages/Admin.tsx`)
+- Extend the existing `AdminStorageStats` group (which already reports
+  `database_size_bytes`) with **total image storage**:
+
+  ```go
+  type AdminStorageStats struct {
+      DatabaseSizeBytes int64 `json:"database_size_bytes"`
+      ImageCount        int64 `json:"image_count"`         // distinct stored blobs
+      ImagesSizeBytes   int64 `json:"images_size_bytes"`   // total bytes on disk
+  }
+  ```
+- **Computed dedup-aware from the DB**, so it reflects real disk footprint and
+  needs no filesystem walk (works for both SQLite and Postgres):
+
+  ```sql
+  SELECT COUNT(*), COALESCE(SUM(size_bytes), 0)
+  FROM (SELECT DISTINCT sha256, size_bytes FROM note_images);
+  ```
+  Counting `DISTINCT sha256` avoids double-counting deduped images. Soft-deleted
+  rows still on disk (within the 7-day window, §10) are included since they
+  occupy space. Thumbnails (small, derived) are excluded — noted as approximate;
+  an exact total including thumbnails would require walking `UPLOAD_DIR`.
+- Add the field to the `AdminStats` interface in `shared/src/types.ts` and render
+  it in the Storage section of `Admin.tsx` (human-readable bytes, beside DB size),
+  with a localized label added to all 8 locales (`task check-translations`).
+- Covered by the admin-stats integration test and `Admin.test.tsx`.
 
 ---
 
@@ -396,7 +434,8 @@ Dedicated events are cheaper and match existing granularity.
   restore (undo toast), size+type+count limits, image decode/validation,
   eager thumbnail generation + thumbnail endpoint, webapp picker + drag/drop +
   paste, gallery-above-body rendering (banner + grid using thumbnails), lightbox,
-  inline serving with `nosniff`, auth via note access.
+  inline serving with `nosniff`, auth via note access, total-image-storage stat
+  on the admin page.
 - **v1.1**: SSE live updates, NoteCard cover thumbnail, mobile
   camera/library/files + offline queue.
 - **Later**: export/import bundling, storage quotas, S3 backend.
@@ -413,6 +452,9 @@ Dedicated events are cheaper and match existing granularity.
   sweep → 410, blob reclaimed only after finalization, cascade on note
   hard-delete.
 - **Store unit tests** for refcount/cleanup logic and grace-window finalization.
+- **Admin stats**: extend the admin-stats integration test + `Admin.test.tsx` to
+  assert `images_size_bytes` / `image_count` (dedup-aware; deduped image counted
+  once).
 - **Webapp** (Vitest + RTL): drag/drop, paste, banner vs grid rendering, lightbox,
   bin-icon remove → undo toast → restore, error states, NoteCard cover.
 - **E2E** (Playwright, required for user-facing features per `CLAUDE.md`): upload
@@ -423,16 +465,16 @@ Dedicated events are cheaper and match existing granularity.
 
 ---
 
-## 15. Open questions
+## 15. Resolved decisions
 
-1. **Storage**: confirm filesystem (content-addressed) over DB-BLOB for v1.
-2. **Animated GIFs**: keep animation (serve original in grid) or freeze to a
-   static thumbnail tile? (Leaning: static thumbnail, animate in lightbox.)
-3. **Undo grace window** length before the sweep finalizes a removal (e.g. 30s
-   toast vs a few minutes server-side)? Client toast and server grace should be
-   configured together.
-4. **Quotas**: per-user / per-instance storage cap in v1, or defer? (Threat model
-   prioritizes overload protection, so a cap may be worth MVP inclusion.)
-5. **Export format**: zip bundle vs base64-inline — depends on current export.
-6. **Image without a note**: require a `note_id` (create the note first) vs allow
-   a draft upload bound on save? (Leaning: require `note_id`.)
+1. **Storage** — filesystem, content-addressed (§5). Not DB-BLOB.
+2. **Animated GIFs** — static (first-frame) thumbnail tile; animate only in the
+   lightbox (which serves the original).
+3. **Undo window** — ~10s client toast, **7-day** server-side grace
+   (`IMAGE_TRASH_RETENTION`) before finalization (§6/§10).
+4. **Quotas** — **deferred**; rely on the per-note count, per-file size, and
+   upload rate limits for v1.
+5. **Export format** — **zip bundle** (notes JSON + `images/` folder), not
+   base64-inline (§9).
+6. **Image without a note** — **require `note_id`**; create the note first, then
+   upload. No draft/orphan uploads.
