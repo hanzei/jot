@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/auth"
+	"github.com/hanzei/jot/server/internal/blobgc"
 	"github.com/hanzei/jot/server/internal/blobstore"
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
@@ -65,21 +66,10 @@ func (h *NotesHandler) publishNoteImageEvent(ctx context.Context, noteID string,
 // reclaimNoteImageBlob deletes the on-disk blob for sha if no note_images row
 // still references it (dedup means another row may share the same content
 // hash). Errors are logged but never fail the delete request — the row is
-// already gone, and issue #608 will add a periodic orphan sweep as the
-// safety net for any path that doesn't call this (e.g. a note hard-delete
-// cascade).
+// already gone, and the periodic orphan sweep (internal/blobgc) is the safety
+// net for anything left behind.
 func (h *NotesHandler) reclaimNoteImageBlob(ctx context.Context, sha string) {
-	count, err := h.noteStore.GetNoteImageRefCount(ctx, sha)
-	if err != nil {
-		logutil.FromContext(ctx).WithError(err).WithField("sha256", sha).Error("Failed to check note image refcount for blob reclamation")
-		return
-	}
-	if count > 0 {
-		return
-	}
-	if err := h.blobstore.Delete(ctx, sha); err != nil {
-		logutil.FromContext(ctx).WithError(err).WithField("sha256", sha).Error("Failed to reclaim orphaned note image blob")
-	}
+	blobgc.Reclaim(ctx, h.blobstore, h.noteStore, []string{sha})
 }
 
 // UploadNoteImage godoc

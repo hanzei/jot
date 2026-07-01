@@ -225,3 +225,76 @@ func (s *noteStore) GetNoteImageRefCount(ctx context.Context, sha256 string) (in
 	}
 	return count, nil
 }
+
+// ListDistinctImageSHA256 returns every content hash currently referenced by
+// at least one note_images row, for the orphan sweep to diff against what is
+// actually on disk.
+func (s *noteStore) ListDistinctImageSHA256(ctx context.Context) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT sha256 FROM note_images`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list distinct image hashes: %w", err)
+	}
+	shas, err := collectRows(rows, func(rows *sql.Rows) (string, error) {
+		var sha string
+		return sha, rows.Scan(&sha)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan image hashes: %w", err)
+	}
+	return shas, nil
+}
+
+// GetNoteImagesBySHA256 returns every note_images row referencing a given
+// content hash. Used by the orphan sweep to log which rows point at a blob
+// that is unexpectedly missing on disk.
+func (s *noteStore) GetNoteImagesBySHA256(ctx context.Context, sha256 string) ([]NoteImage, error) {
+	query := `SELECT id, note_id, uploader_id, filename, content_type, size_bytes, sha256, width, height, created_at
+			  FROM note_images
+			  WHERE sha256 = ?`
+
+	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), sha256)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get note images by hash: %w", err)
+	}
+	images, err := collectRows(rows, scanNoteImage)
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan note images: %w", err)
+	}
+	return images, nil
+}
+
+// getDistinctImageSHA256sByNoteIDsTx returns the distinct content hashes
+// referenced by images attached to noteIDs, queried within tx before the
+// notes (and their cascade-deleted note_images rows) are removed. Callers use
+// the result to reclaim now-orphaned blobs once the delete commits.
+func (s *noteStore) getDistinctImageSHA256sByNoteIDsTx(ctx context.Context, tx *sql.Tx, noteIDs []string) ([]string, error) {
+	if len(noteIDs) == 0 {
+		return nil, nil
+	}
+
+	seen := make(map[string]struct{})
+	var shas []string
+	for chunk := range slices.Chunk(noteIDs, noteIDsQueryBatchSize) {
+		placeholders, args := buildInClauseArgs(chunk)
+		query := `SELECT DISTINCT sha256 FROM note_images WHERE note_id IN (` + placeholders + `)` // #nosec G202 -- only "?" placeholders are joined, no user input
+
+		rows, err := tx.QueryContext(ctx, s.d.RewritePlaceholders(query), args...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query image hashes: %w", err)
+		}
+		chunkSHAs, err := collectRows(rows, func(rows *sql.Rows) (string, error) {
+			var sha string
+			return sha, rows.Scan(&sha)
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan image hashes: %w", err)
+		}
+		for _, sha := range chunkSHAs {
+			if _, ok := seen[sha]; !ok {
+				seen[sha] = struct{}{}
+				shas = append(shas, sha)
+			}
+		}
+	}
+	return shas, nil
+}

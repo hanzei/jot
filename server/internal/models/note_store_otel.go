@@ -99,19 +99,19 @@ func (s *NoteStore) DeleteFromTrash(ctx context.Context, id string, userID strin
 	return s.inner.DeleteFromTrash(ctx, id, userID)
 }
 
-func (s *NoteStore) EmptyTrash(ctx context.Context, userID string) (_ []DeletedNoteAudience, err error) {
+func (s *NoteStore) EmptyTrash(ctx context.Context, userID string) (_ []DeletedNoteAudience, _ []string, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.EmptyTrash", &err)
 	defer end()
 	return s.inner.EmptyTrash(ctx, userID)
 }
 
-func (s *NoteStore) DeleteAllByUser(ctx context.Context, userID string) (_ int, err error) {
+func (s *NoteStore) DeleteAllByUser(ctx context.Context, userID string) (_ int, _ []string, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.DeleteAllByUser", &err)
 	defer end()
 	return s.inner.DeleteAllByUser(ctx, userID)
 }
 
-func (s *NoteStore) PurgeOldTrashedNotes(ctx context.Context, olderThan time.Duration) (err error) {
+func (s *NoteStore) PurgeOldTrashedNotes(ctx context.Context, olderThan time.Duration) (_ []string, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.PurgeOldTrashedNotes", &err)
 	defer end()
 	return s.inner.PurgeOldTrashedNotes(ctx, olderThan)
@@ -290,6 +290,18 @@ func (s *NoteStore) GetNoteImageRefCount(ctx context.Context, sha256 string) (_ 
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.GetNoteImageRefCount", &err)
 	defer end()
 	return s.inner.GetNoteImageRefCount(ctx, sha256)
+}
+
+func (s *NoteStore) ListDistinctImageSHA256(ctx context.Context) (_ []string, err error) {
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.ListDistinctImageSHA256", &err)
+	defer end()
+	return s.inner.ListDistinctImageSHA256(ctx)
+}
+
+func (s *NoteStore) GetNoteImagesBySHA256(ctx context.Context, sha256 string) (_ []NoteImage, err error) {
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.GetNoteImagesBySHA256", &err)
+	defer end()
+	return s.inner.GetNoteImagesBySHA256(ctx, sha256)
 }
 
 func (s *NoteStore) GetOwnedNotesForExport(ctx context.Context, userID string) (_ []*Note, err error) {

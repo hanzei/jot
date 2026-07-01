@@ -3,6 +3,7 @@ package models
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/hanzei/jot/server/internal/database"
 	"github.com/hanzei/jot/server/internal/database/dialect"
@@ -261,6 +262,112 @@ func TestNoteImageEmbeddedInNote(t *testing.T) {
 	note, err = store.GetByID(ctx, noteID, userID)
 	require.NoError(t, err)
 	assert.Empty(t, note.Images, "a deleted image drops out of the note immediately")
+}
+
+func TestListDistinctImageSHA256(t *testing.T) {
+	store, userID, noteID := newTestNoteImageStore(t)
+	ctx := t.Context()
+
+	shas, err := store.ListDistinctImageSHA256(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, shas)
+
+	_, err = store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "sha-a", 1, 1, 0)
+	require.NoError(t, err)
+	// A second row sharing the same hash (dedup) must not produce a duplicate entry.
+	_, err = store.CreateNoteImage(ctx, noteID, userID, "a-dup.png", "image/png", 1, "sha-a", 1, 1, 0)
+	require.NoError(t, err)
+	_, err = store.CreateNoteImage(ctx, noteID, userID, "b.png", "image/png", 1, "sha-b", 1, 1, 0)
+	require.NoError(t, err)
+
+	shas, err = store.ListDistinctImageSHA256(ctx)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"sha-a", "sha-b"}, shas)
+}
+
+func TestGetNoteImagesBySHA256(t *testing.T) {
+	store, userID, noteID := newTestNoteImageStore(t)
+	ctx := t.Context()
+
+	rows, err := store.GetNoteImagesBySHA256(ctx, "sha-a")
+	require.NoError(t, err)
+	assert.Empty(t, rows)
+
+	img1, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "sha-a", 1, 1, 0)
+	require.NoError(t, err)
+	img2, err := store.CreateNoteImage(ctx, noteID, userID, "a-dup.png", "image/png", 1, "sha-a", 1, 1, 0)
+	require.NoError(t, err)
+
+	rows, err = store.GetNoteImagesBySHA256(ctx, "sha-a")
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	gotIDs := []string{rows[0].ID, rows[1].ID}
+	assert.ElementsMatch(t, []string{img1.ID, img2.ID}, gotIDs)
+}
+
+func TestEmptyTrashReturnsFreedImageHashes(t *testing.T) {
+	store, userID, noteID := newTestNoteImageStore(t)
+	ctx := t.Context()
+
+	_, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "sha-a", 1, 1, 0)
+	require.NoError(t, err)
+
+	require.NoError(t, store.MoveToTrash(ctx, noteID, userID))
+
+	_, freedSHA256, err := store.EmptyTrash(ctx, userID)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"sha-a"}, freedSHA256)
+}
+
+func TestEmptyTrashWithNoTrashedNotesReturnsNoFreedHashes(t *testing.T) {
+	store, userID, _ := newTestNoteImageStore(t)
+
+	deletedNotes, freedSHA256, err := store.EmptyTrash(t.Context(), userID)
+	require.NoError(t, err)
+	assert.Empty(t, deletedNotes)
+	assert.Empty(t, freedSHA256)
+}
+
+func TestDeleteAllByUserReturnsFreedImageHashes(t *testing.T) {
+	store, userID, noteID := newTestNoteImageStore(t)
+	ctx := t.Context()
+
+	_, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "sha-a", 1, 1, 0)
+	require.NoError(t, err)
+
+	deletedCount, freedSHA256, err := store.DeleteAllByUser(ctx, userID)
+	require.NoError(t, err)
+	assert.Equal(t, 1, deletedCount)
+	assert.Equal(t, []string{"sha-a"}, freedSHA256)
+}
+
+// TestPurgeOldTrashedNotesReturnsFreedImageHashes covers the periodic-sweep
+// candidate list: PurgeOldTrashedNotes must report the content hash of an
+// image attached to a note it purges, even if that hash is still referenced
+// by another, still-active note (dedup) — deciding whether the blob is
+// actually now orphaned is the caller's job (see internal/blobgc.Reclaim).
+func TestPurgeOldTrashedNotesReturnsFreedImageHashes(t *testing.T) {
+	store, userID, noteID := newTestNoteImageStore(t)
+	ctx := t.Context()
+
+	_, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "sha-a", 1, 1, 0)
+	require.NoError(t, err)
+
+	_, err = store.db.ExecContext(ctx, `INSERT INTO notes (id, user_id, note_type) VALUES ('note000000000000000im3', ?, 'text')`, userID)
+	require.NoError(t, err)
+	_, err = store.CreateNoteImage(ctx, "note000000000000000im3", userID, "a-dup.png", "image/png", 1, "sha-a", 1, 1, 0)
+	require.NoError(t, err)
+
+	require.NoError(t, store.MoveToTrash(ctx, noteID, userID))
+	_, err = store.db.ExecContext(ctx, `UPDATE notes SET deleted_at = datetime('now', '-8 days') WHERE id = ?`, noteID)
+	require.NoError(t, err)
+
+	freedSHA256, err := store.PurgeOldTrashedNotes(ctx, 7*24*time.Hour)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"sha-a"}, freedSHA256)
+
+	_, err = store.GetByID(ctx, noteID, userID)
+	require.ErrorIs(t, err, ErrNoteNotFound)
 }
 
 func TestGetNoteImageCountByNoteID(t *testing.T) {

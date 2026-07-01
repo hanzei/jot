@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/auth"
+	"github.com/hanzei/jot/server/internal/blobgc"
 	"github.com/hanzei/jot/server/internal/blobstore"
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
@@ -800,10 +801,12 @@ func (h *NotesHandler) EmptyTrash(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
-	deletedNotes, err := h.noteStore.EmptyTrash(r.Context(), user.ID)
+	deletedNotes, freedSHA256, err := h.noteStore.EmptyTrash(r.Context(), user.ID)
 	if err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("empty trash: %w", err)
 	}
+
+	blobgc.Reclaim(r.Context(), h.blobstore, h.noteStore, freedSHA256)
 
 	for _, deletedNote := range deletedNotes {
 		h.publishDeletedNoteEvent(r.Context(), deletedNote.NoteID, deletedNote.AudienceIDs, user.ID)

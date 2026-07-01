@@ -10,6 +10,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/auth"
+	"github.com/hanzei/jot/server/internal/blobgc"
+	"github.com/hanzei/jot/server/internal/blobstore"
 	"github.com/hanzei/jot/server/internal/models"
 )
 
@@ -18,6 +20,7 @@ type AdminHandler struct {
 	noteStore         *models.NoteStore
 	statsStore        *models.AdminStatsStore
 	userSettingsStore *models.UserSettingsStore
+	blobstore         blobstore.Blobstore
 	dbPath            string
 	passwordMinLength int
 }
@@ -27,6 +30,7 @@ func NewAdminHandler(
 	noteStore *models.NoteStore,
 	statsStore *models.AdminStatsStore,
 	userSettingsStore *models.UserSettingsStore,
+	imageBlobstore blobstore.Blobstore,
 	dbPath string,
 	passwordMinLength int,
 ) *AdminHandler {
@@ -35,6 +39,7 @@ func NewAdminHandler(
 		noteStore:         noteStore,
 		statsStore:        statsStore,
 		userSettingsStore: userSettingsStore,
+		blobstore:         imageBlobstore,
 		dbPath:            dbPath,
 		passwordMinLength: passwordMinLength,
 	}
@@ -254,10 +259,12 @@ func (h *AdminHandler) DeleteUserNotes(w http.ResponseWriter, r *http.Request) (
 		return http.StatusBadRequest, nil, errors.New("invalid user ID format")
 	}
 
-	deleted, err := h.noteStore.DeleteAllByUser(r.Context(), targetID)
+	deleted, freedSHA256, err := h.noteStore.DeleteAllByUser(r.Context(), targetID)
 	if err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("delete notes for user: %w", err)
 	}
+
+	blobgc.Reclaim(r.Context(), h.blobstore, h.noteStore, freedSHA256)
 
 	return http.StatusOK, DeleteUserNotesResponse{Deleted: deleted}, nil
 }

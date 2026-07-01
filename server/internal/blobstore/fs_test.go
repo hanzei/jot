@@ -145,6 +145,44 @@ func TestFSBlobstoreDelete(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
+func TestFSBlobstoreListEmpty(t *testing.T) {
+	store := newTestStore(t)
+	ctx := t.Context()
+
+	shas, err := store.List(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, shas)
+}
+
+func TestFSBlobstoreListReturnsStoredHashes(t *testing.T) {
+	store := newTestStore(t)
+	ctx := t.Context()
+	shaA := shaOf("blob a")
+	shaB := shaOf("blob b")
+
+	require.NoError(t, store.Put(ctx, shaA, strings.NewReader("blob a")))
+	require.NoError(t, store.Put(ctx, shaB, strings.NewReader("blob b")))
+
+	shas, err := store.List(ctx)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{shaA, shaB}, shas)
+}
+
+func TestFSBlobstoreListSkipsAfterDelete(t *testing.T) {
+	store := newTestStore(t)
+	ctx := t.Context()
+	shaA := shaOf("kept")
+	shaB := shaOf("removed")
+
+	require.NoError(t, store.Put(ctx, shaA, strings.NewReader("kept")))
+	require.NoError(t, store.Put(ctx, shaB, strings.NewReader("removed")))
+	require.NoError(t, store.Delete(ctx, shaB))
+
+	shas, err := store.List(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, []string{shaA}, shas)
+}
+
 func TestFSBlobstoreClose(t *testing.T) {
 	store := newTestStore(t)
 	require.NoError(t, store.Close())

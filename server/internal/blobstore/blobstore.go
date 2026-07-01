@@ -26,4 +26,7 @@ type Blobstore interface {
 	// Delete removes the blob stored under sha. It is a no-op if no such
 	// blob exists.
 	Delete(ctx context.Context, sha string) error
+	// List returns the hex-encoded SHA-256 hash of every blob currently
+	// stored, for use by the orphan sweep.
+	List(ctx context.Context) ([]string, error)
 }

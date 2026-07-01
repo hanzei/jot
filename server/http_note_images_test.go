@@ -2,9 +2,12 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"image"
 	"image/color"
 	"net/http"
+	"path/filepath"
 	"testing"
 
 	"github.com/hanzei/jot/server/client"
@@ -265,4 +268,77 @@ func TestNoteImageDedupBlobSurvivesUntilUnreferenced(t *testing.T) {
 	assert.Equal(t, data, downloaded)
 
 	require.NoError(t, user.Client.DeleteNoteImage(t.Context(), imgB.ID))
+}
+
+// TestNoteImageHardDeleteCascadeReclaimsBlob exercises the other reclamation
+// path from docs/specs/file-attachments.md §10: a note hard-delete cascade
+// (here, EmptyTrash) rather than the single-image DELETE endpoint. Dedup must
+// still be respected — the blob backing two notes' images survives until
+// both referencing notes are permanently deleted.
+func TestNoteImageHardDeleteCascadeReclaimsBlob(t *testing.T) {
+	var uploadDir string
+	ts := setupTestServerWithConfig(t, func(cfg *config.Config) {
+		uploadDir = cfg.UploadDir
+	})
+	user := ts.createTestUser(t, "imghardcascade", "password123", false)
+
+	noteA, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "note A"})
+	require.NoError(t, err)
+	noteB, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "note B"})
+	require.NoError(t, err)
+
+	data := testPNG(t, 6, 6)
+	sum := sha256.Sum256(data)
+	sha := hex.EncodeToString(sum[:])
+	blobPath := filepath.Join(uploadDir, "blobs", sha[0:2], sha[2:4], sha)
+
+	_, err = user.Client.UploadNoteImage(t.Context(), noteA.ID, "shared.png", bytes.NewReader(data))
+	require.NoError(t, err)
+	_, err = user.Client.UploadNoteImage(t.Context(), noteB.ID, "shared.png", bytes.NewReader(data))
+	require.NoError(t, err)
+	require.FileExists(t, blobPath)
+
+	require.NoError(t, user.Client.DeleteNote(t.Context(), noteA.ID))
+	_, err = user.Client.EmptyTrash(t.Context())
+	require.NoError(t, err)
+
+	// noteB still references the same content hash: the cascade from noteA's
+	// permanent deletion must not reclaim a blob that's still in use.
+	require.FileExists(t, blobPath, "blob must survive while noteB still references it")
+
+	require.NoError(t, user.Client.DeleteNote(t.Context(), noteB.ID))
+	_, err = user.Client.EmptyTrash(t.Context())
+	require.NoError(t, err)
+
+	require.NoFileExists(t, blobPath, "blob must be reclaimed once its last referencing note is hard-deleted")
+}
+
+// TestAdminDeleteUserNotesReclaimsBlob covers the admin bulk-delete hard-delete
+// cascade (server/internal/handlers/admin.go DeleteUserNotes) — a second,
+// independent cascade path alongside EmptyTrash that must also reclaim
+// now-orphaned blobs.
+func TestAdminDeleteUserNotesReclaimsBlob(t *testing.T) {
+	var uploadDir string
+	ts := setupTestServerWithConfig(t, func(cfg *config.Config) {
+		uploadDir = cfg.UploadDir
+	})
+	adminUser := ts.createTestUser(t, "imgadmindelete", "password123", true)
+	targetUser := ts.createTestUser(t, "imgadmintarget", "password123", false)
+
+	note, err := targetUser.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "note"})
+	require.NoError(t, err)
+
+	data := testPNG(t, 6, 6)
+	sum := sha256.Sum256(data)
+	sha := hex.EncodeToString(sum[:])
+	blobPath := filepath.Join(uploadDir, "blobs", sha[0:2], sha[2:4], sha)
+
+	_, err = targetUser.Client.UploadNoteImage(t.Context(), note.ID, "cat.png", bytes.NewReader(data))
+	require.NoError(t, err)
+	require.FileExists(t, blobPath)
+
+	_, err = adminUser.Client.AdminDeleteUserNotes(t.Context(), targetUser.User.ID)
+	require.NoError(t, err)
+
+	require.NoFileExists(t, blobPath, "blob must be reclaimed when the admin hard-deletes the last referencing note")
 }

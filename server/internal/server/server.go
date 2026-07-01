@@ -18,6 +18,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/hanzei/jot/server/internal/auth"
+	"github.com/hanzei/jot/server/internal/blobgc"
 	"github.com/hanzei/jot/server/internal/blobstore"
 	"github.com/hanzei/jot/server/internal/config"
 	"database/sql"
@@ -129,7 +130,7 @@ func New(cfg *config.Config) (*Server, error) {
 	}
 	labelsHandler := handlers.NewLabelsHandler(noteStore, labelStore, hub)
 	eventsHandler := handlers.NewEventsHandler(hub)
-	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, userSettingsStore, cfg.DBDSN, cfg.PasswordMinLength)
+	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, userSettingsStore, imageBlobstore, cfg.DBDSN, cfg.PasswordMinLength)
 	sessionsHandler := handlers.NewSessionsHandler(sessionStore)
 	patsHandler := handlers.NewPATsHandler(patStore)
 
@@ -158,8 +159,27 @@ func New(cfg *config.Config) (*Server, error) {
 		return sessionStore.DeleteExpired(ctx)
 	}, "delete expired sessions")
 	startPeriodicTask(&s.bgWg, ctx, time.Hour, true, func() error {
-		return noteStore.PurgeOldTrashedNotes(ctx, 7*24*time.Hour)
+		freedSHA256, err := noteStore.PurgeOldTrashedNotes(ctx, 7*24*time.Hour)
+		if err != nil {
+			return err
+		}
+		blobgc.Reclaim(ctx, imageBlobstore, noteStore, freedSHA256)
+		return nil
 	}, "purge old trashed notes")
+	startPeriodicTask(&s.bgWg, ctx, 24*time.Hour, true, func() error {
+		result, err := blobgc.Sweep(ctx, imageBlobstore, noteStore)
+		if err != nil {
+			return err
+		}
+		if result.BlobsReclaimed > 0 || result.MissingBlobs > 0 {
+			logrus.WithFields(logrus.Fields{
+				"blobs_reclaimed": result.BlobsReclaimed,
+				"missing_blobs":   result.MissingBlobs,
+				"missing_rows":    result.MissingRows,
+			}).Info("Note image orphan sweep completed")
+		}
+		return nil
+	}, "sweep orphaned note image blobs")
 
 	if err := s.setupRoutes(); err != nil {
 		cancel()

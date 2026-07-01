@@ -167,3 +167,33 @@ func (s *FSBlobstore) Delete(ctx context.Context, sha string) error {
 	}
 	return nil
 }
+
+// List implements Blobstore.
+func (s *FSBlobstore) List(ctx context.Context) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	var shas []string
+	walkErr := fs.WalkDir(s.root.FS(), "blobs", func(_ string, d fs.DirEntry, err error) error {
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return nil // no blobs directory yet
+			}
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		canon, shaErr := canonicalSHA(d.Name())
+		if shaErr != nil {
+			return nil //nolint:nilerr // skip stray non-blob files (e.g. leftover temp uploads)
+		}
+		shas = append(shas, canon)
+		return nil
+	})
+	if walkErr != nil {
+		return nil, fmt.Errorf("list blobs: %w", walkErr)
+	}
+	return shas, nil
+}
