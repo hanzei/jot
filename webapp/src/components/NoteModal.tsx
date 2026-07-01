@@ -6,6 +6,7 @@ import { VALIDATION, NOTE_COLORS, buildCollaborators, generateId, type Note, typ
 import { notes } from '@/utils/api';
 import { renderMarkdown } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
+import NoteImageGallery from '@/components/NoteImageGallery';
 import LetterAvatar from '@/components/LetterAvatar';
 import AssigneePicker from '@/components/AssigneePicker';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -1826,6 +1827,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
           {/* Content */}
           <div className="p-2 sm:p-4 pt-10 space-y-4 overflow-y-auto max-h-[calc(90vh-8rem)]">
+            {/* Image gallery, rendered above the title. Read directly from the
+                note prop (not local state) so SSE-driven updates render live. */}
+            {note?.images && note.images.length > 0 && (
+              <NoteImageGallery images={note.images} />
+            )}
+
             {/* Note type selector (only for new notes) */}
             {!note && (
               <div className="flex space-x-2">

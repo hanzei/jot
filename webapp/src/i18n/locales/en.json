@@ -417,6 +417,13 @@
     "unsharedSuccess": "Note unshared successfully!",
     "failedUnshare": "Failed to unshare note. Please try again."
   },
+  "images": {
+    "openLightbox": "View {{filename}}",
+    "moreImages": "View {{count}} more images",
+    "lightboxPrevious": "Previous image",
+    "lightboxNext": "Next image",
+    "lightboxCounter": "{{current}} / {{total}}"
+  },
   "serviceWorker": {
     "updatePrompt": "New app update is available! Click OK to refresh"
   },
