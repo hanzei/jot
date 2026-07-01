@@ -437,12 +437,13 @@ Dedicated events are cheaper and match existing granularity.
   restore (undo toast), size+type+count limits, image decode/validation, webapp
   picker + drag/drop + paste, gallery-above-body rendering (banner + grid
   rendering **originals** downscaled by CSS, laid out from `width`/`height`),
-  lightbox, inline serving with `nosniff`, auth via note access,
-  total-image-storage stat on the admin page.
+  lightbox, inline serving with `nosniff`, auth via note access, **SSE live
+  updates** (`note_image_added` / `note_image_removed`), total-image-storage stat
+  on the admin page.
 - **v1.1**: **thumbnails** — eager generation at upload + `thumb/` keyspace +
   thumbnail endpoint + grid/NoteCard tiles switching to them (bandwidth
-  optimization); SSE live updates; NoteCard cover thumbnail; mobile
-  camera/library/files + offline queue.
+  optimization); NoteCard cover thumbnail.
+- **v1.2**: **mobile** — camera/library/files pickers + offline upload queue.
 - **Later**: export/import bundling, storage quotas, S3 backend.
 
 ---
