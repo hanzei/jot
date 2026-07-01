@@ -72,4 +72,23 @@ describe('NoteImageGallery', () => {
     await user.keyboard('{Escape}')
     expect(screen.queryByText('2 / 3')).not.toBeInTheDocument()
   })
+
+  it('clamps the open lightbox to the last valid image when the gallery shrinks live', async () => {
+    const user = userEvent.setup()
+    const images = makeImages(2)
+    const { rerender } = render(<NoteImageGallery images={images} />)
+
+    // Open the lightbox on the second (last) image.
+    await user.click(screen.getByRole('button', { name: 'View photo2.png' }))
+    expect(screen.getByText('2 / 2')).toBeInTheDocument()
+
+    // A live SSE removal shrinks the gallery down to the first image only;
+    // the lightbox should clamp to it instead of disappearing.
+    rerender(<NoteImageGallery images={[images[0]]} />)
+
+    // photo1.png now renders both as the banner tile and inside the (still
+    // open) lightbox — if the lightbox had instead unmounted, only one would remain.
+    expect(screen.getAllByAltText('photo1.png')).toHaveLength(2)
+    expect(screen.queryByText('2 / 2')).not.toBeInTheDocument()
+  })
 })

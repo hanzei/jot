@@ -1583,6 +1583,37 @@ describe('Dashboard', () => {
       // window.history doesn't leak into later tests in this file.
       await user.click(screen.getByTestId('modal-close'))
     })
+
+    it('reconciles via loadNotes when an image event arrives for a note not yet in the list', async () => {
+      const mockGetAll = vi.mocked(notes.getAll)
+      mockGetAll.mockResolvedValue([])
+
+      renderDashboard()
+
+      await waitFor(() => {
+        expect(mockGetAll).toHaveBeenCalledTimes(1)
+      })
+
+      const sseCallbacks = mockRegisterSSECallbacks.mock.calls[0]?.[0]
+      expect(sseCallbacks).toBeDefined()
+
+      // A note created moments ago hasn't made it into notesList yet (its
+      // note_created-triggered loadNotes() is still in flight) when its first
+      // image upload's SSE event arrives.
+      mockGetAll.mockResolvedValue([createMockNote({ id: 'brand-new', title: 'New Note', images: [mockImage] })])
+
+      await act(async () => {
+        sseCallbacks?.onEvent({
+          type: 'note_image_added',
+          source_user_id: 'user1',
+          data: { note_id: 'brand-new', image: mockImage },
+        })
+      })
+
+      await waitFor(() => {
+        expect(mockGetAll).toHaveBeenCalledTimes(2)
+      })
+    })
   })
 
   describe('My Tasks Filtering', () => {

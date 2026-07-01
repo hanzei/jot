@@ -423,6 +423,10 @@ export default function Dashboard() {
 
       setEditingNote(prev => (prev && prev.id === imageNoteId ? { ...prev, images: patchImages(prev.images) } : prev));
       setNotesList(prev => prev.map(n => (n.id === imageNoteId ? { ...n, images: patchImages(n.images) } : n)));
+      // Also reconcile via a full reload, same as every other event type below —
+      // this is the fallback for a note whose note_created hasn't loaded yet, so
+      // an image added just after creation isn't silently dropped from the list.
+      loadNotes();
       return;
     }
 
