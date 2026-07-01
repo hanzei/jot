@@ -113,15 +113,14 @@ type NoteShare struct {
 // contract are tagged json:"-" and used internally (batch-loading, refcount,
 // future upload/delete handlers).
 type NoteImage struct {
-	ID          string     `json:"id"`
-	NoteID      string     `json:"-"`
-	UploaderID  string     `json:"-"`
-	Filename    string     `json:"filename"`
-	ContentType string     `json:"content_type"`
-	SizeBytes   int64      `json:"-"`
-	SHA256      string     `json:"-"`
-	Width       int        `json:"width"`
-	Height      int        `json:"height"`
-	CreatedAt   time.Time  `json:"created_at"`
-	DeletedAt   *time.Time `json:"-"`
+	ID          string    `json:"id"`
+	NoteID      string    `json:"-"`
+	UploaderID  string    `json:"-"`
+	Filename    string    `json:"filename"`
+	ContentType string    `json:"content_type"`
+	SizeBytes   int64     `json:"-"`
+	SHA256      string    `json:"-"`
+	Width       int       `json:"width"`
+	Height      int       `json:"height"`
+	CreatedAt   time.Time `json:"created_at"`
 }

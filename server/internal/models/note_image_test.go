@@ -50,7 +50,6 @@ func TestNoteImageStore(t *testing.T) {
 		assert.Equal(t, 100, img.Width)
 		assert.Equal(t, 200, img.Height)
 		assert.False(t, img.CreatedAt.IsZero())
-		assert.Nil(t, img.DeletedAt)
 	})
 
 	t.Run("GetNoteImagesByNoteID lists images in upload order", func(t *testing.T) {
@@ -77,69 +76,41 @@ func TestNoteImageStore(t *testing.T) {
 		assert.NotNil(t, images)
 	})
 
-	t.Run("SoftDeleteNoteImage hides the image from listing", func(t *testing.T) {
+	t.Run("DeleteNoteImage hard-deletes the row and it drops out of listing", func(t *testing.T) {
 		store, userID, noteID := newTestNoteImageStore(t)
 		ctx := t.Context()
 
 		img, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "sha-a", 1, 1)
 		require.NoError(t, err)
 
-		require.NoError(t, store.SoftDeleteNoteImage(ctx, img.ID))
+		require.NoError(t, store.DeleteNoteImage(ctx, img.ID))
 
 		images, err := store.GetNoteImagesByNoteID(ctx, noteID)
 		require.NoError(t, err)
 		assert.Empty(t, images)
+
+		// There is no soft-delete/restore step: the row is simply gone.
+		count, err := store.GetNoteImageRefCount(ctx, "sha-a")
+		require.NoError(t, err)
+		assert.Equal(t, 0, count)
 	})
 
-	t.Run("SoftDeleteNoteImage on an unknown or already-deleted image returns ErrNoteImageNotFound", func(t *testing.T) {
+	t.Run("DeleteNoteImage on an unknown or already-deleted image returns ErrNoteImageNotFound", func(t *testing.T) {
 		store, userID, noteID := newTestNoteImageStore(t)
 		ctx := t.Context()
 
-		err := store.SoftDeleteNoteImage(ctx, "doesnotexist0000000000")
+		err := store.DeleteNoteImage(ctx, "doesnotexist0000000000")
 		require.ErrorIs(t, err, ErrNoteImageNotFound)
 
 		img, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "sha-a", 1, 1)
 		require.NoError(t, err)
-		require.NoError(t, store.SoftDeleteNoteImage(ctx, img.ID))
+		require.NoError(t, store.DeleteNoteImage(ctx, img.ID))
 
-		err = store.SoftDeleteNoteImage(ctx, img.ID)
+		err = store.DeleteNoteImage(ctx, img.ID)
 		require.ErrorIs(t, err, ErrNoteImageNotFound)
 	})
 
-	t.Run("RestoreNoteImage undoes a soft-delete and it reappears in listing", func(t *testing.T) {
-		store, userID, noteID := newTestNoteImageStore(t)
-		ctx := t.Context()
-
-		img, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "sha-a", 1, 1)
-		require.NoError(t, err)
-		require.NoError(t, store.SoftDeleteNoteImage(ctx, img.ID))
-
-		restored, err := store.RestoreNoteImage(ctx, img.ID)
-		require.NoError(t, err)
-		assert.Equal(t, img.ID, restored.ID)
-		assert.Nil(t, restored.DeletedAt)
-
-		images, err := store.GetNoteImagesByNoteID(ctx, noteID)
-		require.NoError(t, err)
-		require.Len(t, images, 1)
-		assert.Equal(t, img.ID, images[0].ID)
-	})
-
-	t.Run("RestoreNoteImage on an unknown or not-deleted image returns ErrNoteImageNotFound", func(t *testing.T) {
-		store, userID, noteID := newTestNoteImageStore(t)
-		ctx := t.Context()
-
-		_, err := store.RestoreNoteImage(ctx, "doesnotexist0000000000")
-		require.ErrorIs(t, err, ErrNoteImageNotFound)
-
-		img, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "sha-a", 1, 1)
-		require.NoError(t, err)
-
-		_, err = store.RestoreNoteImage(ctx, img.ID)
-		require.ErrorIs(t, err, ErrNoteImageNotFound, "restoring an image that isn't soft-deleted is a no-op error, not a silent success")
-	})
-
-	t.Run("GetNoteImageRefCount counts rows referencing a hash, including soft-deleted ones", func(t *testing.T) {
+	t.Run("GetNoteImageRefCount counts rows referencing a hash and drops to zero once all are deleted", func(t *testing.T) {
 		store, userID, noteID := newTestNoteImageStore(t)
 		ctx := t.Context()
 
@@ -152,18 +123,24 @@ func TestNoteImageStore(t *testing.T) {
 
 		_, err = store.db.ExecContext(ctx, `INSERT INTO notes (id, user_id, note_type) VALUES ('note000000000000000im2', ?, 'text')`, userID)
 		require.NoError(t, err)
-		_, err = store.CreateNoteImage(ctx, "note000000000000000im2", userID, "a-dup.png", "image/png", 1, "shared-hash", 1, 1)
+		img2, err := store.CreateNoteImage(ctx, "note000000000000000im2", userID, "a-dup.png", "image/png", 1, "shared-hash", 1, 1)
 		require.NoError(t, err)
 
 		count, err = store.GetNoteImageRefCount(ctx, "shared-hash")
 		require.NoError(t, err)
 		assert.Equal(t, 2, count)
 
-		// A soft-deleted reference still counts: its blob must survive for undo.
-		require.NoError(t, store.SoftDeleteNoteImage(ctx, img1.ID))
+		// Deleting one row still leaves the other referencing the same hash
+		// (dedup): the blob must survive until refcount reaches zero.
+		require.NoError(t, store.DeleteNoteImage(ctx, img1.ID))
 		count, err = store.GetNoteImageRefCount(ctx, "shared-hash")
 		require.NoError(t, err)
-		assert.Equal(t, 2, count)
+		assert.Equal(t, 1, count)
+
+		require.NoError(t, store.DeleteNoteImage(ctx, img2.ID))
+		count, err = store.GetNoteImageRefCount(ctx, "shared-hash")
+		require.NoError(t, err)
+		assert.Equal(t, 0, count)
 	})
 
 	t.Run("batch-loading images for a note list matches GetNoteImagesByNoteID and needs no per-note query", func(t *testing.T) {
@@ -177,10 +154,10 @@ func TestNoteImageStore(t *testing.T) {
 		require.NoError(t, err)
 		img2, err := store.CreateNoteImage(ctx, "note000000000000000im2", userID, "b.png", "image/png", 1, "sha-b", 1, 1)
 		require.NoError(t, err)
-		// A soft-deleted image must not appear in the batch load either.
+		// A deleted image must not appear in the batch load either.
 		deletedImg, err := store.CreateNoteImage(ctx, noteID, userID, "c.png", "image/png", 1, "sha-c", 1, 1)
 		require.NoError(t, err)
-		require.NoError(t, store.SoftDeleteNoteImage(ctx, deletedImg.ID))
+		require.NoError(t, store.DeleteNoteImage(ctx, deletedImg.ID))
 
 		notes := []*Note{{ID: noteID}, {ID: "note000000000000000im2"}, {ID: "note-with-no-images-0"}}
 		require.NoError(t, store.batchLoadImages(ctx, notes))
@@ -220,16 +197,9 @@ func TestNoteImageEmbeddedInNote(t *testing.T) {
 	require.Len(t, notes[0].Images, 1)
 	assert.Equal(t, img.ID, notes[0].Images[0].ID)
 
-	require.NoError(t, store.SoftDeleteNoteImage(ctx, img.ID))
+	require.NoError(t, store.DeleteNoteImage(ctx, img.ID))
 
 	note, err = store.GetByID(ctx, noteID, userID)
 	require.NoError(t, err)
-	assert.Empty(t, note.Images, "a soft-deleted image drops out of the note immediately")
-
-	_, err = store.RestoreNoteImage(ctx, img.ID)
-	require.NoError(t, err)
-
-	note, err = store.GetByID(ctx, noteID, userID)
-	require.NoError(t, err)
-	require.Len(t, note.Images, 1, "restoring within the grace window brings it back")
+	assert.Empty(t, note.Images, "a deleted image drops out of the note immediately")
 }

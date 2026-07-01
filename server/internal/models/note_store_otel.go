@@ -262,20 +262,12 @@ func (s *NoteStore) GetNoteImagesByNoteID(ctx context.Context, noteID string) (_
 	return s.inner.GetNoteImagesByNoteID(ctx, noteID)
 }
 
-func (s *NoteStore) SoftDeleteNoteImage(ctx context.Context, imageID string) (err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.SoftDeleteNoteImage", &err,
+func (s *NoteStore) DeleteNoteImage(ctx context.Context, imageID string) (err error) {
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.DeleteNoteImage", &err,
 		attribute.String("image.id", imageID),
 	)
 	defer end()
-	return s.inner.SoftDeleteNoteImage(ctx, imageID)
-}
-
-func (s *NoteStore) RestoreNoteImage(ctx context.Context, imageID string) (_ *NoteImage, err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.RestoreNoteImage", &err,
-		attribute.String("image.id", imageID),
-	)
-	defer end()
-	return s.inner.RestoreNoteImage(ctx, imageID)
+	return s.inner.DeleteNoteImage(ctx, imageID)
 }
 
 func (s *NoteStore) GetNoteImageRefCount(ctx context.Context, sha256 string) (_ int, err error) {
