@@ -2041,16 +2041,18 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                                 rows.push(
                                   <div
                                     key={`ghost-${parent.id}`}
-                                    className="flex items-start min-w-0 text-sm opacity-60 select-none"
+                                    className="flex items-start gap-2 min-w-0 text-sm opacity-60 select-none"
+                                    style={{ marginLeft: indentOf(parent) * VALIDATION.INDENT_PX_PER_LEVEL }}
                                     aria-label={t('note.completedItemGroup', { title: parent.text })}
                                   >
+                                    <div className="w-6 h-4 flex-shrink-0"></div>
                                     <input
                                       type="checkbox"
                                       checked={false}
                                       disabled
                                       readOnly
                                       aria-hidden="true"
-                                      className="h-4 w-4 rounded mr-2 mt-0.5 flex-shrink-0 cursor-default"
+                                      className="h-4 w-4 rounded mt-0.5 flex-shrink-0 cursor-default"
                                     />
                                     <span className="min-w-0 whitespace-pre-wrap break-words font-semibold text-gray-500 dark:text-gray-400">
                                       {parent.text}

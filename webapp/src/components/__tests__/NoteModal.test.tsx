@@ -1104,8 +1104,14 @@ describe('NoteModal', () => {
 
       // The active list still shows the parent; the completed section shows the
       // child under a non-interactive ghost copy of the parent (aria-labelled).
-      expect(screen.getByLabelText('Group: Groceries')).toBeInTheDocument()
+      const ghostRow = screen.getByLabelText('Group: Groceries')
+      expect(ghostRow).toBeInTheDocument()
       expect(screen.getByText('Milk')).toBeInTheDocument()
+
+      // The ghost row must stay aligned with the parent's own indent (0 here,
+      // since ghosts are only ever shown for top-level parents) rather than
+      // drifting out of alignment with the other completed rows.
+      expect(ghostRow.style.marginLeft).toBe('0px')
     })
 
     it('indenting the first item is a no-op (nothing to nest under)', async () => {
