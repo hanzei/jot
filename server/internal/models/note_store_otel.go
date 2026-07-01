@@ -246,6 +246,44 @@ func (s *NoteStore) RemoveLabelFromNote(ctx context.Context, noteID, labelID, us
 	return s.inner.RemoveLabelFromNote(ctx, noteID, labelID, userID)
 }
 
+func (s *NoteStore) CreateNoteImage(ctx context.Context, noteID, uploaderID, filename, contentType string, sizeBytes int64, sha256 string, width, height int) (_ *NoteImage, err error) {
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.CreateNoteImage", &err,
+		attribute.String("note.id", noteID),
+	)
+	defer end()
+	return s.inner.CreateNoteImage(ctx, noteID, uploaderID, filename, contentType, sizeBytes, sha256, width, height)
+}
+
+func (s *NoteStore) GetNoteImagesByNoteID(ctx context.Context, noteID string) (_ []NoteImage, err error) {
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.GetNoteImagesByNoteID", &err,
+		attribute.String("note.id", noteID),
+	)
+	defer end()
+	return s.inner.GetNoteImagesByNoteID(ctx, noteID)
+}
+
+func (s *NoteStore) SoftDeleteNoteImage(ctx context.Context, imageID string) (err error) {
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.SoftDeleteNoteImage", &err,
+		attribute.String("image.id", imageID),
+	)
+	defer end()
+	return s.inner.SoftDeleteNoteImage(ctx, imageID)
+}
+
+func (s *NoteStore) RestoreNoteImage(ctx context.Context, imageID string) (_ *NoteImage, err error) {
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.RestoreNoteImage", &err,
+		attribute.String("image.id", imageID),
+	)
+	defer end()
+	return s.inner.RestoreNoteImage(ctx, imageID)
+}
+
+func (s *NoteStore) GetNoteImageRefCount(ctx context.Context, sha256 string) (_ int, err error) {
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.GetNoteImageRefCount", &err)
+	defer end()
+	return s.inner.GetNoteImageRefCount(ctx, sha256)
+}
+
 func (s *NoteStore) GetOwnedNotesForExport(ctx context.Context, userID string) (_ []*Note, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.GetOwnedNotesForExport", &err)
 	defer end()
