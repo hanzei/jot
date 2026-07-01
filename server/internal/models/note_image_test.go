@@ -76,14 +76,17 @@ func TestNoteImageStore(t *testing.T) {
 		assert.NotNil(t, images)
 	})
 
-	t.Run("DeleteNoteImage hard-deletes the row and it drops out of listing", func(t *testing.T) {
+	t.Run("DeleteNoteImage hard-deletes the row, returns it, and it drops out of listing", func(t *testing.T) {
 		store, userID, noteID := newTestNoteImageStore(t)
 		ctx := t.Context()
 
 		img, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "sha-a", 1, 1)
 		require.NoError(t, err)
 
-		require.NoError(t, store.DeleteNoteImage(ctx, img.ID))
+		deleted, err := store.DeleteNoteImage(ctx, img.ID)
+		require.NoError(t, err)
+		assert.Equal(t, img.ID, deleted.ID)
+		assert.Equal(t, "sha-a", deleted.SHA256)
 
 		images, err := store.GetNoteImagesByNoteID(ctx, noteID)
 		require.NoError(t, err)
@@ -99,14 +102,15 @@ func TestNoteImageStore(t *testing.T) {
 		store, userID, noteID := newTestNoteImageStore(t)
 		ctx := t.Context()
 
-		err := store.DeleteNoteImage(ctx, "doesnotexist0000000000")
+		_, err := store.DeleteNoteImage(ctx, "doesnotexist0000000000")
 		require.ErrorIs(t, err, ErrNoteImageNotFound)
 
 		img, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "sha-a", 1, 1)
 		require.NoError(t, err)
-		require.NoError(t, store.DeleteNoteImage(ctx, img.ID))
+		_, err = store.DeleteNoteImage(ctx, img.ID)
+		require.NoError(t, err)
 
-		err = store.DeleteNoteImage(ctx, img.ID)
+		_, err = store.DeleteNoteImage(ctx, img.ID)
 		require.ErrorIs(t, err, ErrNoteImageNotFound)
 	})
 
@@ -132,12 +136,14 @@ func TestNoteImageStore(t *testing.T) {
 
 		// Deleting one row still leaves the other referencing the same hash
 		// (dedup): the blob must survive until refcount reaches zero.
-		require.NoError(t, store.DeleteNoteImage(ctx, img1.ID))
+		_, err = store.DeleteNoteImage(ctx, img1.ID)
+		require.NoError(t, err)
 		count, err = store.GetNoteImageRefCount(ctx, "shared-hash")
 		require.NoError(t, err)
 		assert.Equal(t, 1, count)
 
-		require.NoError(t, store.DeleteNoteImage(ctx, img2.ID))
+		_, err = store.DeleteNoteImage(ctx, img2.ID)
+		require.NoError(t, err)
 		count, err = store.GetNoteImageRefCount(ctx, "shared-hash")
 		require.NoError(t, err)
 		assert.Equal(t, 0, count)
@@ -157,10 +163,11 @@ func TestNoteImageStore(t *testing.T) {
 		// A deleted image must not appear in the batch load either.
 		deletedImg, err := store.CreateNoteImage(ctx, noteID, userID, "c.png", "image/png", 1, "sha-c", 1, 1)
 		require.NoError(t, err)
-		require.NoError(t, store.DeleteNoteImage(ctx, deletedImg.ID))
+		_, err = store.DeleteNoteImage(ctx, deletedImg.ID)
+		require.NoError(t, err)
 
 		notes := []*Note{{ID: noteID}, {ID: "note000000000000000im2"}, {ID: "note-with-no-images-0"}}
-		require.NoError(t, store.batchLoadImages(ctx, notes))
+		require.NoError(t, store.batchLoadNoteAssociations(ctx, notes, userID))
 
 		require.Len(t, notes[0].Images, 1)
 		assert.Equal(t, img1.ID, notes[0].Images[0].ID)
@@ -171,8 +178,7 @@ func TestNoteImageStore(t *testing.T) {
 }
 
 // TestNoteImageEmbeddedInNote exercises the Note.images embedding contract
-// end-to-end through GetByID (single note) and GetByUserID (list), per
-// spec docs/specs/file-attachments.md §4/§6.1.
+// end-to-end through GetByID (single note) and GetByUserID (list).
 func TestNoteImageEmbeddedInNote(t *testing.T) {
 	store, userID, noteID := newTestNoteImageStore(t)
 	ctx := t.Context()
@@ -197,7 +203,8 @@ func TestNoteImageEmbeddedInNote(t *testing.T) {
 	require.Len(t, notes[0].Images, 1)
 	assert.Equal(t, img.ID, notes[0].Images[0].ID)
 
-	require.NoError(t, store.DeleteNoteImage(ctx, img.ID))
+	_, err = store.DeleteNoteImage(ctx, img.ID)
+	require.NoError(t, err)
 
 	note, err = store.GetByID(ctx, noteID, userID)
 	require.NoError(t, err)

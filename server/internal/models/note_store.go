@@ -372,11 +372,7 @@ func (s *noteStore) GetByUserID(ctx context.Context, userID string, archived boo
 		return nil, err
 	}
 
-	if err := s.batchLoadSharesAndLabels(ctx, notes, userID); err != nil {
-		return nil, err
-	}
-
-	if err := s.batchLoadImages(ctx, notes); err != nil {
+	if err := s.batchLoadNoteAssociations(ctx, notes, userID); err != nil {
 		return nil, err
 	}
 
@@ -405,8 +401,9 @@ func (s *noteStore) populateNoteItemsAndDefaults(ctx context.Context, scannedNot
 	return notes, nil
 }
 
-// batchLoadSharesAndLabels batch-loads shares and labels for a slice of notes, updating each note in place.
-func (s *noteStore) batchLoadSharesAndLabels(ctx context.Context, notes []*Note, userID string) error {
+// batchLoadNoteAssociations batch-loads shares, labels, and images for a
+// slice of notes, updating each note in place.
+func (s *noteStore) batchLoadNoteAssociations(ctx context.Context, notes []*Note, userID string) error {
 	if len(notes) == 0 {
 		return nil
 	}
@@ -435,21 +432,6 @@ func (s *noteStore) batchLoadSharesAndLabels(ctx context.Context, notes []*Note,
 		if lbls, ok := labelsMap[n.ID]; ok {
 			n.Labels = lbls
 		}
-	}
-
-	return nil
-}
-
-// batchLoadImages batch-loads images for a slice of notes in a single query,
-// updating each note in place, mirroring batchLoadSharesAndLabels.
-func (s *noteStore) batchLoadImages(ctx context.Context, notes []*Note) error {
-	if len(notes) == 0 {
-		return nil
-	}
-
-	noteIDs := make([]string, len(notes))
-	for i, n := range notes {
-		noteIDs[i] = n.ID
 	}
 
 	imagesMap, err := s.getNoteImagesByNoteIDs(ctx, noteIDs)

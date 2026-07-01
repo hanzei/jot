@@ -105,13 +105,12 @@ type NoteShare struct {
 	UpdatedAt        time.Time `json:"updated_at"`
 }
 
-// NoteImage is a metadata row for an image attached to a note (spec
-// docs/specs/file-attachments.md §4). The bytes live on disk in the
-// Blobstore, content-addressed by SHA256; this row is the pointer plus
-// display metadata. Only a narrow field set is embedded into Note responses
-// (spec §6.1) so the note list payload stays small; fields not in that
-// contract are tagged json:"-" and used internally (batch-loading, refcount,
-// future upload/delete handlers).
+// NoteImage is a metadata row for an image attached to a note. The bytes
+// live on disk in the Blobstore, content-addressed by SHA256; this row is
+// the pointer plus display metadata. Only a narrow field set is embedded
+// into Note responses so the note list payload stays small; fields not in
+// that contract are tagged json:"-" and used internally (batch-loading,
+// refcount, future upload/delete handlers).
 type NoteImage struct {
 	ID          string    `json:"id"`
 	NoteID      string    `json:"-"`

@@ -3,6 +3,7 @@ package models
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -69,62 +70,73 @@ func (s *noteStore) GetNoteImagesByNoteID(ctx context.Context, noteID string) ([
 	return images, nil
 }
 
-// getNoteImagesByNoteIDs batch-loads images for a set of note IDs in a
-// single query, mirroring getSharesByNoteIDs/getLabelsByNoteIDs, so listing
-// notes never does one images query per note.
+// getNoteImagesByNoteIDs batch-loads images for a set of note IDs, mirroring
+// getSharesByNoteIDs/getLabelsByNoteIDs, so listing notes never does one
+// images query per note. Chunked at noteIDsQueryBatchSize like
+// getSharesByNoteIDs so a large note list can't exceed the driver's
+// bound-parameter limit.
 func (s *noteStore) getNoteImagesByNoteIDs(ctx context.Context, noteIDs []string) (map[string][]NoteImage, error) {
 	if len(noteIDs) == 0 {
 		return map[string][]NoteImage{}, nil
 	}
 
-	placeholders := strings.Join(slices.Repeat([]string{"?"}, len(noteIDs)), ",")
-	args := make([]any, len(noteIDs))
-	for i, id := range noteIDs {
-		args[i] = id
-	}
-
-	query := `SELECT id, note_id, uploader_id, filename, content_type, size_bytes, sha256, width, height, created_at
-			  FROM note_images
-			  WHERE note_id IN (` + placeholders + `)
-			  ORDER BY note_id, created_at` // #nosec G202 -- only "?" placeholders are joined, no user input
-
-	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), args...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to batch-get note images: %w", err)
-	}
-
-	defer func() { _ = rows.Close() }()
 	result := map[string][]NoteImage{}
-	for img, err := range scanRows(rows, scanNoteImage) {
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan note image: %w", err)
+
+	for chunk := range slices.Chunk(noteIDs, noteIDsQueryBatchSize) {
+		placeholders := strings.Join(slices.Repeat([]string{"?"}, len(chunk)), ",")
+		args := make([]any, len(chunk))
+		for i, id := range chunk {
+			args[i] = id
 		}
-		result[img.NoteID] = append(result[img.NoteID], img)
+
+		query := `SELECT id, note_id, uploader_id, filename, content_type, size_bytes, sha256, width, height, created_at
+				  FROM note_images
+				  WHERE note_id IN (` + placeholders + `)
+				  ORDER BY note_id, created_at` // #nosec G202 -- only "?" placeholders are joined, no user input
+
+		rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), args...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to batch-get note images: %w", err)
+		}
+
+		for img, err := range scanRows(rows, scanNoteImage) {
+			if err != nil {
+				_ = rows.Close()
+				return nil, fmt.Errorf("failed to scan note image: %w", err)
+			}
+			result[img.NoteID] = append(result[img.NoteID], img)
+		}
+		if err := rows.Close(); err != nil {
+			return nil, fmt.Errorf("failed to close note images rows: %w", err)
+		}
 	}
+
 	return result, nil
 }
 
-// DeleteNoteImage hard-deletes an image row. Undo lives entirely on the
-// client (a ~10s toast before it ever calls this), so there is no
-// soft-delete/restore step here — by the time this is called the removal is
-// final. Returns ErrNoteImageNotFound if the image doesn't exist.
-func (s *noteStore) DeleteNoteImage(ctx context.Context, imageID string) error {
-	result, err := s.db.ExecContext(ctx,
-		s.d.RewritePlaceholders(`DELETE FROM note_images WHERE id = ?`),
-		imageID,
+// DeleteNoteImage hard-deletes an image row and returns it. Undo lives
+// entirely on the client (a ~10s toast before it ever calls this), so there
+// is no soft-delete/restore step here — by the time this is called the
+// removal is final. The caller needs the returned SHA256 to call
+// GetNoteImageRefCount and decide whether the blob is now orphaned. Returns
+// ErrNoteImageNotFound if the image doesn't exist.
+func (s *noteStore) DeleteNoteImage(ctx context.Context, imageID string) (*NoteImage, error) {
+	query := `DELETE FROM note_images WHERE id = ?
+			  RETURNING id, note_id, uploader_id, filename, content_type, size_bytes, sha256, width, height, created_at`
+
+	row := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), imageID)
+	var deleted NoteImage
+	err := row.Scan(
+		&deleted.ID, &deleted.NoteID, &deleted.UploaderID, &deleted.Filename, &deleted.ContentType,
+		&deleted.SizeBytes, &deleted.SHA256, &deleted.Width, &deleted.Height, &deleted.CreatedAt,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to delete note image: %w", err)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNoteImageNotFound
+		}
+		return nil, fmt.Errorf("failed to delete note image: %w", err)
 	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
-	}
-	if rowsAffected == 0 {
-		return ErrNoteImageNotFound
-	}
-	return nil
+	return &deleted, nil
 }
 
 // GetNoteImageRefCount returns the number of note_images rows referencing a

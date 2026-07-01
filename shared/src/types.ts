@@ -87,10 +87,10 @@ export interface NoteShare {
 }
 
 /**
- * Metadata for an image attached to a note (spec docs/specs/file-attachments.md
- * §4/§6.1). Embedded on `Note.images`; a narrow field set by design so the note
- * list payload stays small. Image bytes are fetched out-of-band from
- * `GET /api/images/{id}` (and `/thumbnail`), never inlined here.
+ * Metadata for an image attached to a note. Embedded on `Note.images`; a
+ * narrow field set by design so the note list payload stays small. Image
+ * bytes are fetched out-of-band from `GET /api/images/{id}` (and
+ * `/thumbnail`), never inlined here.
  */
 export interface NoteImage {
   id: string;

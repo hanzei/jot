@@ -262,7 +262,7 @@ func (s *NoteStore) GetNoteImagesByNoteID(ctx context.Context, noteID string) (_
 	return s.inner.GetNoteImagesByNoteID(ctx, noteID)
 }
 
-func (s *NoteStore) DeleteNoteImage(ctx context.Context, imageID string) (err error) {
+func (s *NoteStore) DeleteNoteImage(ctx context.Context, imageID string) (_ *NoteImage, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.DeleteNoteImage", &err,
 		attribute.String("image.id", imageID),
 	)
