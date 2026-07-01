@@ -137,6 +137,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!token) {
           return;
         }
+
+        // Render the cached profile immediately (if any) instead of blocking
+        // the dashboard on the network round-trip below. auth.me() still runs
+        // to revalidate the session and correct state once it resolves, the
+        // same stale-while-revalidate pattern revalidateSession() uses on
+        // later app foregrounds.
+        const cached = await getCachedAuthProfile();
+        if (cached?.user && cached?.settings && !cancelled) {
+          setUser(cached.user);
+          setSettings(cached.settings);
+          setIsLoading(false);
+        }
+
         const response = await auth.me();
         if (!cancelled) {
           setUser(response.user);
