@@ -186,15 +186,18 @@ type Blobstore interface {
   Directories are fanned out by hash prefix to stay shallow. Every path is
   derived solely from the validated hex hash, so user input never reaches the
   filesystem path (no traversal).
-- **Thumbnails are a derived cache, not an entity.** A thumbnail is deterministic
-  from `(original sha256, target size)`, so it is keyed by the *original's* sha
-  and gets **no `note_images` row and no refcount of its own**. It is generated
-  **eagerly during the upload request** with the avatar resize pipeline (output
-  JPEG, so the thumbnail response is always `image/jpeg`) — the grid never waits
-  on a first-request miss. It is still regenerated on demand if the file ever goes
-  missing, since it is disposable. Grid tiles use the thumbnail; the lightbox uses
-  the original. A future multi-size need extends the key to `<sha>_<w>.jpg` with
-  no schema change.
+- **Thumbnails are a derived cache, not an entity — and a v1.1 optimization
+  (§13), not MVP.** In MVP the grid renders originals downscaled by CSS (layout
+  driven by the `width`/`height` metadata, so no reflow); thumbnails are added
+  later purely to cut bandwidth. When they ship, a thumbnail is deterministic from
+  `(original sha256, target size)`, so it is keyed by the *original's* sha and gets
+  **no `note_images` row and no refcount of its own**. It is generated **eagerly
+  during the upload request** with the avatar resize pipeline (output JPEG, so the
+  thumbnail response is always `image/jpeg`) — the grid never waits on a
+  first-request miss — and regenerated on demand if the file ever goes missing,
+  since it is disposable. Grid tiles then use the thumbnail; the lightbox always
+  uses the original. A future multi-size need extends the key to `<sha>_<w>.jpg`
+  with no schema change.
 - **Thumbnail lifecycle rides on the original.** When an original's refcount hits
   zero and it is GC'd (§10), delete its `thumb/<sha>.jpg` in the same step — no
   separate sweep.
@@ -223,7 +226,7 @@ annotations.
 |---|---|---|
 | `POST` | `/api/notes/{noteId}/images` | Upload an image to a note (multipart `file`). 201 → `NoteImage`. Requires note write access (owner or shared). |
 | `GET` | `/api/images/{id}` | Stream the full-size image bytes. Requires access to the parent note. |
-| `GET` | `/api/images/{id}/thumbnail` | Resized thumbnail for grid tiles. |
+| `GET` | `/api/images/{id}/thumbnail` | Resized thumbnail for grid tiles. *(v1.1)* |
 | `DELETE` | `/api/images/{id}` | **Soft-remove** the image (sets `deleted_at`, hides it). Requires note access. |
 | `POST` | `/api/images/{id}/restore` | Undo a removal within the grace window (clears `deleted_at`); `410 Gone` if already swept. |
 
@@ -271,8 +274,8 @@ clients.
 3. `http.DetectContentType` → must be in the **image allowlist** (§7); reject
    anything else (this is what enforces "images only").
 4. **Decode the image** to confirm it's valid and capture width/height (reuse the
-   avatar pipeline), then **generate the thumbnail eagerly** and store it under
-   the `thumb/` keyspace (§5).
+   avatar pipeline). *(v1.1)* also **generate the thumbnail eagerly** here and
+   store it under the `thumb/` keyspace (§5).
 5. `Blobstore.Put` (no-op if hash already present → dedup), insert the row.
 6. Emit SSE event (§8), return `NoteImage`.
 
@@ -431,12 +434,14 @@ Dedicated events are cheaper and match existing granularity.
 ## 13. Phasing
 
 - **MVP**: `note_images` table + `fsBlobstore`, upload/get + soft-delete +
-  restore (undo toast), size+type+count limits, image decode/validation,
-  eager thumbnail generation + thumbnail endpoint, webapp picker + drag/drop +
-  paste, gallery-above-body rendering (banner + grid using thumbnails), lightbox,
-  inline serving with `nosniff`, auth via note access, total-image-storage stat
-  on the admin page.
-- **v1.1**: SSE live updates, NoteCard cover thumbnail, mobile
+  restore (undo toast), size+type+count limits, image decode/validation, webapp
+  picker + drag/drop + paste, gallery-above-body rendering (banner + grid
+  rendering **originals** downscaled by CSS, laid out from `width`/`height`),
+  lightbox, inline serving with `nosniff`, auth via note access,
+  total-image-storage stat on the admin page.
+- **v1.1**: **thumbnails** — eager generation at upload + `thumb/` keyspace +
+  thumbnail endpoint + grid/NoteCard tiles switching to them (bandwidth
+  optimization); SSE live updates; NoteCard cover thumbnail; mobile
   camera/library/files + offline queue.
 - **Later**: export/import bundling, storage quotas, S3 backend.
 
@@ -469,7 +474,8 @@ Dedicated events are cheaper and match existing granularity.
 
 1. **Storage** — filesystem, content-addressed (§5). Not DB-BLOB.
 2. **Animated GIFs** — static (first-frame) thumbnail tile; animate only in the
-   lightbox (which serves the original).
+   lightbox (which serves the original). Applies once thumbnails ship (v1.1); MVP
+   grids render originals, so GIFs animate inline there until then.
 3. **Undo window** — ~10s client toast, **7-day** server-side grace
    (`IMAGE_TRASH_RETENTION`) before finalization (§6/§10).
 4. **Quotas** — **deferred**; rely on the per-note count, per-file size, and
