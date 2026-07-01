@@ -112,7 +112,7 @@ func New(cfg *config.Config) (*Server, error) {
 		return nil, fmt.Errorf("initialize SSE hub: %w", err)
 	}
 
-	imageStore, thumbStore, err := blobstore.NewStores(cfg.UploadDir)
+	imageStore, err := blobstore.NewImageStore(cfg.UploadDir)
 	if err != nil {
 		cancel()
 		_ = db.Close()
@@ -120,7 +120,7 @@ func New(cfg *config.Config) (*Server, error) {
 	}
 
 	authHandler := handlers.NewAuthHandler(userStore, noteStore, sessionService, userSettingsStore, hub, cfg.RegistrationEnabled, cfg.PasswordMinLength)
-	notesHandler, err := handlers.NewNotesHandler(noteStore, userStore, labelStore, hub, imageStore, thumbStore, int64(cfg.UploadMaxBytes))
+	notesHandler, err := handlers.NewNotesHandler(noteStore, userStore, labelStore, hub, imageStore, int64(cfg.UploadMaxBytes))
 	if err != nil {
 		cancel()
 		_ = imageStore.Close()

@@ -1,7 +1,7 @@
-// Package blobstore provides filesystem-backed storage for note-image bytes:
-// ImageStore for content-addressed, hash-verified originals, and ThumbStore
-// for their derived, unverified JPEG thumbnails. Both share one on-disk root
-// (see NewStores) so there is a single directory to configure and back up.
+// Package blobstore provides ImageStore, filesystem-backed storage for
+// note-image bytes: content-addressed, hash-verified originals plus their
+// derived, unverified JPEG thumbnails, both under one on-disk root (see
+// NewImageStore) so there is a single directory to configure and back up.
 package blobstore
 
 import "errors"

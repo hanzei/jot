@@ -16,11 +16,12 @@ import (
 // shaHexLen is the length of a lowercase hex-encoded SHA-256 hash.
 const shaHexLen = sha256.Size * 2
 
-// blobStore provides the filesystem mechanics shared by ImageStore and
-// ThumbStore: directory fanout, atomic writes, and safe path access via
-// os.Root. It has no notion of content verification or what a key is
-// supposed to mean — that policy belongs entirely to the types that embed
-// it, so this type stays reusable for both the verified and unverified case.
+// blobStore provides the filesystem mechanics ImageStore builds on:
+// directory fanout, atomic writes, and safe path access via os.Root. It has
+// no notion of content verification or what a key is supposed to mean —
+// that policy belongs entirely to the type that embeds it, so this type
+// stays reusable for both the verified (original) and unverified
+// (thumbnail) case ImageStore handles.
 type blobStore struct {
 	root *os.Root
 }
@@ -140,19 +141,4 @@ func (s *blobStore) remove(path string) error {
 		return fmt.Errorf("delete file: %w", err)
 	}
 	return nil
-}
-
-// NewStores creates the ImageStore and its companion ThumbStore, both
-// rooted at the same directory (creating it if it does not already exist).
-// They share one os.Root so there is exactly one upload directory to
-// configure and back up (docs/specs/file-attachments.md §5) — there is
-// deliberately no separate constructor that could point them at different
-// roots. Call Close on the returned ImageStore during shutdown; ThumbStore
-// does not own the underlying handle and has no Close of its own.
-func NewStores(root string) (*ImageStore, *ThumbStore, error) {
-	bs, err := newBlobStore(root)
-	if err != nil {
-		return nil, nil, err
-	}
-	return &ImageStore{blobStore: *bs}, &ThumbStore{blobStore: *bs}, nil
 }

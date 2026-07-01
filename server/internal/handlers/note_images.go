@@ -91,10 +91,7 @@ func (h *NotesHandler) reclaimNoteImageBlob(ctx context.Context, sha string) {
 		return
 	}
 	if err := h.imageStore.Delete(ctx, sha); err != nil {
-		logutil.FromContext(ctx).WithError(err).WithField("sha256", sha).Error("Failed to reclaim orphaned note image blob")
-	}
-	if err := h.thumbStore.Delete(ctx, sha); err != nil {
-		logutil.FromContext(ctx).WithError(err).WithField("sha256", sha).Error("Failed to reclaim orphaned note image thumbnail")
+		logutil.FromContext(ctx).WithError(err).WithField("sha256", sha).Error("Failed to reclaim orphaned note image blob/thumbnail")
 	}
 }
 
@@ -184,7 +181,7 @@ func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (
 	// Generated eagerly here (rather than on first thumbnail request) so the
 	// grid never waits on a first-request miss; a no-op if a dedup hit means
 	// this hash's thumbnail already exists.
-	if putErr := h.thumbStore.Put(r.Context(), sha, bytes.NewReader(thumbnail)); putErr != nil {
+	if putErr := h.imageStore.PutThumbnail(r.Context(), sha, bytes.NewReader(thumbnail)); putErr != nil {
 		h.reclaimNoteImageBlob(r.Context(), sha)
 		return http.StatusInternalServerError, nil, fmt.Errorf("store thumbnail: %w", putErr)
 	}
@@ -296,7 +293,7 @@ func (h *NotesHandler) GetNoteImageThumbnail(w http.ResponseWriter, r *http.Requ
 		return http.StatusInternalServerError, nil, err
 	}
 
-	thumb, err := h.thumbStore.Open(r.Context(), img.SHA256)
+	thumb, err := h.imageStore.OpenThumbnail(r.Context(), img.SHA256)
 	if err != nil {
 		if !errors.Is(err, blobstore.ErrNotFound) {
 			return http.StatusInternalServerError, nil, fmt.Errorf("open thumbnail: %w", err)
@@ -353,7 +350,7 @@ func (h *NotesHandler) regenerateNoteImageThumbnail(ctx context.Context, img *mo
 		return nil, fmt.Errorf("regenerate thumbnail: %w", err)
 	}
 
-	if putErr := h.thumbStore.Put(ctx, img.SHA256, bytes.NewReader(thumbnail)); putErr != nil {
+	if putErr := h.imageStore.PutThumbnail(ctx, img.SHA256, bytes.NewReader(thumbnail)); putErr != nil {
 		logutil.FromContext(ctx).WithError(putErr).WithField("sha256", img.SHA256).
 			Error("Failed to persist regenerated note image thumbnail")
 	}

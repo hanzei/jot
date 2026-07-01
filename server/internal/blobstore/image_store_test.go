@@ -18,24 +18,16 @@ func shaOf(data string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// newTestStores creates an ImageStore/ThumbStore pair rooted at a fresh temp
-// directory.
-func newTestStores(t *testing.T) (*ImageStore, *ThumbStore) {
-	t.Helper()
-	images, thumbs, err := NewStores(t.TempDir())
-	require.NoError(t, err)
-	return images, thumbs
-}
-
 func newTestImageStore(t *testing.T) *ImageStore {
 	t.Helper()
-	images, _ := newTestStores(t)
-	return images
+	store, err := NewImageStore(t.TempDir())
+	require.NoError(t, err)
+	return store
 }
 
-func TestNewStoresCreatesRoot(t *testing.T) {
+func TestNewImageStoreCreatesRoot(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "uploads")
-	_, _, err := NewStores(root)
+	_, err := NewImageStore(root)
 	require.NoError(t, err)
 
 	info, err := os.Stat(root)
@@ -153,6 +145,24 @@ func TestImageStoreDelete(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
+func TestImageStoreDeleteRemovesThumbnailToo(t *testing.T) {
+	store := newTestImageStore(t)
+	ctx := t.Context()
+	content := "original bytes"
+	sha := shaOf(content)
+
+	require.NoError(t, store.Put(ctx, sha, strings.NewReader(content)))
+	require.NoError(t, store.PutThumbnail(ctx, sha, strings.NewReader("thumb bytes")))
+
+	require.NoError(t, store.Delete(ctx, sha))
+
+	_, err := store.Open(ctx, sha)
+	require.ErrorIs(t, err, ErrNotFound, "Delete must remove the original")
+
+	_, err = store.OpenThumbnail(ctx, sha)
+	require.ErrorIs(t, err, ErrNotFound, "Delete must remove the derived thumbnail too — there is no separate DeleteThumbnail")
+}
+
 func TestImageStoreClose(t *testing.T) {
 	store := newTestImageStore(t)
 	require.NoError(t, store.Close())
@@ -194,6 +204,13 @@ func TestImageStorePathSafety(t *testing.T) {
 
 			err = store.Delete(ctx, tt.sha)
 			require.Error(t, err)
+
+			err = store.PutThumbnail(ctx, tt.sha, strings.NewReader("payload"))
+			require.Error(t, err)
+
+			_, err = store.OpenThumbnail(ctx, tt.sha)
+			require.Error(t, err)
+			require.NotErrorIs(t, err, ErrNotFound, "invalid hashes must be rejected before the not-found lookup")
 		})
 	}
 
@@ -201,7 +218,7 @@ func TestImageStorePathSafety(t *testing.T) {
 	entries, err := os.ReadDir(store.root.Name())
 	require.NoError(t, err)
 	for _, e := range entries {
-		assert.Equal(t, "blobs", e.Name())
+		assert.Contains(t, []string{"blobs", "thumb"}, e.Name())
 	}
 }
 
@@ -214,4 +231,91 @@ func TestImageStoreRootRejectsEscape(t *testing.T) {
 
 	_, err := store.root.OpenFile(filepath.Join("..", "escaped"), os.O_CREATE|os.O_WRONLY, 0o640)
 	require.Error(t, err)
+}
+
+func TestImageStoreThumbnailRoundTrip(t *testing.T) {
+	store := newTestImageStore(t)
+	ctx := t.Context()
+	sha := shaOf("original bytes")
+	thumbContent := "resized jpeg bytes"
+
+	require.NoError(t, store.PutThumbnail(ctx, sha, strings.NewReader(thumbContent)))
+
+	rc, err := store.OpenThumbnail(ctx, sha)
+	require.NoError(t, err)
+	defer rc.Close()
+
+	got, err := io.ReadAll(rc)
+	require.NoError(t, err)
+	assert.Equal(t, thumbContent, string(got))
+}
+
+func TestImageStoreThumbnailLayout(t *testing.T) {
+	store := newTestImageStore(t)
+	ctx := t.Context()
+	sha := shaOf("original bytes")
+
+	require.NoError(t, store.PutThumbnail(ctx, sha, strings.NewReader("thumb")))
+
+	wantPath := filepath.Join(store.root.Name(), "thumb", sha[0:2], sha[2:4], sha+".jpg")
+	got, err := os.ReadFile(wantPath) // #nosec G304 -- test-controlled path
+	require.NoError(t, err)
+	assert.Equal(t, "thumb", string(got))
+}
+
+func TestImageStoreThumbnailDoesNotAffectOriginalBlob(t *testing.T) {
+	store := newTestImageStore(t)
+	ctx := t.Context()
+	content := "hello, blob"
+	sha := shaOf(content)
+
+	require.NoError(t, store.Put(ctx, sha, strings.NewReader(content)))
+	require.NoError(t, store.PutThumbnail(ctx, sha, strings.NewReader("thumb bytes")))
+
+	rc, err := store.Open(ctx, sha)
+	require.NoError(t, err)
+	defer rc.Close()
+	got, err := io.ReadAll(rc)
+	require.NoError(t, err)
+	assert.Equal(t, content, string(got), "putting a thumbnail must not touch the original blob stored under the same hash")
+}
+
+func TestImageStorePutThumbnailIsNoOpIfAlreadyPresent(t *testing.T) {
+	store := newTestImageStore(t)
+	ctx := t.Context()
+	sha := shaOf("original bytes")
+
+	require.NoError(t, store.PutThumbnail(ctx, sha, strings.NewReader("first")))
+	require.NoError(t, store.PutThumbnail(ctx, sha, strings.NewReader("second")))
+
+	rc, err := store.OpenThumbnail(ctx, sha)
+	require.NoError(t, err)
+	defer rc.Close()
+	got, err := io.ReadAll(rc)
+	require.NoError(t, err)
+	assert.Equal(t, "first", string(got))
+}
+
+func TestImageStoreOpenThumbnailMissing(t *testing.T) {
+	store := newTestImageStore(t)
+	ctx := t.Context()
+
+	_, err := store.OpenThumbnail(ctx, shaOf("never stored"))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestImageStoreDeleteThumbnailOnlyIsNoOpForMissingOriginal(t *testing.T) {
+	store := newTestImageStore(t)
+	ctx := t.Context()
+	sha := shaOf("original bytes")
+
+	require.NoError(t, store.PutThumbnail(ctx, sha, strings.NewReader("thumb")))
+
+	// No original was ever stored under sha; Delete must still succeed and
+	// clean up the thumbnail that does exist.
+	require.NoError(t, store.Delete(ctx, sha))
+
+	_, err := store.OpenThumbnail(ctx, sha)
+	assert.ErrorIs(t, err, ErrNotFound)
 }
