@@ -115,6 +115,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
 
+    // Tracks the cached-profile read across the try/catch below so the
+    // network-error fallback can reuse it instead of reading it twice.
+    // `undefined` means the read was never attempted (e.g. an earlier step
+    // failed first).
+    let cachedProfile: Awaited<ReturnType<typeof getCachedAuthProfile>> | undefined;
+
     async function restoreSession() {
       try {
         // Local mode is a first-class persistent state: when enabled, sign in
@@ -138,19 +144,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        // Render the cached profile immediately (if any) instead of blocking
-        // the dashboard on the network round-trip below. auth.me() still runs
-        // to revalidate the session and correct state once it resolves, the
-        // same stale-while-revalidate pattern revalidateSession() uses on
-        // later app foregrounds.
-        const cached = await getCachedAuthProfile();
-        if (cached?.user && cached?.settings && !cancelled) {
-          setUser(cached.user);
-          setSettings(cached.settings);
+        // Start revalidation and the cache read together so the cache read
+        // doesn't delay auth.me() from firing. The cached profile (if any)
+        // renders the dashboard immediately without waiting for auth.me() to
+        // resolve; auth.me() still corrects state once it resolves, the same
+        // stale-while-revalidate pattern revalidateSession() uses on later
+        // app foregrounds.
+        const mePromise = auth.me();
+        cachedProfile = await getCachedAuthProfile();
+        if (cachedProfile?.user && cachedProfile?.settings && !cancelled) {
+          setUser(cachedProfile.user);
+          setSettings(cachedProfile.settings);
           setIsLoading(false);
         }
 
-        const response = await auth.me();
+        const response = await mePromise;
         if (!cancelled) {
           setUser(response.user);
           setSettings(response.settings);
@@ -164,8 +172,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else if (isHttpResponseError(error)) {
           clearAuth();
         } else {
-          // Network error — try to restore from cached profile
-          const cached = await getCachedAuthProfile();
+          // Network error — fall back to the cached profile read above (or
+          // read it now if an earlier step failed before we got there).
+          const cached = cachedProfile !== undefined ? cachedProfile : await getCachedAuthProfile();
           if (cached?.user && cached?.settings && !cancelled) {
             setUser(cached.user);
             setSettings(cached.settings);
