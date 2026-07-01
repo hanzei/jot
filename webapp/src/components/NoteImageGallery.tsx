@@ -22,11 +22,6 @@ const GRID_CLEAR_TILES = GRID_VISIBLE_TILES - 1;
 export default function NoteImageGallery({ images }: NoteImageGalleryProps) {
   const { t } = useTranslation();
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-  // A live SSE removal can shrink `images` while the lightbox is open; clamp
-  // to the last valid index rather than pass ImageLightbox a stale
-  // out-of-range one (which would silently unmount it — see its
-  // `if (!image) return null`).
-  const openLightboxIndex = lightboxIndex === null ? null : Math.min(lightboxIndex, images.length - 1);
 
   if (images.length === 0) return null;
 
@@ -43,14 +38,12 @@ export default function NoteImageGallery({ images }: NoteImageGalleryProps) {
         >
           <img src={imagesApi.url(image.id)} alt={image.filename} className="w-full h-full object-cover" />
         </button>
-        {openLightboxIndex !== null && (
-          <ImageLightbox
-            images={images}
-            index={openLightboxIndex}
-            onIndexChange={setLightboxIndex}
-            onClose={() => setLightboxIndex(null)}
-          />
-        )}
+        <ImageLightbox
+          images={images}
+          index={lightboxIndex}
+          onIndexChange={setLightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
       </>
     );
   }
@@ -91,14 +84,12 @@ export default function NoteImageGallery({ images }: NoteImageGalleryProps) {
           );
         })}
       </div>
-      {openLightboxIndex !== null && (
-        <ImageLightbox
-          images={images}
-          index={openLightboxIndex}
-          onIndexChange={setLightboxIndex}
-          onClose={() => setLightboxIndex(null)}
-        />
-      )}
+      <ImageLightbox
+        images={images}
+        index={lightboxIndex}
+        onIndexChange={setLightboxIndex}
+        onClose={() => setLightboxIndex(null)}
+      />
     </>
   );
 }

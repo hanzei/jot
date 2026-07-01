@@ -7,28 +7,41 @@ import { images as imagesApi } from '@/utils/api';
 
 interface ImageLightboxProps {
   images: NoteImage[];
-  index: number;
+  /** null means closed. Kept mounted regardless (see below) so the close transition can play. */
+  index: number | null;
   onIndexChange: (index: number) => void;
   onClose: () => void;
 }
 
 // Full-screen viewer for a note's images. Always serves the original (never
 // a thumbnail) since this is where a user inspects the image closely.
+//
+// Stays mounted with `open` toggled — like every other modal in this app
+// (AboutModal, ImportModal, NewPATModal, KeyboardShortcutsDialog) — rather
+// than being conditionally rendered by the caller, so headlessui's own
+// mount/unmount timing gets a chance to play the close transition instead of
+// the panel vanishing instantly.
 export default function ImageLightbox({ images, index, onIndexChange, onClose }: ImageLightboxProps) {
   const { t } = useTranslation();
-  const image = images[index];
+  const isOpen = index !== null;
+  // Clamp against a live SSE removal shrinking `images` while open, rather
+  // than index a stale out-of-range position.
+  const safeIndex = index === null ? null : Math.min(index, images.length - 1);
+  const image = safeIndex === null ? undefined : images[safeIndex];
   const hasMultiple = images.length > 1;
 
   const goToPrevious = useCallback(() => {
-    onIndexChange((index - 1 + images.length) % images.length);
-  }, [index, images.length, onIndexChange]);
+    if (safeIndex === null) return;
+    onIndexChange((safeIndex - 1 + images.length) % images.length);
+  }, [safeIndex, images.length, onIndexChange]);
 
   const goToNext = useCallback(() => {
-    onIndexChange((index + 1) % images.length);
-  }, [index, images.length, onIndexChange]);
+    if (safeIndex === null) return;
+    onIndexChange((safeIndex + 1) % images.length);
+  }, [safeIndex, images.length, onIndexChange]);
 
   useEffect(() => {
-    if (!hasMultiple) return;
+    if (!isOpen || !hasMultiple) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowLeft') {
         e.preventDefault();
@@ -40,12 +53,10 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose }:
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [hasMultiple, goToPrevious, goToNext]);
-
-  if (!image) return null;
+  }, [isOpen, hasMultiple, goToPrevious, goToNext]);
 
   return (
-    <Dialog open={true} onClose={onClose} className="relative z-[70]">
+    <Dialog open={isOpen} onClose={onClose} className="relative z-[70]">
       <DialogBackdrop transition aria-hidden="true" className="fixed inset-0 bg-black/80 transition duration-200 ease-out data-[closed]:opacity-0 motion-reduce:transition-none" />
       <div className="fixed inset-0 flex items-center justify-center p-4">
         <DialogPanel
@@ -60,7 +71,7 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose }:
           >
             <XMarkIcon className="h-6 w-6" />
           </button>
-          {hasMultiple && (
+          {isOpen && hasMultiple && (
             <>
               <button
                 type="button"
@@ -80,14 +91,16 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose }:
               </button>
             </>
           )}
-          <img
-            src={imagesApi.url(image.id)}
-            alt={image.filename}
-            className="max-w-[95vw] max-h-[95vh] object-contain"
-          />
-          {hasMultiple && (
+          {image && (
+            <img
+              src={imagesApi.url(image.id)}
+              alt={image.filename}
+              className="max-w-[95vw] max-h-[95vh] object-contain"
+            />
+          )}
+          {isOpen && hasMultiple && safeIndex !== null && (
             <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-sm text-white">
-              {t('images.lightboxCounter', { current: index + 1, total: images.length })}
+              {t('images.lightboxCounter', { current: safeIndex + 1, total: images.length })}
             </div>
           )}
         </DialogPanel>
