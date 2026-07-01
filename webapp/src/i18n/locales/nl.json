@@ -417,6 +417,13 @@
     "unsharedSuccess": "Delen van notitie succesvol ongedaan gemaakt!",
     "failedUnshare": "Delen van notitie ongedaan maken mislukt. Probeer het opnieuw."
   },
+  "images": {
+    "openLightbox": "{{filename}} bekijken",
+    "moreImages": "{{count}} meer afbeeldingen bekijken",
+    "lightboxPrevious": "Vorige afbeelding",
+    "lightboxNext": "Volgende afbeelding",
+    "lightboxCounter": "{{current}} / {{total}}"
+  },
   "serviceWorker": {
     "updatePrompt": "Nieuwe app-update beschikbaar! Klik op OK om te vernieuwen"
   },
