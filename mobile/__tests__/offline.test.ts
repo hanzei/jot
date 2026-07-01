@@ -115,6 +115,7 @@ function makeMockDb(entries: { id: number; operation: string; endpoint: string; 
     getAllAsync: jest.fn().mockResolvedValue([...entries]),
     runAsync: jest.fn().mockResolvedValue(undefined),
     getFirstAsync: jest.fn().mockResolvedValue({ count: entries.length }),
+    withTransactionAsync: jest.fn(async (cb: () => Promise<void> | void) => { await cb(); }),
   };
 }
 
@@ -546,6 +547,41 @@ describe('drainQueue', () => {
 
     expect(mockSaveNote).toHaveBeenCalledWith(db, serverNote);
     expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [40]);
+  });
+
+  it('reconciles all authoritative fields (not just completed) from a toggleItemCompleted replay', async () => {
+    // The server returns the note's full, authoritative item list on this
+    // endpoint. If the local DB only patched `completed`, a stale local
+    // parent_id/position left over from an earlier partial sync would never
+    // get corrected, and the toggle would end up rendered against the wrong
+    // item's row.
+    const db = makeMockDb([
+      {
+        id: 42,
+        operation: 'toggleItemCompleted',
+        endpoint: '/notes/n1/items/i1/toggle-completed',
+        method: 'POST',
+        body: '{"completed":true}',
+        created_at: '',
+      },
+    ]);
+    mockApi.post.mockResolvedValueOnce({
+      data: [
+        { id: 'i1', text: 'Replace faucet', completed: true, position: 1, parent_id: 'kitchen', assigned_to: '' },
+        { id: 'i2', text: 'Hgg', completed: false, position: 4, parent_id: 'mirror', assigned_to: '' },
+      ],
+    } as never);
+
+    await drainQueue(db as never);
+
+    expect(db.runAsync).toHaveBeenCalledWith(
+      expect.stringContaining('parent_id = ?'),
+      expect.arrayContaining(['Replace faucet', 'kitchen', 'i1', 'n1']),
+    );
+    expect(db.runAsync).toHaveBeenCalledWith(
+      expect.stringContaining('parent_id = ?'),
+      expect.arrayContaining(['Hgg', 'mirror', 'i2', 'n1']),
+    );
   });
 
   it('persists the note returned by a removeLabelFromNote replay', async () => {
