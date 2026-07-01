@@ -422,7 +422,18 @@
     "moreImages": "View {{count}} more images",
     "lightboxPrevious": "Previous image",
     "lightboxNext": "Next image",
-    "lightboxCounter": "{{current}} / {{total}}"
+    "lightboxCounter": "{{current}} / {{total}}",
+    "addImage": "Add image",
+    "dropOverlay": "Drop image to add",
+    "removeImage": "Remove {{filename}}",
+    "removedToast": "Image removed",
+    "uploading": "Uploading… {{percent}}%",
+    "uploadFailed": "Upload failed",
+    "retryUpload": "Retry uploading {{filename}}",
+    "dismissUpload": "Dismiss {{filename}}",
+    "errorWrongType": "Only images can be attached.",
+    "errorTooLarge": "Image exceeds the {{maxMB}} MB limit.",
+    "errorTooMany": "Notes can have up to {{max}} images."
   },
   "serviceWorker": {
     "updatePrompt": "New app update is available! Click OK to refresh"

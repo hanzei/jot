@@ -1,8 +1,8 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import type { NoteImage } from '@jot/shared'
-import NoteImageGallery from '../NoteImageGallery'
+import NoteImageGallery, { type PendingImageUpload } from '../NoteImageGallery'
 
 const makeImage = (overrides: Partial<NoteImage> = {}): NoteImage => ({
   id: 'img1',
@@ -16,6 +16,15 @@ const makeImage = (overrides: Partial<NoteImage> = {}): NoteImage => ({
 
 const makeImages = (count: number): NoteImage[] =>
   Array.from({ length: count }, (_, i) => makeImage({ id: `img${i + 1}`, filename: `photo${i + 1}.png` }))
+
+const makeUpload = (overrides: Partial<PendingImageUpload> = {}): PendingImageUpload => ({
+  id: 'upload1',
+  filename: 'new.png',
+  previewUrl: 'blob:new.png',
+  progress: 0,
+  status: 'uploading',
+  ...overrides,
+})
 
 describe('NoteImageGallery', () => {
   it('renders nothing when there are no images', () => {
@@ -90,5 +99,74 @@ describe('NoteImageGallery', () => {
     // open) lightbox — if the lightbox had instead unmounted, only one would remain.
     expect(screen.getAllByAltText('photo1.png')).toHaveLength(2)
     expect(screen.queryByText('2 / 2')).not.toBeInTheDocument()
+  })
+
+  describe('editable mode', () => {
+    it('does not render a remove button when not editable', () => {
+      render(<NoteImageGallery images={[makeImage()]} />)
+      expect(screen.queryByRole('button', { name: 'Remove photo.png' })).not.toBeInTheDocument()
+    })
+
+    it('calls onRemove when a tile remove button is clicked', async () => {
+      const user = userEvent.setup()
+      const onRemove = vi.fn()
+      render(<NoteImageGallery images={[makeImage()]} editable onRemove={onRemove} />)
+
+      await user.click(screen.getByRole('button', { name: 'Remove photo.png' }))
+
+      expect(onRemove).toHaveBeenCalledWith(makeImage())
+    })
+
+    it('removing a tile does not also open the lightbox', async () => {
+      const user = userEvent.setup()
+      const onRemove = vi.fn()
+      render(<NoteImageGallery images={makeImages(2)} editable onRemove={onRemove} />)
+
+      await user.click(screen.getByRole('button', { name: 'Remove photo1.png' }))
+
+      expect(onRemove).toHaveBeenCalledTimes(1)
+      expect(screen.queryByText('1 / 2')).not.toBeInTheDocument()
+    })
+
+    it('renders a single in-progress upload as a banner tile with its progress', () => {
+      render(<NoteImageGallery images={[]} editable uploads={[makeUpload({ progress: 42 })]} />)
+
+      expect(screen.queryByTestId('note-image-grid')).not.toBeInTheDocument()
+      const tile = screen.getByTestId('image-upload-tile')
+      expect(tile).toHaveAttribute('data-status', 'uploading')
+      expect(tile).toHaveTextContent('42%')
+    })
+
+    it('renders an upload tile alongside persisted images in the grid', () => {
+      render(<NoteImageGallery images={[makeImage()]} editable uploads={[makeUpload()]} />)
+
+      const grid = screen.getByTestId('note-image-grid')
+      expect(grid.querySelectorAll('img')).toHaveLength(2)
+      expect(screen.getByTestId('image-upload-tile')).toBeInTheDocument()
+    })
+
+    it('shows an error tile with retry and dismiss controls', async () => {
+      const user = userEvent.setup()
+      const onRetryUpload = vi.fn()
+      const onDismissUpload = vi.fn()
+      render(
+        <NoteImageGallery
+          images={[]}
+          editable
+          uploads={[makeUpload({ status: 'error', errorMessage: 'Upload failed' })]}
+          onRetryUpload={onRetryUpload}
+          onDismissUpload={onDismissUpload}
+        />
+      )
+
+      expect(screen.getByTestId('image-upload-tile')).toHaveAttribute('data-status', 'error')
+      expect(screen.getByText('Upload failed')).toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: 'Retry uploading new.png' }))
+      expect(onRetryUpload).toHaveBeenCalledWith('upload1')
+
+      await user.click(screen.getByRole('button', { name: 'Dismiss new.png' }))
+      expect(onDismissUpload).toHaveBeenCalledWith('upload1')
+    })
   })
 })

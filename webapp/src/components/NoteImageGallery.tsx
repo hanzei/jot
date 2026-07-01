@@ -1,12 +1,37 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ArrowPathIcon, TrashIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import type { NoteImage } from '@jot/shared';
 import { images as imagesApi } from '@/utils/api';
 import ImageLightbox from '@/components/ImageLightbox';
 
+// A locally-tracked upload in flight (or failed) for a note, rendered as a
+// gallery tile alongside the note's persisted images. Never sent to the
+// server as-is — id is a client-generated key, not a NoteImage id.
+export interface PendingImageUpload {
+  id: string;
+  filename: string;
+  previewUrl: string;
+  progress: number;
+  status: 'uploading' | 'error';
+  errorMessage?: string;
+}
+
 interface NoteImageGalleryProps {
   images: NoteImage[];
+  // Adding editable=true turns on hover remove buttons for persisted images
+  // and renders `uploads` as in-progress/error tiles. Read-only callers (none
+  // currently) can omit it and get the original display-only gallery.
+  editable?: boolean;
+  uploads?: PendingImageUpload[];
+  onRemove?: (image: NoteImage) => void;
+  onRetryUpload?: (uploadId: string) => void;
+  onDismissUpload?: (uploadId: string) => void;
 }
+
+type Tile =
+  | { key: string; kind: 'image'; image: NoteImage }
+  | { key: string; kind: 'upload'; upload: PendingImageUpload };
 
 // Grid tiles shown at once; beyond this the last tile carries a "+N" overlay
 // for the rest instead of growing the grid further.
@@ -15,75 +40,140 @@ const GRID_VISIBLE_TILES = 4;
 // final visible tile becomes the "+N" overlay tile.
 const GRID_CLEAR_TILES = GRID_VISIBLE_TILES - 1;
 
-// Read-only display of a note's images: a full-width banner for a single
-// image, or a responsive grid for 2+ (laid out from width/height so the
-// reserved space matches the image before it loads, avoiding reflow). Tapping
-// any tile opens the full-screen lightbox. Upload/remove is out of scope here.
-export default function NoteImageGallery({ images }: NoteImageGalleryProps) {
+const TILE_FRAME_CLASSNAME = 'group relative overflow-hidden rounded-md bg-gray-100 dark:bg-slate-700';
+
+// Display of a note's images: a full-width banner for a single tile, or a
+// responsive grid for 2+ (laid out from width/height so the reserved space
+// matches the image before it loads, avoiding reflow). Tapping a persisted
+// image tile opens the full-screen lightbox. In editable mode, persisted
+// tiles get a hover remove button and `uploads` render as
+// queued/uploading/error placeholders (add/remove UI lives in NoteModal).
+export default function NoteImageGallery({ images, editable = false, uploads = [], onRemove, onRetryUpload, onDismissUpload }: NoteImageGalleryProps) {
   const { t } = useTranslation();
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
-  if (images.length === 0) return null;
+  const tiles: Tile[] = [
+    ...images.map((image): Tile => ({ key: image.id, kind: 'image', image })),
+    ...uploads.map((upload): Tile => ({ key: upload.id, kind: 'upload', upload })),
+  ];
 
-  if (images.length === 1) {
-    const image = images[0];
-    return (
-      <>
-        <button
-          type="button"
-          aria-label={t('images.openLightbox', { filename: image.filename })}
-          className="block w-full max-h-80 overflow-hidden rounded-md bg-gray-100 dark:bg-slate-700"
-          style={{ aspectRatio: `${image.width} / ${image.height}` }}
-          onClick={() => setLightboxIndex(0)}
-        >
-          <img src={imagesApi.url(image.id)} alt={image.filename} className="w-full h-full object-cover" />
-        </button>
-        <ImageLightbox
-          images={images}
-          index={lightboxIndex}
-          onIndexChange={setLightboxIndex}
-          onClose={() => setLightboxIndex(null)}
-        />
-      </>
-    );
-  }
+  if (tiles.length === 0) return null;
 
-  const visibleCount = Math.min(images.length, GRID_VISIBLE_TILES);
-  const overlayCount = images.length > GRID_VISIBLE_TILES ? images.length - GRID_CLEAR_TILES : 0;
-  const visibleImages = images.slice(0, visibleCount);
+  const visibleCount = Math.min(tiles.length, GRID_VISIBLE_TILES);
+  const overlayCount = tiles.length > GRID_VISIBLE_TILES ? tiles.length - GRID_CLEAR_TILES : 0;
+  const visibleTiles = tiles.slice(0, visibleCount);
+  const isGrid = tiles.length > 1;
   // An odd tile count of 3 spans the final tile across both columns so it
   // doesn't leave a dangling empty cell.
-  const spanLastTile = visibleCount === 3;
+  const spanLastTile = isGrid && visibleCount === 3;
+
+  // Renders a single tile. The remove/retry/dismiss controls are always
+  // siblings of the (optional) clickable image button, never nested inside
+  // it — a <button> inside another <button> is invalid HTML and would break
+  // click and keyboard handling.
+  const renderTile = (tile: Tile, index: number) => {
+    const isOverlayTile = overlayCount > 0 && index === visibleCount - 1;
+    const frameStyle = isGrid ? undefined : { aspectRatio: tile.kind === 'image' ? `${tile.image.width} / ${tile.image.height}` : '4 / 3' };
+    const frameClassName = `${TILE_FRAME_CLASSNAME} ${isGrid ? 'aspect-square' : 'block w-full max-h-80'} ${
+      spanLastTile && index === 2 ? 'col-span-2' : ''
+    }`;
+
+    if (tile.kind === 'image') {
+      // Image tiles always occupy the same position in `tiles` (and thus in
+      // `visibleTiles`) as they do in `images` — uploads are appended after
+      // all images — so `index` doubles as the lightbox index directly.
+      const label = isOverlayTile
+        ? t('images.moreImages', { count: overlayCount })
+        : t('images.openLightbox', { filename: tile.image.filename });
+      return (
+        <div key={tile.key} className={frameClassName} style={frameStyle}>
+          <button
+            type="button"
+            aria-label={label}
+            className="absolute inset-0 w-full h-full"
+            onClick={() => setLightboxIndex(index)}
+          >
+            <img src={imagesApi.url(tile.image.id)} alt={tile.image.filename} className="w-full h-full object-cover" />
+            {isOverlayTile && (
+              <span className="absolute inset-0 flex items-center justify-center bg-black/50 text-white text-lg font-medium">
+                +{overlayCount}
+              </span>
+            )}
+          </button>
+          {editable && onRemove && !isOverlayTile && (
+            <button
+              type="button"
+              aria-label={t('images.removeImage', { filename: tile.image.filename })}
+              onClick={() => onRemove(tile.image)}
+              className="absolute top-1 right-1 z-10 p-1 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-black/70 transition-opacity"
+            >
+              <TrashIcon className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    const { upload } = tile;
+    return (
+      <div key={tile.key} className={frameClassName} style={frameStyle}>
+        <img src={upload.previewUrl} alt={upload.filename} className="w-full h-full object-cover opacity-50" />
+        {!isOverlayTile && (
+          <div
+            role="status"
+            data-testid="image-upload-tile"
+            data-status={upload.status}
+            className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/40 text-white text-xs p-2 text-center"
+          >
+            {upload.status === 'uploading' ? (
+              <span>{t('images.uploading', { percent: upload.progress })}</span>
+            ) : (
+              <>
+                <span>{upload.errorMessage ?? t('images.uploadFailed')}</span>
+                <div className="flex items-center gap-2">
+                  {onRetryUpload && (
+                    <button
+                      type="button"
+                      aria-label={t('images.retryUpload', { filename: upload.filename })}
+                      onClick={() => onRetryUpload(upload.id)}
+                      className="p-1 rounded-full bg-white/20 hover:bg-white/30"
+                    >
+                      <ArrowPathIcon className="h-4 w-4" />
+                    </button>
+                  )}
+                  {onDismissUpload && (
+                    <button
+                      type="button"
+                      aria-label={t('images.dismissUpload', { filename: upload.filename })}
+                      onClick={() => onDismissUpload(upload.id)}
+                      className="p-1 rounded-full bg-white/20 hover:bg-white/30"
+                    >
+                      <XMarkIcon className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+        {isOverlayTile && (
+          <span className="absolute inset-0 flex items-center justify-center bg-black/50 text-white text-lg font-medium">
+            +{overlayCount}
+          </span>
+        )}
+      </div>
+    );
+  };
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-1" data-testid="note-image-grid">
-        {visibleImages.map((image, i) => {
-          const isOverlayTile = overlayCount > 0 && i === visibleCount - 1;
-          return (
-            <button
-              key={image.id}
-              type="button"
-              aria-label={
-                isOverlayTile
-                  ? t('images.moreImages', { count: overlayCount })
-                  : t('images.openLightbox', { filename: image.filename })
-              }
-              className={`relative aspect-square overflow-hidden rounded-md bg-gray-100 dark:bg-slate-700 ${
-                spanLastTile && i === 2 ? 'col-span-2' : ''
-              }`}
-              onClick={() => setLightboxIndex(i)}
-            >
-              <img src={imagesApi.url(image.id)} alt={image.filename} className="w-full h-full object-cover" />
-              {isOverlayTile && (
-                <span className="absolute inset-0 flex items-center justify-center bg-black/50 text-white text-lg font-medium">
-                  +{overlayCount}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
+      {isGrid ? (
+        <div className="grid grid-cols-2 gap-1" data-testid="note-image-grid">
+          {visibleTiles.map((tile, i) => renderTile(tile, i))}
+        </div>
+      ) : (
+        renderTile(visibleTiles[0], 0)
+      )}
       <ImageLightbox
         images={images}
         index={lightboxIndex}

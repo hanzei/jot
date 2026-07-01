@@ -422,7 +422,18 @@
     "moreImages": "Ver {{count}} imágenes más",
     "lightboxPrevious": "Imagen anterior",
     "lightboxNext": "Imagen siguiente",
-    "lightboxCounter": "{{current}} / {{total}}"
+    "lightboxCounter": "{{current}} / {{total}}",
+    "addImage": "Añadir imagen",
+    "dropOverlay": "Suelta la imagen para añadirla",
+    "removeImage": "Eliminar {{filename}}",
+    "removedToast": "Imagen eliminada",
+    "uploading": "Subiendo… {{percent}}%",
+    "uploadFailed": "Error al subir la imagen",
+    "retryUpload": "Reintentar subir {{filename}}",
+    "dismissUpload": "Descartar {{filename}}",
+    "errorWrongType": "Solo se pueden adjuntar imágenes.",
+    "errorTooLarge": "La imagen supera el límite de {{maxMB}} MB.",
+    "errorTooMany": "Las notas pueden tener hasta {{max}} imágenes."
   },
   "serviceWorker": {
     "updatePrompt": "¡Hay una nueva actualización disponible! Haz clic en Aceptar para actualizar"

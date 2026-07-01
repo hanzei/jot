@@ -15,6 +15,8 @@ const {
   mockDeleteItem,
   mockReorderItems,
   mockToggleItemCompleted,
+  mockImagesUpload,
+  mockImagesDelete,
   dragEndRef,
 } = vi.hoisted(() => ({
   // Captures the latest DndContext onDragEnd so tests can invoke a drag directly
@@ -31,6 +33,10 @@ const {
   // tests that need cascade override this with the full item list.
   mockToggleItemCompleted: vi.fn().mockImplementation((_noteId, itemId, completed) =>
     Promise.resolve([{ id: itemId, completed }])),
+  mockImagesUpload: vi.fn().mockResolvedValue({
+    id: 'uploaded1', filename: 'upload.png', content_type: 'image/png', width: 10, height: 10, created_at: '2024-01-01T00:00:00Z',
+  }),
+  mockImagesDelete: vi.fn().mockResolvedValue(undefined),
 }))
 vi.mock('@/utils/api', () => ({
   notes: {
@@ -49,13 +55,15 @@ vi.mock('@/utils/api', () => ({
   },
   images: {
     url: (id: string) => `/api/v1/images/${id}`,
+    upload: mockImagesUpload,
+    delete: mockImagesDelete,
   },
 }))
 
 // Mock @headlessui/react
 vi.mock('@headlessui/react', () => {
-  const DialogPanel = ({ className, children }: { className?: string; children?: ReactNode }) => (
-    <div className={className} data-testid="dialog-panel">{children}</div>
+  const DialogPanel = ({ className, children, ...rest }: { className?: string; children?: ReactNode } & Record<string, unknown>) => (
+    <div className={className} data-testid="dialog-panel" {...rest}>{children}</div>
   )
 
   const Dialog = ({ children, open }: { children?: ReactNode; open?: boolean }) => (
@@ -314,6 +322,231 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByRole('button', { name: 'View photo.png' }))
 
       expect(screen.getByText('1 / 2')).toBeInTheDocument()
+    })
+  })
+
+  describe('Image upload and remove', () => {
+    const makeImageFile = (name = 'photo.png', type = 'image/png', size = 1024) =>
+      new File([new Uint8Array(size)], name, { type })
+
+    // Upload/delete mocks resolve via a plain promise chain with no timer of
+    // their own, so vi.runAllTimersAsync() (which only ticks pending timers)
+    // has nothing to advance. Flush the microtask queue directly instead.
+    const flushMicrotasks = () => act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const uploadViaPicker = async (file: File) => {
+      const input = screen.getByTestId('note-image-file-input') as HTMLInputElement
+      fireEvent.change(input, { target: { files: [file] } })
+      await flushMicrotasks()
+    }
+
+    it('does not render the add-image button for a brand-new (unsaved) note', () => {
+      renderNoteModal(defaultProps)
+      expect(screen.queryByRole('button', { name: 'Add image' })).not.toBeInTheDocument()
+    })
+
+    it('uploads a file selected via the toolbar picker and shows an uploading tile', async () => {
+      const note = createMockNote({ images: [] })
+      renderNoteModal({ ...defaultProps, note })
+
+      const file = makeImageFile()
+      const input = screen.getByTestId('note-image-file-input') as HTMLInputElement
+      fireEvent.change(input, { target: { files: [file] } })
+
+      expect(mockImagesUpload).toHaveBeenCalledWith('1', file, expect.any(Function))
+      expect(screen.getByTestId('image-upload-tile')).toHaveAttribute('data-status', 'uploading')
+
+      await flushMicrotasks()
+
+      // The upload placeholder is dropped once the request resolves — the real
+      // tile appears later, driven by the note_image_added SSE event.
+      expect(screen.queryByTestId('image-upload-tile')).not.toBeInTheDocument()
+    })
+
+    it('rejects a non-image file with an inline error and does not upload it', async () => {
+      const note = createMockNote({ images: [] })
+      renderNoteModal({ ...defaultProps, note })
+
+      await uploadViaPicker(new File(['x'], 'doc.pdf', { type: 'application/pdf' }))
+
+      expect(mockImagesUpload).not.toHaveBeenCalled()
+      expect(screen.getByText('Only images can be attached.')).toBeInTheDocument()
+    })
+
+    it('rejects an oversized file with an inline error and does not upload it', async () => {
+      const note = createMockNote({ images: [] })
+      renderNoteModal({ ...defaultProps, note })
+
+      await uploadViaPicker(makeImageFile('big.png', 'image/png', 26 * 1024 * 1024))
+
+      expect(mockImagesUpload).not.toHaveBeenCalled()
+      expect(screen.getByText('Image exceeds the 25 MB limit.')).toBeInTheDocument()
+    })
+
+    it('refuses to queue more uploads than the per-note image cap allows', async () => {
+      const existingImages: NoteImage[] = Array.from({ length: 9 }, (_, i) => ({
+        id: `img${i}`, filename: `photo${i}.png`, content_type: 'image/png', width: 10, height: 10, created_at: '2023-01-01T00:00:00Z',
+      }))
+      const note = createMockNote({ images: existingImages })
+      renderNoteModal({ ...defaultProps, note })
+
+      const input = screen.getByTestId('note-image-file-input') as HTMLInputElement
+      fireEvent.change(input, { target: { files: [makeImageFile('a.png'), makeImageFile('b.png')] } })
+      await flushMicrotasks()
+
+      // 9 existing + 10-cap leaves exactly one free slot.
+      expect(mockImagesUpload).toHaveBeenCalledTimes(1)
+      expect(screen.getByText('Notes can have up to 10 images.')).toBeInTheDocument()
+    })
+
+    it('shows a retryable error tile when the upload request fails', async () => {
+      mockImagesUpload.mockRejectedValueOnce(new Error('network error'))
+      const note = createMockNote({ images: [] })
+      renderNoteModal({ ...defaultProps, note })
+
+      await uploadViaPicker(makeImageFile())
+
+      const tile = screen.getByTestId('image-upload-tile')
+      expect(tile).toHaveAttribute('data-status', 'error')
+
+      mockImagesUpload.mockResolvedValueOnce({
+        id: 'uploaded2', filename: 'photo.png', content_type: 'image/png', width: 10, height: 10, created_at: '2023-01-01T00:00:00Z',
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Retry uploading photo.png' }))
+      await flushMicrotasks()
+
+      expect(mockImagesUpload).toHaveBeenCalledTimes(2)
+      expect(screen.queryByTestId('image-upload-tile')).not.toBeInTheDocument()
+    })
+
+    it('uploads an image dropped onto the note modal', async () => {
+      const note = createMockNote({ images: [] })
+      renderNoteModal({ ...defaultProps, note })
+
+      const panel = screen.getByTestId('dialog-panel')
+      const file = makeImageFile()
+      fireEvent.drop(panel, { dataTransfer: { files: [file] } })
+      await flushMicrotasks()
+
+      expect(mockImagesUpload).toHaveBeenCalledWith('1', file, expect.any(Function))
+    })
+
+    it('shows a drop overlay while dragging a file over the modal', () => {
+      const note = createMockNote({ images: [] })
+      renderNoteModal({ ...defaultProps, note })
+
+      const panel = screen.getByTestId('dialog-panel')
+      fireEvent.dragEnter(panel, { dataTransfer: { items: [{ kind: 'file', type: 'image/png' }] } })
+
+      expect(screen.getByTestId('note-image-drop-overlay')).toBeInTheDocument()
+
+      fireEvent.dragLeave(panel)
+      expect(screen.queryByTestId('note-image-drop-overlay')).not.toBeInTheDocument()
+    })
+
+    it('uploads an image pasted onto the note modal', async () => {
+      const note = createMockNote({ images: [] })
+      renderNoteModal({ ...defaultProps, note })
+
+      const panel = screen.getByTestId('dialog-panel')
+      const file = makeImageFile()
+      fireEvent.paste(panel, {
+        clipboardData: { items: [{ kind: 'file', type: 'image/png', getAsFile: () => file }] },
+      })
+      await flushMicrotasks()
+
+      expect(mockImagesUpload).toHaveBeenCalledWith('1', file, expect.any(Function))
+    })
+
+    it('removing an image hides it immediately without deleting it right away', () => {
+      const note = createMockNote({ images: [{ id: 'img1', filename: 'photo.png', content_type: 'image/png', width: 10, height: 10, created_at: '2023-01-01T00:00:00Z' }] })
+      renderNoteModal({ ...defaultProps, note })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remove photo.png' }))
+
+      expect(screen.queryByAltText('photo.png')).not.toBeInTheDocument()
+      expect(mockImagesDelete).not.toHaveBeenCalled()
+      expect(screen.getByText('Image removed')).toBeInTheDocument()
+    })
+
+    it('undo restores the image and cancels the deferred delete', async () => {
+      const note = createMockNote({ images: [{ id: 'img1', filename: 'photo.png', content_type: 'image/png', width: 10, height: 10, created_at: '2023-01-01T00:00:00Z' }] })
+      renderNoteModal({ ...defaultProps, note })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remove photo.png' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+
+      expect(screen.getByAltText('photo.png')).toBeInTheDocument()
+
+      await vi.advanceTimersByTimeAsync(15_000)
+      expect(mockImagesDelete).not.toHaveBeenCalled()
+    })
+
+    it('fires the delete once the undo window elapses without an undo', async () => {
+      const note = createMockNote({ images: [{ id: 'img1', filename: 'photo.png', content_type: 'image/png', width: 10, height: 10, created_at: '2023-01-01T00:00:00Z' }] })
+      renderNoteModal({ ...defaultProps, note })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remove photo.png' }))
+      expect(mockImagesDelete).not.toHaveBeenCalled()
+
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(mockImagesDelete).toHaveBeenCalledWith('img1')
+    })
+
+    it('keeps a still-pending removal hidden with its undo bar after navigating away and back before the undo window elapses', async () => {
+      const image = { id: 'img1', filename: 'photo.png', content_type: 'image/png', width: 10, height: 10, created_at: '2023-01-01T00:00:00Z' }
+      const noteA = createMockNote({ id: 'noteA', images: [image] })
+      const noteB = createMockNote({ id: 'noteB', images: [] })
+
+      const { rerender } = renderNoteModal({ ...defaultProps, note: noteA })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remove photo.png' }))
+      expect(screen.queryByAltText('photo.png')).not.toBeInTheDocument()
+
+      // Navigate to a different note, then back to noteA before the 10s undo window elapses.
+      rerender(<ToastProvider><NoteModal {...defaultProps} note={noteB} /></ToastProvider>)
+      rerender(<ToastProvider><NoteModal {...defaultProps} note={noteA} /></ToastProvider>)
+
+      // The image must still be hidden with its undo bar, not silently reappear
+      // only to vanish later with no explanation once the timer fires.
+      expect(screen.queryByAltText('photo.png')).not.toBeInTheDocument()
+      expect(screen.getByText('Image removed')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+      expect(screen.getByAltText('photo.png')).toBeInTheDocument()
+
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(mockImagesDelete).not.toHaveBeenCalled()
+    })
+
+    it('ignores a second rapid click on Retry while a retry is already in flight', async () => {
+      mockImagesUpload.mockRejectedValueOnce(new Error('network error'))
+      const note = createMockNote({ images: [] })
+      renderNoteModal({ ...defaultProps, note })
+
+      await uploadViaPicker(makeImageFile())
+      expect(screen.getByTestId('image-upload-tile')).toHaveAttribute('data-status', 'error')
+
+      let resolveRetry: (value: unknown) => void = () => {}
+      mockImagesUpload.mockImplementationOnce(() => new Promise(resolve => { resolveRetry = resolve }))
+
+      const retryButton = screen.getByRole('button', { name: 'Retry uploading photo.png' })
+      fireEvent.click(retryButton)
+      fireEvent.click(retryButton)
+      await flushMicrotasks()
+
+      // One call for the initial (failed) upload, one for the retry — the
+      // second rapid click must not fire a duplicate request.
+      expect(mockImagesUpload).toHaveBeenCalledTimes(2)
+
+      resolveRetry({
+        id: 'uploaded2', filename: 'photo.png', content_type: 'image/png', width: 10, height: 10, created_at: '2023-01-01T00:00:00Z',
+      })
+      await flushMicrotasks()
+      expect(screen.queryByTestId('image-upload-tile')).not.toBeInTheDocument()
     })
   })
 

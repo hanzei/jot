@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo, useRef, useCallback, type ReactElement } from 'react';
-import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, UserPlusIcon, CheckIcon, TagIcon, DocumentDuplicateIcon, DevicePhoneMobileIcon, PaintBrushIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, UserPlusIcon, CheckIcon, TagIcon, DocumentDuplicateIcon, DevicePhoneMobileIcon, PaintBrushIcon, PhotoIcon } from '@heroicons/react/24/outline';
 import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, NOTE_COLORS, buildCollaborators, generateId, type Note, type NoteItem, type NoteType, type CreateNoteRequest, type UpdateNoteRequest, type PatchNoteItemRequest, type Label, type User, type Collaborator } from '@jot/shared';
-import { notes } from '@/utils/api';
+import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, IMAGE_MAX_PER_NOTE, UPLOAD_MAX_BYTES, buildCollaborators, generateId, type Note, type NoteItem, type NoteType, type NoteImage, type CreateNoteRequest, type UpdateNoteRequest, type PatchNoteItemRequest, type Label, type User, type Collaborator } from '@jot/shared';
+import { notes, images as imagesApi } from '@/utils/api';
 import { renderMarkdown } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
-import NoteImageGallery from '@/components/NoteImageGallery';
+import NoteImageGallery, { type PendingImageUpload } from '@/components/NoteImageGallery';
 import LetterAvatar from '@/components/LetterAvatar';
 import AssigneePicker from '@/components/AssigneePicker';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -32,6 +32,12 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+
+// Undo window for a client-deferred note image removal (spec: ~10s).
+const IMAGE_REMOVE_UNDO_MS = 10_000;
+// Human-readable max upload size, shared by the client-side pre-check and the
+// 413-from-server fallback message.
+const IMAGE_MAX_MB = Math.round(UPLOAD_MAX_BYTES / (1024 * 1024));
 
 // Validation functions
 type TFunction = (key: string, opts?: Record<string, unknown>) => string;
@@ -498,6 +504,28 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const [isEditingContent, setIsEditingContent] = useState(!note);
   const pendingSelectionRef = useRef<{ start: number; end: number } | null>(null);
 
+  // Note image add/remove UI. Uploads require an existing note (an id to
+  // attach to), so all of this is gated on `note` being set.
+  const [imageUploads, setImageUploads] = useState<PendingImageUpload[]>([]);
+  const [hiddenImageIds, setHiddenImageIds] = useState<Set<string>>(new Set());
+  // Images currently showing an inline "Image removed — Undo" bar. Rendered
+  // inside the DialogPanel (not the app-wide toast) so clicking Undo is never
+  // mistaken by HeadlessUI's Dialog for an outside click that should close it.
+  const [removedImages, setRemovedImages] = useState<NoteImage[]>([]);
+  const [isDraggingImage, setIsDraggingImage] = useState(false);
+  const imageFileInputRef = useRef<HTMLInputElement>(null);
+  const imageUploadsRef = useRef<PendingImageUpload[]>([]);
+  const imageUploadFilesRef = useRef<Map<string, File>>(new Map());
+  // Upload ids currently in flight, checked synchronously (not via React
+  // state) so a rapid double-click on Retry can't start a second concurrent
+  // request for the same file before a re-render reflects the first one.
+  const activeUploadIdsRef = useRef<Set<string>>(new Set());
+  const imageDragCounterRef = useRef(0);
+  // Timers for client-deferred image removal (undo window). Stored in a ref
+  // (not React state) so they keep running — and the eventual DELETE still
+  // fires — even if this component unmounts before the undo window elapses.
+  const pendingImageRemovalsRef = useRef<Map<string, { timeoutId: ReturnType<typeof setTimeout> }>>(new Map());
+
   // Use useRef for timeout management instead of global window property
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const errorTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -756,7 +784,29 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     if (sameNote && (savingRef.current || saveTimeoutRef.current || isDirty())) {
       return;
     }
+    const previousAdoptedId = adoptedNoteIdRef.current;
     adoptedNoteIdRef.current = incomingId;
+
+    if (previousAdoptedId !== incomingId) {
+      // Switching notes (or to/from a brand-new note) drops any in-flight
+      // image uploads left over from whichever note we're leaving.
+      imageUploadsRef.current.forEach(u => URL.revokeObjectURL(u.previewUrl));
+      imageUploadFilesRef.current.clear();
+      setImageUploads([]);
+      // Hidden/removed-with-undo image state is NOT simply cleared here —
+      // pendingImageRemovalsRef's timers are keyed by image id and keep
+      // running across a note switch (this component doesn't unmount), so a
+      // removal whose ~10s undo window is still open must stay hidden (with
+      // its undo bar) if the user navigates back to this note before it
+      // elapses. Re-derive both from whatever the incoming note's images
+      // still have a live timer for, rather than assuming "different note
+      // adopted" means "no pending removals" — otherwise the image would
+      // reappear with no undo affordance and then vanish once the timer
+      // fires, with no explanation.
+      const stillPending = (note?.images ?? []).filter(img => pendingImageRemovalsRef.current.has(img.id));
+      setHiddenImageIds(new Set(stillPending.map(img => img.id)));
+      setRemovedImages(stillPending);
+    }
 
     if (note) {
       setNoteType(note.note_type);
@@ -808,6 +858,19 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   useEffect(() => {
     noteTypeRef.current = noteType;
   }, [noteType]);
+
+  useEffect(() => {
+    imageUploadsRef.current = imageUploads;
+  }, [imageUploads]);
+
+  // Revoke any outstanding local preview URLs on unmount. Deliberately does
+  // NOT clear pendingImageRemovalsRef's timers — those must keep running so
+  // a removal's deferred DELETE still fires after the modal closes.
+  useEffect(() => {
+    return () => {
+      imageUploadsRef.current.forEach(u => URL.revokeObjectURL(u.previewUrl));
+    };
+  }, []);
 
   useEffect(() => {
     autoSaveDraftRef.current = {
@@ -913,6 +976,186 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       setErrorMessage(null);
     }, 5000);
   }, []);
+
+  // Validates a file client-side before it's queued for upload — a fast,
+  // friendly pre-check; the server (§7 of the spec) is the source of truth
+  // and re-validates type/size/count regardless.
+  const validateImageFile = useCallback((file: File): string | null => {
+    if (!(IMAGE_ALLOWED_TYPES as readonly string[]).includes(file.type)) {
+      return t('images.errorWrongType');
+    }
+    if (file.size > UPLOAD_MAX_BYTES) {
+      return t('images.errorTooLarge', { maxMB: IMAGE_MAX_MB });
+    }
+    return null;
+  }, [t]);
+
+  // Removes a completed or dismissed upload tile and revokes its local
+  // preview URL so the object URL doesn't leak.
+  const removeUploadTile = useCallback((uploadId: string) => {
+    setImageUploads(prev => {
+      const tile = prev.find(u => u.id === uploadId);
+      if (tile) URL.revokeObjectURL(tile.previewUrl);
+      return prev.filter(u => u.id !== uploadId);
+    });
+    imageUploadFilesRef.current.delete(uploadId);
+  }, []);
+
+  const runImageUpload = useCallback((uploadId: string, file: File) => {
+    const noteId = noteIdRef.current;
+    if (!noteId) return;
+    // Guard against a duplicate concurrent request for the same upload — a
+    // rapid double-click on Retry (or the initial upload racing a fast
+    // retry) before React re-renders the tile out of its clickable state.
+    if (activeUploadIdsRef.current.has(uploadId)) return;
+    activeUploadIdsRef.current.add(uploadId);
+    imagesApi.upload(noteId, file, (percent) => {
+      setImageUploads(prev => prev.map(u => (u.id === uploadId ? { ...u, progress: percent } : u)));
+    }).then(() => {
+      activeUploadIdsRef.current.delete(uploadId);
+      // The server's note_image_added SSE event patches note.images live
+      // (see Dashboard's SSE handler), so the real tile takes over from here.
+      removeUploadTile(uploadId);
+    }).catch((error) => {
+      activeUploadIdsRef.current.delete(uploadId);
+      console.error('Failed to upload image:', error);
+      const status = (error as { response?: { status?: number } })?.response?.status;
+      const message = status === 413
+        ? t('images.errorTooLarge', { maxMB: IMAGE_MAX_MB })
+        : t('images.uploadFailed');
+      setImageUploads(prev => prev.map(u => (u.id === uploadId ? { ...u, status: 'error', errorMessage: message } : u)));
+    });
+  }, [removeUploadTile, t]);
+
+  const startImageUpload = useCallback((file: File) => {
+    const id = generateId();
+    const previewUrl = URL.createObjectURL(file);
+    imageUploadFilesRef.current.set(id, file);
+    setImageUploads(prev => [...prev, { id, filename: file.name, previewUrl, progress: 0, status: 'uploading' }]);
+    runImageUpload(id, file);
+  }, [runImageUpload]);
+
+  const retryImageUpload = useCallback((uploadId: string) => {
+    const file = imageUploadFilesRef.current.get(uploadId);
+    if (!file) return;
+    setImageUploads(prev => prev.map(u => (u.id === uploadId ? { ...u, status: 'uploading', progress: 0, errorMessage: undefined } : u)));
+    runImageUpload(uploadId, file);
+  }, [runImageUpload]);
+
+  // Entry point for the toolbar picker, drag & drop, and paste. Validates
+  // each file and enforces the per-note image cap client-side (the server
+  // enforces it authoritatively) before starting an upload per valid file.
+  const queueImageFiles = useCallback((files: File[]) => {
+    if (!note || files.length === 0) return;
+
+    let remainingSlots = IMAGE_MAX_PER_NOTE
+      - (note.images?.length ?? 0)
+      - imageUploadsRef.current.filter(u => u.status !== 'error').length;
+
+    for (const file of files) {
+      const validationError = validateImageFile(file);
+      if (validationError) {
+        showError(validationError);
+        continue;
+      }
+      if (remainingSlots <= 0) {
+        showError(t('images.errorTooMany', { max: IMAGE_MAX_PER_NOTE }));
+        break;
+      }
+      remainingSlots -= 1;
+      startImageUpload(file);
+    }
+  }, [note, showError, startImageUpload, t, validateImageFile]);
+
+  const handleImageFileInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = '';
+    queueImageFiles(files);
+  }, [queueImageFiles]);
+
+  const handleImageDragEnter = useCallback((e: React.DragEvent) => {
+    if (!note || !Array.from(e.dataTransfer.items).some(item => item.kind === 'file')) return;
+    e.preventDefault();
+    imageDragCounterRef.current += 1;
+    setIsDraggingImage(true);
+  }, [note]);
+
+  const handleImageDragOver = useCallback((e: React.DragEvent) => {
+    if (!note) return;
+    e.preventDefault();
+  }, [note]);
+
+  const handleImageDragLeave = useCallback(() => {
+    if (!note) return;
+    imageDragCounterRef.current = Math.max(0, imageDragCounterRef.current - 1);
+    if (imageDragCounterRef.current === 0) setIsDraggingImage(false);
+  }, [note]);
+
+  const handleImageDrop = useCallback((e: React.DragEvent) => {
+    if (!note) return;
+    e.preventDefault();
+    imageDragCounterRef.current = 0;
+    setIsDraggingImage(false);
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+    queueImageFiles(files);
+  }, [note, queueImageFiles]);
+
+  const handleModalPaste = useCallback((e: React.ClipboardEvent) => {
+    if (!note) return;
+    const files = Array.from(e.clipboardData?.items ?? [])
+      .filter(item => item.kind === 'file' && item.type.startsWith('image/'))
+      .map(item => item.getAsFile())
+      .filter((f): f is File => f !== null);
+    if (files.length === 0) return;
+    e.preventDefault();
+    queueImageFiles(files);
+  }, [note, queueImageFiles]);
+
+  // Clears the local "removed, showing undo" state for an image — called
+  // either by undo or once the deferred delete actually lands.
+  const clearImageRemovalState = useCallback((imageId: string) => {
+    setHiddenImageIds(prev => {
+      const next = new Set(prev);
+      next.delete(imageId);
+      return next;
+    });
+    setRemovedImages(prev => prev.filter(img => img.id !== imageId));
+  }, []);
+
+  // Removal is client-deferred (spec §3.1): the tile hides immediately and an
+  // inline "Image removed — Undo" bar appears (rendered inside the modal, not
+  // the app-wide toast — HeadlessUI's Dialog treats any click outside its own
+  // portal as a request to close it, which would otherwise dismiss the modal
+  // the moment Undo is clicked). The DELETE only fires once the undo window
+  // elapses with no undo. The timer lives in pendingImageRemovalsRef (a ref,
+  // not state) so it keeps running even if this component unmounts first.
+  const removeNoteImage = useCallback((image: NoteImage) => {
+    setHiddenImageIds(prev => new Set(prev).add(image.id));
+    setRemovedImages(prev => (prev.some(img => img.id === image.id) ? prev : [...prev, image]));
+
+    const timeoutId = setTimeout(() => {
+      const entry = pendingImageRemovalsRef.current.get(image.id);
+      pendingImageRemovalsRef.current.delete(image.id);
+      // Undo (or a later removal of the same image) deletes the map entry
+      // and clears this timer, so reaching here with no entry means it was
+      // already cancelled — nothing left to do.
+      if (!entry) return;
+      imagesApi.delete(image.id).catch((error) => {
+        console.error('Failed to delete note image:', error);
+      });
+      clearImageRemovalState(image.id);
+    }, IMAGE_REMOVE_UNDO_MS);
+    pendingImageRemovalsRef.current.set(image.id, { timeoutId });
+  }, [clearImageRemovalState]);
+
+  const undoRemoveImage = useCallback((imageId: string) => {
+    const entry = pendingImageRemovalsRef.current.get(imageId);
+    if (entry) {
+      clearTimeout(entry.timeoutId);
+      pendingImageRemovalsRef.current.delete(imageId);
+    }
+    clearImageRemovalState(imageId);
+  }, [clearImageRemovalState]);
 
   const INDENT_DRAG_THRESHOLD = 50;
 
@@ -1790,7 +2033,21 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
           className={`mx-auto w-full max-w-lg max-h-[90vh] overflow-hidden rounded-lg shadow-xl relative transition duration-200 ease-out data-[closed]:scale-95 data-[closed]:opacity-0 motion-reduce:transition-none ${
             colors.find(c => c.value === color)?.class || 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600'
           }`}
+          onDragEnter={handleImageDragEnter}
+          onDragOver={handleImageDragOver}
+          onDragLeave={handleImageDragLeave}
+          onDrop={handleImageDrop}
+          onPaste={handleModalPaste}
         >
+          {isDraggingImage && (
+            <div
+              data-testid="note-image-drop-overlay"
+              className="absolute inset-0 z-30 flex items-center justify-center rounded-lg border-2 border-dashed border-blue-400 bg-blue-50/90 dark:bg-blue-900/80 pointer-events-none"
+            >
+              <span className="text-blue-700 dark:text-blue-200 font-medium">{t('images.dropOverlay')}</span>
+            </div>
+          )}
+
           {/* Top-right controls — close button, and Done when editing */}
           <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
             {noteType === 'text' && isEditingContent && (
@@ -1827,11 +2084,38 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
           {/* Content */}
           <div className="p-2 sm:p-4 pt-10 space-y-4 overflow-y-auto max-h-[calc(90vh-8rem)]">
-            {/* Image gallery, rendered above the title. Read directly from the
-                note prop (not local state) so SSE-driven updates render live. */}
-            {note?.images && note.images.length > 0 && (
-              <NoteImageGallery images={note.images} />
+            {/* Image gallery, rendered above the title. Persisted images are read
+                directly from the note prop (not local state) so SSE-driven
+                updates render live; hiddenImageIds/imageUploads are the only
+                purely-local overlay (a client-deferred removal and in-flight
+                uploads, respectively). */}
+            {((note?.images?.length ?? 0) > 0 || imageUploads.length > 0) && (
+              <NoteImageGallery
+                images={(note?.images ?? []).filter(img => !hiddenImageIds.has(img.id))}
+                editable={!!note}
+                uploads={imageUploads}
+                onRemove={removeNoteImage}
+                onRetryUpload={retryImageUpload}
+                onDismissUpload={removeUploadTile}
+              />
             )}
+
+            {/* Inline "Image removed — Undo" bars for client-deferred removals. */}
+            {removedImages.map(image => (
+              <div
+                key={image.id}
+                className="flex items-center justify-between rounded-md bg-gray-800 dark:bg-slate-900 text-white text-sm px-3 py-2"
+              >
+                <span>{t('images.removedToast')}</span>
+                <button
+                  type="button"
+                  onClick={() => undoRemoveImage(image.id)}
+                  className="ml-3 font-medium text-blue-300 hover:text-blue-200 hover:underline"
+                >
+                  {t('dashboard.undo')}
+                </button>
+              </div>
+            ))}
 
             {/* Note type selector (only for new notes) */}
             {!note && (
@@ -2225,6 +2509,24 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
                 {note && (
                   <>
+                    <input
+                      ref={imageFileInputRef}
+                      type="file"
+                      accept={IMAGE_ALLOWED_TYPES.join(',')}
+                      multiple
+                      className="hidden"
+                      onChange={handleImageFileInputChange}
+                      data-testid="note-image-file-input"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => imageFileInputRef.current?.click()}
+                      className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                      title={t('images.addImage')}
+                      aria-label={t('images.addImage')}
+                    >
+                      <PhotoIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                    </button>
                     {noteDeepLinkHref && (
                       <a
                         href={noteDeepLinkHref}
