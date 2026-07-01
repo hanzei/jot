@@ -70,11 +70,12 @@ a gallery** (no markdown embedding), **max 10 per note**.
   top of the card (Keep-style), with a small "+N" badge when there are more.
 
 **Managing**
-- Hover a gallery tile → remove (✕). No markdown cleanup needed since images are
-  not referenced from the body.
-- Images keep a stable order (upload order by default); drag-to-reorder within
-  the gallery is a fast-follow (an `order`/`position` column supports it from
-  day one).
+- Hover a gallery tile → remove via a **trash/bin icon** (🗑). Removing hides the
+  image immediately and shows an **undo toast** ("Image removed — Undo"). Clicking
+  Undo restores it instantly; letting the toast expire finalizes the removal. See
+  §6/§10 for the soft-delete + restore mechanics behind this. No markdown cleanup
+  needed since images are not referenced from the body.
+- Images display in **upload order** (no user reordering in v1).
 - Upload states: queued → uploading (progress %) → done / error (retry).
 
 **Errors (inline toast + tile state)**
@@ -91,6 +92,9 @@ filename; lightbox is keyboard navigable/closeable.
   **Files** (Expo pickers, images only).
 - Gallery renders above the note body, same banner/grid rules; tap → full-screen
   viewer.
+- Remove uses the same **trash/bin icon** and shows an **undo toast** (Snackbar);
+  Undo restores the image, expiry finalizes the removal — same soft-delete flow
+  as the webapp.
 - Uploads queue through the existing React Query mutation layer; offline =
   queued and flushed by the sync hook when back online (offline-first design).
   Pending images render with a spinner.
@@ -106,7 +110,7 @@ filename; lightbox is keyboard navigable/closeable.
 ## 4. Data model
 
 New `note_images` table. Bytes are stored on disk (see §5); the row holds
-metadata + a content hash + gallery position. Mirror migrations in **both**
+metadata + a content hash. Mirror migrations in **both**
 `server/internal/database/migrations/sqlite/` and `.../postgres/` as the next
 sequential number (`000004_add_note_images.up.sql` / `.down.sql`).
 
@@ -122,25 +126,26 @@ CREATE TABLE note_images (
     sha256        TEXT NOT NULL,                 -- content hash (storage key + dedup)
     width         INTEGER NOT NULL,              -- captured at upload
     height        INTEGER NOT NULL,
-    position      INTEGER NOT NULL,              -- gallery order within the note
-    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,  -- also the gallery sort key
+    deleted_at    DATETIME DEFAULT NULL,         -- soft-delete for undo (§6/§10)
     FOREIGN KEY (note_id)     REFERENCES notes (id) ON DELETE CASCADE,
     FOREIGN KEY (uploader_id) REFERENCES users (id) ON DELETE CASCADE
 );
-CREATE INDEX idx_note_images_note_id ON note_images(note_id, position);
+CREATE INDEX idx_note_images_note_id ON note_images(note_id, created_at);
 CREATE INDEX idx_note_images_sha256  ON note_images(sha256);
 ```
 
-(Postgres variant: `TIMESTAMPTZ`, `BIGINT` for size, `INTEGER` for dims/position.)
+(Postgres variant: `TIMESTAMPTZ`, `BIGINT` for size, `INTEGER` for dims.)
 
 `ON DELETE CASCADE` from `notes` means permanently deleting a note (post-trash)
 drops its image rows automatically; on-disk blobs are reclaimed by the orphan
 sweep in §10.
 
 A `Note` response gains an `images []NoteImage` field (omitempty, ordered by
-`position`), built alongside `Items`/`Labels`/`SharedWith` in the note store,
-and a matching `NoteImage` interface in `shared/src/types.ts` (single source of
-truth — do not redefine in webapp).
+`created_at`, `deleted_at IS NULL` only), built alongside
+`Items`/`Labels`/`SharedWith` in the note store, and a matching `NoteImage`
+interface in `shared/src/types.ts` (single source of truth — do not redefine in
+webapp).
 
 ---
 
@@ -200,8 +205,8 @@ annotations.
 | `GET` | `/api/notes/{noteId}/images` | List a note's images (metadata, ordered). |
 | `GET` | `/api/images/{id}` | Stream the full-size image bytes. Requires access to the parent note. |
 | `GET` | `/api/images/{id}/thumbnail` | Resized thumbnail for grid tiles. |
-| `DELETE` | `/api/images/{id}` | Remove the image from the note. Requires note access. |
-| `PATCH` | `/api/notes/{noteId}/images/order` | Reorder gallery (array of image IDs). *Fast-follow.* |
+| `DELETE` | `/api/images/{id}` | **Soft-remove** the image (sets `deleted_at`, hides it). Requires note access. |
+| `POST` | `/api/images/{id}/restore` | Undo a removal within the grace window (clears `deleted_at`); `410 Gone` if already swept. |
 
 **Authorization**: every route resolves the parent note and reuses the existing
 "owner **or** shared-with" check (same predicate as note read/update). No new
@@ -215,9 +220,14 @@ works identically.
    anything else (this is what enforces "images only").
 4. **Decode the image** to confirm it's valid and capture width/height (reuse the
    avatar pipeline). Generate/queue a thumbnail.
-5. `Blobstore.Put` (no-op if hash already present → dedup), insert the row with
-   `position = max(position)+1` for the note.
+5. `Blobstore.Put` (no-op if hash already present → dedup), insert the row.
 6. Emit SSE event (§8), return `NoteImage`.
+
+**Remove/undo**: `DELETE` sets `deleted_at` and emits `note_image_removed`; the
+image drops out of note responses immediately, powering the undo toast.
+`POST .../restore` clears `deleted_at` (emits `note_image_added`) if still within
+the grace window. The blob is untouched until the sweep finalizes the delete
+(§10), so restore is instant and needs no re-upload.
 
 **Download handler** (mirrors `GetUserProfileIcon`):
 - Set `Content-Type` from the stored image type and **`X-Content-Type-Options:
@@ -261,8 +271,8 @@ accidental internal overload; baseline authz mandatory):
 
 Add `EventType`s in `internal/sse/hub.go` (the hub already has `note_updated`,
 `profile_icon_updated`, etc.):
-- `note_image_added` / `note_image_removed` (and `note_image_reordered` when
-  reorder ships), payloads `{ note_id, image }` / `{ note_id, image_id }`.
+- `note_image_added` / `note_image_removed`, payloads `{ note_id, image }` /
+  `{ note_id, image_id }`. A restore (undo) re-emits `note_image_added`.
 - Fan-out audience = the note's owner + shared users (same logic as
   `note_updated`), so a collaborator sees a new image appear without reload.
 
@@ -290,15 +300,19 @@ Dedicated events are cheaper and match existing granularity.
 
 ## 10. Lifecycle & orphan cleanup
 
+- **Soft-delete finalization**: rows whose `deleted_at` is older than the undo
+  grace window (config, e.g. a few minutes) are hard-deleted by the sweep. Until
+  then they can be restored (§6).
 - Dedup means a blob may be referenced by multiple rows (same image on several
-  notes). **Reference count = `COUNT(*) FROM note_images WHERE sha256=?`**.
-- On image delete or note hard-delete: remove the row; if no rows reference that
-  `sha256`, `Blobstore.Delete` the blob (and its thumbnail).
-- A periodic **sweep** (startup + daily) deletes on-disk blobs with zero
-  referencing rows, covering crash-after-row-delete races. A row whose blob is
-  missing is logged and surfaced as a broken tile.
-- Deleting an image just removes its gallery tile — no markdown references to
-  clean up.
+  notes). **Reference count = `COUNT(*) FROM note_images WHERE sha256=?`** (rows
+  pending soft-delete still count, so their blob survives for undo).
+- On row hard-delete (sweep finalization or note hard-delete): if no rows
+  reference that `sha256`, `Blobstore.Delete` the blob (and its thumbnail).
+- A periodic **sweep** (startup + daily, plus the grace-window pass above)
+  deletes on-disk blobs with zero referencing rows, covering crash races. A row
+  whose blob is missing is logged and surfaced as a broken tile.
+- Removing an image just hides its gallery tile — no markdown references to clean
+  up.
 
 ---
 
@@ -326,13 +340,12 @@ Dedicated events are cheaper and match existing granularity.
 
 ## 13. Phasing
 
-- **MVP**: `note_images` table + `fsBlobstore`, upload/list/get/delete,
-  size+type+count limits, image decode/validation, webapp picker + drag/drop +
-  paste, gallery-above-body rendering (banner + grid), lightbox, inline serving
-  with `nosniff`, auth via note access.
+- **MVP**: `note_images` table + `fsBlobstore`, upload/list/get + soft-delete +
+  restore (undo toast), size+type+count limits, image decode/validation, webapp
+  picker + drag/drop + paste, gallery-above-body rendering (banner + grid),
+  lightbox, inline serving with `nosniff`, auth via note access.
 - **v1.1**: thumbnails endpoint + grid tiles using them, SSE live updates,
-  NoteCard cover thumbnail, mobile camera/library/files + offline queue,
-  drag-to-reorder (`PATCH .../images/order`).
+  NoteCard cover thumbnail, mobile camera/library/files + offline queue.
 - **Later**: export/import bundling, storage quotas, S3 backend.
 
 ---
@@ -341,15 +354,17 @@ Dedicated events are cheaper and match existing granularity.
 
 - **Server integration** (new `server/http_note_images_test.go`, following
   `http_profile_icon_test.go`): upload happy path, oversize → 413, non-image →
-  400, 11th image → rejected, ordering, download content-type + nosniff, access
-  control (non-shared → 403/404, shared → 200), dedup, delete + blob reclamation,
-  cascade on note hard-delete.
-- **Store unit tests** for position assignment and refcount/cleanup logic.
+  400, 11th image → rejected, upload-order listing, download content-type +
+  nosniff, access control (non-shared → 403/404, shared → 200), dedup,
+  soft-delete hides image, restore within window → visible again, restore after
+  sweep → 410, blob reclaimed only after finalization, cascade on note
+  hard-delete.
+- **Store unit tests** for refcount/cleanup logic and grace-window finalization.
 - **Webapp** (Vitest + RTL): drag/drop, paste, banner vs grid rendering, lightbox,
-  error states, NoteCard cover.
+  bin-icon remove → undo toast → restore, error states, NoteCard cover.
 - **E2E** (Playwright, required for user-facing features per `CLAUDE.md`): upload
   one image → banner above body; upload several → grid; open lightbox; reload;
-  delete.
+  remove via bin icon → undo toast → image returns.
 - **i18n**: add keys to all locales, run `task check-translations`.
 - Run `task test`, `task lint`, `task test-e2e`, `task gen-docs` before PR.
 
@@ -362,8 +377,9 @@ Dedicated events are cheaper and match existing granularity.
    simpler; eager gives predictable grid latency.)
 3. **Animated GIFs**: keep animation (serve original in grid) or freeze to a
    static thumbnail tile? (Leaning: static thumbnail, animate in lightbox.)
-4. **Reorder in MVP** or fast-follow? (Spec assumes the `position` column ships in
-   MVP, the reorder endpoint/UX follows in v1.1.)
+4. **Undo grace window** length before the sweep finalizes a removal (e.g. 30s
+   toast vs a few minutes server-side)? Client toast and server grace should be
+   configured together.
 5. **Quotas**: per-user / per-instance storage cap in v1, or defer? (Threat model
    prioritizes overload protection, so a cap may be worth MVP inclusion.)
 6. **Export format**: zip bundle vs base64-inline — depends on current export.
