@@ -5,8 +5,6 @@ import (
 	"image"
 	"image/color"
 	"net/http"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/hanzei/jot/server/client"
@@ -267,82 +265,4 @@ func TestNoteImageDedupBlobSurvivesUntilUnreferenced(t *testing.T) {
 	assert.Equal(t, data, downloaded)
 
 	require.NoError(t, user.Client.DeleteNoteImage(t.Context(), imgB.ID))
-}
-
-// imageSHA256 looks up an image's content hash directly from the DB, since
-// it is intentionally not exposed on the API response.
-func imageSHA256(t *testing.T, ts *TestServer, imageID string) string {
-	t.Helper()
-	var sha string
-	require.NoError(t, ts.Server.GetDB().QueryRow("SELECT sha256 FROM note_images WHERE id = ?", imageID).Scan(&sha))
-	return sha
-}
-
-// blobExists reports whether a blob is present on disk under the test
-// server's configured upload directory, mirroring FSBlobstore's layout.
-func blobExists(t *testing.T, ts *TestServer, sha string) bool {
-	t.Helper()
-	path := filepath.Join(ts.Config.UploadDir, "blobs", sha[0:2], sha[2:4], sha)
-	_, err := os.Stat(path)
-	if err == nil {
-		return true
-	}
-	require.True(t, os.IsNotExist(err), "unexpected stat error: %v", err)
-	return false
-}
-
-func TestPermanentNoteDeleteReclaimsImageBlob(t *testing.T) {
-	ts := setupTestServer(t)
-	user := ts.createTestUser(t, "imgpurgeowner", "password123", false)
-
-	note, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "note"})
-	require.NoError(t, err)
-	img, err := user.Client.UploadNoteImage(t.Context(), note.ID, "cat.png", bytes.NewReader(testPNG(t, 4, 4)))
-	require.NoError(t, err)
-	sha := imageSHA256(t, ts, img.ID)
-	require.True(t, blobExists(t, ts, sha), "blob should exist right after upload")
-
-	require.NoError(t, user.Client.DeleteNote(t.Context(), note.ID))
-	require.NoError(t, user.Client.DeleteNotePermanently(t.Context(), note.ID))
-
-	assert.False(t, blobExists(t, ts, sha), "permanently deleting the note's last reference must reclaim its image blob")
-}
-
-func TestPermanentNoteDeleteKeepsSharedBlobUntilLastReferenceGone(t *testing.T) {
-	ts := setupTestServer(t)
-	user := ts.createTestUser(t, "imgpurgededup", "password123", false)
-
-	noteA, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "note A"})
-	require.NoError(t, err)
-	noteB, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "note B"})
-	require.NoError(t, err)
-
-	data := testPNG(t, 4, 4)
-	imgA, err := user.Client.UploadNoteImage(t.Context(), noteA.ID, "shared.png", bytes.NewReader(data))
-	require.NoError(t, err)
-	_, err = user.Client.UploadNoteImage(t.Context(), noteB.ID, "shared.png", bytes.NewReader(data))
-	require.NoError(t, err)
-	sha := imageSHA256(t, ts, imgA.ID)
-
-	require.NoError(t, user.Client.DeleteNote(t.Context(), noteA.ID))
-	require.NoError(t, user.Client.DeleteNotePermanently(t.Context(), noteA.ID))
-
-	assert.True(t, blobExists(t, ts, sha), "noteB still references this hash; the blob must survive noteA's permanent delete")
-}
-
-func TestEmptyTrashReclaimsImageBlobs(t *testing.T) {
-	ts := setupTestServer(t)
-	user := ts.createTestUser(t, "imgemptytrash", "password123", false)
-
-	note, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "note"})
-	require.NoError(t, err)
-	img, err := user.Client.UploadNoteImage(t.Context(), note.ID, "cat.png", bytes.NewReader(testPNG(t, 4, 4)))
-	require.NoError(t, err)
-	sha := imageSHA256(t, ts, img.ID)
-
-	require.NoError(t, user.Client.DeleteNote(t.Context(), note.ID))
-	_, err = user.Client.EmptyTrash(t.Context())
-	require.NoError(t, err)
-
-	assert.False(t, blobExists(t, ts, sha), "emptying trash must reclaim the deleted note's image blob")
 }

@@ -3,7 +3,6 @@ package models
 import (
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/hanzei/jot/server/internal/database"
 	"github.com/hanzei/jot/server/internal/database/dialect"
@@ -280,44 +279,4 @@ func TestGetNoteImageCountByNoteID(t *testing.T) {
 	count, err = store.GetNoteImageCountByNoteID(ctx, noteID)
 	require.NoError(t, err)
 	assert.Equal(t, 2, count)
-}
-
-// TestPurgeOldTrashedNotesReclaimsImages verifies that permanently purging an
-// old trashed note both removes its note_images rows (via cascade) and
-// reports the row's content hash, so the caller can reclaim the now-orphaned
-// blob — there is no other cleanup path for images purged this way.
-func TestPurgeOldTrashedNotesReclaimsImages(t *testing.T) {
-	store, userID, noteID := newTestNoteImageStore(t)
-	ctx := t.Context()
-
-	img, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "sha-purge", 1, 1, 0)
-	require.NoError(t, err)
-
-	_, err = store.db.ExecContext(ctx, `UPDATE notes SET deleted_at = datetime('now', '-10 days') WHERE id = ?`, noteID)
-	require.NoError(t, err)
-
-	imageSHAs, err := store.PurgeOldTrashedNotes(ctx, 7*24*time.Hour)
-	require.NoError(t, err)
-	assert.Equal(t, []string{"sha-purge"}, imageSHAs)
-
-	_, err = store.GetNoteImageByID(ctx, img.ID)
-	require.ErrorIs(t, err, ErrNoteImageNotFound, "the image row must have cascaded away with the purged note")
-}
-
-// TestPurgeOldTrashedNotesLeavesRecentTrashAlone verifies a note trashed
-// within the retention window is not purged and its image hash is not
-// reported for reclamation.
-func TestPurgeOldTrashedNotesLeavesRecentTrashAlone(t *testing.T) {
-	store, userID, noteID := newTestNoteImageStore(t)
-	ctx := t.Context()
-
-	_, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "sha-recent", 1, 1, 0)
-	require.NoError(t, err)
-
-	_, err = store.db.ExecContext(ctx, `UPDATE notes SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?`, noteID)
-	require.NoError(t, err)
-
-	imageSHAs, err := store.PurgeOldTrashedNotes(ctx, 7*24*time.Hour)
-	require.NoError(t, err)
-	assert.Empty(t, imageSHAs)
 }

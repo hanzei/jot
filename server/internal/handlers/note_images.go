@@ -62,18 +62,14 @@ func (h *NotesHandler) publishNoteImageEvent(ctx context.Context, noteID string,
 	})
 }
 
-// ReclaimOrphanedNoteImageBlob deletes the on-disk blob for sha if no
-// note_images row references it anymore (dedup means another row may share
-// the same content hash, so this must run after the row(s) that prompted the
-// reclaim are already gone). Errors are logged but never returned — callers
-// use this to clean up after a delete that already succeeded, so there is
-// nothing left to fail. It is a package-level function (not a NotesHandler
-// method) so callers outside this package's handlers — like the periodic
-// trash-purge task in internal/server, which permanently deletes notes and
-// cascades away their images without going through a handler — can reclaim
-// blobs too.
-func ReclaimOrphanedNoteImageBlob(ctx context.Context, noteStore *models.NoteStore, bs blobstore.Blobstore, sha string) {
-	count, err := noteStore.GetNoteImageRefCount(ctx, sha)
+// reclaimNoteImageBlob deletes the on-disk blob for sha if no note_images row
+// still references it (dedup means another row may share the same content
+// hash). Errors are logged but never fail the delete request — the row is
+// already gone, and issue #608 will add a periodic orphan sweep as the
+// safety net for any path that doesn't call this (e.g. a note hard-delete
+// cascade).
+func (h *NotesHandler) reclaimNoteImageBlob(ctx context.Context, sha string) {
+	count, err := h.noteStore.GetNoteImageRefCount(ctx, sha)
 	if err != nil {
 		logutil.FromContext(ctx).WithError(err).WithField("sha256", sha).Error("Failed to check note image refcount for blob reclamation")
 		return
@@ -81,53 +77,9 @@ func ReclaimOrphanedNoteImageBlob(ctx context.Context, noteStore *models.NoteSto
 	if count > 0 {
 		return
 	}
-	if err := bs.Delete(ctx, sha); err != nil {
+	if err := h.blobstore.Delete(ctx, sha); err != nil {
 		logutil.FromContext(ctx).WithError(err).WithField("sha256", sha).Error("Failed to reclaim orphaned note image blob")
 	}
-}
-
-// ReclaimOrphanedNoteImageBlobs calls ReclaimOrphanedNoteImageBlob for each
-// sha in shas.
-func ReclaimOrphanedNoteImageBlobs(ctx context.Context, noteStore *models.NoteStore, bs blobstore.Blobstore, shas []string) {
-	for _, sha := range shas {
-		ReclaimOrphanedNoteImageBlob(ctx, noteStore, bs, sha)
-	}
-}
-
-// reclaimNoteImageBlob is the single-hash form of ReclaimOrphanedNoteImageBlob
-// bound to this handler's own store/blobstore, for the common case of
-// reclaiming right after a request-scoped delete.
-func (h *NotesHandler) reclaimNoteImageBlob(ctx context.Context, sha string) {
-	ReclaimOrphanedNoteImageBlob(ctx, h.noteStore, h.blobstore, sha)
-}
-
-// reclaimNoteImageBlobs is the multi-hash form of reclaimNoteImageBlob, for
-// permanently deleting a note along with all of its images at once.
-func (h *NotesHandler) reclaimNoteImageBlobs(ctx context.Context, shas []string) {
-	ReclaimOrphanedNoteImageBlobs(ctx, h.noteStore, h.blobstore, shas)
-}
-
-// noteImageSHA256sForNote returns the sha256 hashes of a note's images, for a
-// caller about to permanently delete the note so it can reclaim the
-// now-orphaned blobs afterward (note_images rows are cascade-deleted with the
-// note, so this must be captured before the delete). A note in the trash
-// cannot receive new image uploads (HasAccess requires an active, non-trashed
-// note), so there is no race between this read and a delete of an
-// already-trashed note. Errors are logged and a nil slice is returned rather
-// than failing the caller's delete — at worst this delete's blobs go
-// unreclaimed, the same as if this helper were never called.
-func (h *NotesHandler) noteImageSHA256sForNote(ctx context.Context, noteID string) []string {
-	images, err := h.noteStore.GetNoteImagesByNoteID(ctx, noteID)
-	if err != nil {
-		logutil.FromContext(ctx).WithError(err).WithField("note_id", noteID).
-			Error("Failed to fetch note images before permanent delete; their blobs will not be reclaimed")
-		return nil
-	}
-	shas := make([]string, len(images))
-	for i, img := range images {
-		shas[i] = img.SHA256
-	}
-	return shas
 }
 
 // UploadNoteImage godoc

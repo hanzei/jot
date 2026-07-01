@@ -158,12 +158,7 @@ func New(cfg *config.Config) (*Server, error) {
 		return sessionStore.DeleteExpired(ctx)
 	}, "delete expired sessions")
 	startPeriodicTask(&s.bgWg, ctx, time.Hour, true, func() error {
-		imageSHAs, err := noteStore.PurgeOldTrashedNotes(ctx, 7*24*time.Hour)
-		if err != nil {
-			return err
-		}
-		handlers.ReclaimOrphanedNoteImageBlobs(ctx, noteStore, imageBlobstore, imageSHAs)
-		return nil
+		return noteStore.PurgeOldTrashedNotes(ctx, 7*24*time.Hour)
 	}, "purge old trashed notes")
 
 	if err := s.setupRoutes(); err != nil {
