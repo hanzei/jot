@@ -1411,11 +1411,14 @@ func (s *noteStore) PatchItem(ctx context.Context, noteID, itemID string, patch 
 
 	// Keep the same parent/child completion invariant as ToggleItemCompleted:
 	// this is the only other path that can change `completed`. Cascades off of
-	// currentParent (the item's parent before this patch), so a request that
-	// changes parent_id and completed together is evaluated against its old
-	// group, not the one it's moving into.
+	// the item's *resolved* (post-patch) parent, so a request that changes
+	// parent_id and completed together enforces the invariant against the
+	// group the item ends up in, not the one it's leaving. This matters in
+	// practice: the webapp's autosave diff can send both fields in one patch
+	// (e.g. a drag-to-reparent that lands before an in-flight checkbox toggle's
+	// own request has advanced the local baseline).
 	if patch.Completed != nil {
-		if err = cascadeItemCompletion(ctx, tx, s.d, noteID, itemID, currentParent, resolvedCompleted); err != nil {
+		if err = cascadeItemCompletion(ctx, tx, s.d, noteID, itemID, nullableParentID(resolvedParent), resolvedCompleted); err != nil {
 			return nil, err
 		}
 	}

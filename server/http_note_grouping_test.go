@@ -188,6 +188,45 @@ func TestNoteGrouping(t *testing.T) {
 		assert.True(t, itemByText(t, note.Items, "Child B").Completed)
 	})
 
+	t.Run("patching parent_id and completed together evaluates the invariant against the new parent", func(t *testing.T) {
+		ts := setupTestServer(t)
+		user := ts.createTestUser(t, "grpuser4f", "password123", false)
+
+		// Two independent, fully-completed groups.
+		note, err := user.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
+			Title: "Two Groups",
+			Items: []client.CreateNoteItem{
+				{Text: "Parent A", Position: 0, IndentLevel: 0, Completed: true},
+				{Text: "Child A1", Position: 1, IndentLevel: 1, Completed: true},
+				{Text: "Parent B", Position: 2, IndentLevel: 0, Completed: true},
+				{Text: "Child B1", Position: 3, IndentLevel: 1, Completed: true},
+			},
+		})
+		require.NoError(t, err)
+		noteID := note.ID
+		parentAID := itemByText(t, note.Items, "Parent A").ID
+		parentBID := itemByText(t, note.Items, "Parent B").ID
+		childA1ID := itemByText(t, note.Items, "Child A1").ID
+
+		// Move Child A1 into Parent B's group and uncheck it in one request. The
+		// invariant must be enforced against the group it ends up in (B), not
+		// the one it's leaving (A).
+		incomplete := false
+		_, err = user.Client.UpdateNoteItem(t.Context(), noteID, childA1ID, &client.PatchNoteItemRequest{
+			ParentID:  &parentBID,
+			Completed: &incomplete,
+		})
+		require.NoError(t, err)
+
+		updated, err := user.Client.GetNote(t.Context(), noteID)
+		require.NoError(t, err)
+		assert.False(t, itemByText(t, updated.Items, "Parent B").Completed, "new parent can't stay completed with an incomplete child")
+		assert.True(t, itemByText(t, updated.Items, "Child B1").Completed, "unrelated sibling in the new group is untouched")
+		assert.True(t, itemByText(t, updated.Items, "Parent A").Completed, "old parent is untouched: it has no children left")
+
+		_ = parentAID
+	})
+
 	t.Run("toggle without completed field is rejected", func(t *testing.T) {
 		ts := setupTestServer(t)
 		user := ts.createTestUser(t, "grpuser5b", "password123", false)
