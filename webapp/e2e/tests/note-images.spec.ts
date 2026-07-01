@@ -67,6 +67,12 @@ test.describe('Note image gallery', () => {
     await expect(dialog.getByAltText('test-icon.png')).toBeVisible();
     await expect(dialog.getByTestId('image-upload-tile')).not.toBeAttached();
 
+    // Re-check in the SAME session, after the upload placeholder is gone —
+    // the uploading tab's own note_image_added SSE event is dropped (self-
+    // echo suppression), so this specifically guards against the real tile
+    // only ever showing up after a reload instead of right away.
+    await expect(dialog.getByAltText('test-icon.png')).toBeVisible();
+
     // Persisted across a reload — the upload actually landed server-side.
     await dashboardPage.closeNoteModal();
     await page.reload();

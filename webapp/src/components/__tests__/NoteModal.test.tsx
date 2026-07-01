@@ -386,6 +386,21 @@ describe('NoteModal', () => {
       expect(screen.getByText('Image exceeds the 25 MB limit.')).toBeInTheDocument()
     })
 
+    it('combines validation errors from every invalid file in one batch instead of only the last one', async () => {
+      const note = createMockNote({ images: [] })
+      renderNoteModal({ ...defaultProps, note })
+
+      const input = screen.getByTestId('note-image-file-input') as HTMLInputElement
+      fireEvent.change(input, {
+        target: { files: [new File(['x'], 'doc.pdf', { type: 'application/pdf' }), makeImageFile('big.png', 'image/png', 26 * 1024 * 1024)] },
+      })
+      await flushMicrotasks()
+
+      expect(mockImagesUpload).not.toHaveBeenCalled()
+      expect(screen.getByText(/Only images can be attached\./)).toBeInTheDocument()
+      expect(screen.getByText(/Image exceeds the 25 MB limit\./)).toBeInTheDocument()
+    })
+
     it('refuses to queue more uploads than the per-note image cap allows', async () => {
       const existingImages: NoteImage[] = Array.from({ length: 9 }, (_, i) => ({
         id: `img${i}`, filename: `photo${i}.png`, content_type: 'image/png', width: 10, height: 10, created_at: '2023-01-01T00:00:00Z',
@@ -445,6 +460,16 @@ describe('NoteModal', () => {
 
       fireEvent.dragLeave(panel)
       expect(screen.queryByTestId('note-image-drop-overlay')).not.toBeInTheDocument()
+    })
+
+    it('does not preventDefault on a dragover that carries no files, so native text drag-and-drop still works', () => {
+      const note = createMockNote({ images: [] })
+      renderNoteModal({ ...defaultProps, note })
+
+      const panel = screen.getByTestId('dialog-panel')
+      // fireEvent returns false only when some handler called preventDefault().
+      const notPrevented = fireEvent.dragOver(panel, { dataTransfer: { types: ['text/plain'] } })
+      expect(notPrevented).toBe(true)
     })
 
     it('uploads an image pasted onto the note modal', async () => {
@@ -547,6 +572,38 @@ describe('NoteModal', () => {
       })
       await flushMicrotasks()
       expect(screen.queryByTestId('image-upload-tile')).not.toBeInTheDocument()
+    })
+
+    it('shows the uploaded image immediately even when note.images is never updated (the uploader\'s own SSE echo is dropped)', async () => {
+      // The note prop is never re-supplied with the new image after upload —
+      // simulating the real behavior where the client that performed the
+      // upload has its own note_image_added SSE event dropped (self-echo
+      // suppression). The gallery must still show the real tile from a local
+      // overlay, not just make the upload placeholder vanish into nothing.
+      mockImagesUpload.mockResolvedValueOnce({
+        id: 'newimg', filename: 'uploaded.png', content_type: 'image/png', width: 10, height: 10, created_at: '2023-01-01T00:00:00Z',
+      })
+      const note = createMockNote({ images: [] })
+      renderNoteModal({ ...defaultProps, note })
+
+      await uploadViaPicker(makeImageFile('uploaded.png'))
+
+      expect(screen.queryByTestId('image-upload-tile')).not.toBeInTheDocument()
+      expect(screen.getByAltText('uploaded.png')).toBeInTheDocument()
+    })
+
+    it('calls onRefresh after the deferred delete succeeds, so a stale note list is corrected even if the modal already closed', async () => {
+      const note = createMockNote({ images: [{ id: 'img1', filename: 'photo.png', content_type: 'image/png', width: 10, height: 10, created_at: '2023-01-01T00:00:00Z' }] })
+      const onRefresh = vi.fn()
+      renderNoteModal({ ...defaultProps, note, onRefresh })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remove photo.png' }))
+      onRefresh.mockClear() // drop any calls made by the removal click itself
+
+      await vi.advanceTimersByTimeAsync(10_000)
+
+      expect(mockImagesDelete).toHaveBeenCalledWith('img1')
+      expect(onRefresh).toHaveBeenCalled()
     })
   })
 

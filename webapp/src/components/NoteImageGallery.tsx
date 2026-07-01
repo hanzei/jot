@@ -52,9 +52,15 @@ export default function NoteImageGallery({ images, editable = false, uploads = [
   const { t } = useTranslation();
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
+  // Uploads sort before persisted images (not after) so that once a note
+  // already has GRID_VISIBLE_TILES images, a newly-added upload doesn't fall
+  // past the visible window and get silently dropped — with no progress or
+  // error/retry feedback at all — in favor of an image the user isn't
+  // actively acting on right now. Overflow from that then folds the oldest
+  // persisted images into the "+N" tile first, never an in-flight upload.
   const tiles: Tile[] = [
-    ...images.map((image): Tile => ({ key: image.id, kind: 'image', image })),
     ...uploads.map((upload): Tile => ({ key: upload.id, kind: 'upload', upload })),
+    ...images.map((image): Tile => ({ key: image.id, kind: 'image', image })),
   ];
 
   if (tiles.length === 0) return null;
@@ -79,9 +85,10 @@ export default function NoteImageGallery({ images, editable = false, uploads = [
     }`;
 
     if (tile.kind === 'image') {
-      // Image tiles always occupy the same position in `tiles` (and thus in
-      // `visibleTiles`) as they do in `images` — uploads are appended after
-      // all images — so `index` doubles as the lightbox index directly.
+      // Uploads sort before images in `tiles` (see above), so a tile's
+      // position there no longer matches its position in `images` — look up
+      // the real index for the lightbox rather than reusing `index`.
+      const imageIndex = images.findIndex(img => img.id === tile.image.id);
       const label = isOverlayTile
         ? t('images.moreImages', { count: overlayCount })
         : t('images.openLightbox', { filename: tile.image.filename });
@@ -91,7 +98,7 @@ export default function NoteImageGallery({ images, editable = false, uploads = [
             type="button"
             aria-label={label}
             className="absolute inset-0 w-full h-full"
-            onClick={() => setLightboxIndex(index)}
+            onClick={() => setLightboxIndex(imageIndex)}
           >
             <img src={imagesApi.url(tile.image.id)} alt={tile.image.filename} className="w-full h-full object-cover" />
             {isOverlayTile && (

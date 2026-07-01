@@ -168,5 +168,26 @@ describe('NoteImageGallery', () => {
       await user.click(screen.getByRole('button', { name: 'Dismiss new.png' }))
       expect(onDismissUpload).toHaveBeenCalledWith('upload1')
     })
+
+    it('never drops an upload tile from the grid, even once the note already has 4+ images', () => {
+      // A note already filling the visible grid window (4 images) plus a
+      // brand-new upload: the upload must still get its own tile with
+      // progress/retry feedback rather than silently falling outside the
+      // visible window in favor of an older, already-settled image.
+      render(<NoteImageGallery images={makeImages(4)} editable uploads={[makeUpload()]} />)
+
+      expect(screen.getByTestId('image-upload-tile')).toBeInTheDocument()
+    })
+
+    it('opens the lightbox at the correct image index when upload tiles are present', async () => {
+      const user = userEvent.setup()
+      render(<NoteImageGallery images={makeImages(2)} editable uploads={[makeUpload()]} />)
+
+      // Uploads render before images, so "photo2.png" is the last grid tile —
+      // clicking it must still open the lightbox on image index 1, not the
+      // tile's position in the combined upload+image grid.
+      await user.click(screen.getByRole('button', { name: 'View photo2.png' }))
+      expect(screen.getByText('2 / 2')).toBeInTheDocument()
+    })
   })
 })

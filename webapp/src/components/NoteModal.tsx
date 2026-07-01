@@ -507,11 +507,36 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   // Note image add/remove UI. Uploads require an existing note (an id to
   // attach to), so all of this is gated on `note` being set.
   const [imageUploads, setImageUploads] = useState<PendingImageUpload[]>([]);
-  const [hiddenImageIds, setHiddenImageIds] = useState<Set<string>>(new Set());
   // Images currently showing an inline "Image removed — Undo" bar. Rendered
   // inside the DialogPanel (not the app-wide toast) so clicking Undo is never
   // mistaken by HeadlessUI's Dialog for an outside click that should close it.
+  // hiddenImageIds is derived from this below rather than tracked separately
+  // — the two must always agree, so there is only one thing to keep in sync.
   const [removedImages, setRemovedImages] = useState<NoteImage[]>([]);
+  const hiddenImageIds = useMemo(() => new Set(removedImages.map(img => img.id)), [removedImages]);
+  // Images this session has uploaded that note.images may not reflect yet.
+  // The server's note_image_added SSE event is dropped for the client that
+  // triggered it (self-echo suppression in useSSE, keyed on X-Client-Id —
+  // every mutation this modal makes carries that header), so without this
+  // local overlay a just-uploaded tile would vanish the moment its upload
+  // placeholder is removed and only reappear after an unrelated refresh or a
+  // reload. Tagged with the note it was uploaded to (NoteImage itself carries
+  // no note_id) so switching notes can't leak one note's optimistic image
+  // into another's gallery. Pruned once note.images actually contains it.
+  const [optimisticImages, setOptimisticImages] = useState<{ noteId: string; image: NoteImage }[]>([]);
+  const optimisticImagesRef = useRef<{ noteId: string; image: NoteImage }[]>([]);
+  // The gallery's actual source of truth: note.images plus this session's own
+  // not-yet-confirmed uploads for this note, minus anything mid-undo-window.
+  const displayedImages = useMemo(() => {
+    const base = note?.images ?? [];
+    if (!note) return base;
+    const baseIds = new Set(base.map(img => img.id));
+    const extra = optimisticImages
+      .filter(e => e.noteId === note.id && !baseIds.has(e.image.id))
+      .map(e => e.image);
+    const merged = extra.length > 0 ? [...base, ...extra] : base;
+    return hiddenImageIds.size > 0 ? merged.filter(img => !hiddenImageIds.has(img.id)) : merged;
+  }, [note, optimisticImages, hiddenImageIds]);
   const [isDraggingImage, setIsDraggingImage] = useState(false);
   const imageFileInputRef = useRef<HTMLInputElement>(null);
   const imageUploadsRef = useRef<PendingImageUpload[]>([]);
@@ -793,18 +818,20 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       imageUploadsRef.current.forEach(u => URL.revokeObjectURL(u.previewUrl));
       imageUploadFilesRef.current.clear();
       setImageUploads([]);
-      // Hidden/removed-with-undo image state is NOT simply cleared here —
-      // pendingImageRemovalsRef's timers are keyed by image id and keep
-      // running across a note switch (this component doesn't unmount), so a
-      // removal whose ~10s undo window is still open must stay hidden (with
-      // its undo bar) if the user navigates back to this note before it
-      // elapses. Re-derive both from whatever the incoming note's images
-      // still have a live timer for, rather than assuming "different note
-      // adopted" means "no pending removals" — otherwise the image would
-      // reappear with no undo affordance and then vanish once the timer
-      // fires, with no explanation.
+      // removedImages (and the hiddenImageIds derived from it) is NOT simply
+      // cleared here — pendingImageRemovalsRef's timers are keyed by image id
+      // and keep running across a note switch (this component doesn't
+      // unmount), so a removal whose ~10s undo window is still open must
+      // stay hidden (with its undo bar) if the user navigates back to this
+      // note before it elapses. Re-derive it from whatever the incoming
+      // note's images still have a live timer for, rather than assuming
+      // "different note adopted" means "no pending removals" — otherwise the
+      // image would reappear with no undo affordance and then vanish once
+      // the timer fires, with no explanation. optimisticImages is left
+      // alone entirely (not reset here) for the same reason on the upload
+      // side — it's pruned per-note by its own effect above as each note is
+      // (re-)opened, not cleared on switch.
       const stillPending = (note?.images ?? []).filter(img => pendingImageRemovalsRef.current.has(img.id));
-      setHiddenImageIds(new Set(stillPending.map(img => img.id)));
       setRemovedImages(stillPending);
     }
 
@@ -862,6 +889,24 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   useEffect(() => {
     imageUploadsRef.current = imageUploads;
   }, [imageUploads]);
+
+  useEffect(() => {
+    optimisticImagesRef.current = optimisticImages;
+  }, [optimisticImages]);
+
+  // Once note.images actually contains an optimistically-added image (a
+  // later refresh caught up), drop it from the local overlay so it isn't
+  // rendered twice and doesn't grow unbounded across a long session. Only
+  // prunes entries for the currently-open note — entries for a note that's
+  // no longer open are reconciled the next time that note is reopened.
+  useEffect(() => {
+    if (optimisticImages.length === 0 || !note) return;
+    const confirmedIds = new Set((note.images ?? []).map(img => img.id));
+    setOptimisticImages(prev => {
+      const next = prev.filter(e => e.noteId !== note.id || !confirmedIds.has(e.image.id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [note, optimisticImages.length]);
 
   // Revoke any outstanding local preview URLs on unmount. Deliberately does
   // NOT clear pendingImageRemovalsRef's timers — those must keep running so
@@ -1011,10 +1056,15 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     activeUploadIdsRef.current.add(uploadId);
     imagesApi.upload(noteId, file, (percent) => {
       setImageUploads(prev => prev.map(u => (u.id === uploadId ? { ...u, progress: percent } : u)));
-    }).then(() => {
+    }).then((image) => {
       activeUploadIdsRef.current.delete(uploadId);
-      // The server's note_image_added SSE event patches note.images live
-      // (see Dashboard's SSE handler), so the real tile takes over from here.
+      // note_image_added's SSE echo is dropped for the client that triggered
+      // it (self-echo suppression in useSSE, keyed on the same X-Client-Id
+      // header this upload just sent), so note.images won't reflect this
+      // upload here on its own — add it to the local overlay so the real
+      // tile takes over from the upload placeholder immediately instead of
+      // vanishing until an unrelated refresh or reload catches it up.
+      setOptimisticImages(prev => (prev.some(e => e.image.id === image.id) ? prev : [...prev, { noteId, image }]));
       removeUploadTile(uploadId);
     }).catch((error) => {
       activeUploadIdsRef.current.delete(uploadId);
@@ -1048,23 +1098,37 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const queueImageFiles = useCallback((files: File[]) => {
     if (!note || files.length === 0) return;
 
+    const noteImages = note.images ?? [];
+    const confirmedIds = new Set(noteImages.map(img => img.id));
+    // Images this session already uploaded to this note that note.images
+    // doesn't reflect yet (see optimisticImages above) still occupy a slot.
+    const unconfirmedOptimisticCount = optimisticImagesRef.current.filter(
+      e => e.noteId === note.id && !confirmedIds.has(e.image.id)
+    ).length;
     let remainingSlots = IMAGE_MAX_PER_NOTE
-      - (note.images?.length ?? 0)
+      - noteImages.length
+      - unconfirmedOptimisticCount
       - imageUploadsRef.current.filter(u => u.status !== 'error').length;
 
+    // Collect distinct error messages across the whole batch instead of
+    // showing (and immediately overwriting) one per invalid file — a drop of
+    // several invalid files in one action would otherwise only ever surface
+    // the last file's error.
+    const errors = new Set<string>();
     for (const file of files) {
       const validationError = validateImageFile(file);
       if (validationError) {
-        showError(validationError);
+        errors.add(validationError);
         continue;
       }
       if (remainingSlots <= 0) {
-        showError(t('images.errorTooMany', { max: IMAGE_MAX_PER_NOTE }));
+        errors.add(t('images.errorTooMany', { max: IMAGE_MAX_PER_NOTE }));
         break;
       }
       remainingSlots -= 1;
       startImageUpload(file);
     }
+    if (errors.size > 0) showError(Array.from(errors).join(' '));
   }, [note, showError, startImageUpload, t, validateImageFile]);
 
   const handleImageFileInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1081,7 +1145,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   }, [note]);
 
   const handleImageDragOver = useCallback((e: React.DragEvent) => {
-    if (!note) return;
+    // Only claim file drags — preventDefault() unconditionally would also
+    // suppress the browser's native text drag-and-drop (e.g. repositioning
+    // selected text within the note's own textarea), which this handler
+    // does nothing with.
+    if (!note || !e.dataTransfer.types.includes('Files')) return;
     e.preventDefault();
   }, [note]);
 
@@ -1114,11 +1182,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   // Clears the local "removed, showing undo" state for an image — called
   // either by undo or once the deferred delete actually lands.
   const clearImageRemovalState = useCallback((imageId: string) => {
-    setHiddenImageIds(prev => {
-      const next = new Set(prev);
-      next.delete(imageId);
-      return next;
-    });
     setRemovedImages(prev => prev.filter(img => img.id !== imageId));
   }, []);
 
@@ -1130,7 +1193,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   // elapses with no undo. The timer lives in pendingImageRemovalsRef (a ref,
   // not state) so it keeps running even if this component unmounts first.
   const removeNoteImage = useCallback((image: NoteImage) => {
-    setHiddenImageIds(prev => new Set(prev).add(image.id));
     setRemovedImages(prev => (prev.some(img => img.id === image.id) ? prev : [...prev, image]));
 
     const timeoutId = setTimeout(() => {
@@ -1140,13 +1202,29 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       // and clears this timer, so reaching here with no entry means it was
       // already cancelled — nothing left to do.
       if (!entry) return;
-      imagesApi.delete(image.id).catch((error) => {
+      imagesApi.delete(image.id).then(() => {
+        // note_image_removed's SSE echo is dropped for this client (same
+        // self-echo suppression as uploads), and this component may have
+        // already unmounted (modal closed) by the time this fires, so
+        // Dashboard's note.images can otherwise stay stale — reopening the
+        // note would show the just-deleted image again. onRefresh's closure
+        // still targets the current Dashboard instance's state setters even
+        // if captured before this component unmounted.
+        onRefresh?.();
+      }).catch((error) => {
         console.error('Failed to delete note image:', error);
+      }).finally(() => {
+        // Deliberately deferred until the request settles (not run
+        // synchronously when the timer fires) — clearing this earlier would
+        // un-hide the tile for the gap between "timer fired" and "DELETE
+        // actually completed," flashing the about-to-be-deleted image back
+        // into view. On failure this correctly restores it since the delete
+        // never happened.
+        clearImageRemovalState(image.id);
       });
-      clearImageRemovalState(image.id);
     }, IMAGE_REMOVE_UNDO_MS);
     pendingImageRemovalsRef.current.set(image.id, { timeoutId });
-  }, [clearImageRemovalState]);
+  }, [clearImageRemovalState, onRefresh]);
 
   const undoRemoveImage = useCallback((imageId: string) => {
     const entry = pendingImageRemovalsRef.current.get(imageId);
@@ -2084,14 +2162,15 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
           {/* Content */}
           <div className="p-2 sm:p-4 pt-10 space-y-4 overflow-y-auto max-h-[calc(90vh-8rem)]">
-            {/* Image gallery, rendered above the title. Persisted images are read
-                directly from the note prop (not local state) so SSE-driven
-                updates render live; hiddenImageIds/imageUploads are the only
-                purely-local overlay (a client-deferred removal and in-flight
-                uploads, respectively). */}
-            {((note?.images?.length ?? 0) > 0 || imageUploads.length > 0) && (
+            {/* Image gallery, rendered above the title. Persisted images come
+                from the note prop so SSE-driven updates from OTHER clients
+                render live; displayedImages layers this session's own
+                not-yet-confirmed uploads on top (see optimisticImages) and
+                removes anything mid-undo-window, since neither of those is
+                reflected in note.images on their own. */}
+            {(displayedImages.length > 0 || imageUploads.length > 0) && (
               <NoteImageGallery
-                images={(note?.images ?? []).filter(img => !hiddenImageIds.has(img.id))}
+                images={displayedImages}
                 editable={!!note}
                 uploads={imageUploads}
                 onRemove={removeNoteImage}
