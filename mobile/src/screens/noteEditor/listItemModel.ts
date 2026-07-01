@@ -131,8 +131,11 @@ export function droppedParentId(
   return null;
 }
 
-// applyCompletedCascade mirrors the server: toggling a top-level item also
-// toggles all its children; toggling a child touches only that item.
+// applyCompletedCascade mirrors the server: a top-level item's completed
+// state cascades to all of its children (in either direction), and unchecking
+// a child also un-completes its parent — a parent can never stay "done" with
+// an incomplete child. Completing every child does not auto-complete the
+// parent; that still requires checking it directly.
 //
 // NOTE: this rule must stay in agreement with `collectToggleCascade` in
 // hooks/useNotes.ts (which performs the same cascade over the server-shaped
@@ -143,9 +146,11 @@ export function applyCompletedCascade(items: LocalItem[], itemId: string, comple
   const target = items.find((item) => item.id === itemId);
   if (!target) return items;
   const cascadeToChildren = target.parentId === null;
+  const uncompleteParent = target.parentId !== null && !completed;
   return items.map((item) => {
     if (item.id === itemId) return { ...item, completed };
     if (cascadeToChildren && item.parentId === itemId) return { ...item, completed };
+    if (uncompleteParent && item.id === target.parentId) return { ...item, completed: false };
     return item;
   });
 }

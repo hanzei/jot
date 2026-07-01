@@ -164,6 +164,29 @@ describe('applyCompletedCascade', () => {
   it('returns the input unchanged for an unknown id', () => {
     expect(applyCompletedCascade(items, 'missing', true)).toBe(items);
   });
+
+  it('unchecking a child also un-completes an already-completed parent', () => {
+    const completedGroup = [
+      local({ id: 'p1', completed: true }),
+      local({ id: 'c1', parentId: 'p1', completed: true }),
+      local({ id: 'c2', parentId: 'p1', completed: true }),
+    ];
+    const result = applyCompletedCascade(completedGroup, 'c1', false);
+    expect(result.find((i) => i.id === 'c1')?.completed).toBe(false);
+    expect(result.find((i) => i.id === 'p1')?.completed).toBe(false);
+    expect(result.find((i) => i.id === 'c2')?.completed).toBe(true);
+  });
+
+  it('completing every child does not auto-complete the parent', () => {
+    const group = [
+      local({ id: 'p1' }),
+      local({ id: 'c1', parentId: 'p1', completed: true }),
+      local({ id: 'c2', parentId: 'p1' }),
+    ];
+    const result = applyCompletedCascade(group, 'c2', true);
+    expect(result.find((i) => i.id === 'c2')?.completed).toBe(true);
+    expect(result.find((i) => i.id === 'p1')?.completed).toBe(false);
+  });
 });
 
 describe('droppedParentId', () => {

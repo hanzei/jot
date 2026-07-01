@@ -478,9 +478,21 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           const items = response?.data as NoteItem[] | undefined;
           if (Array.isArray(items) && items.length > 0) {
             // endpoint: /notes/{noteId}/items/{itemId}/toggle-completed
+            // The server returns the note's full, authoritative item list (not
+            // just the toggled item), so reconcile every field here rather than
+            // just `completed` — otherwise a local item left stale by an earlier
+            // partial sync (e.g. parent_id/position from a reorder) never gets
+            // corrected, and the toggle can end up applied to the wrong item's
+            // row once rendered.
             const noteId = endpoint.split('/')[2];
             for (const item of items) {
-              await patchLocalItem(db, noteId, item.id, { completed: item.completed });
+              await patchLocalItem(db, noteId, item.id, {
+                text: item.text,
+                completed: item.completed,
+                position: item.position,
+                parent_id: item.parent_id,
+                assigned_to: item.assigned_to,
+              });
             }
           }
         } else if (entry.operation === 'share') {

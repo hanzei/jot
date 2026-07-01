@@ -1064,6 +1064,34 @@ describe('NoteModal', () => {
       expect(checkboxes.every(cb => cb.checked)).toBe(true)
     })
 
+    it('unchecking a completed child un-completes its already-completed parent', async () => {
+      const listNote = createMockNote({
+        note_type: 'list',
+        items: [
+          item('parent', { text: 'Parent', position: 0, completed: true }),
+          item('childA', { text: 'Child A', position: 1, parent_id: 'parent', completed: true }),
+          item('childB', { text: 'Child B', position: 2, parent_id: 'parent', completed: true }),
+        ],
+      })
+      // Server enforces the same invariant: a parent can't stay completed once
+      // one of its children is unchecked.
+      mockToggleItemCompleted.mockResolvedValueOnce([
+        { id: 'parent', completed: false },
+        { id: 'childA', completed: false },
+        { id: 'childB', completed: true },
+      ])
+      renderNoteModal({ ...defaultProps, note: listNote })
+
+      // All three start completed: parent, then Child A, then Child B.
+      fireEvent.click(screen.getAllByRole('checkbox')[1])
+      await vi.runAllTimersAsync()
+
+      expect(mockToggleItemCompleted).toHaveBeenCalledWith('1', 'childA', false)
+      expect(screen.getByText('Completed items (1)')).toBeInTheDocument()
+      expect(screen.getByDisplayValue('Parent')).toBeInTheDocument()
+      expect(screen.getByDisplayValue('Child A')).toBeInTheDocument()
+    })
+
     it('shows a ghost parent above a completed child whose parent is still active', async () => {
       const listNote = createMockNote({
         note_type: 'list',
