@@ -417,6 +417,13 @@
     "unsharedSuccess": "Compartilhamento da nota cancelado com sucesso!",
     "failedUnshare": "Falha ao cancelar o compartilhamento da nota. Tente novamente."
   },
+  "images": {
+    "openLightbox": "Ver {{filename}}",
+    "moreImages": "Ver mais {{count}} imagens",
+    "lightboxPrevious": "Imagem anterior",
+    "lightboxNext": "Próxima imagem",
+    "lightboxCounter": "{{current}} / {{total}}"
+  },
   "serviceWorker": {
     "updatePrompt": "Nova atualização do aplicativo disponível! Clique em OK para atualizar"
   },

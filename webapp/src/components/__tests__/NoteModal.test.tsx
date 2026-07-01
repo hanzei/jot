@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { type ReactNode } from 'react'
 import NoteModal from '../NoteModal'
 import { ToastProvider } from '../Toast'
-import { VALIDATION, type Note, type NoteItem } from '@jot/shared'
+import { VALIDATION, type Note, type NoteItem, type NoteImage } from '@jot/shared'
 import { createMockNote } from '@/utils/__tests__/test-helpers'
 
 // Mock the API module
@@ -46,6 +46,9 @@ vi.mock('@/utils/api', () => ({
   },
   labels: {
     getAll: vi.fn().mockResolvedValue([]),
+  },
+  images: {
+    url: (id: string) => `/api/v1/images/${id}`,
   },
 }))
 
@@ -274,6 +277,43 @@ describe('NoteModal', () => {
     it('does not render mobile app toolbar link for new note', () => {
       renderNoteModal(defaultProps)
       expect(screen.queryByTestId('note-open-mobile-app-toolbar-link')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('Image gallery', () => {
+    const makeImage = (overrides: Partial<NoteImage> = {}): NoteImage => ({
+      id: 'img1',
+      filename: 'photo.png',
+      content_type: 'image/png',
+      width: 800,
+      height: 600,
+      created_at: '2023-01-01T00:00:00Z',
+      ...overrides,
+    })
+
+    it('does not render a gallery region when the note has no images', () => {
+      const note = createMockNote({ images: [] })
+      renderNoteModal({ ...defaultProps, note })
+
+      expect(screen.queryByAltText('photo.png')).not.toBeInTheDocument()
+    })
+
+    it('renders a banner for a note with one image', () => {
+      const note = createMockNote({ images: [makeImage()] })
+      renderNoteModal({ ...defaultProps, note })
+
+      expect(screen.getByAltText('photo.png')).toHaveAttribute('src', '/api/v1/images/img1')
+    })
+
+    it('opens the lightbox when a gallery tile is clicked', () => {
+      const note = createMockNote({
+        images: [makeImage(), makeImage({ id: 'img2', filename: 'photo2.png' })],
+      })
+      renderNoteModal({ ...defaultProps, note })
+
+      fireEvent.click(screen.getByRole('button', { name: 'View photo.png' }))
+
+      expect(screen.getByText('1 / 2')).toBeInTheDocument()
     })
   })
 

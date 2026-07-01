@@ -3,7 +3,7 @@ import { PlusIcon, DocumentTextIcon, ArchiveBoxIcon, TrashIcon, ClipboardDocumen
 import { useTranslation } from 'react-i18next';
 import { notes, users as usersApi } from '@/utils/api';
 import { getUser, getSettings, setSettings } from '@/utils/auth';
-import type { Note, User, SSEEvent, NoteSort } from '@jot/shared';
+import type { Note, NoteImage, User, SSEEvent, NoteSort } from '@jot/shared';
 import { useSearchParams, useParams, useNavigate } from 'react-router';
 import PageContent from '@/components/PageContent';
 import SearchBar from '@/components/SearchBar';
@@ -405,6 +405,24 @@ export default function Dashboard() {
           return next;
         });
       })();
+      return;
+    }
+
+    if (event.type === 'note_image_added' || event.type === 'note_image_removed') {
+      const { note_id: imageNoteId } = event.data;
+      const patchImages = (imgs: NoteImage[] | undefined): NoteImage[] | undefined => {
+        if (event.type === 'note_image_added') {
+          const image = event.data.image;
+          if (!image || imgs?.some(img => img.id === image.id)) return imgs;
+          return [...(imgs ?? []), image];
+        }
+        const imageId = event.data.image_id;
+        if (!imageId || !imgs) return imgs;
+        return imgs.filter(img => img.id !== imageId);
+      };
+
+      setEditingNote(prev => (prev && prev.id === imageNoteId ? { ...prev, images: patchImages(prev.images) } : prev));
+      setNotesList(prev => prev.map(n => (n.id === imageNoteId ? { ...n, images: patchImages(n.images) } : n)));
       return;
     }
 

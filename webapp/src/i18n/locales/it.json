@@ -417,6 +417,13 @@
     "unsharedSuccess": "Condivisione della nota annullata con successo!",
     "failedUnshare": "Impossibile annullare la condivisione della nota. Riprova."
   },
+  "images": {
+    "openLightbox": "Visualizza {{filename}}",
+    "moreImages": "Visualizza {{count}} immagini in più",
+    "lightboxPrevious": "Immagine precedente",
+    "lightboxNext": "Immagine successiva",
+    "lightboxCounter": "{{current}} / {{total}}"
+  },
   "serviceWorker": {
     "updatePrompt": "Nuovo aggiornamento dell'app disponibile! Clicca OK per aggiornare"
   },

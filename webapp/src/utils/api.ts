@@ -196,6 +196,13 @@ export const pats = {
     api.delete(`/pats/${id}`).then(() => undefined),
 };
 
+// Note images are served inline (not via axios) so <img> tags can use the URL
+// directly as their src; the browser sends the session cookie automatically
+// for this same-origin request.
+export const images = {
+  url: (id: string): string => `/api/v1/images/${id}`,
+};
+
 export const about = {
   get: (): Promise<AboutInfo> =>
     api.get('/about').then(res => res.data),

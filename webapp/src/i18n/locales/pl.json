@@ -417,6 +417,13 @@
     "unsharedSuccess": "Udostępnianie notatki zostało anulowane pomyślnie!",
     "failedUnshare": "Nie udało się anulować udostępniania notatki. Spróbuj ponownie."
   },
+  "images": {
+    "openLightbox": "Wyświetl {{filename}}",
+    "moreImages": "Wyświetl {{count}} więcej zdjęć",
+    "lightboxPrevious": "Poprzednie zdjęcie",
+    "lightboxNext": "Następne zdjęcie",
+    "lightboxCounter": "{{current}} / {{total}}"
+  },
   "serviceWorker": {
     "updatePrompt": "Dostępna jest nowa aktualizacja! Kliknij OK, aby odświeżyć"
   },
