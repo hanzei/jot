@@ -510,23 +510,29 @@ func resizeImage(data []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	return resizeToJPEG(img, cfg, maxProfileIconDimension)
+}
 
-	// Determine opaqueness from the config color model (before a potential
-	// resize converts the image to RGBA and loses the original model info).
+// resizeToJPEG resizes img to fit within maxDim x maxDim (preserving aspect
+// ratio; a no-op if it already fits) and re-encodes it as JPEG. cfg is the
+// image's decoded config, used to determine source opaqueness before a
+// potential resize converts the image to RGBA and loses that information.
+// Shared by the profile-icon and note-image-thumbnail pipelines.
+func resizeToJPEG(img image.Image, cfg image.Config, maxDim int) ([]byte, error) {
 	sourceOpaque := isOpaqueImage(cfg.ColorModel, img)
 
 	bounds := img.Bounds()
 	srcW := bounds.Dx()
 	srcH := bounds.Dy()
 
-	if srcW > maxProfileIconDimension || srcH > maxProfileIconDimension {
+	if srcW > maxDim || srcH > maxDim {
 		var dstW, dstH int
 		if srcW >= srcH {
-			dstW = maxProfileIconDimension
-			dstH = srcH * maxProfileIconDimension / srcW
+			dstW = maxDim
+			dstH = srcH * maxDim / srcW
 		} else {
-			dstH = maxProfileIconDimension
-			dstW = srcW * maxProfileIconDimension / srcH
+			dstH = maxDim
+			dstW = srcW * maxDim / srcH
 		}
 		dstW = max(dstW, 1)
 		dstH = max(dstH, 1)

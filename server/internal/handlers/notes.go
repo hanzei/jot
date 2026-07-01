@@ -26,7 +26,7 @@ type NotesHandler struct {
 	userStore      *models.UserStore
 	labelStore     *models.LabelStore
 	hub            *sse.Hub
-	blobstore      blobstore.Blobstore
+	imageStore     *blobstore.ImageStore
 	uploadMaxBytes int64
 	notesCreated   metric.Int64Counter
 	notesUpdated   metric.Int64Counter
@@ -36,7 +36,7 @@ type NotesHandler struct {
 
 // NewNotesHandler creates a NotesHandler with OTel instruments initialized from
 // the global MeterProvider. Returns an error if any instrument cannot be created.
-func NewNotesHandler(noteStore *models.NoteStore, userStore *models.UserStore, labelStore *models.LabelStore, hub *sse.Hub, imageBlobstore blobstore.Blobstore, uploadMaxBytes int64) (*NotesHandler, error) {
+func NewNotesHandler(noteStore *models.NoteStore, userStore *models.UserStore, labelStore *models.LabelStore, hub *sse.Hub, imageStore *blobstore.ImageStore, uploadMaxBytes int64) (*NotesHandler, error) {
 	meter := otel.GetMeterProvider().Meter("github.com/hanzei/jot/server")
 
 	notesCreated, err := meter.Int64Counter(
@@ -76,7 +76,7 @@ func NewNotesHandler(noteStore *models.NoteStore, userStore *models.UserStore, l
 		userStore:      userStore,
 		labelStore:     labelStore,
 		hub:            hub,
-		blobstore:      imageBlobstore,
+		imageStore:     imageStore,
 		uploadMaxBytes: uploadMaxBytes,
 		notesCreated:   notesCreated,
 		notesUpdated:   notesUpdated,
