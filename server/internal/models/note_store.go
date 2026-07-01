@@ -1120,18 +1120,39 @@ func (s *noteStore) DeleteAllByUser(ctx context.Context, userID string) (int, er
 	return len(noteIDs), nil
 }
 
-// PurgeOldTrashedNotes permanently deletes all notes that have been in the trash
-// longer than the given duration. This is intended to be called periodically.
-func (s *noteStore) PurgeOldTrashedNotes(ctx context.Context, olderThan time.Duration) error {
+// PurgeOldTrashedNotes permanently deletes all notes that have been in the
+// trash longer than the given duration. This is intended to be called
+// periodically. It returns the distinct sha256 hashes of any images that
+// belonged to purged notes — note_images rows are cascade-deleted along with
+// the notes (FK ON DELETE CASCADE, not part of the explicit dependent-row
+// deletes below), so the caller must reclaim their blobs itself; there is no
+// other cleanup path for images purged this way.
+func (s *noteStore) PurgeOldTrashedNotes(ctx context.Context, olderThan time.Duration) ([]string, error) {
 	cutoff := time.Now().Add(-olderThan)
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	subquery := `SELECT id FROM notes WHERE deleted_at IS NOT NULL AND deleted_at < ?`
+
+	rows, err := tx.QueryContext(ctx,
+		s.d.RewritePlaceholders(`SELECT DISTINCT sha256 FROM note_images WHERE note_id IN (`+subquery+`)`),
+		cutoff,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query images of notes to purge: %w", err)
+	}
+	imageSHAs, err := collectRows(rows, func(rows *sql.Rows) (string, error) {
+		var sha string
+		return sha, rows.Scan(&sha)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan image hashes to purge: %w", err)
+	}
+
 	for _, q := range []string{
 		`DELETE FROM note_items WHERE note_id IN (` + subquery + `)`,
 		`DELETE FROM note_labels WHERE note_id IN (` + subquery + `)`,
@@ -1139,18 +1160,18 @@ func (s *noteStore) PurgeOldTrashedNotes(ctx context.Context, olderThan time.Dur
 		`DELETE FROM note_user_state WHERE note_id IN (` + subquery + `)`,
 	} {
 		if _, err = tx.ExecContext(ctx, s.d.RewritePlaceholders(q), cutoff); err != nil {
-			return fmt.Errorf("failed to purge dependent rows: %w", err)
+			return nil, fmt.Errorf("failed to purge dependent rows: %w", err)
 		}
 	}
 
 	if _, err = tx.ExecContext(ctx, s.d.RewritePlaceholders(`DELETE FROM notes WHERE deleted_at IS NOT NULL AND deleted_at < ?`), cutoff); err != nil {
-		return fmt.Errorf("failed to purge old trashed notes: %w", err)
+		return nil, fmt.Errorf("failed to purge old trashed notes: %w", err)
 	}
 
 	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("commit purge old trashed notes: %w", err)
+		return nil, fmt.Errorf("commit purge old trashed notes: %w", err)
 	}
-	return nil
+	return imageSHAs, nil
 }
 
 func nullableAssignedTo(s string) sql.NullString {

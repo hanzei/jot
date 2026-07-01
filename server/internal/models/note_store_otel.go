@@ -111,7 +111,7 @@ func (s *NoteStore) DeleteAllByUser(ctx context.Context, userID string) (_ int, 
 	return s.inner.DeleteAllByUser(ctx, userID)
 }
 
-func (s *NoteStore) PurgeOldTrashedNotes(ctx context.Context, olderThan time.Duration) (err error) {
+func (s *NoteStore) PurgeOldTrashedNotes(ctx context.Context, olderThan time.Duration) (_ []string, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.PurgeOldTrashedNotes", &err)
 	defer end()
 	return s.inner.PurgeOldTrashedNotes(ctx, olderThan)
@@ -268,6 +268,14 @@ func (s *NoteStore) GetNoteImagesByNoteID(ctx context.Context, noteID string) (_
 	)
 	defer end()
 	return s.inner.GetNoteImagesByNoteID(ctx, noteID)
+}
+
+func (s *NoteStore) GetNoteImageCountByNoteID(ctx context.Context, noteID string) (_ int, err error) {
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.GetNoteImageCountByNoteID", &err,
+		attribute.String("note.id", noteID),
+	)
+	defer end()
+	return s.inner.GetNoteImageCountByNoteID(ctx, noteID)
 }
 
 func (s *NoteStore) DeleteNoteImage(ctx context.Context, imageID string) (_ *NoteImage, err error) {

@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"image"
 	_ "image/gif"
 	"io"
 	"net/http"
@@ -32,25 +31,15 @@ var allowedNoteImageTypes = map[string]bool{
 	"image/gif":  true,
 }
 
-// decodeImageDimensions decodes data fully to confirm it is a valid,
-// non-corrupt image (this is what enforces "images only" beyond the
-// Content-Type sniff) and returns its pixel dimensions. Header-only bounds
-// are checked first, mirroring the profile-icon pipeline, so a small file
-// claiming huge dimensions is rejected before a full decode allocates memory
-// for it (decompression-bomb protection).
+// decodeImageDimensions confirms data is a valid, non-corrupt image (this is
+// what enforces "images only" beyond the Content-Type sniff) and returns its
+// pixel dimensions, reusing the same decode-with-bounds-check pipeline as the
+// profile-icon upload path.
 func decodeImageDimensions(data []byte) (width, height int, err error) {
-	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	_, cfg, err := decodeImageWithBoundsCheck(data)
 	if err != nil {
-		return 0, 0, fmt.Errorf("decode image config: %w", err)
+		return 0, 0, err
 	}
-	if boundsErr := validateImageBounds(cfg); boundsErr != nil {
-		return 0, 0, boundsErr
-	}
-
-	if _, _, err := image.Decode(bytes.NewReader(data)); err != nil {
-		return 0, 0, fmt.Errorf("decode image: %w", err)
-	}
-
 	return cfg.Width, cfg.Height, nil
 }
 
@@ -73,12 +62,18 @@ func (h *NotesHandler) publishNoteImageEvent(ctx context.Context, noteID string,
 	})
 }
 
-// reclaimNoteImageBlob deletes the on-disk blob for sha if no note_images row
-// still references it (dedup means another row may share the same content
-// hash). Errors are logged but never fail the delete request — the row is
-// already gone, and the periodic orphan sweep is the safety net for this path.
-func (h *NotesHandler) reclaimNoteImageBlob(ctx context.Context, sha string) {
-	count, err := h.noteStore.GetNoteImageRefCount(ctx, sha)
+// ReclaimOrphanedNoteImageBlob deletes the on-disk blob for sha if no
+// note_images row references it anymore (dedup means another row may share
+// the same content hash, so this must run after the row(s) that prompted the
+// reclaim are already gone). Errors are logged but never returned — callers
+// use this to clean up after a delete that already succeeded, so there is
+// nothing left to fail. It is a package-level function (not a NotesHandler
+// method) so callers outside this package's handlers — like the periodic
+// trash-purge task in internal/server, which permanently deletes notes and
+// cascades away their images without going through a handler — can reclaim
+// blobs too.
+func ReclaimOrphanedNoteImageBlob(ctx context.Context, noteStore *models.NoteStore, bs blobstore.Blobstore, sha string) {
+	count, err := noteStore.GetNoteImageRefCount(ctx, sha)
 	if err != nil {
 		logutil.FromContext(ctx).WithError(err).WithField("sha256", sha).Error("Failed to check note image refcount for blob reclamation")
 		return
@@ -86,9 +81,53 @@ func (h *NotesHandler) reclaimNoteImageBlob(ctx context.Context, sha string) {
 	if count > 0 {
 		return
 	}
-	if err := h.blobstore.Delete(ctx, sha); err != nil {
+	if err := bs.Delete(ctx, sha); err != nil {
 		logutil.FromContext(ctx).WithError(err).WithField("sha256", sha).Error("Failed to reclaim orphaned note image blob")
 	}
+}
+
+// ReclaimOrphanedNoteImageBlobs calls ReclaimOrphanedNoteImageBlob for each
+// sha in shas.
+func ReclaimOrphanedNoteImageBlobs(ctx context.Context, noteStore *models.NoteStore, bs blobstore.Blobstore, shas []string) {
+	for _, sha := range shas {
+		ReclaimOrphanedNoteImageBlob(ctx, noteStore, bs, sha)
+	}
+}
+
+// reclaimNoteImageBlob is the single-hash form of ReclaimOrphanedNoteImageBlob
+// bound to this handler's own store/blobstore, for the common case of
+// reclaiming right after a request-scoped delete.
+func (h *NotesHandler) reclaimNoteImageBlob(ctx context.Context, sha string) {
+	ReclaimOrphanedNoteImageBlob(ctx, h.noteStore, h.blobstore, sha)
+}
+
+// reclaimNoteImageBlobs is the multi-hash form of reclaimNoteImageBlob, for
+// permanently deleting a note along with all of its images at once.
+func (h *NotesHandler) reclaimNoteImageBlobs(ctx context.Context, shas []string) {
+	ReclaimOrphanedNoteImageBlobs(ctx, h.noteStore, h.blobstore, shas)
+}
+
+// noteImageSHA256sForNote returns the sha256 hashes of a note's images, for a
+// caller about to permanently delete the note so it can reclaim the
+// now-orphaned blobs afterward (note_images rows are cascade-deleted with the
+// note, so this must be captured before the delete). A note in the trash
+// cannot receive new image uploads (HasAccess requires an active, non-trashed
+// note), so there is no race between this read and a delete of an
+// already-trashed note. Errors are logged and a nil slice is returned rather
+// than failing the caller's delete — at worst this delete's blobs go
+// unreclaimed, the same as if this helper were never called.
+func (h *NotesHandler) noteImageSHA256sForNote(ctx context.Context, noteID string) []string {
+	images, err := h.noteStore.GetNoteImagesByNoteID(ctx, noteID)
+	if err != nil {
+		logutil.FromContext(ctx).WithError(err).WithField("note_id", noteID).
+			Error("Failed to fetch note images before permanent delete; their blobs will not be reclaimed")
+		return nil
+	}
+	shas := make([]string, len(images))
+	for i, img := range images {
+		shas[i] = img.SHA256
+	}
+	return shas
 }
 
 // UploadNoteImage godoc
@@ -131,18 +170,15 @@ func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (
 	// only an optimization — CreateNoteImage enforces the cap atomically
 	// inside a transaction, so concurrent uploads can't race past it even
 	// though this check runs outside one.
-	existing, err := h.noteStore.GetNoteImagesByNoteID(r.Context(), noteID)
+	existingCount, err := h.noteStore.GetNoteImageCountByNoteID(r.Context(), noteID)
 	if err != nil {
-		return http.StatusInternalServerError, nil, fmt.Errorf("get note images: %w", err)
+		return http.StatusInternalServerError, nil, fmt.Errorf("count note images: %w", err)
 	}
-	if len(existing) >= imageMaxPerNote {
+	if existingCount >= imageMaxPerNote {
 		return http.StatusBadRequest, nil, fmt.Errorf("note cannot have more than %d images", imageMaxPerNote)
 	}
 
-	// Overhead for multipart boundary/header bytes on top of the file itself,
-	// mirroring UploadProfileIcon.
-	const multipartOverhead = int64(64 << 10)
-	r.Body = http.MaxBytesReader(w, r.Body, h.uploadMaxBytes+multipartOverhead)
+	r.Body = http.MaxBytesReader(w, r.Body, h.uploadMaxBytes+multipartOverheadBytes)
 	if parseErr := r.ParseMultipartForm(h.uploadMaxBytes); parseErr != nil {
 		// wrapHandler promotes a wrapped *http.MaxBytesError to 413 regardless
 		// of the status returned here.
@@ -179,6 +215,12 @@ func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (
 
 	img, err := h.noteStore.CreateNoteImage(r.Context(), noteID, user.ID, header.Filename, contentType, int64(len(data)), sha, width, height, imageMaxPerNote)
 	if err != nil {
+		// The blob was already written by Put above; if the row never got
+		// created (e.g. the cap-check pre-check above was stale and the
+		// atomic check in CreateNoteImage rejected this one), reclaim it
+		// rather than leaking it — it's a no-op if some other row already
+		// references this hash (dedup).
+		h.reclaimNoteImageBlob(r.Context(), sha)
 		if errors.Is(err, models.ErrNoteImageCapExceeded) {
 			return http.StatusBadRequest, nil, fmt.Errorf("note cannot have more than %d images", imageMaxPerNote)
 		}
@@ -214,12 +256,12 @@ func (h *NotesHandler) GetNoteImage(w http.ResponseWriter, r *http.Request) (int
 		return http.StatusBadRequest, nil, errors.New("invalid image ID format")
 	}
 
-	img, hasAccess, status, err := h.loadNoteImageForAccess(r.Context(), imageID, user.ID)
+	img, err := h.loadNoteImageForAccess(r.Context(), imageID, user.ID)
 	if err != nil {
-		return status, nil, err
-	}
-	if !hasAccess {
-		return http.StatusNotFound, nil, models.ErrNoteImageNotFound
+		if errors.Is(err, models.ErrNoteImageNotFound) {
+			return http.StatusNotFound, nil, err
+		}
+		return http.StatusInternalServerError, nil, err
 	}
 
 	blob, err := h.blobstore.Open(r.Context(), img.SHA256)
@@ -247,24 +289,27 @@ func (h *NotesHandler) GetNoteImage(w http.ResponseWriter, r *http.Request) (int
 }
 
 // loadNoteImageForAccess fetches an image row and checks that userID has
-// access to its parent note, returning the appropriate HTTP status on
-// failure. hasAccess is false (with no error) when the image exists but the
-// user cannot see it; callers should treat that the same as not-found so
-// existence isn't leaked to users without access.
-func (h *NotesHandler) loadNoteImageForAccess(ctx context.Context, imageID, userID string) (img *models.NoteImage, hasAccess bool, status int, err error) {
-	img, err = h.noteStore.GetNoteImageByID(ctx, imageID)
+// access to its parent note. When the image doesn't exist, or exists but the
+// user cannot see it, it returns models.ErrNoteImageNotFound in both cases —
+// callers should map that uniformly to 404 so existence isn't leaked to
+// users without access.
+func (h *NotesHandler) loadNoteImageForAccess(ctx context.Context, imageID, userID string) (*models.NoteImage, error) {
+	img, err := h.noteStore.GetNoteImageByID(ctx, imageID)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteImageNotFound) {
-			return nil, false, http.StatusNotFound, err
+			return nil, err
 		}
-		return nil, false, http.StatusInternalServerError, fmt.Errorf("get note image: %w", err)
+		return nil, fmt.Errorf("get note image: %w", err)
 	}
 
-	hasAccess, err = h.noteStore.HasAccess(ctx, img.NoteID, userID)
+	hasAccess, err := h.noteStore.HasAccess(ctx, img.NoteID, userID)
 	if err != nil {
-		return nil, false, http.StatusInternalServerError, fmt.Errorf("check note access: %w", err)
+		return nil, fmt.Errorf("check note access: %w", err)
 	}
-	return img, hasAccess, http.StatusOK, nil
+	if !hasAccess {
+		return nil, models.ErrNoteImageNotFound
+	}
+	return img, nil
 }
 
 // DeleteNoteImage godoc
@@ -290,12 +335,11 @@ func (h *NotesHandler) DeleteNoteImage(w http.ResponseWriter, r *http.Request) (
 		return http.StatusBadRequest, nil, errors.New("invalid image ID format")
 	}
 
-	_, hasAccess, status, err := h.loadNoteImageForAccess(r.Context(), imageID, user.ID)
-	if err != nil {
-		return status, nil, err
-	}
-	if !hasAccess {
-		return http.StatusNotFound, nil, models.ErrNoteImageNotFound
+	if _, err := h.loadNoteImageForAccess(r.Context(), imageID, user.ID); err != nil {
+		if errors.Is(err, models.ErrNoteImageNotFound) {
+			return http.StatusNotFound, nil, err
+		}
+		return http.StatusInternalServerError, nil, err
 	}
 
 	deleted, err := h.noteStore.DeleteNoteImage(r.Context(), imageID)

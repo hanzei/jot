@@ -50,6 +50,7 @@ type TestUser struct {
 type TestServer struct {
 	Server     *server.Server
 	HTTPServer *httptest.Server
+	Config     *config.Config
 }
 
 func defaultTestConfig(tmpDir string) *config.Config {
@@ -95,6 +96,7 @@ func setupTestServerWithConfig(t *testing.T, customize func(*config.Config)) *Te
 	ts := &TestServer{
 		Server:     s,
 		HTTPServer: httpServer,
+		Config:     cfg,
 	}
 
 	t.Cleanup(func() {

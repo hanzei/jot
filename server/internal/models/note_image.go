@@ -125,6 +125,23 @@ func (s *noteStore) GetNoteImagesByNoteID(ctx context.Context, noteID string) ([
 	return images, nil
 }
 
+// GetNoteImageCountByNoteID returns the number of images attached to a note.
+// Used for the upload handler's fast-path capacity pre-check, which only
+// needs a count and would otherwise waste a full row fetch+scan just to
+// discard everything but len() (CreateNoteImage's own transactional check is
+// what actually enforces the cap).
+func (s *noteStore) GetNoteImageCountByNoteID(ctx context.Context, noteID string) (int, error) {
+	var count int
+	err := s.db.QueryRowContext(ctx,
+		s.d.RewritePlaceholders(`SELECT COUNT(*) FROM note_images WHERE note_id = ?`),
+		noteID,
+	).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count note images: %w", err)
+	}
+	return count, nil
+}
+
 // getNoteImagesByNoteIDs batch-loads images for a set of note IDs, mirroring
 // getSharesByNoteIDs/getLabelsByNoteIDs, so listing notes never does one
 // images query per note. Chunked at noteIDsQueryBatchSize like

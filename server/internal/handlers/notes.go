@@ -759,6 +759,11 @@ func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, 
 	audienceIDs, audienceErr := h.noteStore.GetNoteAudienceIDs(r.Context(), id)
 
 	if permanent {
+		// Capture the note's image hashes before deleting: note_images rows
+		// cascade away with the note, so this is the last point they can be
+		// read in order to reclaim their now-orphaned blobs afterward.
+		imageSHAs := h.noteImageSHA256sForNote(r.Context(), id)
+
 		err := h.noteStore.DeleteFromTrash(r.Context(), id, user.ID)
 		if err != nil {
 			if errors.Is(err, models.ErrNoteNotInTrash) {
@@ -766,6 +771,8 @@ func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, 
 			}
 			return http.StatusInternalServerError, nil, fmt.Errorf("delete note from trash: %w", err)
 		}
+
+		h.reclaimNoteImageBlobs(r.Context(), imageSHAs)
 	} else {
 		err := h.noteStore.MoveToTrash(r.Context(), id, user.ID)
 		if err != nil {
@@ -800,10 +807,27 @@ func (h *NotesHandler) EmptyTrash(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
+	// Capture image hashes for every note about to be permanently deleted
+	// (same predicate EmptyTrash itself uses to select trashed, owned notes),
+	// so their now-orphaned blobs can be reclaimed once the notes — and the
+	// note_images rows that cascade away with them — are actually gone.
+	var imageSHAs []string
+	if trashedNotes, trashErr := h.noteStore.GetByUserID(r.Context(), user.ID, false, true, "", "", false); trashErr != nil {
+		logutil.FromContext(r.Context()).WithError(trashErr).Error("Failed to fetch trashed notes' images before emptying trash; their blobs will not be reclaimed")
+	} else {
+		for _, n := range trashedNotes {
+			for _, img := range n.Images {
+				imageSHAs = append(imageSHAs, img.SHA256)
+			}
+		}
+	}
+
 	deletedNotes, err := h.noteStore.EmptyTrash(r.Context(), user.ID)
 	if err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("empty trash: %w", err)
 	}
+
+	h.reclaimNoteImageBlobs(r.Context(), imageSHAs)
 
 	for _, deletedNote := range deletedNotes {
 		h.publishDeletedNoteEvent(r.Context(), deletedNote.NoteID, deletedNote.AudienceIDs, user.ID)
