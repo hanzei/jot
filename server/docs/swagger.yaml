@@ -868,6 +868,42 @@ paths:
       summary: Download a note image
       tags:
       - notes
+  /images/{id}/thumbnail:
+    get:
+      parameters:
+      - description: Image ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - image/jpeg
+      responses:
+        "200":
+          description: Thumbnail JPEG bytes
+          schema:
+            type: file
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Download a note image's thumbnail
+      tags:
+      - notes
   /labels:
     get:
       produces:

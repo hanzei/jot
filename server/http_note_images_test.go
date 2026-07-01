@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"image"
 	"image/color"
+	"io/fs"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/hanzei/jot/server/client"
@@ -12,6 +15,29 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// countRegularFiles recursively counts regular files under dir, treating a
+// missing directory as zero files (used to assert on thumbnail cache
+// presence/absence without depending on the content hash, which the API
+// never exposes to clients).
+func countRegularFiles(t *testing.T, dir string) int {
+	t.Helper()
+	count := 0
+	err := filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() {
+			count++
+		}
+		return nil
+	})
+	if os.IsNotExist(err) {
+		return 0
+	}
+	require.NoError(t, err)
+	return count
+}
 
 // testPNG returns a small valid PNG of the given size.
 func testPNG(t *testing.T, w, h int) []byte {
@@ -265,4 +291,128 @@ func TestNoteImageDedupBlobSurvivesUntilUnreferenced(t *testing.T) {
 	assert.Equal(t, data, downloaded)
 
 	require.NoError(t, user.Client.DeleteNoteImage(t.Context(), imgB.ID))
+}
+
+func TestGetNoteImageThumbnail(t *testing.T) {
+	var uploadDir string
+	ts := setupTestServerWithConfig(t, func(cfg *config.Config) {
+		uploadDir = cfg.UploadDir
+	})
+	user := ts.createTestUser(t, "imgthumb", "password123", false)
+
+	note, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "note"})
+	require.NoError(t, err)
+
+	// Larger than the thumbnail's target dimension so the thumbnail is an
+	// actual resize, not a same-size re-encode.
+	img, err := user.Client.UploadNoteImage(t.Context(), note.ID, "cat.png", bytes.NewReader(testPNG(t, 800, 600)))
+	require.NoError(t, err)
+
+	thumbDir := filepath.Join(uploadDir, "thumb")
+
+	t.Run("served after upload with correct type and nosniff", func(t *testing.T) {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/images/"+img.ID+"/thumbnail", nil)
+		require.NoError(t, err)
+
+		resp, err := user.Client.HTTPClient().Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Equal(t, "image/jpeg", resp.Header.Get("Content-Type"))
+		assert.Equal(t, "nosniff", resp.Header.Get("X-Content-Type-Options"))
+		assert.NotEmpty(t, resp.Header.Get("ETag"))
+
+		assert.Positive(t, countRegularFiles(t, thumbDir), "thumbnail should be generated eagerly at upload time")
+	})
+
+	t.Run("regenerated after the cached thumbnail file is removed", func(t *testing.T) {
+		// Thumbnails are a disposable cache with no DB row or refcount; wipe
+		// the whole thumb/ tree to simulate it going missing and confirm the
+		// endpoint regenerates on demand rather than erroring.
+		require.NoError(t, os.RemoveAll(thumbDir))
+
+		data, contentType, err := user.Client.GetNoteImageThumbnail(t.Context(), img.ID)
+		require.NoError(t, err)
+		assert.NotEmpty(t, data)
+		assert.Equal(t, "image/jpeg", contentType)
+
+		assert.Positive(t, countRegularFiles(t, thumbDir), "a regenerated thumbnail should be persisted back to disk")
+	})
+
+	t.Run("unauthenticated returns 401", func(t *testing.T) {
+		c := ts.newClient()
+		_, _, err := c.GetNoteImageThumbnail(t.Context(), img.ID)
+		assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
+	})
+
+	t.Run("unknown image ID returns 404", func(t *testing.T) {
+		_, _, err := user.Client.GetNoteImageThumbnail(t.Context(), "doesnotexist0000000000")
+		assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
+	})
+
+	t.Run("removed from disk once the original is fully reclaimed", func(t *testing.T) {
+		require.NoError(t, user.Client.DeleteNoteImage(t.Context(), img.ID))
+
+		assert.Zero(t, countRegularFiles(t, thumbDir), "thumbnail must be reclaimed alongside its now-orphaned original blob")
+
+		_, _, err := user.Client.GetNoteImageThumbnail(t.Context(), img.ID)
+		assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
+	})
+}
+
+// TestGetNoteImageThumbnailMissingOriginalReturns404 covers the (should never
+// happen in practice) case where a note_images row's original blob has gone
+// missing from disk: the thumbnail endpoint must surface the same 404 as
+// GetNoteImage rather than a 500 from a failed regeneration attempt.
+func TestGetNoteImageThumbnailMissingOriginalReturns404(t *testing.T) {
+	var uploadDir string
+	ts := setupTestServerWithConfig(t, func(cfg *config.Config) {
+		uploadDir = cfg.UploadDir
+	})
+	user := ts.createTestUser(t, "imgthumbmissing", "password123", false)
+
+	note, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "note"})
+	require.NoError(t, err)
+
+	img, err := user.Client.UploadNoteImage(t.Context(), note.ID, "cat.png", bytes.NewReader(testPNG(t, 4, 4)))
+	require.NoError(t, err)
+
+	// Wipe both the cached thumbnail and the original blob, forcing the
+	// thumbnail endpoint down the regeneration path with nothing to
+	// regenerate from.
+	require.NoError(t, os.RemoveAll(filepath.Join(uploadDir, "thumb")))
+	require.NoError(t, os.RemoveAll(filepath.Join(uploadDir, "blobs")))
+
+	_, _, err = user.Client.GetNoteImageThumbnail(t.Context(), img.ID)
+	assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
+}
+
+// TestNoteImageThumbnailAccessControl mirrors TestNoteImageAccessControl for
+// the thumbnail endpoint: an image's thumbnail is exactly as accessible as
+// its parent note.
+func TestNoteImageThumbnailAccessControl(t *testing.T) {
+	ts := setupTestServer(t)
+	owner := ts.createTestUser(t, "imgthumbaclowner", "password123", false)
+	sharedUser := ts.createTestUser(t, "imgthumbaclshared", "password123", false)
+	stranger := ts.createTestUser(t, "imgthumbaclstranger", "password123", false)
+
+	note, err := owner.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "shared note"})
+	require.NoError(t, err)
+	require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, sharedUser.User.ID))
+
+	img, err := owner.Client.UploadNoteImage(t.Context(), note.ID, "cat.png", bytes.NewReader(testPNG(t, 4, 4)))
+	require.NoError(t, err)
+
+	t.Run("shared user can download the thumbnail", func(t *testing.T) {
+		data, contentType, err := sharedUser.Client.GetNoteImageThumbnail(t.Context(), img.ID)
+		require.NoError(t, err)
+		assert.NotEmpty(t, data)
+		assert.Equal(t, "image/jpeg", contentType)
+	})
+
+	t.Run("non-shared user cannot download the thumbnail", func(t *testing.T) {
+		_, _, err := stranger.Client.GetNoteImageThumbnail(t.Context(), img.ID)
+		assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
+	})
 }
