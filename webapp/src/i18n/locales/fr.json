@@ -309,7 +309,9 @@
         "noteAssociations": "Affectations de labels",
         "completed": "Terminées",
         "assigned": "Assignées",
-        "databaseSize": "Taille de la base de données"
+        "databaseSize": "Taille de la base de données",
+        "imageCount": "Nombre d'images",
+        "imagesSize": "Stockage des images"
       }
     }
   },

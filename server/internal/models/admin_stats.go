@@ -39,6 +39,8 @@ type AdminListItemStats struct {
 
 type AdminStorageStats struct {
 	DatabaseSizeBytes int64 `json:"database_size_bytes"`
+	ImageCount        int64 `json:"image_count"`
+	ImagesSizeBytes   int64 `json:"images_size_bytes"`
 }
 
 type AdminStats struct {
@@ -115,6 +117,17 @@ func (s *adminStatsStore) GetStats(ctx context.Context) (*AdminStats, error) {
 		FROM note_items
 	`)).Scan(&stats.ListItems.Total, &stats.ListItems.Completed, &stats.ListItems.Assigned); err != nil {
 		return nil, fmt.Errorf("count note items: %w", err)
+	}
+
+	// Dedup-aware: distinct on sha256 so images sharing a blob are counted
+	// once, matching the actual on-disk footprint in UPLOAD_DIR.
+	if err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(`
+		SELECT
+			COUNT(*),
+			COALESCE(SUM(size_bytes), 0)
+		FROM (SELECT DISTINCT sha256, size_bytes FROM note_images) dedup_images
+	`)).Scan(&stats.Storage.ImageCount, &stats.Storage.ImagesSizeBytes); err != nil {
+		return nil, fmt.Errorf("count note images: %w", err)
 	}
 
 	return stats, nil

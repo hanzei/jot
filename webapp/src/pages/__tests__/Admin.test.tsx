@@ -63,7 +63,7 @@ const mockStats: AdminStatsResponse = {
   sharing: { shared_notes: 1, share_links: 2 },
   labels: { total: 2, note_associations: 3 },
   list_items: { total: 3, completed: 1, assigned: 2 },
-  storage: { database_size_bytes: 4_398_047 },
+  storage: { database_size_bytes: 4_398_047, image_count: 5, images_size_bytes: 2_097_152 },
 }
 
 const renderAdmin = (passwordMinLength: number = VALIDATION.PASSWORD_MIN_LENGTH) => {
@@ -101,6 +101,8 @@ describe('Admin', () => {
       expect(screen.getByTestId('admin-stats-labels-total')).toHaveTextContent('2')
       expect(screen.getByTestId('admin-stats-list-items-total')).toHaveTextContent('3')
       expect(screen.getByTestId('admin-stats-database-size')).toHaveTextContent('4.2 MB')
+      expect(screen.getByTestId('admin-stats-image-count')).toHaveTextContent('5')
+      expect(screen.getByTestId('admin-stats-images-size')).toHaveTextContent('2 MB')
     })
 
     it('shows loading placeholders while stats are fetching', async () => {

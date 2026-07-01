@@ -318,6 +318,8 @@ type AdminListItemStats struct {
 
 type AdminStorageStats struct {
 	DatabaseSizeBytes int64 `json:"database_size_bytes"`
+	ImageCount        int64 `json:"image_count"`
+	ImagesSizeBytes   int64 `json:"images_size_bytes"`
 }
 
 // SessionInfo is a single active session as returned by the sessions API.

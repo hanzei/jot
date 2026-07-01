@@ -287,6 +287,8 @@ export interface AdminListItemStats {
 
 export interface AdminStorageStats {
   database_size_bytes: number;
+  image_count: number;
+  images_size_bytes: number;
 }
 
 export interface AdminStatsResponse {
