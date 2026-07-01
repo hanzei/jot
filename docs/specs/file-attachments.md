@@ -213,6 +213,36 @@ annotations.
 permission concept — an image is exactly as accessible as its note. PAT-auth
 works identically.
 
+### 6.1 How clients fetch the note list
+
+`GET /api/notes` (and its `?trashed` / `?archived` / `?search` / `?label` /
+`?my_tasks` variants) is **unchanged in shape**: it still returns an array of
+`Note` objects. Each note simply gains an `images` array, exactly like the
+existing embedded `items` / `labels` / `shared_with`. No new list endpoint, no
+pagination change, no extra round-trip to discover a note's images.
+
+- **Metadata only in the JSON.** Each embedded `NoteImage` is
+  `{ id, filename, content_type, width, height, created_at }` (a few hundred
+  bytes). Image *bytes* are never in the list payload.
+- **Batch-loaded, no N+1.** Images for the whole result set are loaded in a
+  single query (`WHERE note_id IN (...) AND deleted_at IS NULL ORDER BY note_id,
+  created_at`), mirroring the existing `batchLoadSharesAndLabels` — one extra
+  query per list request regardless of note count.
+- **Bytes fetched out-of-band and cached.** Clients render tiles from
+  `GET /api/images/{id}/thumbnail` and the lightbox from `GET /api/images/{id}`.
+  Both are immutable (content-addressed, `ETag = sha256`, `Cache-Control`), so
+  they are served from cache on subsequent list loads. The embedded
+  `width`/`height` let clients reserve tile aspect ratios up front to avoid
+  layout reflow while thumbnails load.
+- **Stays live via SSE.** `note_image_added` / `note_image_removed` (§8) patch the
+  already-loaded list without a refetch.
+
+Design fork (open question): embed **all** image metadata per note in list
+responses (simple, lets the grid render a full gallery directly — **recommended**,
+since ≤10 tiny entries/note is cheap) vs. return only the **cover** image in list
+mode and the full set on the single-note `GET /notes/{id}` (leaner list payload,
+but a gallery needs a second fetch). See §15.
+
 **Upload handler** (mirrors `UploadProfileIcon`):
 1. `r.Body = http.MaxBytesReader(w, r.Body, limit+overhead)`; `ParseMultipartForm`.
 2. Read `file`, enforce the **10-per-note** cap, compute SHA-256 while reading.
@@ -385,3 +415,6 @@ Dedicated events are cheaper and match existing granularity.
 6. **Export format**: zip bundle vs base64-inline — depends on current export.
 7. **Image without a note**: require a `note_id` (create the note first) vs allow
    a draft upload bound on save? (Leaning: require `note_id`.)
+8. **List payload**: embed all image metadata per note in `GET /notes` vs. only
+   the cover in list mode + full set on `GET /notes/{id}` (§6.1). Leaning: embed
+   all — cheap and lets the grid render galleries without a second fetch.
