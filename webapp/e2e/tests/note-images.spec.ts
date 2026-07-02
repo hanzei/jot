@@ -55,6 +55,40 @@ test.describe('Note image gallery', () => {
     await expect(page.getByText('1 / 2')).toBeHidden();
   });
 
+  test('shows the first image as a cover thumbnail on the note card, with a +N badge for extra images', async ({ page, dashboardPage }) => {
+    await dashboardPage.goto();
+    const title = `Cover note ${Date.now()}`;
+    await dashboardPage.createNote(title);
+
+    const notesResponse = await page.request.get('/api/v1/notes');
+    const notesList: Array<{ id: string; title?: string }> = await notesResponse.json();
+    const note = notesList.find((n) => n.title === title);
+    expect(note).toBeTruthy();
+
+    const firstUpload = await page.request.post(`/api/v1/notes/${note!.id}/images`, {
+      multipart: { file: noteImageFile },
+    });
+    expect(firstUpload.ok()).toBeTruthy();
+
+    await page.reload();
+
+    const card = page.locator('[data-testid="note-card"]').filter({
+      has: page.locator('h3').getByText(title, { exact: true }),
+    });
+    await expect(card.getByTestId('note-card-cover')).toBeVisible();
+    await expect(card.getByAltText('test-icon.png')).toBeVisible();
+    await expect(card.getByText(/^\+\d+$/)).not.toBeAttached();
+
+    // A second image adds a "+N" badge on the same cover.
+    const secondUpload = await page.request.post(`/api/v1/notes/${note!.id}/images`, {
+      multipart: { file: noteImageFile },
+    });
+    expect(secondUpload.ok()).toBeTruthy();
+
+    await page.reload();
+    await expect(card.getByText('+1')).toBeVisible();
+  });
+
   test('uploads an image via the toolbar picker', async ({ page, dashboardPage }) => {
     await dashboardPage.goto();
     const title = `Toolbar upload note ${Date.now()}`;

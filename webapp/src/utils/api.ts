@@ -202,6 +202,10 @@ export const pats = {
 export const images = {
   url: (id: string): string => `/api/v1/images/${id}`,
 
+  // Resized JPEG tile for grid/cover thumbnails; the lightbox uses `url`
+  // (the original) instead so a closer look never shows a downscaled image.
+  thumbnailUrl: (id: string): string => `/api/v1/images/${id}/thumbnail`,
+
   upload: (noteId: string, file: File, onProgress?: (percent: number) => void): Promise<NoteImage> => {
     const formData = new FormData();
     formData.append('file', file);

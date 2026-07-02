@@ -420,6 +420,7 @@
   "images": {
     "openLightbox": "Visualizza {{filename}}",
     "moreImages": "Visualizza {{count}} immagini in più",
+    "moreImagesBadge": "{{count}} immagini in più",
     "lightboxPrevious": "Immagine precedente",
     "lightboxNext": "Immagine successiva",
     "lightboxCounter": "{{current}} / {{total}}",
