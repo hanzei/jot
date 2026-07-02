@@ -453,6 +453,8 @@
     "fileTypesJson": "Pliki .json",
     "invalidFileType": "Nieprawidłowy typ pliku. Wybierz plik .json lub .zip.",
     "invalidFileTypeJson": "Nieprawidłowy typ pliku. Wybierz plik .json.",
+    "importedNotes_few": "Zaimportowano {{count}} notatki",
+    "importedNotes_many": "Zaimportowano {{count}} notatek",
     "importedNotes_one": "Zaimportowano {{count}} notatkę",
     "importedNotes_other": "Zaimportowano {{count}} notatek",
     "skipped": "({{count}} pominięto)",

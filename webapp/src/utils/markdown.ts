@@ -7,7 +7,16 @@ marked.use({
   renderer: {
     link({ href, tokens }: Tokens.Link): string {
       const text = this.parser.parseInline(tokens);
-      const safeHref = encodeURI(href);
+      // Same normalization as marked's own cleanUrl: encode, then undo the
+      // '%' → '%25' double-encoding so already-encoded URLs (e.g.
+      // .../Caf%C3%A9) round-trip unchanged instead of ending up broken.
+      // (javascript: and friends are stripped later by DOMPurify.)
+      let safeHref: string;
+      try {
+        safeHref = encodeURI(href).replace(/%25/g, '%');
+      } catch {
+        return text;
+      }
       return `<a href="${safeHref}" target="_blank" rel="noopener noreferrer">${text}</a>`;
     },
   },

@@ -239,6 +239,17 @@ describe('NotesListScreen sorting', () => {
 
     render(<NotesListScreen variant="notes" />);
 
+    // The draggable masonry only positions and reveals cards once it has
+    // measured their real height via onLayout; simulate the native layout
+    // pass the test renderer doesn't perform on its own. The card starts out
+    // in the (accessibility-hidden) off-screen measurement pool, so it must
+    // be queried with includeHiddenElements.
+    ['pinned-zulu', 'unpinned-bravo', 'unpinned-alpha'].forEach((id) => {
+      fireEvent(screen.getByTestId(`note-card-${id}`, { includeHiddenElements: true }), 'layout', {
+        nativeEvent: { layout: { x: 0, y: 0, width: 150, height: 100 } },
+      });
+    });
+
     expect(screen.queryByTestId('sort-disabled-notice')).toBeNull();
     expect(screen.queryByTestId('sort-controls')).toBeNull();
     expect(screen.getByTestId('drawer-toggle')).toBeTruthy();

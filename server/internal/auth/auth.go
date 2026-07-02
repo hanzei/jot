@@ -34,12 +34,12 @@ func NewSessionService(sessionStore *models.SessionStore, userStore *models.User
 
 func (s *SessionService) CreateSession(w http.ResponseWriter, r *http.Request, userID string) error {
 	userAgent := r.UserAgent()
-	session, err := s.sessionStore.Create(r.Context(), userID, userAgent)
+	_, rawToken, err := s.sessionStore.Create(r.Context(), userID, userAgent)
 	if err != nil {
-		return err
+		return fmt.Errorf("store session: %w", err)
 	}
 
-	s.setSessionCookie(w, session.Token, int(models.SessionDuration.Seconds()))
+	s.setSessionCookie(w, rawToken, int(models.SessionDuration.Seconds()))
 
 	return nil
 }
@@ -93,17 +93,21 @@ func (s *SessionService) GetSessionAndUser(r *http.Request) (_ *models.Session, 
 	return session, user, nil
 }
 
-func (s *SessionService) RenewSessionIfExpiringSoon(ctx context.Context, w http.ResponseWriter, session *models.Session) error {
+// RenewSessionIfExpiringSoon extends the session and re-sets the cookie when
+// the session is close to expiry. rawToken is the token from the client's
+// cookie; only its hash is stored, so the cookie value cannot be derived from
+// the session record itself.
+func (s *SessionService) RenewSessionIfExpiringSoon(ctx context.Context, w http.ResponseWriter, session *models.Session, rawToken string) error {
 	now := time.Now()
 	if session.ExpiresAt.Sub(now) >= models.SessionRenewWindow {
 		return nil
 	}
 
 	newExpiry := now.Add(models.SessionDuration)
-	if err := s.sessionStore.UpdateExpiry(ctx, session.Token, newExpiry); err != nil {
+	if err := s.sessionStore.UpdateExpiry(ctx, session.TokenHash, newExpiry); err != nil {
 		return fmt.Errorf("renew session: %w", err)
 	}
-	s.setSessionCookie(w, session.Token, int(models.SessionDuration.Seconds()))
+	s.setSessionCookie(w, rawToken, int(models.SessionDuration.Seconds()))
 	return nil
 }
 
