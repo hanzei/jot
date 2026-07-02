@@ -1340,7 +1340,10 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     setTimeout(() => itemInputRefs.current.get(newId)?.focus(), 0);
   };
 
-  const insertListItemAfter = (afterItemId: string) => {
+  const insertListItemAfter = (
+    afterItemId: string,
+    overrides: { text?: string; parentId?: string | null; assignedTo?: string } = {},
+  ) => {
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = undefined;
@@ -1350,11 +1353,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     const afterItem = afterItemPos >= 0 ? currentItems[afterItemPos] : undefined;
     const newItem: ListItem = {
       id: generateItemId(),
-      text: '',
+      text: overrides.text ?? '',
       completed: false,
       position: 0,
-      parentId: afterItem ? afterItem.parentId : null,
-      assignedTo: '',
+      parentId: overrides.parentId !== undefined ? overrides.parentId : (afterItem ? afterItem.parentId : null),
+      assignedTo: overrides.assignedTo ?? '',
     };
     const insertPos = afterItemPos >= 0 ? afterItemPos + 1 : currentItems.length;
     const newItems = [...currentItems];
@@ -1364,8 +1367,71 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     return newItem.id;
   };
 
+  // insertListItemBefore adds a new empty item immediately before beforeItemId,
+  // leaving that item's own text untouched (used when Enter is pressed at the
+  // very start of a non-empty item).
+  const insertListItemBefore = (
+    beforeItemId: string,
+    overrides: { parentId?: string | null; assignedTo?: string } = {},
+  ) => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = undefined;
+    }
+    const currentItems = itemsRef.current;
+    const beforeItemPos = currentItems.findIndex(item => item.id === beforeItemId);
+    const beforeItem = beforeItemPos >= 0 ? currentItems[beforeItemPos] : undefined;
+    const newItem: ListItem = {
+      id: generateItemId(),
+      text: '',
+      completed: false,
+      position: 0,
+      parentId: overrides.parentId !== undefined ? overrides.parentId : (beforeItem ? beforeItem.parentId : null),
+      assignedTo: overrides.assignedTo ?? '',
+    };
+    const insertPos = beforeItemPos >= 0 ? beforeItemPos : currentItems.length;
+    const newItems = [...currentItems];
+    newItems.splice(insertPos, 0, newItem);
+    commitItems(normalizeItemOrder(newItems));
+    autoSaveNote();
+    return newItem.id;
+  };
+
+  // splitListItem truncates itemId's text to the text before splitPos and
+  // inserts a new item directly after it containing the text from splitPos
+  // onward, inheriting the same group (parentId) and assignee.
+  const splitListItem = (itemId: string, splitPos: number) => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = undefined;
+    }
+    const currentItems = itemsRef.current;
+    const itemPos = currentItems.findIndex(item => item.id === itemId);
+    if (itemPos === -1) return itemId;
+    const currentItem = currentItems[itemPos];
+    const before = currentItem.text.slice(0, splitPos);
+    const after = currentItem.text.slice(splitPos);
+    const newItem: ListItem = {
+      id: generateItemId(),
+      text: after,
+      completed: false,
+      position: 0,
+      parentId: currentItem.parentId,
+      assignedTo: currentItem.assignedTo,
+    };
+    const newItems = [...currentItems];
+    newItems[itemPos] = { ...currentItem, text: before };
+    newItems.splice(itemPos + 1, 0, newItem);
+    commitItems(normalizeItemOrder(newItems));
+    autoSaveNote();
+    return newItem.id;
+  };
+
   const handleItemKeyDown = (index: number, e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      // Cross-item arrow navigation is only wired up within the uncompleted
+      // section; completed items keep default textarea arrow behavior.
+      if (index >= uncompletedItems.length) return;
       if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
       const textarea = e.currentTarget;
       if (textarea.value.includes('\n')) return;
@@ -1409,8 +1475,39 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
     if (e.key === 'Enter') {
       e.preventDefault();
-      const currentItem = uncompletedItems[index];
-      const newId = insertListItemAfter(currentItem?.id ?? '');
+      const currentItem = findTargetItem(index);
+      if (!currentItem) return;
+
+      const textarea = e.currentTarget;
+      const text = currentItem.text;
+      const cursorPos = textarea.selectionStart ?? text.length;
+
+      // Cursor at the very start of a non-empty item: add a blank item
+      // before it and move focus there, leaving this item's text untouched.
+      if (cursorPos === 0 && text.length > 0) {
+        const newId = insertListItemBefore(currentItem.id, {
+          parentId: currentItem.parentId,
+          assignedTo: currentItem.assignedTo,
+        });
+        setTimeout(() => itemInputRefs.current.get(newId)?.focus(), 0);
+        return;
+      }
+
+      // Cursor mid-text: split the item at the cursor into two items.
+      if (cursorPos > 0 && cursorPos < text.length) {
+        const newId = splitListItem(currentItem.id, cursorPos);
+        setTimeout(() => {
+          const el = itemInputRefs.current.get(newId);
+          if (el) {
+            el.focus();
+            el.setSelectionRange(0, 0);
+          }
+        }, 0);
+        return;
+      }
+
+      // Cursor at the end (or item is empty): append a blank item after.
+      const newId = insertListItemAfter(currentItem.id);
       setTimeout(() => {
         itemInputRefs.current.get(newId)?.focus();
       }, 0);
@@ -2456,6 +2553,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                                 onUpdateListItem={(idx, field, value) => updateListItem(idx, field, value)}
                                 onRemoveListItem={removeListItem}
                                 isCompleted={true}
+                                onKeyDown={handleItemKeyDown}
+                                inputRef={(el) => {
+                                  if (el) itemInputRefs.current.set(item.id, el);
+                                  else itemInputRefs.current.delete(item.id);
+                                }}
                                 isShared={note?.is_shared}
                                 collaborators={collaborators}
                                 usersById={usersById}

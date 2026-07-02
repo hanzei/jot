@@ -905,7 +905,74 @@ export default function NoteEditorScreen() {
     autoFocusClearTimerRef.current = setTimeout(() => { autoFocusItemIdRef.current = null; }, 500);
   }, [markDirtyAndScheduleUpdate]);
 
-  const handleInsertItemAfter = useCallback((index: number) => {
+  // handleItemEnterAtCursor mirrors the webapp's Enter-key handling:
+  //  - cursor at the very start of a non-empty item -> insert a blank item
+  //    before it (leaving its own text untouched), focus the new item;
+  //  - cursor mid-text -> split the item into two at the cursor, focus the
+  //    new (second) item with its cursor at the start;
+  //  - cursor at the end (or item is empty) -> append a blank item after
+  //    (previous default behavior).
+  // Newly created items inherit the current item's group (parentId) and
+  // assignee; completed always resets to false.
+  const handleItemEnterAtCursor = useCallback((index: number, cursorPosition: number) => {
+    const currentItem = itemsRef.current[index];
+    if (!currentItem) return;
+
+    const text = currentItem.text;
+    const cursorPos = Math.max(0, Math.min(cursorPosition, text.length));
+
+    if (cursorPos === 0 && text.length > 0) {
+      const newId = nextTempId();
+      const newItemRef = getItemRef(newId);
+      setItems((prev) => {
+        const newItem: LocalItem = {
+          id: newId,
+          text: '',
+          completed: false,
+          position: index,
+          parentId: prev[index]?.parentId ?? null,
+          assigned_to: prev[index]?.assigned_to ?? '',
+        };
+        const next = [...prev.slice(0, index), newItem, ...prev.slice(index)];
+        return next.map((item, i) => ({ ...item, position: i }));
+      });
+      markDirtyAndScheduleUpdate();
+      setTimeout(() => newItemRef.current?.focus(), 50);
+      return;
+    }
+
+    if (cursorPos > 0 && cursorPos < text.length) {
+      const before = text.slice(0, cursorPos);
+      const after = text.slice(cursorPos);
+      const newId = nextTempId();
+      const newItemRef = getItemRef(newId);
+      setItems((prev) => {
+        const newItem: LocalItem = {
+          id: newId,
+          text: after,
+          completed: false,
+          position: index + 1,
+          parentId: prev[index]?.parentId ?? null,
+          assigned_to: prev[index]?.assigned_to ?? '',
+        };
+        const next = [
+          ...prev.slice(0, index),
+          { ...prev[index], text: before },
+          newItem,
+          ...prev.slice(index + 1),
+        ];
+        return next.map((item, i) => ({ ...item, position: i }));
+      });
+      markDirtyAndScheduleUpdate();
+      setTimeout(() => {
+        newItemRef.current?.focus();
+        // Not all TextInput host implementations (e.g. test mocks) provide
+        // this imperative method, so guard the call.
+        newItemRef.current?.setSelection?.(0, 0);
+      }, 50);
+      return;
+    }
+
     const newId = nextTempId();
     const newItemRef = getItemRef(newId);
     setItems((prev) => {
@@ -1387,12 +1454,12 @@ export default function NoteEditorScreen() {
       onToggle: (itemId, completed) => { void handleItemCompletedToggle(itemId, completed); },
       onChangeText: handleItemTextChange,
       onDelete: handleDeleteItem,
-      onInsertAfter: handleInsertItemAfter,
+      onEnterAtCursor: handleItemEnterAtCursor,
       onBackspaceOnEmpty: handleBackspaceOnEmpty,
       onAssignPress: openAssigneePicker,
       onFocus: handleFocusListItem,
     }),
-    [handleItemCompletedToggle, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, openAssigneePicker, handleFocusListItem],
+    [handleItemCompletedToggle, handleItemTextChange, handleDeleteItem, handleItemEnterAtCursor, handleBackspaceOnEmpty, openAssigneePicker, handleFocusListItem],
   );
 
   const renderActiveRow = useCallback(
@@ -1425,7 +1492,7 @@ export default function NoteEditorScreen() {
             onToggle: () => listItemHandlers.onToggle(item.id, !item.completed),
             onChangeText: (text) => listItemHandlers.onChangeText(originalIndex, text),
             onDelete: () => listItemHandlers.onDelete(originalIndex),
-            onSubmitEditing: () => listItemHandlers.onInsertAfter(originalIndex),
+            onSubmitEditing: (cursorPos) => listItemHandlers.onEnterAtCursor(originalIndex, cursorPos),
             onBackspaceOnEmpty: () => listItemHandlers.onBackspaceOnEmpty(originalIndex),
             onAssignPress: () => listItemHandlers.onAssignPress(item.id),
             onFocus: (event) => listItemHandlers.onFocus(item.id, event),

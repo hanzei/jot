@@ -17,7 +17,7 @@ export interface ListItemHandlers {
   onToggle: (itemId: string, completed: boolean) => void;
   onChangeText: (index: number, text: string) => void;
   onDelete: (index: number) => void;
-  onInsertAfter: (index: number) => void;
+  onEnterAtCursor: (index: number, cursorPosition: number) => void;
   onBackspaceOnEmpty: (index: number) => void;
   onAssignPress: (itemId: string) => void;
   onFocus: (itemId: string, event: Parameters<NonNullable<TextInputProps['onFocus']>>[0]) => void;
@@ -111,7 +111,7 @@ export default function CheckedItemsSection({
           onToggle={() => { handlers.onToggle(item.id, !item.completed); }}
           onChangeText={(text) => handlers.onChangeText(originalIndex, text)}
           onDelete={() => handlers.onDelete(originalIndex)}
-          onSubmitEditing={() => handlers.onInsertAfter(originalIndex)}
+          onSubmitEditing={(cursorPos) => handlers.onEnterAtCursor(originalIndex, cursorPos)}
           onBackspaceOnEmpty={() => handlers.onBackspaceOnEmpty(originalIndex)}
           onAssignPress={() => handlers.onAssignPress(item.id)}
           onFocus={(event) => handlers.onFocus(item.id, event)}

@@ -43,7 +43,7 @@ interface ListItemProps {
   onToggle?: () => void;
   onChangeText?: (text: string) => void;
   onDelete?: () => void;
-  onSubmitEditing?: () => void;
+  onSubmitEditing?: (cursorPosition: number) => void;
   onBackspaceOnEmpty?: () => void;
   onAssignPress?: () => void;
   onFocus?: TextInputProps['onFocus'];
@@ -83,6 +83,11 @@ function ListItem({
   const { t } = useTranslation();
   const [showSuggestions, setShowSuggestions] = useState(false);
   const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Tracks the native cursor position so Enter/submit can decide whether to
+  // split the item at the cursor, insert before it, or append after it.
+  // Seeded to the end of the current text and refined by onSelectionChange,
+  // since onSubmitEditing's native event carries no selection info.
+  const selectionRef = useRef({ start: text.length, end: text.length });
 
   useEffect(() => {
     return () => {
@@ -187,13 +192,19 @@ function ListItem({
             value={text}
             onChangeText={(newText) => {
               onChangeText?.(newText);
+              // Approximate the cursor moving to the end of freshly typed text;
+              // onSelectionChange refines this once the native event arrives.
+              selectionRef.current = { start: newText.length, end: newText.length };
               if (!completed) setShowSuggestions(newText.trim().length > 0);
+            }}
+            onSelectionChange={(event) => {
+              selectionRef.current = event.nativeEvent.selection;
             }}
             editable={editable}
             placeholder={t('note.itemPlaceholder')}
             placeholderTextColor={effectivePlaceholder}
             returnKeyType="next"
-            onSubmitEditing={onSubmitEditing}
+            onSubmitEditing={() => onSubmitEditing?.(selectionRef.current.start)}
             blurOnSubmit={false}
             onFocus={(event) => {
               onFocus?.(event);
