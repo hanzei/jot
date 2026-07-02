@@ -51,17 +51,11 @@ import { enqueueOperation, rethrowIfNotQueueable } from '../db/syncQueue';
 import { useNetworkStatus } from './useNetworkStatus';
 import { useAuth } from '../store/AuthContext';
 import { isLocalModeActive } from '../store/localMode';
-import { isServerSwitchInProgress } from '../api/client';
+import { assertSwitchWriteAllowed } from '../api/client';
 import {
   noteLocalQueryKey,
   notesLocalQueryScopeKey,
 } from './queryKeys';
-
-function assertSwitchWriteAllowed(): void {
-  if (isServerSwitchInProgress()) {
-    throw new Error('Server switch in progress; write blocked');
-  }
-}
 
 /**
  * Collects the item ids a completed-toggle should cascade to, mirroring the

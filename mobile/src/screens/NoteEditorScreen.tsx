@@ -41,7 +41,11 @@ import { useToast } from '../hooks/useToast';
 import ColorPicker from '../components/ColorPicker';
 import LabelPicker from '../components/LabelPicker';
 import AssigneePicker from '../components/AssigneePicker';
-import { buildCollaborators, generateId, VALIDATION, type Collaborator, type NoteType, type CreateNoteRequest, type UpdateNoteRequest, type UpdateListNoteRequest, type UpdateTextNoteRequest, type PatchNoteItemRequest, type Label } from '@jot/shared';
+import AddImageActionSheet from '../components/AddImageActionSheet';
+import { useUploadNoteImage, useDeleteNoteImage } from '../hooks/useNoteImages';
+import type { ImageUploadFile } from '../api/images';
+import { buildCollaborators, generateId, VALIDATION, IMAGE_MAX_PER_NOTE, type Collaborator, type NoteType, type NoteImage, type CreateNoteRequest, type UpdateNoteRequest, type UpdateListNoteRequest, type UpdateTextNoteRequest, type PatchNoteItemRequest, type Label } from '@jot/shared';
+import { validateImageFile as validateImageFileRaw, IMAGE_MAX_MB } from '../utils/imageValidation';
 import { useAuth } from '../store/AuthContext';
 import { useUsers } from '../store/UsersContext';
 import { useTheme } from '../theme/ThemeContext';
@@ -67,7 +71,7 @@ import {
 } from './noteEditor/listItemModel';
 import { MarkdownToolbarContent } from './noteEditor/EditorToolbars';
 import CheckedItemsSection, { type ListItemHandlers } from './noteEditor/CheckedItemsSection';
-import NoteImageGallery from '../components/NoteImageGallery';
+import NoteImageGallery, { type PendingImageUpload } from '../components/NoteImageGallery';
 import { styles } from './noteEditor/styles';
 import { animateListReflow, isReduceMotionEnabledSync } from '../utils/layoutAnimation';
 import ActiveListRow from './noteEditor/ActiveListRow';
@@ -165,6 +169,15 @@ export default function NoteEditorScreen() {
   const deleteItemMutation = useDeleteNoteItem();
   const reorderItemsMutation = useReorderNoteItems();
   const toggleItemCompletedMutation = useToggleNoteItemCompleted();
+  const uploadImageMutation = useUploadNoteImage();
+  const deleteImageMutation = useDeleteNoteImage();
+
+  // Add-image UX state: the action sheet, in-flight/failed uploads rendered as
+  // gallery placeholders, and images hidden pending the deferred-delete undo
+  // window (spec §3.1/§6 — online-only per issue #617; #13 tracks offline).
+  const [addImageSheetVisible, setAddImageSheetVisible] = useState(false);
+  const [imageUploads, setImageUploads] = useState<PendingImageUpload[]>([]);
+  const [removedImageIds, setRemovedImageIds] = useState<Set<string>>(new Set());
 
   // Show a toast when another user updates this note while editor is open
   useSSESubscription(noteId, useCallback(() => {
@@ -231,6 +244,141 @@ export default function NoteEditorScreen() {
   reorderItemsRef.current = reorderItemsMutation.mutateAsync;
   const toggleItemCompletedRef = useRef(toggleItemCompletedMutation.mutateAsync);
   toggleItemCompletedRef.current = toggleItemCompletedMutation.mutateAsync;
+
+  const imageUploadsRef = useRef(imageUploads);
+  imageUploadsRef.current = imageUploads;
+  const imageUploadFilesRef = useRef(new Map<string, ImageUploadFile>());
+  const activeImageUploadIdsRef = useRef(new Set<string>());
+
+  const displayedImages = useMemo(
+    () => (existingNote?.images ?? []).filter((img) => !removedImageIds.has(img.id)),
+    [existingNote?.images, removedImageIds],
+  );
+
+  const validateImageFile = useCallback((file: ImageUploadFile): string | null => {
+    const error = validateImageFileRaw(file);
+    if (error === 'wrongType') return t('images.errorWrongType');
+    if (error === 'tooLarge') return t('images.errorTooLarge', { maxMB: IMAGE_MAX_MB });
+    return null;
+  }, [t]);
+
+  const removeUploadTile = useCallback((uploadId: string) => {
+    setImageUploads((prev) => prev.filter((u) => u.id !== uploadId));
+    imageUploadFilesRef.current.delete(uploadId);
+  }, []);
+
+  const runImageUpload = useCallback((uploadId: string, file: ImageUploadFile) => {
+    const currentNoteId = noteIdRef.current;
+    if (!currentNoteId) {
+      // The note id can null out mid-flight (e.g. the share-target redirect
+      // resets it) between queuing the placeholder tile and getting here —
+      // surface it as a failed upload instead of leaving the tile spinning
+      // forever with no retry/dismiss affordance.
+      setImageUploads((prev) => prev.map((u) => (u.id === uploadId ? { ...u, status: 'error', errorMessage: t('images.uploadFailed') } : u)));
+      return;
+    }
+    // Guard against a duplicate concurrent request for the same upload (a
+    // rapid double-tap on Retry before React re-renders the tile out of its
+    // pressable state).
+    if (activeImageUploadIdsRef.current.has(uploadId)) return;
+    activeImageUploadIdsRef.current.add(uploadId);
+    uploadImageMutation.mutateAsync({
+      noteId: currentNoteId,
+      file,
+      onProgress: (percent) => {
+        setImageUploads((prev) => prev.map((u) => (u.id === uploadId ? { ...u, progress: percent } : u)));
+      },
+    }).then(() => {
+      activeImageUploadIdsRef.current.delete(uploadId);
+      removeUploadTile(uploadId);
+    }).catch((error) => {
+      activeImageUploadIdsRef.current.delete(uploadId);
+      console.error('Failed to upload note image:', error);
+      const status = (error as { response?: { status?: number } })?.response?.status;
+      const message = status === 413 ? t('images.errorTooLarge', { maxMB: IMAGE_MAX_MB }) : t('images.uploadFailed');
+      setImageUploads((prev) => prev.map((u) => (u.id === uploadId ? { ...u, status: 'error', errorMessage: message } : u)));
+    });
+  }, [removeUploadTile, t, uploadImageMutation]);
+
+  const startImageUpload = useCallback((file: ImageUploadFile) => {
+    const id = generateId();
+    imageUploadFilesRef.current.set(id, file);
+    setImageUploads((prev) => [...prev, { id, filename: file.name, previewUri: file.uri, progress: 0, status: 'uploading' }]);
+    runImageUpload(id, file);
+  }, [runImageUpload]);
+
+  const retryImageUpload = useCallback((uploadId: string) => {
+    const file = imageUploadFilesRef.current.get(uploadId);
+    if (!file) return;
+    setImageUploads((prev) => prev.map((u) => (u.id === uploadId ? { ...u, status: 'uploading', progress: 0, errorMessage: undefined } : u)));
+    runImageUpload(uploadId, file);
+  }, [runImageUpload]);
+
+  // Entry point for the add-image action sheet. Validates each file and
+  // enforces the per-note image cap client-side (the server enforces it
+  // authoritatively) before starting an upload per valid file.
+  const queueImageFiles = useCallback((files: ImageUploadFile[]) => {
+    if (files.length === 0) return;
+
+    const noteImages = existingNote?.images ?? [];
+    let remainingSlots = IMAGE_MAX_PER_NOTE
+      - noteImages.length
+      - imageUploadsRef.current.filter((u) => u.status !== 'error').length;
+
+    // Collect distinct error messages across the whole batch instead of
+    // showing (and immediately overwriting) one per invalid file.
+    const errors = new Set<string>();
+    for (const file of files) {
+      const validationError = validateImageFile(file);
+      if (validationError) {
+        errors.add(validationError);
+        continue;
+      }
+      if (remainingSlots <= 0) {
+        errors.add(t('images.errorTooMany', { max: IMAGE_MAX_PER_NOTE }));
+        break;
+      }
+      remainingSlots -= 1;
+      startImageUpload(file);
+    }
+    if (errors.size > 0) showToast(Array.from(errors).join(' '), 'error');
+  }, [existingNote?.images, showToast, startImageUpload, t, validateImageFile]);
+
+  const handleImagePermissionDenied = useCallback((source: 'camera' | 'library') => {
+    showToast(source === 'camera' ? t('images.cameraPermissionDenied') : t('images.libraryPermissionDenied'), 'error');
+  }, [showToast, t]);
+
+  // Removal is client-deferred: the tile hides immediately and an undo toast
+  // appears; the DELETE only fires once the toast's own timer expires with no
+  // undo (no restore endpoint exists for images, unlike notes/archive above).
+  // Driven entirely by the toast's onExpire — not a second independent timer —
+  // so the delete can never race ahead of (or lag) the visible Undo button.
+  const removeNoteImage = useCallback((image: NoteImage) => {
+    const currentNoteId = noteIdRef.current;
+    if (!currentNoteId) return;
+    setRemovedImageIds((prev) => new Set(prev).add(image.id));
+
+    const clearRemovalState = () => {
+      setRemovedImageIds((prev) => {
+        const next = new Set(prev);
+        next.delete(image.id);
+        return next;
+      });
+    };
+
+    showToast(t('images.removedToast'), 'info', {
+      label: t('dashboard.undo'),
+      onPress: clearRemovalState,
+      onExpire: () => {
+        deleteImageMutation.mutateAsync({ noteId: currentNoteId, imageId: image.id })
+          .catch((error) => {
+            console.error('Failed to delete note image:', error);
+          })
+          .finally(clearRemovalState);
+      },
+    });
+  }, [deleteImageMutation, showToast, t]);
+
   // Baseline of the last-saved state, used to diff local edits into granular
   // per-item operations (and field-only scalar patches) instead of re-sending
   // the whole note — so a save here can't overwrite another device's edits.
@@ -1651,8 +1799,15 @@ export default function NoteEditorScreen() {
         contentContainerStyle={styles.scrollContentContainer}
         keyboardShouldPersistTaps="handled"
       >
-        {existingNote?.images && existingNote.images.length > 0 && (
-          <NoteImageGallery images={existingNote.images} />
+        {(displayedImages.length > 0 || imageUploads.length > 0) && (
+          <NoteImageGallery
+            images={displayedImages}
+            editable
+            uploads={imageUploads}
+            onRemove={removeNoteImage}
+            onRetryUpload={retryImageUpload}
+            onDismissUpload={removeUploadTile}
+          />
         )}
 
         {noteType === 'list' && (
@@ -1865,6 +2020,20 @@ export default function NoteEditorScreen() {
           </TouchableOpacity>
         )}
 
+        {/* Add image. Images require a server-backed note_id (spec §15.6 — no
+            draft/orphan uploads) and are online-only for now (#617; offline
+            queueing is #13), so this is gated the same as the label button. */}
+        {noteId && !isLocalId(noteId) && (
+          <TouchableOpacity
+            onPress={() => setAddImageSheetVisible(true)}
+            style={styles.toolbarBtn}
+            testID="toolbar-add-image-btn"
+            accessibilityLabel={t('images.addImage')}
+          >
+            <Ionicons name="image-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
+          </TouchableOpacity>
+        )}
+
         <View style={styles.toolbarSpacer} />
 
         {/* Delete */}
@@ -1878,6 +2047,17 @@ export default function NoteEditorScreen() {
         currentColor={color}
         onSelect={handleColorSelect}
         onClose={() => setColorPickerVisible(false)}
+      />
+
+      <AddImageActionSheet
+        visible={addImageSheetVisible}
+        onClose={() => setAddImageSheetVisible(false)}
+        onPick={queueImageFiles}
+        onPermissionDenied={handleImagePermissionDenied}
+        remainingSlots={Math.max(
+          IMAGE_MAX_PER_NOTE - displayedImages.length - imageUploads.filter((u) => u.status !== 'error').length,
+          0,
+        )}
       />
 
       {noteId && (

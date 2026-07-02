@@ -310,7 +310,22 @@
     "moreImages": "Ver {{count}} imágenes más",
     "lightboxPrevious": "Imagen anterior",
     "lightboxNext": "Imagen siguiente",
-    "lightboxCounter": "{{current}} / {{total}}"
+    "lightboxCounter": "{{current}} / {{total}}",
+    "addImage": "Añadir imagen",
+    "camera": "Cámara",
+    "photoLibrary": "Biblioteca de fotos",
+    "files": "Archivos",
+    "cameraPermissionDenied": "Se necesita acceso a la cámara para tomar una foto.",
+    "libraryPermissionDenied": "Se necesita acceso a la biblioteca de fotos para elegir una foto.",
+    "removeImage": "Eliminar {{filename}}",
+    "removedToast": "Imagen eliminada",
+    "uploading": "Subiendo… {{percent}}%",
+    "uploadFailed": "Error al subir la imagen",
+    "retryUpload": "Reintentar subir {{filename}}",
+    "dismissUpload": "Descartar {{filename}}",
+    "errorWrongType": "Solo se pueden adjuntar imágenes.",
+    "errorTooLarge": "La imagen supera el límite de {{maxMB}} MB.",
+    "errorTooMany": "Las notas pueden tener hasta {{max}} imágenes."
   },
   "labels": {
     "title": "Etiquetas",

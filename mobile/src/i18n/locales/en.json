@@ -310,7 +310,22 @@
     "moreImages": "View {{count}} more images",
     "lightboxPrevious": "Previous image",
     "lightboxNext": "Next image",
-    "lightboxCounter": "{{current}} / {{total}}"
+    "lightboxCounter": "{{current}} / {{total}}",
+    "addImage": "Add image",
+    "camera": "Camera",
+    "photoLibrary": "Photo Library",
+    "files": "Files",
+    "cameraPermissionDenied": "Camera access is needed to take a photo.",
+    "libraryPermissionDenied": "Photo library access is needed to choose a photo.",
+    "removeImage": "Remove {{filename}}",
+    "removedToast": "Image removed",
+    "uploading": "Uploading… {{percent}}%",
+    "uploadFailed": "Upload failed",
+    "retryUpload": "Retry uploading {{filename}}",
+    "dismissUpload": "Dismiss {{filename}}",
+    "errorWrongType": "Only images can be attached.",
+    "errorTooLarge": "Image exceeds the {{maxMB}} MB limit.",
+    "errorTooMany": "Notes can have up to {{max}} images."
   },
   "labels": {
     "title": "Labels",

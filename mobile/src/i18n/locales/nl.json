@@ -310,7 +310,22 @@
     "moreImages": "{{count}} meer afbeeldingen bekijken",
     "lightboxPrevious": "Vorige afbeelding",
     "lightboxNext": "Volgende afbeelding",
-    "lightboxCounter": "{{current}} / {{total}}"
+    "lightboxCounter": "{{current}} / {{total}}",
+    "addImage": "Afbeelding toevoegen",
+    "camera": "Camera",
+    "photoLibrary": "Fotobibliotheek",
+    "files": "Bestanden",
+    "cameraPermissionDenied": "Cameratoegang is nodig om een foto te maken.",
+    "libraryPermissionDenied": "Toegang tot de fotobibliotheek is nodig om een foto te kiezen.",
+    "removeImage": "{{filename}} verwijderen",
+    "removedToast": "Afbeelding verwijderd",
+    "uploading": "Uploaden… {{percent}}%",
+    "uploadFailed": "Uploaden mislukt",
+    "retryUpload": "{{filename}} opnieuw uploaden",
+    "dismissUpload": "{{filename}} negeren",
+    "errorWrongType": "Er kunnen alleen afbeeldingen worden toegevoegd.",
+    "errorTooLarge": "De afbeelding overschrijdt de limiet van {{maxMB}} MB.",
+    "errorTooMany": "Notities kunnen tot {{max}} afbeeldingen bevatten."
   },
   "labels": {
     "title": "Labels",

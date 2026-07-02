@@ -93,6 +93,16 @@ jest.mock('../src/hooks/useNotes', () => ({
   }),
 }));
 
+jest.mock('../src/hooks/useNoteImages', () => ({
+  __esModule: true,
+  useUploadNoteImage: () => ({
+    mutateAsync: jest.fn(),
+  }),
+  useDeleteNoteImage: () => ({
+    mutateAsync: jest.fn(),
+  }),
+}));
+
 jest.mock('../src/hooks/useOfflineNotes', () => ({
   __esModule: true,
   useOfflineNote: () => mockUseOfflineNote(),
