@@ -368,6 +368,7 @@
     "failedDuplicate": "Error al duplicar la nota. Inténtalo de nuevo.",
     "menuOptions": "Opciones de nota",
     "assignItem": "Asignar elemento",
+    "removeItem": "Eliminar elemento",
     "unassign": "Desasignar",
     "assignedTo": "Asignado a {{name}}",
     "completedSuggestions": "Sugerencias de elementos completados"
@@ -420,6 +421,7 @@
   "images": {
     "openLightbox": "Ver {{filename}}",
     "moreImages": "Ver {{count}} imágenes más",
+    "moreImagesBadge": "{{count}} imágenes más",
     "lightboxPrevious": "Imagen anterior",
     "lightboxNext": "Imagen siguiente",
     "lightboxCounter": "{{current}} / {{total}}",

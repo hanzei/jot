@@ -234,6 +234,7 @@
     "failedSaveChanges": "Nie udało się zapisać zmian. Dotknij, aby ponowić.",
     "menuOptions": "Opcje notatki",
     "assignItem": "Przypisz element",
+    "removeItem": "Usuń element",
     "unassign": "Usuń przypisanie",
     "assignedTo": "Przypisano do {{name}}",
     "changeColor": "Kolor notatki",
@@ -274,6 +275,13 @@
     "saveFailedExitTitle": "Zapisywanie nie powiodło się",
     "saveFailedExitMessage": "Nie można było zapisać zmian. Spróbuj ponownie lub odrzuć je, aby wyjść.",
     "discardAndLeave": "Odrzuć i wyjdź"
+  },
+  "images": {
+    "openLightbox": "Wyświetl {{filename}}",
+    "moreImages": "Wyświetl {{count}} więcej zdjęć",
+    "lightboxPrevious": "Poprzednie zdjęcie",
+    "lightboxNext": "Następne zdjęcie",
+    "lightboxCounter": "{{current}} / {{total}}"
   },
   "labels": {
     "title": "Etykiety",

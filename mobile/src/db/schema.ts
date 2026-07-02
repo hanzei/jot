@@ -21,6 +21,7 @@ const migration1 = async (db: SQLiteDatabase): Promise<void> => {
       updated_at TEXT NOT NULL,
       labels_json TEXT NOT NULL DEFAULT '[]',
       shared_with_json TEXT NOT NULL DEFAULT '[]',
+      images_json TEXT NOT NULL DEFAULT '[]',
       sync_state TEXT NOT NULL DEFAULT 'synced'
     );
 
@@ -136,7 +137,17 @@ const migration2 = async (db: SQLiteDatabase): Promise<void> => {
   }
 };
 
-export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2];
+// Migration 3: add an images_json column to notes, mirroring labels_json/
+// shared_with_json, so a note's embedded image metadata (issue #616) can be
+// cached locally alongside the rest of the note. Column-probed like migration2.
+const migration3 = async (db: SQLiteDatabase): Promise<void> => {
+  const noteCols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(notes)');
+  if (!noteCols.some((c) => c.name === 'images_json')) {
+    await db.runAsync(`ALTER TABLE notes ADD COLUMN images_json TEXT NOT NULL DEFAULT '[]'`);
+  }
+};
+
+export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3];
 
 export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   // Run PRAGMAs separately: sqlite3_exec (used by execAsync) stops on the
