@@ -147,18 +147,34 @@ export default function DraggableMasonry({
     setOrders(next);
   }, [sections, isDragging]);
 
+  // Tracks, per section, whether every card has reported a real measured height
+  // at least once. Sticky once true. Used to suppress the resting-position
+  // animation while cards are still settling from their initial estimated
+  // height into their real one on first render, so the list doesn't visibly
+  // "pop in" and rearrange on every app open; genuine later repacks (drag
+  // reorder, a note added/removed, a card's content changing height) still
+  // animate normally.
+  const settledSectionsRef = useRef<Set<string>>(new Set());
+
   // Pack each section and keep the latest placements in refs for the hover math.
   const packedBySection = useMemo(() => {
-    const result: Record<string, { placed: PlacedItem[]; containerHeight: number }> = {};
+    const result: Record<string, { placed: PlacedItem[]; containerHeight: number; animate: boolean }> = {};
     sections.forEach((s) => {
       const order = orders[s.key] ?? s.data.map((n) => n.id);
-      result[s.key] = packColumns(order, heights, {
-        columnWidth,
-        columnGap: MASONRY_COLUMN_GAP,
-        rowGap: MASONRY_ROW_GAP,
-        columns,
-        estimatedHeight: ESTIMATED_CARD_HEIGHT,
-      });
+      const wasSettled = settledSectionsRef.current.has(s.key);
+      if (order.every((id) => heights[id] !== undefined)) {
+        settledSectionsRef.current.add(s.key);
+      }
+      result[s.key] = {
+        ...packColumns(order, heights, {
+          columnWidth,
+          columnGap: MASONRY_COLUMN_GAP,
+          rowGap: MASONRY_ROW_GAP,
+          columns,
+          estimatedHeight: ESTIMATED_CARD_HEIGHT,
+        }),
+        animate: wasSettled,
+      };
     });
     return result;
   }, [sections, orders, heights, columnWidth, columns]);
@@ -275,6 +291,7 @@ export default function DraggableMasonry({
                         width={columnWidth}
                         x={item.x}
                         y={item.y}
+                        animate={packed.animate}
                         sectionRef={sectionRefs[sectionIndex]}
                         shared={shared}
                         onMeasureHeight={handleMeasureHeight}
@@ -302,6 +319,8 @@ interface DraggableCardProps {
   width: number;
   x: number;
   y: number;
+  /** Whether resting-position changes should animate, or snap instantly. */
+  animate: boolean;
   sectionRef: ReturnType<typeof useAnimatedRef<Animated.View>>;
   shared: SharedDragState;
   onMeasureHeight: (id: string, height: number) => void;
@@ -318,6 +337,7 @@ function DraggableCard({
   width,
   x,
   y,
+  animate,
   sectionRef,
   shared,
   onMeasureHeight,
@@ -400,8 +420,8 @@ function DraggableCard({
     }
     return {
       transform: [
-        { translateX: withTiming(x, { duration: 180 }) },
-        { translateY: withTiming(y, { duration: 180 }) },
+        { translateX: animate ? withTiming(x, { duration: 180 }) : x },
+        { translateY: animate ? withTiming(y, { duration: 180 }) : y },
         { scale: 1 },
       ],
       zIndex: 0,
