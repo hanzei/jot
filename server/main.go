@@ -66,6 +66,7 @@ func main() {
 		ServiceName:    cfg.OTelServiceName,
 		ServiceVersion: server.Version(),
 		Insecure:       cfg.OTelInsecure,
+		TracesEnabled:  cfg.OTelTracesEnabled,
 	})
 	if err != nil {
 		logrus.WithError(err).Fatal("Failed to initialize OpenTelemetry")

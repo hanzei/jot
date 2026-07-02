@@ -26,6 +26,7 @@ type Config struct {
 	OTelEndpoint        string
 	OTelServiceName     string
 	OTelInsecure        bool
+	OTelTracesEnabled   bool
 }
 
 // parseBoolEnv reads an environment variable that must be "true", "false", or
@@ -158,6 +159,12 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	cfg.OTelInsecure = otelInsecure
+
+	otelTracesEnabled, err := parseBoolEnv("OTEL_TRACES_ENABLED", false)
+	if err != nil {
+		return nil, err
+	}
+	cfg.OTelTracesEnabled = otelTracesEnabled
 
 	return cfg, nil
 }
