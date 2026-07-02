@@ -98,22 +98,31 @@ const navigationRoute = new NavigationRoute(
 registerRoute(navigationRoute);
 
 // Only POST endpoints that are idempotent or have uniqueness constraints are
-// safe to retry via background sync. All other POSTs (e.g., note creation)
-// would create duplicates since the server generates a new random ID per request.
+// safe to retry via background sync. All other POSTs (e.g., note creation,
+// import, duplicate, image upload) would create duplicates since the server
+// generates a new random ID per request. Login is also excluded: answering it
+// with a synthetic 202 would flip the client into an authenticated state with
+// no user data.
 const retryablePostPaths = new Set([
-  '/api/v1/login',
   '/api/v1/logout',
   '/api/v1/notes/reorder',
 ]);
 
-// POST paths with dynamic segments that are safe to retry (matched by prefix).
-const retryablePostPrefixes = [
-  '/api/v1/notes/', // covers /notes/{id}/share, /notes/{id}/restore, /notes/{id}/labels
+// POST paths with dynamic segments that are safe to retry. Each endpoint is
+// matched exactly — a bare prefix like '/api/v1/notes/' would also capture
+// non-idempotent endpoints (/notes/import, /notes/{id}/duplicate,
+// /notes/{id}/images) that must never be replayed, nor answered with a
+// synthetic 202 whose plain-text body their callers would misread as a real
+// response.
+const retryablePostPatterns = [
+  /^\/api\/v1\/notes\/[^/]+\/(share|restore|labels)$/,
+  /^\/api\/v1\/notes\/[^/]+\/items\/reorder$/,
+  /^\/api\/v1\/notes\/[^/]+\/items\/[^/]+\/toggle-completed$/,
 ];
 
 const isRetryablePost = (pathname: string): boolean => {
   if (retryablePostPaths.has(pathname)) return true;
-  return retryablePostPrefixes.some(prefix => pathname.startsWith(prefix));
+  return retryablePostPatterns.some(pattern => pattern.test(pathname));
 };
 
 // Handle non-GET API requests via fetch event listener directly, since

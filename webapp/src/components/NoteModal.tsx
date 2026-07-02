@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback, type ReactElement } 
 import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, UserPlusIcon, CheckIcon, TagIcon, DocumentDuplicateIcon, DevicePhoneMobileIcon, PaintBrushIcon, PhotoIcon } from '@heroicons/react/24/outline';
 import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, IMAGE_MAX_PER_NOTE, UPLOAD_MAX_BYTES, buildCollaborators, generateId, type Note, type NoteItem, type NoteType, type NoteImage, type CreateNoteRequest, type UpdateNoteRequest, type PatchNoteItemRequest, type Label, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, IMAGE_MAX_PER_NOTE, UPLOAD_MAX_BYTES, buildCollaborators, generateId, type Note, type NoteType, type NoteImage, type CreateNoteRequest, type UpdateNoteRequest, type PatchNoteItemRequest, type Label, type User, type Collaborator } from '@jot/shared';
 import { notes, images as imagesApi } from '@/utils/api';
 import { renderMarkdown } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
@@ -62,24 +62,6 @@ const validateTitle = (title: string, t: TFunction): string | null => {
 const validateContent = (content: string, t: TFunction): string | null => {
   if (content.length > VALIDATION.CONTENT_MAX_LENGTH) return t('note.contentTooLong', { max: VALIDATION.CONTENT_MAX_LENGTH });
   return null;
-};
-
-const haveListItemsChanged = (currentItems: ListItem[], originalItems: NoteItem[] | undefined): boolean => {
-  const baseItems = originalItems ?? [];
-  if (currentItems.length !== baseItems.length) return true;
-
-  return currentItems.some((item, index) => {
-    const baseItem = baseItems[index];
-    if (!baseItem) return true;
-
-    return (
-      item.text !== baseItem.text ||
-      item.completed !== baseItem.completed ||
-      item.position !== baseItem.position ||
-      item.parentId !== (baseItem.parent_id ?? null) ||
-      item.assignedTo !== (baseItem.assigned_to ?? '')
-    );
-  });
 };
 
 // Timeout management now handled via useRef instead of global window property
@@ -380,10 +362,17 @@ function SortableItem({ id, index, item, onUpdateListItem, onRemoveListItem, isC
                   return;
                 }
                 if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  const idxToAccept = selectedSuggestionIndex >= 0 ? selectedSuggestionIndex : 0;
-                  selectSuggestion(suggestions[idxToAccept]);
-                  return;
+                  // Only accept a suggestion the user explicitly highlighted
+                  // (arrow keys or hover). With none highlighted, Enter keeps
+                  // its normal add/split behavior below — the dropdown being
+                  // merely visible must not hijack creating a new item.
+                  if (selectedSuggestionIndex >= 0) {
+                    e.preventDefault();
+                    selectSuggestion(suggestions[selectedSuggestionIndex]);
+                    return;
+                  }
+                  setShowSuggestions(false);
+                  setSelectedSuggestionIndex(-1);
                 }
                 if (e.key === 'Escape' || e.key === 'Tab') {
                   e.preventDefault();
@@ -1184,11 +1173,16 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
   const handleImageDrop = useCallback((e: React.DragEvent) => {
     if (!note) return;
+    // Only claim drops that actually carry files — same reasoning as
+    // handleImageDragOver: cancelling a file-less drop would also cancel the
+    // browser's native text drag-and-drop (e.g. repositioning selected text
+    // within the note's own textarea), making that drop silently do nothing.
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    if (droppedFiles.length === 0) return;
     e.preventDefault();
     imageDragCounterRef.current = 0;
     setIsDraggingImage(false);
-    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
-    queueImageFiles(files);
+    queueImageFiles(droppedFiles.filter(f => f.type.startsWith('image/')));
   }, [note, queueImageFiles]);
 
   const handleModalPaste = useCallback((e: React.ClipboardEvent) => {
@@ -1525,13 +1519,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
 
     if (e.key === 'Backspace' || e.key === 'Delete') {
-      const currentItem = uncompletedItems[index];
+      // Resolve via findTargetItem: completed rows pass a combined index
+      // (uncompletedItems.length + i), so indexing uncompletedItems directly
+      // would come up empty there and dead-key the shortcut.
+      const currentItem = findTargetItem(index);
       if (!currentItem || currentItem.text.trim() !== '') return;
 
       e.preventDefault();
-      const focusTarget = e.key === 'Backspace'
-        ? uncompletedItems[index - 1]
-        : uncompletedItems[index + 1];
+      const focusTarget = findTargetItem(e.key === 'Backspace' ? index - 1 : index + 1);
 
       removeListItem(currentItem.id);
 
@@ -2082,23 +2077,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
   const hasUnsavedChanges = () => {
     if (note) {
-      if (note.note_type === 'list') {
-        return (
-          title !== note.title ||
-          color !== note.color ||
-          pinned !== note.pinned ||
-          archived !== note.archived ||
-          checkedItemsCollapsed !== note.checked_items_collapsed ||
-          haveListItemsChanged(items, note.items)
-        );
-      } else {
-        return (
-          content !== note.content ||
-          color !== note.color ||
-          pinned !== note.pinned ||
-          archived !== note.archived
-        );
-      }
+      // Compare against the same saved baseline the autosave pipeline uses
+      // (savedScalarsRef/savedItemsRef), not the note prop: adoption renumbers
+      // item positions and the prop can lag behind granular saves, so a
+      // prop-based comparison reports "changes" when there is nothing left to
+      // flush and closing then runs a pointless save pass.
+      return isDirty();
     } else {
       if (noteType === 'list') {
         return title.trim() !== '' || items.some(item => item.text.trim() !== '') || noteLabels.length > 0;
@@ -2195,8 +2179,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
             backdropHandledRef.current = false;
             return;
           }
-          // Escape key: two-step dismiss — collapse first, then close on second press.
-          if (isEditingContent) {
+          // Escape key: two-step dismiss — collapse first, then close on second
+          // press. Only text notes have an edit/preview mode; for list notes
+          // isEditingContent is meaningless (it merely starts out true on new
+          // notes), so consuming a press to flip it would make the first
+          // Escape silently do nothing.
+          if (noteType === 'text' && isEditingContent) {
             setIsEditingContent(false);
           } else {
             handleCloseRequest();
@@ -2218,7 +2206,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
             if (e.target !== e.currentTarget) return;
             // Signal onClose to skip its logic — we're handling this dismiss.
             backdropHandledRef.current = true;
-            if (isEditingContent) {
+            if (noteType === 'text' && isEditingContent) {
               setIsEditingContent(false);
             } else {
               handleCloseRequest();
