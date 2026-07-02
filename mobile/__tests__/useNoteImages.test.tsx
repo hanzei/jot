@@ -134,6 +134,7 @@ describe('useNoteImages hooks', () => {
 
       expect(mockImagesApi.uploadNoteImage).not.toHaveBeenCalled();
       expect(mockNoteQueries.patchLocalNoteImages).not.toHaveBeenCalled();
+      expect(mockEnqueueImageUpload).not.toHaveBeenCalled();
     });
 
     it('surfaces a permanent upload failure (e.g. 413 for an oversized file) without queuing it', async () => {
