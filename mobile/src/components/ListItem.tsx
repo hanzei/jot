@@ -53,6 +53,11 @@ interface ListItemProps {
 // Press-and-hold duration on the drag handle before a reorder drag begins.
 const DRAG_HANDLE_LONG_PRESS_MS = 180;
 
+// Delay before hiding focus-gated controls (delete/assign) and suggestions on
+// blur, so a tap on those controls — which blurs the input first — still lands
+// before they unmount.
+const BLUR_HIDE_DELAY_MS = 200;
+
 function ListItem({
   text,
   completed,
@@ -82,6 +87,9 @@ function ListItem({
   const { colors } = useTheme();
   const { t } = useTranslation();
   const [showSuggestions, setShowSuggestions] = useState(false);
+  // The delete (x) button is only shown while this row is focused (the "selected"
+  // row), so users are less likely to delete an item they didn't mean to.
+  const [isFocused, setIsFocused] = useState(false);
   const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -196,11 +204,18 @@ function ListItem({
             onSubmitEditing={onSubmitEditing}
             blurOnSubmit={false}
             onFocus={(event) => {
+              if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
+              setIsFocused(true);
               onFocus?.(event);
               if (!completed) setShowSuggestions(true);
             }}
             onBlur={() => {
-              blurTimeoutRef.current = setTimeout(() => setShowSuggestions(false), 200);
+              // Delay hiding so a tap on the delete button (which blurs the input
+              // first) still lands before the button unmounts.
+              blurTimeoutRef.current = setTimeout(() => {
+                setShowSuggestions(false);
+                setIsFocused(false);
+              }, BLUR_HIDE_DELAY_MS);
             }}
             multiline
             submitBehavior="submit"
@@ -230,7 +245,7 @@ function ListItem({
                 size="small"
               />
             </TouchableOpacity>
-          ) : showAssignUI && !completed ? (
+          ) : showAssignUI && !completed && isFocused ? (
             <TouchableOpacity
               onPress={onAssignPress}
               style={styles.assignBtn}
@@ -242,9 +257,14 @@ function ListItem({
               </View>
             </TouchableOpacity>
           ) : null}
-          {editable && onDelete && (
-            <TouchableOpacity onPress={onDelete} style={styles.deleteBtn} testID="list-item-delete">
-              <Ionicons name="close" size={18} color={effectiveIconMuted} />
+          {editable && onDelete && isFocused && (
+            <TouchableOpacity
+              onPress={onDelete}
+              style={styles.deleteBtn}
+              testID="list-item-delete"
+              accessibilityLabel={t('note.removeItem')}
+            >
+              <Ionicons name="close" size={22} color={effectiveIconMuted} />
             </TouchableOpacity>
           )}
         </View>
@@ -315,7 +335,7 @@ const styles = StyleSheet.create({
     textDecorationLine: 'line-through' as const,
   },
   deleteBtn: {
-    padding: 4,
+    padding: 8,
     marginLeft: 'auto',
   },
   assignBtn: {

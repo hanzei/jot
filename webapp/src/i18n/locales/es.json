@@ -368,6 +368,7 @@
     "failedDuplicate": "Error al duplicar la nota. Inténtalo de nuevo.",
     "menuOptions": "Opciones de nota",
     "assignItem": "Asignar elemento",
+    "removeItem": "Eliminar elemento",
     "unassign": "Desasignar",
     "assignedTo": "Asignado a {{name}}",
     "completedSuggestions": "Sugerencias de elementos completados"

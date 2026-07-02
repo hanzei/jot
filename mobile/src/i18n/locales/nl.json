@@ -263,6 +263,7 @@
     "failedSaveChanges": "Wijzigingen opslaan mislukt. Tik om opnieuw te proberen.",
     "menuOptions": "Notitieopties",
     "assignItem": "Item toewijzen",
+    "removeItem": "Item verwijderen",
     "unassign": "Toewijzing opheffen",
     "assignedTo": "Toegewezen aan {{name}}",
     "changeColor": "Notitiekl",

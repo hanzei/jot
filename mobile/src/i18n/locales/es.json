@@ -263,6 +263,7 @@
     "failedSaveChanges": "Error al guardar los cambios. Toca para reintentar.",
     "menuOptions": "Opciones de nota",
     "assignItem": "Asignar elemento",
+    "removeItem": "Eliminar elemento",
     "unassign": "Desasignar",
     "assignedTo": "Asignado a {{name}}",
     "changeColor": "Color de nota",

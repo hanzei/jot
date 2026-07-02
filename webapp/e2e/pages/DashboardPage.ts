@@ -506,11 +506,14 @@ export class DashboardPage {
     await expect(this.page.getByRole('dialog').getByRole('button', { name: 'Close' })).toBeVisible();
 
     const itemRow = this.page.locator('[data-testid="list-item-row"]').nth(itemIndex);
-    await itemRow.hover();
+    // The assign button is only revealed for the row the user is working on.
+    // Focus the row's text field to reveal it — this works on both desktop and
+    // mobile emulation (no hover needed), and makes the button interactive
+    // (it's pointer-events-none while hidden), so a normal click lands.
+    await itemRow.locator('[data-testid="list-item-input"]').focus();
     const assignBtn = itemRow.locator('button[aria-label="Assign item"]');
-    // force: true bypasses visibility so the click works on both desktop (hover
-    // shows the button) and mobile emulation (group-hover CSS doesn't trigger).
-    await assignBtn.click({ force: true });
+    await expect(assignBtn).toBeVisible();
+    await assignBtn.click();
 
     await expect(this.page.getByText('Assign item')).toBeVisible();
     const pickerPopover = this.page.locator('.max-h-48');

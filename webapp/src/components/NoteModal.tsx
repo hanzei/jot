@@ -39,6 +39,13 @@ const IMAGE_REMOVE_UNDO_MS = 10_000;
 // Validation functions
 type TFunction = (key: string, opts?: Record<string, unknown>) => string;
 
+// Per-row controls (delete, assign) are hidden until the row is hovered
+// (desktop) or a field within it is focused (works on touch). While hidden the
+// control is also non-interactive, so an invisible button can't be tapped by
+// accident — important on touch devices, where there's no hover to reveal it.
+export const ROW_REVEAL_CLASSES =
+  'opacity-0 pointer-events-none group-hover/item:opacity-100 group-hover/item:pointer-events-auto group-focus-within/item:opacity-100 group-focus-within/item:pointer-events-auto';
+
 const validateItemText = (text: string, t: TFunction): string | null => {
   const trimmed = text.trim();
   if (trimmed.length === 0) return null; // Allow empty items (will be removed on save)
@@ -452,7 +459,7 @@ function SortableItem({ id, index, item, onUpdateListItem, onRemoveListItem, isC
               !isCompleted && (
                 <button
                   onClick={() => setShowAssigneePicker(true)}
-                  className="w-5 h-5 rounded-full border border-dashed border-gray-300 dark:border-gray-400 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-white/10 transition-colors opacity-0 group-hover/item:opacity-100 focus:opacity-100 focus-visible:ring-2 focus-visible:ring-blue-500 touch-visible"
+                  className={`w-5 h-5 rounded-full border border-dashed border-gray-300 dark:border-gray-400 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-white/10 transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 ${ROW_REVEAL_CLASSES}`}
                   title={t('note.assignItem')}
                   aria-label={t('note.assignItem')}
                 >
@@ -475,9 +482,12 @@ function SortableItem({ id, index, item, onUpdateListItem, onRemoveListItem, isC
 
       <button
         onClick={() => onRemoveListItem(item.id)}
-        className="ml-auto p-1 text-gray-400 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-100"
+        aria-label={t('note.removeItem')}
+        title={t('note.removeItem')}
+        data-testid="list-item-delete"
+        className={`ml-auto p-1.5 text-gray-400 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-100 transition-opacity ${ROW_REVEAL_CLASSES}`}
       >
-        <TrashIcon className="h-4 w-4" />
+        <XMarkIcon className="h-6 w-6" />
       </button>
     </div>
   );

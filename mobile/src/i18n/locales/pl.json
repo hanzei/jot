@@ -234,6 +234,7 @@
     "failedSaveChanges": "Nie udało się zapisać zmian. Dotknij, aby ponowić.",
     "menuOptions": "Opcje notatki",
     "assignItem": "Przypisz element",
+    "removeItem": "Usuń element",
     "unassign": "Usuń przypisanie",
     "assignedTo": "Przypisano do {{name}}",
     "changeColor": "Kolor notatki",

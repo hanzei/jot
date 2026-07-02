@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, within, act } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { type ReactNode } from 'react'
-import NoteModal from '../NoteModal'
+import NoteModal, { ROW_REVEAL_CLASSES } from '../NoteModal'
 import { ToastProvider } from '../Toast'
 import { VALIDATION, type Note, type NoteItem, type NoteImage } from '@jot/shared'
 import { createMockNote } from '@/utils/__tests__/test-helpers'
@@ -1476,6 +1476,31 @@ describe('NoteModal', () => {
       const row = screen.getAllByTestId('list-item-row')[0]
       expect(row.style.marginLeft).toBe('0px')
       expect(mockUpdateItem).not.toHaveBeenCalled()
+    })
+
+    it('item delete button is reveal-on-hover/focus and removes the item when clicked', async () => {
+      const listNote = createMockNote({
+        note_type: 'list',
+        items: [
+          item('item1', { text: 'First', position: 0 }),
+          item('item2', { text: 'Second', position: 1 }),
+        ],
+      })
+      renderNoteModal({ ...defaultProps, note: listNote })
+
+      const deleteButtons = screen.getAllByTestId('list-item-delete')
+      expect(deleteButtons).toHaveLength(2)
+      // Hidden by default; only the hovered row (desktop) or the row with a
+      // focused field (works on touch too) reveals its delete button, so users
+      // are less likely to delete an item they didn't intend to.
+      expect(deleteButtons[0].className).toContain(ROW_REVEAL_CLASSES)
+      expect(deleteButtons[0]).toHaveAttribute('aria-label', 'Remove item')
+
+      fireEvent.click(deleteButtons[0])
+      await vi.runAllTimersAsync()
+
+      expect(screen.getAllByTestId('list-item-row')).toHaveLength(1)
+      expect(screen.getByDisplayValue('Second')).toBeInTheDocument()
     })
 
     it('un-indenting a child promotes it to top-level via parent_id ""', async () => {
