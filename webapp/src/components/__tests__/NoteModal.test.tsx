@@ -607,10 +607,15 @@ describe('NoteModal', () => {
     it('calls onRefresh after the deferred delete succeeds, so a stale note list is corrected even if the modal already closed', async () => {
       const note = createMockNote({ images: [{ id: 'img1', filename: 'photo.png', content_type: 'image/png', width: 10, height: 10, created_at: '2023-01-01T00:00:00Z' }] })
       const onRefresh = vi.fn()
-      renderNoteModal({ ...defaultProps, note, onRefresh })
+      const { unmount } = renderNoteModal({ ...defaultProps, note, onRefresh })
 
       fireEvent.click(screen.getByRole('button', { name: 'Remove photo.png' }))
       onRefresh.mockClear() // drop any calls made by the removal click itself
+
+      // The deferred-delete timer lives in a ref, not React state, precisely
+      // so it keeps running after the component unmounts — unmount here so
+      // this actually exercises that, instead of just the (weaker) mounted case.
+      unmount()
 
       await vi.advanceTimersByTimeAsync(10_000)
 

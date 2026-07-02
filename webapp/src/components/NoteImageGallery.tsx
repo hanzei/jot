@@ -58,7 +58,7 @@ export default function NoteImageGallery({ images, editable = false, uploads = [
   // error/retry feedback at all — in favor of an image the user isn't
   // actively acting on right now. Overflow from that then folds the oldest
   // persisted images into the "+N" tile first, never an in-flight upload.
-  const tiles: Tile[] = [
+  let tiles: Tile[] = [
     ...uploads.map((upload): Tile => ({ key: upload.id, kind: 'upload', upload })),
     ...images.map((image): Tile => ({ key: image.id, kind: 'image', image })),
   ];
@@ -67,6 +67,22 @@ export default function NoteImageGallery({ images, editable = false, uploads = [
 
   const visibleCount = Math.min(tiles.length, GRID_VISIBLE_TILES);
   const overlayCount = tiles.length > GRID_VISIBLE_TILES ? tiles.length - GRID_CLEAR_TILES : 0;
+
+  // The overlay slot (last visible tile when overflowing) loses its own
+  // controls — it just represents "N more." An upload stuck there has no way
+  // to retry or dismiss it at all, which is worse than an image losing its
+  // remove button there, so when an image exists, swap it into that slot
+  // instead of leaving an upload there (only reachable when uploads.length
+  // alone already fills every visible slot, i.e. 4+ concurrent uploads).
+  if (overlayCount > 0 && tiles[visibleCount - 1].kind === 'upload') {
+    const imageIndex = tiles.findIndex(tile => tile.kind === 'image');
+    if (imageIndex >= visibleCount) {
+      const swapped = [...tiles];
+      [swapped[visibleCount - 1], swapped[imageIndex]] = [swapped[imageIndex], swapped[visibleCount - 1]];
+      tiles = swapped;
+    }
+  }
+
   const visibleTiles = tiles.slice(0, visibleCount);
   const isGrid = tiles.length > 1;
   // An odd tile count of 3 spans the final tile across both columns so it

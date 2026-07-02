@@ -189,5 +189,31 @@ describe('NoteImageGallery', () => {
       await user.click(screen.getByRole('button', { name: 'View photo2.png' }))
       expect(screen.getByText('2 / 2')).toBeInTheDocument()
     })
+
+    it('reserves the "+N" overlay slot for a persisted image rather than an in-flight upload, when both are present', () => {
+      // 4 uploads + 1 image = 5 tiles. Uploads sort first, so the naive last-
+      // of-4 visible slot would be the 4th upload — hiding its progress/retry
+      // controls behind the overlay, with no way to act on it. The image must
+      // take that slot instead so every visible upload keeps its own status UI.
+      const uploads = [
+        makeUpload({ id: 'u1', filename: 'u1.png' }),
+        makeUpload({ id: 'u2', filename: 'u2.png' }),
+        makeUpload({ id: 'u3', filename: 'u3.png' }),
+        makeUpload({ id: 'u4', filename: 'u4.png' }),
+      ]
+      render(<NoteImageGallery images={[makeImage()]} editable uploads={uploads} />)
+
+      // The persisted image must actually render (as the "+N" backdrop) —
+      // without the fix it's folded away entirely in favor of the 4th
+      // upload occupying that slot instead, which would make this fail.
+      expect(screen.getByAltText('photo.png')).toBeInTheDocument()
+      expect(screen.getByText('+2')).toBeInTheDocument()
+
+      // All three visible uploads keep their own status UI — none of them is
+      // the one silently sitting behind the overlay with no progress/retry.
+      const uploadTiles = screen.getAllByTestId('image-upload-tile')
+      expect(uploadTiles).toHaveLength(3)
+      uploadTiles.forEach(tile => expect(tile).toHaveAttribute('data-status', 'uploading'))
+    })
   })
 })
