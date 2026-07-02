@@ -321,6 +321,8 @@
     "removedToast": "Imagem removida",
     "uploading": "Enviando… {{percent}}%",
     "uploadFailed": "Falha no envio",
+    "queuedOffline": "Aguardando envio…",
+    "uploadQueuedToast": "A imagem será enviada quando você estiver online novamente",
     "retryUpload": "Tentar enviar {{filename}} novamente",
     "dismissUpload": "Descartar {{filename}}",
     "errorWrongType": "Só é possível anexar imagens.",

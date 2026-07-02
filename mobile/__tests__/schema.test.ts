@@ -62,6 +62,10 @@ describe('migrateDatabase', () => {
       expect(ddl).toContain('CREATE TABLE IF NOT EXISTS dead_letter');
       expect(ddl).toContain('CREATE TABLE IF NOT EXISTS users');
 
+      // migration4 (issue #618): offline image upload queue.
+      const migration4Ddl = db.execAsync.mock.calls[1][0] as string;
+      expect(migration4Ddl).toContain('CREATE TABLE IF NOT EXISTS pending_image_uploads');
+
       expect(runSqls(db).some((s) => s.startsWith('ALTER TABLE'))).toBe(false);
       expect(db.runAsync).toHaveBeenCalledWith(`PRAGMA user_version = ${MIGRATIONS.length}`);
     });

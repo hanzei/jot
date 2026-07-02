@@ -1,11 +1,12 @@
 import React, { useCallback, useContext, useEffect, useRef } from 'react';
-import { Modal, View, Image, Text, TouchableOpacity, FlatList, useWindowDimensions, StyleSheet, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
+import { Modal, View, Text, TouchableOpacity, FlatList, useWindowDimensions, StyleSheet, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 import type { NoteImage } from '@jot/shared';
 import { useActiveServerBaseUrl } from '../hooks/useActiveServerBaseUrl';
 import { noteImageUrl } from '../api/images';
+import CachedNoteImage from './CachedNoteImage';
 
 interface ImageLightboxProps {
   images: NoteImage[];
@@ -110,11 +111,19 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose }:
           getItemLayout={(_, i) => ({ length: screenWidth, offset: screenWidth * i, index: i })}
           keyExtractor={(img) => img.id}
           onMomentumScrollEnd={handleMomentumScrollEnd}
+          // Cap windowing so opening the lightbox on a note with many images
+          // doesn't kick off a full-resolution CachedNoteImage download (issue
+          // #618) for every image at once — only the current page and its
+          // immediate neighbors render ahead of a swipe.
+          initialNumToRender={1}
+          windowSize={3}
           testID="lightbox-pager"
           renderItem={({ item }) => (
             <View style={[styles.page, { width: screenWidth }]} testID={`lightbox-page-${item.id}`}>
-              <Image
-                source={{ uri: noteImageUrl(baseUrl, item.id) }}
+              <CachedNoteImage
+                imageId={item.id}
+                variant="original"
+                networkUrl={noteImageUrl(baseUrl, item.id)}
                 style={styles.image}
                 resizeMode="contain"
                 accessibilityLabel={item.filename}

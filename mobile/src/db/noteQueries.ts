@@ -1,4 +1,5 @@
 import { SQLiteDatabase } from 'expo-sqlite';
+import * as FileSystem from 'expo-file-system/legacy';
 import type { Note, NoteItem, GetNotesParams, Label, NoteShare, NoteImage } from '@jot/shared';
 import { getRandomBytes, getStrongRandomBytes } from '../utils/random';
 import { withSerializedTransaction } from './transaction';
@@ -358,7 +359,23 @@ export async function markLocalNoteRestored(db: SQLiteDatabase, id: string): Pro
   );
 }
 
+/**
+ * Permanently delete a note. `ON DELETE CASCADE` (migration4, issue #618)
+ * removes the note's `pending_image_uploads` rows automatically, but not
+ * their stable file copies under `pending-image-uploads/` (imageUploadQueue.ts) —
+ * clean those up first, best-effort, so a note deleted while an offline image
+ * upload is still queued for it doesn't leak the copied file forever. Reads
+ * the table directly rather than importing imageUploadQueue.ts to avoid a
+ * circular import (that module already imports from this one).
+ */
 export async function permanentDeleteLocalNote(db: SQLiteDatabase, id: string): Promise<void> {
+  const pendingUploads = await db.getAllAsync<{ local_path: string }>(
+    'SELECT local_path FROM pending_image_uploads WHERE note_id = ?',
+    [id],
+  );
+  await Promise.allSettled(
+    pendingUploads.map((row) => FileSystem.deleteAsync(row.local_path, { idempotent: true })),
+  );
   await db.runAsync('DELETE FROM notes WHERE id = ?', [id]);
 }
 

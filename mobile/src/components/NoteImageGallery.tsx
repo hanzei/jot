@@ -5,19 +5,11 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import type { NoteImage } from '@jot/shared';
 import { useActiveServerBaseUrl } from '../hooks/useActiveServerBaseUrl';
 import { noteImageThumbnailUrl } from '../api/images';
+import CachedNoteImage from './CachedNoteImage';
 import ImageLightbox from './ImageLightbox';
+import type { PendingImageUpload } from '../hooks/usePendingImageUploads';
 
-// A locally-tracked upload in flight (or failed) for a note, rendered as a
-// gallery tile alongside the note's persisted images. Never sent to the
-// server as-is — id is a client-generated key, not a NoteImage id.
-export interface PendingImageUpload {
-  id: string;
-  filename: string;
-  previewUri: string;
-  progress: number;
-  status: 'uploading' | 'error';
-  errorMessage?: string;
-}
+export type { PendingImageUpload };
 
 interface NoteImageGalleryProps {
   images: NoteImage[];
@@ -116,8 +108,10 @@ export default function NoteImageGallery({ images, editable = false, uploads = [
             accessibilityRole="button"
             testID={isGrid ? `note-image-grid-tile-${tile.image.id}` : `note-image-banner-${tile.image.id}`}
           >
-            <Image
-              source={{ uri: noteImageThumbnailUrl(baseUrl, tile.image.id) }}
+            <CachedNoteImage
+              imageId={tile.image.id}
+              variant="thumbnail"
+              networkUrl={noteImageThumbnailUrl(baseUrl, tile.image.id)}
               style={styles.tileImage}
               resizeMode="cover"
               accessibilityIgnoresInvertColors
@@ -153,6 +147,22 @@ export default function NoteImageGallery({ images, editable = false, uploads = [
               <>
                 <ActivityIndicator size="small" color="#fff" />
                 <Text style={styles.uploadStatusText}>{t('images.uploading', { percent: upload.progress })}</Text>
+              </>
+            ) : upload.status === 'queued' ? (
+              <>
+                <Ionicons name="cloud-offline-outline" size={20} color="#fff" />
+                <Text style={styles.uploadStatusText}>{t('images.queuedOffline')}</Text>
+                {onDismissUpload && (
+                  <TouchableOpacity
+                    style={styles.uploadActionButton}
+                    onPress={() => onDismissUpload(upload.id)}
+                    accessibilityLabel={t('images.dismissUpload', { filename: upload.filename })}
+                    accessibilityRole="button"
+                    testID={`dismiss-upload-${upload.id}`}
+                  >
+                    <Ionicons name="close" size={16} color="#fff" />
+                  </TouchableOpacity>
+                )}
               </>
             ) : (
               <>

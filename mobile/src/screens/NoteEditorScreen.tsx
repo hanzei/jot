@@ -43,6 +43,7 @@ import LabelPicker from '../components/LabelPicker';
 import AssigneePicker from '../components/AssigneePicker';
 import AddImageActionSheet from '../components/AddImageActionSheet';
 import { useUploadNoteImage, useDeleteNoteImage } from '../hooks/useNoteImages';
+import { usePendingImageUploads, useRetryPendingImageUpload, useDismissPendingImageUpload } from '../hooks/usePendingImageUploads';
 import type { ImageUploadFile } from '../api/images';
 import { buildCollaborators, generateId, VALIDATION, IMAGE_MAX_PER_NOTE, type Collaborator, type NoteType, type NoteImage, type CreateNoteRequest, type UpdateNoteRequest, type UpdateListNoteRequest, type UpdateTextNoteRequest, type PatchNoteItemRequest, type Label } from '@jot/shared';
 import { validateImageFile as validateImageFileRaw, IMAGE_MAX_MB } from '../utils/imageValidation';
@@ -171,12 +172,24 @@ export default function NoteEditorScreen() {
   const toggleItemCompletedMutation = useToggleNoteItemCompleted();
   const uploadImageMutation = useUploadNoteImage();
   const deleteImageMutation = useDeleteNoteImage();
+  const retryPendingImageUploadMutation = useRetryPendingImageUpload();
+  const dismissPendingImageUploadMutation = useDismissPendingImageUpload();
+  // Uploads queued while offline (or after a transient failure) — persisted to
+  // pending_image_uploads, so they survive navigating away or an app restart
+  // until the sync engine's drain flushes them (issue #618).
+  const pendingImageUploads = usePendingImageUploads(noteId);
 
   // Add-image UX state: the action sheet, in-flight/failed uploads rendered as
   // gallery placeholders, and images hidden pending the deferred-delete undo
-  // window (spec §3.1/§6 — online-only per issue #617; #13 tracks offline).
+  // window (spec §3.1/§6). `imageUploads` only ever holds attempts currently
+  // in flight online or that failed permanently — anything falling back to the
+  // offline queue is handed off to `pendingImageUploads` above instead.
   const [addImageSheetVisible, setAddImageSheetVisible] = useState(false);
   const [imageUploads, setImageUploads] = useState<PendingImageUpload[]>([]);
+  const displayedImageUploads = useMemo(
+    () => [...imageUploads, ...pendingImageUploads],
+    [imageUploads, pendingImageUploads],
+  );
   const [removedImageIds, setRemovedImageIds] = useState<Set<string>>(new Set());
 
   // Show a toast when another user updates this note while editor is open
@@ -245,8 +258,10 @@ export default function NoteEditorScreen() {
   const toggleItemCompletedRef = useRef(toggleItemCompletedMutation.mutateAsync);
   toggleItemCompletedRef.current = toggleItemCompletedMutation.mutateAsync;
 
-  const imageUploadsRef = useRef(imageUploads);
-  imageUploadsRef.current = imageUploads;
+  const displayedImageUploadsRef = useRef(displayedImageUploads);
+  displayedImageUploadsRef.current = displayedImageUploads;
+  const pendingImageUploadsRef = useRef(pendingImageUploads);
+  pendingImageUploadsRef.current = pendingImageUploads;
   const imageUploadFilesRef = useRef(new Map<string, ImageUploadFile>());
   const activeImageUploadIdsRef = useRef(new Set<string>());
 
@@ -265,7 +280,13 @@ export default function NoteEditorScreen() {
   const removeUploadTile = useCallback((uploadId: string) => {
     setImageUploads((prev) => prev.filter((u) => u.id !== uploadId));
     imageUploadFilesRef.current.delete(uploadId);
-  }, []);
+    // Only hits the DB when this tile had actually fallen back to the
+    // persisted offline queue (#618) — the common ephemeral uploading/error
+    // tile was never persisted, so there's nothing to cancel.
+    if (pendingImageUploadsRef.current.some((u) => u.id === uploadId)) {
+      dismissPendingImageUploadMutation.mutate(uploadId);
+    }
+  }, [dismissPendingImageUploadMutation]);
 
   const runImageUpload = useCallback((uploadId: string, file: ImageUploadFile) => {
     const currentNoteId = noteIdRef.current;
@@ -284,13 +305,19 @@ export default function NoteEditorScreen() {
     activeImageUploadIdsRef.current.add(uploadId);
     uploadImageMutation.mutateAsync({
       noteId: currentNoteId,
+      uploadId,
       file,
       onProgress: (percent) => {
         setImageUploads((prev) => prev.map((u) => (u.id === uploadId ? { ...u, progress: percent } : u)));
       },
-    }).then(() => {
+    }).then((result) => {
       activeImageUploadIdsRef.current.delete(uploadId);
-      removeUploadTile(uploadId);
+      // Either it uploaded, or it fell back to the persisted offline queue
+      // (issue #618) — either way the ephemeral tile is done; a queued upload
+      // is now rendered from `pendingImageUploads` instead, under the same id.
+      setImageUploads((prev) => prev.filter((u) => u.id !== uploadId));
+      imageUploadFilesRef.current.delete(uploadId);
+      if (result.status === 'queued') showToast(t('images.uploadQueuedToast'), 'info');
     }).catch((error) => {
       activeImageUploadIdsRef.current.delete(uploadId);
       console.error('Failed to upload note image:', error);
@@ -298,7 +325,7 @@ export default function NoteEditorScreen() {
       const message = status === 413 ? t('images.errorTooLarge', { maxMB: IMAGE_MAX_MB }) : t('images.uploadFailed');
       setImageUploads((prev) => prev.map((u) => (u.id === uploadId ? { ...u, status: 'error', errorMessage: message } : u)));
     });
-  }, [removeUploadTile, t, uploadImageMutation]);
+  }, [showToast, t, uploadImageMutation]);
 
   const startImageUpload = useCallback((file: ImageUploadFile) => {
     const id = generateId();
@@ -309,10 +336,15 @@ export default function NoteEditorScreen() {
 
   const retryImageUpload = useCallback((uploadId: string) => {
     const file = imageUploadFilesRef.current.get(uploadId);
-    if (!file) return;
-    setImageUploads((prev) => prev.map((u) => (u.id === uploadId ? { ...u, status: 'uploading', progress: 0, errorMessage: undefined } : u)));
-    runImageUpload(uploadId, file);
-  }, [runImageUpload]);
+    if (file) {
+      setImageUploads((prev) => prev.map((u) => (u.id === uploadId ? { ...u, status: 'uploading', progress: 0, errorMessage: undefined } : u)));
+      runImageUpload(uploadId, file);
+      return;
+    }
+    // Not an in-flight ephemeral upload — a persisted offline upload that hit
+    // a permanent error; re-queue it so the next drain retries it (#618).
+    retryPendingImageUploadMutation.mutate(uploadId);
+  }, [retryPendingImageUploadMutation, runImageUpload]);
 
   // Entry point for the add-image action sheet. Validates each file and
   // enforces the per-note image cap client-side (the server enforces it
@@ -323,7 +355,7 @@ export default function NoteEditorScreen() {
     const noteImages = existingNote?.images ?? [];
     let remainingSlots = IMAGE_MAX_PER_NOTE
       - noteImages.length
-      - imageUploadsRef.current.filter((u) => u.status !== 'error').length;
+      - displayedImageUploadsRef.current.filter((u) => u.status !== 'error').length;
 
     // Collect distinct error messages across the whole batch instead of
     // showing (and immediately overwriting) one per invalid file.
@@ -1799,11 +1831,11 @@ export default function NoteEditorScreen() {
         contentContainerStyle={styles.scrollContentContainer}
         keyboardShouldPersistTaps="handled"
       >
-        {(displayedImages.length > 0 || imageUploads.length > 0) && (
+        {(displayedImages.length > 0 || displayedImageUploads.length > 0) && (
           <NoteImageGallery
             images={displayedImages}
             editable
-            uploads={imageUploads}
+            uploads={displayedImageUploads}
             onRemove={removeNoteImage}
             onRetryUpload={retryImageUpload}
             onDismissUpload={removeUploadTile}
@@ -2021,8 +2053,8 @@ export default function NoteEditorScreen() {
         )}
 
         {/* Add image. Images require a server-backed note_id (spec §15.6 — no
-            draft/orphan uploads) and are online-only for now (#617; offline
-            queueing is #13), so this is gated the same as the label button. */}
+            draft/orphan uploads), so this is gated the same as the label
+            button. Offline uploads are queued and flushed on reconnect (#618). */}
         {noteId && !isLocalId(noteId) && (
           <TouchableOpacity
             onPress={() => setAddImageSheetVisible(true)}
@@ -2055,7 +2087,7 @@ export default function NoteEditorScreen() {
         onPick={queueImageFiles}
         onPermissionDenied={handleImagePermissionDenied}
         remainingSlots={Math.max(
-          IMAGE_MAX_PER_NOTE - displayedImages.length - imageUploads.filter((u) => u.status !== 'error').length,
+          IMAGE_MAX_PER_NOTE - displayedImages.length - displayedImageUploads.filter((u) => u.status !== 'error').length,
           0,
         )}
       />
