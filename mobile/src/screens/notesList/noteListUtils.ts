@@ -1,4 +1,4 @@
-import type { Note, UpdateNoteRequest } from '@jot/shared';
+import type { Note } from '@jot/shared';
 
 export interface LocalReorderState {
   pinned: Note[] | null;
@@ -6,26 +6,6 @@ export interface LocalReorderState {
 }
 
 export type NoteSection = { key: string; title: string | null; data: Note[] };
-
-export function buildUpdateRequest(note: Note, overrides: Partial<UpdateNoteRequest> = {}): UpdateNoteRequest {
-  if (note.note_type === 'list') {
-    return {
-      title: note.title,
-      pinned: note.pinned,
-      archived: note.archived,
-      color: note.color,
-      checked_items_collapsed: note.checked_items_collapsed,
-      ...overrides,
-    };
-  }
-  return {
-    content: note.content,
-    pinned: note.pinned,
-    archived: note.archived,
-    color: note.color,
-    ...overrides,
-  };
-}
 
 export function buildNoteSections(
   displayPinned: Note[],

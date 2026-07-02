@@ -221,6 +221,11 @@ export default function NoteEditorScreen() {
   const isInitializedRef = useRef(false);
   const intentionalExitRef = useRef(false);
   const hasPendingChangesRef = useRef(false);
+  // Bumped on every edit (markDirtyAndScheduleUpdate). flushSave snapshots it
+  // alongside the state refs so it can tell whether new edits arrived while its
+  // network calls were in flight — clearing the dirty flag then would mark
+  // those edits clean without ever saving them.
+  const editSeqRef = useRef(0);
   const saveInFlightRef = useRef<Promise<boolean> | null>(null);
   const requiresHydrationRef = useRef(initialNoteId !== null);
 
@@ -574,6 +579,18 @@ export default function NoteEditorScreen() {
       const currentColor = colorRef.current;
       const currentPinned = pinnedRef.current;
       const currentArchived = archivedRef.current;
+      const capturedEditSeq = editSeqRef.current;
+
+      // Clear the dirty flag only if no edit arrived while the awaited network
+      // calls below were in flight. A mid-save keystroke re-marks dirty and
+      // schedules its own debounced save; unconditionally clearing here would
+      // wipe that flag, the debounced flushSave would early-return on "no
+      // pending changes", and the mid-save edit would be silently lost on exit.
+      const clearPendingUnlessEditedMidSave = () => {
+        if (editSeqRef.current === capturedEditSeq) {
+          hasPendingChangesRef.current = false;
+        }
+      };
 
       const captureBaseline = () => {
         savedScalarsRef.current = {
@@ -609,7 +626,7 @@ export default function NoteEditorScreen() {
               color: !isWhiteHexColor(currentColor) ? currentColor : undefined,
             };
         const newNote = await createMutateRef.current(req);
-        hasPendingChangesRef.current = false;
+        clearPendingUnlessEditedMidSave();
         // The server honors the client-supplied item IDs, so the items we just
         // sent become the baseline for subsequent granular edits.
         captureBaseline();
@@ -643,7 +660,7 @@ export default function NoteEditorScreen() {
           await persistItemDiff(currentNoteId, currentItems);
         }
 
-        hasPendingChangesRef.current = false;
+        clearPendingUnlessEditedMidSave();
         captureBaseline();
         if (!isMountedRef.current || unmounting) return true;
         setSaveError(null);
@@ -679,6 +696,7 @@ export default function NoteEditorScreen() {
   }, [flushSave]);
 
   const markDirtyAndScheduleUpdate = useCallback(() => {
+    editSeqRef.current += 1;
     hasPendingChangesRef.current = true;
     scheduleUpdate();
   }, [scheduleUpdate]);
@@ -985,7 +1003,10 @@ export default function NoteEditorScreen() {
   const handleItemTextChange = useCallback(
     (index: number, text: string) => {
       if (!text.includes('\n')) {
-        setItems((prev) => prev.map((item, i) => (i === index ? { ...item, text } : item)));
+        // Clamp like the paste paths below: the server rejects longer item text
+        // with a 400, which would wedge the save (or dead-letter it offline).
+        const clamped = text.slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH);
+        setItems((prev) => prev.map((item, i) => (i === index ? { ...item, text: clamped } : item)));
         markDirtyAndScheduleUpdate();
         return;
       }

@@ -71,6 +71,12 @@ export class SSEConnectionManager {
         headers: {
           Cookie: `jot_session=${token}`,
         },
+        // Disable the library's own reconnect loop (default: retry every 5s).
+        // This manager owns retries via scheduleReconnect's exponential backoff;
+        // with both active, the library's fixed-interval retries fire 'error'
+        // events that keep resetting our timer and doubling the backoff, and can
+        // race a second connection alongside the one we're about to open.
+        pollingInterval: 0,
       });
 
       this.es.addEventListener('open', () => {

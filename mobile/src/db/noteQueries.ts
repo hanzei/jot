@@ -94,6 +94,20 @@ function itemRowToNoteItem(row: NoteItemRow): NoteItem {
   };
 }
 
+/**
+ * Escape SQL LIKE wildcards in user-entered search text so `%`/`_` match
+ * literally (paired with `ESCAPE '\'` on the LIKE). Without this a search like
+ * "50%" over-matches locally — and, worse, widens the prune scope in
+ * {@link removeLocalNotesNotIn} beyond what the server's literal match
+ * returned, deleting local rows that still exist on the server.
+ */
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
+const SEARCH_LIKE_SQL =
+  "(title LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\' OR id IN (SELECT note_id FROM note_items WHERE text LIKE ? ESCAPE '\\'))";
+
 async function getItemsForNote(db: SQLiteDatabase, noteId: string): Promise<NoteItem[]> {
   const rows = await db.getAllAsync<NoteItemRow>(
     'SELECT * FROM note_items WHERE note_id = ? ORDER BY position ASC',
@@ -200,8 +214,9 @@ export async function getLocalNotes(db: SQLiteDatabase, params?: GetNotesParams)
   }
 
   if (params?.search) {
-    sql += ' AND (title LIKE ? OR content LIKE ? OR id IN (SELECT note_id FROM note_items WHERE text LIKE ?))';
-    args.push(`%${params.search}%`, `%${params.search}%`, `%${params.search}%`);
+    const pattern = `%${escapeLikePattern(params.search)}%`;
+    sql += ` AND ${SEARCH_LIKE_SQL}`;
+    args.push(pattern, pattern, pattern);
   }
 
   sql += ' ORDER BY pinned DESC, position ASC';
@@ -665,8 +680,9 @@ async function removeLocalNotesNotInTx(
   }
 
   if (params?.search) {
-    scopedWhereSql += ' AND (title LIKE ? OR content LIKE ? OR id IN (SELECT note_id FROM note_items WHERE text LIKE ?))';
-    scopeArgs.push(`%${params.search}%`, `%${params.search}%`, `%${params.search}%`);
+    const pattern = `%${escapeLikePattern(params.search)}%`;
+    scopedWhereSql += ` AND ${SEARCH_LIKE_SQL}`;
+    scopeArgs.push(pattern, pattern, pattern);
   }
 
   if (params?.label) {
