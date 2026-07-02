@@ -595,14 +595,21 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         // isn't found, dead-letter instead of silently dropping a potentially
         // broken id-mapping.
         //
-        // A 404 on a queued image delete means the image (or its parent note,
-        // cascade-deleted) is already gone — the desired end state ("image not
-        // there") already holds, so this resolves like an idempotent conflict
-        // rather than a real failure to preserve (issue #618's "reconcile
-        // queued removals … gracefully").
+        // A permanently-rejected image delete (404: image or its cascade-deleted
+        // parent note already gone; 403: access revoked; etc.) always resolves
+        // silently rather than dead-lettering. The dead-letter "Keep my
+        // version"/Discard recovery flow (useSyncFailures.ts) is built around
+        // preserving *note content* — forking the whole note (sans images) into
+        // a duplicate — which is a meaningless, confusing response to a failed
+        // *image removal*. The image spec's own client-deferred-delete design
+        // already treats "the DELETE never landed" as fail-safe (the image just
+        // reappears on the next server sync, per §6); a background fetch or SSE
+        // event reconciles the note's images either way, so there is nothing to
+        // preserve here that a full note-fork would help with (issue #618's
+        // "reconcile queued removals … gracefully").
         let idempotentConflict =
           (status === 409 && entry.operation !== 'update' && entry.operation !== 'createLabel') ||
-          (status === 404 && entry.operation === 'removeImage');
+          entry.operation === 'removeImage';
         if (status === 409 && entry.operation === 'createLabel') {
           const clientLabelId = body?.id as string | undefined;
           const labelName = body?.name as string | undefined;
