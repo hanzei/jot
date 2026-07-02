@@ -368,6 +368,7 @@
     "failedDuplicate": "Notitie dupliceren mislukt. Probeer het opnieuw.",
     "menuOptions": "Notitieopties",
     "assignItem": "Item toewijzen",
+    "removeItem": "Item verwijderen",
     "unassign": "Toewijzing opheffen",
     "assignedTo": "Toegewezen aan {{name}}",
     "completedSuggestions": "Suggesties van voltooide items"
@@ -417,6 +418,25 @@
     "unsharedSuccess": "Delen van notitie succesvol ongedaan gemaakt!",
     "failedUnshare": "Delen van notitie ongedaan maken mislukt. Probeer het opnieuw."
   },
+  "images": {
+    "openLightbox": "{{filename}} bekijken",
+    "moreImages": "{{count}} meer afbeeldingen bekijken",
+    "moreImagesBadge": "{{count}} meer afbeeldingen",
+    "lightboxPrevious": "Vorige afbeelding",
+    "lightboxNext": "Volgende afbeelding",
+    "lightboxCounter": "{{current}} / {{total}}",
+    "addImage": "Afbeelding toevoegen",
+    "dropOverlay": "Sleep een afbeelding hierheen om toe te voegen",
+    "removeImage": "{{filename}} verwijderen",
+    "removedToast": "Afbeelding verwijderd",
+    "uploading": "Uploaden… {{percent}}%",
+    "uploadFailed": "Uploaden mislukt",
+    "retryUpload": "{{filename}} opnieuw uploaden",
+    "dismissUpload": "{{filename}} negeren",
+    "errorWrongType": "Er kunnen alleen afbeeldingen worden toegevoegd.",
+    "errorTooLarge": "De afbeelding overschrijdt de limiet van {{maxMB}} MB.",
+    "errorTooMany": "Notities kunnen tot {{max}} afbeeldingen bevatten."
+  },
   "serviceWorker": {
     "updatePrompt": "Nieuwe app-update beschikbaar! Klik op OK om te vernieuwen"
   },
@@ -433,6 +453,8 @@
     "fileTypesJson": ".json-bestanden",
     "invalidFileType": "Ongeldig bestandstype. Selecteer een .json- of .zip-bestand.",
     "invalidFileTypeJson": "Ongeldig bestandstype. Selecteer een .json-bestand.",
+    "importedNotes_few": "{{count}} notities geïmporteerd",
+    "importedNotes_many": "{{count}} notities geïmporteerd",
     "importedNotes_one": "{{count}} notitie geïmporteerd",
     "importedNotes_other": "{{count}} notities geïmporteerd",
     "skipped": "({{count}} overgeslagen)",

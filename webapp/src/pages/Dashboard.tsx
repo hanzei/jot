@@ -3,7 +3,7 @@ import { PlusIcon, DocumentTextIcon, ArchiveBoxIcon, TrashIcon, ClipboardDocumen
 import { useTranslation } from 'react-i18next';
 import { notes, users as usersApi } from '@/utils/api';
 import { getUser, getSettings, setSettings } from '@/utils/auth';
-import type { Note, User, SSEEvent, NoteSort } from '@jot/shared';
+import { UPLOAD_MAX_BYTES, type Note, type NoteImage, type User, type SSEEvent, type NoteSort } from '@jot/shared';
 import { useSearchParams, useParams, useNavigate } from 'react-router';
 import PageContent from '@/components/PageContent';
 import SearchBar from '@/components/SearchBar';
@@ -37,7 +37,13 @@ import {
 const SEARCH_DEBOUNCE_MS = 300;
 const isApplePlatform = () => typeof navigator !== 'undefined' && /mac|iphone|ipad|ipod/i.test(navigator.platform);
 
-export default function Dashboard() {
+interface DashboardProps {
+  // Server-configured upload cap (falls back to the shared default if the
+  // parent hasn't fetched /config yet, or the route is used without it).
+  uploadMaxBytes?: number;
+}
+
+export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: DashboardProps) {
   const { t } = useTranslation();
   const { showToast } = useToast();
   const { noteId: noteIdParam } = useParams<{ noteId?: string }>();
@@ -405,6 +411,28 @@ export default function Dashboard() {
           return next;
         });
       })();
+      return;
+    }
+
+    if (event.type === 'note_image_added' || event.type === 'note_image_removed') {
+      const { note_id: imageNoteId } = event.data;
+      const patchImages = (imgs: NoteImage[] | undefined): NoteImage[] | undefined => {
+        if (event.type === 'note_image_added') {
+          const image = event.data.image;
+          if (!image || imgs?.some(img => img.id === image.id)) return imgs;
+          return [...(imgs ?? []), image];
+        }
+        const imageId = event.data.image_id;
+        if (!imageId || !imgs) return imgs;
+        return imgs.filter(img => img.id !== imageId);
+      };
+
+      setEditingNote(prev => (prev && prev.id === imageNoteId ? { ...prev, images: patchImages(prev.images) } : prev));
+      setNotesList(prev => prev.map(n => (n.id === imageNoteId ? { ...n, images: patchImages(n.images) } : n)));
+      // Also reconcile via a full reload, same as every other event type below —
+      // this is the fallback for a note whose note_created hasn't loaded yet, so
+      // an image added just after creation isn't silently dropped from the list.
+      loadNotes();
       return;
     }
 
@@ -1237,6 +1265,7 @@ export default function Dashboard() {
             isOwner={!editingNote || editingNote.user_id === user?.id}
             usersById={usersById}
             currentUserId={user?.id}
+            uploadMaxBytes={uploadMaxBytes}
           />
         )}
 

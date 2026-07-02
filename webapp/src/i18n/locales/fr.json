@@ -368,6 +368,7 @@
     "failedDuplicate": "Impossible de dupliquer la note. Veuillez réessayer.",
     "menuOptions": "Options de la note",
     "assignItem": "Assigner l'élément",
+    "removeItem": "Supprimer l'élément",
     "unassign": "Désassigner",
     "assignedTo": "Assigné à {{name}}",
     "completedSuggestions": "Suggestions d'éléments terminés"
@@ -417,6 +418,25 @@
     "unsharedSuccess": "Partage de la note annulé avec succès !",
     "failedUnshare": "Impossible d'annuler le partage de la note. Veuillez réessayer."
   },
+  "images": {
+    "openLightbox": "Voir {{filename}}",
+    "moreImages": "Voir {{count}} images supplémentaires",
+    "moreImagesBadge": "{{count}} images supplémentaires",
+    "lightboxPrevious": "Image précédente",
+    "lightboxNext": "Image suivante",
+    "lightboxCounter": "{{current}} / {{total}}",
+    "addImage": "Ajouter une image",
+    "dropOverlay": "Déposez l'image pour l'ajouter",
+    "removeImage": "Supprimer {{filename}}",
+    "removedToast": "Image supprimée",
+    "uploading": "Téléchargement… {{percent}} %",
+    "uploadFailed": "Échec du téléchargement",
+    "retryUpload": "Réessayer d'envoyer {{filename}}",
+    "dismissUpload": "Ignorer {{filename}}",
+    "errorWrongType": "Seules les images peuvent être jointes.",
+    "errorTooLarge": "L'image dépasse la limite de {{maxMB}} Mo.",
+    "errorTooMany": "Une note peut contenir jusqu'à {{max}} images."
+  },
   "serviceWorker": {
     "updatePrompt": "Une nouvelle mise à jour est disponible ! Cliquez sur OK pour actualiser"
   },
@@ -433,6 +453,8 @@
     "fileTypesJson": "Fichiers .json",
     "invalidFileType": "Type de fichier non valide. Veuillez sélectionner un fichier .json ou .zip.",
     "invalidFileTypeJson": "Type de fichier non valide. Veuillez sélectionner un fichier .json.",
+    "importedNotes_few": "{{count}} notes importées",
+    "importedNotes_many": "{{count}} notes importées",
     "importedNotes_one": "{{count}} note importée",
     "importedNotes_other": "{{count}} notes importées",
     "skipped": "({{count}} ignorées)",

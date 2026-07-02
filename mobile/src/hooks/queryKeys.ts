@@ -32,3 +32,11 @@ export function noteSharesQueryKey(noteId: string | null): [string, string, stri
 export function deadLettersQueryKey(): [string, string] {
   return ['dead-letters', currentQueryServerScope()];
 }
+
+export function pendingImageUploadsQueryScopeKey(): [string, string] {
+  return ['pending-image-uploads', currentQueryServerScope()];
+}
+
+export function pendingImageUploadsQueryKey(noteId: string | null): [string, string, string | null] {
+  return ['pending-image-uploads', currentQueryServerScope(), noteId];
+}

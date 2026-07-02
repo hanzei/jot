@@ -21,7 +21,10 @@ interface ToastMessage {
   action?: ToastAction;
 }
 
-const TOAST_DURATION_MS = 4000;
+// Exported so callers that need a server write to stay in sync with the
+// visible undo window (e.g. the note-image deferred-delete timer) don't drift
+// out of step with the toast's own auto-dismiss.
+export const TOAST_DURATION_MS = 4000;
 const ENTER_ANIMATION_MS = 180;
 const EXIT_ANIMATION_MS = 180;
 
@@ -87,6 +90,13 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
     if (isExitingRef.current) {
       return;
     }
+    // actionInFlightRef is only true here when this close() came from the
+    // action handler's post-onPress `close(true)` — every other path (the
+    // auto-dismiss timer, the X button) reaches here with it false, which is
+    // exactly "dismissed without the action running."
+    if (!actionInFlightRef.current) {
+      toast.action?.onExpire?.();
+    }
     clearAutoDismissTimer();
     isExitingRef.current = true;
     Animated.parallel([
@@ -103,7 +113,7 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
         useNativeDriver: true,
       }),
     ]).start(() => onDismiss(toast.id));
-  }, [clearAutoDismissTimer, onDismiss, opacity, toast.id, translateY]);
+  }, [clearAutoDismissTimer, onDismiss, opacity, toast.action, toast.id, translateY]);
 
   useEffect(() => {
     Animated.parallel([
@@ -172,7 +182,12 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
           <Text style={styles.actionText}>{toast.action.label}</Text>
         </TouchableOpacity>
       )}
-      <TouchableOpacity onPress={() => close()} style={styles.closeButton} accessibilityLabel={t('common.close')}>
+      <TouchableOpacity
+        onPress={() => close()}
+        style={styles.closeButton}
+        accessibilityLabel={t('common.close')}
+        testID={`toast-close-${toast.id}`}
+      >
         <Ionicons name="close" size={18} color={colors.offlineBannerText} />
       </TouchableOpacity>
     </Animated.View>

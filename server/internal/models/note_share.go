@@ -67,11 +67,36 @@ func (s *noteStore) ShareNote(ctx context.Context, noteID string, sharedByUserID
 		return fmt.Errorf("failed to share note: %w", err)
 	}
 
-	ignoreQ := s.d.RewritePlaceholders(
-		s.d.InsertIgnore("note_user_state", "note_id, user_id", "?, ?"),
-	)
-	if _, err = tx.ExecContext(ctx, ignoreQ, noteID, sharedWithUserID); err != nil {
-		return fmt.Errorf("failed to create note user state for collaborator: %w", err)
+	// Ensure the collaborator has a per-user state row for this note. Only create
+	// one when absent: if a row already exists (unexpected here, since the share
+	// insert above is the uniqueness guard) leave its position untouched. A new
+	// row shifts the collaborator's existing notes down and lands at position 0,
+	// mirroring how Create/Duplicate place a new note — otherwise it would default
+	// to position 0 and tie with their current top note, giving a nondeterministic
+	// order under `ORDER BY pinned DESC, position ASC`.
+	var stateExists int
+	if err = tx.QueryRowContext(ctx,
+		s.d.RewritePlaceholders(`SELECT COUNT(*) FROM note_user_state WHERE note_id = ? AND user_id = ?`),
+		noteID, sharedWithUserID,
+	).Scan(&stateExists); err != nil {
+		return fmt.Errorf("failed to check collaborator note state: %w", err)
+	}
+	if stateExists == 0 {
+		if _, err = tx.ExecContext(ctx,
+			s.d.RewritePlaceholders(`UPDATE note_user_state SET position = position + 1
+			 WHERE user_id = ? AND pinned = FALSE AND archived = FALSE
+			 AND note_id IN (SELECT id FROM notes WHERE deleted_at IS NULL)`),
+			sharedWithUserID,
+		); err != nil {
+			return fmt.Errorf("failed to shift collaborator notes: %w", err)
+		}
+		if _, err = tx.ExecContext(ctx,
+			s.d.RewritePlaceholders(`INSERT INTO note_user_state (note_id, user_id, position, unpinned_position)
+			 VALUES (?, ?, 0, 0)`),
+			noteID, sharedWithUserID,
+		); err != nil {
+			return fmt.Errorf("failed to create note user state for collaborator: %w", err)
+		}
 	}
 
 	return tx.Commit()

@@ -879,10 +879,19 @@ describe('getLocalNotes search', () => {
     await getLocalNotes(db as never, { search: 'hello' });
 
     const [sql, args] = (db.getAllAsync as jest.Mock).mock.calls[0] as [string, unknown[]];
-    expect(sql).toContain('title LIKE ?');
-    expect(sql).toContain('content LIKE ?');
-    expect(sql).toContain('id IN (SELECT note_id FROM note_items WHERE text LIKE ?)');
+    expect(sql).toContain("title LIKE ? ESCAPE '\\'");
+    expect(sql).toContain("content LIKE ? ESCAPE '\\'");
+    expect(sql).toContain("id IN (SELECT note_id FROM note_items WHERE text LIKE ? ESCAPE '\\')");
     expect(args).toEqual(['%hello%', '%hello%', '%hello%']);
+  });
+
+  it('escapes LIKE wildcards in the search text so they match literally', async () => {
+    const db = { getAllAsync: jest.fn().mockResolvedValue([]) };
+
+    await getLocalNotes(db as never, { search: '50%_a\\b' });
+
+    const [, args] = (db.getAllAsync as jest.Mock).mock.calls[0] as [string, unknown[]];
+    expect(args).toEqual(['%50\\%\\_a\\\\b%', '%50\\%\\_a\\\\b%', '%50\\%\\_a\\\\b%']);
   });
 
   it('does not add a LIKE condition when no search param is given', async () => {
@@ -911,10 +920,26 @@ describe('removeLocalNotesNotIn with search', () => {
     ) as [string, unknown[]] | undefined;
     expect(deleteCall).toBeDefined();
     const [sql, args] = deleteCall!;
-    expect(sql).toContain('title LIKE ?');
-    expect(sql).toContain('content LIKE ?');
-    expect(sql).toContain('id IN (SELECT note_id FROM note_items WHERE text LIKE ?)');
+    expect(sql).toContain("title LIKE ? ESCAPE '\\'");
+    expect(sql).toContain("content LIKE ? ESCAPE '\\'");
+    expect(sql).toContain("id IN (SELECT note_id FROM note_items WHERE text LIKE ? ESCAPE '\\')");
     expect(args).toEqual(['%hello%', '%hello%', '%hello%']);
+  });
+
+  it('escapes LIKE wildcards so the prune scope matches the server literal search', async () => {
+    const db = {
+      getAllAsync: jest.fn().mockResolvedValue([]),
+      runAsync: jest.fn().mockResolvedValue(undefined),
+    };
+
+    await removeLocalNotesNotIn(db as never, new Set<string>(), { search: '50%' });
+
+    const deleteCall = (db.runAsync as jest.Mock).mock.calls.find(
+      (c: unknown[]) => String(c[0]).startsWith('DELETE'),
+    ) as [string, unknown[]] | undefined;
+    expect(deleteCall).toBeDefined();
+    const [, args] = deleteCall!;
+    expect(args).toEqual(['%50\\%%', '%50\\%%', '%50\\%%']);
   });
 });
 

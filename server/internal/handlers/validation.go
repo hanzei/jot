@@ -38,6 +38,9 @@ const (
 	maxPATsPerUser = 50
 	// maxJSONBodySize is the maximum request body size for JSON endpoints.
 	maxJSONBodySize = 1 << 20 // 1 MiB
+	// passwordMaxBytes is bcrypt's input limit: bcrypt.GenerateFromPassword
+	// rejects anything longer, so surface a clear 400 instead of a 500.
+	passwordMaxBytes = 72
 )
 
 func validateUsername(username string) error {
@@ -66,6 +69,9 @@ func validateUsername(username string) error {
 func validatePassword(password string, minLength int) error {
 	if utf8.RuneCountInString(password) < minLength {
 		return fmt.Errorf("password must be at least %d characters", minLength)
+	}
+	if len(password) > passwordMaxBytes {
+		return fmt.Errorf("password must be %d bytes or fewer", passwordMaxBytes)
 	}
 	return nil
 }

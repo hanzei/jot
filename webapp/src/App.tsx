@@ -11,13 +11,14 @@ import { ToastProvider } from '@/components/Toast';
 import { isAdmin, setUser, setSettings, removeUser } from '@/utils/auth';
 import { auth, serverConfig } from '@/utils/api';
 import { applyTheme, getThemePreference } from '@/utils/theme';
-import { VALIDATION } from '@jot/shared';
+import { VALIDATION, UPLOAD_MAX_BYTES } from '@jot/shared';
 
 function App() {
   const [isAuth, setIsAuth] = useState(false);
   const [loading, setLoading] = useState(true);
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
   const [passwordMinLength, setPasswordMinLength] = useState<number>(VALIDATION.PASSWORD_MIN_LENGTH);
+  const [uploadMaxBytes, setUploadMaxBytes] = useState<number>(UPLOAD_MAX_BYTES);
 
   useEffect(() => {
     applyTheme(getThemePreference());
@@ -30,6 +31,7 @@ function App() {
       .then((cfg) => {
         setRegistrationEnabled(cfg.registration_enabled);
         setPasswordMinLength(cfg.password_min_length);
+        setUploadMaxBytes(cfg.upload_max_bytes);
       })
       .catch(() => { /* keep defaults if config fetch fails */ });
 
@@ -84,7 +86,7 @@ function App() {
                 : <Navigate to="/login" />
             }
           >
-            <Route element={<Dashboard />}>
+            <Route element={<Dashboard uploadMaxBytes={uploadMaxBytes} />}>
               <Route index element={null} />
               <Route path="notes/:noteId" element={null} />
             </Route>

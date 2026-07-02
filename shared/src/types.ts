@@ -1,6 +1,7 @@
 export interface ServerConfig {
   registration_enabled: boolean;
   password_min_length: number;
+  upload_max_bytes: number;
 }
 
 export interface AboutInfo {
@@ -382,4 +383,20 @@ export interface ProfileIconSSEEvent {
   };
 }
 
-export type SSEEvent = NoteSSEEvent | LabelsChangedSSEEvent | ProfileIconSSEEvent;
+/**
+ * Fired when an image is added to or removed from a note. `image` is set for
+ * note_image_added; `image_id` is set for note_image_removed (the row is
+ * already gone by the time that event fires).
+ */
+export interface NoteImageSSEEvent {
+  type: 'note_image_added' | 'note_image_removed';
+  source_user_id: string;
+  client_id?: string;
+  data: {
+    note_id: string;
+    image?: NoteImage;
+    image_id?: string;
+  };
+}
+
+export type SSEEvent = NoteSSEEvent | LabelsChangedSSEEvent | ProfileIconSSEEvent | NoteImageSSEEvent;

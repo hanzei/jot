@@ -485,6 +485,63 @@ const docTemplate = `{
                 ]
             }
         },
+        "/images/{id}/thumbnail": {
+            "get": {
+                "produces": [
+                    "image/jpeg"
+                ],
+                "tags": [
+                    "notes"
+                ],
+                "summary": "Download a note image's thumbnail",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Image ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Thumbnail JPEG bytes",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ]
+            }
+        },
         "/labels": {
             "get": {
                 "produces": [
@@ -3628,6 +3685,9 @@ const docTemplate = `{
                 },
                 "registration_enabled": {
                     "type": "boolean"
+                },
+                "upload_max_bytes": {
+                    "type": "integer"
                 }
             }
         }

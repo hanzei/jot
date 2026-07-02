@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import NoteCard from '../NoteCard'
@@ -11,6 +11,9 @@ import { createMockNote, createMockListNote } from '@/utils/__tests__/test-helpe
 vi.mock('@/utils/api', () => ({
   notes: {
     update: vi.fn(),
+  },
+  images: {
+    thumbnailUrl: (id: string) => `/api/v1/images/${id}/thumbnail`,
   },
 }))
 
@@ -111,6 +114,45 @@ describe('NoteCard', () => {
       renderNoteCard({ ...defaultProps, note: specialNote })
 
       expect(screen.getByText('Special <>&"\'` Characters')).toBeInTheDocument()
+    })
+  })
+
+  describe('Cover Image', () => {
+    it('renders no cover when the note has no images', () => {
+      renderNoteCard(defaultProps)
+
+      expect(screen.queryByTestId('note-card-cover')).not.toBeInTheDocument()
+    })
+
+    it('renders the first image as a cover thumbnail', () => {
+      const note = createMockListNote({
+        title: 'Test Note',
+        images: [
+          { id: 'img1', filename: 'photo1.png', content_type: 'image/png', width: 800, height: 600, created_at: '2023-01-01T00:00:00Z' },
+        ],
+      })
+      renderNoteCard({ ...defaultProps, note })
+
+      const cover = screen.getByTestId('note-card-cover')
+      const img = within(cover).getByAltText('photo1.png')
+      expect(img).toHaveAttribute('src', '/api/v1/images/img1/thumbnail')
+      expect(screen.queryByText(/^\+\d+$/)).not.toBeInTheDocument()
+    })
+
+    it('shows a +N badge when the note has more than one image', () => {
+      const note = createMockListNote({
+        title: 'Test Note',
+        images: [
+          { id: 'img1', filename: 'photo1.png', content_type: 'image/png', width: 800, height: 600, created_at: '2023-01-01T00:00:00Z' },
+          { id: 'img2', filename: 'photo2.png', content_type: 'image/png', width: 800, height: 600, created_at: '2023-01-01T00:00:00Z' },
+          { id: 'img3', filename: 'photo3.png', content_type: 'image/png', width: 800, height: 600, created_at: '2023-01-01T00:00:00Z' },
+        ],
+      })
+      renderNoteCard({ ...defaultProps, note })
+
+      const cover = screen.getByTestId('note-card-cover')
+      expect(within(cover).getByAltText('photo1.png')).toBeInTheDocument()
+      expect(screen.getByText('+2')).toBeInTheDocument()
     })
   })
 

@@ -21,6 +21,7 @@ const migration1 = async (db: SQLiteDatabase): Promise<void> => {
       updated_at TEXT NOT NULL,
       labels_json TEXT NOT NULL DEFAULT '[]',
       shared_with_json TEXT NOT NULL DEFAULT '[]',
+      images_json TEXT NOT NULL DEFAULT '[]',
       sync_state TEXT NOT NULL DEFAULT 'synced'
     );
 
@@ -136,7 +137,42 @@ const migration2 = async (db: SQLiteDatabase): Promise<void> => {
   }
 };
 
-export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2];
+// Migration 3: add an images_json column to notes, mirroring labels_json/
+// shared_with_json, so a note's embedded image metadata (issue #616) can be
+// cached locally alongside the rest of the note. Column-probed like migration2.
+const migration3 = async (db: SQLiteDatabase): Promise<void> => {
+  const noteCols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(notes)');
+  if (!noteCols.some((c) => c.name === 'images_json')) {
+    await db.runAsync(`ALTER TABLE notes ADD COLUMN images_json TEXT NOT NULL DEFAULT '[]'`);
+  }
+};
+
+// Migration 4: add a table for images picked while offline (or whose upload
+// hit a transient failure), so they survive an app restart until the sync
+// engine can flush them (issue #618). Bytes are copied to a stable app-owned
+// path (outside any OS-managed cache dir) at enqueue time — see
+// db/imageUploadQueue.ts — so `local_path` always points at a durable file.
+const migration4 = async (db: SQLiteDatabase): Promise<void> => {
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS pending_image_uploads (
+      id TEXT PRIMARY KEY,
+      note_id TEXT NOT NULL,
+      local_path TEXT NOT NULL,
+      filename TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      size_bytes INTEGER,
+      status TEXT NOT NULL DEFAULT 'queued',
+      error_message TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_pending_image_uploads_note_id
+      ON pending_image_uploads (note_id);
+  `);
+};
+
+export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4];
 
 export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   // Run PRAGMAs separately: sqlite3_exec (used by execAsync) stops on the
