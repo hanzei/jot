@@ -299,6 +299,12 @@ func TestRegisterEndpoint(t *testing.T) {
 		_, err := c.Register(t.Context(), "x", "password123")
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
+
+	t.Run("password longer than bcrypt limit", func(t *testing.T) {
+		c := ts.newClient()
+		_, err := c.Register(t.Context(), "longpwuser", strings.Repeat("a", 73))
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+	})
 }
 
 func TestRegisterDisabled(t *testing.T) {
