@@ -111,13 +111,15 @@ const retryablePostPaths = new Set([
 // POST paths with dynamic segments that are safe to retry. Each endpoint is
 // matched exactly — a bare prefix like '/api/v1/notes/' would also capture
 // non-idempotent endpoints (/notes/import, /notes/{id}/duplicate,
-// /notes/{id}/images) that must never be replayed, nor answered with a
-// synthetic 202 whose plain-text body their callers would misread as a real
-// response.
+// /notes/{id}/images) that must never be replayed. Beyond idempotency, an
+// endpoint only qualifies if its client ignores the response body: a queued
+// request is answered with the synthetic 202 plain-text response below, which
+// a body-reading caller would misparse (that rules out /notes/{id}/restore,
+// /notes/{id}/labels and .../toggle-completed, whose clients read the
+// returned note/items).
 const retryablePostPatterns = [
-  /^\/api\/v1\/notes\/[^/]+\/(share|restore|labels)$/,
+  /^\/api\/v1\/notes\/[^/]+\/share$/,
   /^\/api\/v1\/notes\/[^/]+\/items\/reorder$/,
-  /^\/api\/v1\/notes\/[^/]+\/items\/[^/]+\/toggle-completed$/,
 ];
 
 const isRetryablePost = (pathname: string): boolean => {
