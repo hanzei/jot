@@ -5,7 +5,10 @@ export interface LocalReorderState {
   unpinned: Note[] | null;
 }
 
-export type NoteSection = { key: string; title: string | null; data: Note[] };
+/** The fixed set of dashboard sections; a literal union so key checks (e.g. `key === 'pinned'`) are compile-time validated. */
+export type NoteSectionKey = 'pinned' | 'other' | 'notes' | 'archived';
+
+export type NoteSection = { key: NoteSectionKey; title: string | null; data: Note[] };
 
 export function buildNoteSections(
   displayPinned: Note[],
