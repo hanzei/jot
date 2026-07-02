@@ -263,6 +263,7 @@
     "failedSaveChanges": "Failed to save changes. Tap to retry.",
     "menuOptions": "Note options",
     "assignItem": "Assign item",
+    "removeItem": "Remove item",
     "unassign": "Unassign",
     "assignedTo": "Assigned to {{name}}",
     "changeColor": "Note color",

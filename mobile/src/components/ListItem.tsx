@@ -82,6 +82,9 @@ function ListItem({
   const { colors } = useTheme();
   const { t } = useTranslation();
   const [showSuggestions, setShowSuggestions] = useState(false);
+  // The delete (x) button is only shown while this row is focused (the "selected"
+  // row), so users are less likely to delete an item they didn't mean to.
+  const [isFocused, setIsFocused] = useState(false);
   const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -196,11 +199,18 @@ function ListItem({
             onSubmitEditing={onSubmitEditing}
             blurOnSubmit={false}
             onFocus={(event) => {
+              if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
+              setIsFocused(true);
               onFocus?.(event);
               if (!completed) setShowSuggestions(true);
             }}
             onBlur={() => {
-              blurTimeoutRef.current = setTimeout(() => setShowSuggestions(false), 200);
+              // Delay hiding so a tap on the delete button (which blurs the input
+              // first) still lands before the button unmounts.
+              blurTimeoutRef.current = setTimeout(() => {
+                setShowSuggestions(false);
+                setIsFocused(false);
+              }, 200);
             }}
             multiline
             submitBehavior="submit"
@@ -242,9 +252,14 @@ function ListItem({
               </View>
             </TouchableOpacity>
           ) : null}
-          {editable && onDelete && (
-            <TouchableOpacity onPress={onDelete} style={styles.deleteBtn} testID="list-item-delete">
-              <Ionicons name="close" size={18} color={effectiveIconMuted} />
+          {editable && onDelete && isFocused && (
+            <TouchableOpacity
+              onPress={onDelete}
+              style={styles.deleteBtn}
+              testID="list-item-delete"
+              accessibilityLabel={t('note.removeItem')}
+            >
+              <Ionicons name="close" size={22} color={effectiveIconMuted} />
             </TouchableOpacity>
           )}
         </View>
@@ -315,7 +330,7 @@ const styles = StyleSheet.create({
     textDecorationLine: 'line-through' as const,
   },
   deleteBtn: {
-    padding: 4,
+    padding: 8,
     marginLeft: 'auto',
   },
   assignBtn: {

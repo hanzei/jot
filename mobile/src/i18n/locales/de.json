@@ -234,6 +234,7 @@
     "failedSaveChanges": "Änderungen konnten nicht gespeichert werden. Tippe zum Wiederholen.",
     "menuOptions": "Notizoptionen",
     "assignItem": "Element zuweisen",
+    "removeItem": "Element entfernen",
     "unassign": "Zuweisung aufheben",
     "assignedTo": "Zugewiesen an {{name}}",
     "changeColor": "Notizfarbe",

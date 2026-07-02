@@ -475,9 +475,12 @@ function SortableItem({ id, index, item, onUpdateListItem, onRemoveListItem, isC
 
       <button
         onClick={() => onRemoveListItem(item.id)}
-        className="ml-auto p-1 text-gray-400 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-100"
+        aria-label={t('note.removeItem')}
+        title={t('note.removeItem')}
+        data-testid="list-item-delete"
+        className="ml-auto p-1.5 text-gray-400 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-100 opacity-0 group-hover/item:opacity-100 group-focus-within/item:opacity-100 focus-visible:opacity-100 transition-opacity"
       >
-        <TrashIcon className="h-4 w-4" />
+        <XMarkIcon className="h-6 w-6" />
       </button>
     </div>
   );

@@ -368,6 +368,7 @@
     "failedDuplicate": "Failed to duplicate note. Please try again.",
     "menuOptions": "Note options",
     "assignItem": "Assign item",
+    "removeItem": "Remove item",
     "unassign": "Unassign",
     "assignedTo": "Assigned to {{name}}",
     "completedSuggestions": "Suggestions from completed items"

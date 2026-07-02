@@ -234,6 +234,7 @@
     "failedSaveChanges": "Impossible d'enregistrer les modifications. Appuyez pour réessayer.",
     "menuOptions": "Options de la note",
     "assignItem": "Assigner l'élément",
+    "removeItem": "Supprimer l'élément",
     "unassign": "Désassigner",
     "assignedTo": "Assigné à {{name}}",
     "changeColor": "Couleur de la note",

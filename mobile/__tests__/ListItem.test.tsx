@@ -50,8 +50,20 @@ describe('ListItem', () => {
       <ListItem text="Task" completed={false} onDelete={onDelete} />,
     );
 
+    // The delete button only appears while the row is focused (selected).
+    fireEvent(getByTestId('list-item-text'), 'focus');
     fireEvent.press(getByTestId('list-item-delete'));
     expect(onDelete).toHaveBeenCalledTimes(1);
+  });
+
+  it('hides the delete button until the row is focused', () => {
+    const { getByTestId, queryByTestId } = render(
+      <ListItem text="Task" completed={false} onDelete={jest.fn()} />,
+    );
+
+    expect(queryByTestId('list-item-delete')).toBeNull();
+    fireEvent(getByTestId('list-item-text'), 'focus');
+    expect(queryByTestId('list-item-delete')).not.toBeNull();
   });
 
   it('does not show delete button when not editable', () => {

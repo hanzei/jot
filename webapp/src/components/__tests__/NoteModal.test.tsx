@@ -1478,6 +1478,33 @@ describe('NoteModal', () => {
       expect(mockUpdateItem).not.toHaveBeenCalled()
     })
 
+    it('item delete button is reveal-on-hover/focus and removes the item when clicked', async () => {
+      const listNote = createMockNote({
+        note_type: 'list',
+        items: [
+          item('item1', { text: 'First', position: 0 }),
+          item('item2', { text: 'Second', position: 1 }),
+        ],
+      })
+      renderNoteModal({ ...defaultProps, note: listNote })
+
+      const deleteButtons = screen.getAllByTestId('list-item-delete')
+      expect(deleteButtons).toHaveLength(2)
+      // Hidden by default; only the hovered row (desktop) or the row with a
+      // focused field (works on touch too) reveals its delete button, so users
+      // are less likely to delete an item they didn't intend to.
+      expect(deleteButtons[0].className).toContain('opacity-0')
+      expect(deleteButtons[0].className).toContain('group-hover/item:opacity-100')
+      expect(deleteButtons[0].className).toContain('group-focus-within/item:opacity-100')
+      expect(deleteButtons[0]).toHaveAttribute('aria-label', 'Remove item')
+
+      fireEvent.click(deleteButtons[0])
+      await vi.runAllTimersAsync()
+
+      expect(screen.getAllByTestId('list-item-row')).toHaveLength(1)
+      expect(screen.getByDisplayValue('Second')).toBeInTheDocument()
+    })
+
     it('un-indenting a child promotes it to top-level via parent_id ""', async () => {
       const listNote = createMockNote({
         note_type: 'list',
