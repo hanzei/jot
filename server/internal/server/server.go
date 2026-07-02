@@ -479,6 +479,17 @@ func (s *Server) GetDB() *sql.DB {
 	return s.db
 }
 
+const (
+	// cspDefault disallows inline scripts: the webapp is built by Vite with no
+	// inline script tags (PWA registration uses injectRegister: false), so
+	// script-src 'self' holds and CSP acts as a real XSS backstop.
+	// style-src keeps 'unsafe-inline' for React inline style attributes.
+	cspDefault = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; frame-ancestors 'none'"
+	// cspSwaggerUI additionally allows inline scripts because the Swagger UI
+	// page bootstraps itself with an inline <script> block.
+	cspSwaggerUI = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; frame-ancestors 'none'"
+)
+
 func securityHeaders(cookieSecure bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -487,7 +498,11 @@ func securityHeaders(cookieSecure bool) func(http.Handler) http.Handler {
 			h.Set("X-Frame-Options", "DENY")
 			h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 			h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-			h.Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; frame-ancestors 'none'")
+			csp := cspDefault
+			if strings.HasPrefix(r.URL.Path, "/api/docs/") {
+				csp = cspSwaggerUI
+			}
+			h.Set("Content-Security-Policy", csp)
 			if cookieSecure {
 				h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 			}

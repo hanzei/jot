@@ -183,7 +183,7 @@ Migration files live in `server/internal/database/migrations/` and are named `NN
 
 - Auth is session-based using an HttpOnly `jot_session` cookie (primary method).
 - Personal Access Tokens (PATs) are accepted via `Authorization: Bearer <token>` header (machine-to-machine use).
-- Sessions are persisted in the `sessions` table with 30-day expiry by default.
+- Sessions are persisted in the `sessions` table with 30-day expiry by default. Only the SHA-256 hash of the session token is stored (`token_hash` column); the raw token exists solely in the client's cookie.
 - Sessions are automatically extended to 30 days again when less than 7 days remain.
 - Browser clients send credentialed requests (`withCredentials: true`).
 - The first registered user automatically becomes admin.

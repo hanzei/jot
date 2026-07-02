@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"net/http"
 	"time"
@@ -29,18 +27,23 @@ type SessionResponse struct {
 	ExpiresAt time.Time       `json:"expires_at"`
 }
 
-func sessionID(token string) string {
-	h := sha256.Sum256([]byte(token))
-	return hex.EncodeToString(h[:])[:22]
+// sessionID derives the public session identifier from the stored token
+// hash. It is a prefix of the hex SHA-256 of the raw token, so it reveals
+// nothing usable for authentication.
+func sessionID(tokenHash string) string {
+	if len(tokenHash) < 22 {
+		return tokenHash
+	}
+	return tokenHash[:22]
 }
 
-func toSessionResponse(s *models.Session, currentToken string) SessionResponse {
+func toSessionResponse(s *models.Session, currentTokenHash string) SessionResponse {
 	parsed := parseUserAgent(s.UserAgent)
 	return SessionResponse{
-		ID:        sessionID(s.Token),
+		ID:        sessionID(s.TokenHash),
 		Browser:   parsed.Browser,
 		OS:        parsed.OS,
-		IsCurrent: s.Token == currentToken,
+		IsCurrent: s.TokenHash == currentTokenHash,
 		CreatedAt: s.CreatedAt,
 		ExpiresAt: s.ExpiresAt,
 	}
@@ -61,7 +64,7 @@ func (h *SessionsHandler) ListSessions(w http.ResponseWriter, r *http.Request) (
 		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
-	currentToken, _ := auth.GetSessionTokenFromContext(r.Context())
+	currentTokenHash, _ := auth.GetSessionTokenHashFromContext(r.Context())
 
 	sessions, err := h.sessionStore.GetByUserID(r.Context(), user.ID)
 	if err != nil {
@@ -70,7 +73,7 @@ func (h *SessionsHandler) ListSessions(w http.ResponseWriter, r *http.Request) (
 
 	responses := make([]SessionResponse, 0, len(sessions))
 	for _, s := range sessions {
-		responses = append(responses, toSessionResponse(s, currentToken))
+		responses = append(responses, toSessionResponse(s, currentTokenHash))
 	}
 
 	return http.StatusOK, responses, nil
@@ -94,9 +97,9 @@ func (h *SessionsHandler) RevokeSession(w http.ResponseWriter, r *http.Request) 
 	}
 
 	targetID := chi.URLParam(r, "id")
-	currentToken, _ := auth.GetSessionTokenFromContext(r.Context())
+	currentTokenHash, _ := auth.GetSessionTokenHashFromContext(r.Context())
 
-	if sessionID(currentToken) == targetID {
+	if sessionID(currentTokenHash) == targetID {
 		return http.StatusBadRequest, nil, errors.New("cannot revoke current session")
 	}
 
@@ -106,10 +109,10 @@ func (h *SessionsHandler) RevokeSession(w http.ResponseWriter, r *http.Request) 
 	}
 
 	for _, s := range sessions {
-		if sessionID(s.Token) != targetID {
+		if sessionID(s.TokenHash) != targetID {
 			continue
 		}
-		deleted, err := h.sessionStore.DeleteByUserIDAndToken(r.Context(), user.ID, s.Token)
+		deleted, err := h.sessionStore.DeleteByUserIDAndTokenHash(r.Context(), user.ID, s.TokenHash)
 		if err != nil {
 			return http.StatusInternalServerError, nil, err
 		}
