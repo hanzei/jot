@@ -12,11 +12,12 @@ import NetInfo from '@react-native-community/netinfo';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useQueryClient } from '@tanstack/react-query';
 import { drainQueue, getPendingCount, getDeadLetterCount, subscribeToEnqueue } from '../db/syncQueue';
+import { drainImageUploadQueue, getQueuedImageUploadCount } from '../db/imageUploadQueue';
 import { getPendingCreateNoteIds, getFailedNoteIds } from '../db/noteQueries';
 import { useAuth } from './AuthContext';
 import { isLocalModeActive } from './localMode';
 import { isSyncDrainPaused } from './serverSwitchLifecycle';
-import { labelCountsQueryKey, labelsQueryKey, noteLocalQueryKey, noteLocalQueryScopeKey, notesLocalQueryScopeKey } from '../hooks/queryKeys';
+import { labelCountsQueryKey, labelsQueryKey, noteLocalQueryKey, noteLocalQueryScopeKey, notesLocalQueryScopeKey, pendingImageUploadsQueryScopeKey } from '../hooks/queryKeys';
 
 interface OfflineContextValue {
   isConnected: boolean;
@@ -226,9 +227,32 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       // A drain can dead-letter ops (new failures) or clear a prior failure, so
       // refresh the failed-note badges and review-banner count (#492/#493).
       refreshSyncFailures();
+
+      // Offline image uploads (issue #618) are a separate table — a multipart
+      // file upload doesn't fit sync_queue's JSON-body row shape — so they get
+      // their own drain pass, run after the note queue above so a note whose
+      // offline `create` just landed can immediately take its queued images too.
+      const { uploadedNoteIds, discardedCount } = await drainImageUploadQueue(db);
+      if (discardedCount > 0) {
+        console.warn(`Image upload queue discarded/flagged ${discardedCount} entr(y/ies) after a permanent failure.`);
+      }
+      if (uploadedNoteIds.length > 0) {
+        for (const noteId of new Set(uploadedNoteIds)) {
+          queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
+        }
+        queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      }
+      queryClient.invalidateQueries({ queryKey: pendingImageUploadsQueryScopeKey() });
+
       // drainQueue resolves even when it stops early on a transient failure, so
       // inspect what's left to decide whether a backoff retry is warranted.
-      const remaining = await getPendingCount(db);
+      // Uploads flagged `error` (permanent failures) need a manual retry, so
+      // they don't count here — otherwise a doomed request would retry forever.
+      const [pendingCount, queuedImageUploadCount] = await Promise.all([
+        getPendingCount(db),
+        getQueuedImageUploadCount(db),
+      ]);
+      const remaining = pendingCount + queuedImageUploadCount;
       // Revalidate the session after a settings drain only when the queue is
       // fully empty. The pre-drain revalidation had fetched stale server values
       // (before the PATCH ran), so we need a fresh GET /me to reflect what the

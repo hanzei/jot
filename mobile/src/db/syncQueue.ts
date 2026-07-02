@@ -37,7 +37,8 @@ export type QueueOperation =
   | 'deleteLabel'
   | 'addLabelToNote'
   | 'removeLabelFromNote'
-  | 'updateSettings';
+  | 'updateSettings'
+  | 'removeImage';
 
 interface QueueEntry {
   id: number;
@@ -121,7 +122,14 @@ export function subscribeToEnqueue(listener: EnqueueListener): () => void {
   };
 }
 
-function notifyEnqueueListeners(): void {
+/**
+ * Notify enqueue listeners directly, bypassing `enqueueOperation`. Used by
+ * imageUploadQueue.ts, whose offline upload queue is a separate table (a
+ * multipart file upload doesn't fit the JSON `sync_queue` row shape) but
+ * still wants to trigger OfflineContext's debounced drain like any other
+ * freshly-queued write (issue #618).
+ */
+export function notifyEnqueueListeners(): void {
   for (const listener of enqueueListeners) {
     try {
       listener();
@@ -193,6 +201,14 @@ function collectNoteIds(
   // Drop any query string (e.g. "/notes/{id}?permanent=true") before splitting,
   // and filter out the empty segment from the leading slash.
   const segments = endpoint.split('?')[0].split('/').filter(Boolean);
+  if (segments[0] === 'images') {
+    // DELETE /images/{id}: the endpoint has no note id in it, so `removeImage`
+    // ops (see useNoteImages.ts) carry it in the body purely for this
+    // bookkeeping — it is never sent to the server (DELETE has no body).
+    const noteId = body?.note_id;
+    if (typeof noteId === 'string') ids.add(noteId);
+    return;
+  }
   if (segments[0] !== 'notes') return;
 
   if (segments.length === 1) {
@@ -578,7 +594,15 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         // ops reference the correct server ID. If the lookup fails or the label
         // isn't found, dead-letter instead of silently dropping a potentially
         // broken id-mapping.
-        let idempotentConflict = status === 409 && entry.operation !== 'update' && entry.operation !== 'createLabel';
+        //
+        // A 404 on a queued image delete means the image (or its parent note,
+        // cascade-deleted) is already gone — the desired end state ("image not
+        // there") already holds, so this resolves like an idempotent conflict
+        // rather than a real failure to preserve (issue #618's "reconcile
+        // queued removals … gracefully").
+        let idempotentConflict =
+          (status === 409 && entry.operation !== 'update' && entry.operation !== 'createLabel') ||
+          (status === 404 && entry.operation === 'removeImage');
         if (status === 409 && entry.operation === 'createLabel') {
           const clientLabelId = body?.id as string | undefined;
           const labelName = body?.name as string | undefined;

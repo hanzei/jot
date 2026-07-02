@@ -28,6 +28,11 @@ jest.mock('../src/db/syncQueue', () => ({
   }),
 }));
 
+jest.mock('../src/db/imageUploadQueue', () => ({
+  drainImageUploadQueue: jest.fn().mockResolvedValue({ uploadedNoteIds: [], discardedCount: 0 }),
+  getQueuedImageUploadCount: jest.fn().mockResolvedValue(0),
+}));
+
 const mockRevalidate = jest.fn().mockResolvedValue(true);
 jest.mock('../src/store/AuthContext', () => ({
   useAuth: () => ({ revalidateSession: mockRevalidate }),

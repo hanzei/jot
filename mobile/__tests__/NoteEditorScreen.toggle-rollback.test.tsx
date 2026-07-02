@@ -70,6 +70,13 @@ jest.mock('../src/hooks/useNoteImages', () => ({
   }),
 }));
 
+jest.mock('../src/hooks/usePendingImageUploads', () => ({
+  __esModule: true,
+  usePendingImageUploads: () => [],
+  useRetryPendingImageUpload: () => ({ mutate: jest.fn() }),
+  useDismissPendingImageUpload: () => ({ mutate: jest.fn() }),
+}));
+
 jest.mock('../src/hooks/useOfflineNotes', () => ({
   __esModule: true,
   useOfflineNote: () => mockUseOfflineNote(),

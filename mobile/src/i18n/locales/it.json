@@ -321,6 +321,8 @@
     "removedToast": "Immagine rimossa",
     "uploading": "Caricamento… {{percent}}%",
     "uploadFailed": "Caricamento non riuscito",
+    "queuedOffline": "In attesa di caricamento…",
+    "uploadQueuedToast": "L'immagine verrà caricata quando sarai di nuovo online",
     "retryUpload": "Riprova a caricare {{filename}}",
     "dismissUpload": "Ignora {{filename}}",
     "errorWrongType": "È possibile allegare solo immagini.",
