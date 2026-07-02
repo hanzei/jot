@@ -815,6 +815,8 @@ export function useShareNote() {
     },
     onSuccess: (_data, { noteId }) => {
       queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
+      // Refresh the notes list so dashboard cards re-render collaborator avatars.
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
     },
   });
 }
@@ -865,6 +867,8 @@ export function useUnshareNote() {
     },
     onSuccess: (_data, { noteId }) => {
       queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
+      // Refresh the notes list so dashboard cards re-render collaborator avatars.
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
     },
   });
 }

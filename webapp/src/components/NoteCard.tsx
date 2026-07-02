@@ -98,10 +98,10 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
     setIsUpdating(true);
     try {
       const willArchive = !note.archived;
-      await notes.update(note.id, note.note_type === 'list'
-        ? { archived: willArchive, title: note.title, color: note.color, pinned: note.pinned, checked_items_collapsed: note.checked_items_collapsed }
-        : { archived: willArchive, content: note.content, color: note.color, pinned: note.pinned }
-      );
+      // Send only the field that changed — the card's note prop can be stale,
+      // so re-sending title/content here would overwrite concurrent edits made
+      // in another tab or by a collaborator.
+      await notes.update(note.id, { archived: willArchive });
       onRefresh?.();
       showToast(
         willArchive ? t('dashboard.noteArchived') : t('dashboard.noteUnarchived'),
@@ -110,10 +110,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
           label: t('dashboard.undo'),
           onClick: async () => {
             try {
-              await notes.update(note.id, note.note_type === 'list'
-                ? { archived: !willArchive, title: note.title, color: note.color, pinned: note.pinned, checked_items_collapsed: note.checked_items_collapsed }
-                : { archived: !willArchive, content: note.content, color: note.color, pinned: note.pinned }
-              );
+              await notes.update(note.id, { archived: !willArchive });
               onRefresh?.();
             } catch (undoError) {
               console.error('Failed to undo archive toggle:', undoError);
@@ -134,10 +131,8 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
     setIsUpdating(true);
     try {
       const willPin = !note.pinned;
-      await notes.update(note.id, note.note_type === 'list'
-        ? { pinned: willPin, archived: note.archived, title: note.title, color: note.color, checked_items_collapsed: note.checked_items_collapsed }
-        : { pinned: willPin, archived: note.archived, content: note.content, color: note.color }
-      );
+      // Send only the field that changed (see handleToggleArchive).
+      await notes.update(note.id, { pinned: willPin });
       onRefresh?.();
       showToast(
         willPin ? t('dashboard.notePinned') : t('dashboard.noteUnpinned'),
@@ -146,10 +141,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
           label: t('dashboard.undo'),
           onClick: async () => {
             try {
-              await notes.update(note.id, note.note_type === 'list'
-                ? { pinned: !willPin, archived: note.archived, title: note.title, color: note.color, checked_items_collapsed: note.checked_items_collapsed }
-                : { pinned: !willPin, archived: note.archived, content: note.content, color: note.color }
-              );
+              await notes.update(note.id, { pinned: !willPin });
               onRefresh?.();
             } catch (undoError) {
               console.error('Failed to undo pin toggle:', undoError);
