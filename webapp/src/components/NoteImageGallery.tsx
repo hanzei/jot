@@ -116,7 +116,7 @@ export default function NoteImageGallery({ images, editable = false, uploads = [
             className="absolute inset-0 w-full h-full"
             onClick={() => setLightboxIndex(imageIndex)}
           >
-            <img src={imagesApi.url(tile.image.id)} alt={tile.image.filename} className="w-full h-full object-cover" />
+            <img src={imagesApi.thumbnailUrl(tile.image.id)} alt={tile.image.filename} className="w-full h-full object-cover" />
             {isOverlayTile && (
               <span className="absolute inset-0 flex items-center justify-center bg-black/50 text-white text-lg font-medium">
                 +{overlayCount}
