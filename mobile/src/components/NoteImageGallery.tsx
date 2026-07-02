@@ -7,25 +7,9 @@ import { useActiveServerBaseUrl } from '../hooks/useActiveServerBaseUrl';
 import { noteImageThumbnailUrl } from '../api/images';
 import CachedNoteImage from './CachedNoteImage';
 import ImageLightbox from './ImageLightbox';
+import type { PendingImageUpload } from '../hooks/usePendingImageUploads';
 
-// A locally-tracked upload in flight (or failed) for a note, rendered as a
-// gallery tile alongside the note's persisted images. Never sent to the
-// server as-is — id is a client-generated key, not a NoteImage id.
-//
-// 'queued' additionally covers an offline-deferred upload (issue #618):
-// persisted to the pending_image_uploads table, so — unlike 'uploading' and
-// 'error', which are held only in NoteEditorScreen's in-memory state — it
-// survives navigating away or an app restart until the sync engine's drain
-// flushes it (rendered here the same as 'error': no progress bar, since
-// nothing is in flight yet).
-export interface PendingImageUpload {
-  id: string;
-  filename: string;
-  previewUri: string;
-  progress: number;
-  status: 'uploading' | 'queued' | 'error';
-  errorMessage?: string;
-}
+export type { PendingImageUpload };
 
 interface NoteImageGalleryProps {
   images: NoteImage[];

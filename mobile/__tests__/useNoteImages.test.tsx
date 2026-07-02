@@ -271,6 +271,19 @@ describe('useNoteImages hooks', () => {
 
       await result.current.mutateAsync({ noteId: 'note-1', imageId: 'img-1' });
 
+      // The replayed delete's side effects must match the offline path exactly
+      // (same hide-locally + cache-cleanup + enqueue), or a regression here
+      // would leave the image visible or its cached bytes lingering.
+      expect(mockDeleteCachedNoteImage).toHaveBeenCalledWith('img-1');
+      expect(mockNoteQueries.patchLocalNoteImages).toHaveBeenCalledWith(
+        expect.anything(),
+        'note-1',
+        expect.any(Function),
+      );
+      const updater = mockNoteQueries.patchLocalNoteImages.mock.calls[0][2];
+      const images = [makeImage({ id: 'img-1' }), makeImage({ id: 'img-2' })];
+      expect(updater(images)).toEqual([makeImage({ id: 'img-2' })]);
+
       expect(mockEnqueueOperation).toHaveBeenCalledWith(expect.anything(), {
         operation: 'removeImage',
         endpoint: '/images/img-1',

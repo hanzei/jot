@@ -253,12 +253,14 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
         getQueuedImageUploadCount(db),
       ]);
       const remaining = pendingCount + queuedImageUploadCount;
-      // Revalidate the session after a settings drain only when the queue is
-      // fully empty. The pre-drain revalidation had fetched stale server values
-      // (before the PATCH ran), so we need a fresh GET /me to reflect what the
-      // drain just applied. Guarding on remaining === 0 avoids clobbering
-      // in-memory optimistic state for settings ops that are still pending.
-      if (syncedSettings && remaining === 0) {
+      // Revalidate the session after a settings drain only when the *settings'
+      // own* queue (sync_queue) is empty. The pre-drain revalidation had fetched
+      // stale server values (before the PATCH ran), so we need a fresh GET /me to
+      // reflect what the drain just applied. Guarding on pendingCount === 0 (not
+      // the combined `remaining`) avoids clobbering in-memory optimistic settings
+      // state without being held hostage by an unrelated, independent image
+      // upload backlog (issue #618) that has nothing to do with the settings write.
+      if (syncedSettings && pendingCount === 0) {
         await revalidateSession().catch(() => {});
       }
       if (remaining > 0) {
