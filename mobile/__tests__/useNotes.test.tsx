@@ -1,13 +1,15 @@
 import React from 'react';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useCreateNote, useUpdateNote, useDeleteNote, useDuplicateNote, useCreateNoteItem, useToggleNoteItemCompleted } from '../src/hooks/useNotes';
-import { noteLocalQueryKey, notesLocalQueryKey } from '../src/hooks/queryKeys';
+import { useCreateNote, useUpdateNote, useDeleteNote, useDuplicateNote, useCreateNoteItem, useToggleNoteItemCompleted, useShareNote, useUnshareNote } from '../src/hooks/useNotes';
+import { noteLocalQueryKey, notesLocalQueryKey, notesLocalQueryScopeKey } from '../src/hooks/queryKeys';
 import * as notesApi from '../src/api/notes';
+import * as usersApi from '../src/api/users';
 import * as noteQueriesModule from '../src/db/noteQueries';
 import * as clientModule from '../src/api/client';
 
 jest.mock('../src/api/notes');
+jest.mock('../src/api/users');
 
 jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },
@@ -62,6 +64,7 @@ jest.mock('../src/api/client', () => {
 });
 
 const mockNotesApi = notesApi as jest.Mocked<typeof notesApi>;
+const mockUsersApi = usersApi as jest.Mocked<typeof usersApi>;
 const mockNoteQueries = noteQueriesModule as jest.Mocked<typeof noteQueriesModule>;
 const mockClientModule = clientModule as jest.Mocked<typeof clientModule>;
 const mockSyncQueue = jest.requireMock('../src/db/syncQueue') as { enqueueOperation: jest.Mock };
@@ -332,6 +335,51 @@ describe('useNotes hooks', () => {
       expect(result.current.data).toEqual(updated);
       expect(mockNotesApi.updateNote).toHaveBeenCalledWith('123', { title: 'Updated' });
       expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), updated);
+    });
+  });
+
+  describe('useShareNote / useUnshareNote (online)', () => {
+    const sharedNote = {
+      id: '123', title: 'Shared', content: '', note_type: 'text',
+      color: '#ffffff', pinned: false, archived: false, position: 0,
+      checked_items_collapsed: false, is_shared: true, deleted_at: null,
+      user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
+    };
+    const targetUser = {
+      id: 'u2', username: 'collab', first_name: 'Col', last_name: 'Lab',
+      has_profile_icon: false,
+    };
+
+    it('invalidates the notes list scope so dashboard avatars refresh after sharing', async () => {
+      mockUsersApi.shareNote.mockResolvedValueOnce(undefined as never);
+      mockNotesApi.getNote.mockResolvedValueOnce(sharedNote as never);
+
+      const { wrapper, queryClient } = createWrapperWithClient();
+      const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
+
+      const { result } = renderHook(() => useShareNote(), { wrapper });
+      result.current.mutate({ noteId: '123', user: targetUser as never });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(mockUsersApi.shareNote).toHaveBeenCalledWith('123', 'u2');
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() });
+    });
+
+    it('invalidates the notes list scope so dashboard avatars refresh after unsharing', async () => {
+      mockUsersApi.unshareNote.mockResolvedValueOnce(undefined as never);
+      mockNotesApi.getNote.mockResolvedValueOnce({ ...sharedNote, is_shared: false } as never);
+
+      const { wrapper, queryClient } = createWrapperWithClient();
+      const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
+
+      const { result } = renderHook(() => useUnshareNote(), { wrapper });
+      result.current.mutate({ noteId: '123', userId: 'u2' });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(mockUsersApi.unshareNote).toHaveBeenCalledWith('123', 'u2');
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() });
     });
   });
 
