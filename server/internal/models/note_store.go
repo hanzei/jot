@@ -30,12 +30,36 @@ func deref[T any](p *T, def T) T {
 	return def
 }
 
+// NewNoteItem describes a list item to insert atomically as part of note
+// creation. ID is the caller-supplied item ID, or "" to generate one
+// server-side. ParentID is the resolved parent item ID within the same note
+// ("" for a top-level item); the caller computes it (e.g. from indent levels)
+// before calling CreateWithItems.
+type NewNoteItem struct {
+	ID        string
+	Text      string
+	Position  int
+	Completed bool
+	ParentID  string
+}
+
 // Create inserts a new note for the user. When noteID is empty the server
 // generates one; when non-empty the caller-supplied ID is used as the note's
 // primary key so an offline create can be replayed idempotently. Returns
 // ErrNoteExists if a note with that ID already exists (e.g. a replayed create
 // whose original request already committed).
 func (s *noteStore) Create(ctx context.Context, userID, noteID, title, content string, noteType NoteType, color string) (*Note, error) {
+	return s.CreateWithItems(ctx, userID, noteID, title, content, noteType, color, nil)
+}
+
+// CreateWithItems creates a note, its owner note_user_state, and all provided
+// list items in a single transaction, so any failure (a duplicate item ID, an
+// invalid parent ref, a DB error) rolls back the whole operation instead of
+// leaving an orphaned or partially-populated note. items must already be
+// validated and have their ParentID resolved to item IDs within this note.
+// Returns ErrNoteExists if the note ID is taken, and ErrNoteItemExists /
+// ErrInvalidParentRef for the corresponding item-level conflicts.
+func (s *noteStore) CreateWithItems(ctx context.Context, userID, noteID, title, content string, noteType NoteType, color string, items []NewNoteItem) (*Note, error) {
 	if noteID == "" {
 		var err error
 		noteID, err = generateID()
@@ -98,6 +122,12 @@ func (s *noteStore) Create(ctx context.Context, userID, noteID, title, content s
 		return nil, fmt.Errorf("failed to create note user state: %w", err)
 	}
 
+	for _, item := range items {
+		if err = insertNewNoteItemTx(ctx, tx, s.d, noteID, item); err != nil {
+			return nil, err
+		}
+	}
+
 	if err = tx.Commit(); err != nil {
 		return nil, fmt.Errorf("failed to commit note creation: %w", err)
 	}
@@ -115,6 +145,50 @@ func (s *noteStore) Create(ctx context.Context, userID, noteID, title, content s
 	note.Labels = []Label{}
 
 	return &note, nil
+}
+
+// insertNewNoteItemTx inserts one list item during note creation within tx. A
+// supplied ID is existence-checked (ErrNoteItemExists on collision); an empty
+// ID is generated server-side. The parent ref is validated against items
+// already inserted in this note.
+func insertNewNoteItemTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string, item NewNoteItem) error {
+	itemID := item.ID
+	if itemID == "" {
+		var err error
+		itemID, err = generateID()
+		if err != nil {
+			return fmt.Errorf("failed to generate item ID: %w", err)
+		}
+	} else {
+		var exists int
+		if err := tx.QueryRowContext(ctx,
+			d.RewritePlaceholders(`SELECT COUNT(*) FROM note_items WHERE id = ?`),
+			itemID,
+		).Scan(&exists); err != nil {
+			return fmt.Errorf("failed to check item existence: %w", err)
+		}
+		if exists > 0 {
+			return ErrNoteItemExists
+		}
+	}
+
+	if err := validateParentRefTx(ctx, tx, d, noteID, itemID, item.ParentID); err != nil {
+		return err
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, position, completed, parent_id, assigned_to)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`),
+		itemID, noteID, item.Text, item.Position, item.Completed, nullableParentID(item.ParentID), nullableAssignedTo(""),
+	); err != nil {
+		// Concurrent replays with the same client-supplied ID can both pass the
+		// existence check above; map the constraint violation to ErrNoteItemExists.
+		if item.ID != "" && d.IsUniqueConstraintError(err) {
+			return ErrNoteItemExists
+		}
+		return fmt.Errorf("failed to create note item: %w", err)
+	}
+	return nil
 }
 
 func duplicateNoteTitle(title string) string {
@@ -210,12 +284,12 @@ func (s *noteStore) Duplicate(ctx context.Context, source *Note, userID, clientI
 }
 
 func duplicateItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string, items []NoteItem, itemIDs map[string]string) error {
-	// Process in position order so a parent (lower position than its children,
-	// since children form a contiguous block beneath it) is always inserted
-	// before its children and present in idMap when they are remapped.
-	ordered := make([]NoteItem, len(items))
-	copy(ordered, items)
-	slices.SortStableFunc(ordered, func(a, b NoteItem) int { return a.Position - b.Position })
+	// Insert parents before their children so each child's remapped parent_id is
+	// already in idMap (and satisfies the parent_id foreign key). Position order
+	// alone is not enough — a client reorder can leave a child at a lower position
+	// than its parent — so order by parent-chain depth first, breaking ties by
+	// position for stability.
+	ordered := orderItemsParentsFirst(items)
 
 	idMap := make(map[string]string, len(ordered))
 	for _, item := range ordered {
@@ -234,6 +308,48 @@ func duplicateItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteI
 		}
 	}
 	return nil
+}
+
+// orderItemsParentsFirst returns items ordered so that every item comes after
+// its parent (when that parent is part of the same set), breaking ties by
+// ascending position. Items whose parent is not in the set are treated as roots.
+// Ordering by parent-chain depth guarantees a parent is inserted before its
+// children regardless of their relative positions.
+func orderItemsParentsFirst(items []NoteItem) []NoteItem {
+	byID := make(map[string]NoteItem, len(items))
+	for _, it := range items {
+		byID[it.ID] = it
+	}
+
+	// depthOf walks each item's parent chain; a parent outside the set or a cycle
+	// stops the walk. Two-level lists (indent 0/1) yield depths 0 and 1, but this
+	// handles arbitrary nesting too.
+	depthOf := make(map[string]int, len(items))
+	for _, it := range items {
+		depth := 0
+		seen := map[string]bool{it.ID: true}
+		cur := it
+		for cur.ParentID != nil {
+			parent, ok := byID[*cur.ParentID]
+			if !ok || seen[parent.ID] {
+				break
+			}
+			seen[parent.ID] = true
+			depth++
+			cur = parent
+		}
+		depthOf[it.ID] = depth
+	}
+
+	ordered := make([]NoteItem, len(items))
+	copy(ordered, items)
+	slices.SortStableFunc(ordered, func(a, b NoteItem) int {
+		if da, db := depthOf[a.ID], depthOf[b.ID]; da != db {
+			return da - db
+		}
+		return a.Position - b.Position
+	})
+	return ordered
 }
 
 // resolveItemIDTx returns the ID to use for a duplicated item. When supplied is
@@ -1836,24 +1952,6 @@ func (s *noteStore) getLabelsByNoteIDs(ctx context.Context, noteIDs []string, us
 		return map[string][]Label{}, nil
 	}
 
-	placeholders := slices.Repeat([]string{"?"}, len(noteIDs))
-	args := make([]any, 0, len(noteIDs)+1)
-	for _, id := range noteIDs {
-		args = append(args, id)
-	}
-	args = append(args, userID)
-
-	rawQuery := `SELECT nl.note_id, l.id, l.user_id, l.name, l.created_at, l.updated_at
-			  FROM labels l
-			  JOIN note_labels nl ON l.id = nl.label_id
-			  WHERE nl.note_id IN (` + strings.Join(placeholders, ",") + `) AND nl.user_id = ?
-			  ORDER BY nl.note_id, l.name ASC` // #nosec G202 -- only "?" placeholders are joined, no user input
-
-	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(rawQuery), args...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to batch-get note labels: %w", err)
-	}
-
 	type noteLabelRow struct {
 		noteID string
 		label  Label
@@ -1864,13 +1962,38 @@ func (s *noteStore) getLabelsByNoteIDs(ctx context.Context, noteIDs []string, us
 		return r, err
 	}
 
-	defer func() { _ = rows.Close() }()
 	result := map[string][]Label{}
-	for row, err := range scanRows(rows, scanNoteLabel) {
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan note label: %w", err)
+	// Chunk the note IDs so the bound-parameter count stays under the driver's
+	// limit, matching getSharesByNoteIDs/getNoteImagesByNoteIDs.
+	for chunk := range slices.Chunk(noteIDs, noteIDsQueryBatchSize) {
+		placeholders := strings.Join(slices.Repeat([]string{"?"}, len(chunk)), ",")
+		args := make([]any, 0, len(chunk)+1)
+		for _, id := range chunk {
+			args = append(args, id)
 		}
-		result[row.noteID] = append(result[row.noteID], row.label)
+		args = append(args, userID)
+
+		rawQuery := `SELECT nl.note_id, l.id, l.user_id, l.name, l.created_at, l.updated_at
+				  FROM labels l
+				  JOIN note_labels nl ON l.id = nl.label_id
+				  WHERE nl.note_id IN (` + placeholders + `) AND nl.user_id = ?
+				  ORDER BY nl.note_id, l.name ASC` // #nosec G202 -- only "?" placeholders are joined, no user input
+
+		rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(rawQuery), args...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to batch-get note labels: %w", err)
+		}
+
+		for row, err := range scanRows(rows, scanNoteLabel) {
+			if err != nil {
+				_ = rows.Close()
+				return nil, fmt.Errorf("failed to scan note label: %w", err)
+			}
+			result[row.noteID] = append(result[row.noteID], row.label)
+		}
+		if err := rows.Close(); err != nil {
+			return nil, fmt.Errorf("failed to close note labels rows: %w", err)
+		}
 	}
 	return result, nil
 }

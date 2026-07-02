@@ -45,6 +45,19 @@ describe('renderMarkdown', () => {
     expect(result).not.toContain('javascript:alert');
   });
 
+  it('keeps already percent-encoded hrefs intact instead of double-encoding them', () => {
+    const result = renderMarkdown('[café](https://en.wikipedia.org/wiki/Caf%C3%A9)');
+    expect(result).toContain('href="https://en.wikipedia.org/wiki/Caf%C3%A9"');
+    expect(result).not.toContain('%25C3');
+  });
+
+  it('renders the link text without an anchor when the href cannot be encoded', () => {
+    // A lone surrogate makes encodeURI throw; the renderer falls back to text.
+    const result = renderMarkdown('[broken](https://example.com/\uD800)');
+    expect(result).toContain('broken');
+    expect(result).not.toContain('<a');
+  });
+
   it('strips onclick attributes', () => {
     const result = renderMarkdown('<a onclick="evil()">link</a>');
     expect(result).not.toContain('onclick');

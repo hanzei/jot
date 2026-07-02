@@ -43,7 +43,7 @@ interface ListItemProps {
   onToggle?: () => void;
   onChangeText?: (text: string) => void;
   onDelete?: () => void;
-  onSubmitEditing?: () => void;
+  onSubmitEditing?: (cursorPosition: number) => void;
   onBackspaceOnEmpty?: () => void;
   onAssignPress?: () => void;
   onFocus?: TextInputProps['onFocus'];
@@ -52,6 +52,11 @@ interface ListItemProps {
 
 // Press-and-hold duration on the drag handle before a reorder drag begins.
 const DRAG_HANDLE_LONG_PRESS_MS = 180;
+
+// Delay before hiding focus-gated controls (delete/assign) and suggestions on
+// blur, so a tap on those controls — which blurs the input first — still lands
+// before they unmount.
+const BLUR_HIDE_DELAY_MS = 200;
 
 function ListItem({
   text,
@@ -82,7 +87,15 @@ function ListItem({
   const { colors } = useTheme();
   const { t } = useTranslation();
   const [showSuggestions, setShowSuggestions] = useState(false);
+  // The delete (x) button is only shown while this row is focused (the "selected"
+  // row), so users are less likely to delete an item they didn't mean to.
+  const [isFocused, setIsFocused] = useState(false);
   const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Tracks the native cursor position so Enter/submit can decide whether to
+  // split the item at the cursor, insert before it, or append after it.
+  // Seeded to the end of the current text and refined by onSelectionChange,
+  // since onSubmitEditing's native event carries no selection info.
+  const selectionRef = useRef({ start: text.length, end: text.length });
 
   useEffect(() => {
     return () => {
@@ -187,20 +200,33 @@ function ListItem({
             value={text}
             onChangeText={(newText) => {
               onChangeText?.(newText);
+              // Approximate the cursor moving to the end of freshly typed text;
+              // onSelectionChange refines this once the native event arrives.
+              selectionRef.current = { start: newText.length, end: newText.length };
               if (!completed) setShowSuggestions(newText.trim().length > 0);
+            }}
+            onSelectionChange={(event) => {
+              selectionRef.current = event.nativeEvent.selection;
             }}
             editable={editable}
             placeholder={t('note.itemPlaceholder')}
             placeholderTextColor={effectivePlaceholder}
             returnKeyType="next"
-            onSubmitEditing={onSubmitEditing}
+            onSubmitEditing={() => onSubmitEditing?.(selectionRef.current.start)}
             blurOnSubmit={false}
             onFocus={(event) => {
+              if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
+              setIsFocused(true);
               onFocus?.(event);
               if (!completed) setShowSuggestions(true);
             }}
             onBlur={() => {
-              blurTimeoutRef.current = setTimeout(() => setShowSuggestions(false), 200);
+              // Delay hiding so a tap on the delete button (which blurs the input
+              // first) still lands before the button unmounts.
+              blurTimeoutRef.current = setTimeout(() => {
+                setShowSuggestions(false);
+                setIsFocused(false);
+              }, BLUR_HIDE_DELAY_MS);
             }}
             multiline
             submitBehavior="submit"
@@ -230,7 +256,7 @@ function ListItem({
                 size="small"
               />
             </TouchableOpacity>
-          ) : showAssignUI && !completed ? (
+          ) : showAssignUI && !completed && isFocused ? (
             <TouchableOpacity
               onPress={onAssignPress}
               style={styles.assignBtn}
@@ -242,9 +268,14 @@ function ListItem({
               </View>
             </TouchableOpacity>
           ) : null}
-          {editable && onDelete && (
-            <TouchableOpacity onPress={onDelete} style={styles.deleteBtn} testID="list-item-delete">
-              <Ionicons name="close" size={18} color={effectiveIconMuted} />
+          {editable && onDelete && isFocused && (
+            <TouchableOpacity
+              onPress={onDelete}
+              style={styles.deleteBtn}
+              testID="list-item-delete"
+              accessibilityLabel={t('note.removeItem')}
+            >
+              <Ionicons name="close" size={22} color={effectiveIconMuted} />
             </TouchableOpacity>
           )}
         </View>
@@ -315,7 +346,7 @@ const styles = StyleSheet.create({
     textDecorationLine: 'line-through' as const,
   },
   deleteBtn: {
-    padding: 4,
+    padding: 8,
     marginLeft: 'auto',
   },
   assignBtn: {

@@ -50,8 +50,20 @@ describe('ListItem', () => {
       <ListItem text="Task" completed={false} onDelete={onDelete} />,
     );
 
+    // The delete button only appears while the row is focused (selected).
+    fireEvent(getByTestId('list-item-text'), 'focus');
     fireEvent.press(getByTestId('list-item-delete'));
     expect(onDelete).toHaveBeenCalledTimes(1);
+  });
+
+  it('hides the delete button until the row is focused', () => {
+    const { getByTestId, queryByTestId } = render(
+      <ListItem text="Task" completed={false} onDelete={jest.fn()} />,
+    );
+
+    expect(queryByTestId('list-item-delete')).toBeNull();
+    fireEvent(getByTestId('list-item-text'), 'focus');
+    expect(queryByTestId('list-item-delete')).not.toBeNull();
   });
 
   it('does not show delete button when not editable', () => {
@@ -112,9 +124,28 @@ describe('ListItem', () => {
       />,
     );
 
+    // The unassigned assign button only appears while the row is focused
+    // (selected), matching the delete button.
+    fireEvent(getByTestId('list-item-text'), 'focus');
     expect(getByTestId('list-item-assign')).toBeTruthy();
     fireEvent.press(getByTestId('list-item-assign'));
     expect(onAssignPress).toHaveBeenCalledTimes(1);
+  });
+
+  it('hides the unassigned assign button until the row is focused', () => {
+    const { getByTestId, queryByTestId } = render(
+      <ListItem
+        text="Task"
+        completed={false}
+        isShared={true}
+        collaborators={collaborators}
+        onAssignPress={jest.fn()}
+      />,
+    );
+
+    expect(queryByTestId('list-item-assign')).toBeNull();
+    fireEvent(getByTestId('list-item-text'), 'focus');
+    expect(queryByTestId('list-item-assign')).not.toBeNull();
   });
 
   it('hides assign button when not shared', () => {
@@ -187,6 +218,30 @@ describe('ListItem', () => {
     );
 
     expect(getByTestId('list-item-assignee')).toBeTruthy();
+  });
+
+  it('calls onSubmitEditing with the cursor position from the last selection change', () => {
+    const onSubmitEditing = jest.fn();
+    const { getByTestId } = render(
+      <ListItem text="helloworld" completed={false} onSubmitEditing={onSubmitEditing} />,
+    );
+
+    const input = getByTestId('list-item-text');
+    fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 5, end: 5 } } });
+    fireEvent(input, 'submitEditing');
+
+    expect(onSubmitEditing).toHaveBeenCalledWith(5);
+  });
+
+  it('defaults the submit cursor position to the end of the current text', () => {
+    const onSubmitEditing = jest.fn();
+    const { getByTestId } = render(
+      <ListItem text="helloworld" completed={false} onSubmitEditing={onSubmitEditing} />,
+    );
+
+    fireEvent(getByTestId('list-item-text'), 'submitEditing');
+
+    expect(onSubmitEditing).toHaveBeenCalledWith('helloworld'.length);
   });
 
   describe('checkbox pop animation', () => {

@@ -1,5 +1,6 @@
 import { SQLiteDatabase } from 'expo-sqlite';
-import type { Note, NoteItem, GetNotesParams, Label, NoteShare } from '@jot/shared';
+import * as FileSystem from 'expo-file-system/legacy';
+import type { Note, NoteItem, GetNotesParams, Label, NoteShare, NoteImage } from '@jot/shared';
 import { getRandomBytes, getStrongRandomBytes } from '../utils/random';
 import { withSerializedTransaction } from './transaction';
 import { isLocalModeActive } from '../store/localMode';
@@ -22,6 +23,7 @@ interface NoteRow {
   updated_at: string;
   labels_json: string;
   shared_with_json: string;
+  images_json: string;
 }
 
 interface NoteItemRow {
@@ -39,8 +41,11 @@ interface NoteItemRow {
 function rowToNote(row: NoteRow, items: NoteItem[] = []): Note {
   let labels: Label[] = [];
   let shared_with: NoteShare[] = [];
+  let images: NoteImage[] = [];
   try { labels = JSON.parse(row.labels_json) as Label[]; } catch { /* ignore */ }
   try { shared_with = JSON.parse(row.shared_with_json) as NoteShare[]; } catch { /* ignore */ }
+  // Older local rows (pre-#616) predate the column; default to no images.
+  try { images = JSON.parse(row.images_json) as NoteImage[]; } catch { /* ignore */ }
   const base = {
     id: row.id,
     user_id: row.user_id,
@@ -57,6 +62,7 @@ function rowToNote(row: NoteRow, items: NoteItem[] = []): Note {
     updated_at: row.updated_at,
     labels,
     shared_with,
+    images,
   };
   if (row.note_type === 'list') {
     return {
@@ -88,6 +94,20 @@ function itemRowToNoteItem(row: NoteItemRow): NoteItem {
   };
 }
 
+/**
+ * Escape SQL LIKE wildcards in user-entered search text so `%`/`_` match
+ * literally (paired with `ESCAPE '\'` on the LIKE). Without this a search like
+ * "50%" over-matches locally — and, worse, widens the prune scope in
+ * {@link removeLocalNotesNotIn} beyond what the server's literal match
+ * returned, deleting local rows that still exist on the server.
+ */
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
+const SEARCH_LIKE_SQL =
+  "(title LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\' OR id IN (SELECT note_id FROM note_items WHERE text LIKE ? ESCAPE '\\'))";
+
 async function getItemsForNote(db: SQLiteDatabase, noteId: string): Promise<NoteItem[]> {
   const rows = await db.getAllAsync<NoteItemRow>(
     'SELECT * FROM note_items WHERE note_id = ? ORDER BY position ASC',
@@ -108,8 +128,8 @@ async function saveNoteInTx(db: SQLiteDatabase, note: Note): Promise<void> {
     `INSERT OR REPLACE INTO notes
        (id, user_id, title, content, note_type, version, color, pinned, archived, position,
         checked_items_collapsed, is_shared, deleted_at, created_at, updated_at,
-        labels_json, shared_with_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        labels_json, shared_with_json, images_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       note.id,
       note.user_id,
@@ -128,6 +148,7 @@ async function saveNoteInTx(db: SQLiteDatabase, note: Note): Promise<void> {
       note.updated_at,
       JSON.stringify(note.labels ?? []),
       JSON.stringify(note.shared_with ?? []),
+      JSON.stringify(note.images ?? []),
     ],
   );
 
@@ -193,8 +214,9 @@ export async function getLocalNotes(db: SQLiteDatabase, params?: GetNotesParams)
   }
 
   if (params?.search) {
-    sql += ' AND (title LIKE ? OR content LIKE ? OR id IN (SELECT note_id FROM note_items WHERE text LIKE ?))';
-    args.push(`%${params.search}%`, `%${params.search}%`, `%${params.search}%`);
+    const pattern = `%${escapeLikePattern(params.search)}%`;
+    sql += ` AND ${SEARCH_LIKE_SQL}`;
+    args.push(pattern, pattern, pattern);
   }
 
   sql += ' ORDER BY pinned DESC, position ASC';
@@ -231,6 +253,36 @@ export async function getLocalNote(db: SQLiteDatabase, id: string): Promise<Note
   if (!row) return null;
   const items = row.note_type === 'list' ? await getItemsForNote(db, id) : [];
   return rowToNote(row, items);
+}
+
+/**
+ * Applies `updater` to a note's locally-cached image list, e.g. from an SSE
+ * `note_image_added`/`note_image_removed` event (issue #616). No-op if the
+ * note isn't cached locally yet — the next full note fetch will pick up its
+ * images.
+ */
+export async function patchLocalNoteImages(
+  db: SQLiteDatabase,
+  noteId: string,
+  updater: (images: NoteImage[]) => NoteImage[],
+): Promise<void> {
+  // Serialized like saveNote: the read-modify-write below would otherwise let
+  // two back-to-back SSE events (e.g. two rapid note_image_added) interleave
+  // and have the second write clobber the first's change.
+  await withSerializedTransaction(db, async () => {
+    const row = await db.getFirstAsync<Pick<NoteRow, 'images_json'>>(
+      'SELECT images_json FROM notes WHERE id = ?',
+      [noteId],
+    );
+    if (!row) return;
+    let images: NoteImage[] = [];
+    try { images = JSON.parse(row.images_json) as NoteImage[]; } catch { /* ignore */ }
+    const nextImages = updater(images);
+    await db.runAsync(
+      'UPDATE notes SET images_json = ? WHERE id = ?',
+      [JSON.stringify(nextImages), noteId],
+    );
+  });
 }
 
 export async function markLocalNoteDeleted(db: SQLiteDatabase, id: string): Promise<void> {
@@ -322,7 +374,23 @@ export async function markLocalNoteRestored(db: SQLiteDatabase, id: string): Pro
   );
 }
 
+/**
+ * Permanently delete a note. `ON DELETE CASCADE` (migration4, issue #618)
+ * removes the note's `pending_image_uploads` rows automatically, but not
+ * their stable file copies under `pending-image-uploads/` (imageUploadQueue.ts) —
+ * clean those up first, best-effort, so a note deleted while an offline image
+ * upload is still queued for it doesn't leak the copied file forever. Reads
+ * the table directly rather than importing imageUploadQueue.ts to avoid a
+ * circular import (that module already imports from this one).
+ */
 export async function permanentDeleteLocalNote(db: SQLiteDatabase, id: string): Promise<void> {
+  const pendingUploads = await db.getAllAsync<{ local_path: string }>(
+    'SELECT local_path FROM pending_image_uploads WHERE note_id = ?',
+    [id],
+  );
+  await Promise.allSettled(
+    pendingUploads.map((row) => FileSystem.deleteAsync(row.local_path, { idempotent: true })),
+  );
   await db.runAsync('DELETE FROM notes WHERE id = ?', [id]);
 }
 
@@ -612,8 +680,9 @@ async function removeLocalNotesNotInTx(
   }
 
   if (params?.search) {
-    scopedWhereSql += ' AND (title LIKE ? OR content LIKE ? OR id IN (SELECT note_id FROM note_items WHERE text LIKE ?))';
-    scopeArgs.push(`%${params.search}%`, `%${params.search}%`, `%${params.search}%`);
+    const pattern = `%${escapeLikePattern(params.search)}%`;
+    scopedWhereSql += ` AND ${SEARCH_LIKE_SQL}`;
+    scopeArgs.push(pattern, pattern, pattern);
   }
 
   if (params?.label) {

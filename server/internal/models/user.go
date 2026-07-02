@@ -138,6 +138,24 @@ func (u *User) CheckPassword(password string) bool {
 	return err == nil
 }
 
+// dummyPasswordHash is a bcrypt hash of a throwaway password, generated once
+// at startup for CheckPasswordDummy.
+var dummyPasswordHash = func() []byte {
+	hash, err := bcrypt.GenerateFromPassword([]byte("jot-dummy-timing-equalizer"), bcrypt.DefaultCost)
+	if err != nil {
+		panic(fmt.Sprintf("generate dummy password hash: %v", err))
+	}
+	return hash
+}()
+
+// CheckPasswordDummy runs a bcrypt comparison against a throwaway hash and
+// discards the result. Login calls it when the username does not exist so
+// that the response takes as long as a real password check, preventing a
+// timing side channel from revealing which usernames are registered.
+func CheckPasswordDummy(password string) {
+	_ = bcrypt.CompareHashAndPassword(dummyPasswordHash, []byte(password))
+}
+
 func scanUser(rows *sql.Rows) (User, error) {
 	var user User
 	err := rows.Scan(

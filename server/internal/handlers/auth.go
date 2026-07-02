@@ -139,6 +139,9 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) (int, any, e
 
 	user, err := h.userStore.GetByUsername(r.Context(), req.Username)
 	if err != nil {
+		// Burn the same bcrypt cost as a real password check so response
+		// timing does not reveal whether the username exists.
+		models.CheckPasswordDummy(req.Password)
 		return http.StatusUnauthorized, nil, errors.New("invalid username or password")
 	}
 

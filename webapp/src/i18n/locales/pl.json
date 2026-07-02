@@ -368,6 +368,7 @@
     "failedDuplicate": "Nie udało się zduplikować notatki. Spróbuj ponownie.",
     "menuOptions": "Opcje notatki",
     "assignItem": "Przypisz element",
+    "removeItem": "Usuń element",
     "unassign": "Usuń przypisanie",
     "assignedTo": "Przypisano do {{name}}",
     "completedSuggestions": "Podpowiedzi z ukończonych elementów"
@@ -420,6 +421,7 @@
   "images": {
     "openLightbox": "Wyświetl {{filename}}",
     "moreImages": "Wyświetl {{count}} więcej zdjęć",
+    "moreImagesBadge": "{{count}} więcej zdjęć",
     "lightboxPrevious": "Poprzednie zdjęcie",
     "lightboxNext": "Następne zdjęcie",
     "lightboxCounter": "{{current}} / {{total}}",
@@ -451,6 +453,8 @@
     "fileTypesJson": "Pliki .json",
     "invalidFileType": "Nieprawidłowy typ pliku. Wybierz plik .json lub .zip.",
     "invalidFileTypeJson": "Nieprawidłowy typ pliku. Wybierz plik .json.",
+    "importedNotes_few": "Zaimportowano {{count}} notatki",
+    "importedNotes_many": "Zaimportowano {{count}} notatek",
     "importedNotes_one": "Zaimportowano {{count}} notatkę",
     "importedNotes_other": "Zaimportowano {{count}} notatek",
     "skipped": "({{count}} pominięto)",

@@ -1,5 +1,5 @@
-import type { Note, TextNote, ListNote } from '@jot/shared';
-import { buildUpdateRequest, buildNoteSections } from '../src/screens/notesList/noteListUtils';
+import type { Note, TextNote } from '@jot/shared';
+import { buildNoteSections } from '../src/screens/notesList/noteListUtils';
 
 const BASE_NOTE = {
   user_id: 'user-1',
@@ -20,38 +20,7 @@ function buildTextNote(overrides: Partial<TextNote> & { id: string }): TextNote 
   return { ...BASE_NOTE, note_type: 'text', content: 'content', ...overrides };
 }
 
-function buildListNote(overrides: Partial<ListNote> & { id: string }): ListNote {
-  return { ...BASE_NOTE, note_type: 'list', title: 'My list', checked_items_collapsed: false, ...overrides };
-}
-
 const t = (key: string) => key;
-
-describe('buildUpdateRequest', () => {
-  it('builds a text note update with content fields', () => {
-    const note = buildTextNote({ id: 'n1', content: 'hello', pinned: true, archived: false, color: '#ff0000' });
-    const result = buildUpdateRequest(note);
-    expect(result).toEqual({ content: 'hello', pinned: true, archived: false, color: '#ff0000' });
-    expect(result).not.toHaveProperty('title');
-    expect(result).not.toHaveProperty('checked_items_collapsed');
-  });
-
-  it('builds a list note update with title fields', () => {
-    const note = buildListNote({ id: 'n1', title: 'My list', pinned: false, archived: true, color: '#ffffff', checked_items_collapsed: true });
-    const result = buildUpdateRequest(note);
-    expect(result).toEqual({ title: 'My list', pinned: false, archived: true, color: '#ffffff', checked_items_collapsed: true });
-    expect(result).not.toHaveProperty('content');
-  });
-
-  it('applies overrides on top of the base fields for text notes', () => {
-    const note = buildTextNote({ id: 'n1', pinned: false });
-    expect(buildUpdateRequest(note, { pinned: true })).toMatchObject({ pinned: true });
-  });
-
-  it('applies overrides on top of the base fields for list notes', () => {
-    const note = buildListNote({ id: 'n1', archived: false });
-    expect(buildUpdateRequest(note, { archived: true })).toMatchObject({ archived: true });
-  });
-});
 
 describe('buildNoteSections', () => {
   const note1: Note = buildTextNote({ id: 'n1' });

@@ -368,6 +368,7 @@
     "failedDuplicate": "Error al duplicar la nota. Inténtalo de nuevo.",
     "menuOptions": "Opciones de nota",
     "assignItem": "Asignar elemento",
+    "removeItem": "Eliminar elemento",
     "unassign": "Desasignar",
     "assignedTo": "Asignado a {{name}}",
     "completedSuggestions": "Sugerencias de elementos completados"
@@ -420,6 +421,7 @@
   "images": {
     "openLightbox": "Ver {{filename}}",
     "moreImages": "Ver {{count}} imágenes más",
+    "moreImagesBadge": "{{count}} imágenes más",
     "lightboxPrevious": "Imagen anterior",
     "lightboxNext": "Imagen siguiente",
     "lightboxCounter": "{{current}} / {{total}}",
@@ -451,6 +453,8 @@
     "fileTypesJson": "Archivos .json",
     "invalidFileType": "Tipo de archivo no válido. Selecciona un archivo .json o .zip.",
     "invalidFileTypeJson": "Tipo de archivo no válido. Selecciona un archivo .json.",
+    "importedNotes_few": "Se importaron {{count}} notas",
+    "importedNotes_many": "Se importaron {{count}} notas",
     "importedNotes_one": "Se importó {{count}} nota",
     "importedNotes_other": "Se importaron {{count}} notas",
     "skipped": "({{count}} omitidas)",

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback, type ReactElement } 
 import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, UserPlusIcon, CheckIcon, TagIcon, DocumentDuplicateIcon, DevicePhoneMobileIcon, PaintBrushIcon, PhotoIcon } from '@heroicons/react/24/outline';
 import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, IMAGE_MAX_PER_NOTE, UPLOAD_MAX_BYTES, buildCollaborators, generateId, type Note, type NoteItem, type NoteType, type NoteImage, type CreateNoteRequest, type UpdateNoteRequest, type PatchNoteItemRequest, type Label, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, IMAGE_MAX_PER_NOTE, UPLOAD_MAX_BYTES, buildCollaborators, generateId, type Note, type NoteType, type NoteImage, type CreateNoteRequest, type UpdateNoteRequest, type PatchNoteItemRequest, type Label, type User, type Collaborator } from '@jot/shared';
 import { notes, images as imagesApi } from '@/utils/api';
 import { renderMarkdown } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
@@ -39,6 +39,13 @@ const IMAGE_REMOVE_UNDO_MS = 10_000;
 // Validation functions
 type TFunction = (key: string, opts?: Record<string, unknown>) => string;
 
+// Per-row controls (delete, assign) are hidden until the row is hovered
+// (desktop) or a field within it is focused (works on touch). While hidden the
+// control is also non-interactive, so an invisible button can't be tapped by
+// accident — important on touch devices, where there's no hover to reveal it.
+export const ROW_REVEAL_CLASSES =
+  'opacity-0 pointer-events-none group-hover/item:opacity-100 group-hover/item:pointer-events-auto group-focus-within/item:opacity-100 group-focus-within/item:pointer-events-auto';
+
 const validateItemText = (text: string, t: TFunction): string | null => {
   const trimmed = text.trim();
   if (trimmed.length === 0) return null; // Allow empty items (will be removed on save)
@@ -55,24 +62,6 @@ const validateTitle = (title: string, t: TFunction): string | null => {
 const validateContent = (content: string, t: TFunction): string | null => {
   if (content.length > VALIDATION.CONTENT_MAX_LENGTH) return t('note.contentTooLong', { max: VALIDATION.CONTENT_MAX_LENGTH });
   return null;
-};
-
-const haveListItemsChanged = (currentItems: ListItem[], originalItems: NoteItem[] | undefined): boolean => {
-  const baseItems = originalItems ?? [];
-  if (currentItems.length !== baseItems.length) return true;
-
-  return currentItems.some((item, index) => {
-    const baseItem = baseItems[index];
-    if (!baseItem) return true;
-
-    return (
-      item.text !== baseItem.text ||
-      item.completed !== baseItem.completed ||
-      item.position !== baseItem.position ||
-      item.parentId !== (baseItem.parent_id ?? null) ||
-      item.assignedTo !== (baseItem.assigned_to ?? '')
-    );
-  });
 };
 
 // Timeout management now handled via useRef instead of global window property
@@ -373,10 +362,17 @@ function SortableItem({ id, index, item, onUpdateListItem, onRemoveListItem, isC
                   return;
                 }
                 if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  const idxToAccept = selectedSuggestionIndex >= 0 ? selectedSuggestionIndex : 0;
-                  selectSuggestion(suggestions[idxToAccept]);
-                  return;
+                  // Only accept a suggestion the user explicitly highlighted
+                  // (arrow keys or hover). With none highlighted, Enter keeps
+                  // its normal add/split behavior below — the dropdown being
+                  // merely visible must not hijack creating a new item.
+                  if (selectedSuggestionIndex >= 0) {
+                    e.preventDefault();
+                    selectSuggestion(suggestions[selectedSuggestionIndex]);
+                    return;
+                  }
+                  setShowSuggestions(false);
+                  setSelectedSuggestionIndex(-1);
                 }
                 if (e.key === 'Escape' || e.key === 'Tab') {
                   e.preventDefault();
@@ -452,7 +448,7 @@ function SortableItem({ id, index, item, onUpdateListItem, onRemoveListItem, isC
               !isCompleted && (
                 <button
                   onClick={() => setShowAssigneePicker(true)}
-                  className="w-5 h-5 rounded-full border border-dashed border-gray-300 dark:border-gray-400 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-white/10 transition-colors opacity-0 group-hover/item:opacity-100 focus:opacity-100 focus-visible:ring-2 focus-visible:ring-blue-500 touch-visible"
+                  className={`w-5 h-5 rounded-full border border-dashed border-gray-300 dark:border-gray-400 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-white/10 transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 ${ROW_REVEAL_CLASSES}`}
                   title={t('note.assignItem')}
                   aria-label={t('note.assignItem')}
                 >
@@ -475,9 +471,12 @@ function SortableItem({ id, index, item, onUpdateListItem, onRemoveListItem, isC
 
       <button
         onClick={() => onRemoveListItem(item.id)}
-        className="ml-auto p-1 text-gray-400 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-100"
+        aria-label={t('note.removeItem')}
+        title={t('note.removeItem')}
+        data-testid="list-item-delete"
+        className={`ml-auto p-1.5 text-gray-400 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-100 transition-opacity ${ROW_REVEAL_CLASSES}`}
       >
-        <TrashIcon className="h-4 w-4" />
+        <XMarkIcon className="h-6 w-6" />
       </button>
     </div>
   );
@@ -1174,11 +1173,16 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
   const handleImageDrop = useCallback((e: React.DragEvent) => {
     if (!note) return;
+    // Only claim drops that actually carry files — same reasoning as
+    // handleImageDragOver: cancelling a file-less drop would also cancel the
+    // browser's native text drag-and-drop (e.g. repositioning selected text
+    // within the note's own textarea), making that drop silently do nothing.
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    if (droppedFiles.length === 0) return;
     e.preventDefault();
     imageDragCounterRef.current = 0;
     setIsDraggingImage(false);
-    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
-    queueImageFiles(files);
+    queueImageFiles(droppedFiles.filter(f => f.type.startsWith('image/')));
   }, [note, queueImageFiles]);
 
   const handleModalPaste = useCallback((e: React.ClipboardEvent) => {
@@ -1340,7 +1344,10 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     setTimeout(() => itemInputRefs.current.get(newId)?.focus(), 0);
   };
 
-  const insertListItemAfter = (afterItemId: string) => {
+  const insertListItemAfter = (
+    afterItemId: string,
+    overrides: { text?: string; parentId?: string | null; assignedTo?: string } = {},
+  ) => {
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = undefined;
@@ -1350,11 +1357,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     const afterItem = afterItemPos >= 0 ? currentItems[afterItemPos] : undefined;
     const newItem: ListItem = {
       id: generateItemId(),
-      text: '',
+      text: overrides.text ?? '',
       completed: false,
       position: 0,
-      parentId: afterItem ? afterItem.parentId : null,
-      assignedTo: '',
+      parentId: overrides.parentId !== undefined ? overrides.parentId : (afterItem ? afterItem.parentId : null),
+      assignedTo: overrides.assignedTo ?? '',
     };
     const insertPos = afterItemPos >= 0 ? afterItemPos + 1 : currentItems.length;
     const newItems = [...currentItems];
@@ -1364,8 +1371,71 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     return newItem.id;
   };
 
+  // insertListItemBefore adds a new empty item immediately before beforeItemId,
+  // leaving that item's own text untouched (used when Enter is pressed at the
+  // very start of a non-empty item).
+  const insertListItemBefore = (
+    beforeItemId: string,
+    overrides: { parentId?: string | null; assignedTo?: string } = {},
+  ) => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = undefined;
+    }
+    const currentItems = itemsRef.current;
+    const beforeItemPos = currentItems.findIndex(item => item.id === beforeItemId);
+    const beforeItem = beforeItemPos >= 0 ? currentItems[beforeItemPos] : undefined;
+    const newItem: ListItem = {
+      id: generateItemId(),
+      text: '',
+      completed: false,
+      position: 0,
+      parentId: overrides.parentId !== undefined ? overrides.parentId : (beforeItem ? beforeItem.parentId : null),
+      assignedTo: overrides.assignedTo ?? '',
+    };
+    const insertPos = beforeItemPos >= 0 ? beforeItemPos : currentItems.length;
+    const newItems = [...currentItems];
+    newItems.splice(insertPos, 0, newItem);
+    commitItems(normalizeItemOrder(newItems));
+    autoSaveNote();
+    return newItem.id;
+  };
+
+  // splitListItem truncates itemId's text to the text before splitPos and
+  // inserts a new item directly after it containing the text from splitPos
+  // onward, inheriting the same group (parentId) and assignee.
+  const splitListItem = (itemId: string, splitPos: number) => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = undefined;
+    }
+    const currentItems = itemsRef.current;
+    const itemPos = currentItems.findIndex(item => item.id === itemId);
+    if (itemPos === -1) return itemId;
+    const currentItem = currentItems[itemPos];
+    const before = currentItem.text.slice(0, splitPos);
+    const after = currentItem.text.slice(splitPos);
+    const newItem: ListItem = {
+      id: generateItemId(),
+      text: after,
+      completed: false,
+      position: 0,
+      parentId: currentItem.parentId,
+      assignedTo: currentItem.assignedTo,
+    };
+    const newItems = [...currentItems];
+    newItems[itemPos] = { ...currentItem, text: before };
+    newItems.splice(itemPos + 1, 0, newItem);
+    commitItems(normalizeItemOrder(newItems));
+    autoSaveNote();
+    return newItem.id;
+  };
+
   const handleItemKeyDown = (index: number, e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      // Cross-item arrow navigation is only wired up within the uncompleted
+      // section; completed items keep default textarea arrow behavior.
+      if (index >= uncompletedItems.length) return;
       if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
       const textarea = e.currentTarget;
       if (textarea.value.includes('\n')) return;
@@ -1409,8 +1479,39 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
     if (e.key === 'Enter') {
       e.preventDefault();
-      const currentItem = uncompletedItems[index];
-      const newId = insertListItemAfter(currentItem?.id ?? '');
+      const currentItem = findTargetItem(index);
+      if (!currentItem) return;
+
+      const textarea = e.currentTarget;
+      const text = currentItem.text;
+      const cursorPos = textarea.selectionStart ?? text.length;
+
+      // Cursor at the very start of a non-empty item: add a blank item
+      // before it and move focus there, leaving this item's text untouched.
+      if (cursorPos === 0 && text.length > 0) {
+        const newId = insertListItemBefore(currentItem.id, {
+          parentId: currentItem.parentId,
+          assignedTo: currentItem.assignedTo,
+        });
+        setTimeout(() => itemInputRefs.current.get(newId)?.focus(), 0);
+        return;
+      }
+
+      // Cursor mid-text: split the item at the cursor into two items.
+      if (cursorPos > 0 && cursorPos < text.length) {
+        const newId = splitListItem(currentItem.id, cursorPos);
+        setTimeout(() => {
+          const el = itemInputRefs.current.get(newId);
+          if (el) {
+            el.focus();
+            el.setSelectionRange(0, 0);
+          }
+        }, 0);
+        return;
+      }
+
+      // Cursor at the end (or item is empty): append a blank item after.
+      const newId = insertListItemAfter(currentItem.id);
       setTimeout(() => {
         itemInputRefs.current.get(newId)?.focus();
       }, 0);
@@ -1418,13 +1519,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
 
     if (e.key === 'Backspace' || e.key === 'Delete') {
-      const currentItem = uncompletedItems[index];
+      // Resolve via findTargetItem: completed rows pass a combined index
+      // (uncompletedItems.length + i), so indexing uncompletedItems directly
+      // would come up empty there and dead-key the shortcut.
+      const currentItem = findTargetItem(index);
       if (!currentItem || currentItem.text.trim() !== '') return;
 
       e.preventDefault();
-      const focusTarget = e.key === 'Backspace'
-        ? uncompletedItems[index - 1]
-        : uncompletedItems[index + 1];
+      const focusTarget = findTargetItem(e.key === 'Backspace' ? index - 1 : index + 1);
 
       removeListItem(currentItem.id);
 
@@ -1975,23 +2077,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
   const hasUnsavedChanges = () => {
     if (note) {
-      if (note.note_type === 'list') {
-        return (
-          title !== note.title ||
-          color !== note.color ||
-          pinned !== note.pinned ||
-          archived !== note.archived ||
-          checkedItemsCollapsed !== note.checked_items_collapsed ||
-          haveListItemsChanged(items, note.items)
-        );
-      } else {
-        return (
-          content !== note.content ||
-          color !== note.color ||
-          pinned !== note.pinned ||
-          archived !== note.archived
-        );
-      }
+      // Compare against the same saved baseline the autosave pipeline uses
+      // (savedScalarsRef/savedItemsRef), not the note prop: adoption renumbers
+      // item positions and the prop can lag behind granular saves, so a
+      // prop-based comparison reports "changes" when there is nothing left to
+      // flush and closing then runs a pointless save pass.
+      return isDirty();
     } else {
       if (noteType === 'list') {
         return title.trim() !== '' || items.some(item => item.text.trim() !== '') || noteLabels.length > 0;
@@ -2088,8 +2179,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
             backdropHandledRef.current = false;
             return;
           }
-          // Escape key: two-step dismiss — collapse first, then close on second press.
-          if (isEditingContent) {
+          // Escape key: two-step dismiss — collapse first, then close on second
+          // press. Only text notes have an edit/preview mode; for list notes
+          // isEditingContent is meaningless (it merely starts out true on new
+          // notes), so consuming a press to flip it would make the first
+          // Escape silently do nothing.
+          if (noteType === 'text' && isEditingContent) {
             setIsEditingContent(false);
           } else {
             handleCloseRequest();
@@ -2111,7 +2206,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
             if (e.target !== e.currentTarget) return;
             // Signal onClose to skip its logic — we're handling this dismiss.
             backdropHandledRef.current = true;
-            if (isEditingContent) {
+            if (noteType === 'text' && isEditingContent) {
               setIsEditingContent(false);
             } else {
               handleCloseRequest();
@@ -2456,6 +2551,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                                 onUpdateListItem={(idx, field, value) => updateListItem(idx, field, value)}
                                 onRemoveListItem={removeListItem}
                                 isCompleted={true}
+                                onKeyDown={handleItemKeyDown}
+                                inputRef={(el) => {
+                                  if (el) itemInputRefs.current.set(item.id, el);
+                                  else itemInputRefs.current.delete(item.id);
+                                }}
                                 isShared={note?.is_shared}
                                 collaborators={collaborators}
                                 usersById={usersById}

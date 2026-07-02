@@ -66,6 +66,14 @@ export function isServerSwitchInProgress(): boolean {
   return isServerSwitchInProgressInternal();
 }
 
+// Shared write guard: a mutation should never land mid-switch and get applied
+// against (or persisted under) the wrong server.
+export function assertSwitchWriteAllowed(): void {
+  if (isServerSwitchInProgressInternal()) {
+    throw new Error('Server switch in progress; write blocked');
+  }
+}
+
 function notifyActiveServerChange(serverId: string | null): void {
   for (const listener of activeServerChangeListeners) {
     listener(serverId);

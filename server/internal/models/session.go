@@ -3,6 +3,7 @@ package models
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"errors"
@@ -23,8 +24,11 @@ const (
 
 var ErrSessionNotFoundOrExpired = errors.New("session not found or expired")
 
+// Session is a stored login session. Only the SHA-256 hash of the session
+// token is persisted; the raw token lives exclusively in the client's cookie
+// and is returned once by Create.
 type Session struct {
-	Token     string    `json:"token"`
+	TokenHash string    `json:"-"`
 	UserID    string    `json:"user_id"`
 	UserAgent string    `json:"user_agent"`
 	CreatedAt time.Time `json:"created_at"`
@@ -79,11 +83,22 @@ func generateSessionToken() (string, error) {
 	return hex.EncodeToString(bytes), nil
 }
 
-func (s *sessionStore) Create(ctx context.Context, userID, userAgent string) (*Session, error) {
+// HashSessionToken returns the hex-encoded SHA-256 hash of a raw session
+// token, the form in which tokens are stored and looked up.
+func HashSessionToken(rawToken string) string {
+	h := sha256.Sum256([]byte(rawToken))
+	return hex.EncodeToString(h[:])
+}
+
+// Create stores a new session and returns it together with the raw session
+// token. The raw token is returned only here — callers must place it in the
+// client's cookie immediately, as only its hash is persisted.
+func (s *sessionStore) Create(ctx context.Context, userID, userAgent string) (*Session, string, error) {
 	token, err := generateSessionToken()
 	if err != nil {
-		return nil, fmt.Errorf("create session: %w", err)
+		return nil, "", fmt.Errorf("create session: %w", err)
 	}
+	tokenHash := HashSessionToken(token)
 
 	if runes := []rune(userAgent); len(runes) > maxUserAgentLength {
 		userAgent = string(runes[:maxUserAgentLength])
@@ -94,7 +109,7 @@ func (s *sessionStore) Create(ctx context.Context, userID, userAgent string) (*S
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, "", fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() {
 		if err != nil {
@@ -102,23 +117,23 @@ func (s *sessionStore) Create(ctx context.Context, userID, userAgent string) (*S
 		}
 	}()
 
-	evictQuery := `DELETE FROM sessions WHERE token IN (
-		SELECT token FROM sessions WHERE user_id = ? AND expires_at > ?
+	evictQuery := `DELETE FROM sessions WHERE token_hash IN (
+		SELECT token_hash FROM sessions WHERE user_id = ? AND expires_at > ?
 		ORDER BY created_at DESC
 		LIMIT ` + s.d.LimitAll() + ` OFFSET ?
 	)`
 	evictResult, err := tx.ExecContext(ctx, s.d.RewritePlaceholders(evictQuery), userID, now, MaxSessionsPerUser-1)
 	if err != nil {
-		return nil, fmt.Errorf("failed to evict old sessions: %w", err)
+		return nil, "", fmt.Errorf("failed to evict old sessions: %w", err)
 	}
 
-	insertQuery := `INSERT INTO sessions (token, user_id, user_agent, expires_at) VALUES (?, ?, ?, ?)`
-	if _, err = tx.ExecContext(ctx, s.d.RewritePlaceholders(insertQuery), token, userID, userAgent, expiresAt); err != nil {
-		return nil, fmt.Errorf("failed to create session: %w", err)
+	insertQuery := `INSERT INTO sessions (token_hash, user_id, user_agent, expires_at) VALUES (?, ?, ?, ?)`
+	if _, err = tx.ExecContext(ctx, s.d.RewritePlaceholders(insertQuery), tokenHash, userID, userAgent, expiresAt); err != nil {
+		return nil, "", fmt.Errorf("failed to create session: %w", err)
 	}
 
 	if err = tx.Commit(); err != nil {
-		return nil, fmt.Errorf("failed to commit session: %w", err)
+		return nil, "", fmt.Errorf("failed to commit session: %w", err)
 	}
 
 	if n, rowErr := evictResult.RowsAffected(); rowErr == nil && n > 0 {
@@ -127,20 +142,21 @@ func (s *sessionStore) Create(ctx context.Context, userID, userAgent string) (*S
 	s.created.Add(ctx, 1)
 
 	return &Session{
-		Token:     token,
+		TokenHash: tokenHash,
 		UserID:    userID,
 		UserAgent: userAgent,
 		CreatedAt: now,
 		ExpiresAt: expiresAt,
-	}, nil
+	}, token, nil
 }
 
-func (s *sessionStore) GetByToken(ctx context.Context, token string) (*Session, error) {
+// GetByToken looks up a session by the raw token from the client's cookie.
+func (s *sessionStore) GetByToken(ctx context.Context, rawToken string) (*Session, error) {
 	var session Session
-	query := `SELECT token, user_id, user_agent, created_at, expires_at FROM sessions WHERE token = ? AND expires_at > ?`
+	query := `SELECT token_hash, user_id, user_agent, created_at, expires_at FROM sessions WHERE token_hash = ? AND expires_at > ?`
 
-	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), token, time.Now()).Scan(
-		&session.Token, &session.UserID, &session.UserAgent, &session.CreatedAt, &session.ExpiresAt,
+	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), HashSessionToken(rawToken), time.Now()).Scan(
+		&session.TokenHash, &session.UserID, &session.UserAgent, &session.CreatedAt, &session.ExpiresAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -153,7 +169,7 @@ func (s *sessionStore) GetByToken(ctx context.Context, token string) (*Session, 
 }
 
 func (s *sessionStore) GetByUserID(ctx context.Context, userID string) (sessions []*Session, err error) {
-	query := `SELECT token, user_id, user_agent, created_at, expires_at FROM sessions WHERE user_id = ? AND expires_at > ? ORDER BY created_at DESC`
+	query := `SELECT token_hash, user_id, user_agent, created_at, expires_at FROM sessions WHERE user_id = ? AND expires_at > ? ORDER BY created_at DESC`
 
 	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), userID, time.Now())
 	if err != nil {
@@ -167,7 +183,7 @@ func (s *sessionStore) GetByUserID(ctx context.Context, userID string) (sessions
 
 	for rows.Next() {
 		var session Session
-		if err := rows.Scan(&session.Token, &session.UserID, &session.UserAgent, &session.CreatedAt, &session.ExpiresAt); err != nil {
+		if err := rows.Scan(&session.TokenHash, &session.UserID, &session.UserAgent, &session.CreatedAt, &session.ExpiresAt); err != nil {
 			return nil, fmt.Errorf("failed to scan session: %w", err)
 		}
 		sessions = append(sessions, &session)
@@ -179,17 +195,20 @@ func (s *sessionStore) GetByUserID(ctx context.Context, userID string) (sessions
 	return sessions, nil
 }
 
-func (s *sessionStore) Delete(ctx context.Context, token string) error {
-	query := `DELETE FROM sessions WHERE token = ?`
-	if _, err := s.db.ExecContext(ctx, s.d.RewritePlaceholders(query), token); err != nil {
+// Delete removes a session by the raw token from the client's cookie.
+func (s *sessionStore) Delete(ctx context.Context, rawToken string) error {
+	query := `DELETE FROM sessions WHERE token_hash = ?`
+	if _, err := s.db.ExecContext(ctx, s.d.RewritePlaceholders(query), HashSessionToken(rawToken)); err != nil {
 		return fmt.Errorf("failed to delete session: %w", err)
 	}
 	return nil
 }
 
-func (s *sessionStore) DeleteByUserIDAndToken(ctx context.Context, userID, token string) (bool, error) {
-	query := `DELETE FROM sessions WHERE user_id = ? AND token = ?`
-	result, err := s.db.ExecContext(ctx, s.d.RewritePlaceholders(query), userID, token)
+// DeleteByUserIDAndTokenHash removes a session by its stored token hash (as
+// returned by GetByUserID), but only if it belongs to the given user.
+func (s *sessionStore) DeleteByUserIDAndTokenHash(ctx context.Context, userID, tokenHash string) (bool, error) {
+	query := `DELETE FROM sessions WHERE user_id = ? AND token_hash = ?`
+	result, err := s.db.ExecContext(ctx, s.d.RewritePlaceholders(query), userID, tokenHash)
 	if err != nil {
 		return false, fmt.Errorf("failed to delete session: %w", err)
 	}
@@ -220,9 +239,10 @@ func (s *sessionStore) DeleteExpired(ctx context.Context) error {
 	return nil
 }
 
-func (s *sessionStore) UpdateExpiry(ctx context.Context, token string, expiresAt time.Time) error {
-	query := `UPDATE sessions SET expires_at = ? WHERE token = ? AND expires_at > ?`
-	result, err := s.db.ExecContext(ctx, s.d.RewritePlaceholders(query), expiresAt, token, time.Now())
+// UpdateExpiry extends a session identified by its stored token hash.
+func (s *sessionStore) UpdateExpiry(ctx context.Context, tokenHash string, expiresAt time.Time) error {
+	query := `UPDATE sessions SET expires_at = ? WHERE token_hash = ? AND expires_at > ?`
+	result, err := s.db.ExecContext(ctx, s.d.RewritePlaceholders(query), expiresAt, tokenHash, time.Now())
 	if err != nil {
 		return fmt.Errorf("failed to update session expiry: %w", err)
 	}
