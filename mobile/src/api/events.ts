@@ -7,6 +7,10 @@ const BASE_RECONNECT_DELAY_MS = 3000;
 const MAX_RECONNECT_DELAY_MS = 60000;
 const WATCHDOG_INTERVAL_MS = 15_000;
 // Server sends keepalives every 30s; 2.5× gives margin for two missed beats before reconnecting.
+// The watchdog is also the *only* recovery path for a server-initiated clean
+// stream close: react-native-sse (1.2.1) dispatches no event in that case (its
+// 'close' event only fires for a self-initiated close()), so the connection
+// just goes silent until the keepalive stall trips this timeout.
 const STALL_TIMEOUT_MS = 75_000;
 
 type SSECallback = (event: SSEEvent) => void;
@@ -71,6 +75,12 @@ export class SSEConnectionManager {
         headers: {
           Cookie: `jot_session=${token}`,
         },
+        // Disable the library's own reconnect loop (default: retry every 5s).
+        // This manager owns retries via scheduleReconnect's exponential backoff;
+        // with both active, the library's fixed-interval retries fire 'error'
+        // events that keep resetting our timer and doubling the backoff, and can
+        // race a second connection alongside the one we're about to open.
+        pollingInterval: 0,
       });
 
       this.es.addEventListener('open', () => {
@@ -105,6 +115,13 @@ export class SSEConnectionManager {
           this.disconnect();
           return;
         }
+        // Tear down the errored EventSource before scheduling our retry. This
+        // cancels any internal retry timer the library may still hold (its
+        // `retry:` stream field can re-enable polling even with
+        // pollingInterval: 0) and stops repeated error events from the same
+        // dead connection re-entering scheduleReconnect and inflating the
+        // backoff. openConnection rebuilds everything, watchdog included.
+        this.cleanup();
         // Schedule reconnect with exponential backoff; scheduleReconnect emits the
         // 'reconnecting' status so the UI can distinguish this genuine failure from
         // an in-progress initial connect.
