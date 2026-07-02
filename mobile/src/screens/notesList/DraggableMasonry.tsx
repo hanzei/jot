@@ -32,7 +32,6 @@ import {
 } from './MasonryGrid';
 
 const DEFAULT_COLUMNS = 2;
-const ESTIMATED_CARD_HEIGHT = 140;
 const LONG_PRESS_MS = 220;
 // Edge band (in screen px) within which dragging auto-scrolls, and the per-frame
 // scroll step. These are the values most likely to need on-device tuning.
@@ -89,7 +88,16 @@ export default function DraggableMasonry({
   // cards render correctly on the very first frame instead of flashing blank
   // until onLayout fires; the layout pass then refines it.
   const [contentWidth, setContentWidth] = useState(() => Dimensions.get('window').width);
+  // Every real onLayout measurement lands here first, including ones from the
+  // off-screen HeightMeasurer pool below.
   const [heights, setHeights] = useState<Record<string, number>>({});
+  // Cards only become visible/positioned once their height is copied here. A
+  // whole batch of newly-pending ids (e.g. every note on first load) commits
+  // in one state update once every one of them has measured, so the list
+  // appears fully laid out in a single paint instead of settling card by card.
+  // Ids that were already committed have their height refreshed immediately
+  // when it changes (e.g. a visible card's content is edited).
+  const [committedHeights, setCommittedHeights] = useState<Record<string, number>>({});
   const [orders, setOrders] = useState<Record<string, string[]>>({});
   const [isDragging, setIsDragging] = useState(false);
 
@@ -147,21 +155,95 @@ export default function DraggableMasonry({
     setOrders(next);
   }, [sections, isDragging]);
 
-  // Pack each section and keep the latest placements in refs for the hover math.
+  // Ids of notes currently present anywhere in the list — used to prune
+  // heights of notes that have since been deleted/archived out of `sections`,
+  // so the height caches don't grow unbounded over a long-lived session.
+  const liveIds = useMemo(() => {
+    const set = new Set<string>();
+    sections.forEach((s) => s.data.forEach((n) => set.add(n.id)));
+    return set;
+  }, [sections]);
+
+  useEffect(() => {
+    setHeights((prev) => {
+      let changed = false;
+      const next: Record<string, number> = {};
+      Object.keys(prev).forEach((id) => {
+        if (liveIds.has(id)) {
+          next[id] = prev[id];
+        } else {
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [liveIds]);
+
+  // Commit newly-measured heights in whole per-section batches: a section's
+  // ids only move from "pending" (unmeasured, rendered off-screen by
+  // HeightMeasurer below) to "ready" (positioned and visible) once every one
+  // of them has a real height, so the whole section appears already correctly
+  // packed in a single paint. An id that's already ready has its height
+  // refreshed the moment it changes, so editing a visible note's content still
+  // reflows immediately. Ids no longer present anywhere in `sections` are
+  // dropped so this cache doesn't grow unbounded.
+  useEffect(() => {
+    setCommittedHeights((prev) => {
+      let changed = false;
+      const next: Record<string, number> = {};
+      Object.keys(prev).forEach((id) => {
+        if (!liveIds.has(id)) {
+          changed = true;
+          return;
+        }
+        next[id] = heights[id] !== undefined && heights[id] !== prev[id] ? heights[id] : prev[id];
+        if (next[id] !== prev[id]) changed = true;
+      });
+      sections.forEach((s) => {
+        const order = orders[s.key] ?? s.data.map((n) => n.id);
+        const pending = order.filter((id) => next[id] === undefined);
+        if (pending.length > 0 && pending.every((id) => heights[id] !== undefined)) {
+          pending.forEach((id) => {
+            next[id] = heights[id];
+          });
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [heights, orders, sections, liveIds]);
+
+  // Ids waiting on their first real measurement, across all sections — these
+  // render invisibly via HeightMeasurer instead of in the positioned list.
+  const pendingIds = useMemo(() => {
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    sections.forEach((s) => {
+      (orders[s.key] ?? s.data.map((n) => n.id)).forEach((id) => {
+        if (committedHeights[id] === undefined && !seen.has(id)) {
+          seen.add(id);
+          ids.push(id);
+        }
+      });
+    });
+    return ids;
+  }, [sections, orders, committedHeights]);
+
+  // Pack each section from committed (real, measured) heights only, and keep
+  // the latest placements in refs for the hover math.
   const packedBySection = useMemo(() => {
     const result: Record<string, { placed: PlacedItem[]; containerHeight: number }> = {};
     sections.forEach((s) => {
-      const order = orders[s.key] ?? s.data.map((n) => n.id);
-      result[s.key] = packColumns(order, heights, {
+      const order = (orders[s.key] ?? s.data.map((n) => n.id)).filter((id) => committedHeights[id] !== undefined);
+      result[s.key] = packColumns(order, committedHeights, {
         columnWidth,
         columnGap: MASONRY_COLUMN_GAP,
         rowGap: MASONRY_ROW_GAP,
         columns,
-        estimatedHeight: ESTIMATED_CARD_HEIGHT,
       });
     });
     return result;
-  }, [sections, orders, heights, columnWidth, columns]);
+  }, [sections, orders, committedHeights, columnWidth, columns]);
 
   const placedRef = useRef(packedBySection);
   placedRef.current = packedBySection;
@@ -291,8 +373,49 @@ export default function DraggableMasonry({
               </View>
             );
           })}
+        {columnWidth > 0 && (
+          <View
+            style={styles.measurerPool}
+            pointerEvents="none"
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+          >
+            {pendingIds.map((id) => {
+              const note = notesById.get(id);
+              if (!note) return null;
+              return (
+                <HeightMeasurer key={id} id={id} width={columnWidth} onMeasureHeight={handleMeasureHeight}>
+                  {renderCard(note)}
+                </HeightMeasurer>
+              );
+            })}
+          </View>
+        )}
       </View>
     </Animated.ScrollView>
+  );
+}
+
+interface HeightMeasurerProps {
+  id: string;
+  width: number;
+  onMeasureHeight: (id: string, height: number) => void;
+  children: React.ReactNode;
+}
+
+// Renders a card off-screen (zero opacity, out of flow) purely to obtain its
+// natural height at the real column width, without it ever being visible or
+// interactive. Used to measure a whole batch of pending cards before they're
+// placed and revealed together.
+function HeightMeasurer({ id, width, onMeasureHeight, children }: HeightMeasurerProps) {
+  const handleLayout = useCallback(
+    (e: LayoutChangeEvent) => onMeasureHeight(id, e.nativeEvent.layout.height),
+    [id, onMeasureHeight],
+  );
+  return (
+    <View style={[styles.cardContainer, { width }]} onLayout={handleLayout}>
+      {children}
+    </View>
   );
 }
 
@@ -435,5 +558,11 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     left: 0,
+  },
+  measurerPool: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    opacity: 0,
   },
 });
