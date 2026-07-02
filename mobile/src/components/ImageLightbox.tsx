@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useRef } from 'react';
-import { Modal, View, Image, Text, TouchableOpacity, FlatList, Dimensions, StyleSheet, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
+import React, { useCallback, useContext, useEffect, useRef } from 'react';
+import { Modal, View, Image, Text, TouchableOpacity, FlatList, useWindowDimensions, StyleSheet, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 import type { NoteImage } from '@jot/shared';
@@ -14,6 +15,12 @@ interface ImageLightboxProps {
   onClose: () => void;
 }
 
+// Base offsets for controls that sit against a screen edge; the safe-area
+// inset for that edge is added on top so they clear notches/gesture bars.
+const CLOSE_BUTTON_TOP = 16;
+const CLOSE_BUTTON_RIGHT = 16;
+const COUNTER_BOTTOM = 16;
+
 // Full-screen swipeable viewer for a note's images, opened by tapping a
 // gallery tile. Always serves the original (never a thumbnail) since this is
 // where a user inspects the image closely. Chevron buttons are offered
@@ -22,7 +29,8 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose }:
   const { t } = useTranslation();
   const baseUrl = useActiveServerBaseUrl();
   const listRef = useRef<FlatList<NoteImage>>(null);
-  const screenWidth = Dimensions.get('window').width;
+  const { width: screenWidth } = useWindowDimensions();
+  const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
 
   const isOpen = index !== null;
   // Clamp against a live SSE removal shrinking `images` while open, rather
@@ -60,7 +68,7 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose }:
     <Modal visible transparent animationType="fade" onRequestClose={onClose} testID="image-lightbox">
       <View style={styles.backdrop}>
         <TouchableOpacity
-          style={styles.closeButton}
+          style={[styles.closeButton, { top: CLOSE_BUTTON_TOP + insets.top, right: CLOSE_BUTTON_RIGHT + insets.right }]}
           onPress={onClose}
           accessibilityLabel={t('common.close')}
           accessibilityRole="button"
@@ -116,7 +124,7 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose }:
         />
 
         {hasMultiple && (
-          <Text style={styles.counter} testID="lightbox-counter">
+          <Text style={[styles.counter, { bottom: COUNTER_BOTTOM + insets.bottom }]} testID="lightbox-counter">
             {t('images.lightboxCounter', { current: safeIndex + 1, total: images.length })}
           </Text>
         )}
@@ -133,8 +141,6 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     position: 'absolute',
-    top: 48,
-    right: 16,
     zIndex: 10,
     padding: 8,
   },
@@ -161,7 +167,6 @@ const styles = StyleSheet.create({
   },
   counter: {
     position: 'absolute',
-    bottom: 32,
     alignSelf: 'center',
     color: '#fff',
     fontSize: 13,

@@ -250,18 +250,23 @@ export async function patchLocalNoteImages(
   noteId: string,
   updater: (images: NoteImage[]) => NoteImage[],
 ): Promise<void> {
-  const row = await db.getFirstAsync<Pick<NoteRow, 'images_json'>>(
-    'SELECT images_json FROM notes WHERE id = ?',
-    [noteId],
-  );
-  if (!row) return;
-  let images: NoteImage[] = [];
-  try { images = JSON.parse(row.images_json) as NoteImage[]; } catch { /* ignore */ }
-  const nextImages = updater(images);
-  await db.runAsync(
-    'UPDATE notes SET images_json = ? WHERE id = ?',
-    [JSON.stringify(nextImages), noteId],
-  );
+  // Serialized like saveNote: the read-modify-write below would otherwise let
+  // two back-to-back SSE events (e.g. two rapid note_image_added) interleave
+  // and have the second write clobber the first's change.
+  await withSerializedTransaction(db, async () => {
+    const row = await db.getFirstAsync<Pick<NoteRow, 'images_json'>>(
+      'SELECT images_json FROM notes WHERE id = ?',
+      [noteId],
+    );
+    if (!row) return;
+    let images: NoteImage[] = [];
+    try { images = JSON.parse(row.images_json) as NoteImage[]; } catch { /* ignore */ }
+    const nextImages = updater(images);
+    await db.runAsync(
+      'UPDATE notes SET images_json = ? WHERE id = ?',
+      [JSON.stringify(nextImages), noteId],
+    );
+  });
 }
 
 export async function markLocalNoteDeleted(db: SQLiteDatabase, id: string): Promise<void> {
