@@ -155,20 +155,53 @@ export default function DraggableMasonry({
     setOrders(next);
   }, [sections, isDragging]);
 
+  // Ids of notes currently present anywhere in the list — used to prune
+  // heights of notes that have since been deleted/archived out of `sections`,
+  // so the height caches don't grow unbounded over a long-lived session.
+  const liveIds = useMemo(() => {
+    const set = new Set<string>();
+    sections.forEach((s) => s.data.forEach((n) => set.add(n.id)));
+    return set;
+  }, [sections]);
+
+  useEffect(() => {
+    setHeights((prev) => {
+      let changed = false;
+      const next: Record<string, number> = {};
+      Object.keys(prev).forEach((id) => {
+        if (liveIds.has(id)) {
+          next[id] = prev[id];
+        } else {
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [liveIds]);
+
   // Commit newly-measured heights in whole per-section batches: a section's
   // ids only move from "pending" (unmeasured, rendered off-screen by
   // HeightMeasurer below) to "ready" (positioned and visible) once every one
   // of them has a real height, so the whole section appears already correctly
   // packed in a single paint. An id that's already ready has its height
   // refreshed the moment it changes, so editing a visible note's content still
-  // reflows immediately.
+  // reflows immediately. Ids no longer present anywhere in `sections` are
+  // dropped so this cache doesn't grow unbounded.
   useEffect(() => {
     setCommittedHeights((prev) => {
       let changed = false;
-      const next: Record<string, number> = { ...prev };
+      const next: Record<string, number> = {};
+      Object.keys(prev).forEach((id) => {
+        if (!liveIds.has(id)) {
+          changed = true;
+          return;
+        }
+        next[id] = heights[id] !== undefined && heights[id] !== prev[id] ? heights[id] : prev[id];
+        if (next[id] !== prev[id]) changed = true;
+      });
       sections.forEach((s) => {
         const order = orders[s.key] ?? s.data.map((n) => n.id);
-        const pending = order.filter((id) => prev[id] === undefined);
+        const pending = order.filter((id) => next[id] === undefined);
         if (pending.length > 0 && pending.every((id) => heights[id] !== undefined)) {
           pending.forEach((id) => {
             next[id] = heights[id];
@@ -176,15 +209,9 @@ export default function DraggableMasonry({
           changed = true;
         }
       });
-      Object.keys(prev).forEach((id) => {
-        if (heights[id] !== undefined && heights[id] !== prev[id]) {
-          next[id] = heights[id];
-          changed = true;
-        }
-      });
       return changed ? next : prev;
     });
-  }, [heights, orders, sections]);
+  }, [heights, orders, sections, liveIds]);
 
   // Ids waiting on their first real measurement, across all sections — these
   // render invisibly via HeightMeasurer instead of in the positioned list.
@@ -347,7 +374,12 @@ export default function DraggableMasonry({
             );
           })}
         {columnWidth > 0 && (
-          <View style={styles.measurerPool} pointerEvents="none">
+          <View
+            style={styles.measurerPool}
+            pointerEvents="none"
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+          >
             {pendingIds.map((id) => {
               const note = notesById.get(id);
               if (!note) return null;
