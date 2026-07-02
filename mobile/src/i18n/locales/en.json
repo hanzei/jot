@@ -321,6 +321,8 @@
     "removedToast": "Image removed",
     "uploading": "Uploading… {{percent}}%",
     "uploadFailed": "Upload failed",
+    "queuedOffline": "Waiting to upload…",
+    "uploadQueuedToast": "Image will upload when you're back online",
     "retryUpload": "Retry uploading {{filename}}",
     "dismissUpload": "Dismiss {{filename}}",
     "errorWrongType": "Only images can be attached.",

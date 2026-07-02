@@ -321,6 +321,8 @@
     "removedToast": "Imagen eliminada",
     "uploading": "Subiendo… {{percent}}%",
     "uploadFailed": "Error al subir la imagen",
+    "queuedOffline": "Esperando para subir…",
+    "uploadQueuedToast": "La imagen se subirá cuando vuelvas a estar en línea",
     "retryUpload": "Reintentar subir {{filename}}",
     "dismissUpload": "Descartar {{filename}}",
     "errorWrongType": "Solo se pueden adjuntar imágenes.",

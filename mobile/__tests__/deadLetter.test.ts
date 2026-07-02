@@ -176,6 +176,24 @@ describe('drainQueue dead-letter persistence', () => {
     expect(discardedOperations).toEqual([{ operation: 'createItem', endpoint: '/notes/n1/items', status: 409 }]);
   });
 
+  it('resolves a permanently-rejected removeImage silently regardless of status (issue #618)', async () => {
+    // Unlike every other operation, a queued image delete never dead-letters:
+    // the note-content "Keep my version" fork is a meaningless response to a
+    // failed image removal, and a background sync/SSE event reconciles the
+    // note's images either way (§6's fail-safe design).
+    const db = makeDrainDb([
+      { id: 4, operation: 'removeImage', endpoint: '/images/img1', method: 'DELETE', body: '{"note_id":"n1"}', created_at: 't0' },
+    ]);
+    mockApi.delete.mockRejectedValueOnce(makeAxiosError(403));
+
+    const { discardedOperations } = await drainQueue(db as never);
+
+    expect(callsStartingWith(db, 'INSERT INTO dead_letter')).toHaveLength(0);
+    expect(callsStartingWith(db, `UPDATE notes SET sync_state = 'failed'`)).toHaveLength(0);
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [4]);
+    expect(discardedOperations).toEqual([{ operation: 'removeImage', endpoint: '/images/img1', status: 403 }]);
+  });
+
   it('dead-letters an update 409 (version conflict) instead of dropping it silently', async () => {
     // A 409 on an `update` is an optimistic-concurrency conflict: the note
     // changed on another device since base_version (#489). Unlike an idempotent

@@ -321,6 +321,8 @@
     "removedToast": "Afbeelding verwijderd",
     "uploading": "Uploaden… {{percent}}%",
     "uploadFailed": "Uploaden mislukt",
+    "queuedOffline": "Wachten op uploaden…",
+    "uploadQueuedToast": "De afbeelding wordt geüpload zodra je weer online bent",
     "retryUpload": "{{filename}} opnieuw uploaden",
     "dismissUpload": "{{filename}} negeren",
     "errorWrongType": "Er kunnen alleen afbeeldingen worden toegevoegd.",

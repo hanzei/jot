@@ -1,4 +1,5 @@
 import * as FileSystem from 'expo-file-system/legacy';
+import { ensureDirExists } from './fsCache';
 
 const CACHE_DIR = `${FileSystem.cacheDirectory ?? ''}profile-icons/`;
 
@@ -11,13 +12,6 @@ function safeVersion(updatedAt: string): string {
 
 function iconFilePath(userId: string, updatedAt: string): string {
   return `${CACHE_DIR}${userId}_${safeVersion(updatedAt)}`;
-}
-
-async function ensureCacheDir(): Promise<void> {
-  const info = await FileSystem.getInfoAsync(CACHE_DIR);
-  if (!info.exists) {
-    await FileSystem.makeDirectoryAsync(CACHE_DIR, { intermediates: true });
-  }
 }
 
 // Returns the local file URI for a cached icon, or null if not cached.
@@ -62,7 +56,7 @@ export async function downloadAndCacheIcon(
   if (inProgress.has(key)) return null;
   inProgress.add(key);
   try {
-    await ensureCacheDir();
+    await ensureDirExists(CACHE_DIR);
     const path = iconFilePath(userId, updatedAt);
     const result = await FileSystem.downloadAsync(networkUrl, path);
     if (result.status === 200) {

@@ -292,6 +292,8 @@
     "removedToast": "Obraz usunięty",
     "uploading": "Wysyłanie… {{percent}}%",
     "uploadFailed": "Nie udało się wysłać obrazu",
+    "queuedOffline": "Czeka na wysłanie…",
+    "uploadQueuedToast": "Obraz zostanie wysłany, gdy wrócisz do sieci",
     "retryUpload": "Ponów wysyłanie {{filename}}",
     "dismissUpload": "Odrzuć {{filename}}",
     "errorWrongType": "Można dodawać tylko obrazy.",

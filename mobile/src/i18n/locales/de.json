@@ -292,6 +292,8 @@
     "removedToast": "Bild entfernt",
     "uploading": "Wird hochgeladen … {{percent}}%",
     "uploadFailed": "Upload fehlgeschlagen",
+    "queuedOffline": "Wartet auf Upload…",
+    "uploadQueuedToast": "Das Bild wird hochgeladen, sobald du wieder online bist",
     "retryUpload": "{{filename}} erneut hochladen",
     "dismissUpload": "{{filename}} verwerfen",
     "errorWrongType": "Es können nur Bilder angehängt werden.",
