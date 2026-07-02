@@ -53,6 +53,11 @@ interface ListItemProps {
 // Press-and-hold duration on the drag handle before a reorder drag begins.
 const DRAG_HANDLE_LONG_PRESS_MS = 180;
 
+// Delay before hiding focus-gated controls (delete/assign) and suggestions on
+// blur, so a tap on those controls — which blurs the input first — still lands
+// before they unmount.
+const BLUR_HIDE_DELAY_MS = 200;
+
 function ListItem({
   text,
   completed,
@@ -210,7 +215,7 @@ function ListItem({
               blurTimeoutRef.current = setTimeout(() => {
                 setShowSuggestions(false);
                 setIsFocused(false);
-              }, 200);
+              }, BLUR_HIDE_DELAY_MS);
             }}
             multiline
             submitBehavior="submit"

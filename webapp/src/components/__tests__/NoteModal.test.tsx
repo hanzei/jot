@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, within, act } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { type ReactNode } from 'react'
-import NoteModal from '../NoteModal'
+import NoteModal, { ROW_REVEAL_CLASSES } from '../NoteModal'
 import { ToastProvider } from '../Toast'
 import { VALIDATION, type Note, type NoteItem, type NoteImage } from '@jot/shared'
 import { createMockNote } from '@/utils/__tests__/test-helpers'
@@ -1493,9 +1493,7 @@ describe('NoteModal', () => {
       // Hidden by default; only the hovered row (desktop) or the row with a
       // focused field (works on touch too) reveals its delete button, so users
       // are less likely to delete an item they didn't intend to.
-      expect(deleteButtons[0].className).toContain('opacity-0')
-      expect(deleteButtons[0].className).toContain('group-hover/item:opacity-100')
-      expect(deleteButtons[0].className).toContain('group-focus-within/item:opacity-100')
+      expect(deleteButtons[0].className).toContain(ROW_REVEAL_CLASSES)
       expect(deleteButtons[0]).toHaveAttribute('aria-label', 'Remove item')
 
       fireEvent.click(deleteButtons[0])

@@ -43,7 +43,7 @@ type TFunction = (key: string, opts?: Record<string, unknown>) => string;
 // (desktop) or a field within it is focused (works on touch). While hidden the
 // control is also non-interactive, so an invisible button can't be tapped by
 // accident — important on touch devices, where there's no hover to reveal it.
-const ROW_REVEAL_CLASSES =
+export const ROW_REVEAL_CLASSES =
   'opacity-0 pointer-events-none group-hover/item:opacity-100 group-hover/item:pointer-events-auto group-focus-within/item:opacity-100 group-focus-within/item:pointer-events-auto';
 
 const validateItemText = (text: string, t: TFunction): string | null => {
