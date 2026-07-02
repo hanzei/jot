@@ -268,22 +268,41 @@ func (h *NotesHandler) createNoteLabels(ctx context.Context, noteID, userID stri
 	return http.StatusOK, nil
 }
 
-func (h *NotesHandler) createListItems(ctx context.Context, noteID string, items []CreateNoteItem) (int, error) {
-	// The bulk-create payload is positional and carries indent_level (0/1), so
-	// reconstruct grouping the same way the migration backfill and Jot import do:
-	// each indented item attaches to the most recent top-level item by position.
-	// Sort by position so a parent is always created before its children.
+// buildCreateNoteItems validates the positional bulk-create payload and resolves
+// each item into a models.NewNoteItem for atomic insertion alongside the note.
+// The payload carries indent_level (0/1), so grouping is reconstructed the same
+// way the migration backfill and Jot import do: each indented item attaches to
+// the most recent top-level item by position. Items are sorted by position so a
+// parent is always ordered before its children. A caller-supplied item ID is
+// honored (so it stays stable for later per-item updates); an empty ID is filled
+// with a generated one here so children can reference their parent's ID. It
+// returns the HTTP status to surface on a validation error.
+func buildCreateNoteItems(items []CreateNoteItem) ([]models.NewNoteItem, int, error) {
 	ordered := make([]CreateNoteItem, len(items))
 	copy(ordered, items)
 	slices.SortStableFunc(ordered, func(a, b CreateNoteItem) int { return a.Position - b.Position })
 
+	built := make([]models.NewNoteItem, 0, len(ordered))
 	var lastTopLevelID string
 	for _, item := range ordered {
 		if item.IndentLevel < 0 || item.IndentLevel > 1 {
-			return http.StatusBadRequest, errors.New("indent_level must be 0 or 1")
+			return nil, http.StatusBadRequest, errors.New("indent_level must be 0 or 1")
 		}
 		if utf8.RuneCountInString(item.Text) > noteItemTextMaxLength {
-			return http.StatusBadRequest, fmt.Errorf("item text must be %d characters or fewer", noteItemTextMaxLength)
+			return nil, http.StatusBadRequest, fmt.Errorf("item text must be %d characters or fewer", noteItemTextMaxLength)
+		}
+
+		itemID := item.ID
+		if itemID != "" {
+			if !models.IsValidID(itemID) {
+				return nil, http.StatusBadRequest, errors.New("invalid item ID format")
+			}
+		} else {
+			generated, err := models.GenerateID()
+			if err != nil {
+				return nil, http.StatusInternalServerError, fmt.Errorf("generate item ID: %w", err)
+			}
+			itemID = generated
 		}
 
 		parentID := ""
@@ -291,45 +310,19 @@ func (h *NotesHandler) createListItems(ctx context.Context, noteID string, items
 			parentID = lastTopLevelID // "" when no preceding top-level item exists
 		}
 
-		created, status, err := h.createBulkListItem(ctx, noteID, item, parentID)
-		if err != nil {
-			return status, err
-		}
+		built = append(built, models.NewNoteItem{
+			ID:        itemID,
+			Text:      item.Text,
+			Position:  item.Position,
+			Completed: item.Completed,
+			ParentID:  parentID,
+		})
 
 		if item.IndentLevel == 0 {
-			lastTopLevelID = created.ID
+			lastTopLevelID = itemID
 		}
 	}
-	return http.StatusOK, nil
-}
-
-// createBulkListItem creates one item for the positional bulk-create path,
-// honoring a valid client-supplied ID (so it stays stable for later per-item
-// updates) and otherwise letting the store generate one. It returns the HTTP
-// status to surface on error.
-func (h *NotesHandler) createBulkListItem(ctx context.Context, noteID string, item CreateNoteItem, parentID string) (*models.NoteItem, int, error) {
-	if item.ID != "" {
-		if !models.IsValidID(item.ID) {
-			return nil, http.StatusBadRequest, errors.New("invalid item ID format")
-		}
-		created, err := h.noteStore.CreateItemWithID(ctx, noteID, item.ID, item.Text, item.Position, item.Completed, parentID, "", 0)
-		if err != nil {
-			if errors.Is(err, models.ErrNoteItemExists) {
-				return nil, http.StatusConflict, fmt.Errorf("create list item: %w", err)
-			}
-			if errors.Is(err, models.ErrInvalidParentRef) {
-				return nil, http.StatusBadRequest, fmt.Errorf("create list item: %w", err)
-			}
-			return nil, http.StatusInternalServerError, fmt.Errorf("create list item: %w", err)
-		}
-		return created, http.StatusOK, nil
-	}
-
-	created, err := h.noteStore.CreateItemWithCompleted(ctx, noteID, item.Text, item.Position, item.Completed, parentID, "")
-	if err != nil {
-		return nil, http.StatusInternalServerError, fmt.Errorf("create list item: %w", err)
-	}
-	return created, http.StatusOK, nil
+	return built, http.StatusOK, nil
 }
 
 // GetNotes godoc
@@ -411,22 +404,32 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
 	}
 
-	note, err := h.noteStore.Create(r.Context(), user.ID, req.ID, req.Title, req.Content, req.NoteType, req.Color)
-	if err != nil {
-		if errors.Is(err, models.ErrNoteExists) {
-			return http.StatusConflict, nil, fmt.Errorf("create note: %w", err)
-		}
-		return http.StatusInternalServerError, nil, fmt.Errorf("create note: %w", err)
-	}
-
-	needRefetch := false
-
+	var items []models.NewNoteItem
 	if req.NoteType == models.NoteTypeList && len(req.Items) > 0 {
-		if status, err := h.createListItems(r.Context(), note.ID, req.Items); err != nil {
+		built, status, err := buildCreateNoteItems(req.Items)
+		if err != nil {
 			return status, nil, err
 		}
-		needRefetch = true
+		items = built
 	}
+
+	// Create the note and its items atomically so a bad item never leaves an
+	// orphaned or partially-populated note behind.
+	note, err := h.noteStore.CreateWithItems(r.Context(), user.ID, req.ID, req.Title, req.Content, req.NoteType, req.Color, items)
+	if err != nil {
+		switch {
+		case errors.Is(err, models.ErrNoteExists):
+			return http.StatusConflict, nil, fmt.Errorf("create note: %w", err)
+		case errors.Is(err, models.ErrNoteItemExists):
+			return http.StatusConflict, nil, fmt.Errorf("create note item: %w", err)
+		case errors.Is(err, models.ErrInvalidParentRef):
+			return http.StatusBadRequest, nil, fmt.Errorf("create note item: %w", err)
+		default:
+			return http.StatusInternalServerError, nil, fmt.Errorf("create note: %w", err)
+		}
+	}
+
+	needRefetch := len(items) > 0
 
 	if len(req.Labels) > 0 {
 		if status, err := h.createNoteLabels(r.Context(), note.ID, user.ID, req.Labels); err != nil {

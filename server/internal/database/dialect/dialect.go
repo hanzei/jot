@@ -54,16 +54,12 @@ func (d *Dialect) InsertIgnore(table, cols, placeholders string) string {
 }
 
 // CaseInsensitiveEquals returns a dialect-correct case-insensitive equality
-// expression for use in a WHERE clause. The returned string uses ? placeholder syntax.
-// SQLite: LOWER(col) = LOWER(?)
-// PostgreSQL: col ILIKE ?
+// expression for use in a WHERE clause. The returned string uses ? placeholder
+// syntax. Both dialects use LOWER(col) = LOWER(?) so the bound value is compared
+// as a literal — deliberately not ILIKE, whose `%`/`_` would be interpreted as
+// pattern wildcards (e.g. a label named "in_progress" would match "inXprogress").
 func (d *Dialect) CaseInsensitiveEquals(col string) string {
-	switch d.Driver {
-	case DriverPostgres:
-		return col + " ILIKE ?"
-	default: // sqlite
-		return fmt.Sprintf("LOWER(%s) = LOWER(?)", col)
-	}
+	return fmt.Sprintf("LOWER(%s) = LOWER(?)", col)
 }
 
 // LimitAll returns the dialect-correct expression for "no upper bound" in a

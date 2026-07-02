@@ -131,9 +131,11 @@ func Load() (*Config, error) {
 	}
 	cfg.CookieSecure = cookieSecure
 
-	if os.Getenv("REGISTRATION_ENABLED") == "false" {
-		cfg.RegistrationEnabled = false
+	registrationEnabled, err := parseBoolEnv("REGISTRATION_ENABLED", true)
+	if err != nil {
+		return nil, err
 	}
+	cfg.RegistrationEnabled = registrationEnabled
 
 	passwordMinLength, err := parseIntRangeEnv("PASSWORD_MIN_LENGTH", 10, 1, 72)
 	if err != nil {
