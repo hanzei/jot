@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/auth"
+	"github.com/hanzei/jot/server/internal/blobstore"
 	"github.com/hanzei/jot/server/internal/models"
 )
 
@@ -18,6 +19,7 @@ type AdminHandler struct {
 	noteStore         *models.NoteStore
 	statsStore        *models.AdminStatsStore
 	userSettingsStore *models.UserSettingsStore
+	imageStore        *blobstore.ImageStore
 	dbPath            string
 	passwordMinLength int
 }
@@ -27,6 +29,7 @@ func NewAdminHandler(
 	noteStore *models.NoteStore,
 	statsStore *models.AdminStatsStore,
 	userSettingsStore *models.UserSettingsStore,
+	imageStore *blobstore.ImageStore,
 	dbPath string,
 	passwordMinLength int,
 ) *AdminHandler {
@@ -35,6 +38,7 @@ func NewAdminHandler(
 		noteStore:         noteStore,
 		statsStore:        statsStore,
 		userSettingsStore: userSettingsStore,
+		imageStore:        imageStore,
 		dbPath:            dbPath,
 		passwordMinLength: passwordMinLength,
 	}
@@ -208,7 +212,17 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
-	err := h.userStore.DeleteWithCleanup(r.Context(), targetID, requestingUser.ID, func(ctx context.Context, tx *sql.Tx) error {
+	// Deleting the user cascades away both their owned notes' note_images
+	// rows and any note_images rows where they're the uploader on someone
+	// else's note (note_images.uploader_id also cascades), so the candidate
+	// blob hashes must be read before the delete — afterward the rows are
+	// gone and there's nothing left to look up.
+	shas, err := h.noteStore.GetNoteImageSHA256sForUser(r.Context(), targetID)
+	if err != nil {
+		return http.StatusInternalServerError, nil, fmt.Errorf("get note image hashes for user: %w", err)
+	}
+
+	err = h.userStore.DeleteWithCleanup(r.Context(), targetID, requestingUser.ID, func(ctx context.Context, tx *sql.Tx) error {
 		return h.noteStore.ClearUserAssignmentsTx(ctx, tx, targetID)
 	})
 	if err != nil {
@@ -223,6 +237,8 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) (int, 
 		}
 		return http.StatusInternalServerError, nil, err
 	}
+
+	reclaimOrphanedImageBlobs(r.Context(), h.noteStore, h.imageStore, shas)
 
 	return http.StatusNoContent, nil, nil
 }
@@ -254,10 +270,11 @@ func (h *AdminHandler) DeleteUserNotes(w http.ResponseWriter, r *http.Request) (
 		return http.StatusBadRequest, nil, errors.New("invalid user ID format")
 	}
 
-	deleted, err := h.noteStore.DeleteAllByUser(r.Context(), targetID)
+	deleted, shas, err := h.noteStore.DeleteAllByUser(r.Context(), targetID)
 	if err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("delete notes for user: %w", err)
 	}
+	reclaimOrphanedImageBlobs(r.Context(), h.noteStore, h.imageStore, shas)
 
 	return http.StatusOK, DeleteUserNotesResponse{Deleted: deleted}, nil
 }

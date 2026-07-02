@@ -740,50 +740,49 @@ func (s *noteStore) handleUnpinningTx(ctx context.Context, tx *sql.Tx, id, userI
 	return nil
 }
 
-func (s *noteStore) Delete(ctx context.Context, id string, userID string) error {
+// Delete permanently removes an active (non-trashed) note owned by userID. It
+// returns the distinct sha256 hashes of images that were attached to the note
+// so the caller can reclaim their blobs (note_images rows cascade-delete with
+// the note; the cascade drops the DB rows but never touches the on-disk
+// blobs, so that's on the caller).
+func (s *noteStore) Delete(ctx context.Context, id string, userID string) ([]string, error) {
 	isOwner, err := s.IsOwner(ctx, id, userID)
 	if err != nil {
-		return fmt.Errorf("failed to check ownership: %w", err)
+		return nil, fmt.Errorf("failed to check ownership: %w", err)
 	}
 	if !isOwner {
-		return ErrNoteNotOwnedByUser
+		return nil, ErrNoteNotOwnedByUser
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	for _, q := range []string{
-		`DELETE FROM note_items WHERE note_id = ?`,
-		`DELETE FROM note_labels WHERE note_id = ?`,
-		`DELETE FROM note_shares WHERE note_id = ?`,
-		`DELETE FROM note_user_state WHERE note_id = ?`,
-	} {
-		if _, err = tx.ExecContext(ctx, s.d.RewritePlaceholders(q), id); err != nil {
-			return fmt.Errorf("failed to delete dependent rows: %w", err)
-		}
+	shas, err := deleteNoteDependenciesTx(ctx, tx, s.d, []string{id})
+	if err != nil {
+		return nil, fmt.Errorf("delete note dependencies: %w", err)
 	}
 
 	result, err := tx.ExecContext(ctx, s.d.RewritePlaceholders("DELETE FROM notes WHERE id = ? AND user_id = ?"), id, userID)
 	if err != nil {
-		return fmt.Errorf("failed to delete note: %w", err)
+		return nil, fmt.Errorf("failed to delete note: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
+		return nil, fmt.Errorf("failed to get rows affected: %w", err)
 	}
 
 	if rowsAffected == 0 {
-		return ErrNoteNotOwnedByUser
+		return nil, ErrNoteNotOwnedByUser
 	}
 
 	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("commit note delete: %w", err)
+		return nil, fmt.Errorf("commit note delete: %w", err)
 	}
-	return nil
+	return shas, nil
 }
 
 func buildInClauseArgs(ids []string) (string, []any) {
@@ -846,12 +845,34 @@ func (s *noteStore) getNoteAudiencesTx(ctx context.Context, tx *sql.Tx, noteIDs 
 	return audiences, nil
 }
 
-func deleteNoteDependenciesTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteIDs []string) error {
+// deleteNoteDependenciesTx deletes rows in tables that reference noteIDs but
+// aren't covered by the notes table's own cascading foreign keys (items,
+// labels, shares, per-user state), and returns the distinct sha256 hashes of
+// images attached to noteIDs. Those hashes must be read before the caller
+// deletes the notes themselves: note_images rows cascade-delete with their
+// note, so reading them afterward would find nothing. The caller is
+// responsible for reclaiming the returned hashes' blobs (via
+// blobstore.ReclaimIfOrphaned) once the delete has committed.
+func deleteNoteDependenciesTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteIDs []string) ([]string, error) {
 	if len(noteIDs) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	placeholders, args := buildInClauseArgs(noteIDs)
+
+	imgQuery := `SELECT DISTINCT sha256 FROM note_images WHERE note_id IN (` + placeholders + `)` // #nosec G202 -- only "?" placeholders are joined, no user input
+	rows, err := tx.QueryContext(ctx, d.RewritePlaceholders(imgQuery), args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query note image hashes: %w", err)
+	}
+	shas, err := collectRows(rows, func(rows *sql.Rows) (string, error) {
+		var sha string
+		return sha, rows.Scan(&sha)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan note image hashes: %w", err)
+	}
+
 	for _, q := range []string{
 		`DELETE FROM note_items WHERE note_id IN (` + placeholders + `)`,
 		`DELETE FROM note_labels WHERE note_id IN (` + placeholders + `)`,
@@ -859,11 +880,11 @@ func deleteNoteDependenciesTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialec
 		`DELETE FROM note_user_state WHERE note_id IN (` + placeholders + `)`,
 	} {
 		if _, err := tx.ExecContext(ctx, d.RewritePlaceholders(q), args...); err != nil {
-			return fmt.Errorf("failed to delete dependent rows: %w", err)
+			return nil, fmt.Errorf("failed to delete dependent rows: %w", err)
 		}
 	}
 
-	return nil
+	return shas, nil
 }
 
 // MoveToTrash soft-deletes a note by setting deleted_at to the current time.
@@ -979,16 +1000,20 @@ func (s *noteStore) RestoreFromTrash(ctx context.Context, id string, userID stri
 }
 
 // DeleteFromTrash permanently removes a note that is already in the trash.
-// It returns ErrNoteNotInTrash if the note is not found in the trash or not owned by the user.
-func (s *noteStore) DeleteFromTrash(ctx context.Context, id string, userID string) error {
+// It returns ErrNoteNotInTrash if the note is not found in the trash or not
+// owned by the user. On success it also returns the distinct sha256 hashes
+// of images that were attached to the note, for the caller to reclaim (see
+// deleteNoteDependenciesTx).
+func (s *noteStore) DeleteFromTrash(ctx context.Context, id string, userID string) ([]string, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if err = deleteNoteDependenciesTx(ctx, tx, s.d, []string{id}); err != nil {
-		return fmt.Errorf("delete note dependencies: %w", err)
+	shas, err := deleteNoteDependenciesTx(ctx, tx, s.d, []string{id})
+	if err != nil {
+		return nil, fmt.Errorf("delete note dependencies: %w", err)
 	}
 
 	result, err := tx.ExecContext(ctx,
@@ -996,51 +1021,54 @@ func (s *noteStore) DeleteFromTrash(ctx context.Context, id string, userID strin
 		id, userID,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to permanently delete note from trash: %w", err)
+		return nil, fmt.Errorf("failed to permanently delete note from trash: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
+		return nil, fmt.Errorf("failed to get rows affected: %w", err)
 	}
 	if rowsAffected == 0 {
-		return ErrNoteNotInTrash
+		return nil, ErrNoteNotInTrash
 	}
 
 	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("commit delete from trash: %w", err)
+		return nil, fmt.Errorf("commit delete from trash: %w", err)
 	}
-	return nil
+	return shas, nil
 }
 
 // EmptyTrash permanently removes all notes the user currently has in the trash.
 // It returns the deleted note IDs and their audiences so handlers can publish
-// note_deleted SSE events after the transaction commits.
-func (s *noteStore) EmptyTrash(ctx context.Context, userID string) ([]DeletedNoteAudience, error) {
+// note_deleted SSE events after the transaction commits, plus the distinct
+// sha256 hashes of images that were attached to the deleted notes, for the
+// caller to reclaim (see deleteNoteDependenciesTx).
+func (s *noteStore) EmptyTrash(ctx context.Context, userID string) ([]DeletedNoteAudience, []string, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	noteIDs, err := s.getTrashedOwnedNoteIDsTx(ctx, tx, userID)
 	if err != nil {
-		return nil, fmt.Errorf("get trashed note IDs: %w", err)
+		return nil, nil, fmt.Errorf("get trashed note IDs: %w", err)
 	}
 	if len(noteIDs) == 0 {
 		if err = tx.Commit(); err != nil {
-			return nil, fmt.Errorf("failed to commit empty trash transaction: %w", err)
+			return nil, nil, fmt.Errorf("failed to commit empty trash transaction: %w", err)
 		}
-		return []DeletedNoteAudience{}, nil
+		return []DeletedNoteAudience{}, nil, nil
 	}
 
 	audienceMap, err := s.getNoteAudiencesTx(ctx, tx, noteIDs)
 	if err != nil {
-		return nil, fmt.Errorf("get note audiences: %w", err)
+		return nil, nil, fmt.Errorf("get note audiences: %w", err)
 	}
 
-	if err = deleteNoteDependenciesTx(ctx, tx, s.d, noteIDs); err != nil {
-		return nil, fmt.Errorf("delete note dependencies: %w", err)
+	shas, err := deleteNoteDependenciesTx(ctx, tx, s.d, noteIDs)
+	if err != nil {
+		return nil, nil, fmt.Errorf("delete note dependencies: %w", err)
 	}
 
 	placeholders, args := buildInClauseArgs(noteIDs)
@@ -1051,15 +1079,15 @@ func (s *noteStore) EmptyTrash(ctx context.Context, userID string) ([]DeletedNot
 	deleteQuery := `DELETE FROM notes WHERE user_id = ? AND deleted_at IS NOT NULL AND id IN (` + placeholders + `)` // #nosec G202 -- only generated "?" placeholders are concatenated
 	result, err := tx.ExecContext(ctx, s.d.RewritePlaceholders(deleteQuery), deleteArgs...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to empty trash: %w", err)
+		return nil, nil, fmt.Errorf("failed to empty trash: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get deleted note count: %w", err)
+		return nil, nil, fmt.Errorf("failed to get deleted note count: %w", err)
 	}
 	if rowsAffected != int64(len(noteIDs)) {
-		return nil, fmt.Errorf("expected to delete %d trashed notes, deleted %d", len(noteIDs), rowsAffected)
+		return nil, nil, fmt.Errorf("expected to delete %d trashed notes, deleted %d", len(noteIDs), rowsAffected)
 	}
 
 	deletedNotes := make([]DeletedNoteAudience, 0, len(noteIDs))
@@ -1071,86 +1099,111 @@ func (s *noteStore) EmptyTrash(ctx context.Context, userID string) ([]DeletedNot
 	}
 
 	if err = tx.Commit(); err != nil {
-		return nil, fmt.Errorf("failed to commit empty trash transaction: %w", err)
+		return nil, nil, fmt.Errorf("failed to commit empty trash transaction: %w", err)
 	}
 
-	return deletedNotes, nil
+	return deletedNotes, shas, nil
 }
 
 // DeleteAllByUser permanently removes every note owned by the user, regardless
 // of state (active, archived, or trashed), along with all dependent rows. It
-// returns the number of notes deleted.
-func (s *noteStore) DeleteAllByUser(ctx context.Context, userID string) (int, error) {
+// returns the number of notes deleted and the distinct sha256 hashes of
+// images that were attached to them, for the caller to reclaim (see
+// deleteNoteDependenciesTx).
+func (s *noteStore) DeleteAllByUser(ctx context.Context, userID string) (int, []string, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return 0, fmt.Errorf("failed to begin transaction: %w", err)
+		return 0, nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	rows, err := tx.QueryContext(ctx, s.d.RewritePlaceholders(`SELECT id FROM notes WHERE user_id = ?`), userID)
 	if err != nil {
-		return 0, fmt.Errorf("failed to query owned notes: %w", err)
+		return 0, nil, fmt.Errorf("failed to query owned notes: %w", err)
 	}
 	noteIDs, err := collectRows(rows, func(rows *sql.Rows) (string, error) {
 		var id string
 		return id, rows.Scan(&id)
 	})
 	if err != nil {
-		return 0, fmt.Errorf("failed to scan owned note IDs: %w", err)
+		return 0, nil, fmt.Errorf("failed to scan owned note IDs: %w", err)
 	}
 	if len(noteIDs) == 0 {
 		if err = tx.Commit(); err != nil {
-			return 0, fmt.Errorf("failed to commit delete-all transaction: %w", err)
+			return 0, nil, fmt.Errorf("failed to commit delete-all transaction: %w", err)
 		}
-		return 0, nil
+		return 0, nil, nil
 	}
 
-	if err = deleteNoteDependenciesTx(ctx, tx, s.d, noteIDs); err != nil {
-		return 0, fmt.Errorf("delete note dependencies: %w", err)
+	shas, err := deleteNoteDependenciesTx(ctx, tx, s.d, noteIDs)
+	if err != nil {
+		return 0, nil, fmt.Errorf("delete note dependencies: %w", err)
 	}
 
 	if _, err = tx.ExecContext(ctx, s.d.RewritePlaceholders(`DELETE FROM notes WHERE user_id = ?`), userID); err != nil {
-		return 0, fmt.Errorf("failed to delete notes: %w", err)
+		return 0, nil, fmt.Errorf("failed to delete notes: %w", err)
 	}
 
 	if err = tx.Commit(); err != nil {
-		return 0, fmt.Errorf("failed to commit delete-all transaction: %w", err)
+		return 0, nil, fmt.Errorf("failed to commit delete-all transaction: %w", err)
 	}
 
-	return len(noteIDs), nil
+	return len(noteIDs), shas, nil
 }
 
-// PurgeOldTrashedNotes permanently deletes all notes that have been in the trash
-// longer than the given duration. This is intended to be called periodically.
-func (s *noteStore) PurgeOldTrashedNotes(ctx context.Context, olderThan time.Duration) error {
+// PurgeOldTrashedNotes permanently deletes all notes that have been in the
+// trash longer than the given duration. This is intended to be called
+// periodically. It returns the distinct sha256 hashes of images that were
+// attached to the purged notes, for the caller to reclaim (see
+// deleteNoteDependenciesTx).
+func (s *noteStore) PurgeOldTrashedNotes(ctx context.Context, olderThan time.Duration) ([]string, error) {
 	cutoff := time.Now().Add(-olderThan)
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	subquery := `SELECT id FROM notes WHERE deleted_at IS NOT NULL AND deleted_at < ?`
-	for _, q := range []string{
-		`DELETE FROM note_items WHERE note_id IN (` + subquery + `)`,
-		`DELETE FROM note_labels WHERE note_id IN (` + subquery + `)`,
-		`DELETE FROM note_shares WHERE note_id IN (` + subquery + `)`,
-		`DELETE FROM note_user_state WHERE note_id IN (` + subquery + `)`,
-	} {
-		if _, err = tx.ExecContext(ctx, s.d.RewritePlaceholders(q), cutoff); err != nil {
-			return fmt.Errorf("failed to purge dependent rows: %w", err)
+	rows, err := tx.QueryContext(ctx, s.d.RewritePlaceholders(`SELECT id FROM notes WHERE deleted_at IS NOT NULL AND deleted_at < ?`), cutoff)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query old trashed notes: %w", err)
+	}
+	noteIDs, err := collectRows(rows, func(rows *sql.Rows) (string, error) {
+		var id string
+		return id, rows.Scan(&id)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan old trashed note IDs: %w", err)
+	}
+	if len(noteIDs) == 0 {
+		if err = tx.Commit(); err != nil {
+			return nil, fmt.Errorf("failed to commit purge old trashed notes transaction: %w", err)
 		}
+		return nil, nil
 	}
 
-	if _, err = tx.ExecContext(ctx, s.d.RewritePlaceholders(`DELETE FROM notes WHERE deleted_at IS NOT NULL AND deleted_at < ?`), cutoff); err != nil {
-		return fmt.Errorf("failed to purge old trashed notes: %w", err)
+	shas, err := deleteNoteDependenciesTx(ctx, tx, s.d, noteIDs)
+	if err != nil {
+		return nil, fmt.Errorf("delete note dependencies: %w", err)
+	}
+
+	// Re-check deleted_at here (mirroring EmptyTrash) rather than deleting
+	// bare-by-id: noteIDs was read before this transaction took any write
+	// locks, so a concurrent RestoreFromTrash could have cleared deleted_at
+	// on one of these notes in between. Without the re-check, such a note
+	// would still be hard-deleted despite no longer being in the trash.
+	placeholders, args := buildInClauseArgs(noteIDs)
+	deleteArgs := append([]any{cutoff}, args...)
+	deleteQuery := `DELETE FROM notes WHERE deleted_at IS NOT NULL AND deleted_at < ? AND id IN (` + placeholders + `)` // #nosec G202 -- only generated "?" placeholders are concatenated
+	if _, err = tx.ExecContext(ctx, s.d.RewritePlaceholders(deleteQuery), deleteArgs...); err != nil {
+		return nil, fmt.Errorf("failed to purge old trashed notes: %w", err)
 	}
 
 	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("commit purge old trashed notes: %w", err)
+		return nil, fmt.Errorf("commit purge old trashed notes: %w", err)
 	}
-	return nil
+	return shas, nil
 }
 
 func nullableAssignedTo(s string) sql.NullString {

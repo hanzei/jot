@@ -225,3 +225,63 @@ func (s *noteStore) GetNoteImageRefCount(ctx context.Context, sha256 string) (in
 	}
 	return count, nil
 }
+
+// GetNoteImageRefCounts is the batch form of GetNoteImageRefCount: it
+// returns the current reference count for every hash in shas in one query,
+// so bulk reclamation (EmptyTrash, admin user/notes delete, the periodic
+// purge sweep) doesn't pay one round-trip per hash. A hash with no matching
+// row (already at zero) is simply absent from the returned map.
+func (s *noteStore) GetNoteImageRefCounts(ctx context.Context, shas []string) (map[string]int, error) {
+	if len(shas) == 0 {
+		return map[string]int{}, nil
+	}
+
+	placeholders, args := buildInClauseArgs(shas)
+	query := `SELECT sha256, COUNT(*) FROM note_images WHERE sha256 IN (` + placeholders + `) GROUP BY sha256` // #nosec G202 -- only "?" placeholders are joined, no user input
+
+	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get note image refcounts: %w", err)
+	}
+	type shaCount struct {
+		sha   string
+		count int
+	}
+	rowCounts, err := collectRows(rows, func(rows *sql.Rows) (shaCount, error) {
+		var sc shaCount
+		return sc, rows.Scan(&sc.sha, &sc.count)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan note image refcounts: %w", err)
+	}
+
+	counts := make(map[string]int, len(rowCounts))
+	for _, sc := range rowCounts {
+		counts[sc.sha] = sc.count
+	}
+	return counts, nil
+}
+
+// GetNoteImageSHA256sForUser returns the distinct sha256 hashes of every
+// image reachable from userID: images attached to notes they own, plus
+// images they uploaded to notes owned by someone else (a shared note).
+// Deleting a user cascades both note_images.note_id (via their owned notes)
+// and note_images.uploader_id directly, so callers must read this before the
+// delete to know which blobs to reclaim afterward.
+func (s *noteStore) GetNoteImageSHA256sForUser(ctx context.Context, userID string) ([]string, error) {
+	query := `SELECT DISTINCT sha256 FROM note_images
+			  WHERE uploader_id = ? OR note_id IN (SELECT id FROM notes WHERE user_id = ?)`
+
+	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), userID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query note image hashes for user: %w", err)
+	}
+	shas, err := collectRows(rows, func(rows *sql.Rows) (string, error) {
+		var sha string
+		return sha, rows.Scan(&sha)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan note image hashes for user: %w", err)
+	}
+	return shas, nil
+}
