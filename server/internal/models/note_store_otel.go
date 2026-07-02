@@ -31,6 +31,12 @@ func (s *NoteStore) Create(ctx context.Context, userID, noteID, title, content s
 	return s.inner.Create(ctx, userID, noteID, title, content, noteType, color)
 }
 
+func (s *NoteStore) CreateWithItems(ctx context.Context, userID, noteID, title, content string, noteType NoteType, color string, items []NewNoteItem) (_ *Note, err error) {
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.CreateWithItems", &err)
+	defer end()
+	return s.inner.CreateWithItems(ctx, userID, noteID, title, content, noteType, color, items)
+}
+
 func (s *NoteStore) Duplicate(ctx context.Context, source *Note, userID, clientID string, itemIDs map[string]string) (_ *Note, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.Duplicate", &err)
 	defer end()
