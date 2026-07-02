@@ -453,6 +453,8 @@
     "fileTypesJson": "Fichiers .json",
     "invalidFileType": "Type de fichier non valide. Veuillez sélectionner un fichier .json ou .zip.",
     "invalidFileTypeJson": "Type de fichier non valide. Veuillez sélectionner un fichier .json.",
+    "importedNotes_few": "{{count}} notes importées",
+    "importedNotes_many": "{{count}} notes importées",
     "importedNotes_one": "{{count}} note importée",
     "importedNotes_other": "{{count}} notes importées",
     "skipped": "({{count}} ignorées)",

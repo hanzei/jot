@@ -453,6 +453,8 @@
     "fileTypesJson": ".json-bestanden",
     "invalidFileType": "Ongeldig bestandstype. Selecteer een .json- of .zip-bestand.",
     "invalidFileTypeJson": "Ongeldig bestandstype. Selecteer een .json-bestand.",
+    "importedNotes_few": "{{count}} notities geïmporteerd",
+    "importedNotes_many": "{{count}} notities geïmporteerd",
     "importedNotes_one": "{{count}} notitie geïmporteerd",
     "importedNotes_other": "{{count}} notities geïmporteerd",
     "skipped": "({{count}} overgeslagen)",
