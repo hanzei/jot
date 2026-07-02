@@ -48,10 +48,18 @@ jest.mock('../src/store/AuthContext', () => ({
   useAuth: jest.fn().mockReturnValue({ user: { id: 'test-user-id', username: 'testuser' }, isAuthenticated: true }),
 }));
 
-jest.mock('../src/api/client', () => ({
-  isServerSwitchInProgress: jest.fn(() => false),
-  getActiveServerId: jest.fn(() => 'test-server-id'),
-}));
+jest.mock('../src/api/client', () => {
+  const isServerSwitchInProgress = jest.fn(() => false);
+  return {
+    isServerSwitchInProgress,
+    getActiveServerId: jest.fn(() => 'test-server-id'),
+    assertSwitchWriteAllowed: jest.fn(() => {
+      if (isServerSwitchInProgress()) {
+        throw new Error('Server switch in progress; write blocked');
+      }
+    }),
+  };
+});
 
 const mockNotesApi = notesApi as jest.Mocked<typeof notesApi>;
 const mockNoteQueries = noteQueriesModule as jest.Mocked<typeof noteQueriesModule>;

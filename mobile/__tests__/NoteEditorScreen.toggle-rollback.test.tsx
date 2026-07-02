@@ -60,6 +60,16 @@ jest.mock('../src/hooks/useNotes', () => ({
   useToggleNoteItemCompleted: () => ({ mutateAsync: mockToggleMutateAsync }),
 }));
 
+jest.mock('../src/hooks/useNoteImages', () => ({
+  __esModule: true,
+  useUploadNoteImage: () => ({
+    mutateAsync: jest.fn(),
+  }),
+  useDeleteNoteImage: () => ({
+    mutateAsync: jest.fn(),
+  }),
+}));
+
 jest.mock('../src/hooks/useOfflineNotes', () => ({
   __esModule: true,
   useOfflineNote: () => mockUseOfflineNote(),
