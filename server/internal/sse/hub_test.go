@@ -234,6 +234,26 @@ func TestHub(t *testing.T) {
 			// Should not panic — hub already closed the channel.
 			assert.NotPanics(t, unsub)
 		})
+
+		t.Run("Subscribe after Close returns a closed channel and no-op unsubscribe", func(t *testing.T) {
+			h, err := NewHub()
+			require.NoError(t, err)
+			h.Close()
+
+			// A connection that races the shutdown must not block forever: the
+			// channel is already closed so the caller's read loop exits, and the
+			// subscription is never registered on the hub.
+			ch, unsub := h.Subscribe(t.Context(), "user1")
+			_, ok := <-ch
+			assert.False(t, ok, "channel should be closed")
+
+			h.mu.RLock()
+			_, exists := h.clients["user1"]
+			h.mu.RUnlock()
+			assert.False(t, exists, "late subscriber must not be registered")
+
+			assert.NotPanics(t, unsub, "no-op unsubscribe must not panic")
+		})
 	})
 }
 

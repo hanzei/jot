@@ -156,6 +156,20 @@ func TestLoadRegistrationExplicitTrue(t *testing.T) {
 	assert.True(t, cfg.RegistrationEnabled)
 }
 
+func TestLoadRegistrationInvalidValueErrors(t *testing.T) {
+	// A non-boolean value must fail loudly rather than being silently ignored
+	// (which previously left registration enabled contrary to intent).
+	for _, v := range []string{"False", "0", "no", "disabled"} {
+		t.Run(v, func(t *testing.T) {
+			t.Setenv("REGISTRATION_ENABLED", v)
+			t.Setenv("STATIC_DIR", "/tmp/static")
+
+			_, err := Load()
+			assert.Error(t, err)
+		})
+	}
+}
+
 func TestLoadCORSAllowedOriginSet(t *testing.T) {
 	t.Setenv("CORS_ALLOWED_ORIGIN", "https://app.example.com")
 	t.Setenv("STATIC_DIR", "/tmp/static")

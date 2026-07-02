@@ -61,9 +61,11 @@ func TestCaseInsensitiveEquals(t *testing.T) {
 		assert.Equal(t, "LOWER(name) = LOWER(?)", d.CaseInsensitiveEquals("name"))
 	})
 
-	t.Run("PostgreSQL uses ILIKE", func(t *testing.T) {
+	t.Run("PostgreSQL uses LOWER(col) = LOWER(?)", func(t *testing.T) {
+		// Deliberately not ILIKE: ILIKE would interpret `%`/`_` in the bound
+		// value as pattern wildcards, matching the wrong label.
 		d := &dialect.Dialect{Driver: "postgres"}
-		assert.Equal(t, "name ILIKE ?", d.CaseInsensitiveEquals("name"))
+		assert.Equal(t, "LOWER(name) = LOWER(?)", d.CaseInsensitiveEquals("name"))
 	})
 }
 
