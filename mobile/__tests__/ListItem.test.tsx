@@ -220,6 +220,30 @@ describe('ListItem', () => {
     expect(getByTestId('list-item-assignee')).toBeTruthy();
   });
 
+  it('calls onSubmitEditing with the cursor position from the last selection change', () => {
+    const onSubmitEditing = jest.fn();
+    const { getByTestId } = render(
+      <ListItem text="helloworld" completed={false} onSubmitEditing={onSubmitEditing} />,
+    );
+
+    const input = getByTestId('list-item-text');
+    fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 5, end: 5 } } });
+    fireEvent(input, 'submitEditing');
+
+    expect(onSubmitEditing).toHaveBeenCalledWith(5);
+  });
+
+  it('defaults the submit cursor position to the end of the current text', () => {
+    const onSubmitEditing = jest.fn();
+    const { getByTestId } = render(
+      <ListItem text="helloworld" completed={false} onSubmitEditing={onSubmitEditing} />,
+    );
+
+    fireEvent(getByTestId('list-item-text'), 'submitEditing');
+
+    expect(onSubmitEditing).toHaveBeenCalledWith('helloworld'.length);
+  });
+
   describe('checkbox pop animation', () => {
     it('pops the checkbox on mount when popOnMount is set', () => {
       jest.spyOn(layoutAnimation, 'isReduceMotionEnabledSync').mockReturnValue(false);

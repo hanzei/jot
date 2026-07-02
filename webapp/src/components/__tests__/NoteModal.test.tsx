@@ -1042,6 +1042,123 @@ describe('NoteModal', () => {
       expect(mockCreateItem).toHaveBeenCalledWith('1', expect.objectContaining({ text: '', parent_id: 'item1' }))
     })
 
+    it('pressing Enter at the start of a non-empty item inserts an empty item before it and focuses it', async () => {
+      renderNoteModal(defaultProps)
+
+      fireEvent.click(screen.getByText('List'))
+      fireEvent.click(screen.getByText('Add item'))
+
+      const inputs = screen.getAllByTestId('list-item-input')
+      fireEvent.change(inputs[0], { target: { value: 'hello' } })
+
+      const target = screen.getByDisplayValue('hello') as HTMLTextAreaElement
+      target.setSelectionRange(0, 0)
+      fireEvent.keyDown(target, { key: 'Enter', code: 'Enter' })
+      await vi.runAllTimersAsync()
+
+      const inputsAfter = screen.getAllByTestId('list-item-input')
+      expect(inputsAfter).toHaveLength(2)
+      // The new empty item is inserted before, the original item's text is untouched.
+      expect(inputsAfter[0]).toHaveValue('')
+      expect(inputsAfter[1]).toHaveValue('hello')
+      // Focus moves to the newly inserted item above.
+      expect(inputsAfter[0]).toHaveFocus()
+    })
+
+    it('pressing Enter at the start of an empty item still appends a new item after (no-op split)', async () => {
+      renderNoteModal(defaultProps)
+
+      fireEvent.click(screen.getByText('List'))
+      fireEvent.click(screen.getByText('Add item'))
+
+      const inputs = screen.getAllByTestId('list-item-input')
+      expect(inputs).toHaveLength(1)
+      const target = inputs[0] as HTMLTextAreaElement
+      target.setSelectionRange(0, 0)
+      fireEvent.keyDown(target, { key: 'Enter', code: 'Enter' })
+      await vi.runAllTimersAsync()
+
+      expect(screen.getAllByTestId('list-item-input')).toHaveLength(2)
+    })
+
+    it('pressing Enter in the middle of an item splits it into two items at the cursor', async () => {
+      renderNoteModal(defaultProps)
+
+      fireEvent.click(screen.getByText('List'))
+      fireEvent.click(screen.getByText('Add item'))
+
+      const inputs = screen.getAllByTestId('list-item-input')
+      fireEvent.change(inputs[0], { target: { value: 'helloworld' } })
+
+      const target = screen.getByDisplayValue('helloworld') as HTMLTextAreaElement
+      target.setSelectionRange(5, 5)
+      fireEvent.keyDown(target, { key: 'Enter', code: 'Enter' })
+      await vi.runAllTimersAsync()
+
+      const inputsAfter = screen.getAllByTestId('list-item-input')
+      expect(inputsAfter).toHaveLength(2)
+      expect(inputsAfter[0]).toHaveValue('hello')
+      expect(inputsAfter[1]).toHaveValue('world')
+      // Focus moves to the new (second) item, cursor at its start.
+      expect(inputsAfter[1]).toHaveFocus()
+      expect((inputsAfter[1] as HTMLTextAreaElement).selectionStart).toBe(0)
+    })
+
+    it('split/insert-before new items inherit the current item\'s indentation and assignee', async () => {
+      const listNote = createMockNote({
+        note_type: 'list',
+        items: [
+          {
+            id: 'item1', note_id: '1', text: 'parent', completed: false, position: 0,
+            parent_id: null, assigned_to: '', created_at: '2023-01-01T00:00:00Z', updated_at: '2023-01-01T00:00:00Z',
+          },
+          {
+            id: 'item2', note_id: '1', text: 'helloworld', completed: false, position: 1,
+            parent_id: 'item1', assigned_to: 'user1', created_at: '2023-01-01T00:00:00Z', updated_at: '2023-01-01T00:00:00Z',
+          },
+        ],
+      })
+
+      renderNoteModal({ ...defaultProps, note: listNote })
+      const target = screen.getByDisplayValue('helloworld') as HTMLTextAreaElement
+      target.setSelectionRange(5, 5)
+      fireEvent.keyDown(target, { key: 'Enter', code: 'Enter' })
+      await vi.runAllTimersAsync()
+
+      expect(mockCreateItem).toHaveBeenCalledWith('1', expect.objectContaining({
+        text: 'world',
+        parent_id: 'item1',
+        assigned_to: 'user1',
+      }))
+    })
+
+    it('pressing Enter splits and inserts before within completed items too', async () => {
+      const listNote = createMockNote({
+        note_type: 'list',
+        items: [
+          {
+            id: 'item1', note_id: '1', text: 'helloworld', completed: true, position: 0,
+            parent_id: null, assigned_to: '', created_at: '2023-01-01T00:00:00Z', updated_at: '2023-01-01T00:00:00Z',
+          },
+        ],
+      })
+
+      renderNoteModal({ ...defaultProps, note: listNote })
+      const target = screen.getByDisplayValue('helloworld') as HTMLTextAreaElement
+      target.setSelectionRange(5, 5)
+      fireEvent.keyDown(target, { key: 'Enter', code: 'Enter' })
+      await vi.runAllTimersAsync()
+
+      const inputsAfter = screen.getAllByTestId('list-item-input')
+      expect(inputsAfter).toHaveLength(2)
+      // Original (completed) item keeps the text before the cursor.
+      expect(screen.getByDisplayValue('hello')).toBeInTheDocument()
+      // The split-off remainder is a new (uncompleted) item, rendered in the
+      // uncompleted section above the completed one.
+      expect(screen.getByDisplayValue('world')).toBeInTheDocument()
+      expect(inputsAfter[0]).toHaveValue('world')
+    })
+
     it('pressing a key other than Enter on a list item does not create a new item', async () => {
       renderNoteModal(defaultProps)
 
