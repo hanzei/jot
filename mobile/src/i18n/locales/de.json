@@ -281,7 +281,22 @@
     "moreImages": "{{count}} weitere Bilder anzeigen",
     "lightboxPrevious": "Vorheriges Bild",
     "lightboxNext": "Nächstes Bild",
-    "lightboxCounter": "{{current}} / {{total}}"
+    "lightboxCounter": "{{current}} / {{total}}",
+    "addImage": "Bild hinzufügen",
+    "camera": "Kamera",
+    "photoLibrary": "Fotomediathek",
+    "files": "Dateien",
+    "cameraPermissionDenied": "Für die Aufnahme eines Fotos wird Kamerazugriff benötigt.",
+    "libraryPermissionDenied": "Für die Auswahl eines Fotos wird Zugriff auf die Fotomediathek benötigt.",
+    "removeImage": "{{filename}} entfernen",
+    "removedToast": "Bild entfernt",
+    "uploading": "Wird hochgeladen … {{percent}}%",
+    "uploadFailed": "Upload fehlgeschlagen",
+    "retryUpload": "{{filename}} erneut hochladen",
+    "dismissUpload": "{{filename}} verwerfen",
+    "errorWrongType": "Es können nur Bilder angehängt werden.",
+    "errorTooLarge": "Das Bild überschreitet das Limit von {{maxMB}} MB.",
+    "errorTooMany": "Notizen können bis zu {{max}} Bilder enthalten."
   },
   "labels": {
     "title": "Labels",
