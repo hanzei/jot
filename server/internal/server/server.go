@@ -453,6 +453,7 @@ func (s *Server) handleAbout(_ http.ResponseWriter, _ *http.Request) (int, any, 
 type configResponse struct {
 	RegistrationEnabled bool `json:"registration_enabled"`
 	PasswordMinLength   int  `json:"password_min_length"`
+	UploadMaxBytes      int  `json:"upload_max_bytes"`
 }
 
 // handleConfig godoc
@@ -466,6 +467,7 @@ func (s *Server) handleConfig(_ http.ResponseWriter, _ *http.Request) (int, any,
 	return http.StatusOK, configResponse{
 		RegistrationEnabled: s.cfg.RegistrationEnabled,
 		PasswordMinLength:   s.cfg.PasswordMinLength,
+		UploadMaxBytes:      s.cfg.UploadMaxBytes,
 	}, nil
 }
 

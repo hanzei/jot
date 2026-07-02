@@ -422,7 +422,18 @@
     "moreImages": "{{count}} meer afbeeldingen bekijken",
     "lightboxPrevious": "Vorige afbeelding",
     "lightboxNext": "Volgende afbeelding",
-    "lightboxCounter": "{{current}} / {{total}}"
+    "lightboxCounter": "{{current}} / {{total}}",
+    "addImage": "Afbeelding toevoegen",
+    "dropOverlay": "Sleep een afbeelding hierheen om toe te voegen",
+    "removeImage": "{{filename}} verwijderen",
+    "removedToast": "Afbeelding verwijderd",
+    "uploading": "Uploaden… {{percent}}%",
+    "uploadFailed": "Uploaden mislukt",
+    "retryUpload": "{{filename}} opnieuw uploaden",
+    "dismissUpload": "{{filename}} negeren",
+    "errorWrongType": "Er kunnen alleen afbeeldingen worden toegevoegd.",
+    "errorTooLarge": "De afbeelding overschrijdt de limiet van {{maxMB}} MB.",
+    "errorTooMany": "Notities kunnen tot {{max}} afbeeldingen bevatten."
   },
   "serviceWorker": {
     "updatePrompt": "Nieuwe app-update beschikbaar! Klik op OK om te vernieuwen"

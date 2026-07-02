@@ -3685,6 +3685,9 @@ const docTemplate = `{
                 },
                 "registration_enabled": {
                     "type": "boolean"
+                },
+                "upload_max_bytes": {
+                    "type": "integer"
                 }
             }
         }

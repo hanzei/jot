@@ -422,7 +422,18 @@
     "moreImages": "{{count}} weitere Bilder anzeigen",
     "lightboxPrevious": "Vorheriges Bild",
     "lightboxNext": "Nächstes Bild",
-    "lightboxCounter": "{{current}} / {{total}}"
+    "lightboxCounter": "{{current}} / {{total}}",
+    "addImage": "Bild hinzufügen",
+    "dropOverlay": "Bild hier ablegen, um es hinzuzufügen",
+    "removeImage": "{{filename}} entfernen",
+    "removedToast": "Bild entfernt",
+    "uploading": "Wird hochgeladen … {{percent}}%",
+    "uploadFailed": "Upload fehlgeschlagen",
+    "retryUpload": "{{filename}} erneut hochladen",
+    "dismissUpload": "{{filename}} verwerfen",
+    "errorWrongType": "Es können nur Bilder angehängt werden.",
+    "errorTooLarge": "Das Bild überschreitet das Limit von {{maxMB}} MB.",
+    "errorTooMany": "Notizen können bis zu {{max}} Bilder enthalten."
   },
   "serviceWorker": {
     "updatePrompt": "Es ist ein neues App-Update verfügbar! Klicke OK zum Aktualisieren"

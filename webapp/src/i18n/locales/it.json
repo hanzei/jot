@@ -422,7 +422,18 @@
     "moreImages": "Visualizza {{count}} immagini in più",
     "lightboxPrevious": "Immagine precedente",
     "lightboxNext": "Immagine successiva",
-    "lightboxCounter": "{{current}} / {{total}}"
+    "lightboxCounter": "{{current}} / {{total}}",
+    "addImage": "Aggiungi immagine",
+    "dropOverlay": "Rilascia l'immagine per aggiungerla",
+    "removeImage": "Rimuovi {{filename}}",
+    "removedToast": "Immagine rimossa",
+    "uploading": "Caricamento… {{percent}}%",
+    "uploadFailed": "Caricamento non riuscito",
+    "retryUpload": "Riprova a caricare {{filename}}",
+    "dismissUpload": "Ignora {{filename}}",
+    "errorWrongType": "È possibile allegare solo immagini.",
+    "errorTooLarge": "L'immagine supera il limite di {{maxMB}} MB.",
+    "errorTooMany": "Le note possono contenere fino a {{max}} immagini."
   },
   "serviceWorker": {
     "updatePrompt": "Nuovo aggiornamento dell'app disponibile! Clicca OK per aggiornare"

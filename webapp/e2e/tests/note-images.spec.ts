@@ -54,4 +54,90 @@ test.describe('Note image gallery', () => {
     await page.keyboard.press('Escape');
     await expect(page.getByText('1 / 2')).toBeHidden();
   });
+
+  test('uploads an image via the toolbar picker', async ({ page, dashboardPage }) => {
+    await dashboardPage.goto();
+    const title = `Toolbar upload note ${Date.now()}`;
+    await dashboardPage.createNote(title);
+    await dashboardPage.openNote(title);
+
+    const dialog = page.getByRole('dialog').last();
+    await dialog.getByTestId('note-image-file-input').setInputFiles(path.join(__dirname, '../fixtures/test-icon.png'));
+
+    await expect(dialog.getByAltText('test-icon.png')).toBeVisible();
+    await expect(dialog.getByTestId('image-upload-tile')).not.toBeAttached();
+
+    // Re-check in the SAME session, after the upload placeholder is gone —
+    // the uploading tab's own note_image_added SSE event is dropped (self-
+    // echo suppression), so this specifically guards against the real tile
+    // only ever showing up after a reload instead of right away.
+    await expect(dialog.getByAltText('test-icon.png')).toBeVisible();
+
+    // Persisted across a reload — the upload actually landed server-side.
+    await dashboardPage.closeNoteModal();
+    await page.reload();
+    await dashboardPage.openNote(title);
+    await expect(page.getByRole('dialog').last().getByAltText('test-icon.png')).toBeVisible();
+  });
+
+  test('still shows an uploaded image after closing and reopening the note, without a page reload', async ({ page, dashboardPage }) => {
+    // Regression test: closing the modal destroys NoteModal's local
+    // optimistic-image overlay, so reopening the note relies entirely on
+    // Dashboard's own note list having been corrected — which only happens
+    // if the upload success handler explicitly refreshes it (the uploader's
+    // own note_image_added SSE event is dropped by self-echo suppression).
+    await dashboardPage.goto();
+    const title = `Reopen upload note ${Date.now()}`;
+    await dashboardPage.createNote(title);
+    await dashboardPage.openNote(title);
+
+    const dialog = page.getByRole('dialog').last();
+    await dialog.getByTestId('note-image-file-input').setInputFiles(path.join(__dirname, '../fixtures/test-icon.png'));
+    await expect(dialog.getByAltText('test-icon.png')).toBeVisible();
+    await expect(dialog.getByTestId('image-upload-tile')).not.toBeAttached();
+
+    // Close and reopen the SAME note — deliberately no page.reload() here.
+    await dashboardPage.closeNoteModal();
+    await dashboardPage.openNote(title);
+    await expect(page.getByRole('dialog').last().getByAltText('test-icon.png')).toBeVisible();
+  });
+
+  test('removes an image via the bin icon and undo restores it', async ({ page, dashboardPage }) => {
+    await dashboardPage.goto();
+    const title = `Remove undo note ${Date.now()}`;
+    await dashboardPage.createNote(title);
+
+    const notesResponse = await page.request.get('/api/v1/notes');
+    const notesList: Array<{ id: string; title?: string }> = await notesResponse.json();
+    const note = notesList.find((n) => n.title === title);
+    expect(note).toBeTruthy();
+
+    const upload = await page.request.post(`/api/v1/notes/${note!.id}/images`, {
+      multipart: { file: noteImageFile },
+    });
+    expect(upload.ok()).toBeTruthy();
+
+    await page.reload();
+    await dashboardPage.openNote(title);
+
+    const dialog = page.getByRole('dialog').last();
+    await expect(dialog.getByAltText('test-icon.png')).toBeVisible();
+
+    await dialog.getByRole('button', { name: 'Remove test-icon.png' }).click();
+    await expect(dialog.getByAltText('test-icon.png')).not.toBeAttached();
+
+    // The undo control is rendered inline inside the modal (not the app-wide
+    // toast) so clicking it can never be mistaken for an outside click that
+    // closes the dialog.
+    await expect(dialog.getByText('Image removed')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Undo' }).click();
+    await expect(dialog.getByAltText('test-icon.png')).toBeVisible();
+
+    // The undo cancelled the deferred DELETE — the image is still there
+    // server-side, not just re-added client-side.
+    await dashboardPage.closeNoteModal();
+    await page.reload();
+    await dashboardPage.openNote(title);
+    await expect(page.getByRole('dialog').last().getByAltText('test-icon.png')).toBeVisible();
+  });
 });
