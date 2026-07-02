@@ -1,5 +1,5 @@
 import { SQLiteDatabase } from 'expo-sqlite';
-import type { Note, NoteItem, GetNotesParams, Label, NoteShare } from '@jot/shared';
+import type { Note, NoteItem, GetNotesParams, Label, NoteShare, NoteImage } from '@jot/shared';
 import { getRandomBytes, getStrongRandomBytes } from '../utils/random';
 import { withSerializedTransaction } from './transaction';
 import { isLocalModeActive } from '../store/localMode';
@@ -22,6 +22,7 @@ interface NoteRow {
   updated_at: string;
   labels_json: string;
   shared_with_json: string;
+  images_json: string;
 }
 
 interface NoteItemRow {
@@ -39,8 +40,11 @@ interface NoteItemRow {
 function rowToNote(row: NoteRow, items: NoteItem[] = []): Note {
   let labels: Label[] = [];
   let shared_with: NoteShare[] = [];
+  let images: NoteImage[] = [];
   try { labels = JSON.parse(row.labels_json) as Label[]; } catch { /* ignore */ }
   try { shared_with = JSON.parse(row.shared_with_json) as NoteShare[]; } catch { /* ignore */ }
+  // Older local rows (pre-#616) predate the column; default to no images.
+  try { images = JSON.parse(row.images_json) as NoteImage[]; } catch { /* ignore */ }
   const base = {
     id: row.id,
     user_id: row.user_id,
@@ -57,6 +61,7 @@ function rowToNote(row: NoteRow, items: NoteItem[] = []): Note {
     updated_at: row.updated_at,
     labels,
     shared_with,
+    images,
   };
   if (row.note_type === 'list') {
     return {
@@ -108,8 +113,8 @@ async function saveNoteInTx(db: SQLiteDatabase, note: Note): Promise<void> {
     `INSERT OR REPLACE INTO notes
        (id, user_id, title, content, note_type, version, color, pinned, archived, position,
         checked_items_collapsed, is_shared, deleted_at, created_at, updated_at,
-        labels_json, shared_with_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        labels_json, shared_with_json, images_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       note.id,
       note.user_id,
@@ -128,6 +133,7 @@ async function saveNoteInTx(db: SQLiteDatabase, note: Note): Promise<void> {
       note.updated_at,
       JSON.stringify(note.labels ?? []),
       JSON.stringify(note.shared_with ?? []),
+      JSON.stringify(note.images ?? []),
     ],
   );
 
@@ -231,6 +237,31 @@ export async function getLocalNote(db: SQLiteDatabase, id: string): Promise<Note
   if (!row) return null;
   const items = row.note_type === 'list' ? await getItemsForNote(db, id) : [];
   return rowToNote(row, items);
+}
+
+/**
+ * Applies `updater` to a note's locally-cached image list, e.g. from an SSE
+ * `note_image_added`/`note_image_removed` event (issue #616). No-op if the
+ * note isn't cached locally yet — the next full note fetch will pick up its
+ * images.
+ */
+export async function patchLocalNoteImages(
+  db: SQLiteDatabase,
+  noteId: string,
+  updater: (images: NoteImage[]) => NoteImage[],
+): Promise<void> {
+  const row = await db.getFirstAsync<Pick<NoteRow, 'images_json'>>(
+    'SELECT images_json FROM notes WHERE id = ?',
+    [noteId],
+  );
+  if (!row) return;
+  let images: NoteImage[] = [];
+  try { images = JSON.parse(row.images_json) as NoteImage[]; } catch { /* ignore */ }
+  const nextImages = updater(images);
+  await db.runAsync(
+    'UPDATE notes SET images_json = ? WHERE id = ?',
+    [JSON.stringify(nextImages), noteId],
+  );
 }
 
 export async function markLocalNoteDeleted(db: SQLiteDatabase, id: string): Promise<void> {

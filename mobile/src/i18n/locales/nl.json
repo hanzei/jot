@@ -304,6 +304,13 @@
     "saveFailedExitMessage": "Je wijzigingen konden niet worden opgeslagen. Probeer het opnieuw of verwerp ze om te verlaten.",
     "discardAndLeave": "Verwerpen en verlaten"
   },
+  "images": {
+    "openLightbox": "{{filename}} bekijken",
+    "moreImages": "{{count}} meer afbeeldingen bekijken",
+    "lightboxPrevious": "Vorige afbeelding",
+    "lightboxNext": "Volgende afbeelding",
+    "lightboxCounter": "{{current}} / {{total}}"
+  },
   "labels": {
     "title": "Labels",
     "noLabels": "Nog geen labels",

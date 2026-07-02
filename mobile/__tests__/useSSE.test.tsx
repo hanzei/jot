@@ -30,6 +30,7 @@ jest.mock('../src/api/client', () => ({
 jest.mock('../src/db/noteQueries', () => ({
   markLocalNoteDeleted: jest.fn().mockResolvedValue(undefined),
   permanentDeleteLocalNote: jest.fn().mockResolvedValue(undefined),
+  patchLocalNoteImages: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('../src/api/notes', () => ({
@@ -46,6 +47,7 @@ const mockSaveServerNote = (jest.requireMock('../src/db/syncQueue') as { saveSer
 const mockMarkLocalNoteDeleted = (jest.requireMock('../src/db/noteQueries') as { markLocalNoteDeleted: jest.Mock }).markLocalNoteDeleted;
 const mockPermanentDeleteLocalNote = (jest.requireMock('../src/db/noteQueries') as { permanentDeleteLocalNote: jest.Mock }).permanentDeleteLocalNote;
 const mockGetNote = (jest.requireMock('../src/api/notes') as { getNote: jest.Mock }).getNote;
+const mockPatchLocalNoteImages = (jest.requireMock('../src/db/noteQueries') as { patchLocalNoteImages: jest.Mock }).patchLocalNoteImages;
 const flushMicrotasks = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 // Mock SSEConnectionManager
@@ -182,6 +184,52 @@ describe('useSSE', () => {
       });
     });
 
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: noteLocalQueryKey('note-123') });
+  });
+
+  it('patches local images and invalidates queries on note_image_added event', async () => {
+    const { queryClient, Wrapper } = createWrapper();
+    const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
+
+    renderHook(() => useSSE(), { wrapper: Wrapper });
+    invalidateSpy.mockClear();
+
+    const image = { id: 'img-1', filename: 'a.png', content_type: 'image/png', width: 10, height: 10, created_at: '2024-01-01T00:00:00Z' };
+    await act(async () => {
+      capturedCallback?.({
+        type: 'note_image_added',
+        source_user_id: 'other-user',
+        data: { note_id: 'note-123', image },
+      });
+    });
+
+    await waitFor(() => expect(mockPatchLocalNoteImages).toHaveBeenCalledWith(expect.anything(), 'note-123', expect.any(Function)));
+    const updater = mockPatchLocalNoteImages.mock.calls[0][2] as (images: unknown[]) => unknown[];
+    expect(updater([])).toEqual([image]);
+    expect(updater([image])).toEqual([image]);
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: noteLocalQueryKey('note-123') });
+  });
+
+  it('patches local images and invalidates queries on note_image_removed event', async () => {
+    const { queryClient, Wrapper } = createWrapper();
+    const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
+
+    renderHook(() => useSSE(), { wrapper: Wrapper });
+    invalidateSpy.mockClear();
+
+    await act(async () => {
+      capturedCallback?.({
+        type: 'note_image_removed',
+        source_user_id: 'other-user',
+        data: { note_id: 'note-123', image_id: 'img-1' },
+      });
+    });
+
+    await waitFor(() => expect(mockPatchLocalNoteImages).toHaveBeenCalledWith(expect.anything(), 'note-123', expect.any(Function)));
+    const updater = mockPatchLocalNoteImages.mock.calls[0][2] as (images: { id: string }[]) => { id: string }[];
+    expect(updater([{ id: 'img-1' }, { id: 'img-2' }])).toEqual([{ id: 'img-2' }]);
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: noteLocalQueryKey('note-123') });
   });

@@ -304,6 +304,13 @@
     "saveFailedExitMessage": "Não foi possível salvar as alterações. Tente novamente ou descarte-as para sair.",
     "discardAndLeave": "Descartar e sair"
   },
+  "images": {
+    "openLightbox": "Ver {{filename}}",
+    "moreImages": "Ver mais {{count}} imagens",
+    "lightboxPrevious": "Imagem anterior",
+    "lightboxNext": "Próxima imagem",
+    "lightboxCounter": "{{current}} / {{total}}"
+  },
   "labels": {
     "title": "Etiquetas",
     "noLabels": "Nenhuma etiqueta ainda",
