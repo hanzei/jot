@@ -240,7 +240,7 @@ function ListItem({
                 size="small"
               />
             </TouchableOpacity>
-          ) : showAssignUI && !completed ? (
+          ) : showAssignUI && !completed && isFocused ? (
             <TouchableOpacity
               onPress={onAssignPress}
               style={styles.assignBtn}

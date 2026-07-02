@@ -452,7 +452,7 @@ function SortableItem({ id, index, item, onUpdateListItem, onRemoveListItem, isC
               !isCompleted && (
                 <button
                   onClick={() => setShowAssigneePicker(true)}
-                  className="w-5 h-5 rounded-full border border-dashed border-gray-300 dark:border-gray-400 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-white/10 transition-colors opacity-0 group-hover/item:opacity-100 focus:opacity-100 focus-visible:ring-2 focus-visible:ring-blue-500 touch-visible"
+                  className="w-5 h-5 rounded-full border border-dashed border-gray-300 dark:border-gray-400 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-white/10 transition-colors opacity-0 group-hover/item:opacity-100 group-focus-within/item:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-blue-500"
                   title={t('note.assignItem')}
                   aria-label={t('note.assignItem')}
                 >
