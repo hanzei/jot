@@ -276,6 +276,13 @@
     "saveFailedExitMessage": "Deine Änderungen konnten nicht gespeichert werden. Erneut versuchen oder verwerfen und verlassen.",
     "discardAndLeave": "Verwerfen & verlassen"
   },
+  "images": {
+    "openLightbox": "{{filename}} anzeigen",
+    "moreImages": "{{count}} weitere Bilder anzeigen",
+    "lightboxPrevious": "Vorheriges Bild",
+    "lightboxNext": "Nächstes Bild",
+    "lightboxCounter": "{{current}} / {{total}}"
+  },
   "labels": {
     "title": "Labels",
     "noLabels": "Noch keine Labels",

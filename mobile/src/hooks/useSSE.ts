@@ -8,7 +8,7 @@ import { setActiveSseManager } from '../api/sseState';
 import { CLIENT_ID } from '../api/client';
 import type { SSEEvent } from '@jot/shared';
 import { useNetworkStatus } from './useNetworkStatus';
-import { markLocalNoteDeleted, permanentDeleteLocalNote } from '../db/noteQueries';
+import { markLocalNoteDeleted, permanentDeleteLocalNote, patchLocalNoteImages } from '../db/noteQueries';
 import { getProtectedNoteIds, saveServerNote } from '../db/syncQueue';
 import { getNote } from '../api/notes';
 import { isSseQuiesced, subscribeToServerSwitchLifecycle } from '../store/serverSwitchLifecycle';
@@ -161,6 +161,28 @@ export function useSSE(
               }
               queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(note_id) });
             }
+            queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+            break;
+          }
+          case 'note_image_added':
+          case 'note_image_removed': {
+            const { note_id: imageNoteId } = event.data;
+            try {
+              await patchLocalNoteImages(db, imageNoteId, (images) => {
+                if (event.type === 'note_image_added') {
+                  const image = event.data.image;
+                  if (!image || images.some((img) => img.id === image.id)) return images;
+                  return [...images, image];
+                }
+                const imageId = event.data.image_id;
+                if (!imageId) return images;
+                return images.filter((img) => img.id !== imageId);
+              });
+            } catch {
+              // Note not cached locally yet, or the write failed; the next
+              // background sync/fetch reconciles it.
+            }
+            queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(imageNoteId) });
             queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
             break;
           }

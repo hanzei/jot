@@ -305,6 +305,13 @@
     "saveFailedExitMessage": "Le modifiche non hanno potuto essere salvate. Riprova o scartale per uscire.",
     "discardAndLeave": "Scarta ed esci"
   },
+  "images": {
+    "openLightbox": "Visualizza {{filename}}",
+    "moreImages": "Visualizza altre {{count}} immagini",
+    "lightboxPrevious": "Immagine precedente",
+    "lightboxNext": "Immagine successiva",
+    "lightboxCounter": "{{current}} / {{total}}"
+  },
   "labels": {
     "title": "Etichette",
     "noLabels": "Nessuna etichetta ancora",

@@ -67,6 +67,7 @@ import {
 } from './noteEditor/listItemModel';
 import { MarkdownToolbarContent } from './noteEditor/EditorToolbars';
 import CheckedItemsSection, { type ListItemHandlers } from './noteEditor/CheckedItemsSection';
+import NoteImageGallery from '../components/NoteImageGallery';
 import { styles } from './noteEditor/styles';
 import { animateListReflow, isReduceMotionEnabledSync } from '../utils/layoutAnimation';
 import ActiveListRow from './noteEditor/ActiveListRow';
@@ -1583,6 +1584,10 @@ export default function NoteEditorScreen() {
         contentContainerStyle={styles.scrollContentContainer}
         keyboardShouldPersistTaps="handled"
       >
+        {existingNote?.images && existingNote.images.length > 0 && (
+          <NoteImageGallery images={existingNote.images} />
+        )}
+
         {noteType === 'list' && (
           <TextInput
             ref={titleInputRef}

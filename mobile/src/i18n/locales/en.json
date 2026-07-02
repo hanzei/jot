@@ -305,6 +305,13 @@
     "saveFailedExitMessage": "Your changes couldn't be saved. Retry or discard them to leave.",
     "discardAndLeave": "Discard & leave"
   },
+  "images": {
+    "openLightbox": "View {{filename}}",
+    "moreImages": "View {{count}} more images",
+    "lightboxPrevious": "Previous image",
+    "lightboxNext": "Next image",
+    "lightboxCounter": "{{current}} / {{total}}"
+  },
   "labels": {
     "title": "Labels",
     "noLabels": "No labels yet",

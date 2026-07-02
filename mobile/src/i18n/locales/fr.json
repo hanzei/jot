@@ -276,6 +276,13 @@
     "saveFailedExitMessage": "Vos modifications n’ont pas pu être enregistrées. Réessayez ou abandonnez-les pour quitter.",
     "discardAndLeave": "Abandonner et quitter"
   },
+  "images": {
+    "openLightbox": "Voir {{filename}}",
+    "moreImages": "Voir {{count}} images supplémentaires",
+    "lightboxPrevious": "Image précédente",
+    "lightboxNext": "Image suivante",
+    "lightboxCounter": "{{current}} / {{total}}"
+  },
   "labels": {
     "title": "Étiquettes",
     "noLabels": "Aucune étiquette pour l'instant",
