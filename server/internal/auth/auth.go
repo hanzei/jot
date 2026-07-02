@@ -36,7 +36,7 @@ func (s *SessionService) CreateSession(w http.ResponseWriter, r *http.Request, u
 	userAgent := r.UserAgent()
 	_, rawToken, err := s.sessionStore.Create(r.Context(), userID, userAgent)
 	if err != nil {
-		return err
+		return fmt.Errorf("store session: %w", err)
 	}
 
 	s.setSessionCookie(w, rawToken, int(models.SessionDuration.Seconds()))
