@@ -368,6 +368,7 @@
     "failedDuplicate": "Failed to duplicate note. Please try again.",
     "menuOptions": "Note options",
     "assignItem": "Assign item",
+    "removeItem": "Remove item",
     "unassign": "Unassign",
     "assignedTo": "Assigned to {{name}}",
     "completedSuggestions": "Suggestions from completed items"
@@ -420,6 +421,7 @@
   "images": {
     "openLightbox": "View {{filename}}",
     "moreImages": "View {{count}} more images",
+    "moreImagesBadge": "{{count}} more images",
     "lightboxPrevious": "Previous image",
     "lightboxNext": "Next image",
     "lightboxCounter": "{{current}} / {{total}}",

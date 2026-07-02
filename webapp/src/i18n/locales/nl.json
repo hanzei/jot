@@ -368,6 +368,7 @@
     "failedDuplicate": "Notitie dupliceren mislukt. Probeer het opnieuw.",
     "menuOptions": "Notitieopties",
     "assignItem": "Item toewijzen",
+    "removeItem": "Item verwijderen",
     "unassign": "Toewijzing opheffen",
     "assignedTo": "Toegewezen aan {{name}}",
     "completedSuggestions": "Suggesties van voltooide items"
@@ -420,6 +421,7 @@
   "images": {
     "openLightbox": "{{filename}} bekijken",
     "moreImages": "{{count}} meer afbeeldingen bekijken",
+    "moreImagesBadge": "{{count}} meer afbeeldingen",
     "lightboxPrevious": "Vorige afbeelding",
     "lightboxNext": "Volgende afbeelding",
     "lightboxCounter": "{{current}} / {{total}}",

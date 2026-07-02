@@ -368,6 +368,7 @@
     "failedDuplicate": "Notiz konnte nicht dupliziert werden. Bitte erneut versuchen.",
     "menuOptions": "Notizoptionen",
     "assignItem": "Element zuweisen",
+    "removeItem": "Element entfernen",
     "unassign": "Zuweisung aufheben",
     "assignedTo": "Zugewiesen an {{name}}",
     "completedSuggestions": "Vorschläge aus erledigten Elementen"
@@ -420,6 +421,7 @@
   "images": {
     "openLightbox": "{{filename}} anzeigen",
     "moreImages": "{{count}} weitere Bilder anzeigen",
+    "moreImagesBadge": "{{count}} weitere Bilder",
     "lightboxPrevious": "Vorheriges Bild",
     "lightboxNext": "Nächstes Bild",
     "lightboxCounter": "{{current}} / {{total}}",

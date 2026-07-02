@@ -37,7 +37,7 @@ describe('NoteImageGallery', () => {
 
     expect(screen.queryByTestId('note-image-grid')).not.toBeInTheDocument()
     const img = screen.getByAltText('photo.png')
-    expect(img).toHaveAttribute('src', '/api/v1/images/img1')
+    expect(img).toHaveAttribute('src', '/api/v1/images/img1/thumbnail')
   })
 
   it('renders a grid for two images with no overlay', () => {

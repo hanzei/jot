@@ -263,6 +263,7 @@
     "failedSaveChanges": "Falha ao salvar as alterações. Toque para tentar novamente.",
     "menuOptions": "Opções da nota",
     "assignItem": "Atribuir item",
+    "removeItem": "Remover item",
     "unassign": "Desatribuir",
     "assignedTo": "Atribuído a {{name}}",
     "changeColor": "Cor da nota",
@@ -303,6 +304,13 @@
     "saveFailedExitTitle": "Falha ao salvar",
     "saveFailedExitMessage": "Não foi possível salvar as alterações. Tente novamente ou descarte-as para sair.",
     "discardAndLeave": "Descartar e sair"
+  },
+  "images": {
+    "openLightbox": "Ver {{filename}}",
+    "moreImages": "Ver mais {{count}} imagens",
+    "lightboxPrevious": "Imagem anterior",
+    "lightboxNext": "Próxima imagem",
+    "lightboxCounter": "{{current}} / {{total}}"
   },
   "labels": {
     "title": "Etiquetas",

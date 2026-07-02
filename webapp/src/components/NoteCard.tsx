@@ -11,7 +11,7 @@ import {
 import { Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, type Note, type User } from '@jot/shared';
-import { notes } from '@/utils/api';
+import { notes, images as imagesApi } from '@/utils/api';
 import LetterAvatar from '@/components/LetterAvatar';
 import LinkText from '@/components/LinkText';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -55,6 +55,8 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
   }>({ open: false, title: '', message: '', confirmLabel: '', onConfirm: () => {} });
 
   const isOwner = note.user_id === currentUserId;
+  const coverImage = note.images?.[0];
+  const extraImageCount = (note.images?.length ?? 0) - 1;
 
   const handleMenuKeyDown = (e: React.KeyboardEvent) => {
     if (inBin) return;
@@ -219,6 +221,24 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
         }
       }}
     >
+      {coverImage && (
+        <div className="relative -mx-4 -mt-4 mb-2 rounded-t-lg overflow-hidden" data-testid="note-card-cover">
+          <img
+            src={imagesApi.thumbnailUrl(coverImage.id)}
+            alt={coverImage.filename}
+            className="w-full h-40 object-cover"
+          />
+          {extraImageCount > 0 && (
+            <span
+              className="absolute bottom-1 right-1 rounded-full bg-black/60 text-white text-xs px-1.5 py-0.5"
+              aria-label={t('images.moreImagesBadge', { count: extraImageCount })}
+            >
+              +{extraImageCount}
+            </span>
+          )}
+        </div>
+      )}
+
       {note.pinned && (
         <div className="absolute top-2 right-8">
           <svg data-testid="pin-icon" className="h-3 w-3 text-blue-500" fill="currentColor" viewBox="0 0 24 24">

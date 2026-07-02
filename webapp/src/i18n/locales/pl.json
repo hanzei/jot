@@ -368,6 +368,7 @@
     "failedDuplicate": "Nie udało się zduplikować notatki. Spróbuj ponownie.",
     "menuOptions": "Opcje notatki",
     "assignItem": "Przypisz element",
+    "removeItem": "Usuń element",
     "unassign": "Usuń przypisanie",
     "assignedTo": "Przypisano do {{name}}",
     "completedSuggestions": "Podpowiedzi z ukończonych elementów"
@@ -420,6 +421,7 @@
   "images": {
     "openLightbox": "Wyświetl {{filename}}",
     "moreImages": "Wyświetl {{count}} więcej zdjęć",
+    "moreImagesBadge": "{{count}} więcej zdjęć",
     "lightboxPrevious": "Poprzednie zdjęcie",
     "lightboxNext": "Następne zdjęcie",
     "lightboxCounter": "{{current}} / {{total}}",

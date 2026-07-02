@@ -234,6 +234,7 @@
     "failedSaveChanges": "Impossible d'enregistrer les modifications. Appuyez pour réessayer.",
     "menuOptions": "Options de la note",
     "assignItem": "Assigner l'élément",
+    "removeItem": "Supprimer l'élément",
     "unassign": "Désassigner",
     "assignedTo": "Assigné à {{name}}",
     "changeColor": "Couleur de la note",
@@ -274,6 +275,13 @@
     "saveFailedExitTitle": "Échec de l’enregistrement",
     "saveFailedExitMessage": "Vos modifications n’ont pas pu être enregistrées. Réessayez ou abandonnez-les pour quitter.",
     "discardAndLeave": "Abandonner et quitter"
+  },
+  "images": {
+    "openLightbox": "Voir {{filename}}",
+    "moreImages": "Voir {{count}} images supplémentaires",
+    "lightboxPrevious": "Image précédente",
+    "lightboxNext": "Image suivante",
+    "lightboxCounter": "{{current}} / {{total}}"
   },
   "labels": {
     "title": "Étiquettes",
