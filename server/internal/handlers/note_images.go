@@ -86,6 +86,12 @@ func (h *NotesHandler) publishNoteImageEvent(ctx context.Context, noteID string,
 // cascades (issue #608), plus the periodic orphan sweep as a safety net for
 // any path that misses this.
 func reclaimOrphanedImageBlobs(ctx context.Context, noteStore *models.NoteStore, imageStore *blobstore.ImageStore, shas []string) {
+	// The row delete already committed by the time this runs, so a client
+	// disconnect (which cancels an HTTP/MCP request's context) must not abort
+	// the on-disk cleanup — there's no retry path, so an aborted reclaim here
+	// leaks the blob permanently. context.WithoutCancel keeps request-scoped
+	// values (e.g. the logger below) while detaching from that cancellation.
+	ctx = context.WithoutCancel(ctx)
 	for _, err := range blobstore.ReclaimAllIfOrphaned(ctx, noteStore, imageStore, shas) {
 		logutil.FromContext(ctx).WithError(err).Error("Failed to reclaim orphaned note image blob/thumbnail")
 	}

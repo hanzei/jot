@@ -34,7 +34,10 @@ func ReclaimIfOrphaned(ctx context.Context, refCounter RefCounter, store *ImageS
 	if count > 0 {
 		return nil
 	}
-	return store.Delete(ctx, sha)
+	if err := store.Delete(ctx, sha); err != nil {
+		return fmt.Errorf("reclaim %s: %w", sha, err)
+	}
+	return nil
 }
 
 // ReclaimAllIfOrphaned is ReclaimIfOrphaned's batch form: it checks every

@@ -182,8 +182,11 @@ func (h *Handler) handleDeleteNote(userID string) mcp.ToolHandlerFor[deleteNoteI
 // each sha whose note_images refcount has hit zero, mirroring the HTTP
 // delete_note handler's blob cleanup (docs/specs/file-attachments.md §10).
 // Errors are logged but never fail the tool call — the note delete already
-// succeeded.
+// succeeded. Uses context.WithoutCancel since the row delete already
+// committed: an MCP client disconnecting must not abort this cleanup and
+// leak the blob, as there's no retry path for it afterward.
 func (h *Handler) reclaimNoteImageBlobs(ctx context.Context, shas []string) {
+	ctx = context.WithoutCancel(ctx)
 	for _, err := range blobstore.ReclaimAllIfOrphaned(ctx, h.noteStore, h.imageStore, shas) {
 		logutil.FromContext(ctx).WithError(err).Error("Failed to reclaim orphaned note image blob/thumbnail")
 	}

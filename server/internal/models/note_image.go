@@ -262,17 +262,19 @@ func (s *noteStore) GetNoteImageRefCounts(ctx context.Context, shas []string) (m
 	return counts, nil
 }
 
-// GetNoteImageSHA256sForUser returns the distinct sha256 hashes of every
+// GetNoteImageSHA256sForUserTx returns the distinct sha256 hashes of every
 // image reachable from userID: images attached to notes they own, plus
 // images they uploaded to notes owned by someone else (a shared note).
 // Deleting a user cascades both note_images.note_id (via their owned notes)
-// and note_images.uploader_id directly, so callers must read this before the
-// delete to know which blobs to reclaim afterward.
-func (s *noteStore) GetNoteImageSHA256sForUser(ctx context.Context, userID string) ([]string, error) {
+// and note_images.uploader_id directly, so this must run inside the same
+// transaction as — and before — the user delete: read via tx so it sees a
+// consistent snapshot with the delete that follows, and before it because
+// looking this up after the cascade has already run would find nothing.
+func (s *noteStore) GetNoteImageSHA256sForUserTx(ctx context.Context, tx *sql.Tx, userID string) ([]string, error) {
 	query := `SELECT DISTINCT sha256 FROM note_images
 			  WHERE uploader_id = ? OR note_id IN (SELECT id FROM notes WHERE user_id = ?)`
 
-	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), userID, userID)
+	rows, err := tx.QueryContext(ctx, s.d.RewritePlaceholders(query), userID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query note image hashes for user: %w", err)
 	}

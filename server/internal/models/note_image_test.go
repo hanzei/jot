@@ -412,12 +412,13 @@ func TestNoteHardDeletePathsReturnImageHashes(t *testing.T) {
 	})
 }
 
-// TestGetNoteImageSHA256sForUser covers both cascades a user hard-delete
+// TestGetNoteImageSHA256sForUserTx covers both cascades a user hard-delete
 // triggers: note_images.note_id (via notes the user owns) and
 // note_images.uploader_id directly (images the user uploaded onto someone
 // else's shared note, which survives the delete even though the image row
-// doesn't).
-func TestGetNoteImageSHA256sForUser(t *testing.T) {
+// doesn't). It's tx-scoped (see DeleteWithCleanup's preDelete hook) so the
+// test exercises it the same way: inside a transaction, before any delete.
+func TestGetNoteImageSHA256sForUserTx(t *testing.T) {
 	store, ownerID, ownedNoteID := newTestNoteImageStore(t)
 	ctx := t.Context()
 
@@ -433,11 +434,15 @@ func TestGetNoteImageSHA256sForUser(t *testing.T) {
 	_, err = store.CreateNoteImage(ctx, ownedNoteID, sharedUploaderID, "uploaded.png", "image/png", 1, "sha-uploaded", 1, 1, 0)
 	require.NoError(t, err)
 
-	ownerShas, err := store.GetNoteImageSHA256sForUser(ctx, ownerID)
+	tx, err := store.db.BeginTx(ctx, nil)
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback() }()
+
+	ownerShas, err := store.GetNoteImageSHA256sForUserTx(ctx, tx, ownerID)
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"sha-owned", "sha-uploaded"}, ownerShas, "owner reaches every image on their notes regardless of uploader")
 
-	uploaderShas, err := store.GetNoteImageSHA256sForUser(ctx, sharedUploaderID)
+	uploaderShas, err := store.GetNoteImageSHA256sForUserTx(ctx, tx, sharedUploaderID)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"sha-uploaded"}, uploaderShas, "a non-owner only reaches images they personally uploaded")
 }

@@ -216,15 +216,22 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) (int, 
 	// rows and any note_images rows where they're the uploader on someone
 	// else's note (note_images.uploader_id also cascades), so the candidate
 	// blob hashes must be read before the delete — afterward the rows are
-	// gone and there's nothing left to look up.
-	shas, err := h.noteStore.GetNoteImageSHA256sForUser(r.Context(), targetID)
-	if err != nil {
-		return http.StatusInternalServerError, nil, fmt.Errorf("get note image hashes for user: %w", err)
-	}
-
-	err = h.userStore.DeleteWithCleanup(r.Context(), targetID, requestingUser.ID, func(ctx context.Context, tx *sql.Tx) error {
-		return h.noteStore.ClearUserAssignmentsTx(ctx, tx, targetID)
-	})
+	// gone and there's nothing left to look up. Reading via preDelete inside
+	// DeleteWithCleanup's own transaction (rather than a separate query
+	// beforehand) keeps the read atomic with the delete: a plain query run
+	// before the call could miss an image added in the gap between the read
+	// and the delete actually starting.
+	var shas []string
+	err := h.userStore.DeleteWithCleanup(r.Context(), targetID, requestingUser.ID,
+		func(ctx context.Context, tx *sql.Tx) error {
+			var err error
+			shas, err = h.noteStore.GetNoteImageSHA256sForUserTx(ctx, tx, targetID)
+			return err
+		},
+		func(ctx context.Context, tx *sql.Tx) error {
+			return h.noteStore.ClearUserAssignmentsTx(ctx, tx, targetID)
+		},
+	)
 	if err != nil {
 		if errors.Is(err, models.ErrUserNotFound) {
 			return http.StatusNotFound, nil, err

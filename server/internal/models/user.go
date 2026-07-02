@@ -415,14 +415,19 @@ func (s *userStore) UpdateRole(ctx context.Context, id, role string) (*User, err
 }
 
 func (s *userStore) Delete(ctx context.Context, id, requestingUserID string) error {
-	return s.DeleteWithCleanup(ctx, id, requestingUserID, nil)
+	return s.DeleteWithCleanup(ctx, id, requestingUserID, nil, nil)
 }
 
-// DeleteWithCleanup deletes a user and runs an optional postDelete callback
-// inside the same transaction. The callback executes after the user row is
-// deleted (and cascade effects like note_shares removal have taken place) but
-// before the transaction commits, so any cleanup is atomic with the delete.
-func (s *userStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID string, postDelete func(ctx context.Context, tx *sql.Tx) error) error {
+// DeleteWithCleanup deletes a user and runs optional preDelete/postDelete
+// callbacks inside the same transaction. preDelete executes before the user
+// row is deleted, while it (and everything that cascades from it, e.g.
+// note_images.uploader_id rows) is still there to read — callers that need to
+// know what the cascade is about to remove must do that read here, since
+// looking it up afterward would find nothing. postDelete executes after the
+// user row is deleted (and cascade effects like note_shares removal have
+// taken place) but before the transaction commits, so any cleanup is atomic
+// with the delete.
+func (s *userStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID string, preDelete, postDelete func(ctx context.Context, tx *sql.Tx) error) error {
 	if id == requestingUserID {
 		return fmt.Errorf("%w", ErrCannotDeleteSelf)
 	}
@@ -449,6 +454,12 @@ func (s *userStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID 
 		}
 		if adminCount <= 1 {
 			return fmt.Errorf("%w", ErrLastAdmin)
+		}
+	}
+
+	if preDelete != nil {
+		if err = preDelete(ctx, tx); err != nil {
+			return fmt.Errorf("pre-delete read failed: %w", err)
 		}
 	}
 

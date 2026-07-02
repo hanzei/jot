@@ -298,10 +298,10 @@ func (s *NoteStore) GetNoteImageRefCounts(ctx context.Context, shas []string) (_
 	return s.inner.GetNoteImageRefCounts(ctx, shas)
 }
 
-func (s *NoteStore) GetNoteImageSHA256sForUser(ctx context.Context, userID string) (_ []string, err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.GetNoteImageSHA256sForUser", &err)
+func (s *NoteStore) GetNoteImageSHA256sForUserTx(ctx context.Context, tx *sql.Tx, userID string) (_ []string, err error) {
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.GetNoteImageSHA256sForUserTx", &err)
 	defer end()
-	return s.inner.GetNoteImageSHA256sForUser(ctx, userID)
+	return s.inner.GetNoteImageSHA256sForUserTx(ctx, tx, userID)
 }
 
 func (s *NoteStore) GetOwnedNotesForExport(ctx context.Context, userID string) (_ []*Note, err error) {

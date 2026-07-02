@@ -1196,8 +1196,24 @@ func (s *noteStore) PurgeOldTrashedNotes(ctx context.Context, olderThan time.Dur
 	placeholders, args := buildInClauseArgs(noteIDs)
 	deleteArgs := append([]any{cutoff}, args...)
 	deleteQuery := `DELETE FROM notes WHERE deleted_at IS NOT NULL AND deleted_at < ? AND id IN (` + placeholders + `)` // #nosec G202 -- only generated "?" placeholders are concatenated
-	if _, err = tx.ExecContext(ctx, s.d.RewritePlaceholders(deleteQuery), deleteArgs...); err != nil {
+	result, err := tx.ExecContext(ctx, s.d.RewritePlaceholders(deleteQuery), deleteArgs...)
+	if err != nil {
 		return nil, fmt.Errorf("failed to purge old trashed notes: %w", err)
+	}
+
+	// If the re-check above skipped a concurrently-restored note, rowsAffected
+	// falls short of len(noteIDs): deleteNoteDependenciesTx already dropped
+	// that note's items/labels/shares/state unconditionally (it has no
+	// deleted_at re-check of its own), so this whole batch must abort rather
+	// than commit — otherwise the restored note would silently lose its
+	// content while its notes row survives. Aborting is safe: nothing in this
+	// batch is lost, it's simply picked up again on the next periodic run.
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get purged note count: %w", err)
+	}
+	if rowsAffected != int64(len(noteIDs)) {
+		return nil, fmt.Errorf("expected to purge %d trashed notes, purged %d", len(noteIDs), rowsAffected)
 	}
 
 	if err = tx.Commit(); err != nil {
