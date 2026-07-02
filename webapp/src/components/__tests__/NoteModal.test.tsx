@@ -55,6 +55,7 @@ vi.mock('@/utils/api', () => ({
   },
   images: {
     url: (id: string) => `/api/v1/images/${id}`,
+    thumbnailUrl: (id: string) => `/api/v1/images/${id}/thumbnail`,
     upload: mockImagesUpload,
     delete: mockImagesDelete,
   },
@@ -310,7 +311,7 @@ describe('NoteModal', () => {
       const note = createMockNote({ images: [makeImage()] })
       renderNoteModal({ ...defaultProps, note })
 
-      expect(screen.getByAltText('photo.png')).toHaveAttribute('src', '/api/v1/images/img1')
+      expect(screen.getByAltText('photo.png')).toHaveAttribute('src', '/api/v1/images/img1/thumbnail')
     })
 
     it('opens the lightbox when a gallery tile is clicked', () => {
