@@ -20,7 +20,7 @@ type AdminHandler struct {
 	noteStore         *models.NoteStore
 	statsStore        *models.AdminStatsStore
 	userSettingsStore *models.UserSettingsStore
-	blobstore         blobstore.Blobstore
+	imageStore        *blobstore.ImageStore
 	dbPath            string
 	passwordMinLength int
 }
@@ -30,7 +30,7 @@ func NewAdminHandler(
 	noteStore *models.NoteStore,
 	statsStore *models.AdminStatsStore,
 	userSettingsStore *models.UserSettingsStore,
-	imageBlobstore blobstore.Blobstore,
+	imageStore *blobstore.ImageStore,
 	dbPath string,
 	passwordMinLength int,
 ) *AdminHandler {
@@ -39,7 +39,7 @@ func NewAdminHandler(
 		noteStore:         noteStore,
 		statsStore:        statsStore,
 		userSettingsStore: userSettingsStore,
-		blobstore:         imageBlobstore,
+		imageStore:        imageStore,
 		dbPath:            dbPath,
 		passwordMinLength: passwordMinLength,
 	}
@@ -264,7 +264,7 @@ func (h *AdminHandler) DeleteUserNotes(w http.ResponseWriter, r *http.Request) (
 		return http.StatusInternalServerError, nil, fmt.Errorf("delete notes for user: %w", err)
 	}
 
-	blobgc.Reclaim(r.Context(), h.blobstore, h.noteStore, freedSHA256)
+	blobgc.Reclaim(r.Context(), h.imageStore, h.noteStore, freedSHA256)
 
 	return http.StatusOK, DeleteUserNotesResponse{Deleted: deleted}, nil
 }

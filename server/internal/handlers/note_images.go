@@ -25,6 +25,12 @@ import (
 // when rendered inline (see docs/specs/file-attachments.md §7).
 const imageMaxPerNote = 10
 
+// thumbnailMaxDimension bounds the long edge of a generated note-image
+// thumbnail. Grid tiles render this instead of the original to cut bandwidth
+// (docs/specs/file-attachments.md §5); the lightbox always serves the
+// original at full size.
+const thumbnailMaxDimension = 512
+
 var allowedNoteImageTypes = map[string]bool{
 	"image/png":  true,
 	"image/jpeg": true,
@@ -32,16 +38,23 @@ var allowedNoteImageTypes = map[string]bool{
 	"image/gif":  true,
 }
 
-// decodeImageDimensions confirms data is a valid, non-corrupt image (this is
-// what enforces "images only" beyond the Content-Type sniff) and returns its
-// pixel dimensions, reusing the same decode-with-bounds-check pipeline as the
-// profile-icon upload path.
-func decodeImageDimensions(data []byte) (width, height int, err error) {
-	_, cfg, err := decodeImageWithBoundsCheck(data)
+// decodeAndThumbnail confirms data is a valid, non-corrupt image (this is
+// what enforces "images only" beyond the Content-Type sniff), returning its
+// pixel dimensions and a resized JPEG thumbnail. Reuses the bounds-checked
+// decode pipeline shared with the profile-icon upload path. For animated
+// GIFs, image.Decode returns only the first frame, so the thumbnail is
+// naturally a static tile (docs/specs/file-attachments.md §5, §15.2) even
+// though the original (served by GetNoteImage) still animates.
+func decodeAndThumbnail(data []byte) (width, height int, thumbnail []byte, err error) {
+	img, cfg, err := decodeImageWithBoundsCheck(data)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, nil, err
 	}
-	return cfg.Width, cfg.Height, nil
+	thumbnail, err = resizeToJPEG(img, cfg, thumbnailMaxDimension)
+	if err != nil {
+		return 0, 0, nil, err
+	}
+	return cfg.Width, cfg.Height, thumbnail, nil
 }
 
 // publishNoteImageEvent fetches the note's audience and publishes an SSE event.
@@ -63,13 +76,13 @@ func (h *NotesHandler) publishNoteImageEvent(ctx context.Context, noteID string,
 	})
 }
 
-// reclaimNoteImageBlob deletes the on-disk blob for sha if no note_images row
-// still references it (dedup means another row may share the same content
-// hash). Errors are logged but never fail the delete request — the row is
-// already gone, and the periodic orphan sweep (internal/blobgc) is the safety
-// net for anything left behind.
+// reclaimNoteImageBlob deletes the on-disk blob and its derived thumbnail for
+// sha if no note_images row still references it (dedup means another row may
+// share the same content hash). Errors are logged but never fail the delete
+// request — the row is already gone, and the periodic orphan sweep
+// (internal/blobgc) is the safety net for anything left behind.
 func (h *NotesHandler) reclaimNoteImageBlob(ctx context.Context, sha string) {
-	blobgc.Reclaim(ctx, h.blobstore, h.noteStore, []string{sha})
+	blobgc.Reclaim(ctx, h.imageStore, h.noteStore, []string{sha})
 }
 
 // UploadNoteImage godoc
@@ -143,7 +156,7 @@ func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (
 		return http.StatusBadRequest, nil, errors.New("unsupported file type: must be png, jpeg, webp, or gif")
 	}
 
-	width, height, err := decodeImageDimensions(data)
+	width, height, thumbnail, err := decodeAndThumbnail(data)
 	if err != nil {
 		return http.StatusBadRequest, nil, fmt.Errorf("unsupported or corrupt image: %w", err)
 	}
@@ -151,8 +164,16 @@ func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (
 	sum := sha256.Sum256(data)
 	sha := hex.EncodeToString(sum[:])
 
-	if putErr := h.blobstore.Put(r.Context(), sha, bytes.NewReader(data)); putErr != nil {
+	if putErr := h.imageStore.Put(r.Context(), sha, bytes.NewReader(data)); putErr != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("store image blob: %w", putErr)
+	}
+
+	// Generated eagerly here (rather than on first thumbnail request) so the
+	// grid never waits on a first-request miss; a no-op if a dedup hit means
+	// this hash's thumbnail already exists.
+	if putErr := h.imageStore.PutThumbnail(r.Context(), sha, bytes.NewReader(thumbnail)); putErr != nil {
+		h.reclaimNoteImageBlob(r.Context(), sha)
+		return http.StatusInternalServerError, nil, fmt.Errorf("store thumbnail: %w", putErr)
 	}
 
 	img, err := h.noteStore.CreateNoteImage(r.Context(), noteID, user.ID, header.Filename, contentType, int64(len(data)), sha, width, height, imageMaxPerNote)
@@ -206,7 +227,7 @@ func (h *NotesHandler) GetNoteImage(w http.ResponseWriter, r *http.Request) (int
 		return http.StatusInternalServerError, nil, err
 	}
 
-	blob, err := h.blobstore.Open(r.Context(), img.SHA256)
+	blob, err := h.imageStore.Open(r.Context(), img.SHA256)
 	if err != nil {
 		if errors.Is(err, blobstore.ErrNotFound) {
 			logutil.FromContext(r.Context()).WithField("image_id", img.ID).WithField("sha256", img.SHA256).
@@ -229,6 +250,112 @@ func (h *NotesHandler) GetNoteImage(w http.ResponseWriter, r *http.Request) (int
 	http.ServeContent(w, r, img.Filename, img.CreatedAt, blob)
 	return 0, nil, nil
 }
+
+// GetNoteImageThumbnail godoc
+//
+//	@Summary	Download a note image's thumbnail
+//	@Tags		notes
+//	@Security	CookieAuth
+//	@Produce	image/jpeg
+//	@Param		id	path		string	true	"Image ID"
+//	@Success	200	{file}		binary	"Thumbnail JPEG bytes"
+//	@Failure	400	{string}	string	"bad request"
+//	@Failure	401	{string}	string	"unauthorized"
+//	@Failure	404	{string}	string	"not found"
+//	@Failure	500	{string}	string	"internal server error"
+//	@Router		/images/{id}/thumbnail [get]
+func (h *NotesHandler) GetNoteImageThumbnail(w http.ResponseWriter, r *http.Request) (int, any, error) {
+	user, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	}
+
+	imageID := chi.URLParam(r, "id")
+	if !models.IsValidID(imageID) {
+		return http.StatusBadRequest, nil, errors.New("invalid image ID format")
+	}
+
+	img, err := h.loadNoteImageForAccess(r.Context(), imageID, user.ID)
+	if err != nil {
+		if errors.Is(err, models.ErrNoteImageNotFound) {
+			return http.StatusNotFound, nil, err
+		}
+		return http.StatusInternalServerError, nil, err
+	}
+
+	thumb, err := h.imageStore.OpenThumbnail(r.Context(), img.SHA256)
+	if err != nil {
+		if !errors.Is(err, blobstore.ErrNotFound) {
+			return http.StatusInternalServerError, nil, fmt.Errorf("open thumbnail: %w", err)
+		}
+		// Thumbnails are a disposable cache (no DB row, no refcount): a miss
+		// just means it was never generated or was reclaimed early, so
+		// regenerate it from the original rather than treating this as an
+		// error (docs/specs/file-attachments.md §5).
+		thumb, err = h.regenerateNoteImageThumbnail(r.Context(), img)
+		if err != nil {
+			if errors.Is(err, blobstore.ErrNotFound) {
+				logutil.FromContext(r.Context()).WithField("image_id", img.ID).WithField("sha256", img.SHA256).
+					Error("Note image blob missing on disk during thumbnail regeneration")
+				return http.StatusNotFound, nil, errors.New("image blob not found")
+			}
+			return http.StatusInternalServerError, nil, err
+		}
+	}
+	defer thumb.Close()
+
+	w.Header().Set("Content-Type", "image/jpeg")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
+	w.Header().Set("ETag", `"`+img.SHA256+`-thumb"`)
+
+	http.ServeContent(w, r, img.Filename+".thumb.jpg", img.CreatedAt, thumb)
+	return 0, nil, nil
+}
+
+// regenerateNoteImageThumbnail rebuilds img's thumbnail from its original
+// blob and persists it back to the image store for subsequent requests. A
+// persistence failure is logged but does not fail the response — the
+// regenerated bytes are still served since the thumbnail is disposable and
+// will simply be regenerated again on the next miss. Returns
+// blobstore.ErrNotFound (unwrapped, so callers can match it with errors.Is)
+// if the original blob itself is missing on disk.
+func (h *NotesHandler) regenerateNoteImageThumbnail(ctx context.Context, img *models.NoteImage) (io.ReadSeekCloser, error) {
+	original, err := h.imageStore.Open(ctx, img.SHA256)
+	if err != nil {
+		if errors.Is(err, blobstore.ErrNotFound) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("open original blob for thumbnail regeneration: %w", err)
+	}
+	defer original.Close()
+
+	data, err := io.ReadAll(original)
+	if err != nil {
+		return nil, fmt.Errorf("read original blob: %w", err)
+	}
+
+	_, _, thumbnail, err := decodeAndThumbnail(data)
+	if err != nil {
+		return nil, fmt.Errorf("regenerate thumbnail: %w", err)
+	}
+
+	if putErr := h.imageStore.PutThumbnail(ctx, img.SHA256, bytes.NewReader(thumbnail)); putErr != nil {
+		logutil.FromContext(ctx).WithError(putErr).WithField("sha256", img.SHA256).
+			Error("Failed to persist regenerated note image thumbnail")
+	}
+
+	return closeableReader{bytes.NewReader(thumbnail)}, nil
+}
+
+// closeableReader adapts a *bytes.Reader to io.ReadSeekCloser so a
+// regenerated in-memory thumbnail can be handed to http.ServeContent the
+// same way as an ImageStore-backed file.
+type closeableReader struct {
+	*bytes.Reader
+}
+
+func (closeableReader) Close() error { return nil }
 
 // loadNoteImageForAccess fetches an image row and checks that userID has
 // access to its parent note. When the image doesn't exist, or exists but the

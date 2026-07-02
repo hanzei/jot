@@ -417,6 +417,13 @@
     "unsharedSuccess": "Partage de la note annulé avec succès !",
     "failedUnshare": "Impossible d'annuler le partage de la note. Veuillez réessayer."
   },
+  "images": {
+    "openLightbox": "Voir {{filename}}",
+    "moreImages": "Voir {{count}} images supplémentaires",
+    "lightboxPrevious": "Image précédente",
+    "lightboxNext": "Image suivante",
+    "lightboxCounter": "{{current}} / {{total}}"
+  },
   "serviceWorker": {
     "updatePrompt": "Une nouvelle mise à jour est disponible ! Cliquez sur OK pour actualiser"
   },

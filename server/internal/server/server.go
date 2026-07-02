@@ -55,7 +55,7 @@ type Server struct {
 	httpServer      *http.Server
 	metricsServer   *http.Server
 	staticRoot      *os.Root
-	imageBlobstore  *blobstore.FSBlobstore
+	imageStore      *blobstore.ImageStore
 	startErr        error
 	startReady      chan struct{}
 	startReadyOnce  sync.Once
@@ -113,24 +113,24 @@ func New(cfg *config.Config) (*Server, error) {
 		return nil, fmt.Errorf("initialize SSE hub: %w", err)
 	}
 
-	imageBlobstore, err := blobstore.NewFSBlobstore(cfg.UploadDir)
+	imageStore, err := blobstore.NewImageStore(cfg.UploadDir)
 	if err != nil {
 		cancel()
 		_ = db.Close()
-		return nil, fmt.Errorf("initialize image blobstore: %w", err)
+		return nil, fmt.Errorf("initialize image store: %w", err)
 	}
 
 	authHandler := handlers.NewAuthHandler(userStore, noteStore, sessionService, userSettingsStore, hub, cfg.RegistrationEnabled, cfg.PasswordMinLength)
-	notesHandler, err := handlers.NewNotesHandler(noteStore, userStore, labelStore, hub, imageBlobstore, int64(cfg.UploadMaxBytes))
+	notesHandler, err := handlers.NewNotesHandler(noteStore, userStore, labelStore, hub, imageStore, int64(cfg.UploadMaxBytes))
 	if err != nil {
 		cancel()
-		_ = imageBlobstore.Close()
+		_ = imageStore.Close()
 		_ = db.Close()
 		return nil, fmt.Errorf("initialize notes handler: %w", err)
 	}
 	labelsHandler := handlers.NewLabelsHandler(noteStore, labelStore, hub)
 	eventsHandler := handlers.NewEventsHandler(hub)
-	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, userSettingsStore, imageBlobstore, cfg.DBDSN, cfg.PasswordMinLength)
+	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, userSettingsStore, imageStore, cfg.DBDSN, cfg.PasswordMinLength)
 	sessionsHandler := handlers.NewSessionsHandler(sessionStore)
 	patsHandler := handlers.NewPATsHandler(patStore)
 
@@ -152,7 +152,7 @@ func New(cfg *config.Config) (*Server, error) {
 		patsHandler:     patsHandler,
 		noteStore:       noteStore,
 		labelStore:      labelStore,
-		imageBlobstore:  imageBlobstore,
+		imageStore:      imageStore,
 	}
 
 	startPeriodicTask(&s.bgWg, ctx, time.Hour, false, func() error {
@@ -163,11 +163,11 @@ func New(cfg *config.Config) (*Server, error) {
 		if err != nil {
 			return err
 		}
-		blobgc.Reclaim(ctx, imageBlobstore, noteStore, freedSHA256)
+		blobgc.Reclaim(ctx, imageStore, noteStore, freedSHA256)
 		return nil
 	}, "purge old trashed notes")
 	startPeriodicTask(&s.bgWg, ctx, 24*time.Hour, true, func() error {
-		result, err := blobgc.Sweep(ctx, imageBlobstore, noteStore)
+		result, err := blobgc.Sweep(ctx, imageStore, noteStore)
 		if err != nil {
 			return err
 		}
@@ -183,7 +183,7 @@ func New(cfg *config.Config) (*Server, error) {
 
 	if err := s.setupRoutes(); err != nil {
 		cancel()
-		_ = imageBlobstore.Close()
+		_ = imageStore.Close()
 		_ = db.Close()
 		return nil, fmt.Errorf("setup routes: %w", err)
 	}
@@ -259,6 +259,7 @@ func (s *Server) setupRoutes() error {
 
 			r.Post("/notes/{id}/images", s.wrapHandler(s.notesHandler.UploadNoteImage))
 			r.Get("/images/{id}", s.wrapHandler(s.notesHandler.GetNoteImage))
+			r.Get("/images/{id}/thumbnail", s.wrapHandler(s.notesHandler.GetNoteImageThumbnail))
 			r.Delete("/images/{id}", s.wrapHandler(s.notesHandler.DeleteNoteImage))
 
 			r.Post("/notes/{id}/items", s.wrapHandler(s.notesHandler.CreateNoteItem))
@@ -671,9 +672,9 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		}
 	}
 
-	if s.imageBlobstore != nil {
-		if err := s.imageBlobstore.Close(); err != nil {
-			return fmt.Errorf("close image blobstore: %w", err)
+	if s.imageStore != nil {
+		if err := s.imageStore.Close(); err != nil {
+			return fmt.Errorf("close image store: %w", err)
 		}
 	}
 
