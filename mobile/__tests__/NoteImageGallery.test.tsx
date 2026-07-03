@@ -34,6 +34,25 @@ describe('NoteImageGallery', () => {
     expect(queryByTestId('note-image-grid')).toBeNull();
   });
 
+  it('keeps a portrait image banner full width instead of shrinking to fit its aspect ratio', () => {
+    // Portrait image (taller than wide) whose natural height at full
+    // container width would exceed the banner's max height.
+    const image = makeImage({ width: 600, height: 1200 });
+    const { getByTestId } = render(<NoteImageGallery images={[image]} />);
+
+    const container = getByTestId('note-image-banner-container');
+    fireEvent(container, 'layout', { nativeEvent: { layout: { width: 320, height: 0, x: 0, y: 0 } } });
+
+    // The tile View (the container's only child) carries the sizing style;
+    // the inner TouchableOpacity just fills whatever box that resolves to.
+    const tileView = container.children[0];
+    if (typeof tileView === 'string') throw new Error('expected a host element, got a text node');
+    const style = Object.assign({}, ...[tileView.props.style].flat(Infinity).filter(Boolean));
+    expect(style.width).toBe('100%');
+    expect(style.aspectRatio).toBeUndefined();
+    expect(style.height).toBeLessThanOrEqual(240);
+  });
+
   it('renders a 2-column grid for two or more images', () => {
     const images = [makeImage({ id: 'img-1' }), makeImage({ id: 'img-2' })];
     const { getByTestId, queryByTestId } = render(<NoteImageGallery images={images} />);
