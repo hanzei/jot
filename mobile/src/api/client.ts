@@ -457,6 +457,28 @@ export function setOnUnauthorized(cb: (() => void) | null): void {
   onUnauthorized = cb;
 }
 
+/**
+ * Clear the stored session/cached profile and notify AuthContext, the same way
+ * the response interceptor reacts to a 401. Exported so the SSE stream — which
+ * bypasses axios and would otherwise sit in a silently signed-in state until the
+ * next API call happens to 401 — can funnel its own 401 through this one
+ * centralized logout path. The re-entrancy guard makes concurrent callers (an
+ * API 401 and an SSE 401 racing on session expiry) collapse into a single logout.
+ */
+export async function handleUnauthorizedSession(): Promise<void> {
+  if (isHandlingUnauthorized || sessionCache === null) {
+    return;
+  }
+  isHandlingUnauthorized = true;
+  sessionCache = null;
+  try {
+    await Promise.all([clearStoredSession(), clearCachedProfile()]);
+    onUnauthorized?.();
+  } finally {
+    isHandlingUnauthorized = false;
+  }
+}
+
 api.interceptors.response.use(
   (response) => {
     const config = response.config as SwitchAwareAxiosRequestConfig;
@@ -481,15 +503,8 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       const url: string = config?.url || '';
       const isAuthEndpoint = url === '/login' || url === '/register' || url === '/logout' || url === '/me';
-      if (!isAuthEndpoint && !isHandlingUnauthorized && sessionCache !== null) {
-        isHandlingUnauthorized = true;
-        sessionCache = null;
-        try {
-          await Promise.all([clearStoredSession(), clearCachedProfile()]);
-          onUnauthorized?.();
-        } finally {
-          isHandlingUnauthorized = false;
-        }
+      if (!isAuthEndpoint) {
+        await handleUnauthorizedSession();
       }
     }
     return Promise.reject(error);

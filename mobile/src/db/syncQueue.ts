@@ -79,6 +79,32 @@ export function isTransientHttpStatus(status: number | undefined): boolean {
 }
 
 /**
+ * Operations for which a "target is gone" replay status (404/410) is an
+ * idempotent success rather than a failure to preserve. These are destructive /
+ * state-transition ops whose desired end-state (the note/item/share/label is
+ * gone, or the note is restored) is *already true* once the target no longer
+ * exists, and which carry no local content the "Keep my version" note-fork
+ * recovery (useSyncFailures) could meaningfully rescue — so dead-lettering them
+ * would only surface a spurious "couldn't be saved" banner (and, for a delete,
+ * offer to resurrect the note the user just deleted).
+ *
+ * This is the common flaky-connection case: an online write times out
+ * client-side (WRITE_REQUEST_TIMEOUT_MS, see api/client.ts) *after* the server
+ * committed it, falls back to the offline queue, and the replay then finds the
+ * note already trashed/restored/gone (server returns 404). Mirrors the
+ * long-standing `removeImage` handling below, generalized to its siblings.
+ */
+const GONE_IDEMPOTENT_OPERATIONS: ReadonlySet<QueueOperation> = new Set([
+  'delete',
+  'permanentDelete',
+  'restore',
+  'deleteItem',
+  'unshare',
+  'removeLabelFromNote',
+  'deleteLabel',
+]);
+
+/**
  * Returns true if the error is a transient HTTP failure that can be safely
  * swallowed and queued for later replay. Returns false for permanent errors
  * (non-Axios errors, 401, or permanent 4xx) that should be surfaced.
@@ -240,6 +266,19 @@ function affectedNoteIds(endpoint: string, body: Record<string, unknown> | undef
   const ids = new Set<string>();
   collectNoteIds(endpoint, body ?? null, ids);
   return [...ids];
+}
+
+/**
+ * The note IDs a dead-lettered op touched, recovered from its stored (effective)
+ * endpoint/body. A multi-note op like `reorder` records its dead_letter row with
+ * `note_id = NULL` yet still flags every affected note `sync_state = 'failed'`,
+ * so the sync-failure resolution flow uses this to clear all of those per-note
+ * badges — not just the single linked note (#493).
+ */
+export function deadLetterAffectedNoteIds(
+  dl: Pick<DeadLetteredOperation, 'endpoint' | 'body'>,
+): string[] {
+  return affectedNoteIds(dl.endpoint, parseQueueBody(dl.body) ?? undefined);
 }
 
 /**
@@ -607,9 +646,14 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         // event reconciles the note's images either way, so there is nothing to
         // preserve here that a full note-fork would help with (issue #618's
         // "reconcile queued removals … gracefully").
+        // A "gone" replay (404/410) of a destructive/restore op is an idempotent
+        // success — the desired end-state already holds — so resolve it silently
+        // rather than dead-lettering (see GONE_IDEMPOTENT_OPERATIONS).
+        const targetGone = status === 404 || status === 410;
         let idempotentConflict =
           (status === 409 && entry.operation !== 'update' && entry.operation !== 'createLabel') ||
-          entry.operation === 'removeImage';
+          entry.operation === 'removeImage' ||
+          (targetGone && GONE_IDEMPOTENT_OPERATIONS.has(entry.operation));
         if (status === 409 && entry.operation === 'createLabel') {
           const clientLabelId = body?.id as string | undefined;
           const labelName = body?.name as string | undefined;
