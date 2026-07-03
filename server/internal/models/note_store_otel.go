@@ -73,7 +73,7 @@ func (s *NoteStore) Update(ctx context.Context, id string, userID string, title,
 	return s.inner.Update(ctx, id, userID, title, content, color, pinned, archived, checkedItemsCollapsed, baseVersion)
 }
 
-func (s *NoteStore) Delete(ctx context.Context, id string, userID string) (err error) {
+func (s *NoteStore) Delete(ctx context.Context, id string, userID string) (_ []string, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.Delete", &err,
 		attribute.String("note.id", id),
 	)
@@ -97,7 +97,7 @@ func (s *NoteStore) RestoreFromTrash(ctx context.Context, id string, userID stri
 	return s.inner.RestoreFromTrash(ctx, id, userID)
 }
 
-func (s *NoteStore) DeleteFromTrash(ctx context.Context, id string, userID string) (err error) {
+func (s *NoteStore) DeleteFromTrash(ctx context.Context, id string, userID string) (_ []string, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.DeleteFromTrash", &err,
 		attribute.String("note.id", id),
 	)
@@ -105,19 +105,19 @@ func (s *NoteStore) DeleteFromTrash(ctx context.Context, id string, userID strin
 	return s.inner.DeleteFromTrash(ctx, id, userID)
 }
 
-func (s *NoteStore) EmptyTrash(ctx context.Context, userID string) (_ []DeletedNoteAudience, err error) {
+func (s *NoteStore) EmptyTrash(ctx context.Context, userID string) (_ []DeletedNoteAudience, _ []string, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.EmptyTrash", &err)
 	defer end()
 	return s.inner.EmptyTrash(ctx, userID)
 }
 
-func (s *NoteStore) DeleteAllByUser(ctx context.Context, userID string) (_ int, err error) {
+func (s *NoteStore) DeleteAllByUser(ctx context.Context, userID string) (_ int, _ []string, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.DeleteAllByUser", &err)
 	defer end()
 	return s.inner.DeleteAllByUser(ctx, userID)
 }
 
-func (s *NoteStore) PurgeOldTrashedNotes(ctx context.Context, olderThan time.Duration) (err error) {
+func (s *NoteStore) PurgeOldTrashedNotes(ctx context.Context, olderThan time.Duration) (_ []string, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.PurgeOldTrashedNotes", &err)
 	defer end()
 	return s.inner.PurgeOldTrashedNotes(ctx, olderThan)
@@ -296,6 +296,12 @@ func (s *NoteStore) GetNoteImageRefCount(ctx context.Context, sha256 string) (_ 
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.GetNoteImageRefCount", &err)
 	defer end()
 	return s.inner.GetNoteImageRefCount(ctx, sha256)
+}
+
+func (s *NoteStore) GetNoteImageSHA256sForUserTx(ctx context.Context, tx *sql.Tx, userID string) (_ []string, err error) {
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.GetNoteImageSHA256sForUserTx", &err)
+	defer end()
+	return s.inner.GetNoteImageSHA256sForUserTx(ctx, tx, userID)
 }
 
 func (s *NoteStore) GetOwnedNotesForExport(ctx context.Context, userID string) (_ []*Note, err error) {

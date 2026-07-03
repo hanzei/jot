@@ -762,13 +762,14 @@ func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, 
 	audienceIDs, audienceErr := h.noteStore.GetNoteAudienceIDs(r.Context(), id)
 
 	if permanent {
-		err := h.noteStore.DeleteFromTrash(r.Context(), id, user.ID)
+		shas, err := h.noteStore.DeleteFromTrash(r.Context(), id, user.ID)
 		if err != nil {
 			if errors.Is(err, models.ErrNoteNotInTrash) {
 				return http.StatusNotFound, nil, err
 			}
 			return http.StatusInternalServerError, nil, fmt.Errorf("delete note from trash: %w", err)
 		}
+		reclaimOrphanedImageBlobs(r.Context(), h.noteStore, h.imageStore, shas)
 	} else {
 		err := h.noteStore.MoveToTrash(r.Context(), id, user.ID)
 		if err != nil {
@@ -803,10 +804,11 @@ func (h *NotesHandler) EmptyTrash(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
-	deletedNotes, err := h.noteStore.EmptyTrash(r.Context(), user.ID)
+	deletedNotes, shas, err := h.noteStore.EmptyTrash(r.Context(), user.ID)
 	if err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("empty trash: %w", err)
 	}
+	reclaimOrphanedImageBlobs(r.Context(), h.noteStore, h.imageStore, shas)
 
 	for _, deletedNote := range deletedNotes {
 		h.publishDeletedNoteEvent(r.Context(), deletedNote.NoteID, deletedNote.AudienceIDs, user.ID)

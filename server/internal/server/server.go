@@ -129,7 +129,7 @@ func New(cfg *config.Config) (*Server, error) {
 	}
 	labelsHandler := handlers.NewLabelsHandler(noteStore, labelStore, hub)
 	eventsHandler := handlers.NewEventsHandler(hub)
-	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, userSettingsStore, cfg.DBDSN, cfg.PasswordMinLength)
+	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, userSettingsStore, imageStore, cfg.DBDSN, cfg.PasswordMinLength)
 	sessionsHandler := handlers.NewSessionsHandler(sessionStore)
 	patsHandler := handlers.NewPATsHandler(patStore)
 
@@ -158,7 +158,16 @@ func New(cfg *config.Config) (*Server, error) {
 		return sessionStore.DeleteExpired(ctx)
 	}, "delete expired sessions")
 	startPeriodicTask(&s.bgWg, ctx, time.Hour, true, func() error {
-		return noteStore.PurgeOldTrashedNotes(ctx, 7*24*time.Hour)
+		shas, err := noteStore.PurgeOldTrashedNotes(ctx, 7*24*time.Hour)
+		if err != nil {
+			return err
+		}
+		for _, sha := range shas {
+			if err := blobstore.ReclaimIfOrphaned(ctx, noteStore, imageStore, sha); err != nil {
+				logrus.WithError(err).WithField("sha256", sha).Error("Failed to reclaim orphaned note image blob/thumbnail")
+			}
+		}
+		return nil
 	}, "purge old trashed notes")
 
 	if err := s.setupRoutes(); err != nil {
@@ -272,7 +281,7 @@ func (s *Server) setupRoutes() error {
 			r.With(auth.SessionRequired).Post("/pats", s.wrapHandler(s.patsHandler.CreatePAT))
 			r.With(auth.SessionRequired).Delete("/pats/{id}", s.wrapHandler(s.patsHandler.RevokePAT))
 
-			r.Handle("/mcp", mcphandler.New(s.noteStore, s.labelStore).NewStreamableHTTPHandler())
+			r.Handle("/mcp", mcphandler.New(s.noteStore, s.labelStore, s.imageStore).NewStreamableHTTPHandler())
 		})
 
 		r.Group(func(r chi.Router) {

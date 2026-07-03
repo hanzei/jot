@@ -3,6 +3,7 @@ package models
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/hanzei/jot/server/internal/database"
 	"github.com/hanzei/jot/server/internal/database/dialect"
@@ -261,6 +262,163 @@ func TestNoteImageEmbeddedInNote(t *testing.T) {
 	note, err = store.GetByID(ctx, noteID, userID)
 	require.NoError(t, err)
 	assert.Empty(t, note.Images, "a deleted image drops out of the note immediately")
+}
+
+// TestNoteHardDeletePathsReturnImageHashes covers every note/user hard-delete
+// path's contract with note_images blob reclamation: note_images rows
+// cascade-delete with their note (or, for uploader_id, with the uploading
+// user), so each path must read the distinct sha256 hashes before the delete
+// and hand them back to the caller to reclaim (docs/specs/file-attachments.md
+// §10). Dedup (a hash referenced by a still-live row elsewhere) is exercised
+// per-path so the returned set is exactly what's now safe to reclaim, not
+// just "every hash that was ever attached."
+func TestNoteHardDeletePathsReturnImageHashes(t *testing.T) {
+	t.Run("Delete returns the note's image hashes", func(t *testing.T) {
+		store, userID, noteID := newTestNoteImageStore(t)
+		ctx := t.Context()
+
+		_, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "sha-a", 1, 1, 0)
+		require.NoError(t, err)
+		_, err = store.CreateNoteImage(ctx, noteID, userID, "b.png", "image/png", 1, "sha-b", 1, 1, 0)
+		require.NoError(t, err)
+
+		shas, err := store.Delete(ctx, noteID, userID)
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []string{"sha-a", "sha-b"}, shas)
+
+		_, err = store.GetByIDAnyState(ctx, noteID, userID)
+		require.ErrorIs(t, err, ErrNoteNotFound)
+	})
+
+	t.Run("DeleteFromTrash returns the note's image hashes", func(t *testing.T) {
+		store, userID, noteID := newTestNoteImageStore(t)
+		ctx := t.Context()
+
+		_, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "sha-a", 1, 1, 0)
+		require.NoError(t, err)
+		require.NoError(t, store.MoveToTrash(ctx, noteID, userID))
+
+		shas, err := store.DeleteFromTrash(ctx, noteID, userID)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"sha-a"}, shas)
+	})
+
+	t.Run("EmptyTrash returns the deduped union of image hashes across all purged notes", func(t *testing.T) {
+		store, userID, noteID := newTestNoteImageStore(t)
+		ctx := t.Context()
+
+		_, err := store.db.ExecContext(ctx, `INSERT INTO notes (id, user_id, note_type) VALUES ('note00000000000empty2', ?, 'text')`, userID)
+		require.NoError(t, err)
+
+		// "shared-hash" is attached to both notes (dedup); "sha-only1" only to
+		// the first. The returned set must be deduped, not a raw concatenation.
+		_, err = store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "shared-hash", 1, 1, 0)
+		require.NoError(t, err)
+		_, err = store.CreateNoteImage(ctx, noteID, userID, "b.png", "image/png", 1, "sha-only1", 1, 1, 0)
+		require.NoError(t, err)
+		_, err = store.CreateNoteImage(ctx, "note00000000000empty2", userID, "c.png", "image/png", 1, "shared-hash", 1, 1, 0)
+		require.NoError(t, err)
+
+		require.NoError(t, store.MoveToTrash(ctx, noteID, userID))
+		require.NoError(t, store.MoveToTrash(ctx, "note00000000000empty2", userID))
+
+		deleted, shas, err := store.EmptyTrash(ctx, userID)
+		require.NoError(t, err)
+		assert.Len(t, deleted, 2)
+		assert.ElementsMatch(t, []string{"shared-hash", "sha-only1"}, shas)
+	})
+
+	t.Run("DeleteAllByUser returns the image hashes across all of the user's notes", func(t *testing.T) {
+		store, userID, noteID := newTestNoteImageStore(t)
+		ctx := t.Context()
+
+		_, err := store.db.ExecContext(ctx, `INSERT INTO notes (id, user_id, note_type) VALUES ('note0000000000allbyu2', ?, 'text')`, userID)
+		require.NoError(t, err)
+
+		_, err = store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "sha-a", 1, 1, 0)
+		require.NoError(t, err)
+		_, err = store.CreateNoteImage(ctx, "note0000000000allbyu2", userID, "b.png", "image/png", 1, "sha-b", 1, 1, 0)
+		require.NoError(t, err)
+
+		deletedCount, shas, err := store.DeleteAllByUser(ctx, userID)
+		require.NoError(t, err)
+		assert.Equal(t, 2, deletedCount)
+		assert.ElementsMatch(t, []string{"sha-a", "sha-b"}, shas)
+	})
+
+	t.Run("PurgeOldTrashedNotes only purges notes past the cutoff and returns their image hashes", func(t *testing.T) {
+		store, userID, noteID := newTestNoteImageStore(t)
+		ctx := t.Context()
+
+		_, err := store.db.ExecContext(ctx, `INSERT INTO notes (id, user_id, note_type) VALUES ('note00000000000recent', ?, 'text')`, userID)
+		require.NoError(t, err)
+
+		_, err = store.CreateNoteImage(ctx, noteID, userID, "old.png", "image/png", 1, "sha-old", 1, 1, 0)
+		require.NoError(t, err)
+		_, err = store.CreateNoteImage(ctx, "note00000000000recent", userID, "recent.png", "image/png", 1, "sha-recent", 1, 1, 0)
+		require.NoError(t, err)
+
+		require.NoError(t, store.MoveToTrash(ctx, noteID, userID))
+		require.NoError(t, store.MoveToTrash(ctx, "note00000000000recent", userID))
+
+		// Backdate only the first note's deleted_at so it alone is past the cutoff.
+		_, err = store.db.ExecContext(ctx, `UPDATE notes SET deleted_at = datetime('now', '-10 days') WHERE id = ?`, noteID)
+		require.NoError(t, err)
+
+		shas, err := store.PurgeOldTrashedNotes(ctx, 7*24*time.Hour)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"sha-old"}, shas)
+
+		_, err = store.GetByIDAnyState(ctx, noteID, userID)
+		require.ErrorIs(t, err, ErrNoteNotFound)
+
+		var recentCount int
+		require.NoError(t, store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM notes WHERE id = 'note00000000000recent'`).Scan(&recentCount))
+		assert.Equal(t, 1, recentCount, "the recently-trashed note must survive the purge")
+	})
+
+	t.Run("PurgeOldTrashedNotes returns nothing when no note is past the cutoff", func(t *testing.T) {
+		store, _, _ := newTestNoteImageStore(t)
+
+		shas, err := store.PurgeOldTrashedNotes(t.Context(), 7*24*time.Hour)
+		require.NoError(t, err)
+		assert.Empty(t, shas)
+	})
+}
+
+// TestGetNoteImageSHA256sForUserTx covers both cascades a user hard-delete
+// triggers: note_images.note_id (via notes the user owns) and
+// note_images.uploader_id directly (images the user uploaded onto someone
+// else's shared note, which survives the delete even though the image row
+// doesn't). It's tx-scoped (see DeleteWithCleanup's preDelete hook) so the
+// test exercises it the same way: inside a transaction, before any delete.
+func TestGetNoteImageSHA256sForUserTx(t *testing.T) {
+	store, ownerID, ownedNoteID := newTestNoteImageStore(t)
+	ctx := t.Context()
+
+	_, err := store.db.ExecContext(ctx, `INSERT INTO users (id, username, password_hash) VALUES ('user0000000shareduser', 'shareduploader', 'x')`)
+	require.NoError(t, err)
+	sharedUploaderID := "user0000000shareduser"
+
+	// Image the owner attached to their own note.
+	_, err = store.CreateNoteImage(ctx, ownedNoteID, ownerID, "owned.png", "image/png", 1, "sha-owned", 1, 1, 0)
+	require.NoError(t, err)
+	// Image sharedUploaderID uploaded onto the owner's note (a collaborator
+	// upload) — reachable via uploader_id, not via owning any note.
+	_, err = store.CreateNoteImage(ctx, ownedNoteID, sharedUploaderID, "uploaded.png", "image/png", 1, "sha-uploaded", 1, 1, 0)
+	require.NoError(t, err)
+
+	tx, err := store.db.BeginTx(ctx, nil)
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback() }()
+
+	ownerShas, err := store.GetNoteImageSHA256sForUserTx(ctx, tx, ownerID)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"sha-owned", "sha-uploaded"}, ownerShas, "owner reaches every image on their notes regardless of uploader")
+
+	uploaderShas, err := store.GetNoteImageSHA256sForUserTx(ctx, tx, sharedUploaderID)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"sha-uploaded"}, uploaderShas, "a non-owner only reaches images they personally uploaded")
 }
 
 func TestGetNoteImageCountByNoteID(t *testing.T) {

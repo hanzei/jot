@@ -75,24 +75,32 @@ func (h *NotesHandler) publishNoteImageEvent(ctx context.Context, noteID string,
 	})
 }
 
-// reclaimNoteImageBlob deletes the on-disk blob and its derived thumbnail for
-// sha if no note_images row still references it (dedup means another row may
-// share the same content hash). Errors are logged but never fail the delete
-// request — the row is already gone, and issue #608 will add a periodic
-// orphan sweep as the safety net for any path that doesn't call this (e.g. a
-// note hard-delete cascade).
+// reclaimOrphanedImageBlobs reclaims the on-disk blob (and derived thumbnail)
+// for each sha in shas whose note_images refcount has hit zero (dedup means
+// another row may still share a given content hash). Errors are logged but
+// never fail the caller's request — by the time this runs, the row delete
+// that made shas candidates has already succeeded. Shared by every path that
+// hard-deletes notes or images: single-image delete, upload rollback, and
+// note/user hard-delete cascades (issue #608), plus the periodic orphan
+// sweep as a safety net for any path that misses this.
+func reclaimOrphanedImageBlobs(ctx context.Context, noteStore *models.NoteStore, imageStore *blobstore.ImageStore, shas []string) {
+	// The row delete already committed by the time this runs, so a client
+	// disconnect (which cancels an HTTP/MCP request's context) must not abort
+	// the on-disk cleanup — there's no retry path, so an aborted reclaim here
+	// leaks the blob permanently. context.WithoutCancel keeps request-scoped
+	// values (e.g. the logger below) while detaching from that cancellation.
+	ctx = context.WithoutCancel(ctx)
+	for _, sha := range shas {
+		if err := blobstore.ReclaimIfOrphaned(ctx, noteStore, imageStore, sha); err != nil {
+			logutil.FromContext(ctx).WithError(err).WithField("sha256", sha).Error("Failed to reclaim orphaned note image blob/thumbnail")
+		}
+	}
+}
+
+// reclaimNoteImageBlob is the single-hash convenience form of
+// reclaimOrphanedImageBlobs for NotesHandler's own image endpoints.
 func (h *NotesHandler) reclaimNoteImageBlob(ctx context.Context, sha string) {
-	count, err := h.noteStore.GetNoteImageRefCount(ctx, sha)
-	if err != nil {
-		logutil.FromContext(ctx).WithError(err).WithField("sha256", sha).Error("Failed to check note image refcount for blob reclamation")
-		return
-	}
-	if count > 0 {
-		return
-	}
-	if err := h.imageStore.Delete(ctx, sha); err != nil {
-		logutil.FromContext(ctx).WithError(err).WithField("sha256", sha).Error("Failed to reclaim orphaned note image blob/thumbnail")
-	}
+	reclaimOrphanedImageBlobs(ctx, h.noteStore, h.imageStore, []string{sha})
 }
 
 // UploadNoteImage godoc
