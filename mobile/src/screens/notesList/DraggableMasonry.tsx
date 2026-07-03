@@ -214,16 +214,29 @@ export default function DraggableMasonry({
     });
   }, [heights, orders, sections, liveIds]);
 
-  // Once the first batch of cards has been measured and placed, any card that
-  // mounts afterwards is a genuine addition (a created note, or one arriving via
-  // sync) and fades in. The initial populate mounts while this is still false,
-  // so navigating into the view never animates the whole list in.
+  // Entrance animations are enabled only once the *entire* initial data set has
+  // been measured and placed. Sections commit independently (see the batch
+  // commit above), so keying off a single committed height would flip too early
+  // and animate later-committing initial cards (e.g. the "other" section
+  // committing after "pinned") as if they were new. Instead we capture the ids
+  // from the first non-empty render and wait for every one of them to commit
+  // (or drop out of the list). Any card mounting after that is a genuine
+  // addition — a created note or one arriving via sync — and fades in.
+  const initialIdsRef = useRef<Set<string> | null>(null);
   const hasPopulatedRef = useRef(false);
   useEffect(() => {
-    if (!hasPopulatedRef.current && Object.keys(committedHeights).length > 0) {
+    if (hasPopulatedRef.current) return;
+    if (initialIdsRef.current === null) {
+      if (liveIds.size === 0) return;
+      initialIdsRef.current = new Set(liveIds);
+    }
+    const allInitialCommitted = [...initialIdsRef.current].every(
+      (id) => committedHeights[id] !== undefined || !liveIds.has(id),
+    );
+    if (allInitialCommitted) {
       hasPopulatedRef.current = true;
     }
-  }, [committedHeights]);
+  }, [committedHeights, liveIds]);
 
   // Ids waiting on their first real measurement, across all sections — these
   // render invisibly via HeightMeasurer instead of in the positioned list.

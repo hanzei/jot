@@ -604,7 +604,9 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   // Signature of the active view/filter/sort/layout. The static grid swaps
   // instantly when it changes, so only in-view note changes (create, delete,
   // archive, pin, sync) animate — never a search/sort switch or first load.
-  const gridViewKey = `${variant}|${debouncedSearch}|${labelId ?? ''}|${sortMode}|${layout}`;
+  // JSON-encoded (not delimiter-joined) so free-form search text — which may
+  // contain any separator character — can't make two different views collide.
+  const gridViewKey = JSON.stringify([variant, debouncedSearch, labelId ?? '', sortMode, layout]);
 
   const handleGridSectionReorder = useCallback(
     (sectionKey: string, newData: Note[]) => {

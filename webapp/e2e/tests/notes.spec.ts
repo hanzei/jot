@@ -100,26 +100,26 @@ test.describe('Notes', () => {
     );
   });
 
-  test('pins a note and it appears in the pinned section', async ({ page, dashboardPage }) => {
+  test('pins a note and it appears in the pinned section', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createNote('Note to Pin');
 
     await dashboardPage.pinNote('Note to Pin');
 
     // Pinned section heading should appear with the note under it
-    await expect(page.locator('h2:has-text("Pinned")')).toBeVisible();
+    await expect(dashboardPage.pinnedSectionHeading()).toBeVisible();
     await expect(dashboardPage.noteCard('Note to Pin')).toBeVisible();
   });
 
-  test('unpins a pinned note', async ({ page, dashboardPage }) => {
+  test('unpins a pinned note', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createNote('Pinned Note');
     await dashboardPage.pinNote('Pinned Note');
-    await expect(page.locator('h2:has-text("Pinned")')).toBeVisible();
+    await expect(dashboardPage.pinnedSectionHeading()).toBeVisible();
 
     await dashboardPage.unpinNote('Pinned Note');
     // Pinned section heading should disappear once the only pinned note is unpinned
-    await expect(page.locator('h2:has-text("Pinned")')).toHaveCount(0);
+    await expect(dashboardPage.pinnedSectionHeading()).toHaveCount(0);
   });
 
   test('archives a note and it disappears from main view', async ({ dashboardPage }) => {
