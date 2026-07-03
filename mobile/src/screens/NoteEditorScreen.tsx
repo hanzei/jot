@@ -1344,6 +1344,10 @@ export default function NoteEditorScreen() {
       destructive: true,
     });
     if (!confirmed) return;
+    // Re-read the id: offline sync can reconcile a local_* id to its
+    // server-issued id while the confirmation dialog was awaiting the user.
+    const currentNoteId = noteIdRef.current;
+    if (!currentNoteId) return;
     try {
       if (debounceRef.current) {
         clearTimeout(debounceRef.current);
@@ -1353,12 +1357,12 @@ export default function NoteEditorScreen() {
       if (saveInFlightRef.current) {
         try { await saveInFlightRef.current; } catch { /* already handled */ }
       }
-      await deleteMutation.mutateAsync(noteId);
+      await deleteMutation.mutateAsync(currentNoteId);
       showToast(t('dashboard.noteDeleted'), 'success', {
         label: t('dashboard.undo'),
         onPress: async () => {
           try {
-            await restoreMutation.mutateAsync(noteId);
+            await restoreMutation.mutateAsync(currentNoteId);
             showToast(t('dashboard.noteRestored'));
           } catch {
             showToast(t('note.failedRestore'), 'error');
@@ -2150,6 +2154,7 @@ export default function NoteEditorScreen() {
         onCancel={exitSavePrompt && exitSavePrompt.retriesLeft > 0 ? handleExitRetry : undefined}
         onConfirm={handleExitDiscard}
         busy={isExitRetrying}
+        dismissible={false}
       />
 
       <Modal

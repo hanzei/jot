@@ -91,6 +91,33 @@ describe('ConfirmDialog / useConfirm', () => {
 
     expect(getByTestId('confirm-dialog-cancel').props.accessibilityLabel).toBe('Cancel');
   });
+
+  it('resolves an unresolved prior confirm() as cancelled when a second one replaces it', async () => {
+    const { getByTestId, confirm } = renderConfirm();
+    let firstResult: boolean | undefined;
+    let secondResult: boolean | undefined;
+
+    act(() => {
+      confirm()({ title: 'First', message: 'first', confirmLabel: 'Go' })
+        .then((value) => { firstResult = value; });
+    });
+
+    // A second confirm() call before the first was answered must not leave
+    // the first promise hanging forever.
+    await act(async () => {
+      confirm()({ title: 'Second', message: 'second', confirmLabel: 'Go' })
+        .then((value) => { secondResult = value; });
+    });
+
+    expect(firstResult).toBe(false);
+    expect(secondResult).toBeUndefined();
+    expect(getByTestId('confirm-dialog-title').props.children).toBe('Second');
+
+    await act(async () => {
+      fireEvent.press(getByTestId('confirm-dialog-confirm'));
+    });
+    expect(secondResult).toBe(true);
+  });
 });
 
 describe('useConfirm default (no provider)', () => {

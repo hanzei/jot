@@ -246,6 +246,28 @@ describe('NoteEditorScreen exit save behavior', () => {
     expect(getByTestId('confirm-dialog-cancel').props.accessibilityLabel).toBe('common.retry');
   });
 
+  it('does not trigger a retry when the backdrop is tapped', async () => {
+    mockCreateMutateAsync.mockRejectedValue(new Error('400 Bad Request'));
+
+    const { getByTestId, findByTestId } = render(<NoteEditorScreen />);
+    fireEvent.changeText(getByTestId('note-content-input'), 'Hello');
+
+    const beforeRemove = getBeforeRemoveHandler()!;
+    const event = makeEvent();
+    act(() => { beforeRemove(event); });
+
+    await findByTestId('confirm-dialog-cancel');
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1);
+
+    // The "cancel" slot is repurposed for Retry here, not a true dismiss —
+    // tapping outside the dialog must be a no-op, not a silent retry attempt.
+    fireEvent.press(getByTestId('confirm-dialog-overlay'));
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1);
+    expect(mockDispatch).not.toHaveBeenCalled();
+    expect(getByTestId('confirm-dialog-cancel')).toBeTruthy();
+  });
+
   it('dispatches navigation when Discard & leave is chosen', async () => {
     mockCreateMutateAsync.mockRejectedValue(new Error('400 Bad Request'));
 

@@ -11,11 +11,11 @@ interface ConfirmDialogProps {
   title: string;
   message: string;
   confirmLabel: string;
+  cancelLabel?: string;
+  onConfirm: () => void;
   // Omit to render a single, non-dismissable confirm action (no cancel button,
   // backdrop tap and hardware back are no-ops) — used for prompts the user
   // must resolve via the primary action.
-  cancelLabel?: string;
-  onConfirm: () => void;
   onCancel?: () => void;
   destructive?: boolean;
   // Set while a caller-driven async action (e.g. a retry) is in flight to
@@ -23,6 +23,11 @@ interface ConfirmDialogProps {
   // / onCancel resolve synchronously (the common useConfirm() case) never
   // need this since the dialog unmounts before any async work starts.
   busy?: boolean;
+  // Set false when onCancel is repurposed for a secondary action that isn't
+  // "dismiss" (e.g. a "Retry" button) so backdrop tap / hardware back don't
+  // silently trigger it. Defaults to true, which ties backdrop/back dismissal
+  // to onCancel as with a normal Cancel button.
+  dismissible?: boolean;
 }
 
 export default function ConfirmDialog({
@@ -35,10 +40,11 @@ export default function ConfirmDialog({
   onCancel,
   destructive,
   busy,
+  dismissible = true,
 }: ConfirmDialogProps) {
   const { colors } = useTheme();
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
-  const dismiss = busy ? () => {} : onCancel ?? (() => {});
+  const dismiss = busy || !dismissible ? () => {} : onCancel ?? (() => {});
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={dismiss}>
@@ -104,7 +110,12 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
 
   const confirm = useCallback((options: ConfirmOptions): Promise<boolean> => {
     return new Promise<boolean>((resolve) => {
-      setRequest({ options, resolve });
+      setRequest((prev) => {
+        // A still-pending request would otherwise be dropped with its promise
+        // left unresolved forever — settle it as cancelled before replacing it.
+        prev?.resolve(false);
+        return { options, resolve };
+      });
     });
   }, []);
 
