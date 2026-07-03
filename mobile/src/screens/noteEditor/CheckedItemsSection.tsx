@@ -37,6 +37,8 @@ interface CheckedItemsSectionProps {
   handlers: ListItemHandlers;
   /** Id of the item the user just checked off, so only that row pops on mount. */
   popItemId: string | null;
+  /** When false (read-only trashed note), rows render non-interactive. */
+  editable?: boolean;
 }
 
 /**
@@ -57,6 +59,7 @@ export default function CheckedItemsSection({
   dividerColor,
   handlers,
   popItemId,
+  editable = true,
 }: CheckedItemsSectionProps) {
   const { t } = useTranslation();
   const { colors } = useTheme();
@@ -101,6 +104,7 @@ export default function CheckedItemsSection({
           inputRef={getItemRef(item.id)}
           text={item.text}
           completed={item.completed}
+          editable={editable}
           isActive={false}
           indentLevel={item.parentId ? 1 : 0}
           assignedTo={item.assigned_to}

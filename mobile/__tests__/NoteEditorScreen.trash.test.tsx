@@ -5,12 +5,12 @@ import NoteEditorScreen from '../src/screens/NoteEditorScreen';
 
 const mockUseRoute = jest.fn();
 const mockGoBack = jest.fn();
-const mockReplace = jest.fn();
 const mockNavigate = jest.fn();
 const mockDispatch = jest.fn();
 const mockSetParams = jest.fn();
 const mockNavigationAddListener = jest.fn().mockReturnValue(jest.fn());
-const mockUpdateMutateAsync = jest.fn();
+const mockRestoreMutateAsync = jest.fn();
+const mockPermanentDeleteMutateAsync = jest.fn();
 const mockUseOfflineNote = jest.fn();
 const mockShowToast = jest.fn();
 
@@ -19,7 +19,7 @@ jest.mock('@react-navigation/native', () => ({
   useRoute: () => mockUseRoute(),
   useNavigation: () => ({
     goBack: mockGoBack,
-    replace: mockReplace,
+    replace: jest.fn(),
     navigate: mockNavigate,
     dispatch: mockDispatch,
     setParams: mockSetParams,
@@ -51,15 +51,13 @@ jest.mock('expo-haptics', () => ({
   NotificationFeedbackType: { Error: 'error' },
 }));
 
-// react-native-reorderable-list is mocked once globally in jest.setup.js.
-
 jest.mock('../src/hooks/useNotes', () => ({
   __esModule: true,
   useCreateNote: () => ({ mutateAsync: jest.fn() }),
-  useUpdateNote: () => ({ mutateAsync: mockUpdateMutateAsync }),
+  useUpdateNote: () => ({ mutateAsync: jest.fn() }),
   useDeleteNote: () => ({ mutateAsync: jest.fn() }),
-  useRestoreNote: () => ({ mutateAsync: jest.fn() }),
-  usePermanentDeleteNote: () => ({ mutateAsync: jest.fn() }),
+  useRestoreNote: () => ({ mutateAsync: mockRestoreMutateAsync }),
+  usePermanentDeleteNote: () => ({ mutateAsync: mockPermanentDeleteMutateAsync }),
   useDuplicateNote: () => ({ mutateAsync: jest.fn() }),
   useCreateNoteItem: () => ({ mutateAsync: jest.fn() }),
   useUpdateNoteItem: () => ({ mutateAsync: jest.fn() }),
@@ -70,12 +68,8 @@ jest.mock('../src/hooks/useNotes', () => ({
 
 jest.mock('../src/hooks/useNoteImages', () => ({
   __esModule: true,
-  useUploadNoteImage: () => ({
-    mutateAsync: jest.fn(),
-  }),
-  useDeleteNoteImage: () => ({
-    mutateAsync: jest.fn(),
-  }),
+  useUploadNoteImage: () => ({ mutateAsync: jest.fn() }),
+  useDeleteNoteImage: () => ({ mutateAsync: jest.fn() }),
 }));
 
 jest.mock('../src/hooks/usePendingImageUploads', () => ({
@@ -119,75 +113,58 @@ jest.mock('../src/theme/ThemeContext', () => ({
   useTheme: () => ({
     isDark: false,
     colors: {
-      background: '#fff',
-      surface: '#fff',
-      border: '#ddd',
-      borderLight: '#eee',
-      text: '#111',
-      textSecondary: '#444',
-      textMuted: '#777',
-      placeholder: '#aaa',
-      icon: '#555',
-      iconMuted: '#888',
-      primary: '#2563eb',
-      primaryLight: '#dbeafe',
-      error: '#dc2626',
-      errorLight: '#fee2e2',
-      cardBackground: '#fff',
-      cardBorder: '#ddd',
+      background: '#fff', surface: '#fff', border: '#ddd', borderLight: '#eee',
+      text: '#111', textSecondary: '#444', textMuted: '#777', placeholder: '#aaa',
+      icon: '#555', iconMuted: '#888', primary: '#2563eb', primaryLight: '#dbeafe',
+      error: '#dc2626', errorLight: '#fee2e2', cardBackground: '#fff', cardBorder: '#ddd',
+      overlay: 'rgba(0,0,0,0.4)', sheetBackground: '#fff', handleColor: '#ccc',
     },
   }),
 }));
 
 jest.mock('../src/store/AuthContext', () => ({
   __esModule: true,
-  useAuth: () => ({
-    user: { id: 'u1', username: 'alice' },
-    isAuthenticated: true,
-  }),
+  useAuth: () => ({ user: { id: 'u1', username: 'alice' }, isAuthenticated: true, isLocalMode: false }),
 }));
 
 jest.mock('../src/store/UsersContext', () => ({
   __esModule: true,
-  useUsers: () => ({
-    usersById: new Map(),
-  }),
+  useUsers: () => ({ usersById: new Map() }),
 }));
 
 jest.mock('../src/hooks/useToast', () => ({
   __esModule: true,
-  useToast: () => ({
-    showToast: mockShowToast,
-  }),
+  useToast: () => ({ showToast: mockShowToast }),
 }));
 
-jest.mock('../src/i18n', () => ({
-  __esModule: true,
-  default: {},
-}));
+jest.mock('../src/i18n', () => ({ __esModule: true, default: {} }));
 
-function makeNote(overrides: Record<string, unknown> = {}) {
+function makeTrashedNote(overrides: Record<string, unknown> = {}) {
   return {
     id: 'note-1',
+    user_id: 'u1',
     note_type: 'text',
     title: '',
-    content: 'Hello world',
+    content: 'Deleted note body',
     pinned: false,
     archived: false,
     color: '#ffffff',
     checked_items_collapsed: false,
     labels: [],
     items: [],
+    deleted_at: '2026-07-03T00:00:00Z',
     ...overrides,
   };
 }
 
-describe('NoteEditorScreen archive navigation', () => {
+describe('NoteEditorScreen read-only trashed note', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockNavigationAddListener.mockReturnValue(jest.fn());
-    mockUseRoute.mockReturnValue({ params: { noteId: 'note-1' } });
-    mockUpdateMutateAsync.mockResolvedValue({});
+    mockUseRoute.mockReturnValue({ params: { noteId: 'note-1', readOnly: true } });
+    mockRestoreMutateAsync.mockResolvedValue({});
+    mockPermanentDeleteMutateAsync.mockResolvedValue({});
+    mockUseOfflineNote.mockReturnValue({ data: makeTrashedNote() });
     jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
   });
 
@@ -195,41 +172,37 @@ describe('NoteEditorScreen archive navigation', () => {
     jest.restoreAllMocks();
   });
 
-  it('navigates back to the dashboard after archiving an existing note', async () => {
-    mockUseOfflineNote.mockReturnValue({ data: makeNote({ archived: false }) });
+  it('renders the content preview (not the editable input) and disables bar actions', () => {
+    const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
 
-    const { getByTestId } = render(<NoteEditorScreen />);
+    // Read-only: preview shown, no editable content input.
+    expect(getByTestId('content-preview')).toBeTruthy();
+    expect(queryByTestId('note-content-input')).toBeNull();
 
-    await act(async () => {
-      fireEvent.press(getByTestId('toolbar-archive-btn'));
-    });
-
-    await waitFor(() => {
-      expect(mockUpdateMutateAsync).toHaveBeenCalledWith(
-        expect.objectContaining({ id: 'note-1', data: expect.objectContaining({ archived: true }) }),
-      );
-    });
-
-    expect(mockGoBack).toHaveBeenCalledTimes(1);
-    expect(mockShowToast).toHaveBeenCalledWith('dashboard.noteArchived', 'success', expect.anything());
+    // Bar actions are disabled.
+    expect(getByTestId('toolbar-pin-btn').props.accessibilityState).toMatchObject({ disabled: true });
+    expect(getByTestId('toolbar-archive-btn').props.accessibilityState).toMatchObject({ disabled: true });
+    expect(getByTestId('toolbar-color-btn').props.accessibilityState).toMatchObject({ disabled: true });
+    expect(getByTestId('toolbar-add-image-btn').props.accessibilityState).toMatchObject({ disabled: true });
   });
 
-  it('does not navigate back when unarchiving an existing note', async () => {
-    mockUseOfflineNote.mockReturnValue({ data: makeNote({ archived: true }) });
+  it('offers Restore and Delete-forever in the overflow menu and restores the note', async () => {
+    const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
 
-    const { getByTestId } = render(<NoteEditorScreen />);
+    fireEvent.press(getByTestId('toolbar-menu-btn'));
+
+    // Trashed menu: only restore + delete-forever, no move-to-trash/send.
+    expect(getByTestId('editor-menu-restore')).toBeTruthy();
+    expect(getByTestId('editor-menu-delete-permanently')).toBeTruthy();
+    expect(queryByTestId('editor-menu-trash')).toBeNull();
 
     await act(async () => {
-      fireEvent.press(getByTestId('toolbar-archive-btn'));
+      fireEvent.press(getByTestId('editor-menu-restore'));
     });
 
     await waitFor(() => {
-      expect(mockUpdateMutateAsync).toHaveBeenCalledWith(
-        expect.objectContaining({ id: 'note-1', data: expect.objectContaining({ archived: false }) }),
-      );
+      expect(mockRestoreMutateAsync).toHaveBeenCalledWith('note-1');
     });
-
-    expect(mockGoBack).not.toHaveBeenCalled();
-    expect(mockShowToast).toHaveBeenCalledWith('dashboard.noteUnarchived');
+    expect(mockGoBack).toHaveBeenCalledTimes(1);
   });
 });

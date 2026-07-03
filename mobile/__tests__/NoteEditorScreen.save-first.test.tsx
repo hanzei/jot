@@ -4,25 +4,20 @@ import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import NoteEditorScreen from '../src/screens/NoteEditorScreen';
 
 const mockUseRoute = jest.fn();
-const mockGoBack = jest.fn();
-const mockReplace = jest.fn();
-const mockNavigate = jest.fn();
-const mockDispatch = jest.fn();
-const mockSetParams = jest.fn();
 const mockNavigationAddListener = jest.fn().mockReturnValue(jest.fn());
+const mockCreateMutateAsync = jest.fn();
 const mockUpdateMutateAsync = jest.fn();
 const mockUseOfflineNote = jest.fn();
-const mockShowToast = jest.fn();
 
 jest.mock('@react-navigation/native', () => ({
   __esModule: true,
   useRoute: () => mockUseRoute(),
   useNavigation: () => ({
-    goBack: mockGoBack,
-    replace: mockReplace,
-    navigate: mockNavigate,
-    dispatch: mockDispatch,
-    setParams: mockSetParams,
+    goBack: jest.fn(),
+    replace: jest.fn(),
+    navigate: jest.fn(),
+    dispatch: jest.fn(),
+    setParams: jest.fn(),
     addListener: mockNavigationAddListener,
   }),
   useFocusEffect: jest.fn(),
@@ -51,11 +46,9 @@ jest.mock('expo-haptics', () => ({
   NotificationFeedbackType: { Error: 'error' },
 }));
 
-// react-native-reorderable-list is mocked once globally in jest.setup.js.
-
 jest.mock('../src/hooks/useNotes', () => ({
   __esModule: true,
-  useCreateNote: () => ({ mutateAsync: jest.fn() }),
+  useCreateNote: () => ({ mutateAsync: mockCreateMutateAsync }),
   useUpdateNote: () => ({ mutateAsync: mockUpdateMutateAsync }),
   useDeleteNote: () => ({ mutateAsync: jest.fn() }),
   useRestoreNote: () => ({ mutateAsync: jest.fn() }),
@@ -70,12 +63,8 @@ jest.mock('../src/hooks/useNotes', () => ({
 
 jest.mock('../src/hooks/useNoteImages', () => ({
   __esModule: true,
-  useUploadNoteImage: () => ({
-    mutateAsync: jest.fn(),
-  }),
-  useDeleteNoteImage: () => ({
-    mutateAsync: jest.fn(),
-  }),
+  useUploadNoteImage: () => ({ mutateAsync: jest.fn() }),
+  useDeleteNoteImage: () => ({ mutateAsync: jest.fn() }),
 }));
 
 jest.mock('../src/hooks/usePendingImageUploads', () => ({
@@ -101,92 +90,56 @@ jest.mock('../src/components/LabelPicker', () => ({
   default: () => null,
 }));
 
-jest.mock('react-i18next', () => ({
-  __esModule: true,
-  useTranslation: () => ({
-    t: (key: string, options?: { count?: number }) => {
-      if (key === 'note.completedItems') {
-        return `${options?.count ?? 0} completed items`;
-      }
-      return key;
-    },
-    i18n: { language: 'en' },
-  }),
-}));
+// Return a STABLE t/i18n across renders. A fresh t each render would change the
+// identity of the editor's flushSave callback, re-firing its mount effect and
+// tripping an unmounting=true autosave that skips setNoteId — a test artifact,
+// not real behavior (react-i18next's real t is stable).
+jest.mock('react-i18next', () => {
+  const t = (key: string, options?: { count?: number }) =>
+    key === 'note.completedItems' ? `${options?.count ?? 0} completed items` : key;
+  const i18n = { language: 'en' };
+  return { __esModule: true, useTranslation: () => ({ t, i18n }) };
+});
 
 jest.mock('../src/theme/ThemeContext', () => ({
   __esModule: true,
   useTheme: () => ({
     isDark: false,
     colors: {
-      background: '#fff',
-      surface: '#fff',
-      border: '#ddd',
-      borderLight: '#eee',
-      text: '#111',
-      textSecondary: '#444',
-      textMuted: '#777',
-      placeholder: '#aaa',
-      icon: '#555',
-      iconMuted: '#888',
-      primary: '#2563eb',
-      primaryLight: '#dbeafe',
-      error: '#dc2626',
-      errorLight: '#fee2e2',
-      cardBackground: '#fff',
-      cardBorder: '#ddd',
+      background: '#fff', surface: '#fff', border: '#ddd', borderLight: '#eee',
+      text: '#111', textSecondary: '#444', textMuted: '#777', placeholder: '#aaa',
+      icon: '#555', iconMuted: '#888', primary: '#2563eb', primaryLight: '#dbeafe',
+      error: '#dc2626', errorLight: '#fee2e2', cardBackground: '#fff', cardBorder: '#ddd',
+      overlay: 'rgba(0,0,0,0.4)', sheetBackground: '#fff', handleColor: '#ccc',
     },
   }),
 }));
 
 jest.mock('../src/store/AuthContext', () => ({
   __esModule: true,
-  useAuth: () => ({
-    user: { id: 'u1', username: 'alice' },
-    isAuthenticated: true,
-  }),
+  useAuth: () => ({ user: { id: 'u1', username: 'alice' }, isAuthenticated: true, isLocalMode: false }),
 }));
 
 jest.mock('../src/store/UsersContext', () => ({
   __esModule: true,
-  useUsers: () => ({
-    usersById: new Map(),
-  }),
+  useUsers: () => ({ usersById: new Map() }),
 }));
 
 jest.mock('../src/hooks/useToast', () => ({
   __esModule: true,
-  useToast: () => ({
-    showToast: mockShowToast,
-  }),
+  useToast: () => ({ showToast: jest.fn() }),
 }));
 
-jest.mock('../src/i18n', () => ({
-  __esModule: true,
-  default: {},
-}));
+jest.mock('../src/i18n', () => ({ __esModule: true, default: {} }));
 
-function makeNote(overrides: Record<string, unknown> = {}) {
-  return {
-    id: 'note-1',
-    note_type: 'text',
-    title: '',
-    content: 'Hello world',
-    pinned: false,
-    archived: false,
-    color: '#ffffff',
-    checked_items_collapsed: false,
-    labels: [],
-    items: [],
-    ...overrides,
-  };
-}
-
-describe('NoteEditorScreen archive navigation', () => {
+describe('NoteEditorScreen save-first actions', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockNavigationAddListener.mockReturnValue(jest.fn());
-    mockUseRoute.mockReturnValue({ params: { noteId: 'note-1' } });
+    // Brand-new note: no id yet, nothing hydrated.
+    mockUseRoute.mockReturnValue({ params: { noteId: null } });
+    mockUseOfflineNote.mockReturnValue({ data: null });
+    mockCreateMutateAsync.mockResolvedValue({ id: 'server-1', note_type: 'text', content: 'Fresh note' });
     mockUpdateMutateAsync.mockResolvedValue({});
     jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
   });
@@ -195,41 +148,26 @@ describe('NoteEditorScreen archive navigation', () => {
     jest.restoreAllMocks();
   });
 
-  it('navigates back to the dashboard after archiving an existing note', async () => {
-    mockUseOfflineNote.mockReturnValue({ data: makeNote({ archived: false }) });
-
+  it('creates the note before pinning when it has not been saved yet', async () => {
     const { getByTestId } = render(<NoteEditorScreen />);
 
+    // Type some content so the note is non-empty (and therefore saveable).
     await act(async () => {
-      fireEvent.press(getByTestId('toolbar-archive-btn'));
+      fireEvent.changeText(getByTestId('note-content-input'), 'Fresh note');
     });
-
-    await waitFor(() => {
-      expect(mockUpdateMutateAsync).toHaveBeenCalledWith(
-        expect.objectContaining({ id: 'note-1', data: expect.objectContaining({ archived: true }) }),
-      );
-    });
-
-    expect(mockGoBack).toHaveBeenCalledTimes(1);
-    expect(mockShowToast).toHaveBeenCalledWith('dashboard.noteArchived', 'success', expect.anything());
-  });
-
-  it('does not navigate back when unarchiving an existing note', async () => {
-    mockUseOfflineNote.mockReturnValue({ data: makeNote({ archived: true }) });
-
-    const { getByTestId } = render(<NoteEditorScreen />);
 
     await act(async () => {
-      fireEvent.press(getByTestId('toolbar-archive-btn'));
+      fireEvent.press(getByTestId('toolbar-pin-btn'));
     });
 
+    // Save-first: a create fires, then the pin update against the new id.
+    await waitFor(() => {
+      expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1);
+    });
     await waitFor(() => {
       expect(mockUpdateMutateAsync).toHaveBeenCalledWith(
-        expect.objectContaining({ id: 'note-1', data: expect.objectContaining({ archived: false }) }),
+        expect.objectContaining({ id: 'server-1', data: expect.objectContaining({ pinned: true }) }),
       );
     });
-
-    expect(mockGoBack).not.toHaveBeenCalled();
-    expect(mockShowToast).toHaveBeenCalledWith('dashboard.noteUnarchived');
   });
 });

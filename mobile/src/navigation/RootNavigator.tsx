@@ -18,8 +18,9 @@ import ConnectToServerScreen from '../screens/ConnectToServerScreen';
 export type RootStackParamList = {
   MainDrawer: undefined;
   // sharedText pre-fills a brand-new note (noteId null) when opened from an
-  // Android share intent.
-  NoteEditor: { noteId: string | null; sharedText?: string };
+  // Android share intent. readOnly opens a trashed note in a view-only state
+  // (all editing disabled; overflow menu offers only Restore / Delete-forever).
+  NoteEditor: { noteId: string | null; sharedText?: string; readOnly?: boolean };
   Share: { noteId: string };
   Settings: undefined;
   SyncFailures: undefined;
