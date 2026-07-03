@@ -140,8 +140,8 @@ function ListItem({
   }, [text, completedItemTexts]);
 
   const effectiveText = hasNoteColor ? '#1a1a1a' : colors.text;
-  const effectiveTextMuted = hasNoteColor ? '#777' : colors.textMuted;
-  const effectivePlaceholder = hasNoteColor ? '#999' : colors.placeholder;
+  const effectiveTextSecondary = hasNoteColor ? '#666' : colors.textSecondary;
+  const effectiveIcon = hasNoteColor ? '#444' : colors.icon;
   const effectiveIconMuted = hasNoteColor ? '#888' : colors.iconMuted;
   const effectiveBorder = hasNoteColor ? '#bbb' : colors.border;
   const showAssignUI = isShared && collaborators && collaborators.length > 0 && onAssignPress;
@@ -172,7 +172,7 @@ function ListItem({
         >
           {/* Six-dot drag-handle glyph: the conventional "grab to drag" affordance
               (drag vertically to reorder, horizontally to indent/outdent). */}
-          <MaterialIcons name="drag-indicator" size={22} color={effectiveIconMuted} />
+          <MaterialIcons name="drag-indicator" size={22} color={effectiveIcon} />
         </TouchableOpacity>
       )}
       <TouchableOpacity
@@ -196,7 +196,7 @@ function ListItem({
           <TextInput
             ref={inputRef}
             autoFocus={autoFocus}
-            style={[styles.textInput, { color: completed ? effectiveTextMuted : effectiveText }, completed && styles.completedText]}
+            style={[styles.textInput, { color: completed ? effectiveTextSecondary : effectiveText }, completed && styles.completedText]}
             value={text}
             onChangeText={(newText) => {
               onChangeText?.(newText);
@@ -209,8 +209,6 @@ function ListItem({
               selectionRef.current = event.nativeEvent.selection;
             }}
             editable={editable}
-            placeholder={t('note.itemPlaceholder')}
-            placeholderTextColor={effectivePlaceholder}
             returnKeyType="next"
             onSubmitEditing={() => onSubmitEditing?.(selectionRef.current.start)}
             blurOnSubmit={false}

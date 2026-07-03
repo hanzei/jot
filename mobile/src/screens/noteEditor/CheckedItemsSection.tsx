@@ -132,9 +132,9 @@ export default function CheckedItemsSection({
         <Ionicons
           name={collapsed ? 'chevron-forward' : 'chevron-down'}
           size={18}
-          color={hasNoteColor ? '#888' : colors.iconMuted}
+          color={hasNoteColor ? '#444' : colors.icon}
         />
-        <Text style={[styles.checkedHeaderText, { color: hasNoteColor ? '#777' : colors.textMuted }]}>
+        <Text style={[styles.checkedHeaderText, { color: hasNoteColor ? '#666' : colors.textSecondary }]}>
           {t('note.completedItems', { count: checkedItems.length })}
         </Text>
       </TouchableOpacity>
