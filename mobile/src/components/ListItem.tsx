@@ -272,6 +272,10 @@ function ListItem({
             <TouchableOpacity
               onPress={onDelete}
               style={styles.deleteBtn}
+              // Keep the tap target generous even though the button's own padding
+              // is small — a smaller footprint keeps the row height stable when
+              // this button appears on focus (see deleteBtn style note).
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               testID="list-item-delete"
               accessibilityLabel={t('note.removeItem')}
             >
@@ -346,7 +350,12 @@ const styles = StyleSheet.create({
     textDecorationLine: 'line-through' as const,
   },
   deleteBtn: {
-    padding: 8,
+    // Match the checkbox's padding (4) so this button — which only appears while
+    // the row is focused — has the same height as the always-present checkbox.
+    // A larger padding made the focused row taller than the unfocused one,
+    // shifting every item below it down when a row was selected. The tap target
+    // is kept comfortable via hitSlop on the button itself.
+    padding: 4,
     marginLeft: 'auto',
   },
   assignBtn: {

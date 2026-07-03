@@ -52,6 +52,7 @@ jest.mock('../src/hooks/useNotes', () => ({
   useUpdateNote: () => ({ mutateAsync: jest.fn().mockResolvedValue({}) }),
   useDeleteNote: () => ({ mutateAsync: jest.fn() }),
   useRestoreNote: () => ({ mutateAsync: jest.fn() }),
+  usePermanentDeleteNote: () => ({ mutateAsync: jest.fn() }),
   useDuplicateNote: () => ({ mutateAsync: jest.fn() }),
   useCreateNoteItem: () => ({ mutateAsync: jest.fn() }),
   useUpdateNoteItem: () => ({ mutateAsync: jest.fn() }),

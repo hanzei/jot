@@ -31,7 +31,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation, useRoute, RouteProp, type NavigationAction } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
-import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, useDuplicateNote, useCreateNoteItem, useUpdateNoteItem, useDeleteNoteItem, useReorderNoteItems, useToggleNoteItemCompleted } from '../hooks/useNotes';
+import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useDuplicateNote, useCreateNoteItem, useUpdateNoteItem, useDeleteNoteItem, useReorderNoteItems, useToggleNoteItemCompleted } from '../hooks/useNotes';
 import { useOfflineNote } from '../hooks/useOfflineNotes';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { isLocalId } from '../db/noteQueries';
@@ -74,6 +74,7 @@ import {
 } from './noteEditor/listItemModel';
 import { MarkdownToolbarContent } from './noteEditor/EditorToolbars';
 import CheckedItemsSection, { type ListItemHandlers } from './noteEditor/CheckedItemsSection';
+import NoteEditorMenu from '../components/NoteEditorMenu';
 import NoteImageGallery, { type PendingImageUpload } from '../components/NoteImageGallery';
 import { styles } from './noteEditor/styles';
 import { animateListReflow, isReduceMotionEnabledSync } from '../utils/layoutAnimation';
@@ -98,7 +99,7 @@ const DRAG_CELL_ANIMATIONS = { opacity: 1, transform: [] };
 export default function NoteEditorScreen() {
   const navigation = useNavigation<EditorNavProp>();
   const route = useRoute<EditorRouteProp>();
-  const { noteId: initialNoteId, sharedText } = route.params;
+  const { noteId: initialNoteId, sharedText, readOnly } = route.params;
   const { t, i18n } = useTranslation();
   const failedNoteIds = useFailedNoteIds();
 
@@ -124,6 +125,7 @@ export default function NoteEditorScreen() {
   const [hasCreated, setHasCreated] = useState(initialNoteId !== null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [colorPickerVisible, setColorPickerVisible] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
   const [labelPickerVisible, setLabelPickerVisible] = useState(false);
   const [assigneePickerVisible, setAssigneePickerVisible] = useState(false);
   const [assigningItemId, setAssigningItemId] = useState<string | null>(null);
@@ -163,10 +165,15 @@ export default function NoteEditorScreen() {
   const androidKeyboardInset = Platform.OS === 'android' ? keyboardHeight : 0;
   const bannerShown = useBannerShown();
   const { data: existingNote } = useOfflineNote(noteId);
+  // A trashed note opens view-only. Driven by the route param set when the note
+  // is opened from the trash list, and defensively by the note's own deleted_at
+  // in case it lands here already trashed.
+  const isReadOnly = readOnly === true || existingNote?.deleted_at != null;
   const createMutation = useCreateNote();
   const updateMutation = useUpdateNote();
   const deleteMutation = useDeleteNote();
   const restoreMutation = useRestoreNote();
+  const permanentDeleteMutation = usePermanentDeleteNote();
   const duplicateMutation = useDuplicateNote();
   const createItemMutation = useCreateNoteItem();
   const updateItemMutation = useUpdateNoteItem();
@@ -801,6 +808,20 @@ export default function NoteEditorScreen() {
     return flushSave();
   }, [flushSave]);
 
+  // Save-first wrapper for note-level actions. A new/unsaved note is created by
+  // flushing before the action runs, so bar actions no longer have to be hidden
+  // until the first autosave. flushSave no-ops (and leaves noteId null) only for
+  // a genuinely empty note, in which case the action is skipped. Actions that
+  // additionally need a *server* id (not an offline local_* draft) still guard on
+  // that themselves — see issue #652.
+  const withSavedNote = useCallback(async (action: (id: string) => void | Promise<void>) => {
+    const saved = await flushPendingChanges();
+    if (!saved) return; // save failed — error already surfaced by flushSave
+    const id = noteIdRef.current;
+    if (!id) return; // empty note, nothing to act on
+    await action(id);
+  }, [flushPendingChanges]);
+
   // Keep input refs bounded to currently rendered items.
   useEffect(() => {
     const activeItemIds = new Set(items.map((item) => item.id));
@@ -1295,10 +1316,11 @@ export default function NoteEditorScreen() {
   }, [markDirtyAndScheduleUpdate, getItemRef]);
 
   const handleToggleCollapsed = useCallback(() => {
+    if (isReadOnly) return;
     animateListReflow();
     setCheckedItemsCollapsed((prev) => !prev);
     markDirtyAndScheduleUpdate();
-  }, [markDirtyAndScheduleUpdate]);
+  }, [isReadOnly, markDirtyAndScheduleUpdate]);
 
   const collaborators = useMemo<Collaborator[]>(() => {
     if (!existingNote) return [];
@@ -1322,9 +1344,10 @@ export default function NoteEditorScreen() {
   );
 
   const openAssigneePicker = useCallback((itemId: string) => {
+    if (isReadOnly) return;
     setAssigningItemId(itemId);
     setAssigneePickerVisible(true);
-  }, []);
+  }, [isReadOnly]);
 
   const handleNativeShare = useCallback(() => {
     const text = formatEditorStateForShare(noteTypeRef.current, titleRef.current, contentRef.current, itemsRef.current);
@@ -1337,15 +1360,8 @@ export default function NoteEditorScreen() {
       navigation.goBack();
       return;
     }
-    const confirmed = await confirm({
-      title: t('note.deleteConfirmTitle'),
-      message: t('note.deleteConfirm'),
-      confirmLabel: t('common.delete'),
-      destructive: true,
-    });
-    if (!confirmed) return;
-    // Re-read the id: offline sync can reconcile a local_* id to its
-    // server-issued id while the confirmation dialog was awaiting the user.
+    // Moving to trash is undoable (toast below + restoreMutation), so this
+    // doesn't confirm — matches NotesListScreen's handleMoveToTrash.
     const currentNoteId = noteIdRef.current;
     if (!currentNoteId) return;
     try {
@@ -1374,19 +1390,49 @@ export default function NoteEditorScreen() {
       intentionalExitRef.current = false;
       Alert.alert(t('common.error'), t('note.failedDelete'));
     }
-  }, [confirm, deleteMutation, navigation, noteId, restoreMutation, showToast, t]);
+  }, [deleteMutation, navigation, noteId, restoreMutation, showToast, t]);
 
-  const handleTogglePin = useCallback(async () => {
+  // Restore a trashed note (read-only view) and return to the list.
+  const handleRestoreNote = useCallback(async () => {
     if (!noteId) return;
-    const saveSucceeded = await flushPendingChanges();
-    if (!saveSucceeded) {
-      return;
+    try {
+      await restoreMutation.mutateAsync(noteId);
+      intentionalExitRef.current = true;
+      showToast(t('dashboard.noteRestored'));
+      navigation.goBack();
+    } catch {
+      Alert.alert(t('common.error'), t('note.failedRestore'));
     }
+  }, [navigation, noteId, restoreMutation, showToast, t]);
+
+  // Permanently delete a trashed note (read-only view) after confirmation.
+  const handleDeletePermanently = useCallback(async () => {
+    if (!noteId) return;
+    const confirmed = await confirm({
+      title: t('note.deleteForeverTitle'),
+      message: t('note.deleteForeverConfirm'),
+      confirmLabel: t('common.delete'),
+      destructive: true,
+    });
+    if (!confirmed) return;
+    const currentNoteId = noteIdRef.current;
+    if (!currentNoteId) return;
+    try {
+      intentionalExitRef.current = true;
+      await permanentDeleteMutation.mutateAsync(currentNoteId);
+      navigation.goBack();
+    } catch {
+      intentionalExitRef.current = false;
+      Alert.alert(t('common.error'), t('note.failedDelete'));
+    }
+  }, [confirm, navigation, noteId, permanentDeleteMutation, t]);
+
+  const handleTogglePin = useCallback(() => withSavedNote(async (id) => {
     const newPinned = !pinnedRef.current;
     setPinned(newPinned);
     try {
       await updateMutation.mutateAsync({
-        id: noteId,
+        id,
         data: buildMetadataUpdateData({ pinned: newPinned }),
       });
       commitMetadataBaseline({ pinned: newPinned });
@@ -1394,19 +1440,14 @@ export default function NoteEditorScreen() {
       setPinned(!newPinned);
       Alert.alert(t('common.error'), t('note.failedUpdate'));
     }
-  }, [buildMetadataUpdateData, commitMetadataBaseline, flushPendingChanges, noteId, t, updateMutation]);
+  }), [buildMetadataUpdateData, commitMetadataBaseline, withSavedNote, t, updateMutation]);
 
-  const handleToggleArchive = useCallback(async () => {
-    if (!noteId) return;
-    const saveSucceeded = await flushPendingChanges();
-    if (!saveSucceeded) {
-      return;
-    }
+  const handleToggleArchive = useCallback(() => withSavedNote(async (id) => {
     const newArchived = !archivedRef.current;
     setArchived(newArchived);
     try {
       await updateMutation.mutateAsync({
-        id: noteId,
+        id,
         data: buildMetadataUpdateData({ archived: newArchived }),
       });
       commitMetadataBaseline({ archived: newArchived });
@@ -1419,7 +1460,7 @@ export default function NoteEditorScreen() {
           onPress: async () => {
             try {
               await updateMutation.mutateAsync({
-                id: noteId,
+                id,
                 data: buildMetadataUpdateData({ archived: false }),
               });
               commitMetadataBaseline({ archived: false });
@@ -1437,7 +1478,7 @@ export default function NoteEditorScreen() {
       setArchived(!newArchived);
       Alert.alert(t('common.error'), t('note.failedUpdate'));
     }
-  }, [buildMetadataUpdateData, commitMetadataBaseline, flushPendingChanges, navigation, noteId, showToast, t, updateMutation]);
+  }), [buildMetadataUpdateData, commitMetadataBaseline, withSavedNote, navigation, showToast, t, updateMutation]);
 
   const handleColorSelect = useCallback(async (selectedColor: string) => {
     const saveSucceeded = await flushPendingChanges();
@@ -1652,6 +1693,16 @@ export default function NoteEditorScreen() {
 
   const hasNoteColor = !!color && !isWhiteHexColor(color);
 
+  // Actions that need a server-backed note id (not an offline local_* draft).
+  // Sharing additionally requires a central server and ownership. These stay
+  // gated for offline/unsaved drafts (issue #652).
+  const isServerNote = !!noteId && !isLocalId(noteId);
+  const canShareWithCollaborators =
+    !isLocalMode && isServerNote && !!existingNote && existingNote.user_id === currentUser?.id;
+  // Muted icon color for the bar; disabled buttons render at reduced opacity.
+  const barIconColor = hasNoteColor ? '#444' : colors.icon;
+  const disabledBarIconColor = hasNoteColor ? '#999' : colors.iconMuted;
+
   // Per-item callbacks shared by the active list (renderListItem) and the
   // completed-items section, so both wire ListItem the same way.
   const listItemHandlers = useMemo<ListItemHandlers>(
@@ -1688,7 +1739,8 @@ export default function NoteEditorScreen() {
             text: item.text,
             completed: item.completed,
             indentLevel: item.parentId ? 1 : 0,
-            showDragHandle: true,
+            editable: !isReadOnly,
+            showDragHandle: !isReadOnly,
             assignedTo: item.assigned_to,
             isShared: !!isNoteShared,
             collaborators,
@@ -1706,7 +1758,7 @@ export default function NoteEditorScreen() {
         />
       );
     },
-    [getItemRef, listItemHandlers, isNoteShared, collaborators, hasNoteColor, completedItemTexts, handleAcceptSuggestion, dragTranslateX],
+    [getItemRef, listItemHandlers, isNoteShared, collaborators, hasNoteColor, completedItemTexts, handleAcceptSuggestion, dragTranslateX, isReadOnly],
   );
 
   const applyToolbarEdit = useCallback((updater: (prev: string) => string) => {
@@ -1878,14 +1930,14 @@ export default function NoteEditorScreen() {
             returnKeyType="next"
             onSubmitEditing={handleTitleSubmit}
             blurOnSubmit={false}
-            editable={!isHydrating}
+            editable={!isHydrating && !isReadOnly}
             testID="note-title-input"
           />
         )}
 
         {noteType === 'text' ? (
           <>
-            {isEditingContent ? (
+            {isEditingContent && !isReadOnly ? (
               <TextInput
                 ref={contentInputRef}
                 autoFocus
@@ -1903,7 +1955,8 @@ export default function NoteEditorScreen() {
               />
             ) : (
               <TouchableOpacity
-                onPress={() => setIsEditingContent(true)}
+                onPress={isReadOnly ? undefined : () => setIsEditingContent(true)}
+                disabled={isReadOnly}
                 activeOpacity={1}
                 testID="content-preview"
                 style={styles.contentPreview}
@@ -1921,7 +1974,7 @@ export default function NoteEditorScreen() {
             )}
 
             {/* Android: formatting toolbar in layout (shown when editing) */}
-            {Platform.OS === 'android' && isEditingContent && (
+            {Platform.OS === 'android' && isEditingContent && !isReadOnly && (
               <MarkdownToolbarContent
                 onBold={() => wrapMobileSelection('**', '**')}
                 onItalic={() => wrapMobileSelection('*', '*')}
@@ -1960,10 +2013,12 @@ export default function NoteEditorScreen() {
               itemLayoutAnimation={isReduceMotionEnabledSync() ? undefined : LinearTransition.duration(LIST_REFLOW_ANIM_MS)}
             />
 
-            <TouchableOpacity style={styles.addItemRow} onPress={handleAddItem} testID="add-list-item">
-              <Ionicons name="add" size={22} color={colors.primary} />
-              <Text style={[styles.addItemText, { color: colors.primary }]}>{t('note.addItem')}</Text>
-            </TouchableOpacity>
+            {!isReadOnly && (
+              <TouchableOpacity style={styles.addItemRow} onPress={handleAddItem} testID="add-list-item">
+                <Ionicons name="add" size={22} color={colors.primary} />
+                <Text style={[styles.addItemText, { color: colors.primary }]}>{t('note.addItem')}</Text>
+              </TouchableOpacity>
+            )}
 
             <CheckedItemsSection
               checkedItems={checkedItems}
@@ -1978,125 +2033,96 @@ export default function NoteEditorScreen() {
               dividerColor={completedSectionDividerColor}
               handlers={listItemHandlers}
               popItemId={popItemId}
+              editable={!isReadOnly}
             />
           </View>
         )}
       </ScrollViewContainer>
 
       <View style={[styles.toolbar, { backgroundColor: noteBackground, borderTopColor: hasNoteColor ? 'transparent' : colors.border, paddingBottom: insets.bottom || 8 }]}>
-        {/* Color picker button */}
+        {/* Color. Works on unsaved notes (deferred via autosave), so it is only
+            disabled for read-only (trashed) notes. */}
         <TouchableOpacity
           onPress={() => setColorPickerVisible(true)}
+          disabled={isReadOnly}
           style={styles.toolbarBtn}
           testID="toolbar-color-btn"
           accessibilityLabel={t('note.changeColor')}
+          accessibilityState={{ disabled: isReadOnly }}
         >
-          <Ionicons name="color-palette-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
+          <Ionicons name="color-palette-outline" size={22} color={isReadOnly ? disabledBarIconColor : barIconColor} />
         </TouchableOpacity>
 
-        {/* Send: share note content via the system share sheet. Available for
-            any saved note regardless of ownership. */}
-        {noteId && (
-          <TouchableOpacity
-            onPress={handleNativeShare}
-            style={styles.toolbarBtn}
-            testID="toolbar-send-btn"
-            accessibilityLabel={t('note.send')}
-          >
-            <Ionicons name="share-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
-          </TouchableOpacity>
-        )}
+        {/* Add image. Requires a server-backed note_id (spec §15.6 — no
+            draft/orphan uploads), so it stays disabled for offline/unsaved
+            drafts and read-only notes. Offline uploads are queued and flushed on
+            reconnect (#618). */}
+        <TouchableOpacity
+          onPress={() => setAddImageSheetVisible(true)}
+          disabled={isReadOnly || !isServerNote}
+          style={styles.toolbarBtn}
+          testID="toolbar-add-image-btn"
+          accessibilityLabel={t('images.addImage')}
+          accessibilityState={{ disabled: isReadOnly || !isServerNote }}
+        >
+          <Ionicons name="image-outline" size={22} color={isReadOnly || !isServerNote ? disabledBarIconColor : barIconColor} />
+        </TouchableOpacity>
 
-        {/* Share with collaborators (when the note is saved and owned by the current
-            user). Sharing requires a central server and is not available in local mode.
-            An offline-created note can be shared: its create drains FIFO before the
-            queued share (#475). Notes with a local_* id are excluded (no server id). */}
-        {!isLocalMode && noteId && !isLocalId(noteId) && existingNote && existingNote.user_id === currentUser?.id && (
-          <TouchableOpacity
-            onPress={() => navigation.navigate('Share', { noteId })}
-            style={styles.toolbarBtn}
-            testID="toolbar-share-btn"
-            accessibilityLabel={t('note.share')}
-          >
-            <Ionicons name="person-add-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
-          </TouchableOpacity>
-        )}
+        {/* Pin / Unpin. Save-first: an unsaved note is created before pinning. */}
+        <TouchableOpacity
+          onPress={handleTogglePin}
+          disabled={isReadOnly}
+          style={styles.toolbarBtn}
+          testID="toolbar-pin-btn"
+          accessibilityLabel={pinned ? t('note.unpin') : t('note.pin')}
+          accessibilityState={{ disabled: isReadOnly }}
+        >
+          <Ionicons name={pinned ? 'pin' : 'pin-outline'} size={22} color={isReadOnly ? disabledBarIconColor : (pinned ? colors.primary : barIconColor)} />
+        </TouchableOpacity>
 
-        {/* Pin / Unpin */}
-        {noteId && (
-          <TouchableOpacity
-            onPress={handleTogglePin}
-            style={styles.toolbarBtn}
-            testID="toolbar-pin-btn"
-            accessibilityLabel={pinned ? t('note.unpin') : t('note.pin')}
-          >
-            <Ionicons name={pinned ? 'pin' : 'pin-outline'} size={22} color={pinned ? colors.primary : (hasNoteColor ? '#444' : colors.icon)} />
-          </TouchableOpacity>
-        )}
-
-        {/* Archive / Unarchive */}
-        {noteId && (
-          <TouchableOpacity
-            onPress={handleToggleArchive}
-            style={styles.toolbarBtn}
-            testID="toolbar-archive-btn"
-            accessibilityLabel={archived ? t('note.unarchive') : t('note.archive')}
-          >
-            <Ionicons
-              name="archive-outline"
-              size={22}
-              color={archived ? colors.primary : (hasNoteColor ? '#444' : colors.icon)}
-            />
-          </TouchableOpacity>
-        )}
-
-        {/* Duplicate. */}
-        {noteId && (
-          <TouchableOpacity
-            onPress={handleDuplicate}
-            style={styles.toolbarBtn}
-            testID="toolbar-duplicate-btn"
-            accessibilityLabel={t('note.duplicate')}
-          >
-            <Ionicons name="copy-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
-          </TouchableOpacity>
-        )}
-
-        {/* Label button. Label ops queue FIFO behind an offline-created note's
-            create (#475), so they work for pending-create notes. Only unsynced
-            notes with a local_* id (offline labels) are excluded. */}
-        {noteId && !isLocalId(noteId) && (
-          <TouchableOpacity
-            onPress={() => setLabelPickerVisible(true)}
-            style={styles.toolbarBtn}
-            testID="toolbar-label-btn"
-            accessibilityLabel={t('labels.title')}
-          >
-            <Ionicons name="pricetag-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
-          </TouchableOpacity>
-        )}
-
-        {/* Add image. Images require a server-backed note_id (spec §15.6 — no
-            draft/orphan uploads), so this is gated the same as the label
-            button. Offline uploads are queued and flushed on reconnect (#618). */}
-        {noteId && !isLocalId(noteId) && (
-          <TouchableOpacity
-            onPress={() => setAddImageSheetVisible(true)}
-            style={styles.toolbarBtn}
-            testID="toolbar-add-image-btn"
-            accessibilityLabel={t('images.addImage')}
-          >
-            <Ionicons name="image-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
-          </TouchableOpacity>
-        )}
+        {/* Archive / Unarchive. Save-first, like Pin. */}
+        <TouchableOpacity
+          onPress={handleToggleArchive}
+          disabled={isReadOnly}
+          style={styles.toolbarBtn}
+          testID="toolbar-archive-btn"
+          accessibilityLabel={archived ? t('note.unarchive') : t('note.archive')}
+          accessibilityState={{ disabled: isReadOnly }}
+        >
+          <Ionicons
+            name="archive-outline"
+            size={22}
+            color={isReadOnly ? disabledBarIconColor : (archived ? colors.primary : barIconColor)}
+          />
+        </TouchableOpacity>
 
         <View style={styles.toolbarSpacer} />
 
-        {/* Delete */}
-        <TouchableOpacity onPress={handleDelete} style={styles.toolbarBtn} testID="delete-note-btn">
-          <Ionicons name="trash-outline" size={22} color={colors.error} />
+        {/* Overflow menu: Send / Share / Duplicate / Labels / Delete for a normal
+            note, or Restore / Delete-forever for a read-only trashed note. */}
+        <TouchableOpacity
+          onPress={() => setMenuVisible(true)}
+          style={styles.toolbarBtn}
+          testID="toolbar-menu-btn"
+          accessibilityLabel={t('note.menuOptions')}
+        >
+          <Ionicons name="ellipsis-vertical" size={22} color={barIconColor} />
         </TouchableOpacity>
       </View>
+
+      <NoteEditorMenu
+        visible={menuVisible}
+        onClose={() => setMenuVisible(false)}
+        trashed={isReadOnly}
+        title={noteType === 'list' ? title : undefined}
+        onSend={handleNativeShare}
+        onShare={canShareWithCollaborators && noteId ? () => navigation.navigate('Share', { noteId }) : undefined}
+        onDuplicate={handleDuplicate}
+        onManageLabels={isServerNote ? () => setLabelPickerVisible(true) : undefined}
+        onMoveToTrash={handleDelete}
+        onRestore={handleRestoreNote}
+        onDeletePermanently={handleDeletePermanently}
+      />
 
       <ColorPicker
         visible={colorPickerVisible}
