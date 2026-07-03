@@ -433,8 +433,8 @@ var allowedImageTypes = map[string]bool{
 const (
 	maxProfileIconDimension = 256
 	jpegQuality             = 85
-	maxSourceDimension      = 4096
-	maxSourcePixels         = maxSourceDimension * maxSourceDimension // ~16 megapixels
+	maxSourceDimension      = 8160
+	maxSourcePixels         = maxSourceDimension * maxSourceDimension // ~66 megapixels
 	// multipartOverheadBytes is added on top of a caller's declared max file
 	// size to account for multipart boundary/header bytes when sizing
 	// http.MaxBytesReader. Shared by every single-file multipart upload
