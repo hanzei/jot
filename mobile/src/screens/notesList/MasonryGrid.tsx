@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useMemo, useRef } from 'react';
 import { View, Text, ScrollView, StyleSheet, type RefreshControlProps } from 'react-native';
 import type { Note } from '@jot/shared';
 import { useTheme } from '../../theme/ThemeContext';
+import { animateListReflow } from '../../utils/layoutAnimation';
 import { styles as listStyles } from './styles';
 import type { NoteSection } from './noteListUtils';
 
@@ -17,6 +18,12 @@ interface MasonryGridProps {
   ListEmptyComponent?: React.ReactNode;
   /** Number of columns: 1 for the list layout, 2 for the grid. Defaults to 2. */
   columns?: number;
+  /**
+   * Signature of the active view/filter/sort/layout. When it changes the grid
+   * swaps instantly (no enter/leave); only in-view note add/remove/reorder
+   * within the *same* view animates — mirroring the webapp's AnimatedNoteGrid.
+   */
+  viewKey?: string;
 }
 
 /**
@@ -41,9 +48,33 @@ export default function MasonryGrid({
   contentBottomPadding,
   ListEmptyComponent,
   columns = 2,
+  viewKey,
 }: MasonryGridProps) {
   const { colors } = useTheme();
   const isEmpty = sections.every((section) => section.data.length === 0);
+
+  // Order-sensitive signature of every note id currently rendered. When it
+  // changes *within the same view* (a note created, deleted, archived, pinned,
+  // reordered, or arriving via sync) we queue a subtle layout animation for the
+  // next commit so cards fade/slide in and out instead of popping. The first
+  // populate and any view/search/sort switch swap instantly (guarded below), so
+  // navigating never animates a whole list in. animateListReflow already no-ops
+  // under the OS "Reduce Motion" setting.
+  const idSignature = useMemo(
+    () => sections.map((section) => `${section.key}:${section.data.map((note) => note.id).join(',')}`).join('|'),
+    [sections],
+  );
+  const prevSignatureRef = useRef<string | null>(null);
+  const prevViewKeyRef = useRef(viewKey);
+  if (
+    prevSignatureRef.current !== null &&
+    prevViewKeyRef.current === viewKey &&
+    prevSignatureRef.current !== idSignature
+  ) {
+    animateListReflow();
+  }
+  prevSignatureRef.current = idSignature;
+  prevViewKeyRef.current = viewKey;
 
   return (
     <ScrollView

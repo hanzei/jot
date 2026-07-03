@@ -89,7 +89,6 @@ describe('NoteContextMenu labels action', () => {
         onMoveToTrash={jest.fn()}
         onRestore={jest.fn()}
         onDeletePermanently={jest.fn()}
-        onChangeColor={jest.fn()}
         onShare={jest.fn()}
         onManageLabels={jest.fn()}
       />,
@@ -114,7 +113,6 @@ describe('NoteContextMenu labels action', () => {
         onMoveToTrash={jest.fn()}
         onRestore={jest.fn()}
         onDeletePermanently={jest.fn()}
-        onChangeColor={jest.fn()}
         onShare={jest.fn()}
         onManageLabels={onManageLabels}
       />,
@@ -140,7 +138,6 @@ describe('NoteContextMenu labels action', () => {
         onMoveToTrash={jest.fn()}
         onRestore={jest.fn()}
         onDeletePermanently={jest.fn()}
-        onChangeColor={jest.fn()}
         onShare={jest.fn()}
         onManageLabels={jest.fn()}
       />,
@@ -163,7 +160,6 @@ describe('NoteContextMenu labels action', () => {
         onMoveToTrash={jest.fn()}
         onRestore={jest.fn()}
         onDeletePermanently={jest.fn()}
-        onChangeColor={jest.fn()}
         onShare={jest.fn()}
         onManageLabels={jest.fn()}
       />,
@@ -186,7 +182,6 @@ describe('NoteContextMenu labels action', () => {
         onMoveToTrash={jest.fn()}
         onRestore={jest.fn()}
         onDeletePermanently={jest.fn()}
-        onChangeColor={jest.fn()}
         onShare={jest.fn()}
         onManageLabels={jest.fn()}
       />,
@@ -213,7 +208,6 @@ describe('NoteContextMenu labels action', () => {
         onMoveToTrash={jest.fn()}
         onRestore={jest.fn()}
         onDeletePermanently={jest.fn()}
-        onChangeColor={jest.fn()}
         onShare={jest.fn()}
         onManageLabels={jest.fn()}
       />,
@@ -239,7 +233,6 @@ describe('NoteContextMenu labels action', () => {
         onMoveToTrash={jest.fn()}
         onRestore={jest.fn()}
         onDeletePermanently={jest.fn()}
-        onChangeColor={jest.fn()}
         onShare={jest.fn()}
         onManageLabels={jest.fn()}
       />,
@@ -248,7 +241,6 @@ describe('NoteContextMenu labels action', () => {
     // An offline-created note has a server-valid id and its create drains FIFO
     // before the queued share/label/duplicate ops, so all three are available.
     // Only a local_* duplicate (no server id yet) gates them.
-    expect(queryByTestId('context-color')).toBeTruthy();
     expect(queryByTestId('context-pin')).toBeTruthy();
     expect(queryByTestId('context-share')).toBeTruthy();
     expect(queryByTestId('context-label')).toBeTruthy();
@@ -270,7 +262,6 @@ describe('NoteContextMenu labels action', () => {
         onMoveToTrash={jest.fn()}
         onRestore={jest.fn()}
         onDeletePermanently={jest.fn()}
-        onChangeColor={jest.fn()}
         onShare={jest.fn()}
         onManageLabels={jest.fn()}
       />,
@@ -295,7 +286,6 @@ describe('NoteContextMenu labels action', () => {
         onMoveToTrash={jest.fn()}
         onRestore={jest.fn()}
         onDeletePermanently={jest.fn()}
-        onChangeColor={jest.fn()}
         onShare={jest.fn()}
       />,
     );

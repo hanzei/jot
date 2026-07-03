@@ -7,13 +7,14 @@ test.describe('Undo actions on success toasts', () => {
     void authenticatedUser;
   });
 
-  test('supports undo for pin/unpin and archive/unarchive', async ({ toastPage, dashboardPage }) => {
+  test('supports undo for pin/unpin and archive/unarchive', async ({ page, toastPage, dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createNote('Undo Toggle Note');
 
     await dashboardPage.pinNote('Undo Toggle Note');
     await toastPage.clickUndoOnLatestToast();
-    await expect(dashboardPage.noteCard('Undo Toggle Note').locator('[data-testid="pin-icon"]')).toHaveCount(0);
+    // Undoing the pin removes the only pinned note, so the Pinned section is gone.
+    await expect(page.locator('h2:has-text("Pinned")')).toHaveCount(0);
 
     await dashboardPage.archiveNote('Undo Toggle Note');
     await toastPage.clickUndoOnLatestToast();
@@ -23,8 +24,6 @@ test.describe('Undo actions on success toasts', () => {
     await dashboardPage.switchToArchived();
     await dashboardPage.expectNoteVisible('Undo Toggle Note');
 
-    const archivedCard = dashboardPage.noteCard('Undo Toggle Note')
-    await expect(archivedCard.locator('[data-testid="pin-icon"]')).toHaveCount(0);
     await dashboardPage.unarchiveNote('Undo Toggle Note');
     await toastPage.clickUndoOnLatestToast();
     await dashboardPage.switchToArchived();
