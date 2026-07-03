@@ -308,6 +308,7 @@
   "images": {
     "openLightbox": "{{filename}} bekijken",
     "moreImages": "{{count}} meer afbeeldingen bekijken",
+"moreImagesBadge": "{{count}} meer afbeeldingen",
     "lightboxPrevious": "Vorige afbeelding",
     "lightboxNext": "Volgende afbeelding",
     "lightboxCounter": "{{current}} / {{total}}",
