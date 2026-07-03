@@ -175,6 +175,7 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress, onLabelPress }: Not
             networkUrl={noteImageThumbnailUrl(baseUrl, coverImage.id)}
             style={styles.coverImage}
             resizeMode="cover"
+            accessibilityLabel={coverImage.filename}
             accessibilityIgnoresInvertColors
           />
           {extraImageCount > 0 && (
