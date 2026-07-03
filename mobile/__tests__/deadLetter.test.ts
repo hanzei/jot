@@ -183,6 +183,7 @@ describe('drainQueue dead-letter persistence', () => {
     ['restore', '/notes/n1/restore', 'POST'],
     ['unshare', '/notes/n1/shares/u2', 'DELETE'],
     ['removeLabelFromNote', '/notes/n1/labels/l1', 'DELETE'],
+    ['deleteLabel', '/labels/l1', 'DELETE'],
   ])('treats a 404 replay of %s as an idempotent success (no dead-letter, no failed flag)', async (operation, endpoint, method) => {
     // The common flaky-connection case: the original online write timed out
     // client-side after the server committed it, fell back to the queue, and the
@@ -201,6 +202,22 @@ describe('drainQueue dead-letter persistence', () => {
     // Still removed from the queue (and reported as discarded for logging).
     expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [1]);
     expect(discardedOperations).toEqual([{ operation, endpoint, status: 404 }]);
+  });
+
+  it('treats a 410 (gone) replay of a destructive op as idempotent too', async () => {
+    // targetGone covers 410 alongside 404, so a resource reported permanently
+    // gone resolves the same way as a 404.
+    const db = makeDrainDb([
+      { id: 22, operation: 'delete', endpoint: '/notes/n1', method: 'DELETE', body: null, created_at: 't0' },
+    ]);
+    mockApi.delete.mockRejectedValueOnce(makeAxiosError(410));
+
+    const { discardedOperations } = await drainQueue(db as never);
+
+    expect(callsStartingWith(db, 'INSERT INTO dead_letter')).toHaveLength(0);
+    expect(callsStartingWith(db, `UPDATE notes SET sync_state = 'failed'`)).toHaveLength(0);
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [22]);
+    expect(discardedOperations).toEqual([{ operation: 'delete', endpoint: '/notes/n1', status: 410 }]);
   });
 
   it('still dead-letters a non-gone permanent failure (400) for a delete op', async () => {

@@ -472,7 +472,12 @@ export async function handleUnauthorizedSession(): Promise<void> {
   isHandlingUnauthorized = true;
   sessionCache = null;
   try {
-    await Promise.all([clearStoredSession(), clearCachedProfile()]);
+    // allSettled, not all: the storage cleanup is best-effort, but AuthContext
+    // must be notified regardless. A rejected clearStoredSession must not skip
+    // the logout (nor, from the SSE `void` call site, surface as an unhandled
+    // rejection). sessionCache is already nulled above, so auth is effectively
+    // cleared in-memory even if the persisted token/profile fails to delete.
+    await Promise.allSettled([clearStoredSession(), clearCachedProfile()]);
     onUnauthorized?.();
   } finally {
     isHandlingUnauthorized = false;
