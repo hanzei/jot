@@ -1189,18 +1189,18 @@ func TestUploadProfileIcon(t *testing.T) {
 	})
 
 	t.Run("decompression bomb is rejected", func(t *testing.T) {
-		// Minimal PNG with an IHDR claiming 5000x5000 pixels (~75 MB decompressed).
-		// UploadProfileIcon rejects dimensions exceeding the 4096-pixel cap.
+		// Minimal PNG with an IHDR claiming 10000x10000 pixels (~300 MB decompressed).
+		// UploadProfileIcon rejects dimensions exceeding the 8160-pixel cap.
 		pngHeader := []byte{
 			0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
 			0x00, 0x00, 0x00, 0x0D,
 			0x49, 0x48, 0x44, 0x52,
-			0x00, 0x00, 0x13, 0x88,
-			0x00, 0x00, 0x13, 0x88,
+			0x00, 0x00, 0x27, 0x10,
+			0x00, 0x00, 0x27, 0x10,
 			0x08,
 			0x02,
 			0x00, 0x00, 0x00,
-			0x00, 0x00, 0x00, 0x00,
+			0x35, 0x2C, 0xF5, 0x70,
 		}
 		_, err := user.Client.UploadProfileIcon(t.Context(), "bomb.png", bytes.NewReader(pngHeader))
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
