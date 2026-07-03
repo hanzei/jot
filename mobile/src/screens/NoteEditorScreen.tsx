@@ -28,7 +28,7 @@ import { Gesture } from 'react-native-gesture-handler';
 import { LinearTransition, useSharedValue, runOnJS } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp, type NavigationAction } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useDuplicateNote, useCreateNoteItem, useUpdateNoteItem, useDeleteNoteItem, useReorderNoteItems, useToggleNoteItemCompleted } from '../hooks/useNotes';
@@ -38,6 +38,8 @@ import { isLocalId } from '../db/noteQueries';
 import { useFailedNoteIds } from '../store/OfflineContext';
 import { useSSESubscription } from '../store/SSEContext';
 import { useToast } from '../hooks/useToast';
+import { useConfirm } from '../hooks/useConfirm';
+import ConfirmDialog from '../components/ConfirmDialog';
 import ColorPicker from '../components/ColorPicker';
 import LabelPicker from '../components/LabelPicker';
 import AssigneePicker from '../components/AssigneePicker';
@@ -141,6 +143,7 @@ export default function NoteEditorScreen() {
   const { user: currentUser, isLocalMode } = useAuth();
   const { usersById } = useUsers();
   const { showToast } = useToast();
+  const { confirm } = useConfirm();
 
   const { colors } = useTheme();
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
@@ -228,6 +231,11 @@ export default function NoteEditorScreen() {
   const isInitializedRef = useRef(false);
   const intentionalExitRef = useRef(false);
   const hasPendingChangesRef = useRef(false);
+  const [exitSavePrompt, setExitSavePrompt] = useState<{
+    navAction: NavigationAction;
+    retriesLeft: number;
+  } | null>(null);
+  const [isExitRetrying, setIsExitRetrying] = useState(false);
   // Bumped on every edit (markDirtyAndScheduleUpdate). flushSave snapshots it
   // alongside the state refs so it can tell whether new edits arrived while its
   // network calls were in flight — clearing the dirty flag then would mark
@@ -824,6 +832,12 @@ export default function NoteEditorScreen() {
     }
   }, [items]);
 
+  const exitWith = useCallback((navAction: NavigationAction) => {
+    intentionalExitRef.current = true;
+    setExitSavePrompt(null);
+    navigation.dispatch(navAction);
+  }, [navigation]);
+
   // Intercept navigation away to flush pending edits before leaving the screen.
   useEffect(() => {
     const unsubscribe = navigation.addListener('beforeRemove', (event) => {
@@ -836,51 +850,38 @@ export default function NoteEditorScreen() {
         debounceRef.current = null;
       }
 
-      const showSaveFailedAlert = (retriesLeft = MAX_EXIT_SAVE_RETRIES) => {
-        Alert.alert(
-          t('note.saveFailedExitTitle'),
-          t('note.saveFailedExitMessage'),
-          [
-            {
-              text: t('note.discardAndLeave'),
-              style: 'destructive',
-              onPress: () => {
-                intentionalExitRef.current = true;
-                navigation.dispatch(event.data.action);
-              },
-            },
-            ...(retriesLeft > 0
-              ? [
-                  {
-                    text: t('common.retry'),
-                    onPress: async () => {
-                      const retrySucceeded = await flushSave();
-                      if (retrySucceeded) {
-                        intentionalExitRef.current = true;
-                        navigation.dispatch(event.data.action);
-                      } else {
-                        showSaveFailedAlert(retriesLeft - 1);
-                      }
-                    },
-                  },
-                ]
-              : []),
-          ],
-        );
-      };
-
       void (async () => {
         const saveSucceeded = await flushSave();
         if (!saveSucceeded) {
-          showSaveFailedAlert();
+          setExitSavePrompt({ navAction: event.data.action, retriesLeft: MAX_EXIT_SAVE_RETRIES });
           return;
         }
-        intentionalExitRef.current = true;
-        navigation.dispatch(event.data.action);
+        exitWith(event.data.action);
       })();
     });
     return unsubscribe;
-  }, [flushSave, navigation, t]);
+  }, [exitWith, flushSave, navigation]);
+
+  const handleExitDiscard = useCallback(() => {
+    if (!exitSavePrompt || isExitRetrying) return;
+    exitWith(exitSavePrompt.navAction);
+  }, [exitSavePrompt, exitWith, isExitRetrying]);
+
+  // Guarded by isExitRetrying so a retry in flight can't race a second tap on
+  // Retry or Discard into a double dispatch or a stale retriesLeft update —
+  // the dialog also disables both buttons via `busy` while this is true.
+  const handleExitRetry = useCallback(async () => {
+    if (!exitSavePrompt || isExitRetrying) return;
+    setIsExitRetrying(true);
+    const { navAction, retriesLeft } = exitSavePrompt;
+    const retrySucceeded = await flushSave();
+    if (retrySucceeded) {
+      exitWith(navAction);
+    } else {
+      setExitSavePrompt({ navAction, retriesLeft: retriesLeft - 1 });
+    }
+    setIsExitRetrying(false);
+  }, [exitSavePrompt, exitWith, flushSave, isExitRetrying]);
 
   // Flush pending save on unmount (prevent data loss), skip if intentionally exiting
   useEffect(() => {
@@ -1353,47 +1354,44 @@ export default function NoteEditorScreen() {
     if (text.trim()) void Share.share({ message: text });
   }, []);
 
-  const handleDelete = useCallback(() => {
+  const handleDelete = useCallback(async () => {
     if (!noteId) {
       intentionalExitRef.current = true;
       navigation.goBack();
       return;
     }
-    Alert.alert(t('note.deleteConfirmTitle'), t('note.deleteConfirm'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('common.delete'),
-        style: 'destructive',
+    // Moving to trash is undoable (toast below + restoreMutation), so this
+    // doesn't confirm — matches NotesListScreen's handleMoveToTrash.
+    try {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+      intentionalExitRef.current = true;
+      if (saveInFlightRef.current) {
+        try { await saveInFlightRef.current; } catch { /* already handled */ }
+      }
+      // Re-read after the in-flight save settles: it can reconcile a local_*
+      // draft id to the server-issued id while we were awaiting it.
+      const currentNoteId = noteIdRef.current;
+      if (!currentNoteId) return;
+      await deleteMutation.mutateAsync(currentNoteId);
+      showToast(t('dashboard.noteDeleted'), 'success', {
+        label: t('dashboard.undo'),
         onPress: async () => {
           try {
-            if (debounceRef.current) {
-              clearTimeout(debounceRef.current);
-              debounceRef.current = null;
-            }
-            intentionalExitRef.current = true;
-            if (saveInFlightRef.current) {
-              try { await saveInFlightRef.current; } catch { /* already handled */ }
-            }
-            await deleteMutation.mutateAsync(noteId);
-            showToast(t('dashboard.noteDeleted'), 'success', {
-              label: t('dashboard.undo'),
-              onPress: async () => {
-                try {
-                  await restoreMutation.mutateAsync(noteId);
-                  showToast(t('dashboard.noteRestored'));
-                } catch {
-                  showToast(t('note.failedRestore'), 'error');
-                }
-              },
-            });
-            navigation.goBack();
+            await restoreMutation.mutateAsync(currentNoteId);
+            showToast(t('dashboard.noteRestored'));
           } catch {
-            intentionalExitRef.current = false;
-            Alert.alert(t('common.error'), t('note.failedDelete'));
+            showToast(t('note.failedRestore'), 'error');
           }
         },
-      },
-    ]);
+      });
+      navigation.goBack();
+    } catch {
+      intentionalExitRef.current = false;
+      Alert.alert(t('common.error'), t('note.failedDelete'));
+    }
   }, [deleteMutation, navigation, noteId, restoreMutation, showToast, t]);
 
   // Restore a trashed note (read-only view) and return to the list.
@@ -1410,26 +1408,26 @@ export default function NoteEditorScreen() {
   }, [navigation, noteId, restoreMutation, showToast, t]);
 
   // Permanently delete a trashed note (read-only view) after confirmation.
-  const handleDeletePermanently = useCallback(() => {
+  const handleDeletePermanently = useCallback(async () => {
     if (!noteId) return;
-    Alert.alert(t('note.deleteForeverTitle'), t('note.deleteForeverConfirm'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('common.delete'),
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            intentionalExitRef.current = true;
-            await permanentDeleteMutation.mutateAsync(noteId);
-            navigation.goBack();
-          } catch {
-            intentionalExitRef.current = false;
-            Alert.alert(t('common.error'), t('note.failedDelete'));
-          }
-        },
-      },
-    ]);
-  }, [navigation, noteId, permanentDeleteMutation, t]);
+    const confirmed = await confirm({
+      title: t('note.deleteForeverTitle'),
+      message: t('note.deleteForeverConfirm'),
+      confirmLabel: t('common.delete'),
+      destructive: true,
+    });
+    if (!confirmed) return;
+    const currentNoteId = noteIdRef.current;
+    if (!currentNoteId) return;
+    try {
+      intentionalExitRef.current = true;
+      await permanentDeleteMutation.mutateAsync(currentNoteId);
+      navigation.goBack();
+    } catch {
+      intentionalExitRef.current = false;
+      Alert.alert(t('common.error'), t('note.failedDelete'));
+    }
+  }, [confirm, navigation, noteId, permanentDeleteMutation, t]);
 
   const handleTogglePin = useCallback(() => withSavedNote(async (id) => {
     const newPinned = !pinnedRef.current;
@@ -2172,6 +2170,19 @@ export default function NoteEditorScreen() {
           setAssigneePickerVisible(false);
           setAssigningItemId(null);
         }}
+      />
+
+      <ConfirmDialog
+        visible={!!exitSavePrompt}
+        title={t('note.saveFailedExitTitle')}
+        message={t('note.saveFailedExitMessage')}
+        confirmLabel={t('note.discardAndLeave')}
+        destructive
+        cancelLabel={exitSavePrompt && exitSavePrompt.retriesLeft > 0 ? t('common.retry') : undefined}
+        onCancel={exitSavePrompt && exitSavePrompt.retriesLeft > 0 ? handleExitRetry : undefined}
+        onConfirm={handleExitDiscard}
+        busy={isExitRetrying}
+        dismissible={false}
       />
 
       <Modal

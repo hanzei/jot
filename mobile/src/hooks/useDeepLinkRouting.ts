@@ -6,6 +6,7 @@ import {
   getStateFromPath,
 } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
+import { useConfirm } from './useConfirm';
 import {
   getActiveServerId,
   getBaseUrl,
@@ -43,6 +44,7 @@ export function useDeepLinkRouting({
   revalidateSession,
 }: UseDeepLinkRoutingParams): UseDeepLinkRoutingResult {
   const { t } = useTranslation();
+  const { confirm } = useConfirm();
   const pendingDeepLinkUrlRef = React.useRef<string | null>(null);
   const warnedDeepLinkUrlsRef = React.useRef<Set<string>>(new Set());
   const deepLinkServerPromptInFlightRef = React.useRef<Promise<boolean> | null>(null);
@@ -60,21 +62,16 @@ export function useDeepLinkRouting({
     if (deepLinkServerPromptInFlightRef.current) {
       return deepLinkServerPromptInFlightRef.current;
     }
-    const promptPromise = new Promise<boolean>((resolve) => {
-      Alert.alert(
-        t('deepLink.unknownServerTitle'),
-        t('deepLink.unknownServerMessage', { server: serverOrigin }),
-        [
-          { text: t('common.cancel'), style: 'cancel', onPress: () => resolve(false) },
-          { text: t('deepLink.addAndSwitchAction'), onPress: () => resolve(true) },
-        ],
-      );
+    const promptPromise = confirm({
+      title: t('deepLink.unknownServerTitle'),
+      message: t('deepLink.unknownServerMessage', { server: serverOrigin }),
+      confirmLabel: t('deepLink.addAndSwitchAction'),
     }).finally(() => {
       deepLinkServerPromptInFlightRef.current = null;
     });
     deepLinkServerPromptInFlightRef.current = promptPromise;
     return promptPromise;
-  }, [t]);
+  }, [confirm, t]);
 
   const ensureDeepLinkServerContext = React.useCallback(async (serverOrigin: string): Promise<'ready' | 'switched' | false> => {
     const knownServers = await listServers();

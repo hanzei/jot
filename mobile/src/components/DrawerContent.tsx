@@ -22,6 +22,7 @@ import { switchActiveServer } from '../api/client';
 import UserAvatar from './UserAvatar';
 import ServerSetupGate from './ServerSetupGate';
 import { extractErrorMessage } from './drawer/utils';
+import { useConfirm } from '../hooks/useConfirm';
 import { styles } from './drawer/styles';
 import LabelsSection from './drawer/LabelsSection';
 import CreateLabelModal from './drawer/CreateLabelModal';
@@ -46,6 +47,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
   const deleteLabel = useDeleteLabel();
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const { confirm } = useConfirm();
   const insets = useSafeAreaInsets();
   const topItems: NavItem[] = [
     { name: 'Notes', label: t('dashboard.tabNotes'), icon: 'document-text-outline', activeIcon: 'document-text' },
@@ -73,16 +75,15 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     | { labelId?: string } | undefined;
   const activeLabelId = activeRoute === 'Notes' ? activeParams?.labelId : undefined;
 
-  const handleLogout = useCallback(() => {
-    Alert.alert(t('nav.logoutConfirmTitle'), t('nav.logoutConfirmMessage'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('nav.logout'),
-        style: 'destructive',
-        onPress: () => logout(),
-      },
-    ]);
-  }, [logout, t]);
+  const handleLogout = useCallback(async () => {
+    const confirmed = await confirm({
+      title: t('nav.logoutConfirmTitle'),
+      message: t('nav.logoutConfirmMessage'),
+      confirmLabel: t('nav.logout'),
+      destructive: true,
+    });
+    if (confirmed) logout();
+  }, [confirm, logout, t]);
 
   const handleNavPress = useCallback((name: keyof MainDrawerParamList) => {
     if (name === 'Notes') {
@@ -134,28 +135,22 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     setRenameValue(label.name);
   }, []);
 
-  const handleDeleteLabel = useCallback((label: Label) => {
-    Alert.alert(
-      t('labels.deleteConfirmTitle'),
-      t('labels.deleteConfirmMessage', { name: label.name }),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('labels.delete'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteLabel.mutateAsync({ labelId: label.id });
-              handleDeleteLabelSuccess(label.id);
-              Alert.alert(t('labels.deleteSuccess'));
-            } catch (error) {
-              Alert.alert(t('common.error'), extractErrorMessage(error, t('labels.deleteError')));
-            }
-          },
-        },
-      ],
-    );
-  }, [deleteLabel, handleDeleteLabelSuccess, t]);
+  const handleDeleteLabel = useCallback(async (label: Label) => {
+    const confirmed = await confirm({
+      title: t('labels.deleteConfirmTitle'),
+      message: t('labels.deleteConfirmMessage', { name: label.name }),
+      confirmLabel: t('labels.delete'),
+      destructive: true,
+    });
+    if (!confirmed) return;
+    try {
+      await deleteLabel.mutateAsync({ labelId: label.id });
+      handleDeleteLabelSuccess(label.id);
+      Alert.alert(t('labels.deleteSuccess'));
+    } catch (error) {
+      Alert.alert(t('common.error'), extractErrorMessage(error, t('labels.deleteError')));
+    }
+  }, [confirm, deleteLabel, handleDeleteLabelSuccess, t]);
 
   const handleSubmitCreateLabel = useCallback(async () => {
     const name = newLabelValue.trim();

@@ -1,17 +1,19 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../theme/ThemeContext';
 import { listSessions, revokeSession } from '../../api/settings';
 import { subscribeToClientActiveServerChanges } from '../../api/client';
 import { getActiveServer } from '../../store/serverAccounts';
 import { displayMessage, getCurrentLocale } from '../../i18n/utils';
+import { useConfirm } from '../../hooks/useConfirm';
 import type { ActiveSession } from '@jot/shared';
 import { styles } from './styles';
 
 export default function SessionsSection() {
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const { confirm } = useConfirm();
   const isMountedRef = useRef(true);
   const previousServerUrlRef = useRef<string | null | undefined>(undefined);
 
@@ -89,25 +91,16 @@ export default function SessionsSection() {
     }
   }, []);
 
-  const handleRevokeSession = useCallback((id: string) => {
-    Alert.alert(
-      t('settings.sessionsRevokeConfirmTitle'),
-      t('settings.sessionsRevokeConfirmMessage'),
-      [
-        {
-          text: t('common.cancel'),
-          style: 'cancel',
-        },
-        {
-          text: t('settings.sessionsRevoke'),
-          style: 'destructive',
-          onPress: () => {
-            void revokeSessionById(id);
-          },
-        },
-      ],
-    );
-  }, [revokeSessionById, t]);
+  const handleRevokeSession = useCallback(async (id: string) => {
+    const confirmed = await confirm({
+      title: t('settings.sessionsRevokeConfirmTitle'),
+      message: t('settings.sessionsRevokeConfirmMessage'),
+      confirmLabel: t('settings.sessionsRevoke'),
+      destructive: true,
+    });
+    if (!confirmed) return;
+    void revokeSessionById(id);
+  }, [confirm, revokeSessionById, t]);
 
   const currentLocale = getCurrentLocale();
 

@@ -2,6 +2,7 @@ import React from 'react';
 import { Alert } from 'react-native';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import NoteEditorScreen from '../src/screens/NoteEditorScreen';
+import { ConfirmProvider } from '../src/components/ConfirmDialog';
 
 const mockUseRoute = jest.fn();
 const mockGoBack = jest.fn();
@@ -206,28 +207,44 @@ describe('NoteEditorScreen read-only trashed note', () => {
     expect(mockGoBack).toHaveBeenCalledTimes(1);
   });
 
-  it('permanently deletes the note after confirming the destructive alert', async () => {
-    const { getByTestId } = render(<NoteEditorScreen />);
+  it('permanently deletes the note after confirming the destructive dialog', async () => {
+    const { getByTestId, findByTestId } = render(
+      <ConfirmProvider>
+        <NoteEditorScreen />
+      </ConfirmProvider>,
+    );
 
     fireEvent.press(getByTestId('toolbar-menu-btn'));
     fireEvent.press(getByTestId('editor-menu-delete-permanently'));
 
-    // The confirm dialog is a native Alert; invoke its destructive button.
-    const alertMock = Alert.alert as jest.Mock;
-    expect(alertMock).toHaveBeenCalledWith('note.deleteForeverTitle', 'note.deleteForeverConfirm', expect.any(Array));
-    const buttons = alertMock.mock.calls[alertMock.mock.calls.length - 1][2] as Array<{
-      style?: string;
-      onPress?: () => void | Promise<void>;
-    }>;
-    const destructive = buttons.find((b) => b.style === 'destructive');
-    expect(destructive).toBeDefined();
+    await findByTestId('confirm-dialog-confirm');
+    expect(getByTestId('confirm-dialog-title').props.children).toBe('note.deleteForeverTitle');
+    expect(getByTestId('confirm-dialog-message').props.children).toBe('note.deleteForeverConfirm');
 
     await act(async () => {
-      await destructive!.onPress?.();
+      fireEvent.press(getByTestId('confirm-dialog-confirm'));
     });
 
     expect(mockPermanentDeleteMutateAsync).toHaveBeenCalledWith('note-1');
     expect(mockGoBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not delete the note when the destructive dialog is cancelled', async () => {
+    const { getByTestId, findByTestId, queryByTestId } = render(
+      <ConfirmProvider>
+        <NoteEditorScreen />
+      </ConfirmProvider>,
+    );
+
+    fireEvent.press(getByTestId('toolbar-menu-btn'));
+    fireEvent.press(getByTestId('editor-menu-delete-permanently'));
+
+    await findByTestId('confirm-dialog-cancel');
+    fireEvent.press(getByTestId('confirm-dialog-cancel'));
+
+    await waitFor(() => { expect(queryByTestId('confirm-dialog-cancel')).toBeNull(); });
+    expect(mockPermanentDeleteMutateAsync).not.toHaveBeenCalled();
+    expect(mockGoBack).not.toHaveBeenCalled();
   });
 
   it('renders a trashed list note with non-interactive item controls', () => {
