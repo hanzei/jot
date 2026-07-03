@@ -106,7 +106,7 @@ describe('Toast auto dismiss durations', () => {
     expect(screen.queryByText('Standard toast')).not.toBeInTheDocument()
   })
 
-  it('runs action callback and dismisses immediately when action is clicked', () => {
+  it('runs action callback once and dismisses after its exit animation when action is clicked', async () => {
     render(
       <ToastProvider>
         <ToastHarness />
@@ -114,9 +114,58 @@ describe('Toast auto dismiss durations', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Show undo toast' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+    const actionButton = screen.getByRole('button', { name: 'Undo' })
+    fireEvent.click(actionButton)
+    // A second tap while the action is in flight must not fire it again.
+    fireEvent.click(actionButton)
+
+    expect(actionSpy).toHaveBeenCalledTimes(1)
+    expect(screen.getByText('Undo toast')).toBeInTheDocument()
+
+    // Flush the awaited (resolved) action, then run the exit animation.
+    await act(async () => {
+      await Promise.resolve()
+      vi.advanceTimersByTime(TOAST_EXIT_ANIMATION_MS)
+    })
 
     expect(actionSpy).toHaveBeenCalledTimes(1)
     expect(screen.queryByText('Undo toast')).not.toBeInTheDocument()
+  })
+
+  it('does not fire onExpire when the action runs, but does on auto-dismiss', async () => {
+    const onExpire = vi.fn()
+    function Harness() {
+      const { showToast } = useToast()
+      return (
+        <button
+          onClick={() => showToast('Expiry toast', 'success', { label: 'Undo', onClick: actionSpy, onExpire })}
+        >
+          Show expiry toast
+        </button>
+      )
+    }
+
+    render(
+      <ToastProvider>
+        <Harness />
+      </ToastProvider>
+    )
+
+    // Action clicked → onExpire must NOT fire.
+    fireEvent.click(screen.getByRole('button', { name: 'Show expiry toast' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+    await act(async () => {
+      await Promise.resolve()
+      vi.advanceTimersByTime(TOAST_EXIT_ANIMATION_MS)
+    })
+    expect(onExpire).not.toHaveBeenCalled()
+
+    // New toast left to auto-dismiss → onExpire fires exactly once.
+    onExpire.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: 'Show expiry toast' }))
+    act(() => {
+      vi.advanceTimersByTime(TOAST_ACTION_AUTO_DISMISS_MS + TOAST_EXIT_ANIMATION_MS)
+    })
+    expect(onExpire).toHaveBeenCalledTimes(1)
   })
 })

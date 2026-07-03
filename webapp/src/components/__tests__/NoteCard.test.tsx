@@ -193,14 +193,6 @@ describe('NoteCard', () => {
   })
 
   describe('Pin/Unpin Functionality', () => {
-    it('shows pinned indicator when note is pinned', () => {
-      const pinnedNote = createMockNote({ pinned: true })
-      renderNoteCard({ ...defaultProps, note: pinnedNote })
-
-      const pinIcon = screen.getByTestId('pin-icon')
-      expect(pinIcon).toBeInTheDocument()
-    })
-
     it('handles pin toggle successfully', async () => {
       const user = userEvent.setup()
       const mockUpdate = vi.mocked(notes.update)

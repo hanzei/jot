@@ -26,7 +26,6 @@ import { useTheme } from '../theme/ThemeContext';
 import SkeletonNoteList from '../components/SkeletonNoteList';
 import NoteCard from '../components/NoteCard';
 import NoteContextMenu, { ContextMenuViewContext } from '../components/NoteContextMenu';
-import ColorPicker from '../components/ColorPicker';
 import LabelPicker from '../components/LabelPicker';
 import type { Note, NoteSort } from '@jot/shared';
 import type { RootStackParamList } from '../navigation/RootNavigator';
@@ -78,7 +77,6 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const listBottomPadding = variant === 'notes' ? fabBottom + 60 : insets.bottom + 80;
 
   const [contextMenuNote, setContextMenuNote] = useState<Note | null>(null);
-  const [colorPickerNote, setColorPickerNote] = useState<Note | null>(null);
   const [labelPickerNote, setLabelPickerNote] = useState<Note | null>(null);
   const [localOrder, setLocalOrder] = useState<LocalReorderState>({ pinned: null, unpinned: null });
   const [sortMode, setSortMode] = useState<NoteSort>(() => normalizeNoteSort(settings?.note_sort));
@@ -423,10 +421,6 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     );
   }, [db, handleRefresh, isConnected, t]);
 
-  const handleChangeColor = useCallback((note: Note) => {
-    setColorPickerNote(note);
-  }, []);
-
   const handleShare = useCallback((note: Note) => {
     navigation.navigate('Share', { noteId: note.id });
   }, [navigation]);
@@ -434,18 +428,6 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const handleManageLabels = useCallback((note: Note) => {
     setLabelPickerNote(note);
   }, []);
-
-  const handleColorSelect = useCallback(async (color: string) => {
-    if (!colorPickerNote) return;
-    try {
-      await updateNote.mutateAsync({
-        id: colorPickerNote.id,
-        data: { color },
-      });
-    } catch {
-      Alert.alert(t('common.error'), t('note.failedColorUpdate'));
-    }
-  }, [colorPickerNote, t, updateNote]);
 
   // Separate active from archived matches. For My Tasks the archived notes are
   // mixed into `notes`; otherwise they come from the dedicated archived fetch.
@@ -618,6 +600,13 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   // (and mix in archived matches), so reordering them would persist a partial
   // or misclassified manual order — disable dragging there.
   const isDraggable = variant === 'notes' && sortMode === 'manual' && !debouncedSearch && !labelId;
+
+  // Signature of the active view/filter/sort/layout. The static grid swaps
+  // instantly when it changes, so only in-view note changes (create, delete,
+  // archive, pin, sync) animate — never a search/sort switch or first load.
+  // JSON-encoded (not delimiter-joined) so free-form search text — which may
+  // contain any separator character — can't make two different views collide.
+  const gridViewKey = JSON.stringify([variant, debouncedSearch, labelId ?? '', sortMode, layout]);
 
   const handleGridSectionReorder = useCallback(
     (sectionKey: string, newData: Note[]) => {
@@ -819,6 +808,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           }
           contentBottomPadding={listBottomPadding}
           ListEmptyComponent={listEmptyComponent}
+          viewKey={gridViewKey}
         />
       )}
 
@@ -846,16 +836,8 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         onMoveToTrash={handleMoveToTrash}
         onRestore={handleRestore}
         onDeletePermanently={handleDeletePermanently}
-        onChangeColor={handleChangeColor}
         onShare={handleShare}
         onManageLabels={handleManageLabels}
-      />
-
-      <ColorPicker
-        visible={colorPickerNote !== null}
-        currentColor={colorPickerNote?.color ?? '#ffffff'}
-        onSelect={handleColorSelect}
-        onClose={() => setColorPickerNote(null)}
       />
 
       {labelPickerNote && (

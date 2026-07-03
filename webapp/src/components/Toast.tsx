@@ -44,11 +44,33 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
   const { t } = useTranslation();
   const [visible, setVisible] = useState(false);
   const [exiting, setExiting] = useState(false);
+  const [isActionInFlight, setIsActionInFlight] = useState(false);
   const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoDismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rafRef = useRef<number | null>(null);
+  const exitingRef = useRef(false);
+  const actionInFlightRef = useRef(false);
   const autoDismissMs = toast.action ? TOAST_ACTION_AUTO_DISMISS_MS : TOAST_AUTO_DISMISS_MS;
-  const beginDismiss = useCallback(() => {
+
+  const clearAutoDismissTimer = useCallback(() => {
+    if (autoDismissTimerRef.current) {
+      clearTimeout(autoDismissTimerRef.current);
+      autoDismissTimerRef.current = null;
+    }
+  }, []);
+
+  const beginDismiss = useCallback((fromAction = false) => {
+    // Guard against a second dismiss (e.g. the auto-dismiss timer firing while
+    // an exit is already animating) that would double-invoke onExpire.
+    if (exitingRef.current) return;
+    // Fire onExpire only when the toast is dismissed *without* its action having
+    // run (auto-dismiss timeout or the close button) — never after onClick.
+    if (!fromAction && !actionInFlightRef.current) {
+      toast.action?.onExpire?.();
+    }
+    exitingRef.current = true;
     setExiting(true);
+    clearAutoDismissTimer();
     if (exitTimerRef.current) {
       clearTimeout(exitTimerRef.current);
     }
@@ -56,14 +78,30 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
       onDismiss(toast.id);
       exitTimerRef.current = null;
     }, TOAST_EXIT_ANIMATION_MS);
-  }, [onDismiss, toast.id]);
+  }, [clearAutoDismissTimer, onDismiss, toast.action, toast.id]);
+
+  const handleAction = useCallback(async () => {
+    // Ignore repeat taps so the action can't fire twice (e.g. a double-click on
+    // "Undo" restoring a note twice).
+    if (actionInFlightRef.current || exitingRef.current) return;
+    actionInFlightRef.current = true;
+    setIsActionInFlight(true);
+    clearAutoDismissTimer();
+    try {
+      await toast.action?.onClick();
+    } catch (error) {
+      console.error('Toast action failed:', error);
+    } finally {
+      beginDismiss(true);
+    }
+  }, [beginDismiss, clearAutoDismissTimer, toast.action]);
 
   useEffect(() => {
     rafRef.current = requestAnimationFrame(() => {
       setVisible(true);
       rafRef.current = null;
     });
-    const timer = setTimeout(() => {
+    autoDismissTimerRef.current = setTimeout(() => {
       beginDismiss();
     }, autoDismissMs);
     return () => {
@@ -71,13 +109,13 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
       }
-      clearTimeout(timer);
+      clearAutoDismissTimer();
       if (exitTimerRef.current) {
         clearTimeout(exitTimerRef.current);
         exitTimerRef.current = null;
       }
     };
-  }, [autoDismissMs, beginDismiss]);
+  }, [autoDismissMs, beginDismiss, clearAutoDismissTimer]);
 
   const Icon = toast.type === 'success' ? CheckCircleIcon
     : toast.type === 'error' ? ExclamationTriangleIcon
@@ -92,28 +130,24 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
       data-testid="toast"
       role="status"
       aria-live="polite"
-      className={`pointer-events-auto flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg border bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700 text-sm text-gray-900 dark:text-white transition-all duration-200 ${
+      className={`pointer-events-auto flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg border bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700 text-sm text-gray-900 dark:text-white transition-all duration-200 max-w-[min(92vw,28rem)] ${
         visible && !exiting ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'
       }`}
     >
       <Icon className={`h-5 w-5 flex-shrink-0 ${iconColor}`} />
-      <span>{toast.message}</span>
+      <span className="min-w-0 break-words">{toast.message}</span>
       {toast.action && (
         <button
-          onClick={() => {
-            toast.action!.onClick();
-            onDismiss(toast.id);
-          }}
-          className="ml-1 font-medium text-blue-600 dark:text-blue-400 hover:underline"
+          onClick={handleAction}
+          disabled={isActionInFlight}
+          className="ml-1 flex-shrink-0 font-medium text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-60 disabled:no-underline"
         >
           {toast.action.label}
         </button>
       )}
       <button
-        onClick={() => {
-          beginDismiss();
-        }}
-        className="ml-1 p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700"
+        onClick={() => beginDismiss()}
+        className="ml-1 flex-shrink-0 p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700"
         aria-label={t('common.close')}
       >
         <XMarkIcon className="h-4 w-4 text-gray-400" aria-hidden="true" />

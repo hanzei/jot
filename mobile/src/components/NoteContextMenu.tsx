@@ -31,7 +31,6 @@ interface NoteContextMenuProps {
   onMoveToTrash: (note: Note) => void;
   onRestore: (note: Note) => void;
   onDeletePermanently: (note: Note) => void;
-  onChangeColor: (note: Note) => void;
   onShare: (note: Note) => void;
   onManageLabels?: (note: Note) => void;
 }
@@ -56,7 +55,6 @@ export default function NoteContextMenu({
   onMoveToTrash,
   onRestore,
   onDeletePermanently,
-  onChangeColor,
   onShare,
   onManageLabels,
 }: NoteContextMenuProps) {
@@ -86,12 +84,6 @@ export default function NoteContextMenu({
   const actions: Action[] = [];
 
   if (viewContext === 'notes' || viewContext === 'my-tasks') {
-    actions.push({
-      icon: 'color-palette-outline',
-      label: t('note.changeColor'),
-      onPress: () => { onClose(); onChangeColor(note); },
-      testId: 'context-color',
-    });
     actions.push({
       icon: 'share-outline',
       label: t('note.send'),

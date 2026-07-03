@@ -100,27 +100,26 @@ test.describe('Notes', () => {
     );
   });
 
-  test('pins a note and it appears in the pinned section', async ({ page, dashboardPage }) => {
+  test('pins a note and it appears in the pinned section', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createNote('Note to Pin');
 
     await dashboardPage.pinNote('Note to Pin');
 
-    // Pinned section heading should appear
-    await expect(page.locator('h2:has-text("Pinned")')).toBeVisible();
-    // The pin icon should be visible on the card
-    await expect(dashboardPage.noteCard('Note to Pin').locator('[data-testid="pin-icon"]')).toBeVisible();
+    // Pinned section heading should appear with the note under it
+    await expect(dashboardPage.pinnedSectionHeading()).toBeVisible();
+    await expect(dashboardPage.noteCard('Note to Pin')).toBeVisible();
   });
 
-  test('unpins a pinned note', async ({ page, dashboardPage }) => {
+  test('unpins a pinned note', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createNote('Pinned Note');
     await dashboardPage.pinNote('Pinned Note');
-    await expect(page.locator('h2:has-text("Pinned")')).toBeVisible();
+    await expect(dashboardPage.pinnedSectionHeading()).toBeVisible();
 
     await dashboardPage.unpinNote('Pinned Note');
-    // Pin icon should no longer be visible
-    await expect(dashboardPage.noteCard('Pinned Note').locator('[data-testid="pin-icon"]')).toHaveCount(0);
+    // Pinned section heading should disappear once the only pinned note is unpinned
+    await expect(dashboardPage.pinnedSectionHeading()).toHaveCount(0);
   });
 
   test('archives a note and it disappears from main view', async ({ dashboardPage }) => {
