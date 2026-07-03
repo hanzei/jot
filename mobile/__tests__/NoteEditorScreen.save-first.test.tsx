@@ -5,6 +5,7 @@ import NoteEditorScreen from '../src/screens/NoteEditorScreen';
 
 const mockUseRoute = jest.fn();
 const mockNavigationAddListener = jest.fn().mockReturnValue(jest.fn());
+const mockGoBack = jest.fn();
 const mockCreateMutateAsync = jest.fn();
 const mockUpdateMutateAsync = jest.fn();
 const mockUseOfflineNote = jest.fn();
@@ -13,7 +14,7 @@ jest.mock('@react-navigation/native', () => ({
   __esModule: true,
   useRoute: () => mockUseRoute(),
   useNavigation: () => ({
-    goBack: jest.fn(),
+    goBack: mockGoBack,
     replace: jest.fn(),
     navigate: jest.fn(),
     dispatch: jest.fn(),
@@ -168,6 +169,32 @@ describe('NoteEditorScreen save-first actions', () => {
       expect(mockUpdateMutateAsync).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'server-1', data: expect.objectContaining({ pinned: true }) }),
       );
+    });
+  });
+
+  it('creates the note before archiving when it has not been saved yet', async () => {
+    const { getByTestId } = render(<NoteEditorScreen />);
+
+    await act(async () => {
+      fireEvent.changeText(getByTestId('note-content-input'), 'Fresh note');
+    });
+
+    await act(async () => {
+      fireEvent.press(getByTestId('toolbar-archive-btn'));
+    });
+
+    // Save-first: a create fires, then the archive update against the new id.
+    await waitFor(() => {
+      expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1);
+    });
+    await waitFor(() => {
+      expect(mockUpdateMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'server-1', data: expect.objectContaining({ archived: true }) }),
+      );
+    });
+    // Archiving a note returns the user to the dashboard.
+    await waitFor(() => {
+      expect(mockGoBack).toHaveBeenCalledTimes(1);
     });
   });
 });

@@ -131,6 +131,7 @@ export default function CheckedItemsSection({
       <TouchableOpacity
         style={styles.checkedHeader}
         onPress={onToggleCollapsed}
+        disabled={!editable}
         testID="toggle-checked-items"
       >
         <Ionicons

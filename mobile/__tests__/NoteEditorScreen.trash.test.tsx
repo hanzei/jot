@@ -205,4 +205,55 @@ describe('NoteEditorScreen read-only trashed note', () => {
     });
     expect(mockGoBack).toHaveBeenCalledTimes(1);
   });
+
+  it('permanently deletes the note after confirming the destructive alert', async () => {
+    const { getByTestId } = render(<NoteEditorScreen />);
+
+    fireEvent.press(getByTestId('toolbar-menu-btn'));
+    fireEvent.press(getByTestId('editor-menu-delete-permanently'));
+
+    // The confirm dialog is a native Alert; invoke its destructive button.
+    const alertMock = Alert.alert as jest.Mock;
+    expect(alertMock).toHaveBeenCalledWith('note.deleteForeverTitle', 'note.deleteForeverConfirm', expect.any(Array));
+    const buttons = alertMock.mock.calls[alertMock.mock.calls.length - 1][2] as Array<{
+      style?: string;
+      onPress?: () => void | Promise<void>;
+    }>;
+    const destructive = buttons.find((b) => b.style === 'destructive');
+    expect(destructive).toBeDefined();
+
+    await act(async () => {
+      await destructive!.onPress?.();
+    });
+
+    expect(mockPermanentDeleteMutateAsync).toHaveBeenCalledWith('note-1');
+    expect(mockGoBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders a trashed list note with non-interactive item controls', () => {
+    mockUseOfflineNote.mockReturnValue({
+      data: makeTrashedNote({
+        note_type: 'list',
+        title: 'Groceries',
+        content: undefined,
+        items: [
+          { id: 'i1', text: 'Milk', completed: false, position: 0, parent_id: null, assigned_to: '' },
+          { id: 'i2', text: 'Eggs', completed: true, position: 1, parent_id: null, assigned_to: '' },
+        ],
+      }),
+    });
+
+    const { getAllByTestId, getByTestId, queryByTestId } = render(<NoteEditorScreen />);
+
+    // No "add item" affordance in read-only mode.
+    expect(queryByTestId('add-list-item')).toBeNull();
+
+    // Item checkboxes are disabled (non-interactive).
+    for (const checkbox of getAllByTestId('list-item-checkbox')) {
+      expect(checkbox.props.accessibilityState).toMatchObject({ disabled: true });
+    }
+
+    // The completed-items collapse toggle is disabled.
+    expect(getByTestId('toggle-checked-items').props.accessibilityState).toMatchObject({ disabled: true });
+  });
 });

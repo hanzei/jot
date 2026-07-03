@@ -1315,10 +1315,11 @@ export default function NoteEditorScreen() {
   }, [markDirtyAndScheduleUpdate, getItemRef]);
 
   const handleToggleCollapsed = useCallback(() => {
+    if (isReadOnly) return;
     animateListReflow();
     setCheckedItemsCollapsed((prev) => !prev);
     markDirtyAndScheduleUpdate();
-  }, [markDirtyAndScheduleUpdate]);
+  }, [isReadOnly, markDirtyAndScheduleUpdate]);
 
   const collaborators = useMemo<Collaborator[]>(() => {
     if (!existingNote) return [];

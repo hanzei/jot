@@ -142,7 +142,7 @@ export default function NoteEditorMenu({
       onRequestClose={onClose}
     >
       <Pressable style={[styles.overlay, { backgroundColor: colors.overlay }]} onPress={onClose}>
-        <View style={[styles.sheet, { backgroundColor: colors.sheetBackground, paddingBottom: insets.bottom }]}>
+        <View style={[styles.sheet, { backgroundColor: colors.sheetBackground, paddingBottom: insets.bottom || 8 }]}>
           <Pressable>
             <View style={[styles.handle, { backgroundColor: colors.handleColor }]} />
             {title ? (
@@ -167,6 +167,8 @@ export default function NoteEditorMenu({
                     ]}
                     onPress={action.onPress}
                     testID={action.testId}
+                    accessibilityRole="menuitem"
+                    accessibilityLabel={action.label}
                   >
                     <Ionicons
                       name={action.icon}
