@@ -27,6 +27,8 @@ type Config struct {
 	OTelServiceName     string
 	OTelInsecure        bool
 	OTelTracesEnabled   bool
+	OTelMetricsEnabled  bool
+	OTelLogsEnabled     bool
 }
 
 // parseBoolEnv reads an environment variable that must be "true", "false", or
@@ -167,6 +169,22 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	cfg.OTelTracesEnabled = otelTracesEnabled
+
+	// Metrics and logs default to true (unlike traces) to preserve pre-existing
+	// export behavior: collectors missing a traces pipeline are common, but
+	// ones missing metrics/logs pipelines are not, so opting those out by
+	// default would silently drop data most users still want.
+	otelMetricsEnabled, err := parseBoolEnv("OTEL_METRICS_ENABLED", true)
+	if err != nil {
+		return nil, err
+	}
+	cfg.OTelMetricsEnabled = otelMetricsEnabled
+
+	otelLogsEnabled, err := parseBoolEnv("OTEL_LOGS_ENABLED", true)
+	if err != nil {
+		return nil, err
+	}
+	cfg.OTelLogsEnabled = otelLogsEnabled
 
 	return cfg, nil
 }
