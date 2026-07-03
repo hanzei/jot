@@ -1362,8 +1362,6 @@ export default function NoteEditorScreen() {
     }
     // Moving to trash is undoable (toast below + restoreMutation), so this
     // doesn't confirm — matches NotesListScreen's handleMoveToTrash.
-    const currentNoteId = noteIdRef.current;
-    if (!currentNoteId) return;
     try {
       if (debounceRef.current) {
         clearTimeout(debounceRef.current);
@@ -1373,6 +1371,10 @@ export default function NoteEditorScreen() {
       if (saveInFlightRef.current) {
         try { await saveInFlightRef.current; } catch { /* already handled */ }
       }
+      // Re-read after the in-flight save settles: it can reconcile a local_*
+      // draft id to the server-issued id while we were awaiting it.
+      const currentNoteId = noteIdRef.current;
+      if (!currentNoteId) return;
       await deleteMutation.mutateAsync(currentNoteId);
       showToast(t('dashboard.noteDeleted'), 'success', {
         label: t('dashboard.undo'),
