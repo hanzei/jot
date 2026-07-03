@@ -7,10 +7,15 @@ import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../store/AuthContext';
 import { useFailedNoteIds } from '../store/OfflineContext';
 import { useUsers } from '../store/UsersContext';
+import { useActiveServerBaseUrl } from '../hooks/useActiveServerBaseUrl';
+import { noteImageThumbnailUrl } from '../api/images';
 import UserAvatar from './UserAvatar';
+import CachedNoteImage from './CachedNoteImage';
 import { isWhiteHexColor } from '../utils/colorContrast';
 import { stripMarkdownForPreview } from '../utils/markdownStyles';
 import LinkText from './LinkText';
+
+const CARD_RADIUS = 12;
 
 interface NoteCardProps {
   note: Note;
@@ -142,6 +147,9 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress, onLabelPress }: Not
   const failedNoteIds = useFailedNoteIds();
   const didNotSync = failedNoteIds.has(note.id);
   const hasColor = !!(note.color && !isWhiteHexColor(note.color));
+  const baseUrl = useActiveServerBaseUrl();
+  const coverImage = note.images?.[0];
+  const extraImageCount = (note.images?.length ?? 0) - 1;
   const textPreview = useMemo(
     () => note.note_type === 'text' && note.content ? stripMarkdownForPreview(note.content) : null,
     [note],
@@ -159,6 +167,25 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress, onLabelPress }: Not
       activeOpacity={0.7}
       testID={`note-card-${note.id}`}
     >
+      {coverImage && (
+        <View style={styles.cover} testID={`note-card-cover-${note.id}`}>
+          <CachedNoteImage
+            imageId={coverImage.id}
+            variant="thumbnail"
+            networkUrl={noteImageThumbnailUrl(baseUrl, coverImage.id)}
+            style={styles.coverImage}
+            resizeMode="cover"
+            accessibilityLabel={coverImage.filename}
+            accessibilityIgnoresInvertColors
+          />
+          {extraImageCount > 0 && (
+            <View style={styles.coverBadge} accessibilityLabel={t('images.moreImagesBadge', { count: extraImageCount })}>
+              <Text style={styles.coverBadgeText}>+{extraImageCount}</Text>
+            </View>
+          )}
+        </View>
+      )}
+
       {didNotSync && (
         <View
           style={[styles.failedBadge, { backgroundColor: hasColor ? 'rgba(0,0,0,0.08)' : colors.warning }]}
@@ -241,7 +268,7 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress, onLabelPress }: Not
 const styles = StyleSheet.create({
   card: {
     borderWidth: 1,
-    borderRadius: 12,
+    borderRadius: CARD_RADIUS,
     padding: 12,
     // The masonry layout (both the single-column list and the two-column grid)
     // owns the spacing between cards, so the card itself carries no margins.
@@ -250,6 +277,34 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 3,
     elevation: 1,
+  },
+  cover: {
+    marginHorizontal: -12,
+    marginTop: -12,
+    marginBottom: 8,
+    height: 160,
+    borderTopLeftRadius: CARD_RADIUS,
+    borderTopRightRadius: CARD_RADIUS,
+    overflow: 'hidden',
+    backgroundColor: '#e5e7eb',
+  },
+  coverImage: {
+    width: '100%',
+    height: '100%',
+  },
+  coverBadge: {
+    position: 'absolute',
+    bottom: 6,
+    right: 6,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  coverBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '600',
   },
   cardHeader: {
     flexDirection: 'row',
