@@ -33,6 +33,7 @@ func NewApp(out io.Writer) *App {
 func Execute() {
 	app := NewApp(os.Stdout)
 	if err := app.newRootCmd().Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
 	}
 }
@@ -45,7 +46,10 @@ func (a *App) newRootCmd() *cobra.Command {
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 			return a.loadSession()
 		},
+		// Errors are printed once by Execute; without these flags cobra would
+		// swallow the error message and dump the command usage instead.
 		SilenceErrors: true,
+		SilenceUsage:  true,
 	}
 
 	root.PersistentFlags().BoolVar(&a.jsonOutput, "json", false, "Output as JSON")
