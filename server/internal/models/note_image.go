@@ -226,42 +226,6 @@ func (s *noteStore) GetNoteImageRefCount(ctx context.Context, sha256 string) (in
 	return count, nil
 }
 
-// GetNoteImageRefCounts is the batch form of GetNoteImageRefCount: it
-// returns the current reference count for every hash in shas in one query,
-// so bulk reclamation (EmptyTrash, admin user/notes delete, the periodic
-// purge sweep) doesn't pay one round-trip per hash. A hash with no matching
-// row (already at zero) is simply absent from the returned map.
-func (s *noteStore) GetNoteImageRefCounts(ctx context.Context, shas []string) (map[string]int, error) {
-	if len(shas) == 0 {
-		return map[string]int{}, nil
-	}
-
-	placeholders, args := buildInClauseArgs(shas)
-	query := `SELECT sha256, COUNT(*) FROM note_images WHERE sha256 IN (` + placeholders + `) GROUP BY sha256` // #nosec G202 -- only "?" placeholders are joined, no user input
-
-	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), args...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get note image refcounts: %w", err)
-	}
-	type shaCount struct {
-		sha   string
-		count int
-	}
-	rowCounts, err := collectRows(rows, func(rows *sql.Rows) (shaCount, error) {
-		var sc shaCount
-		return sc, rows.Scan(&sc.sha, &sc.count)
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to scan note image refcounts: %w", err)
-	}
-
-	counts := make(map[string]int, len(rowCounts))
-	for _, sc := range rowCounts {
-		counts[sc.sha] = sc.count
-	}
-	return counts, nil
-}
-
 // GetNoteImageSHA256sForUserTx returns the distinct sha256 hashes of every
 // image reachable from userID: images attached to notes they own, plus
 // images they uploaded to notes owned by someone else (a shared note).

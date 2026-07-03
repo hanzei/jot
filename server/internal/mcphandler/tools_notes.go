@@ -187,7 +187,9 @@ func (h *Handler) handleDeleteNote(userID string) mcp.ToolHandlerFor[deleteNoteI
 // leak the blob, as there's no retry path for it afterward.
 func (h *Handler) reclaimNoteImageBlobs(ctx context.Context, shas []string) {
 	ctx = context.WithoutCancel(ctx)
-	for _, err := range blobstore.ReclaimAllIfOrphaned(ctx, h.noteStore, h.imageStore, shas) {
-		logutil.FromContext(ctx).WithError(err).Error("Failed to reclaim orphaned note image blob/thumbnail")
+	for _, sha := range shas {
+		if err := blobstore.ReclaimIfOrphaned(ctx, h.noteStore, h.imageStore, sha); err != nil {
+			logutil.FromContext(ctx).WithError(err).WithField("sha256", sha).Error("Failed to reclaim orphaned note image blob/thumbnail")
+		}
 	}
 }

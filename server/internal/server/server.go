@@ -162,8 +162,10 @@ func New(cfg *config.Config) (*Server, error) {
 		if err != nil {
 			return err
 		}
-		for _, err := range blobstore.ReclaimAllIfOrphaned(ctx, noteStore, imageStore, shas) {
-			logrus.WithError(err).Error("Failed to reclaim orphaned note image blob/thumbnail")
+		for _, sha := range shas {
+			if err := blobstore.ReclaimIfOrphaned(ctx, noteStore, imageStore, sha); err != nil {
+				logrus.WithError(err).WithField("sha256", sha).Error("Failed to reclaim orphaned note image blob/thumbnail")
+			}
 		}
 		return nil
 	}, "purge old trashed notes")

@@ -171,32 +171,6 @@ func TestNoteImageStore(t *testing.T) {
 		assert.Equal(t, 0, count)
 	})
 
-	t.Run("GetNoteImageRefCounts returns the count for every hash in one query, omitting unreferenced ones", func(t *testing.T) {
-		store, userID, noteID := newTestNoteImageStore(t)
-		ctx := t.Context()
-
-		_, err := store.db.ExecContext(ctx, `INSERT INTO notes (id, user_id, note_type) VALUES ('note000000000000000im2', ?, 'text')`, userID)
-		require.NoError(t, err)
-
-		_, err = store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "shared-hash", 1, 1, 0)
-		require.NoError(t, err)
-		_, err = store.CreateNoteImage(ctx, "note000000000000000im2", userID, "a-dup.png", "image/png", 1, "shared-hash", 1, 1, 0)
-		require.NoError(t, err)
-		_, err = store.CreateNoteImage(ctx, noteID, userID, "b.png", "image/png", 1, "solo-hash", 1, 1, 0)
-		require.NoError(t, err)
-
-		counts, err := store.GetNoteImageRefCounts(ctx, []string{"shared-hash", "solo-hash", "never-referenced"})
-		require.NoError(t, err)
-		assert.Equal(t, map[string]int{"shared-hash": 2, "solo-hash": 1}, counts, "a hash with no matching row must be absent, not present with 0")
-	})
-
-	t.Run("GetNoteImageRefCounts returns an empty map for an empty input", func(t *testing.T) {
-		store, _, _ := newTestNoteImageStore(t)
-		counts, err := store.GetNoteImageRefCounts(t.Context(), nil)
-		require.NoError(t, err)
-		assert.Empty(t, counts)
-	})
-
 	t.Run("batch-loading images for a note list matches GetNoteImagesByNoteID and needs no per-note query", func(t *testing.T) {
 		store, userID, noteID := newTestNoteImageStore(t)
 		ctx := t.Context()
