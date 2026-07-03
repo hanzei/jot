@@ -162,6 +162,23 @@ func Setup(ctx context.Context, cfg Config) (shutdown func(context.Context) erro
 	}, nil
 }
 
+// initTracerProvider returns a noop TracerProvider when tracesEnabled is
+// false, otherwise builds a real one from the exporter produced by newExporter.
+func initTracerProvider(tracesEnabled bool, res *resource.Resource, newExporter func() (sdktrace.SpanExporter, error)) (trace.TracerProvider, []func(context.Context) error, error) {
+	if !tracesEnabled {
+		return tracenoop.NewTracerProvider(), nil, nil
+	}
+	exporter, err := newExporter()
+	if err != nil {
+		return nil, nil, err
+	}
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exporter),
+		sdktrace.WithResource(res),
+	)
+	return tp, []func(context.Context) error{tp.Shutdown}, nil
+}
+
 func setupOTLP(ctx context.Context, res *resource.Resource, endpoint string, insecureConn bool, tracesEnabled bool, promExp *promexporter.Exporter) (trace.TracerProvider, *metric.MeterProvider, *sdklog.LoggerProvider, []func(context.Context) error, error) {
 	var creds credentials.TransportCredentials
 	if insecureConn {
@@ -175,22 +192,12 @@ func setupOTLP(ctx context.Context, res *resource.Resource, endpoint string, ins
 		return nil, nil, nil, nil, fmt.Errorf("create OTLP gRPC connection: %w", err)
 	}
 
-	var (
-		tp        trace.TracerProvider = tracenoop.NewTracerProvider()
-		shutdowns []func(context.Context) error
-	)
-	if tracesEnabled {
-		traceExporter, traceErr := otlptracegrpc.New(ctx, otlptracegrpc.WithGRPCConn(conn))
-		if traceErr != nil {
-			_ = conn.Close()
-			return nil, nil, nil, nil, fmt.Errorf("create OTLP trace exporter: %w", traceErr)
-		}
-		realTP := sdktrace.NewTracerProvider(
-			sdktrace.WithBatcher(traceExporter),
-			sdktrace.WithResource(res),
-		)
-		tp = realTP
-		shutdowns = append(shutdowns, realTP.Shutdown)
+	tp, shutdowns, err := initTracerProvider(tracesEnabled, res, func() (sdktrace.SpanExporter, error) {
+		return otlptracegrpc.New(ctx, otlptracegrpc.WithGRPCConn(conn))
+	})
+	if err != nil {
+		_ = conn.Close()
+		return nil, nil, nil, nil, fmt.Errorf("create OTLP trace exporter: %w", err)
 	}
 
 	metricExporter, err := otlpmetricgrpc.New(ctx, otlpmetricgrpc.WithGRPCConn(conn))
@@ -234,21 +241,11 @@ func setupOTLP(ctx context.Context, res *resource.Resource, endpoint string, ins
 }
 
 func setupStdout(ctx context.Context, res *resource.Resource, tracesEnabled bool, promExp *promexporter.Exporter) (trace.TracerProvider, *metric.MeterProvider, *sdklog.LoggerProvider, []func(context.Context) error, error) {
-	var (
-		tp        trace.TracerProvider = tracenoop.NewTracerProvider()
-		shutdowns []func(context.Context) error
-	)
-	if tracesEnabled {
-		traceExporter, traceErr := stdouttrace.New(stdouttrace.WithWriter(os.Stdout))
-		if traceErr != nil {
-			return nil, nil, nil, nil, fmt.Errorf("create stdout trace exporter: %w", traceErr)
-		}
-		realTP := sdktrace.NewTracerProvider(
-			sdktrace.WithBatcher(traceExporter),
-			sdktrace.WithResource(res),
-		)
-		tp = realTP
-		shutdowns = append(shutdowns, realTP.Shutdown)
+	tp, shutdowns, err := initTracerProvider(tracesEnabled, res, func() (sdktrace.SpanExporter, error) {
+		return stdouttrace.New(stdouttrace.WithWriter(os.Stdout))
+	})
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("create stdout trace exporter: %w", err)
 	}
 
 	logExporter, err := stdoutlog.New(stdoutlog.WithWriter(os.Stdout))
