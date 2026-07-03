@@ -22,6 +22,7 @@ import { useOfflineNotes, useOfflineNote } from '../hooks/useOfflineNotes';
 import { useUsers } from '../store/UsersContext';
 import { useAuth } from '../store/AuthContext';
 import { useToast } from '../hooks/useToast';
+import { useConfirm } from '../hooks/useConfirm';
 import { useTheme } from '../theme/ThemeContext';
 import SkeletonNoteList from '../components/SkeletonNoteList';
 import NoteCard from '../components/NoteCard';
@@ -72,6 +73,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const { colors } = useTheme();
   const { t } = useTranslation();
   const { showToast } = useToast();
+  const { confirm } = useConfirm();
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
   const fabBottom = Math.max(insets.bottom + 20, 20);
   const listBottomPadding = variant === 'notes' ? fabBottom + 60 : insets.bottom + 80;
@@ -351,75 +353,63 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     }
   }, [duplicateNote, t]);
 
-  const handleDeletePermanently = useCallback((note: Note) => {
-    Alert.alert(
-      t('note.deleteForeverTitle'),
-      t('note.deleteForeverConfirm'),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('common.delete'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await permanentDeleteNote.mutateAsync(note.id);
-            } catch {
-              Alert.alert(t('common.error'), t('note.failedDelete'));
-            }
-          },
-        },
-      ],
-    );
-  }, [permanentDeleteNote, t]);
+  const handleDeletePermanently = useCallback(async (note: Note) => {
+    const confirmed = await confirm({
+      title: t('note.deleteForeverTitle'),
+      message: t('note.deleteForeverConfirm'),
+      confirmLabel: t('common.delete'),
+      destructive: true,
+    });
+    if (!confirmed) return;
+    try {
+      await permanentDeleteNote.mutateAsync(note.id);
+    } catch {
+      Alert.alert(t('common.error'), t('note.failedDelete'));
+    }
+  }, [confirm, permanentDeleteNote, t]);
 
-  const handleEmptyTrash = useCallback(() => {
+  const handleEmptyTrash = useCallback(async () => {
     const currentTrashCount = trashCountRef.current;
     if (currentTrashCount === 0) {
       return;
     }
 
-    Alert.alert(
-      t('dashboard.emptyTrash'),
-      t('dashboard.emptyTrashConfirmMessage', { count: currentTrashCount }),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('dashboard.emptyTrash'),
-          style: 'destructive',
-          onPress: async () => {
-            if (trashCountRef.current === 0) {
-              return;
-            }
-            if (!isConnected) {
-              Alert.alert(t('common.error'), t('dashboard.emptyTrashOffline'));
-              return;
-            }
+    const confirmed = await confirm({
+      title: t('dashboard.emptyTrash'),
+      message: t('dashboard.emptyTrashConfirmMessage', { count: currentTrashCount }),
+      confirmLabel: t('dashboard.emptyTrash'),
+      destructive: true,
+    });
+    if (!confirmed) return;
+    if (trashCountRef.current === 0) {
+      return;
+    }
+    if (!isConnected) {
+      Alert.alert(t('common.error'), t('dashboard.emptyTrashOffline'));
+      return;
+    }
 
-            setIsEmptyingTrash(true);
-            let serverTrashEmptied = false;
-            try {
-              await emptyTrashNotes();
-              serverTrashEmptied = true;
-              const trashedNotes = await getLocalNotes(db, { trashed: true });
-              await Promise.all(trashedNotes.map((note) => permanentDeleteLocalNote(db, note.id)));
-              Alert.alert(t('dashboard.emptyTrash'), t('dashboard.trashEmptied'));
-            } catch {
-              if (serverTrashEmptied) {
-                Alert.alert(t('dashboard.emptyTrash'), t('dashboard.trashEmptied'));
-              } else {
-                Alert.alert(t('common.error'), t('dashboard.emptyTrashFailed'));
-              }
-            } finally {
-              if (serverTrashEmptied) {
-                await handleRefresh().catch(() => {});
-              }
-              setIsEmptyingTrash(false);
-            }
-          },
-        },
-      ],
-    );
-  }, [db, handleRefresh, isConnected, t]);
+    setIsEmptyingTrash(true);
+    let serverTrashEmptied = false;
+    try {
+      await emptyTrashNotes();
+      serverTrashEmptied = true;
+      const trashedNotes = await getLocalNotes(db, { trashed: true });
+      await Promise.all(trashedNotes.map((note) => permanentDeleteLocalNote(db, note.id)));
+      Alert.alert(t('dashboard.emptyTrash'), t('dashboard.trashEmptied'));
+    } catch {
+      if (serverTrashEmptied) {
+        Alert.alert(t('dashboard.emptyTrash'), t('dashboard.trashEmptied'));
+      } else {
+        Alert.alert(t('common.error'), t('dashboard.emptyTrashFailed'));
+      }
+    } finally {
+      if (serverTrashEmptied) {
+        await handleRefresh().catch(() => {});
+      }
+      setIsEmptyingTrash(false);
+    }
+  }, [confirm, db, handleRefresh, isConnected, t]);
 
   const handleShare = useCallback((note: Note) => {
     navigation.navigate('Share', { noteId: note.id });

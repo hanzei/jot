@@ -22,6 +22,7 @@ import { OfflineProvider } from './src/store/OfflineContext';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import RootNavigator, { type RootStackParamList } from './src/navigation/RootNavigator';
 import { ToastProvider } from './src/components/Toast';
+import { ConfirmProvider } from './src/components/ConfirmDialog';
 import {
   getActiveServerId,
   initializeServerContext,
@@ -209,7 +210,9 @@ export default function App() {
                     <OfflineProvider>
                       <UsersProvider>
                         <ToastProvider>
-                          <NavigationWrapper />
+                          <ConfirmProvider>
+                            <NavigationWrapper />
+                          </ConfirmProvider>
                         </ToastProvider>
                       </UsersProvider>
                     </OfflineProvider>

@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
-  Alert,
   Share,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
@@ -14,6 +13,7 @@ import { listPATs, createPAT, revokePAT } from '../../api/settings';
 import { subscribeToClientActiveServerChanges } from '../../api/client';
 import { getActiveServer } from '../../store/serverAccounts';
 import { displayMessage, getCurrentLocale } from '../../i18n/utils';
+import { useConfirm } from '../../hooks/useConfirm';
 import { VALIDATION } from '@jot/shared';
 import type { PersonalAccessToken } from '@jot/shared';
 import { styles } from './styles';
@@ -21,6 +21,7 @@ import { styles } from './styles';
 export default function PATsSection() {
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const { confirm } = useConfirm();
   const isMountedRef = useRef(true);
   const previousServerUrlRef = useRef<string | null | undefined>(undefined);
 
@@ -107,32 +108,26 @@ export default function PATsSection() {
     }
   }, [newPATName, creatingPAT, t]);
 
-  const handleRevokePAT = useCallback((id: string, name: string) => {
-    Alert.alert(
-      t('settings.patsRevokeConfirmTitle'),
-      t('settings.patsRevokeConfirmMessage', { name }),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('settings.patsRevoke'),
-          style: 'destructive',
-          onPress: async () => {
-            setRevokingPATId(id);
-            try {
-              await revokePAT(id);
-              if (!isMountedRef.current) return;
-              setPats(prev => prev.filter(p => p.id !== id));
-            } catch {
-              if (!isMountedRef.current) return;
-              setPatsError('settings.patsRevokeError');
-            } finally {
-              if (isMountedRef.current) setRevokingPATId(null);
-            }
-          },
-        },
-      ],
-    );
-  }, [t]);
+  const handleRevokePAT = useCallback(async (id: string, name: string) => {
+    const confirmed = await confirm({
+      title: t('settings.patsRevokeConfirmTitle'),
+      message: t('settings.patsRevokeConfirmMessage', { name }),
+      confirmLabel: t('settings.patsRevoke'),
+      destructive: true,
+    });
+    if (!confirmed) return;
+    setRevokingPATId(id);
+    try {
+      await revokePAT(id);
+      if (!isMountedRef.current) return;
+      setPats(prev => prev.filter(p => p.id !== id));
+    } catch {
+      if (!isMountedRef.current) return;
+      setPatsError('settings.patsRevokeError');
+    } finally {
+      if (isMountedRef.current) setRevokingPATId(null);
+    }
+  }, [confirm, t]);
 
   const currentLocale = getCurrentLocale();
 

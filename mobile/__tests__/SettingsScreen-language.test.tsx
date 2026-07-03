@@ -3,6 +3,7 @@ import { Alert, Text } from 'react-native';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { useTranslation } from 'react-i18next';
 import SettingsScreen from '../src/screens/SettingsScreen';
+import { ConfirmProvider } from '../src/components/ConfirmDialog';
 import MobileI18nProvider from '../src/i18n/MobileI18nProvider';
 import i18n from '../src/i18n';
 import { useAuth } from '../src/store/AuthContext';
@@ -265,7 +266,11 @@ describe('SettingsScreen language selection', () => {
   });
 
   it('asks for confirmation before revoking a session', async () => {
-    const { getByTestId } = render(<SettingsScreen />);
+    const { getByTestId, findByTestId } = render(
+      <ConfirmProvider>
+        <SettingsScreen />
+      </ConfirmProvider>,
+    );
 
     await waitFor(() => {
       expect(mockListSessions).toHaveBeenCalled();
@@ -273,28 +278,13 @@ describe('SettingsScreen language selection', () => {
 
     fireEvent.press(getByTestId('settings-revoke-session-other-session'));
 
-    expect(alertSpy).toHaveBeenCalledWith(
-      'Revoke session',
-      'Are you sure you want to revoke this session?',
-      expect.arrayContaining([
-        expect.objectContaining({
-          text: 'Cancel',
-          style: 'cancel',
-        }),
-        expect.objectContaining({
-          text: 'Revoke',
-          style: 'destructive',
-          onPress: expect.any(Function),
-        }),
-      ]),
-    );
+    const dialogTitle = await findByTestId('confirm-dialog-title');
+    expect(dialogTitle.props.children).toBe('Revoke session');
+    expect(getByTestId('confirm-dialog-message').props.children).toBe('Are you sure you want to revoke this session?');
     expect(mockRevokeSession).not.toHaveBeenCalled();
 
-    const [, , actions] = alertSpy.mock.calls[0] as [string, string, Array<{ text: string; onPress?: () => void }>];
-    const revokeAction = actions.find(action => action.text === 'Revoke');
-    expect(revokeAction).toBeDefined();
     await act(async () => {
-      revokeAction?.onPress?.();
+      fireEvent.press(getByTestId('confirm-dialog-confirm'));
     });
 
     await waitFor(() => {
@@ -303,7 +293,11 @@ describe('SettingsScreen language selection', () => {
   });
 
   it('does not revoke when the confirmation is cancelled', async () => {
-    const { getByTestId } = render(<SettingsScreen />);
+    const { getByTestId, findByTestId, queryByTestId } = render(
+      <ConfirmProvider>
+        <SettingsScreen />
+      </ConfirmProvider>,
+    );
 
     await waitFor(() => {
       expect(mockListSessions).toHaveBeenCalled();
@@ -311,13 +305,12 @@ describe('SettingsScreen language selection', () => {
 
     fireEvent.press(getByTestId('settings-revoke-session-other-session'));
 
-    const [, , actions] = alertSpy.mock.calls[0] as [string, string, Array<{ text: string; onPress?: () => void }>];
-    const cancelAction = actions.find(action => action.text === 'Cancel');
-    expect(cancelAction).toBeDefined();
-    cancelAction?.onPress?.();
+    await findByTestId('confirm-dialog-cancel');
+    fireEvent.press(getByTestId('confirm-dialog-cancel'));
 
     await waitFor(() => {
-      expect(mockRevokeSession).not.toHaveBeenCalled();
+      expect(queryByTestId('confirm-dialog-cancel')).toBeNull();
     });
+    expect(mockRevokeSession).not.toHaveBeenCalled();
   });
 });
