@@ -4,14 +4,14 @@ import {
   TrashIcon,
   ArchiveBoxIcon,
   ArchiveBoxXMarkIcon,
-  ShareIcon,
+  UserPlusIcon,
   ArrowUturnLeftIcon,
   DocumentDuplicateIcon,
 } from '@heroicons/react/24/outline';
 import { Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, type Note, type User } from '@jot/shared';
-import { notes } from '@/utils/api';
+import { notes, images as imagesApi } from '@/utils/api';
 import LetterAvatar from '@/components/LetterAvatar';
 import LinkText from '@/components/LinkText';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -55,6 +55,8 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
   }>({ open: false, title: '', message: '', confirmLabel: '', onConfirm: () => {} });
 
   const isOwner = note.user_id === currentUserId;
+  const coverImage = note.images?.[0];
+  const extraImageCount = (note.images?.length ?? 0) - 1;
 
   const handleMenuKeyDown = (e: React.KeyboardEvent) => {
     if (inBin) return;
@@ -96,10 +98,10 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
     setIsUpdating(true);
     try {
       const willArchive = !note.archived;
-      await notes.update(note.id, note.note_type === 'list'
-        ? { archived: willArchive, title: note.title, color: note.color, pinned: note.pinned, checked_items_collapsed: note.checked_items_collapsed }
-        : { archived: willArchive, content: note.content, color: note.color, pinned: note.pinned }
-      );
+      // Send only the field that changed — the card's note prop can be stale,
+      // so re-sending title/content here would overwrite concurrent edits made
+      // in another tab or by a collaborator.
+      await notes.update(note.id, { archived: willArchive });
       onRefresh?.();
       showToast(
         willArchive ? t('dashboard.noteArchived') : t('dashboard.noteUnarchived'),
@@ -108,10 +110,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
           label: t('dashboard.undo'),
           onClick: async () => {
             try {
-              await notes.update(note.id, note.note_type === 'list'
-                ? { archived: !willArchive, title: note.title, color: note.color, pinned: note.pinned, checked_items_collapsed: note.checked_items_collapsed }
-                : { archived: !willArchive, content: note.content, color: note.color, pinned: note.pinned }
-              );
+              await notes.update(note.id, { archived: !willArchive });
               onRefresh?.();
             } catch (undoError) {
               console.error('Failed to undo archive toggle:', undoError);
@@ -132,10 +131,8 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
     setIsUpdating(true);
     try {
       const willPin = !note.pinned;
-      await notes.update(note.id, note.note_type === 'list'
-        ? { pinned: willPin, archived: note.archived, title: note.title, color: note.color, checked_items_collapsed: note.checked_items_collapsed }
-        : { pinned: willPin, archived: note.archived, content: note.content, color: note.color }
-      );
+      // Send only the field that changed (see handleToggleArchive).
+      await notes.update(note.id, { pinned: willPin });
       onRefresh?.();
       showToast(
         willPin ? t('dashboard.notePinned') : t('dashboard.noteUnpinned'),
@@ -144,10 +141,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
           label: t('dashboard.undo'),
           onClick: async () => {
             try {
-              await notes.update(note.id, note.note_type === 'list'
-                ? { pinned: !willPin, archived: note.archived, title: note.title, color: note.color, checked_items_collapsed: note.checked_items_collapsed }
-                : { pinned: !willPin, archived: note.archived, content: note.content, color: note.color }
-              );
+              await notes.update(note.id, { pinned: !willPin });
               onRefresh?.();
             } catch (undoError) {
               console.error('Failed to undo pin toggle:', undoError);
@@ -219,6 +213,24 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
         }
       }}
     >
+      {coverImage && (
+        <div className="relative -mx-4 -mt-4 mb-2 rounded-t-lg overflow-hidden" data-testid="note-card-cover">
+          <img
+            src={imagesApi.thumbnailUrl(coverImage.id)}
+            alt={coverImage.filename}
+            className="w-full h-40 object-cover"
+          />
+          {extraImageCount > 0 && (
+            <span
+              className="absolute bottom-1 right-1 rounded-full bg-black/60 text-white text-xs px-1.5 py-0.5"
+              aria-label={t('images.moreImagesBadge', { count: extraImageCount })}
+            >
+              +{extraImageCount}
+            </span>
+          )}
+        </div>
+      )}
+
       {note.pinned && (
         <div className="absolute top-2 right-8">
           <svg data-testid="pin-icon" className="h-3 w-3 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
@@ -233,7 +245,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
         <MenuButton aria-label={t('note.menuOptions')} className="p-1 rounded-full hover:bg-gray-200 transition-colors">
           <EllipsisVerticalIcon className="h-4 w-4 text-gray-600" />
         </MenuButton>
-        <MenuItems onKeyDownCapture={handleMenuKeyDown} className="absolute right-0 mt-1 w-52 bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black dark:ring-slate-600 ring-opacity-5 focus:outline-none z-10 border border-gray-200 dark:border-slate-600">
+        <MenuItems transition onKeyDownCapture={handleMenuKeyDown} className="absolute right-0 mt-1 w-52 origin-top-right bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black/5 dark:ring-slate-600/20 focus:outline-none z-10 border border-gray-200 dark:border-slate-600 transition duration-100 ease-out data-[closed]:scale-95 data-[closed]:opacity-0 motion-reduce:transition-none">
           <div className="py-1">
             {inBin ? (
               <>
@@ -269,7 +281,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
                       className="flex items-center justify-between w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700"
                     >
                       <span className="flex items-center">
-                        <ShareIcon className="h-4 w-4 mr-2" />
+                        <UserPlusIcon className="h-4 w-4 mr-2" />
                         {t('note.share')}
                       </span>
                       <MenuKbd>S</MenuKbd>

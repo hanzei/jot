@@ -8,8 +8,7 @@ import Dashboard from '../Dashboard'
 import type { AuthResponse, Note, Label, NoteSort, UserSettings } from '@jot/shared'
 import { notes, labels, users } from '@/utils/api'
 import * as auth from '@/utils/auth'
-import { useSSE } from '@/hooks/useSSE'
-import { useAuthenticatedLayout } from '@/components/AuthenticatedLayout'
+import { useAuthenticatedLayout, type AuthenticatedLayoutContext } from '@/components/AuthenticatedLayout'
 import { createMockNote, createMockListNote } from '@/utils/__tests__/test-helpers'
 import { ToastProvider } from '@/components/Toast'
 
@@ -159,6 +158,7 @@ vi.mock('@/components/NoteModal', () => ({
       <button onClick={onClose} data-testid="modal-close">Close</button>
       <button onClick={onSave} data-testid="modal-save">Save</button>
       <button onClick={onRefresh} data-testid="modal-refresh">Refresh</button>
+      <p data-testid="modal-image-count">{note?.images?.length ?? 0}</p>
     </div>
   ),
 }))
@@ -195,9 +195,12 @@ const renderDashboard = (initialEntries = ['/']) => {
   )
 }
 
+let mockRegisterSSECallbacks: ReturnType<typeof vi.fn>
+
 describe('Dashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockRegisterSSECallbacks = vi.fn()
     localStorage.setItem('sidebar-collapsed', 'false')
     vi.mocked(auth.getUser).mockReturnValue({
       id: 'user1',
@@ -259,6 +262,7 @@ describe('Dashboard', () => {
         handleRenameLabel: vi.fn().mockResolvedValue(true),
         handleDeleteLabel: vi.fn().mockResolvedValue(true),
         registerLabelCallbacks: vi.fn(),
+        registerSSECallbacks: mockRegisterSSECallbacks as unknown as AuthenticatedLayoutContext['registerSSECallbacks'],
         setSearchBar: (content: ReactNode) => captureSearchBarRef.current(content),
       }
     })
@@ -1395,15 +1399,15 @@ describe('Dashboard', () => {
       renderDashboard()
 
       await waitFor(() => {
-        expect(useSSE).toHaveBeenCalled()
+        expect(mockRegisterSSECallbacks).toHaveBeenCalled()
         expect(labels.getAll).toHaveBeenCalledTimes(1)
       })
 
-      const sseOptions = vi.mocked(useSSE).mock.calls[0]?.[0]
-      expect(sseOptions).toBeDefined()
+      const sseCallbacks = mockRegisterSSECallbacks.mock.calls[0]?.[0]
+      expect(sseCallbacks).toBeDefined()
 
       await act(async () => {
-        sseOptions?.onEvent({
+        sseCallbacks?.onEvent({
           type: 'note_created',
           source_user_id: 'user1',
           data: { note_id: 'note-1', note: createMockNote({ id: 'note-1', labels: [realtimeLabel] }) },
@@ -1415,7 +1419,7 @@ describe('Dashboard', () => {
       })
 
       await act(async () => {
-        sseOptions?.onEvent({
+        sseCallbacks?.onEvent({
           type: 'note_updated',
           source_user_id: 'user1',
           data: { note_id: 'note-1', note: createMockNote({ id: 'note-1', labels: [realtimeLabel] }) },
@@ -1438,16 +1442,16 @@ describe('Dashboard', () => {
       renderDashboard()
 
       await waitFor(() => {
-        expect(useSSE).toHaveBeenCalled()
+        expect(mockRegisterSSECallbacks).toHaveBeenCalled()
         expect(labels.getAll).toHaveBeenCalledTimes(1)
         expect(labels.getCounts).toHaveBeenCalledTimes(1)
       })
 
-      const sseOptions = vi.mocked(useSSE).mock.calls[0]?.[0]
-      expect(sseOptions).toBeDefined()
+      const sseCallbacks = mockRegisterSSECallbacks.mock.calls[0]?.[0]
+      expect(sseCallbacks).toBeDefined()
 
       await act(async () => {
-        sseOptions?.onEvent({
+        sseCallbacks?.onEvent({
           type: 'labels_changed',
           source_user_id: 'user1',
           data: { label: realtimeLabel },
@@ -1492,11 +1496,15 @@ describe('Dashboard', () => {
         expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-realtime', false)
       })
 
-      const sseOptions = vi.mocked(useSSE).mock.calls[0]?.[0]
-      expect(sseOptions).toBeDefined()
+      await waitFor(() => {
+        expect(mockRegisterSSECallbacks).toHaveBeenCalled()
+      })
+
+      const sseCallbacks = mockRegisterSSECallbacks.mock.calls[0]?.[0]
+      expect(sseCallbacks).toBeDefined()
 
       await act(async () => {
-        sseOptions?.onEvent({
+        sseCallbacks?.onEvent({
           type: 'labels_changed',
           source_user_id: 'user1',
           data: { label: realtimeLabel },
@@ -1513,6 +1521,97 @@ describe('Dashboard', () => {
 
       await waitFor(() => {
         expect(screen.getByTestId('location-search').textContent ?? '').not.toContain('label=')
+      })
+    })
+  })
+
+  describe('Real-time image updates', () => {
+    const mockImage = {
+      id: 'img1',
+      filename: 'photo.png',
+      content_type: 'image/png',
+      width: 800,
+      height: 600,
+      created_at: '2024-01-01T00:00:00Z',
+    }
+
+    it('patches the open note when SSE reports note_image_added and note_image_removed', async () => {
+      const user = userEvent.setup()
+
+      vi.mocked(notes.getAll).mockResolvedValue([createMockNote({ id: '1', title: 'Existing Note' })])
+
+      renderDashboard()
+
+      await waitFor(() => {
+        expect(screen.getByTestId('edit-1')).toBeInTheDocument()
+      })
+      await user.click(screen.getByTestId('edit-1'))
+
+      await waitFor(() => {
+        expect(screen.getByTestId('note-modal')).toBeInTheDocument()
+        expect(screen.getByTestId('modal-image-count')).toHaveTextContent('0')
+      })
+
+      const sseCallbacks = mockRegisterSSECallbacks.mock.calls[0]?.[0]
+      expect(sseCallbacks).toBeDefined()
+
+      await act(async () => {
+        sseCallbacks?.onEvent({
+          type: 'note_image_added',
+          source_user_id: 'user1',
+          data: { note_id: '1', image: mockImage },
+        })
+      })
+
+      await waitFor(() => {
+        expect(screen.getByTestId('modal-image-count')).toHaveTextContent('1')
+      })
+
+      await act(async () => {
+        sseCallbacks?.onEvent({
+          type: 'note_image_removed',
+          source_user_id: 'user1',
+          data: { note_id: '1', image_id: 'img1' },
+        })
+      })
+
+      await waitFor(() => {
+        expect(screen.getByTestId('modal-image-count')).toHaveTextContent('0')
+      })
+
+      // Close the modal so the deep-link URL this test pushed onto the real
+      // window.history doesn't leak into later tests in this file.
+      await user.click(screen.getByTestId('modal-close'))
+    })
+
+    it('reconciles via loadNotes when an image event arrives for a note not yet in the list', async () => {
+      const mockGetAll = vi.mocked(notes.getAll)
+      mockGetAll.mockResolvedValue([])
+
+      renderDashboard()
+
+      await waitFor(() => {
+        expect(mockGetAll).toHaveBeenCalledTimes(1)
+      })
+
+      const sseCallbacks = mockRegisterSSECallbacks.mock.calls[0]?.[0]
+      expect(sseCallbacks).toBeDefined()
+
+      // A note created moments ago hasn't made it into notesList yet (its
+      // note_created-triggered loadNotes() is still in flight) when its first
+      // image upload's SSE event arrives.
+      mockGetAll.mockResolvedValue([createMockNote({ id: 'brand-new', title: 'New Note', images: [mockImage] })])
+
+      await act(async () => {
+        sseCallbacks?.onEvent({
+          type: 'note_image_added',
+          source_user_id: 'user1',
+          data: { note_id: 'brand-new', image: mockImage },
+        })
+      })
+
+      await waitFor(() => {
+        expect(mockGetAll).toHaveBeenCalledTimes(2)
       })
     })
   })

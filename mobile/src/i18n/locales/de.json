@@ -10,7 +10,8 @@
     "error": "Fehler",
     "unknown": "unbekannt",
     "loading": "Lädt...",
-    "done": "Fertig"
+    "done": "Fertig",
+    "or": "oder"
   },
   "nav": {
     "settings": "Einstellungen",
@@ -53,7 +54,10 @@
     "serverSetupInputA11yLabel": "Eingabe für Server-URL",
     "serverSetupSubmitA11yLabel": "Server prüfen und fortfahren",
     "serverSetupConnectionFailed": "Server nicht erreichbar. Prüfe URL und Verbindung und versuche es erneut.",
-    "serverSetupConnectionInvalidServer": "Verbindung hergestellt, aber dies scheint kein kompatibler Jot-API-Endpunkt zu sein."
+    "serverSetupConnectionInvalidServer": "Verbindung hergestellt, aber dies scheint kein kompatibler Jot-API-Endpunkt zu sein.",
+    "localModeLink": "Ohne Server verwenden",
+    "localModeHint": "Deine Notizen bleiben nur auf diesem Gerät.",
+    "localModeFailed": "Lokaler Modus konnte nicht gestartet werden. Bitte versuche es erneut."
   },
   "dashboard": {
     "newNote": "Neue Notiz",
@@ -67,6 +71,7 @@
     "noteDeleted": "Notiz in den Papierkorb verschoben",
     "noteRestored": "Notiz wiederhergestellt",
     "undo": "Rückgängig",
+    "toastActionHint": "{{action}} ausführen",
     "pinned": "Angeheftet",
     "otherNotes": "Weitere Notizen",
     "archivedResults": "Archiviert",
@@ -97,6 +102,8 @@
       "created_at": "Erstellungsdatum"
     },
     "sortAccessibilityLabel": "Sortieren nach {{sortLabel}}",
+    "layoutToggleToGrid": "Zur Rasteransicht wechseln",
+    "layoutToggleToList": "Zur Listenansicht wechseln",
     "sortDisabledNotice": "Manuelles Sortieren ist aus. Notizen sind nach {{sortLabel}} sortiert, daher ist Drag-and-drop deaktiviert."
   },
   "settings": {
@@ -200,6 +207,7 @@
   },
   "note": {
     "share": "Teilen",
+    "send": "Senden",
     "unpin": "Lösen",
     "pin": "Anheften",
     "unarchive": "Aus Archiv holen",
@@ -226,6 +234,7 @@
     "failedSaveChanges": "Änderungen konnten nicht gespeichert werden. Tippe zum Wiederholen.",
     "menuOptions": "Notizoptionen",
     "assignItem": "Element zuweisen",
+    "removeItem": "Element entfernen",
     "unassign": "Zuweisung aufheben",
     "assignedTo": "Zugewiesen an {{name}}",
     "changeColor": "Notizfarbe",
@@ -242,7 +251,7 @@
     "updatedByAnotherUser": "Diese Notiz wurde von einem anderen Benutzer aktualisiert",
     "listItemLabel": "Listenelement",
     "itemCheckbox": "{{item}} Checkbox",
-    "dragToReorder": "Zum Neuordnen ziehen",
+    "dragToReorderIndent": "Zum Neuordnen oder Einrücken ziehen",
     "colorWhite": "Weiß",
     "colorCoral": "Koralle",
     "colorYellow": "Gelb",
@@ -262,7 +271,34 @@
     "outdentItem": "Ausrücken",
     "itemsPasted_one": "1 Element eingefügt",
     "itemsPasted_other": "{{count}} Elemente eingefügt",
-    "filterByLabel": "Nach Label filtern: {{label}}"
+    "filterByLabel": "Nach Label filtern: {{label}}",
+    "saveFailedExitTitle": "Speichern fehlgeschlagen",
+    "saveFailedExitMessage": "Deine Änderungen konnten nicht gespeichert werden. Erneut versuchen oder verwerfen und verlassen.",
+    "discardAndLeave": "Verwerfen & verlassen"
+  },
+  "images": {
+    "openLightbox": "{{filename}} anzeigen",
+    "moreImages": "{{count}} weitere Bilder anzeigen",
+    "lightboxPrevious": "Vorheriges Bild",
+    "lightboxNext": "Nächstes Bild",
+    "lightboxCounter": "{{current}} / {{total}}",
+    "addImage": "Bild hinzufügen",
+    "camera": "Kamera",
+    "photoLibrary": "Fotomediathek",
+    "files": "Dateien",
+    "cameraPermissionDenied": "Für die Aufnahme eines Fotos wird Kamerazugriff benötigt.",
+    "libraryPermissionDenied": "Für die Auswahl eines Fotos wird Zugriff auf die Fotomediathek benötigt.",
+    "removeImage": "{{filename}} entfernen",
+    "removedToast": "Bild entfernt",
+    "uploading": "Wird hochgeladen … {{percent}}%",
+    "uploadFailed": "Upload fehlgeschlagen",
+    "queuedOffline": "Wartet auf Upload…",
+    "uploadQueuedToast": "Das Bild wird hochgeladen, sobald du wieder online bist",
+    "retryUpload": "{{filename}} erneut hochladen",
+    "dismissUpload": "{{filename}} verwerfen",
+    "errorWrongType": "Es können nur Bilder angehängt werden.",
+    "errorTooLarge": "Das Bild überschreitet das Limit von {{maxMB}} MB.",
+    "errorTooMany": "Notizen können bis zu {{max}} Bilder enthalten."
   },
   "labels": {
     "title": "Labels",
@@ -326,6 +362,8 @@
     "invalidUrl": "Ungültige Server-URL. Verwende http:// oder https://",
     "addFailed": "Server konnte nicht hinzugefügt werden",
     "switchFailed": "Serverwechsel fehlgeschlagen",
+    "sessionExpiredTitle": "Anmeldung erforderlich",
+    "sessionExpiredMessage": "Deine gespeicherte Sitzung für „{{server}}“ ist nicht mehr gültig. Möglicherweise wurde das Konto entfernt. Bitte melde dich erneut an.",
     "duplicateTitle": "Server bereits hinzugefügt",
     "duplicateMessage": "Dieser Server ist bereits in deiner Liste.",
     "switchToExisting": "Zu vorhandenem wechseln",
@@ -349,7 +387,9 @@
   },
   "offline": {
     "message": "Du bist offline. Änderungen werden synchronisiert, sobald du wieder verbunden bist.",
-    "syncError": "Einige Änderungen wurden noch nicht synchronisiert. Es wird automatisch erneut versucht."
+    "serverConnecting": "Mit Server verbinden…",
+    "syncError": "Einige Änderungen wurden noch nicht synchronisiert. Es wird automatisch erneut versucht.",
+    "revalidationError": "Sitzung konnte nicht beim Server überprüft werden. Lokale Daten werden verwendet."
   },
   "syncFailures": {
     "bannerCount_one": "{{count}} Änderung konnte nicht gespeichert werden – Überprüfen",
@@ -391,6 +431,40 @@
     "importing": "Importieren...",
     "importButton": "Importieren"
   },
+  "upgrade": {
+    "settingsSectionTitle": "Mit einem Server verbinden",
+    "settingsSectionDescription": "Synchronisiere deine Notizen mit einem Jot-Server. Deine lokalen Notizen werden auf den Server übertragen.",
+    "connectToServer": "Mit einem Server verbinden",
+    "title": "Mit einem Server verbinden",
+    "subtitle": "Gib deine Jot-Server-URL ein, um ein neues Konto zu erstellen und deine Notizen zu migrieren.",
+    "serverUrlLabel": "Server-URL",
+    "serverUrlPlaceholder": "https://jot.beispiel.de",
+    "continue": "Weiter",
+    "registerTitle": "Konto erstellen",
+    "changeServer": "Server ändern",
+    "usernameTaken": "Dieser Benutzername ist bereits vergeben. Wähle einen anderen.",
+    "checkingTitle": "Kompatibilität prüfen",
+    "capabilityFailed": "Dieser Server unterstützt keine Notizmigration. Stelle sicher, dass du eine aktuelle Version von Jot verwendest.",
+    "emptinessFailed": "Das Konto enthält bereits Notizen oder Labels. Für die Migration wird ein leeres Konto benötigt.",
+    "fetchFailed": "Der Server ist nicht erreichbar. Überprüfe deine Verbindung und versuche es erneut.",
+    "successTitle": "Alle Prüfungen bestanden",
+    "successSubtitle": "Dein Server ist kompatibel und bereit. Die Migration wird in einem späteren Schritt gestartet.",
+    "errorTitle": "Verbindung nicht möglich",
+    "seedingTitle": "Migration wird vorbereitet",
+    "migratingTitle": "Notizen werden migriert",
+    "migratingProgress": "{{processed}} von {{total}} wird synchronisiert",
+    "migrationCompleteTitle": "Migration abgeschlossen",
+    "migrationCompleteSubtitle": "Deine Notizen wurden auf den Server hochgeladen.",
+    "deadLetterTitle": "Migration angehalten",
+    "deadLetterSubtitle_one": "{{count}} Änderung konnte nicht mit dem Server synchronisiert werden.",
+    "deadLetterSubtitle_other": "{{count}} Änderungen konnten nicht mit dem Server synchronisiert werden.",
+    "reviewFailedChanges": "Fehlgeschlagene Änderungen überprüfen",
+    "retryMigration": "Migration erneut versuchen",
+    "migrationFailed": "Migration fehlgeschlagen. Überprüfe deine Verbindung und versuche es erneut.",
+    "reconciling": "Notizen werden mit dem Server synchronisiert…",
+    "reconcileFailed": "Notizen spiegeln möglicherweise nicht die neuesten Serverdaten wider. Aktualisiere die Notizliste.",
+    "resync": "Neu synchronisieren"
+  },
   "diagnostics": {
     "title": "Diagnose",
     "developerSection": "Entwickler",
@@ -412,6 +486,7 @@
     "degraded": "Beeinträchtigt",
     "recentLogs": "Neueste Protokolle",
     "clearLogs": "Protokolle löschen",
+    "expandLogs": "Vollständige Protokolle anzeigen",
     "refresh": "Aktualisieren",
     "shareDiagnostics": "Diagnosebericht teilen",
     "yes": "Ja",

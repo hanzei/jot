@@ -119,6 +119,142 @@ func TestNoteGrouping(t *testing.T) {
 		_ = parentID
 	})
 
+	t.Run("unchecking a child un-completes an already-completed parent", func(t *testing.T) {
+		ts := setupTestServer(t)
+		user := ts.createTestUser(t, "grpuser4b", "password123", false)
+		noteID, parentID, childAID, _, _ := createGroupNote(t, user)
+
+		// Complete the whole group (cascades parent -> children).
+		_, err := user.Client.ToggleNoteItemCompleted(t.Context(), noteID, parentID, true)
+		require.NoError(t, err)
+
+		// Unchecking just Child A must also un-complete the parent: a parent can
+		// never stay "done" while one of its children is not.
+		items, err := user.Client.ToggleNoteItemCompleted(t.Context(), noteID, childAID, false)
+		require.NoError(t, err)
+		assert.False(t, itemByText(t, items, "Child A").Completed)
+		assert.True(t, itemByText(t, items, "Child B").Completed, "sibling is untouched")
+		assert.False(t, itemByText(t, items, "Parent").Completed, "parent cannot be completed with an incomplete child")
+	})
+
+	t.Run("completing every child does not auto-complete the parent", func(t *testing.T) {
+		ts := setupTestServer(t)
+		user := ts.createTestUser(t, "grpuser4c", "password123", false)
+		noteID, _, childAID, childBID, _ := createGroupNote(t, user)
+
+		_, err := user.Client.ToggleNoteItemCompleted(t.Context(), noteID, childAID, true)
+		require.NoError(t, err)
+		items, err := user.Client.ToggleNoteItemCompleted(t.Context(), noteID, childBID, true)
+		require.NoError(t, err)
+
+		assert.True(t, itemByText(t, items, "Child A").Completed)
+		assert.True(t, itemByText(t, items, "Child B").Completed)
+		assert.False(t, itemByText(t, items, "Parent").Completed, "checking the parent itself is still required")
+	})
+
+	t.Run("patching completed on a child un-completes the parent the same as toggle", func(t *testing.T) {
+		ts := setupTestServer(t)
+		user := ts.createTestUser(t, "grpuser4d", "password123", false)
+		noteID, parentID, childAID, _, _ := createGroupNote(t, user)
+
+		_, err := user.Client.ToggleNoteItemCompleted(t.Context(), noteID, parentID, true)
+		require.NoError(t, err)
+
+		incomplete := false
+		_, err = user.Client.UpdateNoteItem(t.Context(), noteID, childAID, &client.PatchNoteItemRequest{
+			Completed: &incomplete,
+		})
+		require.NoError(t, err)
+
+		note, err := user.Client.GetNote(t.Context(), noteID)
+		require.NoError(t, err)
+		assert.False(t, itemByText(t, note.Items, "Parent").Completed, "generic patch enforces the same invariant as toggle-completed")
+	})
+
+	t.Run("patching completed on a parent cascades to children the same as toggle", func(t *testing.T) {
+		ts := setupTestServer(t)
+		user := ts.createTestUser(t, "grpuser4e", "password123", false)
+		noteID, parentID, _, _, _ := createGroupNote(t, user)
+
+		complete := true
+		_, err := user.Client.UpdateNoteItem(t.Context(), noteID, parentID, &client.PatchNoteItemRequest{
+			Completed: &complete,
+		})
+		require.NoError(t, err)
+
+		note, err := user.Client.GetNote(t.Context(), noteID)
+		require.NoError(t, err)
+		assert.True(t, itemByText(t, note.Items, "Child A").Completed)
+		assert.True(t, itemByText(t, note.Items, "Child B").Completed)
+	})
+
+	t.Run("patching parent_id and completed together evaluates the invariant against the new parent", func(t *testing.T) {
+		ts := setupTestServer(t)
+		user := ts.createTestUser(t, "grpuser4f", "password123", false)
+
+		// Two independent, fully-completed groups.
+		note, err := user.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
+			Title: "Two Groups",
+			Items: []client.CreateNoteItem{
+				{Text: "Parent A", Position: 0, IndentLevel: 0, Completed: true},
+				{Text: "Child A1", Position: 1, IndentLevel: 1, Completed: true},
+				{Text: "Parent B", Position: 2, IndentLevel: 0, Completed: true},
+				{Text: "Child B1", Position: 3, IndentLevel: 1, Completed: true},
+			},
+		})
+		require.NoError(t, err)
+		noteID := note.ID
+		parentAID := itemByText(t, note.Items, "Parent A").ID
+		parentBID := itemByText(t, note.Items, "Parent B").ID
+		childA1ID := itemByText(t, note.Items, "Child A1").ID
+
+		// Move Child A1 into Parent B's group and uncheck it in one request. The
+		// invariant must be enforced against the group it ends up in (B), not
+		// the one it's leaving (A).
+		incomplete := false
+		_, err = user.Client.UpdateNoteItem(t.Context(), noteID, childA1ID, &client.PatchNoteItemRequest{
+			ParentID:  &parentBID,
+			Completed: &incomplete,
+		})
+		require.NoError(t, err)
+
+		updated, err := user.Client.GetNote(t.Context(), noteID)
+		require.NoError(t, err)
+		assert.False(t, itemByText(t, updated.Items, "Parent B").Completed, "new parent can't stay completed with an incomplete child")
+		assert.True(t, itemByText(t, updated.Items, "Child B1").Completed, "unrelated sibling in the new group is untouched")
+		assert.True(t, itemByText(t, updated.Items, "Parent A").Completed, "old parent is untouched: it has no children left")
+
+		_ = parentAID
+	})
+
+	t.Run("re-parenting an incomplete child under a completed parent un-completes it, even without a completed patch", func(t *testing.T) {
+		ts := setupTestServer(t)
+		user := ts.createTestUser(t, "grpuser4g", "password123", false)
+
+		note, err := user.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
+			Title: "Move Only",
+			Items: []client.CreateNoteItem{
+				{Text: "Parent", Position: 0, IndentLevel: 0, Completed: true},
+				{Text: "Loner", Position: 1, IndentLevel: 0, Completed: false},
+			},
+		})
+		require.NoError(t, err)
+		parentID := itemByText(t, note.Items, "Parent").ID
+		lonerID := itemByText(t, note.Items, "Loner").ID
+
+		// Re-parent Loner (still incomplete) under the already-completed Parent,
+		// without touching `completed` in the request at all.
+		_, err = user.Client.UpdateNoteItem(t.Context(), note.ID, lonerID, &client.PatchNoteItemRequest{
+			ParentID: &parentID,
+		})
+		require.NoError(t, err)
+
+		updated, err := user.Client.GetNote(t.Context(), note.ID)
+		require.NoError(t, err)
+		assert.False(t, itemByText(t, updated.Items, "Parent").Completed, "parent can't stay completed once it gains an incomplete child")
+		assert.False(t, itemByText(t, updated.Items, "Loner").Completed, "the moved item's own completed flag is untouched")
+	})
+
 	t.Run("toggle without completed field is rejected", func(t *testing.T) {
 		ts := setupTestServer(t)
 		user := ts.createTestUser(t, "grpuser5b", "password123", false)

@@ -37,6 +37,7 @@ function makeTextNote(id: string): Note {
     user_id: 'u1',
     note_type: 'text',
     content: 'body',
+    version: 1,
     color: '#ffffff',
     pinned: false,
     archived: false,
@@ -59,11 +60,26 @@ type QueueRow = {
   created_at: string;
 };
 
-function makeDrainDb(entries: QueueRow[]) {
+function makeDrainDb(entries: QueueRow[], opts: { versions?: Record<string, number> } = {}) {
+  // Mutable per-note version store so the test can observe drainQueue resolving an
+  // update's base_version from the local version and advancing it after each op.
+  const versions: Record<string, number> = { ...opts.versions };
   return {
     getAllAsync: jest.fn().mockResolvedValue([...entries]),
-    runAsync: jest.fn().mockResolvedValue(undefined),
-    getFirstAsync: jest.fn().mockResolvedValue({ count: entries.length }),
+    runAsync: jest.fn((sql: string, args?: unknown[]) => {
+      if (typeof sql === 'string' && sql.startsWith('UPDATE notes SET version')) {
+        // setLocalNoteVersion: args = [version, id]
+        versions[args?.[1] as string] = args?.[0] as number;
+      }
+      return Promise.resolve(undefined);
+    }),
+    getFirstAsync: jest.fn((sql: string, args?: unknown[]) => {
+      if (typeof sql === 'string' && sql.includes('SELECT version FROM notes')) {
+        const id = args?.[0] as string;
+        return Promise.resolve(id in versions ? { version: versions[id] } : null);
+      }
+      return Promise.resolve({ count: entries.length });
+    }),
     withTransactionAsync: jest.fn(async (cb: () => Promise<void> | void) => { await cb(); }),
   };
 }
@@ -111,13 +127,14 @@ describe('drainQueue dead-letter persistence', () => {
   });
 
   it('flags a dead-lettered offline-create so its orphan local note is distinguishable from a synced one', async () => {
+    const orphanId = 'ClientNoteId000000000A';
     const db = makeDrainDb([
       {
         id: 2,
         operation: 'create',
         endpoint: '/notes',
         method: 'POST',
-        body: JSON.stringify({ local_id: 'local_orphan', title: 'x', content: '', note_type: 'text' }),
+        body: JSON.stringify({ id: orphanId, title: 'x', content: '', note_type: 'text' }),
         created_at: 't0',
       },
     ]);
@@ -126,9 +143,9 @@ describe('drainQueue dead-letter persistence', () => {
     await drainQueue(db as never);
 
     const failedMarks = callsStartingWith(db, `UPDATE notes SET sync_state = 'failed'`);
-    expect(failedMarks).toEqual([['local_orphan']]);
+    expect(failedMarks).toEqual([[orphanId]]);
     const inserts = callsStartingWith(db, 'INSERT INTO dead_letter');
-    expect(inserts[0][5]).toBe('local_orphan'); // note_id column
+    expect(inserts[0][5]).toBe(orphanId); // note_id column
   });
 
   it('stores a NULL note_id for a multi-note reorder but flags every listed note', async () => {
@@ -159,6 +176,74 @@ describe('drainQueue dead-letter persistence', () => {
     expect(discardedOperations).toEqual([{ operation: 'createItem', endpoint: '/notes/n1/items', status: 409 }]);
   });
 
+  it('resolves a permanently-rejected removeImage silently regardless of status (issue #618)', async () => {
+    // Unlike every other operation, a queued image delete never dead-letters:
+    // the note-content "Keep my version" fork is a meaningless response to a
+    // failed image removal, and a background sync/SSE event reconciles the
+    // note's images either way (§6's fail-safe design).
+    const db = makeDrainDb([
+      { id: 4, operation: 'removeImage', endpoint: '/images/img1', method: 'DELETE', body: '{"note_id":"n1"}', created_at: 't0' },
+    ]);
+    mockApi.delete.mockRejectedValueOnce(makeAxiosError(403));
+
+    const { discardedOperations } = await drainQueue(db as never);
+
+    expect(callsStartingWith(db, 'INSERT INTO dead_letter')).toHaveLength(0);
+    expect(callsStartingWith(db, `UPDATE notes SET sync_state = 'failed'`)).toHaveLength(0);
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [4]);
+    expect(discardedOperations).toEqual([{ operation: 'removeImage', endpoint: '/images/img1', status: 403 }]);
+  });
+
+  it('dead-letters an update 409 (version conflict) instead of dropping it silently', async () => {
+    // A 409 on an `update` is an optimistic-concurrency conflict: the note
+    // changed on another device since base_version (#489). Unlike an idempotent
+    // create/item 409, it must be preserved + flagged so the stale edit surfaces
+    // in the failed-changes banner instead of being silently clobbered.
+    const db = makeDrainDb(
+      [{ id: 7, operation: 'update', endpoint: '/notes/n1', method: 'PATCH', body: '{"content":"mine"}', created_at: 't0' }],
+      { versions: { n1: 3 } },
+    );
+    mockApi.patch.mockRejectedValueOnce(makeAxiosError(409));
+
+    const { discardedOperations } = await drainQueue(db as never);
+
+    const inserts = callsStartingWith(db, 'INSERT INTO dead_letter');
+    expect(inserts).toHaveLength(1);
+    expect(inserts[0][0]).toBe('update'); // operation column
+    expect(inserts[0][4]).toBe(409); // status column
+    expect(inserts[0][5]).toBe('n1'); // note_id column
+    expect(callsStartingWith(db, `UPDATE notes SET sync_state = 'failed'`)).toEqual([['n1']]);
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [7]);
+    expect(discardedOperations).toEqual([{ operation: 'update', endpoint: '/notes/n1', status: 409 }]);
+  });
+
+  it('resolves each queued update base_version from the advancing local version so a same-note chain does not self-conflict (#489)', async () => {
+    // Two offline content edits to the same note (base local version 3). The first
+    // drains, the server bumps to 4, and setLocalNoteVersion advances the local
+    // version; the second must replay against 4, not the stale 3, or it would be
+    // wrongly dead-lettered as a cross-device conflict. base_version is resolved at
+    // drain time from the local version, not stored in the queued body.
+    const db = makeDrainDb(
+      [
+        { id: 8, operation: 'update', endpoint: '/notes/n1', method: 'PATCH', body: '{"content":"first"}', created_at: 't0' },
+        { id: 9, operation: 'update', endpoint: '/notes/n1', method: 'PATCH', body: '{"content":"second"}', created_at: 't1' },
+      ],
+      { versions: { n1: 3 } },
+    );
+    mockApi.patch
+      .mockResolvedValueOnce({ data: { ...makeTextNote('n1'), version: 4 } } as never)
+      .mockResolvedValueOnce({ data: { ...makeTextNote('n1'), version: 5 } } as never);
+
+    await drainQueue(db as never);
+
+    // First replays against the base version 3; second against the advanced 4.
+    expect(mockApi.patch).toHaveBeenNthCalledWith(1, '/notes/n1', { content: 'first', base_version: 3 });
+    expect(mockApi.patch).toHaveBeenNthCalledWith(2, '/notes/n1', { content: 'second', base_version: 4 });
+    // Both drained cleanly — nothing dead-lettered or flagged failed.
+    expect(callsStartingWith(db, 'INSERT INTO dead_letter')).toHaveLength(0);
+    expect(callsStartingWith(db, `UPDATE notes SET sync_state = 'failed'`)).toHaveLength(0);
+  });
+
   it('clears a prior failed flag when a later op for the note drains successfully', async () => {
     const db = makeDrainDb([
       { id: 4, operation: 'update', endpoint: '/notes/n1', method: 'PATCH', body: '{"content":"y"}', created_at: 't0' },
@@ -172,29 +257,30 @@ describe('drainQueue dead-letter persistence', () => {
     expect(callsStartingWith(db, 'INSERT INTO dead_letter')).toHaveLength(0);
   });
 
-  it('dead-letters using the id-remapped endpoint after an earlier create reconciled the local id', async () => {
-    const serverNote = makeTextNote('server-1');
+  it('dead-letters an update queued after an offline create when the update fails', async () => {
+    const clientId = 'ClientNoteId000000001A';
+    const serverNote = makeTextNote(clientId);
     const db = makeDrainDb([
       {
         id: 5,
         operation: 'create',
         endpoint: '/notes',
         method: 'POST',
-        body: JSON.stringify({ local_id: 'local_a', title: 'x', content: '', note_type: 'text' }),
+        body: JSON.stringify({ id: clientId, title: 'x', content: '', note_type: 'text' }),
         created_at: 't0',
       },
-      { id: 6, operation: 'update', endpoint: '/notes/local_a', method: 'PATCH', body: '{"content":"z"}', created_at: 't1' },
+      { id: 6, operation: 'update', endpoint: `/notes/${clientId}`, method: 'PATCH', body: '{"content":"z"}', created_at: 't1' },
     ]);
     mockApi.post.mockResolvedValueOnce({ data: serverNote } as never);
     mockApi.patch.mockRejectedValueOnce(makeAxiosError(403));
 
     await drainQueue(db as never);
 
-    // The dead-lettered update is stored and flagged against the *server* id.
+    // The dead-lettered update is stored and flagged against the client/server id.
     const inserts = callsStartingWith(db, 'INSERT INTO dead_letter');
-    expect(inserts[0][1]).toBe('/notes/server-1'); // endpoint column
-    expect(inserts[0][5]).toBe('server-1'); // note_id column
-    expect(callsStartingWith(db, `UPDATE notes SET sync_state = 'failed'`)).toEqual([['server-1']]);
+    expect(inserts[0][1]).toBe(`/notes/${clientId}`); // endpoint column
+    expect(inserts[0][5]).toBe(clientId); // note_id column
+    expect(callsStartingWith(db, `UPDATE notes SET sync_state = 'failed'`)).toEqual([[clientId]]);
   });
 });
 

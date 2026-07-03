@@ -372,6 +372,169 @@
                 }
             }
         },
+        "/images/{id}": {
+            "get": {
+                "produces": [
+                    "image/*"
+                ],
+                "tags": [
+                    "notes"
+                ],
+                "summary": "Download a note image",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Image ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Image bytes",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ]
+            },
+            "delete": {
+                "tags": [
+                    "notes"
+                ],
+                "summary": "Delete a note image",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Image ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "no content"
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/images/{id}/thumbnail": {
+            "get": {
+                "produces": [
+                    "image/jpeg"
+                ],
+                "tags": [
+                    "notes"
+                ],
+                "summary": "Download a note image's thumbnail",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Image ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Thumbnail JPEG bytes",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ]
+            }
+        },
         "/labels": {
             "get": {
                 "produces": [
@@ -420,10 +583,10 @@
                 "tags": [
                     "labels"
                 ],
-                "summary": "Create or return an existing label",
+                "summary": "Create a label, or return the existing one when no ID is supplied",
                 "parameters": [
                     {
-                        "description": "Label name",
+                        "description": "Label name and optional client-supplied ID",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -447,6 +610,12 @@
                     },
                     "401": {
                         "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "409": {
+                        "description": "label already exists",
                         "schema": {
                             "type": "string"
                         }
@@ -1229,6 +1398,12 @@
                             "type": "string"
                         }
                     },
+                    "409": {
+                        "description": "version conflict for title/content update: note changed since base_version",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "internal server error",
                         "schema": {
@@ -1245,6 +1420,9 @@
         },
         "/notes/{id}/duplicate": {
             "post": {
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -1259,6 +1437,14 @@
                         "name": "id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "description": "Optional client-supplied ID for idempotent replay",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.DuplicateNoteRequest"
+                        }
                     }
                 ],
                 "responses": {
@@ -1282,6 +1468,85 @@
                     },
                     "404": {
                         "description": "not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "409": {
+                        "description": "conflict — duplicate ID already exists",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/notes/{id}/images": {
+            "post": {
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notes"
+                ],
+                "summary": "Upload an image to a note",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Note ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "file",
+                        "description": "Image file (PNG, JPEG, WebP, or GIF)",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/models.NoteImage"
+                        }
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "413": {
+                        "description": "file too large",
                         "schema": {
                             "type": "string"
                         }
@@ -2603,6 +2868,10 @@
         "handlers.AddLabelRequest": {
             "type": "object",
             "properties": {
+                "id": {
+                    "description": "ID is an optional client-supplied label ID. When provided it is used as the\nlabel's primary key so an offline-created label can be replayed idempotently:\na replay whose original create already committed is rejected with 409\ninstead of inserting a duplicate. When empty the server generates one.",
+                    "type": "string"
+                },
                 "name": {
                     "type": "string"
                 }
@@ -2727,6 +2996,20 @@
             "properties": {
                 "deleted": {
                     "type": "integer"
+                }
+            }
+        },
+        "handlers.DuplicateNoteRequest": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "item_ids": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -2879,6 +3162,10 @@
             "properties": {
                 "archived": {
                     "type": "boolean"
+                },
+                "base_version": {
+                    "description": "BaseVersion enables optimistic concurrency for shared title/content\nchanges: when those fields are changed and this is set, the update is\nrejected with 409 unless the note's current version still matches it.\nPer-user-only fields (color, pinned, archived, checked_items_collapsed)\nignore this value. When omitted, shared-content updates behave as\nlast-write-wins writes.",
+                    "type": "integer"
                 },
                 "checked_items_collapsed": {
                     "type": "boolean"
@@ -3092,6 +3379,12 @@
             "properties": {
                 "database_size_bytes": {
                     "type": "integer"
+                },
+                "image_count": {
+                    "type": "integer"
+                },
+                "images_size_bytes": {
+                    "type": "integer"
                 }
             }
         },
@@ -3150,6 +3443,12 @@
                 "id": {
                     "type": "string"
                 },
+                "images": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.NoteImage"
+                    }
+                },
                 "is_shared": {
                     "type": "boolean"
                 },
@@ -3188,6 +3487,33 @@
                 },
                 "user_id": {
                     "type": "string"
+                },
+                "version": {
+                    "description": "Version is an optimistic-concurrency counter bumped on every shared-content\n(title/content) change. Clients echo the version their edit was based on as\nbase_version on update so a stale write can be rejected (issue #489).",
+                    "type": "integer"
+                }
+            }
+        },
+        "models.NoteImage": {
+            "type": "object",
+            "properties": {
+                "content_type": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "filename": {
+                    "type": "string"
+                },
+                "height": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "width": {
+                    "type": "integer"
                 }
             }
         },
@@ -3352,6 +3678,9 @@
                 },
                 "registration_enabled": {
                     "type": "boolean"
+                },
+                "upload_max_bytes": {
+                    "type": "integer"
                 }
             }
         }

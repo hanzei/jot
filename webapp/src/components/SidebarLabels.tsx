@@ -239,7 +239,8 @@ const SidebarLabels = ({
                         <EllipsisVerticalIcon className="h-4 w-4" />
                       </MenuButton>
                       <MenuItems
-                        className="absolute right-0 z-20 mt-1 w-40 rounded-md border border-gray-200 bg-white shadow-lg ring-1 ring-black/5 focus:outline-none dark:border-slate-600 dark:bg-slate-800"
+                        transition
+                        className="absolute right-0 z-20 mt-1 w-40 origin-top-right rounded-md border border-gray-200 bg-white shadow-lg ring-1 ring-black/5 focus:outline-none dark:border-slate-600 dark:bg-slate-800 transition duration-100 ease-out data-[closed]:scale-95 data-[closed]:opacity-0 motion-reduce:transition-none"
                       >
                         <div className="py-1">
                           <MenuItem>

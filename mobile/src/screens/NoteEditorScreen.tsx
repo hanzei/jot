@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, useContext } from 'react';
 import {
   View,
   Text,
@@ -6,17 +6,26 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
-  StyleSheet,
   KeyboardAvoidingView,
   Platform,
   InputAccessoryView,
   Keyboard,
   Modal,
+  Share,
   type TextInputProps,
   type TextInput as TextInputType,
 } from 'react-native';
 import Markdown from 'react-native-markdown-display';
-import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
+import {
+  NestedReorderableList,
+  ScrollViewContainer,
+  reorderItems,
+  type ReorderableListReorderEvent,
+  type ReorderableListDragEndEvent,
+  type ReorderableListRenderItemInfo,
+} from 'react-native-reorderable-list';
+import { Gesture } from 'react-native-gesture-handler';
+import { LinearTransition, useSharedValue, runOnJS } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -24,25 +33,49 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, useDuplicateNote, useCreateNoteItem, useUpdateNoteItem, useDeleteNoteItem, useReorderNoteItems, useToggleNoteItemCompleted } from '../hooks/useNotes';
 import { useOfflineNote } from '../hooks/useOfflineNotes';
-import { isUnsyncedNoteId } from '../db/noteQueries';
-import { usePendingNoteIds, useFailedNoteIds } from '../store/OfflineContext';
+import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
+import { isLocalId } from '../db/noteQueries';
+import { useFailedNoteIds } from '../store/OfflineContext';
 import { useSSESubscription } from '../store/SSEContext';
 import { useToast } from '../hooks/useToast';
-import ListItem from '../components/ListItem';
 import ColorPicker from '../components/ColorPicker';
 import LabelPicker from '../components/LabelPicker';
 import AssigneePicker from '../components/AssigneePicker';
-import { buildCollaborators, generateId, VALIDATION, type Collaborator, type NoteType, type NoteItem, type CreateNoteRequest, type UpdateNoteRequest, type UpdateListNoteRequest, type UpdateTextNoteRequest, type PatchNoteItemRequest, type Label } from '@jot/shared';
+import AddImageActionSheet from '../components/AddImageActionSheet';
+import { useUploadNoteImage, useDeleteNoteImage } from '../hooks/useNoteImages';
+import { usePendingImageUploads, useRetryPendingImageUpload, useDismissPendingImageUpload } from '../hooks/usePendingImageUploads';
+import type { ImageUploadFile } from '../api/images';
+import { buildCollaborators, generateId, VALIDATION, IMAGE_MAX_PER_NOTE, type Collaborator, type NoteType, type NoteImage, type CreateNoteRequest, type UpdateNoteRequest, type UpdateListNoteRequest, type UpdateTextNoteRequest, type PatchNoteItemRequest, type Label } from '@jot/shared';
+import { validateImageFile as validateImageFileRaw, IMAGE_MAX_MB } from '../utils/imageValidation';
 import { useAuth } from '../store/AuthContext';
 import { useUsers } from '../store/UsersContext';
 import { useTheme } from '../theme/ThemeContext';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { getCompletedSectionDividerColor, isWhiteHexColor } from '../utils/colorContrast';
+import { formatEditorStateForShare } from '../utils/noteTextFormatter';
 import { fullMarkdownStyles, preprocessMarkdown } from '../utils/markdownStyles';
 import { getActiveServer, listServers, type ServerAccountEntry } from '../store/serverAccounts';
 import { setPendingShare, usePendingShare } from '../store/shareIntent';
 import { useBannerShown } from '../hooks/useBannerShown';
+import {
+  type LocalItem,
+  type ItemSnapshot,
+  toLocalItems,
+  serializeItems,
+  itemSnapshot,
+  normalizeItemOrder,
+  itemHasChildren,
+  applyCompletedCascade,
+  droppedParentId,
+  indentLevelFromDrag,
+} from './noteEditor/listItemModel';
+import { MarkdownToolbarContent } from './noteEditor/EditorToolbars';
+import CheckedItemsSection, { type ListItemHandlers } from './noteEditor/CheckedItemsSection';
+import NoteImageGallery, { type PendingImageUpload } from '../components/NoteImageGallery';
+import { styles } from './noteEditor/styles';
+import { animateListReflow, isReduceMotionEnabledSync } from '../utils/layoutAnimation';
+import ActiveListRow from './noteEditor/ActiveListRow';
 
 type EditorRouteProp = RouteProp<RootStackParamList, 'NoteEditor'>;
 type EditorNavProp = NativeStackNavigationProp<RootStackParamList, 'NoteEditor'>;
@@ -50,112 +83,21 @@ type EditorNavProp = NativeStackNavigationProp<RootStackParamList, 'NoteEditor'>
 const IOS_KEYBOARD_VERTICAL_OFFSET = 88;
 const FOCUSED_INPUT_KEYBOARD_MARGIN = 120;
 const MARKDOWN_TOOLBAR_ID = 'markdown-formatting-toolbar';
-const LIST_INDENT_TOOLBAR_ID = 'list-indent-toolbar';
-
-interface LocalItem {
-  id: string;
-  text: string;
-  completed: boolean;
-  position: number;
-  parentId: string | null;
-  assigned_to: string;
-}
-
-function toLocalItems(serverItems: NoteItem[]): LocalItem[] {
-  return [...serverItems]
-    .sort((a, b) => a.position - b.position)
-    .map((item) => ({
-      id: item.id,
-      text: item.text,
-      completed: item.completed,
-      position: item.position,
-      parentId: item.parent_id ?? null,
-      assigned_to: item.assigned_to ?? '',
-    }));
-}
-
-function serializeItems(items: LocalItem[]) {
-  return items.map((item, i) => ({
-    id: item.id,
-    text: item.text,
-    position: i,
-    completed: item.completed,
-    indent_level: item.parentId ? 1 : 0,
-    assigned_to: item.assigned_to,
-  }));
-}
-
-// Mergeable fields of a list item, used as the per-item baseline for diffing
-// local edits against the last-saved state.
-type ItemSnapshot = Pick<LocalItem, 'text' | 'completed' | 'parentId' | 'assigned_to'>;
-const itemSnapshot = (item: LocalItem): ItemSnapshot => ({
-  text: item.text,
-  completed: item.completed,
-  parentId: item.parentId,
-  assigned_to: item.assigned_to,
-});
-
-// normalizeItemOrder walks top-level items in order and emits each one followed
-// by its children (keeping a group contiguous). Orphaned children (parent gone)
-// are promoted to top-level. Renumbers position = 0..N across the whole set.
-function normalizeItemOrder(items: LocalItem[]): LocalItem[] {
-  const childrenByParent = new Map<string, LocalItem[]>();
-  for (const it of items) {
-    if (it.parentId !== null) {
-      const siblings = childrenByParent.get(it.parentId) ?? [];
-      siblings.push(it);
-      childrenByParent.set(it.parentId, siblings);
-    }
-  }
-  const ordered: LocalItem[] = [];
-  const placed = new Set<string>();
-  for (const it of items) {
-    if (it.parentId !== null) continue;
-    ordered.push(it);
-    placed.add(it.id);
-    for (const child of childrenByParent.get(it.id) ?? []) {
-      ordered.push(child);
-      placed.add(child.id);
-    }
-  }
-  for (const it of items) {
-    if (!placed.has(it.id)) ordered.push({ ...it, parentId: null });
-  }
-  return ordered.map((it, index) => ({ ...it, position: index }));
-}
-
-function itemHasChildren(items: LocalItem[], itemId: string): boolean {
-  return items.some((it) => it.parentId === itemId);
-}
-
-function precedingTopLevelId(items: LocalItem[], itemId: string): string | null {
-  let last: string | null = null;
-  for (const it of items) {
-    if (it.id === itemId) return last;
-    if (it.parentId === null) last = it.id;
-  }
-  return null;
-}
-
-// applyCompletedCascade mirrors the server: toggling a top-level item also
-// toggles all its children; toggling a child touches only that item.
-function applyCompletedCascade(items: LocalItem[], itemId: string, completed: boolean): LocalItem[] {
-  const target = items.find((item) => item.id === itemId);
-  if (!target) return items;
-  const cascadeToChildren = target.parentId === null;
-  return items.map((item) => {
-    if (item.id === itemId) return { ...item, completed };
-    if (cascadeToChildren && item.parentId === itemId) return { ...item, completed };
-    return item;
-  });
-}
+// Duration (ms) of the row slide when the active list reflows after a toggle/delete.
+const LIST_REFLOW_ANIM_MS = 150;
+const MAX_EXIT_SAVE_RETRIES = 3;
+// Override the reorderable list's default cell animation so the dragged row is
+// fully static apart from following the finger: opacity stays 1 and no scale is
+// applied. The library's default opacity/scale animations could otherwise stick
+// after a drop and leave the row greyed out or enlarged. Module-scoped so the
+// reference stays stable across renders.
+const DRAG_CELL_ANIMATIONS = { opacity: 1, transform: [] };
 
 export default function NoteEditorScreen() {
   const navigation = useNavigation<EditorNavProp>();
   const route = useRoute<EditorRouteProp>();
   const { noteId: initialNoteId, sharedText } = route.params;
   const { t, i18n } = useTranslation();
-  const pendingNoteIds = usePendingNoteIds();
   const failedNoteIds = useFailedNoteIds();
 
   // A new note opened from an Android share intent arrives with sharedText to
@@ -168,6 +110,11 @@ export default function NoteEditorScreen() {
   const [noteType, setNoteType] = useState<NoteType>('text');
   const [items, setItems] = useState<LocalItem[]>([]);
   const [checkedItemsCollapsed, setCheckedItemsCollapsed] = useState(false);
+  // Id of the item the user just checked off, so its completed-section row pops
+  // on mount. Cleared shortly after so a later collapse/expand doesn't re-pop.
+  const [popItemId, setPopItemId] = useState<string | null>(null);
+  const popClearRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (popClearRef.current) clearTimeout(popClearRef.current); }, []);
   const [pinned, setPinned] = useState(false);
   const [archived, setArchived] = useState(false);
   const [color, setColor] = useState('#ffffff');
@@ -180,7 +127,6 @@ export default function NoteEditorScreen() {
   const [assigningItemId, setAssigningItemId] = useState<string | null>(null);
   const [syncToast, setSyncToast] = useState<string | null>(null);
   const [isEditingContent, setIsEditingContent] = useState(initialNoteId === null);
-  const [listItemFocused, setListItemFocused] = useState(false);
   // Share-target picker: lets a share be redirected to another server before it
   // is saved (only relevant when opened from a share and 2+ servers exist).
   const [shareServers, setShareServers] = useState<ServerAccountEntry[]>([]);
@@ -190,13 +136,28 @@ export default function NoteEditorScreen() {
   // (e.g. the server switch failed) can be rolled back while still mounted.
   const pendingShare = usePendingShare();
   const redirectInitiatedRef = useRef(false);
-  const focusedListItemIdRef = useRef<string | null>(null);
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, isLocalMode } = useAuth();
   const { usersById } = useUsers();
   const { showToast } = useToast();
 
-  const { colors, isDark } = useTheme();
-  const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
+  const keyboardHeight = useKeyboardHeight();
+  // Live horizontal travel of the row currently being dragged. The list pan's
+  // onChange writes translationX here; the active row snaps it to an indent step
+  // for Keep-style drag-to-indent, and the drop handler reads it to commit.
+  const dragTranslateX = useSharedValue(0);
+  // On Android the window is edge-to-edge and is NOT resized for the keyboard,
+  // so lift the whole editor (scroll area + toolbars) above it manually. iOS
+  // relies on KeyboardAvoidingView's "padding" behavior instead.
+  //
+  // Android reports the keyboard height excluding the bottom navigation inset:
+  // the keyboard draws over that inset, so endCoordinates.height is measured from
+  // the top of the navigation bar, not the bottom edge of the screen. Reserve the
+  // full keyboardHeight here; the toolbar's own safe-area bottom padding
+  // (insets.bottom) then bridges the navigation-inset region so its buttons sit
+  // flush against the top of the keyboard instead of behind it.
+  const androidKeyboardInset = Platform.OS === 'android' ? keyboardHeight : 0;
   const bannerShown = useBannerShown();
   const { data: existingNote } = useOfflineNote(noteId);
   const createMutation = useCreateNote();
@@ -209,6 +170,27 @@ export default function NoteEditorScreen() {
   const deleteItemMutation = useDeleteNoteItem();
   const reorderItemsMutation = useReorderNoteItems();
   const toggleItemCompletedMutation = useToggleNoteItemCompleted();
+  const uploadImageMutation = useUploadNoteImage();
+  const deleteImageMutation = useDeleteNoteImage();
+  const retryPendingImageUploadMutation = useRetryPendingImageUpload();
+  const dismissPendingImageUploadMutation = useDismissPendingImageUpload();
+  // Uploads queued while offline (or after a transient failure) — persisted to
+  // pending_image_uploads, so they survive navigating away or an app restart
+  // until the sync engine's drain flushes them (issue #618).
+  const pendingImageUploads = usePendingImageUploads(noteId);
+
+  // Add-image UX state: the action sheet, in-flight/failed uploads rendered as
+  // gallery placeholders, and images hidden pending the deferred-delete undo
+  // window (spec §3.1/§6). `imageUploads` only ever holds attempts currently
+  // in flight online or that failed permanently — anything falling back to the
+  // offline queue is handed off to `pendingImageUploads` above instead.
+  const [addImageSheetVisible, setAddImageSheetVisible] = useState(false);
+  const [imageUploads, setImageUploads] = useState<PendingImageUpload[]>([]);
+  const displayedImageUploads = useMemo(
+    () => [...imageUploads, ...pendingImageUploads],
+    [imageUploads, pendingImageUploads],
+  );
+  const [removedImageIds, setRemovedImageIds] = useState<Set<string>>(new Set());
 
   // Show a toast when another user updates this note while editor is open
   useSSESubscription(noteId, useCallback(() => {
@@ -230,12 +212,6 @@ export default function NoteEditorScreen() {
   useEffect(() => {
     const sub = Keyboard.addListener('keyboardDidHide', () => {
       setIsEditingContent(false);
-      if (listItemBlurTimerRef.current) {
-        clearTimeout(listItemBlurTimerRef.current);
-        listItemBlurTimerRef.current = null;
-      }
-      setListItemFocused(false);
-      focusedListItemIdRef.current = null;
     });
     return () => sub.remove();
   }, []);
@@ -245,6 +221,11 @@ export default function NoteEditorScreen() {
   const isInitializedRef = useRef(false);
   const intentionalExitRef = useRef(false);
   const hasPendingChangesRef = useRef(false);
+  // Bumped on every edit (markDirtyAndScheduleUpdate). flushSave snapshots it
+  // alongside the state refs so it can tell whether new edits arrived while its
+  // network calls were in flight — clearing the dirty flag then would mark
+  // those edits clean without ever saving them.
+  const editSeqRef = useRef(0);
   const saveInFlightRef = useRef<Promise<boolean> | null>(null);
   const requiresHydrationRef = useRef(initialNoteId !== null);
 
@@ -281,6 +262,160 @@ export default function NoteEditorScreen() {
   reorderItemsRef.current = reorderItemsMutation.mutateAsync;
   const toggleItemCompletedRef = useRef(toggleItemCompletedMutation.mutateAsync);
   toggleItemCompletedRef.current = toggleItemCompletedMutation.mutateAsync;
+
+  const displayedImageUploadsRef = useRef(displayedImageUploads);
+  displayedImageUploadsRef.current = displayedImageUploads;
+  const pendingImageUploadsRef = useRef(pendingImageUploads);
+  pendingImageUploadsRef.current = pendingImageUploads;
+  const imageUploadFilesRef = useRef(new Map<string, ImageUploadFile>());
+  const activeImageUploadIdsRef = useRef(new Set<string>());
+
+  const displayedImages = useMemo(
+    () => (existingNote?.images ?? []).filter((img) => !removedImageIds.has(img.id)),
+    [existingNote?.images, removedImageIds],
+  );
+
+  const validateImageFile = useCallback((file: ImageUploadFile): string | null => {
+    const error = validateImageFileRaw(file);
+    if (error === 'wrongType') return t('images.errorWrongType');
+    if (error === 'tooLarge') return t('images.errorTooLarge', { maxMB: IMAGE_MAX_MB });
+    return null;
+  }, [t]);
+
+  const removeUploadTile = useCallback((uploadId: string) => {
+    setImageUploads((prev) => prev.filter((u) => u.id !== uploadId));
+    imageUploadFilesRef.current.delete(uploadId);
+    // Only hits the DB when this tile had actually fallen back to the
+    // persisted offline queue (#618) — the common ephemeral uploading/error
+    // tile was never persisted, so there's nothing to cancel.
+    if (pendingImageUploadsRef.current.some((u) => u.id === uploadId)) {
+      dismissPendingImageUploadMutation.mutate(uploadId);
+    }
+  }, [dismissPendingImageUploadMutation]);
+
+  const runImageUpload = useCallback((uploadId: string, file: ImageUploadFile) => {
+    const currentNoteId = noteIdRef.current;
+    if (!currentNoteId) {
+      // The note id can null out mid-flight (e.g. the share-target redirect
+      // resets it) between queuing the placeholder tile and getting here —
+      // surface it as a failed upload instead of leaving the tile spinning
+      // forever with no retry/dismiss affordance.
+      setImageUploads((prev) => prev.map((u) => (u.id === uploadId ? { ...u, status: 'error', errorMessage: t('images.uploadFailed') } : u)));
+      return;
+    }
+    // Guard against a duplicate concurrent request for the same upload (a
+    // rapid double-tap on Retry before React re-renders the tile out of its
+    // pressable state).
+    if (activeImageUploadIdsRef.current.has(uploadId)) return;
+    activeImageUploadIdsRef.current.add(uploadId);
+    uploadImageMutation.mutateAsync({
+      noteId: currentNoteId,
+      uploadId,
+      file,
+      onProgress: (percent) => {
+        setImageUploads((prev) => prev.map((u) => (u.id === uploadId ? { ...u, progress: percent } : u)));
+      },
+    }).then((result) => {
+      activeImageUploadIdsRef.current.delete(uploadId);
+      // Either it uploaded, or it fell back to the persisted offline queue
+      // (issue #618) — either way the ephemeral tile is done; a queued upload
+      // is now rendered from `pendingImageUploads` instead, under the same id.
+      setImageUploads((prev) => prev.filter((u) => u.id !== uploadId));
+      imageUploadFilesRef.current.delete(uploadId);
+      if (result.status === 'queued') showToast(t('images.uploadQueuedToast'), 'info');
+    }).catch((error) => {
+      activeImageUploadIdsRef.current.delete(uploadId);
+      console.error('Failed to upload note image:', error);
+      const status = (error as { response?: { status?: number } })?.response?.status;
+      const message = status === 413 ? t('images.errorTooLarge', { maxMB: IMAGE_MAX_MB }) : t('images.uploadFailed');
+      setImageUploads((prev) => prev.map((u) => (u.id === uploadId ? { ...u, status: 'error', errorMessage: message } : u)));
+    });
+  }, [showToast, t, uploadImageMutation]);
+
+  const startImageUpload = useCallback((file: ImageUploadFile) => {
+    const id = generateId();
+    imageUploadFilesRef.current.set(id, file);
+    setImageUploads((prev) => [...prev, { id, filename: file.name, previewUri: file.uri, progress: 0, status: 'uploading' }]);
+    runImageUpload(id, file);
+  }, [runImageUpload]);
+
+  const retryImageUpload = useCallback((uploadId: string) => {
+    const file = imageUploadFilesRef.current.get(uploadId);
+    if (file) {
+      setImageUploads((prev) => prev.map((u) => (u.id === uploadId ? { ...u, status: 'uploading', progress: 0, errorMessage: undefined } : u)));
+      runImageUpload(uploadId, file);
+      return;
+    }
+    // Not an in-flight ephemeral upload — a persisted offline upload that hit
+    // a permanent error; re-queue it so the next drain retries it (#618).
+    retryPendingImageUploadMutation.mutate(uploadId);
+  }, [retryPendingImageUploadMutation, runImageUpload]);
+
+  // Entry point for the add-image action sheet. Validates each file and
+  // enforces the per-note image cap client-side (the server enforces it
+  // authoritatively) before starting an upload per valid file.
+  const queueImageFiles = useCallback((files: ImageUploadFile[]) => {
+    if (files.length === 0) return;
+
+    const noteImages = existingNote?.images ?? [];
+    let remainingSlots = IMAGE_MAX_PER_NOTE
+      - noteImages.length
+      - displayedImageUploadsRef.current.filter((u) => u.status !== 'error').length;
+
+    // Collect distinct error messages across the whole batch instead of
+    // showing (and immediately overwriting) one per invalid file.
+    const errors = new Set<string>();
+    for (const file of files) {
+      const validationError = validateImageFile(file);
+      if (validationError) {
+        errors.add(validationError);
+        continue;
+      }
+      if (remainingSlots <= 0) {
+        errors.add(t('images.errorTooMany', { max: IMAGE_MAX_PER_NOTE }));
+        break;
+      }
+      remainingSlots -= 1;
+      startImageUpload(file);
+    }
+    if (errors.size > 0) showToast(Array.from(errors).join(' '), 'error');
+  }, [existingNote?.images, showToast, startImageUpload, t, validateImageFile]);
+
+  const handleImagePermissionDenied = useCallback((source: 'camera' | 'library') => {
+    showToast(source === 'camera' ? t('images.cameraPermissionDenied') : t('images.libraryPermissionDenied'), 'error');
+  }, [showToast, t]);
+
+  // Removal is client-deferred: the tile hides immediately and an undo toast
+  // appears; the DELETE only fires once the toast's own timer expires with no
+  // undo (no restore endpoint exists for images, unlike notes/archive above).
+  // Driven entirely by the toast's onExpire — not a second independent timer —
+  // so the delete can never race ahead of (or lag) the visible Undo button.
+  const removeNoteImage = useCallback((image: NoteImage) => {
+    const currentNoteId = noteIdRef.current;
+    if (!currentNoteId) return;
+    setRemovedImageIds((prev) => new Set(prev).add(image.id));
+
+    const clearRemovalState = () => {
+      setRemovedImageIds((prev) => {
+        const next = new Set(prev);
+        next.delete(image.id);
+        return next;
+      });
+    };
+
+    showToast(t('images.removedToast'), 'info', {
+      label: t('dashboard.undo'),
+      onPress: clearRemovalState,
+      onExpire: () => {
+        deleteImageMutation.mutateAsync({ noteId: currentNoteId, imageId: image.id })
+          .catch((error) => {
+            console.error('Failed to delete note image:', error);
+          })
+          .finally(clearRemovalState);
+      },
+    });
+  }, [deleteImageMutation, showToast, t]);
+
   // Baseline of the last-saved state, used to diff local edits into granular
   // per-item operations (and field-only scalar patches) instead of re-sending
   // the whole note — so a save here can't overwrite another device's edits.
@@ -294,7 +429,8 @@ export default function NoteEditorScreen() {
   const contentInputRef = useRef<TextInputType>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   const itemInputRefsMap = useRef(new Map<string, React.RefObject<TextInputType | null>>());
-  const listItemBlurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoFocusItemIdRef = useRef<string | null>(null);
+  const autoFocusClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const getItemRef = useCallback((id: string): React.RefObject<TextInputType | null> => {
     if (!itemInputRefsMap.current.has(id)) {
@@ -443,6 +579,18 @@ export default function NoteEditorScreen() {
       const currentColor = colorRef.current;
       const currentPinned = pinnedRef.current;
       const currentArchived = archivedRef.current;
+      const capturedEditSeq = editSeqRef.current;
+
+      // Clear the dirty flag only if no edit arrived while the awaited network
+      // calls below were in flight. A mid-save keystroke re-marks dirty and
+      // schedules its own debounced save; unconditionally clearing here would
+      // wipe that flag, the debounced flushSave would early-return on "no
+      // pending changes", and the mid-save edit would be silently lost on exit.
+      const clearPendingUnlessEditedMidSave = () => {
+        if (editSeqRef.current === capturedEditSeq) {
+          hasPendingChangesRef.current = false;
+        }
+      };
 
       const captureBaseline = () => {
         savedScalarsRef.current = {
@@ -478,7 +626,7 @@ export default function NoteEditorScreen() {
               color: !isWhiteHexColor(currentColor) ? currentColor : undefined,
             };
         const newNote = await createMutateRef.current(req);
-        hasPendingChangesRef.current = false;
+        clearPendingUnlessEditedMidSave();
         // The server honors the client-supplied item IDs, so the items we just
         // sent become the baseline for subsequent granular edits.
         captureBaseline();
@@ -512,7 +660,7 @@ export default function NoteEditorScreen() {
           await persistItemDiff(currentNoteId, currentItems);
         }
 
-        hasPendingChangesRef.current = false;
+        clearPendingUnlessEditedMidSave();
         captureBaseline();
         if (!isMountedRef.current || unmounting) return true;
         setSaveError(null);
@@ -548,6 +696,7 @@ export default function NoteEditorScreen() {
   }, [flushSave]);
 
   const markDirtyAndScheduleUpdate = useCallback(() => {
+    editSeqRef.current += 1;
     hasPendingChangesRef.current = true;
     scheduleUpdate();
   }, [scheduleUpdate]);
@@ -665,9 +814,44 @@ export default function NoteEditorScreen() {
         clearTimeout(debounceRef.current);
         debounceRef.current = null;
       }
+
+      const showSaveFailedAlert = (retriesLeft = MAX_EXIT_SAVE_RETRIES) => {
+        Alert.alert(
+          t('note.saveFailedExitTitle'),
+          t('note.saveFailedExitMessage'),
+          [
+            {
+              text: t('note.discardAndLeave'),
+              style: 'destructive',
+              onPress: () => {
+                intentionalExitRef.current = true;
+                navigation.dispatch(event.data.action);
+              },
+            },
+            ...(retriesLeft > 0
+              ? [
+                  {
+                    text: t('common.retry'),
+                    onPress: async () => {
+                      const retrySucceeded = await flushSave();
+                      if (retrySucceeded) {
+                        intentionalExitRef.current = true;
+                        navigation.dispatch(event.data.action);
+                      } else {
+                        showSaveFailedAlert(retriesLeft - 1);
+                      }
+                    },
+                  },
+                ]
+              : []),
+          ],
+        );
+      };
+
       void (async () => {
         const saveSucceeded = await flushSave();
         if (!saveSucceeded) {
+          showSaveFailedAlert();
           return;
         }
         intentionalExitRef.current = true;
@@ -675,7 +859,7 @@ export default function NoteEditorScreen() {
       })();
     });
     return unsubscribe;
-  }, [flushSave, navigation]);
+  }, [flushSave, navigation, t]);
 
   // Flush pending save on unmount (prevent data loss), skip if intentionally exiting
   useEffect(() => {
@@ -712,13 +896,51 @@ export default function NoteEditorScreen() {
 
   const handleItemCompletedToggle = useCallback(
     async (itemId: string, completed: boolean) => {
+      // itemsRef.current is the authoritative latest state here: each branch
+      // below writes the new array back to it synchronously, so a rapid
+      // follow-up toggle (fired before React re-renders) composes on the most
+      // recent optimistic state rather than a stale render snapshot. Without
+      // this, rows flicker back into the active list and an overlapping
+      // parent/child toggle captures a stale prior snapshot, corrupting its
+      // rollback and save baseline (issue: mobile item flicker).
       const before = itemsRef.current;
       const target = before.find((item) => item.id === itemId);
       if (!target || target.completed === completed) return;
 
-      // Optimistic cascade applied immediately
-      const cascaded = applyCompletedCascade(before, itemId, completed);
-      setItems(cascaded);
+      // Capture the prior completed state of just the items this toggle touches
+      // (the item plus, for a top-level item, its children — or, for a child
+      // being unchecked, its parent) from that latest state. Used to advance
+      // the save baseline and to revert precisely on failure — without
+      // clobbering any other item whose state may change before this async
+      // call settles.
+      const cascadeToChildren = target.parentId === null;
+      const uncompleteParent = target.parentId !== null && !completed;
+      const priorCompletedById = new Map(
+        before
+          .filter(
+            (item) =>
+              item.id === itemId ||
+              (cascadeToChildren && item.parentId === itemId) ||
+              (uncompleteParent && item.id === target.parentId),
+          )
+          .map((item) => [item.id, item.completed]),
+      );
+
+      // Optimistic cascade applied immediately, with a subtle settle as the
+      // item moves between the active list and the completed section.
+      const optimisticItems = applyCompletedCascade(before, itemId, completed);
+      itemsRef.current = optimisticItems;
+      animateListReflow();
+      // Flag the just-checked item so its completed-section row pops on mount,
+      // then clear the flag so a later collapse/expand doesn't replay the pop.
+      if (popClearRef.current) clearTimeout(popClearRef.current);
+      if (completed) {
+        setPopItemId(itemId);
+        popClearRef.current = setTimeout(() => setPopItemId(null), 400);
+      } else {
+        setPopItemId(null);
+      }
+      setItems(optimisticItems);
 
       // For unsaved new notes, let the bulk-create carry completed flags
       if (!noteIdRef.current) {
@@ -739,14 +961,16 @@ export default function NoteEditorScreen() {
           completed,
         });
         if (serverItems.length > 0) {
-          // Online: reconcile only completed flags from server response
+          // Online: reconcile only completed flags from server response,
+          // composing on (and writing back) the latest state so a concurrent
+          // toggle's optimistic change is preserved.
           const completedById = new Map(serverItems.map((item) => [item.id, item.completed]));
-          setItems((prev) =>
-            prev.map((item) => {
-              const serverCompleted = completedById.get(item.id);
-              return serverCompleted === undefined ? item : { ...item, completed: serverCompleted };
-            }),
-          );
+          const reconciled = itemsRef.current.map((item) => {
+            const serverCompleted = completedById.get(item.id);
+            return serverCompleted === undefined ? item : { ...item, completed: serverCompleted };
+          });
+          itemsRef.current = reconciled;
+          setItems(reconciled);
           // Advance the baseline so the diff engine does not re-patch completed
           for (const [id, comp] of completedById) {
             const snap = savedItemsRef.current.get(id);
@@ -754,15 +978,22 @@ export default function NoteEditorScreen() {
           }
         } else {
           // Offline: cascade was applied to local DB; advance baseline here too
-          for (const item of cascaded) {
-            const snap = savedItemsRef.current.get(item.id);
-            if (snap && snap.completed !== item.completed) {
-              savedItemsRef.current.set(item.id, { ...snap, completed: item.completed });
-            }
+          for (const [id, prior] of priorCompletedById) {
+            if (prior === completed) continue;
+            const snap = savedItemsRef.current.get(id);
+            if (snap) savedItemsRef.current.set(id, { ...snap, completed });
           }
         }
       } catch {
-        setItems(before);
+        // Revert only the items this toggle changed, restoring their prior
+        // completed values, so a concurrent toggle's optimistic state survives.
+        const reverted = itemsRef.current.map((item) =>
+          priorCompletedById.has(item.id)
+            ? { ...item, completed: priorCompletedById.get(item.id)! }
+            : item,
+        );
+        itemsRef.current = reverted;
+        setItems(reverted);
         setSaveError(t('note.failedSaveChanges'));
       }
     },
@@ -772,7 +1003,10 @@ export default function NoteEditorScreen() {
   const handleItemTextChange = useCallback(
     (index: number, text: string) => {
       if (!text.includes('\n')) {
-        setItems((prev) => prev.map((item, i) => (i === index ? { ...item, text } : item)));
+        // Clamp like the paste paths below: the server rejects longer item text
+        // with a 400, which would wedge the save (or dead-letter it offline).
+        const clamped = text.slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH);
+        setItems((prev) => prev.map((item, i) => (i === index ? { ...item, text: clamped } : item)));
         markDirtyAndScheduleUpdate();
         return;
       }
@@ -839,10 +1073,15 @@ export default function NoteEditorScreen() {
   const handleDeleteItem = useCallback(
     (index: number) => {
       const removedItemId = itemsRef.current[index]?.id;
-      setItems((prev) => prev.filter((_, i) => i !== index));
       if (removedItemId) {
+        if (itemInputRefsMap.current.get(removedItemId)?.current?.isFocused()) {
+          Keyboard.dismiss();
+        }
         itemInputRefsMap.current.delete(removedItemId);
       }
+      // Settle the surrounding rows as this one is removed instead of snapping.
+      animateListReflow();
+      setItems((prev) => prev.filter((_, i) => i !== index));
       markDirtyAndScheduleUpdate();
     },
     [markDirtyAndScheduleUpdate],
@@ -850,16 +1089,92 @@ export default function NoteEditorScreen() {
 
   const handleAddItem = useCallback(() => {
     const newId = nextTempId();
-    const newItemRef = getItemRef(newId);
+    // Mark before setItems so the item mounts with autoFocus={true}, which
+    // reliably opens the soft keyboard (programmatic focus() doesn't always
+    // trigger the IME on Android for newly mounted inputs).
+    autoFocusItemIdRef.current = newId;
+    // Ease the new row in rather than having the list jump to make room.
+    animateListReflow();
     setItems((prev) => [
       ...prev,
       { id: newId, text: '', completed: false, position: prev.length, parentId: null, assigned_to: '' },
     ]);
     markDirtyAndScheduleUpdate();
-    setTimeout(() => newItemRef.current?.focus(), 50);
-  }, [markDirtyAndScheduleUpdate, getItemRef]);
+    // autoFocus is only consumed at mount; clear after a short delay so a
+    // later unmount/remount of the same ID doesn't re-open the keyboard.
+    // Cancel any pending clear from a previous rapid tap before rescheduling.
+    if (autoFocusClearTimerRef.current !== null) clearTimeout(autoFocusClearTimerRef.current);
+    autoFocusClearTimerRef.current = setTimeout(() => { autoFocusItemIdRef.current = null; }, 500);
+  }, [markDirtyAndScheduleUpdate]);
 
-  const handleInsertItemAfter = useCallback((index: number) => {
+  // handleItemEnterAtCursor mirrors the webapp's Enter-key handling:
+  //  - cursor at the very start of a non-empty item -> insert a blank item
+  //    before it (leaving its own text untouched), focus the new item;
+  //  - cursor mid-text -> split the item into two at the cursor, focus the
+  //    new (second) item with its cursor at the start;
+  //  - cursor at the end (or item is empty) -> append a blank item after
+  //    (previous default behavior).
+  // Newly created items inherit the current item's group (parentId) and
+  // assignee; completed always resets to false.
+  const handleItemEnterAtCursor = useCallback((index: number, cursorPosition: number) => {
+    const currentItem = itemsRef.current[index];
+    if (!currentItem) return;
+
+    const text = currentItem.text;
+    const cursorPos = Math.max(0, Math.min(cursorPosition, text.length));
+
+    if (cursorPos === 0 && text.length > 0) {
+      const newId = nextTempId();
+      const newItemRef = getItemRef(newId);
+      setItems((prev) => {
+        const newItem: LocalItem = {
+          id: newId,
+          text: '',
+          completed: false,
+          position: index,
+          parentId: prev[index]?.parentId ?? null,
+          assigned_to: prev[index]?.assigned_to ?? '',
+        };
+        const next = [...prev.slice(0, index), newItem, ...prev.slice(index)];
+        return next.map((item, i) => ({ ...item, position: i }));
+      });
+      markDirtyAndScheduleUpdate();
+      setTimeout(() => newItemRef.current?.focus(), 50);
+      return;
+    }
+
+    if (cursorPos > 0 && cursorPos < text.length) {
+      const before = text.slice(0, cursorPos);
+      const after = text.slice(cursorPos);
+      const newId = nextTempId();
+      const newItemRef = getItemRef(newId);
+      setItems((prev) => {
+        const newItem: LocalItem = {
+          id: newId,
+          text: after,
+          completed: false,
+          position: index + 1,
+          parentId: prev[index]?.parentId ?? null,
+          assigned_to: prev[index]?.assigned_to ?? '',
+        };
+        const next = [
+          ...prev.slice(0, index),
+          { ...prev[index], text: before },
+          newItem,
+          ...prev.slice(index + 1),
+        ];
+        return next.map((item, i) => ({ ...item, position: i }));
+      });
+      markDirtyAndScheduleUpdate();
+      setTimeout(() => {
+        newItemRef.current?.focus();
+        // Not all TextInput host implementations (e.g. test mocks) provide
+        // this imperative method, so guard the call.
+        newItemRef.current?.setSelection?.(0, 0);
+      }, 50);
+      return;
+    }
+
     const newId = nextTempId();
     const newItemRef = getItemRef(newId);
     setItems((prev) => {
@@ -893,34 +1208,6 @@ export default function NoteEditorScreen() {
       if (focusTargetId) itemInputRefsMap.current.get(focusTargetId)?.current?.focus();
     }, 50);
   }, [markDirtyAndScheduleUpdate]);
-
-  const handleIndentItem = useCallback(
-    (index: number, delta: 1 | -1) => {
-      const currentItems = itemsRef.current;
-      const target = currentItems[index];
-      if (!target) return;
-
-      let newParentId: string | null = target.parentId;
-      if (delta === 1) {
-        if (target.parentId !== null) return; // already nested
-        if (itemHasChildren(currentItems, target.id)) return; // would create a grandchild
-        const parentId = precedingTopLevelId(currentItems, target.id);
-        if (!parentId) return; // nothing to nest under
-        newParentId = parentId;
-      } else {
-        if (target.parentId === null) return; // already top-level
-        newParentId = null;
-      }
-
-      setItems((prev) =>
-        normalizeItemOrder(
-          prev.map((item) => (item.id === target.id ? { ...item, parentId: newParentId } : item)),
-        ),
-      );
-      markDirtyAndScheduleUpdate();
-    },
-    [markDirtyAndScheduleUpdate],
-  );
 
   const handleAcceptSuggestion = useCallback(
     (itemId: string, suggestionText: string) => {
@@ -1007,6 +1294,7 @@ export default function NoteEditorScreen() {
   }, [markDirtyAndScheduleUpdate, getItemRef]);
 
   const handleToggleCollapsed = useCallback(() => {
+    animateListReflow();
     setCheckedItemsCollapsed((prev) => !prev);
     markDirtyAndScheduleUpdate();
   }, [markDirtyAndScheduleUpdate]);
@@ -1035,6 +1323,11 @@ export default function NoteEditorScreen() {
   const openAssigneePicker = useCallback((itemId: string) => {
     setAssigningItemId(itemId);
     setAssigneePickerVisible(true);
+  }, []);
+
+  const handleNativeShare = useCallback(() => {
+    const text = formatEditorStateForShare(noteTypeRef.current, titleRef.current, contentRef.current, itemsRef.current);
+    if (text.trim()) void Share.share({ message: text });
   }, []);
 
   const handleDelete = useCallback(() => {
@@ -1115,6 +1408,9 @@ export default function NoteEditorScreen() {
       });
       commitMetadataBaseline({ archived: newArchived });
       if (newArchived) {
+        // Archiving from the single-note view returns the user to the dashboard.
+        intentionalExitRef.current = true;
+        navigation.goBack();
         showToast(t('dashboard.noteArchived'), 'success', {
           label: t('dashboard.undo'),
           onPress: async () => {
@@ -1138,7 +1434,7 @@ export default function NoteEditorScreen() {
       setArchived(!newArchived);
       Alert.alert(t('common.error'), t('note.failedUpdate'));
     }
-  }, [buildMetadataUpdateData, commitMetadataBaseline, flushPendingChanges, noteId, showToast, t, updateMutation]);
+  }, [buildMetadataUpdateData, commitMetadataBaseline, flushPendingChanges, navigation, noteId, showToast, t, updateMutation]);
 
   const handleColorSelect = useCallback(async (selectedColor: string) => {
     const saveSucceeded = await flushPendingChanges();
@@ -1189,8 +1485,7 @@ export default function NoteEditorScreen() {
     }
 
     const currentNoteId = noteIdRef.current;
-    if (!currentNoteId || isUnsyncedNoteId(currentNoteId, pendingNoteIds)) {
-      Alert.alert(t('common.error'), t('note.waitForSyncBeforeDuplicating'));
+    if (!currentNoteId) {
       return;
     }
 
@@ -1202,7 +1497,7 @@ export default function NoteEditorScreen() {
     } catch {
       Alert.alert(t('common.error'), t('note.failedDuplicate'));
     }
-  }, [duplicateMutation, flushSave, navigation, t, pendingNoteIds]);
+  }, [duplicateMutation, flushSave, navigation, t]);
 
   // Disable inputs while waiting for existing note to hydrate
   const isHydrating = initialNoteId !== null && !existingNote;
@@ -1231,30 +1526,106 @@ export default function NoteEditorScreen() {
     return texts;
   }, [checkedItems]);
 
-  // Use ref to avoid recreating handleListReorder on every items change
+  // Refs to avoid recreating handleListReorder on every items change
   const checkedItemsRef = useRef(checkedItems);
   checkedItemsRef.current = checkedItems;
+  const uncheckedItemsRef = useRef(uncheckedItems);
+  uncheckedItemsRef.current = uncheckedItems;
 
-  const handleListReorder = useCallback(
-    (reorderedUnchecked: LocalItem[]) => {
+  // Commits a finished drag: applies the vertical move (if any) and the indent
+  // implied by the horizontal drag distance, then persists. Called from both
+  // onReorder (fires only when the row changed slots) and onDragEnd (fires on
+  // every drop, which is how a purely sideways indent gets committed at all).
+  const commitDrag = useCallback(
+    (from: number, to: number) => {
+      // Apply the move to the unchecked list (a no-op when from === to, e.g. a
+      // purely sideways drag that only changed the indent).
+      const reorderedUnchecked = reorderItems(uncheckedItemsRef.current, from, to);
+      const moved = reorderedUnchecked[to];
+      let changed = from !== to;
+      if (moved) {
+        const above = to > 0 ? reorderedUnchecked[to - 1] : null;
+        const baseLevel = moved.parentId ? 1 : 0;
+        const canIndent = !itemHasChildren(itemsRef.current, moved.id) && !!above;
+        const canOutdent = baseLevel === 1;
+        const targetLevel = indentLevelFromDrag(dragTranslateX.value, baseLevel, canIndent, canOutdent);
+        let newParentId: string | null;
+        if (targetLevel !== baseLevel) {
+          // The horizontal drag past a step is an explicit indent intent.
+          newParentId = targetLevel === 1 && above ? above.parentId ?? above.id : null;
+        } else if (from !== to) {
+          // No sideways intent but the row moved: fall back to the position-based
+          // reparent so dropping into a group still nests as before.
+          newParentId = droppedParentId(itemsRef.current, moved, above);
+        } else {
+          // Released in place with no sideways intent: leave the parent untouched.
+          newParentId = moved.parentId;
+        }
+        if (newParentId !== moved.parentId) {
+          reorderedUnchecked[to] = { ...moved, parentId: newParentId };
+          changed = true;
+        }
+      }
+      // Note: dragTranslateX is intentionally not reset here. Each active row now
+      // holds its dropped indent in its own `displayLevel` until the committed
+      // re-render lands; zeroing the shared value mid-drop could clobber that hold
+      // and reintroduce the snap-back flash. The drag start resets it instead.
+      if (!changed) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-      // Merge reordered unchecked with existing checked items, then normalize
-      // so that each parent's children stay contiguous in the combined array.
+      // Merge with existing checked items and normalize so each parent's
+      // children stay contiguous.
       setItems(normalizeItemOrder([...reorderedUnchecked, ...checkedItemsRef.current]));
       markDirtyAndScheduleUpdate();
     },
-    [markDirtyAndScheduleUpdate],
+    [markDirtyAndScheduleUpdate, dragTranslateX],
   );
 
-  const handleListDragStart = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-  }, []);
+  const handleListReorder = useCallback(
+    ({ from, to }: ReorderableListReorderEvent) => commitDrag(from, to),
+    [commitDrag],
+  );
+
+  // onReorder never fires for a purely sideways drag (the library only calls it
+  // when from !== to). onDragEnd fires on every drop — inside a UI-thread
+  // worklet — so we hop back to JS to commit the indent for that case. The
+  // from !== to drops are already handled by onReorder above.
+  const handleListDragEnd = useCallback(
+    ({ from, to }: ReorderableListDragEndEvent) => {
+      'worklet';
+      if (from === to) {
+        runOnJS(commitDrag)(from, to);
+      }
+    },
+    [commitDrag],
+  );
+
+  // The reorder drag activates on movement along either axis: vertical to
+  // reorder, horizontal to indent/outdent (Google Keep style). onChange feeds
+  // translationX into dragTranslateX so the lifted row can follow the finger
+  // sideways and snap to an indent step as it is dragged. (There is no longer a
+  // separate swipe-to-indent gesture competing for the horizontal axis.) The
+  // library chains its own onBegin/onUpdate/onEnd/onFinalize handlers onto this
+  // gesture; onChange is free for us to use.
+  const listDragGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetX([-10, 10])
+        .activeOffsetY([-10, 10])
+        .onChange((event) => {
+          'worklet';
+          dragTranslateX.value = event.translationX;
+        }),
+    [dragTranslateX],
+  );
 
   const handleListItemFocus = useCallback<NonNullable<TextInputProps['onFocus']>>((event) => {
     const nativeTarget = event.nativeEvent.target;
     if (nativeTarget == null) return;
 
-    // Use ScrollView's native keyboard helper so focused list item inputs stay visible.
+    // Use ScrollView's native keyboard helper so focused list item inputs stay
+    // visible. scrollViewRef now points at the library's ScrollViewContainer
+    // (a Reanimated ScrollView); if its forwarded ref doesn't expose
+    // getScrollResponder this degrades to a no-op rather than crashing.
     const responder = scrollViewRef.current?.getScrollResponder?.();
     if (
       responder &&
@@ -1270,90 +1641,69 @@ export default function NoteEditorScreen() {
   }, []);
 
   const handleFocusListItem = useCallback(
-    (itemId: string, event: Parameters<NonNullable<TextInputProps['onFocus']>>[0]) => {
-      if (listItemBlurTimerRef.current) {
-        clearTimeout(listItemBlurTimerRef.current);
-        listItemBlurTimerRef.current = null;
-      }
-      focusedListItemIdRef.current = itemId;
-      setListItemFocused(true);
+    (_itemId: string, event: Parameters<NonNullable<TextInputProps['onFocus']>>[0]) => {
       handleListItemFocus(event);
     },
     [handleListItemFocus],
   );
 
-  const handleBlurListItem = useCallback(() => {
-    // Delay so toolbar button onPress fires before state clears (Android blur-before-press ordering)
-    listItemBlurTimerRef.current = setTimeout(() => {
-      listItemBlurTimerRef.current = null;
-      focusedListItemIdRef.current = null;
-      setListItemFocused(false);
-    }, 200);
-  }, []);
-
-  const handleListIndent = useCallback(
-    (delta: 1 | -1) => {
-      const id = focusedListItemIdRef.current;
-      if (!id) return;
-      const index = itemIndexMapRef.current.get(id);
-      if (index === undefined) return;
-      handleIndentItem(index, delta);
-    },
-    [handleIndentItem],
-  );
-
   const hasNoteColor = !!color && !isWhiteHexColor(color);
 
-  const listIndentToolbarContent = noteType === 'list' ? (
-    <View style={[styles.formattingToolbar, { backgroundColor: colors.surfaceVariant, borderTopColor: colors.border }]}>
-      <TouchableOpacity onPress={() => handleListIndent(-1)} style={styles.fmtBtn} accessibilityLabel={t('note.outdentItem')} testID="list-outdent-btn">
-        <Ionicons name="arrow-back-outline" size={18} color={colors.text} />
-      </TouchableOpacity>
-      <View style={[styles.fmtSep, { backgroundColor: colors.border }]} />
-      <TouchableOpacity onPress={() => handleListIndent(1)} style={styles.fmtBtn} accessibilityLabel={t('note.indentItem')} testID="list-indent-btn">
-        <Ionicons name="arrow-forward-outline" size={18} color={colors.text} />
-      </TouchableOpacity>
-    </View>
-  ) : null;
+  // Per-item callbacks shared by the active list (renderListItem) and the
+  // completed-items section, so both wire ListItem the same way.
+  const listItemHandlers = useMemo<ListItemHandlers>(
+    () => ({
+      onToggle: (itemId, completed) => { void handleItemCompletedToggle(itemId, completed); },
+      onChangeText: handleItemTextChange,
+      onDelete: handleDeleteItem,
+      onEnterAtCursor: handleItemEnterAtCursor,
+      onBackspaceOnEmpty: handleBackspaceOnEmpty,
+      onAssignPress: openAssigneePicker,
+      onFocus: handleFocusListItem,
+    }),
+    [handleItemCompletedToggle, handleItemTextChange, handleDeleteItem, handleItemEnterAtCursor, handleBackspaceOnEmpty, openAssigneePicker, handleFocusListItem],
+  );
 
-  const renderListItem = useCallback(
-    ({ item, drag, isActive }: { item: LocalItem; drag: () => void; isActive: boolean }) => {
+  const renderActiveRow = useCallback(
+    ({ item, index }: ReorderableListRenderItemInfo<LocalItem>) => {
       const originalIndex = itemIndexMapRef.current.get(item.id);
       if (originalIndex === undefined) return null;
-      const itemRef = getItemRef(item.id);
+      const baseLevel = item.parentId ? 1 : 0;
       return (
-        <ScaleDecorator>
-          <View style={isActive ? [styles.draggingListItem, { shadowColor: isDark ? colors.border : '#000' }] : undefined}>
-            <ListItem
-              inputRef={itemRef}
-              text={item.text}
-              completed={item.completed}
-              isActive={isActive}
-              indentLevel={item.parentId ? 1 : 0}
-              showDragHandle
-              assignedTo={item.assigned_to}
-              isShared={!!isNoteShared}
-              collaborators={collaborators}
-              hasNoteColor={hasNoteColor}
-              completedItemTexts={completedItemTexts}
-              onDrag={drag}
-              onToggle={() => { void handleItemCompletedToggle(item.id, !item.completed); }}
-              onChangeText={(text) => handleItemTextChange(originalIndex, text)}
-              onDelete={() => handleDeleteItem(originalIndex)}
-              onSubmitEditing={() => handleInsertItemAfter(originalIndex)}
-              onBackspaceOnEmpty={() => handleBackspaceOnEmpty(originalIndex)}
-              onAssignPress={() => openAssigneePicker(item.id)}
-              onFocus={(event) => handleFocusListItem(item.id, event)}
-              onBlur={handleBlurListItem}
-              onIndent={(delta) => handleIndentItem(originalIndex, delta)}
-              onAcceptSuggestion={(text) => handleAcceptSuggestion(item.id, text)}
-              inputAccessoryViewID={Platform.OS === 'ios' ? LIST_INDENT_TOOLBAR_ID : undefined}
-            />
-          </View>
-        </ScaleDecorator>
+        <ActiveListRow
+          dragTranslateX={dragTranslateX}
+          indentBaseLevel={baseLevel}
+          // Mirror commitDrag: an item can only nest if it has no children and
+          // there is a row above it to nest under (index > 0 in the active list).
+          // Keeping this in step stops the preview showing an indent that the
+          // drop would reject.
+          canIndent={!itemHasChildren(itemsRef.current, item.id) && index > 0}
+          canOutdent={baseLevel === 1}
+          listItemProps={{
+            inputRef: getItemRef(item.id),
+            autoFocus: item.id === autoFocusItemIdRef.current,
+            text: item.text,
+            completed: item.completed,
+            indentLevel: item.parentId ? 1 : 0,
+            showDragHandle: true,
+            assignedTo: item.assigned_to,
+            isShared: !!isNoteShared,
+            collaborators,
+            hasNoteColor,
+            completedItemTexts,
+            onToggle: () => listItemHandlers.onToggle(item.id, !item.completed),
+            onChangeText: (text) => listItemHandlers.onChangeText(originalIndex, text),
+            onDelete: () => listItemHandlers.onDelete(originalIndex),
+            onSubmitEditing: (cursorPos) => listItemHandlers.onEnterAtCursor(originalIndex, cursorPos),
+            onBackspaceOnEmpty: () => listItemHandlers.onBackspaceOnEmpty(originalIndex),
+            onAssignPress: () => listItemHandlers.onAssignPress(item.id),
+            onFocus: (event) => listItemHandlers.onFocus(item.id, event),
+            onAcceptSuggestion: (text) => handleAcceptSuggestion(item.id, text),
+          }}
+        />
       );
     },
-    [getItemRef, handleItemCompletedToggle, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, isNoteShared, collaborators, openAssigneePicker, handleIndentItem, isDark, colors, handleFocusListItem, handleBlurListItem, hasNoteColor, completedItemTexts, handleAcceptSuggestion],
+    [getItemRef, listItemHandlers, isNoteShared, collaborators, hasNoteColor, completedItemTexts, handleAcceptSuggestion, dragTranslateX],
   );
 
   const applyToolbarEdit = useCallback((updater: (prev: string) => string) => {
@@ -1393,7 +1743,7 @@ export default function NoteEditorScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.container, { backgroundColor: noteBackground }]}
+      style={[styles.container, { backgroundColor: noteBackground, paddingBottom: androidKeyboardInset }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? IOS_KEYBOARD_VERTICAL_OFFSET : 0}
     >
@@ -1491,12 +1841,28 @@ export default function NoteEditorScreen() {
         </TouchableOpacity>
       )}
 
-      <ScrollView
+      {/*
+        ScrollViewContainer (from react-native-reorderable-list) wraps the editor
+        so the NestedReorderableList below can drive drag-to-reorder and autoscroll
+        while still scrolling as one page with the title and completed section.
+      */}
+      <ScrollViewContainer
         ref={scrollViewRef}
         style={styles.scrollContent}
         contentContainerStyle={styles.scrollContentContainer}
         keyboardShouldPersistTaps="handled"
       >
+        {(displayedImages.length > 0 || displayedImageUploads.length > 0) && (
+          <NoteImageGallery
+            images={displayedImages}
+            editable
+            uploads={displayedImageUploads}
+            onRemove={removeNoteImage}
+            onRetryUpload={retryImageUpload}
+            onDismissUpload={removeUploadTile}
+          />
+        )}
+
         {noteType === 'list' && (
           <TextInput
             ref={titleInputRef}
@@ -1553,53 +1919,42 @@ export default function NoteEditorScreen() {
 
             {/* Android: formatting toolbar in layout (shown when editing) */}
             {Platform.OS === 'android' && isEditingContent && (
-              <View style={[styles.formattingToolbar, { backgroundColor: colors.surfaceVariant, borderTopColor: colors.border }]}>
-                <TouchableOpacity onPress={() => wrapMobileSelection('**', '**')} style={styles.fmtBtn} accessibilityLabel={t('note.formatBold')}>
-                  <Text style={[styles.fmtBtnText, { color: colors.text, fontWeight: '700' }]}>B</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => wrapMobileSelection('*', '*')} style={styles.fmtBtn} accessibilityLabel={t('note.formatItalic')}>
-                  <Text style={[styles.fmtBtnText, { color: colors.text, fontStyle: 'italic' }]}>I</Text>
-                </TouchableOpacity>
-                <View style={[styles.fmtSep, { backgroundColor: colors.border }]} />
-                <TouchableOpacity onPress={insertMobileHeading} style={styles.fmtBtn} accessibilityLabel={t('note.formatHeading')}>
-                  <Text style={[styles.fmtBtnText, { color: colors.text }]}>H₂</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={insertMobileBullet} style={styles.fmtBtn} accessibilityLabel={t('note.formatBulletList')}>
-                  <Text style={[styles.fmtBtnText, { color: colors.text }]}>• list</Text>
-                </TouchableOpacity>
-              </View>
+              <MarkdownToolbarContent
+                onBold={() => wrapMobileSelection('**', '**')}
+                onItalic={() => wrapMobileSelection('*', '*')}
+                onHeading={insertMobileHeading}
+                onBullet={insertMobileBullet}
+              />
             )}
 
             {/* iOS: formatting toolbar as InputAccessoryView (docks above keyboard) */}
             {Platform.OS === 'ios' && noteType === 'text' && (
               <InputAccessoryView nativeID={MARKDOWN_TOOLBAR_ID}>
-                <View style={[styles.formattingToolbar, { backgroundColor: colors.surfaceVariant, borderTopColor: colors.border }]}>
-                  <TouchableOpacity onPress={() => wrapMobileSelection('**', '**')} style={styles.fmtBtn} accessibilityLabel={t('note.formatBold')}>
-                    <Text style={[styles.fmtBtnText, { color: colors.text, fontWeight: '700' }]}>B</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => wrapMobileSelection('*', '*')} style={styles.fmtBtn} accessibilityLabel={t('note.formatItalic')}>
-                    <Text style={[styles.fmtBtnText, { color: colors.text, fontStyle: 'italic' }]}>I</Text>
-                  </TouchableOpacity>
-                  <View style={[styles.fmtSep, { backgroundColor: colors.border }]} />
-                  <TouchableOpacity onPress={insertMobileHeading} style={styles.fmtBtn} accessibilityLabel={t('note.formatHeading')}>
-                    <Text style={[styles.fmtBtnText, { color: colors.text }]}>H₂</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={insertMobileBullet} style={styles.fmtBtn} accessibilityLabel={t('note.formatBulletList')}>
-                    <Text style={[styles.fmtBtnText, { color: colors.text }]}>• list</Text>
-                  </TouchableOpacity>
-                </View>
+                <MarkdownToolbarContent
+                  onBold={() => wrapMobileSelection('**', '**')}
+                  onItalic={() => wrapMobileSelection('*', '*')}
+                  onHeading={insertMobileHeading}
+                  onBullet={insertMobileBullet}
+                />
               </InputAccessoryView>
             )}
           </>
         ) : (
           <View style={styles.listContainer}>
-            <DraggableFlatList
+            <NestedReorderableList
               data={uncheckedItems}
               keyExtractor={(item) => item.id}
-              scrollEnabled={false}
-              onDragBegin={handleListDragStart}
-              onDragEnd={({ data }) => handleListReorder(data)}
-              renderItem={renderListItem}
+              scrollable={false}
+              shouldUpdateActiveItem
+              panGesture={listDragGesture}
+              onReorder={handleListReorder}
+              onDragEnd={handleListDragEnd}
+              cellAnimations={DRAG_CELL_ANIMATIONS}
+              renderItem={renderActiveRow}
+              // Slide remaining rows into place when an item is checked off (and
+              // moves to the completed section) or deleted. Skipped under the OS
+              // Reduce Motion setting, like the editor's other animations.
+              itemLayoutAnimation={isReduceMotionEnabledSync() ? undefined : LinearTransition.duration(LIST_REFLOW_ANIM_MS)}
             />
 
             <TouchableOpacity style={styles.addItemRow} onPress={handleAddItem} testID="add-list-item">
@@ -1607,98 +1962,23 @@ export default function NoteEditorScreen() {
               <Text style={[styles.addItemText, { color: colors.primary }]}>{t('note.addItem')}</Text>
             </TouchableOpacity>
 
-            {checkedItems.length > 0 && (
-              <View style={[styles.checkedSection, { borderTopColor: completedSectionDividerColor }]} testID="checked-items-section">
-                <TouchableOpacity
-                  style={styles.checkedHeader}
-                  onPress={handleToggleCollapsed}
-                  testID="toggle-checked-items"
-                >
-                  <Ionicons
-                    name={checkedItemsCollapsed ? 'chevron-forward' : 'chevron-down'}
-                    size={18}
-                    color={hasNoteColor ? '#888' : colors.iconMuted}
-                  />
-                  <Text style={[styles.checkedHeaderText, { color: hasNoteColor ? '#777' : colors.textMuted }]}>
-                    {t('note.completedItems', { count: checkedItems.length })}
-                  </Text>
-                </TouchableOpacity>
-
-                {!checkedItemsCollapsed && (() => {
-                  const completedIds = new Set(checkedItems.map((i) => i.id));
-                  const itemsById = new Map(items.map((i) => [i.id, i]));
-                  const rows: React.ReactElement[] = [];
-                  let lastGhostParentId: string | null = null;
-
-                  checkedItems.forEach((item) => {
-                    const originalIndex = itemIndexMap.get(item.id);
-                    if (originalIndex === undefined) return;
-                    const parent = item.parentId ? itemsById.get(item.parentId) : undefined;
-                    const parentIsCompleted = item.parentId ? completedIds.has(item.parentId) : false;
-
-                    if (parent && !parentIsCompleted) {
-                      if (lastGhostParentId !== parent.id) {
-                        lastGhostParentId = parent.id;
-                        rows.push(
-                          <View
-                            key={`ghost-${parent.id}`}
-                            style={styles.ghostParent}
-                            accessibilityLabel={t('note.completedItemGroup', { title: parent.text })}
-                          >
-                            <View style={styles.ghostCheckbox} />
-                            <Text style={[styles.ghostParentText, { color: hasNoteColor ? '#888' : colors.textMuted }]} numberOfLines={1}>
-                              {parent.text}
-                            </Text>
-                          </View>,
-                        );
-                      }
-                    } else {
-                      lastGhostParentId = null;
-                    }
-
-                    rows.push(
-                      <ListItem
-                        key={item.id}
-                        inputRef={getItemRef(item.id)}
-                        text={item.text}
-                        completed={item.completed}
-                        isActive={false}
-                        indentLevel={item.parentId ? 1 : 0}
-                        assignedTo={item.assigned_to}
-                        isShared={!!isNoteShared}
-                        collaborators={collaborators}
-                        hasNoteColor={hasNoteColor}
-                        onToggle={() => { void handleItemCompletedToggle(item.id, !item.completed); }}
-                        onChangeText={(text) => handleItemTextChange(originalIndex, text)}
-                        onDelete={() => handleDeleteItem(originalIndex)}
-                        onSubmitEditing={() => handleInsertItemAfter(originalIndex)}
-                        onBackspaceOnEmpty={() => handleBackspaceOnEmpty(originalIndex)}
-                        onAssignPress={() => openAssigneePicker(item.id)}
-                        onFocus={(event) => handleFocusListItem(item.id, event)}
-                        onBlur={handleBlurListItem}
-                        onIndent={(delta) => handleIndentItem(originalIndex, delta)}
-                        inputAccessoryViewID={Platform.OS === 'ios' ? LIST_INDENT_TOOLBAR_ID : undefined}
-                      />,
-                    );
-                  });
-
-                  return rows;
-                })()}
-              </View>
-            )}
+            <CheckedItemsSection
+              checkedItems={checkedItems}
+              items={items}
+              itemIndexMap={itemIndexMap}
+              collapsed={checkedItemsCollapsed}
+              onToggleCollapsed={handleToggleCollapsed}
+              getItemRef={getItemRef}
+              isNoteShared={!!isNoteShared}
+              collaborators={collaborators}
+              hasNoteColor={hasNoteColor}
+              dividerColor={completedSectionDividerColor}
+              handlers={listItemHandlers}
+              popItemId={popItemId}
+            />
           </View>
         )}
-      </ScrollView>
-
-      {/* Android: show toolbar when a list item is focused (state-gated since no native focus binding) */}
-      {Platform.OS === 'android' && listItemFocused && listIndentToolbarContent}
-
-      {/* iOS: InputAccessoryView is implicitly focus-gated via inputAccessoryViewID on the TextInput */}
-      {Platform.OS === 'ios' && listIndentToolbarContent !== null && (
-        <InputAccessoryView nativeID={LIST_INDENT_TOOLBAR_ID}>
-          {listIndentToolbarContent}
-        </InputAccessoryView>
-      )}
+      </ScrollViewContainer>
 
       <View style={[styles.toolbar, { backgroundColor: noteBackground, borderTopColor: hasNoteColor ? 'transparent' : colors.border, paddingBottom: insets.bottom || 8 }]}>
         {/* Color picker button */}
@@ -1711,15 +1991,31 @@ export default function NoteEditorScreen() {
           <Ionicons name="color-palette-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
         </TouchableOpacity>
 
-        {/* Share (only when note is saved, synced, and owned by current user) */}
-        {noteId && !isUnsyncedNoteId(noteId, pendingNoteIds) && existingNote && existingNote.user_id === currentUser?.id && (
+        {/* Send: share note content via the system share sheet. Available for
+            any saved note regardless of ownership. */}
+        {noteId && (
+          <TouchableOpacity
+            onPress={handleNativeShare}
+            style={styles.toolbarBtn}
+            testID="toolbar-send-btn"
+            accessibilityLabel={t('note.send')}
+          >
+            <Ionicons name="share-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
+          </TouchableOpacity>
+        )}
+
+        {/* Share with collaborators (when the note is saved and owned by the current
+            user). Sharing requires a central server and is not available in local mode.
+            An offline-created note can be shared: its create drains FIFO before the
+            queued share (#475). Notes with a local_* id are excluded (no server id). */}
+        {!isLocalMode && noteId && !isLocalId(noteId) && existingNote && existingNote.user_id === currentUser?.id && (
           <TouchableOpacity
             onPress={() => navigation.navigate('Share', { noteId })}
             style={styles.toolbarBtn}
             testID="toolbar-share-btn"
             accessibilityLabel={t('note.share')}
           >
-            <Ionicons name="share-social-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
+            <Ionicons name="person-add-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
           </TouchableOpacity>
         )}
 
@@ -1751,7 +2047,8 @@ export default function NoteEditorScreen() {
           </TouchableOpacity>
         )}
 
-        {noteId && !isUnsyncedNoteId(noteId, pendingNoteIds) && (
+        {/* Duplicate. */}
+        {noteId && (
           <TouchableOpacity
             onPress={handleDuplicate}
             style={styles.toolbarBtn}
@@ -1762,8 +2059,10 @@ export default function NoteEditorScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Label button (only when note is saved and synced to server) */}
-        {noteId && !isUnsyncedNoteId(noteId, pendingNoteIds) && (
+        {/* Label button. Label ops queue FIFO behind an offline-created note's
+            create (#475), so they work for pending-create notes. Only unsynced
+            notes with a local_* id (offline labels) are excluded. */}
+        {noteId && !isLocalId(noteId) && (
           <TouchableOpacity
             onPress={() => setLabelPickerVisible(true)}
             style={styles.toolbarBtn}
@@ -1771,6 +2070,20 @@ export default function NoteEditorScreen() {
             accessibilityLabel={t('labels.title')}
           >
             <Ionicons name="pricetag-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
+          </TouchableOpacity>
+        )}
+
+        {/* Add image. Images require a server-backed note_id (spec §15.6 — no
+            draft/orphan uploads), so this is gated the same as the label
+            button. Offline uploads are queued and flushed on reconnect (#618). */}
+        {noteId && !isLocalId(noteId) && (
+          <TouchableOpacity
+            onPress={() => setAddImageSheetVisible(true)}
+            style={styles.toolbarBtn}
+            testID="toolbar-add-image-btn"
+            accessibilityLabel={t('images.addImage')}
+          >
+            <Ionicons name="image-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
           </TouchableOpacity>
         )}
 
@@ -1787,6 +2100,17 @@ export default function NoteEditorScreen() {
         currentColor={color}
         onSelect={handleColorSelect}
         onClose={() => setColorPickerVisible(false)}
+      />
+
+      <AddImageActionSheet
+        visible={addImageSheetVisible}
+        onClose={() => setAddImageSheetVisible(false)}
+        onPick={queueImageFiles}
+        onPermissionDenied={handleImagePermissionDenied}
+        remainingSlots={Math.max(
+          IMAGE_MAX_PER_NOTE - displayedImages.length - displayedImageUploads.filter((u) => u.status !== 'error').length,
+          0,
+        )}
       />
 
       {noteId && (
@@ -1853,225 +2177,3 @@ export default function NoteEditorScreen() {
     </KeyboardAvoidingView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  shareTargetBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  failedBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-  },
-  failedBarText: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  shareTargetText: {
-    flex: 1,
-    fontSize: 13,
-    marginRight: 12,
-  },
-  shareTargetAction: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  shareModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
-  },
-  shareModalCard: {
-    borderRadius: 12,
-    paddingVertical: 8,
-  },
-  shareModalTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 8,
-  },
-  shareModalRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  shareModalRowText: {
-    flex: 1,
-    fontSize: 15,
-    marginRight: 12,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  typeToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  typeToggleText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  scrollContent: {
-    flex: 1,
-    paddingHorizontal: 16,
-  },
-  scrollContentContainer: {
-    paddingBottom: 96,
-  },
-  titleInput: {
-    fontSize: 22,
-    fontWeight: '600',
-    paddingVertical: 16,
-    paddingHorizontal: 0,
-  },
-  contentInput: {
-    fontSize: 16,
-    lineHeight: 24,
-    minHeight: 200,
-    paddingHorizontal: 0,
-  },
-  listContainer: {
-    paddingBottom: 16,
-  },
-  addItemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    gap: 8,
-  },
-  addItemText: {
-    fontSize: 16,
-  },
-  checkedSection: {
-    marginTop: 16,
-    borderTopWidth: 1,
-    paddingTop: 8,
-  },
-  checkedHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    gap: 4,
-  },
-  checkedHeaderText: {
-    fontSize: 14,
-  },
-  toolbar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    gap: 2,
-  },
-  toolbarBtn: {
-    padding: 10,
-    borderRadius: 20,
-  },
-  toolbarSpacer: {
-    flex: 1,
-  },
-  errorBanner: {
-    borderBottomWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  errorText: {
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  syncToast: {
-    borderBottomWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  syncToastText: {
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  draggingListItem: {
-    borderRadius: 8,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-  },
-  contentPreview: {
-    flex: 1,
-    paddingHorizontal: 0,
-    paddingTop: 8,
-    minHeight: 120,
-  },
-  formattingToolbar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  fmtBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  fmtBtnText: {
-    fontSize: 14,
-  },
-  fmtSep: {
-    width: StyleSheet.hairlineWidth,
-    height: 18,
-    marginHorizontal: 4,
-  },
-  ghostParent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    opacity: 0.55,
-    paddingVertical: 4,
-    gap: 8,
-  },
-  ghostCheckbox: {
-    width: 18,
-    height: 18,
-    borderRadius: 3,
-    borderWidth: 1,
-    borderColor: '#aaa',
-    flexShrink: 0,
-  },
-  ghostParentText: {
-    fontSize: 14,
-    fontWeight: '600',
-    flex: 1,
-  },
-});

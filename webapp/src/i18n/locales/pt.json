@@ -309,7 +309,9 @@
         "noteAssociations": "Atribuições de etiquetas",
         "completed": "Concluídas",
         "assigned": "Atribuídas",
-        "databaseSize": "Tamanho do banco de dados"
+        "databaseSize": "Tamanho do banco de dados",
+        "imageCount": "Quantidade de imagens",
+        "imagesSize": "Armazenamento de imagens"
       }
     }
   },
@@ -366,6 +368,7 @@
     "failedDuplicate": "Falha ao duplicar a nota. Tente novamente.",
     "menuOptions": "Opções da nota",
     "assignItem": "Atribuir item",
+    "removeItem": "Remover item",
     "unassign": "Desatribuir",
     "assignedTo": "Atribuído a {{name}}",
     "completedSuggestions": "Sugestões de itens concluídos"
@@ -415,6 +418,25 @@
     "unsharedSuccess": "Compartilhamento da nota cancelado com sucesso!",
     "failedUnshare": "Falha ao cancelar o compartilhamento da nota. Tente novamente."
   },
+  "images": {
+    "openLightbox": "Ver {{filename}}",
+    "moreImages": "Ver mais {{count}} imagens",
+    "moreImagesBadge": "mais {{count}} imagens",
+    "lightboxPrevious": "Imagem anterior",
+    "lightboxNext": "Próxima imagem",
+    "lightboxCounter": "{{current}} / {{total}}",
+    "addImage": "Adicionar imagem",
+    "dropOverlay": "Solte a imagem para adicioná-la",
+    "removeImage": "Remover {{filename}}",
+    "removedToast": "Imagem removida",
+    "uploading": "Enviando… {{percent}}%",
+    "uploadFailed": "Falha no envio",
+    "retryUpload": "Tentar enviar {{filename}} novamente",
+    "dismissUpload": "Descartar {{filename}}",
+    "errorWrongType": "Só é possível anexar imagens.",
+    "errorTooLarge": "A imagem excede o limite de {{maxMB}} MB.",
+    "errorTooMany": "As notas podem ter até {{max}} imagens."
+  },
   "serviceWorker": {
     "updatePrompt": "Nova atualização do aplicativo disponível! Clique em OK para atualizar"
   },
@@ -431,6 +453,8 @@
     "fileTypesJson": "Arquivos .json",
     "invalidFileType": "Tipo de arquivo inválido. Selecione um arquivo .json ou .zip.",
     "invalidFileTypeJson": "Tipo de arquivo inválido. Selecione um arquivo .json.",
+    "importedNotes_few": "{{count}} notas importadas",
+    "importedNotes_many": "{{count}} notas importadas",
     "importedNotes_one": "{{count}} nota importada",
     "importedNotes_other": "{{count}} notas importadas",
     "skipped": "({{count}} ignoradas)",

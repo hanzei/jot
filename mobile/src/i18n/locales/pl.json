@@ -10,7 +10,8 @@
     "error": "Błąd",
     "unknown": "nieznany",
     "loading": "Ładowanie...",
-    "done": "Gotowe"
+    "done": "Gotowe",
+    "or": "lub"
   },
   "nav": {
     "settings": "Ustawienia",
@@ -53,7 +54,10 @@
     "serverSetupInputA11yLabel": "Pole URL serwera",
     "serverSetupSubmitA11yLabel": "Zweryfikuj serwer i kontynuuj",
     "serverSetupConnectionFailed": "Nie udało się połączyć z tym serwerem. Sprawdź adres URL i połączenie, a następnie spróbuj ponownie.",
-    "serverSetupConnectionInvalidServer": "Połączono, ale to nie wygląda na zgodny punkt API Jot."
+    "serverSetupConnectionInvalidServer": "Połączono, ale to nie wygląda na zgodny punkt API Jot.",
+    "localModeLink": "Użyj bez serwera",
+    "localModeHint": "Twoje notatki pozostają tylko na tym urządzeniu.",
+    "localModeFailed": "Nie udało się uruchomić trybu lokalnego. Spróbuj ponownie."
   },
   "dashboard": {
     "newNote": "Nowa notatka",
@@ -92,12 +96,15 @@
       "created_at": "Data utworzenia"
     },
     "sortAccessibilityLabel": "Sortuj według {{sortLabel}}",
+    "layoutToggleToGrid": "Przełącz na widok siatki",
+    "layoutToggleToList": "Przełącz na widok listy",
     "sortDisabledNotice": "Ręczne sortowanie jest wyłączone. Notatki są posortowane według {{sortLabel}}, więc przeciąganie i upuszczanie jest niedostępne.",
     "noteArchived": "Notatka zarchiwizowana",
     "noteUnarchived": "Notatka przywrócona z archiwum",
     "noteDeleted": "Notatka przeniesiona do kosza",
     "noteRestored": "Notatka przywrócona",
-    "undo": "Cofnij"
+    "undo": "Cofnij",
+    "toastActionHint": "Dotknij, aby {{action}}"
   },
   "settings": {
     "title": "Ustawienia",
@@ -200,6 +207,7 @@
   },
   "note": {
     "share": "Udostępnij",
+    "send": "Wyślij",
     "unpin": "Odepnij",
     "pin": "Przypnij",
     "unarchive": "Przywróć z archiwum",
@@ -226,6 +234,7 @@
     "failedSaveChanges": "Nie udało się zapisać zmian. Dotknij, aby ponowić.",
     "menuOptions": "Opcje notatki",
     "assignItem": "Przypisz element",
+    "removeItem": "Usuń element",
     "unassign": "Usuń przypisanie",
     "assignedTo": "Przypisano do {{name}}",
     "changeColor": "Kolor notatki",
@@ -242,7 +251,7 @@
     "updatedByAnotherUser": "Ta notatka została zaktualizowana przez innego użytkownika",
     "listItemLabel": "Element listy",
     "itemCheckbox": "Pole wyboru {{item}}",
-    "dragToReorder": "Przeciągnij, aby zmienić kolejność",
+    "dragToReorderIndent": "Przeciągnij, aby zmienić kolejność lub wciąć",
     "colorWhite": "Biały",
     "colorCoral": "Koral",
     "colorYellow": "Żółty",
@@ -262,7 +271,34 @@
     "outdentItem": "Usuń wcięcie",
     "itemsPasted_one": "1 element wklejony",
     "itemsPasted_other": "{{count}} elementy wklejone",
-    "filterByLabel": "Filtruj według etykiety: {{label}}"
+    "filterByLabel": "Filtruj według etykiety: {{label}}",
+    "saveFailedExitTitle": "Zapisywanie nie powiodło się",
+    "saveFailedExitMessage": "Nie można było zapisać zmian. Spróbuj ponownie lub odrzuć je, aby wyjść.",
+    "discardAndLeave": "Odrzuć i wyjdź"
+  },
+  "images": {
+    "openLightbox": "Wyświetl {{filename}}",
+    "moreImages": "Wyświetl {{count}} więcej zdjęć",
+    "lightboxPrevious": "Poprzednie zdjęcie",
+    "lightboxNext": "Następne zdjęcie",
+    "lightboxCounter": "{{current}} / {{total}}",
+    "addImage": "Dodaj obraz",
+    "camera": "Aparat",
+    "photoLibrary": "Biblioteka zdjęć",
+    "files": "Pliki",
+    "cameraPermissionDenied": "Aby zrobić zdjęcie, wymagany jest dostęp do aparatu.",
+    "libraryPermissionDenied": "Aby wybrać zdjęcie, wymagany jest dostęp do biblioteki zdjęć.",
+    "removeImage": "Usuń {{filename}}",
+    "removedToast": "Obraz usunięty",
+    "uploading": "Wysyłanie… {{percent}}%",
+    "uploadFailed": "Nie udało się wysłać obrazu",
+    "queuedOffline": "Czeka na wysłanie…",
+    "uploadQueuedToast": "Obraz zostanie wysłany, gdy wrócisz do sieci",
+    "retryUpload": "Ponów wysyłanie {{filename}}",
+    "dismissUpload": "Odrzuć {{filename}}",
+    "errorWrongType": "Można dodawać tylko obrazy.",
+    "errorTooLarge": "Obraz przekracza limit {{maxMB}} MB.",
+    "errorTooMany": "Notatka może zawierać maksymalnie {{max}} obrazów."
   },
   "labels": {
     "title": "Etykiety",
@@ -322,7 +358,9 @@
   },
   "offline": {
     "message": "Jesteś offline. Zmiany zostaną zsynchronizowane po ponownym połączeniu.",
-    "syncError": "Niektóre zmiany nie zostały jeszcze zsynchronizowane. Nastąpi automatyczna ponowna próba."
+    "serverConnecting": "Łączenie z serwerem…",
+    "syncError": "Niektóre zmiany nie zostały jeszcze zsynchronizowane. Nastąpi automatyczna ponowna próba.",
+    "revalidationError": "Nie można zweryfikować sesji z serwerem. Używane są lokalne dane."
   },
   "syncFailures": {
     "bannerCount_one": "Nie udało się zapisać {{count}} zmiany — Przejrzyj",
@@ -360,6 +398,8 @@
     "duplicateMessage": "Ten serwer jest już na liście.",
     "switchToExisting": "Przełącz na istniejący",
     "switchFailed": "Nie udało się przełączyć serwera.",
+    "sessionExpiredTitle": "Wymagane logowanie",
+    "sessionExpiredMessage": "Zapisana sesja dla „{{server}}” nie jest już ważna. Konto mogło zostać usunięte. Zaloguj się ponownie.",
     "addFailed": "Nie udało się dodać serwera.",
     "deleteButton": "Usuń",
     "deleteConfirmTitle": "Usuń serwer",
@@ -391,6 +431,40 @@
     "importing": "Importowanie...",
     "importButton": "Importuj"
   },
+  "upgrade": {
+    "settingsSectionTitle": "Połącz z serwerem",
+    "settingsSectionDescription": "Synchronizuj notatki z serwerem Jot. Twoje lokalne notatki zostaną przeniesione na serwer.",
+    "connectToServer": "Połącz z serwerem",
+    "title": "Połącz z serwerem",
+    "subtitle": "Wprowadź adres URL serwera Jot, aby utworzyć nowe konto i przenieść swoje notatki.",
+    "serverUrlLabel": "Adres URL serwera",
+    "serverUrlPlaceholder": "https://jot.przyklad.pl",
+    "continue": "Kontynuuj",
+    "registerTitle": "Utwórz konto",
+    "changeServer": "Zmień serwer",
+    "usernameTaken": "Ta nazwa użytkownika jest już zajęta. Wybierz inną.",
+    "checkingTitle": "Sprawdzanie zgodności",
+    "capabilityFailed": "Ten serwer nie obsługuje migracji notatek. Upewnij się, że używasz najnowszej wersji Jot.",
+    "emptinessFailed": "Konto zawiera już notatki lub etykiety. Migracja wymaga pustego konta.",
+    "fetchFailed": "Nie można połączyć się z serwerem. Sprawdź połączenie i spróbuj ponownie.",
+    "successTitle": "Wszystkie sprawdzenia zakończone pomyślnie",
+    "successSubtitle": "Twój serwer jest zgodny i gotowy. Migracja rozpocznie się w kolejnym kroku.",
+    "errorTitle": "Nie można połączyć",
+    "seedingTitle": "Przygotowanie migracji",
+    "migratingTitle": "Migrowanie Twoich notatek",
+    "migratingProgress": "Synchronizowanie {{processed}} z {{total}}",
+    "migrationCompleteTitle": "Migracja zakończona",
+    "migrationCompleteSubtitle": "Twoje notatki zostały przesłane na serwer.",
+    "deadLetterTitle": "Migracja wstrzymana",
+    "deadLetterSubtitle_one": "{{count}} zmiana nie mogła zostać zsynchronizowana z serwerem.",
+    "deadLetterSubtitle_other": "{{count}} zmian nie mogło zostać zsynchronizowanych z serwerem.",
+    "reviewFailedChanges": "Przeglądaj nieudane zmiany",
+    "retryMigration": "Ponów migrację",
+    "migrationFailed": "Migracja nie powiodła się. Sprawdź połączenie i spróbuj ponownie.",
+    "reconciling": "Synchronizowanie notatek z serwerem…",
+    "reconcileFailed": "Notatki mogą nie odzwierciedlać najnowszych danych serwera. Odśwież listę notatek.",
+    "resync": "Zsynchronizuj ponownie"
+  },
   "diagnostics": {
     "title": "Diagnostyka",
     "developerSection": "Deweloper",
@@ -412,6 +486,7 @@
     "degraded": "Ograniczona funkcjonalność",
     "recentLogs": "Ostatnie logi",
     "clearLogs": "Wyczyść logi",
+    "expandLogs": "Wyświetl pełne logi",
     "refresh": "Odśwież",
     "shareDiagnostics": "Udostępnij raport diagnostyczny",
     "yes": "Tak",

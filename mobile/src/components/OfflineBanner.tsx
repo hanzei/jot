@@ -1,17 +1,22 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { useTheme } from '../theme/ThemeContext';
+import type { TopBannerProps } from '../hooks/useTopBanners';
 import Banner from './Banner';
 
-export default function OfflineBanner() {
-  const { isConnected } = useNetworkStatus();
+/**
+ * Shown while the device is offline. Visibility and safe-area ownership are
+ * decided centrally by {@link useVisibleTopBanners}; this component only
+ * supplies the presentation.
+ */
+export default function OfflineBanner({ visible, applyTopInset }: TopBannerProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
 
   return (
     <Banner
-      visible={!isConnected}
+      visible={visible}
+      applyTopInset={applyTopInset}
       icon="cloud-offline-outline"
       text={t('offline.message')}
       backgroundColor={colors.offlineBanner}

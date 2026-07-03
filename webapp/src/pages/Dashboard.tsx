@@ -3,13 +3,11 @@ import { PlusIcon, DocumentTextIcon, ArchiveBoxIcon, TrashIcon, ClipboardDocumen
 import { useTranslation } from 'react-i18next';
 import { notes, users as usersApi } from '@/utils/api';
 import { getUser, getSettings, setSettings } from '@/utils/auth';
-import type { Note, User, SSEEvent, NoteSort } from '@jot/shared';
-import { useSSE } from '@/hooks/useSSE';
-import { SSEStatusIndicator } from '@/components/SSEStatusIndicator';
-import { useSearchParams, useParams } from 'react-router';
+import { UPLOAD_MAX_BYTES, type Note, type NoteImage, type User, type SSEEvent, type NoteSort } from '@jot/shared';
+import { useSearchParams, useParams, useNavigate } from 'react-router';
 import PageContent from '@/components/PageContent';
 import SearchBar from '@/components/SearchBar';
-import SortableNoteCard from '@/components/SortableNoteCard';
+import AnimatedNoteGrid from '@/components/AnimatedNoteGrid';
 import NoteModal from '@/components/NoteModal';
 import ShareModal from '@/components/ShareModal';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -30,9 +28,7 @@ import {
 } from '@dnd-kit/core';
 import {
   arrayMove,
-  SortableContext,
   sortableKeyboardCoordinates,
-  rectSortingStrategy,
 } from '@dnd-kit/sortable';
 import {
   restrictToWindowEdges,
@@ -41,16 +37,24 @@ import {
 const SEARCH_DEBOUNCE_MS = 300;
 const isApplePlatform = () => typeof navigator !== 'undefined' && /mac|iphone|ipad|ipod/i.test(navigator.platform);
 
-export default function Dashboard() {
+interface DashboardProps {
+  // Server-configured upload cap (falls back to the shared default if the
+  // parent hasn't fetched /config yet, or the route is used without it).
+  uploadMaxBytes?: number;
+}
+
+export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: DashboardProps) {
   const { t } = useTranslation();
   const { showToast } = useToast();
   const { noteId: noteIdParam } = useParams<{ noteId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const {
     labels: labelsList,
     loadLabels,
     loadLabelCounts,
     registerLabelCallbacks,
+    registerSSECallbacks,
     setSearchBar,
   } = useAuthenticatedLayout();
   const [notesList, setNotesList] = useState<Note[]>([]);
@@ -73,6 +77,9 @@ export default function Dashboard() {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [sharingNote, setSharingNote] = useState<Note | null>(null);
   const [usersById, setUsersById] = useState<Map<string, User>>(new Map());
+  // Whether each grid section still has cards rendered (live or animating out),
+  // so the last card can finish its exit animation before the section unmounts.
+  const [sectionActive, setSectionActive] = useState({ pinned: false, other: false, archived: false });
   const user = getUser();
   const isMountedRef = useRef(true);
   const selectedLabelIdRef = useRef<string | null>(initialLabel);
@@ -311,9 +318,9 @@ export default function Dashboard() {
       openNoteIdRef.current = null;
       const returnTo = returnPathRef.current;
       returnPathRef.current = '/';
-      window.history.replaceState(null, '', returnTo);
+      navigate(returnTo, { replace: true });
     }
-  }, []);
+  }, [navigate]);
 
   const openNoteFromUrl = useCallback((noteId: string) => {
     openNoteIdRef.current = null;
@@ -407,6 +414,28 @@ export default function Dashboard() {
       return;
     }
 
+    if (event.type === 'note_image_added' || event.type === 'note_image_removed') {
+      const { note_id: imageNoteId } = event.data;
+      const patchImages = (imgs: NoteImage[] | undefined): NoteImage[] | undefined => {
+        if (event.type === 'note_image_added') {
+          const image = event.data.image;
+          if (!image || imgs?.some(img => img.id === image.id)) return imgs;
+          return [...(imgs ?? []), image];
+        }
+        const imageId = event.data.image_id;
+        if (!imageId || !imgs) return imgs;
+        return imgs.filter(img => img.id !== imageId);
+      };
+
+      setEditingNote(prev => (prev && prev.id === imageNoteId ? { ...prev, images: patchImages(prev.images) } : prev));
+      setNotesList(prev => prev.map(n => (n.id === imageNoteId ? { ...n, images: patchImages(n.images) } : n)));
+      // Also reconcile via a full reload, same as every other event type below —
+      // this is the fallback for a note whose note_created hasn't loaded yet, so
+      // an image added just after creation isn't silently dropped from the list.
+      loadNotes();
+      return;
+    }
+
     const { note_id } = event.data;
     const currentUserLostAccess =
       event.type === 'note_deleted' ||
@@ -441,10 +470,10 @@ export default function Dashboard() {
     }
   }, [editingNote, sharingNote, loadNotes, loadLabels, loadLabelCounts, setSearchParams, user?.id, restoreReturnUrl]);
 
-  const sseStatus = useSSE({
-    onEvent: handleSSEEvent,
-    onConnected: loadNotes,
-  });
+  useEffect(() => {
+    registerSSECallbacks({ onEvent: handleSSEEvent, onConnected: loadNotes });
+    return () => registerSSECallbacks({});
+  }, [registerSSECallbacks, handleSSEEvent, loadNotes]);
 
   const handleCreateNote = useCallback(() => {
     lastFocusedElementRef.current = document.activeElement;
@@ -869,6 +898,30 @@ export default function Dashboard() {
     return [...pinned, ...other];
   }, [archivedMatches, noteSort]);
   const dragReorderingDisabled = showArchived || showBin || showMyTasks || isSearching || isFilteringByLabel || noteSort !== 'manual';
+  // Signature of the active view/filter/search. The grids swap instantly when it
+  // changes, so only in-view card changes (create, delete, archive, …) animate.
+  const viewKey = `${showArchived ? 'archive' : showBin ? 'bin' : showMyTasks ? 'my-tasks' : 'notes'}|${selectedLabelId ?? ''}|${debouncedSearchQuery}`;
+  const handlePinnedActive = useCallback((active: boolean) => {
+    setSectionActive(prev => (prev.pinned === active ? prev : { ...prev, pinned: active }));
+  }, []);
+  const handleOtherActive = useCallback((active: boolean) => {
+    setSectionActive(prev => (prev.other === active ? prev : { ...prev, other: active }));
+  }, []);
+  const handleArchivedActive = useCallback((active: boolean) => {
+    setSectionActive(prev => (prev.archived === active ? prev : { ...prev, archived: active }));
+  }, []);
+  // Keep a section (and the grid as a whole) rendered while its last card is
+  // still animating out, even though the live note list is already empty.
+  const renderPinnedSection = displayedPinned.length > 0 || sectionActive.pinned;
+  const renderOtherSection = displayedOther.length > 0 || sectionActive.other;
+  const renderArchivedSection = displayedArchived.length > 0 || sectionActive.archived;
+  // Every note id currently shown across all sections. Lets each grid tell a
+  // genuine removal (animate out) apart from a section move like pin/unpin
+  // (drop instantly, since the note re-appears in another section).
+  const displayedIds = useMemo(
+    () => new Set([...displayedPinned, ...displayedOther, ...displayedArchived].map(note => note.id)),
+    [displayedPinned, displayedOther, displayedArchived],
+  );
   const activeSortLabel = t(`dashboard.sortOption.${noteSort}`);
   const focusSearchShortcutHint = isApplePlatform() ? '⌘ + F' : t('keyboardShortcuts.focusSearchKey');
   const showCreateFirstNoteCta =
@@ -995,7 +1048,6 @@ export default function Dashboard() {
 
   return (
     <PageContent>
-        <SSEStatusIndicator status={sseStatus} />
         {/* Create note button — hidden in bin view */}
         {!showBin && (
           <div className="mb-8">
@@ -1032,7 +1084,7 @@ export default function Dashboard() {
         {noteSort !== 'manual' && !sortWarningDismissed && (
           <div
             data-testid="manual-reorder-disabled-notice"
-            className="mb-6 flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900/70 dark:bg-blue-950/40 dark:text-blue-200"
+            className="mb-6 flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900/70 dark:bg-blue-950/40 dark:text-blue-200 animate-fade-in motion-reduce:animate-none"
           >
             <ArrowsUpDownIcon className="mt-0.5 h-4 w-4 shrink-0" />
             <div className="flex-1">
@@ -1049,11 +1101,11 @@ export default function Dashboard() {
           </div>
         )}
 
-        {displayedPinned.length === 0 && displayedOther.length === 0 && displayedArchived.length === 0 ? (
+        {!renderPinnedSection && !renderOtherSection && !renderArchivedSection ? (
           <div className="py-12">
             <div
               data-testid="dashboard-empty-state"
-              className="mx-auto flex max-w-2xl flex-col items-center rounded-2xl border border-gray-200 bg-white px-6 py-10 text-center shadow-sm dark:border-slate-700 dark:bg-slate-800"
+              className="mx-auto flex max-w-2xl flex-col items-center rounded-2xl border border-gray-200 bg-white px-6 py-10 text-center shadow-sm dark:border-slate-700 dark:bg-slate-800 animate-pop-in motion-reduce:animate-none"
             >
               <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-100 text-gray-500 dark:bg-slate-700 dark:text-slate-200">
                 {emptyState.icon}
@@ -1088,110 +1140,96 @@ export default function Dashboard() {
           >
             <div className="space-y-8">
               {/* Pinned notes section */}
-              {displayedPinned.length > 0 && (
+              {renderPinnedSection && (
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-                    <svg className="h-4 w-4 text-blue-500 dark:text-blue-400 mr-2" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
-                    </svg>
-                    {t('dashboard.pinned')}
-                  </h2>
-                  <SortableContext
-                    items={displayedPinned.map(note => note.id)}
-                    strategy={rectSortingStrategy}
-                  >
-                    <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-0">
-                      {displayedPinned.map((note) => (
-                        <SortableNoteCard
-                          key={note.id}
-                          note={note}
-                          onEdit={handleEditNote}
-                          onDelete={handleDeleteNote}
-                          onDuplicate={handleDuplicateNote}
-                          onShare={handleShareNote}
-                          onRestore={handleRestoreNote}
-                          onPermanentlyDelete={handlePermanentlyDeleteNote}
-                          currentUserId={user?.id}
-                          usersById={usersById}
-                          disabled={dragReorderingDisabled}
-                          inBin={showBin}
-                          onRefresh={loadNotes}
-                          onLabelClick={!showBin ? handleLabelClick : undefined}
-                        />
-                      ))}
-                    </div>
-                  </SortableContext>
+                  {displayedPinned.length > 0 && (
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+                      <svg className="h-4 w-4 text-blue-500 dark:text-blue-400 mr-2" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
+                      </svg>
+                      {t('dashboard.pinned')}
+                    </h2>
+                  )}
+                  <AnimatedNoteGrid
+                    key="pinned"
+                    viewKey={viewKey}
+                    presentElsewhere={displayedIds}
+                    onActiveChange={handlePinnedActive}
+                    notes={displayedPinned}
+                    onEdit={handleEditNote}
+                    onDelete={handleDeleteNote}
+                    onDuplicate={handleDuplicateNote}
+                    onShare={handleShareNote}
+                    onRestore={handleRestoreNote}
+                    onPermanentlyDelete={handlePermanentlyDeleteNote}
+                    currentUserId={user?.id}
+                    usersById={usersById}
+                    disabled={dragReorderingDisabled}
+                    inBin={showBin}
+                    onRefresh={loadNotes}
+                    onLabelClick={!showBin ? handleLabelClick : undefined}
+                  />
                 </div>
               )}
 
               {/* Other notes section */}
-              {displayedOther.length > 0 && (
+              {renderOtherSection && (
                 <div>
-                  {displayedPinned.length > 0 && (
+                  {displayedOther.length > 0 && displayedPinned.length > 0 && (
                     <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                       {t('dashboard.otherNotes')}
                     </h2>
                   )}
-                  <SortableContext
-                    items={displayedOther.map(note => note.id)}
-                    strategy={rectSortingStrategy}
-                  >
-                    <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-0">
-                      {displayedOther.map((note) => (
-                        <SortableNoteCard
-                          key={note.id}
-                          note={note}
-                          onEdit={handleEditNote}
-                          onDelete={handleDeleteNote}
-                          onDuplicate={handleDuplicateNote}
-                          onShare={handleShareNote}
-                          onRestore={handleRestoreNote}
-                          onPermanentlyDelete={handlePermanentlyDeleteNote}
-                          currentUserId={user?.id}
-                          usersById={usersById}
-                          disabled={dragReorderingDisabled}
-                          inBin={showBin}
-                          onRefresh={loadNotes}
-                          onLabelClick={!showBin ? handleLabelClick : undefined}
-                        />
-                      ))}
-                    </div>
-                  </SortableContext>
+                  <AnimatedNoteGrid
+                    key="other"
+                    viewKey={viewKey}
+                    presentElsewhere={displayedIds}
+                    onActiveChange={handleOtherActive}
+                    notes={displayedOther}
+                    onEdit={handleEditNote}
+                    onDelete={handleDeleteNote}
+                    onDuplicate={handleDuplicateNote}
+                    onShare={handleShareNote}
+                    onRestore={handleRestoreNote}
+                    onPermanentlyDelete={handlePermanentlyDeleteNote}
+                    currentUserId={user?.id}
+                    usersById={usersById}
+                    disabled={dragReorderingDisabled}
+                    inBin={showBin}
+                    onRefresh={loadNotes}
+                    onLabelClick={!showBin ? handleLabelClick : undefined}
+                  />
                 </div>
               )}
 
               {/* Archived search results section */}
-              {displayedArchived.length > 0 && (
+              {renderArchivedSection && (
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-                    <ArchiveBoxIcon aria-hidden="true" className="h-4 w-4 text-gray-500 dark:text-gray-400 mr-2" />
-                    {t('dashboard.archivedResults')}
-                  </h2>
-                  <SortableContext
-                    items={displayedArchived.map(note => note.id)}
-                    strategy={rectSortingStrategy}
-                  >
-                    <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-0">
-                      {displayedArchived.map((note) => (
-                        <SortableNoteCard
-                          key={note.id}
-                          note={note}
-                          onEdit={handleEditNote}
-                          onDelete={handleDeleteNote}
-                          onDuplicate={handleDuplicateNote}
-                          onShare={handleShareNote}
-                          onRestore={handleRestoreNote}
-                          onPermanentlyDelete={handlePermanentlyDeleteNote}
-                          currentUserId={user?.id}
-                          usersById={usersById}
-                          disabled={true}
-                          inBin={showBin}
-                          onRefresh={loadNotes}
-                          onLabelClick={!showBin ? handleLabelClick : undefined}
-                        />
-                      ))}
-                    </div>
-                  </SortableContext>
+                  {displayedArchived.length > 0 && (
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+                      <ArchiveBoxIcon aria-hidden="true" className="h-4 w-4 text-gray-500 dark:text-gray-400 mr-2" />
+                      {t('dashboard.archivedResults')}
+                    </h2>
+                  )}
+                  <AnimatedNoteGrid
+                    key="archived"
+                    viewKey={viewKey}
+                    presentElsewhere={displayedIds}
+                    onActiveChange={handleArchivedActive}
+                    notes={displayedArchived}
+                    onEdit={handleEditNote}
+                    onDelete={handleDeleteNote}
+                    onDuplicate={handleDuplicateNote}
+                    onShare={handleShareNote}
+                    onRestore={handleRestoreNote}
+                    onPermanentlyDelete={handlePermanentlyDeleteNote}
+                    currentUserId={user?.id}
+                    usersById={usersById}
+                    disabled={true}
+                    inBin={showBin}
+                    onRefresh={loadNotes}
+                    onLabelClick={!showBin ? handleLabelClick : undefined}
+                  />
                 </div>
               )}
             </div>
@@ -1227,6 +1265,7 @@ export default function Dashboard() {
             isOwner={!editingNote || editingNote.user_id === user?.id}
             usersById={usersById}
             currentUserId={user?.id}
+            uploadMaxBytes={uploadMaxBytes}
           />
         )}
 

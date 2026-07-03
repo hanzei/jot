@@ -1,7 +1,5 @@
 import React from 'react';
-import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
-import { PanResponder, StyleSheet } from 'react-native';
-import type { GestureResponderEvent, PanResponderGestureState } from 'react-native';
+import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { VALIDATION } from '@jot/shared';
 import NoteEditorScreen from '../src/screens/NoteEditorScreen';
 
@@ -21,20 +19,6 @@ const mockUpdateItemMutateAsync = jest.fn();
 const mockDeleteItemMutateAsync = jest.fn();
 const mockReorderItemsMutateAsync = jest.fn();
 const mockUseOfflineNote = jest.fn();
-const mockGestureResponderEvent = {} as GestureResponderEvent;
-const createPanState = (dx: number, dy: number): PanResponderGestureState => ({
-  stateID: 1,
-  moveX: 0,
-  moveY: 0,
-  x0: 0,
-  y0: 0,
-  dx,
-  dy,
-  vx: 0,
-  vy: 0,
-  numberActiveTouches: 1,
-  _accountsForMovesUpTo: 0,
-});
 
 jest.mock('@react-navigation/native', () => ({
   __esModule: true,
@@ -73,23 +57,7 @@ jest.mock('expo-haptics', () => ({
   NotificationFeedbackType: { Error: 'error' },
 }));
 
-jest.mock('react-native-draggable-flatlist', () => {
-  const ReactNative = jest.requireActual('react-native') as typeof import('react-native');
-  const ReactModule = jest.requireActual('react') as typeof import('react');
-  return {
-    __esModule: true,
-    default: ({ data, renderItem }: { data: Array<{ id: string }>; renderItem: (args: { item: { id: string }; drag: () => void; isActive: boolean }) => React.ReactNode }) => (
-      <ReactNative.View>
-        {data.map((item) => (
-          <ReactModule.Fragment key={item.id}>
-            {renderItem({ item, drag: () => {}, isActive: false })}
-          </ReactModule.Fragment>
-        ))}
-      </ReactNative.View>
-    ),
-    ScaleDecorator: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  };
-});
+// react-native-reorderable-list is mocked once globally in jest.setup.js.
 
 jest.mock('../src/hooks/useNotes', () => ({
   __esModule: true,
@@ -125,6 +93,23 @@ jest.mock('../src/hooks/useNotes', () => ({
   }),
 }));
 
+jest.mock('../src/hooks/useNoteImages', () => ({
+  __esModule: true,
+  useUploadNoteImage: () => ({
+    mutateAsync: jest.fn(),
+  }),
+  useDeleteNoteImage: () => ({
+    mutateAsync: jest.fn(),
+  }),
+}));
+
+jest.mock('../src/hooks/usePendingImageUploads', () => ({
+  __esModule: true,
+  usePendingImageUploads: () => [],
+  useRetryPendingImageUpload: () => ({ mutate: jest.fn() }),
+  useDismissPendingImageUpload: () => ({ mutate: jest.fn() }),
+}));
+
 jest.mock('../src/hooks/useOfflineNotes', () => ({
   __esModule: true,
   useOfflineNote: () => mockUseOfflineNote(),
@@ -133,6 +118,7 @@ jest.mock('../src/hooks/useOfflineNotes', () => ({
 jest.mock('../src/store/SSEContext', () => ({
   __esModule: true,
   useSSESubscription: jest.fn(),
+  useSSEContext: jest.fn(() => ({ sseReconnecting: false })),
 }));
 
 jest.mock('../src/components/LabelPicker', () => ({
@@ -206,14 +192,6 @@ jest.mock('../src/i18n', () => ({
 }));
 
 describe('NoteEditorScreen list submit behavior', () => {
-  function getLastPanResponderConfig(createSpy: jest.SpiedFunction<typeof PanResponder.create>, callsBefore: number) {
-    const configs = createSpy.mock.calls
-      .slice(callsBefore)
-      .map(([config]) => config)
-      .filter((config) => typeof config.onPanResponderRelease === 'function');
-    return configs[configs.length - 1];
-  }
-
   afterEach(() => {
     jest.restoreAllMocks();
   });
@@ -242,6 +220,220 @@ describe('NoteEditorScreen list submit behavior', () => {
 
     await waitFor(() => {
       expect(getAllByTestId('list-item-text').length).toBe(baselineCount + 1);
+    });
+  });
+
+  it('pressing Enter at the start of a non-empty item inserts an empty item before it', async () => {
+    const { getByTestId, getAllByTestId } = render(<NoteEditorScreen />);
+
+    fireEvent.press(getByTestId('toggle-note-type'));
+    fireEvent.press(getByTestId('add-list-item'));
+
+    const input = getAllByTestId('list-item-text')[0];
+    fireEvent.changeText(input, 'hello');
+    fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 0, end: 0 } } });
+    fireEvent(input, 'submitEditing');
+
+    await waitFor(() => {
+      const inputsAfter = getAllByTestId('list-item-text');
+      expect(inputsAfter).toHaveLength(2);
+      expect(inputsAfter[0].props.value).toBe('');
+      expect(inputsAfter[1].props.value).toBe('hello');
+    });
+  });
+
+  it('pressing Enter in the middle of an item splits it into two items at the cursor', async () => {
+    const { getByTestId, getAllByTestId } = render(<NoteEditorScreen />);
+
+    fireEvent.press(getByTestId('toggle-note-type'));
+    fireEvent.press(getByTestId('add-list-item'));
+
+    const input = getAllByTestId('list-item-text')[0];
+    fireEvent.changeText(input, 'helloworld');
+    fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 5, end: 5 } } });
+    fireEvent(input, 'submitEditing');
+
+    await waitFor(() => {
+      const inputsAfter = getAllByTestId('list-item-text');
+      expect(inputsAfter).toHaveLength(2);
+      expect(inputsAfter[0].props.value).toBe('hello');
+      expect(inputsAfter[1].props.value).toBe('world');
+    });
+  });
+
+  it('split/insert-before new items inherit the current item\'s group and assignee', async () => {
+    const existingNote = {
+      id: 'note-split',
+      user_id: 'u1',
+      title: 'Split test',
+      content: '',
+      note_type: 'list',
+      color: '#ffffff',
+      pinned: false,
+      archived: false,
+      position: 0,
+      checked_items_collapsed: false,
+      is_shared: false,
+      deleted_at: null,
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:00.000Z',
+      labels: [],
+      shared_with: [],
+      items: [
+        {
+          id: 'parent-item',
+          note_id: 'note-split',
+          text: 'parent',
+          completed: false,
+          position: 0,
+          parent_id: null,
+          assigned_to: '',
+          created_at: '2026-01-01T00:00:00.000Z',
+          updated_at: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'child-item',
+          note_id: 'note-split',
+          text: 'helloworld',
+          completed: false,
+          position: 1,
+          parent_id: 'parent-item',
+          assigned_to: 'user1',
+          created_at: '2026-01-01T00:00:00.000Z',
+          updated_at: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    };
+
+    mockUseRoute.mockReturnValue({ params: { noteId: 'note-split' } });
+    mockUseOfflineNote.mockReturnValue({ data: existingNote });
+    mockCreateItemMutateAsync.mockClear();
+
+    const { getAllByTestId } = render(<NoteEditorScreen />);
+
+    const input = getAllByTestId('list-item-text')[1];
+    fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 5, end: 5 } } });
+    fireEvent(input, 'submitEditing');
+
+    await waitFor(() => {
+      expect(mockCreateItemMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          noteId: 'note-split',
+          item: expect.objectContaining({
+            text: 'world',
+            parent_id: 'parent-item',
+            assigned_to: 'user1',
+          }),
+        }),
+      );
+    });
+  });
+
+  it('pressing Enter at the start of a non-empty completed item inserts an empty item before it', async () => {
+    const existingNote = {
+      id: 'note-split-completed-start',
+      user_id: 'u1',
+      title: 'Split completed test',
+      content: '',
+      note_type: 'list',
+      color: '#ffffff',
+      pinned: false,
+      archived: false,
+      position: 0,
+      checked_items_collapsed: false,
+      is_shared: false,
+      deleted_at: null,
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:00.000Z',
+      labels: [],
+      shared_with: [],
+      items: [
+        {
+          id: 'completed-item',
+          note_id: 'note-split-completed-start',
+          text: 'hello',
+          completed: true,
+          position: 0,
+          parent_id: null,
+          assigned_to: '',
+          created_at: '2026-01-01T00:00:00.000Z',
+          updated_at: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    };
+
+    mockUseRoute.mockReturnValue({ params: { noteId: 'note-split-completed-start' } });
+    mockUseOfflineNote.mockReturnValue({ data: existingNote });
+
+    const { getByTestId, getAllByTestId } = render(<NoteEditorScreen />);
+
+    expect(getByTestId('checked-items-section')).toBeTruthy();
+
+    const input = getAllByTestId('list-item-text')[0];
+    fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 0, end: 0 } } });
+    fireEvent(input, 'submitEditing');
+
+    await waitFor(() => {
+      const inputsAfter = getAllByTestId('list-item-text');
+      expect(inputsAfter).toHaveLength(2);
+      // New (uncompleted) blank item renders above the completed section;
+      // the completed item's own text is untouched.
+      expect(inputsAfter[0].props.value).toBe('');
+      expect(inputsAfter[1].props.value).toBe('hello');
+    });
+  });
+
+  it('pressing Enter in the middle of a completed item splits it into two items at the cursor', async () => {
+    const existingNote = {
+      id: 'note-split-completed-mid',
+      user_id: 'u1',
+      title: 'Split completed test',
+      content: '',
+      note_type: 'list',
+      color: '#ffffff',
+      pinned: false,
+      archived: false,
+      position: 0,
+      checked_items_collapsed: false,
+      is_shared: false,
+      deleted_at: null,
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:00.000Z',
+      labels: [],
+      shared_with: [],
+      items: [
+        {
+          id: 'completed-item',
+          note_id: 'note-split-completed-mid',
+          text: 'helloworld',
+          completed: true,
+          position: 0,
+          parent_id: null,
+          assigned_to: '',
+          created_at: '2026-01-01T00:00:00.000Z',
+          updated_at: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    };
+
+    mockUseRoute.mockReturnValue({ params: { noteId: 'note-split-completed-mid' } });
+    mockUseOfflineNote.mockReturnValue({ data: existingNote });
+
+    const { getByTestId, getAllByTestId } = render(<NoteEditorScreen />);
+
+    expect(getByTestId('checked-items-section')).toBeTruthy();
+
+    const input = getAllByTestId('list-item-text')[0];
+    fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 5, end: 5 } } });
+    fireEvent(input, 'submitEditing');
+
+    await waitFor(() => {
+      const inputsAfter = getAllByTestId('list-item-text');
+      expect(inputsAfter).toHaveLength(2);
+      // The split-off remainder is a new (uncompleted) item, rendered above
+      // the still-completed original.
+      expect(inputsAfter[0].props.value).toBe('world');
+      expect(inputsAfter[1].props.value).toBe('hello');
     });
   });
 
@@ -342,82 +534,6 @@ describe('NoteEditorScreen list submit behavior', () => {
 
     await waitFor(() => {
       expect(mockUpdateMutateAsync).not.toHaveBeenCalled();
-    });
-  });
-
-  it('updates list item indentation from horizontal swipe gesture', async () => {
-    const panResponderSpy = jest.spyOn(PanResponder, 'create');
-    const callsBefore = panResponderSpy.mock.calls.length;
-    const { getByTestId, getAllByTestId } = render(<NoteEditorScreen />);
-
-    fireEvent.press(getByTestId('toggle-note-type'));
-    // Add two items so the second can be nested under the first
-    fireEvent.press(getByTestId('add-list-item'));
-    fireEvent.press(getByTestId('add-list-item'));
-
-    // Both items start with no indentation
-    expect(StyleSheet.flatten(getAllByTestId('list-item-row')[1].props.style)?.marginLeft).toBe(0);
-
-    // Get the last PanResponder created — belongs to the second (to-be-indented) item
-    const secondItemConfig = getLastPanResponderConfig(panResponderSpy, callsBefore);
-    expect(secondItemConfig).toBeDefined();
-
-    // Swipe right on the second item to nest it under the first
-    await act(async () => {
-      secondItemConfig?.onPanResponderRelease?.(mockGestureResponderEvent, createPanState(60, 0));
-    });
-
-    await waitFor(() => {
-      expect(StyleSheet.flatten(getAllByTestId('list-item-row')[1].props.style)?.marginLeft).toBe(
-        VALIDATION.INDENT_PX_PER_LEVEL,
-      );
-    });
-
-    // Re-query the latest configs after re-render
-    const secondItemConfigAfter = getLastPanResponderConfig(panResponderSpy, callsBefore);
-
-    // Swipe left to outdent
-    await act(async () => {
-      secondItemConfigAfter?.onPanResponderRelease?.(mockGestureResponderEvent, createPanState(-60, 0));
-    });
-
-    await waitFor(() => {
-      expect(StyleSheet.flatten(getAllByTestId('list-item-row')[1].props.style)?.marginLeft).toBe(0);
-    });
-  });
-
-  it('indents and outdents list item via toolbar buttons', async () => {
-    const { getByTestId, getAllByTestId } = render(<NoteEditorScreen />);
-
-    fireEvent.press(getByTestId('toggle-note-type'));
-    // Add two items so the second can be nested under the first
-    fireEvent.press(getByTestId('add-list-item'));
-    fireEvent.press(getByTestId('add-list-item'));
-
-    const secondItemRow = getAllByTestId('list-item-row')[1];
-    expect(StyleSheet.flatten(secondItemRow.props.style)?.marginLeft).toBe(0);
-
-    // Focus the second list item input to set focusedListItemId
-    fireEvent(getAllByTestId('list-item-text')[1], 'focus', { nativeEvent: { target: 2 } });
-
-    // Tap indent button — nests second item under first
-    await act(async () => {
-      fireEvent.press(getByTestId('list-indent-btn'));
-    });
-
-    await waitFor(() => {
-      expect(StyleSheet.flatten(getAllByTestId('list-item-row')[1].props.style)?.marginLeft).toBe(
-        VALIDATION.INDENT_PX_PER_LEVEL,
-      );
-    });
-
-    // Tap outdent button — promotes back to top-level
-    await act(async () => {
-      fireEvent.press(getByTestId('list-outdent-btn'));
-    });
-
-    await waitFor(() => {
-      expect(StyleSheet.flatten(getAllByTestId('list-item-row')[1].props.style)?.marginLeft).toBe(0);
     });
   });
 

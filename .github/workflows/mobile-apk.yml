@@ -49,12 +49,30 @@ jobs:
 
       - name: Configure gradle.properties
         run: |
-          echo "reactNativeArchitectures=arm64-v8a" >> ./mobile/android/gradle.properties
-          echo "org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g" >> ./mobile/android/gradle.properties
+          file=./mobile/android/gradle.properties
+          # Set a property to a single value, replacing any existing definition.
+          # expo prebuild writes some of these (e.g. reactNativeArchitectures,
+          # org.gradle.jvmargs) into the generated file already, so appending would
+          # leave a duplicate key whose effective value is ambiguous. Replacing
+          # in place guarantees our value is the only one present.
+          set_prop() {
+            if grep -q "^$1=" "$file"; then
+              sed -i "s|^$1=.*|$1=$2|" "$file"
+            else
+              printf '%s=%s\n' "$1" "$2" >> "$file"
+            fi
+          }
+          # Build only for arm64-v8a to keep CI fast — it is the only ABI we ship.
+          set_prop reactNativeArchitectures arm64-v8a
+          set_prop org.gradle.jvmargs "-Xmx4g -XX:MaxMetaspaceSize=1g"
+          # Reuse task outputs across runs via the Gradle build cache (persisted by
+          # gradle/actions/setup-gradle) and build modules in parallel.
+          set_prop org.gradle.caching true
+          set_prop org.gradle.parallel true
           # Required by expo-modules-autolinking's ExpoAutolinkingPlugin to run the
           # mirror-kotlin-inline-modules command. expo prebuild should set this, but
           # we set it explicitly here to guard against cases where it is absent.
-          echo "expo.inlineModules.watchedDirectories=[]" >> ./mobile/android/gradle.properties
+          set_prop expo.inlineModules.watchedDirectories "[]"
 
       - name: Write keystore
         run: echo "$KEYSTORE_BASE64" | base64 -d > ./mobile/android/release.keystore
@@ -64,7 +82,15 @@ jobs:
       - uses: gradle/actions/setup-gradle@50e97c2cd7a37755bbfafc9c5b7cafaece252f6e # v6
 
       - name: Build release APK
-        run: ./gradlew assembleRelease
+        # -P reactNativeArchitectures is the React Native Gradle plugin's documented
+        # override and takes precedence over gradle.properties, so the build only
+        # compiles native code for arm64-v8a. Android lint (lintVital*) is skipped:
+        # it adds several minutes and is not needed to produce the APK artifact.
+        run: >-
+          ./gradlew assembleRelease
+          -PreactNativeArchitectures=arm64-v8a
+          -x lintVitalAnalyzeRelease
+          -x lintVitalRelease
         working-directory: ./mobile/android
         env:
           ANDROID_KEYSTORE_PATH: release.keystore

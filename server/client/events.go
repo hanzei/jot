@@ -25,8 +25,17 @@ type SSELabelsData struct {
 	Label *Label `json:"label"`
 }
 
+// SSENoteImageData is the Data payload for note_image_added/note_image_removed
+// SSE events. Image is set for note_image_added; ImageID is set for
+// note_image_removed (the row is already gone by the time that event fires).
+type SSENoteImageData struct {
+	NoteID  string     `json:"note_id"`
+	Image   *NoteImage `json:"image,omitempty"`
+	ImageID string     `json:"image_id,omitempty"`
+}
+
 // SSEEvent is a single event received from the server-sent events stream.
-// Depending on Type, NoteData, LabelsData, or ProfileData may be non-nil.
+// Depending on Type, NoteData, LabelsData, ProfileData, or ImageData may be non-nil.
 type SSEEvent struct {
 	Type         string
 	SourceUserID string
@@ -34,6 +43,7 @@ type SSEEvent struct {
 	NoteData     *SSENoteData        // set for note_created/updated/deleted/shared/unshared
 	LabelsData   *SSELabelsData      // set for labels_changed
 	ProfileData  *SSEProfileIconData // set for profile_icon_updated
+	ImageData    *SSENoteImageData   // set for note_image_added/note_image_removed
 }
 
 // sseEventWire is the raw JSON shape of an SSE event envelope.
@@ -42,6 +52,18 @@ type sseEventWire struct {
 	SourceUserID string          `json:"source_user_id"`
 	TargetUserID string          `json:"target_user_id,omitempty"`
 	Data         json.RawMessage `json:"data,omitempty"`
+}
+
+// unmarshalSSEData decodes raw into a new *T, treating an empty payload as a
+// zero-valued (non-nil) result rather than an error.
+func unmarshalSSEData[T any](raw json.RawMessage) (*T, bool) {
+	var d T
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw, &d); err != nil {
+			return nil, false
+		}
+	}
+	return &d, true
 }
 
 func parseSSEEvent(raw []byte) (SSEEvent, bool) {
@@ -54,31 +76,22 @@ func parseSSEEvent(raw []byte) (SSEEvent, bool) {
 		SourceUserID: wire.SourceUserID,
 		TargetUserID: wire.TargetUserID,
 	}
+
+	var ok bool
 	switch wire.Type {
 	case "note_created", "note_updated", "note_deleted", "note_shared", "note_unshared":
-		var d SSENoteData
-		if len(wire.Data) > 0 {
-			if err := json.Unmarshal(wire.Data, &d); err != nil {
-				return SSEEvent{}, false
-			}
-		}
-		ev.NoteData = &d
+		ev.NoteData, ok = unmarshalSSEData[SSENoteData](wire.Data)
 	case "labels_changed":
-		var d SSELabelsData
-		if len(wire.Data) > 0 {
-			if err := json.Unmarshal(wire.Data, &d); err != nil {
-				return SSEEvent{}, false
-			}
-		}
-		ev.LabelsData = &d
+		ev.LabelsData, ok = unmarshalSSEData[SSELabelsData](wire.Data)
 	case "profile_icon_updated":
-		var d SSEProfileIconData
-		if len(wire.Data) > 0 {
-			if err := json.Unmarshal(wire.Data, &d); err != nil {
-				return SSEEvent{}, false
-			}
-		}
-		ev.ProfileData = &d
+		ev.ProfileData, ok = unmarshalSSEData[SSEProfileIconData](wire.Data)
+	case "note_image_added", "note_image_removed":
+		ev.ImageData, ok = unmarshalSSEData[SSENoteImageData](wire.Data)
+	default:
+		ok = true
+	}
+	if !ok {
+		return SSEEvent{}, false
 	}
 	return ev, true
 }

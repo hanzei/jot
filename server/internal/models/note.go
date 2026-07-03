@@ -20,10 +20,13 @@ var ErrNoteNotInTrash = errors.New("note not found in trash or not owned by user
 var ErrNoteShareNotFound = errors.New("note share not found")
 var ErrNoteAlreadyShared = errors.New("note already shared with user")
 var ErrNoteExists = errors.New("note already exists")
+var ErrNoteVersionConflict = errors.New("note was modified by another write")
 var ErrNoteItemNotFound = errors.New("note item not found")
 var ErrNoteItemExists = errors.New("note item already exists")
 var ErrNoteItemCapExceeded = errors.New("note item limit reached")
 var ErrInvalidParentRef = errors.New("invalid parent reference")
+var ErrNoteImageNotFound = errors.New("note image not found")
+var ErrNoteImageCapExceeded = errors.New("note image limit reached")
 
 // NoteItemPatch carries the fields that may be changed by a partial single-item
 // update. Nil fields are left untouched (resolved against the item's current
@@ -48,11 +51,15 @@ type DeletedNoteAudience struct {
 }
 
 type Note struct {
-	ID                    string      `json:"id"`
-	UserID                string      `json:"user_id"`
-	Title                 string      `json:"title"`
-	Content               string      `json:"content"`
-	NoteType              NoteType    `json:"note_type"`
+	ID       string   `json:"id"`
+	UserID   string   `json:"user_id"`
+	Title    string   `json:"title"`
+	Content  string   `json:"content"`
+	NoteType NoteType `json:"note_type"`
+	// Version is an optimistic-concurrency counter bumped on every shared-content
+	// (title/content) change. Clients echo the version their edit was based on as
+	// base_version on update so a stale write can be rejected (issue #489).
+	Version               int         `json:"version"`
 	Color                 string      `json:"color"`
 	Pinned                bool        `json:"pinned"`
 	Archived              bool        `json:"archived"`
@@ -63,6 +70,7 @@ type Note struct {
 	SharedWith            []NoteShare `json:"shared_with,omitempty"`
 	IsShared              bool        `json:"is_shared"`
 	Labels                []Label     `json:"labels"`
+	Images                []NoteImage `json:"images,omitempty"`
 	DeletedAt             *time.Time  `json:"deleted_at"`
 	CreatedAt             time.Time   `json:"created_at"`
 	UpdatedAt             time.Time   `json:"updated_at"`
@@ -96,4 +104,23 @@ type NoteShare struct {
 	HasProfileIcon   bool      `json:"has_profile_icon"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
+}
+
+// NoteImage is a metadata row for an image attached to a note. The bytes
+// live on disk in the Blobstore, content-addressed by SHA256; this row is
+// the pointer plus display metadata. Only a narrow field set is embedded
+// into Note responses so the note list payload stays small; fields not in
+// that contract are tagged json:"-" and used internally (batch-loading,
+// refcount, future upload/delete handlers).
+type NoteImage struct {
+	ID          string    `json:"id"`
+	NoteID      string    `json:"-"`
+	UploaderID  string    `json:"-"`
+	Filename    string    `json:"filename"`
+	ContentType string    `json:"content_type"`
+	SizeBytes   int64     `json:"-"`
+	SHA256      string    `json:"-"`
+	Width       int       `json:"width"`
+	Height      int       `json:"height"`
+	CreatedAt   time.Time `json:"created_at"`
 }

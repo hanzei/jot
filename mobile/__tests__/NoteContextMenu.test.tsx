@@ -26,6 +26,7 @@ jest.mock('react-i18next', () => ({
       const labels: Record<string, string> = {
         'note.changeColor': 'Note color',
         'note.share': 'Share',
+        'note.send': 'Send',
         'note.pin': 'Pin',
         'note.unpin': 'Unpin',
         'note.archive': 'Archive',
@@ -44,8 +45,15 @@ jest.mock('../src/store/OfflineContext', () => ({
   usePendingNoteIds: () => mockPendingNoteIds,
 }));
 
+let mockIsLocalMode = false;
+jest.mock('../src/store/AuthContext', () => ({
+  __esModule: true,
+  useAuth: () => ({ isLocalMode: mockIsLocalMode }),
+}));
+
 afterEach(() => {
   mockPendingNoteIds = new Set<string>();
+  mockIsLocalMode = false;
 });
 
 const baseNote: Note = {
@@ -53,6 +61,7 @@ const baseNote: Note = {
   user_id: 'user-1',
   content: '',
   note_type: 'text',
+  version: 1,
   color: '#ffffff',
   pinned: false,
   archived: false,
@@ -186,7 +195,11 @@ describe('NoteContextMenu labels action', () => {
     expect(getByTestId('context-label')).toBeTruthy();
   });
 
-  it('hides share, duplicate, and label actions for local notes', () => {
+  it('hides share and label actions for local notes, but shows duplicate', () => {
+    // Duplicate no longer requires a server id — offline duplicates now use a
+    // server-valid client id, so the action is available for all notes including
+    // ones with a local_* id (e.g. offline-created labels still produce local_ ids).
+    // Share and label management still require a server id, so those remain hidden.
     const { queryByTestId } = render(
       <NoteContextMenu
         visible
@@ -207,11 +220,11 @@ describe('NoteContextMenu labels action', () => {
     );
 
     expect(queryByTestId('context-share')).toBeNull();
-    expect(queryByTestId('context-duplicate')).toBeNull();
+    expect(queryByTestId('context-duplicate')).toBeTruthy();
     expect(queryByTestId('context-label')).toBeNull();
   });
 
-  it('hides share, duplicate, and label actions for a pending-create note (#475)', () => {
+  it('shows share, label, and duplicate for a pending-create note (#475)', () => {
     mockPendingNoteIds = new Set(['note-1']);
     const { queryByTestId } = render(
       <NoteContextMenu
@@ -232,12 +245,40 @@ describe('NoteContextMenu labels action', () => {
       />,
     );
 
-    // Non-server actions stay available; server-bound ones are gated.
+    // An offline-created note has a server-valid id and its create drains FIFO
+    // before the queued share/label/duplicate ops, so all three are available.
+    // Only a local_* duplicate (no server id yet) gates them.
     expect(queryByTestId('context-color')).toBeTruthy();
     expect(queryByTestId('context-pin')).toBeTruthy();
+    expect(queryByTestId('context-share')).toBeTruthy();
+    expect(queryByTestId('context-label')).toBeTruthy();
+    expect(queryByTestId('context-duplicate')).toBeTruthy();
+  });
+
+  it('hides share action in local mode', () => {
+    mockIsLocalMode = true;
+    const { queryByTestId } = render(
+      <NoteContextMenu
+        visible
+        note={baseNote}
+        viewContext="notes"
+        onClose={jest.fn()}
+        onPin={jest.fn()}
+        onArchive={jest.fn()}
+        onUnarchive={jest.fn()}
+        onDuplicate={jest.fn()}
+        onMoveToTrash={jest.fn()}
+        onRestore={jest.fn()}
+        onDeletePermanently={jest.fn()}
+        onChangeColor={jest.fn()}
+        onShare={jest.fn()}
+        onManageLabels={jest.fn()}
+      />,
+    );
+
     expect(queryByTestId('context-share')).toBeNull();
-    expect(queryByTestId('context-duplicate')).toBeNull();
-    expect(queryByTestId('context-label')).toBeNull();
+    expect(queryByTestId('context-duplicate')).toBeTruthy();
+    expect(queryByTestId('context-label')).toBeTruthy();
   });
 
   it('does not render label action when callback is omitted', () => {

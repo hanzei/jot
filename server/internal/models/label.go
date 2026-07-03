@@ -10,8 +10,11 @@ import (
 	"github.com/hanzei/jot/server/internal/database/dialect"
 )
 
-var ErrLabelNotFoundOrNotOwned = errors.New("label not found or not owned by user")
-var ErrLabelNameConflict = errors.New("label name already exists")
+var (
+	ErrLabelNotFoundOrNotOwned = errors.New("label not found or not owned by user")
+	ErrLabelNameConflict       = errors.New("label name already exists")
+	ErrLabelIDConflict         = errors.New("label ID already exists")
+)
 
 func scanLabel(rows *sql.Rows) (Label, error) {
 	var l Label
@@ -145,6 +148,25 @@ func (s *labelStore) GetOrCreateLabel(ctx context.Context, userID, name string) 
 		return nil, fmt.Errorf("failed to get or create label after conflict: %w", err)
 	}
 	return &l, nil
+}
+
+// CreateLabel inserts a new label with the given client-supplied id for idempotent offline replay.
+func (s *labelStore) CreateLabel(ctx context.Context, userID, id, name string) (*Label, error) {
+	var l Label
+	insertQ := s.d.RewritePlaceholders(
+		`INSERT INTO labels (id, user_id, name) VALUES (?, ?, ?)
+		 RETURNING id, user_id, name, created_at, updated_at`,
+	)
+	err := s.db.QueryRowContext(ctx, insertQ, id, userID, name).Scan(
+		&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt,
+	)
+	if err == nil {
+		return &l, nil
+	}
+	if s.d.IsUniqueConstraintError(err) {
+		return nil, ErrLabelIDConflict
+	}
+	return nil, fmt.Errorf("create label: %w", err)
 }
 
 // GetLabelNoteIDs returns note IDs currently associated with a user-owned label.

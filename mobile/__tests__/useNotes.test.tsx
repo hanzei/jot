@@ -1,13 +1,15 @@
 import React from 'react';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useCreateNote, useUpdateNote, useDeleteNote, useDuplicateNote, useCreateNoteItem, useToggleNoteItemCompleted } from '../src/hooks/useNotes';
-import { noteLocalQueryKey, notesLocalQueryKey } from '../src/hooks/queryKeys';
+import { useCreateNote, useUpdateNote, useDeleteNote, useDuplicateNote, useCreateNoteItem, useToggleNoteItemCompleted, useShareNote, useUnshareNote } from '../src/hooks/useNotes';
+import { noteLocalQueryKey, notesLocalQueryKey, notesLocalQueryScopeKey } from '../src/hooks/queryKeys';
 import * as notesApi from '../src/api/notes';
+import * as usersApi from '../src/api/users';
 import * as noteQueriesModule from '../src/db/noteQueries';
 import * as clientModule from '../src/api/client';
 
 jest.mock('../src/api/notes');
+jest.mock('../src/api/users');
 
 jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },
@@ -29,7 +31,6 @@ jest.mock('../src/db/noteQueries', () => ({
   markLocalNoteRestored: jest.fn().mockResolvedValue(undefined),
   permanentDeleteLocalNote: jest.fn().mockResolvedValue(undefined),
   updateLocalNote: jest.fn().mockResolvedValue(undefined),
-  generateLocalId: jest.fn(() => 'local_test_id'),
   generateClientNoteId: jest.fn(() => 'ClientNoteId000000000A'),
   markNotePendingCreate: jest.fn().mockResolvedValue(undefined),
   isNotePendingCreate: jest.fn().mockResolvedValue(false),
@@ -49,12 +50,21 @@ jest.mock('../src/store/AuthContext', () => ({
   useAuth: jest.fn().mockReturnValue({ user: { id: 'test-user-id', username: 'testuser' }, isAuthenticated: true }),
 }));
 
-jest.mock('../src/api/client', () => ({
-  isServerSwitchInProgress: jest.fn(() => false),
-  getActiveServerId: jest.fn(() => 'test-server-id'),
-}));
+jest.mock('../src/api/client', () => {
+  const isServerSwitchInProgress = jest.fn(() => false);
+  return {
+    isServerSwitchInProgress,
+    getActiveServerId: jest.fn(() => 'test-server-id'),
+    assertSwitchWriteAllowed: jest.fn(() => {
+      if (isServerSwitchInProgress()) {
+        throw new Error('Server switch in progress; write blocked');
+      }
+    }),
+  };
+});
 
 const mockNotesApi = notesApi as jest.Mocked<typeof notesApi>;
+const mockUsersApi = usersApi as jest.Mocked<typeof usersApi>;
 const mockNoteQueries = noteQueriesModule as jest.Mocked<typeof noteQueriesModule>;
 const mockClientModule = clientModule as jest.Mocked<typeof clientModule>;
 const mockSyncQueue = jest.requireMock('../src/db/syncQueue') as { enqueueOperation: jest.Mock };
@@ -203,15 +213,106 @@ describe('useNotes hooks', () => {
     });
   });
 
+  describe('permanent server-format item IDs in local/offline creates (#513)', () => {
+    const ID_RE = /^[0-9a-zA-Z]{22}$/;
+
+    it('assigns inline list items a permanent server-format ID and sends it in the create body', async () => {
+      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+
+      const { result } = renderHook(() => useCreateNote(), { wrapper: createWrapper() });
+
+      const created = await result.current.mutateAsync({
+        title: 'Groceries',
+        note_type: 'list',
+        items: [
+          { text: 'Fruit', position: 0 },
+          { text: 'Apples', position: 1, indent_level: 1 },
+        ],
+      });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      // The local rows carry permanent server-format IDs, never a `local_*`
+      // placeholder that would need server reconciliation.
+      const localItems = created.note_type === 'list' ? created.items ?? [] : [];
+      expect(localItems).toHaveLength(2);
+      for (const item of localItems) {
+        expect(item.id).toMatch(ID_RE);
+      }
+      // The indented item is parented to the preceding top-level item by its new ID.
+      expect(localItems[1].parent_id).toBe(localItems[0].id);
+
+      // The queued create carries the *same* IDs so the server keeps them (no
+      // `local_* → server ID` reconciliation on drain).
+      const enqueueCall = mockSyncQueue.enqueueOperation.mock.calls.find(
+        (call) => call[1].operation === 'create',
+      );
+      expect(enqueueCall).toBeDefined();
+      const body = enqueueCall?.[1].body as { id: string; items: { id: string }[] };
+      expect(body.id).toBe('ClientNoteId000000000A');
+      expect(body.items.map((i) => i.id)).toEqual(localItems.map((i) => i.id));
+    });
+
+    it('assigns duplicated list items a permanent server-format ID with remapped parents', async () => {
+      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce({
+        id: 'src', title: 'List', content: '', note_type: 'list', version: 1,
+        color: '#ffffff', pinned: false, archived: false, position: 0,
+        checked_items_collapsed: false, is_shared: false, deleted_at: null,
+        user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
+        items: [
+          { id: 'srcItem1', note_id: 'src', text: 'A', completed: false, position: 0, parent_id: null, assigned_to: '', created_at: '', updated_at: '' },
+          { id: 'srcItem2', note_id: 'src', text: 'B', completed: false, position: 1, parent_id: 'srcItem1', assigned_to: '', created_at: '', updated_at: '' },
+        ],
+      } as never);
+
+      const { result } = renderHook(() => useDuplicateNote(), { wrapper: createWrapper() });
+      const dup = await result.current.mutateAsync('src');
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      const dupItems = dup.note_type === 'list' ? dup.items ?? [] : [];
+      expect(dupItems).toHaveLength(2);
+      for (const item of dupItems) {
+        expect(item.id).toMatch(ID_RE);
+      }
+      // New IDs, not the source's, and parent_id is remapped to the new top-level ID.
+      expect(dupItems[0].id).not.toBe('srcItem1');
+      expect(dupItems[1].parent_id).toBe(dupItems[0].id);
+    });
+  });
+
   describe('useDuplicateNote guard (#475)', () => {
-    it('refuses to duplicate a note whose offline create is still pending', async () => {
+    it('queues (does not call the API) when duplicating a pending-create note even while online', async () => {
+      // The source note has a server-valid id but its create hasn't drained, so a
+      // direct API call would 404. The duplicate queues FIFO behind the create
+      // and uses a server-valid client id so the replay is idempotent.
       mockNoteQueries.isNotePendingCreate.mockResolvedValueOnce(true);
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce({
+        id: 'ServerValidButPending00', title: '', content: 'Hi', note_type: 'text',
+        color: '#ffffff', pinned: false, archived: false, position: 0, version: 1,
+        checked_items_collapsed: false, is_shared: false, deleted_at: null,
+        user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
+      } as never);
 
       const { result } = renderHook(() => useDuplicateNote(), { wrapper: createWrapper() });
 
-      await expect(result.current.mutateAsync('ServerValidButPending00')).rejects.toThrow(/unsynced/i);
+      await result.current.mutateAsync('ServerValidButPending00');
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(mockNotesApi.duplicateNote).not.toHaveBeenCalled();
-      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          operation: 'duplicate',
+          endpoint: '/notes/ServerValidButPending00/duplicate',
+          method: 'POST',
+          body: { id: 'ClientNoteId000000000A' },
+        }),
+      );
+      expect(mockNoteQueries.markNotePendingCreate).toHaveBeenCalledWith(
+        expect.anything(),
+        'ClientNoteId000000000A',
+      );
     });
   });
 
@@ -237,15 +338,60 @@ describe('useNotes hooks', () => {
     });
   });
 
+  describe('useShareNote / useUnshareNote (online)', () => {
+    const sharedNote = {
+      id: '123', title: 'Shared', content: '', note_type: 'text',
+      color: '#ffffff', pinned: false, archived: false, position: 0,
+      checked_items_collapsed: false, is_shared: true, deleted_at: null,
+      user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
+    };
+    const targetUser = {
+      id: 'u2', username: 'collab', first_name: 'Col', last_name: 'Lab',
+      has_profile_icon: false,
+    };
+
+    it('invalidates the notes list scope so dashboard avatars refresh after sharing', async () => {
+      mockUsersApi.shareNote.mockResolvedValueOnce(undefined as never);
+      mockNotesApi.getNote.mockResolvedValueOnce(sharedNote as never);
+
+      const { wrapper, queryClient } = createWrapperWithClient();
+      const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
+
+      const { result } = renderHook(() => useShareNote(), { wrapper });
+      result.current.mutate({ noteId: '123', user: targetUser as never });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(mockUsersApi.shareNote).toHaveBeenCalledWith('123', 'u2');
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() });
+    });
+
+    it('invalidates the notes list scope so dashboard avatars refresh after unsharing', async () => {
+      mockUsersApi.unshareNote.mockResolvedValueOnce(undefined as never);
+      mockNotesApi.getNote.mockResolvedValueOnce({ ...sharedNote, is_shared: false } as never);
+
+      const { wrapper, queryClient } = createWrapperWithClient();
+      const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
+
+      const { result } = renderHook(() => useUnshareNote(), { wrapper });
+      result.current.mutate({ noteId: '123', userId: 'u2' });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(mockUsersApi.unshareNote).toHaveBeenCalledWith('123', 'u2');
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() });
+    });
+  });
+
   describe('useUpdateNote (offline)', () => {
     const existingTextNote = {
-      id: '123', title: '', content: 'Old body', note_type: 'text',
+      id: '123', title: '', content: 'Old body', note_type: 'text', version: 7,
       color: '#ffffff', pinned: false, archived: false, position: 0,
       checked_items_collapsed: false, is_shared: false, deleted_at: null,
       user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
     };
     const existingListNote = {
-      id: '456', title: 'Old title', content: '', note_type: 'list',
+      id: '456', title: 'Old title', content: '', note_type: 'list', version: 3,
       color: '#ffffff', pinned: false, archived: false, position: 0,
       checked_items_collapsed: false, is_shared: false, deleted_at: null,
       user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
@@ -264,6 +410,8 @@ describe('useNotes hooks', () => {
 
       // Only the user-changed field is queued; pinned/archived/color are absent,
       // so replaying this PATCH cannot overwrite them with the stale local snapshot.
+      // base_version is NOT stored in the queued body — drainQueue resolves it from
+      // the note's local version at replay time so a chain doesn't self-conflict (#489).
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
@@ -298,6 +446,29 @@ describe('useNotes hooks', () => {
       );
     });
 
+    it('omits base_version for a per-user-only change (no content edit)', async () => {
+      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingTextNote as never);
+
+      const { result } = renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync({ id: '123', data: { pinned: true } });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      // pinned is a per-user field; it is not version-guarded, so no base_version
+      // is attached (sending one would cause false conflicts for other devices).
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          operation: 'update',
+          endpoint: '/notes/123',
+          method: 'PATCH',
+          body: { pinned: true },
+        }),
+      );
+    });
+
     it('rejects and does not enqueue or write to DB when note is missing from local cache', async () => {
       mockUseNetworkStatus.mockReturnValue({ isConnected: false });
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(null);
@@ -319,11 +490,28 @@ describe('useNotes hooks', () => {
 
   describe('useUpdateNote (online write failures)', () => {
     const existingNote = {
-      id: '123', title: 'Old', content: 'Old body', note_type: 'text',
+      id: '123', title: 'Old', content: 'Old body', note_type: 'text', version: 9,
       color: '#ffffff', pinned: false, archived: false, position: 0,
       checked_items_collapsed: false, is_shared: false, deleted_at: null,
       user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
     };
+
+    it('sends base_version on an online content update', async () => {
+      const updated = { ...existingNote, content: 'New body', version: 10 };
+      mockNotesApi.updateNote.mockResolvedValueOnce(updated as never);
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingNote as never);
+
+      const { result } = renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync({ id: '123', data: { content: 'New body' } });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      // The note's current version is echoed so the server can reject a write
+      // that raced a concurrent edit (#489).
+      expect(mockNotesApi.updateNote).toHaveBeenCalledWith('123', { content: 'New body', base_version: 9 });
+      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
+    });
 
     it('falls back to the local queue when a transient failure (5xx) occurs', async () => {
       mockNotesApi.updateNote.mockRejectedValueOnce(makeAxiosError(503));
@@ -366,9 +554,10 @@ describe('useNotes hooks', () => {
 
       await waitFor(() => expect(result.current.isError).toBe(true));
 
-      // A real validation/auth error must reach the UI, not be silently queued.
+      // A real validation/auth error must reach the UI, not be silently queued
+      // or written to the local DB (the offline fallback path).
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
-      expect(mockNoteQueries.getLocalNote).not.toHaveBeenCalled();
+      expect(mockNoteQueries.updateLocalNote).not.toHaveBeenCalled();
     });
 
     it('surfaces a 401 without queuing (the interceptor logs the user out)', async () => {
@@ -381,7 +570,7 @@ describe('useNotes hooks', () => {
       await waitFor(() => expect(result.current.isError).toBe(true));
 
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
-      expect(mockNoteQueries.getLocalNote).not.toHaveBeenCalled();
+      expect(mockNoteQueries.updateLocalNote).not.toHaveBeenCalled();
     });
 
     it('rethrows a non-Axios (local) error instead of queuing it', async () => {
@@ -394,7 +583,7 @@ describe('useNotes hooks', () => {
       await waitFor(() => expect(result.current.isError).toBe(true));
 
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
-      expect(mockNoteQueries.getLocalNote).not.toHaveBeenCalled();
+      expect(mockNoteQueries.updateLocalNote).not.toHaveBeenCalled();
     });
   });
 
@@ -585,6 +774,36 @@ describe('useNotes hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
     });
 
+    it('useToggleNoteItemCompleted un-completes an already-completed parent when a child is unchecked', async () => {
+      const { wrapper, queryClient } = createWrapperWithClient();
+      const completedListNote = {
+        ...listNote,
+        items: [
+          { ...listNote.items[0], completed: true },
+          { ...listNote.items[1], completed: true },
+        ],
+      };
+      queryClient.setQueryData(noteLocalQueryKey('n1'), completedListNote);
+
+      const pending = deferred<unknown[]>();
+      mockNotesApi.toggleItemCompleted.mockReset();
+      mockNotesApi.toggleItemCompleted.mockReturnValueOnce(pending.promise as never);
+
+      const { result } = renderHook(() => useToggleNoteItemCompleted(), { wrapper });
+      result.current.mutate({ noteId: 'n1', itemId: 'c', completed: false });
+
+      await waitFor(() => {
+        const cached = queryClient.getQueryData(noteLocalQueryKey('n1')) as { items: Array<{ id: string; completed: boolean }> };
+        expect(cached.items.find((i) => i.id === 'c')!.completed).toBe(false);
+        // A parent can never stay "done" while one of its children is not.
+        expect(cached.items.find((i) => i.id === 'p')!.completed).toBe(false);
+      });
+      expect(mockNotesApi.toggleItemCompleted).toHaveBeenCalledWith('n1', 'c', false);
+
+      pending.resolve([]);
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    });
+
     it('useToggleNoteItemCompleted rolls back the optimistic toggle on a permanent failure', async () => {
       const { wrapper, queryClient } = createWrapperWithClient();
       queryClient.setQueryData(noteLocalQueryKey('n1'), listNote);
@@ -645,7 +864,7 @@ describe('useNotes hooks', () => {
       ],
     };
 
-    it('creates a local copy of a text note and enqueues the duplicate op', async () => {
+    it('creates a local copy of a text note with a server-valid client id and enqueues the duplicate op', async () => {
       mockUseNetworkStatus.mockReturnValue({ isConnected: false });
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(sourceTextNote as never);
 
@@ -655,8 +874,9 @@ describe('useNotes hooks', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      // Local copy should reset sharing/pinned/position but keep content and labels.
-      expect(localDuplicate.id).toBe('local_test_id');
+      // Local copy should reset sharing/pinned/position but keep content and labels,
+      // and use a server-valid client id (no local_ prefix) for idempotent replay.
+      expect(localDuplicate.id).toBe('ClientNoteId000000000A');
       expect(localDuplicate.note_type).toBe('text');
       expect((localDuplicate as { content: string }).content).toBe('Hello');
       expect(localDuplicate.color).toBe('#ffeecc');
@@ -667,13 +887,17 @@ describe('useNotes hooks', () => {
       expect(localDuplicate.labels).toEqual(sourceTextNote.labels);
 
       expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), localDuplicate);
+      expect(mockNoteQueries.markNotePendingCreate).toHaveBeenCalledWith(
+        expect.anything(),
+        'ClientNoteId000000000A',
+      );
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
           operation: 'duplicate',
           endpoint: '/notes/123/duplicate',
           method: 'POST',
-          body: { local_id: 'local_test_id' },
+          body: { id: 'ClientNoteId000000000A' },
         }),
       );
     });
@@ -694,8 +918,9 @@ describe('useNotes hooks', () => {
         items: Array<{ id: string; note_id: string; text: string; parent_id: string | null }>;
       };
       expect(dupList.items).toHaveLength(2);
-      // Item ids are regenerated; note_id points to the local duplicate.
-      expect(dupList.items[0].note_id).toBe('local_test_id');
+      // Item ids are regenerated (permanent server-format, #513); note_id points to
+      // the client-id duplicate.
+      expect(dupList.items[0].note_id).toBe('ClientNoteId000000000A');
       expect(dupList.items[0].text).toBe('Item A');
       expect(dupList.items[0].parent_id).toBeNull();
       expect(dupList.items[1].text).toBe('Item B');
@@ -708,37 +933,6 @@ describe('useNotes hooks', () => {
         expect.anything(),
         expect.objectContaining({ operation: 'duplicate', endpoint: '/notes/456/duplicate' }),
       );
-    });
-
-    it('throws a clear error when duplicating an unsynced (local_*) note', async () => {
-      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
-
-      const { result } = renderHook(() => useDuplicateNote(), { wrapper: createWrapper() });
-
-      await result.current.mutateAsync('local_abc').catch(() => {});
-
-      await waitFor(() => expect(result.current.isError).toBe(true));
-
-      expect((result.current.error as Error).message).toMatch(/unsynced/i);
-      expect(mockNoteQueries.getLocalNote).not.toHaveBeenCalled();
-      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
-    });
-
-    it('throws a clear error when duplicating an unsynced note while connected', async () => {
-      // isLocalId guard must fire before the API call so we get the explicit
-      // "unsynced" message rather than a confusing 404 from the server.
-      mockUseNetworkStatus.mockReturnValue({ isConnected: true });
-
-      const { result } = renderHook(() => useDuplicateNote(), { wrapper: createWrapper() });
-
-      await result.current.mutateAsync('local_abc').catch(() => {});
-
-      await waitFor(() => expect(result.current.isError).toBe(true));
-
-      expect((result.current.error as Error).message).toMatch(/unsynced/i);
-      expect(mockNotesApi.duplicateNote).not.toHaveBeenCalled();
-      expect(mockNoteQueries.getLocalNote).not.toHaveBeenCalled();
-      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
     });
 
     it('throws when the source note is missing from the local cache', async () => {

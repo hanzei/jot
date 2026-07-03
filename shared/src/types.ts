@@ -1,6 +1,7 @@
 export interface ServerConfig {
   registration_enabled: boolean;
   password_min_length: number;
+  upload_max_bytes: number;
 }
 
 export interface AboutInfo {
@@ -86,10 +87,32 @@ export interface NoteShare {
   updated_at: string;
 }
 
+/**
+ * Metadata for an image attached to a note. Embedded on `Note.images`; a
+ * narrow field set by design so the note list payload stays small. Image
+ * bytes are fetched out-of-band from `GET /api/images/{id}` (and
+ * `/thumbnail`), never inlined here.
+ */
+export interface NoteImage {
+  id: string;
+  filename: string;
+  content_type: string;
+  width: number;
+  height: number;
+  created_at: string;
+}
+
 interface BaseNote {
   id: string;
   user_id: string;
   note_type: NoteType;
+  /**
+   * Optimistic-concurrency counter bumped server-side on every shared-content
+   * (title/content) change. Echo it as `base_version` on an update so a stale
+   * write is rejected with 409 instead of silently clobbering a newer edit made
+   * on another device (issue #489).
+   */
+  version: number;
   color: string;
   pinned: boolean;
   archived: boolean;
@@ -97,6 +120,7 @@ interface BaseNote {
   shared_with?: NoteShare[];
   is_shared: boolean;
   labels: Label[];
+  images?: NoteImage[];
   deleted_at: string | null;
   created_at: string;
   updated_at: string;
@@ -196,14 +220,24 @@ export interface CreateListNoteRequest {
 
 export type CreateNoteRequest = CreateTextNoteRequest | CreateListNoteRequest;
 
-export interface UpdateTextNoteRequest {
+/**
+ * Optimistic-concurrency guard shared by both update-request shapes: the note
+ * `version` the edit was based on. When present, the server rejects the write
+ * with 409 if the note's content changed since (issue #489); only meaningful
+ * alongside a `title`/`content` change, so it is omitted for per-user-only edits.
+ */
+interface BaseUpdateNoteRequest {
+  base_version?: number;
+}
+
+export interface UpdateTextNoteRequest extends BaseUpdateNoteRequest {
   content?: string;
   pinned?: boolean;
   archived?: boolean;
   color?: string;
 }
 
-export interface UpdateListNoteRequest {
+export interface UpdateListNoteRequest extends BaseUpdateNoteRequest {
   title?: string;
   pinned?: boolean;
   archived?: boolean;
@@ -254,6 +288,8 @@ export interface AdminListItemStats {
 
 export interface AdminStorageStats {
   database_size_bytes: number;
+  image_count: number;
+  images_size_bytes: number;
 }
 
 export interface AdminStatsResponse {
@@ -347,4 +383,20 @@ export interface ProfileIconSSEEvent {
   };
 }
 
-export type SSEEvent = NoteSSEEvent | LabelsChangedSSEEvent | ProfileIconSSEEvent;
+/**
+ * Fired when an image is added to or removed from a note. `image` is set for
+ * note_image_added; `image_id` is set for note_image_removed (the row is
+ * already gone by the time that event fires).
+ */
+export interface NoteImageSSEEvent {
+  type: 'note_image_added' | 'note_image_removed';
+  source_user_id: string;
+  client_id?: string;
+  data: {
+    note_id: string;
+    image?: NoteImage;
+    image_id?: string;
+  };
+}
+
+export type SSEEvent = NoteSSEEvent | LabelsChangedSSEEvent | ProfileIconSSEEvent | NoteImageSSEEvent;

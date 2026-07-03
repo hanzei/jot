@@ -38,7 +38,6 @@ import {
   markLocalNoteRestored,
   permanentDeleteLocalNote,
   updateLocalNote,
-  generateLocalId,
   generateClientNoteId,
   markNotePendingCreate,
   isNotePendingCreate,
@@ -51,23 +50,21 @@ import {
 import { enqueueOperation, rethrowIfNotQueueable } from '../db/syncQueue';
 import { useNetworkStatus } from './useNetworkStatus';
 import { useAuth } from '../store/AuthContext';
-import { isServerSwitchInProgress } from '../api/client';
+import { isLocalModeActive } from '../store/localMode';
+import { assertSwitchWriteAllowed } from '../api/client';
 import {
   noteLocalQueryKey,
   notesLocalQueryScopeKey,
 } from './queryKeys';
 
-function assertSwitchWriteAllowed(): void {
-  if (isServerSwitchInProgress()) {
-    throw new Error('Server switch in progress; write blocked');
-  }
-}
-
 /**
  * Collects the item ids a completed-toggle should cascade to, mirroring the
- * server: toggling a top-level item also toggles its direct children. Only ids
- * whose `completed` actually changes are returned. Shared by the optimistic
- * cache update and the offline local-DB write so the two stay in agreement.
+ * server: a top-level item's completed state cascades to all of its direct
+ * children (in either direction), and unchecking a child also un-completes
+ * its parent — a parent can never stay "done" with an incomplete child.
+ * Completing every child does not auto-complete the parent. Only ids whose
+ * `completed` actually changes are returned. Shared by the optimistic cache
+ * update and the offline local-DB write so the two stay in agreement.
  *
  * (NoteEditorScreen keeps a parallel `applyCompletedCascade` over its own
  * `LocalItem[]` editor state; keep the cascade rule here in sync with it.)
@@ -76,10 +73,13 @@ function collectToggleCascade(items: NoteItem[], itemId: string, completed: bool
   const target = items.find((i) => i.id === itemId);
   if (!target) return [];
   const cascadeToChildren = target.parent_id === null;
+  const uncompleteParent = target.parent_id !== null && !completed;
   return items
     .filter(
       (i) =>
-        (i.id === itemId || (cascadeToChildren && i.parent_id === itemId)) &&
+        (i.id === itemId ||
+          (cascadeToChildren && i.parent_id === itemId) ||
+          (uncompleteParent && i.id === target.parent_id)) &&
         i.completed !== completed,
     )
     .map((i) => i.id);
@@ -158,7 +158,7 @@ export function useCreateNote() {
   return useMutation({
     mutationFn: async (data: CreateNoteRequest): Promise<Note> => {
       assertSwitchWriteAllowed();
-      if (isConnectedRef.current) {
+      if (isConnectedRef.current && !isLocalModeActive()) {
         try {
           const note = await createNote(data);
           await saveNote(db, note);
@@ -178,9 +178,24 @@ export function useCreateNote() {
       const now = new Date().toISOString();
       const labels: Label[] = [];
       const shared_with: NoteShare[] = [];
+
+      // Pre-assign a permanent, server-format ID to every list item so the *same*
+      // ID backs the local row and is sent in the create body. The server honors
+      // client-supplied item IDs (see createBulkListItem), so the item's identity
+      // is stable from creation — no `local_* → server ID` reconciliation on drain
+      // (issues #513/#475), and a later per-item edit queued before the create
+      // drains still references a valid ID. In local mode there is no server to
+      // reconcile against, so this permanent ID is simply terminal.
+      const itemsWithIds =
+        data.note_type === 'list'
+          ? (data.items ?? []).map((item) => ({ ...item, id: item.id ?? generateId() }))
+          : undefined;
       const baseLocalNote = {
         id: clientId,
         user_id: user?.id ?? '',
+        // A brand-new note starts at version 1, matching the server's default;
+        // the first successful sync replaces it with the canonical server note.
+        version: 1,
         color: data.color ?? '#ffffff',
         pinned: false,
         archived: false,
@@ -200,15 +215,12 @@ export function useCreateNote() {
             checked_items_collapsed: false,
             items: (() => {
               let lastTopLevelId: string | null = null;
-              return data.items?.map((item, i) => {
-                // Honor the client-supplied item ID so it stays stable when the
-                // note create is replayed and items are later edited granularly.
-                const id = item.id ?? generateLocalId();
+              return (itemsWithIds ?? []).map((item, i) => {
                 const isChild = (item.indent_level ?? 0) === 1;
                 const parentId = isChild ? lastTopLevelId : null;
-                if (!isChild) lastTopLevelId = id;
+                if (!isChild) lastTopLevelId = item.id;
                 return {
-                  id,
+                  id: item.id,
                   note_id: clientId,
                   text: item.text,
                   completed: item.completed ?? false,
@@ -234,7 +246,14 @@ export function useCreateNote() {
         operation: 'create',
         endpoint: '/notes',
         method: 'POST',
-        body: { ...data, id: clientId } as Record<string, unknown>,
+        // Carry the pre-assigned item IDs so the server keeps them (no
+        // reconciliation) and the local rows stay valid for any per-item edit
+        // queued behind this create (#513).
+        body: {
+          ...data,
+          ...(itemsWithIds ? { items: itemsWithIds } : {}),
+          id: clientId,
+        } as Record<string, unknown>,
       });
       return localNote;
     },
@@ -258,9 +277,21 @@ export function useUpdateNote() {
     },
     mutationFn: async ({ id, data }: { id: string; data: UpdateNoteRequest }): Promise<Note> => {
       assertSwitchWriteAllowed();
-      if (isConnectedRef.current) {
+
+      const existing = await getLocalNote(db, id);
+      // Only content edits (title/content) are version-guarded; per-user fields
+      // (color/pinned/archived/collapsed) live in note_user_state and aren't.
+      const fields = data as { title?: string; content?: string };
+      const touchesContent = fields.title !== undefined || fields.content !== undefined;
+
+      if (isConnectedRef.current && !isLocalModeActive()) {
         try {
-          const updatedNote = await updateNote(id, data);
+          // Online: gate on the version we currently hold locally so the server
+          // can reject a write that raced a concurrent edit on another device
+          // (#489). A 409 is permanent, so rethrowIfNotQueueable surfaces it.
+          const body: UpdateNoteRequest =
+            touchesContent && existing ? { ...data, base_version: existing.version } : data;
+          const updatedNote = await updateNote(id, body);
           await saveNote(db, updatedNote);
           return updatedNote;
         } catch (err) {
@@ -272,7 +303,6 @@ export function useUpdateNote() {
 
       // Offline (or a transient online failure): update local DB and queue the
       // server operation.
-      const existing = await getLocalNote(db, id);
       if (!existing) {
         throw new Error(`Note ${id} not found in local DB`);
       }
@@ -286,7 +316,10 @@ export function useUpdateNote() {
       // Queue only the fields the user actually changed. The server PATCH is a
       // partial update (absent fields are left unchanged), so sending the full
       // snapshot would re-assert stale values and clobber fields edited
-      // concurrently on another device when this op replays later.
+      // concurrently on another device when this op replays later. base_version is
+      // intentionally NOT stored here: drainQueue resolves it from the note's
+      // local version at replay time, so a chain of offline edits to one note
+      // replays against the advancing version instead of self-conflicting (#489).
       await enqueueOperation(db, {
         operation: 'update',
         endpoint: `/notes/${id}`,
@@ -345,7 +378,7 @@ export function useCreateNoteItem() {
         parent_id: itemWithId.parent_id ?? null,
         assigned_to: itemWithId.assigned_to ?? '',
       };
-      if (isConnectedRef.current) {
+      if (isConnectedRef.current && !isLocalModeActive()) {
         try {
           await createNoteItem(noteId, itemWithId);
           await createLocalItem(db, noteId, local);
@@ -380,7 +413,7 @@ export function useUpdateNoteItem() {
   return useMutation({
     mutationFn: async ({ noteId, itemId, data }: { noteId: string; itemId: string; data: PatchNoteItemRequest }): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isConnectedRef.current) {
+      if (isConnectedRef.current && !isLocalModeActive()) {
         try {
           await updateNoteItem(noteId, itemId, data);
           await patchLocalItem(db, noteId, itemId, data);
@@ -415,7 +448,7 @@ export function useDeleteNoteItem() {
   return useMutation({
     mutationFn: async ({ noteId, itemId }: { noteId: string; itemId: string }): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isConnectedRef.current) {
+      if (isConnectedRef.current && !isLocalModeActive()) {
         try {
           await deleteNoteItem(noteId, itemId);
           await deleteLocalItem(db, noteId, itemId);
@@ -449,7 +482,7 @@ export function useReorderNoteItems() {
   return useMutation({
     mutationFn: async ({ noteId, itemIds }: { noteId: string; itemIds: string[] }): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isConnectedRef.current) {
+      if (isConnectedRef.current && !isLocalModeActive()) {
         try {
           await reorderNoteItems(noteId, itemIds);
           await reorderLocalItems(db, noteId, itemIds);
@@ -484,7 +517,7 @@ export function useDeleteNote() {
   return useMutation({
     mutationFn: async (id: string): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isConnectedRef.current) {
+      if (isConnectedRef.current && !isLocalModeActive()) {
         try {
           await deleteNote(id);
           await markLocalNoteDeleted(db, id);
@@ -518,14 +551,12 @@ export function useDuplicateNote() {
   return useMutation({
     mutationFn: async (id: string): Promise<Note> => {
       assertSwitchWriteAllowed();
-      // Guard up front: duplicating an unsynced note is never safe — the server
-      // doesn't know its ID yet, so both the online API call and the offline queue
-      // entry would reference an ID the server can't resolve. Covers local-only
-      // duplicates and offline creates still awaiting their POST (#475).
-      if (isLocalId(id) || await isNotePendingCreate(db, id)) {
-        throw new Error('Cannot duplicate an unsynced note; please wait until it has synced');
-      }
-      if (isConnectedRef.current) {
+      // An offline-created note already carries a server-valid id (#475) and its
+      // queued create drains FIFO before this duplicate, so queue rather than
+      // calling online against a note the server doesn't know yet (a 404 would
+      // surface as an error instead of syncing).
+      const pendingCreate = await isNotePendingCreate(db, id);
+      if (isConnectedRef.current && !pendingCreate && !isLocalModeActive()) {
         try {
           const duplicatedNote = await duplicateNote(id);
           await saveNote(db, duplicatedNote);
@@ -537,17 +568,19 @@ export function useDuplicateNote() {
         }
       }
 
-      // Offline (or a transient online failure): create a local copy and queue
-      // the server operation.
+      // Offline (or a transient online failure): create a local copy with a
+      // server-valid client ID and queue the server operation. The client ID is
+      // sent in the request body so the server keeps it — making the replay
+      // idempotent (same ID → 409, treated as already-applied, no second copy).
       const source = await getLocalNote(db, id);
       if (!source) {
         throw new Error(`Note ${id} not found in local DB`);
       }
 
-      const localId = generateLocalId();
+      const clientId = generateClientNoteId();
       const now = new Date().toISOString();
       const resetFields = {
-        id: localId,
+        id: clientId,
         pinned: false,
         archived: false,
         position: 0,
@@ -557,38 +590,38 @@ export function useDuplicateNote() {
         created_at: now,
         updated_at: now,
       };
+      // Build a source→new item ID map for list notes. This is captured here
+      // (outside the items spread) so we can send it to the server, letting it
+      // honor the same IDs. That way any per-item edits queued after this
+      // duplicate—but before it drains—still target valid server item IDs.
+      const idRemap = new Map<string, string>();
       const localDuplicate: Note = source.note_type === 'list'
         ? {
             ...source,
             ...resetFields,
-            items: (() => {
-              // Build a map from old item IDs to new local IDs so that parent_id
-              // references within the duplicate point to the new items, not to items
-              // in the source note. Items arrive in position order, so parents are
-              // always mapped before their children are processed.
-              const idRemap = new Map<string, string>();
-              return (source.items ?? []).map((item) => {
-                const newId = generateLocalId();
-                idRemap.set(item.id, newId);
-                return {
-                  ...item,
-                  id: newId,
-                  note_id: localId,
-                  parent_id: item.parent_id !== null ? (idRemap.get(item.parent_id) ?? item.parent_id) : null,
-                  created_at: now,
-                  updated_at: now,
-                };
-              });
-            })(),
+            items: (source.items ?? []).map((item) => {
+              const newId = generateId();
+              idRemap.set(item.id, newId);
+              return {
+                ...item,
+                id: newId,
+                note_id: clientId,
+                parent_id: item.parent_id !== null ? (idRemap.get(item.parent_id) ?? item.parent_id) : null,
+                created_at: now,
+                updated_at: now,
+              };
+            }),
           }
         : { ...source, ...resetFields };
 
+      const itemIds = idRemap.size > 0 ? Object.fromEntries(idRemap) : undefined;
       await saveNote(db, localDuplicate);
+      await markNotePendingCreate(db, clientId);
       await enqueueOperation(db, {
         operation: 'duplicate',
         endpoint: `/notes/${id}/duplicate`,
         method: 'POST',
-        body: { local_id: localId } as Record<string, unknown>,
+        body: { id: clientId, ...(itemIds ? { item_ids: itemIds } : {}) } as Record<string, unknown>,
       });
       return localDuplicate;
     },
@@ -609,7 +642,7 @@ export function useRestoreNote() {
   return useMutation({
     mutationFn: async (id: string): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isConnectedRef.current) {
+      if (isConnectedRef.current && !isLocalModeActive()) {
         try {
           await restoreNote(id);
           await markLocalNoteRestored(db, id);
@@ -643,7 +676,7 @@ export function usePermanentDeleteNote() {
   return useMutation({
     mutationFn: async (id: string): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isConnectedRef.current) {
+      if (isConnectedRef.current && !isLocalModeActive()) {
         try {
           await permanentDeleteNote(id);
           await permanentDeleteLocalNote(db, id);
@@ -677,7 +710,7 @@ export function useReorderNotes() {
   return useMutation({
     mutationFn: async (noteIds: string[]): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isConnectedRef.current) {
+      if (isConnectedRef.current && !isLocalModeActive()) {
         try {
           await reorderNotes(noteIds);
           // Update positions in local DB to match the new order
@@ -727,11 +760,18 @@ export function useShareNote() {
   return useMutation({
     mutationFn: async ({ noteId, user }: { noteId: string; user: User }) => {
       assertSwitchWriteAllowed();
-      if (isLocalId(noteId) || await isNotePendingCreate(db, noteId)) {
+      // A local_* duplicate has no server-side id yet (it awaits id reconciliation),
+      // so it can never be shared.
+      if (isLocalId(noteId)) {
         throw new Error('cannot share unsynced note');
       }
+      // An offline-created note already carries a server-valid id (#475) and its
+      // queued create drains FIFO before this share, so queue the share rather than
+      // attempting it online — the server doesn't know the note yet, so a direct
+      // call would 404 (permanent) and surface as an error instead of syncing.
+      const pendingCreate = await isNotePendingCreate(db, noteId);
 
-      if (isConnectedRef.current) {
+      if (isConnectedRef.current && !pendingCreate && !isLocalModeActive()) {
         try {
           await shareNote(noteId, user.id);
           // Fetch updated note so shared_with_json in SQLite reflects server state
@@ -775,6 +815,8 @@ export function useShareNote() {
     },
     onSuccess: (_data, { noteId }) => {
       queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
+      // Refresh the notes list so dashboard cards re-render collaborator avatars.
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
     },
   });
 }
@@ -789,11 +831,15 @@ export function useUnshareNote() {
   return useMutation({
     mutationFn: async ({ noteId, userId }: { noteId: string; userId: string }) => {
       assertSwitchWriteAllowed();
-      if (isLocalId(noteId) || await isNotePendingCreate(db, noteId)) {
+      // A local_* duplicate has no server-side id yet, so there is nothing to unshare.
+      if (isLocalId(noteId)) {
         throw new Error('cannot unshare unsynced note');
       }
+      // An offline-created note (#475) drains its create FIFO before this unshare,
+      // so queue rather than calling online against a note the server doesn't know yet.
+      const pendingCreate = await isNotePendingCreate(db, noteId);
 
-      if (isConnectedRef.current) {
+      if (isConnectedRef.current && !pendingCreate && !isLocalModeActive()) {
         try {
           await unshareNote(noteId, userId);
           try {
@@ -821,6 +867,8 @@ export function useUnshareNote() {
     },
     onSuccess: (_data, { noteId }) => {
       queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
+      // Refresh the notes list so dashboard cards re-render collaborator avatars.
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
     },
   });
 }
@@ -841,7 +889,7 @@ export function useToggleNoteItemCompleted() {
       ),
     mutationFn: async ({ noteId, itemId, completed }: { noteId: string; itemId: string; completed: boolean }): Promise<NoteItem[]> => {
       assertSwitchWriteAllowed();
-      if (isConnectedRef.current) {
+      if (isConnectedRef.current && !isLocalModeActive()) {
         try {
           const serverItems = await toggleItemCompleted(noteId, itemId, completed);
           for (const item of serverItems) {

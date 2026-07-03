@@ -2,7 +2,7 @@
  * Tests for offline support: local note queries, sync queue, and ID utilities.
  */
 
-import { generateLocalId, generateClientNoteId, isLocalId, isUnsyncedNoteId, replaceLocalNoteId, removeLocalNotesNotIn, getLocalLabels, getLocalLabelCounts, saveNote, addLabelToLocalNote, removeLabelFromLocalNote } from '../src/db/noteQueries';
+import { generateLocalId, generateClientNoteId, isLocalId, isUnsyncedNoteId, removeLocalNotesNotIn, getLocalLabels, getLocalLabelCounts, saveNote, addLabelToLocalNote, removeLabelFromLocalNote, getLocalNotes } from '../src/db/noteQueries';
 import { drainQueue, isTransientHttpStatus } from '../src/db/syncQueue';
 import api from '../src/api/client';
 
@@ -16,6 +16,7 @@ function makeAxiosError(status: number) {
 jest.mock('../src/api/client', () => ({
   __esModule: true,
   default: {
+    get: jest.fn(),
     post: jest.fn(),
     patch: jest.fn(),
     delete: jest.fn(),
@@ -24,12 +25,10 @@ jest.mock('../src/api/client', () => ({
 
 jest.mock('../src/db/noteQueries', () => ({
   ...jest.requireActual('../src/db/noteQueries'),
-  replaceLocalNoteId: jest.fn().mockResolvedValue(undefined),
   saveNote: jest.fn().mockResolvedValue(undefined),
 }));
 
 const mockApi = api as jest.Mocked<typeof api>;
-const mockReplaceLocalNoteId = replaceLocalNoteId as jest.MockedFunction<typeof replaceLocalNoteId>;
 const mockSaveNote = saveNote as jest.MockedFunction<typeof saveNote>;
 
 // ── generateLocalId / isLocalId ────────────────────────────────────────────
@@ -116,6 +115,7 @@ function makeMockDb(entries: { id: number; operation: string; endpoint: string; 
     getAllAsync: jest.fn().mockResolvedValue([...entries]),
     runAsync: jest.fn().mockResolvedValue(undefined),
     getFirstAsync: jest.fn().mockResolvedValue({ count: entries.length }),
+    withTransactionAsync: jest.fn(async (cb: () => Promise<void> | void) => { await cb(); }),
   };
 }
 
@@ -293,31 +293,6 @@ describe('drainQueue', () => {
     expect(discardedOperations).toHaveLength(0);
   });
 
-  it('remaps local IDs after a create operation', async () => {
-    const serverNote = {
-      id: 'server-abc', title: 'Test', content: '', note_type: 'text',
-      color: '#ffffff', pinned: false, archived: false, position: 0,
-      checked_items_collapsed: false, is_shared: false, deleted_at: null,
-      user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
-    };
-    const db = makeMockDb([
-      {
-        id: 8,
-        operation: 'create',
-        endpoint: '/notes',
-        method: 'POST',
-        body: JSON.stringify({ local_id: 'local_temp_1', title: 'Test', content: '', note_type: 'text' }),
-        created_at: '',
-      },
-    ]);
-    mockApi.post.mockResolvedValueOnce({ data: serverNote } as never);
-
-    await drainQueue(db as never);
-
-    expect(mockReplaceLocalNoteId).toHaveBeenCalledWith(db, 'local_temp_1', serverNote);
-    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [8]);
-  });
-
   it('keeps a client-supplied create id stable: adopts the server note, clears pending, no reconcile (#475)', async () => {
     const clientId = 'AbcdefghijklmnopqrstUv'; // 22-char server-valid id
     const serverNote = {
@@ -340,9 +315,7 @@ describe('drainQueue', () => {
 
     const { idMappings } = await drainQueue(db as never);
 
-    // The id never changes, so there is no reconcile — the canonical note is
-    // adopted and the pending-create marker is cleared.
-    expect(mockReplaceLocalNoteId).not.toHaveBeenCalled();
+    // The id never changes — adopt the canonical note and clear the pending-create marker.
     expect(mockSaveNote).toHaveBeenCalledWith(db, serverNote);
     expect(db.runAsync).toHaveBeenCalledWith(
       `UPDATE notes SET sync_state = 'synced' WHERE id = ? AND sync_state = 'pending'`,
@@ -378,9 +351,13 @@ describe('drainQueue', () => {
     ]);
   });
 
-  it('reconciles a duplicate local id and replaces the local note with the server note', async () => {
+  it('adopts the server note and clears pending-create when duplicate uses a client-supplied id', async () => {
+    // New-style offline duplicate: client sends { id } instead of { local_id }.
+    // The server keeps the client-supplied id, so serverNote.id === clientId →
+    // the stable-id path runs (saveNote + clearNotePendingCreate), no remap needed.
+    const clientId = 'DupClientId000000000Ab';
     const serverNote = {
-      id: 'server-dup', title: 'Source copy', content: 'body', note_type: 'text',
+      id: clientId, title: 'Copy of Source', content: 'body', note_type: 'text',
       color: '#ffffff', pinned: false, archived: false, position: 0,
       checked_items_collapsed: false, is_shared: false, deleted_at: null,
       user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
@@ -391,7 +368,7 @@ describe('drainQueue', () => {
         operation: 'duplicate',
         endpoint: '/notes/src-123/duplicate',
         method: 'POST',
-        body: JSON.stringify({ local_id: 'local_dup_1' }),
+        body: JSON.stringify({ id: clientId }),
         created_at: '',
       },
     ]);
@@ -399,46 +376,15 @@ describe('drainQueue', () => {
 
     const { idMappings } = await drainQueue(db as never);
 
-    expect(mockApi.post).toHaveBeenCalledWith('/notes/src-123/duplicate', { local_id: 'local_dup_1' });
-    expect(mockReplaceLocalNoteId).toHaveBeenCalledWith(db, 'local_dup_1', serverNote);
+    expect(mockApi.post).toHaveBeenCalledWith('/notes/src-123/duplicate', { id: clientId });
+    // Save canonical note and clear pending-create marker.
+    expect(mockSaveNote).toHaveBeenCalledWith(db, serverNote);
+    expect(db.runAsync).toHaveBeenCalledWith(
+      `UPDATE notes SET sync_state = 'synced' WHERE id = ? AND sync_state = 'pending'`,
+      [clientId],
+    );
     expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [9]);
-    expect(idMappings).toEqual([{ localId: 'local_dup_1', serverNote }]);
-  });
-
-  it('remaps a duplicate local id in later queue entries that reference it', async () => {
-    const serverNote = {
-      id: 'server-dup', title: '', content: 'body', note_type: 'text',
-      color: '#ffffff', pinned: false, archived: false, position: 0,
-      checked_items_collapsed: false, is_shared: false, deleted_at: null,
-      user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
-    };
-    const db = makeMockDb([
-      {
-        id: 17,
-        operation: 'duplicate',
-        endpoint: '/notes/src-123/duplicate',
-        method: 'POST',
-        body: JSON.stringify({ local_id: 'local_dup_1' }),
-        created_at: '',
-      },
-      {
-        id: 18,
-        operation: 'update',
-        endpoint: '/notes/local_dup_1',
-        method: 'PATCH',
-        body: JSON.stringify({ content: 'edited' }),
-        created_at: '',
-      },
-    ]);
-    mockApi.post.mockResolvedValueOnce({ data: serverNote } as never);
-    mockApi.patch.mockResolvedValueOnce({ data: {} } as never);
-
-    await drainQueue(db as never);
-
-    // The update endpoint should be remapped to the server-assigned id.
-    expect(mockApi.patch).toHaveBeenCalledWith('/notes/server-dup', { content: 'edited' });
-    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [17]);
-    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [18]);
+    expect(idMappings).toEqual([{ localId: clientId, serverNote }]);
   });
 
   it('reconciles a createLabel local id and remaps it for later queued ops', async () => {
@@ -472,6 +418,110 @@ describe('drainQueue', () => {
     expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [31]);
   });
 
+  it('resolves a createLabel 409 as idempotent when the server label has the same ID (replay)', async () => {
+    const clientId = 'ClientLblId00000000001';
+    const db = makeMockDb([
+      {
+        id: 32,
+        operation: 'createLabel',
+        endpoint: '/labels',
+        method: 'POST',
+        body: JSON.stringify({ id: clientId, name: 'Work' }),
+        created_at: '',
+      },
+    ]);
+    mockApi.post.mockRejectedValueOnce(makeAxiosError(409) as never);
+    mockApi.get.mockResolvedValueOnce({ data: [{ id: clientId, name: 'Work' }] } as never);
+
+    const { discardedOperations } = await drainQueue(db as never);
+
+    // Resolved via GET /labels — same server ID, no remap needed.
+    expect(mockApi.get).toHaveBeenCalledWith('/labels');
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [32]);
+    // No dead-letter inserted.
+    const calls = (db.runAsync as jest.Mock).mock.calls as unknown[][];
+    expect(calls.some((c) => String(c[0]).startsWith('INSERT INTO dead_letter'))).toBe(false);
+    expect(discardedOperations).toEqual([{ operation: 'createLabel', endpoint: '/labels', status: 409 }]);
+  });
+
+  it('remaps a createLabel 409 to the server ID when there is a name collision', async () => {
+    const clientId = 'ClientLblId00000000002';
+    const serverLblId = 'ServerLblId0000000002';
+    const db = makeMockDb([
+      {
+        id: 33,
+        operation: 'createLabel',
+        endpoint: '/labels',
+        method: 'POST',
+        body: JSON.stringify({ id: clientId, name: 'Home' }),
+        created_at: '',
+      },
+      {
+        id: 34,
+        operation: 'deleteLabel',
+        endpoint: `/labels/${clientId}`,
+        method: 'DELETE',
+        body: null,
+        created_at: '',
+      },
+    ]);
+    mockApi.post.mockRejectedValueOnce(makeAxiosError(409) as never);
+    mockApi.get.mockResolvedValueOnce({ data: [{ id: serverLblId, name: 'Home' }] } as never);
+    mockApi.delete.mockResolvedValueOnce({ data: {} } as never);
+
+    const { discardedOperations } = await drainQueue(db as never);
+
+    // Downstream delete endpoint remapped to the server label ID.
+    expect(mockApi.delete).toHaveBeenCalledWith(`/labels/${serverLblId}`);
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [33]);
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [34]);
+    expect(discardedOperations).toEqual([{ operation: 'createLabel', endpoint: '/labels', status: 409 }]);
+  });
+
+  it('dead-letters a createLabel 409 when the label is not found via GET /labels', async () => {
+    const db = makeMockDb([
+      {
+        id: 35,
+        operation: 'createLabel',
+        endpoint: '/labels',
+        method: 'POST',
+        body: JSON.stringify({ id: 'ClientLblId00000000003', name: 'Gone' }),
+        created_at: '',
+      },
+    ]);
+    mockApi.post.mockRejectedValueOnce(makeAxiosError(409) as never);
+    mockApi.get.mockResolvedValueOnce({ data: [] } as never);
+
+    const { discardedOperations } = await drainQueue(db as never);
+
+    const calls = (db.runAsync as jest.Mock).mock.calls as unknown[][];
+    expect(calls.some((c) => String(c[0]).startsWith('INSERT INTO dead_letter'))).toBe(true);
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [35]);
+    expect(discardedOperations).toEqual([{ operation: 'createLabel', endpoint: '/labels', status: 409 }]);
+  });
+
+  it('dead-letters a createLabel 409 when the GET /labels lookup itself fails', async () => {
+    const db = makeMockDb([
+      {
+        id: 36,
+        operation: 'createLabel',
+        endpoint: '/labels',
+        method: 'POST',
+        body: JSON.stringify({ id: 'ClientLblId00000000004', name: 'Fail' }),
+        created_at: '',
+      },
+    ]);
+    mockApi.post.mockRejectedValueOnce(makeAxiosError(409) as never);
+    mockApi.get.mockRejectedValueOnce(new Error('Network Error') as never);
+
+    const { discardedOperations } = await drainQueue(db as never);
+
+    const calls = (db.runAsync as jest.Mock).mock.calls as unknown[][];
+    expect(calls.some((c) => String(c[0]).startsWith('INSERT INTO dead_letter'))).toBe(true);
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [36]);
+    expect(discardedOperations).toEqual([{ operation: 'createLabel', endpoint: '/labels', status: 409 }]);
+  });
+
   it('persists the note returned by an addLabelToNote replay', async () => {
     const serverNote = {
       id: 'n1', content: 'body', note_type: 'text',
@@ -497,6 +547,41 @@ describe('drainQueue', () => {
 
     expect(mockSaveNote).toHaveBeenCalledWith(db, serverNote);
     expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [40]);
+  });
+
+  it('reconciles all authoritative fields (not just completed) from a toggleItemCompleted replay', async () => {
+    // The server returns the note's full, authoritative item list on this
+    // endpoint. If the local DB only patched `completed`, a stale local
+    // parent_id/position left over from an earlier partial sync would never
+    // get corrected, and the toggle would end up rendered against the wrong
+    // item's row.
+    const db = makeMockDb([
+      {
+        id: 42,
+        operation: 'toggleItemCompleted',
+        endpoint: '/notes/n1/items/i1/toggle-completed',
+        method: 'POST',
+        body: '{"completed":true}',
+        created_at: '',
+      },
+    ]);
+    mockApi.post.mockResolvedValueOnce({
+      data: [
+        { id: 'i1', text: 'Replace faucet', completed: true, position: 1, parent_id: 'kitchen', assigned_to: '' },
+        { id: 'i2', text: 'Hgg', completed: false, position: 4, parent_id: 'mirror', assigned_to: '' },
+      ],
+    } as never);
+
+    await drainQueue(db as never);
+
+    expect(db.runAsync).toHaveBeenCalledWith(
+      expect.stringContaining('parent_id = ?'),
+      expect.arrayContaining(['Replace faucet', 1, 'kitchen', 'i1', 'n1']),
+    );
+    expect(db.runAsync).toHaveBeenCalledWith(
+      expect.stringContaining('parent_id = ?'),
+      expect.arrayContaining(['Hgg', 4, 'mirror', 'i2', 'n1']),
+    );
   });
 
   it('persists the note returned by a removeLabelFromNote replay', async () => {
@@ -543,6 +628,77 @@ describe('drainQueue', () => {
     expect(mockApi.patch).toHaveBeenCalledWith('/users/me', { language: 'de' });
     expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [50]);
     expect(syncedSettings).toBe(true);
+  });
+
+  it('reconciles the note from the server after a share op (204 has no body)', async () => {
+    const serverNote = {
+      id: 'n1', title: 'Shared', content: '', note_type: 'text', color: '#fff', pinned: false,
+      archived: false, position: 0, version: 1, checked_items_collapsed: false, is_shared: true,
+      deleted_at: null, user_id: 'u1', created_at: '', updated_at: '', labels: [],
+      shared_with: [{ id: 's-real', note_id: 'n1', shared_with_user_id: 'u2', shared_by_user_id: 'u1', permission_level: 'write', username: 'bob', first_name: '', last_name: '', has_profile_icon: false, created_at: '', updated_at: '' }],
+    };
+    const db = makeMockDb([
+      { id: 60, operation: 'share', endpoint: '/notes/n1/share', method: 'POST', body: JSON.stringify({ user_id: 'u2' }), created_at: '' },
+    ]);
+    mockApi.post.mockResolvedValueOnce({ status: 204 } as never);
+    mockApi.get.mockResolvedValueOnce({ data: serverNote } as never);
+
+    await drainQueue(db as never);
+
+    expect(mockApi.post).toHaveBeenCalledWith('/notes/n1/share', { user_id: 'u2' });
+    // The optimistic `optimistic_<userId>` share row is replaced by re-fetching
+    // the canonical note (share returns 204, so there is no response body). Only
+    // the share columns are written, not a full saveNote, so a content edit still
+    // queued for the same note isn't clobbered.
+    expect(mockApi.get).toHaveBeenCalledWith('/notes/n1');
+    expect(mockSaveNote).not.toHaveBeenCalled();
+    expect(db.runAsync).toHaveBeenCalledWith(
+      'UPDATE notes SET is_shared = ?, shared_with_json = ? WHERE id = ?',
+      [1, JSON.stringify(serverNote.shared_with), 'n1'],
+    );
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [60]);
+  });
+
+  it('reconciles the note from the server after an unshare op', async () => {
+    const serverNote = {
+      id: 'n1', title: 'Unshared', content: '', note_type: 'text', color: '#fff', pinned: false,
+      archived: false, position: 0, version: 1, checked_items_collapsed: false, is_shared: false,
+      deleted_at: null, user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
+    };
+    const db = makeMockDb([
+      { id: 61, operation: 'unshare', endpoint: '/notes/n1/shares/u2', method: 'DELETE', body: null, created_at: '' },
+    ]);
+    mockApi.delete.mockResolvedValueOnce({ status: 204 } as never);
+    mockApi.get.mockResolvedValueOnce({ data: serverNote } as never);
+
+    await drainQueue(db as never);
+
+    expect(mockApi.delete).toHaveBeenCalledWith('/notes/n1/shares/u2');
+    expect(mockApi.get).toHaveBeenCalledWith('/notes/n1');
+    expect(mockSaveNote).not.toHaveBeenCalled();
+    expect(db.runAsync).toHaveBeenCalledWith(
+      'UPDATE notes SET is_shared = ?, shared_with_json = ? WHERE id = ?',
+      [0, JSON.stringify([]), 'n1'],
+    );
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [61]);
+  });
+
+  it('still drains a share op when the post-share reconcile fetch fails', async () => {
+    const db = makeMockDb([
+      { id: 62, operation: 'share', endpoint: '/notes/n1/share', method: 'POST', body: JSON.stringify({ user_id: 'u2' }), created_at: '' },
+    ]);
+    mockApi.post.mockResolvedValueOnce({ status: 204 } as never);
+    mockApi.get.mockRejectedValueOnce(makeAxiosError(500));
+
+    await drainQueue(db as never);
+
+    // The share itself succeeded, so the entry is removed even though the
+    // best-effort reconcile fetch failed (the next background sync reconciles).
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [62]);
+    expect(db.runAsync).not.toHaveBeenCalledWith(
+      'UPDATE notes SET is_shared = ?, shared_with_json = ? WHERE id = ?',
+      expect.anything(),
+    );
   });
 });
 
@@ -711,6 +867,79 @@ describe('removeLocalNotesNotIn', () => {
     );
 
     expect(db.runAsync).not.toHaveBeenCalled();
+  });
+});
+
+// ── getLocalNotes search ───────────────────────────────────────────────────
+
+describe('getLocalNotes search', () => {
+  it('searches title, content, and item text when search param is provided', async () => {
+    const db = { getAllAsync: jest.fn().mockResolvedValue([]) };
+
+    await getLocalNotes(db as never, { search: 'hello' });
+
+    const [sql, args] = (db.getAllAsync as jest.Mock).mock.calls[0] as [string, unknown[]];
+    expect(sql).toContain("title LIKE ? ESCAPE '\\'");
+    expect(sql).toContain("content LIKE ? ESCAPE '\\'");
+    expect(sql).toContain("id IN (SELECT note_id FROM note_items WHERE text LIKE ? ESCAPE '\\')");
+    expect(args).toEqual(['%hello%', '%hello%', '%hello%']);
+  });
+
+  it('escapes LIKE wildcards in the search text so they match literally', async () => {
+    const db = { getAllAsync: jest.fn().mockResolvedValue([]) };
+
+    await getLocalNotes(db as never, { search: '50%_a\\b' });
+
+    const [, args] = (db.getAllAsync as jest.Mock).mock.calls[0] as [string, unknown[]];
+    expect(args).toEqual(['%50\\%\\_a\\\\b%', '%50\\%\\_a\\\\b%', '%50\\%\\_a\\\\b%']);
+  });
+
+  it('does not add a LIKE condition when no search param is given', async () => {
+    const db = { getAllAsync: jest.fn().mockResolvedValue([]) };
+
+    await getLocalNotes(db as never);
+
+    const [sql] = (db.getAllAsync as jest.Mock).mock.calls[0] as [string, unknown[]];
+    expect(sql).not.toContain('LIKE');
+  });
+});
+
+// ── removeLocalNotesNotIn search scope ────────────────────────────────────────
+
+describe('removeLocalNotesNotIn with search', () => {
+  it('includes item-text subquery in pruning scope when search param is provided', async () => {
+    const db = {
+      getAllAsync: jest.fn().mockResolvedValue([]),
+      runAsync: jest.fn().mockResolvedValue(undefined),
+    };
+
+    await removeLocalNotesNotIn(db as never, new Set<string>(), { search: 'hello' });
+
+    const deleteCall = (db.runAsync as jest.Mock).mock.calls.find(
+      (c: unknown[]) => String(c[0]).startsWith('DELETE'),
+    ) as [string, unknown[]] | undefined;
+    expect(deleteCall).toBeDefined();
+    const [sql, args] = deleteCall!;
+    expect(sql).toContain("title LIKE ? ESCAPE '\\'");
+    expect(sql).toContain("content LIKE ? ESCAPE '\\'");
+    expect(sql).toContain("id IN (SELECT note_id FROM note_items WHERE text LIKE ? ESCAPE '\\')");
+    expect(args).toEqual(['%hello%', '%hello%', '%hello%']);
+  });
+
+  it('escapes LIKE wildcards so the prune scope matches the server literal search', async () => {
+    const db = {
+      getAllAsync: jest.fn().mockResolvedValue([]),
+      runAsync: jest.fn().mockResolvedValue(undefined),
+    };
+
+    await removeLocalNotesNotIn(db as never, new Set<string>(), { search: '50%' });
+
+    const deleteCall = (db.runAsync as jest.Mock).mock.calls.find(
+      (c: unknown[]) => String(c[0]).startsWith('DELETE'),
+    ) as [string, unknown[]] | undefined;
+    expect(deleteCall).toBeDefined();
+    const [, args] = deleteCall!;
+    expect(args).toEqual(['%50\\%%', '%50\\%%', '%50\\%%']);
   });
 });
 

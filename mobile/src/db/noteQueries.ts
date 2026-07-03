@@ -1,6 +1,9 @@
 import { SQLiteDatabase } from 'expo-sqlite';
-import type { Note, NoteItem, GetNotesParams, Label, NoteShare } from '@jot/shared';
+import * as FileSystem from 'expo-file-system/legacy';
+import type { Note, NoteItem, GetNotesParams, Label, NoteShare, NoteImage } from '@jot/shared';
 import { getRandomBytes, getStrongRandomBytes } from '../utils/random';
+import { withSerializedTransaction } from './transaction';
+import { isLocalModeActive } from '../store/localMode';
 
 interface NoteRow {
   id: string;
@@ -8,6 +11,7 @@ interface NoteRow {
   title: string;
   content: string;
   note_type: string;
+  version: number;
   color: string;
   pinned: number;
   archived: number;
@@ -19,6 +23,7 @@ interface NoteRow {
   updated_at: string;
   labels_json: string;
   shared_with_json: string;
+  images_json: string;
 }
 
 interface NoteItemRow {
@@ -36,11 +41,17 @@ interface NoteItemRow {
 function rowToNote(row: NoteRow, items: NoteItem[] = []): Note {
   let labels: Label[] = [];
   let shared_with: NoteShare[] = [];
+  let images: NoteImage[] = [];
   try { labels = JSON.parse(row.labels_json) as Label[]; } catch { /* ignore */ }
   try { shared_with = JSON.parse(row.shared_with_json) as NoteShare[]; } catch { /* ignore */ }
+  // Older local rows (pre-#616) predate the column; default to no images.
+  try { images = JSON.parse(row.images_json) as NoteImage[]; } catch { /* ignore */ }
   const base = {
     id: row.id,
     user_id: row.user_id,
+    // Older local rows (pre-#489) predate the column; default to 1 so the note
+    // is still usable and the first server fetch supplies the real version.
+    version: row.version ?? 1,
     color: row.color,
     pinned: row.pinned === 1,
     archived: row.archived === 1,
@@ -51,6 +62,7 @@ function rowToNote(row: NoteRow, items: NoteItem[] = []): Note {
     updated_at: row.updated_at,
     labels,
     shared_with,
+    images,
   };
   if (row.note_type === 'list') {
     return {
@@ -82,6 +94,20 @@ function itemRowToNoteItem(row: NoteItemRow): NoteItem {
   };
 }
 
+/**
+ * Escape SQL LIKE wildcards in user-entered search text so `%`/`_` match
+ * literally (paired with `ESCAPE '\'` on the LIKE). Without this a search like
+ * "50%" over-matches locally — and, worse, widens the prune scope in
+ * {@link removeLocalNotesNotIn} beyond what the server's literal match
+ * returned, deleting local rows that still exist on the server.
+ */
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
+const SEARCH_LIKE_SQL =
+  "(title LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\' OR id IN (SELECT note_id FROM note_items WHERE text LIKE ? ESCAPE '\\'))";
+
 async function getItemsForNote(db: SQLiteDatabase, noteId: string): Promise<NoteItem[]> {
   const rows = await db.getAllAsync<NoteItemRow>(
     'SELECT * FROM note_items WHERE note_id = ? ORDER BY position ASC',
@@ -100,16 +126,17 @@ async function saveNoteInTx(db: SQLiteDatabase, note: Note): Promise<void> {
 
   await db.runAsync(
     `INSERT OR REPLACE INTO notes
-       (id, user_id, title, content, note_type, color, pinned, archived, position,
+       (id, user_id, title, content, note_type, version, color, pinned, archived, position,
         checked_items_collapsed, is_shared, deleted_at, created_at, updated_at,
-        labels_json, shared_with_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        labels_json, shared_with_json, images_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       note.id,
       note.user_id,
       title,
       content,
       note.note_type,
+      note.version,
       note.color,
       note.pinned ? 1 : 0,
       note.archived ? 1 : 0,
@@ -121,6 +148,7 @@ async function saveNoteInTx(db: SQLiteDatabase, note: Note): Promise<void> {
       note.updated_at,
       JSON.stringify(note.labels ?? []),
       JSON.stringify(note.shared_with ?? []),
+      JSON.stringify(note.images ?? []),
     ],
   );
 
@@ -147,17 +175,26 @@ interface SaveNoteOptions {
 
 export async function saveNote(db: SQLiteDatabase, note: Note, options?: SaveNoteOptions): Promise<void> {
   if (options?.skipNoteIds?.has(note.id)) return;
-  await db.withTransactionAsync(() => saveNoteInTx(db, note));
+  await withSerializedTransaction(db, () => saveNoteInTx(db, note));
+}
+
+/**
+ * Persist a batch of notes without opening its own transaction. Must only be
+ * called from within an existing transaction context (see saveNotes / reconcileServerNotesScope).
+ */
+async function saveNotesInTx(
+  db: SQLiteDatabase,
+  notes: Note[],
+  skipNoteIds?: ReadonlySet<string>,
+): Promise<void> {
+  for (const note of notes) {
+    if (skipNoteIds?.has(note.id)) continue;
+    await saveNoteInTx(db, note);
+  }
 }
 
 export async function saveNotes(db: SQLiteDatabase, notes: Note[], options?: SaveNoteOptions): Promise<void> {
-  const skipNoteIds = options?.skipNoteIds;
-  await db.withTransactionAsync(async () => {
-    for (const note of notes) {
-      if (skipNoteIds?.has(note.id)) continue;
-      await saveNoteInTx(db, note);
-    }
-  });
+  await withSerializedTransaction(db, () => saveNotesInTx(db, notes, options?.skipNoteIds));
 }
 
 export async function getLocalNotes(db: SQLiteDatabase, params?: GetNotesParams): Promise<Note[]> {
@@ -177,8 +214,9 @@ export async function getLocalNotes(db: SQLiteDatabase, params?: GetNotesParams)
   }
 
   if (params?.search) {
-    sql += ' AND ((note_type = \'list\' AND title LIKE ?) OR (note_type = \'text\' AND content LIKE ?))';
-    args.push(`%${params.search}%`, `%${params.search}%`);
+    const pattern = `%${escapeLikePattern(params.search)}%`;
+    sql += ` AND ${SEARCH_LIKE_SQL}`;
+    args.push(pattern, pattern, pattern);
   }
 
   sql += ' ORDER BY pinned DESC, position ASC';
@@ -215,6 +253,36 @@ export async function getLocalNote(db: SQLiteDatabase, id: string): Promise<Note
   if (!row) return null;
   const items = row.note_type === 'list' ? await getItemsForNote(db, id) : [];
   return rowToNote(row, items);
+}
+
+/**
+ * Applies `updater` to a note's locally-cached image list, e.g. from an SSE
+ * `note_image_added`/`note_image_removed` event (issue #616). No-op if the
+ * note isn't cached locally yet — the next full note fetch will pick up its
+ * images.
+ */
+export async function patchLocalNoteImages(
+  db: SQLiteDatabase,
+  noteId: string,
+  updater: (images: NoteImage[]) => NoteImage[],
+): Promise<void> {
+  // Serialized like saveNote: the read-modify-write below would otherwise let
+  // two back-to-back SSE events (e.g. two rapid note_image_added) interleave
+  // and have the second write clobber the first's change.
+  await withSerializedTransaction(db, async () => {
+    const row = await db.getFirstAsync<Pick<NoteRow, 'images_json'>>(
+      'SELECT images_json FROM notes WHERE id = ?',
+      [noteId],
+    );
+    if (!row) return;
+    let images: NoteImage[] = [];
+    try { images = JSON.parse(row.images_json) as NoteImage[]; } catch { /* ignore */ }
+    const nextImages = updater(images);
+    await db.runAsync(
+      'UPDATE notes SET images_json = ? WHERE id = ?',
+      [JSON.stringify(nextImages), noteId],
+    );
+  });
 }
 
 export async function markLocalNoteDeleted(db: SQLiteDatabase, id: string): Promise<void> {
@@ -260,6 +328,13 @@ export async function getFailedNoteIds(db: SQLiteDatabase): Promise<Set<string>>
  * (issue #475).
  */
 export async function markNotePendingCreate(db: SQLiteDatabase, id: string): Promise<void> {
+  // Local mode has no server to confirm the create against, so a locally-created
+  // note is already terminal ('synced', the column default). Skipping the pending
+  // marker keeps local writes terminal and prevents the note from being gated as
+  // "not on the server yet" forever (issue #514).
+  if (isLocalModeActive()) {
+    return;
+  }
   await db.runAsync(`UPDATE notes SET sync_state = 'pending' WHERE id = ?`, [id]);
 }
 
@@ -299,7 +374,23 @@ export async function markLocalNoteRestored(db: SQLiteDatabase, id: string): Pro
   );
 }
 
+/**
+ * Permanently delete a note. `ON DELETE CASCADE` (migration4, issue #618)
+ * removes the note's `pending_image_uploads` rows automatically, but not
+ * their stable file copies under `pending-image-uploads/` (imageUploadQueue.ts) —
+ * clean those up first, best-effort, so a note deleted while an offline image
+ * upload is still queued for it doesn't leak the copied file forever. Reads
+ * the table directly rather than importing imageUploadQueue.ts to avoid a
+ * circular import (that module already imports from this one).
+ */
 export async function permanentDeleteLocalNote(db: SQLiteDatabase, id: string): Promise<void> {
+  const pendingUploads = await db.getAllAsync<{ local_path: string }>(
+    'SELECT local_path FROM pending_image_uploads WHERE note_id = ?',
+    [id],
+  );
+  await Promise.allSettled(
+    pendingUploads.map((row) => FileSystem.deleteAsync(row.local_path, { idempotent: true })),
+  );
   await db.runAsync('DELETE FROM notes WHERE id = ?', [id]);
 }
 
@@ -341,16 +432,54 @@ export async function updateLocalNote(
   await db.runAsync(`UPDATE notes SET ${fields.join(', ')} WHERE id = ?`, values);
 }
 
+/**
+ * Read a note's current optimistic-concurrency version, or null if the note
+ * isn't in the local DB. Used by the queue drain to resolve an update's
+ * base_version at replay time (see {@link setLocalNoteVersion}, #489).
+ */
+export async function getLocalNoteVersion(db: SQLiteDatabase, id: string): Promise<number | null> {
+  const row = await db.getFirstAsync<{ version: number }>('SELECT version FROM notes WHERE id = ?', [id]);
+  return row?.version ?? null;
+}
+
+/**
+ * Refresh just a note's `version` column from a server response during queue
+ * drain. Only the version is touched (not content) so a later same-note edit
+ * still pending in the queue keeps its optimistic content; the bumped version
+ * lets the next queued edit to this note replay against the right base (#489).
+ */
+export async function setLocalNoteVersion(db: SQLiteDatabase, id: string, version: number): Promise<void> {
+  await db.runAsync('UPDATE notes SET version = ? WHERE id = ?', [version, id]);
+}
+
+/**
+ * Update only a note's share columns (`is_shared` + `shared_with`) from a server
+ * snapshot, leaving title/content/items/version untouched. Used by the queue
+ * drain to reconcile optimistic share rows after a share/unshare without
+ * clobbering a content edit that may still be queued for the same note: the
+ * `update` drain only bumps the version (see {@link setLocalNoteVersion}), so a
+ * full saveNote here would revert that pending edit until the next background sync.
+ */
+export async function updateLocalNoteShares(
+  db: SQLiteDatabase,
+  id: string,
+  shares: { is_shared: boolean; shared_with: NoteShare[] },
+): Promise<void> {
+  await db.runAsync(
+    'UPDATE notes SET is_shared = ?, shared_with_json = ? WHERE id = ?',
+    [shares.is_shared ? 1 : 0, JSON.stringify(shares.shared_with ?? []), id],
+  );
+}
+
 export async function renameLabelInLocalNotes(
   db: SQLiteDatabase,
   labelId: string,
   name: string,
 ): Promise<void> {
-  const rows = await db.getAllAsync<Pick<NoteRow, 'id' | 'labels_json'>>(
-    'SELECT id, labels_json FROM notes',
-  );
-
-  await db.withTransactionAsync(async () => {
+  await withSerializedTransaction(db, async () => {
+    const rows = await db.getAllAsync<Pick<NoteRow, 'id' | 'labels_json'>>(
+      'SELECT id, labels_json FROM notes',
+    );
     for (const row of rows) {
       let labels: Label[] = [];
       try {
@@ -441,11 +570,10 @@ export async function deleteLabelFromLocalNotes(
   db: SQLiteDatabase,
   labelId: string,
 ): Promise<void> {
-  const rows = await db.getAllAsync<Pick<NoteRow, 'id' | 'labels_json'>>(
-    'SELECT id, labels_json FROM notes',
-  );
-
-  await db.withTransactionAsync(async () => {
+  await withSerializedTransaction(db, async () => {
+    const rows = await db.getAllAsync<Pick<NoteRow, 'id' | 'labels_json'>>(
+      'SELECT id, labels_json FROM notes',
+    );
     for (const row of rows) {
       let labels: Label[] = [];
       try {
@@ -464,19 +592,6 @@ export async function deleteLabelFromLocalNotes(
         [JSON.stringify(nextLabels), new Date().toISOString(), row.id],
       );
     }
-  });
-}
-
-export async function replaceLocalNoteId(
-  db: SQLiteDatabase,
-  oldId: string,
-  newNote: Note,
-): Promise<void> {
-  // Wrap DELETE + INSERT in a single transaction so a mid-operation crash cannot
-  // leave the note permanently deleted without the new server ID being written.
-  await db.withTransactionAsync(async () => {
-    await db.runAsync('DELETE FROM notes WHERE id = ?', [oldId]);
-    await saveNoteInTx(db, newNote);
   });
 }
 
@@ -532,6 +647,19 @@ export async function removeLocalNotesNotIn(
   params?: GetNotesParams,
   options?: { skipNoteIds?: ReadonlySet<string> },
 ): Promise<void> {
+  await removeLocalNotesNotInTx(db, serverIds, params, options?.skipNoteIds);
+}
+
+/**
+ * Prune-scope body without its own transaction. Must only be called from within
+ * an existing transaction context (see removeLocalNotesNotIn / reconcileServerNotesScope).
+ */
+async function removeLocalNotesNotInTx(
+  db: SQLiteDatabase,
+  serverIds: Set<string>,
+  params?: GetNotesParams,
+  skipNoteIds?: ReadonlySet<string>,
+): Promise<void> {
   // my_tasks is a cross-cutting filter (overlaps with the main "notes" scope),
   // so we must not remove notes that may still belong in other views.
   if (params?.my_tasks) return;
@@ -540,8 +668,6 @@ export async function removeLocalNotesNotIn(
   // edit can optimistically move a note into this scope (e.g. un-archive/restore)
   // before the server reflects it, so it would be absent from serverIds and get
   // deleted, destroying the optimistic edit. The drain reconciles them (#487).
-  const skipNoteIds = options?.skipNoteIds;
-
   const scopeArgs: (string | number | null)[] = [];
   let scopedWhereSql = "id NOT LIKE 'local_%'";
 
@@ -554,8 +680,9 @@ export async function removeLocalNotesNotIn(
   }
 
   if (params?.search) {
-    scopedWhereSql += ' AND (title LIKE ? OR content LIKE ?)';
-    scopeArgs.push(`%${params.search}%`, `%${params.search}%`);
+    const pattern = `%${escapeLikePattern(params.search)}%`;
+    scopedWhereSql += ` AND ${SEARCH_LIKE_SQL}`;
+    scopeArgs.push(pattern, pattern, pattern);
   }
 
   if (params?.label) {
@@ -602,6 +729,34 @@ export async function removeLocalNotesNotIn(
   await db.runAsync(sql, args);
 }
 
+/**
+ * Atomically reconcile a scoped server note list into local SQLite: persist the
+ * fetched notes and prune local rows that have fallen out of this scope, both in
+ * a *single* transaction. The notes-list and single-note queries read straight
+ * from SQLite (staleTime: Infinity) and refetch on every invalidation, so when
+ * the save and the prune ran as two separate writes a concurrent read could
+ * observe the half-written intermediate state — which on reconnect, as several
+ * triggers raced to refresh, surfaced as a visible flash to an empty/partial
+ * list. Wrapping both in one transaction makes a reader see either the full
+ * pre-state or the full post-state, never a partial one.
+ *
+ * Both steps share a single `skipNoteIds` set so notes with an unsynced (pending
+ * or failed) local edit are neither overwritten nor pruned (#487/#492).
+ */
+export async function reconcileServerNotesScope(
+  db: SQLiteDatabase,
+  serverNotes: Note[],
+  params?: GetNotesParams,
+  options?: SaveNoteOptions,
+): Promise<void> {
+  const skipNoteIds = options?.skipNoteIds;
+  const serverIds = new Set(serverNotes.map((n) => n.id));
+  await withSerializedTransaction(db, async () => {
+    await saveNotesInTx(db, serverNotes, skipNoteIds);
+    await removeLocalNotesNotInTx(db, serverIds, params, skipNoteIds);
+  });
+}
+
 // --- Granular local list-item mutations -----------------------------------
 // These mirror the server's per-item endpoints so the local SQLite cache stays
 // consistent when items are edited one at a time (online or offline).
@@ -621,7 +776,7 @@ export interface LocalItemInput {
 
 export async function createLocalItem(db: SQLiteDatabase, noteId: string, item: LocalItemInput): Promise<void> {
   const now = new Date().toISOString();
-  await db.withTransactionAsync(async () => {
+  await withSerializedTransaction(db, async () => {
     await db.runAsync(
       `INSERT OR REPLACE INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -651,14 +806,14 @@ export async function patchLocalItem(db: SQLiteDatabase, noteId: string, itemId:
   fields.push('updated_at = ?');
   values.push(new Date().toISOString());
   values.push(itemId, noteId);
-  await db.withTransactionAsync(async () => {
+  await withSerializedTransaction(db, async () => {
     await db.runAsync(`UPDATE note_items SET ${fields.join(', ')} WHERE id = ? AND note_id = ?`, values);
     await touchLocalNote(db, noteId);
   });
 }
 
 export async function deleteLocalItem(db: SQLiteDatabase, noteId: string, itemId: string): Promise<void> {
-  await db.withTransactionAsync(async () => {
+  await withSerializedTransaction(db, async () => {
     await db.runAsync('DELETE FROM note_items WHERE id = ? AND note_id = ?', [itemId, noteId]);
     await touchLocalNote(db, noteId);
   });
@@ -666,7 +821,7 @@ export async function deleteLocalItem(db: SQLiteDatabase, noteId: string, itemId
 
 export async function reorderLocalItems(db: SQLiteDatabase, noteId: string, itemIds: string[]): Promise<void> {
   const now = new Date().toISOString();
-  await db.withTransactionAsync(async () => {
+  await withSerializedTransaction(db, async () => {
     for (let i = 0; i < itemIds.length; i++) {
       await db.runAsync('UPDATE note_items SET position = ?, updated_at = ? WHERE id = ? AND note_id = ?', [i, now, itemIds[i], noteId]);
     }
@@ -694,7 +849,7 @@ const SERVER_ID_LENGTH = 22;
  * `POST /notes` and the create replays idempotently — no server-side ID
  * reconciliation is needed because the client ID *is* the server ID (issue #475).
  */
-export function generateClientNoteId(): string {
+function generateClientId(): string {
   const bytes = new Uint8Array(SERVER_ID_LENGTH);
   getStrongRandomBytes(bytes);
   let id = '';
@@ -702,6 +857,49 @@ export function generateClientNoteId(): string {
     id += SERVER_ID_CHARS[bytes[i] % SERVER_ID_CHARS.length];
   }
   return id;
+}
+
+/**
+ * Generate a server-compatible 22-char note ID. Offline-created notes use this
+ * (rather than a `local_*` ID) so the ID is sent as the note's primary key on
+ * `POST /notes` and the create replays idempotently — no server-side ID
+ * reconciliation is needed because the client ID *is* the server ID (issue #475).
+ */
+export function generateClientNoteId(): string {
+  return generateClientId();
+}
+
+/**
+ * Generate a server-compatible 22-char label ID. Offline-created labels use this
+ * (rather than a `local_*` ID) so the ID is sent as the label's primary key on
+ * `POST /labels` and the create replays idempotently — no server-side ID
+ * reconciliation is needed because the client ID *is* the server ID (issue #546).
+ */
+export function generateClientLabelId(): string {
+  return generateClientId();
+}
+
+export async function getAllLocalNotes(db: SQLiteDatabase): Promise<Note[]> {
+  const rows = await db.getAllAsync<NoteRow>('SELECT * FROM notes ORDER BY position ASC');
+
+  if (rows.length === 0) return [];
+
+  const listIds = rows.filter((r) => r.note_type === 'list').map((r) => r.id);
+  const itemsByNoteId = new Map<string, NoteItem[]>();
+  if (listIds.length > 0) {
+    const placeholders = listIds.map(() => '?').join(', ');
+    const itemRows = await db.getAllAsync<NoteItemRow>(
+      `SELECT * FROM note_items WHERE note_id IN (${placeholders}) ORDER BY note_id ASC, position ASC`,
+      listIds,
+    );
+    for (const itemRow of itemRows) {
+      const existing = itemsByNoteId.get(itemRow.note_id) ?? [];
+      existing.push(itemRowToNoteItem(itemRow));
+      itemsByNoteId.set(itemRow.note_id, existing);
+    }
+  }
+
+  return rows.map((row) => rowToNote(row, itemsByNoteId.get(row.id) ?? []));
 }
 
 export function isLocalId(id: string): boolean {

@@ -10,7 +10,8 @@
     "error": "Error",
     "unknown": "unknown",
     "loading": "Loading...",
-    "done": "Done"
+    "done": "Done",
+    "or": "or"
   },
   "nav": {
     "settings": "Settings",
@@ -30,6 +31,8 @@
     "invalidUrl": "Server URL must start with http:// or https://.",
     "addFailed": "Failed to add server.",
     "switchFailed": "Failed to switch server.",
+    "sessionExpiredTitle": "Sign in required",
+    "sessionExpiredMessage": "Your saved session for \"{{server}}\" is no longer valid. The account may have been removed. Please sign in again.",
     "duplicateTitle": "Server already added",
     "duplicateMessage": "That server already exists in your list.",
     "switchToExisting": "Switch to existing",
@@ -80,7 +83,10 @@
     "serverSetupInputA11yLabel": "Server URL input",
     "serverSetupSubmitA11yLabel": "Validate server and continue",
     "serverSetupConnectionFailed": "Couldn't reach that server. Check the URL and your connection, then try again.",
-    "serverSetupConnectionInvalidServer": "Connected, but this doesn't look like a compatible Jot API endpoint."
+    "serverSetupConnectionInvalidServer": "Connected, but this doesn't look like a compatible Jot API endpoint.",
+    "localModeLink": "Use without a server",
+    "localModeHint": "Your notes stay on this device only.",
+    "localModeFailed": "Couldn’t start local mode. Please try again."
   },
   "dashboard": {
     "newNote": "New Note",
@@ -119,12 +125,15 @@
       "created_at": "Date created"
     },
     "sortAccessibilityLabel": "Sort by {{sortLabel}}",
+    "layoutToggleToGrid": "Switch to grid layout",
+    "layoutToggleToList": "Switch to list layout",
     "sortDisabledNotice": "Manual reorder is off. Notes are sorted by {{sortLabel}}, so drag-and-drop is unavailable.",
     "noteArchived": "Note archived",
     "noteUnarchived": "Note unarchived",
     "noteDeleted": "Note moved to trash",
     "noteRestored": "Note restored",
-    "undo": "Undo"
+    "undo": "Undo",
+    "toastActionHint": "Tap to {{action}}"
   },
   "settings": {
     "title": "Settings",
@@ -227,6 +236,7 @@
   },
   "note": {
     "share": "Share",
+    "send": "Send",
     "unpin": "Unpin",
     "pin": "Pin",
     "unarchive": "Unarchive",
@@ -253,6 +263,7 @@
     "failedSaveChanges": "Failed to save changes. Tap to retry.",
     "menuOptions": "Note options",
     "assignItem": "Assign item",
+    "removeItem": "Remove item",
     "unassign": "Unassign",
     "assignedTo": "Assigned to {{name}}",
     "changeColor": "Note color",
@@ -269,7 +280,7 @@
     "updatedByAnotherUser": "This note was updated by another user",
     "listItemLabel": "List item",
     "itemCheckbox": "{{item}} checkbox",
-    "dragToReorder": "Drag to reorder",
+    "dragToReorderIndent": "Drag to reorder or indent",
     "colorWhite": "White",
     "colorCoral": "Coral",
     "colorYellow": "Yellow",
@@ -289,7 +300,34 @@
     "outdentItem": "Outdent",
     "itemsPasted_one": "1 item pasted",
     "itemsPasted_other": "{{count}} items pasted",
-    "filterByLabel": "Filter by label: {{label}}"
+    "filterByLabel": "Filter by label: {{label}}",
+    "saveFailedExitTitle": "Save failed",
+    "saveFailedExitMessage": "Your changes couldn't be saved. Retry or discard them to leave.",
+    "discardAndLeave": "Discard & leave"
+  },
+  "images": {
+    "openLightbox": "View {{filename}}",
+    "moreImages": "View {{count}} more images",
+    "lightboxPrevious": "Previous image",
+    "lightboxNext": "Next image",
+    "lightboxCounter": "{{current}} / {{total}}",
+    "addImage": "Add image",
+    "camera": "Camera",
+    "photoLibrary": "Photo Library",
+    "files": "Files",
+    "cameraPermissionDenied": "Camera access is needed to take a photo.",
+    "libraryPermissionDenied": "Photo library access is needed to choose a photo.",
+    "removeImage": "Remove {{filename}}",
+    "removedToast": "Image removed",
+    "uploading": "Uploading… {{percent}}%",
+    "uploadFailed": "Upload failed",
+    "queuedOffline": "Waiting to upload…",
+    "uploadQueuedToast": "Image will upload when you're back online",
+    "retryUpload": "Retry uploading {{filename}}",
+    "dismissUpload": "Dismiss {{filename}}",
+    "errorWrongType": "Only images can be attached.",
+    "errorTooLarge": "Image exceeds the {{maxMB}} MB limit.",
+    "errorTooMany": "Notes can have up to {{max}} images."
   },
   "labels": {
     "title": "Labels",
@@ -349,7 +387,9 @@
   },
   "offline": {
     "message": "You're offline. Changes will sync when you reconnect.",
-    "syncError": "Some changes haven't synced yet. They'll retry automatically."
+    "serverConnecting": "Connecting to server…",
+    "syncError": "Some changes haven't synced yet. They'll retry automatically.",
+    "revalidationError": "Couldn't verify your session with the server. Using local data."
   },
   "syncFailures": {
     "bannerCount_one": "{{count}} change couldn't be saved — Review",
@@ -391,6 +431,40 @@
     "importing": "Importing...",
     "importButton": "Import"
   },
+  "upgrade": {
+    "settingsSectionTitle": "Connect to a server",
+    "settingsSectionDescription": "Sync your notes with a Jot server. Your local notes will be migrated to the server.",
+    "connectToServer": "Connect to a server",
+    "title": "Connect to a server",
+    "subtitle": "Enter your Jot server URL to create a new account and migrate your notes.",
+    "serverUrlLabel": "Server URL",
+    "serverUrlPlaceholder": "https://jot.example.com",
+    "continue": "Continue",
+    "registerTitle": "Create your account",
+    "changeServer": "Change server",
+    "usernameTaken": "This username is already taken. Choose a different one.",
+    "checkingTitle": "Checking compatibility",
+    "capabilityFailed": "This server does not support note migration. Make sure you are using a recent version of Jot.",
+    "emptinessFailed": "The account already has notes or labels. Migration requires a fresh, empty account.",
+    "fetchFailed": "Could not reach the server. Check your connection and try again.",
+    "successTitle": "All checks passed",
+    "successSubtitle": "Your server is compatible and ready. Migration will start in a future step.",
+    "errorTitle": "Cannot connect",
+    "seedingTitle": "Preparing migration",
+    "migratingTitle": "Migrating your notes",
+    "migratingProgress": "Syncing {{processed}} of {{total}}",
+    "migrationCompleteTitle": "Migration complete",
+    "migrationCompleteSubtitle": "Your notes have been uploaded to the server.",
+    "deadLetterTitle": "Migration paused",
+    "deadLetterSubtitle_one": "{{count}} change couldn't be synced to the server.",
+    "deadLetterSubtitle_other": "{{count}} changes couldn't be synced to the server.",
+    "reviewFailedChanges": "Review failed changes",
+    "retryMigration": "Retry migration",
+    "migrationFailed": "Migration failed. Check your connection and try again.",
+    "reconciling": "Syncing notes with server…",
+    "reconcileFailed": "Notes may not reflect the latest server data. Pull to refresh in the notes list.",
+    "resync": "Re-sync"
+  },
   "diagnostics": {
     "title": "Diagnostics",
     "developerSection": "Developer",
@@ -412,6 +486,7 @@
     "degraded": "Degraded",
     "recentLogs": "Recent Logs",
     "clearLogs": "Clear Logs",
+    "expandLogs": "View full logs",
     "refresh": "Refresh",
     "shareDiagnostics": "Share Diagnostics Report",
     "yes": "Yes",

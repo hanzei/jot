@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, NoteItem, CreateNoteRequest, UpdateNoteRequest, CreateNoteItemRequest, PatchNoteItemRequest, User, CreateUserRequest, UserListResponse, AdminStatsResponse, ShareNoteRequest, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, Label, ActiveSession, EmptyTrashResponse, PersonalAccessToken, CreatePATRequest } from '@jot/shared';
+import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, NoteItem, CreateNoteRequest, UpdateNoteRequest, CreateNoteItemRequest, PatchNoteItemRequest, User, CreateUserRequest, UserListResponse, AdminStatsResponse, ShareNoteRequest, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, Label, ActiveSession, EmptyTrashResponse, PersonalAccessToken, CreatePATRequest, NoteImage } from '@jot/shared';
 import { removeUser } from '@/utils/auth';
 
 // Unique ID for this browser tab, used to suppress SSE echoes of our own mutations.
@@ -8,6 +8,7 @@ export const CLIENT_ID = crypto.randomUUID();
 const api = axios.create({
   baseURL: '/api/v1',
   withCredentials: true,
+  timeout: 10_000,
   headers: { 'X-Client-Id': CLIENT_ID },
 });
 
@@ -193,6 +194,31 @@ export const pats = {
 
   revoke: (id: string): Promise<void> =>
     api.delete(`/pats/${id}`).then(() => undefined),
+};
+
+// Note images are served inline (not via axios) so <img> tags can use the URL
+// directly as their src; the browser sends the session cookie automatically
+// for this same-origin request.
+export const images = {
+  url: (id: string): string => `/api/v1/images/${id}`,
+
+  // Resized JPEG tile for grid/cover thumbnails; the lightbox uses `url`
+  // (the original) instead so a closer look never shows a downscaled image.
+  thumbnailUrl: (id: string): string => `/api/v1/images/${id}/thumbnail`,
+
+  upload: (noteId: string, file: File, onProgress?: (percent: number) => void): Promise<NoteImage> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post(`/notes/${noteId}/images`, formData, {
+      onUploadProgress: (event) => {
+        if (!onProgress || !event.total) return;
+        onProgress(Math.round((event.loaded / event.total) * 100));
+      },
+    }).then(res => res.data);
+  },
+
+  delete: (id: string): Promise<void> =>
+    api.delete(`/images/${id}`).then(() => undefined),
 };
 
 export const about = {

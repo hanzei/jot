@@ -11,6 +11,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import NetInfo from '@react-native-community/netinfo';
 import { OfflineProvider, useOfflineContext } from '../src/store/OfflineContext';
 import { drainQueue, getPendingCount } from '../src/db/syncQueue';
+import { getQueuedImageUploadCount } from '../src/db/imageUploadQueue';
+import { setLocalModeActive } from '../src/store/localMode';
 
 // Capture the enqueue listener registered by the provider so tests can fire it.
 let enqueueListener: (() => void) | null = null;
@@ -27,6 +29,11 @@ jest.mock('../src/db/syncQueue', () => ({
   }),
 }));
 
+jest.mock('../src/db/imageUploadQueue', () => ({
+  drainImageUploadQueue: jest.fn().mockResolvedValue({ uploadedNoteIds: [], discardedCount: 0 }),
+  getQueuedImageUploadCount: jest.fn().mockResolvedValue(0),
+}));
+
 const mockRevalidate = jest.fn().mockResolvedValue(true);
 jest.mock('../src/store/AuthContext', () => ({
   useAuth: () => ({ revalidateSession: mockRevalidate }),
@@ -37,6 +44,7 @@ jest.mock('../src/store/AuthContext', () => ({
 
 const mockDrainQueue = drainQueue as jest.MockedFunction<typeof drainQueue>;
 const mockGetPendingCount = getPendingCount as jest.MockedFunction<typeof getPendingCount>;
+const mockGetQueuedImageUploadCount = getQueuedImageUploadCount as jest.MockedFunction<typeof getQueuedImageUploadCount>;
 
 // Captures the latest syncError value exposed through the context.
 let lastSyncError = false;
@@ -82,6 +90,7 @@ describe('OfflineProvider queue draining', () => {
     mockRevalidate.mockResolvedValue(true);
     mockDrainQueue.mockResolvedValue({ idMappings: [], discardedOperations: [], syncedSettings: false });
     mockGetPendingCount.mockResolvedValue(0);
+    mockGetQueuedImageUploadCount.mockResolvedValue(0);
     jest.spyOn(AppState, 'addEventListener');
   });
 
@@ -89,6 +98,33 @@ describe('OfflineProvider queue draining', () => {
     jest.runOnlyPendingTimers();
     jest.useRealTimers();
     jest.restoreAllMocks();
+    setLocalModeActive(false);
+  });
+
+  it('never drains the queue in local mode (mount, foreground, or enqueue)', async () => {
+    setLocalModeActive(true);
+    renderProvider();
+    await flush();
+    // Mount must not drain.
+    expect(mockDrainQueue).not.toHaveBeenCalled();
+
+    // A foreground transition must not drain either.
+    const handler = getAppStateHandler();
+    await act(async () => {
+      handler('active');
+    });
+    await flush();
+
+    // Nor an enqueue signal after its debounce window elapses.
+    act(() => {
+      enqueueListener?.();
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+    });
+    await flush();
+
+    expect(mockDrainQueue).not.toHaveBeenCalled();
   });
 
   it('drains once on mount when starting online', async () => {
@@ -114,6 +150,47 @@ describe('OfflineProvider queue draining', () => {
     await flush();
 
     expect(mockDrainQueue).toHaveBeenCalledTimes(1);
+  });
+
+  it('revalidates the session after a settings drain even with an unrelated image upload backlog', async () => {
+    // The note/settings queue (sync_queue) is empty, but an independent image
+    // upload is still queued — that backlog must not hold the settings
+    // revalidation hostage; it has nothing to do with the settings write.
+    mockDrainQueue.mockResolvedValue({ idMappings: [], discardedOperations: [], syncedSettings: true });
+    mockGetPendingCount.mockResolvedValue(0);
+    mockGetQueuedImageUploadCount.mockResolvedValue(2);
+    renderProvider();
+    await flush();
+    mockRevalidate.mockClear();
+
+    act(() => {
+      enqueueListener?.();
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+    });
+    await flush();
+
+    expect(mockRevalidate).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not revalidate the session after a settings drain while the note queue itself is still pending', async () => {
+    mockDrainQueue.mockResolvedValue({ idMappings: [], discardedOperations: [], syncedSettings: true });
+    mockGetPendingCount.mockResolvedValue(1);
+    mockGetQueuedImageUploadCount.mockResolvedValue(0);
+    renderProvider();
+    await flush();
+    mockRevalidate.mockClear();
+
+    act(() => {
+      enqueueListener?.();
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+    });
+    await flush();
+
+    expect(mockRevalidate).not.toHaveBeenCalled();
   });
 
   it('drains when the app returns to the foreground', async () => {

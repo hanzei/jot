@@ -14,12 +14,14 @@ const migration1 = async (db: SQLiteDatabase): Promise<void> => {
       archived INTEGER NOT NULL DEFAULT 0,
       position INTEGER NOT NULL DEFAULT 0,
       checked_items_collapsed INTEGER NOT NULL DEFAULT 0,
+      version INTEGER NOT NULL DEFAULT 1,
       is_shared INTEGER NOT NULL DEFAULT 0,
       deleted_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       labels_json TEXT NOT NULL DEFAULT '[]',
       shared_with_json TEXT NOT NULL DEFAULT '[]',
+      images_json TEXT NOT NULL DEFAULT '[]',
       sync_state TEXT NOT NULL DEFAULT 'synced'
     );
 
@@ -121,7 +123,56 @@ const migration1 = async (db: SQLiteDatabase): Promise<void> => {
   }
 };
 
-export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1];
+// Migration 2: add an optimistic-concurrency version column to notes (issue #489).
+// Mirrors the server's notes.version: it lets a queued offline update carry the
+// version its edit was based on so a stale write is detected instead of silently
+// clobbering a concurrent change. Column-probed so it is safe on installs that
+// already created the table.
+const migration2 = async (db: SQLiteDatabase): Promise<void> => {
+  // Fresh installs already get the column from migration1's CREATE TABLE; this
+  // ALTER is only for installs created before the column existed.
+  const noteCols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(notes)');
+  if (!noteCols.some((c) => c.name === 'version')) {
+    await db.runAsync(`ALTER TABLE notes ADD COLUMN version INTEGER NOT NULL DEFAULT 1`);
+  }
+};
+
+// Migration 3: add an images_json column to notes, mirroring labels_json/
+// shared_with_json, so a note's embedded image metadata (issue #616) can be
+// cached locally alongside the rest of the note. Column-probed like migration2.
+const migration3 = async (db: SQLiteDatabase): Promise<void> => {
+  const noteCols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(notes)');
+  if (!noteCols.some((c) => c.name === 'images_json')) {
+    await db.runAsync(`ALTER TABLE notes ADD COLUMN images_json TEXT NOT NULL DEFAULT '[]'`);
+  }
+};
+
+// Migration 4: add a table for images picked while offline (or whose upload
+// hit a transient failure), so they survive an app restart until the sync
+// engine can flush them (issue #618). Bytes are copied to a stable app-owned
+// path (outside any OS-managed cache dir) at enqueue time — see
+// db/imageUploadQueue.ts — so `local_path` always points at a durable file.
+const migration4 = async (db: SQLiteDatabase): Promise<void> => {
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS pending_image_uploads (
+      id TEXT PRIMARY KEY,
+      note_id TEXT NOT NULL,
+      local_path TEXT NOT NULL,
+      filename TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      size_bytes INTEGER,
+      status TEXT NOT NULL DEFAULT 'queued',
+      error_message TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_pending_image_uploads_note_id
+      ON pending_image_uploads (note_id);
+  `);
+};
+
+export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4];
 
 export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   // Run PRAGMAs separately: sqlite3_exec (used by execAsync) stops on the

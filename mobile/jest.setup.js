@@ -63,7 +63,7 @@ jest.mock('expo-haptics', () => ({
 }));
 
 jest.mock('react-native-reanimated', () => {
-  const View = require('react-native').View;
+  const RN = require('react-native');
   return {
     __esModule: true,
     default: {
@@ -71,22 +71,63 @@ jest.mock('react-native-reanimated', () => {
       createAnimatedComponent: (component) => component,
       addWhitelistedNativeProps: jest.fn(),
       addWhitelistedUIProps: jest.fn(),
+      View: RN.View,
+      ScrollView: RN.ScrollView,
     },
     useAnimatedStyle: () => ({}),
+    useAnimatedReaction: jest.fn(),
     useSharedValue: (init) => ({ value: init }),
+    useAnimatedRef: () => ({ current: null }),
+    useScrollViewOffset: () => ({ value: 0 }),
+    useFrameCallback: () => ({ setActive: jest.fn(), isActive: false }),
+    useDerivedValue: (fn) => ({ value: typeof fn === 'function' ? undefined : fn }),
     withTiming: (val) => val,
     withSpring: (val) => val,
+    runOnJS: (fn) => fn,
+    scrollTo: jest.fn(),
+    measure: jest.fn(() => null),
+    cancelAnimation: jest.fn(),
     Easing: { linear: jest.fn(), ease: jest.fn() },
     FadeIn: { duration: () => ({ build: () => ({}) }) },
     FadeOut: { duration: () => ({ build: () => ({}) }) },
     Layout: { springify: () => ({}) },
+    LinearTransition: { duration: () => ({ build: () => ({}) }) },
   };
 });
 
 jest.mock('react-native-gesture-handler', () => {
   const RN = require('react-native');
+  const createGesture = () => {
+    const gesture = {};
+    const chain = () => gesture;
+    [
+      'activateAfterLongPress',
+      'onBegin',
+      'onStart',
+      'onUpdate',
+      'onChange',
+      'onEnd',
+      'onFinalize',
+      'enabled',
+      'minDistance',
+      'activeOffsetX',
+      'activeOffsetY',
+      'failOffsetX',
+      'failOffsetY',
+      'withRef',
+    ].forEach((method) => {
+      gesture[method] = chain;
+    });
+    return gesture;
+  };
   return {
     GestureHandlerRootView: RN.View,
+    GestureDetector: ({ children }) => children,
+    Gesture: {
+      Pan: createGesture,
+      Tap: createGesture,
+      LongPress: createGesture,
+    },
     Swipeable: RN.View,
     DrawerLayout: RN.View,
     State: {},
@@ -98,37 +139,42 @@ jest.mock('react-native-gesture-handler', () => {
   };
 });
 
-jest.mock('react-native-draggable-flatlist', () => {
+// Single source of truth for the react-native-reorderable-list mock, used by
+// every test that renders the note editor. Renders each row synchronously so
+// tests can query list items without FlatList virtualization timing.
+jest.mock('react-native-reorderable-list', () => {
   const React = require('react');
-  const { FlatList, ScrollView } = require('react-native');
-  function DraggableFlatList(props) {
-    return React.createElement(FlatList, {
-      ...props,
-      renderItem: (info) =>
-        props.renderItem({ ...info, drag: jest.fn(), isActive: false }),
-    });
+  const { View, ScrollView } = require('react-native');
+  function ReorderableList(props) {
+    const data = props.data || [];
+    return React.createElement(
+      View,
+      null,
+      data.map((item, index) =>
+        React.createElement(React.Fragment, { key: item.id }, props.renderItem({ item, index })),
+      ),
+    );
   }
-  DraggableFlatList.displayName = 'DraggableFlatList';
-  function NestableDraggableFlatList(props) {
-    return React.createElement(FlatList, {
-      ...props,
-      renderItem: (info) =>
-        props.renderItem({ ...info, drag: jest.fn(), isActive: false }),
-    });
-  }
-  NestableDraggableFlatList.displayName = 'NestableDraggableFlatList';
-  const NestableScrollContainer = React.forwardRef(function NestableScrollContainer(props, ref) {
+  ReorderableList.displayName = 'ReorderableList';
+  const ScrollViewContainer = React.forwardRef(function ScrollViewContainer(props, ref) {
     return React.createElement(ScrollView, { ...props, ref });
   });
-  function ScaleDecorator({ children }) {
-    return children;
-  }
   return {
     __esModule: true,
-    default: DraggableFlatList,
-    ScaleDecorator,
-    NestableDraggableFlatList,
-    NestableScrollContainer,
+    default: ReorderableList,
+    ReorderableList,
+    NestedReorderableList: ReorderableList,
+    ScrollViewContainer,
+    useReorderableDrag: () => () => {},
+    useReorderableDragStart: () => () => {},
+    useReorderableDragEnd: () => () => {},
+    useIsActive: () => false,
+    reorderItems: (arr, from, to) => {
+      const copy = [...arr];
+      const [moved] = copy.splice(from, 1);
+      copy.splice(to, 0, moved);
+      return copy;
+    },
   };
 });
 
@@ -152,6 +198,16 @@ jest.mock('@expo/vector-icons/Ionicons', () => {
   });
   MockIonicons.glyphMap = {};
   return { __esModule: true, default: MockIonicons };
+});
+
+jest.mock('@expo/vector-icons/MaterialIcons', () => {
+  const React = require('react');
+  const { Text } = require('react-native');
+  const MockMaterialIcons = React.forwardRef(function MockMaterialIcons(props, ref) {
+    return React.createElement(Text, { ...props, ref, testID: props.testID || `icon-${props.name}` }, props.name);
+  });
+  MockMaterialIcons.glyphMap = {};
+  return { __esModule: true, default: MockMaterialIcons };
 });
 
 const i18n = require('./src/i18n').default;

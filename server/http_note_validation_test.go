@@ -312,6 +312,27 @@ func TestNoteValidation(t *testing.T) {
 		})
 	})
 
+	t.Run("invalid item does not leave a partial note", func(t *testing.T) {
+		// A note plus its items are created atomically: if any item fails
+		// validation the whole create is rolled back, so no orphaned note or
+		// partially-inserted items remain.
+		before, err := user.Client.ListNotes(t.Context(), nil)
+		require.NoError(t, err)
+
+		status := postNote(t, map[string]any{
+			"note_type": "list",
+			"items": []map[string]any{
+				{"text": "ok", "position": 0, "indent_level": 0},
+				{"text": "bad", "position": 1, "indent_level": 5},
+			},
+		})
+		assert.Equal(t, http.StatusBadRequest, status)
+
+		after, err := user.Client.ListNotes(t.Context(), nil)
+		require.NoError(t, err)
+		assert.Len(t, after, len(before), "no note should be created when an item is invalid")
+	})
+
 	t.Run("deleting the only item clears list items", func(t *testing.T) {
 		note, err := user.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
 			Items: []client.CreateNoteItem{

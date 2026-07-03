@@ -63,14 +63,15 @@ COPY --from=backend-builder /src/server/main ./
 # Copy the built frontend files
 COPY --from=frontend-builder /app/webapp/build ./webapp/build/
 
-# Create data directory for SQLite database
-RUN mkdir -p /data
+# Create data directory for SQLite database and uploaded blobs
+RUN mkdir -p /data/uploads
 
 # Expose port
 EXPOSE 8080
 
 # Set environment variables
 ENV DB_DSN=/data/jot.db
+ENV UPLOAD_DIR=/data/uploads
 ENV STATIC_DIR=/app/webapp/build
 
 # Run the application

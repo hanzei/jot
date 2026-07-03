@@ -10,7 +10,8 @@
     "error": "Erreur",
     "unknown": "inconnu",
     "loading": "Chargement...",
-    "done": "Terminé"
+    "done": "Terminé",
+    "or": "ou"
   },
   "nav": {
     "settings": "Paramètres",
@@ -53,7 +54,10 @@
     "serverSetupInputA11yLabel": "Champ URL du serveur",
     "serverSetupSubmitA11yLabel": "Valider le serveur et continuer",
     "serverSetupConnectionFailed": "Impossible d'atteindre ce serveur. Vérifiez l'URL et votre connexion, puis réessayez.",
-    "serverSetupConnectionInvalidServer": "Connexion établie, mais ce point de terminaison ne semble pas être une API Jot compatible."
+    "serverSetupConnectionInvalidServer": "Connexion établie, mais ce point de terminaison ne semble pas être une API Jot compatible.",
+    "localModeLink": "Utiliser sans serveur",
+    "localModeHint": "Vos notes restent uniquement sur cet appareil.",
+    "localModeFailed": "Impossible de démarrer le mode local. Veuillez réessayer."
   },
   "dashboard": {
     "newNote": "Nouvelle note",
@@ -92,12 +96,15 @@
       "created_at": "Date de création"
     },
     "sortAccessibilityLabel": "Trier par {{sortLabel}}",
+    "layoutToggleToGrid": "Passer à la vue en grille",
+    "layoutToggleToList": "Passer à la vue en liste",
     "sortDisabledNotice": "Le tri manuel est désactivé. Les notes sont triées par {{sortLabel}}, le glisser-déposer n'est donc pas disponible.",
     "noteArchived": "Note archivée",
     "noteUnarchived": "Note désarchivée",
     "noteDeleted": "Note déplacée vers la corbeille",
     "noteRestored": "Note restaurée",
-    "undo": "Annuler"
+    "undo": "Annuler",
+    "toastActionHint": "Appuyer pour {{action}}"
   },
   "settings": {
     "title": "Paramètres",
@@ -200,6 +207,7 @@
   },
   "note": {
     "share": "Partager",
+    "send": "Envoyer",
     "unpin": "Désépingler",
     "pin": "Épingler",
     "unarchive": "Désarchiver",
@@ -226,6 +234,7 @@
     "failedSaveChanges": "Impossible d'enregistrer les modifications. Appuyez pour réessayer.",
     "menuOptions": "Options de la note",
     "assignItem": "Assigner l'élément",
+    "removeItem": "Supprimer l'élément",
     "unassign": "Désassigner",
     "assignedTo": "Assigné à {{name}}",
     "changeColor": "Couleur de la note",
@@ -242,7 +251,7 @@
     "updatedByAnotherUser": "Cette note a été mise à jour par un autre utilisateur",
     "listItemLabel": "Élément de liste",
     "itemCheckbox": "Case à cocher {{item}}",
-    "dragToReorder": "Glisser pour réorganiser",
+    "dragToReorderIndent": "Glisser pour réorganiser ou indenter",
     "colorWhite": "Blanc",
     "colorCoral": "Corail",
     "colorYellow": "Jaune",
@@ -262,7 +271,34 @@
     "outdentItem": "Désindenter",
     "itemsPasted_one": "1 élément collé",
     "itemsPasted_other": "{{count}} éléments collés",
-    "filterByLabel": "Filtrer par étiquette : {{label}}"
+    "filterByLabel": "Filtrer par étiquette : {{label}}",
+    "saveFailedExitTitle": "Échec de l’enregistrement",
+    "saveFailedExitMessage": "Vos modifications n’ont pas pu être enregistrées. Réessayez ou abandonnez-les pour quitter.",
+    "discardAndLeave": "Abandonner et quitter"
+  },
+  "images": {
+    "openLightbox": "Voir {{filename}}",
+    "moreImages": "Voir {{count}} images supplémentaires",
+    "lightboxPrevious": "Image précédente",
+    "lightboxNext": "Image suivante",
+    "lightboxCounter": "{{current}} / {{total}}",
+    "addImage": "Ajouter une image",
+    "camera": "Appareil photo",
+    "photoLibrary": "Photothèque",
+    "files": "Fichiers",
+    "cameraPermissionDenied": "L'accès à l'appareil photo est nécessaire pour prendre une photo.",
+    "libraryPermissionDenied": "L'accès à la photothèque est nécessaire pour choisir une photo.",
+    "removeImage": "Supprimer {{filename}}",
+    "removedToast": "Image supprimée",
+    "uploading": "Téléchargement… {{percent}} %",
+    "uploadFailed": "Échec du téléchargement",
+    "queuedOffline": "En attente d'envoi…",
+    "uploadQueuedToast": "L'image sera envoyée dès que vous serez de nouveau en ligne",
+    "retryUpload": "Réessayer d'envoyer {{filename}}",
+    "dismissUpload": "Ignorer {{filename}}",
+    "errorWrongType": "Seules les images peuvent être jointes.",
+    "errorTooLarge": "L'image dépasse la limite de {{maxMB}} Mo.",
+    "errorTooMany": "Une note peut contenir jusqu'à {{max}} images."
   },
   "labels": {
     "title": "Étiquettes",
@@ -325,6 +361,8 @@
     "urlRequired": "L'URL du serveur est requise",
     "invalidUrl": "URL du serveur invalide. Utilisez http:// ou https://",
     "switchFailed": "Impossible de changer de serveur",
+    "sessionExpiredTitle": "Connexion requise",
+    "sessionExpiredMessage": "Votre session enregistrée pour « {{server}} » n'est plus valide. Le compte a peut-être été supprimé. Veuillez vous reconnecter.",
     "addFailed": "Impossible d'ajouter le serveur",
     "duplicateTitle": "Serveur déjà ajouté",
     "duplicateMessage": "Ce serveur existe déjà. Souhaitez-vous y basculer ?",
@@ -349,7 +387,9 @@
   },
   "offline": {
     "message": "Vous êtes hors ligne. Les modifications seront synchronisées lors de la reconnexion.",
-    "syncError": "Certaines modifications ne sont pas encore synchronisées. Une nouvelle tentative aura lieu automatiquement."
+    "serverConnecting": "Connexion au serveur…",
+    "syncError": "Certaines modifications ne sont pas encore synchronisées. Une nouvelle tentative aura lieu automatiquement.",
+    "revalidationError": "Impossible de vérifier votre session avec le serveur. Les données locales sont utilisées."
   },
   "syncFailures": {
     "bannerCount_one": "{{count}} modification n'a pas pu être enregistrée — Examiner",
@@ -391,6 +431,40 @@
     "importing": "Importation...",
     "importButton": "Importer"
   },
+  "upgrade": {
+    "settingsSectionTitle": "Se connecter à un serveur",
+    "settingsSectionDescription": "Synchronisez vos notes avec un serveur Jot. Vos notes locales seront migrées vers le serveur.",
+    "connectToServer": "Se connecter à un serveur",
+    "title": "Se connecter à un serveur",
+    "subtitle": "Entrez l'URL de votre serveur Jot pour créer un nouveau compte et migrer vos notes.",
+    "serverUrlLabel": "URL du serveur",
+    "serverUrlPlaceholder": "https://jot.exemple.fr",
+    "continue": "Continuer",
+    "registerTitle": "Créer votre compte",
+    "changeServer": "Changer de serveur",
+    "usernameTaken": "Ce nom d'utilisateur est déjà pris. Choisissez-en un autre.",
+    "checkingTitle": "Vérification de la compatibilité",
+    "capabilityFailed": "Ce serveur ne prend pas en charge la migration des notes. Assurez-vous d'utiliser une version récente de Jot.",
+    "emptinessFailed": "Le compte contient déjà des notes ou des étiquettes. La migration nécessite un compte vide.",
+    "fetchFailed": "Impossible de joindre le serveur. Vérifiez votre connexion et réessayez.",
+    "successTitle": "Toutes les vérifications réussies",
+    "successSubtitle": "Votre serveur est compatible et prêt. La migration débutera lors d'une prochaine étape.",
+    "errorTitle": "Impossible de se connecter",
+    "seedingTitle": "Préparation de la migration",
+    "migratingTitle": "Migration de vos notes",
+    "migratingProgress": "Synchronisation de {{processed}} sur {{total}}",
+    "migrationCompleteTitle": "Migration terminée",
+    "migrationCompleteSubtitle": "Vos notes ont été envoyées sur le serveur.",
+    "deadLetterTitle": "Migration suspendue",
+    "deadLetterSubtitle_one": "{{count}} modification n'a pas pu être synchronisée avec le serveur.",
+    "deadLetterSubtitle_other": "{{count}} modifications n'ont pas pu être synchronisées avec le serveur.",
+    "reviewFailedChanges": "Examiner les modifications échouées",
+    "retryMigration": "Réessayer la migration",
+    "migrationFailed": "La migration a échoué. Vérifiez votre connexion et réessayez.",
+    "reconciling": "Synchronisation des notes avec le serveur…",
+    "reconcileFailed": "Les notes peuvent ne pas refléter les dernières données du serveur. Actualisez la liste des notes.",
+    "resync": "Resynchroniser"
+  },
   "diagnostics": {
     "title": "Diagnostic",
     "developerSection": "Développeur",
@@ -412,6 +486,7 @@
     "degraded": "Dégradé",
     "recentLogs": "Journaux récents",
     "clearLogs": "Effacer les journaux",
+    "expandLogs": "Voir tous les journaux",
     "refresh": "Actualiser",
     "shareDiagnostics": "Partager le rapport de diagnostic",
     "yes": "Oui",

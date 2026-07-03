@@ -56,6 +56,7 @@ type Note struct {
 	Title                 string      `json:"title"`
 	Content               string      `json:"content"`
 	NoteType              NoteType    `json:"note_type"`
+	Version               int         `json:"version"`
 	Color                 string      `json:"color"`
 	Pinned                bool        `json:"pinned"`
 	Archived              bool        `json:"archived"`
@@ -65,9 +66,24 @@ type Note struct {
 	SharedWith            []NoteShare `json:"shared_with,omitempty"`
 	IsShared              bool        `json:"is_shared"`
 	Labels                []Label     `json:"labels"`
+	Images                []NoteImage `json:"images,omitempty"`
 	DeletedAt             *time.Time  `json:"deleted_at"`
 	CreatedAt             time.Time   `json:"created_at"`
 	UpdatedAt             time.Time   `json:"updated_at"`
+}
+
+// NoteImage is a single image attached to a note. It intentionally mirrors
+// only the metadata fields embedded in Note.images (matching the server's
+// narrow response contract); size, hash, and uploader are server-internal
+// and are not exposed here. Image bytes are fetched out-of-band via
+// GetNoteImage, never inlined here.
+type NoteImage struct {
+	ID          string    `json:"id"`
+	Filename    string    `json:"filename"`
+	ContentType string    `json:"content_type"`
+	Width       int       `json:"width"`
+	Height      int       `json:"height"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 // NoteItem is a single checklist entry within a list note.
@@ -148,6 +164,10 @@ type UpdateTextNoteRequest struct {
 	Pinned   *bool   `json:"pinned,omitempty"`
 	Archived *bool   `json:"archived,omitempty"`
 	Color    *string `json:"color,omitempty"`
+	// BaseVersion enables optimistic concurrency: when set, the server rejects
+	// the update with 409 unless the note's current version still matches it
+	// (issue #489). Omit for last-write-wins behavior.
+	BaseVersion *int `json:"base_version,omitempty"`
 }
 
 // UpdateListNoteRequest is the body for PATCH /api/v1/notes/{id} on a list note.
@@ -160,6 +180,8 @@ type UpdateListNoteRequest struct {
 	Archived              *bool   `json:"archived,omitempty"`
 	Color                 *string `json:"color,omitempty"`
 	CheckedItemsCollapsed *bool   `json:"checked_items_collapsed,omitempty"`
+	// BaseVersion enables optimistic concurrency; see UpdateTextNoteRequest.
+	BaseVersion *int `json:"base_version,omitempty"`
 }
 
 // CreateNoteItemRequest is the body for POST /api/v1/notes/{id}/items. ID is
@@ -296,6 +318,8 @@ type AdminListItemStats struct {
 
 type AdminStorageStats struct {
 	DatabaseSizeBytes int64 `json:"database_size_bytes"`
+	ImageCount        int64 `json:"image_count"`
+	ImagesSizeBytes   int64 `json:"images_size_bytes"`
 }
 
 // SessionInfo is a single active session as returned by the sessions API.
@@ -312,6 +336,7 @@ type SessionInfo struct {
 type ServerConfig struct {
 	RegistrationEnabled bool `json:"registration_enabled"`
 	PasswordMinLength   int  `json:"password_min_length"`
+	UploadMaxBytes      int  `json:"upload_max_bytes"`
 }
 
 // Ptr returns a pointer to v; useful for building UpdateUserRequest fields.

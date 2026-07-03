@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/hanzei/jot/server/internal/blobstore"
+	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -130,7 +132,7 @@ func (h *Handler) handleUpdateNote(userID string) mcp.ToolHandlerFor[updateNoteI
 		if in.ID == "" {
 			return toolError("id is required")
 		}
-		if err := h.noteStore.Update(ctx, in.ID, userID, in.Title, in.Content, in.Color, in.Pinned, in.Archived, in.CheckedItemsCollapsed); err != nil {
+		if err := h.noteStore.Update(ctx, in.ID, userID, in.Title, in.Content, in.Color, in.Pinned, in.Archived, in.CheckedItemsCollapsed, nil); err != nil {
 			return toolError("update note: %w", err)
 		}
 		note, err := h.noteStore.GetByID(ctx, in.ID, userID)
@@ -157,19 +159,37 @@ func (h *Handler) handleDeleteNote(userID string) mcp.ToolHandlerFor[deleteNoteI
 		if in.ID == "" {
 			return toolError("id is required")
 		}
-		var err error
 		if in.Permanent {
-			err = h.noteStore.DeleteFromTrash(ctx, in.ID, userID)
+			shas, err := h.noteStore.DeleteFromTrash(ctx, in.ID, userID)
+			if err != nil {
+				return toolError("delete note: %w", err)
+			}
+			h.reclaimNoteImageBlobs(ctx, shas)
 		} else {
-			err = h.noteStore.MoveToTrash(ctx, in.ID, userID)
-		}
-		if err != nil {
-			return toolError("delete note: %w", err)
+			if err := h.noteStore.MoveToTrash(ctx, in.ID, userID); err != nil {
+				return toolError("delete note: %w", err)
+			}
 		}
 		data, err := json.Marshal(map[string]any{"id": in.ID, "deleted": true, "permanent": in.Permanent})
 		if err != nil {
 			return toolError("marshal response: %w", err)
 		}
 		return toolTextResult(data), nil, nil
+	}
+}
+
+// reclaimNoteImageBlobs reclaims the on-disk blob (and derived thumbnail) for
+// each sha whose note_images refcount has hit zero, mirroring the HTTP
+// delete_note handler's blob cleanup (docs/specs/file-attachments.md §10).
+// Errors are logged but never fail the tool call — the note delete already
+// succeeded. Uses context.WithoutCancel since the row delete already
+// committed: an MCP client disconnecting must not abort this cleanup and
+// leak the blob, as there's no retry path for it afterward.
+func (h *Handler) reclaimNoteImageBlobs(ctx context.Context, shas []string) {
+	ctx = context.WithoutCancel(ctx)
+	for _, sha := range shas {
+		if err := blobstore.ReclaimIfOrphaned(ctx, h.noteStore, h.imageStore, sha); err != nil {
+			logutil.FromContext(ctx).WithError(err).WithField("sha256", sha).Error("Failed to reclaim orphaned note image blob/thumbnail")
+		}
 	}
 }

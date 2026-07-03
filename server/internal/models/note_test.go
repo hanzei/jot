@@ -4,7 +4,52 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func TestOrderItemsParentsFirst(t *testing.T) {
+	ptr := func(s string) *string { return &s }
+
+	t.Run("orders parent before child even when child has a lower position", func(t *testing.T) {
+		parent := NoteItem{ID: "parent", Position: 5}
+		child := NoteItem{ID: "child", Position: 1, ParentID: ptr("parent")}
+
+		ordered := orderItemsParentsFirst([]NoteItem{child, parent})
+
+		require.Len(t, ordered, 2)
+		assert.Equal(t, "parent", ordered[0].ID)
+		assert.Equal(t, "child", ordered[1].ID)
+	})
+
+	t.Run("keeps ascending position order within the same depth", func(t *testing.T) {
+		ordered := orderItemsParentsFirst([]NoteItem{
+			{ID: "a", Position: 2},
+			{ID: "b", Position: 0},
+			{ID: "c", Position: 1},
+		})
+
+		assert.Equal(t, []string{"b", "c", "a"},
+			[]string{ordered[0].ID, ordered[1].ID, ordered[2].ID})
+	})
+
+	t.Run("treats an item whose parent is outside the set as a root", func(t *testing.T) {
+		ordered := orderItemsParentsFirst([]NoteItem{
+			{ID: "orphan", Position: 0, ParentID: ptr("missing")},
+		})
+
+		require.Len(t, ordered, 1)
+		assert.Equal(t, "orphan", ordered[0].ID)
+	})
+
+	t.Run("does not loop on a parent cycle", func(t *testing.T) {
+		ordered := orderItemsParentsFirst([]NoteItem{
+			{ID: "x", ParentID: ptr("y")},
+			{ID: "y", ParentID: ptr("x")},
+		})
+
+		assert.Len(t, ordered, 2)
+	})
+}
 
 func TestIsValidID(t *testing.T) {
 	t.Run("valid ID with 22 characters", func(t *testing.T) {

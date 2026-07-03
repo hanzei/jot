@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Dialog, DialogPanel, DialogTitle } from '@headlessui/react';
+import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
 import { ROLES, VALIDATION, type User, type CreateUserRequest } from '@jot/shared';
@@ -90,10 +90,10 @@ export default function CreateUserModal({ passwordMinLength, onClose, onSuccess 
 
   return (
     <Dialog open={true} onClose={loading ? () => {} : onClose} className="relative z-50">
-      <div className="fixed inset-0 bg-black/25 dark:bg-black/50" aria-hidden="true" />
+      <DialogBackdrop transition aria-hidden="true" className="fixed inset-0 bg-black/25 dark:bg-black/50 transition duration-200 ease-out data-[closed]:opacity-0 motion-reduce:transition-none" />
       <div className="fixed inset-0 overflow-y-auto">
         <div className="flex min-h-full items-center justify-center p-4">
-          <DialogPanel className="mx-auto w-full max-w-md rounded-lg bg-white dark:bg-slate-800 shadow-xl border border-gray-200 dark:border-slate-700">
+          <DialogPanel transition className="mx-auto w-full max-w-md rounded-lg bg-white dark:bg-slate-800 shadow-xl border border-gray-200 dark:border-slate-700 transition duration-200 ease-out data-[closed]:scale-95 data-[closed]:opacity-0 motion-reduce:transition-none">
             <div className="flex items-center justify-between p-6 pb-4">
               <DialogTitle className="text-lg font-medium text-gray-900 dark:text-white">
                 {t('admin.createNewUser')}

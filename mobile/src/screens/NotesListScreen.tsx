@@ -1,24 +1,20 @@
-import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef, useContext } from 'react';
 import {
   View,
   Text,
-  TextInput,
-  FlatList,
-  SectionList,
   TouchableOpacity,
   RefreshControl,
-  StyleSheet,
   ActivityIndicator,
   Alert,
   ScrollView,
+  Keyboard,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import DraggableFlatList, { ScaleDecorator, NestableDraggableFlatList, NestableScrollContainer } from 'react-native-draggable-flatlist';
 import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { DrawerActions, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { updateMe } from '../api/settings';
 import { useTranslation } from 'react-i18next';
 import { useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useReorderNotes, useDuplicateNote } from '../hooks/useNotes';
@@ -27,41 +23,32 @@ import { useUsers } from '../store/UsersContext';
 import { useAuth } from '../store/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { useTheme } from '../theme/ThemeContext';
-import { isUnsyncedNoteId } from '../db/noteQueries';
-import { usePendingNoteIds } from '../store/OfflineContext';
 import SkeletonNoteList from '../components/SkeletonNoteList';
 import NoteCard from '../components/NoteCard';
 import NoteContextMenu, { ContextMenuViewContext } from '../components/NoteContextMenu';
 import ColorPicker from '../components/ColorPicker';
 import LabelPicker from '../components/LabelPicker';
-import type { Note, NoteSort, UpdateNoteRequest } from '@jot/shared';
+import type { Note, NoteSort } from '@jot/shared';
 import type { RootStackParamList } from '../navigation/RootNavigator';
-import { NOTE_SORT_OPTIONS, getNoteSortLabel, normalizeNoteSort, sortNotesForDisplay } from '../utils/noteSort';
+import { normalizeNoteSort, sortNotesForDisplay } from '../utils/noteSort';
 import { isSortWarningDismissed, dismissSortWarning } from '../utils/sortWarningDismissed';
 import { emptyTrash as emptyTrashNotes } from '../api/notes';
 import { getLocalNotes, permanentDeleteLocalNote } from '../db/noteQueries';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { useBannerShown } from '../hooks/useBannerShown';
-
-function buildUpdateRequest(note: Note, overrides: Partial<UpdateNoteRequest> = {}): UpdateNoteRequest {
-  if (note.note_type === 'list') {
-    return {
-      title: note.title,
-      pinned: note.pinned,
-      archived: note.archived,
-      color: note.color,
-      checked_items_collapsed: note.checked_items_collapsed,
-      ...overrides,
-    };
-  }
-  return {
-    content: note.content,
-    pinned: note.pinned,
-    archived: note.archived,
-    color: note.color,
-    ...overrides,
-  };
-}
+import { styles } from './notesList/styles';
+import { buildNoteSections, type LocalReorderState } from './notesList/noteListUtils';
+import NotesListHeader from './notesList/NotesListHeader';
+import MasonryGrid from './notesList/MasonryGrid';
+import DraggableMasonry from './notesList/DraggableMasonry';
+import FadeInView from '../components/FadeInView';
+import { animateListReflow } from '../utils/layoutAnimation';
+import {
+  getDashboardLayout,
+  setDashboardLayout,
+  DEFAULT_DASHBOARD_LAYOUT,
+  type DashboardLayout,
+} from '../utils/dashboardLayout';
 
 interface NotesListScreenProps {
   variant?: 'notes' | 'archived' | 'trash' | 'my-tasks';
@@ -74,83 +61,21 @@ const SEARCH_DEBOUNCE_MS = 300;
 const EMPTY_NOTES: Note[] = [];
 const EMPTY_LOCAL_ORDER: LocalReorderState = { pinned: null, unpinned: null };
 
-interface LocalReorderState {
-  pinned: Note[] | null;
-  unpinned: Note[] | null;
-}
-
-type NoteSection = { key: string; title: string | null; data: Note[] };
-
-function buildNoteSections(
-  displayPinned: Note[],
-  displayUnpinned: Note[],
-  displayedArchived: Note[],
-  includePinned: boolean,
-  t: (key: string) => string,
-): NoteSection[] {
-  const sections: NoteSection[] = [];
-  if (includePinned && displayPinned.length > 0) {
-    sections.push({ key: 'pinned', title: t('dashboard.pinned'), data: displayPinned });
-  }
-  if (displayUnpinned.length > 0) {
-    sections.push({
-      key: includePinned ? 'other' : 'notes',
-      title: includePinned && displayPinned.length > 0 ? t('dashboard.otherNotes') : null,
-      data: displayUnpinned,
-    });
-  }
-  if (displayedArchived.length > 0) {
-    sections.push({ key: 'archived', title: t('dashboard.archivedResults'), data: displayedArchived });
-  }
-  return sections;
-}
-
-interface NoteListItemProps {
-  note: Note;
-  onPress: (id: string) => void;
-  onMenuPress?: (note: Note) => void;
-  onLongPress?: (note: Note) => void;
-  onLabelPress?: (labelId: string, labelName: string) => void;
-}
-
-const NoteListItem = React.memo(function NoteListItem({
-  note,
-  onPress,
-  onMenuPress,
-  onLongPress,
-  onLabelPress,
-}: NoteListItemProps) {
-  const handlePress = useCallback(() => onPress(note.id), [onPress, note.id]);
-  const handleMenuPress = useCallback(() => onMenuPress?.(note), [onMenuPress, note]);
-  const handleLongPress = useCallback(() => onLongPress?.(note), [onLongPress, note]);
-
-  return (
-    <NoteCard
-      note={note}
-      onPress={handlePress}
-      onMenuPress={onMenuPress ? handleMenuPress : undefined}
-      onLongPress={onLongPress ? handleLongPress : undefined}
-      onLabelPress={onLabelPress}
-    />
-  );
-});
-
 export default function NotesListScreen({ variant = 'notes', labelId }: NotesListScreenProps) {
   const [searchText, setSearchText] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const { user, settings, setSettings } = useAuth();
+  const { user, settings, setSettings, isLocalMode } = useAuth();
   const [trashCount, setTrashCount] = useState(0);
   const [isEmptyingTrash, setIsEmptyingTrash] = useState(false);
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const pendingNoteIds = usePendingNoteIds();
   const bannerShown = useBannerShown();
   const { colors } = useTheme();
   const { t } = useTranslation();
   const { showToast } = useToast();
-  const insets = useSafeAreaInsets();
+  const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
   const fabBottom = Math.max(insets.bottom + 20, 20);
-  const listBottomPadding = variant === 'notes' ? fabBottom + 60 : 80;
+  const listBottomPadding = variant === 'notes' ? fabBottom + 60 : insets.bottom + 80;
 
   const [contextMenuNote, setContextMenuNote] = useState<Note | null>(null);
   const [colorPickerNote, setColorPickerNote] = useState<Note | null>(null);
@@ -158,6 +83,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const [localOrder, setLocalOrder] = useState<LocalReorderState>({ pinned: null, unpinned: null });
   const [sortMode, setSortMode] = useState<NoteSort>(() => normalizeNoteSort(settings?.note_sort));
   const [isSortControlsOpen, setIsSortControlsOpen] = useState(false);
+  const [layout, setLayout] = useState<DashboardLayout>(DEFAULT_DASHBOARD_LAYOUT);
   const [sortWarningDismissed, setSortWarningDismissed] = useState<boolean | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sortRequestIdRef = useRef(0);
@@ -247,6 +173,10 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
       setSettings({ ...previousSettings, note_sort: nextSort });
     }
 
+    if (isLocalMode) {
+      return;
+    }
+
     try {
       const response = await updateMe({ note_sort: nextSort });
       if (requestId !== sortRequestIdRef.current) {
@@ -263,7 +193,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
       }
       Alert.alert(t('common.error'), t('dashboard.sortUpdateFailed'));
     }
-  }, [setSettings, settings, sortMode, t]);
+  }, [setSettings, settings, sortMode, isLocalMode, t]);
 
   const handleSortChipPress = useCallback((nextSort: NoteSort) => {
     setIsSortControlsOpen(false);
@@ -282,13 +212,45 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   }, [sortMode]);
 
   const handleDismissSortWarning = useCallback(() => {
+    animateListReflow();
     setSortWarningDismissed(true);
     void dismissSortWarning(sortMode);
   }, [sortMode]);
 
+  const handleToggleSort = useCallback(() => {
+    animateListReflow();
+    setIsSortControlsOpen((open) => !open);
+  }, []);
+
+  // Dashboard layout is a device-only preference, loaded once on mount. If the
+  // user toggles before the async read resolves, their choice wins.
+  const layoutToggledRef = useRef(false);
+  useEffect(() => {
+    let cancelled = false;
+    void getDashboardLayout().then((stored) => {
+      if (!cancelled && !layoutToggledRef.current) setLayout(stored);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Persist the layout only after the user toggles it (not for the initial load,
+  // which just reflects what was already stored).
+  useEffect(() => {
+    if (layoutToggledRef.current) void setDashboardLayout(layout);
+  }, [layout]);
+
+  const handleToggleLayout = useCallback(() => {
+    animateListReflow();
+    layoutToggledRef.current = true;
+    setLayout((prev) => (prev === 'list' ? 'grid' : 'list'));
+  }, []);
+
   const handleNotePress = useCallback(
     (noteId: string) => {
       if (variant === 'trash') return; // read-only
+      Keyboard.dismiss();
       navigation.navigate('NoteEditor', { noteId });
     },
     [navigation, variant],
@@ -302,12 +264,15 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     setContextMenuNote(note);
   }, []);
 
-  // Context menu actions
+  // Context menu actions. Each PATCH carries only the field being changed:
+  // including unchanged title/content would re-assert a possibly-stale snapshot
+  // (clobbering another device's edit) and, because content triggers the
+  // base_version guard, turn a mere pin/color toggle into a 409 conflict.
   const handlePin = useCallback(async (note: Note) => {
     try {
       await updateNote.mutateAsync({
         id: note.id,
-        data: buildUpdateRequest(note, { pinned: !note.pinned }),
+        data: { pinned: !note.pinned },
       });
     } catch {
       Alert.alert(t('common.error'), t('note.failedUpdate'));
@@ -318,7 +283,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     try {
       await updateNote.mutateAsync({
         id: note.id,
-        data: buildUpdateRequest(note, { archived: true }),
+        data: { archived: true },
       });
       showToast(t('dashboard.noteArchived'), 'success', {
         label: t('dashboard.undo'),
@@ -326,7 +291,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           try {
             await updateNote.mutateAsync({
               id: note.id,
-              data: buildUpdateRequest(note, { archived: false }),
+              data: { archived: false },
             });
             showToast(t('dashboard.noteUnarchived'));
           } catch {
@@ -343,7 +308,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     try {
       await updateNote.mutateAsync({
         id: note.id,
-        data: buildUpdateRequest(note, { archived: false }),
+        data: { archived: false },
       });
       showToast(t('dashboard.noteUnarchived'));
     } catch {
@@ -380,18 +345,13 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   }, [restoreNote, showToast, t]);
 
   const handleDuplicate = useCallback(async (note: Note) => {
-    if (isUnsyncedNoteId(note.id, pendingNoteIds)) {
-      Alert.alert(t('common.error'), t('note.waitForSyncBeforeDuplicating'));
-      return;
-    }
-
     try {
       await duplicateNote.mutateAsync(note.id);
       Alert.alert(t('note.duplicate'), t('note.duplicated'));
     } catch {
       Alert.alert(t('common.error'), t('note.failedDuplicate'));
     }
-  }, [duplicateNote, t, pendingNoteIds]);
+  }, [duplicateNote, t]);
 
   const handleDeletePermanently = useCallback((note: Note) => {
     Alert.alert(
@@ -480,7 +440,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     try {
       await updateNote.mutateAsync({
         id: colorPickerNote.id,
-        data: buildUpdateRequest(colorPickerNote, { color }),
+        data: { color },
       });
     } catch {
       Alert.alert(t('common.error'), t('note.failedColorUpdate'));
@@ -560,14 +520,6 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     [displayPinned, displayUnpinned, displayedArchived, hasPinned, t],
   );
 
-  const renderSectionHeader = useCallback(
-    ({ section }: { section: NoteSection }) =>
-      section.title ? (
-        <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>{section.title}</Text>
-      ) : null,
-    [colors.textMuted],
-  );
-
   const listEmptyComponent = useMemo(
     () =>
       isSearchLoading ? (
@@ -575,7 +527,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : debouncedSearch || labelId ? (
-        <View style={styles.emptySearchContainer}>
+        <FadeInView style={styles.emptySearchContainer} scaleFrom={0.97}>
           <Ionicons
             name={debouncedSearch ? 'search-outline' : 'pricetag-outline'}
             size={48}
@@ -591,7 +543,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
               {t('dashboard.tryDifferentKeywords')}
             </Text>
           )}
-        </View>
+        </FadeInView>
       ) : null,
     [isSearchLoading, debouncedSearch, labelId, colors, t],
   );
@@ -628,188 +580,70 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     [reorderNotes, t],
   );
 
-  const handleDragEndPinned = useCallback(
-    ({ data }: { data: Note[] }) => handleDragEnd(data, true),
-    [handleDragEnd],
-  );
-
-  const handleDragEndUnpinned = useCallback(
-    ({ data }: { data: Note[] }) => handleDragEnd(data, false),
-    [handleDragEnd],
-  );
-
   const handleDragStart = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   }, []);
 
-  const renderDraggableNoteCard = useCallback(
-    ({ item, drag, isActive }: { item: Note; drag: () => void; isActive: boolean }) => (
-      <ScaleDecorator>
-        <View style={isActive ? styles.draggingCard : undefined}>
-          <NoteCard
-            note={item}
-            onPress={() => handleNotePress(item.id)}
-            onLongPress={drag}
-            onMenuPress={() => handleOpenMenu(item)}
-            onLabelPress={variant === 'notes' ? handleLabelPress : undefined}
-          />
-        </View>
-      </ScaleDecorator>
-    ),
-    [handleNotePress, handleOpenMenu, handleLabelPress, variant],
-  );
-
-  const renderNonDraggableNoteCard = useCallback(
-    ({ item }: { item: Note }) => (
-      <NoteListItem
-        note={item}
-        onPress={handleNotePress}
-        onMenuPress={variant !== 'trash' ? handleOpenMenu : undefined}
-        onLongPress={variant === 'trash' ? handleOpenMenu : undefined}
+  // Masonry card renderers, shared by the list (1 column) and grid (2 columns)
+  // layouts. The draggable variant omits onLongPress so the masonry's drag
+  // gesture owns the long press; the static variant uses it to open the context
+  // menu in the read-only trash view.
+  const renderMasonryCardStatic = useCallback(
+    (note: Note) => (
+      <NoteCard
+        note={note}
+        onPress={() => handleNotePress(note.id)}
+        onMenuPress={variant !== 'trash' ? () => handleOpenMenu(note) : undefined}
+        onLongPress={variant === 'trash' ? () => handleOpenMenu(note) : undefined}
         onLabelPress={variant === 'notes' ? handleLabelPress : undefined}
       />
     ),
     [handleNotePress, handleOpenMenu, variant, handleLabelPress],
   );
 
+  const renderMasonryCardDraggable = useCallback(
+    (note: Note) => (
+      <NoteCard
+        note={note}
+        onPress={() => handleNotePress(note.id)}
+        onMenuPress={() => handleOpenMenu(note)}
+        onLabelPress={handleLabelPress}
+      />
+    ),
+    [handleNotePress, handleOpenMenu, handleLabelPress],
+  );
 
-  // Drag-and-drop is only available in the notes variant while manual sorting is
-  // active and no search is in progress (search results mix in archived notes
-  // and reordering a filtered list is not meaningful).
-  const isDraggable = variant === 'notes' && sortMode === 'manual' && !debouncedSearch;
-  const activeSortLabel = getNoteSortLabel(sortMode, t);
+  // Drag-and-drop is only available in the unfiltered notes variant while manual
+  // sorting is active. Search and label filters both show a filtered subset
+  // (and mix in archived matches), so reordering them would persist a partial
+  // or misclassified manual order — disable dragging there.
+  const isDraggable = variant === 'notes' && sortMode === 'manual' && !debouncedSearch && !labelId;
 
-  const renderTopControls = () => (
-    <>
-      <View
-        style={[
-          styles.topControlsRow,
-          variant === 'notes' ? { paddingTop: bannerShown ? 0 : insets.top } : undefined,
-        ]}
-      >
-        {variant === 'notes' && (
-          <TouchableOpacity
-            style={[styles.menuButton, { backgroundColor: colors.surface, borderColor: colors.searchBorder }]}
-            onPress={handleToggleDrawer}
-            testID="drawer-toggle"
-            accessibilityLabel={t('nav.openMenu')}
-            accessibilityRole="button"
-          >
-            <Ionicons name="menu" size={22} color={colors.text} />
-          </TouchableOpacity>
-        )}
-        <View style={[styles.searchContainer, { backgroundColor: colors.searchBackground, borderColor: colors.searchBorder }]}>
-          <Ionicons name="search" size={18} color={colors.iconMuted} style={styles.searchIcon} />
-          <TextInput
-            style={[styles.searchInput, { color: colors.text }]}
-            placeholder={t('dashboard.searchPlaceholder')}
-            placeholderTextColor={colors.placeholder}
-            accessibilityLabel={t('dashboard.searchPlaceholder')}
-            value={searchText}
-            onChangeText={setSearchText}
-            returnKeyType="search"
-            testID="search-input"
-          />
-          {searchText.length > 0 && (
-            <TouchableOpacity
-              onPress={handleClearSearch}
-              testID="clear-search"
-              accessibilityRole="button"
-              accessibilityLabel={t('common.clearSearch')}
-              hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
-            >
-              <Ionicons name="close-circle" size={18} color={colors.iconMuted} />
-            </TouchableOpacity>
-          )}
-        </View>
-        <TouchableOpacity
-          style={[
-            styles.sortToggleButton,
-            {
-              borderColor: colors.searchBorder,
-              backgroundColor: isSortControlsOpen ? colors.primaryLight : colors.surface,
-            },
-          ]}
-          onPress={() => setIsSortControlsOpen((open) => !open)}
-          testID="sort-toggle"
-          accessibilityRole="button"
-          accessibilityLabel={t('dashboard.sortAccessibilityLabel', { sortLabel: activeSortLabel })}
-          accessibilityState={{ expanded: isSortControlsOpen }}
-        >
-          <Ionicons name="swap-vertical" size={18} color={isSortControlsOpen ? colors.primary : colors.iconMuted} />
-        </TouchableOpacity>
-      </View>
+  const handleGridSectionReorder = useCallback(
+    (sectionKey: string, newData: Note[]) => {
+      void handleDragEnd(newData, sectionKey === 'pinned');
+    },
+    [handleDragEnd],
+  );
 
-      {/* Sort preference is global across notes, archived, trash, labels, and my-tasks views. */}
-      {isSortControlsOpen && (
-        <View style={styles.sortControlsContainer}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.sortControlsContent}
-            testID="sort-controls"
-          >
-            {NOTE_SORT_OPTIONS.map((option) => {
-              const isActive = sortMode === option;
-              const optionLabel = getNoteSortLabel(option, t);
-              return (
-                <TouchableOpacity
-                  key={option}
-                  style={[
-                    styles.sortChip,
-                    {
-                      borderColor: isActive ? colors.primary : colors.border,
-                      backgroundColor: isActive ? colors.primaryLight : colors.surface,
-                    },
-                  ]}
-                  onPress={() => handleSortChipPress(option)}
-                  testID={`sort-chip-${option}`}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('dashboard.sortAccessibilityLabel', { sortLabel: optionLabel })}
-                  accessibilityState={{ selected: isActive }}
-                >
-                  <Text
-                    style={[
-                      styles.sortChipText,
-                      { color: isActive ? colors.primary : colors.textSecondary },
-                      isActive && styles.sortChipTextActive,
-                    ]}
-                  >
-                    {optionLabel}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
-      )}
-
-      {sortMode !== 'manual' && sortWarningDismissed === false && (
-        <View
-          style={[
-            styles.sortNotice,
-            {
-              backgroundColor: colors.primaryLight,
-              borderColor: colors.primary,
-            },
-          ]}
-          testID="sort-disabled-notice"
-        >
-          <Ionicons name="swap-vertical" size={16} color={colors.primary} style={styles.sortNoticeIcon} />
-          <Text style={[styles.sortNoticeText, { color: colors.textSecondary }]}>
-            {t('dashboard.sortDisabledNotice', { sortLabel: activeSortLabel })}
-          </Text>
-          <TouchableOpacity
-            onPress={handleDismissSortWarning}
-            style={styles.sortNoticeDismiss}
-            accessibilityLabel={t('common.close')}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Ionicons name="close" size={16} color={colors.primary} />
-          </TouchableOpacity>
-        </View>
-      )}
-    </>
+  const header = (
+    <NotesListHeader
+      variant={variant}
+      bannerShown={bannerShown}
+      topInset={insets.top}
+      searchText={searchText}
+      onSearchChange={setSearchText}
+      onClearSearch={handleClearSearch}
+      isSortOpen={isSortControlsOpen}
+      onToggleSort={handleToggleSort}
+      sortMode={sortMode}
+      onSortSelect={handleSortChipPress}
+      sortWarningDismissed={sortWarningDismissed}
+      onDismissSortWarning={handleDismissSortWarning}
+      onToggleDrawer={handleToggleDrawer}
+      layout={layout}
+      onToggleLayout={handleToggleLayout}
+    />
   );
 
   // Show full-screen loading only on initial load (no prior data, no active search query).
@@ -818,7 +652,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   if (isLoading && !notes && !debouncedSearch) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        {renderTopControls()}
+        {header}
         <SkeletonNoteList />
       </View>
     );
@@ -859,7 +693,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        {renderTopControls()}
+        {header}
         {errorContent}
       </View>
     );
@@ -874,7 +708,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
       variant === 'my-tasks' ? 'clipboard-outline' : 'document-text-outline';
     return (
       <View style={[styles.emptyWrapper, { backgroundColor: colors.background }]}>
-        {variant === 'notes' && renderTopControls()}
+        {variant === 'notes' && header}
         {variant === 'trash' && (
           <View style={[styles.trashBanner, { backgroundColor: colors.warning, borderBottomColor: colors.warningBorder }]}>
             <Ionicons name="information-circle-outline" size={16} color={colors.warningText} style={styles.trashBannerIcon} />
@@ -956,103 +790,35 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         </View>
       )}
 
-      {renderTopControls()}
+      {header}
 
-      {/* Notes list */}
-      {hasPinned ? (
-        isDraggable ? (
-          <NestableScrollContainer
-            refreshControl={
-              <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
-            }
-            contentContainerStyle={[styles.listContent, { paddingBottom: listBottomPadding }]}
-            testID="notes-section-list"
-          >
-            {displayPinned.length > 0 && (
-              <>
-                <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>{t('dashboard.pinned')}</Text>
-                <NestableDraggableFlatList
-                  data={displayPinned}
-                  keyExtractor={(item) => item.id}
-                  renderItem={renderDraggableNoteCard}
-                  onDragBegin={handleDragStart}
-                  onDragEnd={handleDragEndPinned}
-                  testID="pinned-draggable-list"
-                />
-              </>
-            )}
-            {displayUnpinned.length > 0 && (
-              <>
-                {displayPinned.length > 0 && (
-                  <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>{t('dashboard.otherNotes')}</Text>
-                )}
-                <NestableDraggableFlatList
-                  data={displayUnpinned}
-                  keyExtractor={(item) => item.id}
-                  renderItem={renderDraggableNoteCard}
-                  onDragBegin={handleDragStart}
-                  onDragEnd={handleDragEndUnpinned}
-                  testID="unpinned-draggable-list"
-                />
-              </>
-            )}
-            {displayPinned.length === 0 && displayUnpinned.length === 0 && listEmptyComponent}
-          </NestableScrollContainer>
-        ) : (
-          <SectionList
-            sections={noteSections}
-            keyExtractor={(item) => item.id}
-            renderItem={renderNonDraggableNoteCard}
-            renderSectionHeader={renderSectionHeader}
-            stickySectionHeadersEnabled={false}
-            refreshControl={
-              <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
-            }
-            contentContainerStyle={[styles.listContent, { paddingBottom: listBottomPadding }]}
-            ListEmptyComponent={listEmptyComponent}
-            testID="notes-section-list"
-          />
-        )
-      ) : isDraggable ? (
-        <DraggableFlatList
-          data={displayUnpinned}
-          keyExtractor={(item) => item.id}
-          renderItem={renderDraggableNoteCard}
-          onDragBegin={handleDragStart}
-          onDragEnd={handleDragEndUnpinned}
-          activationDistance={20}
-          refreshControl={
-            <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
-          }
-          contentContainerStyle={[styles.listContent, { paddingBottom: listBottomPadding }]}
-          ListEmptyComponent={listEmptyComponent}
-          testID="notes-flat-list"
-        />
-      ) : showArchivedSplit ? (
-        <SectionList
+      {/* Notes list — both the single-column list and the two-column grid are
+          rendered by the same masonry engine; only the column count differs.
+          The draggable masonry has nothing to drag (and no empty state) when
+          there are no notes, so fall back to the static grid in that case. */}
+      {isDraggable && noteSections.some((section) => section.data.length > 0) ? (
+        <DraggableMasonry
+          columns={layout === 'grid' ? 2 : 1}
           sections={noteSections}
-          keyExtractor={(item) => item.id}
-          renderItem={renderNonDraggableNoteCard}
-          renderSectionHeader={renderSectionHeader}
-          stickySectionHeadersEnabled={false}
+          onSectionReorder={handleGridSectionReorder}
+          onDragStart={handleDragStart}
+          renderCard={renderMasonryCardDraggable}
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
           }
-          contentContainerStyle={[styles.listContent, { paddingBottom: listBottomPadding }]}
-          ListEmptyComponent={listEmptyComponent}
-          testID="notes-section-list"
+          contentBottomPadding={listBottomPadding}
+          topInset={insets.top}
         />
       ) : (
-        <FlatList
-          data={displayUnpinned}
-          keyExtractor={(item) => item.id}
-          renderItem={renderNonDraggableNoteCard}
+        <MasonryGrid
+          columns={layout === 'grid' ? 2 : 1}
+          sections={noteSections}
+          renderCard={renderMasonryCardStatic}
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
           }
-          contentContainerStyle={[styles.listContent, { paddingBottom: listBottomPadding }]}
+          contentBottomPadding={listBottomPadding}
           ListEmptyComponent={listEmptyComponent}
-          testID="notes-flat-list"
         />
       )}
 
@@ -1103,219 +869,3 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  emptyWrapper: {
-    flex: 1,
-  },
-  emptyContent: {
-    width: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-  },
-  emptyScroll: {
-    flex: 1,
-  },
-  emptyScrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  errorScrollContent: {
-    flexGrow: 1,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginTop: 16,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  emptySearchContainer: {
-    paddingTop: 48,
-    alignItems: 'center',
-    gap: 8,
-  },
-  emptySearchTitle: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  trashBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-  },
-  trashBannerMessage: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  trashBannerIcon: {
-    marginRight: 8,
-  },
-  trashBannerText: {
-    fontSize: 13,
-    flex: 1,
-  },
-  emptyTrashButton: {
-    marginLeft: 12,
-    minWidth: 96,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyTrashButtonDisabled: {
-    opacity: 0.6,
-  },
-  emptyTrashButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  topControlsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: 12,
-    marginTop: 8,
-    marginBottom: 8,
-    gap: 8,
-  },
-  menuButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    borderRadius: 22,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    height: 40,
-  },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 14,
-    paddingVertical: 0,
-  },
-  sortToggleButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sortControlsContainer: {
-    marginHorizontal: 12,
-    marginBottom: 8,
-  },
-  sortControlsContent: {
-    gap: 8,
-    paddingRight: 8,
-  },
-  sortChip: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  sortChipText: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  sortChipTextActive: {
-    fontWeight: '600',
-  },
-  sortNotice: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginHorizontal: 16,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  sortNoticeIcon: {
-    marginRight: 8,
-    marginTop: 1,
-  },
-  sortNoticeText: {
-    flex: 1,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  sortNoticeDismiss: {
-    marginLeft: 8,
-    marginTop: 1,
-  },
-  sectionHeader: {
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 4,
-  },
-  listContent: {},
-  retryButton: {
-    marginTop: 16,
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  retryText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  fab: {
-    position: 'absolute',
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-  },
-  draggingCard: {
-    opacity: 0.9,
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-  },
-});

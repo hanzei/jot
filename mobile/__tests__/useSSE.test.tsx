@@ -29,6 +29,12 @@ jest.mock('../src/api/client', () => ({
 
 jest.mock('../src/db/noteQueries', () => ({
   markLocalNoteDeleted: jest.fn().mockResolvedValue(undefined),
+  permanentDeleteLocalNote: jest.fn().mockResolvedValue(undefined),
+  patchLocalNoteImages: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('../src/api/notes', () => ({
+  getNote: jest.fn(),
 }));
 
 let mockProtectedNoteIds = new Set<string>();
@@ -39,6 +45,9 @@ jest.mock('../src/db/syncQueue', () => ({
 
 const mockSaveServerNote = (jest.requireMock('../src/db/syncQueue') as { saveServerNote: jest.Mock }).saveServerNote;
 const mockMarkLocalNoteDeleted = (jest.requireMock('../src/db/noteQueries') as { markLocalNoteDeleted: jest.Mock }).markLocalNoteDeleted;
+const mockPermanentDeleteLocalNote = (jest.requireMock('../src/db/noteQueries') as { permanentDeleteLocalNote: jest.Mock }).permanentDeleteLocalNote;
+const mockGetNote = (jest.requireMock('../src/api/notes') as { getNote: jest.Mock }).getNote;
+const mockPatchLocalNoteImages = (jest.requireMock('../src/db/noteQueries') as { patchLocalNoteImages: jest.Mock }).patchLocalNoteImages;
 const flushMicrotasks = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 // Mock SSEConnectionManager
@@ -116,22 +125,48 @@ describe('useSSE', () => {
     expect(mockDisconnect).toHaveBeenCalled();
   });
 
-  it('invalidates notes list on note_created event', () => {
+  it('persists the note payload and invalidates queries on note_created event', async () => {
     const { queryClient, Wrapper } = createWrapper();
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
     renderHook(() => useSSE(), { wrapper: Wrapper });
     invalidateSpy.mockClear();
 
-    act(() => {
+    const note = { id: 'new-note', note_type: 'text', content: 'hi' } as unknown as Note;
+    await act(async () => {
       capturedCallback?.({
         type: 'note_created',
         source_user_id: 'other-user',
+        data: { note_id: 'new-note', note },
+      });
+    });
+
+    // The list/detail queries read from SQLite (staleTime: Infinity), so the note
+    // must be written before invalidation or the new note wouldn't appear until the
+    // next reconnect-triggered resync.
+    await waitFor(() => expect(mockSaveServerNote).toHaveBeenCalledWith(expect.anything(), note));
+    expect(mockGetNote).not.toHaveBeenCalled();
+    await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() }));
+  });
+
+  it('fetches the note when a note_created/note_shared event carries no payload', async () => {
+    const fetched = { id: 'new-note', note_type: 'text', content: 'fetched' } as unknown as Note;
+    mockGetNote.mockResolvedValueOnce(fetched);
+
+    const { Wrapper } = createWrapper();
+    renderHook(() => useSSE(), { wrapper: Wrapper });
+
+    await act(async () => {
+      capturedCallback?.({
+        type: 'note_shared',
+        source_user_id: 'other-user',
+        target_user_id: 'current-user',
         data: { note_id: 'new-note', note: null },
       });
     });
 
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() });
+    await waitFor(() => expect(mockGetNote).toHaveBeenCalledWith('new-note'));
+    await waitFor(() => expect(mockSaveServerNote).toHaveBeenCalledWith(expect.anything(), fetched));
   });
 
   it('invalidates notes list and specific note on note_updated event', () => {
@@ -149,6 +184,52 @@ describe('useSSE', () => {
       });
     });
 
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: noteLocalQueryKey('note-123') });
+  });
+
+  it('patches local images and invalidates queries on note_image_added event', async () => {
+    const { queryClient, Wrapper } = createWrapper();
+    const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
+
+    renderHook(() => useSSE(), { wrapper: Wrapper });
+    invalidateSpy.mockClear();
+
+    const image = { id: 'img-1', filename: 'a.png', content_type: 'image/png', width: 10, height: 10, created_at: '2024-01-01T00:00:00Z' };
+    await act(async () => {
+      capturedCallback?.({
+        type: 'note_image_added',
+        source_user_id: 'other-user',
+        data: { note_id: 'note-123', image },
+      });
+    });
+
+    await waitFor(() => expect(mockPatchLocalNoteImages).toHaveBeenCalledWith(expect.anything(), 'note-123', expect.any(Function)));
+    const updater = mockPatchLocalNoteImages.mock.calls[0][2] as (images: unknown[]) => unknown[];
+    expect(updater([])).toEqual([image]);
+    expect(updater([image])).toEqual([image]);
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: noteLocalQueryKey('note-123') });
+  });
+
+  it('patches local images and invalidates queries on note_image_removed event', async () => {
+    const { queryClient, Wrapper } = createWrapper();
+    const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
+
+    renderHook(() => useSSE(), { wrapper: Wrapper });
+    invalidateSpy.mockClear();
+
+    await act(async () => {
+      capturedCallback?.({
+        type: 'note_image_removed',
+        source_user_id: 'other-user',
+        data: { note_id: 'note-123', image_id: 'img-1' },
+      });
+    });
+
+    await waitFor(() => expect(mockPatchLocalNoteImages).toHaveBeenCalledWith(expect.anything(), 'note-123', expect.any(Function)));
+    const updater = mockPatchLocalNoteImages.mock.calls[0][2] as (images: { id: string }[]) => { id: string }[];
+    expect(updater([{ id: 'img-1' }, { id: 'img-2' }])).toEqual([{ id: 'img-2' }]);
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: noteLocalQueryKey('note-123') });
   });
@@ -172,6 +253,45 @@ describe('useSSE', () => {
     await waitFor(() => expect(mockSaveServerNote).toHaveBeenCalledWith(expect.anything(), note));
   });
 
+  it('persists the note to SQLite before invalidating queries so the refetch reads fresh data', async () => {
+    // Regression: the notes list and single-note queries read straight from SQLite
+    // (staleTime: Infinity), so invalidating before saveServerNote lands makes the
+    // refetch read stale rows — the remote change (item toggle, edited text) never
+    // surfaces on the dashboard until the next background sync.
+    let resolveSave: (() => void) | undefined;
+    mockSaveServerNote.mockImplementationOnce(
+      () => new Promise<void>((resolve) => { resolveSave = resolve; }),
+    );
+
+    const { queryClient, Wrapper } = createWrapper();
+    const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
+
+    renderHook(() => useSSE(), { wrapper: Wrapper });
+    invalidateSpy.mockClear();
+
+    const note = { id: 'note-123', note_type: 'list', title: 'Groceries' } as unknown as Note;
+    act(() => {
+      capturedCallback?.({
+        type: 'note_updated',
+        source_user_id: 'other-user',
+        data: { note_id: 'note-123', note },
+      });
+    });
+
+    // While the write is in flight, queries must not be invalidated yet.
+    await flushMicrotasks();
+    expect(mockSaveServerNote).toHaveBeenCalledWith(expect.anything(), note);
+    expect(invalidateSpy).not.toHaveBeenCalled();
+
+    // Once the write lands, both the single note and the dashboard list refresh.
+    await act(async () => {
+      resolveSave?.();
+      await flushMicrotasks();
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: noteLocalQueryKey('note-123') });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() });
+  });
+
   it('invalidates notes list and tombstones the note on note_deleted event', async () => {
     const { queryClient, Wrapper } = createWrapper();
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
@@ -188,9 +308,11 @@ describe('useSSE', () => {
       });
     });
 
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() });
     await waitFor(() => expect(removeSpy).toHaveBeenCalledWith({ queryKey: noteLocalQueryKey('note-123') }));
     expect(mockMarkLocalNoteDeleted).toHaveBeenCalledWith(expect.anything(), 'note-123');
+    // The list is refreshed only after the tombstone lands, so the refetch can't
+    // read the still-present row.
+    await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() }));
   });
 
   it('does not tombstone a deleted note that still has a pending or failed local op (#487/#492)', async () => {
@@ -297,27 +419,18 @@ describe('useSSE', () => {
     expect(onNotify).toHaveBeenCalledWith(event);
   });
 
-  it('invalidates notes list on note_shared and note_unshared events', () => {
+  it('hard-removes the note for the recipient who lost access on note_unshared', async () => {
+    // The recipient gets no note payload and can no longer see the note in any
+    // scope, so it must be hard-deleted (not tombstoned — it must not linger in
+    // their local trash view).
     const { queryClient, Wrapper } = createWrapper();
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
+    const removeSpy = jest.spyOn(queryClient, 'removeQueries');
 
     renderHook(() => useSSE(), { wrapper: Wrapper });
     invalidateSpy.mockClear();
 
-    act(() => {
-      capturedCallback?.({
-        type: 'note_shared',
-        source_user_id: 'other-user',
-        target_user_id: 'current-user',
-        data: { note_id: 'note-123', note: null },
-      });
-    });
-
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() });
-
-    invalidateSpy.mockClear();
-
-    act(() => {
+    await act(async () => {
       capturedCallback?.({
         type: 'note_unshared',
         source_user_id: 'other-user',
@@ -326,7 +439,61 @@ describe('useSSE', () => {
       });
     });
 
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() });
+    await waitFor(() => expect(mockPermanentDeleteLocalNote).toHaveBeenCalledWith(expect.anything(), 'note-123'));
+    expect(mockMarkLocalNoteDeleted).not.toHaveBeenCalled();
+    expect(removeSpy).toHaveBeenCalledWith({ queryKey: noteLocalQueryKey('note-123') });
+    await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() }));
+  });
+
+  it('refreshes (does not remove) the note on note_unshared for the owner or other collaborators', async () => {
+    // The owner/remaining collaborators receive the event too; they keep the note
+    // but its shared_with changed. The event has no payload and SQLite-backed
+    // queries don't refetch on a bare invalidation, so the note is fetched and
+    // saved, and both the detail and list caches are invalidated.
+    const fetched = { id: 'note-123', note_type: 'text', is_shared: false } as unknown as Note;
+    mockGetNote.mockResolvedValueOnce(fetched);
+
+    const { queryClient, Wrapper } = createWrapper();
+    const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
+
+    renderHook(() => useSSE(), { wrapper: Wrapper });
+    invalidateSpy.mockClear();
+
+    await act(async () => {
+      capturedCallback?.({
+        type: 'note_unshared',
+        source_user_id: 'current-user',
+        target_user_id: 'someone-else',
+        data: { note_id: 'note-123', note: null },
+      });
+    });
+
+    expect(mockPermanentDeleteLocalNote).not.toHaveBeenCalled();
+    await waitFor(() => expect(mockGetNote).toHaveBeenCalledWith('note-123'));
+    await waitFor(() => expect(mockSaveServerNote).toHaveBeenCalledWith(expect.anything(), fetched));
+    await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: noteLocalQueryKey('note-123') }));
+    await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() }));
+  });
+
+  it('does not hard-remove an unshared note that has a pending or failed local op (#487/#492)', async () => {
+    mockProtectedNoteIds = new Set(['note-123']);
+    const { queryClient, Wrapper } = createWrapper();
+    const removeSpy = jest.spyOn(queryClient, 'removeQueries');
+
+    renderHook(() => useSSE(), { wrapper: Wrapper });
+
+    await act(async () => {
+      capturedCallback?.({
+        type: 'note_unshared',
+        source_user_id: 'other-user',
+        target_user_id: 'current-user',
+        data: { note_id: 'note-123', note: null },
+      });
+    });
+    await flushMicrotasks();
+
+    expect(mockPermanentDeleteLocalNote).not.toHaveBeenCalled();
+    expect(removeSpy).not.toHaveBeenCalled();
   });
 
   it('does not start connection when offline', () => {

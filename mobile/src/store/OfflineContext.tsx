@@ -12,10 +12,12 @@ import NetInfo from '@react-native-community/netinfo';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useQueryClient } from '@tanstack/react-query';
 import { drainQueue, getPendingCount, getDeadLetterCount, subscribeToEnqueue } from '../db/syncQueue';
+import { drainImageUploadQueue, getQueuedImageUploadCount } from '../db/imageUploadQueue';
 import { getPendingCreateNoteIds, getFailedNoteIds } from '../db/noteQueries';
 import { useAuth } from './AuthContext';
+import { isLocalModeActive } from './localMode';
 import { isSyncDrainPaused } from './serverSwitchLifecycle';
-import { labelCountsQueryKey, labelsQueryKey, noteLocalQueryKey, noteLocalQueryScopeKey, notesLocalQueryScopeKey } from '../hooks/queryKeys';
+import { labelCountsQueryKey, labelsQueryKey, noteLocalQueryKey, noteLocalQueryScopeKey, notesLocalQueryScopeKey, pendingImageUploadsQueryScopeKey } from '../hooks/queryKeys';
 
 interface OfflineContextValue {
   isConnected: boolean;
@@ -141,6 +143,11 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   const rerunRequestedRef = useRef(false);
   // Holds the latest performDrain so timers always call the current closure.
   const performDrainRef = useRef<() => void>(() => {});
+  // Guard so near-simultaneous reconnect signals collapse into a single resync.
+  const isReconnectingRef = useRef(false);
+  // Set when a reconnect is requested while one is already in flight, so we run
+  // one more pass afterward and don't drop the later signal's session refresh.
+  const reconnectRerunRequestedRef = useRef(false);
 
   const clearDrainTimer = useCallback(() => {
     if (drainTimerRef.current !== null) {
@@ -184,6 +191,11 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     // only stall and reschedule. A timer scheduled while online can fire after we
     // go offline; the offline NetInfo handler also clears it, this is a backstop.
     if (!isConnectedRef.current) return;
+    // Local mode has no server and never enqueues server ops, so the drain loop
+    // stays parked (issue #514). This single guard covers every drain trigger
+    // (mount, reconnect, foreground, post-enqueue), keeping the online sync engine
+    // otherwise untouched.
+    if (isLocalModeActive()) return;
     if (isSyncDrainPaused()) return;
     if (isDrainingRef.current) {
       // A drain is already running; remember to run again once it finishes so
@@ -215,15 +227,40 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       // A drain can dead-letter ops (new failures) or clear a prior failure, so
       // refresh the failed-note badges and review-banner count (#492/#493).
       refreshSyncFailures();
+
+      // Offline image uploads (issue #618) are a separate table — a multipart
+      // file upload doesn't fit sync_queue's JSON-body row shape — so they get
+      // their own drain pass, run after the note queue above so a note whose
+      // offline `create` just landed can immediately take its queued images too.
+      const { uploadedNoteIds, discardedCount } = await drainImageUploadQueue(db);
+      if (discardedCount > 0) {
+        console.warn(`Image upload queue discarded/flagged ${discardedCount} entr(y/ies) after a permanent failure.`);
+      }
+      if (uploadedNoteIds.length > 0) {
+        for (const noteId of new Set(uploadedNoteIds)) {
+          queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
+        }
+        queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      }
+      queryClient.invalidateQueries({ queryKey: pendingImageUploadsQueryScopeKey() });
+
       // drainQueue resolves even when it stops early on a transient failure, so
       // inspect what's left to decide whether a backoff retry is warranted.
-      const remaining = await getPendingCount(db);
-      // Revalidate the session after a settings drain only when the queue is
-      // fully empty. The pre-drain revalidation had fetched stale server values
-      // (before the PATCH ran), so we need a fresh GET /me to reflect what the
-      // drain just applied. Guarding on remaining === 0 avoids clobbering
-      // in-memory optimistic state for settings ops that are still pending.
-      if (syncedSettings && remaining === 0) {
+      // Uploads flagged `error` (permanent failures) need a manual retry, so
+      // they don't count here — otherwise a doomed request would retry forever.
+      const [pendingCount, queuedImageUploadCount] = await Promise.all([
+        getPendingCount(db),
+        getQueuedImageUploadCount(db),
+      ]);
+      const remaining = pendingCount + queuedImageUploadCount;
+      // Revalidate the session after a settings drain only when the *settings'
+      // own* queue (sync_queue) is empty. The pre-drain revalidation had fetched
+      // stale server values (before the PATCH ran), so we need a fresh GET /me to
+      // reflect what the drain just applied. Guarding on pendingCount === 0 (not
+      // the combined `remaining`) avoids clobbering in-memory optimistic settings
+      // state without being held hostage by an unrelated, independent image
+      // upload backlog (issue #618) that has nothing to do with the settings write.
+      if (syncedSettings && pendingCount === 0) {
         await revalidateSession().catch(() => {});
       }
       if (remaining > 0) {
@@ -254,16 +291,37 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   performDrainRef.current = performDrain;
 
   const handleReconnect = useCallback(async () => {
+    // In local mode there is no server session to revalidate and no queue to
+    // drain, so skip the whole reconnect path (issue #514).
+    if (isLocalModeActive()) return;
     if (isSyncDrainPaused()) return;
-    // Re-validate session with the server (handles offline-authenticated users
-    // and refreshes user/settings for all returning-online users).
-    const stillAuthenticated = await revalidateSession();
-    if (!stillAuthenticated) return;
-    // A fresh connectivity/foreground signal: give the queue a clean budget of
-    // retries even if a prior streak of failures had paused auto-retrying.
-    failureCountRef.current = 0;
-    setSyncError(false);
-    await performDrain();
+    // A NetInfo offline→online transition and an AppState foreground commonly fire
+    // together when the device wakes, and each would otherwise re-validate the
+    // session and drain — invalidating every query — independently, causing the UI
+    // to refresh several times in a row. Collapse overlapping signals into one,
+    // remembering to run one final pass so a later signal's session refresh isn't
+    // dropped (mirrors performDrain's rerun-requested handling).
+    if (isReconnectingRef.current) {
+      reconnectRerunRequestedRef.current = true;
+      return;
+    }
+    isReconnectingRef.current = true;
+    try {
+      do {
+        reconnectRerunRequestedRef.current = false;
+        // Re-validate session with the server (handles offline-authenticated users
+        // and refreshes user/settings for all returning-online users).
+        const stillAuthenticated = await revalidateSession();
+        if (!stillAuthenticated) return;
+        // A fresh connectivity/foreground signal: give the queue a clean budget of
+        // retries even if a prior streak of failures had paused auto-retrying.
+        failureCountRef.current = 0;
+        setSyncError(false);
+        await performDrain();
+      } while (reconnectRerunRequestedRef.current);
+    } finally {
+      isReconnectingRef.current = false;
+    }
   }, [revalidateSession, performDrain]);
 
   useEffect(() => {

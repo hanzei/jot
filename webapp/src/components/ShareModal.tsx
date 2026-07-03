@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Dialog, DialogPanel } from '@headlessui/react';
+import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react';
 import { XMarkIcon, TrashIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
 import { ROLES, type Note, type NoteShare, type User } from '@jot/shared';
 import { notes, users as usersApi } from '@/utils/api';
+import { useSizeTransition } from '@/hooks/useSizeTransition';
 
 interface ShareModalProps {
   note: Note | null;
@@ -24,6 +25,12 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
   const [success, setSuccess] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
+
+  // Softly animate the modal's height when its contents change (a collaborator
+  // added/removed, suggestions toggled, or a status message shown/hidden).
+  const sizeTransitionKey =
+    `${shares.length}:${showSuggestions}:${filteredUsers.length}:${!!error}:${!!success}`;
+  const panelRef = useSizeTransition<HTMLDivElement>(sizeTransitionKey);
 
   const loadShares = useCallback(async () => {
     if (!note) return;
@@ -184,11 +191,11 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
 
   return (
     <Dialog open={isOpen} onClose={handleClose} aria-label={t('note.share')} className="relative z-50">
-      <div className="fixed inset-0 bg-black/25" />
-      
+      <DialogBackdrop transition className="fixed inset-0 bg-black/25 transition duration-200 ease-out data-[closed]:opacity-0 motion-reduce:transition-none" />
+
       <div className="fixed inset-0 overflow-y-auto">
         <div className="flex min-h-full items-center justify-center p-4">
-          <DialogPanel className="mx-auto max-w-md rounded bg-white dark:bg-slate-800 p-6 shadow-xl border border-gray-200 dark:border-slate-700">
+          <DialogPanel ref={panelRef} transition className="mx-auto max-w-md rounded bg-white dark:bg-slate-800 p-6 shadow-xl border border-gray-200 dark:border-slate-700 transition duration-200 ease-out data-[closed]:scale-95 data-[closed]:opacity-0 motion-reduce:transition-none">
             <div className="flex justify-end mb-4">
               <button
                 onClick={handleClose}

@@ -10,7 +10,8 @@
     "error": "Fout",
     "unknown": "onbekend",
     "loading": "Laden...",
-    "done": "Klaar"
+    "done": "Klaar",
+    "or": "of"
   },
   "nav": {
     "settings": "Instellingen",
@@ -30,6 +31,8 @@
     "invalidUrl": "Voer een geldige server-URL in (http:// of https://).",
     "addFailed": "Server toevoegen mislukt.",
     "switchFailed": "Server wisselen mislukt.",
+    "sessionExpiredTitle": "Aanmelden vereist",
+    "sessionExpiredMessage": "Je opgeslagen sessie voor ‘{{server}}’ is niet langer geldig. Het account is mogelijk verwijderd. Meld je opnieuw aan.",
     "duplicateTitle": "Server al toegevoegd",
     "duplicateMessage": "Deze server bestaat al in je lijst.",
     "switchToExisting": "Naar bestaande server",
@@ -80,7 +83,10 @@
     "serverSetupInputA11yLabel": "Invoer server-URL",
     "serverSetupSubmitA11yLabel": "Server valideren en doorgaan",
     "serverSetupConnectionFailed": "Kon die server niet bereiken. Controleer de URL en je verbinding en probeer het opnieuw.",
-    "serverSetupConnectionInvalidServer": "Verbonden, maar dit lijkt geen compatibel Jot API-eindpunt."
+    "serverSetupConnectionInvalidServer": "Verbonden, maar dit lijkt geen compatibel Jot API-eindpunt.",
+    "localModeLink": "Gebruiken zonder server",
+    "localModeHint": "Je notities blijven alleen op dit apparaat.",
+    "localModeFailed": "Kan lokale modus niet starten. Probeer het opnieuw."
   },
   "dashboard": {
     "newNote": "Nieuwe notitie",
@@ -119,12 +125,15 @@
       "created_at": "Aanmaakdatum"
     },
     "sortAccessibilityLabel": "Sorteren op {{sortLabel}}",
+    "layoutToggleToGrid": "Overschakelen naar rasterweergave",
+    "layoutToggleToList": "Overschakelen naar lijstweergave",
     "sortDisabledNotice": "Handmatig sorteren is uitgeschakeld. Notities zijn gesorteerd op {{sortLabel}}, dus slepen en neerzetten is niet beschikbaar.",
     "noteArchived": "Notitie gearchiveerd",
     "noteUnarchived": "Notitie uit archief gehaald",
     "noteDeleted": "Notitie naar prullenbak verplaatst",
     "noteRestored": "Notitie hersteld",
-    "undo": "Ongedaan maken"
+    "undo": "Ongedaan maken",
+    "toastActionHint": "Tik om {{action}} te activeren"
   },
   "settings": {
     "title": "Instellingen",
@@ -227,6 +236,7 @@
   },
   "note": {
     "share": "Delen",
+    "send": "Versturen",
     "unpin": "Losmaken",
     "pin": "Vastzetten",
     "unarchive": "Uit archief halen",
@@ -253,6 +263,7 @@
     "failedSaveChanges": "Wijzigingen opslaan mislukt. Tik om opnieuw te proberen.",
     "menuOptions": "Notitieopties",
     "assignItem": "Item toewijzen",
+    "removeItem": "Item verwijderen",
     "unassign": "Toewijzing opheffen",
     "assignedTo": "Toegewezen aan {{name}}",
     "changeColor": "Notitiekl",
@@ -269,7 +280,7 @@
     "updatedByAnotherUser": "Deze notitie is bijgewerkt door een andere gebruiker",
     "listItemLabel": "Lijstitem",
     "itemCheckbox": "Selectievakje {{item}}",
-    "dragToReorder": "Sleep om te sorteren",
+    "dragToReorderIndent": "Sleep om te sorteren of in te springen",
     "colorWhite": "Wit",
     "colorCoral": "Koraal",
     "colorYellow": "Geel",
@@ -289,7 +300,34 @@
     "outdentItem": "Inspringing verwijderen",
     "itemsPasted_one": "1 item geplakt",
     "itemsPasted_other": "{{count}} items geplakt",
-    "filterByLabel": "Filteren op label: {{label}}"
+    "filterByLabel": "Filteren op label: {{label}}",
+    "saveFailedExitTitle": "Opslaan mislukt",
+    "saveFailedExitMessage": "Je wijzigingen konden niet worden opgeslagen. Probeer het opnieuw of verwerp ze om te verlaten.",
+    "discardAndLeave": "Verwerpen en verlaten"
+  },
+  "images": {
+    "openLightbox": "{{filename}} bekijken",
+    "moreImages": "{{count}} meer afbeeldingen bekijken",
+    "lightboxPrevious": "Vorige afbeelding",
+    "lightboxNext": "Volgende afbeelding",
+    "lightboxCounter": "{{current}} / {{total}}",
+    "addImage": "Afbeelding toevoegen",
+    "camera": "Camera",
+    "photoLibrary": "Fotobibliotheek",
+    "files": "Bestanden",
+    "cameraPermissionDenied": "Cameratoegang is nodig om een foto te maken.",
+    "libraryPermissionDenied": "Toegang tot de fotobibliotheek is nodig om een foto te kiezen.",
+    "removeImage": "{{filename}} verwijderen",
+    "removedToast": "Afbeelding verwijderd",
+    "uploading": "Uploaden… {{percent}}%",
+    "uploadFailed": "Uploaden mislukt",
+    "queuedOffline": "Wachten op uploaden…",
+    "uploadQueuedToast": "De afbeelding wordt geüpload zodra je weer online bent",
+    "retryUpload": "{{filename}} opnieuw uploaden",
+    "dismissUpload": "{{filename}} negeren",
+    "errorWrongType": "Er kunnen alleen afbeeldingen worden toegevoegd.",
+    "errorTooLarge": "De afbeelding overschrijdt de limiet van {{maxMB}} MB.",
+    "errorTooMany": "Notities kunnen tot {{max}} afbeeldingen bevatten."
   },
   "labels": {
     "title": "Labels",
@@ -349,7 +387,9 @@
   },
   "offline": {
     "message": "Je bent offline. Wijzigingen worden gesynchroniseerd als je weer verbinding hebt.",
-    "syncError": "Sommige wijzigingen zijn nog niet gesynchroniseerd. Er wordt automatisch opnieuw geprobeerd."
+    "serverConnecting": "Verbinding maken met server…",
+    "syncError": "Sommige wijzigingen zijn nog niet gesynchroniseerd. Er wordt automatisch opnieuw geprobeerd.",
+    "revalidationError": "Sessie kon niet worden geverifieerd met de server. Lokale gegevens worden gebruikt."
   },
   "syncFailures": {
     "bannerCount_one": "{{count}} wijziging kon niet worden opgeslagen — Bekijken",
@@ -391,6 +431,40 @@
     "importing": "Importeren...",
     "importButton": "Importeren"
   },
+  "upgrade": {
+    "settingsSectionTitle": "Verbinden met een server",
+    "settingsSectionDescription": "Synchroniseer je notities met een Jot-server. Je lokale notities worden naar de server gemigreerd.",
+    "connectToServer": "Verbinden met een server",
+    "title": "Verbinden met een server",
+    "subtitle": "Voer je Jot-server-URL in om een nieuw account te maken en je notities te migreren.",
+    "serverUrlLabel": "Server-URL",
+    "serverUrlPlaceholder": "https://jot.voorbeeld.nl",
+    "continue": "Doorgaan",
+    "registerTitle": "Maak je account aan",
+    "changeServer": "Server wijzigen",
+    "usernameTaken": "Deze gebruikersnaam is al in gebruik. Kies een andere.",
+    "checkingTitle": "Compatibiliteit controleren",
+    "capabilityFailed": "Deze server ondersteunt geen notitemigratie. Zorg dat je een recente versie van Jot gebruikt.",
+    "emptinessFailed": "Het account bevat al notities of labels. Migratie vereist een leeg account.",
+    "fetchFailed": "Kan de server niet bereiken. Controleer je verbinding en probeer het opnieuw.",
+    "successTitle": "Alle controles geslaagd",
+    "successSubtitle": "Je server is compatibel en klaar. De migratie begint in een volgende stap.",
+    "errorTitle": "Kan niet verbinden",
+    "seedingTitle": "Migratie voorbereiden",
+    "migratingTitle": "Je notities migreren",
+    "migratingProgress": "{{processed}} van {{total}} synchroniseren",
+    "migrationCompleteTitle": "Migratie voltooid",
+    "migrationCompleteSubtitle": "Je notities zijn geüpload naar de server.",
+    "deadLetterTitle": "Migratie gepauzeerd",
+    "deadLetterSubtitle_one": "{{count}} wijziging kon niet worden gesynchroniseerd met de server.",
+    "deadLetterSubtitle_other": "{{count}} wijzigingen konden niet worden gesynchroniseerd met de server.",
+    "reviewFailedChanges": "Mislukte wijzigingen bekijken",
+    "retryMigration": "Migratie opnieuw proberen",
+    "migrationFailed": "Migratie mislukt. Controleer je verbinding en probeer het opnieuw.",
+    "reconciling": "Notities synchroniseren met server…",
+    "reconcileFailed": "Notities weerspiegelen mogelijk niet de meest recente servergegevens. Vernieuw de notitieslijst.",
+    "resync": "Opnieuw synchroniseren"
+  },
   "diagnostics": {
     "title": "Diagnose",
     "developerSection": "Ontwikkelaar",
@@ -412,6 +486,7 @@
     "degraded": "Verminderd",
     "recentLogs": "Recente logboeken",
     "clearLogs": "Logboeken wissen",
+    "expandLogs": "Volledige logboeken weergeven",
     "refresh": "Vernieuwen",
     "shareDiagnostics": "Diagnoserapport delen",
     "yes": "Ja",

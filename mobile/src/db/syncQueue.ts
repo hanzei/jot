@@ -3,16 +3,19 @@ import axios from 'axios';
 import api from '../api/client';
 import type { GetNotesParams, Note, NoteItem } from '@jot/shared';
 import {
-  replaceLocalNoteId,
   saveNote,
   saveNotes,
   patchLocalItem,
-  removeLocalNotesNotIn,
+  reconcileServerNotesScope,
   markNoteSyncFailed,
   clearNoteSyncFailed,
   clearNotePendingCreate,
   getFailedNoteIds,
+  getLocalNoteVersion,
+  setLocalNoteVersion,
+  updateLocalNoteShares,
 } from './noteQueries';
+import { isLocalModeActive } from '../store/localMode';
 
 export type QueueOperation =
   | 'create'
@@ -34,7 +37,8 @@ export type QueueOperation =
   | 'deleteLabel'
   | 'addLabelToNote'
   | 'removeLabelFromNote'
-  | 'updateSettings';
+  | 'updateSettings'
+  | 'removeImage';
 
 interface QueueEntry {
   id: number;
@@ -118,7 +122,14 @@ export function subscribeToEnqueue(listener: EnqueueListener): () => void {
   };
 }
 
-function notifyEnqueueListeners(): void {
+/**
+ * Notify enqueue listeners directly, bypassing `enqueueOperation`. Used by
+ * imageUploadQueue.ts, whose offline upload queue is a separate table (a
+ * multipart file upload doesn't fit the JSON `sync_queue` row shape) but
+ * still wants to trigger OfflineContext's debounced drain like any other
+ * freshly-queued write (issue #618).
+ */
+export function notifyEnqueueListeners(): void {
   for (const listener of enqueueListeners) {
     try {
       listener();
@@ -128,7 +139,14 @@ function notifyEnqueueListeners(): void {
   }
 }
 
-export async function enqueueOperation(db: SQLiteDatabase, params: EnqueueParams): Promise<void> {
+/**
+ * Insert a single entry directly into the sync queue, bypassing the local-mode
+ * guard and enqueue listeners. Used exclusively by the local→server upgrade seed
+ * path (seedReplayQueue): local mode is still active while the queue is being
+ * pre-populated for replay, so the normal `enqueueOperation` guard would be a
+ * no-op. Do NOT call this from any other code path.
+ */
+export async function insertQueueEntry(db: SQLiteDatabase, params: EnqueueParams): Promise<void> {
   await db.runAsync(
     `INSERT INTO sync_queue (operation, endpoint, method, body, created_at)
      VALUES (?, ?, ?, ?, ?)`,
@@ -140,6 +158,18 @@ export async function enqueueOperation(db: SQLiteDatabase, params: EnqueueParams
       new Date().toISOString(),
     ],
   );
+}
+
+export async function enqueueOperation(db: SQLiteDatabase, params: EnqueueParams): Promise<void> {
+  // Local mode has no server to sync to, so local writes are terminal the moment
+  // they land in SQLite (issue #514). Short-circuit before touching `sync_queue`
+  // so no ops ever accumulate there — and, by extension, nothing can dead-letter
+  // purely because a server is absent. The drain loop is also gated off in local
+  // mode (OfflineContext), so a stray queued op would otherwise sit pending forever.
+  if (isLocalModeActive()) {
+    return;
+  }
+  await insertQueueEntry(db, params);
   notifyEnqueueListeners();
 }
 
@@ -171,13 +201,20 @@ function collectNoteIds(
   // Drop any query string (e.g. "/notes/{id}?permanent=true") before splitting,
   // and filter out the empty segment from the leading slash.
   const segments = endpoint.split('?')[0].split('/').filter(Boolean);
+  if (segments[0] === 'images') {
+    // DELETE /images/{id}: the endpoint has no note id in it, so `removeImage`
+    // ops (see useNoteImages.ts) carry it in the body purely for this
+    // bookkeeping — it is never sent to the server (DELETE has no body).
+    const noteId = body?.note_id;
+    if (typeof noteId === 'string') ids.add(noteId);
+    return;
+  }
   if (segments[0] !== 'notes') return;
 
   if (segments.length === 1) {
-    // POST /notes (create): the affected note is the offline-created note. Newer
-    // creates carry the client-supplied `id` (issue #475); fall back to the
-    // legacy `local_id` for ops queued before that change.
-    const createId = body?.id ?? body?.local_id;
+    // POST /notes (create): the affected note is the offline-created note, identified
+    // by the client-supplied `id` (issue #475).
+    const createId = body?.id;
     if (typeof createId === 'string') ids.add(createId);
   } else if (segments[1] === 'reorder') {
     // POST /notes/reorder: body.note_ids lists every note whose position moved.
@@ -188,10 +225,10 @@ function collectNoteIds(
   } else {
     // POST /notes/{id}/duplicate creates a local clone: the write belongs to the
     // clone, not the source note (which it only reads), so track just the new
-    // local_id. Every other /notes/{id}/... op touches that note itself.
+    // note id via the client-supplied `id`.
     if (segments.length === 3 && segments[2] === 'duplicate') {
-      const localId = body?.local_id;
-      if (typeof localId === 'string') ids.add(localId);
+      const dupId = body?.id;
+      if (typeof dupId === 'string') ids.add(dupId);
     } else {
       ids.add(segments[1]);
     }
@@ -253,12 +290,9 @@ export async function saveServerNotes(db: SQLiteDatabase, notes: Note[]): Promis
 }
 
 /**
- * Reconcile a scoped server note list into local SQLite: persist the fetched notes
- * and prune local rows that have fallen out of this scope. Both steps share a single
- * protected-id set so notes with an unsynced (pending or failed) local edit are
- * neither overwritten nor pruned — a queued edit can optimistically move a note into
- * the scope before the server reflects it (e.g. un-archive/restore), and pruning it
- * would lose the edit (#487/#492).
+ * Reconcile a scoped server note list into local SQLite. Reads the protected-id set
+ * once (notes with an unsynced pending/failed local edit, #487/#492) and delegates to
+ * {@link reconcileServerNotesScope}, which applies the save and the prune atomically.
  */
 export async function saveServerNotesScope(
   db: SQLiteDatabase,
@@ -266,9 +300,7 @@ export async function saveServerNotesScope(
   params?: GetNotesParams,
 ): Promise<void> {
   const skipNoteIds = await getProtectedNoteIds(db);
-  await saveNotes(db, serverNotes, { skipNoteIds });
-  const serverIds = new Set(serverNotes.map((n) => n.id));
-  await removeLocalNotesNotIn(db, serverIds, params, { skipNoteIds });
+  await reconcileServerNotesScope(db, serverNotes, params, { skipNoteIds });
 }
 
 function remapValue(value: unknown, idMap: Map<string, string>): unknown {
@@ -309,7 +341,7 @@ export interface DiscardedOperation {
 }
 
 export interface DrainResult {
-  /** Maps local_* IDs to the server IDs assigned during create operations. */
+  /** The canonical server note returned for each drained create/duplicate operation. */
   idMappings: Array<{ localId: string; serverNote: Note }>;
   /** Operations that were discarded because the server returned a permanent (non-transient 4xx) error. */
   discardedOperations: DiscardedOperation[];
@@ -390,9 +422,10 @@ async function recordDeadLetter(
  * edit isn't lost (#492). On a transient failure (network/timeout/5xx), stop draining
  * and retry the remaining entries on the next reconnect.
  *
- * Handles offline-create ID reconciliation: when a `create` operation succeeds, the
- * server returns a new note ID. Any subsequent queue entries that reference the local
- * temporary ID are remapped to the server-assigned ID before execution.
+ * Handles offline-create ID reconciliation: when a `create` or `duplicate` operation
+ * succeeds, the server echoes back the client-supplied ID unchanged. The canonical
+ * server note (with authoritative fields like `updated_at`, version, item IDs) is
+ * adopted locally and the pending-create marker is cleared.
  *
  * Returns an array of {localId, serverNote} pairs for any create operations that
  * succeeded, so callers can update their caches.
@@ -402,7 +435,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
     'SELECT * FROM sync_queue ORDER BY id ASC',
   );
 
-  // Maps local_* IDs → server IDs as creates are processed
+  // Maps offline label IDs → server IDs as createLabel ops are processed
   const idMap = new Map<string, string>();
   const idMappings: Array<{ localId: string; serverNote: Note }> = [];
   const discardedOperations: DiscardedOperation[] = [];
@@ -432,31 +465,22 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         const response = await api.post(endpoint, body);
 
         if (entry.operation === 'create' || entry.operation === 'duplicate') {
-          // The server returns the canonical note. A create (#475) sends a
-          // server-valid `id` that the server keeps, so the id is stable and no
-          // remap is needed — just adopt the canonical note (server item ids etc.)
-          // and clear the pending-create marker. A duplicate (and any legacy
-          // create still carrying `local_id`) gets a server-assigned id, so its
-          // local id is reconciled and remapped for later queued ops.
-          const clientId = (body?.id ?? body?.local_id) as string | undefined;
+          // The server keeps the client-supplied `id`, so the id is stable —
+          // adopt the canonical note (server item ids etc.) and clear the
+          // pending-create marker. No id remap is needed.
+          const clientId = body?.id as string | undefined;
           const data = response?.data;
           if (clientId && hasStringId(data)) {
             const serverNote = data as Note;
-            if (serverNote.id !== clientId) {
-              idMap.set(clientId, serverNote.id);
-              idMappings.push({ localId: clientId, serverNote });
-              await replaceLocalNoteId(db, clientId, serverNote);
-            } else {
-              idMappings.push({ localId: clientId, serverNote });
-              await saveNote(db, serverNote);
-              await clearNotePendingCreate(db, clientId);
-            }
+            idMappings.push({ localId: clientId, serverNote });
+            await saveNote(db, serverNote);
+            await clearNotePendingCreate(db, clientId);
           }
         } else if (entry.operation === 'createLabel' && body?.local_id) {
-          // Reconcile the offline-generated local label id with the server id so
-          // later queued ops that reference it (rename/delete/remove-from-note)
-          // are remapped. Labels are derived from notes' labels_json rather than a
-          // dedicated table, so no row is rewritten here — the remap is enough.
+          // Backward compat: ops queued before issue #546 carried a `local_*`
+          // placeholder id that the server replaced with a new server id. Remap
+          // so later ops (rename/delete) reference the correct id. New ops carry
+          // a client-supplied `id` (the server id) and skip this block entirely.
           const localId = body.local_id as string;
           const data = response?.data;
           if (hasStringId(data) && data.id !== localId) {
@@ -470,16 +494,53 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           const items = response?.data as NoteItem[] | undefined;
           if (Array.isArray(items) && items.length > 0) {
             // endpoint: /notes/{noteId}/items/{itemId}/toggle-completed
+            // The server returns the note's full, authoritative item list (not
+            // just the toggled item), so reconcile every field here rather than
+            // just `completed` — otherwise a local item left stale by an earlier
+            // partial sync (e.g. parent_id/position from a reorder) never gets
+            // corrected, and the toggle can end up applied to the wrong item's
+            // row once rendered.
             const noteId = endpoint.split('/')[2];
             for (const item of items) {
-              await patchLocalItem(db, noteId, item.id, { completed: item.completed });
+              await patchLocalItem(db, noteId, item.id, {
+                text: item.text,
+                completed: item.completed,
+                position: item.position,
+                parent_id: item.parent_id,
+                assigned_to: item.assigned_to,
+              });
             }
           }
+        } else if (entry.operation === 'share') {
+          // Share returns 204 (no body) and the optimistic local note carries a
+          // synthetic `optimistic_<userId>` share row; re-fetch the canonical note
+          // so shared_with reflects the server-assigned share ids.
+          await reconcileNoteFromServer(db, affectedNoteIds(endpoint, body)[0]);
         }
       } else if (entry.method === 'PATCH') {
-        await api.patch(endpoint, body);
+        const updateNoteID =
+          entry.operation === 'update' ? affectedNoteIds(endpoint, body)[0] : undefined;
+        if (updateNoteID !== undefined && body && ('content' in body || 'title' in body)) {
+          // Resolve the optimistic-concurrency base from the note's current local
+          // version at replay time. setLocalNoteVersion below advances that version
+          // after each drained edit, so a chain of offline edits to one note
+          // replays against the right base even across separate drains; a note
+          // changed on another device keeps its stale local version (it's
+          // protected from server overwrite while queued, #487), so a real
+          // conflict is still caught (#489).
+          const version = await getLocalNoteVersion(db, updateNoteID);
+          if (version !== null) body.base_version = version;
+        }
+        const response = await api.patch(endpoint, body);
         if (entry.operation === 'updateSettings') {
           syncedSettings = true;
+        } else if (updateNoteID !== undefined) {
+          // Refresh just the local version from the canonical response so the next
+          // queued edit to this note resolves a fresh base_version (above).
+          const serverNote = response?.data;
+          if (hasStringId(serverNote) && typeof (serverNote as Note).version === 'number') {
+            await setLocalNoteVersion(db, updateNoteID, (serverNote as Note).version);
+          }
         }
       } else if (entry.method === 'DELETE') {
         const response = await api.delete(endpoint);
@@ -487,6 +548,10 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           // The server returns the updated note; persist it so the local
           // labels_json drops the removed label and stays consistent.
           await saveNoteFromResponse(db, response?.data);
+        } else if (entry.operation === 'unshare') {
+          // Unshare returns 204 (no body); re-fetch so shared_with/is_shared
+          // reflect the server state after the removal.
+          await reconcileNoteFromServer(db, affectedNoteIds(endpoint, body)[0]);
         }
       }
 
@@ -512,12 +577,63 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         console.warn(`Discarding queued operation id=${entry.id} (HTTP ${status})`);
         discardedOperations.push({ operation: entry.operation, endpoint, status });
 
-        // 409 is an idempotent already-applied conflict (e.g. replaying a create
-        // whose original request already committed): the local state is correct,
-        // so resolve it silently. Every other permanent status is real data loss —
-        // preserve the op in the dead_letter table and flag the affected note(s)
-        // so the optimistic edit isn't dropped or clobbered by a later fetch (#492).
-        if (status !== 409) {
+        // A 409 from a create/duplicate replay is an idempotent already-applied
+        // conflict (the original request already committed): the local state is
+        // correct, so resolve it silently. A 409 from an `update` is an
+        // optimistic-concurrency conflict — the note changed on another device
+        // since the edit's base_version (#489) — so it is real potential data
+        // loss and must be dead-lettered like any other permanent failure, so the
+        // edit is preserved and surfaced ("changed on another device") via the
+        // failed-changes banner instead of being silently dropped. Every other
+        // permanent status also dead-letters (#492).
+        //
+        // createLabel 409s require special handling: the conflict response body
+        // doesn't include the canonical label ID, so we resolve it via GET /labels.
+        // If the server label ID differs from the client-supplied body.id (name
+        // conflict vs. a different label), we remap it so downstream rename/delete
+        // ops reference the correct server ID. If the lookup fails or the label
+        // isn't found, dead-letter instead of silently dropping a potentially
+        // broken id-mapping.
+        //
+        // A permanently-rejected image delete (404: image or its cascade-deleted
+        // parent note already gone; 403: access revoked; etc.) always resolves
+        // silently rather than dead-lettering. The dead-letter "Keep my
+        // version"/Discard recovery flow (useSyncFailures.ts) is built around
+        // preserving *note content* — forking the whole note (sans images) into
+        // a duplicate — which is a meaningless, confusing response to a failed
+        // *image removal*. The image spec's own client-deferred-delete design
+        // already treats "the DELETE never landed" as fail-safe (the image just
+        // reappears on the next server sync, per §6); a background fetch or SSE
+        // event reconciles the note's images either way, so there is nothing to
+        // preserve here that a full note-fork would help with (issue #618's
+        // "reconcile queued removals … gracefully").
+        let idempotentConflict =
+          (status === 409 && entry.operation !== 'update' && entry.operation !== 'createLabel') ||
+          entry.operation === 'removeImage';
+        if (status === 409 && entry.operation === 'createLabel') {
+          const clientLabelId = body?.id as string | undefined;
+          const labelName = body?.name as string | undefined;
+          if (clientLabelId && labelName) {
+            try {
+              const labelsResp = await api.get<Array<{ id: string; name: string }>>('/labels');
+              const serverLabel = (labelsResp.data ?? []).find(
+                (l) => l.name.toLowerCase() === labelName.toLowerCase(),
+              );
+              if (serverLabel) {
+                if (serverLabel.id !== clientLabelId) {
+                  // Name conflict: another label owns this name with a different server
+                  // ID. Remap so downstream rename/delete ops use the correct ID.
+                  idMap.set(clientLabelId, serverLabel.id);
+                }
+                idempotentConflict = true;
+              }
+              // serverLabel not found: fall through to dead-letter
+            } catch {
+              // GET /labels failed: fall through to dead-letter
+            }
+          }
+        }
+        if (!idempotentConflict) {
           const noteIds = affectedNoteIds(endpoint, body);
           // Only link dead_letter.note_id when there's a single clear note (per the
           // schema contract); a multi-note op like reorder stores NULL. The note(s)
@@ -526,9 +642,9 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           for (const noteId of noteIds) {
             await markNoteSyncFailed(db, noteId);
           }
-        } else if (entry.operation === 'create') {
-          // Replaying a create whose original already committed: the note exists
-          // on the server, so clear its pending-create marker (#475).
+        } else if (entry.operation === 'create' || entry.operation === 'duplicate') {
+          // Replaying a create/duplicate whose original already committed: the
+          // note exists on the server, so clear its pending-create marker (#475).
           for (const noteId of affectedNoteIds(endpoint, body)) {
             await clearNotePendingCreate(db, noteId);
           }
@@ -557,5 +673,32 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
 async function saveNoteFromResponse(db: SQLiteDatabase, data: unknown): Promise<void> {
   if (hasStringId(data)) {
     await saveNote(db, data as Note);
+  }
+}
+
+/**
+ * Re-fetch a note from the server and reconcile its share state during queue
+ * drain. Used by share/unshare ops, which return 204 (no body) yet leave the
+ * local note holding an optimistic `shared_with` (a synthetic `optimistic_<userId>`
+ * row, or a row the unshare removed): a GET reconciles it to the server-assigned
+ * share ids. Only the share columns are written (not a full saveNote) so a content
+ * edit still queued for the same note isn't clobbered — the `update` drain bumps
+ * only the version, so a full overwrite would revert that pending edit until the
+ * next background sync. Best-effort: a failed fetch leaves the optimistic state
+ * for the next background sync to reconcile.
+ */
+async function reconcileNoteFromServer(db: SQLiteDatabase, noteId: string | undefined): Promise<void> {
+  if (!noteId) return;
+  try {
+    const data = (await api.get(`/notes/${noteId}`))?.data;
+    if (hasStringId(data)) {
+      const note = data as Note;
+      await updateLocalNoteShares(db, note.id, {
+        is_shared: note.is_shared,
+        shared_with: note.shared_with ?? [],
+      });
+    }
+  } catch (err) {
+    console.warn(`Failed to reconcile note id=${noteId} after share/unshare drain:`, err);
   }
 }

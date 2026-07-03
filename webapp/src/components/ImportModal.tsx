@@ -1,8 +1,9 @@
 import { useState, useRef } from 'react';
-import { Dialog, DialogPanel, DialogTitle } from '@headlessui/react';
+import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
 import { XMarkIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
 import { notes, isAxiosError } from '@/utils/api';
+import { useSizeTransition } from '@/hooks/useSizeTransition';
 import type { ImportResponse } from '@jot/shared';
 
 type ImportType = 'jot_json' | 'google_keep' | 'usememos';
@@ -23,6 +24,12 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
   const [error, setError] = useState('');
   const [result, setResult] = useState<ImportResponse | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Softly animate the modal's height when its contents change (import type
+  // switched, a file selected, or an error/result block shown).
+  const sizeTransitionKey =
+    `${importType}:${!!selectedFile}:${!!error}:${!!result}`;
+  const panelRef = useSizeTransition<HTMLDivElement>(sizeTransitionKey);
 
   const isFileType = importType !== 'usememos';
   const acceptedFileTypes = importType === 'jot_json' ? '.json' : '.json,.zip';
@@ -115,11 +122,11 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
 
   return (
     <Dialog open={isOpen} onClose={handleClose} className="relative z-50">
-      <div className="fixed inset-0 bg-black/25" />
+      <DialogBackdrop transition className="fixed inset-0 bg-black/25 transition duration-200 ease-out data-[closed]:opacity-0 motion-reduce:transition-none" />
 
       <div className="fixed inset-0 overflow-y-auto">
         <div className="flex min-h-full items-center justify-center p-4">
-          <DialogPanel className="mx-auto max-w-md w-full rounded bg-white dark:bg-slate-800 p-6 shadow-xl border border-gray-200 dark:border-slate-700">
+          <DialogPanel ref={panelRef} transition className="mx-auto max-w-md w-full rounded bg-white dark:bg-slate-800 p-6 shadow-xl border border-gray-200 dark:border-slate-700 transition duration-200 ease-out data-[closed]:scale-95 data-[closed]:opacity-0 motion-reduce:transition-none">
             <div className="flex items-center justify-between mb-4">
               <DialogTitle className="text-lg font-medium text-gray-900 dark:text-white">
                 {t('import.title')}
@@ -186,7 +193,10 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
             {result && (
               <>
                 <div className={`mb-4 p-3 rounded text-sm ${result.errors?.length ? 'bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-400' : 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400'}`}>
-                  {result.imported === 1 ? t('import.importedNotes_one', { count: result.imported }) : t('import.importedNotes_other', { count: result.imported })}
+                  {/* Let i18next pick the plural form from count — hand-picking
+                      _one/_other can never select the extra plural categories
+                      some locales have (e.g. Polish few/many). */}
+                  {t('import.importedNotes', { count: result.imported })}
                   {result.skipped > 0 && ` ${t('import.skipped', { count: result.skipped })}`}
                   {result.errors?.length ? `, ${t('import.failed', { count: result.errors.length })}` : ''}.
                 </div>

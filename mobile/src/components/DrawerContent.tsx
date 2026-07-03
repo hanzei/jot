@@ -3,7 +3,6 @@ import {
   View,
   Text,
   TouchableOpacity,
-  StyleSheet,
   Alert,
   Modal,
   Pressable,
@@ -22,6 +21,11 @@ import { getActiveServer, listServers, removeServer, renameServer, type ServerAc
 import { switchActiveServer } from '../api/client';
 import UserAvatar from './UserAvatar';
 import ServerSetupGate from './ServerSetupGate';
+import { extractErrorMessage } from './drawer/utils';
+import { styles } from './drawer/styles';
+import LabelsSection from './drawer/LabelsSection';
+import CreateLabelModal from './drawer/CreateLabelModal';
+import RenameLabelModal from './drawer/RenameLabelModal';
 
 import type { Label } from '@jot/shared';
 import type { MainDrawerParamList } from '../navigation/MainDrawer';
@@ -33,36 +37,8 @@ interface NavItem {
   activeIcon: keyof typeof Ionicons.glyphMap;
 }
 
-function extractErrorMessage(error: unknown, fallback: string) {
-  if (typeof error === 'object' && error !== null && 'response' in error) {
-    const response = error.response;
-    if (typeof response === 'object' && response !== null && 'data' in response) {
-      const { data } = response as { data?: unknown };
-      if (typeof data === 'string') {
-        const message = data.trim();
-        if (message) {
-          return message;
-        }
-      } else if (typeof data === 'object' && data !== null) {
-        const objectData = data as { message?: unknown; error?: unknown; detail?: unknown };
-        for (const candidate of [objectData.message, objectData.error, objectData.detail]) {
-          if (typeof candidate === 'string' && candidate.trim()) {
-            return candidate.trim();
-          }
-        }
-      }
-    }
-  }
-
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-
-  return fallback;
-}
-
 export default function DrawerContent(props: DrawerContentComponentProps) {
-  const { user, logout, clearAuth, revalidateSession } = useAuth();
+  const { user, logout, clearAuth, revalidateSession, isLocalMode } = useAuth();
   const { data: labels } = useLabels();
   const { data: labelCounts } = useLabelCounts();
   const createLabel = useCreateLabel();
@@ -73,7 +49,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
   const insets = useSafeAreaInsets();
   const topItems: NavItem[] = [
     { name: 'Notes', label: t('dashboard.tabNotes'), icon: 'document-text-outline', activeIcon: 'document-text' },
-    { name: 'MyTasks', label: t('dashboard.tabMyTasks'), icon: 'clipboard-outline', activeIcon: 'clipboard' },
+    ...(!isLocalMode ? [{ name: 'MyTasks' as const, label: t('dashboard.tabMyTasks'), icon: 'clipboard-outline' as const, activeIcon: 'clipboard' as const }] : []),
   ];
   const bottomItems: NavItem[] = [
     { name: 'Archived', label: t('dashboard.tabArchive'), icon: 'archive-outline', activeIcon: 'archive' },
@@ -91,7 +67,6 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
   const [activeServerId, setActiveServerId] = useState<string | null>(null);
   const [isServerActionPending, setIsServerActionPending] = useState(false);
   const serverSwitchingRef = useRef(false);
-  const longPressHandledRef = useRef(false);
 
   const activeRoute = props.state.routes[props.state.index]?.name;
   const activeParams = props.state.routes[props.state.index]?.params as
@@ -118,11 +93,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     props.navigation.closeDrawer();
   }, [props.navigation]);
 
-  const handleLabelPress = useCallback((labelId: string, labelName: string) => {
-    if (longPressHandledRef.current) {
-      longPressHandledRef.current = false;
-      return;
-    }
+  const handleLabelNavigate = useCallback((labelId: string, labelName: string) => {
     props.navigation.navigate('Notes', { labelId, labelName });
     props.navigation.closeDrawer();
   }, [props.navigation]);
@@ -210,35 +181,16 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     setNewLabelValue('');
   }, [createLabel.isPending]);
 
-  const resetLongPressHandled = useCallback(() => {
-    longPressHandledRef.current = false;
+  const closeRenameModal = useCallback(() => {
+    if (!renameLabel.isPending) {
+      setRenameLabelTarget(null);
+    }
+  }, [renameLabel.isPending]);
+
+  const handleCreateLabelPress = useCallback(() => {
+    setNewLabelValue('');
+    setIsCreateLabelVisible(true);
   }, []);
-
-  const openLabelMenu = useCallback((label: Label) => {
-    Alert.alert(label.name, t('labels.menuOptions', { name: label.name }), [
-      {
-        text: t('labels.rename'),
-        onPress: () => {
-          resetLongPressHandled();
-          openRenameModal(label);
-        },
-      },
-      {
-        text: t('labels.delete'),
-        style: 'destructive',
-        onPress: () => {
-          resetLongPressHandled();
-          handleDeleteLabel(label);
-        },
-      },
-      { text: t('common.cancel'), style: 'cancel', onPress: resetLongPressHandled },
-    ], { cancelable: true, onDismiss: resetLongPressHandled });
-  }, [handleDeleteLabel, openRenameModal, resetLongPressHandled, t]);
-
-  const handleLabelLongPress = useCallback((label: Label) => {
-    longPressHandledRef.current = true;
-    openLabelMenu(label);
-  }, [openLabelMenu]);
 
   const handleSettingsPress = useCallback(() => {
     props.navigation.dispatch(
@@ -283,9 +235,25 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
         return;
       }
       switchedSuccessfully = true;
-      await revalidateSession();
+
+      // revalidateSession returns false when the target server's stored session
+      // is no longer valid (expired, or the account was deleted): it clears auth
+      // so the app redirects to that server's login screen. Skip closeDrawer in
+      // that case (the navigator is already unmounting) and prompt the user to
+      // sign in again rather than reporting a switch failure.
+      const authenticated = await revalidateSession();
       setIsServerPickerVisible(false);
-      props.navigation.closeDrawer();
+      if (authenticated) {
+        props.navigation.closeDrawer();
+      } else {
+        const targetServer = servers.find((server) => server.serverId === serverId);
+        Alert.alert(
+          t('serverPicker.sessionExpiredTitle'),
+          t('serverPicker.sessionExpiredMessage', {
+            server: targetServer?.displayName || targetServer?.serverUrl || '',
+          }),
+        );
+      }
     } catch {
       Alert.alert(t('common.error'), t('serverPicker.switchFailed'));
     } finally {
@@ -301,7 +269,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
         await refreshServerPickerData();
       }
     }
-  }, [isServerActionPending, loadServerPickerData, props.navigation, revalidateSession, refreshServerPickerData, t]);
+  }, [isServerActionPending, loadServerPickerData, props.navigation, revalidateSession, refreshServerPickerData, servers, t]);
 
   const handleOpenServerSetup = useCallback(() => {
     if (isServerActionPending) {
@@ -434,32 +402,46 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
         {...props}
         contentContainerStyle={{ paddingTop: insets.top + 8 }}
       >
-        {/* User profile section */}
-        <TouchableOpacity
-          style={styles.profileSection}
-          onPress={handleOpenServerPicker}
-          accessibilityRole="button"
-          accessibilityLabel={t('serverPicker.open')}
-          testID="drawer-profile-button"
-        >
-          <UserAvatar
-            userId={user?.id ?? ''}
-            username={user?.username ?? ''}
-            hasProfileIcon={user?.has_profile_icon}
-            iconVersion={user?.updated_at}
-            size="large"
-          />
-          <View style={styles.profileTextWrap}>
-            <Text style={[styles.displayName, { color: colors.text }]} numberOfLines={1}>{displayName}</Text>
-            {user && displayName !== user.username && (
-              <Text style={[styles.username, { color: colors.textSecondary }]} numberOfLines={1}>@{user.username}</Text>
-            )}
-            <Text style={[styles.serverPickerHint, { color: colors.textSecondary }]} numberOfLines={1}>
-              {t('serverPicker.open')}
-            </Text>
+        {isLocalMode ? (
+          <View style={styles.profileSection} testID="drawer-profile-button">
+            <UserAvatar
+              userId={user?.id ?? ''}
+              username={user?.username ?? ''}
+              hasProfileIcon={user?.has_profile_icon}
+              iconVersion={user?.updated_at}
+              size="large"
+            />
+            <View style={styles.profileTextWrap}>
+              <Text style={[styles.displayName, { color: colors.text }]} numberOfLines={1}>{displayName}</Text>
+            </View>
           </View>
-          <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
-        </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={styles.profileSection}
+            onPress={handleOpenServerPicker}
+            accessibilityRole="button"
+            accessibilityLabel={t('serverPicker.open')}
+            testID="drawer-profile-button"
+          >
+            <UserAvatar
+              userId={user?.id ?? ''}
+              username={user?.username ?? ''}
+              hasProfileIcon={user?.has_profile_icon}
+              iconVersion={user?.updated_at}
+              size="large"
+            />
+            <View style={styles.profileTextWrap}>
+              <Text style={[styles.displayName, { color: colors.text }]} numberOfLines={1}>{displayName}</Text>
+              {user && displayName !== user.username && (
+                <Text style={[styles.username, { color: colors.textSecondary }]} numberOfLines={1}>@{user.username}</Text>
+              )}
+              <Text style={[styles.serverPickerHint, { color: colors.textSecondary }]} numberOfLines={1}>
+                {t('serverPicker.open')}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+          </TouchableOpacity>
+        )}
 
         <View style={[styles.divider, { backgroundColor: colors.divider }]} />
 
@@ -490,82 +472,15 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
             );
           })}
 
-          {labels && labels.length > 0 && (
-            <>
-              <View style={[styles.navDivider, { backgroundColor: colors.divider }]} />
-              {labels.map((label) => {
-                const isActive = activeLabelId === label.id;
-                const labelCount = labelCounts?.[label.id] ?? 0;
-                const labelAccessibilityName = `${label.name}, ${labelCount}`;
-                return (
-                  <View
-                    key={label.id}
-                    style={[styles.labelRow, isActive && { backgroundColor: colors.primaryLight }]}
-                  >
-                    <TouchableOpacity
-                      style={[styles.navItem, styles.labelNavItem]}
-                      onPress={() => handleLabelPress(label.id, label.name)}
-                      onLongPress={() => handleLabelLongPress(label)}
-                      delayLongPress={250}
-                      testID={`drawer-label-${label.id}`}
-                      accessibilityLabel={labelAccessibilityName}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: isActive }}
-                    >
-                      <Ionicons
-                        name={isActive ? 'pricetag' : 'pricetag-outline'}
-                        size={22}
-                        color={isActive ? colors.primary : colors.icon}
-                      />
-                      <Text
-                        style={[styles.navItemText, { color: colors.icon }, isActive && { color: colors.primary, fontWeight: '600' }]}
-                        numberOfLines={1}
-                      >
-                        {label.name}
-                      </Text>
-                    </TouchableOpacity>
-                    <Text
-                      style={[styles.labelCount, { color: isActive ? colors.primary : colors.textSecondary }]}
-                      testID={`drawer-label-count-${label.id}`}
-                    >
-                      {labelCount}
-                    </Text>
-                    <TouchableOpacity
-                      style={styles.labelMenuButton}
-                      onPress={() => openLabelMenu(label)}
-                      hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${label.name}. ${t('labels.menuOptions', { name: label.name })}`}
-                      testID={`drawer-label-menu-${label.id}`}
-                    >
-                      <Ionicons
-                        name="ellipsis-vertical"
-                        size={18}
-                        color={isActive ? colors.primary : colors.icon}
-                      />
-                    </TouchableOpacity>
-                  </View>
-                );
-              })}
-            </>
-          )}
-
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => {
-              setRenameLabelTarget(null);
-              setNewLabelValue('');
-              setIsCreateLabelVisible(true);
-            }}
-            testID="drawer-label-create"
-            accessibilityRole="button"
-            accessibilityLabel={t('labels.newSidebar')}
-          >
-            <Ionicons name="add" size={22} color={colors.primary} />
-            <Text style={[styles.navItemText, { color: colors.primary, fontWeight: '600' }]}>
-              {t('labels.newSidebar')}
-            </Text>
-          </TouchableOpacity>
+          <LabelsSection
+            labels={labels ?? []}
+            labelCounts={labelCounts}
+            activeLabelId={activeLabelId}
+            onLabelNavigate={handleLabelNavigate}
+            onOpenRenameModal={openRenameModal}
+            onDeleteLabel={handleDeleteLabel}
+            onCreateLabelPress={handleCreateLabelPress}
+          />
 
           <View style={[styles.navDivider, { backgroundColor: colors.divider }]} />
 
@@ -595,177 +510,50 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
         </View>
       </DrawerContentScrollView>
 
-      {/* Settings & Logout pinned to bottom */}
       <View
         style={[styles.bottomSection, { paddingBottom: Math.max(insets.bottom, 16) }]}
         testID="drawer-bottom-section"
       >
         <View style={[styles.divider, { backgroundColor: colors.divider }]} />
         <TouchableOpacity
-          style={styles.settingsButton}
+          style={styles.bottomNavButton}
           onPress={handleSettingsPress}
           testID="drawer-settings"
           accessibilityLabel={t('nav.settings')}
           accessibilityRole="button"
         >
           <Ionicons name="settings-outline" size={22} color={colors.icon} />
-          <Text style={[styles.settingsText, { color: colors.icon }]}>{t('nav.settings')}</Text>
+          <Text style={[styles.bottomNavText, { color: colors.icon }]}>{t('nav.settings')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={styles.logoutButton}
+          style={styles.bottomNavButton}
           onPress={handleLogout}
           testID="drawer-logout"
           accessibilityLabel={t('nav.logout')}
           accessibilityRole="button"
         >
           <Ionicons name="log-out-outline" size={22} color={colors.error} />
-          <Text style={[styles.logoutText, { color: colors.error }]}>{t('nav.logout')}</Text>
+          <Text style={[styles.bottomNavText, { color: colors.error }]}>{t('nav.logout')}</Text>
         </TouchableOpacity>
       </View>
 
-      <Modal
+      <CreateLabelModal
         visible={isCreateLabelVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => {
-          closeCreateLabelModal();
-        }}
-      >
-        <Pressable
-          style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}
-          onPress={() => {
-            closeCreateLabelModal();
-          }}
-        >
-          <Pressable
-            style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}
-            onPress={(event) => event.stopPropagation()}
-          >
-            <Text style={[styles.modalTitle, { color: colors.text }]}>
-              {t('labels.createInputLabel')}
-            </Text>
-            <TextInput
-              style={[styles.modalInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
-              value={newLabelValue}
-              onChangeText={setNewLabelValue}
-              placeholder={t('labels.newLabelPlaceholder')}
-              placeholderTextColor={colors.placeholder}
-              autoFocus
-              editable={!createLabel.isPending}
-              returnKeyType="done"
-              onSubmitEditing={() => {
-                void handleSubmitCreateLabel();
-              }}
-              testID="create-label-input"
-            />
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalSecondaryButton, { borderColor: colors.border }]}
-                onPress={() => {
-                  closeCreateLabelModal();
-                }}
-                disabled={createLabel.isPending}
-              >
-                <Text style={[styles.modalSecondaryText, { color: colors.textSecondary }]}>
-                  {t('labels.createCancel')}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.modalButton,
-                  styles.modalPrimaryButton,
-                  { backgroundColor: colors.primary },
-                  !newLabelValue.trim() && styles.modalButtonDisabled,
-                ]}
-                onPress={() => {
-                  void handleSubmitCreateLabel();
-                }}
-                disabled={!newLabelValue.trim() || createLabel.isPending}
-                testID="create-label-submit"
-              >
-                <Text style={styles.modalPrimaryText}>
-                  {createLabel.isPending ? t('settings.saving') : t('labels.createSave')}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
+        value={newLabelValue}
+        onChange={setNewLabelValue}
+        isPending={createLabel.isPending}
+        onSubmit={() => { void handleSubmitCreateLabel(); }}
+        onClose={closeCreateLabelModal}
+      />
 
-      <Modal
-        visible={renameLabelTarget !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => {
-          if (!renameLabel.isPending) {
-            setRenameLabelTarget(null);
-          }
-        }}
-      >
-        <Pressable
-          style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}
-          onPress={() => {
-            if (!renameLabel.isPending) {
-              setRenameLabelTarget(null);
-            }
-          }}
-        >
-          <Pressable
-            style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}
-            onPress={(event) => event.stopPropagation()}
-          >
-            <Text style={[styles.modalTitle, { color: colors.text }]}>
-              {t('labels.renameInputLabel', { name: renameLabelTarget?.name ?? '' })}
-            </Text>
-            <TextInput
-              style={[styles.modalInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
-              value={renameValue}
-              onChangeText={setRenameValue}
-              placeholder={t('labels.renamePlaceholder')}
-              placeholderTextColor={colors.placeholder}
-              autoFocus
-              editable={!renameLabel.isPending}
-              returnKeyType="done"
-              onSubmitEditing={() => {
-                void handleSubmitRename();
-              }}
-              testID="rename-label-input"
-            />
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalSecondaryButton, { borderColor: colors.border }]}
-                onPress={() => {
-                  if (!renameLabel.isPending) {
-                    setRenameLabelTarget(null);
-                  }
-                }}
-                disabled={renameLabel.isPending}
-              >
-                <Text style={[styles.modalSecondaryText, { color: colors.textSecondary }]}>
-                  {t('labels.renameCancel')}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.modalButton,
-                  styles.modalPrimaryButton,
-                  { backgroundColor: colors.primary },
-                  !renameValue.trim() && styles.modalButtonDisabled,
-                ]}
-                onPress={() => {
-                  void handleSubmitRename();
-                }}
-                disabled={!renameValue.trim() || renameLabel.isPending}
-                testID="rename-label-submit"
-              >
-                <Text style={styles.modalPrimaryText}>
-                  {renameLabel.isPending ? t('settings.saving') : t('labels.renameSave')}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
+      <RenameLabelModal
+        target={renameLabelTarget}
+        value={renameValue}
+        onChange={setRenameValue}
+        isPending={renameLabel.isPending}
+        onSubmit={() => { void handleSubmitRename(); }}
+        onClose={closeRenameModal}
+      />
 
       <Modal
         visible={isServerPickerVisible}
@@ -874,12 +662,9 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
               <TouchableOpacity
                 style={[
                   styles.modalButton,
-                  styles.modalPrimaryButton,
                   { backgroundColor: colors.primary },
                 ]}
-                onPress={() => {
-                  handleOpenServerSetup();
-                }}
+                onPress={handleOpenServerSetup}
                 disabled={isServerActionPending}
                 testID="server-picker-add-submit"
                 accessibilityRole="button"
@@ -920,10 +705,12 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                   if (!ok) {
                     return;
                   }
-                  await revalidateSession();
+                  const authenticated = await revalidateSession();
                   setIsServerSetupVisible(false);
                   setIsServerPickerVisible(false);
-                  props.navigation.closeDrawer();
+                  if (authenticated) {
+                    props.navigation.closeDrawer();
+                  }
                 } catch {
                   Alert.alert(t('common.error'), t('serverPicker.switchFailed'));
                 } finally {
@@ -938,9 +725,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                 <View style={styles.serverSetupActions}>
                   <TouchableOpacity
                     style={[styles.modalButton, styles.modalSecondaryButton, { borderColor: colors.border }]}
-                    onPress={() => {
-                      handleBackToDashboardFromServerSetup();
-                    }}
+                    onPress={handleBackToDashboardFromServerSetup}
                     disabled={isServerActionPending}
                     testID="server-picker-add-cancel"
                     accessibilityRole="button"
@@ -1008,7 +793,6 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
               <TouchableOpacity
                 style={[
                   styles.modalButton,
-                  styles.modalPrimaryButton,
                   { backgroundColor: colors.primary },
                   isServerActionPending && styles.modalButtonDisabled,
                 ]}
@@ -1029,193 +813,3 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  profileSection: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  profileTextWrap: {
-    flex: 1,
-  },
-  displayName: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  username: {
-    fontSize: 13,
-    marginTop: 2,
-  },
-  serverPickerHint: {
-    fontSize: 12,
-    marginTop: 4,
-  },
-  divider: {
-    height: 1,
-    marginHorizontal: 20,
-  },
-  navSection: {
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-  },
-  navItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    gap: 14,
-  },
-  navItemText: {
-    fontSize: 15,
-    fontWeight: '400',
-    flexShrink: 1,
-  },
-  labelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 10,
-    paddingRight: 6,
-  },
-  labelNavItem: {
-    flex: 1,
-    paddingRight: 8,
-  },
-  labelMenuButton: {
-    padding: 10,
-    borderRadius: 8,
-  },
-  labelCount: {
-    minWidth: 24,
-    textAlign: 'right',
-    fontSize: 12,
-    fontWeight: '600',
-    marginLeft: 6,
-  },
-  navDivider: {
-    height: 1,
-    marginHorizontal: 16,
-    marginVertical: 4,
-  },
-  bottomSection: {
-    paddingTop: 0,
-  },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'center',
-    padding: 24,
-  },
-  modalCard: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 20,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 12,
-  },
-  modalInput: {
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
-  },
-  modalActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 12,
-    marginTop: 16,
-  },
-  modalButton: {
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  modalPrimaryButton: {},
-  modalSecondaryButton: {
-    borderWidth: 1,
-  },
-  modalButtonDisabled: {
-    opacity: 0.5,
-  },
-  modalPrimaryText: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-  modalSecondaryText: {
-    fontWeight: '500',
-  },
-  serverList: {
-    marginBottom: 12,
-    gap: 8,
-  },
-  serverRow: {
-    borderWidth: 1,
-    borderRadius: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  serverRowPressable: {
-    flex: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  serverRowIconButton: {
-    paddingRight: 12,
-    paddingVertical: 10,
-  },
-  serverRowContent: {
-    flex: 1,
-  },
-  serverRowTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  serverRowSubtext: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  serverSetupActions: {
-    marginTop: 8,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  serverSetupPending: {
-    marginLeft: 12,
-  },
-  settingsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    gap: 14,
-  },
-  settingsText: {
-    fontSize: 15,
-    fontWeight: '500',
-  },
-  logoutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    gap: 14,
-  },
-  logoutText: {
-    fontSize: 15,
-    fontWeight: '500',
-  },
-});

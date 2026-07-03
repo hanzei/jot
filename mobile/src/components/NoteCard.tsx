@@ -1,6 +1,5 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import Markdown from 'react-native-markdown-display';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, type Note, type NoteItem, type User } from '@jot/shared';
@@ -10,7 +9,7 @@ import { useFailedNoteIds } from '../store/OfflineContext';
 import { useUsers } from '../store/UsersContext';
 import UserAvatar from './UserAvatar';
 import { isWhiteHexColor } from '../utils/colorContrast';
-import { compactMarkdownStyles, preprocessMarkdown } from '../utils/markdownStyles';
+import { stripMarkdownForPreview } from '../utils/markdownStyles';
 import LinkText from './LinkText';
 
 interface NoteCardProps {
@@ -123,13 +122,13 @@ function ListPreview({ items, hasColor }: { items: NoteItem[]; hasColor?: boolea
             style={[styles.listRow, { marginLeft: indentLevel * VALIDATION.INDENT_PX_PER_LEVEL }]}
             testID={`note-card-list-row-${item.id}`}
           >
-            <Ionicons name="square-outline" size={14} color={hasColor ? '#999' : colors.iconMuted} />
-            <LinkText text={item.text} style={[styles.listText, { color: hasColor ? '#666' : colors.textSecondary }]} />
+            <Ionicons name="square-outline" size={14} color={hasColor ? '#555' : colors.textSecondary} />
+            <LinkText text={item.text} style={[styles.listText, { color: hasColor ? '#1a1a1a' : colors.text }]} />
           </View>
         );
       })}
       {completedCount > 0 && (
-        <Text style={[styles.completedCount, { color: hasColor ? '#999' : colors.textMuted }]}>
+        <Text style={[styles.completedCount, { color: hasColor ? '#555' : colors.textSecondary }]}>
           {t('note.moreCompletedItems', { count: completedCount })}
         </Text>
       )}
@@ -143,6 +142,10 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress, onLabelPress }: Not
   const failedNoteIds = useFailedNoteIds();
   const didNotSync = failedNoteIds.has(note.id);
   const hasColor = !!(note.color && !isWhiteHexColor(note.color));
+  const textPreview = useMemo(
+    () => note.note_type === 'text' && note.content ? stripMarkdownForPreview(note.content) : null,
+    [note],
+  );
 
   return (
     <TouchableOpacity
@@ -176,6 +179,14 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress, onLabelPress }: Not
               {note.title}
             </Text>
           ) : null}
+          {textPreview ? (
+            <Text
+              style={[styles.contentText, { color: hasColor ? '#1a1a1a' : colors.text }]}
+              numberOfLines={3}
+            >
+              {textPreview}
+            </Text>
+          ) : null}
         </View>
         {onMenuPress && (
           <TouchableOpacity
@@ -190,14 +201,6 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress, onLabelPress }: Not
           </TouchableOpacity>
         )}
       </View>
-
-      {note.note_type === 'text' && note.content ? (
-        <View style={styles.contentPreview}>
-          <Markdown style={compactMarkdownStyles(hasColor ? '#666' : colors.textSecondary)}>
-            {preprocessMarkdown(note.content)}
-          </Markdown>
-        </View>
-      ) : null}
 
       {note.note_type === 'list' && note.items && note.items.length > 0 ? (
         <ListPreview items={note.items} hasColor={hasColor} />
@@ -240,8 +243,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 12,
     padding: 12,
-    marginHorizontal: 16,
-    marginVertical: 5,
+    // The masonry layout (both the single-column list and the two-column grid)
+    // owns the spacing between cards, so the card itself carries no margins.
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
@@ -275,17 +278,13 @@ const styles = StyleSheet.create({
     marginRight: -4,
   },
   title: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     marginBottom: 4,
   },
-  content: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  contentPreview: {
-    maxHeight: 60,
-    overflow: 'hidden',
+  contentText: {
+    fontSize: 13,
+    lineHeight: 18,
   },
   listPreview: {
     marginTop: 4,

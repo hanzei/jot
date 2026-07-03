@@ -1,9 +1,9 @@
 import { render, screen, fireEvent, within, act } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { type ReactNode } from 'react'
-import NoteModal from '../NoteModal'
+import NoteModal, { ROW_REVEAL_CLASSES } from '../NoteModal'
 import { ToastProvider } from '../Toast'
-import { VALIDATION, type Note, type NoteItem } from '@jot/shared'
+import { VALIDATION, type Note, type NoteItem, type NoteImage } from '@jot/shared'
 import { createMockNote } from '@/utils/__tests__/test-helpers'
 
 // Mock the API module
@@ -15,6 +15,8 @@ const {
   mockDeleteItem,
   mockReorderItems,
   mockToggleItemCompleted,
+  mockImagesUpload,
+  mockImagesDelete,
   dragEndRef,
 } = vi.hoisted(() => ({
   // Captures the latest DndContext onDragEnd so tests can invoke a drag directly
@@ -31,6 +33,10 @@ const {
   // tests that need cascade override this with the full item list.
   mockToggleItemCompleted: vi.fn().mockImplementation((_noteId, itemId, completed) =>
     Promise.resolve([{ id: itemId, completed }])),
+  mockImagesUpload: vi.fn().mockResolvedValue({
+    id: 'uploaded1', filename: 'upload.png', content_type: 'image/png', width: 10, height: 10, created_at: '2024-01-01T00:00:00Z',
+  }),
+  mockImagesDelete: vi.fn().mockResolvedValue(undefined),
 }))
 vi.mock('@/utils/api', () => ({
   notes: {
@@ -47,12 +53,18 @@ vi.mock('@/utils/api', () => ({
   labels: {
     getAll: vi.fn().mockResolvedValue([]),
   },
+  images: {
+    url: (id: string) => `/api/v1/images/${id}`,
+    thumbnailUrl: (id: string) => `/api/v1/images/${id}/thumbnail`,
+    upload: mockImagesUpload,
+    delete: mockImagesDelete,
+  },
 }))
 
 // Mock @headlessui/react
 vi.mock('@headlessui/react', () => {
-  const DialogPanel = ({ className, children }: { className?: string; children?: ReactNode }) => (
-    <div className={className} data-testid="dialog-panel">{children}</div>
+  const DialogPanel = ({ className, children, ...rest }: { className?: string; children?: ReactNode } & Record<string, unknown>) => (
+    <div className={className} data-testid="dialog-panel" {...rest}>{children}</div>
   )
 
   const Dialog = ({ children, open }: { children?: ReactNode; open?: boolean }) => (
@@ -65,7 +77,11 @@ vi.mock('@headlessui/react', () => {
     <h2 className={className}>{children}</h2>
   )
 
-  return { Dialog, DialogPanel, DialogTitle }
+  const DialogBackdrop = ({ className }: { className?: string }) => (
+    <div className={className} data-testid="dialog-backdrop" />
+  )
+
+  return { Dialog, DialogPanel, DialogTitle, DialogBackdrop }
 })
 
 // Mock @dnd-kit components
@@ -270,6 +286,342 @@ describe('NoteModal', () => {
     it('does not render mobile app toolbar link for new note', () => {
       renderNoteModal(defaultProps)
       expect(screen.queryByTestId('note-open-mobile-app-toolbar-link')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('Image gallery', () => {
+    const makeImage = (overrides: Partial<NoteImage> = {}): NoteImage => ({
+      id: 'img1',
+      filename: 'photo.png',
+      content_type: 'image/png',
+      width: 800,
+      height: 600,
+      created_at: '2023-01-01T00:00:00Z',
+      ...overrides,
+    })
+
+    it('does not render a gallery region when the note has no images', () => {
+      const note = createMockNote({ images: [] })
+      renderNoteModal({ ...defaultProps, note })
+
+      expect(screen.queryByAltText('photo.png')).not.toBeInTheDocument()
+    })
+
+    it('renders a banner for a note with one image', () => {
+      const note = createMockNote({ images: [makeImage()] })
+      renderNoteModal({ ...defaultProps, note })
+
+      expect(screen.getByAltText('photo.png')).toHaveAttribute('src', '/api/v1/images/img1/thumbnail')
+    })
+
+    it('opens the lightbox when a gallery tile is clicked', () => {
+      const note = createMockNote({
+        images: [makeImage(), makeImage({ id: 'img2', filename: 'photo2.png' })],
+      })
+      renderNoteModal({ ...defaultProps, note })
+
+      fireEvent.click(screen.getByRole('button', { name: 'View photo.png' }))
+
+      expect(screen.getByText('1 / 2')).toBeInTheDocument()
+    })
+  })
+
+  describe('Image upload and remove', () => {
+    const makeImageFile = (name = 'photo.png', type = 'image/png', size = 1024) =>
+      new File([new Uint8Array(size)], name, { type })
+
+    // Upload/delete mocks resolve via a plain promise chain with no timer of
+    // their own, so vi.runAllTimersAsync() (which only ticks pending timers)
+    // has nothing to advance. Flush the microtask queue directly instead.
+    const flushMicrotasks = () => act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const uploadViaPicker = async (file: File) => {
+      const input = screen.getByTestId('note-image-file-input') as HTMLInputElement
+      fireEvent.change(input, { target: { files: [file] } })
+      await flushMicrotasks()
+    }
+
+    it('does not render the add-image button for a brand-new (unsaved) note', () => {
+      renderNoteModal(defaultProps)
+      expect(screen.queryByRole('button', { name: 'Add image' })).not.toBeInTheDocument()
+    })
+
+    it('uploads a file selected via the toolbar picker and shows an uploading tile', async () => {
+      const note = createMockNote({ images: [] })
+      renderNoteModal({ ...defaultProps, note })
+
+      const file = makeImageFile()
+      const input = screen.getByTestId('note-image-file-input') as HTMLInputElement
+      fireEvent.change(input, { target: { files: [file] } })
+
+      expect(mockImagesUpload).toHaveBeenCalledWith('1', file, expect.any(Function))
+      expect(screen.getByTestId('image-upload-tile')).toHaveAttribute('data-status', 'uploading')
+
+      await flushMicrotasks()
+
+      // The upload placeholder is dropped once the request resolves — the real
+      // tile appears later, driven by the note_image_added SSE event.
+      expect(screen.queryByTestId('image-upload-tile')).not.toBeInTheDocument()
+    })
+
+    it('rejects a non-image file with an inline error and does not upload it', async () => {
+      const note = createMockNote({ images: [] })
+      renderNoteModal({ ...defaultProps, note })
+
+      await uploadViaPicker(new File(['x'], 'doc.pdf', { type: 'application/pdf' }))
+
+      expect(mockImagesUpload).not.toHaveBeenCalled()
+      expect(screen.getByText('Only images can be attached.')).toBeInTheDocument()
+    })
+
+    it('rejects an oversized file with an inline error and does not upload it', async () => {
+      const note = createMockNote({ images: [] })
+      renderNoteModal({ ...defaultProps, note })
+
+      await uploadViaPicker(makeImageFile('big.png', 'image/png', 26 * 1024 * 1024))
+
+      expect(mockImagesUpload).not.toHaveBeenCalled()
+      expect(screen.getByText('Image exceeds the 25 MB limit.')).toBeInTheDocument()
+    })
+
+    it('uses the server-configured upload cap (from /config) instead of a hardcoded 25 MB', async () => {
+      const note = createMockNote({ images: [] })
+      renderNoteModal({ ...defaultProps, note, uploadMaxBytes: 10 * 1024 * 1024 })
+
+      // 15 MB is under the hardcoded 25 MB default but over this server's
+      // actual configured 10 MB cap.
+      await uploadViaPicker(makeImageFile('medium.png', 'image/png', 15 * 1024 * 1024))
+
+      expect(mockImagesUpload).not.toHaveBeenCalled()
+      expect(screen.getByText('Image exceeds the 10 MB limit.')).toBeInTheDocument()
+    })
+
+    it('combines validation errors from every invalid file in one batch instead of only the last one', async () => {
+      const note = createMockNote({ images: [] })
+      renderNoteModal({ ...defaultProps, note })
+
+      const input = screen.getByTestId('note-image-file-input') as HTMLInputElement
+      fireEvent.change(input, {
+        target: { files: [new File(['x'], 'doc.pdf', { type: 'application/pdf' }), makeImageFile('big.png', 'image/png', 26 * 1024 * 1024)] },
+      })
+      await flushMicrotasks()
+
+      expect(mockImagesUpload).not.toHaveBeenCalled()
+      expect(screen.getByText(/Only images can be attached\./)).toBeInTheDocument()
+      expect(screen.getByText(/Image exceeds the 25 MB limit\./)).toBeInTheDocument()
+    })
+
+    it('refuses to queue more uploads than the per-note image cap allows', async () => {
+      const existingImages: NoteImage[] = Array.from({ length: 9 }, (_, i) => ({
+        id: `img${i}`, filename: `photo${i}.png`, content_type: 'image/png', width: 10, height: 10, created_at: '2023-01-01T00:00:00Z',
+      }))
+      const note = createMockNote({ images: existingImages })
+      renderNoteModal({ ...defaultProps, note })
+
+      const input = screen.getByTestId('note-image-file-input') as HTMLInputElement
+      fireEvent.change(input, { target: { files: [makeImageFile('a.png'), makeImageFile('b.png')] } })
+      await flushMicrotasks()
+
+      // 9 existing + 10-cap leaves exactly one free slot.
+      expect(mockImagesUpload).toHaveBeenCalledTimes(1)
+      expect(screen.getByText('Notes can have up to 10 images.')).toBeInTheDocument()
+    })
+
+    it('shows a retryable error tile when the upload request fails', async () => {
+      mockImagesUpload.mockRejectedValueOnce(new Error('network error'))
+      const note = createMockNote({ images: [] })
+      renderNoteModal({ ...defaultProps, note })
+
+      await uploadViaPicker(makeImageFile())
+
+      const tile = screen.getByTestId('image-upload-tile')
+      expect(tile).toHaveAttribute('data-status', 'error')
+
+      mockImagesUpload.mockResolvedValueOnce({
+        id: 'uploaded2', filename: 'photo.png', content_type: 'image/png', width: 10, height: 10, created_at: '2023-01-01T00:00:00Z',
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Retry uploading photo.png' }))
+      await flushMicrotasks()
+
+      expect(mockImagesUpload).toHaveBeenCalledTimes(2)
+      expect(screen.queryByTestId('image-upload-tile')).not.toBeInTheDocument()
+    })
+
+    it('uploads an image dropped onto the note modal', async () => {
+      const note = createMockNote({ images: [] })
+      renderNoteModal({ ...defaultProps, note })
+
+      const panel = screen.getByTestId('dialog-panel')
+      const file = makeImageFile()
+      fireEvent.drop(panel, { dataTransfer: { files: [file] } })
+      await flushMicrotasks()
+
+      expect(mockImagesUpload).toHaveBeenCalledWith('1', file, expect.any(Function))
+    })
+
+    it('shows a drop overlay while dragging a file over the modal', () => {
+      const note = createMockNote({ images: [] })
+      renderNoteModal({ ...defaultProps, note })
+
+      const panel = screen.getByTestId('dialog-panel')
+      fireEvent.dragEnter(panel, { dataTransfer: { items: [{ kind: 'file', type: 'image/png' }] } })
+
+      expect(screen.getByTestId('note-image-drop-overlay')).toBeInTheDocument()
+
+      fireEvent.dragLeave(panel)
+      expect(screen.queryByTestId('note-image-drop-overlay')).not.toBeInTheDocument()
+    })
+
+    it('does not preventDefault on a dragover that carries no files, so native text drag-and-drop still works', () => {
+      const note = createMockNote({ images: [] })
+      renderNoteModal({ ...defaultProps, note })
+
+      const panel = screen.getByTestId('dialog-panel')
+      // fireEvent returns false only when some handler called preventDefault().
+      const notPrevented = fireEvent.dragOver(panel, { dataTransfer: { types: ['text/plain'] } })
+      expect(notPrevented).toBe(true)
+    })
+
+    it('uploads an image pasted onto the note modal', async () => {
+      const note = createMockNote({ images: [] })
+      renderNoteModal({ ...defaultProps, note })
+
+      const panel = screen.getByTestId('dialog-panel')
+      const file = makeImageFile()
+      fireEvent.paste(panel, {
+        clipboardData: { items: [{ kind: 'file', type: 'image/png', getAsFile: () => file }] },
+      })
+      await flushMicrotasks()
+
+      expect(mockImagesUpload).toHaveBeenCalledWith('1', file, expect.any(Function))
+    })
+
+    it('removing an image hides it immediately without deleting it right away', () => {
+      const note = createMockNote({ images: [{ id: 'img1', filename: 'photo.png', content_type: 'image/png', width: 10, height: 10, created_at: '2023-01-01T00:00:00Z' }] })
+      renderNoteModal({ ...defaultProps, note })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remove photo.png' }))
+
+      expect(screen.queryByAltText('photo.png')).not.toBeInTheDocument()
+      expect(mockImagesDelete).not.toHaveBeenCalled()
+      expect(screen.getByText('Image removed')).toBeInTheDocument()
+    })
+
+    it('undo restores the image and cancels the deferred delete', async () => {
+      const note = createMockNote({ images: [{ id: 'img1', filename: 'photo.png', content_type: 'image/png', width: 10, height: 10, created_at: '2023-01-01T00:00:00Z' }] })
+      renderNoteModal({ ...defaultProps, note })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remove photo.png' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+
+      expect(screen.getByAltText('photo.png')).toBeInTheDocument()
+
+      await vi.advanceTimersByTimeAsync(15_000)
+      expect(mockImagesDelete).not.toHaveBeenCalled()
+    })
+
+    it('fires the delete once the undo window elapses without an undo', async () => {
+      const note = createMockNote({ images: [{ id: 'img1', filename: 'photo.png', content_type: 'image/png', width: 10, height: 10, created_at: '2023-01-01T00:00:00Z' }] })
+      renderNoteModal({ ...defaultProps, note })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remove photo.png' }))
+      expect(mockImagesDelete).not.toHaveBeenCalled()
+
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(mockImagesDelete).toHaveBeenCalledWith('img1')
+    })
+
+    it('keeps a still-pending removal hidden with its undo bar after navigating away and back before the undo window elapses', async () => {
+      const image = { id: 'img1', filename: 'photo.png', content_type: 'image/png', width: 10, height: 10, created_at: '2023-01-01T00:00:00Z' }
+      const noteA = createMockNote({ id: 'noteA', images: [image] })
+      const noteB = createMockNote({ id: 'noteB', images: [] })
+
+      const { rerender } = renderNoteModal({ ...defaultProps, note: noteA })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remove photo.png' }))
+      expect(screen.queryByAltText('photo.png')).not.toBeInTheDocument()
+
+      // Navigate to a different note, then back to noteA before the 10s undo window elapses.
+      rerender(<ToastProvider><NoteModal {...defaultProps} note={noteB} /></ToastProvider>)
+      rerender(<ToastProvider><NoteModal {...defaultProps} note={noteA} /></ToastProvider>)
+
+      // The image must still be hidden with its undo bar, not silently reappear
+      // only to vanish later with no explanation once the timer fires.
+      expect(screen.queryByAltText('photo.png')).not.toBeInTheDocument()
+      expect(screen.getByText('Image removed')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+      expect(screen.getByAltText('photo.png')).toBeInTheDocument()
+
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(mockImagesDelete).not.toHaveBeenCalled()
+    })
+
+    it('ignores a second rapid click on Retry while a retry is already in flight', async () => {
+      mockImagesUpload.mockRejectedValueOnce(new Error('network error'))
+      const note = createMockNote({ images: [] })
+      renderNoteModal({ ...defaultProps, note })
+
+      await uploadViaPicker(makeImageFile())
+      expect(screen.getByTestId('image-upload-tile')).toHaveAttribute('data-status', 'error')
+
+      let resolveRetry: (value: unknown) => void = () => {}
+      mockImagesUpload.mockImplementationOnce(() => new Promise(resolve => { resolveRetry = resolve }))
+
+      const retryButton = screen.getByRole('button', { name: 'Retry uploading photo.png' })
+      fireEvent.click(retryButton)
+      fireEvent.click(retryButton)
+      await flushMicrotasks()
+
+      // One call for the initial (failed) upload, one for the retry — the
+      // second rapid click must not fire a duplicate request.
+      expect(mockImagesUpload).toHaveBeenCalledTimes(2)
+
+      resolveRetry({
+        id: 'uploaded2', filename: 'photo.png', content_type: 'image/png', width: 10, height: 10, created_at: '2023-01-01T00:00:00Z',
+      })
+      await flushMicrotasks()
+      expect(screen.queryByTestId('image-upload-tile')).not.toBeInTheDocument()
+    })
+
+    it('shows the uploaded image immediately even when note.images is never updated (the uploader\'s own SSE echo is dropped)', async () => {
+      // The note prop is never re-supplied with the new image after upload —
+      // simulating the real behavior where the client that performed the
+      // upload has its own note_image_added SSE event dropped (self-echo
+      // suppression). The gallery must still show the real tile from a local
+      // overlay, not just make the upload placeholder vanish into nothing.
+      mockImagesUpload.mockResolvedValueOnce({
+        id: 'newimg', filename: 'uploaded.png', content_type: 'image/png', width: 10, height: 10, created_at: '2023-01-01T00:00:00Z',
+      })
+      const note = createMockNote({ images: [] })
+      renderNoteModal({ ...defaultProps, note })
+
+      await uploadViaPicker(makeImageFile('uploaded.png'))
+
+      expect(screen.queryByTestId('image-upload-tile')).not.toBeInTheDocument()
+      expect(screen.getByAltText('uploaded.png')).toBeInTheDocument()
+    })
+
+    it('calls onRefresh after the deferred delete succeeds, so a stale note list is corrected even if the modal already closed', async () => {
+      const note = createMockNote({ images: [{ id: 'img1', filename: 'photo.png', content_type: 'image/png', width: 10, height: 10, created_at: '2023-01-01T00:00:00Z' }] })
+      const onRefresh = vi.fn()
+      const { unmount } = renderNoteModal({ ...defaultProps, note, onRefresh })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remove photo.png' }))
+      onRefresh.mockClear() // drop any calls made by the removal click itself
+
+      // The deferred-delete timer lives in a ref, not React state, precisely
+      // so it keeps running after the component unmounts — unmount here so
+      // this actually exercises that, instead of just the (weaker) mounted case.
+      unmount()
+
+      await vi.advanceTimersByTimeAsync(10_000)
+
+      expect(mockImagesDelete).toHaveBeenCalledWith('img1')
+      expect(onRefresh).toHaveBeenCalled()
     })
   })
 
@@ -690,6 +1042,123 @@ describe('NoteModal', () => {
       expect(mockCreateItem).toHaveBeenCalledWith('1', expect.objectContaining({ text: '', parent_id: 'item1' }))
     })
 
+    it('pressing Enter at the start of a non-empty item inserts an empty item before it and focuses it', async () => {
+      renderNoteModal(defaultProps)
+
+      fireEvent.click(screen.getByText('List'))
+      fireEvent.click(screen.getByText('Add item'))
+
+      const inputs = screen.getAllByTestId('list-item-input')
+      fireEvent.change(inputs[0], { target: { value: 'hello' } })
+
+      const target = screen.getByDisplayValue('hello') as HTMLTextAreaElement
+      target.setSelectionRange(0, 0)
+      fireEvent.keyDown(target, { key: 'Enter', code: 'Enter' })
+      await vi.runAllTimersAsync()
+
+      const inputsAfter = screen.getAllByTestId('list-item-input')
+      expect(inputsAfter).toHaveLength(2)
+      // The new empty item is inserted before, the original item's text is untouched.
+      expect(inputsAfter[0]).toHaveValue('')
+      expect(inputsAfter[1]).toHaveValue('hello')
+      // Focus moves to the newly inserted item above.
+      expect(inputsAfter[0]).toHaveFocus()
+    })
+
+    it('pressing Enter at the start of an empty item still appends a new item after (no-op split)', async () => {
+      renderNoteModal(defaultProps)
+
+      fireEvent.click(screen.getByText('List'))
+      fireEvent.click(screen.getByText('Add item'))
+
+      const inputs = screen.getAllByTestId('list-item-input')
+      expect(inputs).toHaveLength(1)
+      const target = inputs[0] as HTMLTextAreaElement
+      target.setSelectionRange(0, 0)
+      fireEvent.keyDown(target, { key: 'Enter', code: 'Enter' })
+      await vi.runAllTimersAsync()
+
+      expect(screen.getAllByTestId('list-item-input')).toHaveLength(2)
+    })
+
+    it('pressing Enter in the middle of an item splits it into two items at the cursor', async () => {
+      renderNoteModal(defaultProps)
+
+      fireEvent.click(screen.getByText('List'))
+      fireEvent.click(screen.getByText('Add item'))
+
+      const inputs = screen.getAllByTestId('list-item-input')
+      fireEvent.change(inputs[0], { target: { value: 'helloworld' } })
+
+      const target = screen.getByDisplayValue('helloworld') as HTMLTextAreaElement
+      target.setSelectionRange(5, 5)
+      fireEvent.keyDown(target, { key: 'Enter', code: 'Enter' })
+      await vi.runAllTimersAsync()
+
+      const inputsAfter = screen.getAllByTestId('list-item-input')
+      expect(inputsAfter).toHaveLength(2)
+      expect(inputsAfter[0]).toHaveValue('hello')
+      expect(inputsAfter[1]).toHaveValue('world')
+      // Focus moves to the new (second) item, cursor at its start.
+      expect(inputsAfter[1]).toHaveFocus()
+      expect((inputsAfter[1] as HTMLTextAreaElement).selectionStart).toBe(0)
+    })
+
+    it('split/insert-before new items inherit the current item\'s indentation and assignee', async () => {
+      const listNote = createMockNote({
+        note_type: 'list',
+        items: [
+          {
+            id: 'item1', note_id: '1', text: 'parent', completed: false, position: 0,
+            parent_id: null, assigned_to: '', created_at: '2023-01-01T00:00:00Z', updated_at: '2023-01-01T00:00:00Z',
+          },
+          {
+            id: 'item2', note_id: '1', text: 'helloworld', completed: false, position: 1,
+            parent_id: 'item1', assigned_to: 'user1', created_at: '2023-01-01T00:00:00Z', updated_at: '2023-01-01T00:00:00Z',
+          },
+        ],
+      })
+
+      renderNoteModal({ ...defaultProps, note: listNote })
+      const target = screen.getByDisplayValue('helloworld') as HTMLTextAreaElement
+      target.setSelectionRange(5, 5)
+      fireEvent.keyDown(target, { key: 'Enter', code: 'Enter' })
+      await vi.runAllTimersAsync()
+
+      expect(mockCreateItem).toHaveBeenCalledWith('1', expect.objectContaining({
+        text: 'world',
+        parent_id: 'item1',
+        assigned_to: 'user1',
+      }))
+    })
+
+    it('pressing Enter splits and inserts before within completed items too', async () => {
+      const listNote = createMockNote({
+        note_type: 'list',
+        items: [
+          {
+            id: 'item1', note_id: '1', text: 'helloworld', completed: true, position: 0,
+            parent_id: null, assigned_to: '', created_at: '2023-01-01T00:00:00Z', updated_at: '2023-01-01T00:00:00Z',
+          },
+        ],
+      })
+
+      renderNoteModal({ ...defaultProps, note: listNote })
+      const target = screen.getByDisplayValue('helloworld') as HTMLTextAreaElement
+      target.setSelectionRange(5, 5)
+      fireEvent.keyDown(target, { key: 'Enter', code: 'Enter' })
+      await vi.runAllTimersAsync()
+
+      const inputsAfter = screen.getAllByTestId('list-item-input')
+      expect(inputsAfter).toHaveLength(2)
+      // Original (completed) item keeps the text before the cursor.
+      expect(screen.getByDisplayValue('hello')).toBeInTheDocument()
+      // The split-off remainder is a new (uncompleted) item, rendered in the
+      // uncompleted section above the completed one.
+      expect(screen.getByDisplayValue('world')).toBeInTheDocument()
+      expect(inputsAfter[0]).toHaveValue('world')
+    })
+
     it('pressing a key other than Enter on a list item does not create a new item', async () => {
       renderNoteModal(defaultProps)
 
@@ -1060,6 +1529,34 @@ describe('NoteModal', () => {
       expect(checkboxes.every(cb => cb.checked)).toBe(true)
     })
 
+    it('unchecking a completed child un-completes its already-completed parent', async () => {
+      const listNote = createMockNote({
+        note_type: 'list',
+        items: [
+          item('parent', { text: 'Parent', position: 0, completed: true }),
+          item('childA', { text: 'Child A', position: 1, parent_id: 'parent', completed: true }),
+          item('childB', { text: 'Child B', position: 2, parent_id: 'parent', completed: true }),
+        ],
+      })
+      // Server enforces the same invariant: a parent can't stay completed once
+      // one of its children is unchecked.
+      mockToggleItemCompleted.mockResolvedValueOnce([
+        { id: 'parent', completed: false },
+        { id: 'childA', completed: false },
+        { id: 'childB', completed: true },
+      ])
+      renderNoteModal({ ...defaultProps, note: listNote })
+
+      // All three start completed: parent, then Child A, then Child B.
+      fireEvent.click(screen.getAllByRole('checkbox')[1])
+      await vi.runAllTimersAsync()
+
+      expect(mockToggleItemCompleted).toHaveBeenCalledWith('1', 'childA', false)
+      expect(screen.getByText('Completed items (1)')).toBeInTheDocument()
+      expect(screen.getByDisplayValue('Parent')).toBeInTheDocument()
+      expect(screen.getByDisplayValue('Child A')).toBeInTheDocument()
+    })
+
     it('shows a ghost parent above a completed child whose parent is still active', async () => {
       const listNote = createMockNote({
         note_type: 'list',
@@ -1072,8 +1569,14 @@ describe('NoteModal', () => {
 
       // The active list still shows the parent; the completed section shows the
       // child under a non-interactive ghost copy of the parent (aria-labelled).
-      expect(screen.getByLabelText('Group: Groceries')).toBeInTheDocument()
+      const ghostRow = screen.getByLabelText('Group: Groceries')
+      expect(ghostRow).toBeInTheDocument()
       expect(screen.getByText('Milk')).toBeInTheDocument()
+
+      // The ghost row must stay aligned with the parent's own indent (0 here,
+      // since ghosts are only ever shown for top-level parents) rather than
+      // drifting out of alignment with the other completed rows.
+      expect(ghostRow.style.marginLeft).toBe('0px')
     })
 
     it('indenting the first item is a no-op (nothing to nest under)', async () => {
@@ -1090,6 +1593,31 @@ describe('NoteModal', () => {
       const row = screen.getAllByTestId('list-item-row')[0]
       expect(row.style.marginLeft).toBe('0px')
       expect(mockUpdateItem).not.toHaveBeenCalled()
+    })
+
+    it('item delete button is reveal-on-hover/focus and removes the item when clicked', async () => {
+      const listNote = createMockNote({
+        note_type: 'list',
+        items: [
+          item('item1', { text: 'First', position: 0 }),
+          item('item2', { text: 'Second', position: 1 }),
+        ],
+      })
+      renderNoteModal({ ...defaultProps, note: listNote })
+
+      const deleteButtons = screen.getAllByTestId('list-item-delete')
+      expect(deleteButtons).toHaveLength(2)
+      // Hidden by default; only the hovered row (desktop) or the row with a
+      // focused field (works on touch too) reveals its delete button, so users
+      // are less likely to delete an item they didn't intend to.
+      expect(deleteButtons[0].className).toContain(ROW_REVEAL_CLASSES)
+      expect(deleteButtons[0]).toHaveAttribute('aria-label', 'Remove item')
+
+      fireEvent.click(deleteButtons[0])
+      await vi.runAllTimersAsync()
+
+      expect(screen.getAllByTestId('list-item-row')).toHaveLength(1)
+      expect(screen.getByDisplayValue('Second')).toBeInTheDocument()
     })
 
     it('un-indenting a child promotes it to top-level via parent_id ""', async () => {

@@ -309,7 +309,9 @@
         "noteAssociations": "Przypisania etykiet",
         "completed": "Ukończone",
         "assigned": "Przypisane",
-        "databaseSize": "Rozmiar bazy danych"
+        "databaseSize": "Rozmiar bazy danych",
+        "imageCount": "Liczba obrazów",
+        "imagesSize": "Miejsce na obrazy"
       }
     }
   },
@@ -366,6 +368,7 @@
     "failedDuplicate": "Nie udało się zduplikować notatki. Spróbuj ponownie.",
     "menuOptions": "Opcje notatki",
     "assignItem": "Przypisz element",
+    "removeItem": "Usuń element",
     "unassign": "Usuń przypisanie",
     "assignedTo": "Przypisano do {{name}}",
     "completedSuggestions": "Podpowiedzi z ukończonych elementów"
@@ -415,6 +418,25 @@
     "unsharedSuccess": "Udostępnianie notatki zostało anulowane pomyślnie!",
     "failedUnshare": "Nie udało się anulować udostępniania notatki. Spróbuj ponownie."
   },
+  "images": {
+    "openLightbox": "Wyświetl {{filename}}",
+    "moreImages": "Wyświetl {{count}} więcej zdjęć",
+    "moreImagesBadge": "{{count}} więcej zdjęć",
+    "lightboxPrevious": "Poprzednie zdjęcie",
+    "lightboxNext": "Następne zdjęcie",
+    "lightboxCounter": "{{current}} / {{total}}",
+    "addImage": "Dodaj obraz",
+    "dropOverlay": "Upuść obraz, aby go dodać",
+    "removeImage": "Usuń {{filename}}",
+    "removedToast": "Obraz usunięty",
+    "uploading": "Wysyłanie… {{percent}}%",
+    "uploadFailed": "Nie udało się wysłać obrazu",
+    "retryUpload": "Ponów wysyłanie {{filename}}",
+    "dismissUpload": "Odrzuć {{filename}}",
+    "errorWrongType": "Można dodawać tylko obrazy.",
+    "errorTooLarge": "Obraz przekracza limit {{maxMB}} MB.",
+    "errorTooMany": "Notatka może zawierać maksymalnie {{max}} obrazów."
+  },
   "serviceWorker": {
     "updatePrompt": "Dostępna jest nowa aktualizacja! Kliknij OK, aby odświeżyć"
   },
@@ -431,6 +453,8 @@
     "fileTypesJson": "Pliki .json",
     "invalidFileType": "Nieprawidłowy typ pliku. Wybierz plik .json lub .zip.",
     "invalidFileTypeJson": "Nieprawidłowy typ pliku. Wybierz plik .json.",
+    "importedNotes_few": "Zaimportowano {{count}} notatki",
+    "importedNotes_many": "Zaimportowano {{count}} notatek",
     "importedNotes_one": "Zaimportowano {{count}} notatkę",
     "importedNotes_other": "Zaimportowano {{count}} notatek",
     "skipped": "({{count}} pominięto)",

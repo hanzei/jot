@@ -30,12 +30,36 @@ func deref[T any](p *T, def T) T {
 	return def
 }
 
+// NewNoteItem describes a list item to insert atomically as part of note
+// creation. ID is the caller-supplied item ID, or "" to generate one
+// server-side. ParentID is the resolved parent item ID within the same note
+// ("" for a top-level item); the caller computes it (e.g. from indent levels)
+// before calling CreateWithItems.
+type NewNoteItem struct {
+	ID        string
+	Text      string
+	Position  int
+	Completed bool
+	ParentID  string
+}
+
 // Create inserts a new note for the user. When noteID is empty the server
 // generates one; when non-empty the caller-supplied ID is used as the note's
 // primary key so an offline create can be replayed idempotently. Returns
 // ErrNoteExists if a note with that ID already exists (e.g. a replayed create
 // whose original request already committed).
 func (s *noteStore) Create(ctx context.Context, userID, noteID, title, content string, noteType NoteType, color string) (*Note, error) {
+	return s.CreateWithItems(ctx, userID, noteID, title, content, noteType, color, nil)
+}
+
+// CreateWithItems creates a note, its owner note_user_state, and all provided
+// list items in a single transaction, so any failure (a duplicate item ID, an
+// invalid parent ref, a DB error) rolls back the whole operation instead of
+// leaving an orphaned or partially-populated note. items must already be
+// validated and have their ParentID resolved to item IDs within this note.
+// Returns ErrNoteExists if the note ID is taken, and ErrNoteItemExists /
+// ErrInvalidParentRef for the corresponding item-level conflicts.
+func (s *noteStore) CreateWithItems(ctx context.Context, userID, noteID, title, content string, noteType NoteType, color string, items []NewNoteItem) (*Note, error) {
 	if noteID == "" {
 		var err error
 		noteID, err = generateID()
@@ -98,6 +122,12 @@ func (s *noteStore) Create(ctx context.Context, userID, noteID, title, content s
 		return nil, fmt.Errorf("failed to create note user state: %w", err)
 	}
 
+	for _, item := range items {
+		if err = insertNewNoteItemTx(ctx, tx, s.d, noteID, item); err != nil {
+			return nil, err
+		}
+	}
+
 	if err = tx.Commit(); err != nil {
 		return nil, fmt.Errorf("failed to commit note creation: %w", err)
 	}
@@ -107,6 +137,7 @@ func (s *noteStore) Create(ctx context.Context, userID, noteID, title, content s
 	note.Title = title
 	note.Content = content
 	note.NoteType = noteType
+	note.Version = 1
 	note.Color = color
 	note.Position = nextPosition
 	note.UnpinnedPosition = &nextPosition
@@ -116,20 +147,86 @@ func (s *noteStore) Create(ctx context.Context, userID, noteID, title, content s
 	return &note, nil
 }
 
+// insertNewNoteItemTx inserts one list item during note creation within tx. A
+// supplied ID is existence-checked (ErrNoteItemExists on collision); an empty
+// ID is generated server-side. The parent ref is validated against items
+// already inserted in this note.
+func insertNewNoteItemTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string, item NewNoteItem) error {
+	itemID := item.ID
+	if itemID == "" {
+		var err error
+		itemID, err = generateID()
+		if err != nil {
+			return fmt.Errorf("failed to generate item ID: %w", err)
+		}
+	} else {
+		var exists int
+		if err := tx.QueryRowContext(ctx,
+			d.RewritePlaceholders(`SELECT COUNT(*) FROM note_items WHERE id = ?`),
+			itemID,
+		).Scan(&exists); err != nil {
+			return fmt.Errorf("failed to check item existence: %w", err)
+		}
+		if exists > 0 {
+			return ErrNoteItemExists
+		}
+	}
+
+	if err := validateParentRefTx(ctx, tx, d, noteID, itemID, item.ParentID); err != nil {
+		return err
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, position, completed, parent_id, assigned_to)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`),
+		itemID, noteID, item.Text, item.Position, item.Completed, nullableParentID(item.ParentID), nullableAssignedTo(""),
+	); err != nil {
+		// Concurrent replays with the same client-supplied ID can both pass the
+		// existence check above; map the constraint violation to ErrNoteItemExists.
+		if item.ID != "" && d.IsUniqueConstraintError(err) {
+			return ErrNoteItemExists
+		}
+		return fmt.Errorf("failed to create note item: %w", err)
+	}
+	return nil
+}
+
 func duplicateNoteTitle(title string) string {
 	return "Copy of " + title
 }
 
-func (s *noteStore) Duplicate(ctx context.Context, source *Note, userID string) (*Note, error) {
+// Duplicate creates a copy of source owned by userID. When clientID is non-empty
+// it is used as the new note's primary key so the operation is idempotent on
+// replay; when empty a server-side ID is generated. Returns ErrNoteExists when
+// clientID is already taken (e.g. a replayed duplicate whose original committed).
+// itemIDs maps each source item ID to the caller-supplied new item ID; entries
+// missing from the map fall back to server-side generation.
+func (s *noteStore) Duplicate(ctx context.Context, source *Note, userID, clientID string, itemIDs map[string]string) (*Note, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	noteID, err := generateID()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate note ID: %w", err)
+	noteID := clientID
+	if noteID == "" {
+		noteID, err = generateID()
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate note ID: %w", err)
+		}
+	} else {
+		// Reject a duplicate caller-supplied ID up front so a replayed duplicate
+		// returns ErrNoteExists (mapped to 409) instead of a raw constraint error.
+		var exists int
+		if err = tx.QueryRowContext(ctx,
+			s.d.RewritePlaceholders(`SELECT COUNT(*) FROM notes WHERE id = ?`),
+			noteID,
+		).Scan(&exists); err != nil {
+			return nil, fmt.Errorf("failed to check note existence: %w", err)
+		}
+		if exists > 0 {
+			return nil, ErrNoteExists
+		}
 	}
 
 	if _, err = tx.ExecContext(ctx,
@@ -150,6 +247,11 @@ func (s *noteStore) Duplicate(ctx context.Context, source *Note, userID string) 
 		source.Content,
 		source.NoteType,
 	); err != nil {
+		// Two concurrent duplicates with the same caller-supplied ID can both pass
+		// the existence check above; map the constraint violation to ErrNoteExists.
+		if clientID != "" && s.d.IsUniqueConstraintError(err) {
+			return nil, ErrNoteExists
+		}
 		return nil, fmt.Errorf("failed to create duplicated note: %w", err)
 	}
 
@@ -161,7 +263,7 @@ func (s *noteStore) Duplicate(ctx context.Context, source *Note, userID string) 
 		return nil, fmt.Errorf("failed to create duplicated note user state: %w", err)
 	}
 
-	if err = duplicateItemsTx(ctx, tx, s.d, noteID, source.Items); err != nil {
+	if err = duplicateItemsTx(ctx, tx, s.d, noteID, source.Items, itemIDs); err != nil {
 		return nil, fmt.Errorf("duplicate note items: %w", err)
 	}
 
@@ -181,41 +283,110 @@ func (s *noteStore) Duplicate(ctx context.Context, source *Note, userID string) 
 	return duplicated, nil
 }
 
-func duplicateItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string, items []NoteItem) error {
-	// Process in position order so a parent (lower position than its children,
-	// since children form a contiguous block beneath it) is always inserted
-	// before its children and present in idMap when they are remapped.
-	ordered := make([]NoteItem, len(items))
-	copy(ordered, items)
-	slices.SortStableFunc(ordered, func(a, b NoteItem) int { return a.Position - b.Position })
+func duplicateItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string, items []NoteItem, itemIDs map[string]string) error {
+	// Insert parents before their children so each child's remapped parent_id is
+	// already in idMap (and satisfies the parent_id foreign key). Position order
+	// alone is not enough — a client reorder can leave a child at a lower position
+	// than its parent — so order by parent-chain depth first, breaking ties by
+	// position for stability.
+	ordered := orderItemsParentsFirst(items)
 
 	idMap := make(map[string]string, len(ordered))
 	for _, item := range ordered {
-		itemID, err := generateID()
+		newID, err := resolveItemIDTx(ctx, tx, d, itemIDs[item.ID])
 		if err != nil {
-			return fmt.Errorf("failed to generate note item ID: %w", err)
+			return err
 		}
-		idMap[item.ID] = itemID
-
-		// Re-point parent_id at the duplicated parent's new ID. A child whose
-		// parent was not yet seen (shouldn't happen for contiguous groups) is
-		// promoted to top-level rather than left dangling.
-		var newParent sql.NullString
-		if item.ParentID != nil {
-			if mapped, ok := idMap[*item.ParentID]; ok {
-				newParent = sql.NullString{String: mapped, Valid: true}
+		idMap[item.ID] = newID
+		if err = insertDuplicateItemTx(ctx, tx, d, noteID, item, newID, idMap); err != nil {
+			// Two concurrent replays with the same client-supplied ID can both pass
+			// the existence check above; map the constraint violation to ErrNoteItemExists.
+			if itemIDs[item.ID] != "" && d.IsUniqueConstraintError(err) {
+				return ErrNoteItemExists
 			}
-		}
-
-		if _, err = tx.ExecContext(ctx,
-			d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to)
-			 VALUES (?, ?, ?, ?, ?, ?, ?)`),
-			itemID, noteID, item.Text, item.Completed, item.Position, newParent, nullableAssignedTo(""),
-		); err != nil {
 			return fmt.Errorf("failed to duplicate note item: %w", err)
 		}
 	}
 	return nil
+}
+
+// orderItemsParentsFirst returns items ordered so that every item comes after
+// its parent (when that parent is part of the same set), breaking ties by
+// ascending position. Items whose parent is not in the set are treated as roots.
+// Ordering by parent-chain depth guarantees a parent is inserted before its
+// children regardless of their relative positions.
+func orderItemsParentsFirst(items []NoteItem) []NoteItem {
+	byID := make(map[string]NoteItem, len(items))
+	for _, it := range items {
+		byID[it.ID] = it
+	}
+
+	// depthOf walks each item's parent chain; a parent outside the set or a cycle
+	// stops the walk. Two-level lists (indent 0/1) yield depths 0 and 1, but this
+	// handles arbitrary nesting too.
+	depthOf := make(map[string]int, len(items))
+	for _, it := range items {
+		depth := 0
+		seen := map[string]bool{it.ID: true}
+		cur := it
+		for cur.ParentID != nil {
+			parent, ok := byID[*cur.ParentID]
+			if !ok || seen[parent.ID] {
+				break
+			}
+			seen[parent.ID] = true
+			depth++
+			cur = parent
+		}
+		depthOf[it.ID] = depth
+	}
+
+	ordered := make([]NoteItem, len(items))
+	copy(ordered, items)
+	slices.SortStableFunc(ordered, func(a, b NoteItem) int {
+		if da, db := depthOf[a.ID], depthOf[b.ID]; da != db {
+			return da - db
+		}
+		return a.Position - b.Position
+	})
+	return ordered
+}
+
+// resolveItemIDTx returns the ID to use for a duplicated item. When supplied is
+// non-empty the item is existence-checked and the caller's value is returned;
+// otherwise a fresh server-side ID is generated.
+func resolveItemIDTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, supplied string) (string, error) {
+	if supplied == "" {
+		return generateID()
+	}
+	var exists int
+	if err := tx.QueryRowContext(ctx,
+		d.RewritePlaceholders(`SELECT COUNT(*) FROM note_items WHERE id = ?`),
+		supplied,
+	).Scan(&exists); err != nil {
+		return "", fmt.Errorf("failed to check item existence: %w", err)
+	}
+	if exists > 0 {
+		return "", ErrNoteItemExists
+	}
+	return supplied, nil
+}
+
+// insertDuplicateItemTx inserts one cloned item into noteID, remapping its
+// parent_id through idMap (which must already contain the duplicated parent).
+func insertDuplicateItemTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string, item NoteItem, itemID string, idMap map[string]string) error {
+	var newParent sql.NullString
+	if item.ParentID != nil {
+		if mapped, ok := idMap[*item.ParentID]; ok {
+			newParent = sql.NullString{String: mapped, Valid: true}
+		}
+	}
+	_, err := tx.ExecContext(ctx,
+		d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`),
+		itemID, noteID, item.Text, item.Completed, item.Position, newParent, nullableAssignedTo(""),
+	)
+	return err
 }
 
 func duplicateLabelsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, userID string, labels []Label) error {
@@ -248,7 +419,7 @@ func duplicateLabelsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, note
 }
 
 func buildGetByUserIDQuery(userID string, archived bool, trashed bool, search string, labelID string, myTasks bool) (string, []any) {
-	const selectCols = `SELECT DISTINCT n.id, n.user_id, n.title, n.content, n.note_type,
+	const selectCols = `SELECT DISTINCT n.id, n.user_id, n.title, n.content, n.note_type, n.version,
 				  nus.color, nus.pinned, nus.archived, nus.position, nus.unpinned_position, nus.checked_items_collapsed,
 				  n.deleted_at, n.created_at, n.updated_at`
 
@@ -292,8 +463,8 @@ func buildGetByUserIDQuery(userID string, archived bool, trashed bool, search st
 func scanNote(rows *sql.Rows) (Note, error) {
 	var note Note
 	err := rows.Scan(
-		&note.ID, &note.UserID, &note.Title, &note.Content,
-		&note.NoteType, &note.Color, &note.Pinned, &note.Archived, &note.Position, &note.UnpinnedPosition, &note.CheckedItemsCollapsed,
+		&note.ID, &note.UserID, &note.Title, &note.Content, &note.NoteType, &note.Version,
+		&note.Color, &note.Pinned, &note.Archived, &note.Position, &note.UnpinnedPosition, &note.CheckedItemsCollapsed,
 		&note.DeletedAt, &note.CreatedAt, &note.UpdatedAt,
 	)
 	return note, err
@@ -317,7 +488,7 @@ func (s *noteStore) GetByUserID(ctx context.Context, userID string, archived boo
 		return nil, err
 	}
 
-	if err := s.batchLoadSharesAndLabels(ctx, notes, userID); err != nil {
+	if err := s.batchLoadNoteAssociations(ctx, notes, userID); err != nil {
 		return nil, err
 	}
 
@@ -340,13 +511,15 @@ func (s *noteStore) populateNoteItemsAndDefaults(ctx context.Context, scannedNot
 		note.SharedWith = []NoteShare{}
 		note.IsShared = false
 		note.Labels = []Label{}
+		note.Images = []NoteImage{}
 		notes = append(notes, note)
 	}
 	return notes, nil
 }
 
-// batchLoadSharesAndLabels batch-loads shares and labels for a slice of notes, updating each note in place.
-func (s *noteStore) batchLoadSharesAndLabels(ctx context.Context, notes []*Note, userID string) error {
+// batchLoadNoteAssociations batch-loads shares, labels, and images for a
+// slice of notes, updating each note in place.
+func (s *noteStore) batchLoadNoteAssociations(ctx context.Context, notes []*Note, userID string) error {
 	if len(notes) == 0 {
 		return nil
 	}
@@ -377,11 +550,21 @@ func (s *noteStore) batchLoadSharesAndLabels(ctx context.Context, notes []*Note,
 		}
 	}
 
+	imagesMap, err := s.getNoteImagesByNoteIDs(ctx, noteIDs)
+	if err != nil {
+		return fmt.Errorf("failed to batch-load note images: %w", err)
+	}
+	for _, n := range notes {
+		if imgs, ok := imagesMap[n.ID]; ok {
+			n.Images = imgs
+		}
+	}
+
 	return nil
 }
 
 func (s *noteStore) GetByID(ctx context.Context, id string, userID string) (*Note, error) {
-	query := `SELECT n.id, n.user_id, n.title, n.content, n.note_type,
+	query := `SELECT n.id, n.user_id, n.title, n.content, n.note_type, n.version,
 			  nus.color, nus.pinned, nus.archived, nus.position, nus.unpinned_position, nus.checked_items_collapsed,
 			  n.deleted_at, n.created_at, n.updated_at
 			  FROM active_notes n
@@ -390,8 +573,8 @@ func (s *noteStore) GetByID(ctx context.Context, id string, userID string) (*Not
 
 	var note Note
 	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), userID, id).Scan(
-		&note.ID, &note.UserID, &note.Title, &note.Content,
-		&note.NoteType, &note.Color, &note.Pinned, &note.Archived, &note.Position, &note.UnpinnedPosition, &note.CheckedItemsCollapsed,
+		&note.ID, &note.UserID, &note.Title, &note.Content, &note.NoteType, &note.Version,
+		&note.Color, &note.Pinned, &note.Archived, &note.Position, &note.UnpinnedPosition, &note.CheckedItemsCollapsed,
 		&note.DeletedAt, &note.CreatedAt, &note.UpdatedAt,
 	)
 	if err != nil {
@@ -425,7 +608,7 @@ func (s *noteStore) GetByIDAnyState(ctx context.Context, id string, userID strin
 		return nil, ErrNoteNotFound
 	}
 
-	query := `SELECT n.id, n.user_id, n.title, n.content, n.note_type,
+	query := `SELECT n.id, n.user_id, n.title, n.content, n.note_type, n.version,
 			  nus.color, nus.pinned, nus.archived, nus.position, nus.unpinned_position, nus.checked_items_collapsed,
 			  n.deleted_at, n.created_at, n.updated_at
 			  FROM notes n
@@ -434,8 +617,8 @@ func (s *noteStore) GetByIDAnyState(ctx context.Context, id string, userID strin
 
 	var ownedNote Note
 	err = s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), userID, id, userID).Scan(
-		&ownedNote.ID, &ownedNote.UserID, &ownedNote.Title, &ownedNote.Content,
-		&ownedNote.NoteType, &ownedNote.Color, &ownedNote.Pinned, &ownedNote.Archived, &ownedNote.Position, &ownedNote.UnpinnedPosition, &ownedNote.CheckedItemsCollapsed,
+		&ownedNote.ID, &ownedNote.UserID, &ownedNote.Title, &ownedNote.Content, &ownedNote.NoteType, &ownedNote.Version,
+		&ownedNote.Color, &ownedNote.Pinned, &ownedNote.Archived, &ownedNote.Position, &ownedNote.UnpinnedPosition, &ownedNote.CheckedItemsCollapsed,
 		&ownedNote.DeletedAt, &ownedNote.CreatedAt, &ownedNote.UpdatedAt,
 	)
 	if err != nil {
@@ -474,10 +657,24 @@ func (s *noteStore) populateNoteDetails(ctx context.Context, note *Note, userID 
 	}
 	note.Labels = labels
 
+	images, err := s.GetNoteImagesByNoteID(ctx, note.ID)
+	if err != nil {
+		return fmt.Errorf("failed to get note images: %w", err)
+	}
+	note.Images = images
+
 	return nil
 }
 
-func (s *noteStore) Update(ctx context.Context, id string, userID string, title, content, color *string, pinned, archived, checkedItemsCollapsed *bool) error {
+// Update applies a partial note update. When baseVersion is non-nil it enables
+// optimistic concurrency on the shared content (title/content): the write is
+// rejected with ErrNoteVersionConflict unless the note's current version still
+// matches baseVersion, so a stale offline edit cannot silently clobber a newer
+// change made on another device (issue #489). The version counter is only
+// consulted/bumped when title or content is being changed; per-user fields
+// (color, pinned, archived, checked_items_collapsed) are never version-guarded,
+// since they live in note_user_state and differ per collaborator.
+func (s *noteStore) Update(ctx context.Context, id string, userID string, title, content, color *string, pinned, archived, checkedItemsCollapsed *bool, baseVersion *int) error {
 	hasAccess, err := s.HasAccess(ctx, id, userID)
 	if err != nil {
 		return fmt.Errorf("failed to check access: %w", err)
@@ -505,15 +702,16 @@ func (s *noteStore) Update(ctx context.Context, id string, userID string, title,
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// Only update shared fields (title/content) when the caller explicitly
-	// provided at least one — skipping avoids overwriting concurrent edits
-	// when only per-user fields (color, pinned, etc.) are changing.
-	if title != nil || content != nil {
-		if _, err = tx.ExecContext(ctx,
-			s.d.RewritePlaceholders(`UPDATE notes SET title = ?, content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`),
-			resolvedTitle, resolvedContent, id,
-		); err != nil {
-			return fmt.Errorf("failed to update note: %w", err)
+	// Only touch the shared fields (title/content) when the caller provided at
+	// least one AND it actually differs from the stored value. Skipping a no-op
+	// (e.g. an editor autosave that resends unchanged content) avoids a spurious
+	// version bump that would invalidate other devices' base_version, and avoids
+	// overwriting concurrent edits when only per-user fields are changing.
+	contentChanged := (title != nil || content != nil) &&
+		(resolvedTitle != currentNote.Title || resolvedContent != currentNote.Content)
+	if contentChanged {
+		if err = s.updateNoteContentTx(ctx, tx, id, resolvedTitle, resolvedContent, baseVersion); err != nil {
+			return err
 		}
 	}
 
@@ -542,6 +740,51 @@ func (s *noteStore) Update(ctx context.Context, id string, userID string, title,
 
 	if err = tx.Commit(); err != nil {
 		return fmt.Errorf("commit note update: %w", err)
+	}
+	return nil
+}
+
+// updateNoteContentTx updates title, content, and version inside tx. When baseVersion is non-nil
+// the write is gated on the current version; on a version mismatch (zero rows affected) it re-reads
+// the current title/content: if they already match the requested values it returns nil (idempotent
+// success), otherwise ErrNoteVersionConflict.
+func (s *noteStore) updateNoteContentTx(ctx context.Context, tx *sql.Tx, id, title, content string, baseVersion *int) error {
+	query := `UPDATE notes SET title = ?, content = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+	args := []any{title, content, id}
+	if baseVersion != nil {
+		query += ` AND version = ?`
+		args = append(args, *baseVersion)
+	}
+	result, err := tx.ExecContext(ctx, s.d.RewritePlaceholders(query), args...)
+	if err != nil {
+		return fmt.Errorf("failed to update note: %w", err)
+	}
+	if baseVersion == nil {
+		return nil
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+	// Zero rows means the version guard did not match. Re-read to check whether the
+	// winning write already applied the same title/content; if so, treat this as a
+	// no-op success rather than a conflict, since the desired state is already present.
+	if rows == 0 {
+		var currentTitle, currentContent string
+		err = tx.QueryRowContext(ctx,
+			s.d.RewritePlaceholders(`SELECT title, content FROM notes WHERE id = ? AND deleted_at IS NULL`),
+			id,
+		).Scan(&currentTitle, &currentContent)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return ErrNoteNotFound
+			}
+			return fmt.Errorf("get current note content: %w", err)
+		}
+		if currentTitle == title && currentContent == content {
+			return nil
+		}
+		return ErrNoteVersionConflict
 	}
 	return nil
 }
@@ -613,50 +856,49 @@ func (s *noteStore) handleUnpinningTx(ctx context.Context, tx *sql.Tx, id, userI
 	return nil
 }
 
-func (s *noteStore) Delete(ctx context.Context, id string, userID string) error {
+// Delete permanently removes an active (non-trashed) note owned by userID. It
+// returns the distinct sha256 hashes of images that were attached to the note
+// so the caller can reclaim their blobs (note_images rows cascade-delete with
+// the note; the cascade drops the DB rows but never touches the on-disk
+// blobs, so that's on the caller).
+func (s *noteStore) Delete(ctx context.Context, id string, userID string) ([]string, error) {
 	isOwner, err := s.IsOwner(ctx, id, userID)
 	if err != nil {
-		return fmt.Errorf("failed to check ownership: %w", err)
+		return nil, fmt.Errorf("failed to check ownership: %w", err)
 	}
 	if !isOwner {
-		return ErrNoteNotOwnedByUser
+		return nil, ErrNoteNotOwnedByUser
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	for _, q := range []string{
-		`DELETE FROM note_items WHERE note_id = ?`,
-		`DELETE FROM note_labels WHERE note_id = ?`,
-		`DELETE FROM note_shares WHERE note_id = ?`,
-		`DELETE FROM note_user_state WHERE note_id = ?`,
-	} {
-		if _, err = tx.ExecContext(ctx, s.d.RewritePlaceholders(q), id); err != nil {
-			return fmt.Errorf("failed to delete dependent rows: %w", err)
-		}
+	shas, err := deleteNoteDependenciesTx(ctx, tx, s.d, []string{id})
+	if err != nil {
+		return nil, fmt.Errorf("delete note dependencies: %w", err)
 	}
 
 	result, err := tx.ExecContext(ctx, s.d.RewritePlaceholders("DELETE FROM notes WHERE id = ? AND user_id = ?"), id, userID)
 	if err != nil {
-		return fmt.Errorf("failed to delete note: %w", err)
+		return nil, fmt.Errorf("failed to delete note: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
+		return nil, fmt.Errorf("failed to get rows affected: %w", err)
 	}
 
 	if rowsAffected == 0 {
-		return ErrNoteNotOwnedByUser
+		return nil, ErrNoteNotOwnedByUser
 	}
 
 	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("commit note delete: %w", err)
+		return nil, fmt.Errorf("commit note delete: %w", err)
 	}
-	return nil
+	return shas, nil
 }
 
 func buildInClauseArgs(ids []string) (string, []any) {
@@ -719,12 +961,34 @@ func (s *noteStore) getNoteAudiencesTx(ctx context.Context, tx *sql.Tx, noteIDs 
 	return audiences, nil
 }
 
-func deleteNoteDependenciesTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteIDs []string) error {
+// deleteNoteDependenciesTx deletes rows in tables that reference noteIDs but
+// aren't covered by the notes table's own cascading foreign keys (items,
+// labels, shares, per-user state), and returns the distinct sha256 hashes of
+// images attached to noteIDs. Those hashes must be read before the caller
+// deletes the notes themselves: note_images rows cascade-delete with their
+// note, so reading them afterward would find nothing. The caller is
+// responsible for reclaiming the returned hashes' blobs (via
+// blobstore.ReclaimIfOrphaned) once the delete has committed.
+func deleteNoteDependenciesTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteIDs []string) ([]string, error) {
 	if len(noteIDs) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	placeholders, args := buildInClauseArgs(noteIDs)
+
+	imgQuery := `SELECT DISTINCT sha256 FROM note_images WHERE note_id IN (` + placeholders + `)` // #nosec G202 -- only "?" placeholders are joined, no user input
+	rows, err := tx.QueryContext(ctx, d.RewritePlaceholders(imgQuery), args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query note image hashes: %w", err)
+	}
+	shas, err := collectRows(rows, func(rows *sql.Rows) (string, error) {
+		var sha string
+		return sha, rows.Scan(&sha)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan note image hashes: %w", err)
+	}
+
 	for _, q := range []string{
 		`DELETE FROM note_items WHERE note_id IN (` + placeholders + `)`,
 		`DELETE FROM note_labels WHERE note_id IN (` + placeholders + `)`,
@@ -732,11 +996,11 @@ func deleteNoteDependenciesTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialec
 		`DELETE FROM note_user_state WHERE note_id IN (` + placeholders + `)`,
 	} {
 		if _, err := tx.ExecContext(ctx, d.RewritePlaceholders(q), args...); err != nil {
-			return fmt.Errorf("failed to delete dependent rows: %w", err)
+			return nil, fmt.Errorf("failed to delete dependent rows: %w", err)
 		}
 	}
 
-	return nil
+	return shas, nil
 }
 
 // MoveToTrash soft-deletes a note by setting deleted_at to the current time.
@@ -852,16 +1116,20 @@ func (s *noteStore) RestoreFromTrash(ctx context.Context, id string, userID stri
 }
 
 // DeleteFromTrash permanently removes a note that is already in the trash.
-// It returns ErrNoteNotInTrash if the note is not found in the trash or not owned by the user.
-func (s *noteStore) DeleteFromTrash(ctx context.Context, id string, userID string) error {
+// It returns ErrNoteNotInTrash if the note is not found in the trash or not
+// owned by the user. On success it also returns the distinct sha256 hashes
+// of images that were attached to the note, for the caller to reclaim (see
+// deleteNoteDependenciesTx).
+func (s *noteStore) DeleteFromTrash(ctx context.Context, id string, userID string) ([]string, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if err = deleteNoteDependenciesTx(ctx, tx, s.d, []string{id}); err != nil {
-		return fmt.Errorf("delete note dependencies: %w", err)
+	shas, err := deleteNoteDependenciesTx(ctx, tx, s.d, []string{id})
+	if err != nil {
+		return nil, fmt.Errorf("delete note dependencies: %w", err)
 	}
 
 	result, err := tx.ExecContext(ctx,
@@ -869,51 +1137,54 @@ func (s *noteStore) DeleteFromTrash(ctx context.Context, id string, userID strin
 		id, userID,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to permanently delete note from trash: %w", err)
+		return nil, fmt.Errorf("failed to permanently delete note from trash: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
+		return nil, fmt.Errorf("failed to get rows affected: %w", err)
 	}
 	if rowsAffected == 0 {
-		return ErrNoteNotInTrash
+		return nil, ErrNoteNotInTrash
 	}
 
 	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("commit delete from trash: %w", err)
+		return nil, fmt.Errorf("commit delete from trash: %w", err)
 	}
-	return nil
+	return shas, nil
 }
 
 // EmptyTrash permanently removes all notes the user currently has in the trash.
 // It returns the deleted note IDs and their audiences so handlers can publish
-// note_deleted SSE events after the transaction commits.
-func (s *noteStore) EmptyTrash(ctx context.Context, userID string) ([]DeletedNoteAudience, error) {
+// note_deleted SSE events after the transaction commits, plus the distinct
+// sha256 hashes of images that were attached to the deleted notes, for the
+// caller to reclaim (see deleteNoteDependenciesTx).
+func (s *noteStore) EmptyTrash(ctx context.Context, userID string) ([]DeletedNoteAudience, []string, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	noteIDs, err := s.getTrashedOwnedNoteIDsTx(ctx, tx, userID)
 	if err != nil {
-		return nil, fmt.Errorf("get trashed note IDs: %w", err)
+		return nil, nil, fmt.Errorf("get trashed note IDs: %w", err)
 	}
 	if len(noteIDs) == 0 {
 		if err = tx.Commit(); err != nil {
-			return nil, fmt.Errorf("failed to commit empty trash transaction: %w", err)
+			return nil, nil, fmt.Errorf("failed to commit empty trash transaction: %w", err)
 		}
-		return []DeletedNoteAudience{}, nil
+		return []DeletedNoteAudience{}, nil, nil
 	}
 
 	audienceMap, err := s.getNoteAudiencesTx(ctx, tx, noteIDs)
 	if err != nil {
-		return nil, fmt.Errorf("get note audiences: %w", err)
+		return nil, nil, fmt.Errorf("get note audiences: %w", err)
 	}
 
-	if err = deleteNoteDependenciesTx(ctx, tx, s.d, noteIDs); err != nil {
-		return nil, fmt.Errorf("delete note dependencies: %w", err)
+	shas, err := deleteNoteDependenciesTx(ctx, tx, s.d, noteIDs)
+	if err != nil {
+		return nil, nil, fmt.Errorf("delete note dependencies: %w", err)
 	}
 
 	placeholders, args := buildInClauseArgs(noteIDs)
@@ -924,15 +1195,15 @@ func (s *noteStore) EmptyTrash(ctx context.Context, userID string) ([]DeletedNot
 	deleteQuery := `DELETE FROM notes WHERE user_id = ? AND deleted_at IS NOT NULL AND id IN (` + placeholders + `)` // #nosec G202 -- only generated "?" placeholders are concatenated
 	result, err := tx.ExecContext(ctx, s.d.RewritePlaceholders(deleteQuery), deleteArgs...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to empty trash: %w", err)
+		return nil, nil, fmt.Errorf("failed to empty trash: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get deleted note count: %w", err)
+		return nil, nil, fmt.Errorf("failed to get deleted note count: %w", err)
 	}
 	if rowsAffected != int64(len(noteIDs)) {
-		return nil, fmt.Errorf("expected to delete %d trashed notes, deleted %d", len(noteIDs), rowsAffected)
+		return nil, nil, fmt.Errorf("expected to delete %d trashed notes, deleted %d", len(noteIDs), rowsAffected)
 	}
 
 	deletedNotes := make([]DeletedNoteAudience, 0, len(noteIDs))
@@ -944,86 +1215,127 @@ func (s *noteStore) EmptyTrash(ctx context.Context, userID string) ([]DeletedNot
 	}
 
 	if err = tx.Commit(); err != nil {
-		return nil, fmt.Errorf("failed to commit empty trash transaction: %w", err)
+		return nil, nil, fmt.Errorf("failed to commit empty trash transaction: %w", err)
 	}
 
-	return deletedNotes, nil
+	return deletedNotes, shas, nil
 }
 
 // DeleteAllByUser permanently removes every note owned by the user, regardless
 // of state (active, archived, or trashed), along with all dependent rows. It
-// returns the number of notes deleted.
-func (s *noteStore) DeleteAllByUser(ctx context.Context, userID string) (int, error) {
+// returns the number of notes deleted and the distinct sha256 hashes of
+// images that were attached to them, for the caller to reclaim (see
+// deleteNoteDependenciesTx).
+func (s *noteStore) DeleteAllByUser(ctx context.Context, userID string) (int, []string, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return 0, fmt.Errorf("failed to begin transaction: %w", err)
+		return 0, nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	rows, err := tx.QueryContext(ctx, s.d.RewritePlaceholders(`SELECT id FROM notes WHERE user_id = ?`), userID)
 	if err != nil {
-		return 0, fmt.Errorf("failed to query owned notes: %w", err)
+		return 0, nil, fmt.Errorf("failed to query owned notes: %w", err)
 	}
 	noteIDs, err := collectRows(rows, func(rows *sql.Rows) (string, error) {
 		var id string
 		return id, rows.Scan(&id)
 	})
 	if err != nil {
-		return 0, fmt.Errorf("failed to scan owned note IDs: %w", err)
+		return 0, nil, fmt.Errorf("failed to scan owned note IDs: %w", err)
 	}
 	if len(noteIDs) == 0 {
 		if err = tx.Commit(); err != nil {
-			return 0, fmt.Errorf("failed to commit delete-all transaction: %w", err)
+			return 0, nil, fmt.Errorf("failed to commit delete-all transaction: %w", err)
 		}
-		return 0, nil
+		return 0, nil, nil
 	}
 
-	if err = deleteNoteDependenciesTx(ctx, tx, s.d, noteIDs); err != nil {
-		return 0, fmt.Errorf("delete note dependencies: %w", err)
+	shas, err := deleteNoteDependenciesTx(ctx, tx, s.d, noteIDs)
+	if err != nil {
+		return 0, nil, fmt.Errorf("delete note dependencies: %w", err)
 	}
 
 	if _, err = tx.ExecContext(ctx, s.d.RewritePlaceholders(`DELETE FROM notes WHERE user_id = ?`), userID); err != nil {
-		return 0, fmt.Errorf("failed to delete notes: %w", err)
+		return 0, nil, fmt.Errorf("failed to delete notes: %w", err)
 	}
 
 	if err = tx.Commit(); err != nil {
-		return 0, fmt.Errorf("failed to commit delete-all transaction: %w", err)
+		return 0, nil, fmt.Errorf("failed to commit delete-all transaction: %w", err)
 	}
 
-	return len(noteIDs), nil
+	return len(noteIDs), shas, nil
 }
 
-// PurgeOldTrashedNotes permanently deletes all notes that have been in the trash
-// longer than the given duration. This is intended to be called periodically.
-func (s *noteStore) PurgeOldTrashedNotes(ctx context.Context, olderThan time.Duration) error {
+// PurgeOldTrashedNotes permanently deletes all notes that have been in the
+// trash longer than the given duration. This is intended to be called
+// periodically. It returns the distinct sha256 hashes of images that were
+// attached to the purged notes, for the caller to reclaim (see
+// deleteNoteDependenciesTx).
+func (s *noteStore) PurgeOldTrashedNotes(ctx context.Context, olderThan time.Duration) ([]string, error) {
 	cutoff := time.Now().Add(-olderThan)
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	subquery := `SELECT id FROM notes WHERE deleted_at IS NOT NULL AND deleted_at < ?`
-	for _, q := range []string{
-		`DELETE FROM note_items WHERE note_id IN (` + subquery + `)`,
-		`DELETE FROM note_labels WHERE note_id IN (` + subquery + `)`,
-		`DELETE FROM note_shares WHERE note_id IN (` + subquery + `)`,
-		`DELETE FROM note_user_state WHERE note_id IN (` + subquery + `)`,
-	} {
-		if _, err = tx.ExecContext(ctx, s.d.RewritePlaceholders(q), cutoff); err != nil {
-			return fmt.Errorf("failed to purge dependent rows: %w", err)
+	rows, err := tx.QueryContext(ctx, s.d.RewritePlaceholders(`SELECT id FROM notes WHERE deleted_at IS NOT NULL AND deleted_at < ?`), cutoff)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query old trashed notes: %w", err)
+	}
+	noteIDs, err := collectRows(rows, func(rows *sql.Rows) (string, error) {
+		var id string
+		return id, rows.Scan(&id)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan old trashed note IDs: %w", err)
+	}
+	if len(noteIDs) == 0 {
+		if err = tx.Commit(); err != nil {
+			return nil, fmt.Errorf("failed to commit purge old trashed notes transaction: %w", err)
 		}
+		return nil, nil
 	}
 
-	if _, err = tx.ExecContext(ctx, s.d.RewritePlaceholders(`DELETE FROM notes WHERE deleted_at IS NOT NULL AND deleted_at < ?`), cutoff); err != nil {
-		return fmt.Errorf("failed to purge old trashed notes: %w", err)
+	shas, err := deleteNoteDependenciesTx(ctx, tx, s.d, noteIDs)
+	if err != nil {
+		return nil, fmt.Errorf("delete note dependencies: %w", err)
+	}
+
+	// Re-check deleted_at here (mirroring EmptyTrash) rather than deleting
+	// bare-by-id: noteIDs was read before this transaction took any write
+	// locks, so a concurrent RestoreFromTrash could have cleared deleted_at
+	// on one of these notes in between. Without the re-check, such a note
+	// would still be hard-deleted despite no longer being in the trash.
+	placeholders, args := buildInClauseArgs(noteIDs)
+	deleteArgs := append([]any{cutoff}, args...)
+	deleteQuery := `DELETE FROM notes WHERE deleted_at IS NOT NULL AND deleted_at < ? AND id IN (` + placeholders + `)` // #nosec G202 -- only generated "?" placeholders are concatenated
+	result, err := tx.ExecContext(ctx, s.d.RewritePlaceholders(deleteQuery), deleteArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to purge old trashed notes: %w", err)
+	}
+
+	// If the re-check above skipped a concurrently-restored note, rowsAffected
+	// falls short of len(noteIDs): deleteNoteDependenciesTx already dropped
+	// that note's items/labels/shares/state unconditionally (it has no
+	// deleted_at re-check of its own), so this whole batch must abort rather
+	// than commit — otherwise the restored note would silently lose its
+	// content while its notes row survives. Aborting is safe: nothing in this
+	// batch is lost, it's simply picked up again on the next periodic run.
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get purged note count: %w", err)
+	}
+	if rowsAffected != int64(len(noteIDs)) {
+		return nil, fmt.Errorf("expected to purge %d trashed notes, purged %d", len(noteIDs), rowsAffected)
 	}
 
 	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("commit purge old trashed notes: %w", err)
+		return nil, fmt.Errorf("commit purge old trashed notes: %w", err)
 	}
-	return nil
+	return shas, nil
 }
 
 func nullableAssignedTo(s string) sql.NullString {
@@ -1300,6 +1612,24 @@ func (s *noteStore) PatchItem(ctx context.Context, noteID, itemID string, patch 
 		return nil, fmt.Errorf("failed to update note item: %w", err)
 	}
 
+	// Keep the same parent/child completion invariant as ToggleItemCompleted.
+	// Runs whenever completed or parent_id changes: a plain re-parent (no
+	// Completed in the request) can just as easily violate the invariant —
+	// moving an incomplete child under an already-completed parent — even
+	// though this item's own completed flag isn't part of the patch. Cascades
+	// off of the item's *resolved* (post-patch) parent and completed value, so
+	// a request that changes parent_id and completed together enforces the
+	// invariant against the group the item ends up in, not the one it's
+	// leaving. This matters in practice: the webapp's autosave diff can send
+	// both fields in one patch (e.g. a drag-to-reparent that lands before an
+	// in-flight checkbox toggle's own request has advanced the local
+	// baseline).
+	if patch.Completed != nil || patch.ParentID != nil {
+		if err = cascadeItemCompletion(ctx, tx, s.d, noteID, itemID, nullableParentID(resolvedParent), resolvedCompleted); err != nil {
+			return nil, err
+		}
+	}
+
 	if err = touchNoteTx(ctx, tx, s.d, noteID); err != nil {
 		return nil, err
 	}
@@ -1386,12 +1716,39 @@ func (s *noteStore) ReorderItems(ctx context.Context, noteID string, itemIDs []s
 	return nil
 }
 
-// ToggleItemCompleted sets an item's completed flag and, when the item is a
-// top-level (parent) item, cascades the same value to all of its children in a
-// single transaction. The cascade is one-directional (parent -> children only):
-// completing the last child never auto-completes the parent. It returns the
-// note's full item list so callers reconcile every affected item from one
-// response. Returns ErrNoteItemNotFound if the item does not belong to the note.
+// cascadeItemCompletion enforces the checklist invariant that a parent item
+// can never be marked completed while one of its children is not: completing a
+// top-level item cascades the same value to all of its children (checking or
+// unchecking a group never splits it), while unchecking a child also
+// un-completes its parent. The reverse does not happen: completing the last
+// incomplete child never auto-completes the parent — that still requires
+// checking the parent itself. parentID is the item's parent_id as it stood
+// before this change.
+func cascadeItemCompletion(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, itemID string, parentID sql.NullString, newCompleted bool) error {
+	if !parentID.Valid {
+		if _, err := tx.ExecContext(ctx,
+			d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = CURRENT_TIMESTAMP WHERE note_id = ? AND parent_id = ?`),
+			newCompleted, noteID, itemID,
+		); err != nil {
+			return fmt.Errorf("failed to cascade completion to children: %w", err)
+		}
+		return nil
+	}
+	if !newCompleted {
+		if _, err := tx.ExecContext(ctx,
+			d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND note_id = ?`),
+			false, parentID.String, noteID,
+		); err != nil {
+			return fmt.Errorf("failed to cascade completion to parent: %w", err)
+		}
+	}
+	return nil
+}
+
+// ToggleItemCompleted sets an item's completed flag and cascades per
+// cascadeItemCompletion in a single transaction. It returns the note's full
+// item list so callers reconcile every affected item from one response.
+// Returns ErrNoteItemNotFound if the item does not belong to the note.
 func (s *noteStore) ToggleItemCompleted(ctx context.Context, noteID, itemID string, completed bool) ([]NoteItem, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -1418,14 +1775,8 @@ func (s *noteStore) ToggleItemCompleted(ctx context.Context, noteID, itemID stri
 		return nil, fmt.Errorf("failed to update note item: %w", err)
 	}
 
-	// Cascade only from a top-level item to its children.
-	if !parentID.Valid {
-		if _, err = tx.ExecContext(ctx,
-			s.d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = CURRENT_TIMESTAMP WHERE note_id = ? AND parent_id = ?`),
-			completed, noteID, itemID,
-		); err != nil {
-			return nil, fmt.Errorf("failed to cascade completion to children: %w", err)
-		}
+	if err = cascadeItemCompletion(ctx, tx, s.d, noteID, itemID, parentID, completed); err != nil {
+		return nil, err
 	}
 
 	if err = touchNoteTx(ctx, tx, s.d, noteID); err != nil {
@@ -1601,24 +1952,6 @@ func (s *noteStore) getLabelsByNoteIDs(ctx context.Context, noteIDs []string, us
 		return map[string][]Label{}, nil
 	}
 
-	placeholders := slices.Repeat([]string{"?"}, len(noteIDs))
-	args := make([]any, 0, len(noteIDs)+1)
-	for _, id := range noteIDs {
-		args = append(args, id)
-	}
-	args = append(args, userID)
-
-	rawQuery := `SELECT nl.note_id, l.id, l.user_id, l.name, l.created_at, l.updated_at
-			  FROM labels l
-			  JOIN note_labels nl ON l.id = nl.label_id
-			  WHERE nl.note_id IN (` + strings.Join(placeholders, ",") + `) AND nl.user_id = ?
-			  ORDER BY nl.note_id, l.name ASC` // #nosec G202 -- only "?" placeholders are joined, no user input
-
-	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(rawQuery), args...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to batch-get note labels: %w", err)
-	}
-
 	type noteLabelRow struct {
 		noteID string
 		label  Label
@@ -1629,13 +1962,38 @@ func (s *noteStore) getLabelsByNoteIDs(ctx context.Context, noteIDs []string, us
 		return r, err
 	}
 
-	defer func() { _ = rows.Close() }()
 	result := map[string][]Label{}
-	for row, err := range scanRows(rows, scanNoteLabel) {
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan note label: %w", err)
+	// Chunk the note IDs so the bound-parameter count stays under the driver's
+	// limit, matching getSharesByNoteIDs/getNoteImagesByNoteIDs.
+	for chunk := range slices.Chunk(noteIDs, noteIDsQueryBatchSize) {
+		placeholders := strings.Join(slices.Repeat([]string{"?"}, len(chunk)), ",")
+		args := make([]any, 0, len(chunk)+1)
+		for _, id := range chunk {
+			args = append(args, id)
 		}
-		result[row.noteID] = append(result[row.noteID], row.label)
+		args = append(args, userID)
+
+		rawQuery := `SELECT nl.note_id, l.id, l.user_id, l.name, l.created_at, l.updated_at
+				  FROM labels l
+				  JOIN note_labels nl ON l.id = nl.label_id
+				  WHERE nl.note_id IN (` + placeholders + `) AND nl.user_id = ?
+				  ORDER BY nl.note_id, l.name ASC` // #nosec G202 -- only "?" placeholders are joined, no user input
+
+		rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(rawQuery), args...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to batch-get note labels: %w", err)
+		}
+
+		for row, err := range scanRows(rows, scanNoteLabel) {
+			if err != nil {
+				_ = rows.Close()
+				return nil, fmt.Errorf("failed to scan note label: %w", err)
+			}
+			result[row.noteID] = append(result[row.noteID], row.label)
+		}
+		if err := rows.Close(); err != nil {
+			return nil, fmt.Errorf("failed to close note labels rows: %w", err)
+		}
 	}
 	return result, nil
 }
@@ -1681,7 +2039,7 @@ func (s *noteStore) AddLabelToNote(ctx context.Context, noteID, labelID, userID 
 // It filters on notes.user_id (not note_user_state.user_id) so notes merely
 // shared with the current user are never included.
 func (s *noteStore) GetOwnedNotesForExport(ctx context.Context, userID string) ([]*Note, error) {
-	query := s.d.RewritePlaceholders(`SELECT n.id, n.user_id, n.title, n.content, n.note_type,
+	query := s.d.RewritePlaceholders(`SELECT n.id, n.user_id, n.title, n.content, n.note_type, n.version,
 			  nus.color, nus.pinned, nus.archived, nus.position, nus.unpinned_position, nus.checked_items_collapsed,
 			  n.deleted_at, n.created_at, n.updated_at
 			  FROM notes n

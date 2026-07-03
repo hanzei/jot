@@ -128,12 +128,12 @@ func (s *UserStore) Delete(ctx context.Context, id, requestingUserID string) (er
 	return s.inner.Delete(ctx, id, requestingUserID)
 }
 
-func (s *UserStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID string, postDelete func(ctx context.Context, tx *sql.Tx) error) (err error) {
+func (s *UserStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID string, preDelete, postDelete func(ctx context.Context, tx *sql.Tx) error) (err error) {
 	ctx, end := startSpan(ctx, s.tracer, "UserStore.DeleteWithCleanup", &err,
 		attribute.String("user.id", id),
 	)
 	defer end()
-	return s.inner.DeleteWithCleanup(ctx, id, requestingUserID, postDelete)
+	return s.inner.DeleteWithCleanup(ctx, id, requestingUserID, preDelete, postDelete)
 }
 
 func (s *UserStore) CreateByAdmin(ctx context.Context, username, password string, role string) (_ *User, err error) {

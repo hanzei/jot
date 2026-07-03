@@ -10,7 +10,8 @@
     "error": "Errore",
     "unknown": "sconosciuto",
     "loading": "Caricamento...",
-    "done": "Fatto"
+    "done": "Fatto",
+    "or": "oppure"
   },
   "nav": {
     "settings": "Impostazioni",
@@ -27,6 +28,8 @@
     "addButton": "Aggiungi server",
     "working": "Caricamento...",
     "switchFailed": "Impossibile cambiare server",
+    "sessionExpiredTitle": "Accesso richiesto",
+    "sessionExpiredMessage": "La sessione salvata per «{{server}}» non è più valida. L'account potrebbe essere stato rimosso. Effettua di nuovo l'accesso.",
     "addFailed": "Impossibile aggiungere server",
     "urlRequired": "L'URL del server è obbligatorio",
     "invalidUrl": "Inserisci un URL server valido",
@@ -80,7 +83,10 @@
     "serverSetupInputA11yLabel": "Campo URL del server",
     "serverSetupSubmitA11yLabel": "Convalida il server e continua",
     "serverSetupConnectionFailed": "Impossibile raggiungere il server. Controlla URL e connessione, poi riprova.",
-    "serverSetupConnectionInvalidServer": "Connessione riuscita, ma questo endpoint API non sembra compatibile con Jot."
+    "serverSetupConnectionInvalidServer": "Connessione riuscita, ma questo endpoint API non sembra compatibile con Jot.",
+    "localModeLink": "Usa senza server",
+    "localModeHint": "Le tue note restano solo su questo dispositivo.",
+    "localModeFailed": "Impossibile avviare la modalità locale. Riprova."
   },
   "dashboard": {
     "newNote": "Nuova nota",
@@ -119,12 +125,15 @@
       "created_at": "Data di creazione"
     },
     "sortAccessibilityLabel": "Ordina per {{sortLabel}}",
+    "layoutToggleToGrid": "Passa alla vista a griglia",
+    "layoutToggleToList": "Passa alla vista a elenco",
     "sortDisabledNotice": "Il riordinamento manuale è disattivato. Le note sono ordinate per {{sortLabel}}, quindi il trascinamento non è disponibile.",
     "noteArchived": "Nota archiviata",
     "noteUnarchived": "Nota ripristinata dall'archivio",
     "noteDeleted": "Nota spostata nel cestino",
     "noteRestored": "Nota ripristinata",
-    "undo": "Annulla"
+    "undo": "Annulla",
+    "toastActionHint": "Tocca per {{action}}"
   },
   "settings": {
     "title": "Impostazioni",
@@ -227,6 +236,7 @@
   },
   "note": {
     "share": "Condividi",
+    "send": "Invia",
     "unpin": "Rimuovi dai fissati",
     "pin": "Fissa",
     "unarchive": "Rimuovi dall'archivio",
@@ -253,6 +263,7 @@
     "failedSaveChanges": "Impossibile salvare le modifiche. Tocca per riprovare.",
     "menuOptions": "Opzioni nota",
     "assignItem": "Assegna elemento",
+    "removeItem": "Rimuovi elemento",
     "unassign": "Rimuovi assegnazione",
     "assignedTo": "Assegnato a {{name}}",
     "changeColor": "Colore nota",
@@ -269,7 +280,7 @@
     "updatedByAnotherUser": "Questa nota è stata aggiornata da un altro utente",
     "listItemLabel": "Elemento dell'elenco",
     "itemCheckbox": "Casella di controllo {{item}}",
-    "dragToReorder": "Trascina per riordinare",
+    "dragToReorderIndent": "Trascina per riordinare o rientrare",
     "colorWhite": "Bianco",
     "colorCoral": "Corallo",
     "colorYellow": "Giallo",
@@ -289,7 +300,34 @@
     "outdentItem": "Rimuovi rientro",
     "itemsPasted_one": "1 elemento incollato",
     "itemsPasted_other": "{{count}} elementi incollati",
-    "filterByLabel": "Filtra per etichetta: {{label}}"
+    "filterByLabel": "Filtra per etichetta: {{label}}",
+    "saveFailedExitTitle": "Salvataggio fallito",
+    "saveFailedExitMessage": "Le modifiche non hanno potuto essere salvate. Riprova o scartale per uscire.",
+    "discardAndLeave": "Scarta ed esci"
+  },
+  "images": {
+    "openLightbox": "Visualizza {{filename}}",
+    "moreImages": "Visualizza altre {{count}} immagini",
+    "lightboxPrevious": "Immagine precedente",
+    "lightboxNext": "Immagine successiva",
+    "lightboxCounter": "{{current}} / {{total}}",
+    "addImage": "Aggiungi immagine",
+    "camera": "Fotocamera",
+    "photoLibrary": "Libreria foto",
+    "files": "File",
+    "cameraPermissionDenied": "È necessario l'accesso alla fotocamera per scattare una foto.",
+    "libraryPermissionDenied": "È necessario l'accesso alla libreria foto per scegliere una foto.",
+    "removeImage": "Rimuovi {{filename}}",
+    "removedToast": "Immagine rimossa",
+    "uploading": "Caricamento… {{percent}}%",
+    "uploadFailed": "Caricamento non riuscito",
+    "queuedOffline": "In attesa di caricamento…",
+    "uploadQueuedToast": "L'immagine verrà caricata quando sarai di nuovo online",
+    "retryUpload": "Riprova a caricare {{filename}}",
+    "dismissUpload": "Ignora {{filename}}",
+    "errorWrongType": "È possibile allegare solo immagini.",
+    "errorTooLarge": "L'immagine supera il limite di {{maxMB}} MB.",
+    "errorTooMany": "Le note possono contenere fino a {{max}} immagini."
   },
   "labels": {
     "title": "Etichette",
@@ -349,7 +387,9 @@
   },
   "offline": {
     "message": "Sei offline. Le modifiche verranno sincronizzate quando ti riconnetterai.",
-    "syncError": "Alcune modifiche non sono ancora state sincronizzate. Verrà effettuato un nuovo tentativo automaticamente."
+    "serverConnecting": "Connessione al server…",
+    "syncError": "Alcune modifiche non sono ancora state sincronizzate. Verrà effettuato un nuovo tentativo automaticamente.",
+    "revalidationError": "Impossibile verificare la sessione con il server. Vengono utilizzati i dati locali."
   },
   "syncFailures": {
     "bannerCount_one": "Impossibile salvare {{count}} modifica — Rivedi",
@@ -391,6 +431,40 @@
     "importing": "Importazione...",
     "importButton": "Importa"
   },
+  "upgrade": {
+    "settingsSectionTitle": "Connetti a un server",
+    "settingsSectionDescription": "Sincronizza le tue note con un server Jot. Le tue note locali saranno migrate sul server.",
+    "connectToServer": "Connetti a un server",
+    "title": "Connetti a un server",
+    "subtitle": "Inserisci l'URL del tuo server Jot per creare un nuovo account e migrare le tue note.",
+    "serverUrlLabel": "URL del server",
+    "serverUrlPlaceholder": "https://jot.esempio.it",
+    "continue": "Continua",
+    "registerTitle": "Crea il tuo account",
+    "changeServer": "Cambia server",
+    "usernameTaken": "Questo nome utente è già in uso. Scegline un altro.",
+    "checkingTitle": "Verifica compatibilità",
+    "capabilityFailed": "Questo server non supporta la migrazione delle note. Assicurati di usare una versione recente di Jot.",
+    "emptinessFailed": "L'account contiene già note o etichette. La migrazione richiede un account vuoto.",
+    "fetchFailed": "Impossibile raggiungere il server. Controlla la connessione e riprova.",
+    "successTitle": "Tutte le verifiche superate",
+    "successSubtitle": "Il tuo server è compatibile e pronto. La migrazione inizierà in un passaggio successivo.",
+    "errorTitle": "Impossibile connettersi",
+    "seedingTitle": "Preparazione della migrazione",
+    "migratingTitle": "Migrazione delle note",
+    "migratingProgress": "Sincronizzazione di {{processed}} su {{total}}",
+    "migrationCompleteTitle": "Migrazione completata",
+    "migrationCompleteSubtitle": "Le tue note sono state caricate sul server.",
+    "deadLetterTitle": "Migrazione sospesa",
+    "deadLetterSubtitle_one": "{{count}} modifica non è stata sincronizzata con il server.",
+    "deadLetterSubtitle_other": "{{count}} modifiche non sono state sincronizzate con il server.",
+    "reviewFailedChanges": "Revisiona le modifiche non riuscite",
+    "retryMigration": "Riprova la migrazione",
+    "migrationFailed": "Migrazione non riuscita. Controlla la connessione e riprova.",
+    "reconciling": "Sincronizzazione delle note con il server…",
+    "reconcileFailed": "Le note potrebbero non riflettere i dati più recenti del server. Aggiorna l'elenco delle note.",
+    "resync": "Risincronizza"
+  },
   "diagnostics": {
     "title": "Diagnostica",
     "developerSection": "Sviluppatore",
@@ -412,6 +486,7 @@
     "degraded": "Degradato",
     "recentLogs": "Log recenti",
     "clearLogs": "Cancella log",
+    "expandLogs": "Visualizza log completi",
     "refresh": "Aggiorna",
     "shareDiagnostics": "Condividi report diagnostico",
     "yes": "Sì",

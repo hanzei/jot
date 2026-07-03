@@ -28,6 +28,11 @@ func NewLabelsHandler(noteStore *models.NoteStore, labelStore *models.LabelStore
 }
 
 type AddLabelRequest struct {
+	// ID is an optional client-supplied label ID. When provided it is used as the
+	// label's primary key so an offline-created label can be replayed idempotently:
+	// a replay whose original create already committed is rejected with 409
+	// instead of inserting a duplicate. When empty the server generates one.
+	ID   string `json:"id,omitempty"`
 	Name string `json:"name"`
 }
 
@@ -108,15 +113,16 @@ func (h *LabelsHandler) GetLabelCounts(w http.ResponseWriter, r *http.Request) (
 
 // CreateLabel godoc
 //
-//	@Summary	Create or return an existing label
+//	@Summary	Create a label, or return the existing one when no ID is supplied
 //	@Tags		labels
 //	@Security	CookieAuth
 //	@Accept		json
 //	@Produce	json
-//	@Param		body	body		AddLabelRequest	true	"Label name"
+//	@Param		body	body		AddLabelRequest	true	"Label name and optional client-supplied ID"
 //	@Success	200		{object}	models.Label
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
+//	@Failure	409		{string}	string	"label already exists"
 //	@Failure	500		{string}	string	"internal server error"
 //	@Router		/labels [post]
 func (h *LabelsHandler) CreateLabel(w http.ResponseWriter, r *http.Request) (int, any, error) {
@@ -135,9 +141,26 @@ func (h *LabelsHandler) CreateLabel(w http.ResponseWriter, r *http.Request) (int
 		return http.StatusBadRequest, nil, errors.New("label name is required")
 	}
 
-	label, err := h.labelStore.GetOrCreateLabel(r.Context(), user.ID, req.Name)
-	if err != nil {
-		return http.StatusInternalServerError, nil, fmt.Errorf("get or create label: %w", err)
+	var (
+		label *models.Label
+		err   error
+	)
+	if req.ID != "" {
+		if !models.IsValidID(req.ID) {
+			return http.StatusBadRequest, nil, errors.New("invalid label ID format")
+		}
+		label, err = h.labelStore.CreateLabel(r.Context(), user.ID, req.ID, req.Name)
+		if err != nil {
+			if errors.Is(err, models.ErrLabelIDConflict) {
+				return http.StatusConflict, nil, errors.New("label already exists")
+			}
+			return http.StatusInternalServerError, nil, fmt.Errorf("create label: %w", err)
+		}
+	} else {
+		label, err = h.labelStore.GetOrCreateLabel(r.Context(), user.ID, req.Name)
+		if err != nil {
+			return http.StatusInternalServerError, nil, fmt.Errorf("get or create label: %w", err)
+		}
 	}
 
 	if h.hub != nil {

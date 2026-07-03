@@ -1,0 +1,208 @@
+import { StyleSheet } from 'react-native';
+
+export const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  emptyWrapper: {
+    flex: 1,
+  },
+  emptyContent: {
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  emptyScroll: {
+    flex: 1,
+  },
+  emptyScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorScrollContent: {
+    flexGrow: 1,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    marginTop: 16,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  emptySearchContainer: {
+    paddingTop: 48,
+    alignItems: 'center',
+    gap: 8,
+  },
+  emptySearchTitle: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  trashBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+  },
+  trashBannerMessage: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  trashBannerIcon: {
+    marginRight: 8,
+  },
+  trashBannerText: {
+    fontSize: 13,
+    flex: 1,
+  },
+  emptyTrashButton: {
+    marginLeft: 12,
+    minWidth: 96,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyTrashButtonDisabled: {
+    opacity: 0.6,
+  },
+  emptyTrashButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  topControlsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 12,
+    marginTop: 8,
+    marginBottom: 8,
+    gap: 8,
+  },
+  menuButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    borderRadius: 22,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    height: 40,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    paddingVertical: 0,
+  },
+  sortToggleButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sortControlsContainer: {
+    marginHorizontal: 12,
+    marginBottom: 8,
+  },
+  sortControlsContent: {
+    gap: 8,
+    paddingRight: 8,
+  },
+  sortChip: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  sortChipText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  sortChipTextActive: {
+    fontWeight: '600',
+  },
+  sortNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  sortNoticeIcon: {
+    marginRight: 8,
+    marginTop: 1,
+  },
+  sortNoticeText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  sortNoticeDismiss: {
+    marginLeft: 8,
+    marginTop: 1,
+  },
+  sectionHeader: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  retryButton: {
+    marginTop: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  fab: {
+    position: 'absolute',
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+});

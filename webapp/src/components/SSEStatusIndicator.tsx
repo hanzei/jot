@@ -50,7 +50,7 @@ export function SSEStatusIndicator({ status }: SSEStatusIndicatorProps) {
       role="status"
       aria-live="polite"
       data-testid="sse-status-indicator"
-      className="fixed bottom-4 left-4 z-50 flex items-center gap-2 rounded-lg bg-slate-800 dark:bg-slate-700 text-white px-3 py-2 text-sm shadow-lg"
+      className="w-full bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 px-4 py-2 text-sm flex items-center justify-center gap-2"
     >
       {inProgress ? (
         <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">

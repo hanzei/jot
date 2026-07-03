@@ -4,9 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { SSEProvider } from '../store/SSEContext';
-import OfflineBanner from '../components/OfflineBanner';
-import SyncErrorBanner from '../components/SyncErrorBanner';
-import SyncFailuresBanner from '../components/SyncFailuresBanner';
+import TopBanners from '../components/TopBanners';
 import AuthStack from './AuthStack';
 import MainDrawer from './MainDrawer';
 import NoteEditorScreen from '../screens/NoteEditorScreen';
@@ -14,6 +12,8 @@ import ShareScreen from '../screens/ShareScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import SyncFailuresScreen from '../screens/SyncFailuresScreen';
 import DiagnosticsScreen from '../screens/DiagnosticsScreen';
+import LogsFullscreenScreen from '../screens/LogsFullscreenScreen';
+import ConnectToServerScreen from '../screens/ConnectToServerScreen';
 
 export type RootStackParamList = {
   MainDrawer: undefined;
@@ -24,6 +24,8 @@ export type RootStackParamList = {
   Settings: undefined;
   SyncFailures: undefined;
   Diagnostics: undefined;
+  LogsFullscreen: undefined;
+  ConnectToServer: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -42,9 +44,7 @@ function AuthenticatedStack() {
   return (
     <SSEProvider>
       <View style={styles.flex}>
-        <OfflineBanner />
-        <SyncErrorBanner />
-        <SyncFailuresBanner />
+        <TopBanners />
         <Stack.Navigator>
           <Stack.Screen name="MainDrawer" component={MainDrawer} options={{ headerShown: false }} />
           <Stack.Screen
@@ -84,6 +84,22 @@ function AuthenticatedStack() {
           <Stack.Screen
             name="Diagnostics"
             component={DiagnosticsScreen}
+            options={{
+              headerShown: false,
+              presentation: 'modal',
+            }}
+          />
+          <Stack.Screen
+            name="LogsFullscreen"
+            component={LogsFullscreenScreen}
+            options={{
+              headerShown: false,
+              presentation: 'modal',
+            }}
+          />
+          <Stack.Screen
+            name="ConnectToServer"
+            component={ConnectToServerScreen}
             options={{
               headerShown: false,
               presentation: 'modal',

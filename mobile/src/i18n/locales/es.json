@@ -10,7 +10,8 @@
     "error": "Error",
     "unknown": "desconocido",
     "loading": "Cargando...",
-    "done": "Listo"
+    "done": "Listo",
+    "or": "o"
   },
   "nav": {
     "settings": "Ajustes",
@@ -30,6 +31,8 @@
     "invalidUrl": "La URL del servidor no es válida.",
     "addFailed": "No se pudo añadir el servidor.",
     "switchFailed": "No se pudo cambiar de servidor.",
+    "sessionExpiredTitle": "Inicio de sesión requerido",
+    "sessionExpiredMessage": "Tu sesión guardada para «{{server}}» ya no es válida. Es posible que se haya eliminado la cuenta. Vuelve a iniciar sesión.",
     "duplicateTitle": "Servidor ya añadido",
     "duplicateMessage": "Este servidor ya existe en tu lista.",
     "switchToExisting": "Cambiar al existente",
@@ -80,7 +83,10 @@
     "serverSetupInputA11yLabel": "Campo de URL del servidor",
     "serverSetupSubmitA11yLabel": "Validar servidor y continuar",
     "serverSetupConnectionFailed": "No se pudo conectar con ese servidor. Revisa la URL y tu conexión, y vuelve a intentarlo.",
-    "serverSetupConnectionInvalidServer": "Se pudo conectar, pero no parece un endpoint API de Jot compatible."
+    "serverSetupConnectionInvalidServer": "Se pudo conectar, pero no parece un endpoint API de Jot compatible.",
+    "localModeLink": "Usar sin servidor",
+    "localModeHint": "Tus notas permanecen solo en este dispositivo.",
+    "localModeFailed": "No se pudo iniciar el modo local. Inténtalo de nuevo."
   },
   "dashboard": {
     "newNote": "Nueva nota",
@@ -112,6 +118,7 @@
     "noteDeleted": "Nota movida a la papelera",
     "noteRestored": "Nota restaurada",
     "undo": "Deshacer",
+    "toastActionHint": "Toca para {{action}}",
     "noSearchResults": "No hay notas que coincidan con \"{{query}}\"",
     "noNotesForLabel": "No hay notas para esta etiqueta",
     "tryDifferentKeywords": "Prueba con otras palabras clave",
@@ -124,6 +131,8 @@
       "created_at": "Fecha de creación"
     },
     "sortAccessibilityLabel": "Ordenar por {{sortLabel}}",
+    "layoutToggleToGrid": "Cambiar a vista de cuadrícula",
+    "layoutToggleToList": "Cambiar a vista de lista",
     "sortDisabledNotice": "El orden manual está desactivado. Las notas están ordenadas por {{sortLabel}}, por lo que arrastrar y soltar no está disponible."
   },
   "settings": {
@@ -227,6 +236,7 @@
   },
   "note": {
     "share": "Compartir",
+    "send": "Enviar",
     "unpin": "Desfijar",
     "pin": "Fijar",
     "unarchive": "Desarchivar",
@@ -253,6 +263,7 @@
     "failedSaveChanges": "Error al guardar los cambios. Toca para reintentar.",
     "menuOptions": "Opciones de nota",
     "assignItem": "Asignar elemento",
+    "removeItem": "Eliminar elemento",
     "unassign": "Desasignar",
     "assignedTo": "Asignado a {{name}}",
     "changeColor": "Color de nota",
@@ -269,7 +280,7 @@
     "updatedByAnotherUser": "Esta nota fue actualizada por otro usuario",
     "listItemLabel": "Elemento de lista",
     "itemCheckbox": "Casilla {{item}}",
-    "dragToReorder": "Arrastra para reordenar",
+    "dragToReorderIndent": "Arrastra para reordenar o sangrar",
     "colorWhite": "Blanco",
     "colorCoral": "Coral",
     "colorYellow": "Amarillo",
@@ -289,7 +300,34 @@
     "outdentItem": "Quitar sangría",
     "itemsPasted_one": "1 elemento pegado",
     "itemsPasted_other": "{{count}} elementos pegados",
-    "filterByLabel": "Filtrar por etiqueta: {{label}}"
+    "filterByLabel": "Filtrar por etiqueta: {{label}}",
+    "saveFailedExitTitle": "Error al guardar",
+    "saveFailedExitMessage": "No se pudieron guardar los cambios. Reintenta o descártalos para salir.",
+    "discardAndLeave": "Descartar y salir"
+  },
+  "images": {
+    "openLightbox": "Ver {{filename}}",
+    "moreImages": "Ver {{count}} imágenes más",
+    "lightboxPrevious": "Imagen anterior",
+    "lightboxNext": "Imagen siguiente",
+    "lightboxCounter": "{{current}} / {{total}}",
+    "addImage": "Añadir imagen",
+    "camera": "Cámara",
+    "photoLibrary": "Biblioteca de fotos",
+    "files": "Archivos",
+    "cameraPermissionDenied": "Se necesita acceso a la cámara para tomar una foto.",
+    "libraryPermissionDenied": "Se necesita acceso a la biblioteca de fotos para elegir una foto.",
+    "removeImage": "Eliminar {{filename}}",
+    "removedToast": "Imagen eliminada",
+    "uploading": "Subiendo… {{percent}}%",
+    "uploadFailed": "Error al subir la imagen",
+    "queuedOffline": "Esperando para subir…",
+    "uploadQueuedToast": "La imagen se subirá cuando vuelvas a estar en línea",
+    "retryUpload": "Reintentar subir {{filename}}",
+    "dismissUpload": "Descartar {{filename}}",
+    "errorWrongType": "Solo se pueden adjuntar imágenes.",
+    "errorTooLarge": "La imagen supera el límite de {{maxMB}} MB.",
+    "errorTooMany": "Las notas pueden tener hasta {{max}} imágenes."
   },
   "labels": {
     "title": "Etiquetas",
@@ -349,7 +387,9 @@
   },
   "offline": {
     "message": "Estás sin conexión. Los cambios se sincronizarán cuando vuelvas a conectarte.",
-    "syncError": "Algunos cambios aún no se han sincronizado. Se reintentará automáticamente."
+    "serverConnecting": "Conectando al servidor…",
+    "syncError": "Algunos cambios aún no se han sincronizado. Se reintentará automáticamente.",
+    "revalidationError": "No se pudo verificar tu sesión con el servidor. Se están usando datos locales."
   },
   "syncFailures": {
     "bannerCount_one": "No se pudo guardar {{count}} cambio — Revisar",
@@ -391,6 +431,40 @@
     "importing": "Importando...",
     "importButton": "Importar"
   },
+  "upgrade": {
+    "settingsSectionTitle": "Conectar a un servidor",
+    "settingsSectionDescription": "Sincroniza tus notas con un servidor Jot. Tus notas locales se migrarán al servidor.",
+    "connectToServer": "Conectar a un servidor",
+    "title": "Conectar a un servidor",
+    "subtitle": "Introduce la URL de tu servidor Jot para crear una cuenta nueva y migrar tus notas.",
+    "serverUrlLabel": "URL del servidor",
+    "serverUrlPlaceholder": "https://jot.ejemplo.com",
+    "continue": "Continuar",
+    "registerTitle": "Crear tu cuenta",
+    "changeServer": "Cambiar servidor",
+    "usernameTaken": "Este nombre de usuario ya está en uso. Elige otro.",
+    "checkingTitle": "Comprobando compatibilidad",
+    "capabilityFailed": "Este servidor no admite la migración de notas. Asegúrate de usar una versión reciente de Jot.",
+    "emptinessFailed": "La cuenta ya tiene notas o etiquetas. La migración requiere una cuenta nueva y vacía.",
+    "fetchFailed": "No se pudo contactar con el servidor. Comprueba tu conexión e inténtalo de nuevo.",
+    "successTitle": "Todas las comprobaciones superadas",
+    "successSubtitle": "Tu servidor es compatible y está listo. La migración comenzará en un paso posterior.",
+    "errorTitle": "No se puede conectar",
+    "seedingTitle": "Preparando la migración",
+    "migratingTitle": "Migrando tus notas",
+    "migratingProgress": "Sincronizando {{processed}} de {{total}}",
+    "migrationCompleteTitle": "Migración completada",
+    "migrationCompleteSubtitle": "Tus notas han sido subidas al servidor.",
+    "deadLetterTitle": "Migración pausada",
+    "deadLetterSubtitle_one": "{{count}} cambio no se pudo sincronizar con el servidor.",
+    "deadLetterSubtitle_other": "{{count}} cambios no se pudieron sincronizar con el servidor.",
+    "reviewFailedChanges": "Revisar cambios fallidos",
+    "retryMigration": "Reintentar migración",
+    "migrationFailed": "La migración falló. Comprueba tu conexión e inténtalo de nuevo.",
+    "reconciling": "Sincronizando notas con el servidor…",
+    "reconcileFailed": "Es posible que las notas no reflejen los últimos datos del servidor. Actualiza la lista de notas.",
+    "resync": "Volver a sincronizar"
+  },
   "diagnostics": {
     "title": "Diagnóstico",
     "developerSection": "Desarrollador",
@@ -412,6 +486,7 @@
     "degraded": "Degradado",
     "recentLogs": "Registros recientes",
     "clearLogs": "Limpiar registros",
+    "expandLogs": "Ver registros completos",
     "refresh": "Actualizar",
     "shareDiagnostics": "Compartir informe de diagnóstico",
     "yes": "Sí",

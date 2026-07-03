@@ -1,43 +1,20 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
-import { PanResponder, StyleSheet } from 'react-native';
-import type { GestureResponderEvent, PanResponderGestureState } from 'react-native';
+import { Animated, StyleSheet } from 'react-native';
 import { VALIDATION } from '@jot/shared';
 import ListItem from '../src/components/ListItem';
+import * as layoutAnimation from '../src/utils/layoutAnimation';
 import type { Collaborator } from '@jot/shared';
 
 const collaborators: Collaborator[] = [
   { userId: 'u1', username: 'alice', firstName: 'Alice' },
   { userId: 'u2', username: 'bob', firstName: 'Bob' },
 ];
-const gestureEvent = {} as GestureResponderEvent;
-function createGestureState(dx: number, dy: number): PanResponderGestureState {
-  return {
-    stateID: 0,
-    moveX: 0,
-    moveY: 0,
-    x0: 0,
-    y0: 0,
-    dx,
-    dy,
-    vx: 0,
-    vy: 0,
-    numberActiveTouches: 1,
-    _accountsForMovesUpTo: 0,
-  };
-}
 
 describe('ListItem', () => {
   afterEach(() => {
     jest.restoreAllMocks();
   });
-
-  function getPanResponderConfig(createSpy: jest.SpiedFunction<typeof PanResponder.create>, callsBefore: number) {
-    return createSpy.mock.calls
-      .slice(callsBefore)
-      .map(([config]) => config)
-      .find((config) => typeof config.onPanResponderRelease === 'function');
-  }
 
   it('renders text and unchecked checkbox', () => {
     const { getByTestId } = render(
@@ -73,8 +50,20 @@ describe('ListItem', () => {
       <ListItem text="Task" completed={false} onDelete={onDelete} />,
     );
 
+    // The delete button only appears while the row is focused (selected).
+    fireEvent(getByTestId('list-item-text'), 'focus');
     fireEvent.press(getByTestId('list-item-delete'));
     expect(onDelete).toHaveBeenCalledTimes(1);
+  });
+
+  it('hides the delete button until the row is focused', () => {
+    const { getByTestId, queryByTestId } = render(
+      <ListItem text="Task" completed={false} onDelete={jest.fn()} />,
+    );
+
+    expect(queryByTestId('list-item-delete')).toBeNull();
+    fireEvent(getByTestId('list-item-text'), 'focus');
+    expect(queryByTestId('list-item-delete')).not.toBeNull();
   });
 
   it('does not show delete button when not editable', () => {
@@ -123,61 +112,6 @@ describe('ListItem', () => {
     expect(getByTestId('list-item-text').props.multiline).toBe(true);
   });
 
-  it('calls onIndent with +1 for right swipe beyond threshold', () => {
-    const onIndent = jest.fn();
-    const createSpy = jest.spyOn(PanResponder, 'create');
-    const callsBefore = createSpy.mock.calls.length;
-    render(<ListItem text="Task" completed={false} onIndent={onIndent} />);
-    const config = getPanResponderConfig(createSpy, callsBefore);
-    expect(config).toBeDefined();
-    config?.onPanResponderRelease?.(gestureEvent, createGestureState(60, 0));
-    expect(onIndent).toHaveBeenCalledWith(1);
-  });
-
-  it('calls onIndent with -1 for left swipe beyond threshold', () => {
-    const onIndent = jest.fn();
-    const createSpy = jest.spyOn(PanResponder, 'create');
-    const callsBefore = createSpy.mock.calls.length;
-    render(<ListItem text="Task" completed={false} onIndent={onIndent} />);
-    const config = getPanResponderConfig(createSpy, callsBefore);
-    expect(config).toBeDefined();
-    config?.onPanResponderRelease?.(gestureEvent, createGestureState(-60, 0));
-    expect(onIndent).toHaveBeenCalledWith(-1);
-  });
-
-  it('does not call onIndent for short horizontal swipes', () => {
-    const onIndent = jest.fn();
-    const createSpy = jest.spyOn(PanResponder, 'create');
-    const callsBefore = createSpy.mock.calls.length;
-    render(<ListItem text="Task" completed={false} onIndent={onIndent} />);
-    const config = getPanResponderConfig(createSpy, callsBefore);
-    expect(config).toBeDefined();
-    config?.onPanResponderRelease?.(gestureEvent, createGestureState(20, 0));
-    expect(onIndent).not.toHaveBeenCalled();
-  });
-
-  it('does not call onIndent for mostly vertical swipes', () => {
-    const onIndent = jest.fn();
-    const createSpy = jest.spyOn(PanResponder, 'create');
-    const callsBefore = createSpy.mock.calls.length;
-    render(<ListItem text="Task" completed={false} onIndent={onIndent} />);
-    const config = getPanResponderConfig(createSpy, callsBefore);
-    expect(config).toBeDefined();
-    config?.onPanResponderRelease?.(gestureEvent, createGestureState(60, 80));
-    expect(onIndent).not.toHaveBeenCalled();
-  });
-
-  it('does not call onIndent when item is not editable', () => {
-    const onIndent = jest.fn();
-    const createSpy = jest.spyOn(PanResponder, 'create');
-    const callsBefore = createSpy.mock.calls.length;
-    render(<ListItem text="Task" completed={false} editable={false} onIndent={onIndent} />);
-    const config = getPanResponderConfig(createSpy, callsBefore);
-    expect(config).toBeDefined();
-    config?.onPanResponderRelease?.(gestureEvent, createGestureState(60, 0));
-    expect(onIndent).not.toHaveBeenCalled();
-  });
-
   it('shows assign button when shared with collaborators', () => {
     const onAssignPress = jest.fn();
     const { getByTestId } = render(
@@ -190,9 +124,28 @@ describe('ListItem', () => {
       />,
     );
 
+    // The unassigned assign button only appears while the row is focused
+    // (selected), matching the delete button.
+    fireEvent(getByTestId('list-item-text'), 'focus');
     expect(getByTestId('list-item-assign')).toBeTruthy();
     fireEvent.press(getByTestId('list-item-assign'));
     expect(onAssignPress).toHaveBeenCalledTimes(1);
+  });
+
+  it('hides the unassigned assign button until the row is focused', () => {
+    const { getByTestId, queryByTestId } = render(
+      <ListItem
+        text="Task"
+        completed={false}
+        isShared={true}
+        collaborators={collaborators}
+        onAssignPress={jest.fn()}
+      />,
+    );
+
+    expect(queryByTestId('list-item-assign')).toBeNull();
+    fireEvent(getByTestId('list-item-text'), 'focus');
+    expect(queryByTestId('list-item-assign')).not.toBeNull();
   });
 
   it('hides assign button when not shared', () => {
@@ -265,5 +218,59 @@ describe('ListItem', () => {
     );
 
     expect(getByTestId('list-item-assignee')).toBeTruthy();
+  });
+
+  it('calls onSubmitEditing with the cursor position from the last selection change', () => {
+    const onSubmitEditing = jest.fn();
+    const { getByTestId } = render(
+      <ListItem text="helloworld" completed={false} onSubmitEditing={onSubmitEditing} />,
+    );
+
+    const input = getByTestId('list-item-text');
+    fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 5, end: 5 } } });
+    fireEvent(input, 'submitEditing');
+
+    expect(onSubmitEditing).toHaveBeenCalledWith(5);
+  });
+
+  it('defaults the submit cursor position to the end of the current text', () => {
+    const onSubmitEditing = jest.fn();
+    const { getByTestId } = render(
+      <ListItem text="helloworld" completed={false} onSubmitEditing={onSubmitEditing} />,
+    );
+
+    fireEvent(getByTestId('list-item-text'), 'submitEditing');
+
+    expect(onSubmitEditing).toHaveBeenCalledWith('helloworld'.length);
+  });
+
+  describe('checkbox pop animation', () => {
+    it('pops the checkbox on mount when popOnMount is set', () => {
+      jest.spyOn(layoutAnimation, 'isReduceMotionEnabledSync').mockReturnValue(false);
+      const springSpy = jest.spyOn(Animated, 'spring');
+
+      render(<ListItem text="Done" completed={true} popOnMount />);
+
+      expect(springSpy).toHaveBeenCalledTimes(1);
+      expect(springSpy.mock.calls[0][1]).toMatchObject({ toValue: 1 });
+    });
+
+    it('does not pop when popOnMount is not set', () => {
+      jest.spyOn(layoutAnimation, 'isReduceMotionEnabledSync').mockReturnValue(false);
+      const springSpy = jest.spyOn(Animated, 'spring');
+
+      render(<ListItem text="Done" completed={true} />);
+
+      expect(springSpy).not.toHaveBeenCalled();
+    });
+
+    it('does not pop when Reduce Motion is enabled', () => {
+      jest.spyOn(layoutAnimation, 'isReduceMotionEnabledSync').mockReturnValue(true);
+      const springSpy = jest.spyOn(Animated, 'spring');
+
+      render(<ListItem text="Done" completed={true} popOnMount />);
+
+      expect(springSpy).not.toHaveBeenCalled();
+    });
   });
 });
