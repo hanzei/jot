@@ -89,6 +89,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   const returnPathRef = useRef('/');
   const noteSortUpdateRequestIdRef = useRef(0);
   const loadNotesRequestIdRef = useRef(0);
+  const editingNoteRefreshRequestIdRef = useRef(0);
   useEffect(() => {
     isMountedRef.current = true;
     return () => { isMountedRef.current = false; };
@@ -645,6 +646,26 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   const handleNoteRefresh = () => {
     void Promise.all([loadNotes(), loadLabelCounts()]);
     loadLabels();
+    // loadNotes() only refreshes notesList, not the currently open editingNote,
+    // so callers relying on onRefresh to reflect a just-completed server change
+    // in the open modal (e.g. a client-deferred image removal past its undo
+    // window, whose SSE echo is dropped for the client that triggered it) would
+    // otherwise keep showing stale note data until the note is closed and
+    // reopened. NoteModal's own adoption effect already guards against
+    // clobbering unsaved local edits, so it's safe to always refetch here.
+    const currentNoteId = editingNote?.id;
+    if (currentNoteId) {
+      // Guard against out-of-order responses: several onRefresh calls for the
+      // same note can fire in quick succession (e.g. an image removal and a
+      // label change within the same second), and nothing guarantees their
+      // getById responses land in request order. Only the response to the
+      // most recently issued request is applied.
+      const requestId = ++editingNoteRefreshRequestIdRef.current;
+      notes.getById(currentNoteId).then(refreshed => {
+        if (requestId !== editingNoteRefreshRequestIdRef.current) return;
+        setEditingNote(prev => (prev?.id === currentNoteId ? refreshed : prev));
+      }).catch(() => {});
+    }
   };
 
   const handleDeleteNote = async (noteId: string) => {
