@@ -93,6 +93,23 @@ jest.mock('../src/hooks/useNotes', () => ({
   }),
 }));
 
+jest.mock('../src/hooks/useNoteImages', () => ({
+  __esModule: true,
+  useUploadNoteImage: () => ({
+    mutateAsync: jest.fn(),
+  }),
+  useDeleteNoteImage: () => ({
+    mutateAsync: jest.fn(),
+  }),
+}));
+
+jest.mock('../src/hooks/usePendingImageUploads', () => ({
+  __esModule: true,
+  usePendingImageUploads: () => [],
+  useRetryPendingImageUpload: () => ({ mutate: jest.fn() }),
+  useDismissPendingImageUpload: () => ({ mutate: jest.fn() }),
+}));
+
 jest.mock('../src/hooks/useOfflineNotes', () => ({
   __esModule: true,
   useOfflineNote: () => mockUseOfflineNote(),
@@ -203,6 +220,220 @@ describe('NoteEditorScreen list submit behavior', () => {
 
     await waitFor(() => {
       expect(getAllByTestId('list-item-text').length).toBe(baselineCount + 1);
+    });
+  });
+
+  it('pressing Enter at the start of a non-empty item inserts an empty item before it', async () => {
+    const { getByTestId, getAllByTestId } = render(<NoteEditorScreen />);
+
+    fireEvent.press(getByTestId('toggle-note-type'));
+    fireEvent.press(getByTestId('add-list-item'));
+
+    const input = getAllByTestId('list-item-text')[0];
+    fireEvent.changeText(input, 'hello');
+    fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 0, end: 0 } } });
+    fireEvent(input, 'submitEditing');
+
+    await waitFor(() => {
+      const inputsAfter = getAllByTestId('list-item-text');
+      expect(inputsAfter).toHaveLength(2);
+      expect(inputsAfter[0].props.value).toBe('');
+      expect(inputsAfter[1].props.value).toBe('hello');
+    });
+  });
+
+  it('pressing Enter in the middle of an item splits it into two items at the cursor', async () => {
+    const { getByTestId, getAllByTestId } = render(<NoteEditorScreen />);
+
+    fireEvent.press(getByTestId('toggle-note-type'));
+    fireEvent.press(getByTestId('add-list-item'));
+
+    const input = getAllByTestId('list-item-text')[0];
+    fireEvent.changeText(input, 'helloworld');
+    fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 5, end: 5 } } });
+    fireEvent(input, 'submitEditing');
+
+    await waitFor(() => {
+      const inputsAfter = getAllByTestId('list-item-text');
+      expect(inputsAfter).toHaveLength(2);
+      expect(inputsAfter[0].props.value).toBe('hello');
+      expect(inputsAfter[1].props.value).toBe('world');
+    });
+  });
+
+  it('split/insert-before new items inherit the current item\'s group and assignee', async () => {
+    const existingNote = {
+      id: 'note-split',
+      user_id: 'u1',
+      title: 'Split test',
+      content: '',
+      note_type: 'list',
+      color: '#ffffff',
+      pinned: false,
+      archived: false,
+      position: 0,
+      checked_items_collapsed: false,
+      is_shared: false,
+      deleted_at: null,
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:00.000Z',
+      labels: [],
+      shared_with: [],
+      items: [
+        {
+          id: 'parent-item',
+          note_id: 'note-split',
+          text: 'parent',
+          completed: false,
+          position: 0,
+          parent_id: null,
+          assigned_to: '',
+          created_at: '2026-01-01T00:00:00.000Z',
+          updated_at: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'child-item',
+          note_id: 'note-split',
+          text: 'helloworld',
+          completed: false,
+          position: 1,
+          parent_id: 'parent-item',
+          assigned_to: 'user1',
+          created_at: '2026-01-01T00:00:00.000Z',
+          updated_at: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    };
+
+    mockUseRoute.mockReturnValue({ params: { noteId: 'note-split' } });
+    mockUseOfflineNote.mockReturnValue({ data: existingNote });
+    mockCreateItemMutateAsync.mockClear();
+
+    const { getAllByTestId } = render(<NoteEditorScreen />);
+
+    const input = getAllByTestId('list-item-text')[1];
+    fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 5, end: 5 } } });
+    fireEvent(input, 'submitEditing');
+
+    await waitFor(() => {
+      expect(mockCreateItemMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          noteId: 'note-split',
+          item: expect.objectContaining({
+            text: 'world',
+            parent_id: 'parent-item',
+            assigned_to: 'user1',
+          }),
+        }),
+      );
+    });
+  });
+
+  it('pressing Enter at the start of a non-empty completed item inserts an empty item before it', async () => {
+    const existingNote = {
+      id: 'note-split-completed-start',
+      user_id: 'u1',
+      title: 'Split completed test',
+      content: '',
+      note_type: 'list',
+      color: '#ffffff',
+      pinned: false,
+      archived: false,
+      position: 0,
+      checked_items_collapsed: false,
+      is_shared: false,
+      deleted_at: null,
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:00.000Z',
+      labels: [],
+      shared_with: [],
+      items: [
+        {
+          id: 'completed-item',
+          note_id: 'note-split-completed-start',
+          text: 'hello',
+          completed: true,
+          position: 0,
+          parent_id: null,
+          assigned_to: '',
+          created_at: '2026-01-01T00:00:00.000Z',
+          updated_at: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    };
+
+    mockUseRoute.mockReturnValue({ params: { noteId: 'note-split-completed-start' } });
+    mockUseOfflineNote.mockReturnValue({ data: existingNote });
+
+    const { getByTestId, getAllByTestId } = render(<NoteEditorScreen />);
+
+    expect(getByTestId('checked-items-section')).toBeTruthy();
+
+    const input = getAllByTestId('list-item-text')[0];
+    fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 0, end: 0 } } });
+    fireEvent(input, 'submitEditing');
+
+    await waitFor(() => {
+      const inputsAfter = getAllByTestId('list-item-text');
+      expect(inputsAfter).toHaveLength(2);
+      // New (uncompleted) blank item renders above the completed section;
+      // the completed item's own text is untouched.
+      expect(inputsAfter[0].props.value).toBe('');
+      expect(inputsAfter[1].props.value).toBe('hello');
+    });
+  });
+
+  it('pressing Enter in the middle of a completed item splits it into two items at the cursor', async () => {
+    const existingNote = {
+      id: 'note-split-completed-mid',
+      user_id: 'u1',
+      title: 'Split completed test',
+      content: '',
+      note_type: 'list',
+      color: '#ffffff',
+      pinned: false,
+      archived: false,
+      position: 0,
+      checked_items_collapsed: false,
+      is_shared: false,
+      deleted_at: null,
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:00.000Z',
+      labels: [],
+      shared_with: [],
+      items: [
+        {
+          id: 'completed-item',
+          note_id: 'note-split-completed-mid',
+          text: 'helloworld',
+          completed: true,
+          position: 0,
+          parent_id: null,
+          assigned_to: '',
+          created_at: '2026-01-01T00:00:00.000Z',
+          updated_at: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    };
+
+    mockUseRoute.mockReturnValue({ params: { noteId: 'note-split-completed-mid' } });
+    mockUseOfflineNote.mockReturnValue({ data: existingNote });
+
+    const { getByTestId, getAllByTestId } = render(<NoteEditorScreen />);
+
+    expect(getByTestId('checked-items-section')).toBeTruthy();
+
+    const input = getAllByTestId('list-item-text')[0];
+    fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 5, end: 5 } } });
+    fireEvent(input, 'submitEditing');
+
+    await waitFor(() => {
+      const inputsAfter = getAllByTestId('list-item-text');
+      expect(inputsAfter).toHaveLength(2);
+      // The split-off remainder is a new (uncompleted) item, rendered above
+      // the still-completed original.
+      expect(inputsAfter[0].props.value).toBe('world');
+      expect(inputsAfter[1].props.value).toBe('hello');
     });
   });
 

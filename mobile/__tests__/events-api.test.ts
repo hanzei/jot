@@ -49,6 +49,9 @@ describe('SSEConnectionManager', () => {
       expect.stringContaining('/api/v1/events'),
       expect.objectContaining({
         headers: { Cookie: 'jot_session=test-token' },
+        // The library's built-in fixed-interval reconnect must stay disabled:
+        // SSEConnectionManager owns retries via its exponential backoff.
+        pollingInterval: 0,
       }),
     );
     expect(mockAddEventListener).toHaveBeenCalledWith('message', expect.any(Function));

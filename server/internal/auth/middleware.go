@@ -16,18 +16,22 @@ import (
 type contextKey string
 
 const UserContextKey contextKey = "user"
-const SessionTokenContextKey contextKey = "session_token"
+
+// SessionTokenHashContextKey carries the SHA-256 hash of the current
+// session's token (the form sessions are stored in). The raw token never
+// enters the request context.
+const SessionTokenHashContextKey contextKey = "session_token_hash"
 
 func (s *SessionService) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Try cookie-based session first.
-		if _, err := r.Cookie(SessionCookieName); err == nil {
+		if cookie, err := r.Cookie(SessionCookieName); err == nil {
 			session, user, err := s.GetSessionAndUser(r)
 			if err != nil {
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
 			}
-			if err := s.RenewSessionIfExpiringSoon(r.Context(), w, session); err != nil {
+			if err := s.RenewSessionIfExpiringSoon(r.Context(), w, session, cookie.Value); err != nil {
 				logutil.FromContext(r.Context()).WithError(err).Warn("Failed to renew session")
 			}
 
@@ -35,7 +39,7 @@ func (s *SessionService) AuthMiddleware(next http.Handler) http.Handler {
 			trace.SpanFromContext(r.Context()).SetAttributes(attribute.String("user.id", user.ID))
 
 			ctx := context.WithValue(r.Context(), UserContextKey, user)
-			ctx = context.WithValue(ctx, SessionTokenContextKey, session.Token)
+			ctx = context.WithValue(ctx, SessionTokenHashContextKey, session.TokenHash)
 			next.ServeHTTP(w, r.WithContext(ctx))
 			return
 		}
@@ -83,9 +87,11 @@ func GetUserFromContext(ctx context.Context) (*models.User, bool) {
 	return user, ok
 }
 
-func GetSessionTokenFromContext(ctx context.Context) (string, bool) {
-	token, ok := ctx.Value(SessionTokenContextKey).(string)
-	return token, ok
+// GetSessionTokenHashFromContext returns the stored hash of the current
+// session's token, present only for cookie-authenticated requests.
+func GetSessionTokenHashFromContext(ctx context.Context) (string, bool) {
+	tokenHash, ok := ctx.Value(SessionTokenHashContextKey).(string)
+	return tokenHash, ok
 }
 
 // SessionRequired is a middleware that ensures the request was authenticated
@@ -95,7 +101,7 @@ func GetSessionTokenFromContext(ctx context.Context) (string, bool) {
 // leaked token.
 func SessionRequired(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, ok := GetSessionTokenFromContext(r.Context())
+		_, ok := GetSessionTokenHashFromContext(r.Context())
 		if !ok {
 			http.Error(w, "session authentication required", http.StatusForbidden)
 			return

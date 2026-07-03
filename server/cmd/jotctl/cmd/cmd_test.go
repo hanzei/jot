@@ -50,6 +50,8 @@ func setupTestServerWithConfig(t *testing.T, customize func(*config.Config)) *jo
 		DBDriver:            "sqlite",
 		DBDSN:               tmpDir + "/test.db",
 		StaticDir:           tmpDir,
+		UploadDir:           tmpDir + "/uploads",
+		UploadMaxBytes:      25 << 20,
 		CORSAllowedOrigin:   "http://localhost:5173",
 		CookieSecure:        false,
 		RegistrationEnabled: true,

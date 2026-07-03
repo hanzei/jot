@@ -309,7 +309,9 @@
         "noteAssociations": "Label-Zuweisungen",
         "completed": "Erledigt",
         "assigned": "Zugewiesen",
-        "databaseSize": "Datenbankgröße"
+        "databaseSize": "Datenbankgröße",
+        "imageCount": "Bilderanzahl",
+        "imagesSize": "Bilderspeicher"
       }
     }
   },
@@ -366,6 +368,7 @@
     "failedDuplicate": "Notiz konnte nicht dupliziert werden. Bitte erneut versuchen.",
     "menuOptions": "Notizoptionen",
     "assignItem": "Element zuweisen",
+    "removeItem": "Element entfernen",
     "unassign": "Zuweisung aufheben",
     "assignedTo": "Zugewiesen an {{name}}",
     "completedSuggestions": "Vorschläge aus erledigten Elementen"
@@ -415,6 +418,25 @@
     "unsharedSuccess": "Teilen der Notiz erfolgreich aufgehoben!",
     "failedUnshare": "Teilen der Notiz konnte nicht aufgehoben werden. Bitte erneut versuchen."
   },
+  "images": {
+    "openLightbox": "{{filename}} anzeigen",
+    "moreImages": "{{count}} weitere Bilder anzeigen",
+    "moreImagesBadge": "{{count}} weitere Bilder",
+    "lightboxPrevious": "Vorheriges Bild",
+    "lightboxNext": "Nächstes Bild",
+    "lightboxCounter": "{{current}} / {{total}}",
+    "addImage": "Bild hinzufügen",
+    "dropOverlay": "Bild hier ablegen, um es hinzuzufügen",
+    "removeImage": "{{filename}} entfernen",
+    "removedToast": "Bild entfernt",
+    "uploading": "Wird hochgeladen … {{percent}}%",
+    "uploadFailed": "Upload fehlgeschlagen",
+    "retryUpload": "{{filename}} erneut hochladen",
+    "dismissUpload": "{{filename}} verwerfen",
+    "errorWrongType": "Es können nur Bilder angehängt werden.",
+    "errorTooLarge": "Das Bild überschreitet das Limit von {{maxMB}} MB.",
+    "errorTooMany": "Notizen können bis zu {{max}} Bilder enthalten."
+  },
   "serviceWorker": {
     "updatePrompt": "Es ist ein neues App-Update verfügbar! Klicke OK zum Aktualisieren"
   },
@@ -431,6 +453,8 @@
     "fileTypesJson": ".json-Dateien",
     "invalidFileType": "Ungültiger Dateityp. Bitte eine .json- oder .zip-Datei auswählen.",
     "invalidFileTypeJson": "Ungültiger Dateityp. Bitte eine .json-Datei auswählen.",
+    "importedNotes_few": "{{count}} Notizen importiert",
+    "importedNotes_many": "{{count}} Notizen importiert",
     "importedNotes_one": "{{count}} Notiz importiert",
     "importedNotes_other": "{{count}} Notizen importiert",
     "skipped": "({{count}} übersprungen)",

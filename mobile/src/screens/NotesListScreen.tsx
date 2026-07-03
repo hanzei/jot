@@ -37,7 +37,7 @@ import { getLocalNotes, permanentDeleteLocalNote } from '../db/noteQueries';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { useBannerShown } from '../hooks/useBannerShown';
 import { styles } from './notesList/styles';
-import { buildUpdateRequest, buildNoteSections, type LocalReorderState } from './notesList/noteListUtils';
+import { buildNoteSections, type LocalReorderState } from './notesList/noteListUtils';
 import NotesListHeader from './notesList/NotesListHeader';
 import MasonryGrid from './notesList/MasonryGrid';
 import DraggableMasonry from './notesList/DraggableMasonry';
@@ -265,12 +265,15 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     setContextMenuNote(note);
   }, []);
 
-  // Context menu actions
+  // Context menu actions. Each PATCH carries only the field being changed:
+  // including unchanged title/content would re-assert a possibly-stale snapshot
+  // (clobbering another device's edit) and, because content triggers the
+  // base_version guard, turn a mere pin/color toggle into a 409 conflict.
   const handlePin = useCallback(async (note: Note) => {
     try {
       await updateNote.mutateAsync({
         id: note.id,
-        data: buildUpdateRequest(note, { pinned: !note.pinned }),
+        data: { pinned: !note.pinned },
       });
     } catch {
       Alert.alert(t('common.error'), t('note.failedUpdate'));
@@ -281,7 +284,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     try {
       await updateNote.mutateAsync({
         id: note.id,
-        data: buildUpdateRequest(note, { archived: true }),
+        data: { archived: true },
       });
       showToast(t('dashboard.noteArchived'), 'success', {
         label: t('dashboard.undo'),
@@ -289,7 +292,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           try {
             await updateNote.mutateAsync({
               id: note.id,
-              data: buildUpdateRequest(note, { archived: false }),
+              data: { archived: false },
             });
             showToast(t('dashboard.noteUnarchived'));
           } catch {
@@ -306,7 +309,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     try {
       await updateNote.mutateAsync({
         id: note.id,
-        data: buildUpdateRequest(note, { archived: false }),
+        data: { archived: false },
       });
       showToast(t('dashboard.noteUnarchived'));
     } catch {
@@ -438,7 +441,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     try {
       await updateNote.mutateAsync({
         id: colorPickerNote.id,
-        data: buildUpdateRequest(colorPickerNote, { color }),
+        data: { color },
       });
     } catch {
       Alert.alert(t('common.error'), t('note.failedColorUpdate'));

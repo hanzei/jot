@@ -309,7 +309,9 @@
         "noteAssociations": "Assegnazioni etichette",
         "completed": "Completate",
         "assigned": "Assegnate",
-        "databaseSize": "Dimensione database"
+        "databaseSize": "Dimensione database",
+        "imageCount": "Numero di immagini",
+        "imagesSize": "Spazio immagini"
       }
     }
   },
@@ -366,6 +368,7 @@
     "failedDuplicate": "Impossibile duplicare la nota. Riprova.",
     "menuOptions": "Opzioni nota",
     "assignItem": "Assegna elemento",
+    "removeItem": "Rimuovi elemento",
     "unassign": "Rimuovi assegnazione",
     "assignedTo": "Assegnato a {{name}}",
     "completedSuggestions": "Suggerimenti da elementi completati"
@@ -415,6 +418,25 @@
     "unsharedSuccess": "Condivisione della nota annullata con successo!",
     "failedUnshare": "Impossibile annullare la condivisione della nota. Riprova."
   },
+  "images": {
+    "openLightbox": "Visualizza {{filename}}",
+    "moreImages": "Visualizza {{count}} immagini in più",
+    "moreImagesBadge": "{{count}} immagini in più",
+    "lightboxPrevious": "Immagine precedente",
+    "lightboxNext": "Immagine successiva",
+    "lightboxCounter": "{{current}} / {{total}}",
+    "addImage": "Aggiungi immagine",
+    "dropOverlay": "Rilascia l'immagine per aggiungerla",
+    "removeImage": "Rimuovi {{filename}}",
+    "removedToast": "Immagine rimossa",
+    "uploading": "Caricamento… {{percent}}%",
+    "uploadFailed": "Caricamento non riuscito",
+    "retryUpload": "Riprova a caricare {{filename}}",
+    "dismissUpload": "Ignora {{filename}}",
+    "errorWrongType": "È possibile allegare solo immagini.",
+    "errorTooLarge": "L'immagine supera il limite di {{maxMB}} MB.",
+    "errorTooMany": "Le note possono contenere fino a {{max}} immagini."
+  },
   "serviceWorker": {
     "updatePrompt": "Nuovo aggiornamento dell'app disponibile! Clicca OK per aggiornare"
   },
@@ -431,6 +453,8 @@
     "fileTypesJson": "File .json",
     "invalidFileType": "Tipo di file non valido. Seleziona un file .json o .zip.",
     "invalidFileTypeJson": "Tipo di file non valido. Seleziona un file .json.",
+    "importedNotes_few": "Importate {{count}} note",
+    "importedNotes_many": "Importate {{count}} note",
     "importedNotes_one": "Importata {{count}} nota",
     "importedNotes_other": "Importate {{count}} note",
     "skipped": "({{count}} saltate)",

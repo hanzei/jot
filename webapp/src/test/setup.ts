@@ -31,6 +31,16 @@ if (!globalThis.ResizeObserver) {
   };
 }
 
+// URL.createObjectURL/revokeObjectURL are not implemented in jsdom. Provide a
+// no-op stub so components that preview local files (image upload tiles,
+// export downloads) do not throw.
+if (!globalThis.URL.createObjectURL) {
+  globalThis.URL.createObjectURL = () => 'blob:mock-url';
+}
+if (!globalThis.URL.revokeObjectURL) {
+  globalThis.URL.revokeObjectURL = () => {};
+}
+
 // window.matchMedia is not available in jsdom. Provide a stub so components
 // that call applyTheme (which reads prefers-color-scheme) do not throw.
 Object.defineProperty(globalThis, 'matchMedia', {

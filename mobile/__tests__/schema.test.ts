@@ -24,7 +24,7 @@ const runSqls = (db: MockDb): string[] =>
 const ALL_NOTES_COLS = [
   'id', 'user_id', 'title', 'content', 'note_type', 'color', 'pinned', 'archived',
   'position', 'checked_items_collapsed', 'version', 'is_shared', 'deleted_at', 'created_at',
-  'updated_at', 'labels_json', 'shared_with_json', 'sync_state',
+  'updated_at', 'labels_json', 'shared_with_json', 'images_json', 'sync_state',
 ].map((name) => ({ name }));
 
 const ALL_NOTE_ITEM_COLS = [
@@ -46,7 +46,8 @@ describe('migrateDatabase', () => {
         getAllAsync: jest.fn()
           .mockResolvedValueOnce(ALL_NOTES_COLS)
           .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS)
-          .mockResolvedValueOnce(ALL_NOTES_COLS), // migration2 version probe
+          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
+          .mockResolvedValueOnce(ALL_NOTES_COLS), // migration3 images_json probe
       });
       await migrateDatabase(db as unknown as SQLiteDatabase);
 
@@ -61,6 +62,10 @@ describe('migrateDatabase', () => {
       expect(ddl).toContain('CREATE TABLE IF NOT EXISTS dead_letter');
       expect(ddl).toContain('CREATE TABLE IF NOT EXISTS users');
 
+      // migration4 (issue #618): offline image upload queue.
+      const migration4Ddl = db.execAsync.mock.calls[1][0] as string;
+      expect(migration4Ddl).toContain('CREATE TABLE IF NOT EXISTS pending_image_uploads');
+
       expect(runSqls(db).some((s) => s.startsWith('ALTER TABLE'))).toBe(false);
       expect(db.runAsync).toHaveBeenCalledWith(`PRAGMA user_version = ${MIGRATIONS.length}`);
     });
@@ -72,7 +77,8 @@ describe('migrateDatabase', () => {
         getAllAsync: jest.fn()
           .mockResolvedValueOnce(ALL_NOTES_COLS)
           .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS)
-          .mockResolvedValueOnce(ALL_NOTES_COLS), // migration2 version probe
+          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
+          .mockResolvedValueOnce(ALL_NOTES_COLS), // migration3 images_json probe
       });
       await migrateDatabase(db as unknown as SQLiteDatabase);
 
@@ -86,7 +92,8 @@ describe('migrateDatabase', () => {
         getAllAsync: jest.fn()
           .mockResolvedValueOnce(notesColsWithoutSyncState)
           .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS)
-          .mockResolvedValueOnce(ALL_NOTES_COLS), // migration2 version probe
+          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
+          .mockResolvedValueOnce(ALL_NOTES_COLS), // migration3 images_json probe
       });
       await migrateDatabase(db as unknown as SQLiteDatabase);
 
@@ -101,7 +108,8 @@ describe('migrateDatabase', () => {
         getAllAsync: jest.fn()
           .mockResolvedValueOnce(ALL_NOTES_COLS) // migration1 sync_state probe
           .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS)
-          .mockResolvedValueOnce(notesColsWithoutVersion), // migration2 version probe
+          .mockResolvedValueOnce(notesColsWithoutVersion) // migration2 version probe
+          .mockResolvedValueOnce(ALL_NOTES_COLS), // migration3 images_json probe
       });
       await migrateDatabase(db as unknown as SQLiteDatabase);
 
@@ -118,7 +126,8 @@ describe('migrateDatabase', () => {
         getAllAsync: jest.fn()
           .mockResolvedValueOnce(ALL_NOTES_COLS)
           .mockResolvedValueOnce(noteItemColsWithoutNew)
-          .mockResolvedValueOnce(ALL_NOTES_COLS), // migration2 version probe
+          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
+          .mockResolvedValueOnce(ALL_NOTES_COLS), // migration3 images_json probe
       });
       await migrateDatabase(db as unknown as SQLiteDatabase);
 
@@ -127,6 +136,22 @@ describe('migrateDatabase', () => {
           `ALTER TABLE note_items ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`,
         );
       }
+    });
+
+    it('adds the images_json column when it is missing (issue #616)', async () => {
+      const notesColsWithoutImages = ALL_NOTES_COLS.filter((c) => c.name !== 'images_json');
+      const db = makeDb({
+        getAllAsync: jest.fn()
+          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration1 sync_state probe
+          .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS)
+          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
+          .mockResolvedValueOnce(notesColsWithoutImages), // migration3 images_json probe
+      });
+      await migrateDatabase(db as unknown as SQLiteDatabase);
+
+      expect(db.runAsync).toHaveBeenCalledWith(
+        `ALTER TABLE notes ADD COLUMN images_json TEXT NOT NULL DEFAULT '[]'`,
+      );
     });
   });
 
@@ -159,7 +184,8 @@ describe('migrateDatabase', () => {
           .mockResolvedValueOnce(ALL_NOTES_COLS)
           .mockResolvedValueOnce(noteItemColsWithIndent)
           .mockResolvedValueOnce(rows)
-          .mockResolvedValueOnce(ALL_NOTES_COLS), // migration2 version probe
+          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
+          .mockResolvedValueOnce(ALL_NOTES_COLS), // migration3 images_json probe
       });
       await migrateDatabase(db as unknown as SQLiteDatabase);
 
@@ -182,7 +208,8 @@ describe('migrateDatabase', () => {
         getAllAsync: jest.fn()
           .mockResolvedValueOnce(ALL_NOTES_COLS)
           .mockResolvedValueOnce(noteItemColsWithoutBoth)
-          .mockResolvedValueOnce(ALL_NOTES_COLS), // migration2 version probe
+          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
+          .mockResolvedValueOnce(ALL_NOTES_COLS), // migration3 images_json probe
       });
       await migrateDatabase(db as unknown as SQLiteDatabase);
 

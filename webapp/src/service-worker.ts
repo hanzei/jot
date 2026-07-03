@@ -98,22 +98,33 @@ const navigationRoute = new NavigationRoute(
 registerRoute(navigationRoute);
 
 // Only POST endpoints that are idempotent or have uniqueness constraints are
-// safe to retry via background sync. All other POSTs (e.g., note creation)
-// would create duplicates since the server generates a new random ID per request.
+// safe to retry via background sync. All other POSTs (e.g., note creation,
+// import, duplicate, image upload) would create duplicates since the server
+// generates a new random ID per request. Login is also excluded: answering it
+// with a synthetic 202 would flip the client into an authenticated state with
+// no user data.
 const retryablePostPaths = new Set([
-  '/api/v1/login',
   '/api/v1/logout',
   '/api/v1/notes/reorder',
 ]);
 
-// POST paths with dynamic segments that are safe to retry (matched by prefix).
-const retryablePostPrefixes = [
-  '/api/v1/notes/', // covers /notes/{id}/share, /notes/{id}/restore, /notes/{id}/labels
+// POST paths with dynamic segments that are safe to retry. Each endpoint is
+// matched exactly — a bare prefix like '/api/v1/notes/' would also capture
+// non-idempotent endpoints (/notes/import, /notes/{id}/duplicate,
+// /notes/{id}/images) that must never be replayed. Beyond idempotency, an
+// endpoint only qualifies if its client ignores the response body: a queued
+// request is answered with the synthetic 202 plain-text response below, which
+// a body-reading caller would misparse (that rules out /notes/{id}/restore,
+// /notes/{id}/labels and .../toggle-completed, whose clients read the
+// returned note/items).
+const retryablePostPatterns = [
+  /^\/api\/v1\/notes\/[^/]+\/share$/,
+  /^\/api\/v1\/notes\/[^/]+\/items\/reorder$/,
 ];
 
 const isRetryablePost = (pathname: string): boolean => {
   if (retryablePostPaths.has(pathname)) return true;
-  return retryablePostPrefixes.some(prefix => pathname.startsWith(prefix));
+  return retryablePostPatterns.some(pattern => pattern.test(pathname));
 };
 
 // Handle non-GET API requests via fetch event listener directly, since

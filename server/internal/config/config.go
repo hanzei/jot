@@ -16,6 +16,8 @@ type Config struct {
 	DBDriver            string
 	DBDSN               string
 	StaticDir           string
+	UploadDir           string
+	UploadMaxBytes      int
 	CORSAllowedOrigin   string
 	CookieSecure        bool
 	RegistrationEnabled bool
@@ -65,6 +67,7 @@ func Load() (*Config, error) {
 		MetricsHost:         "127.0.0.1",
 		DBDriver:            "sqlite",
 		DBDSN:               "./jot.db",
+		UploadDir:           "./uploads",
 		CookieSecure:        true,
 		RegistrationEnabled: true,
 		OTelServiceName:     "jot",
@@ -99,6 +102,17 @@ func Load() (*Config, error) {
 		cfg.DBDSN = v
 	}
 
+	if v := os.Getenv("UPLOAD_DIR"); v != "" {
+		cfg.UploadDir = filepath.Clean(v)
+	}
+
+	// Keep default and bounds in sync with shared/src/constants.ts UPLOAD_MAX_BYTES.
+	uploadMaxBytes, err := parseIntRangeEnv("UPLOAD_MAX_BYTES", 25<<20, 1<<20, 500<<20)
+	if err != nil {
+		return nil, err
+	}
+	cfg.UploadMaxBytes = uploadMaxBytes
+
 	if v := os.Getenv("STATIC_DIR"); v != "" {
 		cfg.StaticDir = filepath.Clean(v)
 	} else {
@@ -117,9 +131,11 @@ func Load() (*Config, error) {
 	}
 	cfg.CookieSecure = cookieSecure
 
-	if os.Getenv("REGISTRATION_ENABLED") == "false" {
-		cfg.RegistrationEnabled = false
+	registrationEnabled, err := parseBoolEnv("REGISTRATION_ENABLED", true)
+	if err != nil {
+		return nil, err
 	}
+	cfg.RegistrationEnabled = registrationEnabled
 
 	passwordMinLength, err := parseIntRangeEnv("PASSWORD_MIN_LENGTH", 10, 1, 72)
 	if err != nil {

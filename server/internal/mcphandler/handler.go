@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/hanzei/jot/server/internal/auth"
+	"github.com/hanzei/jot/server/internal/blobstore"
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -16,13 +17,15 @@ import (
 type Handler struct {
 	noteStore  *models.NoteStore
 	labelStore *models.LabelStore
+	imageStore *blobstore.ImageStore
 }
 
 // New creates a new Handler backed by the provided stores.
-func New(noteStore *models.NoteStore, labelStore *models.LabelStore) *Handler {
+func New(noteStore *models.NoteStore, labelStore *models.LabelStore, imageStore *blobstore.ImageStore) *Handler {
 	return &Handler{
 		noteStore:  noteStore,
 		labelStore: labelStore,
+		imageStore: imageStore,
 	}
 }
 

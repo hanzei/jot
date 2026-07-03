@@ -23,12 +23,23 @@ const (
 	EventNoteUnshared       EventType = "note_unshared"
 	EventLabelsChanged      EventType = "labels_changed"
 	EventProfileIconUpdated EventType = "profile_icon_updated"
+	EventNoteImageAdded     EventType = "note_image_added"
+	EventNoteImageRemoved   EventType = "note_image_removed"
 )
 
 // NoteEventData is the Data payload for note-related events.
 type NoteEventData struct {
 	NoteID string `json:"note_id"`
 	Note   any    `json:"note"` // nil for deleted/unshared
+}
+
+// NoteImageEventData is the Data payload for note_image_added/note_image_removed
+// events. Image is set for note_image_added; ImageID is set for
+// note_image_removed (the row is already gone by the time that event fires).
+type NoteImageEventData struct {
+	NoteID  string `json:"note_id"`
+	Image   any    `json:"image,omitempty"`
+	ImageID string `json:"image_id,omitempty"`
 }
 
 // ProfileIconEventData is the Data payload for profile_icon_updated events.
@@ -104,6 +115,16 @@ func (h *Hub) Subscribe(ctx context.Context, userID string) (<-chan Event, func(
 	ch := make(chan Event, 16)
 
 	h.mu.Lock()
+	if h.closed {
+		// The hub is shutting down. Hand back an already-closed channel so the
+		// caller's read loop exits immediately instead of blocking forever —
+		// nothing would ever close this channel otherwise, which would leak the
+		// ServeSSE goroutine and stall graceful shutdown until its deadline. The
+		// returned unsubscribe is a no-op since the channel was never registered.
+		h.mu.Unlock()
+		close(ch)
+		return ch, func() {}
+	}
 	h.clients[userID] = append(h.clients[userID], ch)
 	h.mu.Unlock()
 
@@ -138,7 +159,9 @@ func (h *Hub) Subscribe(ctx context.Context, userID string) (<-chan Event, func(
 // causing any ServeSSE goroutines blocked on channel reads to exit. It is
 // safe to call Close multiple times. After Close, calls to unsubscribe from
 // existing subscriptions are safe and will not double-close channels. Publish
-// becomes a no-op after Close. Subscribe must not be called after Close.
+// becomes a no-op after Close. Subscribe after Close returns an already-closed
+// channel and a no-op unsubscribe, so a late connection during shutdown exits
+// cleanly instead of blocking.
 func (h *Hub) Close() {
 	h.mu.Lock()
 	defer h.mu.Unlock()

@@ -309,7 +309,9 @@
         "noteAssociations": "Label assignments",
         "completed": "Completed",
         "assigned": "Assigned",
-        "databaseSize": "Database size"
+        "databaseSize": "Database size",
+        "imageCount": "Image count",
+        "imagesSize": "Image storage"
       }
     }
   },
@@ -366,6 +368,7 @@
     "failedDuplicate": "Failed to duplicate note. Please try again.",
     "menuOptions": "Note options",
     "assignItem": "Assign item",
+    "removeItem": "Remove item",
     "unassign": "Unassign",
     "assignedTo": "Assigned to {{name}}",
     "completedSuggestions": "Suggestions from completed items"
@@ -415,6 +418,25 @@
     "unsharedSuccess": "Note unshared successfully!",
     "failedUnshare": "Failed to unshare note. Please try again."
   },
+  "images": {
+    "openLightbox": "View {{filename}}",
+    "moreImages": "View {{count}} more images",
+    "moreImagesBadge": "{{count}} more images",
+    "lightboxPrevious": "Previous image",
+    "lightboxNext": "Next image",
+    "lightboxCounter": "{{current}} / {{total}}",
+    "addImage": "Add image",
+    "dropOverlay": "Drop image to add",
+    "removeImage": "Remove {{filename}}",
+    "removedToast": "Image removed",
+    "uploading": "Uploading… {{percent}}%",
+    "uploadFailed": "Upload failed",
+    "retryUpload": "Retry uploading {{filename}}",
+    "dismissUpload": "Dismiss {{filename}}",
+    "errorWrongType": "Only images can be attached.",
+    "errorTooLarge": "Image exceeds the {{maxMB}} MB limit.",
+    "errorTooMany": "Notes can have up to {{max}} images."
+  },
   "serviceWorker": {
     "updatePrompt": "New app update is available! Click OK to refresh"
   },
@@ -431,6 +453,8 @@
     "fileTypesJson": ".json files",
     "invalidFileType": "Invalid file type. Please select a .json or .zip file.",
     "invalidFileTypeJson": "Invalid file type. Please select a .json file.",
+    "importedNotes_few": "Imported {{count}} notes",
+    "importedNotes_many": "Imported {{count}} notes",
     "importedNotes_one": "Imported {{count}} note",
     "importedNotes_other": "Imported {{count}} notes",
     "skipped": "({{count}} skipped)",

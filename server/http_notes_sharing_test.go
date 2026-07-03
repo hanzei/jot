@@ -242,6 +242,29 @@ func TestPerUserNoteState(t *testing.T) {
 		assert.True(t, collabNote.Pinned, "collaborator should see the note as pinned")
 	})
 
+	t.Run("shared note is placed at the top of the collaborator's list", func(t *testing.T) {
+		ts := setupTestServer(t)
+		owner := ts.createTestUser(t, "owner", "password123", false)
+		collab := ts.createTestUser(t, "collab", "password123", false)
+
+		// The collaborator already has a note of their own.
+		ownNote, err := collab.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "Collab's own note"})
+		require.NoError(t, err)
+
+		shared, err := owner.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "Shared note"})
+		require.NoError(t, err)
+		require.NoError(t, owner.Client.ShareNote(t.Context(), shared.ID, collab.User.ID))
+
+		// The shared note is inserted at position 0 with the collaborator's
+		// existing notes shifted down, so it sorts ahead of their own note
+		// deterministically rather than tying at position 0.
+		notes, err := collab.Client.ListNotes(t.Context(), nil)
+		require.NoError(t, err)
+		require.Len(t, notes, 2)
+		assert.Equal(t, shared.ID, notes[0].ID, "shared note should be first")
+		assert.Equal(t, ownNote.ID, notes[1].ID, "collaborator's existing note should be shifted down")
+	})
+
 	t.Run("labels applied by collaborator are only visible to that collaborator", func(t *testing.T) {
 		ts := setupTestServer(t)
 		owner := ts.createTestUser(t, "owner", "password123", false)

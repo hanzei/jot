@@ -93,6 +93,23 @@ jest.mock('../src/hooks/useNotes', () => ({
   }),
 }));
 
+jest.mock('../src/hooks/useNoteImages', () => ({
+  __esModule: true,
+  useUploadNoteImage: () => ({
+    mutateAsync: jest.fn(),
+  }),
+  useDeleteNoteImage: () => ({
+    mutateAsync: jest.fn(),
+  }),
+}));
+
+jest.mock('../src/hooks/usePendingImageUploads', () => ({
+  __esModule: true,
+  usePendingImageUploads: () => [],
+  useRetryPendingImageUpload: () => ({ mutate: jest.fn() }),
+  useDismissPendingImageUpload: () => ({ mutate: jest.fn() }),
+}));
+
 jest.mock('../src/hooks/useOfflineNotes', () => ({
   __esModule: true,
   useOfflineNote: () => mockUseOfflineNote(),
@@ -109,18 +126,22 @@ jest.mock('../src/components/LabelPicker', () => ({
   default: () => null,
 }));
 
-jest.mock('react-i18next', () => ({
-  __esModule: true,
-  useTranslation: () => ({
-    t: (key: string, options?: { count?: number }) => {
-      if (key === 'note.completedItems') {
-        return `${options?.count ?? 0} completed items`;
-      }
-      return key;
-    },
-    i18n: { language: 'en' },
-  }),
-}));
+jest.mock('react-i18next', () => {
+  // Stable `t` identity across renders, mirroring production: an unstable `t`
+  // recreates flushSave every render, which re-fires the unmount-flush effect
+  // cleanup and distorts the save flow under test.
+  const t = (key: string, options?: { count?: number }) => {
+    if (key === 'note.completedItems') {
+      return `${options?.count ?? 0} completed items`;
+    }
+    return key;
+  };
+  const i18n = { language: 'en' };
+  return {
+    __esModule: true,
+    useTranslation: () => ({ t, i18n }),
+  };
+});
 
 jest.mock('../src/theme/ThemeContext', () => ({
   __esModule: true,
@@ -205,6 +226,7 @@ describe('NoteEditorScreen exit save behavior', () => {
   });
 
   afterEach(() => {
+    jest.useRealTimers();
     jest.restoreAllMocks();
   });
 
@@ -312,6 +334,44 @@ describe('NoteEditorScreen exit save behavior', () => {
 
     await waitFor(() => { expect(mockDispatch).toHaveBeenCalledWith(event.data.action); });
     expect(alertSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not drop edits typed while a save is in flight', async () => {
+    jest.useFakeTimers();
+    // First create stays in flight until we resolve it manually.
+    let resolveCreate!: (value: { id: string }) => void;
+    mockCreateMutateAsync.mockImplementation(
+      () => new Promise<{ id: string }>((resolve) => { resolveCreate = resolve; }),
+    );
+
+    const { getByTestId } = render(<NoteEditorScreen />);
+    fireEvent.changeText(getByTestId('note-content-input'), 'Hello');
+
+    // Fire the debounced autosave; the create request is now in flight.
+    act(() => { jest.advanceTimersByTime(1500); });
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1);
+
+    // Type more while the save is still in flight.
+    fireEvent.changeText(getByTestId('note-content-input'), 'Hello world');
+
+    // Let the in-flight create finish. This must NOT mark the mid-save edit clean.
+    await act(async () => { resolveCreate({ id: 'created-note-id' }); });
+
+    // Exiting must flush the mid-save edit instead of leaving without saving.
+    const beforeRemove = getBeforeRemoveHandler()!;
+    const event = makeEvent();
+    act(() => { beforeRemove(event); });
+    expect(event.preventDefault).toHaveBeenCalled();
+
+    await waitFor(() => {
+      expect(mockUpdateMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'created-note-id',
+          data: expect.objectContaining({ content: 'Hello world' }),
+        }),
+      );
+    });
+    await waitFor(() => { expect(mockDispatch).toHaveBeenCalledWith(event.data.action); });
   });
 
   it('does not block navigation when there are no pending changes', () => {

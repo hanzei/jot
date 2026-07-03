@@ -31,6 +31,12 @@ func (s *NoteStore) Create(ctx context.Context, userID, noteID, title, content s
 	return s.inner.Create(ctx, userID, noteID, title, content, noteType, color)
 }
 
+func (s *NoteStore) CreateWithItems(ctx context.Context, userID, noteID, title, content string, noteType NoteType, color string, items []NewNoteItem) (_ *Note, err error) {
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.CreateWithItems", &err)
+	defer end()
+	return s.inner.CreateWithItems(ctx, userID, noteID, title, content, noteType, color, items)
+}
+
 func (s *NoteStore) Duplicate(ctx context.Context, source *Note, userID, clientID string, itemIDs map[string]string) (_ *Note, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.Duplicate", &err)
 	defer end()
@@ -67,7 +73,7 @@ func (s *NoteStore) Update(ctx context.Context, id string, userID string, title,
 	return s.inner.Update(ctx, id, userID, title, content, color, pinned, archived, checkedItemsCollapsed, baseVersion)
 }
 
-func (s *NoteStore) Delete(ctx context.Context, id string, userID string) (err error) {
+func (s *NoteStore) Delete(ctx context.Context, id string, userID string) (_ []string, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.Delete", &err,
 		attribute.String("note.id", id),
 	)
@@ -91,7 +97,7 @@ func (s *NoteStore) RestoreFromTrash(ctx context.Context, id string, userID stri
 	return s.inner.RestoreFromTrash(ctx, id, userID)
 }
 
-func (s *NoteStore) DeleteFromTrash(ctx context.Context, id string, userID string) (err error) {
+func (s *NoteStore) DeleteFromTrash(ctx context.Context, id string, userID string) (_ []string, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.DeleteFromTrash", &err,
 		attribute.String("note.id", id),
 	)
@@ -99,19 +105,19 @@ func (s *NoteStore) DeleteFromTrash(ctx context.Context, id string, userID strin
 	return s.inner.DeleteFromTrash(ctx, id, userID)
 }
 
-func (s *NoteStore) EmptyTrash(ctx context.Context, userID string) (_ []DeletedNoteAudience, err error) {
+func (s *NoteStore) EmptyTrash(ctx context.Context, userID string) (_ []DeletedNoteAudience, _ []string, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.EmptyTrash", &err)
 	defer end()
 	return s.inner.EmptyTrash(ctx, userID)
 }
 
-func (s *NoteStore) DeleteAllByUser(ctx context.Context, userID string) (_ int, err error) {
+func (s *NoteStore) DeleteAllByUser(ctx context.Context, userID string) (_ int, _ []string, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.DeleteAllByUser", &err)
 	defer end()
 	return s.inner.DeleteAllByUser(ctx, userID)
 }
 
-func (s *NoteStore) PurgeOldTrashedNotes(ctx context.Context, olderThan time.Duration) (err error) {
+func (s *NoteStore) PurgeOldTrashedNotes(ctx context.Context, olderThan time.Duration) (_ []string, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.PurgeOldTrashedNotes", &err)
 	defer end()
 	return s.inner.PurgeOldTrashedNotes(ctx, olderThan)
@@ -244,6 +250,58 @@ func (s *NoteStore) RemoveLabelFromNote(ctx context.Context, noteID, labelID, us
 	)
 	defer end()
 	return s.inner.RemoveLabelFromNote(ctx, noteID, labelID, userID)
+}
+
+func (s *NoteStore) CreateNoteImage(ctx context.Context, noteID, uploaderID, filename, contentType string, sizeBytes int64, sha256 string, width, height, maxImages int) (_ *NoteImage, err error) {
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.CreateNoteImage", &err,
+		attribute.String("note.id", noteID),
+	)
+	defer end()
+	return s.inner.CreateNoteImage(ctx, noteID, uploaderID, filename, contentType, sizeBytes, sha256, width, height, maxImages)
+}
+
+func (s *NoteStore) GetNoteImageByID(ctx context.Context, imageID string) (_ *NoteImage, err error) {
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.GetNoteImageByID", &err,
+		attribute.String("image.id", imageID),
+	)
+	defer end()
+	return s.inner.GetNoteImageByID(ctx, imageID)
+}
+
+func (s *NoteStore) GetNoteImagesByNoteID(ctx context.Context, noteID string) (_ []NoteImage, err error) {
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.GetNoteImagesByNoteID", &err,
+		attribute.String("note.id", noteID),
+	)
+	defer end()
+	return s.inner.GetNoteImagesByNoteID(ctx, noteID)
+}
+
+func (s *NoteStore) GetNoteImageCountByNoteID(ctx context.Context, noteID string) (_ int, err error) {
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.GetNoteImageCountByNoteID", &err,
+		attribute.String("note.id", noteID),
+	)
+	defer end()
+	return s.inner.GetNoteImageCountByNoteID(ctx, noteID)
+}
+
+func (s *NoteStore) DeleteNoteImage(ctx context.Context, imageID string) (_ *NoteImage, err error) {
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.DeleteNoteImage", &err,
+		attribute.String("image.id", imageID),
+	)
+	defer end()
+	return s.inner.DeleteNoteImage(ctx, imageID)
+}
+
+func (s *NoteStore) GetNoteImageRefCount(ctx context.Context, sha256 string) (_ int, err error) {
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.GetNoteImageRefCount", &err)
+	defer end()
+	return s.inner.GetNoteImageRefCount(ctx, sha256)
+}
+
+func (s *NoteStore) GetNoteImageSHA256sForUserTx(ctx context.Context, tx *sql.Tx, userID string) (_ []string, err error) {
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.GetNoteImageSHA256sForUserTx", &err)
+	defer end()
+	return s.inner.GetNoteImageSHA256sForUserTx(ctx, tx, userID)
 }
 
 func (s *NoteStore) GetOwnedNotesForExport(ctx context.Context, userID string) (_ []*Note, err error) {

@@ -45,7 +45,12 @@ import { useToast } from '../hooks/useToast';
 import ColorPicker from '../components/ColorPicker';
 import LabelPicker from '../components/LabelPicker';
 import AssigneePicker from '../components/AssigneePicker';
-import { buildCollaborators, generateId, VALIDATION, type Collaborator, type NoteType, type CreateNoteRequest, type UpdateNoteRequest, type UpdateListNoteRequest, type UpdateTextNoteRequest, type PatchNoteItemRequest, type Label } from '@jot/shared';
+import AddImageActionSheet from '../components/AddImageActionSheet';
+import { useUploadNoteImage, useDeleteNoteImage } from '../hooks/useNoteImages';
+import { usePendingImageUploads, useRetryPendingImageUpload, useDismissPendingImageUpload } from '../hooks/usePendingImageUploads';
+import type { ImageUploadFile } from '../api/images';
+import { buildCollaborators, generateId, VALIDATION, IMAGE_MAX_PER_NOTE, type Collaborator, type NoteType, type NoteImage, type CreateNoteRequest, type UpdateNoteRequest, type UpdateListNoteRequest, type UpdateTextNoteRequest, type PatchNoteItemRequest, type Label } from '@jot/shared';
+import { validateImageFile as validateImageFileRaw, IMAGE_MAX_MB } from '../utils/imageValidation';
 import { useAuth } from '../store/AuthContext';
 import { useUsers } from '../store/UsersContext';
 import { useTheme } from '../theme/ThemeContext';
@@ -71,6 +76,7 @@ import {
 } from './noteEditor/listItemModel';
 import { MarkdownToolbarContent } from './noteEditor/EditorToolbars';
 import CheckedItemsSection, { type ListItemHandlers } from './noteEditor/CheckedItemsSection';
+import NoteImageGallery, { type PendingImageUpload } from '../components/NoteImageGallery';
 import { styles } from './noteEditor/styles';
 import { animateListReflow, isReduceMotionEnabledSync } from '../utils/layoutAnimation';
 import ActiveListRow from './noteEditor/ActiveListRow';
@@ -170,6 +176,27 @@ export default function NoteEditorScreen() {
   const deleteItemMutation = useDeleteNoteItem();
   const reorderItemsMutation = useReorderNoteItems();
   const toggleItemCompletedMutation = useToggleNoteItemCompleted();
+  const uploadImageMutation = useUploadNoteImage();
+  const deleteImageMutation = useDeleteNoteImage();
+  const retryPendingImageUploadMutation = useRetryPendingImageUpload();
+  const dismissPendingImageUploadMutation = useDismissPendingImageUpload();
+  // Uploads queued while offline (or after a transient failure) — persisted to
+  // pending_image_uploads, so they survive navigating away or an app restart
+  // until the sync engine's drain flushes them (issue #618).
+  const pendingImageUploads = usePendingImageUploads(noteId);
+
+  // Add-image UX state: the action sheet, in-flight/failed uploads rendered as
+  // gallery placeholders, and images hidden pending the deferred-delete undo
+  // window (spec §3.1/§6). `imageUploads` only ever holds attempts currently
+  // in flight online or that failed permanently — anything falling back to the
+  // offline queue is handed off to `pendingImageUploads` above instead.
+  const [addImageSheetVisible, setAddImageSheetVisible] = useState(false);
+  const [imageUploads, setImageUploads] = useState<PendingImageUpload[]>([]);
+  const displayedImageUploads = useMemo(
+    () => [...imageUploads, ...pendingImageUploads],
+    [imageUploads, pendingImageUploads],
+  );
+  const [removedImageIds, setRemovedImageIds] = useState<Set<string>>(new Set());
 
   // Show a toast when another user updates this note while editor is open
   useSSESubscription(noteId, useCallback(() => {
@@ -200,6 +227,11 @@ export default function NoteEditorScreen() {
   const isInitializedRef = useRef(false);
   const intentionalExitRef = useRef(false);
   const hasPendingChangesRef = useRef(false);
+  // Bumped on every edit (markDirtyAndScheduleUpdate). flushSave snapshots it
+  // alongside the state refs so it can tell whether new edits arrived while its
+  // network calls were in flight — clearing the dirty flag then would mark
+  // those edits clean without ever saving them.
+  const editSeqRef = useRef(0);
   const saveInFlightRef = useRef<Promise<boolean> | null>(null);
   const requiresHydrationRef = useRef(initialNoteId !== null);
 
@@ -309,6 +341,160 @@ export default function NoteEditorScreen() {
   reorderItemsRef.current = reorderItemsMutation.mutateAsync;
   const toggleItemCompletedRef = useRef(toggleItemCompletedMutation.mutateAsync);
   toggleItemCompletedRef.current = toggleItemCompletedMutation.mutateAsync;
+
+  const displayedImageUploadsRef = useRef(displayedImageUploads);
+  displayedImageUploadsRef.current = displayedImageUploads;
+  const pendingImageUploadsRef = useRef(pendingImageUploads);
+  pendingImageUploadsRef.current = pendingImageUploads;
+  const imageUploadFilesRef = useRef(new Map<string, ImageUploadFile>());
+  const activeImageUploadIdsRef = useRef(new Set<string>());
+
+  const displayedImages = useMemo(
+    () => (existingNote?.images ?? []).filter((img) => !removedImageIds.has(img.id)),
+    [existingNote?.images, removedImageIds],
+  );
+
+  const validateImageFile = useCallback((file: ImageUploadFile): string | null => {
+    const error = validateImageFileRaw(file);
+    if (error === 'wrongType') return t('images.errorWrongType');
+    if (error === 'tooLarge') return t('images.errorTooLarge', { maxMB: IMAGE_MAX_MB });
+    return null;
+  }, [t]);
+
+  const removeUploadTile = useCallback((uploadId: string) => {
+    setImageUploads((prev) => prev.filter((u) => u.id !== uploadId));
+    imageUploadFilesRef.current.delete(uploadId);
+    // Only hits the DB when this tile had actually fallen back to the
+    // persisted offline queue (#618) — the common ephemeral uploading/error
+    // tile was never persisted, so there's nothing to cancel.
+    if (pendingImageUploadsRef.current.some((u) => u.id === uploadId)) {
+      dismissPendingImageUploadMutation.mutate(uploadId);
+    }
+  }, [dismissPendingImageUploadMutation]);
+
+  const runImageUpload = useCallback((uploadId: string, file: ImageUploadFile) => {
+    const currentNoteId = noteIdRef.current;
+    if (!currentNoteId) {
+      // The note id can null out mid-flight (e.g. the share-target redirect
+      // resets it) between queuing the placeholder tile and getting here —
+      // surface it as a failed upload instead of leaving the tile spinning
+      // forever with no retry/dismiss affordance.
+      setImageUploads((prev) => prev.map((u) => (u.id === uploadId ? { ...u, status: 'error', errorMessage: t('images.uploadFailed') } : u)));
+      return;
+    }
+    // Guard against a duplicate concurrent request for the same upload (a
+    // rapid double-tap on Retry before React re-renders the tile out of its
+    // pressable state).
+    if (activeImageUploadIdsRef.current.has(uploadId)) return;
+    activeImageUploadIdsRef.current.add(uploadId);
+    uploadImageMutation.mutateAsync({
+      noteId: currentNoteId,
+      uploadId,
+      file,
+      onProgress: (percent) => {
+        setImageUploads((prev) => prev.map((u) => (u.id === uploadId ? { ...u, progress: percent } : u)));
+      },
+    }).then((result) => {
+      activeImageUploadIdsRef.current.delete(uploadId);
+      // Either it uploaded, or it fell back to the persisted offline queue
+      // (issue #618) — either way the ephemeral tile is done; a queued upload
+      // is now rendered from `pendingImageUploads` instead, under the same id.
+      setImageUploads((prev) => prev.filter((u) => u.id !== uploadId));
+      imageUploadFilesRef.current.delete(uploadId);
+      if (result.status === 'queued') showToast(t('images.uploadQueuedToast'), 'info');
+    }).catch((error) => {
+      activeImageUploadIdsRef.current.delete(uploadId);
+      console.error('Failed to upload note image:', error);
+      const status = (error as { response?: { status?: number } })?.response?.status;
+      const message = status === 413 ? t('images.errorTooLarge', { maxMB: IMAGE_MAX_MB }) : t('images.uploadFailed');
+      setImageUploads((prev) => prev.map((u) => (u.id === uploadId ? { ...u, status: 'error', errorMessage: message } : u)));
+    });
+  }, [showToast, t, uploadImageMutation]);
+
+  const startImageUpload = useCallback((file: ImageUploadFile) => {
+    const id = generateId();
+    imageUploadFilesRef.current.set(id, file);
+    setImageUploads((prev) => [...prev, { id, filename: file.name, previewUri: file.uri, progress: 0, status: 'uploading' }]);
+    runImageUpload(id, file);
+  }, [runImageUpload]);
+
+  const retryImageUpload = useCallback((uploadId: string) => {
+    const file = imageUploadFilesRef.current.get(uploadId);
+    if (file) {
+      setImageUploads((prev) => prev.map((u) => (u.id === uploadId ? { ...u, status: 'uploading', progress: 0, errorMessage: undefined } : u)));
+      runImageUpload(uploadId, file);
+      return;
+    }
+    // Not an in-flight ephemeral upload — a persisted offline upload that hit
+    // a permanent error; re-queue it so the next drain retries it (#618).
+    retryPendingImageUploadMutation.mutate(uploadId);
+  }, [retryPendingImageUploadMutation, runImageUpload]);
+
+  // Entry point for the add-image action sheet. Validates each file and
+  // enforces the per-note image cap client-side (the server enforces it
+  // authoritatively) before starting an upload per valid file.
+  const queueImageFiles = useCallback((files: ImageUploadFile[]) => {
+    if (files.length === 0) return;
+
+    const noteImages = existingNote?.images ?? [];
+    let remainingSlots = IMAGE_MAX_PER_NOTE
+      - noteImages.length
+      - displayedImageUploadsRef.current.filter((u) => u.status !== 'error').length;
+
+    // Collect distinct error messages across the whole batch instead of
+    // showing (and immediately overwriting) one per invalid file.
+    const errors = new Set<string>();
+    for (const file of files) {
+      const validationError = validateImageFile(file);
+      if (validationError) {
+        errors.add(validationError);
+        continue;
+      }
+      if (remainingSlots <= 0) {
+        errors.add(t('images.errorTooMany', { max: IMAGE_MAX_PER_NOTE }));
+        break;
+      }
+      remainingSlots -= 1;
+      startImageUpload(file);
+    }
+    if (errors.size > 0) showToast(Array.from(errors).join(' '), 'error');
+  }, [existingNote?.images, showToast, startImageUpload, t, validateImageFile]);
+
+  const handleImagePermissionDenied = useCallback((source: 'camera' | 'library') => {
+    showToast(source === 'camera' ? t('images.cameraPermissionDenied') : t('images.libraryPermissionDenied'), 'error');
+  }, [showToast, t]);
+
+  // Removal is client-deferred: the tile hides immediately and an undo toast
+  // appears; the DELETE only fires once the toast's own timer expires with no
+  // undo (no restore endpoint exists for images, unlike notes/archive above).
+  // Driven entirely by the toast's onExpire — not a second independent timer —
+  // so the delete can never race ahead of (or lag) the visible Undo button.
+  const removeNoteImage = useCallback((image: NoteImage) => {
+    const currentNoteId = noteIdRef.current;
+    if (!currentNoteId) return;
+    setRemovedImageIds((prev) => new Set(prev).add(image.id));
+
+    const clearRemovalState = () => {
+      setRemovedImageIds((prev) => {
+        const next = new Set(prev);
+        next.delete(image.id);
+        return next;
+      });
+    };
+
+    showToast(t('images.removedToast'), 'info', {
+      label: t('dashboard.undo'),
+      onPress: clearRemovalState,
+      onExpire: () => {
+        deleteImageMutation.mutateAsync({ noteId: currentNoteId, imageId: image.id })
+          .catch((error) => {
+            console.error('Failed to delete note image:', error);
+          })
+          .finally(clearRemovalState);
+      },
+    });
+  }, [deleteImageMutation, showToast, t]);
+
   // Baseline of the last-saved state, used to diff local edits into granular
   // per-item operations (and field-only scalar patches) instead of re-sending
   // the whole note — so a save here can't overwrite another device's edits.
@@ -472,6 +658,18 @@ export default function NoteEditorScreen() {
       const currentColor = colorRef.current;
       const currentPinned = pinnedRef.current;
       const currentArchived = archivedRef.current;
+      const capturedEditSeq = editSeqRef.current;
+
+      // Clear the dirty flag only if no edit arrived while the awaited network
+      // calls below were in flight. A mid-save keystroke re-marks dirty and
+      // schedules its own debounced save; unconditionally clearing here would
+      // wipe that flag, the debounced flushSave would early-return on "no
+      // pending changes", and the mid-save edit would be silently lost on exit.
+      const clearPendingUnlessEditedMidSave = () => {
+        if (editSeqRef.current === capturedEditSeq) {
+          hasPendingChangesRef.current = false;
+        }
+      };
 
       const captureBaseline = () => {
         savedScalarsRef.current = {
@@ -507,7 +705,7 @@ export default function NoteEditorScreen() {
               color: !isWhiteHexColor(currentColor) ? currentColor : undefined,
             };
         const newNote = await createMutateRef.current(req);
-        hasPendingChangesRef.current = false;
+        clearPendingUnlessEditedMidSave();
         // The server honors the client-supplied item IDs, so the items we just
         // sent become the baseline for subsequent granular edits.
         captureBaseline();
@@ -541,7 +739,7 @@ export default function NoteEditorScreen() {
           await persistItemDiff(currentNoteId, currentItems);
         }
 
-        hasPendingChangesRef.current = false;
+        clearPendingUnlessEditedMidSave();
         captureBaseline();
         if (!isMountedRef.current || unmounting) return true;
         setSaveError(null);
@@ -577,6 +775,7 @@ export default function NoteEditorScreen() {
   }, [flushSave]);
 
   const markDirtyAndScheduleUpdate = useCallback(() => {
+    editSeqRef.current += 1;
     hasPendingChangesRef.current = true;
     scheduleUpdate();
   }, [scheduleUpdate]);
@@ -907,7 +1106,10 @@ export default function NoteEditorScreen() {
   const handleItemTextChange = useCallback(
     (index: number, text: string) => {
       if (!text.includes('\n')) {
-        setItems((prev) => prev.map((item, i) => (i === index ? { ...item, text } : item)));
+        // Clamp like the paste paths below: the server rejects longer item text
+        // with a 400, which would wedge the save (or dead-letter it offline).
+        const clamped = text.slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH);
+        setItems((prev) => prev.map((item, i) => (i === index ? { ...item, text: clamped } : item)));
         markDirtyAndScheduleUpdate();
         return;
       }
@@ -1008,7 +1210,74 @@ export default function NoteEditorScreen() {
     autoFocusClearTimerRef.current = setTimeout(() => { autoFocusItemIdRef.current = null; }, 500);
   }, [markDirtyAndScheduleUpdate]);
 
-  const handleInsertItemAfter = useCallback((index: number) => {
+  // handleItemEnterAtCursor mirrors the webapp's Enter-key handling:
+  //  - cursor at the very start of a non-empty item -> insert a blank item
+  //    before it (leaving its own text untouched), focus the new item;
+  //  - cursor mid-text -> split the item into two at the cursor, focus the
+  //    new (second) item with its cursor at the start;
+  //  - cursor at the end (or item is empty) -> append a blank item after
+  //    (previous default behavior).
+  // Newly created items inherit the current item's group (parentId) and
+  // assignee; completed always resets to false.
+  const handleItemEnterAtCursor = useCallback((index: number, cursorPosition: number) => {
+    const currentItem = itemsRef.current[index];
+    if (!currentItem) return;
+
+    const text = currentItem.text;
+    const cursorPos = Math.max(0, Math.min(cursorPosition, text.length));
+
+    if (cursorPos === 0 && text.length > 0) {
+      const newId = nextTempId();
+      const newItemRef = getItemRef(newId);
+      setItems((prev) => {
+        const newItem: LocalItem = {
+          id: newId,
+          text: '',
+          completed: false,
+          position: index,
+          parentId: prev[index]?.parentId ?? null,
+          assigned_to: prev[index]?.assigned_to ?? '',
+        };
+        const next = [...prev.slice(0, index), newItem, ...prev.slice(index)];
+        return next.map((item, i) => ({ ...item, position: i }));
+      });
+      markDirtyAndScheduleUpdate();
+      setTimeout(() => newItemRef.current?.focus(), 50);
+      return;
+    }
+
+    if (cursorPos > 0 && cursorPos < text.length) {
+      const before = text.slice(0, cursorPos);
+      const after = text.slice(cursorPos);
+      const newId = nextTempId();
+      const newItemRef = getItemRef(newId);
+      setItems((prev) => {
+        const newItem: LocalItem = {
+          id: newId,
+          text: after,
+          completed: false,
+          position: index + 1,
+          parentId: prev[index]?.parentId ?? null,
+          assigned_to: prev[index]?.assigned_to ?? '',
+        };
+        const next = [
+          ...prev.slice(0, index),
+          { ...prev[index], text: before },
+          newItem,
+          ...prev.slice(index + 1),
+        ];
+        return next.map((item, i) => ({ ...item, position: i }));
+      });
+      markDirtyAndScheduleUpdate();
+      setTimeout(() => {
+        newItemRef.current?.focus();
+        // Not all TextInput host implementations (e.g. test mocks) provide
+        // this imperative method, so guard the call.
+        newItemRef.current?.setSelection?.(0, 0);
+      }, 50);
+      return;
+    }
+
     const newId = nextTempId();
     const newItemRef = getItemRef(newId);
     setItems((prev) => {
@@ -1505,12 +1774,12 @@ export default function NoteEditorScreen() {
       onToggle: (itemId, completed) => { void handleItemCompletedToggle(itemId, completed); },
       onChangeText: handleItemTextChange,
       onDelete: handleDeleteItem,
-      onInsertAfter: handleInsertItemAfter,
+      onEnterAtCursor: handleItemEnterAtCursor,
       onBackspaceOnEmpty: handleBackspaceOnEmpty,
       onAssignPress: openAssigneePicker,
       onFocus: handleFocusListItem,
     }),
-    [handleItemCompletedToggle, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, openAssigneePicker, handleFocusListItem],
+    [handleItemCompletedToggle, handleItemTextChange, handleDeleteItem, handleItemEnterAtCursor, handleBackspaceOnEmpty, openAssigneePicker, handleFocusListItem],
   );
 
   const renderActiveRow = useCallback(
@@ -1543,7 +1812,7 @@ export default function NoteEditorScreen() {
             onToggle: () => listItemHandlers.onToggle(item.id, !item.completed),
             onChangeText: (text) => listItemHandlers.onChangeText(originalIndex, text),
             onDelete: () => listItemHandlers.onDelete(originalIndex),
-            onSubmitEditing: () => listItemHandlers.onInsertAfter(originalIndex),
+            onSubmitEditing: (cursorPos) => listItemHandlers.onEnterAtCursor(originalIndex, cursorPos),
             onBackspaceOnEmpty: () => listItemHandlers.onBackspaceOnEmpty(originalIndex),
             onAssignPress: () => listItemHandlers.onAssignPress(item.id),
             onFocus: (event) => listItemHandlers.onFocus(item.id, event),
@@ -1702,6 +1971,17 @@ export default function NoteEditorScreen() {
         contentContainerStyle={styles.scrollContentContainer}
         keyboardShouldPersistTaps="handled"
       >
+        {(displayedImages.length > 0 || displayedImageUploads.length > 0) && (
+          <NoteImageGallery
+            images={displayedImages}
+            editable
+            uploads={displayedImageUploads}
+            onRemove={removeNoteImage}
+            onRetryUpload={retryImageUpload}
+            onDismissUpload={removeUploadTile}
+          />
+        )}
+
         {noteType === 'list' && (
           <TextInput
             ref={titleInputRef}
@@ -1912,6 +2192,20 @@ export default function NoteEditorScreen() {
           </TouchableOpacity>
         )}
 
+        {/* Add image. Images require a server-backed note_id (spec §15.6 — no
+            draft/orphan uploads), so this is gated the same as the label
+            button. Offline uploads are queued and flushed on reconnect (#618). */}
+        {noteId && !isLocalId(noteId) && (
+          <TouchableOpacity
+            onPress={() => setAddImageSheetVisible(true)}
+            style={styles.toolbarBtn}
+            testID="toolbar-add-image-btn"
+            accessibilityLabel={t('images.addImage')}
+          >
+            <Ionicons name="image-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
+          </TouchableOpacity>
+        )}
+
         <View style={styles.toolbarSpacer} />
 
         {/* Delete */}
@@ -1925,6 +2219,17 @@ export default function NoteEditorScreen() {
         currentColor={color}
         onSelect={handleColorSelect}
         onClose={() => setColorPickerVisible(false)}
+      />
+
+      <AddImageActionSheet
+        visible={addImageSheetVisible}
+        onClose={() => setAddImageSheetVisible(false)}
+        onPick={queueImageFiles}
+        onPermissionDenied={handleImagePermissionDenied}
+        remainingSlots={Math.max(
+          IMAGE_MAX_PER_NOTE - displayedImages.length - displayedImageUploads.filter((u) => u.status !== 'error').length,
+          0,
+        )}
       />
 
       {noteId && (

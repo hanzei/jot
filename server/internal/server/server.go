@@ -18,6 +18,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/hanzei/jot/server/internal/auth"
+	"github.com/hanzei/jot/server/internal/blobstore"
 	"github.com/hanzei/jot/server/internal/config"
 	"database/sql"
 
@@ -53,6 +54,7 @@ type Server struct {
 	httpServer      *http.Server
 	metricsServer   *http.Server
 	staticRoot      *os.Root
+	imageStore      *blobstore.ImageStore
 	startErr        error
 	startReady      chan struct{}
 	startReadyOnce  sync.Once
@@ -110,16 +112,24 @@ func New(cfg *config.Config) (*Server, error) {
 		return nil, fmt.Errorf("initialize SSE hub: %w", err)
 	}
 
-	authHandler := handlers.NewAuthHandler(userStore, noteStore, sessionService, userSettingsStore, hub, cfg.RegistrationEnabled, cfg.PasswordMinLength)
-	notesHandler, err := handlers.NewNotesHandler(noteStore, userStore, labelStore, hub)
+	imageStore, err := blobstore.NewImageStore(cfg.UploadDir)
 	if err != nil {
 		cancel()
+		_ = db.Close()
+		return nil, fmt.Errorf("initialize image store: %w", err)
+	}
+
+	authHandler := handlers.NewAuthHandler(userStore, noteStore, sessionService, userSettingsStore, hub, cfg.RegistrationEnabled, cfg.PasswordMinLength)
+	notesHandler, err := handlers.NewNotesHandler(noteStore, userStore, labelStore, hub, imageStore, int64(cfg.UploadMaxBytes))
+	if err != nil {
+		cancel()
+		_ = imageStore.Close()
 		_ = db.Close()
 		return nil, fmt.Errorf("initialize notes handler: %w", err)
 	}
 	labelsHandler := handlers.NewLabelsHandler(noteStore, labelStore, hub)
 	eventsHandler := handlers.NewEventsHandler(hub)
-	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, userSettingsStore, cfg.DBDSN, cfg.PasswordMinLength)
+	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, userSettingsStore, imageStore, cfg.DBDSN, cfg.PasswordMinLength)
 	sessionsHandler := handlers.NewSessionsHandler(sessionStore)
 	patsHandler := handlers.NewPATsHandler(patStore)
 
@@ -141,17 +151,28 @@ func New(cfg *config.Config) (*Server, error) {
 		patsHandler:     patsHandler,
 		noteStore:       noteStore,
 		labelStore:      labelStore,
+		imageStore:      imageStore,
 	}
 
 	startPeriodicTask(&s.bgWg, ctx, time.Hour, false, func() error {
 		return sessionStore.DeleteExpired(ctx)
 	}, "delete expired sessions")
 	startPeriodicTask(&s.bgWg, ctx, time.Hour, true, func() error {
-		return noteStore.PurgeOldTrashedNotes(ctx, 7*24*time.Hour)
+		shas, err := noteStore.PurgeOldTrashedNotes(ctx, 7*24*time.Hour)
+		if err != nil {
+			return err
+		}
+		for _, sha := range shas {
+			if err := blobstore.ReclaimIfOrphaned(ctx, noteStore, imageStore, sha); err != nil {
+				logrus.WithError(err).WithField("sha256", sha).Error("Failed to reclaim orphaned note image blob/thumbnail")
+			}
+		}
+		return nil
 	}, "purge old trashed notes")
 
 	if err := s.setupRoutes(); err != nil {
 		cancel()
+		_ = imageStore.Close()
 		_ = db.Close()
 		return nil, fmt.Errorf("setup routes: %w", err)
 	}
@@ -225,6 +246,11 @@ func (s *Server) setupRoutes() error {
 			r.Delete("/notes/{id}", s.wrapHandler(s.notesHandler.DeleteNote))
 			r.Post("/notes/{id}/duplicate", s.wrapHandler(s.notesHandler.DuplicateNote))
 
+			r.Post("/notes/{id}/images", s.wrapHandler(s.notesHandler.UploadNoteImage))
+			r.Get("/images/{id}", s.wrapHandler(s.notesHandler.GetNoteImage))
+			r.Get("/images/{id}/thumbnail", s.wrapHandler(s.notesHandler.GetNoteImageThumbnail))
+			r.Delete("/images/{id}", s.wrapHandler(s.notesHandler.DeleteNoteImage))
+
 			r.Post("/notes/{id}/items", s.wrapHandler(s.notesHandler.CreateNoteItem))
 			r.Post("/notes/{id}/items/reorder", s.wrapHandler(s.notesHandler.ReorderNoteItems))
 			r.Patch("/notes/{id}/items/{item_id}", s.wrapHandler(s.notesHandler.UpdateNoteItem))
@@ -255,7 +281,7 @@ func (s *Server) setupRoutes() error {
 			r.With(auth.SessionRequired).Post("/pats", s.wrapHandler(s.patsHandler.CreatePAT))
 			r.With(auth.SessionRequired).Delete("/pats/{id}", s.wrapHandler(s.patsHandler.RevokePAT))
 
-			r.Handle("/mcp", mcphandler.New(s.noteStore, s.labelStore).NewStreamableHTTPHandler())
+			r.Handle("/mcp", mcphandler.New(s.noteStore, s.labelStore, s.imageStore).NewStreamableHTTPHandler())
 		})
 
 		r.Group(func(r chi.Router) {
@@ -436,6 +462,7 @@ func (s *Server) handleAbout(_ http.ResponseWriter, _ *http.Request) (int, any, 
 type configResponse struct {
 	RegistrationEnabled bool `json:"registration_enabled"`
 	PasswordMinLength   int  `json:"password_min_length"`
+	UploadMaxBytes      int  `json:"upload_max_bytes"`
 }
 
 // handleConfig godoc
@@ -449,6 +476,7 @@ func (s *Server) handleConfig(_ http.ResponseWriter, _ *http.Request) (int, any,
 	return http.StatusOK, configResponse{
 		RegistrationEnabled: s.cfg.RegistrationEnabled,
 		PasswordMinLength:   s.cfg.PasswordMinLength,
+		UploadMaxBytes:      s.cfg.UploadMaxBytes,
 	}, nil
 }
 
@@ -460,6 +488,17 @@ func (s *Server) GetDB() *sql.DB {
 	return s.db
 }
 
+const (
+	// cspDefault disallows inline scripts: the webapp is built by Vite with no
+	// inline script tags (PWA registration uses injectRegister: false), so
+	// script-src 'self' holds and CSP acts as a real XSS backstop.
+	// style-src keeps 'unsafe-inline' for React inline style attributes.
+	cspDefault = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; frame-ancestors 'none'"
+	// cspSwaggerUI additionally allows inline scripts because the Swagger UI
+	// page bootstraps itself with an inline <script> block.
+	cspSwaggerUI = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; frame-ancestors 'none'"
+)
+
 func securityHeaders(cookieSecure bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -468,7 +507,11 @@ func securityHeaders(cookieSecure bool) func(http.Handler) http.Handler {
 			h.Set("X-Frame-Options", "DENY")
 			h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 			h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-			h.Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; frame-ancestors 'none'")
+			csp := cspDefault
+			if strings.HasPrefix(r.URL.Path, "/api/docs/") {
+				csp = cspSwaggerUI
+			}
+			h.Set("Content-Security-Policy", csp)
 			if cookieSecure {
 				h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 			}
@@ -632,6 +675,12 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	if s.staticRoot != nil {
 		if err := s.staticRoot.Close(); err != nil {
 			return fmt.Errorf("close static root: %w", err)
+		}
+	}
+
+	if s.imageStore != nil {
+		if err := s.imageStore.Close(); err != nil {
+			return fmt.Errorf("close image store: %w", err)
 		}
 	}
 

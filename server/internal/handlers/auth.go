@@ -139,6 +139,9 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) (int, any, e
 
 	user, err := h.userStore.GetByUsername(r.Context(), req.Username)
 	if err != nil {
+		// Burn the same bcrypt cost as a real password check so response
+		// timing does not reveal whether the username exists.
+		models.CheckPasswordDummy(req.Password)
 		return http.StatusUnauthorized, nil, errors.New("invalid username or password")
 	}
 
@@ -432,6 +435,11 @@ const (
 	jpegQuality             = 85
 	maxSourceDimension      = 4096
 	maxSourcePixels         = maxSourceDimension * maxSourceDimension // ~16 megapixels
+	// multipartOverheadBytes is added on top of a caller's declared max file
+	// size to account for multipart boundary/header bytes when sizing
+	// http.MaxBytesReader. Shared by every single-file multipart upload
+	// endpoint (profile icon, note images).
+	multipartOverheadBytes = int64(64 << 10)
 )
 
 // isOpaqueImage reports whether img is known to have no transparent pixels.
@@ -460,44 +468,74 @@ func flattenAlpha(img image.Image) image.Image {
 	return opaque
 }
 
+// validateImageBounds rejects image dimensions that are too large before a
+// full decode allocates memory for them (decompression-bomb protection).
+// Shared by the profile-icon and note-image upload pipelines.
+func validateImageBounds(cfg image.Config) error {
+	if cfg.Width > maxSourceDimension || cfg.Height > maxSourceDimension {
+		return fmt.Errorf("image dimensions %dx%d exceed maximum %d", cfg.Width, cfg.Height, maxSourceDimension)
+	}
+	if cfg.Width*cfg.Height > maxSourcePixels {
+		return fmt.Errorf("image pixel count %d exceeds maximum %d", cfg.Width*cfg.Height, maxSourcePixels)
+	}
+	return nil
+}
+
+// decodeImageWithBoundsCheck decodes the header first to reject oversized
+// dimensions before a full decode allocates memory for them
+// (decompression-bomb protection, via validateImageBounds), then fully
+// decodes the image — which is also what confirms the bytes are a valid,
+// non-corrupt image in the first place. Shared by the profile-icon and
+// note-image upload pipelines.
+func decodeImageWithBoundsCheck(data []byte) (image.Image, image.Config, error) {
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return nil, image.Config{}, fmt.Errorf("decode image config: %w", err)
+	}
+	if boundsErr := validateImageBounds(cfg); boundsErr != nil {
+		return nil, image.Config{}, boundsErr
+	}
+
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, image.Config{}, fmt.Errorf("decode image: %w", err)
+	}
+
+	return img, cfg, nil
+}
+
 // resizeImage decodes the given image bytes, resizes to fit within
 // maxProfileIconDimension x maxProfileIconDimension (preserving aspect ratio),
 // and re-encodes as JPEG. If the image is already small enough it is still
 // re-encoded as JPEG to normalize the format and compress.
 func resizeImage(data []byte) ([]byte, error) {
-	// Decode only the header to check dimensions before allocating the full image.
-	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	img, cfg, err := decodeImageWithBoundsCheck(data)
 	if err != nil {
-		return nil, fmt.Errorf("decode image config: %w", err)
+		return nil, err
 	}
-	if cfg.Width > maxSourceDimension || cfg.Height > maxSourceDimension {
-		return nil, fmt.Errorf("image dimensions %dx%d exceed maximum %d", cfg.Width, cfg.Height, maxSourceDimension)
-	}
-	if cfg.Width*cfg.Height > maxSourcePixels {
-		return nil, fmt.Errorf("image pixel count %d exceeds maximum %d", cfg.Width*cfg.Height, maxSourcePixels)
-	}
+	return resizeToJPEG(img, cfg, maxProfileIconDimension)
+}
 
-	img, _, err := image.Decode(bytes.NewReader(data))
-	if err != nil {
-		return nil, fmt.Errorf("decode image: %w", err)
-	}
-
-	// Determine opaqueness from the config color model (before a potential
-	// resize converts the image to RGBA and loses the original model info).
+// resizeToJPEG resizes img to fit within maxDim x maxDim (preserving aspect
+// ratio; a no-op if it already fits) and re-encodes it as JPEG. cfg is the
+// image's decoded config, used to determine source opaqueness before a
+// potential resize converts the image to RGBA and loses that information.
+// Shared by the profile-icon and note-image-thumbnail pipelines.
+func resizeToJPEG(img image.Image, cfg image.Config, maxDim int) ([]byte, error) {
 	sourceOpaque := isOpaqueImage(cfg.ColorModel, img)
 
 	bounds := img.Bounds()
 	srcW := bounds.Dx()
 	srcH := bounds.Dy()
 
-	if srcW > maxProfileIconDimension || srcH > maxProfileIconDimension {
+	if srcW > maxDim || srcH > maxDim {
 		var dstW, dstH int
 		if srcW >= srcH {
-			dstW = maxProfileIconDimension
-			dstH = srcH * maxProfileIconDimension / srcW
+			dstW = maxDim
+			dstH = srcH * maxDim / srcW
 		} else {
-			dstH = maxProfileIconDimension
-			dstW = srcW * maxProfileIconDimension / srcH
+			dstH = maxDim
+			dstW = srcW * maxDim / srcH
 		}
 		dstW = max(dstW, 1)
 		dstH = max(dstH, 1)
@@ -543,8 +581,7 @@ func (h *AuthHandler) UploadProfileIcon(w http.ResponseWriter, r *http.Request) 
 	}
 
 	const fileLimit = int64(5 << 20)
-	const overhead = int64(64 << 10)
-	r.Body = http.MaxBytesReader(w, r.Body, fileLimit+overhead)
+	r.Body = http.MaxBytesReader(w, r.Body, fileLimit+multipartOverheadBytes)
 	if err := r.ParseMultipartForm(fileLimit); err != nil {
 		return http.StatusBadRequest, nil, fmt.Errorf("file too large (max %d MB)", fileLimit>>20)
 	}

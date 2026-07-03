@@ -87,6 +87,7 @@ Jot is a self-hosted note-taking application. The backend is a Go HTTP API and t
 │   │       └── cmd/     # Cobra command definitions
 │   ├── internal/
 │   │   ├── auth/        # Session-cookie + PAT auth middleware and utilities
+│   │   ├── blobstore/   # Content-addressed blob storage (Blobstore interface, fsBlobstore)
 │   │   ├── config/      # Server configuration (env vars, defaults)
 │   │   ├── database/    # Database bootstrap and migration runner
 │   │   │   └── migrations/  # Sequential SQL migration files (embedded into binary)
@@ -162,6 +163,8 @@ They return an HTTP status code, a response body (serialized to JSON by `wrapHan
 
 **Observability** — `internal/telemetry` sets up optional OpenTelemetry traces (OTLP gRPC) and Prometheus metrics (separate port). Structured logs are integrated with the OTel LoggerProvider.
 
+**Blob storage** — `internal/blobstore` defines a `Blobstore` interface (`Put`/`Open`/`Delete`) for content-addressed binary storage, keyed by hex-encoded SHA-256 hash. `FSBlobstore` is the v1 implementation, rooted at config `UPLOAD_DIR` (default `./uploads`), laid out as `UPLOAD_DIR/blobs/<sha[0:2]>/<sha[2:4]>/<sha>`. All paths are derived solely from the validated hash, never from caller-supplied filenames, so there is no path traversal risk; filesystem access additionally goes through `os.Root` (opened on `UPLOAD_DIR`, same traversal-resistant pattern used for static file serving in `server.go`) as defense-in-depth. `Put` is a no-op when the hash already exists (dedup). A full backup is now **DB + `UPLOAD_DIR`**.
+
 ### API Specification
 
 Do not maintain endpoint tables in this file. Use the generated OpenAPI spec as the canonical API reference:
@@ -180,7 +183,7 @@ Migration files live in `server/internal/database/migrations/` and are named `NN
 
 - Auth is session-based using an HttpOnly `jot_session` cookie (primary method).
 - Personal Access Tokens (PATs) are accepted via `Authorization: Bearer <token>` header (machine-to-machine use).
-- Sessions are persisted in the `sessions` table with 30-day expiry by default.
+- Sessions are persisted in the `sessions` table with 30-day expiry by default. Only the SHA-256 hash of the session token is stored (`token_hash` column); the raw token exists solely in the client's cookie.
 - Sessions are automatically extended to 30 days again when less than 7 days remain.
 - Browser clients send credentialed requests (`withCredentials: true`).
 - The first registered user automatically becomes admin.

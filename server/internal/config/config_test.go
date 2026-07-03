@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -12,6 +13,7 @@ func TestLoadDefaults(t *testing.T) {
 	t.Setenv("PORT", "")
 	t.Setenv("DB_DRIVER", "")
 	t.Setenv("DB_DSN", "")
+	t.Setenv("UPLOAD_DIR", "")
 	t.Setenv("STATIC_DIR", "")
 	t.Setenv("CORS_ALLOWED_ORIGIN", "")
 	t.Setenv("COOKIE_SECURE", "")
@@ -24,6 +26,7 @@ func TestLoadDefaults(t *testing.T) {
 	assert.Equal(t, 8080, cfg.Port)
 	assert.Equal(t, "sqlite", cfg.DBDriver)
 	assert.Equal(t, "./jot.db", cfg.DBDSN)
+	assert.Equal(t, "./uploads", cfg.UploadDir)
 	assert.Contains(t, cfg.StaticDir, filepath.Join("webapp", "build"))
 	assert.Empty(t, cfg.CORSAllowedOrigin)
 	assert.True(t, cfg.CookieSecure)
@@ -35,6 +38,7 @@ func TestLoadCustomValues(t *testing.T) {
 	t.Setenv("PORT", "3000")
 	t.Setenv("DB_DRIVER", "postgres")
 	t.Setenv("DB_DSN", "postgres://user:pass@localhost/jot")
+	t.Setenv("UPLOAD_DIR", "/var/lib/jot/uploads/")
 	t.Setenv("STATIC_DIR", "/var/www/")
 	t.Setenv("CORS_ALLOWED_ORIGIN", "https://example.com")
 	t.Setenv("COOKIE_SECURE", "false")
@@ -47,6 +51,7 @@ func TestLoadCustomValues(t *testing.T) {
 	assert.Equal(t, 3000, cfg.Port)
 	assert.Equal(t, "postgres", cfg.DBDriver)
 	assert.Equal(t, "postgres://user:pass@localhost/jot", cfg.DBDSN)
+	assert.Equal(t, "/var/lib/jot/uploads", cfg.UploadDir)
 	assert.Equal(t, "/var/www", cfg.StaticDir)
 	assert.Equal(t, "https://example.com", cfg.CORSAllowedOrigin)
 	assert.False(t, cfg.CookieSecure)
@@ -151,6 +156,20 @@ func TestLoadRegistrationExplicitTrue(t *testing.T) {
 	assert.True(t, cfg.RegistrationEnabled)
 }
 
+func TestLoadRegistrationInvalidValueErrors(t *testing.T) {
+	// A non-boolean value must fail loudly rather than being silently ignored
+	// (which previously left registration enabled contrary to intent).
+	for _, v := range []string{"False", "0", "no", "disabled"} {
+		t.Run(v, func(t *testing.T) {
+			t.Setenv("REGISTRATION_ENABLED", v)
+			t.Setenv("STATIC_DIR", "/tmp/static")
+
+			_, err := Load()
+			assert.Error(t, err)
+		})
+	}
+}
+
 func TestLoadCORSAllowedOriginSet(t *testing.T) {
 	t.Setenv("CORS_ALLOWED_ORIGIN", "https://app.example.com")
 	t.Setenv("STATIC_DIR", "/tmp/static")
@@ -158,6 +177,45 @@ func TestLoadCORSAllowedOriginSet(t *testing.T) {
 	cfg, err := Load()
 	require.NoError(t, err)
 	assert.Equal(t, "https://app.example.com", cfg.CORSAllowedOrigin)
+}
+
+func TestLoadUploadMaxBytes(t *testing.T) {
+	t.Setenv("STATIC_DIR", "/tmp/static")
+
+	t.Run("default", func(t *testing.T) {
+		t.Setenv("UPLOAD_MAX_BYTES", "")
+		cfg, err := Load()
+		require.NoError(t, err)
+		assert.Equal(t, 25<<20, cfg.UploadMaxBytes)
+	})
+
+	t.Run("custom", func(t *testing.T) {
+		t.Setenv("UPLOAD_MAX_BYTES", "1048576")
+		cfg, err := Load()
+		require.NoError(t, err)
+		assert.Equal(t, 1<<20, cfg.UploadMaxBytes)
+	})
+
+	t.Run("non-numeric", func(t *testing.T) {
+		t.Setenv("UPLOAD_MAX_BYTES", "notanumber")
+		_, err := Load()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid UPLOAD_MAX_BYTES value")
+	})
+
+	t.Run("too low", func(t *testing.T) {
+		t.Setenv("UPLOAD_MAX_BYTES", "1")
+		_, err := Load()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must be between")
+	})
+
+	t.Run("too high", func(t *testing.T) {
+		t.Setenv("UPLOAD_MAX_BYTES", fmt.Sprint(501<<20))
+		_, err := Load()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must be between")
+	})
 }
 
 func TestLoadPasswordMinLength(t *testing.T) {

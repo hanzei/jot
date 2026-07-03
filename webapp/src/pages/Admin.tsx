@@ -263,7 +263,18 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
                   title={t('admin.stats.metrics.databaseSize')}
                   value={formatBytes(stats.storage.database_size_bytes)}
                   valueTestId="admin-stats-database-size"
-                />
+                >
+                  <StatLine
+                    label={t('admin.stats.metrics.imageCount')}
+                    value={formatNumber(stats.storage.image_count)}
+                    valueTestId="admin-stats-image-count"
+                  />
+                  <StatLine
+                    label={t('admin.stats.metrics.imagesSize')}
+                    value={formatBytes(stats.storage.images_size_bytes)}
+                    valueTestId="admin-stats-images-size"
+                  />
+                </StatCard>
               </>
             ) : null}
           </div>

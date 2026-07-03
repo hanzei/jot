@@ -58,6 +58,8 @@ func defaultTestConfig(tmpDir string) *config.Config {
 		DBDriver:            "sqlite",
 		DBDSN:               tmpDir + "/test.db",
 		StaticDir:           tmpDir,
+		UploadDir:           tmpDir + "/uploads",
+		UploadMaxBytes:      25 << 20,
 		CORSAllowedOrigin:   "http://localhost:5173",
 		CookieSecure:        false,
 		RegistrationEnabled: true,
@@ -250,6 +252,25 @@ func TestConfigEndpoint(t *testing.T) {
 		assert.Equal(t, 4, cfg.PasswordMinLength)
 	})
 
+	t.Run("returns default upload_max_bytes", func(t *testing.T) {
+		ts := setupTestServer(t)
+		c := ts.newClient()
+
+		cfg, err := c.Config(t.Context())
+		require.NoError(t, err)
+		assert.Equal(t, 25<<20, cfg.UploadMaxBytes)
+	})
+
+	t.Run("returns configured upload_max_bytes so the client can match the server's actual cap", func(t *testing.T) {
+		ts := setupTestServerWithConfig(t, func(cfg *config.Config) {
+			cfg.UploadMaxBytes = 10 << 20
+		})
+		c := ts.newClient()
+
+		cfg, err := c.Config(t.Context())
+		require.NoError(t, err)
+		assert.Equal(t, 10<<20, cfg.UploadMaxBytes)
+	})
 }
 
 // Auth endpoint tests
@@ -276,6 +297,12 @@ func TestRegisterEndpoint(t *testing.T) {
 	t.Run("invalid username", func(t *testing.T) {
 		c := ts.newClient()
 		_, err := c.Register(t.Context(), "x", "password123")
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+	})
+
+	t.Run("password longer than bcrypt limit", func(t *testing.T) {
+		c := ts.newClient()
+		_, err := c.Register(t.Context(), "longpwuser", strings.Repeat("a", 73))
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 }
@@ -590,6 +617,18 @@ func TestAdminStatsEndpoint(t *testing.T) {
 	_, err = adminUser.Client.AddLabel(t.Context(), archivedListNote.ID, "work")
 	require.NoError(t, err)
 
+	uniqueImageData := testPNG(t, 4, 4)
+	_, err = adminUser.Client.UploadNoteImage(t.Context(), sharedTextNote.ID, "unique.png", bytes.NewReader(uniqueImageData))
+	require.NoError(t, err)
+
+	// Same bytes uploaded to two different notes: dedup by sha256 means this
+	// blob is counted once even though two note_images rows reference it.
+	dupImageData := testPNG(t, 6, 6)
+	_, err = adminUser.Client.UploadNoteImage(t.Context(), archivedListNote.ID, "dup1.png", bytes.NewReader(dupImageData))
+	require.NoError(t, err)
+	_, err = adminUser.Client.UploadNoteImage(t.Context(), activeListNote.ID, "dup2.png", bytes.NewReader(dupImageData))
+	require.NoError(t, err)
+
 	t.Run("returns aggregated stats for admins", func(t *testing.T) {
 		stats, err := adminUser.Client.AdminGetStats(t.Context())
 		require.NoError(t, err)
@@ -615,6 +654,9 @@ func TestAdminStatsEndpoint(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, fileInfo.Size(), stats.Storage.DatabaseSizeBytes)
 		assert.Positive(t, stats.Storage.DatabaseSizeBytes)
+
+		assert.Equal(t, int64(2), stats.Storage.ImageCount)
+		assert.Equal(t, int64(len(uniqueImageData)+len(dupImageData)), stats.Storage.ImagesSizeBytes)
 	})
 
 	t.Run("returns 403 for non-admin users", func(t *testing.T) {

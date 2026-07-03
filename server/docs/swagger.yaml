@@ -360,6 +360,10 @@ definitions:
     properties:
       database_size_bytes:
         type: integer
+      image_count:
+        type: integer
+      images_size_bytes:
+        type: integer
     type: object
   models.AdminUserStats:
     properties:
@@ -397,6 +401,10 @@ definitions:
         type: string
       id:
         type: string
+      images:
+        items:
+          $ref: '#/definitions/models.NoteImage'
+        type: array
       is_shared:
         type: boolean
       items:
@@ -428,6 +436,21 @@ definitions:
           Version is an optimistic-concurrency counter bumped on every shared-content
           (title/content) change. Clients echo the version their edit was based on as
           base_version on update so a stale write can be rejected (issue #489).
+        type: integer
+    type: object
+  models.NoteImage:
+    properties:
+      content_type:
+        type: string
+      created_at:
+        type: string
+      filename:
+        type: string
+      height:
+        type: integer
+      id:
+        type: string
+      width:
         type: integer
     type: object
   models.NoteItem:
@@ -542,6 +565,8 @@ definitions:
         type: integer
       registration_enabled:
         type: boolean
+      upload_max_bytes:
+        type: integer
     type: object
 info:
   contact:
@@ -778,6 +803,109 @@ paths:
       summary: Get public server configuration
       tags:
       - system
+  /images/{id}:
+    delete:
+      parameters:
+      - description: Image ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: no content
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Delete a note image
+      tags:
+      - notes
+    get:
+      parameters:
+      - description: Image ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - image/*
+      responses:
+        "200":
+          description: Image bytes
+          schema:
+            type: file
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Download a note image
+      tags:
+      - notes
+  /images/{id}/thumbnail:
+    get:
+      parameters:
+      - description: Image ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - image/jpeg
+      responses:
+        "200":
+          description: Thumbnail JPEG bytes
+          schema:
+            type: file
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Download a note image's thumbnail
+      tags:
+      - notes
   /labels:
     get:
       produces:
@@ -1257,6 +1385,53 @@ paths:
       security:
       - CookieAuth: []
       summary: Duplicate an existing note
+      tags:
+      - notes
+  /notes/{id}/images:
+    post:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: Note ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Image file (PNG, JPEG, WebP, or GIF)
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.NoteImage'
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+        "413":
+          description: file too large
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Upload an image to a note
       tags:
       - notes
   /notes/{id}/items:
