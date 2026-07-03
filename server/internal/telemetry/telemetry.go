@@ -36,15 +36,10 @@ import (
 
 // Config holds OpenTelemetry configuration values loaded from environment variables.
 type Config struct {
-	// Enabled controls whether OTel instrumentation is active.
-	// When false, noop providers are registered and all instrumentation
-	// calls are no-ops with zero overhead.
-	Enabled bool
-
 	// Endpoint is the OTLP gRPC endpoint (e.g. "localhost:4317").
-	// When empty and Enabled is true, stdout exporters are used for
-	// traces and logs (useful for development and debugging).
-	// Metrics are always exposed via /metrics regardless of this setting.
+	// When empty, stdout exporters are used for traces and logs (useful for
+	// development and debugging). Metrics are always exposed via /metrics
+	// regardless of this setting.
 	Endpoint string
 
 	// ServiceName is the service name reported in all traces, metrics, and logs.
@@ -68,13 +63,13 @@ type Config struct {
 	TracesEnabled bool
 
 	// MetricsEnabled controls whether metrics are pushed to the configured
-	// OTLP endpoint. Defaults to true. This only affects the OTLP periodic
+	// OTLP endpoint. Defaults to false. This only affects the OTLP periodic
 	// reader; the Prometheus reader backing the /metrics handler is
-	// unaffected and always registered.
+	// unaffected and always registered whenever OTel is set up at all.
 	MetricsEnabled bool
 
 	// LogsEnabled controls whether the log pipeline is set up at all.
-	// Defaults to true. When false, a noop LoggerProvider is registered
+	// Defaults to false. When false, a noop LoggerProvider is registered
 	// instead so log forwarding stays a no-op.
 	LogsEnabled bool
 }
@@ -84,14 +79,17 @@ type Config struct {
 // returned shutdown function must be called (typically via defer) to flush and
 // stop exporters.
 //
-// The Prometheus metric reader is always registered with prometheus.DefaultRegisterer
-// when cfg.Enabled is true, so the /metrics handler (mounted separately by the
-// server) will serve OTel custom metrics alongside the default Go runtime metrics.
+// There is no single on/off switch: Setup runs whenever at least one of
+// TracesEnabled, MetricsEnabled, or LogsEnabled is true. The Prometheus metric
+// reader is always registered with prometheus.DefaultRegisterer in that case,
+// so the /metrics handler (mounted separately by the server) will serve OTel
+// custom metrics alongside the default Go runtime metrics, regardless of
+// MetricsEnabled.
 //
-// When cfg.Enabled is false, noop providers are already the default globals;
+// When all three are false, noop providers are already the default globals;
 // nothing to do.
 func Setup(ctx context.Context, cfg Config) (shutdown func(context.Context) error, err error) {
-	if !cfg.Enabled {
+	if !cfg.TracesEnabled && !cfg.MetricsEnabled && !cfg.LogsEnabled {
 		// Noop providers are already the default globals; nothing to do.
 		return func(_ context.Context) error { return nil }, nil
 	}

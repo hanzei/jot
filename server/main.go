@@ -61,7 +61,6 @@ func main() {
 
 	ctx := context.Background()
 	otelShutdown, err := telemetry.Setup(ctx, telemetry.Config{
-		Enabled:        cfg.OTelEnabled,
 		Endpoint:       cfg.OTelEndpoint,
 		ServiceName:    cfg.OTelServiceName,
 		ServiceVersion: server.Version(),
@@ -81,17 +80,19 @@ func main() {
 		}
 	}()
 
-	if cfg.OTelEnabled {
-		if cfg.OTelLogsEnabled {
-			// Forward all logrus log entries to the OTel LoggerProvider so they
-			// are exported via OTLP alongside traces and metrics.
-			logrus.AddHook(otellogrus.NewHook("github.com/hanzei/jot/server"))
-		}
+	if cfg.OTelLogsEnabled {
+		// Forward all logrus log entries to the OTel LoggerProvider so they
+		// are exported via OTLP alongside traces and metrics.
+		logrus.AddHook(otellogrus.NewHook("github.com/hanzei/jot/server"))
+	}
+	if cfg.OTelTracesEnabled || cfg.OTelMetricsEnabled || cfg.OTelLogsEnabled {
 		if cfg.OTelEndpoint != "" {
 			logrus.Infof("OpenTelemetry enabled (service: %s)", cfg.OTelServiceName)
 		} else {
 			logrus.Infof("OpenTelemetry enabled (stdout exporter, service: %s)", cfg.OTelServiceName)
 		}
+	} else if cfg.OTelEndpoint != "" {
+		logrus.Warn("OTEL_EXPORTER_OTLP_ENDPOINT is set but no OTel signals are enabled (OTEL_TRACES_ENABLED / OTEL_METRICS_ENABLED / OTEL_LOGS_ENABLED); nothing will be exported")
 	}
 
 	s, err := server.New(cfg)

@@ -22,7 +22,6 @@ type Config struct {
 	CookieSecure        bool
 	RegistrationEnabled bool
 	PasswordMinLength   int
-	OTelEnabled         bool
 	OTelEndpoint        string
 	OTelServiceName     string
 	OTelInsecure        bool
@@ -146,12 +145,6 @@ func Load() (*Config, error) {
 	}
 	cfg.PasswordMinLength = passwordMinLength
 
-	otelEnabled, err := parseBoolEnv("OTEL_ENABLED", false)
-	if err != nil {
-		return nil, err
-	}
-	cfg.OTelEnabled = otelEnabled
-
 	cfg.OTelEndpoint = os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 
 	if v := os.Getenv("OTEL_SERVICE_NAME"); v != "" {
@@ -170,17 +163,16 @@ func Load() (*Config, error) {
 	}
 	cfg.OTelTracesEnabled = otelTracesEnabled
 
-	// Metrics and logs default to true (unlike traces) to preserve pre-existing
-	// export behavior: collectors missing a traces pipeline are common, but
-	// ones missing metrics/logs pipelines are not, so opting those out by
-	// default would silently drop data most users still want.
-	otelMetricsEnabled, err := parseBoolEnv("OTEL_METRICS_ENABLED", true)
+	// There is no single OTEL_ENABLED switch: OTel setup runs whenever at
+	// least one of traces/metrics/logs is enabled, so each signal is opt-in
+	// independently and all three default to false.
+	otelMetricsEnabled, err := parseBoolEnv("OTEL_METRICS_ENABLED", false)
 	if err != nil {
 		return nil, err
 	}
 	cfg.OTelMetricsEnabled = otelMetricsEnabled
 
-	otelLogsEnabled, err := parseBoolEnv("OTEL_LOGS_ENABLED", true)
+	otelLogsEnabled, err := parseBoolEnv("OTEL_LOGS_ENABLED", false)
 	if err != nil {
 		return nil, err
 	}
