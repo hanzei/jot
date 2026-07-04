@@ -219,7 +219,15 @@ export function useSSE(
 
     const handleAppStateChange = (nextState: AppStateStatus) => {
       if (nextState === 'active') {
-        startConnection();
+        // A brief inactive→active blip (control center, notification shade, app
+        // switcher peek) shouldn't tear down a working stream and pay a fresh TLS
+        // handshake on a weak link, so only rebuild if it isn't already healthy.
+        // A real background transition runs stopConnection() below (nulling the
+        // manager), so this still reconnects after actual backgrounding; and the
+        // reconnect/server-switch paths still force a rebuild via startConnection().
+        if (!managerRef.current?.isConnected()) {
+          startConnection();
+        }
       } else if (nextState === 'background') {
         stopConnection();
       }

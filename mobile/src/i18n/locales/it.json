@@ -260,7 +260,6 @@
     "typeList": "Lista",
     "titlePlaceholder": "Titolo della nota...",
     "contentPlaceholder": "Prendi nota...",
-    "itemPlaceholder": "Elemento dell'elenco...",
     "addItem": "Aggiungi elemento",
     "failedSaveChanges": "Impossibile salvare le modifiche. Tocca per riprovare.",
     "menuOptions": "Opzioni nota",
@@ -382,6 +381,10 @@
     "unknownServerTitle": "Server non configurato",
     "unknownServerMessage": "Questo link punta a {{server}}, che non è ancora stato aggiunto.",
     "addAndSwitchAction": "Aggiungi e passa"
+  },
+  "quickActions": {
+    "newNote": "Nuova nota",
+    "newList": "Nuova lista"
   },
   "shareIntent": {
     "saveTargetLabel": "Salvataggio su {{server}}",

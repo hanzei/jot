@@ -28,16 +28,17 @@ import { Gesture } from 'react-native-gesture-handler';
 import { LinearTransition, useSharedValue, runOnJS } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp, type NavigationAction } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
-import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, useDuplicateNote, useCreateNoteItem, useUpdateNoteItem, useDeleteNoteItem, useReorderNoteItems, useToggleNoteItemCompleted } from '../hooks/useNotes';
+import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useDuplicateNote, useCreateNoteItem, useUpdateNoteItem, useDeleteNoteItem, useReorderNoteItems, useToggleNoteItemCompleted } from '../hooks/useNotes';
 import { useOfflineNote } from '../hooks/useOfflineNotes';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
-import { isLocalId } from '../db/noteQueries';
 import { useFailedNoteIds } from '../store/OfflineContext';
 import { useSSESubscription } from '../store/SSEContext';
 import { useToast } from '../hooks/useToast';
+import { useConfirm } from '../hooks/useConfirm';
+import ConfirmDialog from '../components/ConfirmDialog';
 import ColorPicker from '../components/ColorPicker';
 import LabelPicker from '../components/LabelPicker';
 import AssigneePicker from '../components/AssigneePicker';
@@ -72,6 +73,7 @@ import {
 } from './noteEditor/listItemModel';
 import { MarkdownToolbarContent } from './noteEditor/EditorToolbars';
 import CheckedItemsSection, { type ListItemHandlers } from './noteEditor/CheckedItemsSection';
+import NoteEditorMenu from '../components/NoteEditorMenu';
 import NoteImageGallery, { type PendingImageUpload } from '../components/NoteImageGallery';
 import { styles } from './noteEditor/styles';
 import { animateListReflow, isReduceMotionEnabledSync } from '../utils/layoutAnimation';
@@ -96,18 +98,21 @@ const DRAG_CELL_ANIMATIONS = { opacity: 1, transform: [] };
 export default function NoteEditorScreen() {
   const navigation = useNavigation<EditorNavProp>();
   const route = useRoute<EditorRouteProp>();
-  const { noteId: initialNoteId, sharedText } = route.params;
+  const { noteId: initialNoteId, sharedText, initialNoteType, readOnly } = route.params;
   const { t, i18n } = useTranslation();
   const failedNoteIds = useFailedNoteIds();
 
-  // A new note opened from an Android share intent arrives with sharedText to
-  // pre-fill the body.
+  // A new note opened from a share intent arrives with sharedText to pre-fill
+  // the body.
   const openedFromShare = initialNoteId === null && !!sharedText;
+  // A new list opened from the "New list" app-icon quick action: start in list
+  // mode and focus the title so the keyboard comes up ready to type.
+  const openedAsNewList = initialNoteId === null && initialNoteType === 'list';
 
   const [noteId, setNoteId] = useState<string | null>(initialNoteId);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState(() => (initialNoteId === null ? sharedText ?? '' : ''));
-  const [noteType, setNoteType] = useState<NoteType>('text');
+  const [noteType, setNoteType] = useState<NoteType>(() => (initialNoteId === null && initialNoteType ? initialNoteType : 'text'));
   const [items, setItems] = useState<LocalItem[]>([]);
   const [checkedItemsCollapsed, setCheckedItemsCollapsed] = useState(false);
   // Id of the item the user just checked off, so its completed-section row pops
@@ -122,6 +127,7 @@ export default function NoteEditorScreen() {
   const [hasCreated, setHasCreated] = useState(initialNoteId !== null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [colorPickerVisible, setColorPickerVisible] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
   const [labelPickerVisible, setLabelPickerVisible] = useState(false);
   const [assigneePickerVisible, setAssigneePickerVisible] = useState(false);
   const [assigningItemId, setAssigningItemId] = useState<string | null>(null);
@@ -139,6 +145,7 @@ export default function NoteEditorScreen() {
   const { user: currentUser, isLocalMode } = useAuth();
   const { usersById } = useUsers();
   const { showToast } = useToast();
+  const { confirm } = useConfirm();
 
   const { colors } = useTheme();
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
@@ -160,10 +167,15 @@ export default function NoteEditorScreen() {
   const androidKeyboardInset = Platform.OS === 'android' ? keyboardHeight : 0;
   const bannerShown = useBannerShown();
   const { data: existingNote } = useOfflineNote(noteId);
+  // A trashed note opens view-only. Driven by the route param set when the note
+  // is opened from the trash list, and defensively by the note's own deleted_at
+  // in case it lands here already trashed.
+  const isReadOnly = readOnly === true || existingNote?.deleted_at != null;
   const createMutation = useCreateNote();
   const updateMutation = useUpdateNote();
   const deleteMutation = useDeleteNote();
   const restoreMutation = useRestoreNote();
+  const permanentDeleteMutation = usePermanentDeleteNote();
   const duplicateMutation = useDuplicateNote();
   const createItemMutation = useCreateNoteItem();
   const updateItemMutation = useUpdateNoteItem();
@@ -221,6 +233,11 @@ export default function NoteEditorScreen() {
   const isInitializedRef = useRef(false);
   const intentionalExitRef = useRef(false);
   const hasPendingChangesRef = useRef(false);
+  const [exitSavePrompt, setExitSavePrompt] = useState<{
+    navAction: NavigationAction;
+    retriesLeft: number;
+  } | null>(null);
+  const [isExitRetrying, setIsExitRetrying] = useState(false);
   // Bumped on every edit (markDirtyAndScheduleUpdate). flushSave snapshots it
   // alongside the state refs so it can tell whether new edits arrived while its
   // network calls were in flight — clearing the dirty flag then would mark
@@ -793,6 +810,18 @@ export default function NoteEditorScreen() {
     return flushSave();
   }, [flushSave]);
 
+  // Save-first wrapper for note-level actions. A new/unsaved note is created by
+  // flushing before the action runs, so bar actions no longer have to be hidden
+  // until the first autosave. flushSave no-ops (and leaves noteId null) only for
+  // a genuinely empty note, in which case the action is skipped.
+  const withSavedNote = useCallback(async (action: (id: string) => void | Promise<void>) => {
+    const saved = await flushPendingChanges();
+    if (!saved) return; // save failed — error already surfaced by flushSave
+    const id = noteIdRef.current;
+    if (!id) return; // empty note, nothing to act on
+    await action(id);
+  }, [flushPendingChanges]);
+
   // Keep input refs bounded to currently rendered items.
   useEffect(() => {
     const activeItemIds = new Set(items.map((item) => item.id));
@@ -802,6 +831,12 @@ export default function NoteEditorScreen() {
       }
     }
   }, [items]);
+
+  const exitWith = useCallback((navAction: NavigationAction) => {
+    intentionalExitRef.current = true;
+    setExitSavePrompt(null);
+    navigation.dispatch(navAction);
+  }, [navigation]);
 
   // Intercept navigation away to flush pending edits before leaving the screen.
   useEffect(() => {
@@ -815,51 +850,38 @@ export default function NoteEditorScreen() {
         debounceRef.current = null;
       }
 
-      const showSaveFailedAlert = (retriesLeft = MAX_EXIT_SAVE_RETRIES) => {
-        Alert.alert(
-          t('note.saveFailedExitTitle'),
-          t('note.saveFailedExitMessage'),
-          [
-            {
-              text: t('note.discardAndLeave'),
-              style: 'destructive',
-              onPress: () => {
-                intentionalExitRef.current = true;
-                navigation.dispatch(event.data.action);
-              },
-            },
-            ...(retriesLeft > 0
-              ? [
-                  {
-                    text: t('common.retry'),
-                    onPress: async () => {
-                      const retrySucceeded = await flushSave();
-                      if (retrySucceeded) {
-                        intentionalExitRef.current = true;
-                        navigation.dispatch(event.data.action);
-                      } else {
-                        showSaveFailedAlert(retriesLeft - 1);
-                      }
-                    },
-                  },
-                ]
-              : []),
-          ],
-        );
-      };
-
       void (async () => {
         const saveSucceeded = await flushSave();
         if (!saveSucceeded) {
-          showSaveFailedAlert();
+          setExitSavePrompt({ navAction: event.data.action, retriesLeft: MAX_EXIT_SAVE_RETRIES });
           return;
         }
-        intentionalExitRef.current = true;
-        navigation.dispatch(event.data.action);
+        exitWith(event.data.action);
       })();
     });
     return unsubscribe;
-  }, [flushSave, navigation, t]);
+  }, [exitWith, flushSave, navigation]);
+
+  const handleExitDiscard = useCallback(() => {
+    if (!exitSavePrompt || isExitRetrying) return;
+    exitWith(exitSavePrompt.navAction);
+  }, [exitSavePrompt, exitWith, isExitRetrying]);
+
+  // Guarded by isExitRetrying so a retry in flight can't race a second tap on
+  // Retry or Discard into a double dispatch or a stale retriesLeft update —
+  // the dialog also disables both buttons via `busy` while this is true.
+  const handleExitRetry = useCallback(async () => {
+    if (!exitSavePrompt || isExitRetrying) return;
+    setIsExitRetrying(true);
+    const { navAction, retriesLeft } = exitSavePrompt;
+    const retrySucceeded = await flushSave();
+    if (retrySucceeded) {
+      exitWith(navAction);
+    } else {
+      setExitSavePrompt({ navAction, retriesLeft: retriesLeft - 1 });
+    }
+    setIsExitRetrying(false);
+  }, [exitSavePrompt, exitWith, flushSave, isExitRetrying]);
 
   // Flush pending save on unmount (prevent data loss), skip if intentionally exiting
   useEffect(() => {
@@ -1294,10 +1316,11 @@ export default function NoteEditorScreen() {
   }, [markDirtyAndScheduleUpdate, getItemRef]);
 
   const handleToggleCollapsed = useCallback(() => {
+    if (isReadOnly) return;
     animateListReflow();
     setCheckedItemsCollapsed((prev) => !prev);
     markDirtyAndScheduleUpdate();
-  }, [markDirtyAndScheduleUpdate]);
+  }, [isReadOnly, markDirtyAndScheduleUpdate]);
 
   const collaborators = useMemo<Collaborator[]>(() => {
     if (!existingNote) return [];
@@ -1321,69 +1344,97 @@ export default function NoteEditorScreen() {
   );
 
   const openAssigneePicker = useCallback((itemId: string) => {
+    if (isReadOnly) return;
     setAssigningItemId(itemId);
     setAssigneePickerVisible(true);
-  }, []);
+  }, [isReadOnly]);
 
   const handleNativeShare = useCallback(() => {
     const text = formatEditorStateForShare(noteTypeRef.current, titleRef.current, contentRef.current, itemsRef.current);
     if (text.trim()) void Share.share({ message: text });
   }, []);
 
-  const handleDelete = useCallback(() => {
+  const handleDelete = useCallback(async () => {
     if (!noteId) {
       intentionalExitRef.current = true;
       navigation.goBack();
       return;
     }
-    Alert.alert(t('note.deleteConfirmTitle'), t('note.deleteConfirm'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('common.delete'),
-        style: 'destructive',
+    // Moving to trash is undoable (toast below + restoreMutation), so this
+    // doesn't confirm — matches NotesListScreen's handleMoveToTrash.
+    try {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+      intentionalExitRef.current = true;
+      if (saveInFlightRef.current) {
+        try { await saveInFlightRef.current; } catch { /* already handled */ }
+      }
+      // Re-read after the in-flight save settles; it may have created the note
+      // and populated noteIdRef while we were awaiting it.
+      const currentNoteId = noteIdRef.current;
+      if (!currentNoteId) return;
+      await deleteMutation.mutateAsync(currentNoteId);
+      showToast(t('dashboard.noteDeleted'), 'success', {
+        label: t('dashboard.undo'),
         onPress: async () => {
           try {
-            if (debounceRef.current) {
-              clearTimeout(debounceRef.current);
-              debounceRef.current = null;
-            }
-            intentionalExitRef.current = true;
-            if (saveInFlightRef.current) {
-              try { await saveInFlightRef.current; } catch { /* already handled */ }
-            }
-            await deleteMutation.mutateAsync(noteId);
-            showToast(t('dashboard.noteDeleted'), 'success', {
-              label: t('dashboard.undo'),
-              onPress: async () => {
-                try {
-                  await restoreMutation.mutateAsync(noteId);
-                  showToast(t('dashboard.noteRestored'));
-                } catch {
-                  showToast(t('note.failedRestore'), 'error');
-                }
-              },
-            });
-            navigation.goBack();
+            await restoreMutation.mutateAsync(currentNoteId);
+            showToast(t('dashboard.noteRestored'));
           } catch {
-            intentionalExitRef.current = false;
-            Alert.alert(t('common.error'), t('note.failedDelete'));
+            showToast(t('note.failedRestore'), 'error');
           }
         },
-      },
-    ]);
+      });
+      navigation.goBack();
+    } catch {
+      intentionalExitRef.current = false;
+      Alert.alert(t('common.error'), t('note.failedDelete'));
+    }
   }, [deleteMutation, navigation, noteId, restoreMutation, showToast, t]);
 
-  const handleTogglePin = useCallback(async () => {
+  // Restore a trashed note (read-only view) and return to the list.
+  const handleRestoreNote = useCallback(async () => {
     if (!noteId) return;
-    const saveSucceeded = await flushPendingChanges();
-    if (!saveSucceeded) {
-      return;
+    try {
+      await restoreMutation.mutateAsync(noteId);
+      intentionalExitRef.current = true;
+      showToast(t('dashboard.noteRestored'));
+      navigation.goBack();
+    } catch {
+      Alert.alert(t('common.error'), t('note.failedRestore'));
     }
+  }, [navigation, noteId, restoreMutation, showToast, t]);
+
+  // Permanently delete a trashed note (read-only view) after confirmation.
+  const handleDeletePermanently = useCallback(async () => {
+    if (!noteId) return;
+    const confirmed = await confirm({
+      title: t('note.deleteForeverTitle'),
+      message: t('note.deleteForeverConfirm'),
+      confirmLabel: t('common.delete'),
+      destructive: true,
+    });
+    if (!confirmed) return;
+    const currentNoteId = noteIdRef.current;
+    if (!currentNoteId) return;
+    try {
+      intentionalExitRef.current = true;
+      await permanentDeleteMutation.mutateAsync(currentNoteId);
+      navigation.goBack();
+    } catch {
+      intentionalExitRef.current = false;
+      Alert.alert(t('common.error'), t('note.failedDelete'));
+    }
+  }, [confirm, navigation, noteId, permanentDeleteMutation, t]);
+
+  const handleTogglePin = useCallback(() => withSavedNote(async (id) => {
     const newPinned = !pinnedRef.current;
     setPinned(newPinned);
     try {
       await updateMutation.mutateAsync({
-        id: noteId,
+        id,
         data: buildMetadataUpdateData({ pinned: newPinned }),
       });
       commitMetadataBaseline({ pinned: newPinned });
@@ -1391,19 +1442,14 @@ export default function NoteEditorScreen() {
       setPinned(!newPinned);
       Alert.alert(t('common.error'), t('note.failedUpdate'));
     }
-  }, [buildMetadataUpdateData, commitMetadataBaseline, flushPendingChanges, noteId, t, updateMutation]);
+  }), [buildMetadataUpdateData, commitMetadataBaseline, withSavedNote, t, updateMutation]);
 
-  const handleToggleArchive = useCallback(async () => {
-    if (!noteId) return;
-    const saveSucceeded = await flushPendingChanges();
-    if (!saveSucceeded) {
-      return;
-    }
+  const handleToggleArchive = useCallback(() => withSavedNote(async (id) => {
     const newArchived = !archivedRef.current;
     setArchived(newArchived);
     try {
       await updateMutation.mutateAsync({
-        id: noteId,
+        id,
         data: buildMetadataUpdateData({ archived: newArchived }),
       });
       commitMetadataBaseline({ archived: newArchived });
@@ -1416,7 +1462,7 @@ export default function NoteEditorScreen() {
           onPress: async () => {
             try {
               await updateMutation.mutateAsync({
-                id: noteId,
+                id,
                 data: buildMetadataUpdateData({ archived: false }),
               });
               commitMetadataBaseline({ archived: false });
@@ -1434,7 +1480,7 @@ export default function NoteEditorScreen() {
       setArchived(!newArchived);
       Alert.alert(t('common.error'), t('note.failedUpdate'));
     }
-  }, [buildMetadataUpdateData, commitMetadataBaseline, flushPendingChanges, navigation, noteId, showToast, t, updateMutation]);
+  }), [buildMetadataUpdateData, commitMetadataBaseline, withSavedNote, navigation, showToast, t, updateMutation]);
 
   const handleColorSelect = useCallback(async (selectedColor: string) => {
     const saveSucceeded = await flushPendingChanges();
@@ -1649,6 +1695,22 @@ export default function NoteEditorScreen() {
 
   const hasNoteColor = !!color && !isWhiteHexColor(color);
 
+  // Share, Labels, and Add-image all act on a note that exists on the server.
+  // A brand-new note (noteId === null) no longer has to wait for the first
+  // autosave: tapping one of these runs it through withSavedNote, which flushes
+  // a create first (save-first) and then performs the action against the
+  // resulting id. Offline-created notes carry a server-valid id up front and
+  // queue the op for replay, so the same path works offline (issue #652).
+  //
+  // Sharing additionally requires a central server and ownership. A brand-new
+  // note is always owned by the current user; an existing one must be owned by
+  // them (a note shared with the user can't be re-shared).
+  const ownsNote = noteId === null || (!!existingNote && existingNote.user_id === currentUser?.id);
+  const canShareWithCollaborators = !isLocalMode && ownsNote;
+  // Muted icon color for the bar; disabled buttons render at reduced opacity.
+  const barIconColor = hasNoteColor ? '#444' : colors.icon;
+  const disabledBarIconColor = hasNoteColor ? '#999' : colors.iconMuted;
+
   // Per-item callbacks shared by the active list (renderListItem) and the
   // completed-items section, so both wire ListItem the same way.
   const listItemHandlers = useMemo<ListItemHandlers>(
@@ -1685,7 +1747,8 @@ export default function NoteEditorScreen() {
             text: item.text,
             completed: item.completed,
             indentLevel: item.parentId ? 1 : 0,
-            showDragHandle: true,
+            editable: !isReadOnly,
+            showDragHandle: !isReadOnly,
             assignedTo: item.assigned_to,
             isShared: !!isNoteShared,
             collaborators,
@@ -1703,7 +1766,7 @@ export default function NoteEditorScreen() {
         />
       );
     },
-    [getItemRef, listItemHandlers, isNoteShared, collaborators, hasNoteColor, completedItemTexts, handleAcceptSuggestion, dragTranslateX],
+    [getItemRef, listItemHandlers, isNoteShared, collaborators, hasNoteColor, completedItemTexts, handleAcceptSuggestion, dragTranslateX, isReadOnly],
   );
 
   const applyToolbarEdit = useCallback((updater: (prev: string) => string) => {
@@ -1869,20 +1932,21 @@ export default function NoteEditorScreen() {
             style={[styles.titleInput, { color: hasNoteColor ? '#1a1a1a' : colors.text }]}
             value={title}
             onChangeText={handleTitleChange}
+            autoFocus={openedAsNewList}
             placeholder={t('note.titlePlaceholder')}
             placeholderTextColor={hasNoteColor ? '#999' : colors.placeholder}
             maxLength={VALIDATION.TITLE_MAX_LENGTH}
             returnKeyType="next"
             onSubmitEditing={handleTitleSubmit}
             blurOnSubmit={false}
-            editable={!isHydrating}
+            editable={!isHydrating && !isReadOnly}
             testID="note-title-input"
           />
         )}
 
         {noteType === 'text' ? (
           <>
-            {isEditingContent ? (
+            {isEditingContent && !isReadOnly ? (
               <TextInput
                 ref={contentInputRef}
                 autoFocus
@@ -1900,7 +1964,8 @@ export default function NoteEditorScreen() {
               />
             ) : (
               <TouchableOpacity
-                onPress={() => setIsEditingContent(true)}
+                onPress={isReadOnly ? undefined : () => setIsEditingContent(true)}
+                disabled={isReadOnly}
                 activeOpacity={1}
                 testID="content-preview"
                 style={styles.contentPreview}
@@ -1918,7 +1983,7 @@ export default function NoteEditorScreen() {
             )}
 
             {/* Android: formatting toolbar in layout (shown when editing) */}
-            {Platform.OS === 'android' && isEditingContent && (
+            {Platform.OS === 'android' && isEditingContent && !isReadOnly && (
               <MarkdownToolbarContent
                 onBold={() => wrapMobileSelection('**', '**')}
                 onItalic={() => wrapMobileSelection('*', '*')}
@@ -1957,10 +2022,12 @@ export default function NoteEditorScreen() {
               itemLayoutAnimation={isReduceMotionEnabledSync() ? undefined : LinearTransition.duration(LIST_REFLOW_ANIM_MS)}
             />
 
-            <TouchableOpacity style={styles.addItemRow} onPress={handleAddItem} testID="add-list-item">
-              <Ionicons name="add" size={22} color={colors.primary} />
-              <Text style={[styles.addItemText, { color: colors.primary }]}>{t('note.addItem')}</Text>
-            </TouchableOpacity>
+            {!isReadOnly && (
+              <TouchableOpacity style={styles.addItemRow} onPress={handleAddItem} testID="add-list-item">
+                <Ionicons name="add" size={22} color={colors.primary} />
+                <Text style={[styles.addItemText, { color: colors.primary }]}>{t('note.addItem')}</Text>
+              </TouchableOpacity>
+            )}
 
             <CheckedItemsSection
               checkedItems={checkedItems}
@@ -1975,125 +2042,97 @@ export default function NoteEditorScreen() {
               dividerColor={completedSectionDividerColor}
               handlers={listItemHandlers}
               popItemId={popItemId}
+              editable={!isReadOnly}
             />
           </View>
         )}
       </ScrollViewContainer>
 
       <View style={[styles.toolbar, { backgroundColor: noteBackground, borderTopColor: hasNoteColor ? 'transparent' : colors.border, paddingBottom: insets.bottom || 8 }]}>
-        {/* Color picker button */}
+        {/* Color. Works on unsaved notes (deferred via autosave), so it is only
+            disabled for read-only (trashed) notes. */}
         <TouchableOpacity
           onPress={() => setColorPickerVisible(true)}
+          disabled={isReadOnly}
           style={styles.toolbarBtn}
           testID="toolbar-color-btn"
           accessibilityLabel={t('note.changeColor')}
+          accessibilityState={{ disabled: isReadOnly }}
         >
-          <Ionicons name="color-palette-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
+          <Ionicons name="color-palette-outline" size={22} color={isReadOnly ? disabledBarIconColor : barIconColor} />
         </TouchableOpacity>
 
-        {/* Send: share note content via the system share sheet. Available for
-            any saved note regardless of ownership. */}
-        {noteId && (
-          <TouchableOpacity
-            onPress={handleNativeShare}
-            style={styles.toolbarBtn}
-            testID="toolbar-send-btn"
-            accessibilityLabel={t('note.send')}
-          >
-            <Ionicons name="share-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
-          </TouchableOpacity>
-        )}
+        {/* Add image. Needs a server-backed note, so a brand-new note is saved
+            first via withSavedNote before the picker opens — no draft/orphan
+            upload is ever created (spec §15.6). Only read-only (trashed) notes
+            disable it. Offline uploads are queued and flushed on reconnect
+            (#618). */}
+        <TouchableOpacity
+          onPress={() => withSavedNote(() => setAddImageSheetVisible(true))}
+          disabled={isReadOnly}
+          style={styles.toolbarBtn}
+          testID="toolbar-add-image-btn"
+          accessibilityLabel={t('images.addImage')}
+          accessibilityState={{ disabled: isReadOnly }}
+        >
+          <Ionicons name="image-outline" size={22} color={isReadOnly ? disabledBarIconColor : barIconColor} />
+        </TouchableOpacity>
 
-        {/* Share with collaborators (when the note is saved and owned by the current
-            user). Sharing requires a central server and is not available in local mode.
-            An offline-created note can be shared: its create drains FIFO before the
-            queued share (#475). Notes with a local_* id are excluded (no server id). */}
-        {!isLocalMode && noteId && !isLocalId(noteId) && existingNote && existingNote.user_id === currentUser?.id && (
-          <TouchableOpacity
-            onPress={() => navigation.navigate('Share', { noteId })}
-            style={styles.toolbarBtn}
-            testID="toolbar-share-btn"
-            accessibilityLabel={t('note.share')}
-          >
-            <Ionicons name="person-add-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
-          </TouchableOpacity>
-        )}
+        {/* Pin / Unpin. Save-first: an unsaved note is created before pinning. */}
+        <TouchableOpacity
+          onPress={handleTogglePin}
+          disabled={isReadOnly}
+          style={styles.toolbarBtn}
+          testID="toolbar-pin-btn"
+          accessibilityLabel={pinned ? t('note.unpin') : t('note.pin')}
+          accessibilityState={{ disabled: isReadOnly }}
+        >
+          <Ionicons name={pinned ? 'pin' : 'pin-outline'} size={22} color={isReadOnly ? disabledBarIconColor : (pinned ? colors.primary : barIconColor)} />
+        </TouchableOpacity>
 
-        {/* Pin / Unpin */}
-        {noteId && (
-          <TouchableOpacity
-            onPress={handleTogglePin}
-            style={styles.toolbarBtn}
-            testID="toolbar-pin-btn"
-            accessibilityLabel={pinned ? t('note.unpin') : t('note.pin')}
-          >
-            <Ionicons name={pinned ? 'pin' : 'pin-outline'} size={22} color={pinned ? colors.primary : (hasNoteColor ? '#444' : colors.icon)} />
-          </TouchableOpacity>
-        )}
-
-        {/* Archive / Unarchive */}
-        {noteId && (
-          <TouchableOpacity
-            onPress={handleToggleArchive}
-            style={styles.toolbarBtn}
-            testID="toolbar-archive-btn"
-            accessibilityLabel={archived ? t('note.unarchive') : t('note.archive')}
-          >
-            <Ionicons
-              name="archive-outline"
-              size={22}
-              color={archived ? colors.primary : (hasNoteColor ? '#444' : colors.icon)}
-            />
-          </TouchableOpacity>
-        )}
-
-        {/* Duplicate. */}
-        {noteId && (
-          <TouchableOpacity
-            onPress={handleDuplicate}
-            style={styles.toolbarBtn}
-            testID="toolbar-duplicate-btn"
-            accessibilityLabel={t('note.duplicate')}
-          >
-            <Ionicons name="copy-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
-          </TouchableOpacity>
-        )}
-
-        {/* Label button. Label ops queue FIFO behind an offline-created note's
-            create (#475), so they work for pending-create notes. Only unsynced
-            notes with a local_* id (offline labels) are excluded. */}
-        {noteId && !isLocalId(noteId) && (
-          <TouchableOpacity
-            onPress={() => setLabelPickerVisible(true)}
-            style={styles.toolbarBtn}
-            testID="toolbar-label-btn"
-            accessibilityLabel={t('labels.title')}
-          >
-            <Ionicons name="pricetag-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
-          </TouchableOpacity>
-        )}
-
-        {/* Add image. Images require a server-backed note_id (spec §15.6 — no
-            draft/orphan uploads), so this is gated the same as the label
-            button. Offline uploads are queued and flushed on reconnect (#618). */}
-        {noteId && !isLocalId(noteId) && (
-          <TouchableOpacity
-            onPress={() => setAddImageSheetVisible(true)}
-            style={styles.toolbarBtn}
-            testID="toolbar-add-image-btn"
-            accessibilityLabel={t('images.addImage')}
-          >
-            <Ionicons name="image-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
-          </TouchableOpacity>
-        )}
+        {/* Archive / Unarchive. Save-first, like Pin. */}
+        <TouchableOpacity
+          onPress={handleToggleArchive}
+          disabled={isReadOnly}
+          style={styles.toolbarBtn}
+          testID="toolbar-archive-btn"
+          accessibilityLabel={archived ? t('note.unarchive') : t('note.archive')}
+          accessibilityState={{ disabled: isReadOnly }}
+        >
+          <Ionicons
+            name="archive-outline"
+            size={22}
+            color={isReadOnly ? disabledBarIconColor : (archived ? colors.primary : barIconColor)}
+          />
+        </TouchableOpacity>
 
         <View style={styles.toolbarSpacer} />
 
-        {/* Delete */}
-        <TouchableOpacity onPress={handleDelete} style={styles.toolbarBtn} testID="delete-note-btn">
-          <Ionicons name="trash-outline" size={22} color={colors.error} />
+        {/* Overflow menu: Send / Share / Duplicate / Labels / Delete for a normal
+            note, or Restore / Delete-forever for a read-only trashed note. */}
+        <TouchableOpacity
+          onPress={() => setMenuVisible(true)}
+          style={styles.toolbarBtn}
+          testID="toolbar-menu-btn"
+          accessibilityLabel={t('note.menuOptions')}
+        >
+          <Ionicons name="ellipsis-vertical" size={22} color={barIconColor} />
         </TouchableOpacity>
       </View>
+
+      <NoteEditorMenu
+        visible={menuVisible}
+        onClose={() => setMenuVisible(false)}
+        trashed={isReadOnly}
+        title={noteType === 'list' ? title : undefined}
+        onSend={handleNativeShare}
+        onShare={canShareWithCollaborators ? () => withSavedNote((id) => navigation.navigate('Share', { noteId: id })) : undefined}
+        onDuplicate={handleDuplicate}
+        onManageLabels={() => withSavedNote(() => setLabelPickerVisible(true))}
+        onMoveToTrash={handleDelete}
+        onRestore={handleRestoreNote}
+        onDeletePermanently={handleDeletePermanently}
+      />
 
       <ColorPicker
         visible={colorPickerVisible}
@@ -2139,6 +2178,19 @@ export default function NoteEditorScreen() {
           setAssigneePickerVisible(false);
           setAssigningItemId(null);
         }}
+      />
+
+      <ConfirmDialog
+        visible={!!exitSavePrompt}
+        title={t('note.saveFailedExitTitle')}
+        message={t('note.saveFailedExitMessage')}
+        confirmLabel={t('note.discardAndLeave')}
+        destructive
+        cancelLabel={exitSavePrompt && exitSavePrompt.retriesLeft > 0 ? t('common.retry') : undefined}
+        onCancel={exitSavePrompt && exitSavePrompt.retriesLeft > 0 ? handleExitRetry : undefined}
+        onConfirm={handleExitDiscard}
+        busy={isExitRetrying}
+        dismissible={false}
       />
 
       <Modal

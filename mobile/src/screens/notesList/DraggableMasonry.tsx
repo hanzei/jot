@@ -22,6 +22,7 @@ import Animated, {
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import type { Note } from '@jot/shared';
 import { useTheme } from '../../theme/ThemeContext';
+import { isReduceMotionEnabledSync } from '../../utils/layoutAnimation';
 import { styles as listStyles } from './styles';
 import type { NoteSection } from './noteListUtils';
 import { packColumns, reorderForPointer, type PlacedItem } from './masonry';
@@ -213,6 +214,30 @@ export default function DraggableMasonry({
     });
   }, [heights, orders, sections, liveIds]);
 
+  // Entrance animations are enabled only once the *entire* initial data set has
+  // been measured and placed. Sections commit independently (see the batch
+  // commit above), so keying off a single committed height would flip too early
+  // and animate later-committing initial cards (e.g. the "other" section
+  // committing after "pinned") as if they were new. Instead we capture the ids
+  // from the first non-empty render and wait for every one of them to commit
+  // (or drop out of the list). Any card mounting after that is a genuine
+  // addition — a created note or one arriving via sync — and fades in.
+  const initialIdsRef = useRef<Set<string> | null>(null);
+  const hasPopulatedRef = useRef(false);
+  useEffect(() => {
+    if (hasPopulatedRef.current) return;
+    if (initialIdsRef.current === null) {
+      if (liveIds.size === 0) return;
+      initialIdsRef.current = new Set(liveIds);
+    }
+    const allInitialCommitted = [...initialIdsRef.current].every(
+      (id) => committedHeights[id] !== undefined || !liveIds.has(id),
+    );
+    if (allInitialCommitted) {
+      hasPopulatedRef.current = true;
+    }
+  }, [committedHeights, liveIds]);
+
   // Ids waiting on their first real measurement, across all sections — these
   // render invisibly via HeightMeasurer instead of in the positioned list.
   const pendingIds = useMemo(() => {
@@ -357,6 +382,7 @@ export default function DraggableMasonry({
                         width={columnWidth}
                         x={item.x}
                         y={item.y}
+                        animateEntrance={hasPopulatedRef.current}
                         sectionRef={sectionRefs[sectionIndex]}
                         shared={shared}
                         onMeasureHeight={handleMeasureHeight}
@@ -425,6 +451,8 @@ interface DraggableCardProps {
   width: number;
   x: number;
   y: number;
+  /** Fade the card in on mount (only for genuine additions, not the first populate). */
+  animateEntrance: boolean;
   sectionRef: ReturnType<typeof useAnimatedRef<Animated.View>>;
   shared: SharedDragState;
   onMeasureHeight: (id: string, height: number) => void;
@@ -441,6 +469,7 @@ function DraggableCard({
   width,
   x,
   y,
+  animateEntrance,
   sectionRef,
   shared,
   onMeasureHeight,
@@ -459,6 +488,18 @@ function DraggableCard({
     posX.value = x;
     posY.value = y;
   }, [x, y, posX, posY]);
+
+  // Entrance fade for freshly added cards. Decided once at mount; existing cards
+  // never re-run it, and it no-ops under the OS "Reduce Motion" setting.
+  const shouldFadeIn = useRef(animateEntrance && !isReduceMotionEnabledSync()).current;
+  const entrance = useSharedValue(shouldFadeIn ? 0 : 1);
+  useEffect(() => {
+    if (shouldFadeIn) {
+      entrance.value = withTiming(1, { duration: 200 });
+    }
+    // Mount-only: entrance is fixed per card.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const pan = useMemo(
     () =>
@@ -508,6 +549,7 @@ function DraggableCard({
     const isActive = shared.activeId.value === id && shared.activeSection.value === sectionIndex;
     if (isActive) {
       return {
+        opacity: entrance.value,
         transform: [
           { translateX: shared.startX.value + shared.dragTX.value },
           { translateY: shared.startY.value + shared.dragTY.value },
@@ -522,6 +564,7 @@ function DraggableCard({
       };
     }
     return {
+      opacity: entrance.value,
       transform: [
         { translateX: withTiming(x, { duration: 180 }) },
         { translateY: withTiming(y, { duration: 180 }) },

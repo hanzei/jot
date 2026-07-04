@@ -98,6 +98,10 @@ interface NoteModalProps {
   // to the shared default so this component still works if a caller (e.g. a
   // test) doesn't pass it.
   uploadMaxBytes?: number;
+  // Prefill for a brand-new note (note === null), e.g. from the /new deep
+  // link (PWA shortcut or share target). Ignored once a note is being edited.
+  initialType?: NoteType;
+  initialContent?: string;
 }
 
 interface ListItem {
@@ -482,7 +486,7 @@ function SortableItem({ id, index, item, onUpdateListItem, onRemoveListItem, isC
   );
 }
 
-export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, onDelete, onDuplicate, isOwner = true, usersById, currentUserId, uploadMaxBytes = UPLOAD_MAX_BYTES }: NoteModalProps) {
+export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, onDelete, onDuplicate, isOwner = true, usersById, currentUserId, uploadMaxBytes = UPLOAD_MAX_BYTES, initialType, initialContent }: NoteModalProps) {
   const { t, i18n } = useTranslation();
   const { showToast } = useToast();
   const [title, setTitle] = useState('');
@@ -872,8 +876,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       setSavedBaseline(draft, listItems);
     } else {
       setTitle('');
-      setContent('');
-      setNoteType('text');
+      setContent(initialContent ?? '');
+      setNoteType(initialType ?? 'text');
       setColor('#ffffff');
       setPinned(false);
       setArchived(false);
@@ -881,7 +885,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       setNoteLabels([]);
       setSavedBaseline({ title: '', content: '', pinned: false, archived: false, color: '#ffffff', checked_items_collapsed: false }, []);
     }
-  }, [commitItems, note, isDirty, setSavedBaseline]);
+  }, [commitItems, note, isDirty, setSavedBaseline, initialType, initialContent]);
 
   useEffect(() => {
     noteIdRef.current = note?.id ?? null;

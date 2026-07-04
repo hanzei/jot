@@ -21,7 +21,6 @@ interface NoteCardProps {
   note: Note;
   onPress: () => void;
   onLongPress?: () => void;
-  onMenuPress?: () => void;
   onLabelPress?: (labelId: string, labelName: string) => void;
 }
 
@@ -141,7 +140,7 @@ function ListPreview({ items, hasColor }: { items: NoteItem[]; hasColor?: boolea
   );
 }
 
-function NoteCard({ note, onPress, onLongPress, onMenuPress, onLabelPress }: NoteCardProps) {
+function NoteCard({ note, onPress, onLongPress, onLabelPress }: NoteCardProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
   const failedNoteIds = useFailedNoteIds();
@@ -215,18 +214,6 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress, onLabelPress }: Not
             </Text>
           ) : null}
         </View>
-        {onMenuPress && (
-          <TouchableOpacity
-            onPress={onMenuPress}
-            style={styles.menuButton}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            testID={`note-menu-${note.id}`}
-            accessibilityLabel={t('note.menuOptions')}
-            accessibilityRole="button"
-          >
-            <Ionicons name="ellipsis-vertical" size={18} color={hasColor ? '#999' : colors.iconMuted} />
-          </TouchableOpacity>
-        )}
       </View>
 
       {note.note_type === 'list' && note.items && note.items.length > 0 ? (
@@ -326,11 +313,6 @@ const styles = StyleSheet.create({
   },
   cardHeaderContent: {
     flex: 1,
-  },
-  menuButton: {
-    padding: 4,
-    marginTop: -4,
-    marginRight: -4,
   },
   title: {
     fontSize: 15,

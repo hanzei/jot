@@ -56,11 +56,13 @@ const mockConnect = jest.fn().mockImplementation(async (cb: (event: SSEEvent) =>
   capturedCallback = cb;
 });
 const mockDisconnect = jest.fn();
+const mockManagerIsConnected = jest.fn(() => false);
 
 jest.mock('../src/api/events', () => ({
   SSEConnectionManager: jest.fn().mockImplementation(() => ({
     connect: mockConnect,
     disconnect: mockDisconnect,
+    isConnected: mockManagerIsConnected,
   })),
 }));
 
@@ -98,6 +100,8 @@ describe('useSSE', () => {
     mockIsAuthenticated = true;
     mockIsConnected = true;
     mockProtectedNoteIds = new Set<string>();
+    // Default: not yet connected, so foreground rebuilds like it always did.
+    mockManagerIsConnected.mockReturnValue(false);
   });
 
   it('starts SSE connection when authenticated', () => {
@@ -552,6 +556,45 @@ describe('useSSE', () => {
     act(() => {
       appStateHandler('active');
     });
+    expect(mockConnect).toHaveBeenCalled();
+  });
+
+  it('does not tear down a healthy connection on a brief inactive→active foreground blip', () => {
+    // A control-center / notification-shade peek sends active→inactive→active
+    // without a 'background', so the manager is still connected. Rebuilding would
+    // throw away a working stream and pay a fresh TLS handshake on a weak link.
+    mockManagerIsConnected.mockReturnValue(true);
+    const { Wrapper } = createWrapper();
+    renderHook(() => useSSE(), { wrapper: Wrapper });
+
+    const appStateHandler = (AppState.addEventListener as jest.Mock).mock.calls[0][1] as (
+      state: AppStateStatus,
+    ) => void;
+
+    mockConnect.mockClear();
+    mockDisconnect.mockClear();
+    act(() => {
+      appStateHandler('active');
+    });
+
+    expect(mockConnect).not.toHaveBeenCalled();
+    expect(mockDisconnect).not.toHaveBeenCalled();
+  });
+
+  it('rebuilds on foreground when the existing connection is not healthy', () => {
+    mockManagerIsConnected.mockReturnValue(false);
+    const { Wrapper } = createWrapper();
+    renderHook(() => useSSE(), { wrapper: Wrapper });
+
+    const appStateHandler = (AppState.addEventListener as jest.Mock).mock.calls[0][1] as (
+      state: AppStateStatus,
+    ) => void;
+
+    mockConnect.mockClear();
+    act(() => {
+      appStateHandler('active');
+    });
+
     expect(mockConnect).toHaveBeenCalled();
   });
 });

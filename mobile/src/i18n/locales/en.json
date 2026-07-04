@@ -260,7 +260,6 @@
     "typeList": "List",
     "titlePlaceholder": "Note title...",
     "contentPlaceholder": "Take a note...",
-    "itemPlaceholder": "List item...",
     "addItem": "Add item",
     "failedSaveChanges": "Failed to save changes. Tap to retry.",
     "menuOptions": "Note options",
@@ -382,6 +381,10 @@
     "addAndSwitchAction": "Add and switch",
     "wrongServerTitle": "Wrong server",
     "wrongServerMessage": "This link targets {{targetServer}}, but you are connected to {{currentServer}}."
+  },
+  "quickActions": {
+    "newNote": "New Note",
+    "newList": "New List"
   },
   "shareIntent": {
     "saveTargetLabel": "Saving to {{server}}",

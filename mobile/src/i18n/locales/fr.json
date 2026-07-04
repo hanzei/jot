@@ -231,7 +231,6 @@
     "typeList": "Liste",
     "titlePlaceholder": "Titre de la note...",
     "contentPlaceholder": "Prendre une note...",
-    "itemPlaceholder": "Élément de liste...",
     "addItem": "Ajouter un élément",
     "failedSaveChanges": "Impossible d'enregistrer les modifications. Appuyez pour réessayer.",
     "menuOptions": "Options de la note",
@@ -382,6 +381,10 @@
     "cancelSetupTitle": "Annuler l'ajout du serveur ?",
     "cancelSetupMessage": "Le serveur ne sera pas ajouté.",
     "cancelSetupConfirm": "Retour"
+  },
+  "quickActions": {
+    "newNote": "Nouvelle note",
+    "newList": "Nouvelle liste"
   },
   "shareIntent": {
     "saveTargetLabel": "Enregistrement sur {{server}}",

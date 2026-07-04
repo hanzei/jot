@@ -15,6 +15,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useTranslation } from 'react-i18next';
 import UserAvatar from './UserAvatar';
 import { useTheme } from '../theme/ThemeContext';
+import { getEffectiveColors } from '../theme/colors';
 import { isReduceMotionEnabledSync } from '../utils/layoutAnimation';
 import { VALIDATION, type Collaborator } from '@jot/shared';
 
@@ -139,11 +140,13 @@ function ListItem({
     return results;
   }, [text, completedItemTexts]);
 
-  const effectiveText = hasNoteColor ? '#1a1a1a' : colors.text;
-  const effectiveTextMuted = hasNoteColor ? '#777' : colors.textMuted;
-  const effectivePlaceholder = hasNoteColor ? '#999' : colors.placeholder;
-  const effectiveIconMuted = hasNoteColor ? '#888' : colors.iconMuted;
-  const effectiveBorder = hasNoteColor ? '#bbb' : colors.border;
+  const {
+    text: effectiveText,
+    textSecondary: effectiveTextSecondary,
+    icon: effectiveIcon,
+    iconMuted: effectiveIconMuted,
+    border: effectiveBorder,
+  } = getEffectiveColors(hasNoteColor, colors);
   const showAssignUI = isShared && collaborators && collaborators.length > 0 && onAssignPress;
   const assignedUser = assignedTo ? collaborators?.find((c) => c.userId === assignedTo) : undefined;
   const normalizedIndentLevel = Math.max(0, indentLevel);
@@ -172,7 +175,7 @@ function ListItem({
         >
           {/* Six-dot drag-handle glyph: the conventional "grab to drag" affordance
               (drag vertically to reorder, horizontally to indent/outdent). */}
-          <MaterialIcons name="drag-indicator" size={22} color={effectiveIconMuted} />
+          <MaterialIcons name="drag-indicator" size={22} color={effectiveIcon} />
         </TouchableOpacity>
       )}
       <TouchableOpacity
@@ -196,7 +199,7 @@ function ListItem({
           <TextInput
             ref={inputRef}
             autoFocus={autoFocus}
-            style={[styles.textInput, { color: completed ? effectiveTextMuted : effectiveText }, completed && styles.completedText]}
+            style={[styles.textInput, { color: completed ? effectiveTextSecondary : effectiveText }, completed && styles.completedText]}
             value={text}
             onChangeText={(newText) => {
               onChangeText?.(newText);
@@ -209,8 +212,6 @@ function ListItem({
               selectionRef.current = event.nativeEvent.selection;
             }}
             editable={editable}
-            placeholder={t('note.itemPlaceholder')}
-            placeholderTextColor={effectivePlaceholder}
             returnKeyType="next"
             onSubmitEditing={() => onSubmitEditing?.(selectionRef.current.start)}
             blurOnSubmit={false}
@@ -272,6 +273,10 @@ function ListItem({
             <TouchableOpacity
               onPress={onDelete}
               style={styles.deleteBtn}
+              // Keep the tap target generous even though the button's own padding
+              // is small — a smaller footprint keeps the row height stable when
+              // this button appears on focus (see deleteBtn style note).
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               testID="list-item-delete"
               accessibilityLabel={t('note.removeItem')}
             >
@@ -346,7 +351,12 @@ const styles = StyleSheet.create({
     textDecorationLine: 'line-through' as const,
   },
   deleteBtn: {
-    padding: 8,
+    // Match the checkbox's padding (4) so this button — which only appears while
+    // the row is focused — has the same height as the always-present checkbox.
+    // A larger padding made the focused row taller than the unfocused one,
+    // shifting every item below it down when a row was selected. The tap target
+    // is kept comfortable via hitSlop on the button itself.
+    padding: 4,
     marginLeft: 'auto',
   },
   assignBtn: {

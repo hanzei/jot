@@ -41,7 +41,6 @@ import {
   generateClientNoteId,
   markNotePendingCreate,
   isNotePendingCreate,
-  isLocalId,
   createLocalItem,
   patchLocalItem,
   deleteLocalItem,
@@ -760,11 +759,6 @@ export function useShareNote() {
   return useMutation({
     mutationFn: async ({ noteId, user }: { noteId: string; user: User }) => {
       assertSwitchWriteAllowed();
-      // A local_* duplicate has no server-side id yet (it awaits id reconciliation),
-      // so it can never be shared.
-      if (isLocalId(noteId)) {
-        throw new Error('cannot share unsynced note');
-      }
       // An offline-created note already carries a server-valid id (#475) and its
       // queued create drains FIFO before this share, so queue the share rather than
       // attempting it online — the server doesn't know the note yet, so a direct
@@ -831,10 +825,6 @@ export function useUnshareNote() {
   return useMutation({
     mutationFn: async ({ noteId, userId }: { noteId: string; userId: string }) => {
       assertSwitchWriteAllowed();
-      // A local_* duplicate has no server-side id yet, so there is nothing to unshare.
-      if (isLocalId(noteId)) {
-        throw new Error('cannot unshare unsynced note');
-      }
       // An offline-created note (#475) drains its create FIFO before this unshare,
       // so queue rather than calling online against a note the server doesn't know yet.
       const pendingCreate = await isNotePendingCreate(db, noteId);

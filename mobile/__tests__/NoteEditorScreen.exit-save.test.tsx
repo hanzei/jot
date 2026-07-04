@@ -1,5 +1,4 @@
 import React from 'react';
-import { Alert } from 'react-native';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import NoteEditorScreen from '../src/screens/NoteEditorScreen';
 
@@ -71,6 +70,9 @@ jest.mock('../src/hooks/useNotes', () => ({
     mutateAsync: mockDeleteMutateAsync,
   }),
   useRestoreNote: () => ({
+    mutateAsync: jest.fn(),
+  }),
+  usePermanentDeleteNote: () => ({
     mutateAsync: jest.fn(),
   }),
   useDuplicateNote: () => ({
@@ -196,7 +198,6 @@ jest.mock('../src/i18n', () => ({
 }));
 
 type BeforeRemoveEvent = { preventDefault: jest.Mock; data: { action: object } };
-type AlertButton = { text: string; style?: string; onPress?: () => void | Promise<void> };
 
 function getBeforeRemoveHandler() {
   const calls = mockNavigationAddListener.mock.calls;
@@ -213,8 +214,6 @@ function makeEvent(): BeforeRemoveEvent {
 }
 
 describe('NoteEditorScreen exit save behavior', () => {
-  let alertSpy: jest.SpyInstance;
-
   beforeEach(() => {
     jest.clearAllMocks();
     mockNavigationAddListener.mockReturnValue(jest.fn());
@@ -222,7 +221,6 @@ describe('NoteEditorScreen exit save behavior', () => {
     mockUseOfflineNote.mockReturnValue({ data: null });
     mockCreateMutateAsync.mockResolvedValue({ id: 'created-note-id' });
     mockUpdateMutateAsync.mockResolvedValue({});
-    alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
   });
 
   afterEach(() => {
@@ -230,10 +228,10 @@ describe('NoteEditorScreen exit save behavior', () => {
     jest.restoreAllMocks();
   });
 
-  it('shows Retry/Discard alert when save fails permanently at exit', async () => {
+  it('shows Retry/Discard dialog when save fails permanently at exit', async () => {
     mockCreateMutateAsync.mockRejectedValue(new Error('400 Bad Request'));
 
-    const { getByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId, findByTestId } = render(<NoteEditorScreen />);
     fireEvent.changeText(getByTestId('note-content-input'), 'Hello');
 
     const beforeRemove = getBeforeRemoveHandler()!;
@@ -242,35 +240,50 @@ describe('NoteEditorScreen exit save behavior', () => {
     const event = makeEvent();
     act(() => { beforeRemove(event); });
 
-    await waitFor(() => {
-      expect(alertSpy).toHaveBeenCalledTimes(1);
-    });
+    await findByTestId('confirm-dialog-confirm');
 
     expect(event.preventDefault).toHaveBeenCalled();
-    const [title, message, buttons] = alertSpy.mock.calls[0] as [string, string, AlertButton[]];
-    expect(title).toBe('note.saveFailedExitTitle');
-    expect(message).toBe('note.saveFailedExitMessage');
-    expect(buttons.map((b) => b.text)).toContain('note.discardAndLeave');
-    expect(buttons.map((b) => b.text)).toContain('common.retry');
+    expect(getByTestId('confirm-dialog-title').props.children).toBe('note.saveFailedExitTitle');
+    expect(getByTestId('confirm-dialog-message').props.children).toBe('note.saveFailedExitMessage');
+    expect(getByTestId('confirm-dialog-confirm').props.accessibilityLabel).toBe('note.discardAndLeave');
+    expect(getByTestId('confirm-dialog-cancel').props.accessibilityLabel).toBe('common.retry');
   });
 
-  it('dispatches navigation when Discard & leave is chosen', async () => {
+  it('does not trigger a retry when the backdrop is tapped', async () => {
     mockCreateMutateAsync.mockRejectedValue(new Error('400 Bad Request'));
 
-    const { getByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId, findByTestId } = render(<NoteEditorScreen />);
     fireEvent.changeText(getByTestId('note-content-input'), 'Hello');
 
     const beforeRemove = getBeforeRemoveHandler()!;
     const event = makeEvent();
     act(() => { beforeRemove(event); });
 
-    await waitFor(() => { expect(alertSpy).toHaveBeenCalledTimes(1); });
+    await findByTestId('confirm-dialog-cancel');
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1);
 
-    const buttons = alertSpy.mock.calls[0]?.[2] as AlertButton[];
-    const discardButton = buttons.find((b) => b.text === 'note.discardAndLeave')!;
-    expect(discardButton).toBeDefined();
+    // The "cancel" slot is repurposed for Retry here, not a true dismiss —
+    // tapping outside the dialog must be a no-op, not a silent retry attempt.
+    fireEvent.press(getByTestId('confirm-dialog-overlay'));
 
-    discardButton.onPress?.();
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1);
+    expect(mockDispatch).not.toHaveBeenCalled();
+    expect(getByTestId('confirm-dialog-cancel')).toBeTruthy();
+  });
+
+  it('dispatches navigation when Discard & leave is chosen', async () => {
+    mockCreateMutateAsync.mockRejectedValue(new Error('400 Bad Request'));
+
+    const { getByTestId, findByTestId } = render(<NoteEditorScreen />);
+    fireEvent.changeText(getByTestId('note-content-input'), 'Hello');
+
+    const beforeRemove = getBeforeRemoveHandler()!;
+    const event = makeEvent();
+    act(() => { beforeRemove(event); });
+
+    await findByTestId('confirm-dialog-confirm');
+
+    fireEvent.press(getByTestId('confirm-dialog-confirm'));
 
     expect(mockDispatch).toHaveBeenCalledWith(event.data.action);
     expect(mockDispatch).toHaveBeenCalledTimes(1);
@@ -280,52 +293,118 @@ describe('NoteEditorScreen exit save behavior', () => {
     // First save fails permanently, retry succeeds — user exits cleanly.
     mockCreateMutateAsync.mockRejectedValue(new Error('400 Bad Request'));
 
-    const { getByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId, findByTestId } = render(<NoteEditorScreen />);
     fireEvent.changeText(getByTestId('note-content-input'), 'Hello');
 
     const beforeRemove = getBeforeRemoveHandler()!;
     const event = makeEvent();
     act(() => { beforeRemove(event); });
 
-    await waitFor(() => { expect(alertSpy).toHaveBeenCalledTimes(1); });
+    await findByTestId('confirm-dialog-cancel');
 
     // Swap mock to succeed so the Retry path exits cleanly.
     mockCreateMutateAsync.mockResolvedValue({ id: 'new-note-id' });
 
-    const buttons = alertSpy.mock.calls[0]?.[2] as AlertButton[];
-    const retryButton = buttons.find((b) => b.text === 'common.retry')!;
-    expect(retryButton).toBeDefined();
+    fireEvent.press(getByTestId('confirm-dialog-cancel'));
 
-    await act(async () => { await retryButton.onPress?.(); });
-
-    expect(mockDispatch).toHaveBeenCalledWith(event.data.action);
+    await waitFor(() => { expect(mockDispatch).toHaveBeenCalledWith(event.data.action); });
   });
 
-  it('shows alert again when Retry also fails', async () => {
+  it('shows dialog again when Retry also fails', async () => {
     mockCreateMutateAsync.mockRejectedValue(new Error('400 Bad Request'));
 
-    const { getByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId, findByTestId } = render(<NoteEditorScreen />);
     fireEvent.changeText(getByTestId('note-content-input'), 'Hello');
 
     const beforeRemove = getBeforeRemoveHandler()!;
     const event = makeEvent();
     act(() => { beforeRemove(event); });
 
-    await waitFor(() => { expect(alertSpy).toHaveBeenCalledTimes(1); });
+    await findByTestId('confirm-dialog-cancel');
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1);
 
-    const buttons = alertSpy.mock.calls[0]?.[2] as AlertButton[];
-    const retryButton = buttons.find((b) => b.text === 'common.retry')!;
+    await act(async () => {
+      fireEvent.press(getByTestId('confirm-dialog-cancel'));
+    });
 
-    await act(async () => { await retryButton.onPress?.(); });
-
-    await waitFor(() => { expect(alertSpy).toHaveBeenCalledTimes(2); });
+    // A second failed save attempt means the retry actually ran, not just a no-op.
+    await waitFor(() => { expect(mockCreateMutateAsync).toHaveBeenCalledTimes(2); });
+    expect(getByTestId('confirm-dialog-cancel')).toBeTruthy();
     expect(mockDispatch).not.toHaveBeenCalled();
   });
 
-  it('navigates without alert when save succeeds at exit', async () => {
+  it('disables both actions while a retry is in flight and ignores extra taps', async () => {
+    mockCreateMutateAsync.mockRejectedValueOnce(new Error('400 Bad Request'));
+
+    const { getByTestId, findByTestId } = render(<NoteEditorScreen />);
+    fireEvent.changeText(getByTestId('note-content-input'), 'Hello');
+
+    const beforeRemove = getBeforeRemoveHandler()!;
+    const event = makeEvent();
+    act(() => { beforeRemove(event); });
+
+    await findByTestId('confirm-dialog-cancel');
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1);
+
+    // Keep the retry's save in flight so we can observe the busy state.
+    let resolveRetrySave!: (value: { id: string }) => void;
+    mockCreateMutateAsync.mockImplementationOnce(
+      () => new Promise((resolve) => { resolveRetrySave = resolve; }),
+    );
+
+    fireEvent.press(getByTestId('confirm-dialog-cancel'));
+    await waitFor(() => {
+      expect(getByTestId('confirm-dialog-cancel').props.accessibilityState.disabled).toBe(true);
+    });
+    expect(getByTestId('confirm-dialog-confirm').props.accessibilityState.disabled).toBe(true);
+
+    // Extra taps while the retry is in flight must not fire a second save or
+    // a premature discard/dispatch.
+    fireEvent.press(getByTestId('confirm-dialog-cancel'));
+    fireEvent.press(getByTestId('confirm-dialog-confirm'));
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(2);
+    expect(mockDispatch).not.toHaveBeenCalled();
+
+    await act(async () => { resolveRetrySave({ id: 'new-note-id' }); });
+
+    await waitFor(() => { expect(mockDispatch).toHaveBeenCalledWith(event.data.action); });
+  });
+
+  it('shows only the discard action once retries are exhausted', async () => {
+    mockCreateMutateAsync.mockRejectedValue(new Error('400 Bad Request'));
+
+    const { getByTestId, findByTestId, queryByTestId } = render(<NoteEditorScreen />);
+    fireEvent.changeText(getByTestId('note-content-input'), 'Hello');
+
+    const beforeRemove = getBeforeRemoveHandler()!;
+    const event = makeEvent();
+    act(() => { beforeRemove(event); });
+    await findByTestId('confirm-dialog-cancel');
+
+    // MAX_EXIT_SAVE_RETRIES is 3 — three failed retries exhaust the budget,
+    // after which only the discard action remains.
+    for (let attempt = 2; attempt <= 3; attempt++) {
+      await act(async () => {
+        fireEvent.press(getByTestId('confirm-dialog-cancel'));
+      });
+      await waitFor(() => { expect(mockCreateMutateAsync).toHaveBeenCalledTimes(attempt); });
+    }
+    await act(async () => {
+      fireEvent.press(getByTestId('confirm-dialog-cancel'));
+    });
+    await waitFor(() => { expect(mockCreateMutateAsync).toHaveBeenCalledTimes(4); });
+
+    expect(queryByTestId('confirm-dialog-cancel')).toBeNull();
+    expect(mockDispatch).not.toHaveBeenCalled();
+
+    fireEvent.press(getByTestId('confirm-dialog-confirm'));
+    expect(mockDispatch).toHaveBeenCalledWith(event.data.action);
+  });
+
+  it('navigates without showing a dialog when save succeeds at exit', async () => {
     mockCreateMutateAsync.mockResolvedValue({ id: 'new-note-id' });
 
-    const { getByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
     fireEvent.changeText(getByTestId('note-content-input'), 'Hello');
 
     const beforeRemove = getBeforeRemoveHandler()!;
@@ -333,7 +412,7 @@ describe('NoteEditorScreen exit save behavior', () => {
     act(() => { beforeRemove(event); });
 
     await waitFor(() => { expect(mockDispatch).toHaveBeenCalledWith(event.data.action); });
-    expect(alertSpy).not.toHaveBeenCalled();
+    expect(queryByTestId('confirm-dialog-confirm')).toBeNull();
   });
 
   it('does not drop edits typed while a save is in flight', async () => {
@@ -375,13 +454,13 @@ describe('NoteEditorScreen exit save behavior', () => {
   });
 
   it('does not block navigation when there are no pending changes', () => {
-    render(<NoteEditorScreen />);
+    const { queryByTestId } = render(<NoteEditorScreen />);
 
     const beforeRemove = getBeforeRemoveHandler()!;
     const event = makeEvent();
     beforeRemove(event);
 
     expect(event.preventDefault).not.toHaveBeenCalled();
-    expect(alertSpy).not.toHaveBeenCalled();
+    expect(queryByTestId('confirm-dialog-confirm')).toBeNull();
   });
 });

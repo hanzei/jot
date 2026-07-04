@@ -21,6 +21,12 @@ import (
 
 const queryTrue = "true"
 
+// SearchQueryParam is the GET /notes query parameter that switches on the
+// search LIKE-scan path (see GetNotes). Exported so callers outside this
+// package (the server's rate-limit wiring) can key off the same name instead
+// of duplicating the literal.
+const SearchQueryParam = "search"
+
 type NotesHandler struct {
 	noteStore      *models.NoteStore
 	userStore      *models.UserStore
@@ -350,7 +356,7 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, an
 	q := r.URL.Query()
 	trashed := q.Get("trashed") == queryTrue
 	archived := q.Get("archived") == queryTrue
-	search := q.Get("search")
+	search := q.Get(SearchQueryParam)
 	labelID := q.Get("label")
 	myTasks := q.Get("my_tasks") == queryTrue
 

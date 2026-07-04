@@ -231,7 +231,6 @@
     "typeList": "Lista",
     "titlePlaceholder": "Tytuł notatki...",
     "contentPlaceholder": "Zapisz notatkę...",
-    "itemPlaceholder": "Element listy...",
     "addItem": "Dodaj element",
     "failedSaveChanges": "Nie udało się zapisać zmian. Dotknij, aby ponowić.",
     "menuOptions": "Opcje notatki",
@@ -353,6 +352,10 @@
     "unknownServerTitle": "Nieznany serwer",
     "unknownServerMessage": "Ten link wskazuje serwer {{server}}, który nie został jeszcze dodany.",
     "addAndSwitchAction": "Dodaj i przełącz"
+  },
+  "quickActions": {
+    "newNote": "Nowa notatka",
+    "newList": "Nowa lista"
   },
   "shareIntent": {
     "saveTargetLabel": "Zapisywanie na {{server}}",

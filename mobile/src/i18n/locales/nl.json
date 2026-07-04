@@ -260,7 +260,6 @@
     "typeList": "Lijst",
     "titlePlaceholder": "Notitietitel...",
     "contentPlaceholder": "Een notitie maken...",
-    "itemPlaceholder": "Lijstitem...",
     "addItem": "Item toevoegen",
     "failedSaveChanges": "Wijzigingen opslaan mislukt. Tik om opnieuw te proberen.",
     "menuOptions": "Notitieopties",
@@ -382,6 +381,10 @@
     "addAndSwitchAction": "Toevoegen en wisselen",
     "wrongServerTitle": "Verkeerde server",
     "wrongServerMessage": "Deze link verwijst naar {{targetServer}}, maar je bent verbonden met {{currentServer}}."
+  },
+  "quickActions": {
+    "newNote": "Nieuwe notitie",
+    "newList": "Nieuwe lijst"
   },
   "shareIntent": {
     "saveTargetLabel": "Opslaan op {{server}}",

@@ -231,7 +231,6 @@
     "typeList": "Liste",
     "titlePlaceholder": "Notiz-Titel...",
     "contentPlaceholder": "Eine Notiz aufschreiben...",
-    "itemPlaceholder": "Listenelement...",
     "addItem": "Element hinzufügen",
     "failedSaveChanges": "Änderungen konnten nicht gespeichert werden. Tippe zum Wiederholen.",
     "menuOptions": "Notizoptionen",
@@ -382,6 +381,10 @@
     "cancelSetupTitle": "Server nicht hinzufügen?",
     "cancelSetupMessage": "Der Server wird nicht hinzugefügt.",
     "cancelSetupConfirm": "Zurück"
+  },
+  "quickActions": {
+    "newNote": "Neue Notiz",
+    "newList": "Neue Liste"
   },
   "shareIntent": {
     "saveTargetLabel": "Speichern auf {{server}}",

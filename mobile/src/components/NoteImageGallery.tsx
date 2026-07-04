@@ -45,6 +45,12 @@ export default function NoteImageGallery({ images, editable = false, uploads = [
   const { t } = useTranslation();
   const baseUrl = useActiveServerBaseUrl();
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  // Measured width of the single-image banner container, used to size the
+  // banner by an explicit height rather than the `aspectRatio` style prop —
+  // Yoga resolves a conflict between a percentage width and an aspectRatio
+  // capped by maxHeight by shrinking width instead of cropping height, which
+  // left portrait images rendered narrower than full width.
+  const [bannerWidth, setBannerWidth] = useState(0);
 
   // Uploads sort before persisted images (not after) so a newly-added upload
   // never falls past the visible window and loses its progress/error/retry
@@ -89,7 +95,10 @@ export default function NoteImageGallery({ images, editable = false, uploads = [
       : 4 / 3;
     const tileStyle = isGrid
       ? [styles.gridTile, spanLastTile && index === 2 ? styles.spanTwoColumns : null]
-      : [styles.bannerTile, { aspectRatio }];
+      : [
+          styles.bannerTile,
+          bannerWidth > 0 ? { height: Math.min(bannerWidth / aspectRatio, BANNER_MAX_HEIGHT) } : { aspectRatio },
+        ];
 
     if (tile.kind === 'image') {
       // Uploads sort before images in `tiles`, so a tile's position there no
@@ -211,7 +220,12 @@ export default function NoteImageGallery({ images, editable = false, uploads = [
           {visibleTiles.map((tile, i) => renderTile(tile, i))}
         </View>
       ) : (
-        <View testID="note-image-banner-container">{renderTile(visibleTiles[0], 0)}</View>
+        <View
+          testID="note-image-banner-container"
+          onLayout={(e) => setBannerWidth(e.nativeEvent.layout.width)}
+        >
+          {renderTile(visibleTiles[0], 0)}
+        </View>
       )}
       <ImageLightbox
         images={images}
