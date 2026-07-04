@@ -120,6 +120,14 @@ func Setup(ctx context.Context, cfg Config) (shutdown func(context.Context) erro
 		logrus.WithError(err).Warn("OTel resource is partial; some attributes may be missing")
 	}
 
+	// runtimeProducer supplies the goroutine scheduling-latency histogram
+	// (go.schedule.duration, queried by the shipped dashboard as
+	// go_schedule_duration_seconds) out of band. goruntime.Start below only
+	// registers the regular async instruments (goroutine count, memory
+	// stats); without this producer attached to a reader, scheduling latency
+	// is silently never collected.
+	runtimeProducer := goruntime.NewProducer()
+
 	// Prometheus exporter: registers with prometheus.DefaultRegisterer so that
 	// the /metrics handler serves OTel custom metrics alongside Go runtime stats.
 	//
@@ -133,6 +141,7 @@ func Setup(ctx context.Context, cfg Config) (shutdown func(context.Context) erro
 		promexporter.WithResourceAsConstantLabels(
 			attribute.NewAllowKeysFilter(semconv.ServiceNameKey, semconv.DeploymentEnvironmentKey),
 		),
+		promexporter.WithProducer(runtimeProducer),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create Prometheus exporter: %w", err)
@@ -146,7 +155,7 @@ func Setup(ctx context.Context, cfg Config) (shutdown func(context.Context) erro
 	)
 
 	if cfg.Endpoint != "" {
-		tp, mp, lp, shutdowns, err = setupOTLP(ctx, res, cfg.Endpoint, cfg.Insecure, cfg.TracesEnabled, cfg.MetricsEnabled, cfg.LogsEnabled, promExp)
+		tp, mp, lp, shutdowns, err = setupOTLP(ctx, res, cfg.Endpoint, cfg.Insecure, cfg.TracesEnabled, cfg.MetricsEnabled, cfg.LogsEnabled, promExp, runtimeProducer)
 	} else {
 		tp, mp, lp, shutdowns, err = setupStdout(ctx, res, cfg.TracesEnabled, cfg.LogsEnabled, promExp)
 	}
@@ -225,7 +234,7 @@ func initLoggerProvider(logsEnabled bool, res *resource.Resource, newExporter fu
 	return lp, []func(context.Context) error{lp.Shutdown}, nil
 }
 
-func setupOTLP(ctx context.Context, res *resource.Resource, endpoint string, insecureConn bool, tracesEnabled, metricsEnabled, logsEnabled bool, promExp *promexporter.Exporter) (trace.TracerProvider, *metric.MeterProvider, log.LoggerProvider, []func(context.Context) error, error) {
+func setupOTLP(ctx context.Context, res *resource.Resource, endpoint string, insecureConn bool, tracesEnabled, metricsEnabled, logsEnabled bool, promExp *promexporter.Exporter, runtimeProducer metric.Producer) (trace.TracerProvider, *metric.MeterProvider, log.LoggerProvider, []func(context.Context) error, error) {
 	var creds credentials.TransportCredentials
 	if insecureConn {
 		creds = insecure.NewCredentials()
@@ -259,7 +268,7 @@ func setupOTLP(ctx context.Context, res *resource.Resource, endpoint string, ins
 			_ = conn.Close()
 			return nil, nil, nil, nil, fmt.Errorf("create OTLP metric exporter: %w", metricErr)
 		}
-		metricOpts = append(metricOpts, metric.WithReader(metric.NewPeriodicReader(metricExporter)))
+		metricOpts = append(metricOpts, metric.WithReader(metric.NewPeriodicReader(metricExporter, metric.WithProducer(runtimeProducer))))
 	}
 	mp := metric.NewMeterProvider(metricOpts...)
 

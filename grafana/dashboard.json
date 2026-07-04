@@ -15,7 +15,7 @@
       }
     ]
   },
-  "description": "Jot application observability \u2013 HTTP traffic, notes activity, sessions, SSE connections, and Go runtime via OpenTelemetry.",
+  "description": "Jot application observability \u2013 HTTP traffic, notes activity, sessions, SSE connections, rate limiting, and Go runtime via OpenTelemetry.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -86,7 +86,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (deployment_environment) (rate(otel_http_server_request_duration_seconds_count{deployment_environment=~\"$environment\"}[$__rate_interval]))",
+          "expr": "sum by (deployment_environment) (rate(http_server_request_duration_seconds_count{deployment_environment=~\"$environment\"}[$__rate_interval]))",
           "legendFormat": "req/s [{{deployment_environment}}]",
           "refId": "A"
         }
@@ -154,7 +154,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "histogram_quantile(0.95, sum by (le, deployment_environment) (rate(otel_http_server_request_duration_seconds_bucket{deployment_environment=~\"$environment\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le, deployment_environment) (rate(http_server_request_duration_seconds_bucket{deployment_environment=~\"$environment\"}[$__rate_interval])))",
           "legendFormat": "p95 [{{deployment_environment}}]",
           "refId": "A"
         }
@@ -233,7 +233,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "100 * sum by (deployment_environment) (rate(otel_http_server_request_duration_seconds_count{http_response_status_code=~\"5..\",deployment_environment=~\"$environment\"}[$__rate_interval])) / sum by (deployment_environment) (rate(otel_http_server_request_duration_seconds_count{deployment_environment=~\"$environment\"}[$__rate_interval]))",
+          "expr": "100 * sum by (deployment_environment) (rate(http_server_request_duration_seconds_count{http_response_status_code=~\"5..\",deployment_environment=~\"$environment\"}[$__rate_interval])) / sum by (deployment_environment) (rate(http_server_request_duration_seconds_count{deployment_environment=~\"$environment\"}[$__rate_interval]))",
           "legendFormat": "error % [{{deployment_environment}}]",
           "refId": "A"
         }
@@ -293,7 +293,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (deployment_environment) (otel_sse_subscribers_active{deployment_environment=~\"$environment\"})",
+          "expr": "sum by (deployment_environment) (sse_subscribers_active{deployment_environment=~\"$environment\"})",
           "legendFormat": "subscribers [{{deployment_environment}}]",
           "refId": "A"
         }
@@ -353,7 +353,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (deployment_environment) (rate(otel_notes_created_total{deployment_environment=~\"$environment\"}[$__rate_interval]))",
+          "expr": "sum by (deployment_environment) (rate(notes_created_total{deployment_environment=~\"$environment\"}[$__rate_interval]))",
           "legendFormat": "notes/s [{{deployment_environment}}]",
           "refId": "A"
         }
@@ -413,7 +413,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (deployment_environment) (rate(otel_sessions_created_total{deployment_environment=~\"$environment\"}[$__rate_interval]))",
+          "expr": "sum by (deployment_environment) (rate(sessions_created_total{deployment_environment=~\"$environment\"}[$__rate_interval]))",
           "legendFormat": "sessions/s [{{deployment_environment}}]",
           "refId": "A"
         }
@@ -515,7 +515,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (http_request_method, http_route, deployment_environment) (rate(otel_http_server_request_duration_seconds_count{deployment_environment=~\"$environment\"}[$__rate_interval]))",
+          "expr": "sum by (http_request_method, http_route, deployment_environment) (rate(http_server_request_duration_seconds_count{deployment_environment=~\"$environment\"}[$__rate_interval]))",
           "legendFormat": "{{http_request_method}} {{http_route}} [{{deployment_environment}}]",
           "refId": "A"
         }
@@ -605,7 +605,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "histogram_quantile(0.50, sum by (le, deployment_environment) (rate(otel_http_server_request_duration_seconds_bucket{deployment_environment=~\"$environment\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.50, sum by (le, deployment_environment) (rate(http_server_request_duration_seconds_bucket{deployment_environment=~\"$environment\"}[$__rate_interval])))",
           "legendFormat": "p50 [{{deployment_environment}}]",
           "refId": "A"
         },
@@ -614,7 +614,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "histogram_quantile(0.95, sum by (le, deployment_environment) (rate(otel_http_server_request_duration_seconds_bucket{deployment_environment=~\"$environment\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le, deployment_environment) (rate(http_server_request_duration_seconds_bucket{deployment_environment=~\"$environment\"}[$__rate_interval])))",
           "legendFormat": "p95 [{{deployment_environment}}]",
           "refId": "B"
         },
@@ -623,7 +623,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "histogram_quantile(0.99, sum by (le, deployment_environment) (rate(otel_http_server_request_duration_seconds_bucket{deployment_environment=~\"$environment\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.99, sum by (le, deployment_environment) (rate(http_server_request_duration_seconds_bucket{deployment_environment=~\"$environment\"}[$__rate_interval])))",
           "legendFormat": "p99 [{{deployment_environment}}]",
           "refId": "C"
         }
@@ -756,7 +756,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (http_response_status_code, deployment_environment) (rate(otel_http_server_request_duration_seconds_count{deployment_environment=~\"$environment\"}[$__rate_interval]))",
+          "expr": "sum by (http_response_status_code, deployment_environment) (rate(http_server_request_duration_seconds_count{deployment_environment=~\"$environment\"}[$__rate_interval]))",
           "legendFormat": "{{http_response_status_code}} [{{deployment_environment}}]",
           "refId": "A"
         }
@@ -864,7 +864,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (deployment_environment) (otel_http_server_active_requests{deployment_environment=~\"$environment\"})",
+          "expr": "sum by (deployment_environment) (http_server_active_requests{deployment_environment=~\"$environment\"})",
           "legendFormat": "active requests [{{deployment_environment}}]",
           "refId": "A"
         },
@@ -873,7 +873,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "histogram_quantile(0.95, sum by (le, deployment_environment) (rate(otel_http_server_response_body_size_bytes_bucket{deployment_environment=~\"$environment\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le, deployment_environment) (rate(http_server_response_body_size_bytes_bucket{deployment_environment=~\"$environment\"}[$__rate_interval])))",
           "legendFormat": "resp body p95 [{{deployment_environment}}]",
           "refId": "B"
         }
@@ -888,6 +888,108 @@
         "w": 24,
         "x": 0,
         "y": 22
+      },
+      "id": 105,
+      "title": "Rate Limiting",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
+      "id": 19,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (bucket, deployment_environment) (rate(ratelimit_throttled_total{deployment_environment=~\"$environment\"}[$__rate_interval]))",
+          "legendFormat": "{{bucket}} [{{deployment_environment}}]",
+          "refId": "A"
+        }
+      ],
+      "title": "Rate Limit Rejections (429s) by Bucket",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 31
       },
       "id": 102,
       "title": "Notes & Sessions",
@@ -952,7 +1054,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 23
+        "y": 32
       },
       "id": 11,
       "options": {
@@ -976,7 +1078,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (deployment_environment) (rate(otel_notes_created_total{deployment_environment=~\"$environment\"}[$__rate_interval]))",
+          "expr": "sum by (deployment_environment) (rate(notes_created_total{deployment_environment=~\"$environment\"}[$__rate_interval]))",
           "legendFormat": "created [{{deployment_environment}}]",
           "refId": "A"
         },
@@ -985,7 +1087,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (deployment_environment) (rate(otel_notes_updated_total{deployment_environment=~\"$environment\"}[$__rate_interval]))",
+          "expr": "sum by (deployment_environment) (rate(notes_updated_total{deployment_environment=~\"$environment\"}[$__rate_interval]))",
           "legendFormat": "updated [{{deployment_environment}}]",
           "refId": "B"
         },
@@ -994,7 +1096,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (deployment_environment) (rate(otel_notes_deleted_total{deployment_environment=~\"$environment\"}[$__rate_interval]))",
+          "expr": "sum by (deployment_environment) (rate(notes_deleted_total{deployment_environment=~\"$environment\"}[$__rate_interval]))",
           "legendFormat": "deleted [{{deployment_environment}}]",
           "refId": "C"
         },
@@ -1003,7 +1105,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (deployment_environment) (rate(otel_notes_restored_total{deployment_environment=~\"$environment\"}[$__rate_interval]))",
+          "expr": "sum by (deployment_environment) (rate(notes_restored_total{deployment_environment=~\"$environment\"}[$__rate_interval]))",
           "legendFormat": "restored [{{deployment_environment}}]",
           "refId": "D"
         }
@@ -1101,7 +1203,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 23
+        "y": 32
       },
       "id": 12,
       "options": {
@@ -1125,7 +1227,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (deployment_environment) (rate(otel_sessions_created_total{deployment_environment=~\"$environment\"}[$__rate_interval]))",
+          "expr": "sum by (deployment_environment) (rate(sessions_created_total{deployment_environment=~\"$environment\"}[$__rate_interval]))",
           "legendFormat": "created [{{deployment_environment}}]",
           "refId": "A"
         },
@@ -1134,7 +1236,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (deployment_environment) (rate(otel_sessions_evicted_total{deployment_environment=~\"$environment\"}[$__rate_interval]))",
+          "expr": "sum by (deployment_environment) (rate(sessions_evicted_total{deployment_environment=~\"$environment\"}[$__rate_interval]))",
           "legendFormat": "evicted [{{deployment_environment}}]",
           "refId": "B"
         },
@@ -1143,7 +1245,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (deployment_environment) (rate(otel_sessions_expired_total{deployment_environment=~\"$environment\"}[$__rate_interval]))",
+          "expr": "sum by (deployment_environment) (rate(sessions_expired_total{deployment_environment=~\"$environment\"}[$__rate_interval]))",
           "legendFormat": "expired (cleanup) [{{deployment_environment}}]",
           "refId": "C"
         }
@@ -1157,7 +1259,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 31
+        "y": 40
       },
       "id": 103,
       "title": "SSE Real-time",
@@ -1222,7 +1324,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 32
+        "y": 41
       },
       "id": 13,
       "options": {
@@ -1247,7 +1349,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (deployment_environment) (otel_sse_subscribers_active{deployment_environment=~\"$environment\"})",
+          "expr": "sum by (deployment_environment) (sse_subscribers_active{deployment_environment=~\"$environment\"})",
           "legendFormat": "active [{{deployment_environment}}]",
           "refId": "A"
         }
@@ -1314,7 +1416,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 32
+        "y": 41
       },
       "id": 14,
       "options": {
@@ -1337,7 +1439,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (event_type, deployment_environment) (rate(otel_sse_events_published_total{deployment_environment=~\"$environment\"}[$__rate_interval]))",
+          "expr": "sum by (event_type, deployment_environment) (rate(sse_events_published_total{deployment_environment=~\"$environment\"}[$__rate_interval]))",
           "legendFormat": "{{event_type}} [{{deployment_environment}}]",
           "refId": "A"
         }
@@ -1408,7 +1510,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 32
+        "y": 41
       },
       "id": 15,
       "options": {
@@ -1432,7 +1534,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (event_type, deployment_environment) (rate(otel_sse_events_dropped_total{deployment_environment=~\"$environment\"}[$__rate_interval]))",
+          "expr": "sum by (event_type, deployment_environment) (rate(sse_events_dropped_total{deployment_environment=~\"$environment\"}[$__rate_interval]))",
           "legendFormat": "dropped ({{event_type}}) [{{deployment_environment}}]",
           "refId": "A"
         }
@@ -1446,7 +1548,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 40
+        "y": 49
       },
       "id": 104,
       "title": "Go Runtime",
@@ -1511,7 +1613,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 41
+        "y": 50
       },
       "id": 16,
       "options": {
@@ -1536,7 +1638,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "otel_go_goroutine_count{deployment_environment=~\"$environment\"}",
+          "expr": "go_goroutine_count{deployment_environment=~\"$environment\"}",
           "legendFormat": "goroutines [{{deployment_environment}}]",
           "refId": "A"
         }
@@ -1603,7 +1705,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 41
+        "y": 50
       },
       "id": 17,
       "options": {
@@ -1628,7 +1730,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "otel_go_memory_used_bytes{deployment_environment=~\"$environment\"}",
+          "expr": "go_memory_used_bytes{deployment_environment=~\"$environment\"}",
           "legendFormat": "memory used [{{deployment_environment}}]",
           "refId": "A"
         },
@@ -1637,7 +1739,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "otel_go_memory_limit_bytes{deployment_environment=~\"$environment\"}",
+          "expr": "go_memory_limit_bytes{deployment_environment=~\"$environment\"}",
           "legendFormat": "memory limit [{{deployment_environment}}]",
           "refId": "B"
         },
@@ -1646,7 +1748,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "otel_go_memory_gc_goal_bytes{deployment_environment=~\"$environment\"}",
+          "expr": "go_memory_gc_goal_bytes{deployment_environment=~\"$environment\"}",
           "legendFormat": "gc goal [{{deployment_environment}}]",
           "refId": "C"
         }
@@ -1713,7 +1815,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 41
+        "y": 50
       },
       "id": 18,
       "options": {
@@ -1737,7 +1839,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "rate(otel_go_schedule_duration_seconds_sum{deployment_environment=~\"$environment\"}[$__rate_interval]) / rate(otel_go_schedule_duration_seconds_count{deployment_environment=~\"$environment\"}[$__rate_interval])",
+          "expr": "rate(go_schedule_duration_seconds_sum{deployment_environment=~\"$environment\"}[$__rate_interval]) / rate(go_schedule_duration_seconds_count{deployment_environment=~\"$environment\"}[$__rate_interval])",
           "legendFormat": "avg scheduler latency [{{deployment_environment}}]",
           "refId": "A"
         },
@@ -1746,7 +1848,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "histogram_quantile(0.75, sum by (le, deployment_environment) (rate(otel_go_schedule_duration_seconds_bucket{deployment_environment=~\"$environment\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.75, sum by (le, deployment_environment) (rate(go_schedule_duration_seconds_bucket{deployment_environment=~\"$environment\"}[$__rate_interval])))",
           "legendFormat": "p75 scheduler latency [{{deployment_environment}}]",
           "refId": "B"
         }
@@ -1780,7 +1882,7 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values(otel_http_server_request_duration_seconds_count, deployment_environment)",
+        "definition": "label_values(http_server_request_duration_seconds_count, deployment_environment)",
         "hide": 0,
         "includeAll": true,
         "label": "Environment",
@@ -1788,7 +1890,7 @@
         "name": "environment",
         "options": [],
         "query": {
-          "query": "label_values(otel_http_server_request_duration_seconds_count, deployment_environment)",
+          "query": "label_values(http_server_request_duration_seconds_count, deployment_environment)",
           "refId": "StandardVariableQuery"
         },
         "refresh": 2,
@@ -1806,5 +1908,5 @@
   "timezone": "browser",
   "title": "Jot Overview",
   "uid": "jot-overview-v1",
-  "version": 2
+  "version": 4
 }
