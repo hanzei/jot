@@ -57,7 +57,9 @@
     "serverSetupConnectionInvalidServer": "Połączono, ale to nie wygląda na zgodny punkt API Jot.",
     "localModeLink": "Użyj bez serwera",
     "localModeHint": "Twoje notatki pozostają tylko na tym urządzeniu.",
-    "localModeFailed": "Nie udało się uruchomić trybu lokalnego. Spróbuj ponownie."
+    "localModeFailed": "Nie udało się uruchomić trybu lokalnego. Spróbuj ponownie.",
+    "localModeConfirmTitle": "Użyć bez serwera?",
+    "localModeConfirmMessage": "Masz zalogowaną sesję na serwerze. Kontynuacja otworzy oddzielny notatnik na tym urządzeniu — Twoje notatki pozostaną na serwerze i możesz do nich wrócić, logując się ponownie."
   },
   "dashboard": {
     "newNote": "Nowa notatka",

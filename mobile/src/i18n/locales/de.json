@@ -57,7 +57,9 @@
     "serverSetupConnectionInvalidServer": "Verbindung hergestellt, aber dies scheint kein kompatibler Jot-API-Endpunkt zu sein.",
     "localModeLink": "Ohne Server verwenden",
     "localModeHint": "Deine Notizen bleiben nur auf diesem Gerät.",
-    "localModeFailed": "Lokaler Modus konnte nicht gestartet werden. Bitte versuche es erneut."
+    "localModeFailed": "Lokaler Modus konnte nicht gestartet werden. Bitte versuche es erneut.",
+    "localModeConfirmTitle": "Ohne Server verwenden?",
+    "localModeConfirmMessage": "Du bist bei einem Server angemeldet. Wenn du fortfährst, wird ein separates Notizbuch auf diesem Gerät geöffnet – deine Server-Notizen bleiben auf dem Server und du kannst wieder darauf zugreifen, indem du dich erneut anmeldest."
   },
   "dashboard": {
     "newNote": "Neue Notiz",

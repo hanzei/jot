@@ -57,7 +57,9 @@
     "serverSetupConnectionInvalidServer": "Connexion établie, mais ce point de terminaison ne semble pas être une API Jot compatible.",
     "localModeLink": "Utiliser sans serveur",
     "localModeHint": "Vos notes restent uniquement sur cet appareil.",
-    "localModeFailed": "Impossible de démarrer le mode local. Veuillez réessayer."
+    "localModeFailed": "Impossible de démarrer le mode local. Veuillez réessayer.",
+    "localModeConfirmTitle": "Utiliser sans serveur ?",
+    "localModeConfirmMessage": "Vous êtes connecté à un serveur. Si vous continuez, un carnet distinct s’ouvrira sur cet appareil : vos notes du serveur y restent, et vous pourrez les retrouver en vous reconnectant."
   },
   "dashboard": {
     "newNote": "Nouvelle note",

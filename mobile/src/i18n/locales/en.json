@@ -86,7 +86,9 @@
     "serverSetupConnectionInvalidServer": "Connected, but this doesn't look like a compatible Jot API endpoint.",
     "localModeLink": "Use without a server",
     "localModeHint": "Your notes stay on this device only.",
-    "localModeFailed": "Couldn’t start local mode. Please try again."
+    "localModeFailed": "Couldn’t start local mode. Please try again.",
+    "localModeConfirmTitle": "Use without a server?",
+    "localModeConfirmMessage": "You’re signed in to a server. Continuing opens a separate notebook on this device — your server notes stay on the server, and you can get back to them by signing in again."
   },
   "dashboard": {
     "newNote": "New Note",

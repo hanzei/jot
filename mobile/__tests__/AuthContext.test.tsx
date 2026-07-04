@@ -61,11 +61,12 @@ const mockUpdateLocalSettings = updateLocalSettings as jest.Mock;
 const mockUpdateLocalUser = updateLocalUser as jest.Mock;
 
 function TestConsumer() {
-  const { user, isAuthenticated, isLoading, logout } = useAuth();
+  const { user, isAuthenticated, isLoading, revalidationFailed, logout } = useAuth();
   return (
     <>
       <Text testID="loading">{String(isLoading)}</Text>
       <Text testID="authenticated">{String(isAuthenticated)}</Text>
+      <Text testID="revalidation-failed">{String(revalidationFailed)}</Text>
       <Text testID="username">{user?.username || 'none'}</Text>
       <TouchableOpacity testID="logout-button" onPress={() => logout().catch(() => {})} />
     </>
@@ -424,7 +425,10 @@ describe('AuthContext', () => {
     unmount();
   });
 
-  it('clears the optimistically-rendered cached profile on 403 during session restore', async () => {
+  it('keeps the cached profile and flags revalidation failure on 403 during session restore', async () => {
+    // A permanent non-401 error (server reachable but rejecting) must not force a
+    // logout: keep the cached profile visible and surface the warning banner,
+    // matching revalidateSession's policy.
     mockGetStoredSession.mockResolvedValue('existing-token');
     mockAuth.me.mockRejectedValue({ response: { status: 403 } });
     mockGetCachedAuthProfile.mockResolvedValue({ user: { ...mockUser, username: 'cached' }, settings: mockSettings });
@@ -439,8 +443,79 @@ describe('AuthContext', () => {
       expect(getByTestId('loading').props.children).toBe('false');
     });
 
+    expect(getByTestId('authenticated').props.children).toBe('true');
+    expect(getByTestId('username').props.children).toBe('cached');
+    expect(getByTestId('revalidation-failed').props.children).toBe('true');
+    expect(mockClearStoredSession).not.toHaveBeenCalled();
+    unmount();
+  });
+
+  it('stays authenticated on a transient 5xx during session restore without flagging revalidation', async () => {
+    // A server hiccup (503) on launch must not log the user out or nag them:
+    // render the cached profile and stay silent, since the error is transient.
+    mockGetStoredSession.mockResolvedValue('existing-token');
+    mockAuth.me.mockRejectedValue({ response: { status: 503 } });
+    mockGetCachedAuthProfile.mockResolvedValue({ user: { ...mockUser, username: 'cached' }, settings: mockSettings });
+
+    const { getByTestId, unmount } = render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('loading').props.children).toBe('false');
+    });
+
+    expect(getByTestId('authenticated').props.children).toBe('true');
+    expect(getByTestId('username').props.children).toBe('cached');
+    expect(getByTestId('revalidation-failed').props.children).toBe('false');
+    expect(mockClearStoredSession).not.toHaveBeenCalled();
+    unmount();
+  });
+
+  it('shows login on a non-401 http error when there is no cached profile', async () => {
+    mockGetStoredSession.mockResolvedValue('existing-token');
+    mockAuth.me.mockRejectedValue({ response: { status: 500 } });
+    mockGetCachedAuthProfile.mockResolvedValue(null);
+
+    const { getByTestId, unmount } = render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('loading').props.children).toBe('false');
+    });
+
     expect(getByTestId('authenticated').props.children).toBe('false');
-    expect(getByTestId('username').props.children).toBe('none');
+    // The stored session is preserved so a later launch can retry (only 401 clears it).
+    expect(mockClearStoredSession).not.toHaveBeenCalled();
+    unmount();
+  });
+
+  it('shows login on a transient network error with no cached profile without flagging revalidation', async () => {
+    // Complements the 500/no-cache case above: a bare network error (no `.response`)
+    // is transient too, so it must not clear the stored session or the (absent)
+    // revalidation warning.
+    mockGetStoredSession.mockResolvedValue('existing-token');
+    mockAuth.me.mockRejectedValue(new Error('Network Error'));
+    mockGetCachedAuthProfile.mockResolvedValue(null);
+
+    const { getByTestId, unmount } = render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('loading').props.children).toBe('false');
+    });
+
+    expect(getByTestId('authenticated').props.children).toBe('false');
+    expect(getByTestId('revalidation-failed').props.children).toBe('false');
+    expect(mockClearStoredSession).not.toHaveBeenCalled();
     unmount();
   });
 
