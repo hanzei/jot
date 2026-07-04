@@ -38,7 +38,9 @@ compiled web app, while SQLite keeps the default deployment small and portable.
   installs as a PWA with offline caching.
 - **Mobile app**: The React Native/Expo app supports multiple servers, local
   SQLite persistence, offline write queueing, SSE sync, image uploads, and
-  Android share-to-note.
+  Android/iOS share-to-note.
+- **App-icon quick actions**: Long-press the mobile app icon for New note and
+  New list shortcuts that open the editor with the keyboard ready, even offline.
 - **Sessions and PATs**: Browser sessions use HttpOnly cookies with sliding
   30-day expiry; Personal Access Tokens support API and automation use cases.
 - **MCP server**: Authenticated MCP clients can manage notes and labels over the

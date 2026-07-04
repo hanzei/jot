@@ -36,7 +36,6 @@ jest.mock('../src/db/noteQueries', () => ({
   getLocalLabelCounts: jest.fn().mockResolvedValue({}),
   getLocalNote: jest.fn().mockResolvedValue(null),
   generateClientLabelId: jest.fn(() => 'client_label_id'),
-  isLocalId: jest.fn((id: string) => id.startsWith('local_')),
   isNotePendingCreate: jest.fn().mockResolvedValue(false),
 }));
 
@@ -222,14 +221,6 @@ describe('useLabels write hooks', () => {
         expect.anything(),
         expect.objectContaining({ operation: 'addLabelToNote', endpoint: '/notes/n1/labels' }),
       );
-    });
-
-    it('throws for a local_* duplicate note (no server id yet)', async () => {
-      const { result } = renderHook(() => useAddLabelToNote(), { wrapper: createWrapper() });
-
-      await expect(result.current.mutateAsync({ noteId: 'local_dup_1', name: 'X' })).rejects.toThrow(/unsynced/i);
-      expect(mockLabelsApi.addLabelToNote).not.toHaveBeenCalled();
-      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
     });
 
     it('reuses an existing local label by name without queuing a createLabel', async () => {

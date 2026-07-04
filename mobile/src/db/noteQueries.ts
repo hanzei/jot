@@ -1,7 +1,7 @@
 import { SQLiteDatabase } from 'expo-sqlite';
 import * as FileSystem from 'expo-file-system/legacy';
 import type { Note, NoteItem, GetNotesParams, Label, NoteShare, NoteImage } from '@jot/shared';
-import { getRandomBytes, getStrongRandomBytes } from '../utils/random';
+import { getStrongRandomBytes } from '../utils/random';
 import { withSerializedTransaction } from './transaction';
 import { isLocalModeActive } from '../store/localMode';
 
@@ -595,11 +595,6 @@ export async function deleteLabelFromLocalNotes(
   });
 }
 
-/**
- * Remove local (server-synced) notes that match the given query scope but are not
- * present in the provided server ID set. Local-only notes (id starting with "local_")
- * are never removed.
- */
 export async function getLocalLabels(db: SQLiteDatabase): Promise<Label[]> {
   const rows = await db.getAllAsync<Pick<NoteRow, 'labels_json'>>(
     'SELECT labels_json FROM notes WHERE deleted_at IS NULL',
@@ -669,7 +664,7 @@ async function removeLocalNotesNotInTx(
   // before the server reflects it, so it would be absent from serverIds and get
   // deleted, destroying the optimistic edit. The drain reconciles them (#487).
   const scopeArgs: (string | number | null)[] = [];
-  let scopedWhereSql = "id NOT LIKE 'local_%'";
+  let scopedWhereSql = '1=1';
 
   if (params?.archived) {
     scopedWhereSql += ' AND archived = 1 AND deleted_at IS NULL';
@@ -829,15 +824,6 @@ export async function reorderLocalItems(db: SQLiteDatabase, noteId: string, item
   });
 }
 
-/** Generate a unique local ID for offline-created notes (prefixed so they are identifiable). */
-export function generateLocalId(): string {
-  const timestamp = Date.now().toString(36);
-  const bytes = new Uint8Array(8);
-  getRandomBytes(bytes);
-  const random = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
-  return `local_${timestamp}_${random}`;
-}
-
 // Mirrors the server's ID alphabet/length (see server internal/models/id.go) so a
 // client-generated note ID is accepted as-is by the server.
 const SERVER_ID_CHARS = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -902,16 +888,10 @@ export async function getAllLocalNotes(db: SQLiteDatabase): Promise<Note[]> {
   return rows.map((row) => rowToNote(row, itemsByNoteId.get(row.id) ?? []));
 }
 
-export function isLocalId(id: string): boolean {
-  return id.startsWith('local_');
-}
-
 /**
- * True for a note not yet known to exist on the server: a local-only duplicate
- * (still carries a `local_*` id pending reconciliation) or an offline create
- * whose queued `POST /notes` hasn't drained yet (#475). Such notes can't be
- * shared or have labels managed until the server knows about them.
+ * True for a note whose queued `POST /notes` has not drained yet (#475). Such
+ * notes need their dependent writes queued behind the pending create.
  */
 export function isUnsyncedNoteId(id: string, pendingNoteIds: ReadonlySet<string>): boolean {
-  return isLocalId(id) || pendingNoteIds.has(id);
+  return pendingNoteIds.has(id);
 }

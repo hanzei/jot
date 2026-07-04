@@ -13,6 +13,15 @@ jest.mock('expo-localization', () => ({
   getLocales: jest.fn(() => [{ languageTag: 'en-US', languageCode: 'en' }]),
 }));
 
+jest.mock('expo-quick-actions', () => ({
+  __esModule: true,
+  initial: undefined,
+  maxCount: 4,
+  setItems: jest.fn().mockResolvedValue(undefined),
+  isSupported: jest.fn().mockResolvedValue(true),
+  addListener: jest.fn(() => ({ remove: jest.fn() })),
+}));
+
 jest.mock('expo-share-intent', () => ({
   ShareIntentProvider: ({ children }) => children,
   useShareIntentContext: () => ({

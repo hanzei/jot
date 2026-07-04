@@ -380,6 +380,10 @@
     "cancelSetupMessage": "Le serveur ne sera pas ajouté.",
     "cancelSetupConfirm": "Retour"
   },
+  "quickActions": {
+    "newNote": "Nouvelle note",
+    "newList": "Nouvelle liste"
+  },
   "shareIntent": {
     "saveTargetLabel": "Enregistrement sur {{server}}",
     "changeServer": "Modifier",
