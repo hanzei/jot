@@ -495,6 +495,30 @@ describe('AuthContext', () => {
     unmount();
   });
 
+  it('shows login on a transient network error with no cached profile without flagging revalidation', async () => {
+    // Complements the 500/no-cache case above: a bare network error (no `.response`)
+    // is transient too, so it must not clear the stored session or the (absent)
+    // revalidation warning.
+    mockGetStoredSession.mockResolvedValue('existing-token');
+    mockAuth.me.mockRejectedValue(new Error('Network Error'));
+    mockGetCachedAuthProfile.mockResolvedValue(null);
+
+    const { getByTestId, unmount } = render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('loading').props.children).toBe('false');
+    });
+
+    expect(getByTestId('authenticated').props.children).toBe('false');
+    expect(getByTestId('revalidation-failed').props.children).toBe('false');
+    expect(mockClearStoredSession).not.toHaveBeenCalled();
+    unmount();
+  });
+
   it('renders the cached profile immediately while auth.me() revalidates in the background', async () => {
     mockGetStoredSession.mockResolvedValue('existing-token');
     mockGetCachedAuthProfile.mockResolvedValue({ user: { ...mockUser, username: 'cached' }, settings: mockSettings });

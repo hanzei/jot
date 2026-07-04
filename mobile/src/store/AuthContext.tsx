@@ -186,15 +186,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (isHttpResponseError(error) && !isTransientHttpStatus(getHttpStatus(error))) {
               setRevalidationFailed(true);
             }
-          } else if (isHttpResponseError(error)) {
+          } else if (isHttpResponseError(error) && !isTransientHttpStatus(getHttpStatus(error))) {
             // No cached profile to render and the server actively rejected us
-            // (non-401). We cannot show an authenticated UI without a profile, so
-            // drop to the login screen. The stored session is left intact so a
-            // later launch can retry (only a 401 clears it).
+            // with a permanent (non-401, non-transient) error. We cannot show an
+            // authenticated UI without a profile, so drop to the login screen.
+            // The stored session is left intact so a later launch can retry
+            // (only a 401 clears it).
             clearAuth();
           }
-          // No cached profile + transient error: leave unauthenticated for now
-          // (nothing to render), but keep the stored session for the next launch.
+          // No cached profile + transient error (network, timeout, 5xx, 429):
+          // leave unauthenticated for now (nothing to render), but keep the
+          // stored session and skip the extra clearAuth()/queryClient.clear()
+          // churn since a retry on the next launch may just work.
         }
       } finally {
         if (!cancelled) {

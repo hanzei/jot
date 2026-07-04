@@ -38,8 +38,10 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
   // When a server account already exists (e.g. the user was bounced here by an
   // expired session), entering local mode would switch them into a separate,
   // empty on-device notebook. Confirm first so an accidental tap can't strand
-  // them away from their server notes.
-  const [hasConfiguredServer, setHasConfiguredServer] = useState(false);
+  // them away from their server notes. `null` means the lookup hasn't resolved
+  // yet; the local-mode button stays disabled until it does so a tap can't race
+  // ahead of the check and skip the confirmation.
+  const [hasConfiguredServer, setHasConfiguredServer] = useState<boolean | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -47,7 +49,11 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
       .then((url) => {
         if (!cancelled) setHasConfiguredServer(!!url);
       })
-      .catch(() => {});
+      .catch(() => {
+        // Fail safe: if we can't determine whether a server is configured, keep
+        // the confirmation guard active rather than risking a silent switch.
+        if (!cancelled) setHasConfiguredServer(true);
+      });
     return () => {
       cancelled = true;
     };
@@ -93,6 +99,11 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
   };
 
   const handleUseLocalMode = () => {
+    if (hasConfiguredServer === null) {
+      // Lookup hasn't resolved yet; the button is disabled in this state so a
+      // tap shouldn't reach here, but bail out defensively just in case.
+      return;
+    }
     if (!hasConfiguredServer) {
       void enterLocalMode();
       return;
@@ -190,12 +201,12 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
 
           <TouchableOpacity
             onPress={handleUseLocalMode}
-            disabled={localModeLoading}
+            disabled={localModeLoading || hasConfiguredServer === null}
             style={[styles.localModeButton, { borderColor: colors.primary }, localModeLoading && styles.buttonDisabled]}
             testID="use-local-mode-button"
             accessibilityRole="button"
             accessibilityLabel={t('auth.localModeLink')}
-            accessibilityState={{ disabled: localModeLoading, busy: localModeLoading }}
+            accessibilityState={{ disabled: localModeLoading || hasConfiguredServer === null, busy: localModeLoading }}
           >
             {localModeLoading ? (
               <ActivityIndicator color={colors.primary} />
