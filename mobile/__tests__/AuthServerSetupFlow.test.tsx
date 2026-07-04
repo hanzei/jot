@@ -1,5 +1,6 @@
 import React from 'react';
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { Alert } from 'react-native';
 import LoginScreen from '../src/screens/LoginScreen';
 import RegisterScreen from '../src/screens/RegisterScreen';
 import i18n from '../src/i18n';
@@ -27,6 +28,7 @@ const mockSetServerUrl = setServerUrl as jest.MockedFunction<typeof setServerUrl
 describe('Auth first-run server setup flow', () => {
   const mockLogin = jest.fn();
   const mockRegister = jest.fn();
+  const mockEnableLocalMode = jest.fn();
 
   beforeEach(() => {
     jest.resetAllMocks();
@@ -40,7 +42,7 @@ describe('Auth first-run server setup flow', () => {
       revalidationFailed: false,
       login: mockLogin,
       register: mockRegister,
-      enableLocalMode: jest.fn(),
+      enableLocalMode: mockEnableLocalMode,
       logout: jest.fn(),
       clearAuth: jest.fn(),
       revalidateSession: jest.fn(),
@@ -278,5 +280,53 @@ describe('Auth first-run server setup flow', () => {
     });
     expect(mockProbeServerReachability).toHaveBeenCalledWith('http://localhost:8080');
     expect(mockSetServerUrl).toHaveBeenCalledWith('http://localhost:8080');
+  });
+
+  it('enters local mode directly when no server is configured', async () => {
+    // Fresh install: local mode is a first-class choice, so no confirmation.
+    mockGetStoredServerUrl.mockResolvedValue(null);
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    const { getByTestId } = renderLoginScreen();
+
+    await waitFor(() => {
+      expect(getByTestId('use-local-mode-button')).toBeTruthy();
+    });
+    await act(async () => {});
+
+    fireEvent.press(getByTestId('use-local-mode-button'));
+
+    await waitFor(() => {
+      expect(mockEnableLocalMode).toHaveBeenCalledTimes(1);
+    });
+    expect(alertSpy).not.toHaveBeenCalled();
+  });
+
+  it('confirms before entering local mode when a server is already configured', async () => {
+    // Session-expiry re-login: a stray tap must not strand the user in an empty
+    // on-device notebook away from their server notes.
+    mockGetStoredServerUrl.mockResolvedValue('https://notes.example.com');
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    const { getByTestId, findByTestId } = renderLoginScreen();
+
+    await findByTestId('username-input');
+    // Flush the effect that reads the stored server URL into hasConfiguredServer.
+    await act(async () => {});
+
+    fireEvent.press(getByTestId('use-local-mode-button'));
+
+    expect(alertSpy).toHaveBeenCalledTimes(1);
+    expect(mockEnableLocalMode).not.toHaveBeenCalled();
+
+    // Invoke the confirm action from the alert's button list.
+    const buttons = alertSpy.mock.calls[0][2] as { text?: string; onPress?: () => void }[];
+    const confirmButton = buttons.find((b) => b.text === i18n.t('auth.localModeLink'));
+    expect(confirmButton).toBeDefined();
+    await act(async () => {
+      confirmButton?.onPress?.();
+    });
+
+    await waitFor(() => {
+      expect(mockEnableLocalMode).toHaveBeenCalledTimes(1);
+    });
   });
 });

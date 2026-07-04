@@ -1,4 +1,4 @@
-import React, { useContext, useState } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -8,11 +8,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../store/AuthContext';
+import { getStoredServerUrl } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
 import { AuthStackParamList } from '../navigation/AuthStack';
 import ServerSetupGate from '../components/ServerSetupGate';
@@ -33,6 +35,23 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [localModeLoading, setLocalModeLoading] = useState(false);
+  // When a server account already exists (e.g. the user was bounced here by an
+  // expired session), entering local mode would switch them into a separate,
+  // empty on-device notebook. Confirm first so an accidental tap can't strand
+  // them away from their server notes.
+  const [hasConfiguredServer, setHasConfiguredServer] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getStoredServerUrl()
+      .then((url) => {
+        if (!cancelled) setHasConfiguredServer(!!url);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleLogin = async () => {
     if (!username.trim() || !password.trim()) {
@@ -61,7 +80,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
     }
   };
 
-  const handleUseLocalMode = async () => {
+  const enterLocalMode = async () => {
     setError('');
     setLocalModeLoading(true);
     try {
@@ -71,6 +90,21 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
     } finally {
       setLocalModeLoading(false);
     }
+  };
+
+  const handleUseLocalMode = () => {
+    if (!hasConfiguredServer) {
+      void enterLocalMode();
+      return;
+    }
+    Alert.alert(
+      t('auth.localModeConfirmTitle'),
+      t('auth.localModeConfirmMessage'),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('auth.localModeLink'), onPress: () => void enterLocalMode() },
+      ],
+    );
   };
 
   return (

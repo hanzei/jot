@@ -86,7 +86,9 @@
     "serverSetupConnectionInvalidServer": "Verbonden, maar dit lijkt geen compatibel Jot API-eindpunt.",
     "localModeLink": "Gebruiken zonder server",
     "localModeHint": "Je notities blijven alleen op dit apparaat.",
-    "localModeFailed": "Kan lokale modus niet starten. Probeer het opnieuw."
+    "localModeFailed": "Kan lokale modus niet starten. Probeer het opnieuw.",
+    "localModeConfirmTitle": "Zonder server gebruiken?",
+    "localModeConfirmMessage": "Je bent aangemeld bij een server. Als je doorgaat, wordt er een apart notitieboek op dit apparaat geopend — je servernotities blijven op de server en je kunt er weer bij door opnieuw in te loggen."
   },
   "dashboard": {
     "newNote": "Nieuwe notitie",

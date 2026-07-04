@@ -169,16 +169,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await clearStoredSession();
           await clearCachedProfile();
           clearAuth();
-        } else if (isHttpResponseError(error)) {
-          clearAuth();
         } else {
-          // Network error — fall back to the cached profile read above (or
-          // read it now if an earlier step failed before we got there).
+          // Any non-401 failure: transient (network, timeout, 5xx, 429) or a
+          // permanent-but-reachable error (e.g. 403, 422). Mirror
+          // revalidateSession's stale-while-revalidate policy instead of logging
+          // the user out — fall back to the cached profile and stay authenticated
+          // when we have one. A server hiccup on launch must not force a re-login
+          // and discard a valid cached session (issue: cold-start forced logout).
           const cached = cachedProfile !== undefined ? cachedProfile : await getCachedAuthProfile();
           if (cached?.user && cached?.settings && !cancelled) {
             setUser(cached.user);
             setSettings(cached.settings);
+            // Surface the revalidation warning only for permanent non-401 HTTP
+            // errors, exactly as revalidateSession does. Transient errors stay
+            // silent so a brief outage doesn't nag the user.
+            if (isHttpResponseError(error) && !isTransientHttpStatus(getHttpStatus(error))) {
+              setRevalidationFailed(true);
+            }
+          } else if (isHttpResponseError(error)) {
+            // No cached profile to render and the server actively rejected us
+            // (non-401). We cannot show an authenticated UI without a profile, so
+            // drop to the login screen. The stored session is left intact so a
+            // later launch can retry (only a 401 clears it).
+            clearAuth();
           }
+          // No cached profile + transient error: leave unauthenticated for now
+          // (nothing to render), but keep the stored session for the next launch.
         }
       } finally {
         if (!cancelled) {
