@@ -44,7 +44,42 @@ export default defineConfig(({ mode }) => ({
             type: 'image/png',
             purpose: 'any'
           }
-        ]
+        ],
+        // Long-press the installed PWA's icon to jump straight into a new note
+        // or list, skipping the dashboard entirely (deep-links to /new, which
+        // Dashboard opens the note modal for).
+        shortcuts: [
+          {
+            name: 'New note',
+            short_name: 'New note',
+            description: 'Create a new text note',
+            url: '/new?type=text',
+            icons: [
+              { src: '/pwa-192x192.png', sizes: '192x192', type: 'image/png' }
+            ]
+          },
+          {
+            name: 'New list',
+            short_name: 'New list',
+            description: 'Create a new checklist',
+            url: '/new?type=list',
+            icons: [
+              { src: '/pwa-192x192.png', sizes: '192x192', type: 'image/png' }
+            ]
+          }
+        ],
+        // Lets the installed PWA appear in the OS share sheet. Shared
+        // title/text/url land as query params on /new, which prefills a new
+        // text note with them (GET is sufficient since no files are shared).
+        share_target: {
+          action: '/new',
+          method: 'GET',
+          params: {
+            title: 'title',
+            text: 'text',
+            url: 'url'
+          }
+        }
       }
     })
   ],

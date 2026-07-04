@@ -3,8 +3,8 @@ import { PlusIcon, DocumentTextIcon, ArchiveBoxIcon, TrashIcon, ClipboardDocumen
 import { useTranslation } from 'react-i18next';
 import { notes, users as usersApi } from '@/utils/api';
 import { getUser, getSettings, setSettings } from '@/utils/auth';
-import { UPLOAD_MAX_BYTES, type Note, type NoteImage, type User, type SSEEvent, type NoteSort } from '@jot/shared';
-import { useSearchParams, useParams, useNavigate } from 'react-router';
+import { UPLOAD_MAX_BYTES, type Note, type NoteImage, type NoteType, type User, type SSEEvent, type NoteSort } from '@jot/shared';
+import { useSearchParams, useParams, useNavigate, useMatch } from 'react-router';
 import PageContent from '@/components/PageContent';
 import SearchBar from '@/components/SearchBar';
 import AnimatedNoteGrid from '@/components/AnimatedNoteGrid';
@@ -16,6 +16,7 @@ import { useAuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { isAnyModalDialogOpen, isEditableElementFocused, isOverlayControlFocused } from '@/utils/keyboardShortcuts';
 import { NOTE_SORT_OPTIONS, normalizeNoteSort, sortNotesForDisplay } from '@/utils/noteSort';
 import { isSortWarningDismissed, dismissSortWarning } from '@/utils/sortWarningDismissed';
+import { buildSharedContent } from '@/utils/sharedContent';
 import {
   DndContext,
   closestCenter,
@@ -47,6 +48,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   const { t } = useTranslation();
   const { showToast } = useToast();
   const { noteId: noteIdParam } = useParams<{ noteId?: string }>();
+  const isNewNoteRoute = !!useMatch('/new');
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const {
@@ -74,6 +76,9 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   const [selectedLabelId, setSelectedLabelId] = useState<string | null>(initialLabel);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
+  // Prefill for a note created via the /new deep link (PWA shortcut or share
+  // target) — undefined fields fall back to NoteModal's own defaults.
+  const [newNoteDraft, setNewNoteDraft] = useState<{ type: NoteType; content: string } | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [sharingNote, setSharingNote] = useState<Note | null>(null);
   const [usersById, setUsersById] = useState<Map<string, User>>(new Map());
@@ -90,6 +95,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   const noteSortUpdateRequestIdRef = useRef(0);
   const loadNotesRequestIdRef = useRef(0);
   const editingNoteRefreshRequestIdRef = useRef(0);
+  const newNoteHandledRef = useRef(false);
   useEffect(() => {
     isMountedRef.current = true;
     return () => { isMountedRef.current = false; };
@@ -315,13 +321,49 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   }, [loadNotes]);
 
   const restoreReturnUrl = useCallback(() => {
+    if (isNewNoteRoute) {
+      // /new is a one-shot deep link (PWA shortcut or share target); once its
+      // modal closes there's nothing to "return" to but the dashboard.
+      newNoteHandledRef.current = false;
+      setNewNoteDraft(null);
+      navigate('/', { replace: true });
+      return;
+    }
     if (openNoteIdRef.current) {
       openNoteIdRef.current = null;
       const returnTo = returnPathRef.current;
       returnPathRef.current = '/';
       navigate(returnTo, { replace: true });
     }
-  }, [navigate]);
+  }, [navigate, isNewNoteRoute]);
+
+  // Deep link entry point: /new?type=text|list opens the create-note modal
+  // straight away, optionally prefilled from a Web Share Target payload
+  // (title/text/url). Runs once per visit to /new (newNoteHandledRef guards
+  // against re-triggering while the route stays matched, e.g. searchParams
+  // changing for an unrelated reason).
+  useEffect(() => {
+    if (!isNewNoteRoute) {
+      newNoteHandledRef.current = false;
+      return;
+    }
+    if (newNoteHandledRef.current) {
+      return;
+    }
+    newNoteHandledRef.current = true;
+
+    const type: NoteType = searchParams.get('type') === 'list' ? 'list' : 'text';
+    const content = buildSharedContent({
+      title: searchParams.get('title'),
+      text: searchParams.get('text'),
+      url: searchParams.get('url'),
+    });
+
+    lastFocusedElementRef.current = document.activeElement;
+    setEditingNote(null);
+    setNewNoteDraft({ type, content });
+    setIsModalOpen(true);
+  }, [isNewNoteRoute, searchParams]);
 
   const openNoteFromUrl = useCallback((noteId: string) => {
     openNoteIdRef.current = null;
@@ -479,6 +521,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   const handleCreateNote = useCallback(() => {
     lastFocusedElementRef.current = document.activeElement;
     setEditingNote(null);
+    setNewNoteDraft(null);
     setIsModalOpen(true);
   }, []);
 
@@ -1287,6 +1330,8 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
             usersById={usersById}
             currentUserId={user?.id}
             uploadMaxBytes={uploadMaxBytes}
+            initialType={newNoteDraft?.type}
+            initialContent={newNoteDraft?.content}
           />
         )}
 
