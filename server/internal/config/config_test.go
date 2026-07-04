@@ -270,3 +270,59 @@ func TestLoadPasswordMinLength(t *testing.T) {
 		assert.Equal(t, 72, cfg.PasswordMinLength)
 	})
 }
+
+func TestLoadRateLimitDefaults(t *testing.T) {
+	t.Setenv("STATIC_DIR", "/tmp/static")
+	t.Setenv("RATE_LIMIT_ENABLED", "")
+	t.Setenv("RATE_LIMIT_PER_MINUTE", "")
+	t.Setenv("RATE_LIMIT_AUTH_PER_MINUTE", "")
+	t.Setenv("RATE_LIMIT_EXPENSIVE_PER_MINUTE", "")
+
+	cfg, err := Load()
+	require.NoError(t, err)
+
+	assert.True(t, cfg.RateLimitEnabled)
+	assert.Equal(t, 300, cfg.RateLimitPerMinute)
+	assert.Equal(t, 20, cfg.RateLimitAuthPerMinute)
+	assert.Equal(t, 20, cfg.RateLimitExpensivePerMinute)
+}
+
+func TestLoadRateLimitCustomValues(t *testing.T) {
+	t.Setenv("STATIC_DIR", "/tmp/static")
+	t.Setenv("RATE_LIMIT_ENABLED", "false")
+	t.Setenv("RATE_LIMIT_PER_MINUTE", "600")
+	t.Setenv("RATE_LIMIT_AUTH_PER_MINUTE", "5")
+	t.Setenv("RATE_LIMIT_EXPENSIVE_PER_MINUTE", "10")
+
+	cfg, err := Load()
+	require.NoError(t, err)
+
+	assert.False(t, cfg.RateLimitEnabled)
+	assert.Equal(t, 600, cfg.RateLimitPerMinute)
+	assert.Equal(t, 5, cfg.RateLimitAuthPerMinute)
+	assert.Equal(t, 10, cfg.RateLimitExpensivePerMinute)
+}
+
+func TestLoadRateLimitInvalidValueErrors(t *testing.T) {
+	t.Setenv("STATIC_DIR", "/tmp/static")
+
+	t.Run("enabled not a bool", func(t *testing.T) {
+		t.Setenv("RATE_LIMIT_ENABLED", "yes")
+		_, err := Load()
+		assert.Error(t, err)
+	})
+
+	t.Run("per-minute not a number", func(t *testing.T) {
+		t.Setenv("RATE_LIMIT_ENABLED", "")
+		t.Setenv("RATE_LIMIT_PER_MINUTE", "notanumber")
+		_, err := Load()
+		assert.Error(t, err)
+	})
+
+	t.Run("per-minute zero", func(t *testing.T) {
+		t.Setenv("RATE_LIMIT_PER_MINUTE", "0")
+		_, err := Load()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must be between")
+	})
+}
