@@ -34,7 +34,6 @@ jest.mock('../src/db/noteQueries', () => ({
   generateClientNoteId: jest.fn(() => 'ClientNoteId000000000A'),
   markNotePendingCreate: jest.fn().mockResolvedValue(undefined),
   isNotePendingCreate: jest.fn().mockResolvedValue(false),
-  isLocalId: jest.fn((id: string) => id.startsWith('local_')),
   createLocalItem: jest.fn().mockResolvedValue(undefined),
   patchLocalItem: jest.fn().mockResolvedValue(undefined),
   deleteLocalItem: jest.fn().mockResolvedValue(undefined),

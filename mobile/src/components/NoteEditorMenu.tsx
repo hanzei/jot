@@ -22,9 +22,8 @@ interface NoteEditorMenuProps {
   trashed?: boolean;
   /** Optional note title, shown as a header (list notes only, like the card menu). */
   title?: string;
-  // Editable-note actions. Callbacks left undefined are hidden — Share and
-  // Labels are gated on a server-backed note id (owner + not a local_* draft),
-  // so a brand-new or offline note simply omits them.
+  // Editable-note actions. Callbacks left undefined are hidden based on the
+  // editor's current ownership/state.
   onSend?: () => void;
   onShare?: () => void;
   onDuplicate?: () => void;
