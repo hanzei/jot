@@ -56,6 +56,9 @@ export default defineConfig({
       PORT: '8080',
       JWT_SECRET: 'e2e-test-secret',
       COOKIE_SECURE: 'false',
+      // E2E tests register a fresh user per test across parallel workers,
+      // which blows past the per-IP auth rate limit almost immediately.
+      RATE_LIMIT_ENABLED: 'false',
     },
   },
 });
