@@ -20,7 +20,6 @@ import UserAvatar from '../components/UserAvatar';
 import { useTheme } from '../theme/ThemeContext';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { useUsers } from '../store/UsersContext';
-import { isLocalId } from '../db/noteQueries';
 import type { User, NoteShare } from '@jot/shared';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
@@ -46,10 +45,6 @@ export default function ShareScreen() {
 
   const { isConnected } = useNetworkStatus();
   const { usersById } = useUsers();
-  // Only a local_* duplicate (no server id yet) is truly un-shareable. An
-  // offline-created note carries a server-valid id and its create drains before
-  // the queued share (#475), so it may be shared while still pending/offline.
-  const isNoteLocalOnly = isLocalId(noteId);
 
   const [pendingUserIds, setPendingUserIds] = useState<Set<string>>(new Set());
   const pendingUserIdsRef = useRef<Set<string>>(new Set());
@@ -130,10 +125,6 @@ export default function ShareScreen() {
 
   const handleShare = useCallback(
     async (user: User) => {
-      if (isNoteLocalOnly) {
-        Alert.alert(t('common.error'), t('share.cannotShareUnsyncedNote'));
-        return;
-      }
       if (pendingUserIdsRef.current.has(user.id)) return;
       pendingUserIdsRef.current.add(user.id);
       setPendingUserIds(new Set(pendingUserIdsRef.current));
@@ -146,7 +137,7 @@ export default function ShareScreen() {
         setPendingUserIds(new Set(pendingUserIdsRef.current));
       }
     },
-    [noteId, isNoteLocalOnly, t],
+    [noteId, t],
   );
 
   const handleUnshare = useCallback(
@@ -252,12 +243,6 @@ export default function ShareScreen() {
           </TouchableOpacity>
         )}
       </View>
-
-      {isNoteLocalOnly && (
-        <Text style={[styles.unsyncedNotice, { color: colors.error }]}>
-          {t('share.cannotShareUnsyncedNote')}
-        </Text>
-      )}
 
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom }}>
         {debouncedQuery.length > 0 && (
@@ -383,10 +368,5 @@ const styles = StyleSheet.create({
   spinner: {
     paddingVertical: 8,
     alignSelf: 'flex-start',
-  },
-  unsyncedNotice: {
-    fontSize: 13,
-    paddingHorizontal: 16,
-    paddingTop: 12,
   },
 });

@@ -21,7 +21,6 @@ import {
   getLocalLabelCounts,
   getLocalNote,
   generateClientLabelId,
-  isLocalId,
   isNotePendingCreate,
 } from '../db/noteQueries';
 import { enqueueOperation, rethrowIfNotQueueable, saveServerNotes } from '../db/syncQueue';
@@ -218,10 +217,6 @@ export function useAddLabelToNote() {
       assertSwitchWriteAllowed();
       const trimmed = name.trim();
       if (!trimmed) throw new Error('Label name must not be empty');
-      // A local_* duplicate has no server id yet, so its labels can't be managed.
-      if (isLocalId(noteId)) {
-        throw new Error('cannot manage labels on unsynced note');
-      }
       // An offline-created note already carries a server-valid id (#475) and its
       // queued create drains FIFO before this label op, so queue rather than
       // calling online against a note the server doesn't know yet (a 404 would
@@ -289,10 +284,6 @@ export function useRemoveLabelFromNote() {
   return useMutation({
     mutationFn: async ({ noteId, labelId }: { noteId: string; labelId: string }) => {
       assertSwitchWriteAllowed();
-      // A local_* duplicate has no server id yet, so its labels can't be managed.
-      if (isLocalId(noteId)) {
-        throw new Error('cannot manage labels on unsynced note');
-      }
       // An offline-created note (#475) drains its create FIFO before this label
       // op, so queue rather than calling online against a note the server doesn't
       // know yet.

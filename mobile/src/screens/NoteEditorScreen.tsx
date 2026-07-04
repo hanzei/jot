@@ -813,9 +813,7 @@ export default function NoteEditorScreen() {
   // Save-first wrapper for note-level actions. A new/unsaved note is created by
   // flushing before the action runs, so bar actions no longer have to be hidden
   // until the first autosave. flushSave no-ops (and leaves noteId null) only for
-  // a genuinely empty note, in which case the action is skipped. Actions that
-  // additionally need a *server* id (not an offline local_* draft) still guard on
-  // that themselves — see issue #652.
+  // a genuinely empty note, in which case the action is skipped.
   const withSavedNote = useCallback(async (action: (id: string) => void | Promise<void>) => {
     const saved = await flushPendingChanges();
     if (!saved) return; // save failed — error already surfaced by flushSave
@@ -1373,8 +1371,8 @@ export default function NoteEditorScreen() {
       if (saveInFlightRef.current) {
         try { await saveInFlightRef.current; } catch { /* already handled */ }
       }
-      // Re-read after the in-flight save settles: it can reconcile a local_*
-      // draft id to the server-issued id while we were awaiting it.
+      // Re-read after the in-flight save settles; it may have created the note
+      // and populated noteIdRef while we were awaiting it.
       const currentNoteId = noteIdRef.current;
       if (!currentNoteId) return;
       await deleteMutation.mutateAsync(currentNoteId);
