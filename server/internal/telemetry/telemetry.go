@@ -12,6 +12,7 @@ import (
 	"github.com/sirupsen/logrus"
 	goruntime "go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
@@ -98,6 +99,12 @@ func Setup(ctx context.Context, cfg Config) (shutdown func(context.Context) erro
 		resource.WithProcess(),
 		resource.WithHost(),
 		resource.WithTelemetrySDK(),
+		// WithFromEnv reads standard OTel resource attributes from
+		// OTEL_RESOURCE_ATTRIBUTES (e.g. "deployment.environment=production"),
+		// which lets a single Jot binary/image be told apart in shared
+		// dashboards (like grafana/dashboard.json) when multiple instances
+		// (prod, test, staging, ...) report to the same backend.
+		resource.WithFromEnv(),
 		resource.WithAttributes(
 			semconv.ServiceName(cfg.ServiceName),
 			semconv.ServiceVersion(cfg.ServiceVersion),
@@ -115,7 +122,18 @@ func Setup(ctx context.Context, cfg Config) (shutdown func(context.Context) erro
 
 	// Prometheus exporter: registers with prometheus.DefaultRegisterer so that
 	// the /metrics handler serves OTel custom metrics alongside Go runtime stats.
-	promExp, err := promexporter.New()
+	//
+	// WithResourceAsConstantLabels attaches deployment.environment (and
+	// service.name) as a label on every exported metric, not just the
+	// separate target_info series the exporter emits by default. The shipped
+	// Grafana dashboard (grafana/dashboard.json) filters and groups on the
+	// resulting deployment_environment label to tell prod and test instances
+	// apart when they report to the same Prometheus.
+	promExp, err := promexporter.New(
+		promexporter.WithResourceAsConstantLabels(
+			attribute.NewAllowKeysFilter(semconv.ServiceNameKey, semconv.DeploymentEnvironmentKey),
+		),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("create Prometheus exporter: %w", err)
 	}
