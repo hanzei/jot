@@ -1362,7 +1362,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     const newItem: ListItem = {
       id: generateItemId(),
       text: overrides.text ?? '',
-      completed: false,
+      completed: afterItem ? afterItem.completed : false,
       position: 0,
       parentId: overrides.parentId !== undefined ? overrides.parentId : (afterItem ? afterItem.parentId : null),
       assignedTo: overrides.assignedTo ?? '',
@@ -1392,7 +1392,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     const newItem: ListItem = {
       id: generateItemId(),
       text: '',
-      completed: false,
+      completed: beforeItem ? beforeItem.completed : false,
       position: 0,
       parentId: overrides.parentId !== undefined ? overrides.parentId : (beforeItem ? beforeItem.parentId : null),
       assignedTo: overrides.assignedTo ?? '',
@@ -1422,7 +1422,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     const newItem: ListItem = {
       id: generateItemId(),
       text: after,
-      completed: false,
+      completed: currentItem.completed,
       position: 0,
       parentId: currentItem.parentId,
       assignedTo: currentItem.assignedTo,

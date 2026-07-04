@@ -1136,8 +1136,8 @@ export default function NoteEditorScreen() {
   //    new (second) item with its cursor at the start;
   //  - cursor at the end (or item is empty) -> append a blank item after
   //    (previous default behavior).
-  // Newly created items inherit the current item's group (parentId) and
-  // assignee; completed always resets to false.
+  // Newly created items inherit the current item's group (parentId),
+  // assignee, and completed state.
   const handleItemEnterAtCursor = useCallback((index: number, cursorPosition: number) => {
     const currentItem = itemsRef.current[index];
     if (!currentItem) return;
@@ -1152,7 +1152,7 @@ export default function NoteEditorScreen() {
         const newItem: LocalItem = {
           id: newId,
           text: '',
-          completed: false,
+          completed: prev[index]?.completed ?? false,
           position: index,
           parentId: prev[index]?.parentId ?? null,
           assigned_to: prev[index]?.assigned_to ?? '',
@@ -1174,7 +1174,7 @@ export default function NoteEditorScreen() {
         const newItem: LocalItem = {
           id: newId,
           text: after,
-          completed: false,
+          completed: prev[index]?.completed ?? false,
           position: index + 1,
           parentId: prev[index]?.parentId ?? null,
           assigned_to: prev[index]?.assigned_to ?? '',
@@ -1203,7 +1203,7 @@ export default function NoteEditorScreen() {
       const newItem: LocalItem = {
         id: newId,
         text: '',
-        completed: false,
+        completed: prev[index]?.completed ?? false,
         position: index + 1,
         parentId: prev[index]?.parentId ?? null,
         assigned_to: '',
