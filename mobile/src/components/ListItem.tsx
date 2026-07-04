@@ -15,6 +15,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useTranslation } from 'react-i18next';
 import UserAvatar from './UserAvatar';
 import { useTheme } from '../theme/ThemeContext';
+import { getEffectiveColors } from '../theme/colors';
 import { isReduceMotionEnabledSync } from '../utils/layoutAnimation';
 import { VALIDATION, type Collaborator } from '@jot/shared';
 
@@ -139,11 +140,13 @@ function ListItem({
     return results;
   }, [text, completedItemTexts]);
 
-  const effectiveText = hasNoteColor ? '#1a1a1a' : colors.text;
-  const effectiveTextSecondary = hasNoteColor ? '#666' : colors.textSecondary;
-  const effectiveIcon = hasNoteColor ? '#444' : colors.icon;
-  const effectiveIconMuted = hasNoteColor ? '#888' : colors.iconMuted;
-  const effectiveBorder = hasNoteColor ? '#bbb' : colors.border;
+  const {
+    text: effectiveText,
+    textSecondary: effectiveTextSecondary,
+    icon: effectiveIcon,
+    iconMuted: effectiveIconMuted,
+    border: effectiveBorder,
+  } = getEffectiveColors(hasNoteColor, colors);
   const showAssignUI = isShared && collaborators && collaborators.length > 0 && onAssignPress;
   const assignedUser = assignedTo ? collaborators?.find((c) => c.userId === assignedTo) : undefined;
   const normalizedIndentLevel = Math.max(0, indentLevel);
