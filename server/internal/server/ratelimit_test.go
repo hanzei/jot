@@ -89,8 +89,8 @@ func TestRateLimiterLimitWithWindow(t *testing.T) {
 	})
 }
 
-func TestSearchOnly(t *testing.T) {
-	limited := searchOnly(func(next http.Handler) http.Handler {
+func TestOnlyWhenQueryParamSet(t *testing.T) {
+	limited := onlyWhenQueryParamSet("search", func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusTooManyRequests)
 		})
@@ -100,15 +100,33 @@ func TestSearchOnly(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	t.Run("plain listing bypasses the wrapped middleware", func(t *testing.T) {
+	t.Run("request without the query param bypasses the wrapped middleware", func(t *testing.T) {
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/notes", nil))
 		assert.Equal(t, http.StatusOK, rec.Code)
 	})
 
-	t.Run("a search query routes through the wrapped middleware", func(t *testing.T) {
+	t.Run("a different query param bypasses the wrapped middleware", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/notes?other=foo", nil))
+		assert.Equal(t, http.StatusOK, rec.Code)
+	})
+
+	t.Run("the matching query param routes through the wrapped middleware", func(t *testing.T) {
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/notes?search=foo", nil))
 		assert.Equal(t, http.StatusTooManyRequests, rec.Code)
 	})
+}
+
+func TestRateLimiterLimitIsMemoizedByBucket(t *testing.T) {
+	rl := newTestRateLimiter(t)
+
+	first := rl.limit("shared", 1, httprate.Key("k"))
+	second := rl.limit("shared", 1, httprate.Key("k"))
+
+	assert.Equal(t, http.StatusOK, doRequest(t.Context(), first).Code)
+	// Same bucket name from a second call site must draw from the same
+	// counter, not a fresh independent one.
+	assert.Equal(t, http.StatusTooManyRequests, doRequest(t.Context(), second).Code)
 }

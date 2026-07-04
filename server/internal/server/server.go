@@ -232,21 +232,24 @@ func (s *Server) setupRoutes() error {
 			// Unauthenticated auth endpoints have no user to key on, so they are
 			// rate-limited per client IP (a stricter bucket than the per-user
 			// baseline below) to add brute-force friction on login and cap
-			// runaway registration/login retries.
+			// runaway registration/login/logout retries. Logout also has no user
+			// in context (it reads the session cookie directly, without
+			// AuthMiddleware), so it belongs in this group rather than the
+			// per-user one below.
 			r.Use(middleware.ClientIPFromRemoteAddr)
-			r.Use(s.rateLimiter.limit("auth", s.cfg.RateLimitAuthPerMinute, keyByClientIP))
+			r.Use(s.rateLimiter.limit(bucketAuth, s.cfg.RateLimitAuthPerMinute, keyByClientIP))
 			r.Post("/register", s.wrapHandler(s.authHandler.Register))
 			r.Post("/login", s.wrapHandler(s.authHandler.Login))
+			r.Post("/logout", s.wrapHandler(s.authHandler.Logout))
 		})
-		r.Post("/logout", s.wrapHandler(s.authHandler.Logout))
 
 		// Baseline per-user rate limit, keyed on the authenticated user so it
 		// applies uniformly across every authenticated route group below (and so
 		// two users can't starve each other). Guards against runaway client sync
 		// loops / SSE reconnect storms without penalizing normal use (CLAUDE.md
-		// threat model: unintentional internal overload). Built once and reused
-		// so both groups draw from the same per-user counters.
-		baselineLimit := s.rateLimiter.limit("baseline", s.cfg.RateLimitPerMinute, keyByUserID)
+		// threat model: unintentional internal overload). limit() memoizes by
+		// bucket name, so both groups below share the same underlying limiter.
+		baselineLimit := s.rateLimiter.limit(bucketBaseline, s.cfg.RateLimitPerMinute, keyByUserID)
 
 		r.Group(func(r chi.Router) {
 			r.Use(s.sessionService.AuthMiddleware)
@@ -268,10 +271,11 @@ func (s *Server) setupRoutes() error {
 			// items, import parses/persists a whole file, and image upload
 			// decodes/resizes/thumbnails. All three draw from one shared,
 			// stricter per-user limit rather than three separate ones
-			// (searchOnly gates GET /notes so plain listing is unaffected).
-			expensiveLimit := s.rateLimiter.limit("expensive", s.cfg.RateLimitExpensivePerMinute, keyByUserID)
+			// (onlyWhenQueryParamSet gates GET /notes so plain listing is
+			// unaffected — it still counts against the baseline limit above).
+			expensiveLimit := s.rateLimiter.limit(bucketExpensive, s.cfg.RateLimitExpensivePerMinute, keyByUserID)
 
-			r.With(searchOnly(expensiveLimit)).Get("/notes", s.wrapHandler(s.notesHandler.GetNotes))
+			r.With(onlyWhenQueryParamSet(handlers.SearchQueryParam, expensiveLimit)).Get("/notes", s.wrapHandler(s.notesHandler.GetNotes))
 			r.Post("/notes", s.wrapHandler(s.notesHandler.CreateNote))
 			r.Delete("/notes/trash", s.wrapHandler(s.notesHandler.EmptyTrash))
 			r.Post("/notes/reorder", s.wrapHandler(s.notesHandler.ReorderNotes))

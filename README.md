@@ -205,20 +205,34 @@ Configure the server with environment variables or a `.env` file.
 
 ### Rate limiting
 
-Every `/api/v1` route is rate-limited to guard against unintentional internal
-overload — a client-side bug or flaky network turning an offline sync queue or
-SSE reconnect loop into a tight request loop against the server — rather than
+Every authenticated `/api/v1` route, plus `/register`, `/login`, and `/logout`,
+is rate-limited to guard against unintentional internal overload — a
+client-side bug or flaky network turning an offline sync queue or SSE
+reconnect loop into a tight request loop against the server — rather than
 against malicious users (see the threat model in `CLAUDE.md`). A request over
 its limit gets `429 Too Many Requests` with a `Retry-After` header. Defaults
 are generous enough that normal interactive use (dashboard load, SSE, note
 editing, syncing after a short offline period) should never hit them.
+(`GET /config` is the one unauthenticated, side-effect-free exception: it's
+fetched on every page load, so it is intentionally left unlimited rather than
+risk throttling normal multi-user traffic behind a shared IP — see the
+reverse-proxy caveat below.)
 
 | Variable | Default | Description |
 | --- | --- | --- |
 | `RATE_LIMIT_ENABLED` | `true` | Set to `false` to disable rate limiting entirely. |
 | `RATE_LIMIT_PER_MINUTE` | `300` | Baseline requests/min per authenticated user, across all `/api/v1` routes. |
-| `RATE_LIMIT_AUTH_PER_MINUTE` | `20` | Requests/min per client IP for `/register` and `/login`, applied before a session exists. |
-| `RATE_LIMIT_EXPENSIVE_PER_MINUTE` | `20` | Requests/min per user, shared by note search (a `LIKE` scan), import, and image upload (decode/resize/thumbnail) — the costliest operations per request. Plain note listing (no `search` query) is unaffected and stays on the baseline limit. |
+| `RATE_LIMIT_AUTH_PER_MINUTE` | `20` | Requests/min per client IP, shared by `/register`, `/login`, and `/logout` (none of which have an authenticated user to key on yet). |
+| `RATE_LIMIT_EXPENSIVE_PER_MINUTE` | `20` | Requests/min per user, shared by note search (a `LIKE` scan), import, and image upload (decode/resize/thumbnail) — the costliest operations per request. These also count against the baseline limit above; the expensive limit is an additional, stricter cap on top of it. Plain note listing (no `search` query) is unaffected by this limit and only counts against the baseline. |
+
+**Reverse-proxy caveat:** `RATE_LIMIT_AUTH_PER_MINUTE` is keyed by the direct
+TCP peer address, not a client-supplied header (which would be trivially
+spoofable). If Jot runs behind a reverse proxy that terminates TLS — a common
+setup, since `COOKIE_SECURE` defaults to requiring HTTPS — every client behind
+that proxy shares one IP and therefore one bucket: one user's failed logins
+can throttle everyone else's login/register/logout attempts for up to a
+minute. If you run Jot behind such a proxy, raise `RATE_LIMIT_AUTH_PER_MINUTE`
+accordingly.
 
 ### Metrics and observability
 

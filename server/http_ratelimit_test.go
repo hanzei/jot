@@ -95,6 +95,30 @@ func TestRateLimiting(t *testing.T) {
 		assert.NotEmpty(t, resp.Header.Get("Retry-After"))
 	})
 
+	t.Run("logout shares the auth bucket with register and login", func(t *testing.T) {
+		ts := setupTestServerWithConfig(t, func(cfg *config.Config) {
+			cfg.RateLimitEnabled = true
+			cfg.RateLimitPerMinute = 100
+			cfg.RateLimitAuthPerMinute = 3
+			cfg.RateLimitExpensivePerMinute = 100
+		})
+		// createTestUser's Register call already spends one of the three slots
+		// in this IP's shared auth bucket.
+		u := ts.createTestUser(t, "logoutuser", "password123", false)
+
+		for range 2 {
+			require.NoError(t, u.Client.Logout(t.Context()))
+		}
+
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, ts.HTTPServer.URL+"/api/v1/logout", nil)
+		require.NoError(t, err)
+		resp, err := u.Client.HTTPClient().Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
+		assert.NotEmpty(t, resp.Header.Get("Retry-After"))
+	})
+
 	t.Run("expensive bucket gates search but not plain note listing", func(t *testing.T) {
 		ts := setupTestServerWithConfig(t, func(cfg *config.Config) {
 			cfg.RateLimitEnabled = true
