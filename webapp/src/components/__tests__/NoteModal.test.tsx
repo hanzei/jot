@@ -1145,7 +1145,7 @@ describe('NoteModal', () => {
       }))
     })
 
-    it('pressing Enter splits and inserts before within completed items too', async () => {
+    it('pressing Enter splits within completed items too, keeping the split-off item completed', async () => {
       const listNote = createMockNote({
         note_type: 'list',
         items: [
@@ -1166,10 +1166,15 @@ describe('NoteModal', () => {
       expect(inputsAfter).toHaveLength(2)
       // Original (completed) item keeps the text before the cursor.
       expect(screen.getByDisplayValue('hello')).toBeInTheDocument()
-      // The split-off remainder is a new (uncompleted) item, rendered in the
-      // uncompleted section above the completed one.
+      // The split-off remainder inherits the completed state and stays in the
+      // completed section, right after the original item.
       expect(screen.getByDisplayValue('world')).toBeInTheDocument()
-      expect(inputsAfter[0]).toHaveValue('world')
+      expect(inputsAfter[0]).toHaveValue('hello')
+      expect(inputsAfter[1]).toHaveValue('world')
+      expect(mockCreateItem).toHaveBeenCalledWith('1', expect.objectContaining({
+        text: 'world',
+        completed: true,
+      }))
     })
 
     it('pressing a key other than Enter on a list item does not create a new item', async () => {
