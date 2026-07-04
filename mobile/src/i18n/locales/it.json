@@ -380,6 +380,10 @@
     "unknownServerMessage": "Questo link punta a {{server}}, che non è ancora stato aggiunto.",
     "addAndSwitchAction": "Aggiungi e passa"
   },
+  "quickActions": {
+    "newNote": "Nuova nota",
+    "newList": "Nuova lista"
+  },
   "shareIntent": {
     "saveTargetLabel": "Salvataggio su {{server}}",
     "changeServer": "Cambia",

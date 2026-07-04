@@ -31,6 +31,7 @@ import {
 import { getDatabaseNameForServer, initializeServerDatabase } from './src/db/serverDatabase';
 import { ShareIntentProvider } from 'expo-share-intent';
 import { useShareIntentNavigation } from './src/hooks/useShareIntentNavigation';
+import { useQuickActionRouting } from './src/hooks/useQuickActionRouting';
 import { useDeepLinkRouting } from './src/hooks/useDeepLinkRouting';
 import './src/i18n';
 
@@ -74,6 +75,12 @@ function NavigationWrapper() {
     isNavReady,
     isAuthenticated,
     revalidateSession,
+  });
+
+  useQuickActionRouting({
+    navigationRef,
+    isNavReady,
+    isAuthenticated,
   });
 
   return (
