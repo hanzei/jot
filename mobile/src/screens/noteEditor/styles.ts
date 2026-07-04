@@ -195,7 +195,6 @@ export const styles = StyleSheet.create({
   ghostParent: {
     flexDirection: 'row',
     alignItems: 'center',
-    opacity: 0.55,
     paddingVertical: 4,
     gap: 8,
   },

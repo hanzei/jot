@@ -229,7 +229,6 @@
     "typeList": "Liste",
     "titlePlaceholder": "Titre de la note...",
     "contentPlaceholder": "Prendre une note...",
-    "itemPlaceholder": "Élément de liste...",
     "addItem": "Ajouter un élément",
     "failedSaveChanges": "Impossible d'enregistrer les modifications. Appuyez pour réessayer.",
     "menuOptions": "Options de la note",
