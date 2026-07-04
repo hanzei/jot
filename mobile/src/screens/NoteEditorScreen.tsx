@@ -34,7 +34,6 @@ import { useTranslation } from 'react-i18next';
 import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useDuplicateNote, useCreateNoteItem, useUpdateNoteItem, useDeleteNoteItem, useReorderNoteItems, useToggleNoteItemCompleted } from '../hooks/useNotes';
 import { useOfflineNote } from '../hooks/useOfflineNotes';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
-import { isLocalId } from '../db/noteQueries';
 import { useFailedNoteIds } from '../store/OfflineContext';
 import { useSSESubscription } from '../store/SSEContext';
 import { useToast } from '../hooks/useToast';
@@ -99,18 +98,21 @@ const DRAG_CELL_ANIMATIONS = { opacity: 1, transform: [] };
 export default function NoteEditorScreen() {
   const navigation = useNavigation<EditorNavProp>();
   const route = useRoute<EditorRouteProp>();
-  const { noteId: initialNoteId, sharedText, readOnly } = route.params;
+  const { noteId: initialNoteId, sharedText, initialNoteType, readOnly } = route.params;
   const { t, i18n } = useTranslation();
   const failedNoteIds = useFailedNoteIds();
 
-  // A new note opened from an Android share intent arrives with sharedText to
-  // pre-fill the body.
+  // A new note opened from a share intent arrives with sharedText to pre-fill
+  // the body.
   const openedFromShare = initialNoteId === null && !!sharedText;
+  // A new list opened from the "New list" app-icon quick action: start in list
+  // mode and focus the title so the keyboard comes up ready to type.
+  const openedAsNewList = initialNoteId === null && initialNoteType === 'list';
 
   const [noteId, setNoteId] = useState<string | null>(initialNoteId);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState(() => (initialNoteId === null ? sharedText ?? '' : ''));
-  const [noteType, setNoteType] = useState<NoteType>('text');
+  const [noteType, setNoteType] = useState<NoteType>(() => (initialNoteId === null && initialNoteType ? initialNoteType : 'text'));
   const [items, setItems] = useState<LocalItem[]>([]);
   const [checkedItemsCollapsed, setCheckedItemsCollapsed] = useState(false);
   // Id of the item the user just checked off, so its completed-section row pops
@@ -1695,12 +1697,18 @@ export default function NoteEditorScreen() {
 
   const hasNoteColor = !!color && !isWhiteHexColor(color);
 
-  // Actions that need a server-backed note id (not an offline local_* draft).
-  // Sharing additionally requires a central server and ownership. These stay
-  // gated for offline/unsaved drafts (issue #652).
-  const isServerNote = !!noteId && !isLocalId(noteId);
-  const canShareWithCollaborators =
-    !isLocalMode && isServerNote && !!existingNote && existingNote.user_id === currentUser?.id;
+  // Share, Labels, and Add-image all act on a note that exists on the server.
+  // A brand-new note (noteId === null) no longer has to wait for the first
+  // autosave: tapping one of these runs it through withSavedNote, which flushes
+  // a create first (save-first) and then performs the action against the
+  // resulting id. Offline-created notes carry a server-valid id up front and
+  // queue the op for replay, so the same path works offline (issue #652).
+  //
+  // Sharing additionally requires a central server and ownership. A brand-new
+  // note is always owned by the current user; an existing one must be owned by
+  // them (a note shared with the user can't be re-shared).
+  const ownsNote = noteId === null || (!!existingNote && existingNote.user_id === currentUser?.id);
+  const canShareWithCollaborators = !isLocalMode && ownsNote;
   // Muted icon color for the bar; disabled buttons render at reduced opacity.
   const barIconColor = hasNoteColor ? '#444' : colors.icon;
   const disabledBarIconColor = hasNoteColor ? '#999' : colors.iconMuted;
@@ -1926,6 +1934,7 @@ export default function NoteEditorScreen() {
             style={[styles.titleInput, { color: hasNoteColor ? '#1a1a1a' : colors.text }]}
             value={title}
             onChangeText={handleTitleChange}
+            autoFocus={openedAsNewList}
             placeholder={t('note.titlePlaceholder')}
             placeholderTextColor={hasNoteColor ? '#999' : colors.placeholder}
             maxLength={VALIDATION.TITLE_MAX_LENGTH}
@@ -2055,19 +2064,20 @@ export default function NoteEditorScreen() {
           <Ionicons name="color-palette-outline" size={22} color={isReadOnly ? disabledBarIconColor : barIconColor} />
         </TouchableOpacity>
 
-        {/* Add image. Requires a server-backed note_id (spec §15.6 — no
-            draft/orphan uploads), so it stays disabled for offline/unsaved
-            drafts and read-only notes. Offline uploads are queued and flushed on
-            reconnect (#618). */}
+        {/* Add image. Needs a server-backed note, so a brand-new note is saved
+            first via withSavedNote before the picker opens — no draft/orphan
+            upload is ever created (spec §15.6). Only read-only (trashed) notes
+            disable it. Offline uploads are queued and flushed on reconnect
+            (#618). */}
         <TouchableOpacity
-          onPress={() => setAddImageSheetVisible(true)}
-          disabled={isReadOnly || !isServerNote}
+          onPress={() => withSavedNote(() => setAddImageSheetVisible(true))}
+          disabled={isReadOnly}
           style={styles.toolbarBtn}
           testID="toolbar-add-image-btn"
           accessibilityLabel={t('images.addImage')}
-          accessibilityState={{ disabled: isReadOnly || !isServerNote }}
+          accessibilityState={{ disabled: isReadOnly }}
         >
-          <Ionicons name="image-outline" size={22} color={isReadOnly || !isServerNote ? disabledBarIconColor : barIconColor} />
+          <Ionicons name="image-outline" size={22} color={isReadOnly ? disabledBarIconColor : barIconColor} />
         </TouchableOpacity>
 
         {/* Pin / Unpin. Save-first: an unsaved note is created before pinning. */}
@@ -2118,9 +2128,9 @@ export default function NoteEditorScreen() {
         trashed={isReadOnly}
         title={noteType === 'list' ? title : undefined}
         onSend={handleNativeShare}
-        onShare={canShareWithCollaborators && noteId ? () => navigation.navigate('Share', { noteId }) : undefined}
+        onShare={canShareWithCollaborators ? () => withSavedNote((id) => navigation.navigate('Share', { noteId: id })) : undefined}
         onDuplicate={handleDuplicate}
-        onManageLabels={isServerNote ? () => setLabelPickerVisible(true) : undefined}
+        onManageLabels={() => withSavedNote(() => setLabelPickerVisible(true))}
         onMoveToTrash={handleDelete}
         onRestore={handleRestoreNote}
         onDeletePermanently={handleDeletePermanently}

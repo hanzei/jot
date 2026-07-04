@@ -13,11 +13,13 @@ interface UseShareIntentNavigationParams {
   revalidateSession: () => Promise<unknown> | void;
 }
 
-// useShareIntentNavigation wires Android share intents ("select text in another
-// app → share to Jot") into the note editor. An incoming intent is stashed in
-// the module-level store, then replayed once the user is authenticated and the
-// navigation tree is ready. A share can also be redirected to another server,
-// in which case it is created on that server after switching to it.
+// useShareIntentNavigation wires OS share intents ("select text in another app
+// → share to Jot") into the note editor. This covers the Android share intent
+// and the iOS share extension alike — expo-share-intent delivers both through
+// the same context. An incoming intent is stashed in the module-level store,
+// then replayed once the user is authenticated and the navigation tree is
+// ready. A share can also be redirected to another server, in which case it is
+// created on that server after switching to it.
 export function useShareIntentNavigation({
   navigationRef,
   isNavReady,

@@ -1,6 +1,7 @@
 import React from 'react';
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import type { NoteType } from '@jot/shared';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { SSEProvider } from '../store/SSEContext';
@@ -17,10 +18,12 @@ import ConnectToServerScreen from '../screens/ConnectToServerScreen';
 
 export type RootStackParamList = {
   MainDrawer: undefined;
-  // sharedText pre-fills a brand-new note (noteId null) when opened from an
-  // Android share intent. readOnly opens a trashed note in a view-only state
-  // (all editing disabled; overflow menu offers only Restore / Delete-forever).
-  NoteEditor: { noteId: string | null; sharedText?: string; readOnly?: boolean };
+  // sharedText pre-fills a brand-new note (noteId null) when opened from a
+  // share intent. initialNoteType opens a brand-new note as a text note or a
+  // checklist (used by the app-icon "New note" / "New list" quick actions);
+  // defaults to text. readOnly opens a trashed note in a view-only state (all
+  // editing disabled; overflow menu offers only Restore / Delete-forever).
+  NoteEditor: { noteId: string | null; sharedText?: string; initialNoteType?: NoteType; readOnly?: boolean };
   Share: { noteId: string };
   Settings: undefined;
   SyncFailures: undefined;
