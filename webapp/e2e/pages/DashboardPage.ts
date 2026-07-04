@@ -409,7 +409,16 @@ export class DashboardPage {
         await existing.first().click();
       }
     } else {
-      await this.page.getByRole('option', { name: `Create "${labelName}"`, exact: true }).click();
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await this.page.getByRole('option', { name: `Create "${labelName}"`, exact: true }).click();
+          break;
+        } catch (error) {
+          if (attempt === 2) throw error;
+          await search.fill('');
+          await search.fill(labelName);
+        }
+      }
     }
     await expect(
       this.page.getByRole('option', { name: labelName, exact: true, selected: true }),
