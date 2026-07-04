@@ -351,6 +351,10 @@
     "unknownServerMessage": "Ten link wskazuje serwer {{server}}, który nie został jeszcze dodany.",
     "addAndSwitchAction": "Dodaj i przełącz"
   },
+  "quickActions": {
+    "newNote": "Nowa notatka",
+    "newList": "Nowa lista"
+  },
   "shareIntent": {
     "saveTargetLabel": "Zapisywanie na {{server}}",
     "changeServer": "Zmień",

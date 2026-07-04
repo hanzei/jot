@@ -380,6 +380,10 @@
     "cancelSetupMessage": "Der Server wird nicht hinzugefügt.",
     "cancelSetupConfirm": "Zurück"
   },
+  "quickActions": {
+    "newNote": "Neue Notiz",
+    "newList": "Neue Liste"
+  },
   "shareIntent": {
     "saveTargetLabel": "Speichern auf {{server}}",
     "changeServer": "Ändern",

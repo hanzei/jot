@@ -380,6 +380,10 @@
     "wrongServerTitle": "Verkeerde server",
     "wrongServerMessage": "Deze link verwijst naar {{targetServer}}, maar je bent verbonden met {{currentServer}}."
   },
+  "quickActions": {
+    "newNote": "Nieuwe notitie",
+    "newList": "Nieuwe lijst"
+  },
   "shareIntent": {
     "saveTargetLabel": "Opslaan op {{server}}",
     "changeServer": "Wijzigen",

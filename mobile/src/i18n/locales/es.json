@@ -380,6 +380,10 @@
     "wrongServerTitle": "Servidor incorrecto",
     "wrongServerMessage": "Este enlace apunta a {{targetServer}}, pero estás conectado a {{currentServer}}."
   },
+  "quickActions": {
+    "newNote": "Nueva nota",
+    "newList": "Nueva lista"
+  },
   "shareIntent": {
     "saveTargetLabel": "Guardando en {{server}}",
     "changeServer": "Cambiar",

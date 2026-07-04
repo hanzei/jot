@@ -98,18 +98,21 @@ const DRAG_CELL_ANIMATIONS = { opacity: 1, transform: [] };
 export default function NoteEditorScreen() {
   const navigation = useNavigation<EditorNavProp>();
   const route = useRoute<EditorRouteProp>();
-  const { noteId: initialNoteId, sharedText, readOnly } = route.params;
+  const { noteId: initialNoteId, sharedText, initialNoteType, readOnly } = route.params;
   const { t, i18n } = useTranslation();
   const failedNoteIds = useFailedNoteIds();
 
-  // A new note opened from an Android share intent arrives with sharedText to
-  // pre-fill the body.
+  // A new note opened from a share intent arrives with sharedText to pre-fill
+  // the body.
   const openedFromShare = initialNoteId === null && !!sharedText;
+  // A new list opened from the "New list" app-icon quick action: start in list
+  // mode and focus the title so the keyboard comes up ready to type.
+  const openedAsNewList = initialNoteId === null && initialNoteType === 'list';
 
   const [noteId, setNoteId] = useState<string | null>(initialNoteId);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState(() => (initialNoteId === null ? sharedText ?? '' : ''));
-  const [noteType, setNoteType] = useState<NoteType>('text');
+  const [noteType, setNoteType] = useState<NoteType>(() => (initialNoteId === null && initialNoteType ? initialNoteType : 'text'));
   const [items, setItems] = useState<LocalItem[]>([]);
   const [checkedItemsCollapsed, setCheckedItemsCollapsed] = useState(false);
   // Id of the item the user just checked off, so its completed-section row pops
@@ -1931,6 +1934,7 @@ export default function NoteEditorScreen() {
             style={[styles.titleInput, { color: hasNoteColor ? '#1a1a1a' : colors.text }]}
             value={title}
             onChangeText={handleTitleChange}
+            autoFocus={openedAsNewList}
             placeholder={t('note.titlePlaceholder')}
             placeholderTextColor={hasNoteColor ? '#999' : colors.placeholder}
             maxLength={VALIDATION.TITLE_MAX_LENGTH}
