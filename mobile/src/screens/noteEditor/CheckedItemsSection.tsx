@@ -85,7 +85,7 @@ export default function CheckedItemsSection({
               accessibilityLabel={t('note.completedItemGroup', { title: parent.text })}
             >
               <View style={styles.ghostCheckbox} />
-              <Text style={[styles.ghostParentText, { color: hasNoteColor ? '#888' : colors.textMuted }]} numberOfLines={1}>
+              <Text style={[styles.ghostParentText, { color: hasNoteColor ? '#666' : colors.textSecondary }]} numberOfLines={1}>
                 {parent.text}
               </Text>
             </View>,
