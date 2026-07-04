@@ -1,38 +1,82 @@
-# Jot - Self-hosted Note-Taking Application
+# Jot - Self-hosted note-taking
 
-A self-hosted note-taking application built with Go backend and React frontend. The server serves both the API and the web application from a single port, making deployment and development simple.
+Jot is a self-hosted note-taking app with a Go API, a React web app, and a
+React Native mobile app. A single Go binary can serve both the API and the
+compiled web app, while SQLite keeps the default deployment small and portable.
 
 ## Features
 
-- **Notes Management**: Create, edit, delete, and organize notes
-- **Note Types**: Support for both plain text notes and lists with checkboxes
-- **Search & Filter**: Find notes quickly with search and filtering capabilities
-- **Responsive Design**: Works on desktop and mobile devices
-- **Share-to-Note**: Select text in any Android or iOS app and share it to Jot to create a new note (multi-server users can redirect it to another server before saving)
-- **App-Icon Quick Actions**: Long-press the Jot app icon (iOS Home Screen quick actions / Android app shortcuts) for **New note** and **New list**, which jump straight into the editor with the keyboard up — and work offline
-- **Self-hosted**: Complete control over your data
-- **SQLite Database**: Lightweight, file-based database
-- **Admin Support**: First registered user becomes admin
-- **Admin Instance Overview**: Admin page shows live usage metrics like users, notes, sharing, labels, list items, and DB size
-- **Single Binary**: Frontend and backend served from one Go binary
-- **Sliding Sessions**: 30-day sessions auto-extend when less than 7 days remain
+### Notes and organization
+
+- **Text and list notes**: Write Markdown text notes or checklist-style list
+  notes with nested items.
+- **Images**: Attach note images with cover thumbnails, galleries, and a
+  lightbox viewer.
+- **Labels and color**: Group notes with labels, filter from the sidebar, and
+  apply note colors.
+- **Search and shortcuts**: Search across notes quickly, with keyboard
+  shortcuts for common navigation and creation actions.
+- **Pin, archive, duplicate, trash**: Keep active notes focused while retaining
+  archived notes and automatically purging trashed notes after seven days.
+- **Import and export**: Import from Jot JSON, Google Keep, or usememos, and
+  export your Jot notes as JSON.
+
+### Collaboration
+
+- **Sharing**: Share notes with other users while preserving owner/share access
+  boundaries.
+- **Live updates**: Server-sent events keep notes, labels, profile icons, and
+  image changes in sync across clients.
+- **Collaborator avatars**: Note cards and editors show owner and collaborator
+  avatars.
+- **Task assignment**: Assign list items to collaborators and use the My Tasks
+  view to focus on assigned work.
+
+### Apps and access
+
+- **Responsive web app**: The React app works on desktop and mobile browsers and
+  installs as a PWA with offline caching.
+- **Mobile app**: The React Native/Expo app supports multiple servers, local
+  SQLite persistence, offline write queueing, SSE sync, image uploads, and
+  Android/iOS share-to-note.
+- **App-icon quick actions**: Long-press the mobile app icon for New note and
+  New list shortcuts that open the editor with the keyboard ready, even offline.
+- **Sessions and PATs**: Browser sessions use HttpOnly cookies with sliding
+  30-day expiry; Personal Access Tokens support API and automation use cases.
+- **MCP server**: Authenticated MCP clients can manage notes and labels over the
+  streamable HTTP endpoint.
+- **Internationalization**: The web and mobile apps include English, German,
+  Spanish, French, Italian, Dutch, Polish, and Portuguese.
+
+### Self-hosting and operations
+
+- **Single binary**: Build one Go binary that serves the API and compiled web
+  assets.
+- **SQLite by default, Postgres optional**: Start with a local SQLite file or
+  point `DB_DRIVER=postgres` at a Postgres DSN.
+- **Filesystem blob storage**: Uploaded images are stored under `UPLOAD_DIR` as
+  content-addressed blobs.
+- **Admin tools**: The first registered user becomes admin; admins can manage
+  users in the web UI or with `jotctl`.
+- **Observability**: Optional Prometheus metrics, OpenTelemetry traces, metrics,
+  logs, request logs, and a Grafana dashboard are included.
 
 ## Screenshots
 
-### Dashboard overview
+### Dashboard with labels, images, and shared notes
 ![Dashboard overview](images/feature-dashboard-overview.png)
 
-### Search and filter
-![Search and filter](images/feature-search-filter.png)
+### Image gallery
+![Image gallery](images/feature-image-gallery.png)
 
-### List note editor
-![List note editor](images/feature-todo-note-editor.png)
+### Sharing and collaborators
+![Sharing and collaborators](images/feature-sharing-collaboration.png)
 
-### Archive view
-![Archive view](images/feature-archive-view.png)
+### My Tasks
+![My Tasks](images/feature-my-tasks.png)
 
-### Settings and theme
-![Settings and theme](images/feature-settings-theme.png)
+### Mobile layout
+![Mobile layout](images/feature-mobile-layout.png)
 
 ## Development Setup
 
@@ -40,7 +84,7 @@ A self-hosted note-taking application built with Go backend and React frontend. 
 
 - **Go 1.26+**: [Download Go](https://golang.org/dl/)
 - **Node.js 24+**: [Download Node.js](https://nodejs.org/)
-- **npm**: Package manager for frontend dependencies
+- **npm**: Package manager for web, shared, and mobile dependencies
 
 ### Quick Start
 
@@ -52,15 +96,14 @@ A self-hosted note-taking application built with Go backend and React frontend. 
 
 2. **Build and run** (recommended for most development):
    ```bash
-   # Build the frontend
+   # Build the frontend.
    cd webapp
-   npm install
+   npm ci
    npm run build
    cd ..
-   
-   # Start the server (serves both API and frontend)
+
+   # Start the server, which serves both API and frontend.
    cd server
-   go mod tidy
    COOKIE_SECURE=false go run main.go
    ```
 
@@ -81,15 +124,18 @@ task test-webapp     # Run webapp tests
 task test-e2e        # Run Playwright end-to-end tests
 task test-mobile     # Run mobile app tests
 task coverage        # Run server tests with coverage report
-task lint                  # Run linters
-task lint-server           # Run server linting with golangci-lint
-task lint-webapp           # Run webapp linting
-task lint-mobile           # Run mobile app linting
-task check-translations    # Check locale files for missing/extra keys
-task gen-docs              # Regenerate Swagger API docs (install swag first: go install github.com/swaggo/swag/cmd/swag@v1.16.6)
-task clean               # Remove generated files and node packages
+task lint            # Run linters
+task lint-server     # Run server linting with golangci-lint
+task lint-webapp     # Run webapp linting
+task lint-mobile     # Run mobile app linting
+task lint-shared     # Run shared package linting
+task test-shared     # Run shared package tests
+task check-translations # Check locale files for missing/extra keys
+task gen-docs        # Regenerate Swagger API docs
+task build-jotctl    # Build the jotctl admin CLI binary
+task clean           # Remove generated files and node packages
 ```
-   
+
 3. **Access the application**:
    - Open `http://localhost:8080` in your browser
    - Register your first account with a username and password (becomes admin automatically)
@@ -98,37 +144,78 @@ task clean               # Remove generated files and node packages
 
 ### Development Options
 
-#### Vite Dev Server (recommended)
+#### Vite dev server
 Run the Vite dev server for instant hot module replacement:
 
 ```bash
-# Terminal 1: Start the Go backend
+# Terminal 1: start the Go backend.
 COOKIE_SECURE=false task run-server
 
-# Terminal 2: Start the Vite dev server with HMR
+# Terminal 2: start the Vite dev server with HMR.
 task run-webapp
 ```
 
 Access: `http://localhost:5173` — API calls are proxied to the Go server automatically.
 
-## Environment Variables
+## Mobile app
 
-Configure the application using environment variables or `.env` file:
+The `mobile/` app is built with React Native and Expo. It connects to any Jot
+server URL you configure at sign-in, stores per-server sessions securely, and
+uses a local SQLite database for cached notes and queued offline writes.
 
 ```bash
-# Database configuration
-DB_DRIVER=sqlite                    # Database driver: "sqlite" (default) or "postgres"
-DB_DSN=./jot.db                     # Database connection string (SQLite file path or Postgres DSN)
-UPLOAD_DIR=./uploads                # Directory for uploaded blob storage (optional)
-UPLOAD_MAX_BYTES=26214400           # Max upload size in bytes per note image (optional, default 25 MB)
-
-# Server configuration
-PORT=8080                           # Server port (optional)
-STATIC_DIR=../webapp/build/         # Frontend build directory (optional)
-
-# Access control
-REGISTRATION_ENABLED=true           # Set to "false" to disable public registration; admins can still create users (optional)
+cd mobile
+npm ci
+npm run android   # Android device or emulator
+npm run ios       # iOS simulator, macOS only
 ```
+
+The Android APK workflow lives in `.github/workflows/mobile-apk.yml`. Android
+share-to-note is supported through the mobile share sheet: share selected text
+to Jot, choose the target server if needed, and save it as a new note.
+
+## Environment Variables
+
+Configure the server with environment variables or a `.env` file.
+
+### Core server
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `PORT` | `8080` | HTTP port for the main web/API server. |
+| `STATIC_DIR` | `../webapp/build` from `server/` | Directory containing the compiled web app. |
+| `CORS_ALLOWED_ORIGIN` | empty | Allowed browser origin for credentialed cross-origin API calls, such as `http://localhost:5173` during Vite development. |
+
+### Database and uploads
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `DB_DRIVER` | `sqlite` | Database driver: `sqlite` or `postgres`. |
+| `DB_DSN` | `./jot.db` | SQLite file path or Postgres connection string. |
+| `UPLOAD_DIR` | `./uploads` | Filesystem root for uploaded image blobs and thumbnails. |
+| `UPLOAD_MAX_BYTES` | `26214400` | Maximum upload size per note image, from 1 MiB to 500 MiB. |
+
+### Access control
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `COOKIE_SECURE` | `true` | Sets the session cookie `Secure` flag. Use `false` only for local HTTP development. |
+| `REGISTRATION_ENABLED` | `true` | Set to `false` to disable public registration; admins can still create users. |
+| `PASSWORD_MIN_LENGTH` | `10` | Minimum password length, from 1 to 72 characters. |
+
+### Metrics and observability
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `METRICS_ENABLED` | `false` | Enables the separate Prometheus metrics HTTP server. |
+| `METRICS_HOST` | `127.0.0.1` | Bind host for the metrics server. |
+| `METRICS_PORT` | `8081` | Bind port for the metrics server. |
+| `OTEL_TRACES_ENABLED` | `false` | Enables OpenTelemetry tracing. |
+| `OTEL_METRICS_ENABLED` | `false` | Enables OTLP metric export. |
+| `OTEL_LOGS_ENABLED` | `false` | Enables OpenTelemetry log export. |
+| `OTEL_SERVICE_NAME` | `jot` | Service name reported to OpenTelemetry. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | empty | OTLP gRPC endpoint, for example `localhost:4317`; stdout exporters are used for traces/logs when empty and their signals are enabled. |
+| `OTEL_EXPORTER_OTLP_INSECURE` | `false` | Uses insecure OTLP gRPC transport for local collectors. |
 
 ### Backups
 
@@ -149,6 +236,54 @@ must always be included in backups alongside the database, regardless of
 
 The full interactive API reference is available via Swagger UI at `http://localhost:8080/api/docs/index.html` when the server is running.
 
+## MCP server
+
+Authenticated MCP clients can connect to `http://<host>/api/v1/mcp` using the
+streamable HTTP transport. The endpoint is mounted behind normal Jot
+authentication, so every MCP session is scoped to the authenticated user.
+
+Use a Personal Access Token for machine-to-machine access:
+
+```text
+Authorization: Bearer <personal-access-token>
+```
+
+The MCP server exposes note and label tools. PATs are created from Settings in
+the web app and are only shown once.
+
+## jotctl admin CLI
+
+`jotctl` manages users and demo data from a terminal.
+
+```bash
+task build-jotctl
+./server/jotctl login --server http://localhost:8080 --username <admin>
+./server/jotctl users list
+./server/jotctl users create --username alice --password change-me
+./server/jotctl users set-role <user-id> admin
+./server/jotctl seed
+```
+
+Useful environment variables:
+
+| Variable | Description |
+| --- | --- |
+| `JOTCTL_SERVER` | Default server URL for `jotctl login`. |
+| `JOTCTL_USERNAME` | Default login username. |
+| `JOTCTL_PASSWORD` | Default login password. |
+| `JOTCTL_CONFIG_DIR` | Override the directory used for the saved session file. |
+
+## Observability
+
+Set `METRICS_ENABLED=true` to expose Prometheus metrics on
+`http://127.0.0.1:8081/metrics` by default. Set one or more of
+`OTEL_TRACES_ENABLED`, `OTEL_METRICS_ENABLED`, or `OTEL_LOGS_ENABLED` to enable
+OpenTelemetry SDK setup. When `OTEL_EXPORTER_OTLP_ENDPOINT` is set, enabled
+signals are exported over OTLP gRPC; otherwise enabled traces/logs use stdout
+exporters for local debugging.
+
+A starter Grafana dashboard is available at `grafana/dashboard.json`.
+
 ## Building for Production
 
 ### Single Binary Deployment (Recommended)
@@ -158,7 +293,7 @@ Build everything into one executable:
 ```bash
 # 1. Build frontend (production build)
 cd webapp
-npm install
+npm ci
 npm run build
 cd ..
 
@@ -236,7 +371,6 @@ docker run -p 8080:8080 -e COOKIE_SECURE=false -v ./data:/data jot
 
 ```yaml
 # docker-compose.override.yml
-version: '3.8'
 services:
   jot:
     image: hanzei/jot:latest
@@ -256,9 +390,9 @@ services:
    ```bash
    # Check if frontend is built
    ls webapp/build/
-   
+
    # Rebuild frontend
-   cd webapp && npm run build
+   cd webapp && npm ci && npm run build
    ```
 
 2. **Database permissions**:
@@ -282,8 +416,8 @@ services:
 5. **Build errors**:
    ```bash
    # Clean and rebuild
-   cd webapp && rm -rf node_modules dist build && npm install && npm run build
-   cd ../server && go clean && go mod tidy
+   cd webapp && rm -rf node_modules dist build && npm ci && npm run build
+   cd ../server && go clean
    ```
 
 ### Development Tips
@@ -312,22 +446,29 @@ sqlite3 jot.db "SELECT * FROM users;"
 
 ## Contributing
 
-1. **Fork** the repository
-2. **Clone** your fork: `git clone https://github.com/yourusername/jot.git`
-3. **Create** feature branch: `git checkout -b feature/amazing-feature`
-4. **Make** your changes following the existing code style
-5. **Test** your changes thoroughly
-6. **Commit** your changes: `git commit -m 'Add amazing feature'`
-7. **Push** to branch: `git push origin feature/amazing-feature`
-8. **Submit** a pull request
+1. Fork the repository.
+2. Clone your fork: `git clone https://github.com/yourusername/jot.git`.
+3. Create a feature branch: `git checkout -b feature/amazing-feature`.
+4. Make your changes following the existing code style.
+5. Run the relevant checks before opening a PR.
+6. Commit your changes: `git commit -m 'Add amazing feature'`.
+7. Push to your branch: `git push origin feature/amazing-feature`.
+8. Submit a pull request.
 
 ### Development Guidelines
 
-- Follow Go and React best practices
-- Add tests for new functionality
-- Update documentation for API changes
-- Ensure Docker build passes
-- Test both development modes
+- Follow Go, React, and React Native project conventions.
+- Add or update tests for new functionality.
+- Update documentation for API, configuration, or feature changes.
+- Keep translation keys in sync when adding user-facing text.
+- Test both production-build and development-server flows when relevant.
+
+### PR checklist
+
+- `task test`
+- `task lint`
+- `task test-e2e`
+- `task check-translations` when i18n keys change
 
 ### CI/CD Pipeline
 
@@ -343,4 +484,4 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
-**Jot** - Simple, fast, and secure note-taking for everyone. 🚀
+**Jot** - Simple, fast, and self-hosted note-taking.
