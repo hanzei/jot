@@ -122,7 +122,8 @@ func Setup(ctx context.Context, cfg Config) (shutdown func(context.Context) erro
 
 	// runtimeProducer supplies the goroutine scheduling-latency histogram
 	// (go.schedule.duration, queried by the shipped dashboard as
-	// go_schedule_duration_seconds) out of band. goruntime.Start below only
+	// otel_go_schedule_duration_seconds — the OTel Collector namespaces it
+	// with an "otel_" prefix) out of band. goruntime.Start below only
 	// registers the regular async instruments (goroutine count, memory
 	// stats); without this producer attached to a reader, scheduling latency
 	// is silently never collected.

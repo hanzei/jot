@@ -314,7 +314,11 @@ OpenTelemetry SDK setup. When `OTEL_EXPORTER_OTLP_ENDPOINT` is set, enabled
 signals are exported over OTLP gRPC; otherwise enabled traces/logs use stdout
 exporters for local debugging.
 
-A starter Grafana dashboard is available at `grafana/dashboard.json`.
+A starter Grafana dashboard is available at `grafana/dashboard.json`. Its
+queries assume metrics reach Prometheus via an OTel Collector, which
+namespaces every Jot metric with an `otel_` prefix (e.g.
+`otel_notes_created_total`) — scraping `/metrics` directly instead will not
+match those queries.
 
 ### Distinguishing environments in the dashboard
 
