@@ -210,6 +210,19 @@ describe('NoteModal', () => {
       expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument()
     })
 
+    it('opens as a list note preset via initialType, with initialContent ignored for lists', () => {
+      renderNoteModal({ ...defaultProps, initialType: 'list', initialContent: 'ignored for lists' })
+
+      expect(screen.getByPlaceholderText('Note title...')).toBeInTheDocument()
+      expect(screen.queryByText('ignored for lists')).not.toBeInTheDocument()
+    })
+
+    it('prefills a new text note from initialContent', () => {
+      renderNoteModal({ ...defaultProps, initialContent: 'Shared from another app' })
+
+      expect(screen.getByPlaceholderText('Take a note...')).toHaveValue('Shared from another app')
+    })
+
     it('renders edit mode correctly for text note', () => {
       const note = createMockNote()
       renderNoteModal({ ...defaultProps, note })

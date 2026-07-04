@@ -9,6 +9,7 @@ A self-hosted note-taking application built with Go backend and React frontend. 
 - **Search & Filter**: Find notes quickly with search and filtering capabilities
 - **Responsive Design**: Works on desktop and mobile devices
 - **Android Share-to-Note**: Select text in any Android app and share it to Jot to create a new note (multi-server users can redirect it to another server before saving)
+- **PWA Quick Capture**: Installed webapp PWAs get long-press icon shortcuts ("New note", "New list") and appear in the OS share sheet, both landing directly in a ready-to-type new note via the bookmarkable `/new` route
 - **Self-hosted**: Complete control over your data
 - **SQLite Database**: Lightweight, file-based database
 - **Admin Support**: First registered user becomes admin

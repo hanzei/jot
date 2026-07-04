@@ -54,7 +54,8 @@ const AuthenticatedLayout = ({ onLogout }: AuthenticatedLayoutProps) => {
   // Track which route we're on for sidebar active states
   const isAtRoot = useMatch('/');
   const isAtNoteId = useMatch('/notes/:noteId');
-  const isAtDashboard = !!(isAtRoot || isAtNoteId);
+  const isAtNewNote = useMatch('/new');
+  const isAtDashboard = !!(isAtRoot || isAtNoteId || isAtNewNote);
   const isAtAdmin = !!useMatch('/admin');
   const isAtSettings = !!useMatch('/settings');
 

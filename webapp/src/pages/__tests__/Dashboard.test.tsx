@@ -152,13 +152,15 @@ vi.mock('@/components/SortableNoteCard', () => ({
 }))
 
 vi.mock('@/components/NoteModal', () => ({
-  default: ({ note, onClose, onSave, onRefresh }: { note?: Note | null; onClose?: () => void; onSave?: () => void; onRefresh?: () => void }) => (
+  default: ({ note, onClose, onSave, onRefresh, initialType, initialContent }: { note?: Note | null; onClose?: () => void; onSave?: () => void; onRefresh?: () => void; initialType?: string; initialContent?: string }) => (
     <div data-testid="note-modal">
       <h2>{note ? 'Edit Note' : 'New Note'}</h2>
       <button onClick={onClose} data-testid="modal-close">Close</button>
       <button onClick={onSave} data-testid="modal-save">Save</button>
       <button onClick={onRefresh} data-testid="modal-refresh">Refresh</button>
       <p data-testid="modal-image-count">{note?.images?.length ?? 0}</p>
+      <p data-testid="modal-initial-type">{initialType ?? ''}</p>
+      <p data-testid="modal-initial-content">{initialContent ?? ''}</p>
     </div>
   ),
 }))
@@ -187,6 +189,7 @@ const renderDashboard = (initialEntries = ['/']) => {
             <Route element={<Dashboard />}>
               <Route index element={null} />
               <Route path="notes/:noteId" element={null} />
+              <Route path="new" element={null} />
             </Route>
           </Routes>
         </SearchBarCapture>
@@ -1065,6 +1068,52 @@ describe('Dashboard', () => {
       await waitFor(() => {
         // Refresh should trigger at least one additional notes fetch.
         expect(mockGetAll.mock.calls.length).toBeGreaterThanOrEqual(initialCalls + 1)
+      })
+    })
+  })
+
+  describe('/new deep link', () => {
+    it('opens the create-note modal defaulting to a text note', async () => {
+      renderDashboard(['/new'])
+
+      await waitFor(() => {
+        expect(screen.getByTestId('note-modal')).toBeInTheDocument()
+        expect(screen.getByTestId('modal-initial-type')).toHaveTextContent('text')
+        expect(screen.getByTestId('modal-initial-content')).toHaveTextContent('')
+      })
+    })
+
+    it('opens the create-note modal preset to a list via ?type=list', async () => {
+      renderDashboard(['/new?type=list'])
+
+      await waitFor(() => {
+        expect(screen.getByTestId('note-modal')).toBeInTheDocument()
+        expect(screen.getByTestId('modal-initial-type')).toHaveTextContent('list')
+      })
+    })
+
+    it('prefills note content from Web Share Target query params', async () => {
+      renderDashboard(['/new?title=Recipe&text=Looks%20tasty&url=https%3A%2F%2Fexample.com'])
+
+      await waitFor(() => {
+        expect(screen.getByTestId('note-modal')).toBeInTheDocument()
+        expect(screen.getByTestId('modal-initial-content'))
+          .toHaveTextContent('Recipe Looks tasty https://example.com')
+      })
+    })
+
+    it('returns to the dashboard when the modal is closed', async () => {
+      const user = userEvent.setup()
+      renderDashboard(['/new'])
+
+      await waitFor(() => {
+        expect(screen.getByTestId('note-modal')).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByTestId('modal-close'))
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('note-modal')).not.toBeInTheDocument()
       })
     })
   })
