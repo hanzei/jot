@@ -258,7 +258,6 @@
     "typeList": "List",
     "titlePlaceholder": "Note title...",
     "contentPlaceholder": "Take a note...",
-    "itemPlaceholder": "List item...",
     "addItem": "Add item",
     "failedSaveChanges": "Failed to save changes. Tap to retry.",
     "menuOptions": "Note options",

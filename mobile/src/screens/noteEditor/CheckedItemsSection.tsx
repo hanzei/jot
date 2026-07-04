@@ -4,6 +4,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 import type { Collaborator } from '@jot/shared';
 import { useTheme } from '../../theme/ThemeContext';
+import { getEffectiveColors } from '../../theme/colors';
 import ListItem from '../../components/ListItem';
 import { styles } from './styles';
 import type { LocalItem } from './listItemModel';
@@ -63,6 +64,7 @@ export default function CheckedItemsSection({
 }: CheckedItemsSectionProps) {
   const { t } = useTranslation();
   const { colors } = useTheme();
+  const { icon: effectiveIcon, textSecondary: effectiveTextSecondary } = getEffectiveColors(hasNoteColor, colors);
 
   if (checkedItems.length === 0) return null;
 
@@ -88,7 +90,7 @@ export default function CheckedItemsSection({
               accessibilityLabel={t('note.completedItemGroup', { title: parent.text })}
             >
               <View style={styles.ghostCheckbox} />
-              <Text style={[styles.ghostParentText, { color: hasNoteColor ? '#888' : colors.textMuted }]} numberOfLines={1}>
+              <Text style={[styles.ghostParentText, { color: effectiveTextSecondary }]} numberOfLines={1}>
                 {parent.text}
               </Text>
             </View>,
@@ -137,9 +139,9 @@ export default function CheckedItemsSection({
         <Ionicons
           name={collapsed ? 'chevron-forward' : 'chevron-down'}
           size={18}
-          color={hasNoteColor ? '#888' : colors.iconMuted}
+          color={effectiveIcon}
         />
-        <Text style={[styles.checkedHeaderText, { color: hasNoteColor ? '#777' : colors.textMuted }]}>
+        <Text style={[styles.checkedHeaderText, { color: effectiveTextSecondary }]}>
           {t('note.completedItems', { count: checkedItems.length })}
         </Text>
       </TouchableOpacity>

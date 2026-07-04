@@ -108,7 +108,7 @@ export default function NotesListHeader({
           <Ionicons
             name={isGrid ? 'list-outline' : 'grid-outline'}
             size={18}
-            color={colors.iconMuted}
+            color={colors.icon}
           />
         </TouchableOpacity>
         <TouchableOpacity
@@ -125,7 +125,7 @@ export default function NotesListHeader({
           accessibilityLabel={t('dashboard.sortAccessibilityLabel', { sortLabel: activeSortLabel })}
           accessibilityState={{ expanded: isSortOpen }}
         >
-          <Ionicons name="swap-vertical" size={18} color={isSortOpen ? colors.primary : colors.iconMuted} />
+          <Ionicons name="swap-vertical" size={18} color={isSortOpen ? colors.primary : colors.icon} />
         </TouchableOpacity>
       </View>
 
