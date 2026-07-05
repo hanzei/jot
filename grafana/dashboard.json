@@ -1877,12 +1877,14 @@
         "type": "datasource"
       },
       {
+        "allValue": ".*",
         "current": {},
         "datasource": {
           "type": "prometheus",
           "uid": "${datasource}"
         },
         "definition": "label_values(http_server_request_duration_seconds_count, deployment_environment)",
+        "description": "Populated from the deployment_environment label, which telemetry.go only attaches when OTEL_RESOURCE_ATTRIBUTES=deployment.environment=<name> is set. If no instance sets it, this list is empty and \"All\" (via allValue) matches every series regardless.",
         "hide": 0,
         "includeAll": true,
         "label": "Environment",
@@ -1908,5 +1910,5 @@
   "timezone": "browser",
   "title": "Jot Overview",
   "uid": "jot-overview-v1",
-  "version": 6
+  "version": 7
 }
