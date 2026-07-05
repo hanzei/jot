@@ -206,6 +206,20 @@ export class DashboardPage {
     await activeDialog.getByRole('button', { name: 'Duplicate' }).click();
   }
 
+  /** Converts the open text note to a list. Text -> list has no confirmation dialog. */
+  async convertCurrentNoteToList() {
+    const activeDialog = this.page.getByRole('dialog').last();
+    await activeDialog.getByRole('button', { name: 'Convert to list' }).click();
+  }
+
+  /** Converts the open list note to text, confirming the lossy-conversion dialog. */
+  async convertCurrentNoteToText() {
+    const activeDialog = this.page.getByRole('dialog').last();
+    await activeDialog.getByRole('button', { name: 'Convert to text' }).click();
+    const confirmDialog = this.page.getByRole('dialog').last();
+    await confirmDialog.getByRole('button', { name: 'Convert to text' }).click();
+  }
+
   async archiveCurrentNoteFromModal() {
     const activeDialog = this.page.getByRole('dialog').last();
     await activeDialog.getByRole('button', { name: 'Archive note' }).click();

@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo, useRef, useCallback, type ReactElement } from 'react';
-import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, UserPlusIcon, CheckIcon, TagIcon, DocumentDuplicateIcon, DevicePhoneMobileIcon, PaintBrushIcon, PhotoIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, UserPlusIcon, CheckIcon, TagIcon, DocumentDuplicateIcon, DevicePhoneMobileIcon, PaintBrushIcon, PhotoIcon, ArrowsRightLeftIcon } from '@heroicons/react/24/outline';
 import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, IMAGE_MAX_PER_NOTE, UPLOAD_MAX_BYTES, buildCollaborators, generateId, type Note, type NoteType, type NoteImage, type CreateNoteRequest, type UpdateNoteRequest, type PatchNoteItemRequest, type Label, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, IMAGE_MAX_PER_NOTE, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListItems, listToText, type Note, type NoteType, type NoteImage, type CreateNoteRequest, type UpdateNoteRequest, type ConvertNoteTypeRequest, type PatchNoteItemRequest, type Label, type User, type Collaborator } from '@jot/shared';
 import { notes, images as imagesApi } from '@/utils/api';
 import { renderMarkdown } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
@@ -91,6 +91,7 @@ interface NoteModalProps {
   onShare?: (note: Note) => void;
   onDelete?: (noteId: string) => void;
   onDuplicate?: (noteId: string) => Promise<void> | void;
+  onConvert?: (noteId: string, data: ConvertNoteTypeRequest) => Promise<void> | void;
   isOwner?: boolean;
   usersById?: Map<string, User>;
   currentUserId?: string;
@@ -486,7 +487,7 @@ function SortableItem({ id, index, item, onUpdateListItem, onRemoveListItem, isC
   );
 }
 
-export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, onDelete, onDuplicate, isOwner = true, usersById, currentUserId, uploadMaxBytes = UPLOAD_MAX_BYTES, initialType, initialContent }: NoteModalProps) {
+export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, onDelete, onDuplicate, onConvert, isOwner = true, usersById, currentUserId, uploadMaxBytes = UPLOAD_MAX_BYTES, initialType, initialContent }: NoteModalProps) {
   const { t, i18n } = useTranslation();
   const { showToast } = useToast();
   const [title, setTitle] = useState('');
@@ -504,6 +505,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const [showLabelPicker, setShowLabelPicker] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showConvertConfirm, setShowConvertConfirm] = useState(false);
   // New notes start in edit mode; existing notes start in preview mode.
   const [isEditingContent, setIsEditingContent] = useState(!note);
   const pendingSelectionRef = useRef<{ start: number; end: number } | null>(null);
@@ -1944,6 +1946,66 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
   };
 
+  // List -> text is lossy (assignments, real checkbox/nesting structure), so
+  // it's confirmed first; text -> list just reflows lines and runs directly.
+  const handleConvertClick = () => {
+    if (!note || !onConvert || loading || savingRef.current) return;
+    if (noteType === 'list') {
+      setShowConvertConfirm(true);
+    } else {
+      void performConvert();
+    }
+  };
+
+  const performConvert = async () => {
+    if (!note || !onConvert) return;
+    const targetType: NoteType = noteType === 'list' ? 'text' : 'list';
+
+    savingRef.current = true;
+    setLoading(true);
+    try {
+      await persistExistingNote();
+    } catch (error) {
+      console.error('Failed to save note before conversion:', error);
+      showError(t('note.failedSaveChanges'));
+      savingRef.current = false;
+      setLoading(false);
+      setShowConvertConfirm(false);
+      return;
+    }
+
+    try {
+      const data: ConvertNoteTypeRequest = targetType === 'list'
+        ? {
+            note_type: 'list',
+            items: textToListItems(content).map((item, idx) => ({
+              text: item.text,
+              position: idx,
+              completed: item.completed,
+            })),
+          }
+        : {
+            note_type: 'text',
+            content: listToText(title, items.map(item => ({
+              id: item.id,
+              text: item.text,
+              completed: item.completed,
+              position: item.position,
+              parent_id: item.parentId,
+            }))),
+          };
+      await onConvert(note.id, data);
+      onClose();
+    } catch (error) {
+      console.error('Failed to convert note:', error);
+      showError(t('note.failedConvert'));
+    } finally {
+      savingRef.current = false;
+      setLoading(false);
+      setShowConvertConfirm(false);
+    }
+  };
+
   const handleDuplicate = async () => {
     if (!note || !onDuplicate || loading || savingRef.current) return;
 
@@ -2172,6 +2234,10 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
+  const assignedItemCount = items.filter(item => item.assignedTo).length;
+  const convertToTextConfirmMessage = assignedItemCount > 0
+    ? `${t('note.convertToTextConfirmMessage')} ${t('note.convertLoseAssignments', { count: assignedItemCount })}`
+    : t('note.convertToTextConfirmMessage');
 
   return (
     <>
@@ -2782,6 +2848,16 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                         <DocumentDuplicateIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                       </button>
                     )}
+                    {onConvert && (
+                      <button
+                        onClick={handleConvertClick}
+                        className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                        title={noteType === 'list' ? t('note.convertToText') : t('note.convertToList')}
+                        aria-label={noteType === 'list' ? t('note.convertToText') : t('note.convertToList')}
+                      >
+                        <ArrowsRightLeftIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                      </button>
+                    )}
                     {isOwner && onDelete && (
                       <button
                         onClick={handleDelete}
@@ -2827,6 +2903,16 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         confirmLabel={t('note.delete')}
         onConfirm={confirmDelete}
         onCancel={() => setShowDeleteConfirm(false)}
+      />
+
+      <ConfirmDialog
+        open={showConvertConfirm}
+        title={t('note.convertToTextConfirmTitle')}
+        message={convertToTextConfirmMessage}
+        confirmLabel={t('note.convertToText')}
+        variant="default"
+        onConfirm={performConvert}
+        onCancel={() => setShowConvertConfirm(false)}
       />
     </>
   );

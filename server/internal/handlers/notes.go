@@ -589,6 +589,129 @@ func (h *NotesHandler) DuplicateNote(w http.ResponseWriter, r *http.Request) (in
 	return http.StatusCreated, sanitized, nil
 }
 
+// ConvertNoteTypeRequest is the request body for POST /notes/{id}/convert.
+// The transform (splitting text into list items, or rendering a list back
+// into text) is computed client-side (see shared/src/noteConversion.ts) and
+// sent precomputed; the server only validates it against the same size
+// limits enforced on directly-authored note content and persists it
+// atomically. Content is used when converting to 'text'; Items when
+// converting to 'list'.
+type ConvertNoteTypeRequest struct {
+	NoteType models.NoteType  `json:"note_type"`
+	Content  *string          `json:"content,omitempty"`
+	Items    []CreateNoteItem `json:"items,omitempty"`
+	// BaseVersion enables optimistic concurrency, matching UpdateNoteRequest:
+	// when set, the conversion is rejected with 409 unless the note's current
+	// version still matches it.
+	BaseVersion *int `json:"base_version,omitempty"`
+}
+
+// normalizeConvertNoteTypeRequest validates req and resolves it into the
+// content/items to persist. Exactly one of content/items is meaningful,
+// depending on the target type; supplying the other is rejected so a client
+// can't accidentally send a stale value for the direction it isn't using.
+func normalizeConvertNoteTypeRequest(req *ConvertNoteTypeRequest) (content string, items []models.NewNoteItem, status int, err error) {
+	if req.NoteType != models.NoteTypeText && req.NoteType != models.NoteTypeList {
+		return "", nil, http.StatusBadRequest, errors.New("note_type must be 'text' or 'list'")
+	}
+
+	if req.NoteType == models.NoteTypeList {
+		if req.Content != nil {
+			return "", nil, http.StatusBadRequest, errors.New("content must not be set when converting to a list")
+		}
+		if len(req.Items) > noteItemsMaxCount {
+			return "", nil, http.StatusBadRequest, fmt.Errorf("note cannot have more than %d items", noteItemsMaxCount)
+		}
+		built, status, err := buildCreateNoteItems(req.Items)
+		if err != nil {
+			return "", nil, status, err
+		}
+		return "", built, http.StatusOK, nil
+	}
+
+	if len(req.Items) > 0 {
+		return "", nil, http.StatusBadRequest, errors.New("items must not be set when converting to text")
+	}
+	if req.Content != nil {
+		content = *req.Content
+	}
+	if utf8.RuneCountInString(content) > noteContentMaxLength {
+		return "", nil, http.StatusBadRequest, fmt.Errorf("content must be %d characters or fewer", noteContentMaxLength)
+	}
+	return content, nil, http.StatusOK, nil
+}
+
+// ConvertNoteType godoc
+//
+//	@Summary	Convert a note between text and list type
+//	@Tags		notes
+//	@Security	CookieAuth
+//	@Accept		json
+//	@Produce	json
+//	@Param		id		path		string					true	"Note ID"
+//	@Param		body	body		ConvertNoteTypeRequest	true	"Target note type and precomputed content/items"
+//	@Success	200		{object}	models.Note
+//	@Failure	400		{string}	string	"bad request"
+//	@Failure	401		{string}	string	"unauthorized"
+//	@Failure	404		{string}	string	"not found"
+//	@Failure	409		{string}	string	"version conflict: note changed since base_version"
+//	@Failure	500		{string}	string	"internal server error"
+//	@Router		/notes/{id}/convert [post]
+func (h *NotesHandler) ConvertNoteType(w http.ResponseWriter, r *http.Request) (int, any, error) {
+	user, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	}
+
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		return http.StatusBadRequest, nil, errors.New("missing note ID")
+	}
+	if !models.IsValidID(id) {
+		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
+	}
+
+	var req ConvertNoteTypeRequest
+	if err := decodeJSONBody(w, r, &req); err != nil {
+		return http.StatusBadRequest, nil, err
+	}
+
+	content, items, status, err := normalizeConvertNoteTypeRequest(&req)
+	if err != nil {
+		return status, nil, err
+	}
+
+	currentNote, err := h.noteStore.GetByID(r.Context(), id, user.ID)
+	if err != nil {
+		if errors.Is(err, models.ErrNoteNotFound) {
+			return http.StatusNotFound, nil, err
+		}
+		return http.StatusInternalServerError, nil, fmt.Errorf("get note: %w", err)
+	}
+	if currentNote.NoteType == req.NoteType {
+		return http.StatusBadRequest, nil, models.ErrNoteTypeUnchanged
+	}
+
+	converted, err := h.noteStore.ConvertType(r.Context(), id, user.ID, req.NoteType, content, items, req.BaseVersion)
+	if err != nil {
+		switch {
+		case errors.Is(err, models.ErrNoteNotFound), errors.Is(err, models.ErrNoteNoAccess):
+			return http.StatusNotFound, nil, err
+		case errors.Is(err, models.ErrNoteVersionConflict):
+			return http.StatusConflict, nil, err
+		case errors.Is(err, models.ErrInvalidParentRef):
+			return http.StatusBadRequest, nil, err
+		default:
+			return http.StatusInternalServerError, nil, fmt.Errorf("convert note: %w", err)
+		}
+	}
+
+	sanitized := sanitizeNote(*converted)
+	h.publishUpdateEvent(r.Context(), id, &sanitized, user.ID, true)
+	h.notesUpdated.Add(r.Context(), 1)
+	return http.StatusOK, sanitized, nil
+}
+
 // validateUpdateNoteTypeFields rejects updates that set fields incompatible with
 // the note's type (e.g., title on a text note, content on a list note).
 func validateUpdateNoteTypeFields(noteType models.NoteType, req *UpdateNoteRequest) (int, error) {

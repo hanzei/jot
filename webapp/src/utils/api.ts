@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, NoteItem, CreateNoteRequest, UpdateNoteRequest, CreateNoteItemRequest, PatchNoteItemRequest, User, CreateUserRequest, UserListResponse, AdminStatsResponse, ShareNoteRequest, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, Label, ActiveSession, EmptyTrashResponse, PersonalAccessToken, CreatePATRequest, NoteImage } from '@jot/shared';
+import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, NoteItem, CreateNoteRequest, UpdateNoteRequest, ConvertNoteTypeRequest, CreateNoteItemRequest, PatchNoteItemRequest, User, CreateUserRequest, UserListResponse, AdminStatsResponse, ShareNoteRequest, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, Label, ActiveSession, EmptyTrashResponse, PersonalAccessToken, CreatePATRequest, NoteImage } from '@jot/shared';
 import { removeUser } from '@/utils/auth';
 
 // Unique ID for this browser tab, used to suppress SSE echoes of our own mutations.
@@ -74,6 +74,9 @@ export const notes = {
 
   duplicate: (id: string): Promise<Note> =>
     api.post(`/notes/${id}/duplicate`).then(res => res.data),
+
+  convert: (id: string, data: ConvertNoteTypeRequest): Promise<Note> =>
+    api.post(`/notes/${id}/convert`, data).then(res => res.data),
 
   share: (id: string, data: ShareNoteRequest): Promise<void> =>
     api.post(`/notes/${id}/share`, data).then(() => undefined),

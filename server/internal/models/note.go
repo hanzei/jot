@@ -27,6 +27,7 @@ var ErrNoteItemCapExceeded = errors.New("note item limit reached")
 var ErrInvalidParentRef = errors.New("invalid parent reference")
 var ErrNoteImageNotFound = errors.New("note image not found")
 var ErrNoteImageCapExceeded = errors.New("note image limit reached")
+var ErrNoteTypeUnchanged = errors.New("note is already of the requested type")
 
 // NoteItemPatch carries the fields that may be changed by a partial single-item
 // update. Nil fields are left untouched (resolved against the item's current

@@ -184,6 +184,19 @@ type UpdateListNoteRequest struct {
 	BaseVersion *int `json:"base_version,omitempty"`
 }
 
+// ConvertNoteTypeRequest is the body for POST /api/v1/notes/{id}/convert,
+// which changes a note's type in place. The caller must precompute the
+// transform (splitting text into list items, or rendering a list back into
+// text) and supply the result: Content when converting to "text", Items when
+// converting to "list". The server only validates and persists it.
+type ConvertNoteTypeRequest struct {
+	NoteType NoteType         `json:"note_type"`
+	Content  string           `json:"content,omitempty"`
+	Items    []CreateNoteItem `json:"items,omitempty"`
+	// BaseVersion enables optimistic concurrency; see UpdateTextNoteRequest.
+	BaseVersion *int `json:"base_version,omitempty"`
+}
+
 // CreateNoteItemRequest is the body for POST /api/v1/notes/{id}/items. ID is
 // optional; when empty the server generates one.
 type CreateNoteItemRequest struct {

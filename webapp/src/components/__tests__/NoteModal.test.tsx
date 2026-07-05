@@ -1975,6 +1975,89 @@ describe('NoteModal', () => {
       expect(onDuplicate).toHaveBeenCalledWith('1')
       expect(onClose).toHaveBeenCalled()
     })
+
+    it('converts a text note to a list with no confirmation dialog', async () => {
+      const note = createMockNote({ note_type: 'text', content: '# Groceries\n- [x] Milk\n- Eggs' })
+      const onConvert = vi.fn().mockResolvedValue(undefined)
+      const onClose = vi.fn()
+
+      renderNoteModal({ ...defaultProps, note, onConvert, onClose })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Convert to list' }))
+      await vi.runAllTimersAsync()
+
+      expect(onConvert).toHaveBeenCalledWith('1', {
+        note_type: 'list',
+        items: [
+          { text: 'Groceries', position: 0, completed: false },
+          { text: 'Milk', position: 1, completed: true },
+          { text: 'Eggs', position: 2, completed: false },
+        ],
+      })
+      expect(onClose).toHaveBeenCalled()
+    })
+
+    it('confirms before converting a list to text and warns about dropped assignments', async () => {
+      const items = createMockListItems()
+      items[0] = { ...items[0], assigned_to: 'user-1' }
+      const note = createMockNote({ note_type: 'list', title: 'Groceries', items })
+      const onConvert = vi.fn().mockResolvedValue(undefined)
+      const onClose = vi.fn()
+
+      renderNoteModal({ ...defaultProps, note, onConvert, onClose })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Convert to text' }))
+      expect(screen.getByText(/lose the assignment of 1 item/)).toBeInTheDocument()
+      expect(onConvert).not.toHaveBeenCalled()
+
+      fireEvent.click(screen.getAllByRole('button', { name: 'Convert to text' })[1])
+      await vi.runAllTimersAsync()
+
+      expect(onConvert).toHaveBeenCalledWith('1', {
+        note_type: 'text',
+        content: '# Groceries\n\n- [ ] First item\n- [x] Second item',
+      })
+      expect(onClose).toHaveBeenCalled()
+    })
+
+    it('cancels a list-to-text conversion without calling onConvert', async () => {
+      const note = createMockNote({ note_type: 'list', title: 'Groceries', items: createMockListItems() })
+      const onConvert = vi.fn()
+
+      renderNoteModal({ ...defaultProps, note, onConvert })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Convert to text' }))
+      expect(screen.getByText(/Converting to a text note/)).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+      expect(onConvert).not.toHaveBeenCalled()
+    })
+
+    it('shows an error and keeps the note open if the conversion request fails', async () => {
+      const note = createMockNote({ note_type: 'list', title: 'Groceries', items: createMockListItems() })
+      const onConvert = vi.fn().mockRejectedValue(new Error('network error'))
+      const onClose = vi.fn()
+
+      renderNoteModal({ ...defaultProps, note, onConvert, onClose })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Convert to text' }))
+      const confirmButtons = screen.getAllByRole('button', { name: 'Convert to text' })
+      fireEvent.click(confirmButtons[1])
+      // onConvert rejects via a plain promise chain with no timer of its own;
+      // flush the microtask queue instead of vi.runAllTimersAsync(), which
+      // would also fire (and clear) showError's 5s auto-dismiss timeout.
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      })
+
+      expect(onConvert).toHaveBeenCalledWith('1', {
+        note_type: 'text',
+        content: '# Groceries\n\n- [ ] First item\n- [x] Second item',
+      })
+      expect(onClose).not.toHaveBeenCalled()
+      expect(screen.getByText('Failed to convert note. Please try again.')).toBeInTheDocument()
+    })
   })
 
   describe('markdown editing in text notes', () => {
