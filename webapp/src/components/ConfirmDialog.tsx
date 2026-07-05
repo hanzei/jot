@@ -39,7 +39,18 @@ export default function ConfirmDialog({
   };
 
   return (
-    <Dialog open={open} onClose={isSubmitting ? () => {} : onCancel} className="relative z-[60]">
+    <Dialog
+      open={open}
+      onClose={isSubmitting ? () => {} : onCancel}
+      className="relative z-[60]"
+      onKeyDown={(e) => {
+        // ConfirmDialog is portaled, but React still bubbles synthetic events up
+        // through its logical parent tree (e.g. a note card's drag-and-drop
+        // keyboard listeners), which would otherwise swallow Enter/Escape meant
+        // for this dialog before the browser's default button activation runs.
+        e.stopPropagation();
+      }}
+    >
       <DialogBackdrop transition aria-hidden="true" className="fixed inset-0 bg-black/30 dark:bg-black/50 transition duration-200 ease-out data-[closed]:opacity-0 motion-reduce:transition-none" />
       <div className="fixed inset-0 flex items-center justify-center p-4">
         <DialogPanel transition className="mx-auto w-full max-w-sm rounded-lg bg-white dark:bg-slate-800 shadow-xl border border-gray-200 dark:border-slate-700 transition duration-200 ease-out data-[closed]:scale-95 data-[closed]:opacity-0 motion-reduce:transition-none">
@@ -72,6 +83,7 @@ export default function ConfirmDialog({
               </button>
               <button
                 type="submit"
+                data-autofocus
                 disabled={isSubmitting}
                 className={`px-3 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-slate-800 disabled:opacity-50 ${
                   variant === 'danger'

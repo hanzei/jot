@@ -82,6 +82,30 @@ test.describe('Arrow key card navigation', () => {
   });
 });
 
+test.describe('ConfirmDialog keyboard confirm', () => {
+  test('pressing Enter in the delete confirmation dialog deletes the note', async ({ authenticatedUser, dashboardPage, page }) => {
+    void authenticatedUser;
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Note to Delete via Enter');
+    await dashboardPage.expectNoteVisible('Note to Delete via Enter');
+
+    const card = page.locator('[data-testid="note-card"]').filter({
+      has: page.locator('h3').getByText('Note to Delete via Enter', { exact: true }),
+    });
+    await card.getByRole('button', { name: 'Note options' }).focus();
+    await page.keyboard.press('Enter');
+    await page.getByRole('menuitem', { name: 'Delete' }).click();
+
+    const confirmDialog = page.getByRole('dialog').last();
+    await expect(confirmDialog.getByRole('button', { name: 'Delete', exact: true })).toBeFocused();
+
+    await page.keyboard.press('Enter');
+
+    await expect(confirmDialog).not.toBeVisible();
+    await dashboardPage.expectNoteNotVisible('Note to Delete via Enter');
+  });
+});
+
 test.describe('Keyboard shortcuts help dialog', () => {
   test('focuses search with Cmd+F', async ({ authenticatedUser, page, dashboardPage }) => {
     void authenticatedUser;
