@@ -802,11 +802,17 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   const handleConvertNote = useCallback(async (noteId: string, data: ConvertNoteTypeRequest) => {
     try {
       await notes.convert(noteId, data);
-      await Promise.all([loadNotes(), loadLabels(), loadLabelCounts()]);
-      showToast(t('dashboard.noteConverted'), 'success');
     } catch (error) {
       console.error('Failed to convert note:', error);
       throw error;
+    }
+    showToast(t('dashboard.noteConverted'), 'success');
+    // The conversion already succeeded — a refresh hiccup here shouldn't be
+    // reported to NoteModal as a conversion failure.
+    try {
+      await Promise.all([loadNotes(), loadLabels(), loadLabelCounts()]);
+    } catch (error) {
+      console.error('Failed to refresh after converting note:', error);
     }
   }, [loadLabelCounts, loadLabels, loadNotes, showToast, t]);
 

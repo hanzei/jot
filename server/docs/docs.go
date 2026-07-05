@@ -2993,6 +2993,7 @@ const docTemplate = `{
                 },
                 "items": {
                     "type": "array",
+                    "maxItems": 500,
                     "items": {
                         "$ref": "#/definitions/handlers.CreateNoteItem"
                     }

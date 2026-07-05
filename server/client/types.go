@@ -191,7 +191,7 @@ type UpdateListNoteRequest struct {
 // converting to "list". The server only validates and persists it.
 type ConvertNoteTypeRequest struct {
 	NoteType NoteType         `json:"note_type"`
-	Content  string           `json:"content,omitempty"`
+	Content  *string          `json:"content,omitempty"`
 	Items    []CreateNoteItem `json:"items,omitempty"`
 	// BaseVersion enables optimistic concurrency; see UpdateTextNoteRequest.
 	BaseVersion *int `json:"base_version,omitempty"`

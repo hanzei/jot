@@ -933,7 +933,14 @@ func (s *noteStore) conversionAlreadyAppliedTx(ctx context.Context, tx *sql.Tx, 
 	if len(currentItems) != len(targetItems) {
 		return false, nil
 	}
-	for i, item := range targetItems {
+	// currentItems came back ORDER BY position; targetItems is whatever order
+	// the caller built it in, so sort a copy the same way before the
+	// index-wise comparison below — otherwise out-of-position-order input
+	// falsely reports a mismatch (or, worse, a spurious match).
+	sortedTargetItems := make([]NewNoteItem, len(targetItems))
+	copy(sortedTargetItems, targetItems)
+	slices.SortStableFunc(sortedTargetItems, func(a, b NewNoteItem) int { return a.Position - b.Position })
+	for i, item := range sortedTargetItems {
 		if currentItems[i].Text != item.Text || currentItems[i].Completed != item.Completed {
 			return false, nil
 		}

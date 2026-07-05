@@ -39,6 +39,7 @@ definitions:
       items:
         items:
           $ref: '#/definitions/handlers.CreateNoteItem'
+        maxItems: 500
         type: array
       note_type:
         $ref: '#/definitions/models.NoteType'

@@ -70,7 +70,7 @@ func TestConvertNoteTypeEndpoint(t *testing.T) {
 
 		converted, err := user.Client.ConvertNoteType(ctx, source.ID, &client.ConvertNoteTypeRequest{
 			NoteType: client.NoteTypeText,
-			Content:  "# Groceries\n\n- [x] Milk\n- [ ] Eggs",
+			Content:  client.Ptr("# Groceries\n\n- [x] Milk\n- [ ] Eggs"),
 		})
 		require.NoError(t, err)
 
@@ -102,7 +102,7 @@ func TestConvertNoteTypeEndpoint(t *testing.T) {
 
 		converted, err := owner.Client.ConvertNoteType(ctx, source.ID, &client.ConvertNoteTypeRequest{
 			NoteType: client.NoteTypeText,
-			Content:  "# Tasks\n\n- [ ] Ship it",
+			Content:  client.Ptr("# Tasks\n\n- [ ] Ship it"),
 		})
 		require.NoError(t, err)
 		assert.Equal(t, client.NoteTypeText, converted.NoteType)
@@ -123,10 +123,43 @@ func TestConvertNoteTypeEndpoint(t *testing.T) {
 
 		_, err = user.Client.ConvertNoteType(ctx, source.ID, &client.ConvertNoteTypeRequest{
 			NoteType: client.NoteTypeText,
-			Content:  "hi",
+			Content:  client.Ptr("hi"),
 		})
 		require.Error(t, err)
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+	})
+
+	t.Run("replaying an already-committed conversion with the original base_version succeeds as a no-op", func(t *testing.T) {
+		ts := setupTestServer(t)
+		user := ts.createTestUser(t, "convert-replay", "password123", false)
+		ctx := t.Context()
+
+		source, err := user.Client.CreateTextNote(ctx, &client.CreateTextNoteRequest{Content: "original"})
+		require.NoError(t, err)
+		originalVersion := source.Version
+
+		convertReq := &client.ConvertNoteTypeRequest{
+			NoteType:    client.NoteTypeList,
+			Items:       []client.CreateNoteItem{{Text: "original", Position: 0}},
+			BaseVersion: client.Ptr(originalVersion),
+		}
+		first, err := user.Client.ConvertNoteType(ctx, source.ID, convertReq)
+		require.NoError(t, err)
+		assert.Equal(t, client.NoteTypeList, first.NoteType)
+
+		// The client never saw the first response (e.g. it was lost in transit)
+		// and retries the exact same request, still carrying the pre-conversion
+		// base_version. currentNote.NoteType now already equals the request's
+		// note_type, but this must succeed as an idempotent no-op — not 400
+		// ("already this type") and not 409 (the version really is stale, but
+		// the content it would produce already matches what's stored).
+		replayed, err := user.Client.ConvertNoteType(ctx, source.ID, convertReq)
+		require.NoError(t, err)
+		assert.Equal(t, client.NoteTypeList, replayed.NoteType)
+		require.Len(t, replayed.Items, 1)
+		assert.Equal(t, "original", replayed.Items[0].Text)
+		// No-op: the replay must not bump the version again.
+		assert.Equal(t, first.Version, replayed.Version)
 	})
 
 	t.Run("rejects a stale base_version with 409", func(t *testing.T) {
@@ -183,7 +216,7 @@ func TestConvertNoteTypeEndpoint(t *testing.T) {
 
 		_, err = user.Client.ConvertNoteType(ctx, source.ID, &client.ConvertNoteTypeRequest{
 			NoteType: client.NoteTypeList,
-			Content:  "hi",
+			Content:  client.Ptr("hi"),
 		})
 		require.Error(t, err)
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
@@ -226,7 +259,7 @@ func TestConvertNoteTypeEndpoint(t *testing.T) {
 
 		_, err = user.Client.ConvertNoteType(ctx, source.ID, &client.ConvertNoteTypeRequest{
 			NoteType: client.NoteTypeText,
-			Content:  string(oversized),
+			Content:  client.Ptr(string(oversized)),
 		})
 		require.Error(t, err)
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))

@@ -1974,10 +1974,21 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       return;
     }
 
+    // Refetch the version rather than trusting the `note` prop: persistExistingNote()
+    // may have just flushed a scalar edit that bumped it server-side, and a stale
+    // value here would make the conversion spuriously conflict with its own flush.
+    let baseVersion = note.version;
+    try {
+      baseVersion = (await notes.getById(note.id)).version;
+    } catch (error) {
+      console.error('Failed to refetch note version before conversion:', error);
+    }
+
     try {
       const data: ConvertNoteTypeRequest = targetType === 'list'
         ? {
             note_type: 'list',
+            base_version: baseVersion,
             items: textToListItems(content).map((item, idx) => ({
               text: item.text,
               position: idx,
@@ -1986,6 +1997,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
           }
         : {
             note_type: 'text',
+            base_version: baseVersion,
             content: listToText(title, items.map(item => ({
               id: item.id,
               text: item.text,

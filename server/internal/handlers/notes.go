@@ -599,7 +599,7 @@ func (h *NotesHandler) DuplicateNote(w http.ResponseWriter, r *http.Request) (in
 type ConvertNoteTypeRequest struct {
 	NoteType models.NoteType  `json:"note_type"`
 	Content  *string          `json:"content,omitempty"`
-	Items    []CreateNoteItem `json:"items,omitempty"`
+	Items    []CreateNoteItem `json:"items,omitempty" validate:"max=500"`
 	// BaseVersion enables optimistic concurrency, matching UpdateNoteRequest:
 	// when set, the conversion is rejected with 409 unless the note's current
 	// version still matches it.
@@ -688,7 +688,15 @@ func (h *NotesHandler) ConvertNoteType(w http.ResponseWriter, r *http.Request) (
 		}
 		return http.StatusInternalServerError, nil, fmt.Errorf("get note: %w", err)
 	}
-	if currentNote.NoteType == req.NoteType {
+	// Only reject a same-type request outright when the caller gave us no
+	// base_version to check a replay against: a request that arrives after its
+	// own earlier attempt already committed (the response was lost and the
+	// caller retried) legitimately has currentNote.NoteType == req.NoteType by
+	// then. With a base_version, defer to ConvertType/convertNoteRowTx, whose
+	// version-gated update plus idempotent-replay check (matching type AND
+	// content/items, not just type) tells a genuine replay apart from a stale
+	// conflicting write.
+	if req.BaseVersion == nil && currentNote.NoteType == req.NoteType {
 		return http.StatusBadRequest, nil, models.ErrNoteTypeUnchanged
 	}
 

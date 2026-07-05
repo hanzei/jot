@@ -10,6 +10,7 @@ import { createMockNote } from '@/utils/__tests__/test-helpers'
 const {
   mockNotesUpdate,
   mockNotesCreate,
+  mockNotesGetById,
   mockCreateItem,
   mockUpdateItem,
   mockDeleteItem,
@@ -25,6 +26,9 @@ const {
   dragEndRef: { current: undefined as undefined | ((event: Record<string, unknown>) => void) },
   mockNotesUpdate: vi.fn().mockResolvedValue({}),
   mockNotesCreate: vi.fn().mockResolvedValue({}),
+  // Used by the convert flow to refetch the note's version before persisting;
+  // defaults to matching createMockNote's default version (1).
+  mockNotesGetById: vi.fn().mockResolvedValue({ version: 1 }),
   mockCreateItem: vi.fn().mockImplementation((_noteId, data) => Promise.resolve({ ...data })),
   mockUpdateItem: vi.fn().mockImplementation((_noteId, itemId, data) => Promise.resolve({ id: itemId, ...data })),
   mockDeleteItem: vi.fn().mockResolvedValue(undefined),
@@ -42,6 +46,7 @@ vi.mock('@/utils/api', () => ({
   notes: {
     create: mockNotesCreate,
     update: mockNotesUpdate,
+    getById: mockNotesGetById,
     createItem: mockCreateItem,
     updateItem: mockUpdateItem,
     deleteItem: mockDeleteItem,
@@ -1986,8 +1991,10 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Convert to list' }))
       await vi.runAllTimersAsync()
 
+      expect(mockNotesGetById).toHaveBeenCalledWith('1')
       expect(onConvert).toHaveBeenCalledWith('1', {
         note_type: 'list',
+        base_version: 1,
         items: [
           { text: 'Groceries', position: 0, completed: false },
           { text: 'Milk', position: 1, completed: true },
@@ -2015,6 +2022,7 @@ describe('NoteModal', () => {
 
       expect(onConvert).toHaveBeenCalledWith('1', {
         note_type: 'text',
+        base_version: 1,
         content: '# Groceries\n\n- [ ] First item\n- [x] Second item',
       })
       expect(onClose).toHaveBeenCalled()
@@ -2043,16 +2051,19 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Convert to text' }))
       const confirmButtons = screen.getAllByRole('button', { name: 'Convert to text' })
       fireEvent.click(confirmButtons[1])
-      // onConvert rejects via a plain promise chain with no timer of its own;
-      // flush the microtask queue instead of vi.runAllTimersAsync(), which
-      // would also fire (and clear) showError's 5s auto-dismiss timeout.
+      // onConvert (and the version refetch before it) reject/resolve via a plain
+      // promise chain with no timer of their own; flush the microtask queue
+      // instead of vi.runAllTimersAsync(), which would also fire (and clear)
+      // showError's 5s auto-dismiss timeout.
       await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
+        for (let i = 0; i < 6; i++) {
+          await Promise.resolve();
+        }
       })
 
       expect(onConvert).toHaveBeenCalledWith('1', {
         note_type: 'text',
+        base_version: 1,
         content: '# Groceries\n\n- [ ] First item\n- [x] Second item',
       })
       expect(onClose).not.toHaveBeenCalled()
