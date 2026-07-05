@@ -12,6 +12,7 @@ import (
 	"github.com/sirupsen/logrus"
 	goruntime "go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
@@ -98,6 +99,12 @@ func Setup(ctx context.Context, cfg Config) (shutdown func(context.Context) erro
 		resource.WithProcess(),
 		resource.WithHost(),
 		resource.WithTelemetrySDK(),
+		// WithFromEnv reads standard OTel resource attributes from
+		// OTEL_RESOURCE_ATTRIBUTES (e.g. "deployment.environment=production"),
+		// which lets a single Jot binary/image be told apart in shared
+		// dashboards (like grafana/dashboard.json) when multiple instances
+		// (prod, test, staging, ...) report to the same backend.
+		resource.WithFromEnv(),
 		resource.WithAttributes(
 			semconv.ServiceName(cfg.ServiceName),
 			semconv.ServiceVersion(cfg.ServiceVersion),
@@ -113,9 +120,29 @@ func Setup(ctx context.Context, cfg Config) (shutdown func(context.Context) erro
 		logrus.WithError(err).Warn("OTel resource is partial; some attributes may be missing")
 	}
 
+	// runtimeProducer supplies the goroutine scheduling-latency histogram
+	// (go.schedule.duration, queried by the shipped dashboard as
+	// go_schedule_duration_seconds) out of band. goruntime.Start below only
+	// registers the regular async instruments (goroutine count, memory
+	// stats); without this producer attached to a reader, scheduling latency
+	// is silently never collected.
+	runtimeProducer := goruntime.NewProducer()
+
 	// Prometheus exporter: registers with prometheus.DefaultRegisterer so that
 	// the /metrics handler serves OTel custom metrics alongside Go runtime stats.
-	promExp, err := promexporter.New()
+	//
+	// WithResourceAsConstantLabels attaches deployment.environment (and
+	// service.name) as a label on every exported metric, not just the
+	// separate target_info series the exporter emits by default. The shipped
+	// Grafana dashboard (grafana/dashboard.json) filters and groups on the
+	// resulting deployment_environment label to tell prod and test instances
+	// apart when they report to the same Prometheus.
+	promExp, err := promexporter.New(
+		promexporter.WithResourceAsConstantLabels(
+			attribute.NewAllowKeysFilter(semconv.ServiceNameKey, semconv.DeploymentEnvironmentKey),
+		),
+		promexporter.WithProducer(runtimeProducer),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("create Prometheus exporter: %w", err)
 	}
@@ -128,7 +155,7 @@ func Setup(ctx context.Context, cfg Config) (shutdown func(context.Context) erro
 	)
 
 	if cfg.Endpoint != "" {
-		tp, mp, lp, shutdowns, err = setupOTLP(ctx, res, cfg.Endpoint, cfg.Insecure, cfg.TracesEnabled, cfg.MetricsEnabled, cfg.LogsEnabled, promExp)
+		tp, mp, lp, shutdowns, err = setupOTLP(ctx, res, cfg.Endpoint, cfg.Insecure, cfg.TracesEnabled, cfg.MetricsEnabled, cfg.LogsEnabled, promExp, runtimeProducer)
 	} else {
 		tp, mp, lp, shutdowns, err = setupStdout(ctx, res, cfg.TracesEnabled, cfg.LogsEnabled, promExp)
 	}
@@ -207,7 +234,7 @@ func initLoggerProvider(logsEnabled bool, res *resource.Resource, newExporter fu
 	return lp, []func(context.Context) error{lp.Shutdown}, nil
 }
 
-func setupOTLP(ctx context.Context, res *resource.Resource, endpoint string, insecureConn bool, tracesEnabled, metricsEnabled, logsEnabled bool, promExp *promexporter.Exporter) (trace.TracerProvider, *metric.MeterProvider, log.LoggerProvider, []func(context.Context) error, error) {
+func setupOTLP(ctx context.Context, res *resource.Resource, endpoint string, insecureConn bool, tracesEnabled, metricsEnabled, logsEnabled bool, promExp *promexporter.Exporter, runtimeProducer metric.Producer) (trace.TracerProvider, *metric.MeterProvider, log.LoggerProvider, []func(context.Context) error, error) {
 	var creds credentials.TransportCredentials
 	if insecureConn {
 		creds = insecure.NewCredentials()
@@ -241,7 +268,7 @@ func setupOTLP(ctx context.Context, res *resource.Resource, endpoint string, ins
 			_ = conn.Close()
 			return nil, nil, nil, nil, fmt.Errorf("create OTLP metric exporter: %w", metricErr)
 		}
-		metricOpts = append(metricOpts, metric.WithReader(metric.NewPeriodicReader(metricExporter)))
+		metricOpts = append(metricOpts, metric.WithReader(metric.NewPeriodicReader(metricExporter, metric.WithProducer(runtimeProducer))))
 	}
 	mp := metric.NewMeterProvider(metricOpts...)
 
