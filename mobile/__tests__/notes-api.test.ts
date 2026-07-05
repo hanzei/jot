@@ -7,6 +7,7 @@ import {
   updateNote,
   deleteNote,
   duplicateNote,
+  convertNoteType,
   importKeepFile,
 } from '../src/api/notes';
 
@@ -155,6 +156,19 @@ describe('Notes API', () => {
 
       expect(mockAxiosInstance.post).toHaveBeenCalledWith('/notes/123/duplicate', undefined);
       expect(result).toEqual(duplicated);
+    });
+  });
+
+  describe('convertNoteType', () => {
+    it('calls POST /notes/{id}/convert with the precomputed data and returns the converted note', async () => {
+      const data = { note_type: 'list' as const, base_version: 3, items: [{ text: 'a', position: 0, completed: false }] };
+      const converted = { id: '123', note_type: 'list', title: '', items: data.items };
+      mockAxiosInstance.post.mockResolvedValueOnce({ data: converted });
+
+      const result = await convertNoteType('123', data);
+
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith('/notes/123/convert', data);
+      expect(result).toEqual(converted);
     });
   });
 
