@@ -31,7 +31,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation, useRoute, RouteProp, type NavigationAction } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
-import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useDuplicateNote, useCreateNoteItem, useUpdateNoteItem, useDeleteNoteItem, useReorderNoteItems, useToggleNoteItemCompleted } from '../hooks/useNotes';
+import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useDuplicateNote, useConvertNoteType, useCreateNoteItem, useUpdateNoteItem, useDeleteNoteItem, useReorderNoteItems, useToggleNoteItemCompleted } from '../hooks/useNotes';
 import { useOfflineNote } from '../hooks/useOfflineNotes';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { useFailedNoteIds } from '../store/OfflineContext';
@@ -177,6 +177,7 @@ export default function NoteEditorScreen() {
   const restoreMutation = useRestoreNote();
   const permanentDeleteMutation = usePermanentDeleteNote();
   const duplicateMutation = useDuplicateNote();
+  const convertMutation = useConvertNoteType();
   const createItemMutation = useCreateNoteItem();
   const updateItemMutation = useUpdateNoteItem();
   const deleteItemMutation = useDeleteNoteItem();
@@ -1545,6 +1546,52 @@ export default function NoteEditorScreen() {
     }
   }, [duplicateMutation, flushSave, navigation, t]);
 
+  // List -> text is lossy (assignments, real checkbox/nesting structure), so
+  // it's confirmed first; text -> list just reflows lines and runs directly
+  // (mirrors the webapp's NoteModal). The note is reloaded via a screen replace
+  // afterward, since the editor's baseline/ref state is keyed to the note's
+  // pre-conversion type and shape.
+  const handleConvertNoteType = useCallback(async () => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+
+    const saveSucceeded = await flushSave();
+    if (!saveSucceeded) {
+      return;
+    }
+
+    const currentNoteId = noteIdRef.current;
+    if (!currentNoteId) {
+      return;
+    }
+
+    if (noteTypeRef.current === 'list') {
+      const assignedCount = itemsRef.current.filter((item) => item.assigned_to).length;
+      const message = assignedCount > 0
+        ? t('note.convertToTextConfirmMessageWithAssignments', { count: assignedCount })
+        : t('note.convertToTextConfirmMessage');
+      const confirmed = await confirm({
+        title: t('note.convertToTextConfirmTitle'),
+        message,
+        confirmLabel: t('note.convertToText'),
+      });
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    try {
+      await convertMutation.mutateAsync(currentNoteId);
+      intentionalExitRef.current = true;
+      navigation.replace('NoteEditor', { noteId: currentNoteId });
+      showToast(t('note.converted'));
+    } catch {
+      Alert.alert(t('common.error'), t('note.failedConvert'));
+    }
+  }, [confirm, convertMutation, flushSave, navigation, showToast, t]);
+
   // Disable inputs while waiting for existing note to hydrate
   const isHydrating = initialNoteId !== null && !existingNote;
 
@@ -2125,9 +2172,11 @@ export default function NoteEditorScreen() {
         onClose={() => setMenuVisible(false)}
         trashed={isReadOnly}
         title={noteType === 'list' ? title : undefined}
+        noteType={noteType}
         onSend={handleNativeShare}
         onShare={canShareWithCollaborators ? () => withSavedNote((id) => navigation.navigate('Share', { noteId: id })) : undefined}
         onDuplicate={handleDuplicate}
+        onConvert={handleConvertNoteType}
         onManageLabels={() => withSavedNote(() => setLabelPickerVisible(true))}
         onMoveToTrash={handleDelete}
         onRestore={handleRestoreNote}

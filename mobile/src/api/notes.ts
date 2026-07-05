@@ -6,6 +6,7 @@ import type {
   GetNotesParams,
   CreateNoteRequest,
   UpdateNoteRequest,
+  ConvertNoteTypeRequest,
   CreateNoteItemRequest,
   PatchNoteItemRequest,
   EmptyTrashResponse,
@@ -39,6 +40,11 @@ export async function updateNote(id: string, data: UpdateNoteRequest): Promise<N
 
 export async function deleteNote(id: string): Promise<void> {
   await api.delete(`/notes/${id}`);
+}
+
+export async function convertNoteType(id: string, data: ConvertNoteTypeRequest): Promise<Note> {
+  const res = await api.post(`/notes/${id}/convert`, data);
+  return res.data;
 }
 
 export async function createNoteItem(noteId: string, data: CreateNoteItemRequest): Promise<NoteItem> {
