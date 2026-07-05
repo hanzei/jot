@@ -11,10 +11,9 @@ import (
 // TestSetupExposesDeploymentEnvironmentLabel verifies that resource
 // attributes set via the standard OTEL_RESOURCE_ATTRIBUTES environment
 // variable (e.g. "deployment.environment=test") end up as a label on every
-// exported metric, not just the separate target_info series. The label name
-// itself is unaffected by the OTel Collector's metric namespacing, so the
-// shipped Grafana dashboard (grafana/dashboard.json) relies on this exact
-// label to tell prod and test instances of the same Jot binary apart.
+// exported metric, not just the separate target_info series. The shipped
+// Grafana dashboard (grafana/dashboard.json) relies on this label to tell
+// prod and test instances of the same Jot binary apart.
 func TestSetupExposesDeploymentEnvironmentLabel(t *testing.T) {
 	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "deployment.environment=test-env")
 
@@ -51,10 +50,8 @@ func TestSetupExposesDeploymentEnvironmentLabel(t *testing.T) {
 }
 
 // TestSetupExposesGoRuntimeMetrics guards against Setup silently failing to
-// collect a Go runtime metric at all. It asserts on the raw names the
-// in-process Prometheus exporter produces (before the OTel Collector adds
-// its "otel_" namespace, which is what the shipped dashboard,
-// grafana/dashboard.json, actually queries). In particular,
+// collect a Go runtime metric at all, matching the names the shipped
+// dashboard (grafana/dashboard.json) queries. In particular,
 // go_schedule_duration_seconds is a precomputed histogram that the
 // goruntime.Producer must be attached to a reader to ever appear — it is not
 // covered by the regular async instruments goruntime.Start registers on its

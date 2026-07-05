@@ -315,10 +315,11 @@ signals are exported over OTLP gRPC; otherwise enabled traces/logs use stdout
 exporters for local debugging.
 
 A starter Grafana dashboard is available at `grafana/dashboard.json`. Its
-queries assume metrics reach Prometheus via an OTel Collector, which
-namespaces every Jot metric with an `otel_` prefix (e.g.
-`otel_notes_created_total`) — scraping `/metrics` directly instead will not
-match those queries.
+queries use Jot's raw metric names (e.g. `notes_created_total`), matching
+both a direct `/metrics` scrape and metrics routed through an OTel
+Collector — as long as the Collector's Prometheus-facing exporter isn't
+configured with a `namespace` (which would prefix every metric name and
+break these queries).
 
 ### Distinguishing environments in the dashboard
 
