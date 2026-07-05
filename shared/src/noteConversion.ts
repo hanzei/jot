@@ -11,7 +11,11 @@ export interface ConvertedListItem {
 const LIST_MARKER_RE = /^(?:[-*+]|\d+\.)\s+(?:\[([ xX])\]\s*)?/;
 const BLOCKQUOTE_RE = /^(?:>\s*)+/;
 const HEADING_RE = /^#{1,6}\s+/;
-const LINK_RE = /\[([^\]]*)\]\([^)]*\)/g;
+// Character classes exclude '[' and '(' too (not just the closing delimiter)
+// so a run of unmatched opening delimiters (e.g. "[[[[[[") fails to match in
+// O(1) per position instead of backtracking over the whole run — otherwise
+// this is a quadratic-time ReDoS on attacker-controlled note content.
+const LINK_RE = /\[([^[\]]*)\]\([^()]*\)/g;
 const INLINE_CODE_RE = /`([^`]+)`/g;
 // Underscore emphasis requires word boundaries, matching marked/CommonMark:
 // my_file_name is left alone, but __init__ still counts as emphasis.
