@@ -211,6 +211,18 @@ func (c *Client) DuplicateNote(ctx context.Context, id string) (*Note, error) {
 	return &note, nil
 }
 
+// ConvertNoteType converts a note between text and list type in place.
+func (c *Client) ConvertNoteType(ctx context.Context, id string, req *ConvertNoteTypeRequest) (*Note, error) {
+	if req == nil {
+		return nil, errors.New("request must not be nil")
+	}
+	var note Note
+	if err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/convert", id), req, &note); err != nil {
+		return nil, err
+	}
+	return &note, nil
+}
+
 // ReorderNotes sets the display order for notes.
 func (c *Client) ReorderNotes(ctx context.Context, noteIDs []string) error {
 	return c.doNoContent(ctx, http.MethodPost, "/api/v1/notes/reorder", map[string][]string{

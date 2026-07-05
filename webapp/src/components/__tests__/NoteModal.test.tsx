@@ -1975,6 +1975,62 @@ describe('NoteModal', () => {
       expect(onDuplicate).toHaveBeenCalledWith('1')
       expect(onClose).toHaveBeenCalled()
     })
+
+    it('converts a text note to a list without a confirmation dialog', async () => {
+      const note = createMockNote({ note_type: 'text', content: 'Original' })
+      const onConvert = vi.fn().mockResolvedValue(undefined)
+      const onClose = vi.fn()
+
+      renderNoteModal({ ...defaultProps, note, onConvert, onClose })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Convert to list' }))
+      await vi.runAllTimersAsync()
+
+      expect(onConvert).toHaveBeenCalledWith('1', 'list')
+      expect(onClose).toHaveBeenCalled()
+    })
+
+    it('confirms before converting a list to text, warning about lost assignments', async () => {
+      const note = createMockNote({
+        note_type: 'list',
+        title: 'Tasks',
+        items: [
+          { id: 'item1', note_id: '1', text: 'Ship it', completed: false, position: 0, parent_id: null, assigned_to: 'user2', created_at: '2023-01-01T00:00:00Z', updated_at: '2023-01-01T00:00:00Z' },
+        ],
+      })
+      const onConvert = vi.fn().mockResolvedValue(undefined)
+      const onClose = vi.fn()
+
+      renderNoteModal({ ...defaultProps, note, onConvert, onClose })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Convert to text' }))
+
+      const dialogPanels = screen.getAllByTestId('dialog-panel')
+      const confirmPanel = dialogPanels[dialogPanels.length - 1]
+      expect(within(confirmPanel).getByText(/lose the assignment of 1 item/)).toBeInTheDocument()
+      expect(onConvert).not.toHaveBeenCalled()
+
+      fireEvent.click(within(confirmPanel).getByRole('button', { name: 'Convert to text' }))
+      await vi.runAllTimersAsync()
+
+      expect(onConvert).toHaveBeenCalledWith('1', 'text')
+      expect(onClose).toHaveBeenCalled()
+    })
+
+    it('cancels a list-to-text conversion without calling onConvert', () => {
+      const note = createMockNote({ note_type: 'list', title: 'Tasks', items: [] })
+      const onConvert = vi.fn()
+
+      renderNoteModal({ ...defaultProps, note, onConvert })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Convert to text' }))
+      const dialogPanels = screen.getAllByTestId('dialog-panel')
+      const confirmPanel = dialogPanels[dialogPanels.length - 1]
+      fireEvent.click(within(confirmPanel).getByRole('button', { name: 'Cancel' }))
+
+      expect(onConvert).not.toHaveBeenCalled()
+      expect(screen.queryAllByTestId('dialog-panel')).toHaveLength(1)
+    })
   })
 
   describe('markdown editing in text notes', () => {

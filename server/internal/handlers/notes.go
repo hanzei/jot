@@ -712,6 +712,113 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 	return http.StatusOK, sanitized, nil
 }
 
+// ConvertNoteTypeRequest is the request body for POST /notes/{id}/convert.
+type ConvertNoteTypeRequest struct {
+	NoteType models.NoteType `json:"note_type"`
+	// BaseVersion enables optimistic concurrency, matching UpdateNoteRequest:
+	// when set, the conversion is rejected with 409 unless the note's current
+	// version still matches it.
+	BaseVersion *int `json:"base_version,omitempty"`
+}
+
+// ConvertNoteType godoc
+//
+//	@Summary	Convert a note between text and list type
+//	@Tags		notes
+//	@Security	CookieAuth
+//	@Accept		json
+//	@Produce	json
+//	@Param		id		path		string					true	"Note ID"
+//	@Param		body	body		ConvertNoteTypeRequest	true	"Target note type"
+//	@Success	200		{object}	models.Note
+//	@Failure	400		{string}	string	"bad request"
+//	@Failure	401		{string}	string	"unauthorized"
+//	@Failure	404		{string}	string	"not found"
+//	@Failure	409		{string}	string	"version conflict: note changed since base_version"
+//	@Failure	500		{string}	string	"internal server error"
+//	@Router		/notes/{id}/convert [post]
+func (h *NotesHandler) ConvertNoteType(w http.ResponseWriter, r *http.Request) (int, any, error) {
+	user, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	}
+
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		return http.StatusBadRequest, nil, errors.New("missing note ID")
+	}
+	if !models.IsValidID(id) {
+		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
+	}
+
+	var req ConvertNoteTypeRequest
+	if err := decodeJSONBody(w, r, &req); err != nil {
+		return http.StatusBadRequest, nil, err
+	}
+	if req.NoteType != models.NoteTypeText && req.NoteType != models.NoteTypeList {
+		return http.StatusBadRequest, nil, errors.New("note_type must be 'text' or 'list'")
+	}
+
+	currentNote, err := h.noteStore.GetByID(r.Context(), id, user.ID)
+	if err != nil {
+		if errors.Is(err, models.ErrNoteNotFound) {
+			return http.StatusNotFound, nil, err
+		}
+		return http.StatusInternalServerError, nil, fmt.Errorf("get note: %w", err)
+	}
+	if currentNote.NoteType == req.NoteType {
+		return http.StatusBadRequest, nil, models.ErrNoteTypeUnchanged
+	}
+
+	newContent, newItems, status, err := buildConversionTarget(req.NoteType, currentNote)
+	if err != nil {
+		return status, nil, err
+	}
+
+	converted, err := h.noteStore.ConvertType(r.Context(), id, user.ID, req.NoteType, newContent, newItems, req.BaseVersion)
+	if err != nil {
+		if errors.Is(err, models.ErrNoteNotFound) || errors.Is(err, models.ErrNoteNoAccess) {
+			return http.StatusNotFound, nil, err
+		}
+		if errors.Is(err, models.ErrNoteVersionConflict) {
+			return http.StatusConflict, nil, err
+		}
+		return http.StatusInternalServerError, nil, fmt.Errorf("convert note: %w", err)
+	}
+
+	sanitized := sanitizeNote(*converted)
+	h.publishUpdateEvent(r.Context(), id, &sanitized, user.ID, true)
+	h.notesUpdated.Add(r.Context(), 1)
+	return http.StatusOK, sanitized, nil
+}
+
+// buildConversionTarget renders currentNote's content into the shape required
+// by targetType (list items when converting to a list, serialized text
+// content when converting to text), enforcing the same size limits applied to
+// directly-authored notes so a conversion cannot bypass them.
+func buildConversionTarget(targetType models.NoteType, currentNote *models.Note) (content string, items []models.NewNoteItem, status int, err error) {
+	if targetType == models.NoteTypeList {
+		converted := models.TextToListItems(currentNote.Content)
+		if len(converted) > noteItemsMaxCount {
+			return "", nil, http.StatusBadRequest, fmt.Errorf("converting would create more than %d items", noteItemsMaxCount)
+		}
+		items = make([]models.NewNoteItem, len(converted))
+		for i, item := range converted {
+			if utf8.RuneCountInString(item.Text) > noteItemTextMaxLength {
+				return "", nil, http.StatusBadRequest, fmt.Errorf("a converted item would exceed %d characters", noteItemTextMaxLength)
+			}
+			items[i] = models.NewNoteItem{Text: item.Text, Position: i, Completed: item.Completed}
+		}
+		return "", items, http.StatusOK, nil
+	}
+
+	content = models.ListToText(currentNote.Title, currentNote.Items)
+	if utf8.RuneCountInString(content) > noteContentMaxLength {
+		return "", nil, http.StatusBadRequest, fmt.Errorf("converted content must be %d characters or fewer", noteContentMaxLength)
+	}
+	return content, nil, http.StatusOK, nil
+}
+
 // publishUpdateEvent sends SSE notifications after a note update. If shared fields
 // changed, every collaborator gets a personalized event; otherwise only the acting
 // user is notified.

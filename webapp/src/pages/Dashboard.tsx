@@ -799,6 +799,17 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
     }
   }, [loadLabelCounts, loadLabels, loadNotes, showToast, t]);
 
+  const handleConvertNote = useCallback(async (noteId: string, targetType: NoteType) => {
+    try {
+      await notes.convert(noteId, { note_type: targetType });
+      await Promise.all([loadNotes(), loadLabels(), loadLabelCounts()]);
+      showToast(t('dashboard.noteConverted'), 'success');
+    } catch (error) {
+      console.error('Failed to convert note:', error);
+      throw error;
+    }
+  }, [loadLabelCounts, loadLabels, loadNotes, showToast, t]);
+
   const handleShareNote = (note: Note) => {
     setSharingNote(note);
     setIsShareModalOpen(true);
@@ -1326,6 +1337,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
             onShare={handleShareNote}
             onDelete={handleDeleteNote}
             onDuplicate={handleDuplicateNote}
+            onConvert={handleConvertNote}
             isOwner={!editingNote || editingNote.user_id === user?.id}
             usersById={usersById}
             currentUserId={user?.id}

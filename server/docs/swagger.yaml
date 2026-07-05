@@ -26,6 +26,17 @@ definitions:
       new_password:
         type: string
     type: object
+  handlers.ConvertNoteTypeRequest:
+    properties:
+      base_version:
+        description: |-
+          BaseVersion enables optimistic concurrency, matching UpdateNoteRequest:
+          when set, the conversion is rejected with 409 unless the note's current
+          version still matches it.
+        type: integer
+      note_type:
+        $ref: '#/definitions/models.NoteType'
+    type: object
   handlers.CreateNoteItem:
     properties:
       completed:
@@ -1338,6 +1349,54 @@ paths:
       security:
       - CookieAuth: []
       summary: Update a note
+      tags:
+      - notes
+  /notes/{id}/convert:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Note ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Target note type
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.ConvertNoteTypeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Note'
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+        "409":
+          description: 'version conflict: note changed since base_version'
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Convert a note between text and list type
       tags:
       - notes
   /notes/{id}/duplicate:

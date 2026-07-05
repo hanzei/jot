@@ -184,6 +184,13 @@ type UpdateListNoteRequest struct {
 	BaseVersion *int `json:"base_version,omitempty"`
 }
 
+// ConvertNoteTypeRequest is the body for POST /api/v1/notes/{id}/convert.
+type ConvertNoteTypeRequest struct {
+	NoteType NoteType `json:"note_type"`
+	// BaseVersion enables optimistic concurrency; see UpdateTextNoteRequest.
+	BaseVersion *int `json:"base_version,omitempty"`
+}
+
 // CreateNoteItemRequest is the body for POST /api/v1/notes/{id}/items. ID is
 // optional; when empty the server generates one.
 type CreateNoteItemRequest struct {

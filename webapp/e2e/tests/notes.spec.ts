@@ -378,6 +378,89 @@ test.describe('Notes', () => {
     );
   });
 
+  test('converts a text note to a list and back, restoring the title as an h1 line and warning about dropped assignments', async ({ page, dashboardPage, request }) => {
+    const collaboratorName = `convert-collab-${Date.now()}`;
+    const collaboratorPassword = 'testpass123';
+
+    const registerResp = await request.post('/api/v1/register', {
+      data: { username: collaboratorName, password: collaboratorPassword },
+    });
+    expect(registerResp.ok()).toBeTruthy();
+    const collaboratorId = (await registerResp.json()).user.id as string;
+
+    await dashboardPage.goto();
+
+    const cookies = await page.context().cookies();
+    const sessionCookie = cookies.find((cookie) => cookie.name === 'jot_session');
+    expect(sessionCookie, 'session cookie must exist').toBeDefined();
+    const authHeaders = { Cookie: `jot_session=${sessionCookie!.value}` };
+
+    const listNotesApi = async () => {
+      const response = await request.get('/api/v1/notes', { headers: authHeaders });
+      expect(response.ok()).toBeTruthy();
+      return response.json();
+    };
+
+    // Seed the source text note via the API — multi-line markdown content is
+    // awkward to type into the dashboard's title-based note lookup helpers,
+    // which key off an <h3> that only list notes with a title render.
+    const createResp = await request.post('/api/v1/notes', {
+      headers: authHeaders,
+      data: { note_type: 'text', content: '# Groceries\n- [x] Milk\n- Eggs' },
+    });
+    expect(createResp.ok()).toBeTruthy();
+    const sourceNote = await createResp.json();
+
+    // --- text -> list: markdown formatting is stripped and lines become items ---
+    await page.reload();
+    await page.locator('[data-testid="note-card"]').filter({ hasText: 'Groceries' }).click();
+    await expect(page.getByRole('dialog').getByRole('button', { name: 'Close' })).toBeVisible();
+    await dashboardPage.convertCurrentNoteToList();
+    await expect(page.getByText('Note converted')).toBeVisible();
+
+    let allNotes = await listNotesApi();
+    let converted = allNotes.find((n: { id: string }) => n.id === sourceNote.id);
+    expect(converted.note_type).toBe('list');
+    expect(
+      converted.items.map((item: { text: string; completed: boolean }) => ({ text: item.text, completed: item.completed })),
+    ).toEqual([
+      { text: 'Groceries', completed: false },
+      { text: 'Milk', completed: true },
+      { text: 'Eggs', completed: false },
+    ]);
+
+    // Give the converted list a title, so it round-trips back as an h1 line
+    // below, and so it becomes findable via the title-based note-lookup helpers.
+    await page.locator('[data-testid="note-card"]').filter({ hasText: 'Groceries' }).click();
+    await page.fill('input[placeholder="Note title..."]', 'Groceries List');
+    await dashboardPage.closeNoteModal();
+
+    // --- list -> text: assigning an item requires sharing the note first ---
+    const shareResp = await request.post(`/api/v1/notes/${converted.id}/share`, {
+      headers: authHeaders,
+      data: { user_id: collaboratorId },
+    });
+    expect(shareResp.ok()).toBeTruthy();
+    const assignResp = await request.patch(`/api/v1/notes/${converted.id}/items/${converted.items[1].id}`, {
+      headers: authHeaders,
+      data: { assigned_to: collaboratorId },
+    });
+    expect(assignResp.ok()).toBeTruthy();
+
+    await page.reload();
+    await dashboardPage.openNote('Groceries List');
+    await page.getByRole('dialog').last().getByRole('button', { name: 'Convert to text' }).click();
+    await expect(page.getByText(/lose the assignment of 1 item/)).toBeVisible();
+    await page.getByRole('dialog').last().getByRole('button', { name: 'Convert to text' }).click();
+    await expect(page.getByText('Note converted')).toBeVisible();
+
+    allNotes = await listNotesApi();
+    const revertedToText = allNotes.find((n: { id: string }) => n.id === sourceNote.id);
+    expect(revertedToText.note_type).toBe('text');
+    expect(revertedToText.title).toBe('');
+    expect(revertedToText.content).toBe('# Groceries List\n\n- [ ] Groceries\n- [x] Milk\n- [ ] Eggs');
+  });
+
   test('shows empty state when no notes exist', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.expectEmptyState(

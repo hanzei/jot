@@ -9,7 +9,7 @@ compiled web app, while SQLite keeps the default deployment small and portable.
 ### Notes and organization
 
 - **Text and list notes**: Write Markdown text notes or checklist-style list
-  notes with nested items.
+  notes with nested items, and convert an existing note between the two types.
 - **Images**: Attach note images with cover thumbnails, galleries, and a
   lightbox viewer.
 - **Labels and color**: Group notes with labels, filter from the sidebar, and
