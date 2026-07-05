@@ -1425,6 +1425,81 @@ const docTemplate = `{
                 ]
             }
         },
+        "/notes/{id}/convert": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notes"
+                ],
+                "summary": "Convert a note between text and list type",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Note ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Target note type and precomputed content/items",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ConvertNoteTypeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Note"
+                        }
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "409": {
+                        "description": "version conflict: note changed since base_version",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ]
+            }
+        },
         "/notes/{id}/duplicate": {
             "post": {
                 "consumes": [
@@ -2903,6 +2978,28 @@ const docTemplate = `{
                 },
                 "new_password": {
                     "type": "string"
+                }
+            }
+        },
+        "handlers.ConvertNoteTypeRequest": {
+            "type": "object",
+            "properties": {
+                "base_version": {
+                    "description": "BaseVersion enables optimistic concurrency, matching UpdateNoteRequest:\nwhen set, the conversion is rejected with 409 unless the note's current\nversion still matches it.",
+                    "type": "integer"
+                },
+                "content": {
+                    "type": "string"
+                },
+                "items": {
+                    "type": "array",
+                    "maxItems": 500,
+                    "items": {
+                        "$ref": "#/definitions/handlers.CreateNoteItem"
+                    }
+                },
+                "note_type": {
+                    "$ref": "#/definitions/models.NoteType"
                 }
             }
         },

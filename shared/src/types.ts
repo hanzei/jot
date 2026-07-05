@@ -247,6 +247,20 @@ export interface UpdateListNoteRequest extends BaseUpdateNoteRequest {
 
 export type UpdateNoteRequest = UpdateTextNoteRequest | UpdateListNoteRequest;
 
+/**
+ * Request body for `POST /notes/{id}/convert`, which changes a note's type in
+ * place. The transform (splitting text into list items, or rendering a list
+ * back into text) is computed client-side via `textToListItems`/`listToText`
+ * (see `noteConversion.ts`) and sent precomputed; the server only validates
+ * and persists it. `content` is used when converting to `text`; `items` when
+ * converting to `list`.
+ */
+export interface ConvertNoteTypeRequest extends BaseUpdateNoteRequest {
+  note_type: NoteType;
+  content?: string;
+  items?: CreateNoteItemRequest[];
+}
+
 export interface CreateUserRequest {
   username: string;
   password: string;

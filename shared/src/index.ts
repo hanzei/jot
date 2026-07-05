@@ -4,3 +4,4 @@ export * from './constants';
 export * from './collaborators';
 export * from './colors';
 export * from './serverUrl';
+export * from './noteConversion';

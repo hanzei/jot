@@ -3,7 +3,7 @@ import { PlusIcon, DocumentTextIcon, ArchiveBoxIcon, TrashIcon, ClipboardDocumen
 import { useTranslation } from 'react-i18next';
 import { notes, users as usersApi } from '@/utils/api';
 import { getUser, getSettings, setSettings } from '@/utils/auth';
-import { UPLOAD_MAX_BYTES, type Note, type NoteImage, type NoteType, type User, type SSEEvent, type NoteSort } from '@jot/shared';
+import { UPLOAD_MAX_BYTES, type Note, type NoteImage, type NoteType, type User, type SSEEvent, type NoteSort, type ConvertNoteTypeRequest } from '@jot/shared';
 import { useSearchParams, useParams, useNavigate, useMatch } from 'react-router';
 import PageContent from '@/components/PageContent';
 import SearchBar from '@/components/SearchBar';
@@ -799,6 +799,23 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
     }
   }, [loadLabelCounts, loadLabels, loadNotes, showToast, t]);
 
+  const handleConvertNote = useCallback(async (noteId: string, data: ConvertNoteTypeRequest) => {
+    try {
+      await notes.convert(noteId, data);
+    } catch (error) {
+      console.error('Failed to convert note:', error);
+      throw error;
+    }
+    showToast(t('dashboard.noteConverted'), 'success');
+    // The conversion already succeeded — a refresh hiccup here shouldn't be
+    // reported to NoteModal as a conversion failure.
+    try {
+      await Promise.all([loadNotes(), loadLabels(), loadLabelCounts()]);
+    } catch (error) {
+      console.error('Failed to refresh after converting note:', error);
+    }
+  }, [loadLabelCounts, loadLabels, loadNotes, showToast, t]);
+
   const handleShareNote = (note: Note) => {
     setSharingNote(note);
     setIsShareModalOpen(true);
@@ -1326,6 +1343,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
             onShare={handleShareNote}
             onDelete={handleDeleteNote}
             onDuplicate={handleDuplicateNote}
+            onConvert={handleConvertNote}
             isOwner={!editingNote || editingNote.user_id === user?.id}
             usersById={usersById}
             currentUserId={user?.id}
