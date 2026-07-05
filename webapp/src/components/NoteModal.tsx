@@ -479,9 +479,9 @@ function SortableItem({ id, index, item, onUpdateListItem, onRemoveListItem, isC
         aria-label={t('note.removeItem')}
         title={t('note.removeItem')}
         data-testid="list-item-delete"
-        className={`ml-auto p-1.5 text-gray-400 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-100 transition-opacity ${ROW_REVEAL_CLASSES}`}
+        className={`ml-auto w-5 h-5 flex-shrink-0 flex items-center justify-center rounded text-gray-400 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-100 transition-opacity ${ROW_REVEAL_CLASSES}`}
       >
-        <XMarkIcon className="h-6 w-6" />
+        <XMarkIcon className="h-4 w-4" />
       </button>
     </div>
   );
