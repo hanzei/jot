@@ -516,6 +516,32 @@ describe('drainQueue', () => {
     expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [40]);
   });
 
+  it('persists the note returned by a convertNoteType replay', async () => {
+    const serverNote = {
+      id: 'n1', note_type: 'list', title: '', version: 4,
+      color: '#ffffff', pinned: false, archived: false, position: 0,
+      checked_items_collapsed: false, is_shared: false, deleted_at: null,
+      user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
+      items: [{ id: 'i1', note_id: 'n1', text: 'Buy milk', completed: false, position: 0, parent_id: null, assigned_to: '', created_at: '', updated_at: '' }],
+    };
+    const db = makeMockDb([
+      {
+        id: 41,
+        operation: 'convertNoteType',
+        endpoint: '/notes/n1/convert',
+        method: 'POST',
+        body: JSON.stringify({ note_type: 'list', items: [{ id: 'i1', text: 'Buy milk', position: 0, completed: false }] }),
+        created_at: '',
+      },
+    ]);
+    mockApi.post.mockResolvedValueOnce({ data: serverNote } as never);
+
+    await drainQueue(db as never);
+
+    expect(mockSaveNote).toHaveBeenCalledWith(db, serverNote);
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [41]);
+  });
+
   it('reconciles all authoritative fields (not just completed) from a toggleItemCompleted replay', async () => {
     // The server returns the note's full, authoritative item list on this
     // endpoint. If the local DB only patched `completed`, a stale local

@@ -78,6 +78,9 @@ jest.mock('../src/hooks/useNotes', () => ({
   useDuplicateNote: () => ({
     mutateAsync: mockDuplicateMutateAsync,
   }),
+  useConvertNoteType: () => ({
+    mutateAsync: jest.fn(),
+  }),
   useCreateNoteItem: () => ({
     mutateAsync: mockCreateItemMutateAsync,
   }),

@@ -11,6 +11,7 @@ import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
+import type { NoteType } from '@jot/shared';
 
 interface NoteEditorMenuProps {
   visible: boolean;
@@ -22,11 +23,14 @@ interface NoteEditorMenuProps {
   trashed?: boolean;
   /** Optional note title, shown as a header (list notes only, like the card menu). */
   title?: string;
+  /** The note's current type, used only to label the convert action below. */
+  noteType?: NoteType;
   // Editable-note actions. Callbacks left undefined are hidden based on the
   // editor's current ownership/state.
   onSend?: () => void;
   onShare?: () => void;
   onDuplicate?: () => void;
+  onConvert?: () => void;
   onManageLabels?: () => void;
   onMoveToTrash?: () => void;
   // Trashed-note actions.
@@ -53,9 +57,11 @@ export default function NoteEditorMenu({
   onClose,
   trashed = false,
   title,
+  noteType,
   onSend,
   onShare,
   onDuplicate,
+  onConvert,
   onManageLabels,
   onMoveToTrash,
   onRestore,
@@ -112,6 +118,14 @@ export default function NoteEditorMenu({
         label: t('note.duplicate'),
         onPress: run(onDuplicate),
         testId: 'editor-menu-duplicate',
+      });
+    }
+    if (onConvert) {
+      actions.push({
+        icon: 'swap-horizontal-outline',
+        label: noteType === 'list' ? t('note.convertToText') : t('note.convertToList'),
+        onPress: run(onConvert),
+        testId: 'editor-menu-convert',
       });
     }
     if (onManageLabels) {

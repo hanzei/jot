@@ -21,6 +21,7 @@ export type QueueOperation =
   | 'create'
   | 'duplicate'
   | 'update'
+  | 'convertNoteType'
   | 'delete'
   | 'restore'
   | 'permanentDelete'
@@ -501,6 +502,16 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
       }
 
       if (entry.method === 'POST') {
+        if (entry.operation === 'convertNoteType' && body) {
+          // Resolve base_version from the note's current local version at replay
+          // time, matching `update` (#489): a chain of offline edits to one note
+          // (e.g. a scalar update followed by a convert) then replays each op
+          // against the version the previous one left behind instead of the
+          // stale value captured when this op was first queued.
+          const noteId = affectedNoteIds(endpoint, body)[0];
+          const version = noteId ? await getLocalNoteVersion(db, noteId) : null;
+          if (version !== null) body.base_version = version;
+        }
         const response = await api.post(endpoint, body);
 
         if (entry.operation === 'create' || entry.operation === 'duplicate') {
@@ -555,6 +566,12 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           // synthetic `optimistic_<userId>` share row; re-fetch the canonical note
           // so shared_with reflects the server-assigned share ids.
           await reconcileNoteFromServer(db, affectedNoteIds(endpoint, body)[0]);
+        } else if (entry.operation === 'convertNoteType') {
+          // The server returns the full converted note (authoritative version,
+          // updated_at, and item ids); persist it rather than trusting the local
+          // optimistic apply to still be in sync after other edits may have
+          // queued in between.
+          await saveNoteFromResponse(db, response?.data);
         }
       } else if (entry.method === 'PATCH') {
         const updateNoteID =
@@ -618,13 +635,13 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
 
         // A 409 from a create/duplicate replay is an idempotent already-applied
         // conflict (the original request already committed): the local state is
-        // correct, so resolve it silently. A 409 from an `update` is an
-        // optimistic-concurrency conflict — the note changed on another device
-        // since the edit's base_version (#489) — so it is real potential data
-        // loss and must be dead-lettered like any other permanent failure, so the
-        // edit is preserved and surfaced ("changed on another device") via the
-        // failed-changes banner instead of being silently dropped. Every other
-        // permanent status also dead-letters (#492).
+        // correct, so resolve it silently. A 409 from an `update` or
+        // `convertNoteType` is an optimistic-concurrency conflict — the note
+        // changed on another device since the edit's base_version (#489) — so it
+        // is real potential data loss and must be dead-lettered like any other
+        // permanent failure, so the edit is preserved and surfaced ("changed on
+        // another device") via the failed-changes banner instead of being
+        // silently dropped. Every other permanent status also dead-letters (#492).
         //
         // createLabel 409s require special handling: the conflict response body
         // doesn't include the canonical label ID, so we resolve it via GET /labels.
@@ -651,7 +668,10 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         // rather than dead-lettering (see GONE_IDEMPOTENT_OPERATIONS).
         const targetGone = status === 404 || status === 410;
         let idempotentConflict =
-          (status === 409 && entry.operation !== 'update' && entry.operation !== 'createLabel') ||
+          (status === 409
+            && entry.operation !== 'update'
+            && entry.operation !== 'convertNoteType'
+            && entry.operation !== 'createLabel') ||
           entry.operation === 'removeImage' ||
           (targetGone && GONE_IDEMPOTENT_OPERATIONS.has(entry.operation));
         if (status === 409 && entry.operation === 'createLabel') {
