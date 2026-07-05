@@ -247,6 +247,7 @@ accordingly.
 | `OTEL_SERVICE_NAME` | `jot` | Service name reported to OpenTelemetry. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | empty | OTLP gRPC endpoint, for example `localhost:4317`; stdout exporters are used for traces/logs when empty and their signals are enabled. |
 | `OTEL_EXPORTER_OTLP_INSECURE` | `false` | Uses insecure OTLP gRPC transport for local collectors. |
+| `OTEL_RESOURCE_ATTRIBUTES` | empty | Comma-separated `key=value` OpenTelemetry resource attributes, for example `deployment.environment=production`. Set a distinct `deployment.environment` on each instance (prod, test, staging, ...) that reports to a shared Prometheus/collector so the same binary/image can be told apart — the shipped Grafana dashboard filters and groups on it. |
 
 ### Backups
 
@@ -313,7 +314,24 @@ OpenTelemetry SDK setup. When `OTEL_EXPORTER_OTLP_ENDPOINT` is set, enabled
 signals are exported over OTLP gRPC; otherwise enabled traces/logs use stdout
 exporters for local debugging.
 
-A starter Grafana dashboard is available at `grafana/dashboard.json`.
+A starter Grafana dashboard is available at `grafana/dashboard.json`. Its
+queries use Jot's raw metric names (e.g. `notes_created_total`), matching
+both a direct `/metrics` scrape and metrics routed through an OTel
+Collector — as long as the Collector's Prometheus-facing exporter isn't
+configured with a `namespace` (which would prefix every metric name and
+break these queries).
+
+### Distinguishing environments in the dashboard
+
+If more than one Jot instance (for example a production deployment and a
+test/staging one) reports metrics to the same Prometheus, set a distinct
+`OTEL_RESOURCE_ATTRIBUTES=deployment.environment=<name>` on each instance —
+e.g. `deployment.environment=production` on prod and
+`deployment.environment=test` on test. Every metric is then labeled with
+`deployment_environment`, and the shipped dashboard exposes an **Environment**
+variable (in addition to the existing **Data source** variable) that filters
+and groups every panel by that label, so you can view one environment at a
+time or overlay both to compare them.
 
 ## Building for Production
 
