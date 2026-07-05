@@ -26,6 +26,12 @@ func Drivers() []string {
 	return dsntest.Drivers()
 }
 
+// ForEachDriver runs fn once per driver returned by Drivers, as a subtest
+// named after the driver.
+func ForEachDriver(t *testing.T, fn func(t *testing.T, driver string)) {
+	dsntest.ForEachDriver(t, fn)
+}
+
 // New opens a fresh, fully migrated database for driver, isolated from every
 // other test. It registers cleanup to close (and for postgres, drop) the
 // database, and skips the test if driver is "postgres" and EnvPostgresDSN is

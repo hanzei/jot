@@ -37,6 +37,15 @@ func Drivers() []string {
 	return drivers
 }
 
+// ForEachDriver runs fn once per driver returned by Drivers, as a subtest
+// named after the driver.
+func ForEachDriver(t *testing.T, fn func(t *testing.T, driver string)) {
+	t.Helper()
+	for _, driver := range Drivers() {
+		t.Run(driver, func(t *testing.T) { fn(t, driver) })
+	}
+}
+
 // IsolatedDSN returns a DSN for a fresh, empty database for driver, isolated
 // from every other test. For postgres it creates a new database on the
 // server pointed to by EnvPostgresDSN and registers cleanup to drop it
