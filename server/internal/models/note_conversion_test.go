@@ -39,6 +39,16 @@ func TestParseTextLineAsListItem(t *testing.T) {
 		assert.Equal(t, "Buy milk", item.Text)
 	})
 
+	t.Run("leaves intraword underscores alone, matching the renderer", func(t *testing.T) {
+		item, ok := ParseTextLineAsListItem("Rename my_file_name.txt")
+		require.True(t, ok)
+		assert.Equal(t, "Rename my_file_name.txt", item.Text)
+
+		item, ok = ParseTextLineAsListItem("call foo_bar_baz here")
+		require.True(t, ok)
+		assert.Equal(t, "call foo_bar_baz here", item.Text)
+	})
+
 	t.Run("strips inline code and links", func(t *testing.T) {
 		item, ok := ParseTextLineAsListItem("Run `npm test`")
 		require.True(t, ok)

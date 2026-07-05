@@ -32,6 +32,11 @@ describe('parseTextLineAsListItem', () => {
     expect(parseTextLineAsListItem('*Buy* milk')).toEqual({ text: 'Buy milk', completed: false });
   });
 
+  it('leaves intraword underscores alone, matching the renderer (no emphasis)', () => {
+    expect(parseTextLineAsListItem('Rename my_file_name.txt')).toEqual({ text: 'Rename my_file_name.txt', completed: false });
+    expect(parseTextLineAsListItem('call foo_bar_baz here')).toEqual({ text: 'call foo_bar_baz here', completed: false });
+  });
+
   it('strips inline code and links', () => {
     expect(parseTextLineAsListItem('Run `npm test`')).toEqual({ text: 'Run npm test', completed: false });
     expect(parseTextLineAsListItem('See [docs](https://example.com)')).toEqual({ text: 'See docs', completed: false });

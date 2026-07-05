@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures';
+import { test, expect, uniqueUsername } from '../fixtures';
 
 test.describe('Notes', () => {
   test.beforeEach(async ({ authenticatedUser }) => {
@@ -379,7 +379,7 @@ test.describe('Notes', () => {
   });
 
   test('converts a text note to a list and back, restoring the title as an h1 line and warning about dropped assignments', async ({ page, dashboardPage, request }) => {
-    const collaboratorName = `convert-collab-${Date.now()}`;
+    const collaboratorName = uniqueUsername('convert');
     const collaboratorPassword = 'testpass123';
 
     const registerResp = await request.post('/api/v1/register', {

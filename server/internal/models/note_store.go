@@ -801,7 +801,9 @@ func (s *noteStore) ConvertType(ctx context.Context, id, userID string, targetTy
 // check below); the caller should then skip re-touching note_items and just
 // commit, since the winning write already did that atomically.
 func (s *noteStore) convertNoteRowTx(ctx context.Context, tx *sql.Tx, id string, targetType NoteType, content string, targetItems []NewNoteItem, baseVersion *int) (alreadyApplied bool, err error) {
-	query := `UPDATE notes SET title = '', content = ?, note_type = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+	// deleted_at IS NULL guards against a concurrent trash landing between the
+	// HasAccess check in ConvertType and this UPDATE.
+	query := `UPDATE notes SET title = '', content = ?, note_type = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL`
 	args := []any{content, targetType, id}
 	if baseVersion != nil {
 		query += ` AND version = ?`

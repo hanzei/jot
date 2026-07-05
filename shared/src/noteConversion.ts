@@ -13,8 +13,10 @@ const BLOCKQUOTE_RE = /^(?:>\s*)+/;
 const HEADING_RE = /^#{1,6}\s+/;
 const LINK_RE = /\[([^\]]*)\]\([^)]*\)/g;
 const INLINE_CODE_RE = /`([^`]+)`/g;
-const BOLD_RE = /\*\*(.+?)\*\*|__(.+?)__/g;
-const ITALIC_RE = /\*(.+?)\*|_(.+?)_/g;
+// Underscore emphasis requires word boundaries, matching marked/CommonMark:
+// my_file_name is left alone, but __init__ still counts as emphasis.
+const BOLD_RE = /\*\*(.+?)\*\*|(?<!\w)__(.+?)__(?!\w)/g;
+const ITALIC_RE = /\*(.+?)\*|(?<!\w)_(.+?)_(?!\w)/g;
 
 function stripInlineFormatting(text: string): string {
   return text

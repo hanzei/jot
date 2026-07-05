@@ -1973,9 +1973,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
   };
 
-  // Converting list -> text is lossy (assignments and real checkbox/nesting
-  // structure collapse into plain text), so that direction is confirmed first.
-  // Converting text -> list only reflows lines into items, so it runs directly.
+  // List -> text is lossy (assignments, real checkbox/nesting structure), so
+  // it's confirmed first; text -> list just reflows lines and runs directly.
   const handleConvertClick = () => {
     if (!note || !onConvert || loading || savingRef.current) return;
     if (noteType === 'list') {
@@ -1998,6 +1997,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       showError(t('note.failedSaveChanges'));
       savingRef.current = false;
       setLoading(false);
+      setShowConvertConfirm(false);
       return;
     }
 

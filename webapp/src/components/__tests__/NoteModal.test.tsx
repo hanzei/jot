@@ -2031,6 +2031,30 @@ describe('NoteModal', () => {
       expect(onConvert).not.toHaveBeenCalled()
       expect(screen.queryAllByTestId('dialog-panel')).toHaveLength(1)
     })
+
+    it('closes the confirmation dialog and shows an error if saving fails before converting', async () => {
+      const note = createMockNote({ note_type: 'list', title: 'Tasks', items: [] })
+      const onConvert = vi.fn()
+      mockNotesUpdate.mockRejectedValueOnce(new Error('network error'))
+
+      renderNoteModal({ ...defaultProps, note, onConvert })
+
+      // Pending title edit makes persistExistingNote actually call notes.update.
+      fireEvent.change(screen.getByDisplayValue('Tasks'), { target: { value: 'Tasks Edited' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Convert to text' }))
+      const dialogPanels = screen.getAllByTestId('dialog-panel')
+      const confirmPanel = dialogPanels[dialogPanels.length - 1]
+      fireEvent.click(within(confirmPanel).getByRole('button', { name: 'Convert to text' }))
+      // advanceTimersByTimeAsync(0) flushes the rejected-save promise chain
+      // without also firing the error banner's 5s auto-dismiss timeout.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0)
+      })
+
+      expect(onConvert).not.toHaveBeenCalled()
+      expect(screen.getByText('Failed to save changes. Please try again.')).toBeInTheDocument()
+      expect(screen.queryAllByTestId('dialog-panel')).toHaveLength(1)
+    })
   })
 
   describe('markdown editing in text notes', () => {

@@ -248,10 +248,8 @@ export interface UpdateListNoteRequest extends BaseUpdateNoteRequest {
 export type UpdateNoteRequest = UpdateTextNoteRequest | UpdateListNoteRequest;
 
 /** Request body for `POST /notes/{id}/convert`, which changes a note's type in place. */
-export interface ConvertNoteTypeRequest {
+export interface ConvertNoteTypeRequest extends BaseUpdateNoteRequest {
   note_type: NoteType;
-  /** Optimistic-concurrency guard; see {@link BaseUpdateNoteRequest.base_version}. */
-  base_version?: number;
 }
 
 export interface CreateUserRequest {

@@ -19,34 +19,58 @@ type ConvertedListItem struct {
 // stay in sync with shared/src/noteConversion.ts, which applies the same
 // rules client-side for the mobile app's offline conversion.
 var (
-	conversionListMarkerRe = regexp.MustCompile(`^(?:[-*+]|\d+\.)\s+(?:\[([ xX])\]\s*)?`)
-	conversionBlockquoteRe = regexp.MustCompile(`^(?:>\s*)+`)
-	conversionHeadingRe    = regexp.MustCompile(`^#{1,6}\s+`)
-	conversionLinkRe       = regexp.MustCompile(`\[([^\]]*)\]\([^)]*\)`)
-	conversionCodeRe       = regexp.MustCompile("`([^`]+)`")
-	conversionBoldRe       = regexp.MustCompile(`\*\*(.+?)\*\*|__(.+?)__`)
-	conversionItalicRe     = regexp.MustCompile(`\*(.+?)\*|_(.+?)_`)
+	conversionListMarkerRe       = regexp.MustCompile(`^(?:[-*+]|\d+\.)\s+(?:\[([ xX])\]\s*)?`)
+	conversionBlockquoteRe       = regexp.MustCompile(`^(?:>\s*)+`)
+	conversionHeadingRe          = regexp.MustCompile(`^#{1,6}\s+`)
+	conversionLinkRe             = regexp.MustCompile(`\[([^\]]*)\]\([^)]*\)`)
+	conversionCodeRe             = regexp.MustCompile("`([^`]+)`")
+	conversionBoldStarRe         = regexp.MustCompile(`\*\*(.+?)\*\*`)
+	conversionItalicStarRe       = regexp.MustCompile(`\*(.+?)\*`)
+	conversionBoldUnderscoreRe   = regexp.MustCompile(`__(.+?)__`)
+	conversionItalicUnderscoreRe = regexp.MustCompile(`_(.+?)_`)
 )
 
 func stripInlineMarkdownFormatting(text string) string {
 	text = conversionLinkRe.ReplaceAllString(text, "$1")
 	text = conversionCodeRe.ReplaceAllString(text, "$1")
-	text = replaceFirstNonEmptyGroup(conversionBoldRe, text)
-	text = replaceFirstNonEmptyGroup(conversionItalicRe, text)
+	// Underscore emphasis needs word boundaries (unlike asterisk emphasis, which
+	// applies intraword); see stripWordBoundaryDelimited.
+	text = conversionBoldStarRe.ReplaceAllString(text, "$1")
+	text = stripWordBoundaryDelimited(text, conversionBoldUnderscoreRe)
+	text = conversionItalicStarRe.ReplaceAllString(text, "$1")
+	text = stripWordBoundaryDelimited(text, conversionItalicUnderscoreRe)
 	return strings.TrimSpace(text)
 }
 
-// replaceFirstNonEmptyGroup replaces every match of re in text with whichever
-// of its two alternative capture groups matched (the pattern's two branches,
-// e.g. **bold** vs __bold__, are mutually exclusive per match).
-func replaceFirstNonEmptyGroup(re *regexp.Regexp, text string) string {
-	return re.ReplaceAllStringFunc(text, func(match string) string {
-		groups := re.FindStringSubmatch(match)
-		if groups[1] != "" {
-			return groups[1]
+// stripWordBoundaryDelimited replaces matches of re with their captured group
+// unless flanked by a word character, matching marked/CommonMark: my_file_name
+// is left alone, but __init__ still counts as emphasis. Go's RE2 has no
+// lookaround, hence the manual boundary check.
+func stripWordBoundaryDelimited(text string, re *regexp.Regexp) string {
+	matches := re.FindAllStringSubmatchIndex(text, -1)
+	if matches == nil {
+		return text
+	}
+	var b strings.Builder
+	last := 0
+	for _, m := range matches {
+		start, end := m[0], m[1]
+		if start < last {
+			continue // overlaps a match already consumed by a replacement
 		}
-		return groups[2]
-	})
+		if (start > 0 && isConversionWordByte(text[start-1])) || (end < len(text) && isConversionWordByte(text[end])) {
+			continue
+		}
+		b.WriteString(text[last:start])
+		b.WriteString(text[m[2]:m[3]])
+		last = end
+	}
+	b.WriteString(text[last:])
+	return b.String()
+}
+
+func isConversionWordByte(c byte) bool {
+	return c == '_' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 }
 
 // ParseTextLineAsListItem parses one line of text-note content into a list
