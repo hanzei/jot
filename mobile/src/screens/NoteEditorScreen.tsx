@@ -1570,7 +1570,7 @@ export default function NoteEditorScreen() {
     if (noteTypeRef.current === 'list') {
       const assignedCount = itemsRef.current.filter((item) => item.assigned_to).length;
       const message = assignedCount > 0
-        ? `${t('note.convertToTextConfirmMessage')} ${t('note.convertLoseAssignments', { count: assignedCount })}`
+        ? t('note.convertToTextConfirmMessageWithAssignments', { count: assignedCount })
         : t('note.convertToTextConfirmMessage');
       const confirmed = await confirm({
         title: t('note.convertToTextConfirmTitle'),
