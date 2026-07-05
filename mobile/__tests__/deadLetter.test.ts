@@ -316,6 +316,40 @@ describe('drainQueue dead-letter persistence', () => {
     expect(callsStartingWith(db, `UPDATE notes SET sync_state = 'failed'`)).toHaveLength(0);
   });
 
+  it('dead-letters a convertNoteType 409 (version conflict) instead of dropping it silently', async () => {
+    // Mirrors the `update` 409 case above: a 409 on a convert means the note
+    // changed on another device since base_version, so it must be preserved and
+    // surfaced rather than treated as an idempotent already-applied conflict.
+    const db = makeDrainDb(
+      [{ id: 12, operation: 'convertNoteType', endpoint: '/notes/n1/convert', method: 'POST', body: '{"note_type":"list","items":[]}', created_at: 't0' }],
+      { versions: { n1: 3 } },
+    );
+    mockApi.post.mockRejectedValueOnce(makeAxiosError(409));
+
+    const { discardedOperations } = await drainQueue(db as never);
+
+    const inserts = callsStartingWith(db, 'INSERT INTO dead_letter');
+    expect(inserts).toHaveLength(1);
+    expect(inserts[0][0]).toBe('convertNoteType'); // operation column
+    expect(inserts[0][4]).toBe(409); // status column
+    expect(inserts[0][5]).toBe('n1'); // note_id column
+    expect(callsStartingWith(db, `UPDATE notes SET sync_state = 'failed'`)).toEqual([['n1']]);
+    expect(discardedOperations).toEqual([{ operation: 'convertNoteType', endpoint: '/notes/n1/convert', status: 409 }]);
+  });
+
+  it('resolves a queued convertNoteType base_version from the local version at replay time', async () => {
+    const db = makeDrainDb(
+      [{ id: 13, operation: 'convertNoteType', endpoint: '/notes/n1/convert', method: 'POST', body: '{"note_type":"text","content":"hi"}', created_at: 't0' }],
+      { versions: { n1: 5 } },
+    );
+    mockApi.post.mockResolvedValueOnce({ data: { ...makeTextNote('n1'), version: 6 } } as never);
+
+    await drainQueue(db as never);
+
+    expect(mockApi.post).toHaveBeenCalledWith('/notes/n1/convert', { note_type: 'text', content: 'hi', base_version: 5 });
+    expect(callsStartingWith(db, 'INSERT INTO dead_letter')).toHaveLength(0);
+  });
+
   it('clears a prior failed flag when a later op for the note drains successfully', async () => {
     const db = makeDrainDb([
       { id: 4, operation: 'update', endpoint: '/notes/n1', method: 'PATCH', body: '{"content":"y"}', created_at: 't0' },

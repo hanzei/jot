@@ -106,4 +106,34 @@ describe('NoteEditorMenu', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(onDuplicate).toHaveBeenCalledTimes(1);
   });
+
+  it('labels the convert action by the note\'s current type and hides it when trashed', () => {
+    const onConvert = jest.fn();
+    const { getByTestId, getByText, rerender, queryByTestId } = render(
+      <NoteEditorMenu visible onClose={noop} onSend={noop} onMoveToTrash={noop} onConvert={onConvert} noteType="text" />,
+    );
+
+    expect(getByText('note.convertToList')).toBeTruthy();
+    fireEvent.press(getByTestId('editor-menu-convert'));
+    expect(onConvert).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <NoteEditorMenu visible onClose={noop} onSend={noop} onMoveToTrash={noop} onConvert={onConvert} noteType="list" />,
+    );
+    expect(getByText('note.convertToText')).toBeTruthy();
+
+    rerender(
+      <NoteEditorMenu
+        visible
+        onClose={noop}
+        trashed
+        onMoveToTrash={noop}
+        onConvert={onConvert}
+        noteType="list"
+        onRestore={noop}
+        onDeletePermanently={noop}
+      />,
+    );
+    expect(queryByTestId('editor-menu-convert')).toBeNull();
+  });
 });
