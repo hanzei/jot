@@ -157,6 +157,24 @@ task run-webapp
 
 Access: `http://localhost:5173` — API calls are proxied to the Go server automatically.
 
+### Testing against Postgres
+
+Server tests run against SQLite by default and need no setup. To also
+exercise the Postgres path locally (store-level and migration tests), point
+`TEST_POSTGRES_DSN` at a running Postgres server — each test creates and
+drops its own isolated database on it, and tests skip cleanly when the
+variable is unset:
+
+```bash
+docker run --rm -d --name jot-test-postgres \
+  -e POSTGRES_USER=jot -e POSTGRES_PASSWORD=jot -e POSTGRES_DB=jot_test \
+  -p 5432:5432 postgres:16-alpine
+
+TEST_POSTGRES_DSN="postgres://jot:jot@localhost:5432/jot_test?sslmode=disable" task test-server
+```
+
+CI runs both paths on every PR touching `server/**` (see `.github/workflows/server-ci.yml`).
+
 ## Mobile app
 
 The `mobile/` app is built with React Native and Expo. It connects to any Jot
