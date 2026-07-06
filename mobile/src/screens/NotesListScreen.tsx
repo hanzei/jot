@@ -457,7 +457,9 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   // Drag-and-drop is only available in the unfiltered notes variant while manual
   // sorting is active. Search and label filters both show a filtered subset
   // (and mix in archived matches), so reordering them would persist a partial
-  // or misclassified manual order — disable dragging there.
+  // or misclassified manual order — disable dragging there. Search results are
+  // additionally ordered by full-text relevance, not manual position, so a drag
+  // would not even map to the positions being shown.
   const isDraggable = variant === 'notes' && sortMode === 'manual' && !debouncedSearch && !labelId;
 
   // Signature of the active view/filter/sort/layout. The static grid swaps

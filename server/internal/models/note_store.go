@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/hanzei/jot/server/internal/database/dialect"
 	"github.com/sirupsen/logrus"
@@ -418,46 +419,95 @@ func duplicateLabelsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, note
 	return nil
 }
 
-func buildGetByUserIDQuery(userID string, archived bool, trashed bool, search string, labelID string, myTasks bool) (string, []any) {
-	const selectCols = `SELECT DISTINCT n.id, n.user_id, n.title, n.content, n.note_type, n.version,
+// buildSearchTokens normalizes a raw search string into lowercase, literal word
+// tokens for full-text matching. It splits on any rune that is not a letter or
+// digit, so query operators and punctuation (%, _, ", *, -, :, &, …) act only
+// as separators and can never be interpreted as FTS/tsquery syntax — the reason
+// such inputs can't error the request. Diacritics are preserved (café ≠ cafe)
+// so tokens line up with the unicode61/simple tokenizers the two backends use.
+// Returns an empty slice when the input has no alphanumeric characters.
+func buildSearchTokens(search string) []string {
+	tokens := strings.FieldsFunc(search, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
+	for i, tok := range tokens {
+		tokens[i] = strings.ToLower(tok)
+	}
+	return tokens
+}
+
+func buildGetByUserIDQuery(d *dialect.Dialect, userID string, archived bool, trashed bool, search string, labelID string, myTasks bool) (string, []any) {
+	// No DISTINCT: every join below is one-to-one with a note (the per-user
+	// state join, the full-text search join, and — for My Tasks — an IN
+	// subquery rather than a row-multiplying note_items join), so each note
+	// yields exactly one row. This also lets ORDER BY reference the search
+	// rank, which Postgres forbids under SELECT DISTINCT.
+	const selectCols = `SELECT n.id, n.user_id, n.title, n.content, n.note_type, n.version,
 				  nus.color, nus.pinned, nus.archived, nus.position, nus.unpinned_position, nus.checked_items_collapsed,
 				  n.deleted_at, n.created_at, n.updated_at`
 
-	var query string
-	var args []any
-	if trashed {
-		query = selectCols + `
+	var b strings.Builder
+	b.WriteString(selectCols)
+	args := make([]any, 0, 6)
+
+	// FROM + per-user state join.
+	switch {
+	case trashed:
+		b.WriteString(`
 				  FROM notes n
-				  INNER JOIN note_user_state nus ON n.id = nus.note_id AND nus.user_id = ?
-				  LEFT JOIN note_items ni ON n.id = ni.note_id
-				  WHERE n.user_id = ? AND n.deleted_at IS NOT NULL`
-		args = []any{userID, userID}
-	} else if myTasks {
-		query = selectCols + `
+				  INNER JOIN note_user_state nus ON n.id = nus.note_id AND nus.user_id = ?`)
+		args = append(args, userID)
+	default: // active notes (both the default grid and the My Tasks filter)
+		b.WriteString(`
 				  FROM active_notes n
-				  INNER JOIN note_user_state nus ON n.id = nus.note_id AND nus.user_id = ?
-				  INNER JOIN note_items ni ON n.id = ni.note_id
-				  WHERE ni.assigned_to = ?`
-		args = []any{userID, userID}
-	} else {
-		query = selectCols + `
-				  FROM active_notes n
-				  INNER JOIN note_user_state nus ON n.id = nus.note_id AND nus.user_id = ?
-				  LEFT JOIN note_items ni ON n.id = ni.note_id
-				  WHERE nus.archived = ?`
-		args = []any{userID, archived}
+				  INNER JOIN note_user_state nus ON n.id = nus.note_id AND nus.user_id = ?`)
+		args = append(args, userID)
 	}
-	if search != "" {
-		query += ` AND (n.title LIKE ? OR n.content LIKE ? OR ni.text LIKE ?)`
-		searchTerm := "%" + search + "%"
-		args = append(args, searchTerm, searchTerm, searchTerm)
+
+	// Full-text search: join candidate note IDs (with relevance rank) from the
+	// note_search index. A query of only punctuation tokenizes to nothing;
+	// treat that as matching nothing rather than erroring or matching all.
+	tokens := buildSearchTokens(search)
+	matchedNothing := search != "" && len(tokens) == 0
+	rankOrder := ""
+	if search != "" && len(tokens) > 0 {
+		join, order := d.FullTextSearchJoin()
+		b.WriteString(join)
+		args = append(args, d.FullTextMatchExpr(tokens))
+		rankOrder = order
 	}
+
+	switch {
+	case trashed:
+		b.WriteString(` WHERE n.user_id = ? AND n.deleted_at IS NOT NULL`)
+		args = append(args, userID)
+	case myTasks:
+		b.WriteString(` WHERE n.id IN (SELECT note_id FROM note_items WHERE assigned_to = ?)`)
+		args = append(args, userID)
+	default:
+		b.WriteString(` WHERE nus.archived = ?`)
+		args = append(args, archived)
+	}
+
+	if matchedNothing {
+		b.WriteString(` AND 1 = 0`)
+	}
+
 	if labelID != "" {
-		query += ` AND n.id IN (SELECT note_id FROM note_labels WHERE label_id = ? AND user_id = ?)`
+		b.WriteString(` AND n.id IN (SELECT note_id FROM note_labels WHERE label_id = ? AND user_id = ?)`)
 		args = append(args, labelID, userID)
 	}
-	query += ` ORDER BY nus.pinned DESC, nus.position ASC`
-	return query, args
+
+	// Search results order by relevance within the pinned/unpinned split; the
+	// plain grid keeps its manual position order. nus.position is a stable
+	// tiebreak for equally-ranked notes.
+	if rankOrder != "" {
+		b.WriteString(` ORDER BY nus.pinned DESC, ` + rankOrder + `, nus.position ASC`)
+	} else {
+		b.WriteString(` ORDER BY nus.pinned DESC, nus.position ASC`)
+	}
+
+	return b.String(), args
 }
 
 func scanNote(rows *sql.Rows) (Note, error) {
@@ -471,7 +521,7 @@ func scanNote(rows *sql.Rows) (Note, error) {
 }
 
 func (s *noteStore) GetByUserID(ctx context.Context, userID string, archived bool, trashed bool, search string, labelID string, myTasks bool) ([]*Note, error) {
-	query, args := buildGetByUserIDQuery(userID, archived, trashed, search, labelID, myTasks)
+	query, args := buildGetByUserIDQuery(s.d, userID, archived, trashed, search, labelID, myTasks)
 
 	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), args...)
 	if err != nil {
