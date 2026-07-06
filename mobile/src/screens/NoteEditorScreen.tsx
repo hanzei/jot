@@ -239,6 +239,13 @@ export default function NoteEditorScreen() {
   const isMountedRef = useRef(true);
   const isInitializedRef = useRef(false);
   const intentionalExitRef = useRef(false);
+  // True for the whole duration of a zoom-close animation, from the moment an
+  // exit action commits to closing until it actually dispatches the
+  // navigation action. intentionalExitRef is only set at that final instant
+  // (not up front) so a concurrent back press mid-animation still hits
+  // beforeRemove; it's swallowed via this flag instead of falling through to
+  // a second, unguarded pop.
+  const isClosingRef = useRef(false);
   const hasPendingChangesRef = useRef(false);
   const [exitSavePrompt, setExitSavePrompt] = useState<{
     navAction: NavigationAction;
@@ -324,8 +331,9 @@ export default function NoteEditorScreen() {
   // and any dashboard removal reflow plays consistently instead of only on
   // some exit paths.
   const zoomCloseAndExit = useCallback(async () => {
-    intentionalExitRef.current = true;
+    isClosingRef.current = true;
     await animateClose();
+    intentionalExitRef.current = true;
     navigation.goBack();
   }, [animateClose, navigation]);
 
@@ -915,14 +923,19 @@ export default function NoteEditorScreen() {
     }
   }, [items]);
 
-  // Mark the exit as intentional (so beforeRemove doesn't re-handle it),
-  // optionally zooming back onto the originating card first, then dispatch the
-  // navigation action that was intercepted.
+  // Mark the exit as intentional (so beforeRemove doesn't re-handle it) only
+  // once the navigation action is about to dispatch, optionally zooming back
+  // onto the originating card first. isClosingRef is set immediately instead,
+  // so a back press that lands mid-animation still hits beforeRemove and gets
+  // swallowed there rather than falling through to an unguarded second pop.
   const exitWith = useCallback((navAction: NavigationAction, wantsZoom: boolean) => {
-    intentionalExitRef.current = true;
     setExitSavePrompt(null);
-    const dispatch = () => navigation.dispatch(navAction);
+    const dispatch = () => {
+      intentionalExitRef.current = true;
+      navigation.dispatch(navAction);
+    };
     if (wantsZoom) {
+      isClosingRef.current = true;
       void animateClose().then(dispatch);
     } else {
       dispatch();
@@ -936,6 +949,13 @@ export default function NoteEditorScreen() {
       // Programmatic exits (delete/archive/duplicate) already set this and run
       // their own zoom/goBack, so don't re-handle them here.
       if (intentionalExitRef.current) {
+        return;
+      }
+      // A zoom-close animation from this or another exit action is already
+      // playing — swallow this concurrent attempt so it doesn't pop an extra
+      // screen once that animation finishes and dispatches its own action.
+      if (isClosingRef.current) {
+        event.preventDefault();
         return;
       }
       const action = event.data.action;
@@ -1470,16 +1490,13 @@ export default function NoteEditorScreen() {
       return;
     }
     // Moving to trash is undoable (toast below + restoreMutation), so this
-    // doesn't confirm — matches NotesListScreen's handleMoveToTrash.
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-      debounceRef.current = null;
-    }
-    if (saveInFlightRef.current) {
-      try { await saveInFlightRef.current; } catch { /* already handled */ }
-    }
-    // Re-read after the in-flight save settles; it may have created the note
-    // and populated noteIdRef while we were awaiting it.
+    // doesn't confirm — matches NotesListScreen's handleMoveToTrash. Flush any
+    // pending debounced edits first so an undo restores the latest content
+    // instead of silently dropping them.
+    const saved = await flushPendingChanges();
+    if (!saved) return; // save failed — error already surfaced by flushSave
+    // Re-read after the flush settles; it may have created the note and
+    // populated noteIdRef while we were awaiting it.
     const currentNoteId = noteIdRef.current;
     if (!currentNoteId) return;
     // Zoom back onto the card first, then delete so the dashboard plays its
@@ -1503,7 +1520,7 @@ export default function NoteEditorScreen() {
       // The editor is already gone, so surface the failure as a toast.
       showToast(t('note.failedDelete'), 'error');
     }
-  }, [zoomCloseAndExit, deleteMutation, navigation, noteId, restoreMutation, showToast, t]);
+  }, [flushPendingChanges, zoomCloseAndExit, deleteMutation, navigation, noteId, restoreMutation, showToast, t]);
 
   // Restore a trashed note (read-only view) and return to the list.
   const handleRestoreNote = useCallback(async () => {
