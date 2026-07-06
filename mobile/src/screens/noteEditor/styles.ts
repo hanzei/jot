@@ -207,8 +207,9 @@ export const styles = StyleSheet.create({
     flexShrink: 0,
   },
   ghostParentText: {
-    fontSize: 14,
-    fontWeight: '600',
+    // Match the checklist item rows' text (ListItem's textInput) so the ghost
+    // parent label reads like the items below it — same size, no bold.
+    fontSize: 16,
     flex: 1,
   },
 });
