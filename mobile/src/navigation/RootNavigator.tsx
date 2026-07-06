@@ -32,13 +32,17 @@ export type RootStackParamList = {
   // defaults to text. readOnly opens a trashed note in a view-only state (all
   // editing disabled; overflow menu offers only Restore / Delete-forever).
   // originRect is the tapped card's on-screen rect, used to zoom the editor
-  // open from (and closed back onto) that card.
+  // open from (and closed back onto) that card. originColor is that card's
+  // note color, used to seed the editor's background so the zoom-open shows
+  // the right color immediately instead of flashing white until the note
+  // hydrates from cache.
   NoteEditor: {
     noteId: string | null;
     sharedText?: string;
     initialNoteType?: NoteType;
     readOnly?: boolean;
     originRect?: LayoutRect;
+    originColor?: string;
   };
   Share: { noteId: string };
   Settings: undefined;

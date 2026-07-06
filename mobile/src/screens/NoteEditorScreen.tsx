@@ -104,7 +104,7 @@ const DRAG_CELL_ANIMATIONS = { opacity: 1, transform: [] };
 export default function NoteEditorScreen() {
   const navigation = useNavigation<EditorNavProp>();
   const route = useRoute<EditorRouteProp>();
-  const { noteId: initialNoteId, sharedText, initialNoteType, readOnly, originRect } = route.params;
+  const { noteId: initialNoteId, sharedText, initialNoteType, readOnly, originRect, originColor } = route.params;
   const { t, i18n } = useTranslation();
   const failedNoteIds = useFailedNoteIds();
 
@@ -128,7 +128,10 @@ export default function NoteEditorScreen() {
   useEffect(() => () => { if (popClearRef.current) clearTimeout(popClearRef.current); }, []);
   const [pinned, setPinned] = useState(false);
   const [archived, setArchived] = useState(false);
-  const [color, setColor] = useState('#ffffff');
+  // Seed from the tapped card's color (passed as a nav param) so a zoom-open
+  // shows the note's background immediately; hydration below sets the
+  // authoritative value. Falls back to white for new notes / direct opens.
+  const [color, setColor] = useState(originColor || '#ffffff');
   const [labels, setLabels] = useState<Label[]>([]);
   const [hasCreated, setHasCreated] = useState(initialNoteId !== null);
   const [saveError, setSaveError] = useState<string | null>(null);
