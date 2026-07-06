@@ -159,11 +159,18 @@ Access: `http://localhost:5173` — API calls are proxied to the Go server autom
 
 ### Testing against Postgres
 
-Server tests run against SQLite by default and need no setup. To also
-exercise the Postgres path locally (store-level and migration tests), point
-`TEST_POSTGRES_DSN` at a running Postgres server — each test creates and
-drops its own isolated database on it, and tests skip cleanly when the
-variable is unset:
+Server tests run against SQLite by default and need no setup. Store-level and
+migration tests also exercise the Postgres path automatically: if Docker is
+available, [testcontainers-go](https://golang.testcontainers.org/) starts a
+single `postgres:16-alpine` container on first use (shared across all tests
+in a package, torn down when the test binary exits) and each test creates and
+drops its own isolated database on it. If Docker isn't available, the
+Postgres subtests skip cleanly.
+
+To point tests at a Postgres server you manage yourself instead (e.g. to
+reuse a long-running instance or test against a different Postgres version),
+set `TEST_POSTGRES_DSN` — this takes priority over the testcontainers
+fallback:
 
 ```bash
 docker run --rm -d --name jot-test-postgres \
@@ -173,7 +180,13 @@ docker run --rm -d --name jot-test-postgres \
 TEST_POSTGRES_DSN="postgres://jot:jot@localhost:5432/jot_test?sslmode=disable" task test-server
 ```
 
-CI runs both paths on every PR touching `server/**` (see `.github/workflows/server-ci.yml`).
+To disable the testcontainers fallback entirely and skip Postgres tests
+unless `TEST_POSTGRES_DSN` is set, set `TEST_POSTGRES_NO_TESTCONTAINERS=1`.
+
+CI runs both paths on every PR touching `server/**` (see
+`.github/workflows/server-ci.yml`), using the same `TEST_POSTGRES_DSN`
+service-container approach rather than testcontainers, since a DSN is
+already provided there and starting a container-in-a-container isn't needed.
 
 ## Mobile app
 
