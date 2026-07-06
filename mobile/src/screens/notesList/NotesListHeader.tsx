@@ -47,6 +47,7 @@ export default function NotesListHeader({
   const { colors } = useTheme();
   const activeSortLabel = getNoteSortLabel(sortMode, t);
   const isGrid = layout === 'grid';
+  const LayoutIcon = isGrid ? List : LayoutGrid;
 
   return (
     <>
@@ -105,11 +106,7 @@ export default function NotesListHeader({
           accessibilityLabel={t(isGrid ? 'dashboard.layoutToggleToList' : 'dashboard.layoutToggleToGrid')}
           accessibilityState={{ selected: isGrid }}
         >
-          {isGrid ? (
-            <List size={18} color={colors.icon} />
-          ) : (
-            <LayoutGrid size={18} color={colors.icon} />
-          )}
+          <LayoutIcon size={18} color={colors.icon} />
         </TouchableOpacity>
         <TouchableOpacity
           style={[

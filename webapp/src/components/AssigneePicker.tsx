@@ -152,7 +152,7 @@ export default function AssigneePicker({ collaborators, currentAssigneeId, onAss
                 {displayName(c)}
               </span>
               {isSelected && (
-                <Check className="w-4 h-4 ml-auto text-blue-500 flex-shrink-0" />
+                <Check className="w-4 h-4 ml-auto text-blue-500 flex-shrink-0" aria-hidden="true" />
               )}
             </div>
           );
@@ -170,7 +170,7 @@ export default function AssigneePicker({ collaborators, currentAssigneeId, onAss
               focusedIndex === collaborators.length ? 'bg-gray-100 dark:bg-slate-700' : ''
             }`}
           >
-            <Circle className="w-5 h-5 mr-2 flex-shrink-0" />
+            <Circle className="w-5 h-5 mr-2 flex-shrink-0" aria-hidden="true" />
             {t('note.unassign')}
           </div>
         )}

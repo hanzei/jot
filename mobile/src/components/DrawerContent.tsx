@@ -457,7 +457,6 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                 <item.icon
                   size={22}
                   color={isActive ? colors.primary : colors.icon}
-                  fill={isActive ? colors.primary : 'none'}
                 />
                 <Text style={[styles.navItemText, { color: colors.icon }, isActive && { color: colors.primary, fontWeight: '600' }]}>
                   {item.label}
@@ -493,7 +492,6 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                 <item.icon
                   size={22}
                   color={isActive ? colors.primary : colors.icon}
-                  fill={isActive ? colors.primary : 'none'}
                 />
                 <Text style={[styles.navItemText, { color: colors.icon }, isActive && { color: colors.primary, fontWeight: '600' }]}>
                   {item.label}

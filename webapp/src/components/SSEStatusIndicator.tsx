@@ -54,9 +54,9 @@ export function SSEStatusIndicator({ status }: SSEStatusIndicatorProps) {
       className="w-full bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 px-4 py-2 text-sm flex items-center justify-center gap-2"
     >
       {inProgress ? (
-        <LoaderCircle className="w-4 h-4 animate-spin" />
+        <LoaderCircle className="w-4 h-4 animate-spin" aria-hidden="true" />
       ) : (
-        <CloudOff className="w-4 h-4" />
+        <CloudOff className="w-4 h-4" aria-hidden="true" />
       )}
       <span>{message}</span>
     </div>

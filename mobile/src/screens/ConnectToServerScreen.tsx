@@ -14,7 +14,7 @@ import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
-import { CircleCheck, TriangleAlert, X } from 'lucide-react-native';
+import { CircleCheck, CircleX, TriangleAlert, X } from 'lucide-react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '../theme/ThemeContext';
@@ -556,7 +556,7 @@ export default function ConnectToServerScreen() {
     // error step
     return (
       <View style={styles.centeredState}>
-        <X size={64} color={colors.error} style={styles.resultIcon} />
+        <CircleX size={64} color={colors.error} style={styles.resultIcon} />
         <Text style={[styles.resultTitle, { color: colors.text }]}>{t('upgrade.errorTitle')}</Text>
         <Text style={[styles.resultSubtitle, { color: colors.textSecondary }]}>
           {preflightErrorMessage(step.reason)}

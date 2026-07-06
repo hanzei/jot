@@ -135,6 +135,8 @@ export default function AppearanceSection() {
     ?? t('settings.themeSystem');
   const dropdownOptions = openDropdown === 'language' ? languageOptions : themeOptions;
   const selectedDropdownValue = openDropdown === 'language' ? languagePref : themePref;
+  const LanguageChevron = openDropdown === 'language' ? ChevronUp : ChevronDown;
+  const ThemeChevron = openDropdown === 'theme' ? ChevronUp : ChevronDown;
 
   return (
     <>
@@ -153,11 +155,7 @@ export default function AppearanceSection() {
           accessibilityState={{ expanded: openDropdown === 'language' }}
         >
           <Text style={[styles.dropdownTriggerText, { color: colors.text }]}>{selectedLanguageLabel}</Text>
-          {openDropdown === 'language' ? (
-            <ChevronUp size={18} color={colors.icon} accessible={false} />
-          ) : (
-            <ChevronDown size={18} color={colors.icon} accessible={false} />
-          )}
+          <LanguageChevron size={18} color={colors.icon} accessible={false} />
         </TouchableOpacity>
         {languageError !== '' && (
           <Text style={[styles.errorText, { color: colors.error }]}>{displayMessage(t, languageError)}</Text>
@@ -175,11 +173,7 @@ export default function AppearanceSection() {
           accessibilityState={{ expanded: openDropdown === 'theme' }}
         >
           <Text style={[styles.dropdownTriggerText, { color: colors.text }]}>{selectedThemeLabel}</Text>
-          {openDropdown === 'theme' ? (
-            <ChevronUp size={18} color={colors.icon} accessible={false} />
-          ) : (
-            <ChevronDown size={18} color={colors.icon} accessible={false} />
-          )}
+          <ThemeChevron size={18} color={colors.icon} accessible={false} />
         </TouchableOpacity>
         {themeError !== '' && (
           <Text style={[styles.errorText, { color: colors.error }]}>{displayMessage(t, themeError)}</Text>
