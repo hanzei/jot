@@ -27,6 +27,26 @@ test.describe('Search', () => {
     await dashboardPage.expectNoteNotVisible('React Hooks');
   });
 
+  test('multi-word query matches terms across title and content', async ({ dashboardPage }) => {
+    await dashboardPage.createNote('Weekend Plans', 'buy groceries and relax');
+
+    // Both words present (one in the title, one in the content) => match.
+    await dashboardPage.search('weekend groceries');
+    await dashboardPage.expectNoteVisible('Weekend Plans');
+    await dashboardPage.expectNoteNotVisible('Go Programming');
+
+    // A word that is absent excludes the note (terms are ANDed, not ORed).
+    await dashboardPage.search('weekend spaghetti');
+    await dashboardPage.expectNoteNotVisible('Weekend Plans');
+  });
+
+  test('prefix-matches the last term for search-as-you-type', async ({ dashboardPage }) => {
+    // Partial last word still finds "TypeScript" before it is fully typed.
+    await dashboardPage.search('typ');
+    await dashboardPage.expectNoteVisible('TypeScript Tutorial');
+    await dashboardPage.expectNoteNotVisible('Go Programming');
+  });
+
   test('includes archived notes under a separate section when searching', async ({ dashboardPage }) => {
     await dashboardPage.createNote('Active Report');
     await dashboardPage.createNote('Archived Report');

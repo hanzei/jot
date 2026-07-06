@@ -2,8 +2,10 @@ package database
 
 import (
 	"database/sql"
+	"strings"
 	"testing"
 	"time"
+	"unicode"
 
 	"github.com/golang-migrate/migrate/v4"
 	migratedatabase "github.com/golang-migrate/migrate/v4/database"
@@ -223,4 +225,76 @@ func TestMigration000004FixCompletedParentWithIncompleteChild(t *testing.T) {
 		assert.NotEqual(t, staleAsStored, noteUpdatedAt("note000000000000000003"), "the healed note's updated_at is bumped, like any other note_items mutation")
 		assert.Equal(t, staleAsStored, noteUpdatedAt("note000000000000000004"), "a note with no invariant violation is left untouched")
 	})
+}
+
+// TestMigration000007Backfill seeds notes and list items at the pre-FTS schema
+// (v6), applies 000007, and asserts the full-text index was backfilled so
+// existing installations become searchable on upgrade with no action — across
+// note title, content, and item text, including multi-word matches that span a
+// note's title and one of its items.
+func TestMigration000007Backfill(t *testing.T) {
+	dsntest.ForEachDriver(t, func(t *testing.T, driver string) {
+		db := dsntest.RawDB(t, driver)
+		d := &dialect.Dialect{Driver: driver}
+		ctx := t.Context()
+
+		m := newMigrator(t, db, driver)
+
+		// Step to v6 — before the note_search index exists.
+		require.NoError(t, m.Migrate(6))
+
+		_, err := db.ExecContext(ctx, d.RewritePlaceholders(`INSERT INTO users (id, username, password_hash) VALUES ('user000000000000000001', 'alice', 'x')`))
+		require.NoError(t, err)
+		// A text note (title + content) and a list note whose match term lives
+		// only in an item.
+		_, err = db.ExecContext(ctx, d.RewritePlaceholders(`INSERT INTO notes (id, user_id, title, content, note_type) VALUES ('note000000000000000001', 'user000000000000000001', 'Weekend', 'buy pineapple', 'text')`))
+		require.NoError(t, err)
+		_, err = db.ExecContext(ctx, d.RewritePlaceholders(`INSERT INTO notes (id, user_id, title, content, note_type) VALUES ('note000000000000000002', 'user000000000000000001', 'Groceries', '', 'list')`))
+		require.NoError(t, err)
+		_, err = db.ExecContext(ctx, d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, position) VALUES ('item00000000000000001', 'note000000000000000002', 'fresh avocado', 0)`))
+		require.NoError(t, err)
+
+		// Apply 000007: create the index structures and backfill from existing rows.
+		require.NoError(t, m.Migrate(7))
+
+		// search returns the note IDs matching query against the backfilled index,
+		// using each backend's native full-text engine.
+		search := func(query string) []string {
+			var q string
+			switch driver {
+			case driverPostgres:
+				q = d.RewritePlaceholders(`SELECT note_id FROM note_search, to_tsquery('simple', ?) tsq WHERE search_tsv @@ tsq ORDER BY note_id`)
+			default:
+				q = `SELECT note_id FROM note_search WHERE note_search MATCH ? ORDER BY note_id`
+			}
+			matchExpr := d.FullTextMatchExpr(buildQueryTokens(query))
+			rows, err := db.QueryContext(ctx, q, matchExpr)
+			require.NoError(t, err)
+			defer func() { _ = rows.Close() }()
+			var ids []string
+			for rows.Next() {
+				var id string
+				require.NoError(t, rows.Scan(&id))
+				ids = append(ids, id)
+			}
+			require.NoError(t, rows.Err())
+			return ids
+		}
+
+		assert.Equal(t, []string{"note000000000000000001"}, search("pineapple"), "content backfilled")
+		assert.Equal(t, []string{"note000000000000000002"}, search("avocado"), "item text backfilled")
+		assert.Equal(t, []string{"note000000000000000001"}, search("weekend pineapple"), "title+content multi-word")
+	})
+}
+
+// buildQueryTokens mirrors the store's query tokenizer for migration-level
+// search assertions: lowercase, split on non-alphanumeric runes.
+func buildQueryTokens(query string) []string {
+	tokens := strings.FieldsFunc(query, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
+	for i, tok := range tokens {
+		tokens[i] = strings.ToLower(tok)
+	}
+	return tokens
 }

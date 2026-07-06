@@ -4,9 +4,9 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/hanzei/jot/server/internal/database/dialect"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
-	"github.com/hanzei/jot/server/internal/database/dialect"
 )
 
 func TestRewritePlaceholders(t *testing.T) {
@@ -34,6 +34,38 @@ func TestRewritePlaceholders(t *testing.T) {
 		d := &dialect.Dialect{Driver: "postgres"}
 		q := "SELECT 1"
 		assert.Equal(t, q, d.RewritePlaceholders(q))
+	})
+}
+
+func TestFullTextMatchExpr(t *testing.T) {
+	t.Run("SQLite quotes terms, ANDs implicitly, prefixes the last", func(t *testing.T) {
+		d := &dialect.Dialect{Driver: "sqlite"}
+		assert.Equal(t, `"foo"*`, d.FullTextMatchExpr([]string{"foo"}))
+		assert.Equal(t, `"foo" "bar" "baz"*`, d.FullTextMatchExpr([]string{"foo", "bar", "baz"}))
+	})
+
+	t.Run("Postgres ANDs with & and prefixes the last with :*", func(t *testing.T) {
+		d := &dialect.Dialect{Driver: "postgres"}
+		assert.Equal(t, "foo:*", d.FullTextMatchExpr([]string{"foo"}))
+		assert.Equal(t, "foo & bar & baz:*", d.FullTextMatchExpr([]string{"foo", "bar", "baz"}))
+	})
+}
+
+func TestFullTextSearchJoin(t *testing.T) {
+	t.Run("SQLite matches note_search and ranks by bm25 ascending", func(t *testing.T) {
+		d := &dialect.Dialect{Driver: "sqlite"}
+		join, order := d.FullTextSearchJoin()
+		assert.Contains(t, join, "note_search MATCH ?")
+		assert.Contains(t, join, "bm25(note_search)")
+		assert.Equal(t, "sr.rank ASC", order)
+	})
+
+	t.Run("Postgres matches tsvector and ranks by ts_rank descending", func(t *testing.T) {
+		d := &dialect.Dialect{Driver: "postgres"}
+		join, order := d.FullTextSearchJoin()
+		assert.Contains(t, join, "to_tsquery('simple', ?)")
+		assert.Contains(t, join, "search_tsv @@ q")
+		assert.Equal(t, "sr.rank DESC", order)
 	})
 }
 

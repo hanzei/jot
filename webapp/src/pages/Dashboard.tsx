@@ -978,6 +978,10 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
     const { pinned, other } = sortNotesForDisplay(archivedMatches, noteSort);
     return [...pinned, ...other];
   }, [archivedMatches, noteSort]);
+  // Reordering is manual-position based, so it is disabled in any view that is
+  // not the plain manually-sorted grid. Search in particular orders results by
+  // full-text relevance rather than position, so a drag would not map to the
+  // order on screen.
   const dragReorderingDisabled = showArchived || showBin || showMyTasks || isSearching || isFilteringByLabel || noteSort !== 'manual';
   // Signature of the active view/filter/search. The grids swap instantly when it
   // changes, so only in-view card changes (create, delete, archive, …) animate.
