@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { XMarkIcon, CheckCircleIcon, ExclamationTriangleIcon, InformationCircleIcon } from '@heroicons/react/24/outline';
+import { X, CircleCheck, TriangleAlert, Info } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ToastContext, type ToastAction, type ToastType } from '@/hooks/useToast';
 import {
@@ -117,9 +117,9 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
     };
   }, [autoDismissMs, beginDismiss, clearAutoDismissTimer]);
 
-  const Icon = toast.type === 'success' ? CheckCircleIcon
-    : toast.type === 'error' ? ExclamationTriangleIcon
-    : InformationCircleIcon;
+  const Icon = toast.type === 'success' ? CircleCheck
+    : toast.type === 'error' ? TriangleAlert
+    : Info;
 
   const iconColor = toast.type === 'success' ? 'text-green-500 dark:text-green-400'
     : toast.type === 'error' ? 'text-red-500 dark:text-red-400'
@@ -150,7 +150,7 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
         className="ml-1 flex-shrink-0 p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700"
         aria-label={t('common.close')}
       >
-        <XMarkIcon className="h-4 w-4 text-gray-400" aria-hidden="true" />
+        <X className="h-4 w-4 text-gray-400" aria-hidden="true" />
       </button>
     </div>
   );

@@ -1,6 +1,6 @@
 import type { ChangeEvent, FormEvent, ReactNode, RefObject } from 'react';
 import { useState } from 'react';
-import { ArrowUpTrayIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import { Upload, Download } from 'lucide-react';
 import type { TFunction } from 'i18next';
 import LetterAvatar from '@/components/LetterAvatar';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -528,7 +528,7 @@ export const PreferencesInfoColumn = ({
           disabled={isExporting}
           className={`${SETTINGS_BTN_CLASSES} disabled:opacity-50 disabled:cursor-not-allowed`}
         >
-          <ArrowDownTrayIcon className="h-5 w-5 mr-2" aria-hidden="true" />
+          <Download className="h-5 w-5 mr-2" aria-hidden="true" />
           {isExporting ? t('settings.exporting') : t('settings.exportButton')}
         </button>
         <button
@@ -536,7 +536,7 @@ export const PreferencesInfoColumn = ({
           onClick={onOpenImportModal}
           className={SETTINGS_BTN_CLASSES}
         >
-          <ArrowUpTrayIcon className="h-5 w-5 mr-2" aria-hidden="true" />
+          <Upload className="h-5 w-5 mr-2" aria-hidden="true" />
           {t('settings.importButton')}
         </button>
       </div>

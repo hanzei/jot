@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
-import { XMarkIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
+import { X, Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { notes, isAxiosError } from '@/utils/api';
 import { useSizeTransition } from '@/hooks/useSizeTransition';
@@ -135,7 +135,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
                 onClick={handleClose}
                 className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
               >
-                <XMarkIcon className="h-5 w-5" />
+                <X className="h-5 w-5" />
               </button>
             </div>
 
@@ -220,7 +220,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
                 onDrop={handleDrop}
                 onDragOver={handleDragOver}
               >
-                <ArrowUpTrayIcon className="h-8 w-8 mx-auto text-gray-400 dark:text-gray-500 mb-2" />
+                <Upload className="h-8 w-8 mx-auto text-gray-400 dark:text-gray-500 mb-2" />
                 {selectedFile ? (
                   <p className="text-sm text-gray-700 dark:text-gray-300 font-medium">{selectedFile.name}</p>
                 ) : (

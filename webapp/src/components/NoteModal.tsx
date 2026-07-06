@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback, type ReactElement } from 'react';
-import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, UserPlusIcon, CheckIcon, TagIcon, DocumentDuplicateIcon, DevicePhoneMobileIcon, PaintBrushIcon, PhotoIcon, ArrowsRightLeftIcon } from '@heroicons/react/24/outline';
+import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, GripVertical, Pin } from 'lucide-react';
 import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, IMAGE_MAX_PER_NOTE, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListItems, listToText, type Note, type NoteType, type NoteImage, type CreateNoteRequest, type UpdateNoteRequest, type ConvertNoteTypeRequest, type PatchNoteItemRequest, type Label, type User, type Collaborator } from '@jot/shared';
@@ -307,9 +307,7 @@ function SortableItem({ id, index, item, onUpdateListItem, onRemoveListItem, isC
           {...listeners}
           className="cursor-grab active:cursor-grabbing p-1 text-gray-400 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-100"
         >
-          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M7 2a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 2zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 8zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 14zm6-8a2 2 0 1 1-.001-4.001A2 2 0 0 1 13 6zm0 2a2 2 0 1 1 .001 4.001A2 2 0 0 1 13 8zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 13 14z" />
-          </svg>
+          <GripVertical className="w-4 h-4" />
         </div>
       )}
       {isCompleted && <div className="w-6 h-4"></div>}
@@ -457,7 +455,7 @@ function SortableItem({ id, index, item, onUpdateListItem, onRemoveListItem, isC
                   title={t('note.assignItem')}
                   aria-label={t('note.assignItem')}
                 >
-                  <UserPlusIcon className="h-3 w-3 text-gray-400 dark:text-gray-300" aria-hidden="true" />
+                  <UserPlus className="h-3 w-3 text-gray-400 dark:text-gray-300" aria-hidden="true" />
                 </button>
               )
             )}
@@ -481,7 +479,7 @@ function SortableItem({ id, index, item, onUpdateListItem, onRemoveListItem, isC
         data-testid="list-item-delete"
         className={`ml-auto w-5 h-5 flex-shrink-0 flex items-center justify-center rounded text-gray-400 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-100 transition-opacity ${ROW_REVEAL_CLASSES}`}
       >
-        <XMarkIcon className="h-4 w-4" />
+        <X className="h-4 w-4" />
       </button>
     </div>
   );
@@ -2325,7 +2323,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                 onClick={() => setIsEditingContent(false)}
                 className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
               >
-                <CheckIcon className="h-5 w-5 text-blue-500 dark:text-blue-400" />
+                <Check className="h-5 w-5 text-blue-500 dark:text-blue-400" />
               </button>
             )}
             <button
@@ -2333,7 +2331,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
               onClick={handleCloseRequest}
               className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
             >
-              <XMarkIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+              <X className="h-5 w-5 text-gray-600 dark:text-gray-300" />
             </button>
           </div>
 
@@ -2558,7 +2556,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                     onClick={addListItemAndFocus}
                     className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white p-1"
                   >
-                    <PlusIcon className="h-4 w-4" />
+                    <Plus className="h-4 w-4" />
                     <span>{t('note.addItem')}</span>
                   </button>
                 </div>
@@ -2570,7 +2568,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                       onClick={handleToggleCompleted}
                       className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white mb-2"
                     >
-                      <ChevronDownIcon 
+                      <ChevronDown 
                         className={`h-4 w-4 transition-transform ${checkedItemsCollapsed ? '-rotate-90' : 'rotate-0'}`}
                       />
                       <span>{t('note.completedItems', { count: completedItems.length })}</span>
@@ -2696,7 +2694,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                   aria-label={t('labels.addLabels')}
                   aria-expanded={showLabelPicker}
                 >
-                  <TagIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                  <Tag className="h-3.5 w-3.5" aria-hidden="true" />
                   <span>{t('labels.addLabels')}</span>
                 </button>
                 {showLabelPicker && (
@@ -2778,7 +2776,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                   aria-label={t('note.colorPickerLabel')}
                   aria-expanded={showColorPicker}
                 >
-                  <PaintBrushIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                  <Palette className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                 </button>
 
                 {note && (
@@ -2799,7 +2797,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                       title={t('images.addImage')}
                       aria-label={t('images.addImage')}
                     >
-                      <PhotoIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                      <Image className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                     </button>
                     {noteDeepLinkHref && (
                       <a
@@ -2809,7 +2807,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                         aria-label={t('nav.openMobileApp')}
                         data-testid="note-open-mobile-app-toolbar-link"
                       >
-                        <DevicePhoneMobileIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                        <Smartphone className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                       </a>
                     )}
                     <button
@@ -2818,15 +2816,10 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                       title={pinned ? t('note.unpinNote') : t('note.pinNote')}
                       aria-label={pinned ? t('note.unpinNote') : t('note.pinNote')}
                     >
-                      {pinned ? (
-                        <svg className="h-5 w-5 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
-                        </svg>
-                      ) : (
-                        <svg className="h-5 w-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                          <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
-                        </svg>
-                      )}
+                      <Pin
+                        className={pinned ? 'h-5 w-5 text-blue-500' : 'h-5 w-5 text-gray-600 dark:text-gray-300'}
+                        fill={pinned ? 'currentColor' : 'none'}
+                      />
                     </button>
                     <button
                       onClick={handleArchiveToggle}
@@ -2835,9 +2828,9 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                       aria-label={archived ? t('note.unarchiveNote') : t('note.archiveNote')}
                     >
                       {archived ? (
-                        <ArchiveBoxXMarkIcon className="h-5 w-5 text-blue-500" />
+                        <ArchiveX className="h-5 w-5 text-blue-500" />
                       ) : (
-                        <ArchiveBoxIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                        <Archive className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                       )}
                     </button>
                     {isOwner && onShare && (
@@ -2847,7 +2840,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                         title={t('note.share')}
                         aria-label={t('note.share')}
                       >
-                        <UserPlusIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                        <UserPlus className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                       </button>
                     )}
                     {onDuplicate && (
@@ -2857,7 +2850,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                         title={t('note.duplicate')}
                         aria-label={t('note.duplicate')}
                       >
-                        <DocumentDuplicateIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                        <Copy className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                       </button>
                     )}
                     {onConvert && (
@@ -2867,7 +2860,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                         title={noteType === 'list' ? t('note.convertToText') : t('note.convertToList')}
                         aria-label={noteType === 'list' ? t('note.convertToText') : t('note.convertToList')}
                       >
-                        <ArrowsRightLeftIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                        <ArrowLeftRight className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                       </button>
                     )}
                     {isOwner && onDelete && (
@@ -2877,7 +2870,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                         title={t('note.delete')}
                         aria-label={t('note.delete')}
                       >
-                        <TrashIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                        <Trash2 className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                       </button>
                     )}
                   </>
@@ -2893,7 +2886,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                   </div>
                 ) : showSaved ? (
                   <div className="flex items-center space-x-1 text-sm text-green-600 dark:text-green-400 transition-opacity">
-                    <CheckIcon className="h-4 w-4" />
+                    <Check className="h-4 w-4" />
                     <span>{t('note.saved')}</span>
                   </div>
                 ) : note ? (

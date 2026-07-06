@@ -1,5 +1,5 @@
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
-import { XMarkIcon } from '@heroicons/react/24/outline';
+import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 interface KeyboardShortcutsDialogProps {
@@ -137,7 +137,7 @@ export default function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardSho
               aria-label={t('common.close')}
               className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
             >
-              <XMarkIcon className="h-5 w-5" />
+              <X className="h-5 w-5" />
             </button>
           </div>
 

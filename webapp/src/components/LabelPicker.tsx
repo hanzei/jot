@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
-import { PlusIcon } from '@heroicons/react/24/outline';
+import { Plus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Label, Note } from '@jot/shared';
 import { notes as notesApi, labels as labelsApi } from '@/utils/api';
@@ -321,7 +321,7 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
             onMouseEnter={() => setHighlightIndex(createIndex)}
             className={`flex items-center w-full px-3 py-1.5 text-sm text-blue-600 dark:text-blue-400 ${createIndex === effectiveHighlight ? 'bg-gray-100 dark:bg-slate-700' : ''}`}
           >
-            <PlusIcon className="h-3.5 w-3.5 mr-2 shrink-0" />
+            <Plus className="h-3.5 w-3.5 mr-2 shrink-0" />
             <span className="truncate">{t('labels.createLabel', { name: trimmedQuery })}</span>
           </button>
         )}

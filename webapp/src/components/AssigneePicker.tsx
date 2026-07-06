@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useId } from 'react';
-import { XMarkIcon } from '@heroicons/react/24/outline';
+import { X, Check, Circle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import LetterAvatar from '@/components/LetterAvatar';
 import { type Collaborator, displayName } from '@jot/shared';
@@ -109,7 +109,7 @@ export default function AssigneePicker({ collaborators, currentAssigneeId, onAss
           aria-label={t('common.close')}
           tabIndex={-1}
         >
-          <XMarkIcon className="h-4 w-4 text-gray-400 dark:text-gray-500" aria-hidden="true" />
+          <X className="h-4 w-4 text-gray-400 dark:text-gray-500" aria-hidden="true" />
         </button>
       </div>
 
@@ -152,9 +152,7 @@ export default function AssigneePicker({ collaborators, currentAssigneeId, onAss
                 {displayName(c)}
               </span>
               {isSelected && (
-                <svg className="w-4 h-4 ml-auto text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
+                <Check className="w-4 h-4 ml-auto text-blue-500 flex-shrink-0" />
               )}
             </div>
           );
@@ -172,9 +170,7 @@ export default function AssigneePicker({ collaborators, currentAssigneeId, onAss
               focusedIndex === collaborators.length ? 'bg-gray-100 dark:bg-slate-700' : ''
             }`}
           >
-            <svg className="w-5 h-5 mr-2 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="12" cy="12" r="9" />
-            </svg>
+            <Circle className="w-5 h-5 mr-2 flex-shrink-0" />
             {t('note.unassign')}
           </div>
         )}

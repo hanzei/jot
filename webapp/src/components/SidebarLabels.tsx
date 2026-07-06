@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSidebarExpanded } from '@/components/SidebarContext';
 import {
-  CheckIcon,
-  EllipsisVerticalIcon,
-  PlusIcon,
-  PencilIcon,
-  TagIcon,
-  TrashIcon,
-  XMarkIcon,
-} from '@heroicons/react/24/outline';
+  Check,
+  EllipsisVertical,
+  Plus,
+  Pencil,
+  Tag,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import type { Label } from '@jot/shared';
@@ -166,7 +166,7 @@ const SidebarLabels = ({
             <li key={label.id}>
               {isEditing ? (
                 <div className="flex items-center gap-1 rounded-md px-2 py-1.5 bg-gray-100 dark:bg-slate-700">
-                  <TagIcon className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-300" />
+                  <Tag className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-300" />
                   <input
                     ref={inputRef}
                     type="text"
@@ -195,7 +195,7 @@ const SidebarLabels = ({
                     aria-label={t('labels.renameSave')}
                     className="rounded p-1 text-green-600 hover:bg-green-50 disabled:opacity-50 dark:text-green-400 dark:hover:bg-green-900/20"
                   >
-                    <CheckIcon className="h-4 w-4" />
+                    <Check className="h-4 w-4" />
                   </button>
                   <button
                     type="button"
@@ -204,7 +204,7 @@ const SidebarLabels = ({
                     aria-label={t('labels.renameCancel')}
                     className="rounded p-1 text-gray-500 hover:bg-gray-200 disabled:opacity-50 dark:text-gray-300 dark:hover:bg-slate-600"
                   >
-                    <XMarkIcon className="h-4 w-4" />
+                    <X className="h-4 w-4" />
                   </button>
                 </div>
               ) : (
@@ -217,7 +217,7 @@ const SidebarLabels = ({
                     aria-pressed={isActive ? true : undefined}
                   >
                     <span className="flex items-center justify-center shrink-0 w-8">
-                      <TagIcon className="h-4 w-4" />
+                      <Tag className="h-4 w-4" />
                     </span>
                     <span className={`truncate min-w-0 overflow-hidden transition-[max-width,opacity] duration-200 ${isExpanded ? 'max-w-[12rem] opacity-100' : 'max-w-0 opacity-0'}`}>{label.name}</span>
                     {labelCounts && (
@@ -236,7 +236,7 @@ const SidebarLabels = ({
                         aria-label={t('labels.menuOptions', { name: label.name })}
                         className="shrink-0 rounded-md p-1.5 text-gray-400"
                       >
-                        <EllipsisVerticalIcon className="h-4 w-4" />
+                        <EllipsisVertical className="h-4 w-4" />
                       </MenuButton>
                       <MenuItems
                         transition
@@ -249,7 +249,7 @@ const SidebarLabels = ({
                               onClick={() => startRename(label)}
                               className="flex w-full items-center px-4 py-2 text-sm text-gray-700 data-[focus]:bg-gray-100 dark:text-gray-200 dark:data-[focus]:bg-slate-700"
                             >
-                              <PencilIcon className="mr-2 h-4 w-4" />
+                              <Pencil className="mr-2 h-4 w-4" />
                               {t('labels.rename')}
                             </button>
                           </MenuItem>
@@ -259,7 +259,7 @@ const SidebarLabels = ({
                               onClick={() => setDeleteTarget(label)}
                               className="flex w-full items-center px-4 py-2 text-sm text-red-600 data-[focus]:bg-gray-100 dark:text-red-400 dark:data-[focus]:bg-slate-700"
                             >
-                              <TrashIcon className="mr-2 h-4 w-4" />
+                              <Trash2 className="mr-2 h-4 w-4" />
                               {t('labels.delete')}
                             </button>
                           </MenuItem>
@@ -277,7 +277,7 @@ const SidebarLabels = ({
         <div className="mt-2">
           {creatingLabel ? (
             <div className="flex items-center gap-1 rounded-md px-2 py-1.5 bg-gray-100 dark:bg-slate-700">
-              <TagIcon className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-300" />
+              <Tag className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-300" />
               <input
                 ref={createInputRef}
                 type="text"
@@ -306,7 +306,7 @@ const SidebarLabels = ({
                 aria-label={t('labels.createSave')}
                 className="rounded p-1 text-green-600 hover:bg-green-50 disabled:opacity-50 dark:text-green-400 dark:hover:bg-green-900/20"
               >
-                <CheckIcon className="h-4 w-4" />
+                <Check className="h-4 w-4" />
               </button>
               <button
                 type="button"
@@ -315,7 +315,7 @@ const SidebarLabels = ({
                 aria-label={t('labels.createCancel')}
                 className="rounded p-1 text-gray-500 hover:bg-gray-200 disabled:opacity-50 dark:text-gray-300 dark:hover:bg-slate-600"
               >
-                <XMarkIcon className="h-4 w-4" />
+                <X className="h-4 w-4" />
               </button>
             </div>
           ) : (
@@ -326,7 +326,7 @@ const SidebarLabels = ({
                 className="flex w-full items-center rounded-md py-1.5 text-sm text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20"
               >
                 <span className="flex items-center justify-center shrink-0 w-8">
-                  <PlusIcon className="h-4 w-4" />
+                  <Plus className="h-4 w-4" />
                 </span>
                 <span className={`overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-200 ${isExpanded ? 'max-w-[12rem] opacity-100' : 'max-w-0 opacity-0'}`}>{t('labels.newSidebar')}</span>
               </button>
