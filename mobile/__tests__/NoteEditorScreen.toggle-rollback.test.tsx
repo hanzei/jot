@@ -264,8 +264,8 @@ describe('NoteEditorScreen toggle rollback', () => {
     await waitFor(() => {
       expect(getByText('1 completed items')).toBeTruthy();
     });
-    expect(getAllByTestId('icon-checkbox')).toHaveLength(1); // only Child completed
-    expect(getAllByTestId('icon-square-outline')).toHaveLength(1); // only Parent active
+    expect(getAllByTestId('icon-SquareCheck')).toHaveLength(1); // only Child completed
+    expect(getAllByTestId('icon-Square')).toHaveLength(1); // only Parent active
 
     expect(mockToggleMutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({ itemId: CHILD_ID, completed: true }),

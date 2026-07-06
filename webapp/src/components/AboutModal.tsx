@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
-import { XMarkIcon } from '@heroicons/react/24/outline';
+import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { about } from '@/utils/api';
 import { getUser } from '@/utils/auth';
@@ -51,7 +51,7 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
                 aria-label={t('common.close')}
                 className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
               >
-                <XMarkIcon className="h-5 w-5" />
+                <X className="h-5 w-5" />
               </button>
             </div>
 

@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import {
-  EllipsisVerticalIcon,
-  TrashIcon,
-  ArchiveBoxIcon,
-  ArchiveBoxXMarkIcon,
-  UserPlusIcon,
-  ArrowUturnLeftIcon,
-  DocumentDuplicateIcon,
-} from '@heroicons/react/24/outline';
+  EllipsisVertical,
+  Trash2,
+  Archive,
+  ArchiveX,
+  UserPlus,
+  Undo2,
+  Copy,
+  Pin,
+} from 'lucide-react';
 import { Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, type Note, type User } from '@jot/shared';
@@ -235,7 +236,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
       <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
       <Menu>
         <MenuButton aria-label={t('note.menuOptions')} className="p-1 rounded-full hover:bg-gray-200 transition-colors">
-          <EllipsisVerticalIcon className="h-4 w-4 text-gray-600" />
+          <EllipsisVertical className="h-4 w-4 text-gray-600" />
         </MenuButton>
         <MenuItems transition onKeyDownCapture={handleMenuKeyDown} className="absolute right-0 mt-1 w-52 origin-top-right bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black/5 dark:ring-slate-600/20 focus:outline-none z-10 border border-gray-200 dark:border-slate-600 transition duration-100 ease-out data-[closed]:scale-95 data-[closed]:opacity-0 motion-reduce:transition-none">
           <div className="py-1">
@@ -247,7 +248,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
                       onClick={handleRestore}
                       className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700"
                     >
-                      <ArrowUturnLeftIcon className="h-4 w-4 mr-2" />
+                      <Undo2 className="h-4 w-4 mr-2" />
                       {t('note.restore')}
                     </button>
                   </MenuItem>
@@ -258,7 +259,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
                       onClick={handlePermanentlyDelete}
                       className="flex items-center w-full px-4 py-2 text-sm text-red-600 dark:text-red-400 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700"
                     >
-                      <TrashIcon className="h-4 w-4 mr-2" />
+                      <Trash2 className="h-4 w-4 mr-2" />
                       {t('note.deleteForever')}
                     </button>
                   </MenuItem>
@@ -273,7 +274,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
                       className="flex items-center justify-between w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700"
                     >
                       <span className="flex items-center">
-                        <UserPlusIcon className="h-4 w-4 mr-2" />
+                        <UserPlus className="h-4 w-4 mr-2" />
                         {t('note.share')}
                       </span>
                       <MenuKbd>S</MenuKbd>
@@ -286,9 +287,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
                     className="flex items-center justify-between w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700"
                   >
                     <span className="flex items-center">
-                      <svg className="h-4 w-4 mr-2" fill={note.pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                        <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
-                      </svg>
+                      <Pin className="h-4 w-4 mr-2" fill={note.pinned ? 'currentColor' : 'none'} />
                       {note.pinned ? t('note.unpin') : t('note.pin')}
                     </span>
                     <MenuKbd>P</MenuKbd>
@@ -302,12 +301,12 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
                     <span className="flex items-center">
                       {note.archived ? (
                         <>
-                          <ArchiveBoxXMarkIcon className="h-4 w-4 mr-2" />
+                          <ArchiveX className="h-4 w-4 mr-2" />
                           {t('note.unarchive')}
                         </>
                       ) : (
                         <>
-                          <ArchiveBoxIcon className="h-4 w-4 mr-2" />
+                          <Archive className="h-4 w-4 mr-2" />
                           {t('note.archive')}
                         </>
                       )}
@@ -322,7 +321,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
                       className="flex items-center justify-between w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700"
                     >
                       <span className="flex items-center">
-                        <DocumentDuplicateIcon className="h-4 w-4 mr-2" />
+                        <Copy className="h-4 w-4 mr-2" />
                         {t('note.duplicate')}
                       </span>
                       <MenuKbd>D</MenuKbd>
@@ -336,7 +335,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
                       className="flex items-center justify-between w-full px-4 py-2 text-sm text-red-600 dark:text-red-400 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700"
                     >
                       <span className="flex items-center">
-                        <TrashIcon className="h-4 w-4 mr-2" />
+                        <Trash2 className="h-4 w-4 mr-2" />
                         {t('note.delete')}
                       </span>
                       <MenuKbd>Del</MenuKbd>

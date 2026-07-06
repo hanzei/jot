@@ -12,7 +12,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { Plus, Square, SquareCheck } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import type { Label } from '@jot/shared';
 import { useTheme } from '../theme/ThemeContext';
@@ -95,11 +95,11 @@ export default function LabelPicker({
                     disabled={isMutating}
                     testID={`label-item-${label.id}`}
                   >
-                    <Ionicons
-                      name={noteLabelIds.has(label.id) ? 'checkbox' : 'square-outline'}
-                      size={22}
-                      color={noteLabelIds.has(label.id) ? colors.primary : colors.iconMuted}
-                    />
+                    {noteLabelIds.has(label.id) ? (
+                      <SquareCheck size={22} color={colors.primary} />
+                    ) : (
+                      <Square size={22} color={colors.iconMuted} />
+                    )}
                     <Text style={[styles.labelName, { color: colors.text }]}>{label.name}</Text>
                   </TouchableOpacity>
                 ))}
@@ -126,8 +126,7 @@ export default function LabelPicker({
                 disabled={!newLabelText.trim()}
                 testID="add-label-btn"
               >
-                <Ionicons
-                  name="add"
+                <Plus
                   size={22}
                   color={newLabelText.trim() ? colors.primary : colors.iconMuted}
                 />

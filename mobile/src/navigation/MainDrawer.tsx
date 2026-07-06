@@ -2,7 +2,7 @@ import React from 'react';
 import { TouchableOpacity, StyleSheet } from 'react-native';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { useRoute, RouteProp } from '@react-navigation/native';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { Menu } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import NotesListScreen from '../screens/NotesListScreen';
 import DrawerContent from '../components/DrawerContent';
@@ -60,7 +60,7 @@ export default function MainDrawer() {
             accessibilityLabel={t('nav.openMenu')}
             accessibilityRole="button"
           >
-            <Ionicons name="menu" size={24} color={colors.text} />
+            <Menu size={24} color={colors.text} />
           </TouchableOpacity>
         ),
       })}

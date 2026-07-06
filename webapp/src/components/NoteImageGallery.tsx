@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowPathIcon, TrashIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { RefreshCw, Trash2, X } from 'lucide-react';
 import type { NoteImage } from '@jot/shared';
 import { images as imagesApi } from '@/utils/api';
 import ImageLightbox from '@/components/ImageLightbox';
@@ -130,7 +130,7 @@ export default function NoteImageGallery({ images, editable = false, uploads = [
               onClick={() => onRemove(tile.image)}
               className="absolute top-1 right-1 z-10 p-1 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-black/70 transition-opacity"
             >
-              <TrashIcon className="h-4 w-4" />
+              <Trash2 className="h-4 w-4" />
             </button>
           )}
         </div>
@@ -161,7 +161,7 @@ export default function NoteImageGallery({ images, editable = false, uploads = [
                       onClick={() => onRetryUpload(upload.id)}
                       className="p-1 rounded-full bg-white/20 hover:bg-white/30"
                     >
-                      <ArrowPathIcon className="h-4 w-4" />
+                      <RefreshCw className="h-4 w-4" />
                     </button>
                   )}
                   {onDismissUpload && (
@@ -171,7 +171,7 @@ export default function NoteImageGallery({ images, editable = false, uploads = [
                       onClick={() => onDismissUpload(upload.id)}
                       className="p-1 rounded-full bg-white/20 hover:bg-white/30"
                     >
-                      <XMarkIcon className="h-4 w-4" />
+                      <X className="h-4 w-4" />
                     </button>
                   )}
                 </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
-import { PlusIcon, DocumentTextIcon, ArchiveBoxIcon, TrashIcon, ClipboardDocumentCheckIcon, ArrowsUpDownIcon, MagnifyingGlassIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { Plus, FileText, Archive, Trash2, ClipboardCheck, ArrowUpDown, Search, X, Pin } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { notes, users as usersApi } from '@/utils/api';
 import { getUser, getSettings, setSettings } from '@/utils/auth';
@@ -1018,7 +1018,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   const emptyState = useMemo(() => {
     if (debouncedSearchQuery) {
       return {
-        icon: <MagnifyingGlassIcon aria-hidden="true" className="h-8 w-8" />,
+        icon: <Search aria-hidden="true" className="h-8 w-8" />,
         title: t('dashboard.noSearchResults', { query: debouncedSearchQuery }),
         description: t('dashboard.searchEmptyHint'),
       };
@@ -1026,7 +1026,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
 
     if (showBin) {
       return {
-        icon: <TrashIcon aria-hidden="true" className="h-8 w-8" />,
+        icon: <Trash2 aria-hidden="true" className="h-8 w-8" />,
         title: t('dashboard.noBinnedNotes'),
         description: t('dashboard.binEmptyHint'),
       };
@@ -1034,7 +1034,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
 
     if (showArchived) {
       return {
-        icon: <ArchiveBoxIcon aria-hidden="true" className="h-8 w-8" />,
+        icon: <Archive aria-hidden="true" className="h-8 w-8" />,
         title: t('dashboard.noArchivedNotes'),
         description: t('dashboard.archiveEmptyHint'),
       };
@@ -1042,7 +1042,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
 
     if (showMyTasks) {
       return {
-        icon: <ClipboardDocumentCheckIcon aria-hidden="true" className="h-8 w-8" />,
+        icon: <ClipboardCheck aria-hidden="true" className="h-8 w-8" />,
         title: t('dashboard.noMyTasksNotesTitle'),
         description: t('dashboard.noMyTasksNotes'),
       };
@@ -1050,14 +1050,14 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
 
     if (selectedLabelId) {
       return {
-        icon: <DocumentTextIcon aria-hidden="true" className="h-8 w-8" />,
+        icon: <FileText aria-hidden="true" className="h-8 w-8" />,
         title: t('dashboard.noNotesForThisLabel'),
         description: t('dashboard.labelFilterEmptyHint'),
       };
     }
 
     return {
-      icon: <DocumentTextIcon aria-hidden="true" className="h-8 w-8" />,
+      icon: <FileText aria-hidden="true" className="h-8 w-8" />,
       title: t('dashboard.noNotesYet'),
       description: t('dashboard.createFirstNote'),
     };
@@ -1082,7 +1082,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
               {t('dashboard.sortLabel')}
             </label>
             <div className="relative">
-              <ArrowsUpDownIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+              <ArrowUpDown className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
               <select
                 id="dashboard-sort"
                 data-testid="dashboard-sort-select"
@@ -1140,7 +1140,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
               onClick={handleCreateNote}
               className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-gray-50 dark:focus:ring-offset-slate-900"
             >
-              <PlusIcon className="h-5 w-5 mr-2" />
+              <Plus className="h-5 w-5 mr-2" />
               {t('dashboard.newNote')}
             </button>
             {showMyTasks && (
@@ -1171,7 +1171,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
             data-testid="manual-reorder-disabled-notice"
             className="mb-6 flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900/70 dark:bg-blue-950/40 dark:text-blue-200 animate-fade-in motion-reduce:animate-none"
           >
-            <ArrowsUpDownIcon className="mt-0.5 h-4 w-4 shrink-0" />
+            <ArrowUpDown className="mt-0.5 h-4 w-4 shrink-0" />
             <div className="flex-1">
               <span className="font-medium">{t('dashboard.manualReorderDisabledTitle')}</span>{' '}
               <span>{t('dashboard.manualReorderDisabled', { sort: activeSortLabel })}</span>
@@ -1181,7 +1181,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
               aria-label={t('common.close')}
               className="shrink-0 rounded p-0.5 hover:bg-blue-100 dark:hover:bg-blue-900/50"
             >
-              <XMarkIcon className="h-4 w-4" />
+              <X className="h-4 w-4" />
             </button>
           </div>
         )}
@@ -1209,7 +1209,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
                     onClick={handleCreateNote}
                     className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 border border-blue-200 dark:border-blue-800 transition-colors"
                   >
-                    <PlusIcon className="h-5 w-5 mr-2" />
+                    <Plus className="h-5 w-5 mr-2" />
                     {t('dashboard.createFirstNoteCta')}
                   </button>
                 </div>
@@ -1229,9 +1229,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
                 <div>
                   {displayedPinned.length > 0 && (
                     <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-                      <svg className="h-4 w-4 text-blue-500 dark:text-blue-400 mr-2" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
-                      </svg>
+                      <Pin className="h-4 w-4 text-blue-500 dark:text-blue-400 mr-2" fill="currentColor" />
                       {t('dashboard.pinned')}
                     </h2>
                   )}
@@ -1292,7 +1290,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
                 <div>
                   {displayedArchived.length > 0 && (
                     <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-                      <ArchiveBoxIcon aria-hidden="true" className="h-4 w-4 text-gray-500 dark:text-gray-400 mr-2" />
+                      <Archive aria-hidden="true" className="h-4 w-4 text-gray-500 dark:text-gray-400 mr-2" />
                       {t('dashboard.archivedResults')}
                     </h2>
                   )}

@@ -4,11 +4,11 @@ import type { SSEEvent } from '@/hooks/useSSE';
 import { Outlet, useOutletContext, useMatch, useNavigate, useSearchParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import {
-  DocumentTextIcon,
-  ArchiveBoxIcon,
-  TrashIcon,
-  ClipboardDocumentCheckIcon,
-} from '@heroicons/react/24/outline';
+  FileText,
+  Archive,
+  Trash2,
+  ClipboardCheck,
+} from 'lucide-react';
 import AppLayout from '@/components/AppLayout';
 import SidebarLabels from '@/components/SidebarLabels';
 import { useSidebarLabelsController } from '@/hooks/useSidebarLabelsController';
@@ -120,13 +120,13 @@ const AuthenticatedLayout = ({ onLogout }: AuthenticatedLayoutProps) => {
   const tabs = useMemo(() => [
     {
       label: t('dashboard.tabNotes'),
-      icon: <DocumentTextIcon className="h-4 w-4 shrink-0" />,
+      icon: <FileText className="h-4 w-4 shrink-0" />,
       href: '/',
       isActive: isAtDashboard && !view && !selectedLabelId,
     },
     {
       label: t('dashboard.tabMyTasks'),
-      icon: <ClipboardDocumentCheckIcon className="h-4 w-4 shrink-0" />,
+      icon: <ClipboardCheck className="h-4 w-4 shrink-0" />,
       href: '/?view=my-tasks',
       isActive: isAtDashboard && view === 'my-tasks',
       title: t('dashboard.myTasksTooltip'),
@@ -137,14 +137,14 @@ const AuthenticatedLayout = ({ onLogout }: AuthenticatedLayoutProps) => {
     {
       label: t('dashboard.tabArchive'),
       title: t('dashboard.archiveTooltip'),
-      icon: <ArchiveBoxIcon className="h-4 w-4 shrink-0" />,
+      icon: <Archive className="h-4 w-4 shrink-0" />,
       href: '/?view=archive',
       isActive: isAtDashboard && view === 'archive',
     },
     {
       label: t('dashboard.tabBin'),
       title: t('dashboard.binTooltip'),
-      icon: <TrashIcon className="h-4 w-4 shrink-0" />,
+      icon: <Trash2 className="h-4 w-4 shrink-0" />,
       href: '/?view=bin',
       isActive: isAtDashboard && view === 'bin',
     },

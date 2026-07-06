@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import * as Haptics from 'expo-haptics';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { Archive, Clipboard, CloudOff, FileText, Info, Plus, Search, Tag, Trash2, type LucideIcon } from 'lucide-react-native';
 import { DrawerActions, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
@@ -373,11 +373,11 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         </View>
       ) : debouncedSearch || labelId ? (
         <FadeInView style={styles.emptySearchContainer} scaleFrom={0.97}>
-          <Ionicons
-            name={debouncedSearch ? 'search-outline' : 'pricetag-outline'}
-            size={48}
-            color={colors.handleColor}
-          />
+          {debouncedSearch ? (
+            <Search size={48} color={colors.handleColor} />
+          ) : (
+            <Tag size={48} color={colors.handleColor} />
+          )}
           <Text style={[styles.emptySearchTitle, { color: colors.textSecondary }]}>
             {debouncedSearch
               ? t('dashboard.noSearchResults', { query: debouncedSearch })
@@ -523,7 +523,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
             { backgroundColor: colors.background },
           ]}
         >
-          <Ionicons name="cloud-offline-outline" size={64} color={colors.handleColor} />
+          <CloudOff size={64} color={colors.handleColor} />
           <Text style={[styles.emptyTitle, { color: colors.text }]}>{t('dashboard.failedLoadNotes')}</Text>
           <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>{t('dashboard.checkConnection')}</Text>
           <TouchableOpacity
@@ -552,16 +552,16 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const isEmpty = !isLoading && (!notes || notes.length === 0);
 
   if (isEmpty && !debouncedSearch && (variant !== 'notes' || !labelId)) {
-    const emptyIcon: keyof typeof Ionicons.glyphMap =
-      variant === 'trash' ? 'trash-outline' :
-      variant === 'archived' ? 'archive-outline' :
-      variant === 'my-tasks' ? 'clipboard-outline' : 'document-text-outline';
+    const EmptyIcon: LucideIcon =
+      variant === 'trash' ? Trash2 :
+      variant === 'archived' ? Archive :
+      variant === 'my-tasks' ? Clipboard : FileText;
     return (
       <View style={[styles.emptyWrapper, { backgroundColor: colors.background }]}>
         {variant === 'notes' && header}
         {variant === 'trash' && (
           <View style={[styles.trashBanner, { backgroundColor: colors.warning, borderBottomColor: colors.warningBorder }]}>
-            <Ionicons name="information-circle-outline" size={16} color={colors.warningText} style={styles.trashBannerIcon} />
+            <Info size={16} color={colors.warningText} style={styles.trashBannerIcon} />
             <Text style={[styles.trashBannerText, { color: colors.warningText }]}>
               {t('dashboard.binInfo')}
             </Text>
@@ -576,8 +576,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           testID="notes-empty-state"
         >
           <View style={styles.emptyContent}>
-            <Ionicons
-              name={emptyIcon}
+            <EmptyIcon
               size={64}
               color={colors.handleColor}
             />
@@ -603,7 +602,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
             accessibilityLabel={t('dashboard.newNote')}
             accessibilityRole="button"
           >
-            <Ionicons name="add" size={28} color="#fff" />
+            <Plus size={28} color="#fff" />
           </TouchableOpacity>
         )}
       </View>
@@ -616,7 +615,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
       {variant === 'trash' && (
         <View style={[styles.trashBanner, { backgroundColor: colors.warning, borderBottomColor: colors.warningBorder }]}>
           <View style={styles.trashBannerMessage}>
-            <Ionicons name="information-circle-outline" size={16} color={colors.warningText} style={styles.trashBannerIcon} />
+            <Info size={16} color={colors.warningText} style={styles.trashBannerIcon} />
             <Text style={[styles.trashBannerText, { color: colors.warningText }]}>
               {t('dashboard.binInfo')}
             </Text>
@@ -681,7 +680,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           accessibilityLabel={t('dashboard.newNote')}
           accessibilityRole="button"
         >
-          <Ionicons name="add" size={28} color="#fff" />
+          <Plus size={28} color="#fff" />
         </TouchableOpacity>
       )}
 

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
-import { XMarkIcon } from '@heroicons/react/24/outline';
+import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ROLES, VALIDATION, type User, type CreateUserRequest } from '@jot/shared';
 import { admin, isAxiosError } from '@/utils/api';
@@ -104,7 +104,7 @@ export default function CreateUserModal({ passwordMinLength, onClose, onSuccess 
                 aria-label={t('common.close')}
                 className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-50"
               >
-                <XMarkIcon className="h-5 w-5" />
+                <X className="h-5 w-5" />
               </button>
             </div>
 

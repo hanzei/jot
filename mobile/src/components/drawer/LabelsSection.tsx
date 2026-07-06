@@ -1,6 +1,6 @@
 import React, { useCallback, useRef } from 'react';
 import { View, Text, TouchableOpacity, Alert } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { EllipsisVertical, Plus, Tag } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../theme/ThemeContext';
 import { styles } from './styles';
@@ -87,10 +87,10 @@ export default function LabelsSection({
                   accessibilityRole="button"
                   accessibilityState={{ selected: isActive }}
                 >
-                  <Ionicons
-                    name={isActive ? 'pricetag' : 'pricetag-outline'}
+                  <Tag
                     size={22}
                     color={isActive ? colors.primary : colors.icon}
+                    fill={isActive ? colors.primary : 'none'}
                   />
                   <Text
                     style={[styles.navItemText, { color: colors.icon }, isActive && { color: colors.primary, fontWeight: '600' }]}
@@ -113,8 +113,7 @@ export default function LabelsSection({
                   accessibilityLabel={`${label.name}. ${t('labels.menuOptions', { name: label.name })}`}
                   testID={`drawer-label-menu-${label.id}`}
                 >
-                  <Ionicons
-                    name="ellipsis-vertical"
+                  <EllipsisVertical
                     size={18}
                     color={isActive ? colors.primary : colors.icon}
                   />
@@ -132,7 +131,7 @@ export default function LabelsSection({
         accessibilityRole="button"
         accessibilityLabel={t('labels.newSidebar')}
       >
-        <Ionicons name="add" size={22} color={colors.primary} />
+        <Plus size={22} color={colors.primary} />
         <Text style={[styles.navItemText, { color: colors.primary, fontWeight: '600' }]}>
           {t('labels.newSidebar')}
         </Text>
