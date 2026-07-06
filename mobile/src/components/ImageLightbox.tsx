@@ -1,7 +1,7 @@
 import React, { useCallback, useContext, useEffect, useRef } from 'react';
 import { Modal, View, Text, TouchableOpacity, FlatList, useWindowDimensions, StyleSheet, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { ChevronLeft, ChevronRight, X } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import type { NoteImage } from '@jot/shared';
 import { useActiveServerBaseUrl } from '../hooks/useActiveServerBaseUrl';
@@ -75,7 +75,7 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose }:
           accessibilityRole="button"
           testID="lightbox-close"
         >
-          <Ionicons name="close" size={28} color="#fff" />
+          <X size={28} color="#fff" />
         </TouchableOpacity>
 
         {hasMultiple && (
@@ -87,7 +87,7 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose }:
               accessibilityRole="button"
               testID="lightbox-previous"
             >
-              <Ionicons name="chevron-back" size={28} color="#fff" />
+              <ChevronLeft size={28} color="#fff" />
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.navButton, styles.navButtonRight]}
@@ -96,7 +96,7 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose }:
               accessibilityRole="button"
               testID="lightbox-next"
             >
-              <Ionicons name="chevron-forward" size={28} color="#fff" />
+              <ChevronRight size={28} color="#fff" />
             </TouchableOpacity>
           </>
         )}

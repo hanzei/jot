@@ -3,7 +3,7 @@ import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from '
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Ionicons } from '@expo/vector-icons';
+import { ArrowLeft } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import { getLogs, type LogEntry } from '../utils/logger';
@@ -29,7 +29,7 @@ export default function LogsFullscreenScreen() {
           accessibilityLabel={t('common.back')}
           accessibilityRole="button"
         >
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
+          <ArrowLeft size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>{t('diagnostics.recentLogs')}</Text>
         <View style={styles.headerSpacer} />

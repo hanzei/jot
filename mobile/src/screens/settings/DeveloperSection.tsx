@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { ChevronRight } from 'lucide-react-native';
 import { useTheme } from '../../theme/ThemeContext';
 import type { RootStackParamList } from '../../navigation/RootNavigator';
 import { styles } from './styles';
@@ -24,7 +24,7 @@ export default function DeveloperSection() {
         accessibilityRole="button"
       >
         <Text style={[styles.aboutToggleText, { color: colors.icon }]}>{t('diagnostics.title')}</Text>
-        <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+        <ChevronRight size={20} color={colors.textSecondary} />
       </TouchableOpacity>
     </View>
   );

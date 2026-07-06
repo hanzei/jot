@@ -1,7 +1,7 @@
 import React, { useCallback, useContext, useState } from 'react';
 import { Modal, View, Text, TouchableOpacity, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { TriangleAlert } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import { ConfirmContext, type ConfirmOptions } from '../hooks/useConfirm';
@@ -60,7 +60,7 @@ export default function ConfirmDialog({
         >
           {destructive && (
             <View style={[styles.iconCircle, { backgroundColor: colors.errorLight }]}>
-              <Ionicons name="warning-outline" size={22} color={colors.error} />
+              <TriangleAlert size={22} color={colors.error} />
             </View>
           )}
           <Text style={[styles.title, { color: colors.text }]} testID="confirm-dialog-title">

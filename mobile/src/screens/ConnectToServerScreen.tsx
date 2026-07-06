@@ -14,7 +14,7 @@ import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { CircleCheck, TriangleAlert, X } from 'lucide-react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '../theme/ThemeContext';
@@ -476,7 +476,7 @@ export default function ConnectToServerScreen() {
       const allResolved = step.deadLetterCount === 0;
       return (
         <View style={styles.centeredState}>
-          <Ionicons name="warning" size={64} color={colors.warningText} style={styles.resultIcon} />
+          <TriangleAlert size={64} color={colors.warningText} style={styles.resultIcon} />
           <Text style={[styles.resultTitle, { color: colors.text }]}>{t('upgrade.deadLetterTitle')}</Text>
           <Text style={[styles.resultSubtitle, { color: colors.textSecondary }]}>
             {t('upgrade.deadLetterSubtitle', { count: step.deadLetterCount })}
@@ -513,7 +513,7 @@ export default function ConnectToServerScreen() {
     if (step.name === 'migrationComplete') {
       return (
         <View style={styles.centeredState}>
-          <Ionicons name="checkmark-circle" size={64} color={colors.success} style={styles.resultIcon} />
+          <CircleCheck size={64} color={colors.success} style={styles.resultIcon} />
           <Text style={[styles.resultTitle, { color: colors.text }]}>{t('upgrade.migrationCompleteTitle')}</Text>
           <Text style={[styles.resultSubtitle, { color: colors.textSecondary }]}>{t('upgrade.migrationCompleteSubtitle')}</Text>
 
@@ -556,7 +556,7 @@ export default function ConnectToServerScreen() {
     // error step
     return (
       <View style={styles.centeredState}>
-        <Ionicons name="close-circle" size={64} color={colors.error} style={styles.resultIcon} />
+        <X size={64} color={colors.error} style={styles.resultIcon} />
         <Text style={[styles.resultTitle, { color: colors.text }]}>{t('upgrade.errorTitle')}</Text>
         <Text style={[styles.resultSubtitle, { color: colors.textSecondary }]}>
           {preflightErrorMessage(step.reason)}
@@ -588,7 +588,7 @@ export default function ConnectToServerScreen() {
           accessibilityLabel={t('common.close')}
           disabled={!isDismissable}
         >
-          <Ionicons name="close" size={24} color={isDismissable ? colors.text : colors.iconMuted} />
+          <X size={24} color={isDismissable ? colors.text : colors.iconMuted} />
         </TouchableOpacity>
       </View>
       <ScrollView

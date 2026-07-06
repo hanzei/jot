@@ -199,24 +199,26 @@ jest.mock('./src/theme/ThemeContext', () => {
   };
 });
 
-jest.mock('@expo/vector-icons/Ionicons', () => {
+// Mock every lucide-react-native icon component with a lightweight stand-in so
+// tests can identify a rendered icon by its component name (e.g. `icon-Trash2`)
+// without depending on react-native-svg internals.
+jest.mock('lucide-react-native', () => {
   const React = require('react');
   const { Text } = require('react-native');
-  const MockIonicons = React.forwardRef(function MockIonicons(props, ref) {
-    return React.createElement(Text, { ...props, ref, testID: props.testID || `icon-${props.name}` }, props.name);
-  });
-  MockIonicons.glyphMap = {};
-  return { __esModule: true, default: MockIonicons };
-});
-
-jest.mock('@expo/vector-icons/MaterialIcons', () => {
-  const React = require('react');
-  const { Text } = require('react-native');
-  const MockMaterialIcons = React.forwardRef(function MockMaterialIcons(props, ref) {
-    return React.createElement(Text, { ...props, ref, testID: props.testID || `icon-${props.name}` }, props.name);
-  });
-  MockMaterialIcons.glyphMap = {};
-  return { __esModule: true, default: MockMaterialIcons };
+  return new Proxy(
+    {},
+    {
+      get(_target, prop) {
+        if (prop === '__esModule') return true;
+        if (typeof prop !== 'string') return undefined;
+        const MockIcon = React.forwardRef(function MockIcon(props, ref) {
+          return React.createElement(Text, { ...props, ref, testID: props.testID || `icon-${prop}` }, prop);
+        });
+        MockIcon.displayName = prop;
+        return MockIcon;
+      },
+    },
+  );
 });
 
 const i18n = require('./src/i18n').default;
