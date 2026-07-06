@@ -1,4 +1,5 @@
 import React from 'react';
+import { CircleAlert } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -28,7 +29,7 @@ export default function SyncFailuresBanner({ visible, applyTopInset }: TopBanner
     <Banner
       visible={visible}
       applyTopInset={applyTopInset}
-      icon="alert-circle-outline"
+      icon={CircleAlert}
       text={t('syncFailures.bannerCount', { count: syncFailureCount })}
       backgroundColor={colors.warning}
       borderColor={colors.warningBorder}

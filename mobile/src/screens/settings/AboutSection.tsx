@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { ChevronDown, ChevronUp } from 'lucide-react-native';
 import { useAuth } from '../../store/AuthContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { getAboutInfo } from '../../api/settings';
@@ -120,11 +120,11 @@ export default function AboutSection() {
         accessibilityRole="button"
       >
         <Text style={[styles.aboutToggleText, { color: colors.icon }]}>{t('settings.aboutButton')}</Text>
-        <Ionicons
-          name={aboutExpanded ? 'chevron-up' : 'chevron-down'}
-          size={20}
-          color={colors.textSecondary}
-        />
+        {aboutExpanded ? (
+          <ChevronUp size={20} color={colors.textSecondary} />
+        ) : (
+          <ChevronDown size={20} color={colors.textSecondary} />
+        )}
       </TouchableOpacity>
       {aboutExpanded && (
         <View style={styles.aboutContent}>

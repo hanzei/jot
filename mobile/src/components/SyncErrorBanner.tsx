@@ -1,4 +1,5 @@
 import React from 'react';
+import { TriangleAlert } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import type { TopBannerProps } from '../hooks/useTopBanners';
@@ -18,7 +19,7 @@ export default function SyncErrorBanner({ visible, applyTopInset }: TopBannerPro
     <Banner
       visible={visible}
       applyTopInset={applyTopInset}
-      icon="warning-outline"
+      icon={TriangleAlert}
       text={t('offline.syncError')}
       backgroundColor={colors.warning}
       borderColor={colors.warningBorder}

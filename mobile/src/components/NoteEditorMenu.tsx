@@ -8,7 +8,7 @@ import {
   Pressable,
 } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { ArrowLeftRight, Copy, Share2, Tag, Trash2, Undo2, UserPlus, type LucideIcon } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import type { NoteType } from '@jot/shared';
@@ -39,7 +39,7 @@ interface NoteEditorMenuProps {
 }
 
 interface Action {
-  icon: keyof typeof Ionicons.glyphMap;
+  icon: LucideIcon;
   label: string;
   onPress: () => void;
   destructive?: boolean;
@@ -80,7 +80,7 @@ export default function NoteEditorMenu({
   if (trashed) {
     if (onRestore) {
       actions.push({
-        icon: 'arrow-undo-outline',
+        icon: Undo2,
         label: t('note.restore'),
         onPress: run(onRestore),
         testId: 'editor-menu-restore',
@@ -88,7 +88,7 @@ export default function NoteEditorMenu({
     }
     if (onDeletePermanently) {
       actions.push({
-        icon: 'trash',
+        icon: Trash2,
         label: t('note.deleteForever'),
         onPress: run(onDeletePermanently),
         destructive: true,
@@ -98,7 +98,7 @@ export default function NoteEditorMenu({
   } else {
     if (onSend) {
       actions.push({
-        icon: 'share-outline',
+        icon: Share2,
         label: t('note.send'),
         onPress: run(onSend),
         testId: 'editor-menu-send',
@@ -106,7 +106,7 @@ export default function NoteEditorMenu({
     }
     if (onShare) {
       actions.push({
-        icon: 'person-add-outline',
+        icon: UserPlus,
         label: t('note.share'),
         onPress: run(onShare),
         testId: 'editor-menu-share',
@@ -114,7 +114,7 @@ export default function NoteEditorMenu({
     }
     if (onDuplicate) {
       actions.push({
-        icon: 'copy-outline',
+        icon: Copy,
         label: t('note.duplicate'),
         onPress: run(onDuplicate),
         testId: 'editor-menu-duplicate',
@@ -122,7 +122,7 @@ export default function NoteEditorMenu({
     }
     if (onConvert) {
       actions.push({
-        icon: 'swap-horizontal-outline',
+        icon: ArrowLeftRight,
         label: noteType === 'list' ? t('note.convertToText') : t('note.convertToList'),
         onPress: run(onConvert),
         testId: 'editor-menu-convert',
@@ -130,7 +130,7 @@ export default function NoteEditorMenu({
     }
     if (onManageLabels) {
       actions.push({
-        icon: 'pricetag-outline',
+        icon: Tag,
         label: t('labels.title'),
         onPress: run(onManageLabels),
         testId: 'editor-menu-label',
@@ -138,7 +138,7 @@ export default function NoteEditorMenu({
     }
     if (onMoveToTrash) {
       actions.push({
-        icon: 'trash-outline',
+        icon: Trash2,
         label: t('note.moveToTrash'),
         onPress: run(onMoveToTrash),
         destructive: true,
@@ -183,8 +183,7 @@ export default function NoteEditorMenu({
                     accessibilityRole="menuitem"
                     accessibilityLabel={action.label}
                   >
-                    <Ionicons
-                      name={action.icon}
+                    <action.icon
                       size={22}
                       color={isDestructive ? colors.error : colors.text}
                     />

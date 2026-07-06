@@ -10,8 +10,7 @@ import {
   type TextInput as TextInputType,
 } from 'react-native';
 import { TouchableOpacity } from 'react-native-gesture-handler';
-import Ionicons from '@expo/vector-icons/Ionicons';
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { GripVertical, Square, SquareCheck, UserPlus, X } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import UserAvatar from './UserAvatar';
 import { useTheme } from '../theme/ThemeContext';
@@ -175,7 +174,7 @@ function ListItem({
         >
           {/* Six-dot drag-handle glyph: the conventional "grab to drag" affordance
               (drag vertically to reorder, horizontally to indent/outdent). */}
-          <MaterialIcons name="drag-indicator" size={22} color={effectiveIcon} />
+          <GripVertical size={22} color={effectiveIcon} />
         </TouchableOpacity>
       )}
       <TouchableOpacity
@@ -187,11 +186,11 @@ function ListItem({
         accessibilityLabel={t('note.itemCheckbox', { item: text || t('note.listItemLabel') })}
       >
         <Animated.View style={{ transform: [{ scale: checkScale }] }}>
-          <Ionicons
-            name={completed ? 'checkbox' : 'square-outline'}
-            size={22}
-            color={completed ? colors.primary : effectiveIconMuted}
-          />
+          {completed ? (
+            <SquareCheck size={22} color={colors.primary} />
+          ) : (
+            <Square size={22} color={effectiveIconMuted} />
+          )}
         </Animated.View>
       </TouchableOpacity>
       <View style={styles.inputColumn}>
@@ -265,7 +264,7 @@ function ListItem({
               accessibilityLabel={t('note.assignItem')}
             >
               <View style={[styles.assignPlaceholder, { borderColor: effectiveBorder }]}>
-                <Ionicons name="person-add-outline" size={12} color={effectiveIconMuted} />
+                <UserPlus size={12} color={effectiveIconMuted} />
               </View>
             </TouchableOpacity>
           ) : null}
@@ -280,7 +279,7 @@ function ListItem({
               testID="list-item-delete"
               accessibilityLabel={t('note.removeItem')}
             >
-              <Ionicons name="close" size={22} color={effectiveIconMuted} />
+              <X size={22} color={effectiveIconMuted} />
             </TouchableOpacity>
           )}
         </View>

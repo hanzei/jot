@@ -8,7 +8,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { Check, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useAuth } from '../../store/AuthContext';
 import { useTheme } from '../../theme/ThemeContext';
@@ -153,12 +153,11 @@ export default function AppearanceSection() {
           accessibilityState={{ expanded: openDropdown === 'language' }}
         >
           <Text style={[styles.dropdownTriggerText, { color: colors.text }]}>{selectedLanguageLabel}</Text>
-          <Ionicons
-            name={openDropdown === 'language' ? 'chevron-up' : 'chevron-down'}
-            size={18}
-            color={colors.icon}
-            accessible={false}
-          />
+          {openDropdown === 'language' ? (
+            <ChevronUp size={18} color={colors.icon} accessible={false} />
+          ) : (
+            <ChevronDown size={18} color={colors.icon} accessible={false} />
+          )}
         </TouchableOpacity>
         {languageError !== '' && (
           <Text style={[styles.errorText, { color: colors.error }]}>{displayMessage(t, languageError)}</Text>
@@ -176,12 +175,11 @@ export default function AppearanceSection() {
           accessibilityState={{ expanded: openDropdown === 'theme' }}
         >
           <Text style={[styles.dropdownTriggerText, { color: colors.text }]}>{selectedThemeLabel}</Text>
-          <Ionicons
-            name={openDropdown === 'theme' ? 'chevron-up' : 'chevron-down'}
-            size={18}
-            color={colors.icon}
-            accessible={false}
-          />
+          {openDropdown === 'theme' ? (
+            <ChevronUp size={18} color={colors.icon} accessible={false} />
+          ) : (
+            <ChevronDown size={18} color={colors.icon} accessible={false} />
+          )}
         </TouchableOpacity>
         {themeError !== '' && (
           <Text style={[styles.errorText, { color: colors.error }]}>{displayMessage(t, themeError)}</Text>
@@ -243,7 +241,7 @@ export default function AppearanceSection() {
                     >
                       {option.label}
                     </Text>
-                    {isSelected && <Ionicons name="checkmark" size={16} color={colors.primary} />}
+                    {isSelected && <Check size={16} color={colors.primary} />}
                   </TouchableOpacity>
                 );
               })}

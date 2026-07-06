@@ -1,4 +1,5 @@
 import React from 'react';
+import { CloudOff } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import type { TopBannerProps } from '../hooks/useTopBanners';
@@ -18,7 +19,7 @@ export default function SSEReconnectBanner({ visible, applyTopInset }: TopBanner
     <Banner
       visible={visible}
       applyTopInset={applyTopInset}
-      icon="cloud-offline-outline"
+      icon={CloudOff}
       text={t('offline.serverConnecting')}
       backgroundColor={colors.warning}
       borderColor={colors.warningBorder}

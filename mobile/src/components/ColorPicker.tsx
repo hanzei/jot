@@ -9,7 +9,7 @@ import {
   Pressable,
 } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { Check } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import { NOTE_COLORS, LIGHT_NOTE_COLORS } from '@jot/shared';
@@ -72,8 +72,7 @@ export default function ColorPicker({ visible, currentColor, onSelect, onClose }
                   accessibilityLabel={t(COLOR_LABELS[color] ?? 'note.changeColor')}
                 >
                   {currentColor === color && (
-                    <Ionicons
-                      name="checkmark"
+                    <Check
                       size={18}
                       color={LIGHT_NOTE_COLORS.has(color) ? '#666' : '#333'}
                     />

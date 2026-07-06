@@ -12,7 +12,7 @@ import {
 import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-navigation/drawer';
 import { CommonActions } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { Archive, CircleCheck, ChevronRight, Clipboard, FileText, LogOut, Pencil, Settings, Trash2, type LucideIcon } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../store/AuthContext';
 import { useCreateLabel, useDeleteLabel, useLabelCounts, useLabels, useRenameLabel } from '../hooks/useLabels';
@@ -34,8 +34,7 @@ import type { MainDrawerParamList } from '../navigation/MainDrawer';
 interface NavItem {
   name: keyof MainDrawerParamList;
   label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  activeIcon: keyof typeof Ionicons.glyphMap;
+  icon: LucideIcon;
 }
 
 export default function DrawerContent(props: DrawerContentComponentProps) {
@@ -50,12 +49,12 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
   const { confirm } = useConfirm();
   const insets = useSafeAreaInsets();
   const topItems: NavItem[] = [
-    { name: 'Notes', label: t('dashboard.tabNotes'), icon: 'document-text-outline', activeIcon: 'document-text' },
-    ...(!isLocalMode ? [{ name: 'MyTasks' as const, label: t('dashboard.tabMyTasks'), icon: 'clipboard-outline' as const, activeIcon: 'clipboard' as const }] : []),
+    { name: 'Notes', label: t('dashboard.tabNotes'), icon: FileText },
+    ...(!isLocalMode ? [{ name: 'MyTasks' as const, label: t('dashboard.tabMyTasks'), icon: Clipboard }] : []),
   ];
   const bottomItems: NavItem[] = [
-    { name: 'Archived', label: t('dashboard.tabArchive'), icon: 'archive-outline', activeIcon: 'archive' },
-    { name: 'Trash', label: t('dashboard.tabBin'), icon: 'trash-outline', activeIcon: 'trash' },
+    { name: 'Archived', label: t('dashboard.tabArchive'), icon: Archive },
+    { name: 'Trash', label: t('dashboard.tabBin'), icon: Trash2 },
   ];
   const [renameLabelTarget, setRenameLabelTarget] = useState<Label | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -434,7 +433,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                 {t('serverPicker.open')}
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+            <ChevronRight size={18} color={colors.textSecondary} />
           </TouchableOpacity>
         )}
 
@@ -455,10 +454,10 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                 accessibilityRole="button"
                 accessibilityState={{ selected: isActive }}
               >
-                <Ionicons
-                  name={isActive ? item.activeIcon : item.icon}
+                <item.icon
                   size={22}
                   color={isActive ? colors.primary : colors.icon}
+                  fill={isActive ? colors.primary : 'none'}
                 />
                 <Text style={[styles.navItemText, { color: colors.icon }, isActive && { color: colors.primary, fontWeight: '600' }]}>
                   {item.label}
@@ -491,10 +490,10 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                 accessibilityRole="button"
                 accessibilityState={{ selected: isActive }}
               >
-                <Ionicons
-                  name={isActive ? item.activeIcon : item.icon}
+                <item.icon
                   size={22}
                   color={isActive ? colors.primary : colors.icon}
+                  fill={isActive ? colors.primary : 'none'}
                 />
                 <Text style={[styles.navItemText, { color: colors.icon }, isActive && { color: colors.primary, fontWeight: '600' }]}>
                   {item.label}
@@ -517,7 +516,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
           accessibilityLabel={t('nav.settings')}
           accessibilityRole="button"
         >
-          <Ionicons name="settings-outline" size={22} color={colors.icon} />
+          <Settings size={22} color={colors.icon} />
           <Text style={[styles.bottomNavText, { color: colors.icon }]}>{t('nav.settings')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -527,7 +526,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
           accessibilityLabel={t('nav.logout')}
           accessibilityRole="button"
         >
-          <Ionicons name="log-out-outline" size={22} color={colors.error} />
+          <LogOut size={22} color={colors.error} />
           <Text style={[styles.bottomNavText, { color: colors.error }]}>{t('nav.logout')}</Text>
         </TouchableOpacity>
       </View>
@@ -610,7 +609,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                             </Text>
                           ) : null}
                         </View>
-                        {isActive ? <Ionicons name="checkmark-circle" size={20} color={colors.primary} /> : null}
+                        {isActive ? <CircleCheck size={20} color={colors.primary} /> : null}
                       </TouchableOpacity>
                       <TouchableOpacity
                         onPress={() => handleOpenRenameServer(server)}
@@ -621,7 +620,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                         accessibilityLabel={t('serverPicker.renameButton')}
                         testID={`server-picker-rename-${server.serverId}`}
                       >
-                        <Ionicons name="pencil-outline" size={18} color={colors.icon} />
+                        <Pencil size={18} color={colors.icon} />
                       </TouchableOpacity>
                       <TouchableOpacity
                         onPress={() => handleDeleteServer(server)}
@@ -632,7 +631,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                         accessibilityLabel={t('serverPicker.deleteButton')}
                         testID={`server-picker-delete-${server.serverId}`}
                       >
-                        <Ionicons name="trash-outline" size={18} color={colors.error} />
+                        <Trash2 size={18} color={colors.error} />
                       </TouchableOpacity>
                     </View>
                   );

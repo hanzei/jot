@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, type TextInputProps, type TextInput as TextInputType } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { ChevronDown, ChevronRight } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import type { Collaborator } from '@jot/shared';
 import { useTheme } from '../../theme/ThemeContext';
@@ -136,11 +136,11 @@ export default function CheckedItemsSection({
         disabled={!editable}
         testID="toggle-checked-items"
       >
-        <Ionicons
-          name={collapsed ? 'chevron-forward' : 'chevron-down'}
-          size={18}
-          color={effectiveIcon}
-        />
+        {collapsed ? (
+          <ChevronRight size={18} color={effectiveIcon} />
+        ) : (
+          <ChevronDown size={18} color={effectiveIcon} />
+        )}
         <Text style={[styles.checkedHeaderText, { color: effectiveTextSecondary }]}>
           {t('note.completedItems', { count: checkedItems.length })}
         </Text>
