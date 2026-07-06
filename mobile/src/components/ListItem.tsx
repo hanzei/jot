@@ -59,11 +59,18 @@ interface ListItemProps {
 // Press-and-hold duration on the drag handle before a reorder drag begins.
 const DRAG_HANDLE_LONG_PRESS_MS = 180;
 
-// Horizontal footprint of the drag handle (icon 22 + padding 4×2 + marginRight
-// 4). Exported so rows that don't render a handle — e.g. the completed-items
-// section — can reserve the same width and keep their checkboxes aligned with
-// the active rows above.
-export const DRAG_HANDLE_WIDTH = 34;
+// Drag handle geometry. These feed both styles.dragHandle / the GripVertical
+// icon below and the exported DRAG_HANDLE_WIDTH, so the reserved width stays in
+// sync with the actual handle if any of them change.
+const DRAG_HANDLE_ICON_SIZE = 22;
+const DRAG_HANDLE_PADDING = 4;
+const DRAG_HANDLE_MARGIN_RIGHT = 4;
+
+// Horizontal footprint of the drag handle (icon + padding on both sides +
+// marginRight). Exported so rows that don't render a handle — e.g. the
+// completed-items section — can reserve the same width and keep their checkboxes
+// aligned with the active rows above.
+export const DRAG_HANDLE_WIDTH = DRAG_HANDLE_ICON_SIZE + DRAG_HANDLE_PADDING * 2 + DRAG_HANDLE_MARGIN_RIGHT;
 
 // Delay before hiding focus-gated controls (delete/assign) and suggestions on
 // blur, so a tap on those controls — which blurs the input first — still lands
@@ -187,7 +194,7 @@ function ListItem({
         >
           {/* Six-dot drag-handle glyph: the conventional "grab to drag" affordance
               (drag vertically to reorder, horizontally to indent/outdent). */}
-          <GripVertical size={22} color={effectiveIcon} />
+          <GripVertical size={DRAG_HANDLE_ICON_SIZE} color={effectiveIcon} />
         </TouchableOpacity>
       ) : reserveDragHandleSpace ? (
         <View style={styles.dragHandleSpacer} testID="list-item-drag-handle-spacer" />
@@ -339,8 +346,8 @@ const styles = StyleSheet.create({
     minHeight: 40,
   },
   dragHandle: {
-    padding: 4,
-    marginRight: 4,
+    padding: DRAG_HANDLE_PADDING,
+    marginRight: DRAG_HANDLE_MARGIN_RIGHT,
   },
   dragHandleSpacer: {
     width: DRAG_HANDLE_WIDTH,
