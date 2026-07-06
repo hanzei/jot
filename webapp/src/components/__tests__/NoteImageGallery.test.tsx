@@ -101,6 +101,21 @@ describe('NoteImageGallery', () => {
     expect(screen.queryByText('2 / 2')).not.toBeInTheDocument()
   })
 
+  it('gives the lightbox image a minimum display size so controls never overlap a tiny image', async () => {
+    // A note image can be much smaller than the lightbox chrome (e.g. a small
+    // icon or a low-res upload). Without a size floor the panel shrinks to the
+    // image's intrinsic size and the prev/next/close buttons end up drawn on
+    // top of it instead of around it.
+    const user = userEvent.setup()
+    render(<NoteImageGallery images={[makeImage({ width: 64, height: 64 })]} />)
+
+    await user.click(screen.getByRole('button', { name: 'View photo.png' }))
+
+    const lightboxImage = screen.getAllByAltText('photo.png')[1]
+    expect(lightboxImage.className).toMatch(/\bmin-w-64\b/)
+    expect(lightboxImage.className).toMatch(/\bmin-h-64\b/)
+  })
+
   describe('editable mode', () => {
     it('does not render a remove button when not editable', () => {
       render(<NoteImageGallery images={[makeImage()]} />)

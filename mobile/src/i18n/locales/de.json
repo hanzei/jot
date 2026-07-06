@@ -57,7 +57,9 @@
     "serverSetupConnectionInvalidServer": "Verbindung hergestellt, aber dies scheint kein kompatibler Jot-API-Endpunkt zu sein.",
     "localModeLink": "Ohne Server verwenden",
     "localModeHint": "Deine Notizen bleiben nur auf diesem Gerät.",
-    "localModeFailed": "Lokaler Modus konnte nicht gestartet werden. Bitte versuche es erneut."
+    "localModeFailed": "Lokaler Modus konnte nicht gestartet werden. Bitte versuche es erneut.",
+    "localModeConfirmTitle": "Ohne Server verwenden?",
+    "localModeConfirmMessage": "Du bist bei einem Server angemeldet. Wenn du fortfährst, wird ein separates Notizbuch auf diesem Gerät geöffnet – deine Server-Notizen bleiben auf dem Server und du kannst wieder darauf zugreifen, indem du dich erneut anmeldest."
   },
   "dashboard": {
     "newNote": "Neue Notiz",
@@ -222,6 +224,14 @@
     "restore": "Wiederherstellen",
     "duplicate": "Duplizieren",
     "duplicated": "Notiz dupliziert",
+    "convertToList": "In Liste umwandeln",
+    "convertToText": "In Text umwandeln",
+    "convertToTextConfirmMessage": "Beim Umwandeln in eine Textnotiz werden Kontrollkästchen zu einfachem Text — die Elementstruktur kann nicht automatisch wiederhergestellt werden.",
+    "convertToTextConfirmMessageWithAssignments_one": "Beim Umwandeln in eine Textnotiz werden Kontrollkästchen zu einfachem Text — die Elementstruktur kann nicht automatisch wiederhergestellt werden. Außerdem geht die Zuweisung von {{count}} Element verloren.",
+    "convertToTextConfirmMessageWithAssignments_other": "Beim Umwandeln in eine Textnotiz werden Kontrollkästchen zu einfachem Text — die Elementstruktur kann nicht automatisch wiederhergestellt werden. Außerdem gehen die Zuweisungen von {{count}} Elementen verloren.",
+    "converted": "Notiz konvertiert",
+    "convertToTextConfirmTitle": "In Text umwandeln?",
+    "failedConvert": "Notiz konnte nicht konvertiert werden. Bitte erneut versuchen.",
     "completedItems": "Erledigte Elemente ({{count}})",
     "completedItemGroup": "Gruppe: {{title}}",
     "moreCompletedItems": "+{{count}} erledigte Elemente",
@@ -229,7 +239,6 @@
     "typeList": "Liste",
     "titlePlaceholder": "Notiz-Titel...",
     "contentPlaceholder": "Eine Notiz aufschreiben...",
-    "itemPlaceholder": "Listenelement...",
     "addItem": "Element hinzufügen",
     "failedSaveChanges": "Änderungen konnten nicht gespeichert werden. Tippe zum Wiederholen.",
     "menuOptions": "Notizoptionen",
@@ -279,6 +288,7 @@
   "images": {
     "openLightbox": "{{filename}} anzeigen",
     "moreImages": "{{count}} weitere Bilder anzeigen",
+"moreImagesBadge": "{{count}} weitere Bilder",
     "lightboxPrevious": "Vorheriges Bild",
     "lightboxNext": "Nächstes Bild",
     "lightboxCounter": "{{current}} / {{total}}",
@@ -379,6 +389,10 @@
     "cancelSetupTitle": "Server nicht hinzufügen?",
     "cancelSetupMessage": "Der Server wird nicht hinzugefügt.",
     "cancelSetupConfirm": "Zurück"
+  },
+  "quickActions": {
+    "newNote": "Neue Notiz",
+    "newList": "Neue Liste"
   },
   "shareIntent": {
     "saveTargetLabel": "Speichern auf {{server}}",

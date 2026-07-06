@@ -114,3 +114,34 @@ export const darkColors: ThemeColors = {
 export function getColors(scheme: ColorSchemeName): ThemeColors {
   return scheme === 'dark' ? darkColors : lightColors;
 }
+
+export interface EffectiveNoteColors {
+  text: string;
+  textSecondary: string;
+  icon: string;
+  iconMuted: string;
+  border: string;
+}
+
+// Notes with a custom background color always render their light-mode text
+// styling on top of it (regardless of the active theme), since the note color
+// itself supplies the contrast. These are the fixed overrides shared by every
+// component that renders inside such a note (checklist rows, toolbars, etc.).
+export function getEffectiveColors(hasNoteColor: boolean, colors: ThemeColors): EffectiveNoteColors {
+  if (!hasNoteColor) {
+    return {
+      text: colors.text,
+      textSecondary: colors.textSecondary,
+      icon: colors.icon,
+      iconMuted: colors.iconMuted,
+      border: colors.border,
+    };
+  }
+  return {
+    text: '#1a1a1a',
+    textSecondary: '#666',
+    icon: '#444',
+    iconMuted: '#888',
+    border: '#bbb',
+  };
+}

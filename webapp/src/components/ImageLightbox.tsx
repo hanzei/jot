@@ -95,7 +95,11 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose }:
             <img
               src={imagesApi.url(image.id)}
               alt={image.filename}
-              className="max-w-[95vw] max-h-[95vh] object-contain"
+              // min-w/min-h keep the panel from shrinking to a tiny image's
+              // intrinsic size, which would otherwise crowd the prev/next/close
+              // controls (absolutely positioned relative to this panel) on top
+              // of the image itself.
+              className="max-w-[95vw] max-h-[95vh] min-w-64 min-h-64 object-contain"
             />
           )}
           {isOpen && hasMultiple && safeIndex !== null && (

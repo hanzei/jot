@@ -1,6 +1,7 @@
 import React from 'react';
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import type { NoteType } from '@jot/shared';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { SSEProvider } from '../store/SSEContext';
@@ -25,10 +26,20 @@ export interface LayoutRect {
 
 export type RootStackParamList = {
   MainDrawer: undefined;
-  // sharedText pre-fills a brand-new note (noteId null) when opened from an
-  // Android share intent. originRect is the tapped card's on-screen rect, used to
-  // zoom the editor open from (and closed back onto) that card.
-  NoteEditor: { noteId: string | null; sharedText?: string; originRect?: LayoutRect };
+  // sharedText pre-fills a brand-new note (noteId null) when opened from a
+  // share intent. initialNoteType opens a brand-new note as a text note or a
+  // checklist (used by the app-icon "New note" / "New list" quick actions);
+  // defaults to text. readOnly opens a trashed note in a view-only state (all
+  // editing disabled; overflow menu offers only Restore / Delete-forever).
+  // originRect is the tapped card's on-screen rect, used to zoom the editor
+  // open from (and closed back onto) that card.
+  NoteEditor: {
+    noteId: string | null;
+    sharedText?: string;
+    initialNoteType?: NoteType;
+    readOnly?: boolean;
+    originRect?: LayoutRect;
+  };
   Share: { noteId: string };
   Settings: undefined;
   SyncFailures: undefined;

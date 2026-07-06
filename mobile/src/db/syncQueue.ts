@@ -21,6 +21,7 @@ export type QueueOperation =
   | 'create'
   | 'duplicate'
   | 'update'
+  | 'convertNoteType'
   | 'delete'
   | 'restore'
   | 'permanentDelete'
@@ -77,6 +78,32 @@ export function isTransientHttpStatus(status: number | undefined): boolean {
   if (status === 401 || status === 408 || status === 429) return true;
   return status >= 500;
 }
+
+/**
+ * Operations for which a "target is gone" replay status (404/410) is an
+ * idempotent success rather than a failure to preserve. These are destructive /
+ * state-transition ops whose desired end-state (the note/item/share/label is
+ * gone, or the note is restored) is *already true* once the target no longer
+ * exists, and which carry no local content the "Keep my version" note-fork
+ * recovery (useSyncFailures) could meaningfully rescue — so dead-lettering them
+ * would only surface a spurious "couldn't be saved" banner (and, for a delete,
+ * offer to resurrect the note the user just deleted).
+ *
+ * This is the common flaky-connection case: an online write times out
+ * client-side (WRITE_REQUEST_TIMEOUT_MS, see api/client.ts) *after* the server
+ * committed it, falls back to the offline queue, and the replay then finds the
+ * note already trashed/restored/gone (server returns 404). Mirrors the
+ * long-standing `removeImage` handling below, generalized to its siblings.
+ */
+const GONE_IDEMPOTENT_OPERATIONS: ReadonlySet<QueueOperation> = new Set([
+  'delete',
+  'permanentDelete',
+  'restore',
+  'deleteItem',
+  'unshare',
+  'removeLabelFromNote',
+  'deleteLabel',
+]);
 
 /**
  * Returns true if the error is a transient HTTP failure that can be safely
@@ -240,6 +267,19 @@ function affectedNoteIds(endpoint: string, body: Record<string, unknown> | undef
   const ids = new Set<string>();
   collectNoteIds(endpoint, body ?? null, ids);
   return [...ids];
+}
+
+/**
+ * The note IDs a dead-lettered op touched, recovered from its stored (effective)
+ * endpoint/body. A multi-note op like `reorder` records its dead_letter row with
+ * `note_id = NULL` yet still flags every affected note `sync_state = 'failed'`,
+ * so the sync-failure resolution flow uses this to clear all of those per-note
+ * badges — not just the single linked note (#493).
+ */
+export function deadLetterAffectedNoteIds(
+  dl: Pick<DeadLetteredOperation, 'endpoint' | 'body'>,
+): string[] {
+  return affectedNoteIds(dl.endpoint, parseQueueBody(dl.body) ?? undefined);
 }
 
 /**
@@ -462,6 +502,16 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
       }
 
       if (entry.method === 'POST') {
+        if (entry.operation === 'convertNoteType' && body) {
+          // Resolve base_version from the note's current local version at replay
+          // time, matching `update` (#489): a chain of offline edits to one note
+          // (e.g. a scalar update followed by a convert) then replays each op
+          // against the version the previous one left behind instead of the
+          // stale value captured when this op was first queued.
+          const noteId = affectedNoteIds(endpoint, body)[0];
+          const version = noteId ? await getLocalNoteVersion(db, noteId) : null;
+          if (version !== null) body.base_version = version;
+        }
         const response = await api.post(endpoint, body);
 
         if (entry.operation === 'create' || entry.operation === 'duplicate') {
@@ -516,6 +566,12 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           // synthetic `optimistic_<userId>` share row; re-fetch the canonical note
           // so shared_with reflects the server-assigned share ids.
           await reconcileNoteFromServer(db, affectedNoteIds(endpoint, body)[0]);
+        } else if (entry.operation === 'convertNoteType') {
+          // The server returns the full converted note (authoritative version,
+          // updated_at, and item ids); persist it rather than trusting the local
+          // optimistic apply to still be in sync after other edits may have
+          // queued in between.
+          await saveNoteFromResponse(db, response?.data);
         }
       } else if (entry.method === 'PATCH') {
         const updateNoteID =
@@ -579,13 +635,13 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
 
         // A 409 from a create/duplicate replay is an idempotent already-applied
         // conflict (the original request already committed): the local state is
-        // correct, so resolve it silently. A 409 from an `update` is an
-        // optimistic-concurrency conflict — the note changed on another device
-        // since the edit's base_version (#489) — so it is real potential data
-        // loss and must be dead-lettered like any other permanent failure, so the
-        // edit is preserved and surfaced ("changed on another device") via the
-        // failed-changes banner instead of being silently dropped. Every other
-        // permanent status also dead-letters (#492).
+        // correct, so resolve it silently. A 409 from an `update` or
+        // `convertNoteType` is an optimistic-concurrency conflict — the note
+        // changed on another device since the edit's base_version (#489) — so it
+        // is real potential data loss and must be dead-lettered like any other
+        // permanent failure, so the edit is preserved and surfaced ("changed on
+        // another device") via the failed-changes banner instead of being
+        // silently dropped. Every other permanent status also dead-letters (#492).
         //
         // createLabel 409s require special handling: the conflict response body
         // doesn't include the canonical label ID, so we resolve it via GET /labels.
@@ -607,9 +663,17 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         // event reconciles the note's images either way, so there is nothing to
         // preserve here that a full note-fork would help with (issue #618's
         // "reconcile queued removals … gracefully").
+        // A "gone" replay (404/410) of a destructive/restore op is an idempotent
+        // success — the desired end-state already holds — so resolve it silently
+        // rather than dead-lettering (see GONE_IDEMPOTENT_OPERATIONS).
+        const targetGone = status === 404 || status === 410;
         let idempotentConflict =
-          (status === 409 && entry.operation !== 'update' && entry.operation !== 'createLabel') ||
-          entry.operation === 'removeImage';
+          (status === 409
+            && entry.operation !== 'update'
+            && entry.operation !== 'convertNoteType'
+            && entry.operation !== 'createLabel') ||
+          entry.operation === 'removeImage' ||
+          (targetGone && GONE_IDEMPOTENT_OPERATIONS.has(entry.operation));
         if (status === 409 && entry.operation === 'createLabel') {
           const clientLabelId = body?.id as string | undefined;
           const labelName = body?.name as string | undefined;

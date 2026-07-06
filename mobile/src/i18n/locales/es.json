@@ -86,7 +86,9 @@
     "serverSetupConnectionInvalidServer": "Se pudo conectar, pero no parece un endpoint API de Jot compatible.",
     "localModeLink": "Usar sin servidor",
     "localModeHint": "Tus notas permanecen solo en este dispositivo.",
-    "localModeFailed": "No se pudo iniciar el modo local. Inténtalo de nuevo."
+    "localModeFailed": "No se pudo iniciar el modo local. Inténtalo de nuevo.",
+    "localModeConfirmTitle": "¿Usar sin servidor?",
+    "localModeConfirmMessage": "Has iniciado sesión en un servidor. Si continúas, se abrirá un cuaderno independiente en este dispositivo: tus notas del servidor permanecerán en el servidor y podrás volver a ellas iniciando sesión de nuevo."
   },
   "dashboard": {
     "newNote": "Nueva nota",
@@ -251,6 +253,14 @@
     "restore": "Restaurar",
     "duplicate": "Duplicar",
     "duplicated": "Nota duplicada",
+    "convertToList": "Convertir en lista",
+    "convertToText": "Convertir en texto",
+    "convertToTextConfirmMessage": "Convertir a una nota de texto transforma las casillas en texto sin formato: la estructura de elementos no se puede restaurar automáticamente.",
+    "convertToTextConfirmMessageWithAssignments_one": "Convertir a una nota de texto transforma las casillas en texto sin formato: la estructura de elementos no se puede restaurar automáticamente. También perderás la asignación de {{count}} elemento.",
+    "convertToTextConfirmMessageWithAssignments_other": "Convertir a una nota de texto transforma las casillas en texto sin formato: la estructura de elementos no se puede restaurar automáticamente. También perderás las asignaciones de {{count}} elementos.",
+    "converted": "Nota convertida",
+    "convertToTextConfirmTitle": "¿Convertir en texto?",
+    "failedConvert": "Error al convertir la nota. Inténtalo de nuevo.",
     "completedItems": "Elementos completados ({{count}})",
     "completedItemGroup": "Grupo: {{title}}",
     "moreCompletedItems": "+{{count}} elementos completados",
@@ -258,7 +268,6 @@
     "typeList": "Lista",
     "titlePlaceholder": "Título de la nota...",
     "contentPlaceholder": "Tomar una nota...",
-    "itemPlaceholder": "Elemento de lista...",
     "addItem": "Añadir elemento",
     "failedSaveChanges": "Error al guardar los cambios. Toca para reintentar.",
     "menuOptions": "Opciones de nota",
@@ -308,6 +317,7 @@
   "images": {
     "openLightbox": "Ver {{filename}}",
     "moreImages": "Ver {{count}} imágenes más",
+"moreImagesBadge": "{{count}} imágenes más",
     "lightboxPrevious": "Imagen anterior",
     "lightboxNext": "Imagen siguiente",
     "lightboxCounter": "{{current}} / {{total}}",
@@ -379,6 +389,10 @@
     "addAndSwitchAction": "Agregar y cambiar",
     "wrongServerTitle": "Servidor incorrecto",
     "wrongServerMessage": "Este enlace apunta a {{targetServer}}, pero estás conectado a {{currentServer}}."
+  },
+  "quickActions": {
+    "newNote": "Nueva nota",
+    "newList": "Nueva lista"
   },
   "shareIntent": {
     "saveTargetLabel": "Guardando en {{server}}",

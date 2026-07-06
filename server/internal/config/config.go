@@ -22,10 +22,17 @@ type Config struct {
 	CookieSecure        bool
 	RegistrationEnabled bool
 	PasswordMinLength   int
-	OTelEnabled         bool
 	OTelEndpoint        string
 	OTelServiceName     string
 	OTelInsecure        bool
+	OTelTracesEnabled   bool
+	OTelMetricsEnabled  bool
+	OTelLogsEnabled     bool
+
+	RateLimitEnabled            bool
+	RateLimitPerMinute          int
+	RateLimitAuthPerMinute      int
+	RateLimitExpensivePerMinute int
 }
 
 // parseBoolEnv reads an environment variable that must be "true", "false", or
@@ -62,6 +69,10 @@ func parseIntRangeEnv(name string, defaultVal, min, max int) (int, error) {
 
 // Load reads configuration from environment variables, applying defaults
 // for any values not set.
+//
+//nolint:gocognit,gocyclo // A flat sequence of independent "parse env var,
+// assign field, bail on error" steps; splitting it up would trade this
+// straight-line readability for indirection without reducing actual complexity.
 func Load() (*Config, error) {
 	cfg := &Config{
 		MetricsHost:         "127.0.0.1",
@@ -71,6 +82,7 @@ func Load() (*Config, error) {
 		CookieSecure:        true,
 		RegistrationEnabled: true,
 		OTelServiceName:     "jot",
+		RateLimitEnabled:    true,
 	}
 
 	port, err := parseIntRangeEnv("PORT", 8080, 1, 65535)
@@ -143,12 +155,6 @@ func Load() (*Config, error) {
 	}
 	cfg.PasswordMinLength = passwordMinLength
 
-	otelEnabled, err := parseBoolEnv("OTEL_ENABLED", false)
-	if err != nil {
-		return nil, err
-	}
-	cfg.OTelEnabled = otelEnabled
-
 	cfg.OTelEndpoint = os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 
 	if v := os.Getenv("OTEL_SERVICE_NAME"); v != "" {
@@ -160,6 +166,51 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	cfg.OTelInsecure = otelInsecure
+
+	otelTracesEnabled, err := parseBoolEnv("OTEL_TRACES_ENABLED", false)
+	if err != nil {
+		return nil, err
+	}
+	cfg.OTelTracesEnabled = otelTracesEnabled
+
+	// There is no single OTEL_ENABLED switch: OTel setup runs whenever at
+	// least one of traces/metrics/logs is enabled, so each signal is opt-in
+	// independently and all three default to false.
+	otelMetricsEnabled, err := parseBoolEnv("OTEL_METRICS_ENABLED", false)
+	if err != nil {
+		return nil, err
+	}
+	cfg.OTelMetricsEnabled = otelMetricsEnabled
+
+	otelLogsEnabled, err := parseBoolEnv("OTEL_LOGS_ENABLED", false)
+	if err != nil {
+		return nil, err
+	}
+	cfg.OTelLogsEnabled = otelLogsEnabled
+
+	rateLimitEnabled, err := parseBoolEnv("RATE_LIMIT_ENABLED", true)
+	if err != nil {
+		return nil, err
+	}
+	cfg.RateLimitEnabled = rateLimitEnabled
+
+	rateLimitPerMinute, err := parseIntRangeEnv("RATE_LIMIT_PER_MINUTE", 300, 1, 1_000_000)
+	if err != nil {
+		return nil, err
+	}
+	cfg.RateLimitPerMinute = rateLimitPerMinute
+
+	rateLimitAuthPerMinute, err := parseIntRangeEnv("RATE_LIMIT_AUTH_PER_MINUTE", 20, 1, 1_000_000)
+	if err != nil {
+		return nil, err
+	}
+	cfg.RateLimitAuthPerMinute = rateLimitAuthPerMinute
+
+	rateLimitExpensivePerMinute, err := parseIntRangeEnv("RATE_LIMIT_EXPENSIVE_PER_MINUTE", 20, 1, 1_000_000)
+	if err != nil {
+		return nil, err
+	}
+	cfg.RateLimitExpensivePerMinute = rateLimitExpensivePerMinute
 
 	return cfg, nil
 }

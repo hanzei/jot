@@ -206,6 +206,20 @@ export class DashboardPage {
     await activeDialog.getByRole('button', { name: 'Duplicate' }).click();
   }
 
+  /** Converts the open text note to a list. Text -> list has no confirmation dialog. */
+  async convertCurrentNoteToList() {
+    const activeDialog = this.page.getByRole('dialog').last();
+    await activeDialog.getByRole('button', { name: 'Convert to list' }).click();
+  }
+
+  /** Converts the open list note to text, confirming the lossy-conversion dialog. */
+  async convertCurrentNoteToText() {
+    const activeDialog = this.page.getByRole('dialog').last();
+    await activeDialog.getByRole('button', { name: 'Convert to text' }).click();
+    const confirmDialog = this.page.getByRole('dialog').last();
+    await confirmDialog.getByRole('button', { name: 'Convert to text' }).click();
+  }
+
   async archiveCurrentNoteFromModal() {
     const activeDialog = this.page.getByRole('dialog').last();
     await activeDialog.getByRole('button', { name: 'Archive note' }).click();
@@ -354,6 +368,15 @@ export class DashboardPage {
     return this.page.locator('[data-testid="note-card"]').filter({ hasText: title });
   }
 
+  /**
+   * The "Pinned" section heading. Since the per-card pin badge was removed, this
+   * heading is the UI contract for "a note is pinned" on the dashboard: it is
+   * visible when at least one note is pinned and absent otherwise.
+   */
+  pinnedSectionHeading(): Locator {
+    return this.page.locator('h2:has-text("Pinned")');
+  }
+
   /** Returns the nth note card (0-based) visible on the page. */
   nthNoteCard(index: number): Locator {
     return this.page.locator('[data-testid="note-card"]').nth(index);
@@ -400,7 +423,16 @@ export class DashboardPage {
         await existing.first().click();
       }
     } else {
-      await this.page.getByRole('option', { name: `Create "${labelName}"`, exact: true }).click();
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await this.page.getByRole('option', { name: `Create "${labelName}"`, exact: true }).click();
+          break;
+        } catch (error) {
+          if (attempt === 2) throw error;
+          await search.fill('');
+          await search.fill(labelName);
+        }
+      }
     }
     await expect(
       this.page.getByRole('option', { name: labelName, exact: true, selected: true }),

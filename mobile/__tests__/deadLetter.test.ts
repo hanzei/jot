@@ -176,6 +176,78 @@ describe('drainQueue dead-letter persistence', () => {
     expect(discardedOperations).toEqual([{ operation: 'createItem', endpoint: '/notes/n1/items', status: 409 }]);
   });
 
+  it.each([
+    ['delete', '/notes/n1', 'DELETE'],
+    ['permanentDelete', '/notes/n1?permanent=true', 'DELETE'],
+    ['deleteItem', '/notes/n1/items/i1', 'DELETE'],
+    ['restore', '/notes/n1/restore', 'POST'],
+    ['unshare', '/notes/n1/shares/u2', 'DELETE'],
+    ['removeLabelFromNote', '/notes/n1/labels/l1', 'DELETE'],
+    ['deleteLabel', '/labels/l1', 'DELETE'],
+  ])('treats a 404 replay of %s as an idempotent success (no dead-letter, no failed flag)', async (operation, endpoint, method) => {
+    // The common flaky-connection case: the original online write timed out
+    // client-side after the server committed it, fell back to the queue, and the
+    // replay now finds the target already gone/restored → 404. The desired
+    // end-state already holds, so it must not dead-letter or flag the note as
+    // failed (which would surface a spurious banner and, for a delete, offer to
+    // resurrect the just-deleted note).
+    const db = makeDrainDb([{ id: 1, operation, endpoint, method, body: null, created_at: 't0' }]);
+    if (method === 'DELETE') mockApi.delete.mockRejectedValueOnce(makeAxiosError(404));
+    else mockApi.post.mockRejectedValueOnce(makeAxiosError(404));
+
+    const { discardedOperations } = await drainQueue(db as never);
+
+    expect(callsStartingWith(db, 'INSERT INTO dead_letter')).toHaveLength(0);
+    expect(callsStartingWith(db, `UPDATE notes SET sync_state = 'failed'`)).toHaveLength(0);
+    // Still removed from the queue (and reported as discarded for logging).
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [1]);
+    expect(discardedOperations).toEqual([{ operation, endpoint, status: 404 }]);
+  });
+
+  it('treats a 410 (gone) replay of a destructive op as idempotent too', async () => {
+    // targetGone covers 410 alongside 404, so a resource reported permanently
+    // gone resolves the same way as a 404.
+    const db = makeDrainDb([
+      { id: 22, operation: 'delete', endpoint: '/notes/n1', method: 'DELETE', body: null, created_at: 't0' },
+    ]);
+    mockApi.delete.mockRejectedValueOnce(makeAxiosError(410));
+
+    const { discardedOperations } = await drainQueue(db as never);
+
+    expect(callsStartingWith(db, 'INSERT INTO dead_letter')).toHaveLength(0);
+    expect(callsStartingWith(db, `UPDATE notes SET sync_state = 'failed'`)).toHaveLength(0);
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [22]);
+    expect(discardedOperations).toEqual([{ operation: 'delete', endpoint: '/notes/n1', status: 410 }]);
+  });
+
+  it('still dead-letters a non-gone permanent failure (400) for a delete op', async () => {
+    // Only 404/410 ("target is gone") is idempotent for a delete; a genuine
+    // validation-class rejection is still preserved + flagged.
+    const db = makeDrainDb([
+      { id: 20, operation: 'delete', endpoint: '/notes/n1', method: 'DELETE', body: null, created_at: 't0' },
+    ]);
+    mockApi.delete.mockRejectedValueOnce(makeAxiosError(400));
+
+    await drainQueue(db as never);
+
+    expect(callsStartingWith(db, 'INSERT INTO dead_letter')).toHaveLength(1);
+    expect(callsStartingWith(db, `UPDATE notes SET sync_state = 'failed'`)).toEqual([['n1']]);
+  });
+
+  it('does not treat a 404 as idempotent for a non-destructive op (addLabelToNote)', async () => {
+    // A 404 on adding a label is a real failure (note gone) worth preserving; the
+    // gone-idempotent shortcut is scoped to destructive/restore ops only.
+    const db = makeDrainDb([
+      { id: 21, operation: 'addLabelToNote', endpoint: '/notes/n1/labels', method: 'POST', body: '{"label_id":"l1"}', created_at: 't0' },
+    ]);
+    mockApi.post.mockRejectedValueOnce(makeAxiosError(404));
+
+    await drainQueue(db as never);
+
+    expect(callsStartingWith(db, 'INSERT INTO dead_letter')).toHaveLength(1);
+    expect(callsStartingWith(db, `UPDATE notes SET sync_state = 'failed'`)).toEqual([['n1']]);
+  });
+
   it('resolves a permanently-rejected removeImage silently regardless of status (issue #618)', async () => {
     // Unlike every other operation, a queued image delete never dead-letters:
     // the note-content "Keep my version" fork is a meaningless response to a
@@ -242,6 +314,40 @@ describe('drainQueue dead-letter persistence', () => {
     // Both drained cleanly — nothing dead-lettered or flagged failed.
     expect(callsStartingWith(db, 'INSERT INTO dead_letter')).toHaveLength(0);
     expect(callsStartingWith(db, `UPDATE notes SET sync_state = 'failed'`)).toHaveLength(0);
+  });
+
+  it('dead-letters a convertNoteType 409 (version conflict) instead of dropping it silently', async () => {
+    // Mirrors the `update` 409 case above: a 409 on a convert means the note
+    // changed on another device since base_version, so it must be preserved and
+    // surfaced rather than treated as an idempotent already-applied conflict.
+    const db = makeDrainDb(
+      [{ id: 12, operation: 'convertNoteType', endpoint: '/notes/n1/convert', method: 'POST', body: '{"note_type":"list","items":[]}', created_at: 't0' }],
+      { versions: { n1: 3 } },
+    );
+    mockApi.post.mockRejectedValueOnce(makeAxiosError(409));
+
+    const { discardedOperations } = await drainQueue(db as never);
+
+    const inserts = callsStartingWith(db, 'INSERT INTO dead_letter');
+    expect(inserts).toHaveLength(1);
+    expect(inserts[0][0]).toBe('convertNoteType'); // operation column
+    expect(inserts[0][4]).toBe(409); // status column
+    expect(inserts[0][5]).toBe('n1'); // note_id column
+    expect(callsStartingWith(db, `UPDATE notes SET sync_state = 'failed'`)).toEqual([['n1']]);
+    expect(discardedOperations).toEqual([{ operation: 'convertNoteType', endpoint: '/notes/n1/convert', status: 409 }]);
+  });
+
+  it('resolves a queued convertNoteType base_version from the local version at replay time', async () => {
+    const db = makeDrainDb(
+      [{ id: 13, operation: 'convertNoteType', endpoint: '/notes/n1/convert', method: 'POST', body: '{"note_type":"text","content":"hi"}', created_at: 't0' }],
+      { versions: { n1: 5 } },
+    );
+    mockApi.post.mockResolvedValueOnce({ data: { ...makeTextNote('n1'), version: 6 } } as never);
+
+    await drainQueue(db as never);
+
+    expect(mockApi.post).toHaveBeenCalledWith('/notes/n1/convert', { note_type: 'text', content: 'hi', base_version: 5 });
+    expect(callsStartingWith(db, 'INSERT INTO dead_letter')).toHaveLength(0);
   });
 
   it('clears a prior failed flag when a later op for the note drains successfully', async () => {

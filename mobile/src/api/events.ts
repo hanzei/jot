@@ -1,5 +1,5 @@
 import EventSource from 'react-native-sse';
-import { getBaseUrl, getStoredSession } from './client';
+import { getBaseUrl, getStoredSession, handleUnauthorizedSession } from './client';
 import type { SSEEvent } from '@jot/shared';
 import { getCurrentSwitchGenerationId, isSseQuiesced } from '../store/serverSwitchLifecycle';
 
@@ -111,8 +111,13 @@ export class SSEConnectionManager {
         this._isConnected = false;
         const status = (event as { status?: number })?.status;
         if (status === 401) {
-          // Session expired — do not reconnect
+          // Session expired server-side. Tear down (no reconnect) and propagate
+          // the logout through the same centralized path the axios interceptor
+          // uses, so the app doesn't sit in a silently signed-in state until the
+          // next API call happens to 401. Clearing auth flips isAuthenticated,
+          // which unmounts this connection via useSSE's effect.
           this.disconnect();
+          void handleUnauthorizedSession();
           return;
         }
         // Tear down the errored EventSource before scheduling our retry. This

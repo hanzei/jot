@@ -57,7 +57,9 @@
     "serverSetupConnectionInvalidServer": "Connexion établie, mais ce point de terminaison ne semble pas être une API Jot compatible.",
     "localModeLink": "Utiliser sans serveur",
     "localModeHint": "Vos notes restent uniquement sur cet appareil.",
-    "localModeFailed": "Impossible de démarrer le mode local. Veuillez réessayer."
+    "localModeFailed": "Impossible de démarrer le mode local. Veuillez réessayer.",
+    "localModeConfirmTitle": "Utiliser sans serveur ?",
+    "localModeConfirmMessage": "Vous êtes connecté à un serveur. Si vous continuez, un carnet distinct s’ouvrira sur cet appareil : vos notes du serveur y restent, et vous pourrez les retrouver en vous reconnectant."
   },
   "dashboard": {
     "newNote": "Nouvelle note",
@@ -222,6 +224,14 @@
     "restore": "Restaurer",
     "duplicate": "Dupliquer",
     "duplicated": "Note dupliquée",
+    "convertToList": "Convertir en liste",
+    "convertToText": "Convertir en texte",
+    "convertToTextConfirmMessage": "Convertir en note de texte transforme les cases à cocher en texte brut — la structure des éléments ne peut pas être restaurée automatiquement.",
+    "convertToTextConfirmMessageWithAssignments_one": "Convertir en note de texte transforme les cases à cocher en texte brut — la structure des éléments ne peut pas être restaurée automatiquement. Vous perdrez également l'attribution de {{count}} élément.",
+    "convertToTextConfirmMessageWithAssignments_other": "Convertir en note de texte transforme les cases à cocher en texte brut — la structure des éléments ne peut pas être restaurée automatiquement. Vous perdrez également les attributions de {{count}} éléments.",
+    "converted": "Note convertie",
+    "convertToTextConfirmTitle": "Convertir en texte ?",
+    "failedConvert": "Impossible de convertir la note. Veuillez réessayer.",
     "completedItems": "Éléments terminés ({{count}})",
     "completedItemGroup": "Groupe : {{title}}",
     "moreCompletedItems": "+{{count}} éléments terminés",
@@ -229,7 +239,6 @@
     "typeList": "Liste",
     "titlePlaceholder": "Titre de la note...",
     "contentPlaceholder": "Prendre une note...",
-    "itemPlaceholder": "Élément de liste...",
     "addItem": "Ajouter un élément",
     "failedSaveChanges": "Impossible d'enregistrer les modifications. Appuyez pour réessayer.",
     "menuOptions": "Options de la note",
@@ -279,6 +288,7 @@
   "images": {
     "openLightbox": "Voir {{filename}}",
     "moreImages": "Voir {{count}} images supplémentaires",
+"moreImagesBadge": "{{count}} images supplémentaires",
     "lightboxPrevious": "Image précédente",
     "lightboxNext": "Image suivante",
     "lightboxCounter": "{{current}} / {{total}}",
@@ -379,6 +389,10 @@
     "cancelSetupTitle": "Annuler l'ajout du serveur ?",
     "cancelSetupMessage": "Le serveur ne sera pas ajouté.",
     "cancelSetupConfirm": "Retour"
+  },
+  "quickActions": {
+    "newNote": "Nouvelle note",
+    "newList": "Nouvelle liste"
   },
   "shareIntent": {
     "saveTargetLabel": "Enregistrement sur {{server}}",

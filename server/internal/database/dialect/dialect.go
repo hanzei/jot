@@ -72,6 +72,56 @@ func (d *Dialect) LimitAll() string {
 	return "-1"
 }
 
+// FullTextMatchExpr builds the backend-specific match expression bound into the
+// full-text search query, from tokens already normalized by the caller (lower
+// cased, split into literal alphanumeric words). Terms are ANDed and the final
+// term is a prefix match, so search-as-you-type finds notes before the last
+// word is fully typed. Because tokens contain no query operators, the result
+// can never inject FTS/tsquery syntax. tokens must be non-empty.
+func (d *Dialect) FullTextMatchExpr(tokens []string) string {
+	switch d.Driver {
+	case DriverPostgres:
+		// tsquery: "foo & bar & baz:*" — ':*' prefix-matches the last lexeme.
+		expr := strings.Join(tokens, " & ")
+		return expr + ":*"
+	default: // sqlite
+		// FTS5: `"foo" "bar" "baz"*` — space is implicit AND; each term is
+		// double-quoted (a string literal, so FTS5 keywords like AND/OR/NEAR are
+		// never interpreted), and a trailing '*' on the last term is a prefix.
+		quoted := make([]string, len(tokens))
+		for i, tok := range tokens {
+			quoted[i] = `"` + tok + `"`
+		}
+		return strings.Join(quoted, " ") + "*"
+	}
+}
+
+// FullTextSearchJoin returns an INNER JOIN clause (aliased "sr") that selects
+// the note IDs matching the full-text query along with a per-note relevance
+// score, plus the ORDER BY fragment that sorts by that score (best first). The
+// clause contains a single ? placeholder to bind the FullTextMatchExpr value.
+// It is joined against the main query's note alias "n" on sr.note_id = n.id.
+func (d *Dialect) FullTextSearchJoin() (join string, rankOrder string) {
+	switch d.Driver {
+	case DriverPostgres:
+		// ts_rank: higher is more relevant, so order DESC.
+		join = ` INNER JOIN (
+			SELECT ns.note_id AS note_id, ts_rank(ns.search_tsv, q) AS rank
+			FROM note_search ns, to_tsquery('simple', ?) q
+			WHERE ns.search_tsv @@ q
+		) sr ON sr.note_id = n.id`
+		return join, "sr.rank DESC"
+	default: // sqlite
+		// bm25: lower (more negative) is more relevant, so order ASC.
+		join = ` INNER JOIN (
+			SELECT note_id, bm25(note_search) AS rank
+			FROM note_search
+			WHERE note_search MATCH ?
+		) sr ON sr.note_id = n.id`
+		return join, "sr.rank ASC"
+	}
+}
+
 // IsUniqueConstraintError reports whether err is a unique-constraint violation
 // from the configured driver.
 func (d *Dialect) IsUniqueConstraintError(err error) bool {

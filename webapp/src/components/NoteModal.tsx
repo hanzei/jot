@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo, useRef, useCallback, type ReactElement } from 'react';
-import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, UserPlusIcon, CheckIcon, TagIcon, DocumentDuplicateIcon, DevicePhoneMobileIcon, PaintBrushIcon, PhotoIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, UserPlusIcon, CheckIcon, TagIcon, DocumentDuplicateIcon, DevicePhoneMobileIcon, PaintBrushIcon, PhotoIcon, ArrowsRightLeftIcon } from '@heroicons/react/24/outline';
 import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, IMAGE_MAX_PER_NOTE, UPLOAD_MAX_BYTES, buildCollaborators, generateId, type Note, type NoteType, type NoteImage, type CreateNoteRequest, type UpdateNoteRequest, type PatchNoteItemRequest, type Label, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, IMAGE_MAX_PER_NOTE, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListItems, listToText, type Note, type NoteType, type NoteImage, type CreateNoteRequest, type UpdateNoteRequest, type ConvertNoteTypeRequest, type PatchNoteItemRequest, type Label, type User, type Collaborator } from '@jot/shared';
 import { notes, images as imagesApi } from '@/utils/api';
 import { renderMarkdown } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
@@ -91,6 +91,7 @@ interface NoteModalProps {
   onShare?: (note: Note) => void;
   onDelete?: (noteId: string) => void;
   onDuplicate?: (noteId: string) => Promise<void> | void;
+  onConvert?: (noteId: string, data: ConvertNoteTypeRequest) => Promise<void> | void;
   isOwner?: boolean;
   usersById?: Map<string, User>;
   currentUserId?: string;
@@ -98,6 +99,10 @@ interface NoteModalProps {
   // to the shared default so this component still works if a caller (e.g. a
   // test) doesn't pass it.
   uploadMaxBytes?: number;
+  // Prefill for a brand-new note (note === null), e.g. from the /new deep
+  // link (PWA shortcut or share target). Ignored once a note is being edited.
+  initialType?: NoteType;
+  initialContent?: string;
 }
 
 interface ListItem {
@@ -474,15 +479,15 @@ function SortableItem({ id, index, item, onUpdateListItem, onRemoveListItem, isC
         aria-label={t('note.removeItem')}
         title={t('note.removeItem')}
         data-testid="list-item-delete"
-        className={`ml-auto p-1.5 text-gray-400 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-100 transition-opacity ${ROW_REVEAL_CLASSES}`}
+        className={`ml-auto w-5 h-5 flex-shrink-0 flex items-center justify-center rounded text-gray-400 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-100 transition-opacity ${ROW_REVEAL_CLASSES}`}
       >
-        <XMarkIcon className="h-6 w-6" />
+        <XMarkIcon className="h-4 w-4" />
       </button>
     </div>
   );
 }
 
-export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, onDelete, onDuplicate, isOwner = true, usersById, currentUserId, uploadMaxBytes = UPLOAD_MAX_BYTES }: NoteModalProps) {
+export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, onDelete, onDuplicate, onConvert, isOwner = true, usersById, currentUserId, uploadMaxBytes = UPLOAD_MAX_BYTES, initialType, initialContent }: NoteModalProps) {
   const { t, i18n } = useTranslation();
   const { showToast } = useToast();
   const [title, setTitle] = useState('');
@@ -500,6 +505,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const [showLabelPicker, setShowLabelPicker] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showConvertConfirm, setShowConvertConfirm] = useState(false);
   // New notes start in edit mode; existing notes start in preview mode.
   const [isEditingContent, setIsEditingContent] = useState(!note);
   const pendingSelectionRef = useRef<{ start: number; end: number } | null>(null);
@@ -872,8 +878,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       setSavedBaseline(draft, listItems);
     } else {
       setTitle('');
-      setContent('');
-      setNoteType('text');
+      setContent(initialContent ?? '');
+      setNoteType(initialType ?? 'text');
       setColor('#ffffff');
       setPinned(false);
       setArchived(false);
@@ -881,7 +887,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       setNoteLabels([]);
       setSavedBaseline({ title: '', content: '', pinned: false, archived: false, color: '#ffffff', checked_items_collapsed: false }, []);
     }
-  }, [commitItems, note, isDirty, setSavedBaseline]);
+  }, [commitItems, note, isDirty, setSavedBaseline, initialType, initialContent]);
 
   useEffect(() => {
     noteIdRef.current = note?.id ?? null;
@@ -1358,7 +1364,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     const newItem: ListItem = {
       id: generateItemId(),
       text: overrides.text ?? '',
-      completed: false,
+      completed: afterItem ? afterItem.completed : false,
       position: 0,
       parentId: overrides.parentId !== undefined ? overrides.parentId : (afterItem ? afterItem.parentId : null),
       assignedTo: overrides.assignedTo ?? '',
@@ -1388,7 +1394,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     const newItem: ListItem = {
       id: generateItemId(),
       text: '',
-      completed: false,
+      completed: beforeItem ? beforeItem.completed : false,
       position: 0,
       parentId: overrides.parentId !== undefined ? overrides.parentId : (beforeItem ? beforeItem.parentId : null),
       assignedTo: overrides.assignedTo ?? '',
@@ -1418,7 +1424,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     const newItem: ListItem = {
       id: generateItemId(),
       text: after,
-      completed: false,
+      completed: currentItem.completed,
       position: 0,
       parentId: currentItem.parentId,
       assignedTo: currentItem.assignedTo,
@@ -1940,6 +1946,78 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
   };
 
+  // List -> text is lossy (assignments, real checkbox/nesting structure), so
+  // it's confirmed first; text -> list just reflows lines and runs directly.
+  const handleConvertClick = () => {
+    if (!note || !onConvert || loading || savingRef.current) return;
+    if (noteType === 'list') {
+      setShowConvertConfirm(true);
+    } else {
+      void performConvert();
+    }
+  };
+
+  const performConvert = async () => {
+    if (!note || !onConvert) return;
+    const targetType: NoteType = noteType === 'list' ? 'text' : 'list';
+
+    savingRef.current = true;
+    setLoading(true);
+    try {
+      await persistExistingNote();
+    } catch (error) {
+      console.error('Failed to save note before conversion:', error);
+      showError(t('note.failedSaveChanges'));
+      savingRef.current = false;
+      setLoading(false);
+      setShowConvertConfirm(false);
+      return;
+    }
+
+    // Refetch the version rather than trusting the `note` prop: persistExistingNote()
+    // may have just flushed a scalar edit that bumped it server-side, and a stale
+    // value here would make the conversion spuriously conflict with its own flush.
+    let baseVersion = note.version;
+    try {
+      baseVersion = (await notes.getById(note.id)).version;
+    } catch (error) {
+      console.error('Failed to refetch note version before conversion:', error);
+    }
+
+    try {
+      const data: ConvertNoteTypeRequest = targetType === 'list'
+        ? {
+            note_type: 'list',
+            base_version: baseVersion,
+            items: textToListItems(content).map((item, idx) => ({
+              text: item.text,
+              position: idx,
+              completed: item.completed,
+            })),
+          }
+        : {
+            note_type: 'text',
+            base_version: baseVersion,
+            content: listToText(title, items.map(item => ({
+              id: item.id,
+              text: item.text,
+              completed: item.completed,
+              position: item.position,
+              parent_id: item.parentId,
+            }))),
+          };
+      await onConvert(note.id, data);
+      onClose();
+    } catch (error) {
+      console.error('Failed to convert note:', error);
+      showError(t('note.failedConvert'));
+    } finally {
+      savingRef.current = false;
+      setLoading(false);
+      setShowConvertConfirm(false);
+    }
+  };
+
   const handleDuplicate = async () => {
     if (!note || !onDuplicate || loading || savingRef.current) return;
 
@@ -2168,6 +2246,10 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
+  const assignedItemCount = items.filter(item => item.assignedTo).length;
+  const convertToTextConfirmMessage = assignedItemCount > 0
+    ? `${t('note.convertToTextConfirmMessage')} ${t('note.convertLoseAssignments', { count: assignedItemCount })}`
+    : t('note.convertToTextConfirmMessage');
 
   return (
     <>
@@ -2778,6 +2860,16 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                         <DocumentDuplicateIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                       </button>
                     )}
+                    {onConvert && (
+                      <button
+                        onClick={handleConvertClick}
+                        className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                        title={noteType === 'list' ? t('note.convertToText') : t('note.convertToList')}
+                        aria-label={noteType === 'list' ? t('note.convertToText') : t('note.convertToList')}
+                      >
+                        <ArrowsRightLeftIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                      </button>
+                    )}
                     {isOwner && onDelete && (
                       <button
                         onClick={handleDelete}
@@ -2823,6 +2915,16 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         confirmLabel={t('note.delete')}
         onConfirm={confirmDelete}
         onCancel={() => setShowDeleteConfirm(false)}
+      />
+
+      <ConfirmDialog
+        open={showConvertConfirm}
+        title={t('note.convertToTextConfirmTitle')}
+        message={convertToTextConfirmMessage}
+        confirmLabel={t('note.convertToText')}
+        variant="default"
+        onConfirm={performConvert}
+        onCancel={() => setShowConvertConfirm(false)}
       />
     </>
   );

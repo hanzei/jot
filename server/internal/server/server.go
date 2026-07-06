@@ -74,6 +74,7 @@ type Server struct {
 	patsHandler     *handlers.PATsHandler
 	noteStore       *models.NoteStore
 	labelStore      *models.LabelStore
+	rateLimiter     *rateLimiter
 }
 
 func New(cfg *config.Config) (*Server, error) {
@@ -133,6 +134,14 @@ func New(cfg *config.Config) (*Server, error) {
 	sessionsHandler := handlers.NewSessionsHandler(sessionStore)
 	patsHandler := handlers.NewPATsHandler(patStore)
 
+	rl, err := newRateLimiter(cfg)
+	if err != nil {
+		cancel()
+		_ = imageStore.Close()
+		_ = db.Close()
+		return nil, fmt.Errorf("initialize rate limiter: %w", err)
+	}
+
 	s := &Server{
 		cfg:             cfg,
 		router:          chi.NewRouter(),
@@ -152,6 +161,7 @@ func New(cfg *config.Config) (*Server, error) {
 		noteStore:       noteStore,
 		labelStore:      labelStore,
 		imageStore:      imageStore,
+		rateLimiter:     rl,
 	}
 
 	startPeriodicTask(&s.bgWg, ctx, time.Hour, false, func() error {
@@ -194,7 +204,7 @@ func (s *Server) setupRoutes() error {
 	corsOpts := cors.Options{
 		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
 		AllowedHeaders:   []string{"Accept", "Content-Type", "Authorization", "X-Client-Id"},
-		ExposedHeaders:   []string{"Link"},
+		ExposedHeaders:   []string{"Link", "Retry-After"},
 		AllowCredentials: true,
 		MaxAge:           300,
 	}
@@ -217,12 +227,34 @@ func (s *Server) setupRoutes() error {
 	s.router.Route("/api/v1", func(r chi.Router) {
 		r.Use(cop.Handler)
 		r.Get("/config", s.wrapHandler(s.handleConfig))
-		r.Post("/register", s.wrapHandler(s.authHandler.Register))
-		r.Post("/login", s.wrapHandler(s.authHandler.Login))
-		r.Post("/logout", s.wrapHandler(s.authHandler.Logout))
+
+		r.Group(func(r chi.Router) {
+			// Unauthenticated auth endpoints have no user to key on, so they are
+			// rate-limited per client IP (a stricter bucket than the per-user
+			// baseline below) to add brute-force friction on login and cap
+			// runaway registration/login/logout retries. Logout also has no user
+			// in context (it reads the session cookie directly, without
+			// AuthMiddleware), so it belongs in this group rather than the
+			// per-user one below.
+			r.Use(middleware.ClientIPFromRemoteAddr)
+			r.Use(s.rateLimiter.limit(bucketAuth, s.cfg.RateLimitAuthPerMinute, keyByClientIP))
+			r.Post("/register", s.wrapHandler(s.authHandler.Register))
+			r.Post("/login", s.wrapHandler(s.authHandler.Login))
+			r.Post("/logout", s.wrapHandler(s.authHandler.Logout))
+		})
+
+		// Baseline per-user rate limit, keyed on the authenticated user so it
+		// applies uniformly across every authenticated route group below (and so
+		// two users can't starve each other). Guards against runaway client sync
+		// loops / SSE reconnect storms without penalizing normal use (CLAUDE.md
+		// threat model: unintentional internal overload). limit() memoizes by
+		// bucket name, so both groups below share the same underlying limiter.
+		baselineLimit := s.rateLimiter.limit(bucketBaseline, s.cfg.RateLimitPerMinute, keyByUserID)
 
 		r.Group(func(r chi.Router) {
 			r.Use(s.sessionService.AuthMiddleware)
+			// Must run after AuthMiddleware has populated the request context.
+			r.Use(baselineLimit)
 			r.Use(handlers.ClientIDMiddleware)
 
 			r.Get("/events", s.eventsHandler.ServeSSE)
@@ -235,18 +267,27 @@ func (s *Server) setupRoutes() error {
 			r.Delete("/users/me/profile-icon", s.wrapHandler(s.authHandler.DeleteProfileIcon))
 			r.Get("/users/{id}/profile-icon", s.wrapHandler(s.authHandler.GetUserProfileIcon))
 
-			r.Get("/notes", s.wrapHandler(s.notesHandler.GetNotes))
+			// Expensive-operation bucket: search does a LIKE scan across notes +
+			// items, import parses/persists a whole file, and image upload
+			// decodes/resizes/thumbnails. All three draw from one shared,
+			// stricter per-user limit rather than three separate ones
+			// (onlyWhenQueryParamSet gates GET /notes so plain listing is
+			// unaffected — it still counts against the baseline limit above).
+			expensiveLimit := s.rateLimiter.limit(bucketExpensive, s.cfg.RateLimitExpensivePerMinute, keyByUserID)
+
+			r.With(onlyWhenQueryParamSet(handlers.SearchQueryParam, expensiveLimit)).Get("/notes", s.wrapHandler(s.notesHandler.GetNotes))
 			r.Post("/notes", s.wrapHandler(s.notesHandler.CreateNote))
 			r.Delete("/notes/trash", s.wrapHandler(s.notesHandler.EmptyTrash))
 			r.Post("/notes/reorder", s.wrapHandler(s.notesHandler.ReorderNotes))
-			r.Post("/notes/import", s.wrapHandler(s.notesHandler.ImportNotes))
+			r.With(expensiveLimit).Post("/notes/import", s.wrapHandler(s.notesHandler.ImportNotes))
 			r.Get("/notes/export", s.wrapHandler(s.notesHandler.ExportNotes))
 			r.Get("/notes/{id}", s.wrapHandler(s.notesHandler.GetNote))
 			r.Patch("/notes/{id}", s.wrapHandler(s.notesHandler.UpdateNote))
 			r.Delete("/notes/{id}", s.wrapHandler(s.notesHandler.DeleteNote))
 			r.Post("/notes/{id}/duplicate", s.wrapHandler(s.notesHandler.DuplicateNote))
+			r.Post("/notes/{id}/convert", s.wrapHandler(s.notesHandler.ConvertNoteType))
 
-			r.Post("/notes/{id}/images", s.wrapHandler(s.notesHandler.UploadNoteImage))
+			r.With(expensiveLimit).Post("/notes/{id}/images", s.wrapHandler(s.notesHandler.UploadNoteImage))
 			r.Get("/images/{id}", s.wrapHandler(s.notesHandler.GetNoteImage))
 			r.Get("/images/{id}/thumbnail", s.wrapHandler(s.notesHandler.GetNoteImageThumbnail))
 			r.Delete("/images/{id}", s.wrapHandler(s.notesHandler.DeleteNoteImage))
@@ -286,6 +327,7 @@ func (s *Server) setupRoutes() error {
 
 		r.Group(func(r chi.Router) {
 			r.Use(s.sessionService.AuthMiddleware)
+			r.Use(baselineLimit)
 			r.Use(auth.AdminRequired)
 
 			r.Get("/admin/stats", s.wrapHandler(s.adminHandler.GetStats))

@@ -89,6 +89,7 @@ function App() {
             <Route element={<Dashboard uploadMaxBytes={uploadMaxBytes} />}>
               <Route index element={null} />
               <Route path="notes/:noteId" element={null} />
+              <Route path="new" element={null} />
             </Route>
             <Route
               path="/admin"

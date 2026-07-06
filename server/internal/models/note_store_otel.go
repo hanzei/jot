@@ -73,6 +73,14 @@ func (s *NoteStore) Update(ctx context.Context, id string, userID string, title,
 	return s.inner.Update(ctx, id, userID, title, content, color, pinned, archived, checkedItemsCollapsed, baseVersion)
 }
 
+func (s *NoteStore) ConvertType(ctx context.Context, id, userID string, targetType NoteType, content string, targetItems []NewNoteItem, baseVersion *int) (_ *Note, err error) {
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.ConvertType", &err,
+		attribute.String("note.id", id),
+	)
+	defer end()
+	return s.inner.ConvertType(ctx, id, userID, targetType, content, targetItems, baseVersion)
+}
+
 func (s *NoteStore) Delete(ctx context.Context, id string, userID string) (_ []string, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.Delete", &err,
 		attribute.String("note.id", id),

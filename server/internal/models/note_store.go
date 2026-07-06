@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/hanzei/jot/server/internal/database/dialect"
 	"github.com/sirupsen/logrus"
@@ -418,46 +419,95 @@ func duplicateLabelsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, note
 	return nil
 }
 
-func buildGetByUserIDQuery(userID string, archived bool, trashed bool, search string, labelID string, myTasks bool) (string, []any) {
-	const selectCols = `SELECT DISTINCT n.id, n.user_id, n.title, n.content, n.note_type, n.version,
+// buildSearchTokens normalizes a raw search string into lowercase, literal word
+// tokens for full-text matching. It splits on any rune that is not a letter or
+// digit, so query operators and punctuation (%, _, ", *, -, :, &, …) act only
+// as separators and can never be interpreted as FTS/tsquery syntax — the reason
+// such inputs can't error the request. Diacritics are preserved (café ≠ cafe)
+// so tokens line up with the unicode61/simple tokenizers the two backends use.
+// Returns an empty slice when the input has no alphanumeric characters.
+func buildSearchTokens(search string) []string {
+	tokens := strings.FieldsFunc(search, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
+	for i, tok := range tokens {
+		tokens[i] = strings.ToLower(tok)
+	}
+	return tokens
+}
+
+func buildGetByUserIDQuery(d *dialect.Dialect, userID string, archived bool, trashed bool, search string, labelID string, myTasks bool) (string, []any) {
+	// No DISTINCT: every join below is one-to-one with a note (the per-user
+	// state join, the full-text search join, and — for My Tasks — an IN
+	// subquery rather than a row-multiplying note_items join), so each note
+	// yields exactly one row. This also lets ORDER BY reference the search
+	// rank, which Postgres forbids under SELECT DISTINCT.
+	const selectCols = `SELECT n.id, n.user_id, n.title, n.content, n.note_type, n.version,
 				  nus.color, nus.pinned, nus.archived, nus.position, nus.unpinned_position, nus.checked_items_collapsed,
 				  n.deleted_at, n.created_at, n.updated_at`
 
-	var query string
-	var args []any
-	if trashed {
-		query = selectCols + `
+	var b strings.Builder
+	b.WriteString(selectCols)
+	args := make([]any, 0, 6)
+
+	// FROM + per-user state join.
+	switch {
+	case trashed:
+		b.WriteString(`
 				  FROM notes n
-				  INNER JOIN note_user_state nus ON n.id = nus.note_id AND nus.user_id = ?
-				  LEFT JOIN note_items ni ON n.id = ni.note_id
-				  WHERE n.user_id = ? AND n.deleted_at IS NOT NULL`
-		args = []any{userID, userID}
-	} else if myTasks {
-		query = selectCols + `
+				  INNER JOIN note_user_state nus ON n.id = nus.note_id AND nus.user_id = ?`)
+		args = append(args, userID)
+	default: // active notes (both the default grid and the My Tasks filter)
+		b.WriteString(`
 				  FROM active_notes n
-				  INNER JOIN note_user_state nus ON n.id = nus.note_id AND nus.user_id = ?
-				  INNER JOIN note_items ni ON n.id = ni.note_id
-				  WHERE ni.assigned_to = ?`
-		args = []any{userID, userID}
-	} else {
-		query = selectCols + `
-				  FROM active_notes n
-				  INNER JOIN note_user_state nus ON n.id = nus.note_id AND nus.user_id = ?
-				  LEFT JOIN note_items ni ON n.id = ni.note_id
-				  WHERE nus.archived = ?`
-		args = []any{userID, archived}
+				  INNER JOIN note_user_state nus ON n.id = nus.note_id AND nus.user_id = ?`)
+		args = append(args, userID)
 	}
-	if search != "" {
-		query += ` AND (n.title LIKE ? OR n.content LIKE ? OR ni.text LIKE ?)`
-		searchTerm := "%" + search + "%"
-		args = append(args, searchTerm, searchTerm, searchTerm)
+
+	// Full-text search: join candidate note IDs (with relevance rank) from the
+	// note_search index. A query of only punctuation tokenizes to nothing;
+	// treat that as matching nothing rather than erroring or matching all.
+	tokens := buildSearchTokens(search)
+	matchedNothing := search != "" && len(tokens) == 0
+	rankOrder := ""
+	if search != "" && len(tokens) > 0 {
+		join, order := d.FullTextSearchJoin()
+		b.WriteString(join)
+		args = append(args, d.FullTextMatchExpr(tokens))
+		rankOrder = order
 	}
+
+	switch {
+	case trashed:
+		b.WriteString(` WHERE n.user_id = ? AND n.deleted_at IS NOT NULL`)
+		args = append(args, userID)
+	case myTasks:
+		b.WriteString(` WHERE n.id IN (SELECT note_id FROM note_items WHERE assigned_to = ?)`)
+		args = append(args, userID)
+	default:
+		b.WriteString(` WHERE nus.archived = ?`)
+		args = append(args, archived)
+	}
+
+	if matchedNothing {
+		b.WriteString(` AND 1 = 0`)
+	}
+
 	if labelID != "" {
-		query += ` AND n.id IN (SELECT note_id FROM note_labels WHERE label_id = ? AND user_id = ?)`
+		b.WriteString(` AND n.id IN (SELECT note_id FROM note_labels WHERE label_id = ? AND user_id = ?)`)
 		args = append(args, labelID, userID)
 	}
-	query += ` ORDER BY nus.pinned DESC, nus.position ASC`
-	return query, args
+
+	// Search results order by relevance within the pinned/unpinned split; the
+	// plain grid keeps its manual position order. nus.position is a stable
+	// tiebreak for equally-ranked notes.
+	if rankOrder != "" {
+		b.WriteString(` ORDER BY nus.pinned DESC, ` + rankOrder + `, nus.position ASC`)
+	} else {
+		b.WriteString(` ORDER BY nus.pinned DESC, nus.position ASC`)
+	}
+
+	return b.String(), args
 }
 
 func scanNote(rows *sql.Rows) (Note, error) {
@@ -471,7 +521,7 @@ func scanNote(rows *sql.Rows) (Note, error) {
 }
 
 func (s *noteStore) GetByUserID(ctx context.Context, userID string, archived bool, trashed bool, search string, labelID string, myTasks bool) ([]*Note, error) {
-	query, args := buildGetByUserIDQuery(userID, archived, trashed, search, labelID, myTasks)
+	query, args := buildGetByUserIDQuery(s.d, userID, archived, trashed, search, labelID, myTasks)
 
 	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), args...)
 	if err != nil {
@@ -787,6 +837,165 @@ func (s *noteStore) updateNoteContentTx(ctx context.Context, tx *sql.Tx, id, tit
 		return ErrNoteVersionConflict
 	}
 	return nil
+}
+
+// ConvertType changes a note's type in place, replacing its content
+// representation (text content <-> title+items) while preserving its ID,
+// labels, shares, and per-user state (pin/archive/color/position). The
+// caller (handler) supplies the precomputed content/items — this method only
+// validates access and persists them atomically. targetItems is inserted
+// only when targetType is NoteTypeList; any existing items are deleted
+// regardless of direction (a text note has none, so the delete is a no-op in
+// that direction).
+func (s *noteStore) ConvertType(ctx context.Context, id, userID string, targetType NoteType, content string, targetItems []NewNoteItem, baseVersion *int) (*Note, error) {
+	hasAccess, err := s.HasAccess(ctx, id, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check access: %w", err)
+	}
+	if !hasAccess {
+		return nil, ErrNoteNoAccess
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	alreadyApplied, err := s.convertNoteRowTx(ctx, tx, id, targetType, content, targetItems, baseVersion)
+	if err != nil {
+		return nil, err
+	}
+
+	if !alreadyApplied {
+		if _, err = tx.ExecContext(ctx, s.d.RewritePlaceholders(`DELETE FROM note_items WHERE note_id = ?`), id); err != nil {
+			return nil, fmt.Errorf("delete note items for conversion: %w", err)
+		}
+		if targetType == NoteTypeList {
+			for _, item := range targetItems {
+				if err = insertNewNoteItemTx(ctx, tx, s.d, id, item); err != nil {
+					return nil, fmt.Errorf("insert converted item: %w", err)
+				}
+			}
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit note conversion: %w", err)
+	}
+
+	converted, err := s.GetByID(ctx, id, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load converted note: %w", err)
+	}
+	return converted, nil
+}
+
+// convertNoteRowTx updates the notes row's title/content/note_type/version for
+// a type conversion inside tx. alreadyApplied is true when a concurrent write
+// already committed this exact conversion (detected via the idempotent-replay
+// check below); the caller should then skip re-touching note_items and just
+// commit, since the winning write already did that atomically.
+func (s *noteStore) convertNoteRowTx(ctx context.Context, tx *sql.Tx, id string, targetType NoteType, content string, targetItems []NewNoteItem, baseVersion *int) (alreadyApplied bool, err error) {
+	// deleted_at IS NULL guards against a concurrent trash landing between the
+	// HasAccess check in ConvertType and this UPDATE.
+	query := `UPDATE notes SET title = '', content = ?, note_type = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL`
+	args := []any{content, targetType, id}
+	if baseVersion != nil {
+		query += ` AND version = ?`
+		args = append(args, *baseVersion)
+	}
+	result, err := tx.ExecContext(ctx, s.d.RewritePlaceholders(query), args...)
+	if err != nil {
+		return false, fmt.Errorf("failed to update note for conversion: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("failed to get rows affected: %w", err)
+	}
+	if rows > 0 {
+		return false, nil
+	}
+	if baseVersion == nil {
+		return false, ErrNoteNotFound
+	}
+
+	// Zero rows means the version guard did not match. Re-read to check whether a
+	// concurrent write already applied this *exact* conversion (matching type
+	// and content/items, not just type — a differently-timed concurrent
+	// conversion could otherwise be mistaken for this caller's own result); if
+	// so, treat it as a no-op success rather than a conflict (mirrors
+	// updateNoteContentTx's idempotent-replay handling).
+	matches, err := s.conversionAlreadyAppliedTx(ctx, tx, id, targetType, content, targetItems)
+	if err != nil {
+		return false, err
+	}
+	if !matches {
+		return false, ErrNoteVersionConflict
+	}
+	return true, nil
+}
+
+// conversionAlreadyAppliedTx reports whether the note currently stored at id
+// already matches the exact conversion result described by targetType/content
+// (for a text target) or targetItems (for a list target).
+func (s *noteStore) conversionAlreadyAppliedTx(ctx context.Context, tx *sql.Tx, id string, targetType NoteType, content string, targetItems []NewNoteItem) (bool, error) {
+	var currentType NoteType
+	var currentContent string
+	err := tx.QueryRowContext(ctx,
+		s.d.RewritePlaceholders(`SELECT note_type, content FROM notes WHERE id = ? AND deleted_at IS NULL`),
+		id,
+	).Scan(&currentType, &currentContent)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, ErrNoteNotFound
+		}
+		return false, fmt.Errorf("get current note: %w", err)
+	}
+	if currentType != targetType {
+		return false, nil
+	}
+	if targetType == NoteTypeText {
+		return currentContent == content, nil
+	}
+
+	rows, err := tx.QueryContext(ctx,
+		s.d.RewritePlaceholders(`SELECT text, completed FROM note_items WHERE note_id = ? ORDER BY position`),
+		id,
+	)
+	if err != nil {
+		return false, fmt.Errorf("get current note items: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var currentItems []NewNoteItem
+	for rows.Next() {
+		var item NewNoteItem
+		if err := rows.Scan(&item.Text, &item.Completed); err != nil {
+			return false, fmt.Errorf("scan current note item: %w", err)
+		}
+		currentItems = append(currentItems, item)
+	}
+	if err := rows.Err(); err != nil {
+		return false, fmt.Errorf("iterate current note items: %w", err)
+	}
+
+	if len(currentItems) != len(targetItems) {
+		return false, nil
+	}
+	// currentItems came back ORDER BY position; targetItems is whatever order
+	// the caller built it in, so sort a copy the same way before the
+	// index-wise comparison below — otherwise out-of-position-order input
+	// falsely reports a mismatch (or, worse, a spurious match).
+	sortedTargetItems := make([]NewNoteItem, len(targetItems))
+	copy(sortedTargetItems, targetItems)
+	slices.SortStableFunc(sortedTargetItems, func(a, b NewNoteItem) int { return a.Position - b.Position })
+	for i, item := range sortedTargetItems {
+		if currentItems[i].Text != item.Text || currentItems[i].Completed != item.Completed {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 // handlePinStatusChangeTx updates note positions when a note is pinned or unpinned within a transaction.

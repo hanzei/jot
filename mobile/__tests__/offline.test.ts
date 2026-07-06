@@ -2,7 +2,7 @@
  * Tests for offline support: local note queries, sync queue, and ID utilities.
  */
 
-import { generateLocalId, generateClientNoteId, isLocalId, isUnsyncedNoteId, removeLocalNotesNotIn, getLocalLabels, getLocalLabelCounts, saveNote, addLabelToLocalNote, removeLabelFromLocalNote, getLocalNotes } from '../src/db/noteQueries';
+import { generateClientNoteId, isUnsyncedNoteId, removeLocalNotesNotIn, getLocalLabels, getLocalLabelCounts, saveNote, addLabelToLocalNote, removeLabelFromLocalNote, getLocalNotes } from '../src/db/noteQueries';
 import { drainQueue, isTransientHttpStatus } from '../src/db/syncQueue';
 import api from '../src/api/client';
 
@@ -31,41 +31,12 @@ jest.mock('../src/db/noteQueries', () => ({
 const mockApi = api as jest.Mocked<typeof api>;
 const mockSaveNote = saveNote as jest.MockedFunction<typeof saveNote>;
 
-// ── generateLocalId / isLocalId ────────────────────────────────────────────
-
-describe('generateLocalId', () => {
-  it('generates a string starting with "local_"', () => {
-    const id = generateLocalId();
-    expect(id).toMatch(/^local_/);
-  });
-
-  it('matches the expected format local_<base36timestamp>_<16hexchars>', () => {
-    const id = generateLocalId();
-    expect(id).toMatch(/^local_[0-9a-z]+_[0-9a-f]{16}$/);
-  });
-
-  it('generates unique IDs on successive calls', () => {
-    const ids = Array.from({ length: 20 }, () => generateLocalId());
-    const unique = new Set(ids);
-    expect(unique.size).toBe(20);
-  });
-});
-
-describe('isLocalId', () => {
-  it('returns true for local_ prefixed IDs', () => {
-    expect(isLocalId('local_abc123_xyz')).toBe(true);
-  });
-
-  it('returns false for server-style IDs', () => {
-    expect(isLocalId('AbCdEfGhIjKlMnOpQrStUv')).toBe(false);
-  });
-});
+// ── generateClientNoteId / isUnsyncedNoteId ────────────────────────────────
 
 describe('generateClientNoteId', () => {
-  it('produces a 22-char server-valid id (no local_ prefix)', () => {
+  it('produces a 22-char server-valid id', () => {
     const id = generateClientNoteId();
     expect(id).toMatch(/^[0-9a-zA-Z]{22}$/);
-    expect(isLocalId(id)).toBe(false);
   });
 
   it('generates unique ids', () => {
@@ -75,10 +46,6 @@ describe('generateClientNoteId', () => {
 });
 
 describe('isUnsyncedNoteId', () => {
-  it('is true for a local_ duplicate id', () => {
-    expect(isUnsyncedNoteId('local_abc_1', new Set())).toBe(true);
-  });
-
   it('is true for a server-valid id still pending its offline create', () => {
     expect(isUnsyncedNoteId('AbCdEfGhIjKlMnOpQrStUv', new Set(['AbCdEfGhIjKlMnOpQrStUv']))).toBe(true);
   });
@@ -549,6 +516,32 @@ describe('drainQueue', () => {
     expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [40]);
   });
 
+  it('persists the note returned by a convertNoteType replay', async () => {
+    const serverNote = {
+      id: 'n1', note_type: 'list', title: '', version: 4,
+      color: '#ffffff', pinned: false, archived: false, position: 0,
+      checked_items_collapsed: false, is_shared: false, deleted_at: null,
+      user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
+      items: [{ id: 'i1', note_id: 'n1', text: 'Buy milk', completed: false, position: 0, parent_id: null, assigned_to: '', created_at: '', updated_at: '' }],
+    };
+    const db = makeMockDb([
+      {
+        id: 41,
+        operation: 'convertNoteType',
+        endpoint: '/notes/n1/convert',
+        method: 'POST',
+        body: JSON.stringify({ note_type: 'list', items: [{ id: 'i1', text: 'Buy milk', position: 0, completed: false }] }),
+        created_at: '',
+      },
+    ]);
+    mockApi.post.mockResolvedValueOnce({ data: serverNote } as never);
+
+    await drainQueue(db as never);
+
+    expect(mockSaveNote).toHaveBeenCalledWith(db, serverNote);
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [41]);
+  });
+
   it('reconciles all authoritative fields (not just completed) from a toggleItemCompleted replay', async () => {
     // The server returns the note's full, authoritative item list on this
     // endpoint. If the local DB only patched `completed`, a stale local
@@ -839,7 +832,7 @@ describe('removeLocalNotesNotIn', () => {
 
     expect(db.getAllAsync).toHaveBeenCalledWith(
       expect.stringContaining(
-        "SELECT id, labels_json FROM notes WHERE id NOT LIKE 'local_%' AND archived = 0 AND deleted_at IS NULL",
+        'SELECT id, labels_json FROM notes WHERE 1=1 AND archived = 0 AND deleted_at IS NULL',
       ),
       [],
     );

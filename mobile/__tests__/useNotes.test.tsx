@@ -1,7 +1,7 @@
 import React from 'react';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useCreateNote, useUpdateNote, useDeleteNote, useDuplicateNote, useCreateNoteItem, useToggleNoteItemCompleted, useShareNote, useUnshareNote } from '../src/hooks/useNotes';
+import { useCreateNote, useUpdateNote, useDeleteNote, useDuplicateNote, useConvertNoteType, useCreateNoteItem, useToggleNoteItemCompleted, useShareNote, useUnshareNote } from '../src/hooks/useNotes';
 import { noteLocalQueryKey, notesLocalQueryKey, notesLocalQueryScopeKey } from '../src/hooks/queryKeys';
 import * as notesApi from '../src/api/notes';
 import * as usersApi from '../src/api/users';
@@ -34,7 +34,6 @@ jest.mock('../src/db/noteQueries', () => ({
   generateClientNoteId: jest.fn(() => 'ClientNoteId000000000A'),
   markNotePendingCreate: jest.fn().mockResolvedValue(undefined),
   isNotePendingCreate: jest.fn().mockResolvedValue(false),
-  isLocalId: jest.fn((id: string) => id.startsWith('local_')),
   createLocalItem: jest.fn().mockResolvedValue(undefined),
   patchLocalItem: jest.fn().mockResolvedValue(undefined),
   deleteLocalItem: jest.fn().mockResolvedValue(undefined),
@@ -998,6 +997,191 @@ describe('useNotes hooks', () => {
 
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
       expect(mockNoteQueries.getLocalNote).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('useConvertNoteType (online)', () => {
+    const sourceTextNote = {
+      id: '123', content: 'Buy milk\nBuy eggs', note_type: 'text',
+      version: 3, color: '#ffffff', pinned: false, archived: false, position: 0,
+      is_shared: false, deleted_at: null,
+      user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
+    };
+
+    it('converts a text note to a list via the API (precomputed items) and caches it locally', async () => {
+      const converted = {
+        id: '123', note_type: 'list', title: '', version: 4,
+        color: '#ffffff', pinned: false, archived: false, position: 0,
+        checked_items_collapsed: false, is_shared: false, deleted_at: null,
+        user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
+        items: [
+          { id: 'i1', note_id: '123', text: 'Buy milk', completed: false, position: 0, parent_id: null, assigned_to: '', created_at: '', updated_at: '' },
+          { id: 'i2', note_id: '123', text: 'Buy eggs', completed: false, position: 1, parent_id: null, assigned_to: '', created_at: '', updated_at: '' },
+        ],
+      };
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce(sourceTextNote as never);
+      mockNotesApi.convertNoteType.mockResolvedValueOnce(converted as never);
+
+      const { result } = renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
+
+      const returned = await result.current.mutateAsync('123');
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(returned).toEqual(converted);
+      expect(mockNotesApi.convertNoteType).toHaveBeenCalledWith('123', {
+        note_type: 'list',
+        base_version: 3,
+        items: [
+          expect.objectContaining({ text: 'Buy milk', position: 0, completed: false }),
+          expect.objectContaining({ text: 'Buy eggs', position: 1, completed: false }),
+        ],
+      });
+      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), converted);
+    });
+
+    it('converts a list note to text via the API (precomputed content)', async () => {
+      const sourceListNote = {
+        id: '456', title: 'My List', content: '', note_type: 'list',
+        version: 2, color: '#ffffff', pinned: false, archived: false, position: 0,
+        checked_items_collapsed: false, is_shared: false, deleted_at: null,
+        user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
+        items: [
+          { id: 'i1', note_id: '456', text: 'Item A', completed: false, position: 0, parent_id: null, assigned_to: '', created_at: '', updated_at: '' },
+        ],
+      };
+      const converted = {
+        id: '456', content: '# My List\n\n- [ ] Item A', note_type: 'text',
+        version: 3, color: '#ffffff', pinned: false, archived: false, position: 0,
+        is_shared: false, deleted_at: null,
+        user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
+      };
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce(sourceListNote as never);
+      mockNotesApi.convertNoteType.mockResolvedValueOnce(converted as never);
+
+      const { result } = renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync('456');
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(mockNotesApi.convertNoteType).toHaveBeenCalledWith('456', {
+        note_type: 'text',
+        base_version: 2,
+        content: '# My List\n\n- [ ] Item A',
+      });
+    });
+
+    it('throws when the note is missing from the local cache', async () => {
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce(null);
+
+      const { result } = renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync('missing').catch(() => {});
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+      expect((result.current.error as Error).message).toMatch(/not found/i);
+      expect(mockNotesApi.convertNoteType).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('useConvertNoteType (offline)', () => {
+    const sourceTextNote = {
+      id: '123', content: 'Buy milk', note_type: 'text',
+      version: 3, color: '#ffffff', pinned: false, archived: false, position: 0,
+      is_shared: false, deleted_at: null,
+      user_id: 'u1', created_at: 'old', updated_at: 'old', labels: [], shared_with: [],
+    };
+
+    it('applies the text->list transform locally and enqueues the convert op without a base_version', async () => {
+      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce(sourceTextNote as never);
+
+      const { result } = renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
+
+      const localConverted = await result.current.mutateAsync('123');
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(localConverted.note_type).toBe('list');
+      const listNote = localConverted as { note_type: 'list'; title: string; items: Array<{ text: string; completed: boolean }> };
+      expect(listNote.title).toBe('');
+      expect(listNote.items).toEqual([expect.objectContaining({ text: 'Buy milk', completed: false })]);
+      expect(mockNotesApi.convertNoteType).not.toHaveBeenCalled();
+      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), localConverted);
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          operation: 'convertNoteType',
+          endpoint: '/notes/123/convert',
+          method: 'POST',
+          body: expect.objectContaining({ note_type: 'list' }),
+        }),
+      );
+      const enqueuedBody = mockSyncQueue.enqueueOperation.mock.calls[0][1].body;
+      expect(enqueuedBody.base_version).toBeUndefined();
+    });
+
+    it('throws when the source note is missing from the local cache', async () => {
+      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce(null);
+
+      const { result } = renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync('missing').catch(() => {});
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('useConvertNoteType (online write failures)', () => {
+    const sourceTextNote = {
+      id: '123', content: 'Buy milk', note_type: 'text',
+      version: 3, color: '#ffffff', pinned: false, archived: false, position: 0,
+      is_shared: false, deleted_at: null,
+      user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
+    };
+
+    it('falls back to the local queue on a transient failure (5xx)', async () => {
+      mockNotesApi.convertNoteType.mockRejectedValueOnce(makeAxiosError(503));
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce(sourceTextNote as never);
+
+      const { result } = renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync('123');
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(mockNoteQueries.saveNote).toHaveBeenCalled();
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ operation: 'convertNoteType', endpoint: '/notes/123/convert', method: 'POST' }),
+      );
+    });
+
+    it('falls back to the local queue on a network error (no response)', async () => {
+      mockNotesApi.convertNoteType.mockRejectedValueOnce(makeNetworkError());
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce(sourceTextNote as never);
+
+      const { result } = renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync('123');
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalled();
+    });
+
+    it('surfaces a permanent failure (4xx) without queuing', async () => {
+      mockNotesApi.convertNoteType.mockRejectedValueOnce(makeAxiosError(403));
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce(sourceTextNote as never);
+
+      const { result } = renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync('123').catch(() => {});
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
     });
   });
 });

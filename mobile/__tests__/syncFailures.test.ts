@@ -197,13 +197,40 @@ describe('reconcileDiscard', () => {
     ]);
   });
 
-  it('only deletes the dead-letter row for a multi-note op with no single note', async () => {
+  it('clears the failed flag on every note a multi-note op touched (reorder) then deletes the row', async () => {
+    // A reorder dead-letters with note_id NULL but flags every listed note failed
+    // (#492). Resolving the banner must clear all of those per-note badges —
+    // otherwise they'd stay stuck until an unrelated write happened to touch each
+    // note. No content is fetched/forked (there's no single note to reconcile).
     const db = makeDb(null);
-    await reconcileDiscard(db as never, dl({ id: 9, operation: 'reorder', note_id: null }));
+    await reconcileDiscard(
+      db as never,
+      dl({
+        id: 9,
+        operation: 'reorder',
+        endpoint: '/notes/reorder',
+        method: 'POST',
+        body: JSON.stringify({ note_ids: ['a', 'b', 'c'] }),
+        note_id: null,
+      }),
+    );
 
+    expect(runCalls(db, `UPDATE notes SET sync_state = 'synced'`)).toEqual([['a'], ['b'], ['c']]);
     expect(runCalls(db, 'DELETE FROM dead_letter')).toEqual([[9]]);
     expect(runCalls(db, 'DELETE FROM notes')).toHaveLength(0);
+    expect(mockGetNote).not.toHaveBeenCalled();
+  });
+
+  it('only deletes the dead-letter row for an op that touches no note (e.g. settings)', async () => {
+    const db = makeDb(null);
+    await reconcileDiscard(
+      db as never,
+      dl({ id: 10, operation: 'updateSettings', endpoint: '/settings', method: 'PATCH', body: '{"theme":"dark"}', note_id: null }),
+    );
+
+    expect(runCalls(db, 'DELETE FROM dead_letter')).toEqual([[10]]);
     expect(runCalls(db, `UPDATE notes SET sync_state = 'synced'`)).toHaveLength(0);
+    expect(runCalls(db, 'DELETE FROM notes')).toHaveLength(0);
     expect(mockGetNote).not.toHaveBeenCalled();
   });
 

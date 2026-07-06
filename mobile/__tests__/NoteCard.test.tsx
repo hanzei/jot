@@ -29,6 +29,10 @@ jest.mock('../src/store/OfflineContext', () => ({
   useFailedNoteIds: () => mockFailedNoteIds,
 }));
 
+jest.mock('../src/hooks/useActiveServerBaseUrl', () => ({
+  useActiveServerBaseUrl: () => 'http://test-server',
+}));
+
 const baseNote: Note = {
   id: 'note-1',
   user_id: 'user-1',
@@ -351,5 +355,39 @@ describe('NoteCard', () => {
     );
 
     expect(getByText('B')).toBeTruthy();
+  });
+
+  it('renders a cover image from the note\'s first image', () => {
+    const noteWithImages: Note = {
+      ...baseNote,
+      images: [
+        { id: 'img-1', filename: 'photo.png', content_type: 'image/png', width: 800, height: 600, created_at: '2024-01-01T00:00:00Z' },
+      ],
+    };
+
+    const { getByTestId } = render(<NoteCard note={noteWithImages} onPress={jest.fn()} />);
+
+    expect(getByTestId('note-card-cover-note-1')).toBeTruthy();
+  });
+
+  it('shows a "+N" badge when the note has more than one image', () => {
+    const noteWithImages: Note = {
+      ...baseNote,
+      images: [
+        { id: 'img-1', filename: 'a.png', content_type: 'image/png', width: 800, height: 600, created_at: '2024-01-01T00:00:00Z' },
+        { id: 'img-2', filename: 'b.png', content_type: 'image/png', width: 800, height: 600, created_at: '2024-01-01T00:00:00Z' },
+        { id: 'img-3', filename: 'c.png', content_type: 'image/png', width: 800, height: 600, created_at: '2024-01-01T00:00:00Z' },
+      ],
+    };
+
+    const { getByText } = render(<NoteCard note={noteWithImages} onPress={jest.fn()} />);
+
+    expect(getByText('+2')).toBeTruthy();
+  });
+
+  it('does not render a cover image when the note has no images', () => {
+    const { queryByTestId } = render(<NoteCard note={baseNote} onPress={jest.fn()} />);
+
+    expect(queryByTestId('note-card-cover-note-1')).toBeNull();
   });
 });

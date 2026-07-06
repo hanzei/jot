@@ -57,7 +57,9 @@
     "serverSetupConnectionInvalidServer": "Połączono, ale to nie wygląda na zgodny punkt API Jot.",
     "localModeLink": "Użyj bez serwera",
     "localModeHint": "Twoje notatki pozostają tylko na tym urządzeniu.",
-    "localModeFailed": "Nie udało się uruchomić trybu lokalnego. Spróbuj ponownie."
+    "localModeFailed": "Nie udało się uruchomić trybu lokalnego. Spróbuj ponownie.",
+    "localModeConfirmTitle": "Użyć bez serwera?",
+    "localModeConfirmMessage": "Masz zalogowaną sesję na serwerze. Kontynuacja otworzy oddzielny notatnik na tym urządzeniu — Twoje notatki pozostaną na serwerze i możesz do nich wrócić, logując się ponownie."
   },
   "dashboard": {
     "newNote": "Nowa notatka",
@@ -222,6 +224,14 @@
     "restore": "Przywróć",
     "duplicate": "Duplikuj",
     "duplicated": "Notatka zduplikowana",
+    "convertToList": "Konwertuj na listę",
+    "convertToText": "Konwertuj na tekst",
+    "convertToTextConfirmMessage": "Konwersja na notatkę tekstową zamienia pola wyboru na zwykły tekst — struktury elementów nie można automatycznie przywrócić.",
+    "convertToTextConfirmMessageWithAssignments_one": "Konwersja na notatkę tekstową zamienia pola wyboru na zwykły tekst — struktury elementów nie można automatycznie przywrócić. Stracisz również przypisanie {{count}} elementu.",
+    "convertToTextConfirmMessageWithAssignments_other": "Konwersja na notatkę tekstową zamienia pola wyboru na zwykły tekst — struktury elementów nie można automatycznie przywrócić. Stracisz również przypisania {{count}} elementów.",
+    "converted": "Notatka przekonwertowana",
+    "convertToTextConfirmTitle": "Przekonwertować na tekst?",
+    "failedConvert": "Nie udało się przekonwertować notatki. Spróbuj ponownie.",
     "completedItems": "Ukończone elementy ({{count}})",
     "completedItemGroup": "Grupa: {{title}}",
     "moreCompletedItems": "+{{count}} ukończonych elementów",
@@ -229,7 +239,6 @@
     "typeList": "Lista",
     "titlePlaceholder": "Tytuł notatki...",
     "contentPlaceholder": "Zapisz notatkę...",
-    "itemPlaceholder": "Element listy...",
     "addItem": "Dodaj element",
     "failedSaveChanges": "Nie udało się zapisać zmian. Dotknij, aby ponowić.",
     "menuOptions": "Opcje notatki",
@@ -279,6 +288,7 @@
   "images": {
     "openLightbox": "Wyświetl {{filename}}",
     "moreImages": "Wyświetl {{count}} więcej zdjęć",
+"moreImagesBadge": "{{count}} więcej zdjęć",
     "lightboxPrevious": "Poprzednie zdjęcie",
     "lightboxNext": "Następne zdjęcie",
     "lightboxCounter": "{{current}} / {{total}}",
@@ -350,6 +360,10 @@
     "unknownServerTitle": "Nieznany serwer",
     "unknownServerMessage": "Ten link wskazuje serwer {{server}}, który nie został jeszcze dodany.",
     "addAndSwitchAction": "Dodaj i przełącz"
+  },
+  "quickActions": {
+    "newNote": "Nowa notatka",
+    "newList": "Nowa lista"
   },
   "shareIntent": {
     "saveTargetLabel": "Zapisywanie na {{server}}",

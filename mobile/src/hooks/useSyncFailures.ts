@@ -7,6 +7,7 @@ import type { CreateNoteRequest, Note } from '@jot/shared';
 import {
   getDeadLetteredOperations,
   deleteDeadLetter,
+  deadLetterAffectedNoteIds,
   type DeadLetteredOperation,
 } from '../db/syncQueue';
 import {
@@ -87,6 +88,17 @@ export async function reconcileDiscard(db: SQLiteDatabase, dl: DeadLetteredOpera
         // Offline or transient: the failed flag is already cleared, so a later
         // background fetch reconciles the note normally.
       }
+    }
+  } else {
+    // A multi-note op (e.g. reorder) records its dead_letter row with note_id
+    // NULL, but each affected note was still flagged sync_state='failed' when it
+    // dead-lettered (#492). Clear every one of those flags here so resolving the
+    // review banner also dismisses the per-note "didn't sync" badges — otherwise
+    // they'd stay stuck until an unrelated successful write happened to touch
+    // each note. Ops with no note at all (e.g. updateSettings) yield an empty
+    // list, so this is a no-op for them.
+    for (const noteId of deadLetterAffectedNoteIds(dl)) {
+      await clearNoteSyncFailed(db, noteId);
     }
   }
 

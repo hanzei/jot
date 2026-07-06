@@ -73,8 +73,14 @@ jest.mock('../src/hooks/useNotes', () => ({
   useRestoreNote: () => ({
     mutateAsync: jest.fn(),
   }),
+  usePermanentDeleteNote: () => ({
+    mutateAsync: jest.fn(),
+  }),
   useDuplicateNote: () => ({
     mutateAsync: mockDuplicateMutateAsync,
+  }),
+  useConvertNoteType: () => ({
+    mutateAsync: jest.fn(),
   }),
   useCreateNoteItem: () => ({
     mutateAsync: mockCreateItemMutateAsync,
@@ -375,11 +381,14 @@ describe('NoteEditorScreen list submit behavior', () => {
 
     await waitFor(() => {
       const inputsAfter = getAllByTestId('list-item-text');
+      const checkboxesAfter = getAllByTestId('list-item-checkbox');
       expect(inputsAfter).toHaveLength(2);
-      // New (uncompleted) blank item renders above the completed section;
-      // the completed item's own text is untouched.
+      // New blank item is inserted before the original, inheriting its
+      // completed state; the original item's own text is untouched.
       expect(inputsAfter[0].props.value).toBe('');
       expect(inputsAfter[1].props.value).toBe('hello');
+      expect(checkboxesAfter[0].props.accessibilityState.checked).toBe(true);
+      expect(checkboxesAfter[1].props.accessibilityState.checked).toBe(true);
     });
   });
 
@@ -429,11 +438,15 @@ describe('NoteEditorScreen list submit behavior', () => {
 
     await waitFor(() => {
       const inputsAfter = getAllByTestId('list-item-text');
+      const checkboxesAfter = getAllByTestId('list-item-checkbox');
       expect(inputsAfter).toHaveLength(2);
-      // The split-off remainder is a new (uncompleted) item, rendered above
-      // the still-completed original.
-      expect(inputsAfter[0].props.value).toBe('world');
-      expect(inputsAfter[1].props.value).toBe('hello');
+      // The original keeps the text before the cursor; the split-off
+      // remainder inherits its completed state and stays in the completed
+      // section, right after it.
+      expect(inputsAfter[0].props.value).toBe('hello');
+      expect(inputsAfter[1].props.value).toBe('world');
+      expect(checkboxesAfter[0].props.accessibilityState.checked).toBe(true);
+      expect(checkboxesAfter[1].props.accessibilityState.checked).toBe(true);
     });
   });
 

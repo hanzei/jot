@@ -8,6 +8,7 @@ import {
   deleteNote,
   restoreNote,
   duplicateNote,
+  convertNoteType,
   permanentDeleteNote,
   reorderNotes,
   createNoteItem,
@@ -18,7 +19,7 @@ import {
 } from '../api/notes';
 import { shareNote, unshareNote } from '../api/users';
 import { useOfflineNote } from './useOfflineNotes';
-import { generateId } from '@jot/shared';
+import { generateId, textToListItems, listToText } from '@jot/shared';
 import type {
   Note,
   NoteItem,
@@ -27,6 +28,7 @@ import type {
   Label,
   CreateNoteRequest,
   UpdateNoteRequest,
+  ConvertNoteTypeRequest,
   CreateNoteItemRequest,
   PatchNoteItemRequest,
 } from '@jot/shared';
@@ -41,7 +43,6 @@ import {
   generateClientNoteId,
   markNotePendingCreate,
   isNotePendingCreate,
-  isLocalId,
   createLocalItem,
   patchLocalItem,
   deleteLocalItem,
@@ -340,6 +341,113 @@ export function useUpdateNote() {
       queryClient.setQueriesData<Note[]>(
         { queryKey: notesLocalQueryScopeKey() },
         (old) => old?.map((n) => (n.id === updatedNote.id ? updatedNote : n)),
+      );
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+    },
+  });
+}
+
+/**
+ * Computes the precomputed `content`/`items` for converting `note` to the
+ * opposite type, via the same shared transform (`textToListItems`/`listToText`)
+ * the webapp uses — the server only validates and persists whatever is sent
+ * (issue #676). Item ids are generated here (rather than left for the server)
+ * so they stay stable across a chain of offline edits: a per-item mutation
+ * queued right after an offline convert, but before it drains, can then target
+ * the same id the eventual server row will have (mirrors useDuplicateNote's
+ * client-supplied item ids). Deliberately excludes `base_version`: the online
+ * path stamps the version current at call time, while the offline/replay path
+ * resolves it fresh at drain time (see the `update` operation's handling, #489).
+ */
+function buildConvertNoteTypeRequest(note: Note): ConvertNoteTypeRequest {
+  if (note.note_type === 'list') {
+    return {
+      note_type: 'text',
+      content: listToText(note.title, note.items ?? []),
+    };
+  }
+  return {
+    note_type: 'list',
+    items: textToListItems(note.content).map((item, index) => ({
+      id: generateId(),
+      text: item.text,
+      position: index,
+      completed: item.completed,
+    })),
+  };
+}
+
+/**
+ * Applies a precomputed convert request to `note` locally, mirroring what the
+ * server persists (`convertNoteRowTx`): title is always cleared, and items are
+ * fully replaced (not merged) in the target-list direction.
+ */
+function applyConvertedNoteLocally(note: Note, data: ConvertNoteTypeRequest, now: string): Note {
+  if (data.note_type === 'text') {
+    return { ...note, note_type: 'text', content: data.content ?? '', updated_at: now };
+  }
+  const items: NoteItem[] = (data.items ?? []).map((item) => ({
+    id: item.id ?? generateId(),
+    note_id: note.id,
+    text: item.text,
+    completed: item.completed ?? false,
+    position: item.position,
+    parent_id: item.parent_id ?? null,
+    assigned_to: '',
+    created_at: now,
+    updated_at: now,
+  }));
+  return { ...note, note_type: 'list', title: '', checked_items_collapsed: false, items, updated_at: now };
+}
+
+export function useConvertNoteType() {
+  const queryClient = useQueryClient();
+  const db = useSQLiteContext();
+  const { isConnected } = useNetworkStatus();
+  const isConnectedRef = useRef(isConnected);
+  isConnectedRef.current = isConnected;
+
+  return useMutation({
+    mutationFn: async (id: string): Promise<Note> => {
+      assertSwitchWriteAllowed();
+
+      const existing = await getLocalNote(db, id);
+      if (!existing) {
+        throw new Error(`Note ${id} not found in local DB`);
+      }
+      const data = buildConvertNoteTypeRequest(existing);
+
+      if (isConnectedRef.current && !isLocalModeActive()) {
+        try {
+          const convertedNote = await convertNoteType(id, { ...data, base_version: existing.version });
+          await saveNote(db, convertedNote);
+          return convertedNote;
+        } catch (err) {
+          // Transient failure: fall through to the offline path so the
+          // conversion is applied locally and queued for replay instead of
+          // being lost.
+          rethrowIfNotQueueable(err);
+        }
+      }
+
+      // Offline (or a transient online failure): apply the same precomputed
+      // transform to local SQLite and queue the operation for replay.
+      const now = new Date().toISOString();
+      const localConverted = applyConvertedNoteLocally(existing, data, now);
+      await saveNote(db, localConverted);
+      await enqueueOperation(db, {
+        operation: 'convertNoteType',
+        endpoint: `/notes/${id}/convert`,
+        method: 'POST',
+        body: data as unknown as Record<string, unknown>,
+      });
+      return localConverted;
+    },
+    onSuccess: (convertedNote) => {
+      queryClient.setQueryData(noteLocalQueryKey(convertedNote.id), convertedNote);
+      queryClient.setQueriesData<Note[]>(
+        { queryKey: notesLocalQueryScopeKey() },
+        (old) => old?.map((n) => (n.id === convertedNote.id ? convertedNote : n)),
       );
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
     },
@@ -760,11 +868,6 @@ export function useShareNote() {
   return useMutation({
     mutationFn: async ({ noteId, user }: { noteId: string; user: User }) => {
       assertSwitchWriteAllowed();
-      // A local_* duplicate has no server-side id yet (it awaits id reconciliation),
-      // so it can never be shared.
-      if (isLocalId(noteId)) {
-        throw new Error('cannot share unsynced note');
-      }
       // An offline-created note already carries a server-valid id (#475) and its
       // queued create drains FIFO before this share, so queue the share rather than
       // attempting it online — the server doesn't know the note yet, so a direct
@@ -831,10 +934,6 @@ export function useUnshareNote() {
   return useMutation({
     mutationFn: async ({ noteId, userId }: { noteId: string; userId: string }) => {
       assertSwitchWriteAllowed();
-      // A local_* duplicate has no server-side id yet, so there is nothing to unshare.
-      if (isLocalId(noteId)) {
-        throw new Error('cannot unshare unsynced note');
-      }
       // An offline-created note (#475) drains its create FIFO before this unshare,
       // so queue rather than calling online against a note the server doesn't know yet.
       const pendingCreate = await isNotePendingCreate(db, noteId);

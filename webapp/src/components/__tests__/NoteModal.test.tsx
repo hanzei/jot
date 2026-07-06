@@ -10,6 +10,7 @@ import { createMockNote } from '@/utils/__tests__/test-helpers'
 const {
   mockNotesUpdate,
   mockNotesCreate,
+  mockNotesGetById,
   mockCreateItem,
   mockUpdateItem,
   mockDeleteItem,
@@ -25,6 +26,9 @@ const {
   dragEndRef: { current: undefined as undefined | ((event: Record<string, unknown>) => void) },
   mockNotesUpdate: vi.fn().mockResolvedValue({}),
   mockNotesCreate: vi.fn().mockResolvedValue({}),
+  // Used by the convert flow to refetch the note's version before persisting;
+  // defaults to matching createMockNote's default version (1).
+  mockNotesGetById: vi.fn().mockResolvedValue({ version: 1 }),
   mockCreateItem: vi.fn().mockImplementation((_noteId, data) => Promise.resolve({ ...data })),
   mockUpdateItem: vi.fn().mockImplementation((_noteId, itemId, data) => Promise.resolve({ id: itemId, ...data })),
   mockDeleteItem: vi.fn().mockResolvedValue(undefined),
@@ -42,6 +46,7 @@ vi.mock('@/utils/api', () => ({
   notes: {
     create: mockNotesCreate,
     update: mockNotesUpdate,
+    getById: mockNotesGetById,
     createItem: mockCreateItem,
     updateItem: mockUpdateItem,
     deleteItem: mockDeleteItem,
@@ -208,6 +213,19 @@ describe('NoteModal', () => {
 
       expect(screen.getByPlaceholderText('Note title...')).toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument()
+    })
+
+    it('opens as a list note preset via initialType, with initialContent ignored for lists', () => {
+      renderNoteModal({ ...defaultProps, initialType: 'list', initialContent: 'ignored for lists' })
+
+      expect(screen.getByPlaceholderText('Note title...')).toBeInTheDocument()
+      expect(screen.queryByText('ignored for lists')).not.toBeInTheDocument()
+    })
+
+    it('prefills a new text note from initialContent', () => {
+      renderNoteModal({ ...defaultProps, initialContent: 'Shared from another app' })
+
+      expect(screen.getByPlaceholderText('Take a note...')).toHaveValue('Shared from another app')
     })
 
     it('renders edit mode correctly for text note', () => {
@@ -1132,7 +1150,7 @@ describe('NoteModal', () => {
       }))
     })
 
-    it('pressing Enter splits and inserts before within completed items too', async () => {
+    it('pressing Enter splits within completed items too, keeping the split-off item completed', async () => {
       const listNote = createMockNote({
         note_type: 'list',
         items: [
@@ -1153,10 +1171,15 @@ describe('NoteModal', () => {
       expect(inputsAfter).toHaveLength(2)
       // Original (completed) item keeps the text before the cursor.
       expect(screen.getByDisplayValue('hello')).toBeInTheDocument()
-      // The split-off remainder is a new (uncompleted) item, rendered in the
-      // uncompleted section above the completed one.
+      // The split-off remainder inherits the completed state and stays in the
+      // completed section, right after the original item.
       expect(screen.getByDisplayValue('world')).toBeInTheDocument()
-      expect(inputsAfter[0]).toHaveValue('world')
+      expect(inputsAfter[0]).toHaveValue('hello')
+      expect(inputsAfter[1]).toHaveValue('world')
+      expect(mockCreateItem).toHaveBeenCalledWith('1', expect.objectContaining({
+        text: 'world',
+        completed: true,
+      }))
     })
 
     it('pressing a key other than Enter on a list item does not create a new item', async () => {
@@ -1956,6 +1979,95 @@ describe('NoteModal', () => {
       expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({ content: 'Edited' }))
       expect(onDuplicate).toHaveBeenCalledWith('1')
       expect(onClose).toHaveBeenCalled()
+    })
+
+    it('converts a text note to a list with no confirmation dialog', async () => {
+      const note = createMockNote({ note_type: 'text', content: '# Groceries\n- [x] Milk\n- Eggs' })
+      const onConvert = vi.fn().mockResolvedValue(undefined)
+      const onClose = vi.fn()
+
+      renderNoteModal({ ...defaultProps, note, onConvert, onClose })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Convert to list' }))
+      await vi.runAllTimersAsync()
+
+      expect(mockNotesGetById).toHaveBeenCalledWith('1')
+      expect(onConvert).toHaveBeenCalledWith('1', {
+        note_type: 'list',
+        base_version: 1,
+        items: [
+          { text: 'Groceries', position: 0, completed: false },
+          { text: 'Milk', position: 1, completed: true },
+          { text: 'Eggs', position: 2, completed: false },
+        ],
+      })
+      expect(onClose).toHaveBeenCalled()
+    })
+
+    it('confirms before converting a list to text and warns about dropped assignments', async () => {
+      const items = createMockListItems()
+      items[0] = { ...items[0], assigned_to: 'user-1' }
+      const note = createMockNote({ note_type: 'list', title: 'Groceries', items })
+      const onConvert = vi.fn().mockResolvedValue(undefined)
+      const onClose = vi.fn()
+
+      renderNoteModal({ ...defaultProps, note, onConvert, onClose })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Convert to text' }))
+      expect(screen.getByText(/lose the assignment of 1 item/)).toBeInTheDocument()
+      expect(onConvert).not.toHaveBeenCalled()
+
+      fireEvent.click(screen.getAllByRole('button', { name: 'Convert to text' })[1])
+      await vi.runAllTimersAsync()
+
+      expect(onConvert).toHaveBeenCalledWith('1', {
+        note_type: 'text',
+        base_version: 1,
+        content: '# Groceries\n\n- [ ] First item\n- [x] Second item',
+      })
+      expect(onClose).toHaveBeenCalled()
+    })
+
+    it('cancels a list-to-text conversion without calling onConvert', async () => {
+      const note = createMockNote({ note_type: 'list', title: 'Groceries', items: createMockListItems() })
+      const onConvert = vi.fn()
+
+      renderNoteModal({ ...defaultProps, note, onConvert })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Convert to text' }))
+      expect(screen.getByText(/Converting to a text note/)).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+      expect(onConvert).not.toHaveBeenCalled()
+    })
+
+    it('shows an error and keeps the note open if the conversion request fails', async () => {
+      const note = createMockNote({ note_type: 'list', title: 'Groceries', items: createMockListItems() })
+      const onConvert = vi.fn().mockRejectedValue(new Error('network error'))
+      const onClose = vi.fn()
+
+      renderNoteModal({ ...defaultProps, note, onConvert, onClose })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Convert to text' }))
+      const confirmButtons = screen.getAllByRole('button', { name: 'Convert to text' })
+      fireEvent.click(confirmButtons[1])
+      // onConvert (and the version refetch before it) reject/resolve via a plain
+      // promise chain with no timer of their own; flush the microtask queue
+      // instead of vi.runAllTimersAsync(), which would also fire (and clear)
+      // showError's 5s auto-dismiss timeout.
+      await act(async () => {
+        for (let i = 0; i < 6; i++) {
+          await Promise.resolve();
+        }
+      })
+
+      expect(onConvert).toHaveBeenCalledWith('1', {
+        note_type: 'text',
+        base_version: 1,
+        content: '# Groceries\n\n- [ ] First item\n- [x] Second item',
+      })
+      expect(onClose).not.toHaveBeenCalled()
+      expect(screen.getByText('Failed to convert note. Please try again.')).toBeInTheDocument()
     })
   })
 

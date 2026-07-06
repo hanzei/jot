@@ -9,14 +9,16 @@ jest.mock('../src/api/client', () => ({
   getStoredSession: jest.fn(),
   getBaseUrl: jest.fn().mockReturnValue('http://localhost:8080'),
   isServerSwitchInProgress: jest.fn(() => false),
+  handleUnauthorizedSession: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock('../src/store/serverSwitchLifecycle', () => ({
   getCurrentSwitchGenerationId: jest.fn(() => 1),
   isSseQuiesced: jest.fn(() => false),
 }));
 
-import { getStoredSession } from '../src/api/client';
+import { getStoredSession, handleUnauthorizedSession } from '../src/api/client';
 const mockGetStoredSession = getStoredSession as jest.MockedFunction<typeof getStoredSession>;
+const mockHandleUnauthorizedSession = handleUnauthorizedSession as jest.MockedFunction<typeof handleUnauthorizedSession>;
 
 // Mock react-native-sse
 const mockAddEventListener = jest.fn();
@@ -210,7 +212,7 @@ describe('SSEConnectionManager', () => {
     jest.useRealTimers();
   });
 
-  it('does not reconnect on 401 errors', async () => {
+  it('does not reconnect on 401 errors and propagates the logout', async () => {
     jest.useFakeTimers();
 
     const manager = new SSEConnectionManager();
@@ -229,6 +231,10 @@ describe('SSEConnectionManager', () => {
 
     // Should not reconnect
     expect(MockEventSource).not.toHaveBeenCalled();
+    // A server-side session expiry must funnel through the same centralized
+    // logout path the axios interceptor uses, instead of leaving the app in a
+    // silently signed-in state until the next API call happens to 401.
+    expect(mockHandleUnauthorizedSession).toHaveBeenCalledTimes(1);
 
     jest.useRealTimers();
   });

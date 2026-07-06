@@ -18,6 +18,7 @@ import { useSyncFailures, syncFailureCauseKey } from '../hooks/useSyncFailures';
 import type { DeadLetteredOperation } from '../db/syncQueue';
 import { getLocalNote } from '../db/noteQueries';
 import { useTheme } from '../theme/ThemeContext';
+import { useConfirm } from '../hooks/useConfirm';
 
 /** A short, human-friendly label for the note a failed change belongs to. */
 function noteSnippet(note: Note | null | undefined, t: (k: string) => string): string {
@@ -38,6 +39,7 @@ export default function SyncFailuresScreen() {
   const { t } = useTranslation();
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
   const db = useSQLiteContext();
+  const { confirm } = useConfirm();
 
   const { deadLetters, isLoading, isError, refetch, keepMyVersion, discard } = useSyncFailures();
   // Local content of each affected note, for the "which note" context.
@@ -78,26 +80,24 @@ export default function SyncFailuresScreen() {
   );
 
   const handleDiscard = useCallback(
-    (dl: DeadLetteredOperation) => {
-      Alert.alert(t('syncFailures.discardTitle'), t('syncFailures.discardConfirm'), [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('syncFailures.discard'),
-          style: 'destructive',
-          onPress: async () => {
-            setProcessingId(dl.id);
-            try {
-              await discard(dl);
-            } catch {
-              Alert.alert(t('common.error'), t('syncFailures.discardFailed'));
-            } finally {
-              setProcessingId(null);
-            }
-          },
-        },
-      ]);
+    async (dl: DeadLetteredOperation) => {
+      const confirmed = await confirm({
+        title: t('syncFailures.discardTitle'),
+        message: t('syncFailures.discardConfirm'),
+        confirmLabel: t('syncFailures.discard'),
+        destructive: true,
+      });
+      if (!confirmed) return;
+      setProcessingId(dl.id);
+      try {
+        await discard(dl);
+      } catch {
+        Alert.alert(t('common.error'), t('syncFailures.discardFailed'));
+      } finally {
+        setProcessingId(null);
+      }
     },
-    [discard, t],
+    [confirm, discard, t],
   );
 
   const renderItem = useCallback(

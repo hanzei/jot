@@ -86,7 +86,9 @@
     "serverSetupConnectionInvalidServer": "Verbonden, maar dit lijkt geen compatibel Jot API-eindpunt.",
     "localModeLink": "Gebruiken zonder server",
     "localModeHint": "Je notities blijven alleen op dit apparaat.",
-    "localModeFailed": "Kan lokale modus niet starten. Probeer het opnieuw."
+    "localModeFailed": "Kan lokale modus niet starten. Probeer het opnieuw.",
+    "localModeConfirmTitle": "Zonder server gebruiken?",
+    "localModeConfirmMessage": "Je bent aangemeld bij een server. Als je doorgaat, wordt er een apart notitieboek op dit apparaat geopend — je servernotities blijven op de server en je kunt er weer bij door opnieuw in te loggen."
   },
   "dashboard": {
     "newNote": "Nieuwe notitie",
@@ -251,6 +253,14 @@
     "restore": "Herstellen",
     "duplicate": "Dupliceren",
     "duplicated": "Notitie gedupliceerd",
+    "convertToList": "Naar lijst converteren",
+    "convertToText": "Naar tekst converteren",
+    "convertToTextConfirmMessage": "Converteren naar een tekstnotitie zet selectievakjes om in platte tekst — de itemstructuur kan niet automatisch worden hersteld.",
+    "convertToTextConfirmMessageWithAssignments_one": "Converteren naar een tekstnotitie zet selectievakjes om in platte tekst — de itemstructuur kan niet automatisch worden hersteld. Je verliest ook de toewijzing van {{count}} item.",
+    "convertToTextConfirmMessageWithAssignments_other": "Converteren naar een tekstnotitie zet selectievakjes om in platte tekst — de itemstructuur kan niet automatisch worden hersteld. Je verliest ook de toewijzingen van {{count}} items.",
+    "converted": "Notitie geconverteerd",
+    "convertToTextConfirmTitle": "Naar tekst converteren?",
+    "failedConvert": "Notitie converteren mislukt. Probeer het opnieuw.",
     "completedItems": "Voltooide items ({{count}})",
     "completedItemGroup": "Groep: {{title}}",
     "moreCompletedItems": "+{{count}} voltooide items",
@@ -258,7 +268,6 @@
     "typeList": "Lijst",
     "titlePlaceholder": "Notitietitel...",
     "contentPlaceholder": "Een notitie maken...",
-    "itemPlaceholder": "Lijstitem...",
     "addItem": "Item toevoegen",
     "failedSaveChanges": "Wijzigingen opslaan mislukt. Tik om opnieuw te proberen.",
     "menuOptions": "Notitieopties",
@@ -308,6 +317,7 @@
   "images": {
     "openLightbox": "{{filename}} bekijken",
     "moreImages": "{{count}} meer afbeeldingen bekijken",
+"moreImagesBadge": "{{count}} meer afbeeldingen",
     "lightboxPrevious": "Vorige afbeelding",
     "lightboxNext": "Volgende afbeelding",
     "lightboxCounter": "{{current}} / {{total}}",
@@ -379,6 +389,10 @@
     "addAndSwitchAction": "Toevoegen en wisselen",
     "wrongServerTitle": "Verkeerde server",
     "wrongServerMessage": "Deze link verwijst naar {{targetServer}}, maar je bent verbonden met {{currentServer}}."
+  },
+  "quickActions": {
+    "newNote": "Nieuwe notitie",
+    "newList": "Nieuwe lijst"
   },
   "shareIntent": {
     "saveTargetLabel": "Opslaan op {{server}}",

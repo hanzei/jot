@@ -3,8 +3,8 @@ import { PlusIcon, DocumentTextIcon, ArchiveBoxIcon, TrashIcon, ClipboardDocumen
 import { useTranslation } from 'react-i18next';
 import { notes, users as usersApi } from '@/utils/api';
 import { getUser, getSettings, setSettings } from '@/utils/auth';
-import { UPLOAD_MAX_BYTES, type Note, type NoteImage, type User, type SSEEvent, type NoteSort } from '@jot/shared';
-import { useSearchParams, useParams, useNavigate } from 'react-router';
+import { UPLOAD_MAX_BYTES, type Note, type NoteImage, type NoteType, type User, type SSEEvent, type NoteSort, type ConvertNoteTypeRequest } from '@jot/shared';
+import { useSearchParams, useParams, useNavigate, useMatch } from 'react-router';
 import PageContent from '@/components/PageContent';
 import SearchBar from '@/components/SearchBar';
 import AnimatedNoteGrid from '@/components/AnimatedNoteGrid';
@@ -16,6 +16,7 @@ import { useAuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { isAnyModalDialogOpen, isEditableElementFocused, isOverlayControlFocused } from '@/utils/keyboardShortcuts';
 import { NOTE_SORT_OPTIONS, normalizeNoteSort, sortNotesForDisplay } from '@/utils/noteSort';
 import { isSortWarningDismissed, dismissSortWarning } from '@/utils/sortWarningDismissed';
+import { buildSharedContent } from '@/utils/sharedContent';
 import {
   DndContext,
   closestCenter,
@@ -47,6 +48,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   const { t } = useTranslation();
   const { showToast } = useToast();
   const { noteId: noteIdParam } = useParams<{ noteId?: string }>();
+  const isNewNoteRoute = !!useMatch('/new');
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const {
@@ -74,6 +76,9 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   const [selectedLabelId, setSelectedLabelId] = useState<string | null>(initialLabel);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
+  // Prefill for a note created via the /new deep link (PWA shortcut or share
+  // target) — undefined fields fall back to NoteModal's own defaults.
+  const [newNoteDraft, setNewNoteDraft] = useState<{ type: NoteType; content: string } | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [sharingNote, setSharingNote] = useState<Note | null>(null);
   const [usersById, setUsersById] = useState<Map<string, User>>(new Map());
@@ -89,6 +94,8 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   const returnPathRef = useRef('/');
   const noteSortUpdateRequestIdRef = useRef(0);
   const loadNotesRequestIdRef = useRef(0);
+  const editingNoteRefreshRequestIdRef = useRef(0);
+  const newNoteHandledRef = useRef(false);
   useEffect(() => {
     isMountedRef.current = true;
     return () => { isMountedRef.current = false; };
@@ -314,13 +321,49 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   }, [loadNotes]);
 
   const restoreReturnUrl = useCallback(() => {
+    if (isNewNoteRoute) {
+      // /new is a one-shot deep link (PWA shortcut or share target); once its
+      // modal closes there's nothing to "return" to but the dashboard.
+      newNoteHandledRef.current = false;
+      setNewNoteDraft(null);
+      navigate('/', { replace: true });
+      return;
+    }
     if (openNoteIdRef.current) {
       openNoteIdRef.current = null;
       const returnTo = returnPathRef.current;
       returnPathRef.current = '/';
       navigate(returnTo, { replace: true });
     }
-  }, [navigate]);
+  }, [navigate, isNewNoteRoute]);
+
+  // Deep link entry point: /new?type=text|list opens the create-note modal
+  // straight away, optionally prefilled from a Web Share Target payload
+  // (title/text/url). Runs once per visit to /new (newNoteHandledRef guards
+  // against re-triggering while the route stays matched, e.g. searchParams
+  // changing for an unrelated reason).
+  useEffect(() => {
+    if (!isNewNoteRoute) {
+      newNoteHandledRef.current = false;
+      return;
+    }
+    if (newNoteHandledRef.current) {
+      return;
+    }
+    newNoteHandledRef.current = true;
+
+    const type: NoteType = searchParams.get('type') === 'list' ? 'list' : 'text';
+    const content = buildSharedContent({
+      title: searchParams.get('title'),
+      text: searchParams.get('text'),
+      url: searchParams.get('url'),
+    });
+
+    lastFocusedElementRef.current = document.activeElement;
+    setEditingNote(null);
+    setNewNoteDraft({ type, content });
+    setIsModalOpen(true);
+  }, [isNewNoteRoute, searchParams]);
 
   const openNoteFromUrl = useCallback((noteId: string) => {
     openNoteIdRef.current = null;
@@ -478,6 +521,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   const handleCreateNote = useCallback(() => {
     lastFocusedElementRef.current = document.activeElement;
     setEditingNote(null);
+    setNewNoteDraft(null);
     setIsModalOpen(true);
   }, []);
 
@@ -645,6 +689,26 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   const handleNoteRefresh = () => {
     void Promise.all([loadNotes(), loadLabelCounts()]);
     loadLabels();
+    // loadNotes() only refreshes notesList, not the currently open editingNote,
+    // so callers relying on onRefresh to reflect a just-completed server change
+    // in the open modal (e.g. a client-deferred image removal past its undo
+    // window, whose SSE echo is dropped for the client that triggered it) would
+    // otherwise keep showing stale note data until the note is closed and
+    // reopened. NoteModal's own adoption effect already guards against
+    // clobbering unsaved local edits, so it's safe to always refetch here.
+    const currentNoteId = editingNote?.id;
+    if (currentNoteId) {
+      // Guard against out-of-order responses: several onRefresh calls for the
+      // same note can fire in quick succession (e.g. an image removal and a
+      // label change within the same second), and nothing guarantees their
+      // getById responses land in request order. Only the response to the
+      // most recently issued request is applied.
+      const requestId = ++editingNoteRefreshRequestIdRef.current;
+      notes.getById(currentNoteId).then(refreshed => {
+        if (requestId !== editingNoteRefreshRequestIdRef.current) return;
+        setEditingNote(prev => (prev?.id === currentNoteId ? refreshed : prev));
+      }).catch(() => {});
+    }
   };
 
   const handleDeleteNote = async (noteId: string) => {
@@ -732,6 +796,23 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
     } catch (error) {
       console.error('Failed to duplicate note:', error);
       throw error;
+    }
+  }, [loadLabelCounts, loadLabels, loadNotes, showToast, t]);
+
+  const handleConvertNote = useCallback(async (noteId: string, data: ConvertNoteTypeRequest) => {
+    try {
+      await notes.convert(noteId, data);
+    } catch (error) {
+      console.error('Failed to convert note:', error);
+      throw error;
+    }
+    showToast(t('dashboard.noteConverted'), 'success');
+    // The conversion already succeeded — a refresh hiccup here shouldn't be
+    // reported to NoteModal as a conversion failure.
+    try {
+      await Promise.all([loadNotes(), loadLabels(), loadLabelCounts()]);
+    } catch (error) {
+      console.error('Failed to refresh after converting note:', error);
     }
   }, [loadLabelCounts, loadLabels, loadNotes, showToast, t]);
 
@@ -897,6 +978,10 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
     const { pinned, other } = sortNotesForDisplay(archivedMatches, noteSort);
     return [...pinned, ...other];
   }, [archivedMatches, noteSort]);
+  // Reordering is manual-position based, so it is disabled in any view that is
+  // not the plain manually-sorted grid. Search in particular orders results by
+  // full-text relevance rather than position, so a drag would not map to the
+  // order on screen.
   const dragReorderingDisabled = showArchived || showBin || showMyTasks || isSearching || isFilteringByLabel || noteSort !== 'manual';
   // Signature of the active view/filter/search. The grids swap instantly when it
   // changes, so only in-view card changes (create, delete, archive, …) animate.
@@ -1262,10 +1347,13 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
             onShare={handleShareNote}
             onDelete={handleDeleteNote}
             onDuplicate={handleDuplicateNote}
+            onConvert={handleConvertNote}
             isOwner={!editingNote || editingNote.user_id === user?.id}
             usersById={usersById}
             currentUserId={user?.id}
             uploadMaxBytes={uploadMaxBytes}
+            initialType={newNoteDraft?.type}
+            initialContent={newNoteDraft?.content}
           />
         )}
 

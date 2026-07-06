@@ -17,17 +17,14 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { updateMe } from '../api/settings';
 import { useTranslation } from 'react-i18next';
-import { useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useReorderNotes, useDuplicateNote } from '../hooks/useNotes';
-import { useOfflineNotes, useOfflineNote } from '../hooks/useOfflineNotes';
+import { useReorderNotes } from '../hooks/useNotes';
+import { useOfflineNotes } from '../hooks/useOfflineNotes';
 import { useUsers } from '../store/UsersContext';
 import { useAuth } from '../store/AuthContext';
-import { useToast } from '../hooks/useToast';
+import { useConfirm } from '../hooks/useConfirm';
 import { useTheme } from '../theme/ThemeContext';
 import SkeletonNoteList from '../components/SkeletonNoteList';
 import NoteCard from '../components/NoteCard';
-import NoteContextMenu, { ContextMenuViewContext } from '../components/NoteContextMenu';
-import ColorPicker from '../components/ColorPicker';
-import LabelPicker from '../components/LabelPicker';
 import type { Note, NoteSort } from '@jot/shared';
 import type { RootStackParamList, LayoutRect } from '../navigation/RootNavigator';
 import { normalizeNoteSort, sortNotesForDisplay } from '../utils/noteSort';
@@ -72,14 +69,11 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const bannerShown = useBannerShown();
   const { colors } = useTheme();
   const { t } = useTranslation();
-  const { showToast } = useToast();
+  const { confirm } = useConfirm();
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
   const fabBottom = Math.max(insets.bottom + 20, 20);
   const listBottomPadding = variant === 'notes' ? fabBottom + 60 : insets.bottom + 80;
 
-  const [contextMenuNote, setContextMenuNote] = useState<Note | null>(null);
-  const [colorPickerNote, setColorPickerNote] = useState<Note | null>(null);
-  const [labelPickerNote, setLabelPickerNote] = useState<Note | null>(null);
   const [localOrder, setLocalOrder] = useState<LocalReorderState>({ pinned: null, unpinned: null });
   const [sortMode, setSortMode] = useState<NoteSort>(() => normalizeNoteSort(settings?.note_sort));
   const [isSortControlsOpen, setIsSortControlsOpen] = useState(false);
@@ -130,13 +124,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   }), [debouncedSearch, labelId, variant]);
   const { data: archivedSearchNotes } = useOfflineNotes(archivedParams, { enabled: fetchArchivedSeparately });
 
-  const { data: labelPickerNoteData } = useOfflineNote(labelPickerNote?.id ?? null);
   const isSearchLoading = isLoading && !notes && !!debouncedSearch;
-  const updateNote = useUpdateNote();
-  const deleteNote = useDeleteNote();
-  const restoreNote = useRestoreNote();
-  const permanentDeleteNote = usePermanentDeleteNote();
-  const duplicateNote = useDuplicateNote();
   const reorderNotes = useReorderNotes();
   const navigation = useNavigation<NavigationProp>();
 
@@ -249,10 +237,11 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
   const handleNotePress = useCallback(
     (noteId: string, rect?: LayoutRect) => {
-      if (variant === 'trash') return; // read-only
       Keyboard.dismiss();
+      // Trashed notes open view-only (Restore / Delete-forever live in the
+      // editor's overflow menu now that the dashboard context menu is gone).
       // Pass the card's rect so the editor can zoom open from it.
-      navigation.navigate('NoteEditor', { noteId, originRect: rect });
+      navigation.navigate('NoteEditor', { noteId, readOnly: variant === 'trash', originRect: rect });
     },
     [navigation, variant],
   );
@@ -261,192 +250,48 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     navigation.navigate('NoteEditor', { noteId: null });
   }, [navigation]);
 
-  const handleOpenMenu = useCallback((note: Note) => {
-    setContextMenuNote(note);
-  }, []);
-
-  // Context menu actions. Each PATCH carries only the field being changed:
-  // including unchanged title/content would re-assert a possibly-stale snapshot
-  // (clobbering another device's edit) and, because content triggers the
-  // base_version guard, turn a mere pin/color toggle into a 409 conflict.
-  const handlePin = useCallback(async (note: Note) => {
-    try {
-      await updateNote.mutateAsync({
-        id: note.id,
-        data: { pinned: !note.pinned },
-      });
-    } catch {
-      Alert.alert(t('common.error'), t('note.failedUpdate'));
-    }
-  }, [t, updateNote]);
-
-  const handleArchive = useCallback(async (note: Note) => {
-    try {
-      await updateNote.mutateAsync({
-        id: note.id,
-        data: { archived: true },
-      });
-      showToast(t('dashboard.noteArchived'), 'success', {
-        label: t('dashboard.undo'),
-        onPress: async () => {
-          try {
-            await updateNote.mutateAsync({
-              id: note.id,
-              data: { archived: false },
-            });
-            showToast(t('dashboard.noteUnarchived'));
-          } catch {
-            showToast(t('note.failedUnarchive'), 'error');
-          }
-        },
-      });
-    } catch {
-      Alert.alert(t('common.error'), t('note.failedArchive'));
-    }
-  }, [showToast, t, updateNote]);
-
-  const handleUnarchive = useCallback(async (note: Note) => {
-    try {
-      await updateNote.mutateAsync({
-        id: note.id,
-        data: { archived: false },
-      });
-      showToast(t('dashboard.noteUnarchived'));
-    } catch {
-      Alert.alert(t('common.error'), t('note.failedUnarchive'));
-    }
-  }, [showToast, t, updateNote]);
-
-  const handleMoveToTrash = useCallback(async (note: Note) => {
-    try {
-      await deleteNote.mutateAsync(note.id);
-      showToast(t('dashboard.noteDeleted'), 'success', {
-        label: t('dashboard.undo'),
-        onPress: async () => {
-          try {
-            await restoreNote.mutateAsync(note.id);
-            showToast(t('dashboard.noteRestored'));
-          } catch {
-            showToast(t('note.failedRestore'), 'error');
-          }
-        },
-      });
-    } catch {
-      Alert.alert(t('common.error'), t('note.failedMoveToTrash'));
-    }
-  }, [deleteNote, restoreNote, showToast, t]);
-
-  const handleRestore = useCallback(async (note: Note) => {
-    try {
-      await restoreNote.mutateAsync(note.id);
-      showToast(t('dashboard.noteRestored'));
-    } catch {
-      Alert.alert(t('common.error'), t('note.failedRestore'));
-    }
-  }, [restoreNote, showToast, t]);
-
-  const handleDuplicate = useCallback(async (note: Note) => {
-    try {
-      await duplicateNote.mutateAsync(note.id);
-      Alert.alert(t('note.duplicate'), t('note.duplicated'));
-    } catch {
-      Alert.alert(t('common.error'), t('note.failedDuplicate'));
-    }
-  }, [duplicateNote, t]);
-
-  const handleDeletePermanently = useCallback((note: Note) => {
-    Alert.alert(
-      t('note.deleteForeverTitle'),
-      t('note.deleteForeverConfirm'),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('common.delete'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await permanentDeleteNote.mutateAsync(note.id);
-            } catch {
-              Alert.alert(t('common.error'), t('note.failedDelete'));
-            }
-          },
-        },
-      ],
-    );
-  }, [permanentDeleteNote, t]);
-
-  const handleEmptyTrash = useCallback(() => {
+  const handleEmptyTrash = useCallback(async () => {
     const currentTrashCount = trashCountRef.current;
     if (currentTrashCount === 0) {
       return;
     }
 
-    Alert.alert(
-      t('dashboard.emptyTrash'),
-      t('dashboard.emptyTrashConfirmMessage', { count: currentTrashCount }),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('dashboard.emptyTrash'),
-          style: 'destructive',
-          onPress: async () => {
-            if (trashCountRef.current === 0) {
-              return;
-            }
-            if (!isConnected) {
-              Alert.alert(t('common.error'), t('dashboard.emptyTrashOffline'));
-              return;
-            }
-
-            setIsEmptyingTrash(true);
-            let serverTrashEmptied = false;
-            try {
-              await emptyTrashNotes();
-              serverTrashEmptied = true;
-              const trashedNotes = await getLocalNotes(db, { trashed: true });
-              await Promise.all(trashedNotes.map((note) => permanentDeleteLocalNote(db, note.id)));
-              Alert.alert(t('dashboard.emptyTrash'), t('dashboard.trashEmptied'));
-            } catch {
-              if (serverTrashEmptied) {
-                Alert.alert(t('dashboard.emptyTrash'), t('dashboard.trashEmptied'));
-              } else {
-                Alert.alert(t('common.error'), t('dashboard.emptyTrashFailed'));
-              }
-            } finally {
-              if (serverTrashEmptied) {
-                await handleRefresh().catch(() => {});
-              }
-              setIsEmptyingTrash(false);
-            }
-          },
-        },
-      ],
-    );
-  }, [db, handleRefresh, isConnected, t]);
-
-  const handleChangeColor = useCallback((note: Note) => {
-    setColorPickerNote(note);
-  }, []);
-
-  const handleShare = useCallback((note: Note) => {
-    navigation.navigate('Share', { noteId: note.id });
-  }, [navigation]);
-
-  const handleManageLabels = useCallback((note: Note) => {
-    setLabelPickerNote(note);
-  }, []);
-
-  const handleColorSelect = useCallback(async (color: string) => {
-    if (!colorPickerNote) return;
-    try {
-      await updateNote.mutateAsync({
-        id: colorPickerNote.id,
-        data: { color },
-      });
-    } catch {
-      Alert.alert(t('common.error'), t('note.failedColorUpdate'));
+    const confirmed = await confirm({
+      title: t('dashboard.emptyTrash'),
+      message: t('dashboard.emptyTrashConfirmMessage', { count: currentTrashCount }),
+      confirmLabel: t('dashboard.emptyTrash'),
+      destructive: true,
+    });
+    if (!confirmed) return;
+    if (trashCountRef.current === 0) {
+      return;
     }
-  }, [colorPickerNote, t, updateNote]);
+    if (!isConnected) {
+      Alert.alert(t('common.error'), t('dashboard.emptyTrashOffline'));
+      return;
+    }
+
+    setIsEmptyingTrash(true);
+    let serverTrashEmptied = false;
+    try {
+      await emptyTrashNotes();
+      serverTrashEmptied = true;
+      const trashedNotes = await getLocalNotes(db, { trashed: true });
+      await Promise.all(trashedNotes.map((note) => permanentDeleteLocalNote(db, note.id)));
+      Alert.alert(t('dashboard.emptyTrash'), t('dashboard.trashEmptied'));
+    } catch {
+      if (serverTrashEmptied) {
+        Alert.alert(t('dashboard.emptyTrash'), t('dashboard.trashEmptied'));
+      } else {
+        Alert.alert(t('common.error'), t('dashboard.emptyTrashFailed'));
+      }
+    } finally {
+      if (serverTrashEmptied) {
+        await handleRefresh().catch(() => {});
+      }
+      setIsEmptyingTrash(false);
+    }
+  }, [confirm, db, handleRefresh, isConnected, t]);
 
   // Separate active from archived matches. For My Tasks the archived notes are
   // mixed into `notes`; otherwise they come from the dedicated archived fetch.
@@ -586,20 +431,17 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   }, []);
 
   // Masonry card renderers, shared by the list (1 column) and grid (2 columns)
-  // layouts. The draggable variant omits onLongPress so the masonry's drag
-  // gesture owns the long press; the static variant uses it to open the context
-  // menu in the read-only trash view.
+  // layouts. Tapping a card opens the note (trashed notes open read-only); all
+  // per-note actions now live in the editor, so the card has no menu affordance.
   const renderMasonryCardStatic = useCallback(
     (note: Note) => (
       <NoteCard
         note={note}
         onPress={(rect) => handleNotePress(note.id, rect)}
-        onMenuPress={variant !== 'trash' ? () => handleOpenMenu(note) : undefined}
-        onLongPress={variant === 'trash' ? () => handleOpenMenu(note) : undefined}
         onLabelPress={variant === 'notes' ? handleLabelPress : undefined}
       />
     ),
-    [handleNotePress, handleOpenMenu, variant, handleLabelPress],
+    [handleNotePress, variant, handleLabelPress],
   );
 
   const renderMasonryCardDraggable = useCallback(
@@ -607,18 +449,26 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
       <NoteCard
         note={note}
         onPress={(rect) => handleNotePress(note.id, rect)}
-        onMenuPress={() => handleOpenMenu(note)}
         onLabelPress={handleLabelPress}
       />
     ),
-    [handleNotePress, handleOpenMenu, handleLabelPress],
+    [handleNotePress, handleLabelPress],
   );
 
   // Drag-and-drop is only available in the unfiltered notes variant while manual
   // sorting is active. Search and label filters both show a filtered subset
   // (and mix in archived matches), so reordering them would persist a partial
-  // or misclassified manual order — disable dragging there.
+  // or misclassified manual order — disable dragging there. Search results are
+  // additionally ordered by full-text relevance, not manual position, so a drag
+  // would not even map to the positions being shown.
   const isDraggable = variant === 'notes' && sortMode === 'manual' && !debouncedSearch && !labelId;
+
+  // Signature of the active view/filter/sort/layout. The static grid swaps
+  // instantly when it changes, so only in-view note changes (create, delete,
+  // archive, pin, sync) animate — never a search/sort switch or first load.
+  // JSON-encoded (not delimiter-joined) so free-form search text — which may
+  // contain any separator character — can't make two different views collide.
+  const gridViewKey = JSON.stringify([variant, debouncedSearch, labelId ?? '', sortMode, layout]);
 
   const handleGridSectionReorder = useCallback(
     (sectionKey: string, newData: Note[]) => {
@@ -820,6 +670,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           }
           contentBottomPadding={listBottomPadding}
           ListEmptyComponent={listEmptyComponent}
+          viewKey={gridViewKey}
         />
       )}
 
@@ -835,38 +686,6 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         </TouchableOpacity>
       )}
 
-      <NoteContextMenu
-        visible={contextMenuNote !== null}
-        note={contextMenuNote}
-        viewContext={variant as ContextMenuViewContext}
-        onClose={() => setContextMenuNote(null)}
-        onPin={handlePin}
-        onArchive={handleArchive}
-        onUnarchive={handleUnarchive}
-        onDuplicate={handleDuplicate}
-        onMoveToTrash={handleMoveToTrash}
-        onRestore={handleRestore}
-        onDeletePermanently={handleDeletePermanently}
-        onChangeColor={handleChangeColor}
-        onShare={handleShare}
-        onManageLabels={handleManageLabels}
-      />
-
-      <ColorPicker
-        visible={colorPickerNote !== null}
-        currentColor={colorPickerNote?.color ?? '#ffffff'}
-        onSelect={handleColorSelect}
-        onClose={() => setColorPickerNote(null)}
-      />
-
-      {labelPickerNote && (
-        <LabelPicker
-          visible
-          noteId={labelPickerNote.id}
-          noteLabels={(labelPickerNoteData ?? labelPickerNote).labels ?? []}
-          onClose={() => setLabelPickerNote(null)}
-        />
-      )}
     </View>
   );
 }
