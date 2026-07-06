@@ -1,5 +1,10 @@
 import { StyleSheet } from 'react-native';
 
+// Muted tone shared by the completed-section ghost parent's checkbox and its
+// label, so the label reads as lighter than the real items just like the ghost
+// checkbox is lighter than the real checkboxes.
+const GHOST_PARENT_COLOR = '#aaa';
+
 export const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -203,12 +208,15 @@ export const styles = StyleSheet.create({
     height: 18,
     borderRadius: 3,
     borderWidth: 1,
-    borderColor: '#aaa',
+    borderColor: GHOST_PARENT_COLOR,
     flexShrink: 0,
   },
   ghostParentText: {
-    fontSize: 14,
-    fontWeight: '600',
+    // Match the checklist item rows' text (ListItem's textInput) so the ghost
+    // parent label reads like the items below it — same size, no bold — but in
+    // the muted ghost tone so it's lighter, matching the ghost checkbox.
+    fontSize: 16,
+    color: GHOST_PARENT_COLOR,
     flex: 1,
   },
 });
