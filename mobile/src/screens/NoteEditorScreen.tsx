@@ -319,8 +319,10 @@ export default function NoteEditorScreen() {
   }, [zoom, zoomEnabled]);
 
   // Mark the exit as intentional (so beforeRemove doesn't re-handle it), zoom
-  // back onto the card, then pop. Used by archive/delete before they mutate so
-  // the dashboard's removal reflow plays on the still-present card.
+  // back onto the card, then pop. Used by every action that leaves the editor
+  // via its own button (archive, trash, restore, delete-forever) so the zoom
+  // and any dashboard removal reflow plays consistently instead of only on
+  // some exit paths.
   const zoomCloseAndExit = useCallback(async () => {
     intentionalExitRef.current = true;
     await animateClose();
@@ -1508,13 +1510,12 @@ export default function NoteEditorScreen() {
     if (!noteId) return;
     try {
       await restoreMutation.mutateAsync(noteId);
-      intentionalExitRef.current = true;
       showToast(t('dashboard.noteRestored'));
-      navigation.goBack();
+      await zoomCloseAndExit();
     } catch {
       Alert.alert(t('common.error'), t('note.failedRestore'));
     }
-  }, [navigation, noteId, restoreMutation, showToast, t]);
+  }, [noteId, restoreMutation, showToast, t, zoomCloseAndExit]);
 
   // Permanently delete a trashed note (read-only view) after confirmation.
   const handleDeletePermanently = useCallback(async () => {
@@ -1529,14 +1530,12 @@ export default function NoteEditorScreen() {
     const currentNoteId = noteIdRef.current;
     if (!currentNoteId) return;
     try {
-      intentionalExitRef.current = true;
       await permanentDeleteMutation.mutateAsync(currentNoteId);
-      navigation.goBack();
+      await zoomCloseAndExit();
     } catch {
-      intentionalExitRef.current = false;
       Alert.alert(t('common.error'), t('note.failedDelete'));
     }
-  }, [confirm, navigation, noteId, permanentDeleteMutation, t]);
+  }, [confirm, noteId, permanentDeleteMutation, t, zoomCloseAndExit]);
 
   const handleTogglePin = useCallback(() => withSavedNote(async (id) => {
     const newPinned = !pinnedRef.current;
