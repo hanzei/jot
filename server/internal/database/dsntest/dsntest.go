@@ -123,7 +123,12 @@ func containerBaseDSN(t *testing.T) string {
 	testcontainers.SkipIfProviderIsNotHealthy(t)
 
 	containerOnce.Do(func() {
-		ctx := context.Background()
+		// t.Context() is only used for this synchronous startup call, which
+		// completes well before t's cleanup phase (and context cancellation)
+		// begins, even though the container it starts outlives t.
+		ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
+		defer cancel()
+
 		container, err := tcpostgres.Run(ctx, "postgres:16-alpine",
 			tcpostgres.WithDatabase("jot_test"),
 			tcpostgres.WithUsername("jot"),
