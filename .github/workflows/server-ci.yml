@@ -16,6 +16,25 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine@sha256:e013e867e712fec275706a6c51c966f0bb0c93cfa8f51000f85a15f9865a28cb # 16-alpine
+        env:
+          POSTGRES_USER: jot
+          POSTGRES_PASSWORD: jot
+          POSTGRES_DB: jot_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      # See internal/database/dsntest: each Postgres-backed test creates and
+      # drops its own database on this server, so the base DSN's database
+      # name is only used to establish the initial connection.
+      TEST_POSTGRES_DSN: postgres://jot:jot@localhost:5432/jot_test?sslmode=disable
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 

@@ -198,6 +198,7 @@ Migration files live in `server/internal/database/migrations/` and are named `NN
 - Helper types: `TestResponse`, `TestUser`, `TestServer`
 - Use `t.Run` subtests for grouping related cases; see `server/CLAUDE.md` for the full Go test naming and table-driven test conventions
 - Run: `task test-server`
+- Store-level tests (`internal/models`) and migration/backfill tests (`internal/database`) run against SQLite unconditionally and additionally against Postgres when `TEST_POSTGRES_DSN` is set, via the harnesses in `internal/database/dsntest` (dependency-free DSN/raw-connection helpers, usable even from `internal/database`'s own internal test files) and `internal/database/dbtest` (fully migrated databases, for other packages). Each test creates and drops its own isolated Postgres database; tests skip cleanly when `TEST_POSTGRES_DSN` is unset. See the README's "Testing against Postgres" section for local setup.
 
 ---
 

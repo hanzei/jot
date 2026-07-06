@@ -18,6 +18,11 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+const (
+	driverSQLite   = "sqlite"
+	driverPostgres = "postgres"
+)
+
 //go:embed migrations/sqlite/*.sql
 var sqliteMigrationsFS embed.FS
 
@@ -39,7 +44,7 @@ func New(driver, dsn string) (*sql.DB, error) {
 		return nil, fmt.Errorf("ping database: %w", err)
 	}
 
-	if driver == "sqlite" {
+	if driver == driverSQLite {
 		// Serialize all access through a single connection. SQLite supports only one
 		// concurrent writer; a single connection eliminates SQLITE_BUSY errors.
 		db.SetMaxOpenConns(1)
@@ -68,7 +73,7 @@ func runMigrations(db *sql.DB, driver string) error {
 	)
 
 	switch driver {
-	case "sqlite":
+	case driverSQLite:
 		src, err = iofs.New(sqliteMigrationsFS, "migrations/sqlite")
 		if err != nil {
 			return fmt.Errorf("create sqlite migration source: %w", err)
@@ -77,12 +82,23 @@ func runMigrations(db *sql.DB, driver string) error {
 		if err != nil {
 			return fmt.Errorf("create sqlite migration driver: %w", err)
 		}
-	case "postgres":
+	case driverPostgres:
 		src, err = iofs.New(postgresMigrationsFS, "migrations/postgres")
 		if err != nil {
 			return fmt.Errorf("create postgres migration source: %w", err)
 		}
-		dbDriver, err = postgresmigrate.WithInstance(db, &postgresmigrate.Config{})
+		// postgresmigrate.WithInstance checks out a dedicated *sql.Conn for its
+		// session-scoped advisory lock and only releases it when the driver is
+		// closed — but closing the driver would also close db, which the caller
+		// still needs. Check out and release the connection ourselves instead,
+		// via WithConnection, so it doesn't leak for the rest of db's lifetime.
+		var conn *sql.Conn
+		conn, err = db.Conn(context.Background())
+		if err != nil {
+			return fmt.Errorf("checkout postgres migration connection: %w", err)
+		}
+		defer func() { _ = conn.Close() }()
+		dbDriver, err = postgresmigrate.WithConnection(context.Background(), conn, &postgresmigrate.Config{})
 		if err != nil {
 			return fmt.Errorf("create postgres migration driver: %w", err)
 		}
