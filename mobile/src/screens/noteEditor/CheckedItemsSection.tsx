@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import type { Collaborator } from '@jot/shared';
 import { useTheme } from '../../theme/ThemeContext';
 import { getEffectiveColors } from '../../theme/colors';
-import ListItem from '../../components/ListItem';
+import ListItem, { DRAG_HANDLE_WIDTH } from '../../components/ListItem';
 import { styles } from './styles';
 import type { LocalItem } from './listItemModel';
 
@@ -86,7 +86,9 @@ export default function CheckedItemsSection({
           rows.push(
             <View
               key={`ghost-${parent.id}`}
-              style={styles.ghostParent}
+              // Reserve the drag handle's width (editable notes only, matching the
+              // active rows) so the ghost checkbox lines up with the rows below it.
+              style={[styles.ghostParent, editable && { paddingLeft: DRAG_HANDLE_WIDTH }]}
               accessibilityLabel={t('note.completedItemGroup', { title: parent.text })}
             >
               <View style={styles.ghostCheckbox} />
@@ -108,6 +110,9 @@ export default function CheckedItemsSection({
           completed={item.completed}
           editable={editable}
           isActive={false}
+          // Active rows show a drag handle when editable; mirror its width here so
+          // completed checkboxes align with the active ones above.
+          reserveDragHandleSpace={editable}
           indentLevel={item.parentId ? 1 : 0}
           assignedTo={item.assigned_to}
           isShared={!!isNoteShared}
