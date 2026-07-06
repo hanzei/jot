@@ -12,7 +12,7 @@ import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { ArrowLeft } from 'lucide-react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../store/AuthContext';
 import { useBannerShown } from '../hooks/useBannerShown';
@@ -46,7 +46,7 @@ export default function SettingsScreen() {
           accessibilityLabel={t('common.back')}
           accessibilityRole="button"
         >
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
+          <ArrowLeft size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>{t('settings.title')}</Text>
         <View style={styles.headerSpacer} />

@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { CircleAlert, CircleCheck, Info, X, type LucideIcon } from 'lucide-react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { ToastContext, type ToastAction, type ToastType } from '../hooks/useToast';
 import { useTheme } from '../theme/ThemeContext';
@@ -29,10 +29,10 @@ const ENTER_ANIMATION_MS = 180;
 const EXIT_ANIMATION_MS = 180;
 
 // Fixed colors chosen to read on the dark offlineBanner background in both themes.
-const TYPE_CONFIG: Record<ToastType, { color: string; iconName: keyof typeof Ionicons.glyphMap }> = {
-  success: { color: '#86efac', iconName: 'checkmark-circle-outline' },
-  error:   { color: '#f87171', iconName: 'alert-circle-outline' },
-  info:    { color: '#60a5fa', iconName: 'information-circle-outline' },
+const TYPE_CONFIG: Record<ToastType, { color: string; icon: LucideIcon }> = {
+  success: { color: '#86efac', icon: CircleCheck },
+  error:   { color: '#f87171', icon: CircleAlert },
+  info:    { color: '#60a5fa', icon: Info },
 };
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
@@ -74,7 +74,7 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
   const [isActionInFlight, setIsActionInFlight] = useState(false);
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(12)).current;
-  const { color: typeColor, iconName } = TYPE_CONFIG[toast.type];
+  const { color: typeColor, icon: Icon } = TYPE_CONFIG[toast.type];
 
   const clearAutoDismissTimer = useCallback(() => {
     if (autoDismissTimerRef.current) {
@@ -151,7 +151,7 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
       ]}
       accessibilityLiveRegion="polite"
     >
-      <Ionicons name={iconName} size={22} color={typeColor} style={styles.icon} />
+      <Icon size={22} color={typeColor} style={styles.icon} />
       <Text style={[styles.message, { color: colors.offlineBannerText }]} numberOfLines={3}>
         {toast.message}
       </Text>
@@ -188,7 +188,7 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
         accessibilityLabel={t('common.close')}
         testID={`toast-close-${toast.id}`}
       >
-        <Ionicons name="close" size={18} color={colors.offlineBannerText} />
+        <X size={18} color={colors.offlineBannerText} />
       </TouchableOpacity>
     </Animated.View>
   );

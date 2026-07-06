@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import { EyeIcon, EyeSlashIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import { Eye, EyeOff, TriangleAlert } from 'lucide-react';
 import { auth } from '@/utils/api';
 import { setUser, setSettings } from '@/utils/auth';
 
@@ -103,7 +103,7 @@ export default function Login({ onLogin, registrationEnabled }: LoginProps) {
                     ? `${t('auth.hidePassword')} (${t('auth.passwordPlaceholder')})`
                     : `${t('auth.showPassword')} (${t('auth.passwordPlaceholder')})`}
                 >
-                  {showPassword ? <EyeSlashIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
             </div>
@@ -115,7 +115,7 @@ export default function Login({ onLogin, registrationEnabled }: LoginProps) {
               className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400 animate-fade-in motion-reduce:animate-none"
             >
               <div className="flex items-start gap-2">
-                <ExclamationTriangleIcon className="mt-0.5 h-5 w-5 flex-shrink-0" />
+                <TriangleAlert className="mt-0.5 h-5 w-5 flex-shrink-0" />
                 <span>{error}</span>
               </div>
             </div>

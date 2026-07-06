@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
-import { ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import { TriangleAlert } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 interface ConfirmDialogProps {
@@ -59,7 +59,7 @@ export default function ConfirmDialog({
               <div className="flex items-start gap-3">
                 {variant === 'danger' && (
                   <div className="flex-shrink-0 rounded-full bg-red-100 dark:bg-red-900/30 p-2">
-                    <ExclamationTriangleIcon className="h-5 w-5 text-red-600 dark:text-red-400" />
+                    <TriangleAlert className="h-5 w-5 text-red-600 dark:text-red-400" />
                   </div>
                 )}
                 <div>

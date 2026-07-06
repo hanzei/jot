@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Image, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { CloudOff, RefreshCw, Trash2, X } from 'lucide-react-native';
 import type { NoteImage } from '@jot/shared';
 import { useActiveServerBaseUrl } from '../hooks/useActiveServerBaseUrl';
 import { noteImageThumbnailUrl } from '../api/images';
@@ -139,7 +139,7 @@ export default function NoteImageGallery({ images, editable = false, uploads = [
               accessibilityRole="button"
               testID={`remove-image-${tile.image.id}`}
             >
-              <Ionicons name="trash" size={16} color="#fff" />
+              <Trash2 size={16} color="#fff" />
             </TouchableOpacity>
           )}
         </View>
@@ -159,7 +159,7 @@ export default function NoteImageGallery({ images, editable = false, uploads = [
               </>
             ) : upload.status === 'queued' ? (
               <>
-                <Ionicons name="cloud-offline-outline" size={20} color="#fff" />
+                <CloudOff size={20} color="#fff" />
                 <Text style={styles.uploadStatusText}>{t('images.queuedOffline')}</Text>
                 {onDismissUpload && (
                   <TouchableOpacity
@@ -169,7 +169,7 @@ export default function NoteImageGallery({ images, editable = false, uploads = [
                     accessibilityRole="button"
                     testID={`dismiss-upload-${upload.id}`}
                   >
-                    <Ionicons name="close" size={16} color="#fff" />
+                    <X size={16} color="#fff" />
                   </TouchableOpacity>
                 )}
               </>
@@ -185,7 +185,7 @@ export default function NoteImageGallery({ images, editable = false, uploads = [
                       accessibilityRole="button"
                       testID={`retry-upload-${upload.id}`}
                     >
-                      <Ionicons name="refresh" size={16} color="#fff" />
+                      <RefreshCw size={16} color="#fff" />
                     </TouchableOpacity>
                   )}
                   {onDismissUpload && (
@@ -196,7 +196,7 @@ export default function NoteImageGallery({ images, editable = false, uploads = [
                       accessibilityRole="button"
                       testID={`dismiss-upload-${upload.id}`}
                     >
-                      <Ionicons name="close" size={16} color="#fff" />
+                      <X size={16} color="#fff" />
                     </TouchableOpacity>
                   )}
                 </View>

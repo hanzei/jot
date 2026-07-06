@@ -1,7 +1,7 @@
 import { ReactNode, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation } from 'react-router';
-import { Bars3Icon } from '@heroicons/react/24/outline';
+import { Menu as MenuIcon } from 'lucide-react';
 import { Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import LetterAvatar from '@/components/LetterAvatar';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -169,7 +169,7 @@ const NavigationHeader = ({ title = 'Jot', onLogout, children, username, isAdmin
               aria-label={t('nav.toggleSidebar', { defaultValue: 'Toggle sidebar' })}
               className="order-0 p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white"
             >
-              <Bars3Icon className="h-7 w-7" />
+              <MenuIcon className="h-7 w-7" />
             </button>
           )}
           <div className="order-1 flex items-center space-x-2 sm:space-x-4">

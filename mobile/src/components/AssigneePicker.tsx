@@ -7,7 +7,7 @@ import {
   StyleSheet,
   ScrollView,
 } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { Check, UserMinus, X } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import UserAvatar from './UserAvatar';
@@ -63,7 +63,7 @@ export default function AssigneePicker({
               testID="assignee-picker-close"
               accessibilityLabel={t('common.close')}
             >
-              <Ionicons name="close" size={22} color={colors.textSecondary} />
+              <X size={22} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
@@ -94,7 +94,7 @@ export default function AssigneePicker({
                     {displayName(c)}
                   </Text>
                   {isSelected && (
-                    <Ionicons name="checkmark" size={20} color={colors.primary} />
+                    <Check size={20} color={colors.primary} />
                   )}
                 </TouchableOpacity>
               );
@@ -115,7 +115,7 @@ export default function AssigneePicker({
                 accessibilityState={{ selected: false }}
               >
                 <View style={styles.unassignIcon}>
-                  <Ionicons name="person-remove-outline" size={16} color={colors.error} />
+                  <UserMinus size={16} color={colors.error} />
                 </View>
                 <Text style={[styles.unassignText, { color: colors.error }]}>{t('note.unassign')}</Text>
               </TouchableOpacity>

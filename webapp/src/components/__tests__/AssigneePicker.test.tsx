@@ -78,11 +78,11 @@ describe('AssigneePicker', () => {
     )
 
     const aliceOption = screen.getByText('Alice Williams').closest('[role="option"]')!
-    const checkmark = aliceOption.querySelector('svg path[d="M5 13l4 4L19 7"]')
+    const checkmark = aliceOption.querySelector('svg.lucide-check')
     expect(checkmark).not.toBeNull()
 
     const bobOption = screen.getByText('Bob Martinez').closest('[role="option"]')!
-    const bobCheckmark = bobOption.querySelector('svg path[d="M5 13l4 4L19 7"]')
+    const bobCheckmark = bobOption.querySelector('svg.lucide-check')
     expect(bobCheckmark).toBeNull()
   })
 

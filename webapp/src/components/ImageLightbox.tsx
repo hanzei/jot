@@ -1,6 +1,6 @@
 import { useCallback, useEffect } from 'react';
 import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react';
-import { ChevronLeftIcon, ChevronRightIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { NoteImage } from '@jot/shared';
 import { images as imagesApi } from '@/utils/api';
@@ -69,7 +69,7 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose }:
             onClick={onClose}
             className="absolute -top-10 right-0 p-1 text-white hover:text-gray-300"
           >
-            <XMarkIcon className="h-6 w-6" />
+            <X className="h-6 w-6" />
           </button>
           {isOpen && hasMultiple && (
             <>
@@ -79,7 +79,7 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose }:
                 onClick={goToPrevious}
                 className="absolute left-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/40 text-white hover:bg-black/60"
               >
-                <ChevronLeftIcon className="h-6 w-6" />
+                <ChevronLeft className="h-6 w-6" />
               </button>
               <button
                 type="button"
@@ -87,7 +87,7 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose }:
                 onClick={goToNext}
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/40 text-white hover:bg-black/60"
               >
-                <ChevronRightIcon className="h-6 w-6" />
+                <ChevronRight className="h-6 w-6" />
               </button>
             </>
           )}

@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { CircleAlert, Square } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, type Note, type NoteItem, type User } from '@jot/shared';
 import { useTheme } from '../theme/ThemeContext';
@@ -130,7 +130,7 @@ function ListPreview({ items, hasColor }: { items: NoteItem[]; hasColor?: boolea
             style={[styles.listRow, { marginLeft: indentLevel * VALIDATION.INDENT_PX_PER_LEVEL }]}
             testID={`note-card-list-row-${item.id}`}
           >
-            <Ionicons name="square-outline" size={14} color={hasColor ? '#555' : colors.textSecondary} />
+            <Square size={14} color={hasColor ? '#555' : colors.textSecondary} />
             <LinkText text={item.text} style={[styles.listText, { color: hasColor ? '#1a1a1a' : colors.text }]} />
           </View>
         );
@@ -219,7 +219,7 @@ function NoteCard({ note, onPress, onLongPress, onLabelPress }: NoteCardProps) {
           testID={`note-failed-badge-${note.id}`}
           accessibilityLabel={t('syncFailures.badge')}
         >
-          <Ionicons name="alert-circle" size={13} color={hasColor ? '#a14b00' : colors.warningText} />
+          <CircleAlert size={13} color={hasColor ? '#a14b00' : colors.warningText} />
           <Text style={[styles.failedBadgeText, { color: hasColor ? '#a14b00' : colors.warningText }]}>
             {t('syncFailures.badge')}
           </Text>

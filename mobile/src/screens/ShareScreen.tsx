@@ -10,7 +10,7 @@ import {
   Alert,
   ScrollView,
 } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { ArrowLeft, Plus, Search, X } from 'lucide-react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
@@ -168,7 +168,7 @@ export default function ShareScreen() {
           )}
           <Text style={[styles.userHandle, { color: colors.textSecondary }]}>@{item.username}</Text>
         </View>
-        <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
+        <Plus size={22} color={colors.primary} />
       </TouchableOpacity>
     ),
     [handleShare, pendingUserIds, colors],
@@ -197,7 +197,7 @@ export default function ShareScreen() {
           accessibilityRole="button"
           accessibilityLabel={t('share.removeAccessFor', { username: item.username ?? item.shared_with_user_id })}
         >
-          <Ionicons name="close-circle-outline" size={22} color={colors.error} />
+          <X size={22} color={colors.error} />
         </TouchableOpacity>
       </View>
     ),
@@ -213,14 +213,14 @@ export default function ShareScreen() {
           accessibilityRole="button"
           accessibilityLabel={t('common.back')}
         >
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
+          <ArrowLeft size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>{t('note.share')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
       <View style={[styles.searchContainer, { backgroundColor: colors.inputBackground, borderColor: colors.searchBorder }]}>
-        <Ionicons name="search" size={18} color={colors.iconMuted} style={styles.searchIcon} />
+        <Search size={18} color={colors.iconMuted} style={styles.searchIcon} />
         <TextInput
           style={[styles.searchInput, { color: colors.text }]}
           placeholder={t('share.searchUsersPlaceholder')}
@@ -239,7 +239,7 @@ export default function ShareScreen() {
             accessibilityRole="button"
             accessibilityLabel={t('common.clearSearch')}
           >
-            <Ionicons name="close-circle" size={18} color={colors.iconMuted} />
+            <X size={18} color={colors.iconMuted} />
           </TouchableOpacity>
         )}
       </View>

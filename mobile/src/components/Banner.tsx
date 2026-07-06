@@ -1,12 +1,12 @@
 import React, { useContext, useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { X, type LucideIcon } from 'lucide-react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
 interface BannerProps {
   /** Whether the banner should be shown. Toggling animates a fade in/out. */
   visible: boolean;
-  icon: React.ComponentProps<typeof Ionicons>['name'];
+  icon: LucideIcon;
   text: string;
   backgroundColor: string;
   borderColor: string;
@@ -36,7 +36,7 @@ interface BannerProps {
  */
 export default function Banner({
   visible,
-  icon,
+  icon: Icon,
   text,
   backgroundColor,
   borderColor,
@@ -75,7 +75,7 @@ export default function Banner({
 
   const body = (
     <View style={styles.content}>
-      <Ionicons name={icon} size={16} color={textColor} />
+      <Icon size={16} color={textColor} />
       <Text style={[styles.text, { color: textColor }]}>{text}</Text>
     </View>
   );
@@ -117,7 +117,7 @@ export default function Banner({
             accessibilityLabel={dismissAccessibilityLabel}
             testID={testID ? `${testID}-dismiss` : undefined}
           >
-            <Ionicons name="close" size={18} color={textColor} />
+            <X size={18} color={textColor} />
           </TouchableOpacity>
         )}
       </View>

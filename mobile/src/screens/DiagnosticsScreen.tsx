@@ -12,7 +12,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
+import { ArrowLeft, Expand } from 'lucide-react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
@@ -122,7 +122,7 @@ export default function DiagnosticsScreen() {
           accessibilityLabel={t('common.back')}
           accessibilityRole="button"
         >
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
+          <ArrowLeft size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>{t('diagnostics.title')}</Text>
         <View style={styles.headerSpacer} />
@@ -204,7 +204,7 @@ export default function DiagnosticsScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={t('diagnostics.expandLogs')}
               >
-                <Ionicons name="expand-outline" size={18} color={colors.primary} />
+                <Expand size={18} color={colors.primary} />
               </TouchableOpacity>
               <TouchableOpacity onPress={handleClearLogs} accessibilityRole="button">
                 <Text style={[styles.clearLogsButton, { color: colors.primary }]}>

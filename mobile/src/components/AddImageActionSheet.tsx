@@ -1,7 +1,7 @@
 import React, { useCallback, useContext } from 'react';
 import { Modal, View, Text, TouchableOpacity, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { Camera, Folder, Images } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -110,17 +110,17 @@ export default function AddImageActionSheet({ visible, onClose, onPick, onPermis
             <Text style={[styles.title, { color: colors.text }]}>{t('images.addImage')}</Text>
 
             <TouchableOpacity style={styles.row} onPress={handleCamera} testID="add-image-camera" accessibilityRole="button">
-              <Ionicons name="camera-outline" size={22} color={colors.icon} />
+              <Camera size={22} color={colors.icon} />
               <Text style={[styles.rowText, { color: colors.text }]}>{t('images.camera')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.row} onPress={handleLibrary} testID="add-image-library" accessibilityRole="button">
-              <Ionicons name="images-outline" size={22} color={colors.icon} />
+              <Images size={22} color={colors.icon} />
               <Text style={[styles.rowText, { color: colors.text }]}>{t('images.photoLibrary')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.row} onPress={handleFiles} testID="add-image-files" accessibilityRole="button">
-              <Ionicons name="folder-outline" size={22} color={colors.icon} />
+              <Folder size={22} color={colors.icon} />
               <Text style={[styles.rowText, { color: colors.text }]}>{t('images.files')}</Text>
             </TouchableOpacity>
           </Pressable>

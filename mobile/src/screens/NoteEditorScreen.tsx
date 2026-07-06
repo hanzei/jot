@@ -31,7 +31,7 @@ import {
 import { Gesture } from 'react-native-gesture-handler';
 import { LinearTransition, useSharedValue, runOnJS } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { Archive, ArrowLeft, Check, ChevronRight, CircleAlert, EllipsisVertical, FileText, Image, List, Palette, Pin, Plus } from 'lucide-react-native';
 import { useNavigation, useRoute, RouteProp, type NavigationAction } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
@@ -2002,7 +2002,7 @@ export default function NoteEditorScreen() {
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           testID="editor-back"
         >
-          <Ionicons name="arrow-back" size={24} color={hasNoteColor ? '#1a1a1a' : colors.text} />
+          <ArrowLeft size={24} color={hasNoteColor ? '#1a1a1a' : colors.text} />
         </TouchableOpacity>
         <View style={styles.headerRight}>
           {noteType === 'text' && isEditingContent && hasCreated ? (
@@ -2018,11 +2018,11 @@ export default function NoteEditorScreen() {
           ) : (
             !hasCreated && (
               <TouchableOpacity onPress={handleToggleNoteType} style={[styles.typeToggle, { backgroundColor: colors.primaryLight }]} testID="toggle-note-type">
-                <Ionicons
-                  name={noteType === 'text' ? 'list' : 'document-text-outline'}
-                  size={22}
-                  color={colors.primary}
-                />
+                {noteType === 'text' ? (
+                  <List size={22} color={colors.primary} />
+                ) : (
+                  <FileText size={22} color={colors.primary} />
+                )}
                 <Text style={[styles.typeToggleText, { color: colors.primary }]}>
                   {noteType === 'text' ? t('note.typeList') : t('note.typeText')}
                 </Text>
@@ -2040,11 +2040,11 @@ export default function NoteEditorScreen() {
           accessibilityRole="button"
           accessibilityLabel={t('syncFailures.badge')}
         >
-          <Ionicons name="alert-circle" size={16} color={colors.warningText} />
+          <CircleAlert size={16} color={colors.warningText} />
           <Text style={[styles.failedBarText, { color: colors.warningText }]} numberOfLines={1}>
             {t('syncFailures.editorBanner')}
           </Text>
-          <Ionicons name="chevron-forward" size={16} color={colors.warningText} />
+          <ChevronRight size={16} color={colors.warningText} />
         </TouchableOpacity>
       )}
 
@@ -2210,7 +2210,7 @@ export default function NoteEditorScreen() {
 
             {!isReadOnly && (
               <TouchableOpacity style={styles.addItemRow} onPress={handleAddItem} testID="add-list-item">
-                <Ionicons name="add" size={22} color={colors.primary} />
+                <Plus size={22} color={colors.primary} />
                 <Text style={[styles.addItemText, { color: colors.primary }]}>{t('note.addItem')}</Text>
               </TouchableOpacity>
             )}
@@ -2245,7 +2245,7 @@ export default function NoteEditorScreen() {
           accessibilityLabel={t('note.changeColor')}
           accessibilityState={{ disabled: isReadOnly }}
         >
-          <Ionicons name="color-palette-outline" size={22} color={isReadOnly ? disabledBarIconColor : barIconColor} />
+          <Palette size={22} color={isReadOnly ? disabledBarIconColor : barIconColor} />
         </TouchableOpacity>
 
         {/* Add image. Needs a server-backed note, so a brand-new note is saved
@@ -2261,7 +2261,7 @@ export default function NoteEditorScreen() {
           accessibilityLabel={t('images.addImage')}
           accessibilityState={{ disabled: isReadOnly }}
         >
-          <Ionicons name="image-outline" size={22} color={isReadOnly ? disabledBarIconColor : barIconColor} />
+          <Image size={22} color={isReadOnly ? disabledBarIconColor : barIconColor} />
         </TouchableOpacity>
 
         {/* Pin / Unpin. Save-first: an unsaved note is created before pinning. */}
@@ -2273,7 +2273,7 @@ export default function NoteEditorScreen() {
           accessibilityLabel={pinned ? t('note.unpin') : t('note.pin')}
           accessibilityState={{ disabled: isReadOnly }}
         >
-          <Ionicons name={pinned ? 'pin' : 'pin-outline'} size={22} color={isReadOnly ? disabledBarIconColor : (pinned ? colors.primary : barIconColor)} />
+          <Pin size={22} color={isReadOnly ? disabledBarIconColor : (pinned ? colors.primary : barIconColor)} fill={pinned ? colors.primary : 'none'} />
         </TouchableOpacity>
 
         {/* Archive / Unarchive. Save-first, like Pin. */}
@@ -2285,8 +2285,7 @@ export default function NoteEditorScreen() {
           accessibilityLabel={archived ? t('note.unarchive') : t('note.archive')}
           accessibilityState={{ disabled: isReadOnly }}
         >
-          <Ionicons
-            name="archive-outline"
+          <Archive
             size={22}
             color={isReadOnly ? disabledBarIconColor : (archived ? colors.primary : barIconColor)}
           />
@@ -2302,7 +2301,7 @@ export default function NoteEditorScreen() {
           testID="toolbar-menu-btn"
           accessibilityLabel={t('note.menuOptions')}
         >
-          <Ionicons name="ellipsis-vertical" size={22} color={barIconColor} />
+          <EllipsisVertical size={22} color={barIconColor} />
         </TouchableOpacity>
       </View>
 
@@ -2407,7 +2406,7 @@ export default function NoteEditorScreen() {
                   {server.displayName || server.serverUrl}
                 </Text>
                 {server.serverId === activeShareServerId && (
-                  <Ionicons name="checkmark" size={18} color={colors.primary} />
+                  <Check size={18} color={colors.primary} />
                 )}
               </TouchableOpacity>
             ))}

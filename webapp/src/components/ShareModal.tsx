@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react';
-import { XMarkIcon, TrashIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
+import { X, Trash2, ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ROLES, type Note, type NoteShare, type User } from '@jot/shared';
 import { notes, users as usersApi } from '@/utils/api';
@@ -202,7 +202,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
                 aria-label={t('common.close')}
                 className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
               >
-                <XMarkIcon className="h-5 w-5" />
+                <X className="h-5 w-5" />
               </button>
             </div>
 
@@ -236,7 +236,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
                   className="w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 pr-10 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                   disabled={isLoading}
                 />
-                <ChevronDownIcon className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 
                 {showSuggestions && (
                   <div 
@@ -305,7 +305,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
                         title={t('share.removeAccess')}
                         aria-label={t('share.removeAccess')}
                       >
-                        <TrashIcon className="h-4 w-4" />
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
                   ))}

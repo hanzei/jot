@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TextInput, ScrollView, TouchableOpacity } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { ArrowUpDown, LayoutGrid, List, Menu, Search, X } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import type { NoteSort } from '@jot/shared';
 import { useTheme } from '../../theme/ThemeContext';
@@ -47,6 +47,7 @@ export default function NotesListHeader({
   const { colors } = useTheme();
   const activeSortLabel = getNoteSortLabel(sortMode, t);
   const isGrid = layout === 'grid';
+  const LayoutIcon = isGrid ? List : LayoutGrid;
 
   return (
     <>
@@ -64,11 +65,11 @@ export default function NotesListHeader({
             accessibilityLabel={t('nav.openMenu')}
             accessibilityRole="button"
           >
-            <Ionicons name="menu" size={22} color={colors.text} />
+            <Menu size={22} color={colors.text} />
           </TouchableOpacity>
         )}
         <View style={[styles.searchContainer, { backgroundColor: colors.searchBackground, borderColor: colors.searchBorder }]}>
-          <Ionicons name="search" size={18} color={colors.iconMuted} style={styles.searchIcon} />
+          <Search size={18} color={colors.iconMuted} style={styles.searchIcon} />
           <TextInput
             style={[styles.searchInput, { color: colors.text }]}
             placeholder={t('dashboard.searchPlaceholder')}
@@ -87,7 +88,7 @@ export default function NotesListHeader({
               accessibilityLabel={t('common.clearSearch')}
               hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
             >
-              <Ionicons name="close-circle" size={18} color={colors.iconMuted} />
+              <X size={18} color={colors.iconMuted} />
             </TouchableOpacity>
           )}
         </View>
@@ -105,11 +106,7 @@ export default function NotesListHeader({
           accessibilityLabel={t(isGrid ? 'dashboard.layoutToggleToList' : 'dashboard.layoutToggleToGrid')}
           accessibilityState={{ selected: isGrid }}
         >
-          <Ionicons
-            name={isGrid ? 'list-outline' : 'grid-outline'}
-            size={18}
-            color={colors.icon}
-          />
+          <LayoutIcon size={18} color={colors.icon} />
         </TouchableOpacity>
         <TouchableOpacity
           style={[
@@ -125,7 +122,7 @@ export default function NotesListHeader({
           accessibilityLabel={t('dashboard.sortAccessibilityLabel', { sortLabel: activeSortLabel })}
           accessibilityState={{ expanded: isSortOpen }}
         >
-          <Ionicons name="swap-vertical" size={18} color={isSortOpen ? colors.primary : colors.icon} />
+          <ArrowUpDown size={18} color={isSortOpen ? colors.primary : colors.icon} />
         </TouchableOpacity>
       </View>
 
@@ -184,7 +181,7 @@ export default function NotesListHeader({
           ]}
           testID="sort-disabled-notice"
         >
-          <Ionicons name="swap-vertical" size={16} color={colors.primary} style={styles.sortNoticeIcon} />
+          <ArrowUpDown size={16} color={colors.primary} style={styles.sortNoticeIcon} />
           <Text style={[styles.sortNoticeText, { color: colors.textSecondary }]}>
             {t('dashboard.sortDisabledNotice', { sortLabel: activeSortLabel })}
           </Text>
@@ -194,7 +191,7 @@ export default function NotesListHeader({
             accessibilityLabel={t('common.close')}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Ionicons name="close" size={16} color={colors.primary} />
+            <X size={16} color={colors.primary} />
           </TouchableOpacity>
         </View>
       )}

@@ -8,7 +8,7 @@ import {
   StyleSheet,
   Alert,
 } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { ArrowLeft, CircleAlert, CircleCheck } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
@@ -164,7 +164,7 @@ export default function SyncFailuresScreen() {
           accessibilityRole="button"
           accessibilityLabel={t('common.back')}
         >
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
+          <ArrowLeft size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>{t('syncFailures.title')}</Text>
         <View style={styles.headerSpacer} />
@@ -174,7 +174,7 @@ export default function SyncFailuresScreen() {
         <ActivityIndicator size="large" color={colors.primary} style={styles.spinner} />
       ) : isError ? (
         <View style={styles.empty} testID="sync-failures-error">
-          <Ionicons name="alert-circle-outline" size={64} color={colors.handleColor} />
+          <CircleAlert size={64} color={colors.handleColor} />
           <Text style={[styles.emptyTitle, { color: colors.text }]}>{t('syncFailures.loadError')}</Text>
           <TouchableOpacity
             style={[styles.retryButton, { backgroundColor: colors.primary }]}
@@ -188,7 +188,7 @@ export default function SyncFailuresScreen() {
         </View>
       ) : deadLetters.length === 0 ? (
         <View style={styles.empty} testID="sync-failures-empty">
-          <Ionicons name="checkmark-circle-outline" size={64} color={colors.handleColor} />
+          <CircleCheck size={64} color={colors.handleColor} />
           <Text style={[styles.emptyTitle, { color: colors.text }]}>{t('syncFailures.emptyTitle')}</Text>
           <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>{t('syncFailures.emptySubtext')}</Text>
         </View>
