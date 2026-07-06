@@ -290,7 +290,11 @@ func TestMigration000007Backfill(t *testing.T) {
 // buildQueryTokens mirrors the store's query tokenizer for migration-level
 // search assertions: lowercase, split on non-alphanumeric runes.
 func buildQueryTokens(query string) []string {
-	return strings.FieldsFunc(query, func(r rune) bool {
+	tokens := strings.FieldsFunc(query, func(r rune) bool {
 		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
 	})
+	for i, tok := range tokens {
+		tokens[i] = strings.ToLower(tok)
+	}
+	return tokens
 }
