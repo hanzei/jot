@@ -288,6 +288,15 @@ export default function NoteEditorScreen() {
   const zoomEnabled = useRef(!!originRect && !isReduceMotionEnabledSync()).current;
   // 0 = scaled/positioned onto the card, 1 = full screen.
   const zoom = useRef(new Animated.Value(zoomEnabled ? 0 : 1)).current;
+  // Holds the editor invisible for the first frame of a zoom-open. With the
+  // native driver the transform/opacity aren't written as static props on the
+  // JS render — the native animation node applies them, and it only attaches
+  // after the first paint (anim.start runs post-mount). Without this gate the
+  // editor paints once at its identity layout (full screen, opaque) before
+  // snapping onto the card — a visible flash, worst on the first, cold open.
+  // A plain (non-native) opacity:0 hides that frame; we reveal on the next
+  // frame, once the native node is driving the transform from the card.
+  const [zoomRevealed, setZoomRevealed] = useState(!zoomEnabled);
 
   // Zoom open from the card once on mount.
   useEffect(() => {
@@ -299,7 +308,11 @@ export default function NoteEditorScreen() {
       useNativeDriver: true,
     });
     anim.start();
-    return () => anim.stop();
+    const raf = requestAnimationFrame(() => setZoomRevealed(true));
+    return () => {
+      cancelAnimationFrame(raf);
+      anim.stop();
+    };
     // Mount-only; zoom/zoomEnabled are stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1990,7 +2003,7 @@ export default function NoteEditorScreen() {
     : colors.borderLight;
 
   return (
-    <Animated.View style={[StyleSheet.absoluteFill, zoomStyle]}>
+    <Animated.View style={[StyleSheet.absoluteFill, zoomStyle, zoomRevealed ? null : styles.zoomHidden]}>
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: noteBackground, paddingBottom: androidKeyboardInset }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}

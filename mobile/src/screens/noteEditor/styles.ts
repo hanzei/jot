@@ -4,6 +4,12 @@ export const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  // Hides the editor for the first frame of a native-driven zoom-open so it
+  // can't flash at full size before the transform is applied (see
+  // NoteEditorScreen's zoomRevealed gate).
+  zoomHidden: {
+    opacity: 0,
+  },
   shareTargetBar: {
     flexDirection: 'row',
     alignItems: 'center',
