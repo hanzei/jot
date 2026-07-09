@@ -10,9 +10,10 @@ function stripTrailingSlash(baseUrl: string): string {
 }
 
 // Note images are served inline by the server and rendered directly from the
-// network URL (no axios round-trip), same as the profile-icon pattern in
-// ProfileIconSection.tsx: the native networking layer attaches the session
-// cookie set during login, so no extra auth wiring is needed here.
+// network URL (no axios round-trip). The endpoint is auth-gated, and since the
+// native <Image> loader / expo-file-system bypass the axios interceptor and the
+// app keeps no native cookie jar, callers attach the session cookie explicitly
+// (see useImageAuthHeaders and the download-cache helpers).
 export function noteImageUrl(baseUrl: string, imageId: string): string {
   return `${stripTrailingSlash(baseUrl)}/api/v1/images/${imageId}`;
 }

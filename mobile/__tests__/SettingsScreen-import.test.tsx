@@ -74,6 +74,7 @@ jest.mock('../src/api/client', () => ({
   getBaseUrl: jest.fn(() => 'http://localhost:8080'),
   subscribeToClientActiveServerChanges: jest.fn(() => () => {}),
   cacheAuthProfile: jest.fn().mockResolvedValue(undefined),
+  getSessionCookieHeader: jest.fn().mockResolvedValue(undefined),
 }));
 
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;

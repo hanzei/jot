@@ -8,24 +8,32 @@ import { getCachedIconUri, downloadAndCacheIcon, refreshIconCacheForUsers } from
 
 type FileInfo = { exists: boolean };
 
+type DownloadOptions = { headers?: Record<string, string> } | undefined;
+
 const mockGetInfoAsync = jest.fn<Promise<FileInfo>, [string]>();
 const mockMakeDirectoryAsync = jest.fn<Promise<void>, [string, { intermediates: boolean }]>();
-const mockDownloadAsync = jest.fn<Promise<{ status: number }>, [string, string]>();
+const mockDownloadAsync = jest.fn<Promise<{ status: number }>, [string, string, DownloadOptions]>();
 const mockDeleteAsync = jest.fn<Promise<void>, [string, { idempotent: boolean }]>();
 const mockReadDirectoryAsync = jest.fn<Promise<string[]>, [string]>();
+const mockGetSessionCookieHeader = jest.fn<Promise<Record<string, string> | undefined>, []>();
 
 jest.mock('expo-file-system/legacy', () => ({
   cacheDirectory: 'file:///cache/',
   getInfoAsync: (path: string) => mockGetInfoAsync(path),
   makeDirectoryAsync: (path: string, opts: { intermediates: boolean }) => mockMakeDirectoryAsync(path, opts),
-  downloadAsync: (url: string, path: string) => mockDownloadAsync(url, path),
+  downloadAsync: (url: string, path: string, opts: DownloadOptions) => mockDownloadAsync(url, path, opts),
   deleteAsync: (path: string, opts: { idempotent: boolean }) => mockDeleteAsync(path, opts),
   readDirectoryAsync: (path: string) => mockReadDirectoryAsync(path),
+}));
+
+jest.mock('../src/api/client', () => ({
+  getSessionCookieHeader: () => mockGetSessionCookieHeader(),
 }));
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const CACHE_DIR = 'file:///cache/profile-icons/';
+const AUTH_HEADER = { Cookie: 'jot_session=test-token' };
 
 function iconFilePath(userId: string, updatedAt: string): string {
   const safeVersion = updatedAt.replace(/[^a-zA-Z0-9-]/g, '_');
@@ -36,6 +44,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   // Default: cache directory exists.
   mockGetInfoAsync.mockResolvedValue({ exists: true });
+  mockGetSessionCookieHeader.mockResolvedValue(AUTH_HEADER);
 });
 
 // ── getCachedIconUri ──────────────────────────────────────────────────────────
@@ -112,8 +121,22 @@ describe('downloadAndCacheIcon', () => {
 
     const result = await downloadAndCacheIcon(userId, updatedAt, networkUrl);
 
-    expect(mockDownloadAsync).toHaveBeenCalledWith(networkUrl, expectedPath);
+    expect(mockDownloadAsync).toHaveBeenCalledWith(networkUrl, expectedPath, { headers: AUTH_HEADER });
     expect(result).toBe(expectedPath);
+  });
+
+  it('downloads without a headers option when there is no session', async () => {
+    const expectedPath = iconFilePath(userId, updatedAt);
+    mockGetInfoAsync
+      .mockResolvedValueOnce({ exists: true })
+      .mockResolvedValueOnce({ exists: true });
+    mockGetSessionCookieHeader.mockResolvedValueOnce(undefined);
+    mockDownloadAsync.mockResolvedValueOnce({ status: 200 });
+    mockReadDirectoryAsync.mockResolvedValueOnce([]);
+
+    await downloadAndCacheIcon(userId, updatedAt, networkUrl);
+
+    expect(mockDownloadAsync).toHaveBeenCalledWith(networkUrl, expectedPath, undefined);
   });
 
   it('creates the cache directory when it does not exist', async () => {
@@ -188,6 +211,7 @@ describe('refreshIconCacheForUsers', () => {
     expect(mockDownloadAsync).toHaveBeenCalledWith(
       `${baseUrl}/api/v1/users/u1/profile-icon`,
       expect.stringContaining('u1'),
+      { headers: AUTH_HEADER },
     );
   });
 
@@ -244,6 +268,7 @@ describe('refreshIconCacheForUsers', () => {
     expect(mockDownloadAsync).toHaveBeenCalledWith(
       `${baseUrl}/api/v1/users/u2/profile-icon`,
       expect.stringContaining('u2'),
+      { headers: AUTH_HEADER },
     );
   });
 });

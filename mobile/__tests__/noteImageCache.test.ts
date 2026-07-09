@@ -9,24 +9,33 @@ import { getCachedNoteImageUri, downloadAndCacheNoteImage, deleteCachedNoteImage
 
 type FileInfo = { exists: boolean };
 
+type DownloadOptions = { headers?: Record<string, string> } | undefined;
+
 const mockGetInfoAsync = jest.fn<Promise<FileInfo>, [string]>();
 const mockMakeDirectoryAsync = jest.fn<Promise<void>, [string, { intermediates: boolean }]>();
-const mockDownloadAsync = jest.fn<Promise<{ status: number }>, [string, string]>();
+const mockDownloadAsync = jest.fn<Promise<{ status: number }>, [string, string, DownloadOptions]>();
 const mockDeleteAsync = jest.fn<Promise<void>, [string, { idempotent: boolean }]>();
+const mockGetSessionCookieHeader = jest.fn<Promise<Record<string, string> | undefined>, []>();
 
 jest.mock('expo-file-system/legacy', () => ({
   cacheDirectory: 'file:///cache/',
   getInfoAsync: (path: string) => mockGetInfoAsync(path),
   makeDirectoryAsync: (path: string, opts: { intermediates: boolean }) => mockMakeDirectoryAsync(path, opts),
-  downloadAsync: (url: string, path: string) => mockDownloadAsync(url, path),
+  downloadAsync: (url: string, path: string, opts: DownloadOptions) => mockDownloadAsync(url, path, opts),
   deleteAsync: (path: string, opts: { idempotent: boolean }) => mockDeleteAsync(path, opts),
 }));
 
+jest.mock('../src/api/client', () => ({
+  getSessionCookieHeader: () => mockGetSessionCookieHeader(),
+}));
+
 const CACHE_DIR = 'file:///cache/note-images/';
+const AUTH_HEADER = { Cookie: 'jot_session=test-token' };
 
 beforeEach(() => {
   jest.clearAllMocks();
   mockGetInfoAsync.mockResolvedValue({ exists: true });
+  mockGetSessionCookieHeader.mockResolvedValue(AUTH_HEADER);
 });
 
 describe('getCachedNoteImageUri', () => {
@@ -73,8 +82,18 @@ describe('downloadAndCacheNoteImage', () => {
 
     const result = await downloadAndCacheNoteImage('img-1', 'original', networkUrl);
 
-    expect(mockDownloadAsync).toHaveBeenCalledWith(networkUrl, `${CACHE_DIR}img-1`);
+    expect(mockDownloadAsync).toHaveBeenCalledWith(networkUrl, `${CACHE_DIR}img-1`, { headers: AUTH_HEADER });
     expect(result).toBe(`${CACHE_DIR}img-1`);
+  });
+
+  it('downloads without a headers option when there is no session', async () => {
+    mockGetInfoAsync.mockResolvedValueOnce({ exists: true });
+    mockGetSessionCookieHeader.mockResolvedValueOnce(undefined);
+    mockDownloadAsync.mockResolvedValueOnce({ status: 200 });
+
+    await downloadAndCacheNoteImage('img-1', 'original', networkUrl);
+
+    expect(mockDownloadAsync).toHaveBeenCalledWith(networkUrl, `${CACHE_DIR}img-1`, undefined);
   });
 
   it('creates the cache directory when it does not exist', async () => {

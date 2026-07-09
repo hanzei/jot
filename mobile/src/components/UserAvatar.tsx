@@ -3,6 +3,7 @@ import { View, Text, Image, StyleSheet } from 'react-native';
 import { getAvatarColor } from '@jot/shared';
 import { useActiveServerBaseUrl } from '../hooks/useActiveServerBaseUrl';
 import { useProfileIcon } from '../hooks/useProfileIcon';
+import { useImageAuthHeaders } from '../hooks/useImageAuthHeaders';
 
 const SIZE_MAP = {
   small: 24,
@@ -30,23 +31,31 @@ export default function UserAvatar({ userId, username, hasProfileIcon, iconVersi
     hasProfileIcon && userId ? `${baseUrl}/api/v1/users/${userId}/profile-icon` : '';
 
   const localUri = useProfileIcon(userId, hasProfileIcon ?? false, iconVersion, networkUrl);
+  const { headers, ready } = useImageAuthHeaders();
 
-  // Reset the image error state when the avatar identity changes.
+  // Reset the image error state when the avatar identity or session changes, so
+  // an icon that errored before the session cookie resolved retries once it's
+  // available (e.g. after a server switch).
   React.useEffect(() => {
     setImageError(false);
-  }, [baseUrl, userId, iconVersion]);
+  }, [baseUrl, userId, iconVersion, headers]);
 
   const safeUsername = username || 'U';
   const bgColor = getAvatarColor(safeUsername);
   const letter = safeUsername.charAt(0).toUpperCase();
 
   // Prefer local cache; fall back to network URL; fall back to initials on error.
+  // The profile-icon endpoint is auth-gated, so the network fallback attaches
+  // the session cookie and holds off until the token resolves (a local file://
+  // URI needs no auth); otherwise the first render 401s and poisons imageError.
+  const usingLocalIcon = !!localUri;
   const imageUri = localUri || networkUrl;
+  const canRenderIcon = hasProfileIcon && userId && imageUri && !imageError && (usingLocalIcon || ready);
 
-  if (hasProfileIcon && userId && imageUri && !imageError) {
+  if (canRenderIcon) {
     return (
       <Image
-        source={{ uri: imageUri }}
+        source={usingLocalIcon ? { uri: imageUri } : { uri: imageUri, headers }}
         style={[styles.avatar, { width: dimension, height: dimension, borderRadius: dimension / 2 }]}
         accessibilityRole="image"
         accessibilityLabel={`${safeUsername} profile picture`}

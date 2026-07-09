@@ -609,6 +609,21 @@ export async function getStoredSession(): Promise<string | null> {
   return sessionCache;
 }
 
+/**
+ * Build the `Cookie` header carrying the active server's session token, or
+ * `undefined` when there is no stored session. Auth-gated media (note images,
+ * profile icons) is fetched by the native image loader and expo-file-system,
+ * neither of which runs through the axios request interceptor above — and the
+ * app keeps no native cookie jar (the token lives in secure-store). So those
+ * requests must attach this header explicitly, exactly as the interceptor does
+ * for axios calls, or they 401 whenever the session was restored from storage
+ * without a fresh login response ever populating the platform cookie store.
+ */
+export async function getSessionCookieHeader(): Promise<Record<string, string> | undefined> {
+  const token = await getStoredSession();
+  return token ? { Cookie: `jot_session=${token}` } : undefined;
+}
+
 export async function clearStoredSession(): Promise<void> {
   sessionCache = null;
   const serverId = await resolveActiveServerId();

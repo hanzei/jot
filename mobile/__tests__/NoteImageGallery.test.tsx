@@ -7,6 +7,10 @@ jest.mock('../src/hooks/useActiveServerBaseUrl', () => ({
   useActiveServerBaseUrl: () => 'http://test-server',
 }));
 
+jest.mock('../src/hooks/useImageAuthHeaders', () => ({
+  useImageAuthHeaders: () => ({ headers: { Cookie: 'jot_session=test-token' }, ready: true }),
+}));
+
 function makeImage(overrides: Partial<NoteImage> = {}): NoteImage {
   return {
     id: 'img-1',

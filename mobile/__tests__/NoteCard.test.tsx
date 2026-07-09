@@ -33,6 +33,10 @@ jest.mock('../src/hooks/useActiveServerBaseUrl', () => ({
   useActiveServerBaseUrl: () => 'http://test-server',
 }));
 
+jest.mock('../src/hooks/useImageAuthHeaders', () => ({
+  useImageAuthHeaders: () => ({ headers: { Cookie: 'jot_session=test-token' }, ready: true }),
+}));
+
 const baseNote: Note = {
   id: 'note-1',
   user_id: 'user-1',

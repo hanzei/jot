@@ -1,5 +1,6 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { ensureDirExists } from './fsCache';
+import { getSessionCookieHeader } from '../api/client';
 
 const CACHE_DIR = `${FileSystem.cacheDirectory ?? ''}note-images/`;
 
@@ -46,7 +47,10 @@ export async function downloadAndCacheNoteImage(
   try {
     await ensureDirExists(CACHE_DIR);
     const path = imageFilePath(imageId, variant);
-    const result = await FileSystem.downloadAsync(networkUrl, path);
+    // The image endpoint is auth-gated and downloadAsync bypasses the axios
+    // interceptor, so attach the session cookie explicitly (mirrors client.ts).
+    const headers = await getSessionCookieHeader();
+    const result = await FileSystem.downloadAsync(networkUrl, path, headers ? { headers } : undefined);
     if (result.status === 200) {
       return path;
     }

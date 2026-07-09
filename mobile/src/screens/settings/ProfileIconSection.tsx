@@ -13,6 +13,7 @@ import { useTheme } from '../../theme/ThemeContext';
 import { uploadProfileIcon, deleteProfileIcon } from '../../api/settings';
 import { useActiveServerBaseUrl } from '../../hooks/useActiveServerBaseUrl';
 import { useProfileIcon } from '../../hooks/useProfileIcon';
+import { useImageAuthHeaders } from '../../hooks/useImageAuthHeaders';
 import { displayMessage, extractApiError } from '../../i18n/utils';
 import { styles } from './styles';
 
@@ -33,6 +34,7 @@ export default function ProfileIconSection() {
   const settingsIconNetworkUrl =
     hasProfileIcon && user ? `${activeServerBaseUrl}/api/v1/users/${user.id}/profile-icon` : '';
   const localIconUri = useProfileIcon(user?.id, hasProfileIcon, iconVersion, settingsIconNetworkUrl);
+  const { headers: iconAuthHeaders, ready: iconAuthReady } = useImageAuthHeaders();
 
   const initials = user
     ? (user.first_name?.[0] ?? user.username?.[0] ?? '').toUpperCase()
@@ -99,9 +101,11 @@ export default function ProfileIconSection() {
       <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('settings.profileIconSection')}</Text>
       <View style={styles.profileIconRow}>
         <View>
-          {hasProfileIcon && user ? (
+          {hasProfileIcon && user && (localIconUri || iconAuthReady) ? (
             <Image
-              source={{ uri: localIconUri ?? settingsIconNetworkUrl }}
+              // A local file:// URI needs no auth; the network fallback attaches
+              // the session cookie since the native loader bypasses axios.
+              source={localIconUri ? { uri: localIconUri } : { uri: settingsIconNetworkUrl, headers: iconAuthHeaders }}
               style={styles.profileAvatar}
             />
           ) : (

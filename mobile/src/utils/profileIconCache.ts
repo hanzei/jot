@@ -1,5 +1,6 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { ensureDirExists } from './fsCache';
+import { getSessionCookieHeader } from '../api/client';
 
 const CACHE_DIR = `${FileSystem.cacheDirectory ?? ''}profile-icons/`;
 
@@ -58,7 +59,10 @@ export async function downloadAndCacheIcon(
   try {
     await ensureDirExists(CACHE_DIR);
     const path = iconFilePath(userId, updatedAt);
-    const result = await FileSystem.downloadAsync(networkUrl, path);
+    // The profile-icon endpoint is auth-gated and downloadAsync bypasses the
+    // axios interceptor, so attach the session cookie explicitly (mirrors client.ts).
+    const headers = await getSessionCookieHeader();
+    const result = await FileSystem.downloadAsync(networkUrl, path, headers ? { headers } : undefined);
     if (result.status === 200) {
       await purgeStaleIcons(userId, updatedAt);
       return path;
