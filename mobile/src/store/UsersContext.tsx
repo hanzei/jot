@@ -94,7 +94,9 @@ export function UsersProvider({ children }: { children: React.ReactNode }) {
       void upsertUser(db, updatedUser).catch((err) => {
         console.warn('Failed to persist profile icon update:', err);
       });
-      void refreshIconCacheForUsers([updatedUser], getBaseUrl());
+      void refreshIconCacheForUsers([updatedUser], getBaseUrl()).catch((err) => {
+        console.warn('Failed to warm profile icon cache after update:', err);
+      });
     });
   }, [db]);
 
