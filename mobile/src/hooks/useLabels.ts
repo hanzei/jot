@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useCallback, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
 import {
@@ -17,13 +17,16 @@ import {
   deleteLabelFromLocalNotes,
   addLabelToLocalNote,
   removeLabelFromLocalNote,
-  getLocalLabels,
+  getStoredLabels,
+  upsertLabel,
+  renameStoredLabel,
+  deleteStoredLabel,
   getLocalLabelCounts,
   getLocalNote,
   generateClientLabelId,
   isNotePendingCreate,
 } from '../db/noteQueries';
-import { enqueueOperation, rethrowIfNotQueueable, saveServerNotes } from '../db/syncQueue';
+import { enqueueOperation, rethrowIfNotQueueable, saveServerNotes, saveServerLabels } from '../db/syncQueue';
 import { useNetworkStatus } from './useNetworkStatus';
 import { retrySync, SyncAbortedError, SyncCanceller } from '../utils/retryWithBackoff';
 import { useAuth } from '../store/AuthContext';
@@ -131,7 +134,17 @@ function useBackgroundSyncQuery<T>(
 
 export function useLabels() {
   const db = useSQLiteContext();
-  return useBackgroundSyncQuery(labelsQueryKey, () => getLocalLabels(db), getLabels);
+  // The list is canonical in the local `labels` store; background sync fetches the
+  // server's labels and reconciles the store (pruning stale, upserting current)
+  // before returning them (issue #691). Memoized so useBackgroundSyncQuery's effect
+  // (which depends on the fns) doesn't re-run — and re-fetch — on every render.
+  const localFn = useCallback(() => getStoredLabels(db), [db]);
+  const serverFn = useCallback(async () => {
+    const labels = await getLabels();
+    await saveServerLabels(db, labels);
+    return labels;
+  }, [db]);
+  return useBackgroundSyncQuery(labelsQueryKey, localFn, serverFn);
 }
 
 export function useLabelCounts() {
@@ -166,7 +179,11 @@ export function useCreateLabel() {
       if (!trimmed) throw new Error('Label name must not be empty');
       if (isConnectedRef.current && !isLocalModeActive()) {
         try {
-          return await createLabel(trimmed);
+          const serverLabel = await createLabel(trimmed);
+          // Persist to the canonical label store so the new (empty) label shows in
+          // the drawer immediately — it isn't attached to any note yet (#691).
+          await upsertLabel(db, serverLabel);
+          return serverLabel;
         } catch (err) {
           // Transient failure: fall through to the offline path so the label is
           // queued for replay instead of being lost.
@@ -177,9 +194,8 @@ export function useCreateLabel() {
       // Offline (or a transient online failure): create a local placeholder label
       // and queue the server create. The client-generated id is sent to the server
       // as the label's primary key (#546), so no ID reconciliation is needed on
-      // replay. Labels are derived from notes' labels_json, so a label not yet
-      // attached to any note lives only in the React Query cache (updated in
-      // onSuccess) until it is.
+      // replay. The label is written to the local store so an empty label survives
+      // regardless of note state (#691).
       const localLabel = buildLocalLabel(trimmed, user?.id ?? '');
       await enqueueOperation(db, {
         operation: 'createLabel',
@@ -187,16 +203,11 @@ export function useCreateLabel() {
         method: 'POST',
         body: { id: localLabel.id, name: trimmed },
       });
+      await upsertLabel(db, localLabel);
       return localLabel;
     },
-    onSuccess: (newLabel) => {
-      // A newly created label is not yet attached to any note, so getLocalLabels()
-      // won't find it — add it directly to avoid it disappearing after the mutation.
-      queryClient.setQueryData<Label[]>(labelsQueryKey(), (old) => {
-        const existing = old ?? [];
-        if (existing.some((l) => l.id === newLabel.id)) return existing;
-        return [...existing, newLabel].sort((a, b) => a.name.localeCompare(b.name));
-      });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
       queryClient.invalidateQueries({ queryKey: labelCountsQueryKey() });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
       queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
@@ -226,6 +237,11 @@ export function useAddLabelToNote() {
         try {
           const updatedNote = await addLabelToNote(noteId, trimmed);
           await saveNote(db, updatedNote);
+          // The server may have minted a brand-new label; persist it to the store
+          // so it shows in the drawer immediately (#691).
+          const normalized = trimmed.toLowerCase();
+          const added = updatedNote.labels.find((l) => l.name.toLowerCase() === normalized);
+          if (added) await upsertLabel(db, added);
           return updatedNote;
         } catch (err) {
           // Transient failure: fall through to the offline path so the edit is
@@ -244,7 +260,7 @@ export function useAddLabelToNote() {
       // (e.g. removing it again while still offline) reconciles to the server id.
       // Match case-insensitively to mirror the server's GetOrCreateLabel lookup.
       const normalized = trimmed.toLowerCase();
-      const known = (await getLocalLabels(db)).find((l) => l.name.toLowerCase() === normalized);
+      const known = (await getStoredLabels(db)).find((l) => l.name.toLowerCase() === normalized);
       const label = known ?? buildLocalLabel(trimmed, user?.id ?? '');
       if (!known) {
         await enqueueOperation(db, {
@@ -253,6 +269,8 @@ export function useAddLabelToNote() {
           method: 'POST',
           body: { id: label.id, name: trimmed },
         });
+        // Persist the newly-minted label so it appears in the drawer immediately.
+        await upsertLabel(db, label);
       }
 
       await addLabelToLocalNote(db, noteId, label);
@@ -340,6 +358,7 @@ export function useRenameLabel() {
       if (isConnectedRef.current && !isLocalModeActive()) {
         try {
           const updatedLabel = await renameLabel(labelId, trimmed);
+          await renameStoredLabel(db, labelId, updatedLabel.name);
           try {
             await renameLabelInLocalNotes(db, labelId, updatedLabel.name);
           } catch (error) {
@@ -361,6 +380,7 @@ export function useRenameLabel() {
       // Offline (or a transient online failure): rename locally and queue. A
       // local label id (offline-created, not yet synced) is remapped to the
       // server id on replay (see drainQueue).
+      await renameStoredLabel(db, labelId, trimmed);
       await renameLabelInLocalNotes(db, labelId, trimmed);
       await enqueueOperation(db, {
         operation: 'renameLabel',
@@ -393,6 +413,7 @@ export function useDeleteLabel() {
       if (isConnectedRef.current && !isLocalModeActive()) {
         try {
           await deleteLabel(labelId);
+          await deleteStoredLabel(db, labelId);
           try {
             await deleteLabelFromLocalNotes(db, labelId);
           } catch (error) {
@@ -414,6 +435,7 @@ export function useDeleteLabel() {
       // Offline (or a transient online failure): delete locally and queue. A
       // local label id (offline-created, not yet synced) is remapped to the
       // server id on replay (see drainQueue).
+      await deleteStoredLabel(db, labelId);
       await deleteLabelFromLocalNotes(db, labelId);
       await enqueueOperation(db, {
         operation: 'deleteLabel',

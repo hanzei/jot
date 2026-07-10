@@ -172,7 +172,50 @@ const migration4 = async (db: SQLiteDatabase): Promise<void> => {
   `);
 };
 
-export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4];
+// Migration 5: give labels a real local store (issue #691). Until now the label
+// list was derived entirely from notes' labels_json, so a label with zero
+// attached notes had no local source: empty labels created on another device
+// never appeared, and locally-created empty labels were wiped by any refetch of
+// the notes-derived list. Add a canonical `labels` table (counts stay derived
+// from notes) and backfill it from existing notes so no labels are lost on
+// upgrade — additive, per the project's "preserve existing installations" rule.
+const migration5 = async (db: SQLiteDatabase): Promise<void> => {
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS labels (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT ''
+    );
+  `);
+
+  // Backfill from existing notes' labels_json so labels already in use survive
+  // the upgrade. INSERT OR IGNORE keeps the first occurrence of each id and makes
+  // the backfill idempotent.
+  const rows = await db.getAllAsync<{ labels_json: string }>('SELECT labels_json FROM notes');
+  const seen = new Set<string>();
+  for (const row of rows) {
+    let labels: { id: string; user_id?: string; name: string; created_at?: string; updated_at?: string }[] = [];
+    try {
+      labels = JSON.parse(row.labels_json);
+    } catch {
+      continue;
+    }
+    for (const label of labels) {
+      if (!label?.id || seen.has(label.id)) {
+        continue;
+      }
+      seen.add(label.id);
+      await db.runAsync(
+        `INSERT OR IGNORE INTO labels (id, user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+        [label.id, label.user_id ?? '', label.name, label.created_at ?? '', label.updated_at ?? ''],
+      );
+    }
+  }
+};
+
+export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4, migration5];
 
 export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   // Run PRAGMAs separately: sqlite3_exec (used by execAsync) stops on the

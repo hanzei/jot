@@ -595,25 +595,91 @@ export async function deleteLabelFromLocalNotes(
   });
 }
 
-export async function getLocalLabels(db: SQLiteDatabase): Promise<Label[]> {
-  const rows = await db.getAllAsync<Pick<NoteRow, 'labels_json'>>(
-    'SELECT labels_json FROM notes WHERE deleted_at IS NULL',
-  );
-  const seen = new Set<string>();
-  const labels: Label[] = [];
-  for (const row of rows) {
-    try {
-      const noteLabels = JSON.parse(row.labels_json) as Label[];
-      for (const label of noteLabels) {
-        if (!seen.has(label.id)) {
-          seen.add(label.id);
-          labels.push(label);
-        }
-      }
-    } catch { /* ignore */ }
-  }
+// ── Label store (issue #691) ─────────────────────────────────────────────────
+// The label *list* is canonical in the `labels` table (so empty labels — zero
+// attached notes — have a real local source), while label *counts* stay derived
+// from notes' labels_json (see getLocalLabelCounts).
+
+interface LabelRow {
+  id: string;
+  user_id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Read the canonical label list from the store, sorted by name. */
+export async function getStoredLabels(db: SQLiteDatabase): Promise<Label[]> {
+  const rows = await db.getAllAsync<LabelRow>('SELECT * FROM labels');
+  const labels = rows.map((row) => ({
+    id: row.id,
+    user_id: row.user_id,
+    name: row.name,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  }));
   labels.sort((a, b) => a.name.localeCompare(b.name));
   return labels;
+}
+
+/** Insert or update a single label in the store (idempotent). */
+export async function upsertLabel(db: SQLiteDatabase, label: Label): Promise<void> {
+  await db.runAsync(
+    `INSERT INTO labels (id, user_id, name, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       user_id = excluded.user_id,
+       name = excluded.name,
+       updated_at = excluded.updated_at`,
+    [label.id, label.user_id, label.name, label.created_at, label.updated_at],
+  );
+}
+
+/** Rename a label in the store. No-op when the label is unknown. */
+export async function renameStoredLabel(db: SQLiteDatabase, labelId: string, name: string): Promise<void> {
+  await db.runAsync(
+    'UPDATE labels SET name = ?, updated_at = ? WHERE id = ?',
+    [name, new Date().toISOString(), labelId],
+  );
+}
+
+/** Delete a label from the store. No-op when the label is unknown. */
+export async function deleteStoredLabel(db: SQLiteDatabase, labelId: string): Promise<void> {
+  await db.runAsync('DELETE FROM labels WHERE id = ?', [labelId]);
+}
+
+/**
+ * Reconcile the store against a canonical server label list: upsert every server
+ * label and drop any local row the server no longer has. `skipLabelIds` protects
+ * labels with an unsynced offline create (their `createLabel` op hasn't drained,
+ * so the server doesn't know them yet) from being pruned (see saveServerLabels).
+ */
+export async function saveLabels(
+  db: SQLiteDatabase,
+  labels: Label[],
+  options?: { skipLabelIds?: ReadonlySet<string> },
+): Promise<void> {
+  const skip = options?.skipLabelIds;
+  await withSerializedTransaction(db, async () => {
+    const serverIds = new Set(labels.map((l) => l.id));
+    const existing = await db.getAllAsync<Pick<LabelRow, 'id'>>('SELECT id FROM labels');
+    for (const row of existing) {
+      if (!serverIds.has(row.id) && !skip?.has(row.id)) {
+        await db.runAsync('DELETE FROM labels WHERE id = ?', [row.id]);
+      }
+    }
+    for (const label of labels) {
+      await db.runAsync(
+        `INSERT INTO labels (id, user_id, name, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           user_id = excluded.user_id,
+           name = excluded.name,
+           updated_at = excluded.updated_at`,
+        [label.id, label.user_id, label.name, label.created_at, label.updated_at],
+      );
+    }
+  });
 }
 
 export async function getLocalLabelCounts(db: SQLiteDatabase): Promise<Record<string, number>> {

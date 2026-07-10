@@ -8,7 +8,7 @@ import { setActiveSseManager } from '../api/sseState';
 import { CLIENT_ID } from '../api/client';
 import type { SSEEvent } from '@jot/shared';
 import { useNetworkStatus } from './useNetworkStatus';
-import { markLocalNoteDeleted, permanentDeleteLocalNote, patchLocalNoteImages } from '../db/noteQueries';
+import { markLocalNoteDeleted, permanentDeleteLocalNote, patchLocalNoteImages, upsertLabel } from '../db/noteQueries';
 import { getProtectedNoteIds, saveServerNote } from '../db/syncQueue';
 import { getNote } from '../api/notes';
 import { isSseQuiesced, subscribeToServerSwitchLifecycle } from '../store/serverSwitchLifecycle';
@@ -202,12 +202,18 @@ export function useSSE(
             break;
           }
           case 'labels_changed': {
-            // A label was created/renamed/deleted on another device. The drawer's
-            // label list and counts are derived from notes' labels_json (a local
-            // read), so re-derive from SQLite. A brand-new *empty* label (no notes
-            // yet) still won't appear — mobile derives labels from notes, unlike the
-            // webapp which server-fetches — but it surfaces via note_updated once
-            // attached to a note.
+            // A label was created on another device. Upsert it into the canonical
+            // local label store so it appears in the drawer immediately — even when
+            // it has zero attached notes (the store is what makes empty labels
+            // reliable now; counts stay derived from notes) (#691).
+            const { label } = event.data;
+            if (label) {
+              try {
+                await upsertLabel(db, label);
+              } catch {
+                // Write failed; the next background sync reconciles the store.
+              }
+            }
             invalidateLabelQueries();
             break;
           }

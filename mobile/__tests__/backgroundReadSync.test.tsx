@@ -27,7 +27,7 @@ jest.mock('../src/db/noteQueries', () => ({
   getLocalNotes: jest.fn().mockResolvedValue([]),
   getLocalNote: jest.fn().mockResolvedValue(null),
   markLocalNoteDeleted: jest.fn().mockResolvedValue(undefined),
-  getLocalLabels: jest.fn().mockResolvedValue([]),
+  getStoredLabels: jest.fn().mockResolvedValue([]),
 }));
 
 jest.mock('../src/db/syncQueue', () => ({
@@ -35,6 +35,7 @@ jest.mock('../src/db/syncQueue', () => ({
   saveServerNotesScope: jest.fn().mockResolvedValue(undefined),
   saveServerNote: jest.fn().mockResolvedValue(undefined),
   getProtectedNoteIds: jest.fn().mockResolvedValue(new Set()),
+  saveServerLabels: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('../src/db/userQueries', () => ({
@@ -90,7 +91,7 @@ describe('background read-sync retry', () => {
     mockUseNetworkStatus.mockReturnValue({ isConnected: true });
     mockNoteQueries.getLocalNotes.mockResolvedValue([]);
     mockNoteQueries.getLocalNote.mockResolvedValue(null);
-    mockNoteQueries.getLocalLabels.mockResolvedValue([]);
+    mockNoteQueries.getStoredLabels.mockResolvedValue([]);
     mockUserQueries.getLocalUsers.mockResolvedValue([]);
     mockSyncQueue.saveServerNotesScope.mockResolvedValue(undefined);
     mockSyncQueue.saveServerNote.mockResolvedValue(undefined);
