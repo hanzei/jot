@@ -257,7 +257,7 @@
     "failedColorUpdate": "Impossible de mettre à jour la couleur de la note",
     "failedReorder": "Impossible de réorganiser les notes",
     "waitForSyncBeforeDuplicating": "Veuillez attendre la synchronisation de cette note avant de la dupliquer",
-    "updatedByAnotherUser": "Cette note a été mise à jour par un autre utilisateur",
+    "updatedByAnotherUser": "Un autre utilisateur a modifié cette note ; l'enregistrement risque d'écraser ses modifications",
     "listItemLabel": "Élément de liste",
     "itemCheckbox": "Case à cocher {{item}}",
     "dragToReorderIndent": "Glisser pour réorganiser ou indenter",

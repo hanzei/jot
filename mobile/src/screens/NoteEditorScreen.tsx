@@ -205,11 +205,6 @@ export default function NoteEditorScreen() {
   );
   const [removedImageIds, setRemovedImageIds] = useState<Set<string>>(new Set());
 
-  // Show a toast when another user updates this note while editor is open
-  useSSESubscription(noteId, useCallback(() => {
-    setSyncToast((prev) => prev ?? t('note.updatedByAnotherUser'));
-  }, [t]));
-
   // Auto-dismiss sync toast after 4 seconds
   useEffect(() => {
     if (!syncToast) return;
@@ -246,6 +241,16 @@ export default function NoteEditorScreen() {
   const editSeqRef = useRef(0);
   const saveInFlightRef = useRef<Promise<boolean> | null>(null);
   const requiresHydrationRef = useRef(initialNoteId !== null);
+
+  // Warn when another user updates this note *while we have unsaved edits*.
+  // A clean editor auto-applies the remote change (see the refresh effect
+  // below), so no warning is needed there; when the editor is dirty that
+  // refresh is intentionally suppressed to protect the in-progress edits, so
+  // this banner is the only signal that the note has diverged on the server.
+  useSSESubscription(noteId, useCallback(() => {
+    if (!hasPendingChangesRef.current) return;
+    setSyncToast((prev) => prev ?? t('note.updatedByAnotherUser'));
+  }, [t]));
 
   // Refs for current state to avoid stale closures in debounced save
   const noteIdRef = useRef(noteId);
@@ -1973,11 +1978,11 @@ export default function NoteEditorScreen() {
 
       {syncToast && (
         <TouchableOpacity
-          style={[styles.syncToast, { backgroundColor: colors.primaryLight, borderBottomColor: colors.primary }]}
+          style={[styles.syncToast, { backgroundColor: colors.warning, borderBottomColor: colors.warningBorder }]}
           onPress={() => setSyncToast(null)}
           testID="sync-toast"
         >
-          <Text style={[styles.syncToastText, { color: colors.primary }]}>{syncToast}</Text>
+          <Text style={[styles.syncToastText, { color: colors.warningText }]}>{syncToast}</Text>
         </TouchableOpacity>
       )}
 

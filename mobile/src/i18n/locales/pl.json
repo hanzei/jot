@@ -257,7 +257,7 @@
     "failedColorUpdate": "Nie udało się zaktualizować koloru notatki",
     "failedReorder": "Nie udało się zmienić kolejności notatek",
     "waitForSyncBeforeDuplicating": "Poczekaj na synchronizację notatki przed jej duplikowaniem",
-    "updatedByAnotherUser": "Ta notatka została zaktualizowana przez innego użytkownika",
+    "updatedByAnotherUser": "Inny użytkownik zmienił tę notatkę – zapisanie może nadpisać jego zmiany",
     "listItemLabel": "Element listy",
     "itemCheckbox": "Pole wyboru {{item}}",
     "dragToReorderIndent": "Przeciągnij, aby zmienić kolejność lub wciąć",

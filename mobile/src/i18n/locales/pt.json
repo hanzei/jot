@@ -286,7 +286,7 @@
     "failedColorUpdate": "Falha ao atualizar a cor da nota",
     "failedReorder": "Falha ao reordenar as notas",
     "waitForSyncBeforeDuplicating": "Aguarde a sincronização desta nota antes de duplicá-la",
-    "updatedByAnotherUser": "Esta nota foi atualizada por outro usuário",
+    "updatedByAnotherUser": "Outro usuário alterou esta nota; salvar pode substituir as alterações dele",
     "listItemLabel": "Item da lista",
     "itemCheckbox": "Caixa de seleção {{item}}",
     "dragToReorderIndent": "Arrastar para reordenar ou recuar",

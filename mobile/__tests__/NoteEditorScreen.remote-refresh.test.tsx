@@ -1,6 +1,7 @@
 import React from 'react';
 import { render, act, fireEvent, waitFor } from '@testing-library/react-native';
 import NoteEditorScreen from '../src/screens/NoteEditorScreen';
+import { useSSESubscription } from '../src/store/SSEContext';
 
 const mockUseRoute = jest.fn();
 const mockNavigationAddListener = jest.fn().mockReturnValue(jest.fn());
@@ -244,5 +245,33 @@ describe('NoteEditorScreen remote refresh', () => {
     // The local edit is preserved and the remote item was not merged in.
     expect(getByTestId('note-title-input').props.value).toBe('Packliste (mine)');
     expect(itemTexts(getAllByTestId)).toEqual(['Kraxxe']);
+  });
+
+  // The banner is now state-aware: a clean editor silently absorbs the remote
+  // change (no banner), while a dirty editor — where the refresh is suppressed —
+  // gets the warning banner as the only signal of the divergence.
+  it('warns about a remote change only while the editor has unsaved edits', async () => {
+    mockUseOfflineNote.mockReturnValue({ data: listNote() });
+    const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
+
+    // The SSE hook is mocked; grab the latest handler the editor registered so
+    // we can simulate an inbound "another user updated this note" event.
+    const fireRemoteUpdate = () => {
+      const calls = (useSSESubscription as jest.Mock).mock.calls;
+      (calls[calls.length - 1][1] as () => void)();
+    };
+
+    // Clean editor: no banner (the change is auto-applied by the refresh effect).
+    await act(async () => { fireRemoteUpdate(); });
+    expect(queryByTestId('sync-toast')).toBeNull();
+
+    // Introduce an unsaved local edit.
+    await act(async () => {
+      fireEvent.changeText(getByTestId('note-title-input'), 'Packliste (mine)');
+    });
+
+    // Now a remote update surfaces the warning banner.
+    await act(async () => { fireRemoteUpdate(); });
+    expect(queryByTestId('sync-toast')).not.toBeNull();
   });
 });

@@ -257,7 +257,7 @@
     "failedColorUpdate": "Notizfarbe konnte nicht aktualisiert werden",
     "failedReorder": "Notizen konnten nicht neu sortiert werden",
     "waitForSyncBeforeDuplicating": "Bitte warte, bis diese Notiz synchronisiert ist, bevor du sie duplizierst",
-    "updatedByAnotherUser": "Diese Notiz wurde von einem anderen Benutzer aktualisiert",
+    "updatedByAnotherUser": "Ein anderer Benutzer hat diese Notiz geändert – beim Speichern werden dessen Änderungen möglicherweise überschrieben",
     "listItemLabel": "Listenelement",
     "itemCheckbox": "{{item}} Checkbox",
     "dragToReorderIndent": "Zum Neuordnen oder Einrücken ziehen",
