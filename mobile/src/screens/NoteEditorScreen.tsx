@@ -463,43 +463,73 @@ export default function NoteEditorScreen() {
     return generateId();
   }
 
-  // Load existing note data
+  // Applies a note from the offline cache to the editor's local state and
+  // re-seeds the save baseline. Used both for the initial hydration and to
+  // refresh the editor when the note changes underneath it (see below).
+  const applyNoteToState = useCallback((note: NonNullable<typeof existingNote>) => {
+    setNoteType(note.note_type);
+    setPinned(note.pinned);
+    setArchived(note.archived);
+    setColor(note.color);
+    setLabels(note.labels ?? []);
+    let nextItems: LocalItem[] = [];
+    if (note.note_type === 'list') {
+      setTitle(note.title);
+      setCheckedItemsCollapsed(note.checked_items_collapsed);
+      nextItems = note.items ? toLocalItems(note.items) : [];
+      setItems(nextItems);
+    } else {
+      setContent(note.content);
+    }
+    // Seed the save baseline from the note so the next edit diffs against this
+    // state rather than re-sending everything.
+    savedScalarsRef.current = {
+      title: note.note_type === 'list' ? note.title : '',
+      content: note.note_type === 'text' ? note.content : '',
+      pinned: note.pinned,
+      archived: note.archived,
+      color: note.color,
+      checked_items_collapsed: note.note_type === 'list' ? note.checked_items_collapsed : false,
+    };
+    savedItemsRef.current = new Map(nextItems.map((it) => [it.id, itemSnapshot(it)]));
+    savedOrderRef.current = nextItems.map((it) => it.id);
+  }, []);
+
+  // Load existing note data (once, on first hydration).
   useEffect(() => {
     if (existingNote && !isInitializedRef.current) {
-      setNoteType(existingNote.note_type);
-      setPinned(existingNote.pinned);
-      setArchived(existingNote.archived);
-      setColor(existingNote.color);
-      setLabels(existingNote.labels ?? []);
-      let initialItems: LocalItem[] = [];
-      if (existingNote.note_type === 'list') {
-        setTitle(existingNote.title);
-        setCheckedItemsCollapsed(existingNote.checked_items_collapsed);
-        if (existingNote.items) {
-          initialItems = toLocalItems(existingNote.items);
-          setItems(initialItems);
-        }
-      } else {
-        setContent(existingNote.content);
-      }
-      // Seed the save baseline from the hydrated note so the first edit diffs
-      // against the server state rather than re-sending everything.
-      savedScalarsRef.current = {
-        title: existingNote.note_type === 'list' ? existingNote.title : '',
-        content: existingNote.note_type === 'text' ? existingNote.content : '',
-        pinned: existingNote.pinned,
-        archived: existingNote.archived,
-        color: existingNote.color,
-        checked_items_collapsed: existingNote.note_type === 'list' ? existingNote.checked_items_collapsed : false,
-      };
-      savedItemsRef.current = new Map(initialItems.map((it) => [it.id, itemSnapshot(it)]));
-      savedOrderRef.current = initialItems.map((it) => it.id);
+      applyNoteToState(existingNote);
       isInitializedRef.current = true;
       requiresHydrationRef.current = false;
     }
-  }, [existingNote]);
+  }, [existingNote, applyNoteToState]);
 
-  // Keep labels in sync when note data refreshes after label mutations
+  // Refresh the editor when the note changes underneath it — most visibly when
+  // another user edits a shared note, which arrives via SSE → SQLite → this
+  // query refetching and surfaces the "updated by another user" banner. Without
+  // this, the banner showed but the checklist/content stayed stale.
+  //
+  // Only refresh when the editor has no unsaved edits and no save is in flight:
+  // a clean editor mirrors the last-saved baseline, so replacing it with the
+  // newer note loses nothing. When the user has in-progress edits we keep their
+  // state intact (the banner alone signals the remote change) rather than risk
+  // clobbering them, since there is no field-level merge here.
+  useEffect(() => {
+    if (
+      existingNote
+      && isInitializedRef.current
+      && !hasPendingChangesRef.current
+      && saveInFlightRef.current === null
+    ) {
+      applyNoteToState(existingNote);
+    }
+  }, [existingNote, applyNoteToState]);
+
+  // Keep labels in sync when note data refreshes after label mutations, even
+  // while the body has unsaved edits (labels are edited via their own picker
+  // and don't participate in the body's save baseline, so the refresh above
+  // may be skipped as dirty). Redundant with that refresh when the editor is
+  // clean, but idempotent.
   useEffect(() => {
     if (existingNote && isInitializedRef.current) {
       setLabels(existingNote.labels ?? []);
