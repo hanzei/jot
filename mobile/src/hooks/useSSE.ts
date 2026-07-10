@@ -12,7 +12,10 @@ import { markLocalNoteDeleted, permanentDeleteLocalNote, patchLocalNoteImages } 
 import { getProtectedNoteIds, saveServerNote } from '../db/syncQueue';
 import { getNote } from '../api/notes';
 import { isSseQuiesced, subscribeToServerSwitchLifecycle } from '../store/serverSwitchLifecycle';
+import { publishProfileIconUpdate } from '../store/profileIconEvents';
 import {
+  labelCountsQueryKey,
+  labelsQueryKey,
   noteLocalQueryKey,
   notesLocalQueryScopeKey,
 } from './queryKeys';
@@ -63,6 +66,14 @@ export function useSSE(
       // useOfflineNote's background-fetch ordering.
       void (async () => {
         const db = dbRef.current;
+        // The drawer's label list and per-label counts (useLabels / useLabelCounts)
+        // are derived from notes' labels_json in SQLite, so any note mutation can
+        // change them. Invalidate them right after the note write lands (a local
+        // re-read, no server round-trip) so the drawer refreshes in lockstep.
+        const invalidateLabelQueries = () => {
+          queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
+          queryClient.invalidateQueries({ queryKey: labelCountsQueryKey() });
+        };
         switch (event.type) {
           case 'note_updated': {
             const { note_id, note } = event.data;
@@ -78,6 +89,7 @@ export function useSSE(
             }
             queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(note_id) });
             queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+            invalidateLabelQueries();
             // Don't fire the "updated by someone else" notification for changes
             // from the same user on another device — query invalidation above is
             // sufficient to sync the state.
@@ -104,6 +116,7 @@ export function useSSE(
               // Leave the local copy in place; a later sync reconciles it.
             }
             queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+            invalidateLabelQueries();
             break;
           }
           case 'note_created':
@@ -129,6 +142,7 @@ export function useSSE(
             }
             queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(note_id) });
             queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+            invalidateLabelQueries();
             break;
           }
           case 'note_unshared': {
@@ -162,6 +176,7 @@ export function useSSE(
               queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(note_id) });
             }
             queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+            invalidateLabelQueries();
             break;
           }
           case 'note_image_added':
@@ -184,6 +199,26 @@ export function useSSE(
             }
             queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(imageNoteId) });
             queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+            break;
+          }
+          case 'labels_changed': {
+            // A label was created/renamed/deleted on another device. The drawer's
+            // label list and counts are derived from notes' labels_json (a local
+            // read), so re-derive from SQLite. A brand-new *empty* label (no notes
+            // yet) still won't appear — mobile derives labels from notes, unlike the
+            // webapp which server-fetches — but it surfaces via note_updated once
+            // attached to a note.
+            invalidateLabelQueries();
+            break;
+          }
+          case 'profile_icon_updated': {
+            // A collaborator changed their profile icon. Hand the updated user to
+            // UsersContext (via the module bus, since UsersProvider sits above
+            // SSEProvider) so avatars re-render off the bumped updated_at.
+            const { user } = event.data;
+            if (user) {
+              publishProfileIconUpdate(user);
+            }
             break;
           }
         }

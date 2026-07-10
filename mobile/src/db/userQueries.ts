@@ -47,6 +47,17 @@ export async function saveUsers(db: SQLiteDatabase, users: User[]): Promise<void
   });
 }
 
+// upsertUser writes a single user without touching the rest of the table, unlike
+// saveUsers which reconciles the whole list (and deletes anyone absent from it).
+// Used to apply a live profile_icon_updated SSE event for one collaborator.
+export async function upsertUser(db: SQLiteDatabase, user: User): Promise<void> {
+  await db.runAsync(
+    `INSERT OR REPLACE INTO users (id, username, first_name, last_name, role, has_profile_icon, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [user.id, user.username, user.first_name, user.last_name, user.role, user.has_profile_icon ? 1 : 0, user.created_at, user.updated_at],
+  );
+}
+
 export async function getLocalUsers(db: SQLiteDatabase): Promise<User[]> {
   const rows = await db.getAllAsync<UserRow>('SELECT * FROM users ORDER BY username ASC');
   return rows.map(rowToUser);
