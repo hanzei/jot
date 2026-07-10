@@ -4,10 +4,11 @@ import { getUsers } from '../api/users';
 import { getBaseUrl } from '../api/client';
 import { useAuth } from './AuthContext';
 import { useSQLiteContext } from 'expo-sqlite';
-import { getLocalUsers, saveUsers } from '../db/userQueries';
+import { getLocalUsers, saveUsers, upsertUser } from '../db/userQueries';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { retrySync, SyncAbortedError, SyncCanceller } from '../utils/retryWithBackoff';
 import { refreshIconCacheForUsers } from '../utils/profileIconCache';
+import { subscribeToProfileIconUpdates } from './profileIconEvents';
 
 interface UsersState {
   usersById: Map<string, User>;
@@ -76,6 +77,28 @@ export function UsersProvider({ children }: { children: React.ReactNode }) {
     loadUsers(canceller);
     return () => canceller.cancel();
   }, [isAuthenticated, isConnected, loadUsers]);
+
+  // Apply live profile_icon_updated SSE events (routed via the module bus because
+  // UsersProvider sits above SSEProvider in the tree). Updating usersById is what
+  // makes avatars re-render — components cache-bust off the user's updated_at — so
+  // that's the essential step; persisting and warming the icon cache mirror the
+  // post-fetch steps in loadUsers and keep SQLite/the cache consistent.
+  useEffect(() => {
+    return subscribeToProfileIconUpdates((updatedUser) => {
+      if (!isMountedRef.current) return;
+      setUsersById((prev) => {
+        const next = new Map(prev);
+        next.set(updatedUser.id, updatedUser);
+        return next;
+      });
+      void upsertUser(db, updatedUser).catch((err) => {
+        console.warn('Failed to persist profile icon update:', err);
+      });
+      void refreshIconCacheForUsers([updatedUser], getBaseUrl()).catch((err) => {
+        console.warn('Failed to warm profile icon cache after update:', err);
+      });
+    });
+  }, [db]);
 
   const value = useMemo<UsersState>(
     () => ({ usersById, refreshUsers: loadUsers }),
