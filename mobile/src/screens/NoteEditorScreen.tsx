@@ -240,6 +240,12 @@ export default function NoteEditorScreen() {
   // those edits clean without ever saving them.
   const editSeqRef = useRef(0);
   const saveInFlightRef = useRef<Promise<boolean> | null>(null);
+  // Guards the metadata PATCH path (pin/archive/color) the same way
+  // saveInFlightRef guards the body/items save: those updates go through
+  // useUpdateNote directly (not flushSave), so they don't touch saveInFlightRef.
+  // While one is in flight the refresh effect must not re-apply a (possibly
+  // stale) refetch and revert the optimistic pin/archive/color.
+  const metadataUpdateInFlightRef = useRef(false);
   const requiresHydrationRef = useRef(initialNoteId !== null);
 
   // Warn when another user updates this note *while we have unsaved edits*.
@@ -514,17 +520,19 @@ export default function NoteEditorScreen() {
   // query refetching and surfaces the "updated by another user" banner. Without
   // this, the banner showed but the checklist/content stayed stale.
   //
-  // Only refresh when the editor has no unsaved edits and no save is in flight:
-  // a clean editor mirrors the last-saved baseline, so replacing it with the
-  // newer note loses nothing. When the user has in-progress edits we keep their
-  // state intact (the banner alone signals the remote change) rather than risk
-  // clobbering them, since there is no field-level merge here.
+  // Only refresh when the editor has no unsaved edits and no save (body/items
+  // or metadata) is in flight: a clean editor mirrors the last-saved baseline,
+  // so replacing it with the newer note loses nothing. When the user has
+  // in-progress edits we keep their state intact (the banner alone signals the
+  // remote change) rather than risk clobbering them, since there is no
+  // field-level merge here.
   useEffect(() => {
     if (
       existingNote
       && isInitializedRef.current
       && !hasPendingChangesRef.current
       && saveInFlightRef.current === null
+      && !metadataUpdateInFlightRef.current
     ) {
       applyNoteToState(existingNote);
     }
@@ -1331,6 +1339,18 @@ export default function NoteEditorScreen() {
     Object.assign(savedScalarsRef.current, overrides);
   }, []);
 
+  // Runs a metadata PATCH while holding metadataUpdateInFlightRef so the
+  // existingNote refresh effect won't revert the optimistic change with a stale
+  // refetch that lands mid-request.
+  const runMetadataUpdate = useCallback(async (id: string, data: UpdateNoteRequest) => {
+    metadataUpdateInFlightRef.current = true;
+    try {
+      await updateMutation.mutateAsync({ id, data });
+    } finally {
+      metadataUpdateInFlightRef.current = false;
+    }
+  }, [updateMutation]);
+
   const handleTitleSubmit = useCallback(() => {
     if (noteTypeRef.current === 'text') {
       contentInputRef.current?.focus();
@@ -1469,25 +1489,19 @@ export default function NoteEditorScreen() {
     const newPinned = !pinnedRef.current;
     setPinned(newPinned);
     try {
-      await updateMutation.mutateAsync({
-        id,
-        data: buildMetadataUpdateData({ pinned: newPinned }),
-      });
+      await runMetadataUpdate(id, buildMetadataUpdateData({ pinned: newPinned }));
       commitMetadataBaseline({ pinned: newPinned });
     } catch {
       setPinned(!newPinned);
       Alert.alert(t('common.error'), t('note.failedUpdate'));
     }
-  }), [buildMetadataUpdateData, commitMetadataBaseline, withSavedNote, t, updateMutation]);
+  }), [buildMetadataUpdateData, commitMetadataBaseline, runMetadataUpdate, withSavedNote, t]);
 
   const handleToggleArchive = useCallback(() => withSavedNote(async (id) => {
     const newArchived = !archivedRef.current;
     setArchived(newArchived);
     try {
-      await updateMutation.mutateAsync({
-        id,
-        data: buildMetadataUpdateData({ archived: newArchived }),
-      });
+      await runMetadataUpdate(id, buildMetadataUpdateData({ archived: newArchived }));
       commitMetadataBaseline({ archived: newArchived });
       if (newArchived) {
         // Archiving from the single-note view returns the user to the dashboard.
@@ -1497,10 +1511,7 @@ export default function NoteEditorScreen() {
           label: t('dashboard.undo'),
           onPress: async () => {
             try {
-              await updateMutation.mutateAsync({
-                id,
-                data: buildMetadataUpdateData({ archived: false }),
-              });
+              await runMetadataUpdate(id, buildMetadataUpdateData({ archived: false }));
               commitMetadataBaseline({ archived: false });
               setArchived(false);
               showToast(t('dashboard.noteUnarchived'));
@@ -1516,7 +1527,7 @@ export default function NoteEditorScreen() {
       setArchived(!newArchived);
       Alert.alert(t('common.error'), t('note.failedUpdate'));
     }
-  }), [buildMetadataUpdateData, commitMetadataBaseline, withSavedNote, navigation, showToast, t, updateMutation]);
+  }), [buildMetadataUpdateData, commitMetadataBaseline, runMetadataUpdate, withSavedNote, navigation, showToast, t]);
 
   const handleColorSelect = useCallback(async (selectedColor: string) => {
     const saveSucceeded = await flushPendingChanges();
@@ -1539,16 +1550,13 @@ export default function NoteEditorScreen() {
       return;
     }
     try {
-      await updateMutation.mutateAsync({
-        id: currentNoteId,
-        data: buildMetadataUpdateData({ color: selectedColor }),
-      });
+      await runMetadataUpdate(currentNoteId, buildMetadataUpdateData({ color: selectedColor }));
       commitMetadataBaseline({ color: selectedColor });
     } catch {
       setColor(prevColor);
       Alert.alert(t('common.error'), t('note.failedColorUpdate'));
     }
-  }, [buildMetadataUpdateData, commitMetadataBaseline, flushPendingChanges, markDirtyAndScheduleUpdate, t, updateMutation]);
+  }, [buildMetadataUpdateData, commitMetadataBaseline, flushPendingChanges, markDirtyAndScheduleUpdate, runMetadataUpdate, t]);
 
   const handleToggleNoteType = useCallback(() => {
     if (hasCreated) return;
