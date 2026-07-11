@@ -57,6 +57,7 @@ import { getCompletedSectionDividerColor, isWhiteHexColor } from '../utils/color
 import { formatEditorStateForShare } from '../utils/noteTextFormatter';
 import { fullMarkdownStyles, preprocessMarkdown } from '../utils/markdownStyles';
 import { getActiveServer, listServers, type ServerAccountEntry } from '../store/serverAccounts';
+import { isServerReachable } from '../api/serverReachability';
 import { setPendingShare, usePendingShare } from '../store/shareIntent';
 import { useBannerShown } from '../hooks/useBannerShown';
 import {
@@ -882,18 +883,57 @@ export default function NoteEditorScreen() {
     navigation.dispatch(navAction);
   }, [navigation]);
 
+  // Flush pending edits without blocking navigation — used when we deliberately
+  // let the user leave (server known-unreachable) and on an unexpected unmount.
+  // flushSave(true) still reports failure via its return value even though its
+  // `unmounting` guard suppresses the in-editor error banner (the editor is on
+  // its way out), so a genuine background-save failure would otherwise vanish
+  // silently. Surface it with a global toast, which outlives this screen.
+  //
+  // showToast is read through a ref so this callback's identity tracks only
+  // flushSave — matching the unmount-flush effect's original `[flushSave]`
+  // dependency exactly. (A direct showToast dependency would let an unstable
+  // toast identity re-run that effect, and re-fire the flush, on every render.)
+  const showToastRef = useRef(showToast);
+  showToastRef.current = showToast;
+  const flushInBackground = useCallback(() => {
+    void flushSave(true)
+      .then((saved) => {
+        if (!saved) showToastRef.current(t('note.failedSaveChanges'), 'error');
+      })
+      .catch(() => showToastRef.current(t('note.failedSaveChanges'), 'error'));
+  }, [flushSave, t]);
+
   // Intercept navigation away to flush pending edits before leaving the screen.
   useEffect(() => {
     const unsubscribe = navigation.addListener('beforeRemove', (event) => {
       if (intentionalExitRef.current || !hasPendingChangesRef.current) {
         return;
       }
-      event.preventDefault();
       if (debounceRef.current) {
         clearTimeout(debounceRef.current);
         debounceRef.current = null;
       }
 
+      // Server known-unreachable: an online write would only stall for the
+      // request timeout before falling back to the local-persist + queue path,
+      // so there is nothing to wait for. Let navigation proceed immediately and
+      // flush in the background — blocking here is what made leaving a note with
+      // unsaved edits feel frozen while the server was down. The edit stays
+      // durable: flushSave writes it to the local DB and enqueues it for replay.
+      // Mark the exit intentional so the unmount cleanup below doesn't flush a
+      // second time.
+      if (!isServerReachable()) {
+        intentionalExitRef.current = true;
+        flushInBackground();
+        return;
+      }
+
+      // Server reachable: await the save so a genuine, non-queueable failure
+      // (validation/conflict) can still prompt Retry/Discard instead of silently
+      // dropping the edit. A reachable server responds promptly, so this path no
+      // longer reintroduces the long stall.
+      event.preventDefault();
       void (async () => {
         const saveSucceeded = await flushSave();
         if (!saveSucceeded) {
@@ -904,7 +944,7 @@ export default function NoteEditorScreen() {
       })();
     });
     return unsubscribe;
-  }, [exitWith, flushSave, navigation]);
+  }, [exitWith, flushSave, flushInBackground, navigation]);
 
   const handleExitDiscard = useCallback(() => {
     if (!exitSavePrompt || isExitRetrying) return;
@@ -937,10 +977,10 @@ export default function NoteEditorScreen() {
         debounceRef.current = null;
       }
       if (!intentionalExitRef.current && hasPendingChangesRef.current) {
-        flushSave(true);
+        flushInBackground();
       }
     };
-  }, [flushSave]);
+  }, [flushInBackground]);
 
   const handleTitleChange = useCallback(
     (newTitle: string) => {
