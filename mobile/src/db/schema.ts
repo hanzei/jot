@@ -198,7 +198,11 @@ const migration5 = async (db: SQLiteDatabase): Promise<void> => {
   for (const row of rows) {
     let labels: { id: string; user_id?: string; name: string; created_at?: string; updated_at?: string }[] = [];
     try {
-      labels = JSON.parse(row.labels_json);
+      const parsed = JSON.parse(row.labels_json);
+      if (!Array.isArray(parsed)) {
+        continue;
+      }
+      labels = parsed;
     } catch {
       continue;
     }

@@ -248,6 +248,8 @@ describe('migrateDatabase', () => {
             // A duplicate id across notes is inserted once (seen guard + INSERT OR IGNORE).
             { labels_json: JSON.stringify([{ id: 'l1', user_id: 'u1', name: 'Work', created_at: 'c1', updated_at: 'u1t' }, { id: 'l2', user_id: 'u1', name: 'Home', created_at: 'c2', updated_at: 'u2t' }]) },
             { labels_json: 'not json' }, // malformed row is tolerated and skipped
+            { labels_json: '5' }, // valid JSON but not an array — tolerated and skipped
+            { labels_json: '{}' }, // valid JSON object (not an array) — tolerated and skipped
           ]),
       });
       await migrateDatabase(db as unknown as SQLiteDatabase);

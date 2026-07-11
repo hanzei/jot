@@ -669,15 +669,7 @@ export async function saveLabels(
       }
     }
     for (const label of labels) {
-      await db.runAsync(
-        `INSERT INTO labels (id, user_id, name, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT(id) DO UPDATE SET
-           user_id = excluded.user_id,
-           name = excluded.name,
-           updated_at = excluded.updated_at`,
-        [label.id, label.user_id, label.name, label.created_at, label.updated_at],
-      );
+      await upsertLabel(db, label);
     }
   });
 }
