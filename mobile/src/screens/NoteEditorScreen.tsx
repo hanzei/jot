@@ -57,6 +57,7 @@ import { getCompletedSectionDividerColor, isWhiteHexColor } from '../utils/color
 import { formatEditorStateForShare } from '../utils/noteTextFormatter';
 import { fullMarkdownStyles, preprocessMarkdown } from '../utils/markdownStyles';
 import { getActiveServer, listServers, type ServerAccountEntry } from '../store/serverAccounts';
+import { isServerReachable } from '../api/serverReachability';
 import { setPendingShare, usePendingShare } from '../store/shareIntent';
 import { useBannerShown } from '../hooks/useBannerShown';
 import {
@@ -888,12 +889,30 @@ export default function NoteEditorScreen() {
       if (intentionalExitRef.current || !hasPendingChangesRef.current) {
         return;
       }
-      event.preventDefault();
       if (debounceRef.current) {
         clearTimeout(debounceRef.current);
         debounceRef.current = null;
       }
 
+      // Server known-unreachable: an online write would only stall for the
+      // request timeout before falling back to the local-persist + queue path,
+      // so there is nothing to wait for. Let navigation proceed immediately and
+      // flush in the background — blocking here is what made leaving a note with
+      // unsaved edits feel frozen while the server was down. The edit stays
+      // durable: flushSave writes it to the local DB and enqueues it for replay.
+      // Mark the exit intentional so the unmount cleanup below doesn't flush a
+      // second time.
+      if (!isServerReachable()) {
+        intentionalExitRef.current = true;
+        void flushSave(true);
+        return;
+      }
+
+      // Server reachable: await the save so a genuine, non-queueable failure
+      // (validation/conflict) can still prompt Retry/Discard instead of silently
+      // dropping the edit. A reachable server responds promptly, so this path no
+      // longer reintroduces the long stall.
+      event.preventDefault();
       void (async () => {
         const saveSucceeded = await flushSave();
         if (!saveSucceeded) {

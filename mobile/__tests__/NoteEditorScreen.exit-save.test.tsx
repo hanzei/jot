@@ -1,6 +1,7 @@
 import React from 'react';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import NoteEditorScreen from '../src/screens/NoteEditorScreen';
+import { markServerReachable, markServerUnreachable } from '../src/api/serverReachability';
 
 const mockUseRoute = jest.fn();
 const mockGoBack = jest.fn();
@@ -224,11 +225,15 @@ describe('NoteEditorScreen exit save behavior', () => {
     mockUseOfflineNote.mockReturnValue({ data: null });
     mockCreateMutateAsync.mockResolvedValue({ id: 'created-note-id' });
     mockUpdateMutateAsync.mockResolvedValue({});
+    // The exit path branches on server reachability; keep the default (reachable)
+    // for the blocking-prompt cases below and reset any override from a prior test.
+    markServerReachable();
   });
 
   afterEach(() => {
     jest.useRealTimers();
     jest.restoreAllMocks();
+    markServerReachable();
   });
 
   it('shows Retry/Discard dialog when save fails permanently at exit', async () => {
@@ -465,5 +470,25 @@ describe('NoteEditorScreen exit save behavior', () => {
 
     expect(event.preventDefault).not.toHaveBeenCalled();
     expect(queryByTestId('confirm-dialog-confirm')).toBeNull();
+  });
+
+  it('navigates immediately without a dialog when the server is unreachable', async () => {
+    // Server is known-down: leaving must not block on (or wait out) the network.
+    markServerUnreachable();
+    mockCreateMutateAsync.mockResolvedValue({ id: 'queued-note-id' });
+
+    const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
+    fireEvent.changeText(getByTestId('note-content-input'), 'Hello');
+
+    const beforeRemove = getBeforeRemoveHandler()!;
+    const event = makeEvent();
+    act(() => { beforeRemove(event); });
+
+    // Navigation is allowed to proceed (no preventDefault) and no Retry/Discard
+    // dialog is shown — the edit is flushed to the local DB + queue in the
+    // background instead.
+    expect(event.preventDefault).not.toHaveBeenCalled();
+    expect(queryByTestId('confirm-dialog-confirm')).toBeNull();
+    await waitFor(() => { expect(mockCreateMutateAsync).toHaveBeenCalled(); });
   });
 });

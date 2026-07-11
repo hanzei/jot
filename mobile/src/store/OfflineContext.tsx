@@ -12,6 +12,7 @@ import NetInfo from '@react-native-community/netinfo';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useQueryClient } from '@tanstack/react-query';
 import { drainQueue, getPendingCount, getDeadLetterCount, subscribeToEnqueue } from '../db/syncQueue';
+import { markServerReachable } from '../api/serverReachability';
 import { drainImageUploadQueue, getQueuedImageUploadCount } from '../db/imageUploadQueue';
 import { getPendingCreateNoteIds, getFailedNoteIds } from '../db/noteQueries';
 import { useAuth } from './AuthContext';
@@ -306,6 +307,11 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     isReconnectingRef.current = true;
+    // The device just regained connectivity: re-arm the server-reachable belief
+    // so the next write probes the network again instead of staying parked on the
+    // queue from a prior outage. A still-down server flips it back on the first
+    // failed attempt; the drain below reconciles either way.
+    markServerReachable();
     try {
       do {
         reconnectRerunRequestedRef.current = false;
