@@ -17,9 +17,13 @@
  * re-armed to reachable whenever the device regains connectivity so a new link
  * gets a fresh probe.
  *
- * This module intentionally has no imports so it can be depended on from the
- * api client, the sync layer, and screens without risking an import cycle.
+ * Its one dependency is the leaf `localMode` flag (used by the
+ * `isOnlineWriteAllowed` gate below), which imports nothing back — so this
+ * module can still be depended on from the api client, the sync layer, and
+ * screens without risking an import cycle.
  */
+
+import { isLocalModeActive } from '../store/localMode';
 
 let serverReachable = true;
 
@@ -52,6 +56,17 @@ export function markServerReachable(): void {
  */
 export function markServerUnreachable(): void {
   setReachable(false);
+}
+
+/**
+ * Whether a write should attempt the network right now: the device is connected,
+ * the server is believed reachable, and the app isn't in serverless local mode.
+ * Callers pass their current connectivity (each write hook mirrors it into a
+ * ref). Call sites with extra conditions compose them, e.g.
+ * `isOnlineWriteAllowed(isConnectedRef.current) && !pendingCreate`.
+ */
+export function isOnlineWriteAllowed(isConnected: boolean): boolean {
+  return isConnected && isServerReachable() && !isLocalModeActive();
 }
 
 /** Subscribe to reachability transitions. Returns an unsubscribe function. */

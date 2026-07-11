@@ -8,7 +8,7 @@ import { enqueueOperation, rethrowIfNotQueueable } from '../db/syncQueue';
 import { enqueueImageUpload } from '../db/imageUploadQueue';
 import { deleteCachedNoteImage } from '../utils/noteImageCache';
 import { assertSwitchWriteAllowed } from '../api/client';
-import { isServerReachable } from '../api/serverReachability';
+import { isOnlineWriteAllowed } from '../api/serverReachability';
 import { useNetworkStatus } from './useNetworkStatus';
 import { isLocalModeActive } from '../store/localMode';
 import { noteLocalQueryKey, notesLocalQueryScopeKey, pendingImageUploadsQueryKey } from './queryKeys';
@@ -49,7 +49,7 @@ export function useUploadNoteImage() {
     }): Promise<UploadNoteImageResult> => {
       assertSwitchWriteAllowed();
 
-      if (isLocalModeActive() || (isConnectedRef.current && isServerReachable())) {
+      if (isLocalModeActive() || isOnlineWriteAllowed(isConnectedRef.current)) {
         try {
           const image = await uploadNoteImage(noteId, file, onProgress);
           // The SSE echo of this upload is dropped for the client that triggered
@@ -112,7 +112,7 @@ export function useDeleteNoteImage() {
     mutationFn: async ({ noteId, imageId }: { noteId: string; imageId: string }): Promise<void> => {
       assertSwitchWriteAllowed();
 
-      if (isLocalModeActive() || (isConnectedRef.current && isServerReachable())) {
+      if (isLocalModeActive() || isOnlineWriteAllowed(isConnectedRef.current)) {
         try {
           await deleteNoteImage(imageId);
           // Same self-echo gap as the upload above, on the removal side.

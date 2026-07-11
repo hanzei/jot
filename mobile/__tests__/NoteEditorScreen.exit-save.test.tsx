@@ -189,10 +189,11 @@ jest.mock('../src/store/UsersContext', () => ({
   }),
 }));
 
+const mockShowToast = jest.fn();
 jest.mock('../src/hooks/useToast', () => ({
   __esModule: true,
   useToast: () => ({
-    showToast: jest.fn(),
+    showToast: mockShowToast,
   }),
 }));
 
@@ -490,5 +491,25 @@ describe('NoteEditorScreen exit save behavior', () => {
     expect(event.preventDefault).not.toHaveBeenCalled();
     expect(queryByTestId('confirm-dialog-confirm')).toBeNull();
     await waitFor(() => { expect(mockCreateMutateAsync).toHaveBeenCalled(); });
+  });
+
+  it('surfaces a save-error toast when the offline background flush fails', async () => {
+    // Server unreachable so we navigate immediately; if the background flush
+    // then genuinely fails, the in-editor banner is suppressed by the unmounting
+    // guard, so the failure must surface via a global toast instead.
+    markServerUnreachable();
+    mockCreateMutateAsync.mockRejectedValue(new Error('local persist failed'));
+
+    const { getByTestId } = render(<NoteEditorScreen />);
+    fireEvent.changeText(getByTestId('note-content-input'), 'Hello');
+
+    const beforeRemove = getBeforeRemoveHandler()!;
+    const event = makeEvent();
+    act(() => { beforeRemove(event); });
+
+    expect(event.preventDefault).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(mockShowToast).toHaveBeenCalledWith('note.failedSaveChanges', 'error');
+    });
   });
 });

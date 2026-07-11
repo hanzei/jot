@@ -27,7 +27,7 @@ import {
   isNotePendingCreate,
 } from '../db/noteQueries';
 import { enqueueOperation, rethrowIfNotQueueable, saveServerNotes, saveServerLabels } from '../db/syncQueue';
-import { isServerReachable } from '../api/serverReachability';
+import { isOnlineWriteAllowed } from '../api/serverReachability';
 import { useNetworkStatus } from './useNetworkStatus';
 import { retrySync, SyncAbortedError, SyncCanceller } from '../utils/retryWithBackoff';
 import { useAuth } from '../store/AuthContext';
@@ -178,7 +178,7 @@ export function useCreateLabel() {
       assertSwitchWriteAllowed();
       const trimmed = name.trim();
       if (!trimmed) throw new Error('Label name must not be empty');
-      if (isConnectedRef.current && isServerReachable() && !isLocalModeActive()) {
+      if (isOnlineWriteAllowed(isConnectedRef.current)) {
         try {
           const serverLabel = await createLabel(trimmed);
           // Persist to the canonical label store so the new (empty) label shows in
@@ -234,7 +234,7 @@ export function useAddLabelToNote() {
       // calling online against a note the server doesn't know yet (a 404 would
       // surface as an error instead of syncing).
       const pendingCreate = await isNotePendingCreate(db, noteId);
-      if (isConnectedRef.current && isServerReachable() && !pendingCreate && !isLocalModeActive()) {
+      if (isOnlineWriteAllowed(isConnectedRef.current) && !pendingCreate) {
         try {
           const updatedNote = await addLabelToNote(noteId, trimmed);
           await saveNote(db, updatedNote);
@@ -307,7 +307,7 @@ export function useRemoveLabelFromNote() {
       // op, so queue rather than calling online against a note the server doesn't
       // know yet.
       const pendingCreate = await isNotePendingCreate(db, noteId);
-      if (isConnectedRef.current && isServerReachable() && !pendingCreate && !isLocalModeActive()) {
+      if (isOnlineWriteAllowed(isConnectedRef.current) && !pendingCreate) {
         try {
           const updatedNote = await removeLabelFromNote(noteId, labelId);
           await saveNote(db, updatedNote);
@@ -356,7 +356,7 @@ export function useRenameLabel() {
       assertSwitchWriteAllowed();
       const trimmed = name.trim();
       if (!trimmed) throw new Error('Label name must not be empty');
-      if (isConnectedRef.current && isServerReachable() && !isLocalModeActive()) {
+      if (isOnlineWriteAllowed(isConnectedRef.current)) {
         try {
           const updatedLabel = await renameLabel(labelId, trimmed);
           await renameStoredLabel(db, labelId, updatedLabel.name);
@@ -411,7 +411,7 @@ export function useDeleteLabel() {
   return useMutation({
     mutationFn: async ({ labelId }: { labelId: string }) => {
       assertSwitchWriteAllowed();
-      if (isConnectedRef.current && isServerReachable() && !isLocalModeActive()) {
+      if (isOnlineWriteAllowed(isConnectedRef.current)) {
         try {
           await deleteLabel(labelId);
           await deleteStoredLabel(db, labelId);

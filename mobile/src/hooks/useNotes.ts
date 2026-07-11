@@ -49,10 +49,9 @@ import {
   reorderLocalItems,
 } from '../db/noteQueries';
 import { enqueueOperation, rethrowIfNotQueueable } from '../db/syncQueue';
-import { isServerReachable } from '../api/serverReachability';
+import { isOnlineWriteAllowed } from '../api/serverReachability';
 import { useNetworkStatus } from './useNetworkStatus';
 import { useAuth } from '../store/AuthContext';
-import { isLocalModeActive } from '../store/localMode';
 import { assertSwitchWriteAllowed } from '../api/client';
 import {
   noteLocalQueryKey,
@@ -160,7 +159,7 @@ export function useCreateNote() {
   return useMutation({
     mutationFn: async (data: CreateNoteRequest): Promise<Note> => {
       assertSwitchWriteAllowed();
-      if (isConnectedRef.current && isServerReachable() && !isLocalModeActive()) {
+      if (isOnlineWriteAllowed(isConnectedRef.current)) {
         try {
           const note = await createNote(data);
           await saveNote(db, note);
@@ -286,7 +285,7 @@ export function useUpdateNote() {
       const fields = data as { title?: string; content?: string };
       const touchesContent = fields.title !== undefined || fields.content !== undefined;
 
-      if (isConnectedRef.current && isServerReachable() && !isLocalModeActive()) {
+      if (isOnlineWriteAllowed(isConnectedRef.current)) {
         try {
           // Online: gate on the version we currently hold locally so the server
           // can reject a write that raced a concurrent edit on another device
@@ -418,7 +417,7 @@ export function useConvertNoteType() {
       }
       const data = buildConvertNoteTypeRequest(existing);
 
-      if (isConnectedRef.current && isServerReachable() && !isLocalModeActive()) {
+      if (isOnlineWriteAllowed(isConnectedRef.current)) {
         try {
           const convertedNote = await convertNoteType(id, { ...data, base_version: existing.version });
           await saveNote(db, convertedNote);
@@ -487,7 +486,7 @@ export function useCreateNoteItem() {
         parent_id: itemWithId.parent_id ?? null,
         assigned_to: itemWithId.assigned_to ?? '',
       };
-      if (isConnectedRef.current && isServerReachable() && !isLocalModeActive()) {
+      if (isOnlineWriteAllowed(isConnectedRef.current)) {
         try {
           await createNoteItem(noteId, itemWithId);
           await createLocalItem(db, noteId, local);
@@ -522,7 +521,7 @@ export function useUpdateNoteItem() {
   return useMutation({
     mutationFn: async ({ noteId, itemId, data }: { noteId: string; itemId: string; data: PatchNoteItemRequest }): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isConnectedRef.current && isServerReachable() && !isLocalModeActive()) {
+      if (isOnlineWriteAllowed(isConnectedRef.current)) {
         try {
           await updateNoteItem(noteId, itemId, data);
           await patchLocalItem(db, noteId, itemId, data);
@@ -557,7 +556,7 @@ export function useDeleteNoteItem() {
   return useMutation({
     mutationFn: async ({ noteId, itemId }: { noteId: string; itemId: string }): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isConnectedRef.current && isServerReachable() && !isLocalModeActive()) {
+      if (isOnlineWriteAllowed(isConnectedRef.current)) {
         try {
           await deleteNoteItem(noteId, itemId);
           await deleteLocalItem(db, noteId, itemId);
@@ -591,7 +590,7 @@ export function useReorderNoteItems() {
   return useMutation({
     mutationFn: async ({ noteId, itemIds }: { noteId: string; itemIds: string[] }): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isConnectedRef.current && isServerReachable() && !isLocalModeActive()) {
+      if (isOnlineWriteAllowed(isConnectedRef.current)) {
         try {
           await reorderNoteItems(noteId, itemIds);
           await reorderLocalItems(db, noteId, itemIds);
@@ -626,7 +625,7 @@ export function useDeleteNote() {
   return useMutation({
     mutationFn: async (id: string): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isConnectedRef.current && isServerReachable() && !isLocalModeActive()) {
+      if (isOnlineWriteAllowed(isConnectedRef.current)) {
         try {
           await deleteNote(id);
           await markLocalNoteDeleted(db, id);
@@ -665,7 +664,7 @@ export function useDuplicateNote() {
       // calling online against a note the server doesn't know yet (a 404 would
       // surface as an error instead of syncing).
       const pendingCreate = await isNotePendingCreate(db, id);
-      if (isConnectedRef.current && !pendingCreate && !isLocalModeActive()) {
+      if (isOnlineWriteAllowed(isConnectedRef.current) && !pendingCreate) {
         try {
           const duplicatedNote = await duplicateNote(id);
           await saveNote(db, duplicatedNote);
@@ -751,7 +750,7 @@ export function useRestoreNote() {
   return useMutation({
     mutationFn: async (id: string): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isConnectedRef.current && isServerReachable() && !isLocalModeActive()) {
+      if (isOnlineWriteAllowed(isConnectedRef.current)) {
         try {
           await restoreNote(id);
           await markLocalNoteRestored(db, id);
@@ -785,7 +784,7 @@ export function usePermanentDeleteNote() {
   return useMutation({
     mutationFn: async (id: string): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isConnectedRef.current && isServerReachable() && !isLocalModeActive()) {
+      if (isOnlineWriteAllowed(isConnectedRef.current)) {
         try {
           await permanentDeleteNote(id);
           await permanentDeleteLocalNote(db, id);
@@ -819,7 +818,7 @@ export function useReorderNotes() {
   return useMutation({
     mutationFn: async (noteIds: string[]): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isConnectedRef.current && isServerReachable() && !isLocalModeActive()) {
+      if (isOnlineWriteAllowed(isConnectedRef.current)) {
         try {
           await reorderNotes(noteIds);
           // Update positions in local DB to match the new order
@@ -875,7 +874,7 @@ export function useShareNote() {
       // call would 404 (permanent) and surface as an error instead of syncing.
       const pendingCreate = await isNotePendingCreate(db, noteId);
 
-      if (isConnectedRef.current && !pendingCreate && !isLocalModeActive()) {
+      if (isOnlineWriteAllowed(isConnectedRef.current) && !pendingCreate) {
         try {
           await shareNote(noteId, user.id);
           // Fetch updated note so shared_with_json in SQLite reflects server state
@@ -939,7 +938,7 @@ export function useUnshareNote() {
       // so queue rather than calling online against a note the server doesn't know yet.
       const pendingCreate = await isNotePendingCreate(db, noteId);
 
-      if (isConnectedRef.current && !pendingCreate && !isLocalModeActive()) {
+      if (isOnlineWriteAllowed(isConnectedRef.current) && !pendingCreate) {
         try {
           await unshareNote(noteId, userId);
           try {
@@ -989,7 +988,7 @@ export function useToggleNoteItemCompleted() {
       ),
     mutationFn: async ({ noteId, itemId, completed }: { noteId: string; itemId: string; completed: boolean }): Promise<NoteItem[]> => {
       assertSwitchWriteAllowed();
-      if (isConnectedRef.current && isServerReachable() && !isLocalModeActive()) {
+      if (isOnlineWriteAllowed(isConnectedRef.current)) {
         try {
           const serverItems = await toggleItemCompleted(noteId, itemId, completed);
           for (const item of serverItems) {
