@@ -32,7 +32,10 @@ jest.mock('../src/db/noteQueries', () => ({
   deleteLabelFromLocalNotes: jest.fn().mockResolvedValue(undefined),
   addLabelToLocalNote: jest.fn().mockResolvedValue(undefined),
   removeLabelFromLocalNote: jest.fn().mockResolvedValue(undefined),
-  getLocalLabels: jest.fn().mockResolvedValue([]),
+  getStoredLabels: jest.fn().mockResolvedValue([]),
+  upsertLabel: jest.fn().mockResolvedValue(undefined),
+  renameStoredLabel: jest.fn().mockResolvedValue(undefined),
+  deleteStoredLabel: jest.fn().mockResolvedValue(undefined),
   getLocalLabelCounts: jest.fn().mockResolvedValue({}),
   getLocalNote: jest.fn().mockResolvedValue(null),
   generateClientLabelId: jest.fn(() => 'client_label_id'),
@@ -42,6 +45,7 @@ jest.mock('../src/db/noteQueries', () => ({
 jest.mock('../src/db/syncQueue', () => ({
   ...jest.requireActual('../src/db/syncQueue'),
   enqueueOperation: jest.fn().mockResolvedValue(undefined),
+  saveServerLabels: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('../src/store/AuthContext', () => ({
@@ -96,7 +100,7 @@ describe('useLabels write hooks', () => {
     jest.clearAllMocks();
     mockUseNetworkStatus.mockReturnValue({ isConnected: true });
     mockClientModule.isServerSwitchInProgress.mockReturnValue(false);
-    mockNoteQueries.getLocalLabels.mockResolvedValue([]);
+    mockNoteQueries.getStoredLabels.mockResolvedValue([]);
     mockNoteQueries.getLocalNote.mockResolvedValue(null);
   });
 
@@ -113,6 +117,9 @@ describe('useLabels write hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(mockLabelsApi.createLabel).toHaveBeenCalledWith('Work');
       expect(result.current.data).toEqual(serverLabel);
+      // The new label is persisted to the store so an empty label (no notes yet)
+      // shows in the drawer immediately (#691).
+      expect(mockNoteQueries.upsertLabel).toHaveBeenCalledWith(expect.anything(), serverLabel);
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
     });
 
@@ -146,6 +153,11 @@ describe('useLabels write hooks', () => {
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({ operation: 'createLabel', body: { id: 'client_label_id', name: 'Home' } }),
+      );
+      // The offline label is persisted to the store so it survives without a note.
+      expect(mockNoteQueries.upsertLabel).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ id: 'client_label_id', name: 'Home' }),
       );
     });
 
@@ -182,13 +194,19 @@ describe('useLabels write hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(mockLabelsApi.addLabelToNote).toHaveBeenCalledWith('n1', 'Work');
       expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), updatedNote);
+      // The label from the server response is persisted to the store so a newly
+      // minted label shows in the drawer immediately (#691).
+      expect(mockNoteQueries.upsertLabel).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ id: 'srv1', name: 'Work' }),
+      );
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
     });
 
     it('on a transient failure for a new label, queues both createLabel and addLabelToNote', async () => {
       mockLabelsApi.addLabelToNote.mockRejectedValueOnce(makeAxiosError(503));
       mockNoteQueries.getLocalNote.mockResolvedValue(sampleNote as never);
-      mockNoteQueries.getLocalLabels.mockResolvedValue([]);
+      mockNoteQueries.getStoredLabels.mockResolvedValue([]);
 
       const { result } = renderHook(() => useAddLabelToNote(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ noteId: 'n1', name: 'New' });
@@ -203,6 +221,27 @@ describe('useLabels write hooks', () => {
         expect.anything(),
         expect.objectContaining({ operation: 'addLabelToNote', endpoint: '/notes/n1/labels', method: 'POST', body: { name: 'New' } }),
       );
+      // The minted label is also written to the store.
+      expect(mockNoteQueries.upsertLabel).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ id: 'client_label_id', name: 'New' }),
+      );
+    });
+
+    it('does not queue a createLabel or upsert when reusing a stored label (online, new label reuse guard)', async () => {
+      // When the server reuses an existing label (same id already stored), upsert is
+      // still idempotent, but no duplicate createLabel is queued.
+      const updatedNote = { ...sampleNote, labels: [{ id: 'srv-existing', user_id: 'u1', name: 'Work', created_at: '', updated_at: '' }] };
+      mockLabelsApi.addLabelToNote.mockResolvedValueOnce(updatedNote as never);
+
+      const { result } = renderHook(() => useAddLabelToNote(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ noteId: 'n1', name: 'Work' });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockNoteQueries.upsertLabel).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ id: 'srv-existing', name: 'Work' }),
+      );
     });
 
     it('queues (does not call the API) for a pending-create note even when online (#475)', async () => {
@@ -210,7 +249,7 @@ describe('useLabels write hooks', () => {
       // The label op queues FIFO behind the create instead.
       mockNoteQueries.isNotePendingCreate.mockResolvedValueOnce(true);
       mockNoteQueries.getLocalNote.mockResolvedValue(sampleNote as never);
-      mockNoteQueries.getLocalLabels.mockResolvedValue([]);
+      mockNoteQueries.getStoredLabels.mockResolvedValue([]);
 
       const { result } = renderHook(() => useAddLabelToNote(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ noteId: 'n1', name: 'Soon' });
@@ -226,7 +265,7 @@ describe('useLabels write hooks', () => {
     it('reuses an existing local label by name without queuing a createLabel', async () => {
       mockUseNetworkStatus.mockReturnValue({ isConnected: false });
       mockNoteQueries.getLocalNote.mockResolvedValue(sampleNote as never);
-      mockNoteQueries.getLocalLabels.mockResolvedValue([
+      mockNoteQueries.getStoredLabels.mockResolvedValue([
         { id: 'srv-existing', user_id: 'u1', name: 'Work', created_at: '', updated_at: '' },
       ] as never);
 
@@ -252,7 +291,7 @@ describe('useLabels write hooks', () => {
     it('reuses an existing label whose name differs only in case (no createLabel queued)', async () => {
       mockUseNetworkStatus.mockReturnValue({ isConnected: false });
       mockNoteQueries.getLocalNote.mockResolvedValue(sampleNote as never);
-      mockNoteQueries.getLocalLabels.mockResolvedValue([
+      mockNoteQueries.getStoredLabels.mockResolvedValue([
         { id: 'srv-existing', user_id: 'u1', name: 'urgent', created_at: '', updated_at: '' },
       ] as never);
 
@@ -347,6 +386,7 @@ describe('useLabels write hooks', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(mockLabelsApi.renameLabel).toHaveBeenCalledWith('l1', 'Renamed');
+      expect(mockNoteQueries.renameStoredLabel).toHaveBeenCalledWith(expect.anything(), 'l1', 'Renamed');
       expect(mockNoteQueries.renameLabelInLocalNotes).toHaveBeenCalledWith(expect.anything(), 'l1', 'Renamed');
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
     });
@@ -359,6 +399,7 @@ describe('useLabels write hooks', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(mockLabelsApi.renameLabel).not.toHaveBeenCalled();
+      expect(mockNoteQueries.renameStoredLabel).toHaveBeenCalledWith(expect.anything(), 'l1', 'Offline');
       expect(mockNoteQueries.renameLabelInLocalNotes).toHaveBeenCalledWith(expect.anything(), 'l1', 'Offline');
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
@@ -388,6 +429,7 @@ describe('useLabels write hooks', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(mockLabelsApi.deleteLabel).toHaveBeenCalledWith('l1');
+      expect(mockNoteQueries.deleteStoredLabel).toHaveBeenCalledWith(expect.anything(), 'l1');
       expect(mockNoteQueries.deleteLabelFromLocalNotes).toHaveBeenCalledWith(expect.anything(), 'l1');
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
     });
@@ -399,6 +441,7 @@ describe('useLabels write hooks', () => {
       await result.current.mutateAsync({ labelId: 'l1' });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockNoteQueries.deleteStoredLabel).toHaveBeenCalledWith(expect.anything(), 'l1');
       expect(mockNoteQueries.deleteLabelFromLocalNotes).toHaveBeenCalledWith(expect.anything(), 'l1');
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),

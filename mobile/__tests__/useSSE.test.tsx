@@ -36,6 +36,7 @@ jest.mock('../src/db/noteQueries', () => ({
   markLocalNoteDeleted: jest.fn().mockResolvedValue(undefined),
   permanentDeleteLocalNote: jest.fn().mockResolvedValue(undefined),
   patchLocalNoteImages: jest.fn().mockResolvedValue(undefined),
+  upsertLabel: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('../src/api/notes', () => ({
@@ -61,6 +62,7 @@ const mockMarkLocalNoteDeleted = (jest.requireMock('../src/db/noteQueries') as {
 const mockPermanentDeleteLocalNote = (jest.requireMock('../src/db/noteQueries') as { permanentDeleteLocalNote: jest.Mock }).permanentDeleteLocalNote;
 const mockGetNote = (jest.requireMock('../src/api/notes') as { getNote: jest.Mock }).getNote;
 const mockPatchLocalNoteImages = (jest.requireMock('../src/db/noteQueries') as { patchLocalNoteImages: jest.Mock }).patchLocalNoteImages;
+const mockUpsertLabel = (jest.requireMock('../src/db/noteQueries') as { upsertLabel: jest.Mock }).upsertLabel;
 const flushMicrotasks = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 // Mock SSEConnectionManager
@@ -230,21 +232,25 @@ describe('useSSE', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: labelCountsQueryKey() });
   });
 
-  it('invalidates label queries on labels_changed event', () => {
+  it('upserts the label into the store and invalidates label queries on labels_changed event', async () => {
     const { queryClient, Wrapper } = createWrapper();
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
     renderHook(() => useSSE(), { wrapper: Wrapper });
     invalidateSpy.mockClear();
 
-    act(() => {
+    const label = { id: 'label-1', user_id: 'other-user', name: 'Urgent', created_at: '', updated_at: '' };
+    await act(async () => {
       capturedCallback?.({
         type: 'labels_changed',
         source_user_id: 'other-user',
-        data: { label: { id: 'label-1', user_id: 'other-user', name: 'Urgent', created_at: '', updated_at: '' } },
+        data: { label },
       });
     });
 
+    // The label is written to the canonical store so an empty label (created on
+    // another device, zero notes) appears in the drawer immediately (#691).
+    await waitFor(() => expect(mockUpsertLabel).toHaveBeenCalledWith(expect.anything(), label));
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: labelsQueryKey() });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: labelCountsQueryKey() });
   });

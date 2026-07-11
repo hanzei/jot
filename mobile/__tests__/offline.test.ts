@@ -2,7 +2,7 @@
  * Tests for offline support: local note queries, sync queue, and ID utilities.
  */
 
-import { generateClientNoteId, isUnsyncedNoteId, removeLocalNotesNotIn, getLocalLabels, getLocalLabelCounts, saveNote, addLabelToLocalNote, removeLabelFromLocalNote, getLocalNotes } from '../src/db/noteQueries';
+import { generateClientNoteId, isUnsyncedNoteId, removeLocalNotesNotIn, getLocalLabelCounts, saveNote, addLabelToLocalNote, removeLabelFromLocalNote, getLocalNotes } from '../src/db/noteQueries';
 import { drainQueue, isTransientHttpStatus } from '../src/db/syncQueue';
 import api from '../src/api/client';
 
@@ -691,64 +691,6 @@ describe('drainQueue', () => {
     expect(db.runAsync).not.toHaveBeenCalledWith(
       'UPDATE notes SET is_shared = ?, shared_with_json = ? WHERE id = ?',
       expect.anything(),
-    );
-  });
-});
-
-// ── getLocalLabels ─────────────────────────────────────────────────────────
-
-describe('getLocalLabels', () => {
-  it('returns deduplicated labels from notes, sorted by name', async () => {
-    const db = {
-      getAllAsync: jest.fn().mockResolvedValue([
-        { labels_json: JSON.stringify([{ id: 'l2', name: 'Work' }, { id: 'l1', name: 'Home' }]) },
-        { labels_json: JSON.stringify([{ id: 'l1', name: 'Home' }]) },
-        { labels_json: JSON.stringify([{ id: 'l3', name: 'Alpha' }]) },
-      ]),
-    };
-
-    const labels = await getLocalLabels(db as never);
-
-    expect(labels).toEqual([
-      { id: 'l3', name: 'Alpha' },
-      { id: 'l1', name: 'Home' },
-      { id: 'l2', name: 'Work' },
-    ]);
-  });
-
-  it('returns an empty array when no notes have labels', async () => {
-    const db = {
-      getAllAsync: jest.fn().mockResolvedValue([
-        { labels_json: '[]' },
-        { labels_json: '[]' },
-      ]),
-    };
-
-    const labels = await getLocalLabels(db as never);
-
-    expect(labels).toEqual([]);
-  });
-
-  it('ignores notes with malformed labels_json', async () => {
-    const db = {
-      getAllAsync: jest.fn().mockResolvedValue([
-        { labels_json: 'not-json' },
-        { labels_json: JSON.stringify([{ id: 'l1', name: 'Valid' }]) },
-      ]),
-    };
-
-    const labels = await getLocalLabels(db as never);
-
-    expect(labels).toEqual([{ id: 'l1', name: 'Valid' }]);
-  });
-
-  it('queries only non-trashed notes', async () => {
-    const db = { getAllAsync: jest.fn().mockResolvedValue([]) };
-
-    await getLocalLabels(db as never);
-
-    expect(db.getAllAsync).toHaveBeenCalledWith(
-      expect.stringContaining('deleted_at IS NULL'),
     );
   });
 });

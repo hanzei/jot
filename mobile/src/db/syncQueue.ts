@@ -5,6 +5,7 @@ import type { GetNotesParams, Note, NoteItem } from '@jot/shared';
 import {
   saveNote,
   saveNotes,
+  saveLabels,
   patchLocalItem,
   reconcileServerNotesScope,
   markNoteSyncFailed,
@@ -16,6 +17,7 @@ import {
   updateLocalNoteShares,
 } from './noteQueries';
 import { isLocalModeActive } from '../store/localMode';
+import type { Label } from '@jot/shared';
 
 export type QueueOperation =
   | 'create'
@@ -327,6 +329,35 @@ export async function saveServerNote(db: SQLiteDatabase, note: Note): Promise<vo
 /** Batch counterpart of {@link saveServerNote}; reads the protected set once. */
 export async function saveServerNotes(db: SQLiteDatabase, notes: Note[]): Promise<void> {
   await saveNotes(db, notes, { skipNoteIds: await getProtectedNoteIds(db) });
+}
+
+/**
+ * Labels with an unsynced offline `createLabel` op still queued: their client id
+ * *is* the server id (#546), but the create hasn't reached the server yet, so a
+ * canonical GET /labels won't list them. They must be protected from pruning
+ * when reconciling the label store (see {@link saveServerLabels}).
+ */
+export async function getPendingLabelIds(db: SQLiteDatabase): Promise<Set<string>> {
+  const entries = await db.getAllAsync<Pick<QueueEntry, 'operation' | 'body'>>(
+    "SELECT operation, body FROM sync_queue WHERE operation = 'createLabel'",
+  );
+  const ids = new Set<string>();
+  for (const entry of entries) {
+    const body = parseQueueBody(entry.body);
+    const id = body?.id;
+    if (typeof id === 'string') ids.add(id);
+  }
+  return ids;
+}
+
+/**
+ * Persist a canonical server label list into the store (background sync), pruning
+ * any local label the server no longer has while leaving unsynced offline-created
+ * labels untouched (see {@link getPendingLabelIds}). This is what makes an empty
+ * label created/deleted on another device converge locally (issue #691).
+ */
+export async function saveServerLabels(db: SQLiteDatabase, labels: Label[]): Promise<void> {
+  await saveLabels(db, labels, { skipLabelIds: await getPendingLabelIds(db) });
 }
 
 /**
