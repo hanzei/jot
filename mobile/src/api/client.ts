@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import type { AuthResponse, LoginRequest, RegisterRequest } from '@jot/shared';
 import { canonicalizeServerOrigin } from '@jot/shared';
 import { randomUUID } from '../utils/random';
+import { markServerReachable, markServerUnreachable } from './serverReachability';
 import {
   addServer,
   ensureServerRegistryMigrated,
@@ -486,6 +487,9 @@ export async function handleUnauthorizedSession(): Promise<void> {
 
 api.interceptors.response.use(
   (response) => {
+    // The server answered, so it is reachable — clear any prior unreachable
+    // belief so writes resume hitting the network instead of queueing.
+    markServerReachable();
     const config = response.config as SwitchAwareAxiosRequestConfig;
     releaseInflightController(config.__serverSwitchGenerationId, config.__serverSwitchAbortController);
     if (!isCurrentRequestGeneration(config.__serverSwitchGenerationId)) {
@@ -503,6 +507,16 @@ api.interceptors.response.use(
 
     if (axios.isCancel(error) || error instanceof CanceledError) {
       return Promise.reject(error);
+    }
+
+    // Update the reachability belief: an HTTP error status still proves the
+    // server answered, whereas the absence of a response (timeout / connection
+    // refused / DNS failure) means it did not — flip to unreachable so later
+    // writes skip the doomed network round-trip and queue immediately.
+    if (error.response) {
+      markServerReachable();
+    } else {
+      markServerUnreachable();
     }
 
     if (error.response?.status === 401) {

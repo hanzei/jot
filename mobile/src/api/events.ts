@@ -2,6 +2,7 @@ import EventSource from 'react-native-sse';
 import { getBaseUrl, getStoredSession, handleUnauthorizedSession } from './client';
 import type { SSEEvent } from '@jot/shared';
 import { getCurrentSwitchGenerationId, isSseQuiesced } from '../store/serverSwitchLifecycle';
+import { markServerReachable } from './serverReachability';
 
 const BASE_RECONNECT_DELAY_MS = 3000;
 const MAX_RECONNECT_DELAY_MS = 60000;
@@ -88,6 +89,10 @@ export class SSEConnectionManager {
         this._reconnectAttempts = 0;
         this.reconnectDelay = BASE_RECONNECT_DELAY_MS;
         this.lastEventAt = Date.now();
+        // The stream opened, so the server is reachable — an always-on recovery
+        // signal that flips writes back to the network path even with no other
+        // request in flight (e.g. the server came back while the note sat idle).
+        markServerReachable();
         this.statusChangeCallback?.('connected');
       });
 

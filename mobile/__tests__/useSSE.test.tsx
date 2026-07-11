@@ -4,8 +4,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AppState, AppStateStatus } from 'react-native';
 import { useSSE } from '../src/hooks/useSSE';
 import { SSEConnectionManager } from '../src/api/events';
-import type { Note, SSEEvent } from '@jot/shared';
-import { noteLocalQueryKey, notesLocalQueryScopeKey } from '../src/hooks/queryKeys';
+import type { Note, SSEEvent, User } from '@jot/shared';
+import {
+  labelCountsQueryKey,
+  labelsQueryKey,
+  noteLocalQueryKey,
+  notesLocalQueryScopeKey,
+} from '../src/hooks/queryKeys';
 
 jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },
@@ -31,11 +36,20 @@ jest.mock('../src/db/noteQueries', () => ({
   markLocalNoteDeleted: jest.fn().mockResolvedValue(undefined),
   permanentDeleteLocalNote: jest.fn().mockResolvedValue(undefined),
   patchLocalNoteImages: jest.fn().mockResolvedValue(undefined),
+  upsertLabel: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('../src/api/notes', () => ({
   getNote: jest.fn(),
 }));
+
+jest.mock('../src/store/profileIconEvents', () => ({
+  publishProfileIconUpdate: jest.fn(),
+}));
+
+const mockPublishProfileIconUpdate = (
+  jest.requireMock('../src/store/profileIconEvents') as { publishProfileIconUpdate: jest.Mock }
+).publishProfileIconUpdate;
 
 let mockProtectedNoteIds = new Set<string>();
 jest.mock('../src/db/syncQueue', () => ({
@@ -48,6 +62,7 @@ const mockMarkLocalNoteDeleted = (jest.requireMock('../src/db/noteQueries') as {
 const mockPermanentDeleteLocalNote = (jest.requireMock('../src/db/noteQueries') as { permanentDeleteLocalNote: jest.Mock }).permanentDeleteLocalNote;
 const mockGetNote = (jest.requireMock('../src/api/notes') as { getNote: jest.Mock }).getNote;
 const mockPatchLocalNoteImages = (jest.requireMock('../src/db/noteQueries') as { patchLocalNoteImages: jest.Mock }).patchLocalNoteImages;
+const mockUpsertLabel = (jest.requireMock('../src/db/noteQueries') as { upsertLabel: jest.Mock }).upsertLabel;
 const flushMicrotasks = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 // Mock SSEConnectionManager
@@ -190,6 +205,70 @@ describe('useSSE', () => {
 
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: noteLocalQueryKey('note-123') });
+  });
+
+  // The drawer's label list/counts are derived from notes' labels_json, so every
+  // note mutation must also refresh the label queries — otherwise a collaborator's
+  // label attach/detach (which fires note_updated) leaves the drawer stale (#689).
+  it.each([
+    ['note_updated', { type: 'note_updated', source_user_id: 'other-user', data: { note_id: 'note-123', note: null } }],
+    ['note_created', { type: 'note_created', source_user_id: 'other-user', data: { note_id: 'note-123', note: null } }],
+    ['note_shared', { type: 'note_shared', source_user_id: 'other-user', target_user_id: 'current-user', data: { note_id: 'note-123', note: null } }],
+    ['note_deleted', { type: 'note_deleted', source_user_id: 'other-user', data: { note_id: 'note-123', note: null } }],
+    ['note_unshared', { type: 'note_unshared', source_user_id: 'current-user', target_user_id: 'someone-else', data: { note_id: 'note-123', note: null } }],
+  ] as [string, SSEEvent][])('invalidates label queries on %s event', async (_label, event) => {
+    mockGetNote.mockResolvedValue({ id: 'note-123', note_type: 'text' } as unknown as Note);
+    const { queryClient, Wrapper } = createWrapper();
+    const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
+
+    renderHook(() => useSSE(), { wrapper: Wrapper });
+    invalidateSpy.mockClear();
+
+    await act(async () => {
+      capturedCallback?.(event);
+    });
+
+    await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: labelsQueryKey() }));
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: labelCountsQueryKey() });
+  });
+
+  it('upserts the label into the store and invalidates label queries on labels_changed event', async () => {
+    const { queryClient, Wrapper } = createWrapper();
+    const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
+
+    renderHook(() => useSSE(), { wrapper: Wrapper });
+    invalidateSpy.mockClear();
+
+    const label = { id: 'label-1', user_id: 'other-user', name: 'Urgent', created_at: '', updated_at: '' };
+    await act(async () => {
+      capturedCallback?.({
+        type: 'labels_changed',
+        source_user_id: 'other-user',
+        data: { label },
+      });
+    });
+
+    // The label is written to the canonical store so an empty label (created on
+    // another device, zero notes) appears in the drawer immediately (#691).
+    await waitFor(() => expect(mockUpsertLabel).toHaveBeenCalledWith(expect.anything(), label));
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: labelsQueryKey() });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: labelCountsQueryKey() });
+  });
+
+  it('publishes to the profile-icon bus on profile_icon_updated event', () => {
+    const { Wrapper } = createWrapper();
+    renderHook(() => useSSE(), { wrapper: Wrapper });
+
+    const updatedUser = { id: 'collaborator-1', username: 'bob', updated_at: '2024-02-02T00:00:00Z' } as unknown as User;
+    act(() => {
+      capturedCallback?.({
+        type: 'profile_icon_updated',
+        source_user_id: 'collaborator-1',
+        data: { user: updatedUser },
+      });
+    });
+
+    expect(mockPublishProfileIconUpdate).toHaveBeenCalledWith(updatedUser);
   });
 
   it('patches local images and invalidates queries on note_image_added event', async () => {

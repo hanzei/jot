@@ -286,7 +286,7 @@
     "failedColorUpdate": "Failed to update note color",
     "failedReorder": "Failed to reorder notes",
     "waitForSyncBeforeDuplicating": "Please wait for this note to sync before duplicating it",
-    "updatedByAnotherUser": "This note was updated by another user",
+    "updatedByAnotherUser": "Another user changed this note — saving may overwrite their changes",
     "listItemLabel": "List item",
     "itemCheckbox": "{{item}} checkbox",
     "dragToReorderIndent": "Drag to reorder or indent",

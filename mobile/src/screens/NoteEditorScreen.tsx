@@ -61,6 +61,7 @@ import { getCompletedSectionDividerColor, isWhiteHexColor } from '../utils/color
 import { formatEditorStateForShare } from '../utils/noteTextFormatter';
 import { fullMarkdownStyles, preprocessMarkdown } from '../utils/markdownStyles';
 import { getActiveServer, listServers, type ServerAccountEntry } from '../store/serverAccounts';
+import { isServerReachable } from '../api/serverReachability';
 import { setPendingShare, usePendingShare } from '../store/shareIntent';
 import { useBannerShown } from '../hooks/useBannerShown';
 import {
@@ -214,11 +215,6 @@ export default function NoteEditorScreen() {
   );
   const [removedImageIds, setRemovedImageIds] = useState<Set<string>>(new Set());
 
-  // Show a toast when another user updates this note while editor is open
-  useSSESubscription(noteId, useCallback(() => {
-    setSyncToast((prev) => prev ?? t('note.updatedByAnotherUser'));
-  }, [t]));
-
   // Auto-dismiss sync toast after 4 seconds
   useEffect(() => {
     if (!syncToast) return;
@@ -262,7 +258,23 @@ export default function NoteEditorScreen() {
   // those edits clean without ever saving them.
   const editSeqRef = useRef(0);
   const saveInFlightRef = useRef<Promise<boolean> | null>(null);
+  // Guards the metadata PATCH path (pin/archive/color) the same way
+  // saveInFlightRef guards the body/items save: those updates go through
+  // useUpdateNote directly (not flushSave), so they don't touch saveInFlightRef.
+  // While one is in flight the refresh effect must not re-apply a (possibly
+  // stale) refetch and revert the optimistic pin/archive/color.
+  const metadataUpdateInFlightRef = useRef(false);
   const requiresHydrationRef = useRef(initialNoteId !== null);
+
+  // Warn when another user updates this note *while we have unsaved edits*.
+  // A clean editor auto-applies the remote change (see the refresh effect
+  // below), so no warning is needed there; when the editor is dirty that
+  // refresh is intentionally suppressed to protect the in-progress edits, so
+  // this banner is the only signal that the note has diverged on the server.
+  useSSESubscription(noteId, useCallback(() => {
+    if (!hasPendingChangesRef.current) return;
+    setSyncToast((prev) => prev ?? t('note.updatedByAnotherUser'));
+  }, [t]));
 
   // Refs for current state to avoid stale closures in debounced save
   const noteIdRef = useRef(noteId);
@@ -569,43 +581,75 @@ export default function NoteEditorScreen() {
     return generateId();
   }
 
-  // Load existing note data
+  // Applies a note from the offline cache to the editor's local state and
+  // re-seeds the save baseline. Used both for the initial hydration and to
+  // refresh the editor when the note changes underneath it (see below).
+  const applyNoteToState = useCallback((note: NonNullable<typeof existingNote>) => {
+    setNoteType(note.note_type);
+    setPinned(note.pinned);
+    setArchived(note.archived);
+    setColor(note.color);
+    setLabels(note.labels ?? []);
+    let nextItems: LocalItem[] = [];
+    if (note.note_type === 'list') {
+      setTitle(note.title);
+      setCheckedItemsCollapsed(note.checked_items_collapsed);
+      nextItems = note.items ? toLocalItems(note.items) : [];
+      setItems(nextItems);
+    } else {
+      setContent(note.content);
+    }
+    // Seed the save baseline from the note so the next edit diffs against this
+    // state rather than re-sending everything.
+    savedScalarsRef.current = {
+      title: note.note_type === 'list' ? note.title : '',
+      content: note.note_type === 'text' ? note.content : '',
+      pinned: note.pinned,
+      archived: note.archived,
+      color: note.color,
+      checked_items_collapsed: note.note_type === 'list' ? note.checked_items_collapsed : false,
+    };
+    savedItemsRef.current = new Map(nextItems.map((it) => [it.id, itemSnapshot(it)]));
+    savedOrderRef.current = nextItems.map((it) => it.id);
+  }, []);
+
+  // Load existing note data (once, on first hydration).
   useEffect(() => {
     if (existingNote && !isInitializedRef.current) {
-      setNoteType(existingNote.note_type);
-      setPinned(existingNote.pinned);
-      setArchived(existingNote.archived);
-      setColor(existingNote.color);
-      setLabels(existingNote.labels ?? []);
-      let initialItems: LocalItem[] = [];
-      if (existingNote.note_type === 'list') {
-        setTitle(existingNote.title);
-        setCheckedItemsCollapsed(existingNote.checked_items_collapsed);
-        if (existingNote.items) {
-          initialItems = toLocalItems(existingNote.items);
-          setItems(initialItems);
-        }
-      } else {
-        setContent(existingNote.content);
-      }
-      // Seed the save baseline from the hydrated note so the first edit diffs
-      // against the server state rather than re-sending everything.
-      savedScalarsRef.current = {
-        title: existingNote.note_type === 'list' ? existingNote.title : '',
-        content: existingNote.note_type === 'text' ? existingNote.content : '',
-        pinned: existingNote.pinned,
-        archived: existingNote.archived,
-        color: existingNote.color,
-        checked_items_collapsed: existingNote.note_type === 'list' ? existingNote.checked_items_collapsed : false,
-      };
-      savedItemsRef.current = new Map(initialItems.map((it) => [it.id, itemSnapshot(it)]));
-      savedOrderRef.current = initialItems.map((it) => it.id);
+      applyNoteToState(existingNote);
       isInitializedRef.current = true;
       requiresHydrationRef.current = false;
     }
-  }, [existingNote]);
+  }, [existingNote, applyNoteToState]);
 
-  // Keep labels in sync when note data refreshes after label mutations
+  // Refresh the editor when the note changes underneath it — most visibly when
+  // another user edits a shared note, which arrives via SSE → SQLite → this
+  // query refetching and surfaces the "updated by another user" banner. Without
+  // this, the banner showed but the checklist/content stayed stale.
+  //
+  // Only refresh when the editor has no unsaved edits and no save (body/items
+  // or metadata) is in flight: a clean editor mirrors the last-saved baseline,
+  // so replacing it with the newer note loses nothing. When the user has
+  // in-progress edits we keep their state intact (the banner alone signals the
+  // remote change) rather than risk clobbering them, since there is no
+  // field-level merge here.
+  useEffect(() => {
+    if (
+      existingNote
+      && isInitializedRef.current
+      && !hasPendingChangesRef.current
+      && saveInFlightRef.current === null
+      && !metadataUpdateInFlightRef.current
+    ) {
+      applyNoteToState(existingNote);
+    }
+  }, [existingNote, applyNoteToState]);
+
+  // Keep labels in sync when note data refreshes after label mutations, even
+  // while the body has unsaved edits (labels are edited via their own picker
+  // and don't participate in the body's save baseline, so the refresh above
+  // may be skipped as dirty). Redundant with that refresh when the editor is
+  // clean, but idempotent.
   useEffect(() => {
     if (existingNote && isInitializedRef.current) {
       setLabels(existingNote.labels ?? []);
@@ -958,6 +1002,27 @@ export default function NoteEditorScreen() {
     }
   }, [animateClose, navigation]);
 
+  // Flush pending edits without blocking navigation — used when we deliberately
+  // let the user leave (server known-unreachable) and on an unexpected unmount.
+  // flushSave(true) still reports failure via its return value even though its
+  // `unmounting` guard suppresses the in-editor error banner (the editor is on
+  // its way out), so a genuine background-save failure would otherwise vanish
+  // silently. Surface it with a global toast, which outlives this screen.
+  //
+  // showToast is read through a ref so this callback's identity tracks only
+  // flushSave — matching the unmount-flush effect's original `[flushSave]`
+  // dependency exactly. (A direct showToast dependency would let an unstable
+  // toast identity re-run that effect, and re-fire the flush, on every render.)
+  const showToastRef = useRef(showToast);
+  showToastRef.current = showToast;
+  const flushInBackground = useCallback(() => {
+    void flushSave(true)
+      .then((saved) => {
+        if (!saved) showToastRef.current(t('note.failedSaveChanges'), 'error');
+      })
+      .catch(() => showToastRef.current(t('note.failedSaveChanges'), 'error'));
+  }, [flushSave, t]);
+
   // Intercept navigation away to flush pending edits before leaving, and to play
   // the zoom-back-onto-the-card animation for back navigation.
   useEffect(() => {
@@ -984,17 +1049,42 @@ export default function NoteEditorScreen() {
       if (!hasPending && !wantsZoom) {
         return;
       }
-      event.preventDefault();
       if (debounceRef.current) {
         clearTimeout(debounceRef.current);
         debounceRef.current = null;
       }
 
+      // No pending edits: nothing to save. Zoom back onto the card (a non-zoom
+      // back nav without pending edits already returned above).
       if (!hasPending) {
+        event.preventDefault();
         exitWith(action, wantsZoom);
         return;
       }
 
+      // Server known-unreachable: an online write would only stall for the
+      // request timeout before falling back to the local-persist + queue path,
+      // so there is nothing to wait for. Flush in the background and let the exit
+      // proceed — blocking here is what made leaving a note with unsaved edits
+      // feel frozen while the server was down. The edit stays durable: flushSave
+      // writes it to the local DB and enqueues it for replay. Mark the exit
+      // intentional so the unmount cleanup below doesn't flush a second time; when
+      // a zoom-back is wanted we still preventDefault and drive it via exitWith.
+      if (!isServerReachable()) {
+        intentionalExitRef.current = true;
+        flushInBackground();
+        if (wantsZoom) {
+          event.preventDefault();
+          exitWith(action, wantsZoom);
+        }
+        return;
+      }
+
+      // Server reachable: await the save so a genuine, non-queueable failure
+      // (validation/conflict) can still prompt Retry/Discard instead of silently
+      // dropping the edit. A reachable server responds promptly, so this path no
+      // longer reintroduces the long stall.
+      event.preventDefault();
       void (async () => {
         const saveSucceeded = await flushSave();
         if (!saveSucceeded) {
@@ -1005,7 +1095,7 @@ export default function NoteEditorScreen() {
       })();
     });
     return unsubscribe;
-  }, [exitWith, flushSave, navigation, zoomEnabled]);
+  }, [exitWith, flushSave, flushInBackground, navigation, zoomEnabled]);
 
   const handleExitDiscard = useCallback(() => {
     if (!exitSavePrompt || isExitRetrying) return;
@@ -1038,10 +1128,10 @@ export default function NoteEditorScreen() {
         debounceRef.current = null;
       }
       if (!intentionalExitRef.current && hasPendingChangesRef.current) {
-        flushSave(true);
+        flushInBackground();
       }
     };
-  }, [flushSave]);
+  }, [flushInBackground]);
 
   const handleTitleChange = useCallback(
     (newTitle: string) => {
@@ -1440,6 +1530,18 @@ export default function NoteEditorScreen() {
     Object.assign(savedScalarsRef.current, overrides);
   }, []);
 
+  // Runs a metadata PATCH while holding metadataUpdateInFlightRef so the
+  // existingNote refresh effect won't revert the optimistic change with a stale
+  // refetch that lands mid-request.
+  const runMetadataUpdate = useCallback(async (id: string, data: UpdateNoteRequest) => {
+    metadataUpdateInFlightRef.current = true;
+    try {
+      await updateMutation.mutateAsync({ id, data });
+    } finally {
+      metadataUpdateInFlightRef.current = false;
+    }
+  }, [updateMutation]);
+
   const handleTitleSubmit = useCallback(() => {
     if (noteTypeRef.current === 'text') {
       contentInputRef.current?.focus();
@@ -1574,16 +1676,13 @@ export default function NoteEditorScreen() {
     const newPinned = !pinnedRef.current;
     setPinned(newPinned);
     try {
-      await updateMutation.mutateAsync({
-        id,
-        data: buildMetadataUpdateData({ pinned: newPinned }),
-      });
+      await runMetadataUpdate(id, buildMetadataUpdateData({ pinned: newPinned }));
       commitMetadataBaseline({ pinned: newPinned });
     } catch {
       setPinned(!newPinned);
       Alert.alert(t('common.error'), t('note.failedUpdate'));
     }
-  }), [buildMetadataUpdateData, commitMetadataBaseline, withSavedNote, t, updateMutation]);
+  }), [buildMetadataUpdateData, commitMetadataBaseline, runMetadataUpdate, withSavedNote, t]);
 
   const handleToggleArchive = useCallback(() => withSavedNote(async (id) => {
     const newArchived = !archivedRef.current;
@@ -1592,10 +1691,7 @@ export default function NoteEditorScreen() {
     if (!newArchived) {
       // Unarchiving keeps the user on the note.
       try {
-        await updateMutation.mutateAsync({
-          id,
-          data: buildMetadataUpdateData({ archived: false }),
-        });
+        await runMetadataUpdate(id, buildMetadataUpdateData({ archived: false }));
         commitMetadataBaseline({ archived: false });
         showToast(t('dashboard.noteUnarchived'));
       } catch {
@@ -1612,18 +1708,12 @@ export default function NoteEditorScreen() {
     commitMetadataBaseline({ archived: true });
     await zoomCloseAndExit();
     try {
-      await updateMutation.mutateAsync({
-        id,
-        data: buildMetadataUpdateData({ archived: true }),
-      });
+      await runMetadataUpdate(id, buildMetadataUpdateData({ archived: true }));
       showToast(t('dashboard.noteArchived'), 'success', {
         label: t('dashboard.undo'),
         onPress: async () => {
           try {
-            await updateMutation.mutateAsync({
-              id,
-              data: buildMetadataUpdateData({ archived: false }),
-            });
+            await runMetadataUpdate(id, buildMetadataUpdateData({ archived: false }));
             showToast(t('dashboard.noteUnarchived'));
           } catch {
             showToast(t('note.failedUnarchive'), 'error');
@@ -1633,7 +1723,7 @@ export default function NoteEditorScreen() {
     } catch {
       showToast(t('note.failedArchive'), 'error');
     }
-  }), [buildMetadataUpdateData, zoomCloseAndExit, commitMetadataBaseline, withSavedNote, showToast, t, updateMutation]);
+  }), [buildMetadataUpdateData, zoomCloseAndExit, commitMetadataBaseline, runMetadataUpdate, withSavedNote, showToast, t]);
 
   const handleColorSelect = useCallback(async (selectedColor: string) => {
     const saveSucceeded = await flushPendingChanges();
@@ -1656,16 +1746,13 @@ export default function NoteEditorScreen() {
       return;
     }
     try {
-      await updateMutation.mutateAsync({
-        id: currentNoteId,
-        data: buildMetadataUpdateData({ color: selectedColor }),
-      });
+      await runMetadataUpdate(currentNoteId, buildMetadataUpdateData({ color: selectedColor }));
       commitMetadataBaseline({ color: selectedColor });
     } catch {
       setColor(prevColor);
       Alert.alert(t('common.error'), t('note.failedColorUpdate'));
     }
-  }, [buildMetadataUpdateData, commitMetadataBaseline, flushPendingChanges, markDirtyAndScheduleUpdate, t, updateMutation]);
+  }, [buildMetadataUpdateData, commitMetadataBaseline, flushPendingChanges, markDirtyAndScheduleUpdate, runMetadataUpdate, t]);
 
   const handleToggleNoteType = useCallback(() => {
     if (hasCreated) return;
@@ -2098,11 +2185,11 @@ export default function NoteEditorScreen() {
 
       {syncToast && (
         <TouchableOpacity
-          style={[styles.syncToast, { backgroundColor: colors.primaryLight, borderBottomColor: colors.primary }]}
+          style={[styles.syncToast, { backgroundColor: colors.warning, borderBottomColor: colors.warningBorder }]}
           onPress={() => setSyncToast(null)}
           testID="sync-toast"
         >
-          <Text style={[styles.syncToastText, { color: colors.primary }]}>{syncToast}</Text>
+          <Text style={[styles.syncToastText, { color: colors.warningText }]}>{syncToast}</Text>
         </TouchableOpacity>
       )}
 

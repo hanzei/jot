@@ -286,7 +286,7 @@
     "failedColorUpdate": "Notitiekl bijwerken mislukt",
     "failedReorder": "Notities sorteren mislukt",
     "waitForSyncBeforeDuplicating": "Wacht tot deze notitie is gesynchroniseerd voordat je dupliceert",
-    "updatedByAnotherUser": "Deze notitie is bijgewerkt door een andere gebruiker",
+    "updatedByAnotherUser": "Een andere gebruiker heeft deze notitie gewijzigd; opslaan overschrijft mogelijk hun wijzigingen",
     "listItemLabel": "Lijstitem",
     "itemCheckbox": "Selectievakje {{item}}",
     "dragToReorderIndent": "Sleep om te sorteren of in te springen",

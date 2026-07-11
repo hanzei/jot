@@ -47,7 +47,8 @@ describe('migrateDatabase', () => {
           .mockResolvedValueOnce(ALL_NOTES_COLS)
           .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS)
           .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
-          .mockResolvedValueOnce(ALL_NOTES_COLS), // migration3 images_json probe
+          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration3 images_json probe
+          .mockResolvedValueOnce([]), // migration5 labels backfill: no notes
       });
       await migrateDatabase(db as unknown as SQLiteDatabase);
 
@@ -66,6 +67,10 @@ describe('migrateDatabase', () => {
       const migration4Ddl = db.execAsync.mock.calls[1][0] as string;
       expect(migration4Ddl).toContain('CREATE TABLE IF NOT EXISTS pending_image_uploads');
 
+      // migration5 (issue #691): canonical local label store.
+      const migration5Ddl = db.execAsync.mock.calls[2][0] as string;
+      expect(migration5Ddl).toContain('CREATE TABLE IF NOT EXISTS labels');
+
       expect(runSqls(db).some((s) => s.startsWith('ALTER TABLE'))).toBe(false);
       expect(db.runAsync).toHaveBeenCalledWith(`PRAGMA user_version = ${MIGRATIONS.length}`);
     });
@@ -78,7 +83,8 @@ describe('migrateDatabase', () => {
           .mockResolvedValueOnce(ALL_NOTES_COLS)
           .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS)
           .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
-          .mockResolvedValueOnce(ALL_NOTES_COLS), // migration3 images_json probe
+          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration3 images_json probe
+          .mockResolvedValueOnce([]), // migration5 labels backfill: no notes
       });
       await migrateDatabase(db as unknown as SQLiteDatabase);
 
@@ -93,7 +99,8 @@ describe('migrateDatabase', () => {
           .mockResolvedValueOnce(notesColsWithoutSyncState)
           .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS)
           .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
-          .mockResolvedValueOnce(ALL_NOTES_COLS), // migration3 images_json probe
+          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration3 images_json probe
+          .mockResolvedValueOnce([]), // migration5 labels backfill: no notes
       });
       await migrateDatabase(db as unknown as SQLiteDatabase);
 
@@ -109,7 +116,8 @@ describe('migrateDatabase', () => {
           .mockResolvedValueOnce(ALL_NOTES_COLS) // migration1 sync_state probe
           .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS)
           .mockResolvedValueOnce(notesColsWithoutVersion) // migration2 version probe
-          .mockResolvedValueOnce(ALL_NOTES_COLS), // migration3 images_json probe
+          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration3 images_json probe
+          .mockResolvedValueOnce([]), // migration5 labels backfill: no notes
       });
       await migrateDatabase(db as unknown as SQLiteDatabase);
 
@@ -127,7 +135,8 @@ describe('migrateDatabase', () => {
           .mockResolvedValueOnce(ALL_NOTES_COLS)
           .mockResolvedValueOnce(noteItemColsWithoutNew)
           .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
-          .mockResolvedValueOnce(ALL_NOTES_COLS), // migration3 images_json probe
+          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration3 images_json probe
+          .mockResolvedValueOnce([]), // migration5 labels backfill: no notes
       });
       await migrateDatabase(db as unknown as SQLiteDatabase);
 
@@ -145,7 +154,8 @@ describe('migrateDatabase', () => {
           .mockResolvedValueOnce(ALL_NOTES_COLS) // migration1 sync_state probe
           .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS)
           .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
-          .mockResolvedValueOnce(notesColsWithoutImages), // migration3 images_json probe
+          .mockResolvedValueOnce(notesColsWithoutImages) // migration3 images_json probe
+          .mockResolvedValueOnce([]), // migration5 labels backfill: no notes
       });
       await migrateDatabase(db as unknown as SQLiteDatabase);
 
@@ -185,7 +195,8 @@ describe('migrateDatabase', () => {
           .mockResolvedValueOnce(noteItemColsWithIndent)
           .mockResolvedValueOnce(rows)
           .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
-          .mockResolvedValueOnce(ALL_NOTES_COLS), // migration3 images_json probe
+          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration3 images_json probe
+          .mockResolvedValueOnce([]), // migration5 labels backfill: no notes
       });
       await migrateDatabase(db as unknown as SQLiteDatabase);
 
@@ -209,7 +220,8 @@ describe('migrateDatabase', () => {
           .mockResolvedValueOnce(ALL_NOTES_COLS)
           .mockResolvedValueOnce(noteItemColsWithoutBoth)
           .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
-          .mockResolvedValueOnce(ALL_NOTES_COLS), // migration3 images_json probe
+          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration3 images_json probe
+          .mockResolvedValueOnce([]), // migration5 labels backfill: no notes
       });
       await migrateDatabase(db as unknown as SQLiteDatabase);
 
@@ -220,6 +232,51 @@ describe('migrateDatabase', () => {
         (c) => c[0] === `UPDATE note_items SET parent_id = ? WHERE id = ?`,
       );
       expect(updateCalls).toHaveLength(0);
+    });
+  });
+
+  describe('labels store backfill (issue #691)', () => {
+    it('backfills the labels table from notes.labels_json, deduping by id', async () => {
+      const db = makeDb({
+        getAllAsync: jest.fn()
+          .mockResolvedValueOnce(ALL_NOTES_COLS)
+          .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS)
+          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
+          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration3 images_json probe
+          .mockResolvedValueOnce([
+            { labels_json: JSON.stringify([{ id: 'l1', user_id: 'u1', name: 'Work', created_at: 'c1', updated_at: 'u1t' }]) },
+            // A duplicate id across notes is inserted once (seen guard + INSERT OR IGNORE).
+            { labels_json: JSON.stringify([{ id: 'l1', user_id: 'u1', name: 'Work', created_at: 'c1', updated_at: 'u1t' }, { id: 'l2', user_id: 'u1', name: 'Home', created_at: 'c2', updated_at: 'u2t' }]) },
+            { labels_json: 'not json' }, // malformed row is tolerated and skipped
+            { labels_json: '5' }, // valid JSON but not an array — tolerated and skipped
+            { labels_json: '{}' }, // valid JSON object (not an array) — tolerated and skipped
+          ]),
+      });
+      await migrateDatabase(db as unknown as SQLiteDatabase);
+
+      const insertCalls = (db.runAsync.mock.calls as unknown[][]).filter(
+        (c) => String(c[0]).startsWith('INSERT OR IGNORE INTO labels'),
+      );
+      expect(insertCalls).toHaveLength(2);
+      expect(insertCalls[0][1]).toEqual(['l1', 'u1', 'Work', 'c1', 'u1t']);
+      expect(insertCalls[1][1]).toEqual(['l2', 'u1', 'Home', 'c2', 'u2t']);
+    });
+
+    it('inserts nothing when there are no notes to backfill from', async () => {
+      const db = makeDb({
+        getAllAsync: jest.fn()
+          .mockResolvedValueOnce(ALL_NOTES_COLS)
+          .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS)
+          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
+          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration3 images_json probe
+          .mockResolvedValueOnce([]), // migration5 labels backfill: no notes
+      });
+      await migrateDatabase(db as unknown as SQLiteDatabase);
+
+      const insertCalls = (db.runAsync.mock.calls as unknown[][]).filter(
+        (c) => String(c[0]).startsWith('INSERT OR IGNORE INTO labels'),
+      );
+      expect(insertCalls).toHaveLength(0);
     });
   });
 });
