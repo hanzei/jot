@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   InputAccessoryView,
@@ -235,6 +236,12 @@ export default function NoteEditorScreen() {
     retriesLeft: number;
   } | null>(null);
   const [isExitRetrying, setIsExitRetrying] = useState(false);
+  // Visible pending state for menu/overflow actions (delete, restore, convert,
+  // share, manage labels, redirect-share) while they await a write. The sheet
+  // that triggered them has already closed, so without this the screen would
+  // otherwise sit with no feedback for up to the write timeout on the first
+  // action of a fresh outage (issue #697).
+  const [isMenuActionPending, setIsMenuActionPending] = useState(false);
   // Bumped on every edit (markDirtyAndScheduleUpdate). flushSave snapshots it
   // alongside the state refs so it can tell whether new edits arrived while its
   // network calls were in flight — clearing the dirty flag then would mark
@@ -794,6 +801,24 @@ export default function NoteEditorScreen() {
     };
   }, [openedFromShare]);
 
+  // Runs `fn`, showing the menu-action pending indicator only while the server
+  // is believed reachable. When it's already known unreachable, the write
+  // underneath skips the network entirely (isOnlineWriteAllowed) and resolves
+  // near-instantly, so no indicator is needed — the action already feels
+  // immediate. When reachable (including the stale-true case on the very first
+  // request of a fresh outage), the write may genuinely block for up to the
+  // write timeout, so surface that wait instead of leaving the screen looking
+  // frozen (issue #697).
+  const withPendingIndicator = useCallback(async <T,>(fn: () => Promise<T>): Promise<T> => {
+    const showPending = isServerReachable();
+    if (showPending) setIsMenuActionPending(true);
+    try {
+      return await fn();
+    } finally {
+      if (showPending && isMountedRef.current) setIsMenuActionPending(false);
+    }
+  }, []);
+
   // Redirect the shared note to a different server: stash the text targeted at
   // that server and let the navigation layer switch servers and re-open the
   // editor there. We skip the unmount flush so nothing new is written to the
@@ -811,20 +836,22 @@ export default function NoteEditorScreen() {
       debounceRef.current = null;
     }
     intentionalExitRef.current = true;
-    // Wait for any in-flight create so we know whether a note already landed on
-    // the current server.
-    if (saveInFlightRef.current) {
-      try { await saveInFlightRef.current; } catch { /* failure surfaced elsewhere */ }
-    }
-    const createdNoteId = noteIdRef.current;
-    if (createdNoteId) {
-      try {
-        await deleteMutation.mutateAsync(createdNoteId);
-      } catch { /* best effort: leave it on the original server if delete fails */ }
-    }
+    await withPendingIndicator(async () => {
+      // Wait for any in-flight create so we know whether a note already landed on
+      // the current server.
+      if (saveInFlightRef.current) {
+        try { await saveInFlightRef.current; } catch { /* failure surfaced elsewhere */ }
+      }
+      const createdNoteId = noteIdRef.current;
+      if (createdNoteId) {
+        try {
+          await deleteMutation.mutateAsync(createdNoteId);
+        } catch { /* best effort: leave it on the original server if delete fails */ }
+      }
+    });
     redirectInitiatedRef.current = true;
     setPendingShare({ text: contentRef.current, targetServerId: serverId });
-  }, [activeShareServerId, deleteMutation]);
+  }, [activeShareServerId, deleteMutation, withPendingIndicator]);
 
   // If the navigation layer drops a redirect we started (the server switch
   // failed, so no remount unmounts this editor), recover instead of leaving a
@@ -860,12 +887,14 @@ export default function NoteEditorScreen() {
   // until the first autosave. flushSave no-ops (and leaves noteId null) only for
   // a genuinely empty note, in which case the action is skipped.
   const withSavedNote = useCallback(async (action: (id: string) => void | Promise<void>) => {
-    const saved = await flushPendingChanges();
-    if (!saved) return; // save failed — error already surfaced by flushSave
-    const id = noteIdRef.current;
-    if (!id) return; // empty note, nothing to act on
-    await action(id);
-  }, [flushPendingChanges]);
+    await withPendingIndicator(async () => {
+      const saved = await flushPendingChanges();
+      if (!saved) return; // save failed — error already surfaced by flushSave
+      const id = noteIdRef.current;
+      if (!id) return; // empty note, nothing to act on
+      await action(id);
+    });
+  }, [flushPendingChanges, withPendingIndicator]);
 
   // Keep input refs bounded to currently rendered items.
   useEffect(() => {
@@ -1464,44 +1493,46 @@ export default function NoteEditorScreen() {
         debounceRef.current = null;
       }
       intentionalExitRef.current = true;
-      if (saveInFlightRef.current) {
-        try { await saveInFlightRef.current; } catch { /* already handled */ }
-      }
-      // Re-read after the in-flight save settles; it may have created the note
-      // and populated noteIdRef while we were awaiting it.
-      const currentNoteId = noteIdRef.current;
-      if (!currentNoteId) return;
-      await deleteMutation.mutateAsync(currentNoteId);
-      showToast(t('dashboard.noteDeleted'), 'success', {
-        label: t('dashboard.undo'),
-        onPress: async () => {
-          try {
-            await restoreMutation.mutateAsync(currentNoteId);
-            showToast(t('dashboard.noteRestored'));
-          } catch {
-            showToast(t('note.failedRestore'), 'error');
-          }
-        },
+      await withPendingIndicator(async () => {
+        if (saveInFlightRef.current) {
+          try { await saveInFlightRef.current; } catch { /* already handled */ }
+        }
+        // Re-read after the in-flight save settles; it may have created the note
+        // and populated noteIdRef while we were awaiting it.
+        const currentNoteId = noteIdRef.current;
+        if (!currentNoteId) return;
+        await deleteMutation.mutateAsync(currentNoteId);
+        showToast(t('dashboard.noteDeleted'), 'success', {
+          label: t('dashboard.undo'),
+          onPress: async () => {
+            try {
+              await restoreMutation.mutateAsync(currentNoteId);
+              showToast(t('dashboard.noteRestored'));
+            } catch {
+              showToast(t('note.failedRestore'), 'error');
+            }
+          },
+        });
+        navigation.goBack();
       });
-      navigation.goBack();
     } catch {
       intentionalExitRef.current = false;
       Alert.alert(t('common.error'), t('note.failedDelete'));
     }
-  }, [deleteMutation, navigation, noteId, restoreMutation, showToast, t]);
+  }, [deleteMutation, navigation, noteId, restoreMutation, showToast, t, withPendingIndicator]);
 
   // Restore a trashed note (read-only view) and return to the list.
   const handleRestoreNote = useCallback(async () => {
     if (!noteId) return;
     try {
-      await restoreMutation.mutateAsync(noteId);
+      await withPendingIndicator(() => restoreMutation.mutateAsync(noteId));
       intentionalExitRef.current = true;
       showToast(t('dashboard.noteRestored'));
       navigation.goBack();
     } catch {
       Alert.alert(t('common.error'), t('note.failedRestore'));
     }
-  }, [navigation, noteId, restoreMutation, showToast, t]);
+  }, [navigation, noteId, restoreMutation, showToast, t, withPendingIndicator]);
 
   // Permanently delete a trashed note (read-only view) after confirmation.
   const handleDeletePermanently = useCallback(async () => {
@@ -1517,13 +1548,13 @@ export default function NoteEditorScreen() {
     if (!currentNoteId) return;
     try {
       intentionalExitRef.current = true;
-      await permanentDeleteMutation.mutateAsync(currentNoteId);
+      await withPendingIndicator(() => permanentDeleteMutation.mutateAsync(currentNoteId));
       navigation.goBack();
     } catch {
       intentionalExitRef.current = false;
       Alert.alert(t('common.error'), t('note.failedDelete'));
     }
-  }, [confirm, navigation, noteId, permanentDeleteMutation, t]);
+  }, [confirm, navigation, noteId, permanentDeleteMutation, t, withPendingIndicator]);
 
   const handleTogglePin = useCallback(() => withSavedNote(async (id) => {
     const newPinned = !pinnedRef.current;
@@ -1640,7 +1671,7 @@ export default function NoteEditorScreen() {
       debounceRef.current = null;
     }
 
-    const saveSucceeded = await flushSave();
+    const saveSucceeded = await withPendingIndicator(() => flushSave());
     if (!saveSucceeded) {
       return;
     }
@@ -1666,14 +1697,16 @@ export default function NoteEditorScreen() {
     }
 
     try {
-      await convertMutation.mutateAsync(currentNoteId);
-      intentionalExitRef.current = true;
-      navigation.replace('NoteEditor', { noteId: currentNoteId });
-      showToast(t('note.converted'));
+      await withPendingIndicator(async () => {
+        await convertMutation.mutateAsync(currentNoteId);
+        intentionalExitRef.current = true;
+        navigation.replace('NoteEditor', { noteId: currentNoteId });
+        showToast(t('note.converted'));
+      });
     } catch {
       Alert.alert(t('common.error'), t('note.failedConvert'));
     }
-  }, [confirm, convertMutation, flushSave, navigation, showToast, t]);
+  }, [confirm, convertMutation, flushSave, navigation, showToast, t, withPendingIndicator]);
 
   // Disable inputs while waiting for existing note to hydrate
   const isHydrating = initialNoteId !== null && !existingNote;
@@ -2034,6 +2067,17 @@ export default function NoteEditorScreen() {
         </TouchableOpacity>
       )}
 
+      {/* Visible pending state for menu/overflow actions (delete, restore, convert,
+          share, manage labels, redirect-share) while the server is reachable but
+          the write hasn't resolved yet — the sheet that triggered the action has
+          already closed, so this is the only feedback the user gets (#697). */}
+      {isMenuActionPending && (
+        <View style={[styles.pendingBar, { backgroundColor: colors.surface, borderBottomColor: colors.borderLight }]} testID="menu-action-pending">
+          <ActivityIndicator size="small" color={colors.textSecondary} />
+          <Text style={[styles.pendingBarText, { color: colors.textSecondary }]}>{t('common.loading')}</Text>
+        </View>
+      )}
+
       {/*
         ScrollViewContainer (from react-native-reorderable-list) wraps the editor
         so the NestedReorderableList below can drive drag-to-reorder and autoscroll
@@ -2238,14 +2282,18 @@ export default function NoteEditorScreen() {
         <View style={styles.toolbarSpacer} />
 
         {/* Overflow menu: Send / Share / Duplicate / Labels / Delete for a normal
-            note, or Restore / Delete-forever for a read-only trashed note. */}
+            note, or Restore / Delete-forever for a read-only trashed note.
+            Disabled while a previous menu action is still pending so a second
+            tap can't fire a concurrent action (#697). */}
         <TouchableOpacity
           onPress={() => setMenuVisible(true)}
+          disabled={isMenuActionPending}
           style={styles.toolbarBtn}
           testID="toolbar-menu-btn"
           accessibilityLabel={t('note.menuOptions')}
+          accessibilityState={{ disabled: isMenuActionPending }}
         >
-          <EllipsisVertical size={22} color={barIconColor} />
+          <EllipsisVertical size={22} color={isMenuActionPending ? disabledBarIconColor : barIconColor} />
         </TouchableOpacity>
       </View>
 

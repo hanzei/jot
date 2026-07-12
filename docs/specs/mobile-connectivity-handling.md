@@ -214,7 +214,12 @@ handling and loop safety are two halves of the same system.)
 - **A blocking network call that could be optimistic** — logout waits ~15 s on a
   down server before clearing the local session (issue #696).
 - **Awaiting a write, then navigating, with no feedback** — menu/action handlers
-  freeze ~5 s with no spinner (issues #697/#698).
+  freeze ~5 s with no spinner; fixed for the note-editor's overflow-menu actions
+  (move to trash, restore, delete-forever, convert, share, manage labels,
+  redirect-share) in #697 by showing a pending indicator while the server is
+  reachable and skipping it (the write already resolves via the local/queue
+  path) when it's known unreachable. #698 (label-management actions, a
+  different surface) remains open.
 - **Unbounded read retries that ignore reachability** — `retrySync` hammers a
   down server for ~67 s (issue #699).
 - **Conflating device connectivity with server reachability** — the umbrella
@@ -226,7 +231,8 @@ handling and loop safety are two halves of the same system.)
 ## 11. Open work
 
 Tracking issues at the time of writing: #695 (upload timeout/cancel), #696
-(logout), #697/#698 (action-handler freezes), #699 (`retrySync` reachability +
-attempt cap), #700 (surface reachability/sync-freshness in Diagnostics). A
-user-facing "last synced / syncing / sync failed" indicator in the main UI is
-noted as future work beyond the diagnostic surface.
+(logout), #698 (label-management action-handler freezes, sibling of the
+now-fixed #697), #699 (`retrySync` reachability + attempt cap), #700 (surface
+reachability/sync-freshness in Diagnostics). A user-facing "last synced /
+syncing / sync failed" indicator in the main UI is noted as future work beyond
+the diagnostic surface.
