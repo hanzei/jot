@@ -47,6 +47,19 @@ interface OfflineContextValue {
   dismissSyncFailuresBanner: () => void;
   /** Re-read failed-note ids and the dead-letter count after a drain or a resolution (#493). */
   refreshSyncFailures: () => void;
+  /**
+   * ISO timestamp of the last time the queue drained with nothing left behind,
+   * or null if no drain has succeeded yet this session. Surfaced in Diagnostics
+   * so a support report can tell "just synced" from "stuck since X" (#700).
+   */
+  lastSyncedAt: string | null;
+  /**
+   * Consecutive stalled/failed drains since the last success (mirrors
+   * `failureCountRef`, the counter behind `syncError`'s cap). Surfaced in
+   * Diagnostics alongside `syncError` so it's clear *why* sync is stuck, not
+   * just that it is (#700).
+   */
+  consecutiveFailureCount: number;
 }
 
 const OfflineContext = createContext<OfflineContextValue>({
@@ -58,6 +71,8 @@ const OfflineContext = createContext<OfflineContextValue>({
   syncFailuresBannerDismissed: false,
   dismissSyncFailuresBanner: () => {},
   refreshSyncFailures: () => {},
+  lastSyncedAt: null,
+  consecutiveFailureCount: 0,
 });
 
 // Sync-loop safety knobs (see mobile/CLAUDE.md → "Sync Loop Safety").
@@ -84,6 +99,8 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   const [failedNoteIds, setFailedNoteIds] = useState<ReadonlySet<string>>(new Set());
   const [syncFailureCount, setSyncFailureCount] = useState(0);
   const [syncFailuresBannerDismissed, setSyncFailuresBannerDismissed] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const [consecutiveFailureCount, setConsecutiveFailureCount] = useState(0);
   const { revalidateSession } = useAuth();
   const db = useSQLiteContext();
   // Last observed dead-letter count, so a fresh failure can re-surface a banner
@@ -169,6 +186,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   // Grows the backoff and reschedules, or gives up once the cap is hit.
   const onDrainStalled = useCallback(() => {
     failureCountRef.current += 1;
+    setConsecutiveFailureCount(failureCountRef.current);
     if (failureCountRef.current >= MAX_CONSECUTIVE_DRAIN_FAILURES) {
       // Persistent failure: stop auto-retrying and surface an error so we don't
       // busy-loop against a server that keeps failing. A fresh external trigger
@@ -269,8 +287,10 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
         onDrainStalled();
       } else {
         failureCountRef.current = 0;
+        setConsecutiveFailureCount(0);
         clearDrainTimer();
         setSyncError(false);
+        setLastSyncedAt(new Date().toISOString());
       }
     } catch (err) {
       console.warn('Queue drain failed:', err);
@@ -322,6 +342,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
         // A fresh connectivity/foreground signal: give the queue a clean budget of
         // retries even if a prior streak of failures had paused auto-retrying.
         failureCountRef.current = 0;
+        setConsecutiveFailureCount(0);
         setSyncError(false);
         await performDrain();
       } while (reconnectRerunRequestedRef.current);
@@ -388,6 +409,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       // auto-retrying. scheduleDrain debounces bursts; performDrain's own guard
       // handles the case where a drain is still in flight when the timer fires.
       failureCountRef.current = 0;
+      setConsecutiveFailureCount(0);
       setSyncError(false);
       scheduleDrain(ENQUEUE_DRAIN_DEBOUNCE_MS);
     });
@@ -419,6 +441,8 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       syncFailuresBannerDismissed,
       dismissSyncFailuresBanner,
       refreshSyncFailures,
+      lastSyncedAt,
+      consecutiveFailureCount,
     }),
     [
       isConnected,
@@ -429,6 +453,8 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       syncFailuresBannerDismissed,
       dismissSyncFailuresBanner,
       refreshSyncFailures,
+      lastSyncedAt,
+      consecutiveFailureCount,
     ],
   );
 

@@ -28,6 +28,8 @@ const baseOffline = {
   syncFailuresBannerDismissed: false,
   dismissSyncFailuresBanner: jest.fn(),
   refreshSyncFailures: jest.fn(),
+  lastSyncedAt: null,
+  consecutiveFailureCount: 0,
 };
 
 function setup(opts: {

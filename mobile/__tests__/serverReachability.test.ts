@@ -3,6 +3,7 @@ import {
   markServerReachable,
   markServerUnreachable,
   subscribeToServerReachability,
+  getServerReachabilityChangedAt,
 } from '../src/api/serverReachability';
 
 describe('serverReachability', () => {
@@ -36,5 +37,19 @@ describe('serverReachability', () => {
 
     markServerUnreachable();
     expect(seen).toEqual([false, true]); // no further callbacks after unsubscribe
+  });
+
+  it('records the timestamp of the last transition, but not a no-op call', () => {
+    markServerUnreachable();
+    const firstChange = getServerReachabilityChangedAt();
+    expect(firstChange).not.toBeNull();
+
+    // A redundant call (already unreachable) must not bump the timestamp.
+    markServerUnreachable();
+    expect(getServerReachabilityChangedAt()).toBe(firstChange);
+
+    markServerReachable();
+    const secondChange = getServerReachabilityChangedAt();
+    expect(secondChange).not.toBeNull();
   });
 });

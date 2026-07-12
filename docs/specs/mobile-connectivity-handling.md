@@ -227,6 +227,10 @@ handling and loop safety are two halves of the same system.)
 
 Tracking issues at the time of writing: #695 (upload timeout/cancel), #696
 (logout), #697/#698 (action-handler freezes), #699 (`retrySync` reachability +
-attempt cap), #700 (surface reachability/sync-freshness in Diagnostics). A
+attempt cap). #700 (surface reachability/sync-freshness in Diagnostics) landed:
+`DiagnosticsScreen.tsx` now shows server reachability (distinct from device
+connectivity, with a last-changed timestamp from `serverReachability.ts`),
+last-successful-sync time, drain outcome/consecutive-failure count, and the
+dead-letter count, all mirrored into the "Share diagnostics" report. A
 user-facing "last synced / syncing / sync failed" indicator in the main UI is
-noted as future work beyond the diagnostic surface.
+still noted as future work beyond the diagnostic surface.

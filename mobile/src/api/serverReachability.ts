@@ -26,6 +26,11 @@
 import { isLocalModeActive } from '../store/localMode';
 
 let serverReachable = true;
+// ISO timestamp of the last reachable/unreachable transition, or null if the
+// belief has never flipped since app start (still the default). Surfaced in
+// Diagnostics so a support report can tell "just went down" from "been down
+// a while" (issue #700).
+let lastChangedAt: string | null = null;
 
 type ReachabilityListener = (reachable: boolean) => void;
 const listeners = new Set<ReachabilityListener>();
@@ -35,9 +40,15 @@ export function isServerReachable(): boolean {
   return serverReachable;
 }
 
+/** ISO timestamp of the last reachability transition, or null if it never changed. */
+export function getServerReachabilityChangedAt(): string | null {
+  return lastChangedAt;
+}
+
 function setReachable(next: boolean): void {
   if (serverReachable === next) return;
   serverReachable = next;
+  lastChangedAt = new Date().toISOString();
   for (const listener of listeners) listener(next);
 }
 
