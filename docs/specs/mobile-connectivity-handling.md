@@ -69,17 +69,17 @@ mode" for the write paths.
 
 | Class | Examples | Local fallback? | Correct behavior |
 |---|---|---|---|
-| **Writes** | note/item/label create·update·delete, share, reorder | Yes (queue) | Optimistic local commit + enqueue, return immediately. Gate the network attempt on `isOnlineWriteAllowed()`. Roll back only on a *permanent* rejection. |
+| **Writes** | note/item/label create·update·delete, share, reorder | Yes (queue) | Optimistic local commit + enqueue, return immediately. Gate the network attempt on `isOnlineWriteAllowed(isConnected)`. Roll back only on a *permanent* rejection. |
 | **Reads** | note list, note body, labels | Yes (cached data) | Serve local cache immediately; refresh in the background with bounded retries; never block load/refresh on the network. |
-| **Auth / one-shot** | login, register, logout, server switch, PAT create/revoke | No | Short, finite timeout + visible pending state + honest error. Optimistic where the local outcome is authoritative (logout). |
+| **Auth / one-shot** | login, register, logout, server switch, PAT create/revoke | No | Finite timeout — the longer `DEFAULT_REQUEST_TIMEOUT_MS`, since auth is excluded from the short write budget — + visible pending state + honest error. Optimistic where the local outcome is authoritative (logout). |
 | **Uploads** | note images, profile icon | Partial (image queue for note images) | Finite timeout (never `0`), cancellable, fall back to the upload queue where one exists. |
 
 ### 4.1 Writes — never block, ever
 
 - Commit optimistically to local state and the DB, enqueue for replay, return.
   The UI reflects the change instantly regardless of connectivity.
-- Attempt the network only when `isOnlineWriteAllowed()` is true; otherwise skip
-  straight to the queue. On a *transient* online failure, catch and fall through
+- Attempt the network only when `isOnlineWriteAllowed(isConnected)` is true;
+  otherwise skip straight to the queue. On a *transient* online failure, catch and fall through
   to the same queue path (`rethrowIfNotQueueable` draws the transient/permanent
   line).
 - Surface *permanent* failures (validation 4xx, conflict 409) distinctly and
@@ -103,9 +103,10 @@ mode" for the write paths.
 ### 4.3 Auth & one-shot ops — bounded, honest, optimistic where safe
 
 - These have no replay queue, so they legitimately touch the network on the
-  critical path. That's acceptable **only** with a finite timeout, a visible
-  pending state, and a clear terminal error — never a silent multi-second freeze
-  or an infinite spinner.
+  critical path. That's acceptable **only** with a finite timeout — the longer
+  `DEFAULT_REQUEST_TIMEOUT_MS`, since auth is excluded from the short write budget
+  — a visible pending state, and a clear terminal error, never a silent
+  multi-second freeze or an infinite spinner.
 - Be optimistic when the local outcome is authoritative. **Logout** should clear
   the session/profile locally and land on the login screen immediately, firing
   `POST /logout` in the background best-effort (server-side invalidation is

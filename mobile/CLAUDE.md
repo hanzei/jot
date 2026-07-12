@@ -40,10 +40,12 @@ load-bearing rules:
   never block initial load or refresh on the network. Background refresh uses bounded
   retries with backoff (`retrySync`) and should consult `isServerReachable()` so it
   stops hammering a known-down server.
-- **Auth & one-shot ops** (login, logout, PAT, uploads) have no queue, so they may touch
-  the network on the critical path — but only with a **finite** timeout and a visible
+- **Auth & one-shot ops** (login, logout, PAT) have no queue, so they may touch the
+  network on the critical path — but only with a **finite** timeout and a visible
   pending state, never a silent freeze. Be optimistic where the local outcome is
   authoritative (e.g. logout clears the session locally and POSTs in the background).
+  Note-image uploads are *not* in this class — they fall back to the offline upload
+  queue like any other write.
 - **Timeouts are finite and tiered; never `timeout: 0`.** Writes get the short budget
   (`WRITE_REQUEST_TIMEOUT_MS`) because a local fallback is waiting; reads/auth get the
   longer default (`DEFAULT_REQUEST_TIMEOUT_MS`). The timeout is the worst case — the
