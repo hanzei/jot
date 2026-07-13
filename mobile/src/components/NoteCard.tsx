@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { CircleAlert, Square } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
@@ -14,12 +14,16 @@ import CachedNoteImage from './CachedNoteImage';
 import { isWhiteHexColor } from '../utils/colorContrast';
 import { stripMarkdownForPreview } from '../utils/markdownStyles';
 import LinkText from './LinkText';
+import type { LayoutRect } from '../navigation/RootNavigator';
 
 const CARD_RADIUS = 12;
 
 interface NoteCardProps {
   note: Note;
-  onPress: () => void;
+  // The card's on-screen rect is passed to onPress so the caller can zoom the
+  // editor open from this card's position. rect is undefined if measurement
+  // failed.
+  onPress: (rect?: LayoutRect) => void;
   onLongPress?: () => void;
   onLabelPress?: (labelId: string, labelName: string) => void;
 }
@@ -154,14 +158,38 @@ function NoteCard({ note, onPress, onLongPress, onLabelPress }: NoteCardProps) {
     [note],
   );
 
+  const cardRef = useRef<React.ElementRef<typeof TouchableOpacity>>(null);
+  // Measure the card in window coordinates so the editor can zoom open from
+  // exactly where it sits, then hand the rect to onPress. On the new
+  // architecture measureInWindow resolves synchronously, so the trailing open()
+  // is a no-op; where it doesn't (the legacy renderer, unit tests) open() runs
+  // first and the note opens without an anchored animation. The guard prevents a
+  // double-open.
+  const handlePress = useCallback(() => {
+    let handled = false;
+    const open = (rect?: LayoutRect) => {
+      if (handled) return;
+      handled = true;
+      onPress(rect);
+    };
+    const node = cardRef.current;
+    if (node) {
+      node.measureInWindow((x, y, width, height) =>
+        open(width && height ? { x, y, width, height } : undefined),
+      );
+    }
+    open();
+  }, [onPress]);
+
   return (
     <TouchableOpacity
+      ref={cardRef}
       style={[
         styles.card,
         { backgroundColor: colors.cardBackground, borderColor: colors.cardBorder },
         hasColor && { backgroundColor: note.color, borderColor: note.color },
       ]}
-      onPress={onPress}
+      onPress={handlePress}
       onLongPress={onLongPress}
       activeOpacity={0.7}
       testID={`note-card-${note.id}`}

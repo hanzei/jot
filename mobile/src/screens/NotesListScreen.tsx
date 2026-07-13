@@ -26,7 +26,7 @@ import { useTheme } from '../theme/ThemeContext';
 import SkeletonNoteList from '../components/SkeletonNoteList';
 import NoteCard from '../components/NoteCard';
 import type { Note, NoteSort } from '@jot/shared';
-import type { RootStackParamList } from '../navigation/RootNavigator';
+import type { RootStackParamList, LayoutRect } from '../navigation/RootNavigator';
 import { normalizeNoteSort, sortNotesForDisplay } from '../utils/noteSort';
 import { isSortWarningDismissed, dismissSortWarning } from '../utils/sortWarningDismissed';
 import { emptyTrash as emptyTrashNotes } from '../api/notes';
@@ -236,11 +236,14 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   }, []);
 
   const handleNotePress = useCallback(
-    (noteId: string) => {
+    (noteId: string, rect?: LayoutRect, noteColor?: string) => {
       Keyboard.dismiss();
       // Trashed notes open view-only (Restore / Delete-forever live in the
       // editor's overflow menu now that the dashboard context menu is gone).
-      navigation.navigate('NoteEditor', { noteId, readOnly: variant === 'trash' });
+      // Pass the card's rect so the editor can zoom open from it, and its color
+      // so the editor's background matches from the first frame (no white flash
+      // while the note hydrates from cache).
+      navigation.navigate('NoteEditor', { noteId, readOnly: variant === 'trash', originRect: rect, originColor: noteColor });
     },
     [navigation, variant],
   );
@@ -436,7 +439,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     (note: Note) => (
       <NoteCard
         note={note}
-        onPress={() => handleNotePress(note.id)}
+        onPress={(rect) => handleNotePress(note.id, rect, note.color)}
         onLabelPress={variant === 'notes' ? handleLabelPress : undefined}
       />
     ),
@@ -447,7 +450,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     (note: Note) => (
       <NoteCard
         note={note}
-        onPress={() => handleNotePress(note.id)}
+        onPress={(rect) => handleNotePress(note.id, rect, note.color)}
         onLabelPress={handleLabelPress}
       />
     ),

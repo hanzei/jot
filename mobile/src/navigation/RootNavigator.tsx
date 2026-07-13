@@ -16,6 +16,14 @@ import DiagnosticsScreen from '../screens/DiagnosticsScreen';
 import LogsFullscreenScreen from '../screens/LogsFullscreenScreen';
 import ConnectToServerScreen from '../screens/ConnectToServerScreen';
 
+/** A view's position and size in window coordinates (from `measureInWindow`). */
+export interface LayoutRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export type RootStackParamList = {
   MainDrawer: undefined;
   // sharedText pre-fills a brand-new note (noteId null) when opened from a
@@ -23,7 +31,19 @@ export type RootStackParamList = {
   // checklist (used by the app-icon "New note" / "New list" quick actions);
   // defaults to text. readOnly opens a trashed note in a view-only state (all
   // editing disabled; overflow menu offers only Restore / Delete-forever).
-  NoteEditor: { noteId: string | null; sharedText?: string; initialNoteType?: NoteType; readOnly?: boolean };
+  // originRect is the tapped card's on-screen rect, used to zoom the editor
+  // open from (and closed back onto) that card. originColor is that card's
+  // note color, used to seed the editor's background so the zoom-open shows
+  // the right color immediately instead of flashing white until the note
+  // hydrates from cache.
+  NoteEditor: {
+    noteId: string | null;
+    sharedText?: string;
+    initialNoteType?: NoteType;
+    readOnly?: boolean;
+    originRect?: LayoutRect;
+    originColor?: string;
+  };
   Share: { noteId: string };
   Settings: undefined;
   SyncFailures: undefined;
@@ -57,7 +77,16 @@ function AuthenticatedStack() {
             getId={getNoteScreenId}
             options={{
               headerShown: false,
-              presentation: 'modal',
+              // The editor animates its own transform to zoom open from (and
+              // closed back onto) the tapped card. A transparent modal keeps the
+              // dashboard rendered behind so the card shows through while the
+              // editor is scaled down; the native present/dismiss animation is
+              // disabled so only the zoom is visible, and the swipe gesture is
+              // off so every exit routes through that zoom.
+              presentation: 'transparentModal',
+              animation: 'none',
+              gestureEnabled: false,
+              contentStyle: { backgroundColor: 'transparent' },
             }}
           />
           <Stack.Screen

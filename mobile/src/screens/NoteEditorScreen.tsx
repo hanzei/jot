@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, useContext } from 'react';
 import axios from 'axios';
 import {
+  Animated,
+  Easing,
   View,
   Text,
   TextInput,
@@ -14,6 +16,8 @@ import {
   Keyboard,
   Modal,
   Share,
+  StyleSheet,
+  useWindowDimensions,
   type TextInputProps,
   type TextInput as TextInputType,
 } from 'react-native';
@@ -91,6 +95,8 @@ const MARKDOWN_TOOLBAR_ID = 'markdown-formatting-toolbar';
 // Duration (ms) of the row slide when the active list reflows after a toggle/delete.
 const LIST_REFLOW_ANIM_MS = 150;
 const MAX_EXIT_SAVE_RETRIES = 3;
+// Duration of the zoom-open / zoom-closed transform animation.
+const ZOOM_MS = 280;
 // Override the reorderable list's default cell animation so the dragged row is
 // fully static apart from following the finger: opacity stays 1 and no scale is
 // applied. The library's default opacity/scale animations could otherwise stick
@@ -101,7 +107,7 @@ const DRAG_CELL_ANIMATIONS = { opacity: 1, transform: [] };
 export default function NoteEditorScreen() {
   const navigation = useNavigation<EditorNavProp>();
   const route = useRoute<EditorRouteProp>();
-  const { noteId: initialNoteId, sharedText, initialNoteType, readOnly } = route.params;
+  const { noteId: initialNoteId, sharedText, initialNoteType, readOnly, originRect, originColor } = route.params;
   const { t, i18n } = useTranslation();
   const failedNoteIds = useFailedNoteIds();
 
@@ -125,7 +131,10 @@ export default function NoteEditorScreen() {
   useEffect(() => () => { if (popClearRef.current) clearTimeout(popClearRef.current); }, []);
   const [pinned, setPinned] = useState(false);
   const [archived, setArchived] = useState(false);
-  const [color, setColor] = useState('#ffffff');
+  // Seed from the tapped card's color (passed as a nav param) so a zoom-open
+  // shows the note's background immediately; hydration below sets the
+  // authoritative value. Falls back to white for new notes / direct opens.
+  const [color, setColor] = useState(originColor || '#ffffff');
   const [labels, setLabels] = useState<Label[]>([]);
   const [hasCreated, setHasCreated] = useState(initialNoteId !== null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -231,9 +240,17 @@ export default function NoteEditorScreen() {
   const isMountedRef = useRef(true);
   const isInitializedRef = useRef(false);
   const intentionalExitRef = useRef(false);
+  // True for the whole duration of a zoom-close animation, from the moment an
+  // exit action commits to closing until it actually dispatches the
+  // navigation action. intentionalExitRef is only set at that final instant
+  // (not up front) so a concurrent back press mid-animation still hits
+  // beforeRemove; it's swallowed via this flag instead of falling through to
+  // a second, unguarded pop.
+  const isClosingRef = useRef(false);
   const hasPendingChangesRef = useRef(false);
   const [exitSavePrompt, setExitSavePrompt] = useState<{
     navAction: NavigationAction;
+    wantsZoom: boolean;
     retriesLeft: number;
   } | null>(null);
   const [isExitRetrying, setIsExitRetrying] = useState(false);
@@ -286,6 +303,95 @@ export default function NoteEditorScreen() {
   archivedRef.current = archived;
   const colorRef = useRef(color);
   colorRef.current = color;
+
+  // Zoom transition: animate the whole editor from the tapped card's rect up to
+  // full screen on open, and back down on close. Decided once at mount; the
+  // native present/dismiss is disabled so this transform is the only motion.
+  const { width: screenW, height: screenH } = useWindowDimensions();
+  const zoomEnabled = useRef(!!originRect && !isReduceMotionEnabledSync()).current;
+  // 0 = scaled/positioned onto the card, 1 = full screen.
+  const zoom = useRef(new Animated.Value(zoomEnabled ? 0 : 1)).current;
+  // Holds the editor invisible for the first frame of a zoom-open. With the
+  // native driver the transform/opacity aren't written as static props on the
+  // JS render — the native animation node applies them, and it only attaches
+  // after the first paint (anim.start runs post-mount). Without this gate the
+  // editor paints once at its identity layout (full screen, opaque) before
+  // snapping onto the card — a visible flash, worst on the first, cold open.
+  // A plain (non-native) opacity:0 hides that frame; we reveal on the next
+  // frame, once the native node is driving the transform from the card.
+  const [zoomRevealed, setZoomRevealed] = useState(!zoomEnabled);
+
+  // Zoom open from the card once on mount.
+  useEffect(() => {
+    if (!zoomEnabled) return;
+    const anim = Animated.timing(zoom, {
+      toValue: 1,
+      duration: ZOOM_MS,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    });
+    anim.start();
+    const raf = requestAnimationFrame(() => setZoomRevealed(true));
+    return () => {
+      cancelAnimationFrame(raf);
+      anim.stop();
+    };
+    // Mount-only; zoom/zoomEnabled are stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Zoom the editor back down onto the card, resolving when done. Instant when
+  // the note wasn't opened from a card or Reduce Motion is on.
+  const animateClose = useCallback(() => {
+    if (!zoomEnabled) return Promise.resolve();
+    // Blur any focused input first. A focused TextInput and its input-accessory
+    // toolbar render outside the transformed view, so without this they "hang"
+    // in place while the editor scales away. Wait a frame so the blur takes
+    // effect before the zoom starts.
+    Keyboard.dismiss();
+    return new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        Animated.timing(zoom, {
+          toValue: 0,
+          duration: ZOOM_MS,
+          easing: Easing.in(Easing.cubic),
+          useNativeDriver: true,
+        }).start(() => resolve());
+      });
+    });
+  }, [zoom, zoomEnabled]);
+
+  // Mark the exit as intentional (so beforeRemove doesn't re-handle it), zoom
+  // back onto the card, then pop. Used by every action that leaves the editor
+  // via its own button (archive, trash, restore, delete-forever) so the zoom
+  // and any dashboard removal reflow plays consistently instead of only on
+  // some exit paths.
+  const zoomCloseAndExit = useCallback(async () => {
+    isClosingRef.current = true;
+    await animateClose();
+    intentionalExitRef.current = true;
+    navigation.goBack();
+  }, [animateClose, navigation]);
+
+  // Maps the fullscreen editor onto the originating card at zoom 0 and to its
+  // natural position/size at zoom 1. A short opacity ramp softens the first
+  // (most distorted) frames of the non-uniform scale.
+  const zoomStyle = useMemo(() => {
+    if (!originRect) return null;
+    const centerX = originRect.x + originRect.width / 2;
+    const centerY = originRect.y + originRect.height / 2;
+    return {
+      // Fade fully out at the card end so the pop after the close zoom isn't a
+      // visible snap; fade in quickly on open.
+      opacity: zoom.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0, 1, 1] }),
+      transform: [
+        { translateX: zoom.interpolate({ inputRange: [0, 1], outputRange: [centerX - screenW / 2, 0] }) },
+        { translateY: zoom.interpolate({ inputRange: [0, 1], outputRange: [centerY - screenH / 2, 0] }) },
+        { scaleX: zoom.interpolate({ inputRange: [0, 1], outputRange: [originRect.width / screenW, 1] }) },
+        { scaleY: zoom.interpolate({ inputRange: [0, 1], outputRange: [originRect.height / screenH, 1] }) },
+      ],
+    };
+  }, [originRect, zoom, screenW, screenH]);
   const createMutateRef = useRef(createMutation.mutateAsync);
   createMutateRef.current = createMutation.mutateAsync;
   const updateMutateRef = useRef(updateMutation.mutateAsync);
@@ -940,11 +1046,24 @@ export default function NoteEditorScreen() {
     }
   }, [items]);
 
-  const exitWith = useCallback((navAction: NavigationAction) => {
-    intentionalExitRef.current = true;
+  // Mark the exit as intentional (so beforeRemove doesn't re-handle it) only
+  // once the navigation action is about to dispatch, optionally zooming back
+  // onto the originating card first. isClosingRef is set immediately instead,
+  // so a back press that lands mid-animation still hits beforeRemove and gets
+  // swallowed there rather than falling through to an unguarded second pop.
+  const exitWith = useCallback((navAction: NavigationAction, wantsZoom: boolean) => {
     setExitSavePrompt(null);
-    navigation.dispatch(navAction);
-  }, [navigation]);
+    const dispatch = () => {
+      intentionalExitRef.current = true;
+      navigation.dispatch(navAction);
+    };
+    if (wantsZoom) {
+      isClosingRef.current = true;
+      void animateClose().then(dispatch);
+    } else {
+      dispatch();
+    }
+  }, [animateClose, navigation]);
 
   // Flush pending edits without blocking navigation — used when we deliberately
   // let the user leave (server known-unreachable) and on an unexpected unmount.
@@ -967,10 +1086,30 @@ export default function NoteEditorScreen() {
       .catch(() => showToastRef.current(t('note.failedSaveChanges'), 'error'));
   }, [flushSave, t]);
 
-  // Intercept navigation away to flush pending edits before leaving the screen.
+  // Intercept navigation away to flush pending edits before leaving, and to play
+  // the zoom-back-onto-the-card animation for back navigation.
   useEffect(() => {
     const unsubscribe = navigation.addListener('beforeRemove', (event) => {
-      if (intentionalExitRef.current || !hasPendingChangesRef.current) {
+      // Programmatic exits (delete/archive/duplicate) already set this and run
+      // their own zoom/goBack, so don't re-handle them here.
+      if (intentionalExitRef.current) {
+        return;
+      }
+      // A zoom-close animation from this or another exit action is already
+      // playing — swallow this concurrent attempt so it doesn't pop an extra
+      // screen once that animation finishes and dispatches its own action.
+      if (isClosingRef.current) {
+        event.preventDefault();
+        return;
+      }
+      const action = event.data.action;
+      const isBack = action.type === 'GO_BACK' || action.type === 'POP';
+      // Zoom back onto the card for any back navigation (header button or
+      // hardware back; the swipe gesture is disabled). Other removals fall
+      // through to an instant dispatch.
+      const wantsZoom = isBack && zoomEnabled;
+      const hasPending = hasPendingChangesRef.current;
+      if (!hasPending && !wantsZoom) {
         return;
       }
       if (debounceRef.current) {
@@ -978,17 +1117,29 @@ export default function NoteEditorScreen() {
         debounceRef.current = null;
       }
 
+      // No pending edits: nothing to save. Zoom back onto the card (a non-zoom
+      // back nav without pending edits already returned above).
+      if (!hasPending) {
+        event.preventDefault();
+        exitWith(action, wantsZoom);
+        return;
+      }
+
       // Server known-unreachable: an online write would only stall for the
       // request timeout before falling back to the local-persist + queue path,
-      // so there is nothing to wait for. Let navigation proceed immediately and
-      // flush in the background — blocking here is what made leaving a note with
-      // unsaved edits feel frozen while the server was down. The edit stays
-      // durable: flushSave writes it to the local DB and enqueues it for replay.
-      // Mark the exit intentional so the unmount cleanup below doesn't flush a
-      // second time.
+      // so there is nothing to wait for. Flush in the background and let the exit
+      // proceed — blocking here is what made leaving a note with unsaved edits
+      // feel frozen while the server was down. The edit stays durable: flushSave
+      // writes it to the local DB and enqueues it for replay. Mark the exit
+      // intentional so the unmount cleanup below doesn't flush a second time; when
+      // a zoom-back is wanted we still preventDefault and drive it via exitWith.
       if (!isServerReachable()) {
         intentionalExitRef.current = true;
         flushInBackground();
+        if (wantsZoom) {
+          event.preventDefault();
+          exitWith(action, wantsZoom);
+        }
         return;
       }
 
@@ -1000,18 +1151,18 @@ export default function NoteEditorScreen() {
       void (async () => {
         const saveSucceeded = await flushSave();
         if (!saveSucceeded) {
-          setExitSavePrompt({ navAction: event.data.action, retriesLeft: MAX_EXIT_SAVE_RETRIES });
+          setExitSavePrompt({ navAction: action, wantsZoom, retriesLeft: MAX_EXIT_SAVE_RETRIES });
           return;
         }
-        exitWith(event.data.action);
+        exitWith(action, wantsZoom);
       })();
     });
     return unsubscribe;
-  }, [exitWith, flushSave, flushInBackground, navigation]);
+  }, [exitWith, flushSave, flushInBackground, navigation, zoomEnabled]);
 
   const handleExitDiscard = useCallback(() => {
     if (!exitSavePrompt || isExitRetrying) return;
-    exitWith(exitSavePrompt.navAction);
+    exitWith(exitSavePrompt.navAction, exitSavePrompt.wantsZoom);
   }, [exitSavePrompt, exitWith, isExitRetrying]);
 
   // Guarded by isExitRetrying so a retry in flight can't race a second tap on
@@ -1020,12 +1171,12 @@ export default function NoteEditorScreen() {
   const handleExitRetry = useCallback(async () => {
     if (!exitSavePrompt || isExitRetrying) return;
     setIsExitRetrying(true);
-    const { navAction, retriesLeft } = exitSavePrompt;
+    const { navAction, wantsZoom, retriesLeft } = exitSavePrompt;
     const retrySucceeded = await flushSave();
     if (retrySucceeded) {
-      exitWith(navAction);
+      exitWith(navAction, wantsZoom);
     } else {
-      setExitSavePrompt({ navAction, retriesLeft: retriesLeft - 1 });
+      setExitSavePrompt({ navAction, wantsZoom, retriesLeft: retriesLeft - 1 });
     }
     setIsExitRetrying(false);
   }, [exitSavePrompt, exitWith, flushSave, isExitRetrying]);
@@ -1531,13 +1682,17 @@ export default function NoteEditorScreen() {
       return;
     }
     // Moving to trash is undoable (toast below + restoreMutation), so this
-    // doesn't confirm — matches NotesListScreen's handleMoveToTrash.
+    // doesn't confirm - matches NotesListScreen's handleMoveToTrash.
     try {
+      // Drop any debounced autosave; the delete runs against the last persisted
+      // state, and the in-flight save (if any) is awaited below.
       if (debounceRef.current) {
         clearTimeout(debounceRef.current);
         debounceRef.current = null;
       }
-      intentionalExitRef.current = true;
+      // Run the delete with the editor still mounted so a slow write shows the
+      // pending indicator (#697) and a failure surfaces as an Alert. On success
+      // we zoom back onto the card afterwards.
       await withPendingIndicator(async () => {
         if (saveInFlightRef.current) {
           try { await saveInFlightRef.current; } catch { /* already handled */ }
@@ -1558,26 +1713,28 @@ export default function NoteEditorScreen() {
             }
           },
         });
-        navigation.goBack();
       });
+      // Zoom back onto the card, then pop - the dashboard plays its removal
+      // reflow on the still-present card as the editor shrinks away.
+      await zoomCloseAndExit();
     } catch {
-      intentionalExitRef.current = false;
       Alert.alert(t('common.error'), t('note.failedDelete'));
     }
-  }, [deleteMutation, navigation, noteId, restoreMutation, showToast, t, withPendingIndicator]);
+  }, [deleteMutation, navigation, noteId, restoreMutation, showToast, t, withPendingIndicator, zoomCloseAndExit]);
 
   // Restore a trashed note (read-only view) and return to the list.
   const handleRestoreNote = useCallback(async () => {
     if (!noteId) return;
     try {
+      // Restore with the editor still mounted so a slow write shows the pending
+      // indicator (#697); on success zoom back onto the card and pop.
       await withPendingIndicator(() => restoreMutation.mutateAsync(noteId));
-      intentionalExitRef.current = true;
       showToast(t('dashboard.noteRestored'));
-      navigation.goBack();
+      await zoomCloseAndExit();
     } catch {
       Alert.alert(t('common.error'), t('note.failedRestore'));
     }
-  }, [navigation, noteId, restoreMutation, showToast, t, withPendingIndicator]);
+  }, [noteId, restoreMutation, showToast, t, withPendingIndicator, zoomCloseAndExit]);
 
   // Permanently delete a trashed note (read-only view) after confirmation.
   const handleDeletePermanently = useCallback(async () => {
@@ -1592,14 +1749,15 @@ export default function NoteEditorScreen() {
     const currentNoteId = noteIdRef.current;
     if (!currentNoteId) return;
     try {
-      intentionalExitRef.current = true;
+      // Run the permanent delete with the editor still mounted so a slow write
+      // shows the pending indicator (#697) and a failure surfaces as an Alert.
       await withPendingIndicator(() => permanentDeleteMutation.mutateAsync(currentNoteId));
-      navigation.goBack();
+      // Zoom back onto the card, then pop.
+      await zoomCloseAndExit();
     } catch {
-      intentionalExitRef.current = false;
       Alert.alert(t('common.error'), t('note.failedDelete'));
     }
-  }, [confirm, navigation, noteId, permanentDeleteMutation, t, withPendingIndicator]);
+  }, [confirm, noteId, permanentDeleteMutation, t, withPendingIndicator, zoomCloseAndExit]);
 
   const handleTogglePin = useCallback(() => withSavedNote(async (id) => {
     const newPinned = !pinnedRef.current;
@@ -1616,34 +1774,43 @@ export default function NoteEditorScreen() {
   const handleToggleArchive = useCallback(() => withSavedNote(async (id) => {
     const newArchived = !archivedRef.current;
     setArchived(newArchived);
-    try {
-      await runMetadataUpdate(id, buildMetadataUpdateData({ archived: newArchived }));
-      commitMetadataBaseline({ archived: newArchived });
-      if (newArchived) {
-        // Archiving from the single-note view returns the user to the dashboard.
-        intentionalExitRef.current = true;
-        navigation.goBack();
-        showToast(t('dashboard.noteArchived'), 'success', {
-          label: t('dashboard.undo'),
-          onPress: async () => {
-            try {
-              await runMetadataUpdate(id, buildMetadataUpdateData({ archived: false }));
-              commitMetadataBaseline({ archived: false });
-              setArchived(false);
-              showToast(t('dashboard.noteUnarchived'));
-            } catch {
-              showToast(t('note.failedUnarchive'), 'error');
-            }
-          },
-        });
-      } else {
+
+    if (!newArchived) {
+      // Unarchiving keeps the user on the note.
+      try {
+        await runMetadataUpdate(id, buildMetadataUpdateData({ archived: false }));
+        commitMetadataBaseline({ archived: false });
         showToast(t('dashboard.noteUnarchived'));
+      } catch {
+        setArchived(true);
+        Alert.alert(t('common.error'), t('note.failedUpdate'));
       }
-    } catch {
-      setArchived(!newArchived);
-      Alert.alert(t('common.error'), t('note.failedUpdate'));
+      return;
     }
-  }), [buildMetadataUpdateData, commitMetadataBaseline, runMetadataUpdate, withSavedNote, navigation, showToast, t]);
+
+    // Archiving from the single-note view returns the user to the dashboard.
+    // Zoom back onto the card first, then archive so the dashboard plays its
+    // removal reflow on the still-present card. The editor is unmounted by the
+    // time we mutate, so failures surface as a toast rather than an alert.
+    commitMetadataBaseline({ archived: true });
+    await zoomCloseAndExit();
+    try {
+      await runMetadataUpdate(id, buildMetadataUpdateData({ archived: true }));
+      showToast(t('dashboard.noteArchived'), 'success', {
+        label: t('dashboard.undo'),
+        onPress: async () => {
+          try {
+            await runMetadataUpdate(id, buildMetadataUpdateData({ archived: false }));
+            showToast(t('dashboard.noteUnarchived'));
+          } catch {
+            showToast(t('note.failedUnarchive'), 'error');
+          }
+        },
+      });
+    } catch {
+      showToast(t('note.failedArchive'), 'error');
+    }
+  }), [buildMetadataUpdateData, zoomCloseAndExit, commitMetadataBaseline, runMetadataUpdate, withSavedNote, showToast, t]);
 
   const handleColorSelect = useCallback(async (selectedColor: string) => {
     const saveSucceeded = await flushPendingChanges();
@@ -1699,6 +1866,8 @@ export default function NoteEditorScreen() {
       const duplicatedNote = await duplicateMutation.mutateAsync(currentNoteId);
       intentionalExitRef.current = true;
       Alert.alert(t('note.duplicate'), t('note.duplicated'));
+      // No originRect: the duplicate isn't tied to a card, so it opens without a
+      // zoom (and leaving it won't zoom onto the original's card).
       navigation.replace('NoteEditor', { noteId: duplicatedNote.id });
     } catch {
       Alert.alert(t('common.error'), t('note.failedDuplicate'));
@@ -2013,6 +2182,7 @@ export default function NoteEditorScreen() {
     : colors.borderLight;
 
   return (
+    <Animated.View style={[StyleSheet.absoluteFill, zoomStyle, zoomRevealed ? null : styles.zoomHidden]}>
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: noteBackground, paddingBottom: androidKeyboardInset }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -2451,5 +2621,6 @@ export default function NoteEditorScreen() {
         </TouchableOpacity>
       </Modal>
     </KeyboardAvoidingView>
+    </Animated.View>
   );
 }
