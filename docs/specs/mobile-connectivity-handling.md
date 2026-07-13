@@ -213,8 +213,10 @@ handling and loop safety are two halves of the same system.)
   (note-image and profile-icon uploads); fixed in #695 by giving both a
   generous but finite timeout and, for note images, a cancel button on the
   in-flight gallery tile that aborts the request.
-- **A blocking network call that could be optimistic** — logout waits ~15 s on a
-  down server before clearing the local session (issue #696).
+- **A blocking network call that could be optimistic** — logout used to wait
+  ~15 s on a down server before clearing the local session (issue #696); fixed in
+  #706 by clearing the local session/profile immediately and firing `POST /logout`
+  in the background best-effort.
 - **Awaiting a write, then navigating, with no feedback** — menu/action handlers
   freeze ~5 s with no spinner; fixed in #697 for the note-editor's own
   overflow-menu actions (move to trash, restore, delete-forever, convert,
