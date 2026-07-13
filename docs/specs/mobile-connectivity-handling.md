@@ -215,8 +215,10 @@ handling and loop safety are two halves of the same system.)
   down server before clearing the local session (issue #696).
 - **Awaiting a write, then navigating, with no feedback** — menu/action handlers
   freeze ~5 s with no spinner (issues #697/#698).
-- **Unbounded read retries that ignore reachability** — `retrySync` hammers a
-  down server for ~67 s (issue #699).
+- **Unbounded read retries that ignore reachability** — `retrySync` used to
+  hammer a down server for ~67 s; fixed in #699 by consulting
+  `isServerReachable()` and capping `SYNC_RETRY_MAX_ATTEMPTS` at 2 (~31 s
+  worst case, near-immediate on a known-down server).
 - **Conflating device connectivity with server reachability** — the umbrella
   cause; if you find code branching only on `isConnected` for a *write*, it
   probably wants `isOnlineWriteAllowed()`.
@@ -226,7 +228,7 @@ handling and loop safety are two halves of the same system.)
 ## 11. Open work
 
 Tracking issues at the time of writing: #695 (upload timeout/cancel), #696
-(logout), #697/#698 (action-handler freezes), #699 (`retrySync` reachability +
-attempt cap), #700 (surface reachability/sync-freshness in Diagnostics). A
-user-facing "last synced / syncing / sync failed" indicator in the main UI is
-noted as future work beyond the diagnostic surface.
+(logout), #697/#698 (action-handler freezes), #700 (surface
+reachability/sync-freshness in Diagnostics). A user-facing "last synced /
+syncing / sync failed" indicator in the main UI is noted as future work beyond
+the diagnostic surface.

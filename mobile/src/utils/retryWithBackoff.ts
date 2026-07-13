@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { isTransientHttpStatus } from '../db/syncQueue';
+import { isServerReachable as isServerReachableDefault } from '../api/serverReachability';
 
 // Sync-loop safety knobs (see mobile/CLAUDE.md → "Sync Loop Safety").
 /** Base delay before the first backoff retry. */
@@ -7,16 +8,17 @@ export const SYNC_RETRY_BASE_DELAY_MS = 1000;
 /** Upper bound on the exponential backoff between retries. */
 export const SYNC_RETRY_MAX_DELAY_MS = 60000;
 /** Total attempts (the initial try plus retries) before giving up. */
-export const SYNC_RETRY_MAX_ATTEMPTS = 4;
+export const SYNC_RETRY_MAX_ATTEMPTS = 2;
 
 /**
  * Thrown when a retry loop stops early because it was cancelled (the caller
- * tore down, e.g. an effect cleanup) or the device went offline. It is *not* a
- * real sync failure — callers should swallow it and keep their local cache,
- * since a reconnect/remount will start a fresh sync.
+ * tore down, e.g. an effect cleanup), the device went offline, or the server is
+ * known-unreachable. It is *not* a real sync failure — callers should swallow it
+ * and keep their local cache, since a reconnect/remount or the server coming back
+ * will start a fresh sync.
  */
 export class SyncAbortedError extends Error {
-  constructor(public readonly reason: 'cancelled' | 'offline') {
+  constructor(public readonly reason: 'cancelled' | 'offline' | 'unreachable') {
     super(`Sync aborted: ${reason}`);
     this.name = 'SyncAbortedError';
   }
@@ -82,6 +84,13 @@ export function isTransientError(err: unknown): boolean {
 export interface RetrySyncOptions {
   /** Current connectivity. Checked before every attempt and before each backoff. */
   isConnected: () => boolean;
+  /**
+   * Best-effort server reachability. Checked before every attempt and before
+   * each backoff, alongside `isConnected`. Defaults to the shared
+   * {@link isServerReachableDefault} signal, so a known-down server fast-fails
+   * instead of burning the full retry budget.
+   */
+  isServerReachable?: () => boolean;
   /** Optional cancellation token; cancel to abort an in-flight wait/loop. */
   canceller?: SyncCanceller;
   /** Total attempts including the first. Defaults to {@link SYNC_RETRY_MAX_ATTEMPTS}. */
@@ -97,15 +106,17 @@ export interface RetrySyncOptions {
 /**
  * Run `fn`, retrying transient failures with exponential backoff.
  *
- * Stops early — throwing {@link SyncAbortedError} — when cancelled or offline,
- * so a flaky read does not busy-loop and connectivity loss hands control back
- * to the caller (a reconnect trigger starts a fresh sync). Permanent failures
+ * Stops early — throwing {@link SyncAbortedError} — when cancelled, offline, or
+ * the server is known-unreachable, so a flaky read does not busy-loop and a
+ * known-down server fails fast instead of burning the full retry budget (a
+ * reconnect/server-recovery trigger starts a fresh sync). Permanent failures
  * and exhausted retries rethrow the original error so the caller can handle or
  * log them while keeping the local cache as a fallback.
  */
 export async function retrySync<T>(fn: () => Promise<T>, options: RetrySyncOptions): Promise<T> {
   const {
     isConnected,
+    isServerReachable = isServerReachableDefault,
     canceller,
     maxAttempts = SYNC_RETRY_MAX_ATTEMPTS,
     baseDelayMs = SYNC_RETRY_BASE_DELAY_MS,
@@ -116,6 +127,7 @@ export async function retrySync<T>(fn: () => Promise<T>, options: RetrySyncOptio
   for (let attempt = 1; ; attempt++) {
     if (canceller?.cancelled) throw new SyncAbortedError('cancelled');
     if (!isConnected()) throw new SyncAbortedError('offline');
+    if (!isServerReachable()) throw new SyncAbortedError('unreachable');
 
     try {
       return await fn();
@@ -123,8 +135,10 @@ export async function retrySync<T>(fn: () => Promise<T>, options: RetrySyncOptio
       if (canceller?.cancelled) throw new SyncAbortedError('cancelled');
       // Out of attempts, or a permanent error: surface the cause.
       if (attempt >= maxAttempts || !shouldRetry(err)) throw err;
-      // Don't burn a retry while offline; a reconnect starts a fresh sync.
+      // Don't burn a retry while offline, or against a known-down server; a
+      // reconnect/server recovery starts a fresh sync.
       if (!isConnected()) throw new SyncAbortedError('offline');
+      if (!isServerReachable()) throw new SyncAbortedError('unreachable');
 
       const delay = Math.min(baseDelayMs * 2 ** (attempt - 1), maxDelayMs);
       if (canceller) {
