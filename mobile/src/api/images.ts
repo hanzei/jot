@@ -31,13 +31,18 @@ export interface ImageUploadFile {
   sizeBytes?: number;
 }
 
-// Multipart upload mirrors uploadProfileIcon in api/settings.ts: no request
-// timeout (uploads can be slow on cellular) and an optional progress callback
-// for the gallery's pending-upload spinner.
+// Generous but finite: uploads can be slow on cellular, but a half-open /
+// unreachable server must resolve to a recoverable error instead of hanging
+// forever (issue #695).
+export const NOTE_IMAGE_UPLOAD_TIMEOUT_MS = 90000;
+
+// Multipart upload mirrors uploadProfileIcon in api/settings.ts. `signal` lets
+// the caller abort an in-flight upload (the gallery's per-tile cancel button).
 export async function uploadNoteImage(
   noteId: string,
   file: ImageUploadFile,
   onUploadProgress?: (percent: number) => void,
+  signal?: AbortSignal,
 ): Promise<NoteImage> {
   const formData = new FormData();
   formData.append('file', {
@@ -49,7 +54,8 @@ export async function uploadNoteImage(
   let lastPercent = -1;
   const res = await api.post(`/notes/${noteId}/images`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
-    timeout: 0,
+    timeout: NOTE_IMAGE_UPLOAD_TIMEOUT_MS,
+    signal,
     ...(onUploadProgress && {
       onUploadProgress: (progressEvent) => {
         const percent = progressEvent.total

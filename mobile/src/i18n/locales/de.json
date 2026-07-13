@@ -306,6 +306,7 @@
     "uploadQueuedToast": "Das Bild wird hochgeladen, sobald du wieder online bist",
     "retryUpload": "{{filename}} erneut hochladen",
     "dismissUpload": "{{filename}} verwerfen",
+    "cancelUpload": "Hochladen von {{filename}} abbrechen",
     "errorWrongType": "Es können nur Bilder angehängt werden.",
     "errorTooLarge": "Das Bild überschreitet das Limit von {{maxMB}} MB.",
     "errorTooMany": "Notizen können bis zu {{max}} Bilder enthalten."

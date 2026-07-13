@@ -335,6 +335,7 @@
     "uploadQueuedToast": "La imagen se subirá cuando vuelvas a estar en línea",
     "retryUpload": "Reintentar subir {{filename}}",
     "dismissUpload": "Descartar {{filename}}",
+    "cancelUpload": "Cancelar la subida de {{filename}}",
     "errorWrongType": "Solo se pueden adjuntar imágenes.",
     "errorTooLarge": "La imagen supera el límite de {{maxMB}} MB.",
     "errorTooMany": "Las notas pueden tener hasta {{max}} imágenes."

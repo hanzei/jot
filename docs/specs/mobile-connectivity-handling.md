@@ -210,7 +210,9 @@ handling and loop safety are two halves of the same system.)
   unsaved-changes freeze; fixed for the note-editor exit in #693 by navigating
   immediately and flushing in the background when the server is unreachable.
 - **`timeout: 0` on uploads** — infinite hang on a half-open server
-  (note-image and profile-icon uploads; issue #695).
+  (note-image and profile-icon uploads); fixed in #695 by giving both a
+  generous but finite timeout and, for note images, a cancel button on the
+  in-flight gallery tile that aborts the request.
 - **A blocking network call that could be optimistic** — logout waits ~15 s on a
   down server before clearing the local session (issue #696).
 - **Awaiting a write, then navigating, with no feedback** — menu/action handlers

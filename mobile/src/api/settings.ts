@@ -11,8 +11,10 @@ export async function changePassword(data: ChangePasswordRequest): Promise<void>
   await api.put('/users/me/password', data);
 }
 
-// Profile-icon uploads can be large on slow cellular — disable the default timeout.
-export const UPLOAD_ICON_TIMEOUT = 0;
+// Profile-icon uploads can be large on slow cellular, so this is generous —
+// but a half-open / unreachable server must still resolve to an error instead
+// of hanging forever (issue #695), so it is finite rather than disabled.
+export const UPLOAD_ICON_TIMEOUT = 90000;
 
 export async function uploadProfileIcon(
   uri: string,

@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import axios from 'axios';
 import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
 import type { NoteImage } from '@jot/shared';
@@ -40,18 +41,21 @@ export function useUploadNoteImage() {
       uploadId,
       file,
       onProgress,
+      signal,
     }: {
       noteId: string;
       /** Client-generated id shared with the ephemeral gallery tile, so a fallback to the persisted queue below reuses the same key (issue #618). */
       uploadId: string;
       file: ImageUploadFile;
       onProgress?: (percent: number) => void;
+      /** Lets the caller cancel this in-flight upload (the gallery tile's cancel button, issue #695). */
+      signal?: AbortSignal;
     }): Promise<UploadNoteImageResult> => {
       assertSwitchWriteAllowed();
 
       if (isLocalModeActive() || isOnlineWriteAllowed(isConnectedRef.current)) {
         try {
-          const image = await uploadNoteImage(noteId, file, onProgress);
+          const image = await uploadNoteImage(noteId, file, onProgress, signal);
           // The SSE echo of this upload is dropped for the client that triggered
           // it (self-echo suppression in useSSE, keyed on the same X-Client-Id
           // header this upload just sent), so the local cache needs patching here
@@ -61,6 +65,11 @@ export function useUploadNoteImage() {
           );
           return { status: 'uploaded', image };
         } catch (err) {
+          // A user-initiated cancel is neither a permanent error nor something
+          // to replay later — always propagate it as-is so the caller (whose
+          // cancel handler already dropped the tile) doesn't queue a request
+          // the user explicitly aborted.
+          if (axios.isCancel(err)) throw err;
           // No server ever exists in local mode (epic #511), so there is nothing
           // to queue a replay against — keep #617's online-only behavior: let the
           // failure surface directly. Otherwise, a transient failure falls

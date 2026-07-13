@@ -156,6 +156,17 @@ export default function NoteImageGallery({ images, editable = false, uploads = [
               <>
                 <ActivityIndicator size="small" color="#fff" />
                 <Text style={styles.uploadStatusText}>{t('images.uploading', { percent: upload.progress })}</Text>
+                {onDismissUpload && (
+                  <TouchableOpacity
+                    style={styles.uploadActionButton}
+                    onPress={() => onDismissUpload(upload.id)}
+                    accessibilityLabel={t('images.cancelUpload', { filename: upload.filename })}
+                    accessibilityRole="button"
+                    testID={`dismiss-upload-${upload.id}`}
+                  >
+                    <X size={16} color="#fff" />
+                  </TouchableOpacity>
+                )}
               </>
             ) : upload.status === 'queued' ? (
               <>

@@ -54,7 +54,9 @@ describe('uploadProfileIcon', () => {
       expect.anything(),
       expect.objectContaining({ timeout: UPLOAD_ICON_TIMEOUT }),
     );
-    expect(UPLOAD_ICON_TIMEOUT).toBe(0);
+    // Generous but finite — never 0 (issue #695): a half-open/unreachable
+    // server must eventually resolve to a recoverable error, not hang forever.
+    expect(UPLOAD_ICON_TIMEOUT).toBeGreaterThan(0);
   });
 
   it('strips file:// prefix on iOS', async () => {
