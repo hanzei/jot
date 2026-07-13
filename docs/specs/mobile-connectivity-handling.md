@@ -225,14 +225,3 @@ handling and loop safety are two halves of the same system.)
 - **Conflating device connectivity with server reachability** — the umbrella
   cause; if you find code branching only on `isConnected` for a *write*, it
   probably wants `isOnlineWriteAllowed()`.
-
----
-
-## 11. Open work
-
-Tracking issues at the time of writing: #695 (upload timeout/cancel), #696
-(logout), #698 (label-management action-handler freezes, sibling of the
-now-fixed #697), #699 (`retrySync` reachability + attempt cap), #700 (surface
-reachability/sync-freshness in Diagnostics). A user-facing "last synced /
-syncing / sync failed" indicator in the main UI is noted as future work beyond
-the diagnostic surface.
