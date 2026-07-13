@@ -594,13 +594,22 @@ export const auth = {
   },
 
   logout: async (): Promise<void> => {
-    try {
-      await api.post('/logout');
-    } catch {
-      // Best-effort: always clear local session even if server call fails
-    }
+    // Server-side session invalidation is best-effort: the session still
+    // expires on the server on its own, and the raw token only ever lived on
+    // this device. Clear the local session immediately so callers can land on
+    // the login screen without waiting on a network round-trip to a server
+    // that may be unreachable, then fire POST /logout in the background
+    // (issue #696). The token is captured before clearing (which nulls the
+    // in-memory session cache the request interceptor reads) and attached
+    // explicitly so the background request still authenticates.
+    const token = await getStoredSession();
     await clearStoredSession();
     await clearCachedProfile();
+    if (token) {
+      void api.post('/logout', undefined, { headers: { Cookie: `jot_session=${token}` } }).catch(() => {
+        // Best-effort: local session is already cleared regardless of outcome.
+      });
+    }
   },
 
   me: async (): Promise<AuthResponse> => {
