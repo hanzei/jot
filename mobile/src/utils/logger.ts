@@ -6,7 +6,7 @@ export interface LogEntry {
   msg: string;
 }
 
-const BUFFER_SIZE = 200;
+const BUFFER_SIZE = 1000;
 const buffer: LogEntry[] = new Array(BUFFER_SIZE);
 let writeIndex = 0;
 let count = 0;
