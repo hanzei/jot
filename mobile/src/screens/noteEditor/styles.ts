@@ -171,6 +171,19 @@ export const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
   },
+  pendingBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+  },
+  pendingBarText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
   contentPreview: {
     flex: 1,
     paddingHorizontal: 0,

@@ -3,6 +3,7 @@ import { Alert } from 'react-native';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import NoteEditorScreen from '../src/screens/NoteEditorScreen';
 import { ConfirmProvider } from '../src/components/ConfirmDialog';
+import { markServerReachable, markServerUnreachable } from '../src/api/serverReachability';
 
 const mockUseRoute = jest.fn();
 const mockGoBack = jest.fn();
@@ -228,6 +229,94 @@ describe('NoteEditorScreen read-only trashed note', () => {
 
     expect(mockPermanentDeleteMutateAsync).toHaveBeenCalledWith('note-1');
     expect(mockGoBack).toHaveBeenCalledTimes(1);
+  });
+
+  // Issue #697: these actions await a write with the menu sheet already closed.
+  // A reachable-but-slow write must show a visible pending indicator instead of
+  // a silent freeze; a known-unreachable server has nothing to wait for (the
+  // mutation resolves via the local/queue path), so no indicator is needed.
+  describe('menu-action pending indicator', () => {
+    afterEach(() => {
+      markServerReachable();
+    });
+
+    it('shows the pending indicator while restoring on a reachable server', async () => {
+      markServerReachable();
+      let resolveRestore!: () => void;
+      mockRestoreMutateAsync.mockReturnValue(new Promise<void>((resolve) => { resolveRestore = resolve; }));
+
+      const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
+      fireEvent.press(getByTestId('toolbar-menu-btn'));
+      fireEvent.press(getByTestId('editor-menu-restore'));
+
+      await waitFor(() => { expect(getByTestId('menu-action-pending')).toBeTruthy(); });
+
+      await act(async () => { resolveRestore(); });
+
+      await waitFor(() => { expect(queryByTestId('menu-action-pending')).toBeNull(); });
+      expect(mockGoBack).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not show the pending indicator when restoring while known unreachable', async () => {
+      markServerUnreachable();
+      let resolveRestore!: () => void;
+      mockRestoreMutateAsync.mockReturnValue(new Promise<void>((resolve) => { resolveRestore = resolve; }));
+
+      const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
+      fireEvent.press(getByTestId('toolbar-menu-btn'));
+      fireEvent.press(getByTestId('editor-menu-restore'));
+
+      expect(queryByTestId('menu-action-pending')).toBeNull();
+
+      await act(async () => { resolveRestore(); });
+      await waitFor(() => { expect(mockGoBack).toHaveBeenCalledTimes(1); });
+    });
+
+    it('shows the pending indicator while permanently deleting on a reachable server', async () => {
+      markServerReachable();
+      let resolveDelete!: () => void;
+      mockPermanentDeleteMutateAsync.mockReturnValue(new Promise<void>((resolve) => { resolveDelete = resolve; }));
+
+      const { getByTestId, findByTestId, queryByTestId } = render(
+        <ConfirmProvider>
+          <NoteEditorScreen />
+        </ConfirmProvider>,
+      );
+
+      fireEvent.press(getByTestId('toolbar-menu-btn'));
+      fireEvent.press(getByTestId('editor-menu-delete-permanently'));
+      await findByTestId('confirm-dialog-confirm');
+      fireEvent.press(getByTestId('confirm-dialog-confirm'));
+
+      await waitFor(() => { expect(getByTestId('menu-action-pending')).toBeTruthy(); });
+
+      await act(async () => { resolveDelete(); });
+
+      await waitFor(() => { expect(queryByTestId('menu-action-pending')).toBeNull(); });
+      expect(mockGoBack).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not show the pending indicator when permanently deleting while known unreachable', async () => {
+      markServerUnreachable();
+      let resolveDelete!: () => void;
+      mockPermanentDeleteMutateAsync.mockReturnValue(new Promise<void>((resolve) => { resolveDelete = resolve; }));
+
+      const { getByTestId, findByTestId, queryByTestId } = render(
+        <ConfirmProvider>
+          <NoteEditorScreen />
+        </ConfirmProvider>,
+      );
+
+      fireEvent.press(getByTestId('toolbar-menu-btn'));
+      fireEvent.press(getByTestId('editor-menu-delete-permanently'));
+      await findByTestId('confirm-dialog-confirm');
+      fireEvent.press(getByTestId('confirm-dialog-confirm'));
+
+      expect(queryByTestId('menu-action-pending')).toBeNull();
+
+      await act(async () => { resolveDelete(); });
+      await waitFor(() => { expect(mockGoBack).toHaveBeenCalledTimes(1); });
+    });
   });
 
   it('does not delete the note when the destructive dialog is cancelled', async () => {
