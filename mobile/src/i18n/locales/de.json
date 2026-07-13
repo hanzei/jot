@@ -314,6 +314,7 @@
   "labels": {
     "title": "Labels",
     "noLabels": "Noch keine Labels",
+    "addLabels": "Labels hinzufügen",
     "newLabelPlaceholder": "Neues Label",
     "newSidebar": "Neues Label",
     "createInputLabel": "Neuer Labelname",

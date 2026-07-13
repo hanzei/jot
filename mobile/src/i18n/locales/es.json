@@ -343,6 +343,7 @@
   "labels": {
     "title": "Etiquetas",
     "noLabels": "Aún no hay etiquetas",
+    "addLabels": "Añadir etiquetas",
     "newLabelPlaceholder": "Nueva etiqueta",
     "newSidebar": "Nueva etiqueta",
     "createInputLabel": "Nuevo nombre de etiqueta",

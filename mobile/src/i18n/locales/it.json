@@ -343,6 +343,7 @@
   "labels": {
     "title": "Etichette",
     "noLabels": "Nessuna etichetta ancora",
+    "addLabels": "Aggiungi etichette",
     "newLabelPlaceholder": "Nuova etichetta",
     "newSidebar": "Nuova etichetta",
     "createInputLabel": "Nuovo nome etichetta",

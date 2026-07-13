@@ -33,7 +33,7 @@ import {
 import { Gesture } from 'react-native-gesture-handler';
 import { LinearTransition, useSharedValue, runOnJS } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { Archive, ArrowLeft, Check, ChevronRight, CircleAlert, EllipsisVertical, FileText, Image, List, Palette, Pin, Plus } from 'lucide-react-native';
+import { Archive, ArrowLeft, Check, ChevronRight, CircleAlert, EllipsisVertical, FileText, Image, List, Palette, Pin, Plus, Tag } from 'lucide-react-native';
 import { useNavigation, useRoute, RouteProp, type NavigationAction } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
@@ -82,6 +82,7 @@ import { MarkdownToolbarContent } from './noteEditor/EditorToolbars';
 import CheckedItemsSection, { type ListItemHandlers } from './noteEditor/CheckedItemsSection';
 import NoteEditorMenu from '../components/NoteEditorMenu';
 import NoteImageGallery, { type PendingImageUpload } from '../components/NoteImageGallery';
+import UserAvatar from '../components/UserAvatar';
 import { styles } from './noteEditor/styles';
 import { animateListReflow, isReduceMotionEnabledSync } from '../utils/layoutAnimation';
 import ActiveListRow from './noteEditor/ActiveListRow';
@@ -2084,6 +2085,17 @@ export default function NoteEditorScreen() {
   // them (a note shared with the user can't be re-shared).
   const ownsNote = noteId === null || (!!existingNote && existingNote.user_id === currentUser?.id);
   const canShareWithCollaborators = !isLocalMode && ownsNote;
+
+  // Save-first openers shared by the overflow menu and the inline
+  // labels/collaborators row below the note body, so tapping a label chip or a
+  // collaborator avatar behaves exactly like the matching menu action.
+  const openLabelPicker = useCallback(() => {
+    void withSavedNote(() => setLabelPickerVisible(true));
+  }, [withSavedNote]);
+  const openShareScreen = useCallback(() => {
+    void withSavedNote((id) => navigation.navigate('Share', { noteId: id }));
+  }, [withSavedNote, navigation]);
+
   // Muted icon color for the bar; disabled buttons render at reduced opacity.
   const barIconColor = hasNoteColor ? '#444' : colors.icon;
   const disabledBarIconColor = hasNoteColor ? '#999' : colors.iconMuted;
@@ -2435,6 +2447,87 @@ export default function NoteEditorScreen() {
             />
           </View>
         )}
+
+        {/* Collaborators + labels, mirroring the webapp's single-note view.
+            Tapping a collaborator avatar opens the share screen; tapping a
+            label chip (or "Add labels") opens the label picker — the same
+            targets as the overflow menu's Share / Labels actions. Shown for
+            shared and/or labelled notes, plus the "Add labels" affordance on
+            any editable note. Read-only (trashed) notes render it as plain,
+            non-interactive display, matching the menu hiding those actions. */}
+        {(collaborators.length > 0 || labels.length > 0 || !isReadOnly) && (
+          <View style={styles.metaRow} testID="note-meta-row">
+            {collaborators.length > 0 && (
+              canShareWithCollaborators ? (
+                <TouchableOpacity
+                  style={styles.metaAvatars}
+                  onPress={openShareScreen}
+                  testID="note-meta-collaborators"
+                  accessibilityLabel={t('note.share')}
+                >
+                  {collaborators.map((c, index) => (
+                    <View key={c.userId} style={index === 0 ? undefined : styles.metaAvatarOverlap}>
+                      <UserAvatar
+                        userId={c.userId}
+                        username={c.username}
+                        hasProfileIcon={c.hasProfileIcon}
+                        iconVersion={c.iconVersion}
+                        size="small"
+                      />
+                    </View>
+                  ))}
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.metaAvatars} testID="note-meta-collaborators">
+                  {collaborators.map((c, index) => (
+                    <View key={c.userId} style={index === 0 ? undefined : styles.metaAvatarOverlap}>
+                      <UserAvatar
+                        userId={c.userId}
+                        username={c.username}
+                        hasProfileIcon={c.hasProfileIcon}
+                        iconVersion={c.iconVersion}
+                        size="small"
+                      />
+                    </View>
+                  ))}
+                </View>
+              )
+            )}
+
+            {labels.map((label) => (
+              !isReadOnly ? (
+                <TouchableOpacity
+                  key={label.id}
+                  style={[styles.metaLabelChip, { backgroundColor: hasNoteColor ? 'rgba(0,0,0,0.08)' : colors.borderLight }]}
+                  onPress={openLabelPicker}
+                  testID={`note-meta-label-${label.id}`}
+                  accessibilityLabel={t('labels.title')}
+                >
+                  <Text style={[styles.metaLabelText, { color: hasNoteColor ? '#666' : colors.textSecondary }]}>{label.name}</Text>
+                </TouchableOpacity>
+              ) : (
+                <View
+                  key={label.id}
+                  style={[styles.metaLabelChip, { backgroundColor: hasNoteColor ? 'rgba(0,0,0,0.08)' : colors.borderLight }]}
+                >
+                  <Text style={[styles.metaLabelText, { color: hasNoteColor ? '#666' : colors.textSecondary }]}>{label.name}</Text>
+                </View>
+              )
+            ))}
+
+            {!isReadOnly && (
+              <TouchableOpacity
+                style={[styles.metaAddLabels, { borderColor: colors.primary }]}
+                onPress={openLabelPicker}
+                testID="note-meta-add-labels"
+                accessibilityLabel={t('labels.addLabels')}
+              >
+                <Tag size={14} color={colors.primary} />
+                <Text style={[styles.metaAddLabelsText, { color: colors.primary }]}>{t('labels.addLabels')}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
       </ScrollViewContainer>
 
       <View style={[styles.toolbar, { backgroundColor: noteBackground, borderTopColor: hasNoteColor ? 'transparent' : colors.border, paddingBottom: insets.bottom || 8 }]}>
@@ -2519,10 +2612,10 @@ export default function NoteEditorScreen() {
         title={noteType === 'list' ? title : undefined}
         noteType={noteType}
         onSend={handleNativeShare}
-        onShare={canShareWithCollaborators ? () => withSavedNote((id) => navigation.navigate('Share', { noteId: id })) : undefined}
+        onShare={canShareWithCollaborators ? openShareScreen : undefined}
         onDuplicate={handleDuplicate}
         onConvert={handleConvertNoteType}
-        onManageLabels={() => withSavedNote(() => setLabelPickerVisible(true))}
+        onManageLabels={openLabelPicker}
         onMoveToTrash={handleDelete}
         onRestore={handleRestoreNote}
         onDeletePermanently={handleDeletePermanently}
