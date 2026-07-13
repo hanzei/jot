@@ -24,7 +24,11 @@ import {
 } from '../store/serverSwitchLifecycle';
 import { getSseState, type SseState } from '../api/sseState';
 import { getPendingCount } from '../db/syncQueue';
-import { isServerReachable, getServerReachabilityChangedAt } from '../api/serverReachability';
+import {
+  isServerReachable,
+  getServerReachabilityChangedAt,
+  subscribeToServerReachability,
+} from '../api/serverReachability';
 import { useOfflineContext } from '../store/OfflineContext';
 import { getLogs, clearLogs, type LogEntry } from '../utils/logger';
 import appConfig from '../../app.json';
@@ -91,6 +95,19 @@ export default function DiagnosticsScreen() {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // Reflect a reachability transition immediately rather than waiting for the
+  // next mount or manual refresh — the belief flips from write/SSE outcomes
+  // that can happen at any time while this screen is open.
+  useEffect(() => {
+    return subscribeToServerReachability((reachable) => {
+      setSnapshot((prev) => ({
+        ...prev,
+        isServerReachable: reachable,
+        serverReachabilityChangedAt: getServerReachabilityChangedAt(),
+      }));
+    });
+  }, []);
 
   const handleClearLogs = useCallback(() => {
     clearLogs();

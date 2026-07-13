@@ -10,6 +10,7 @@ describe('serverReachability', () => {
   afterEach(() => {
     // Reset to the default so state doesn't leak between cases.
     markServerReachable();
+    jest.useRealTimers();
   });
 
   it('defaults to reachable', () => {
@@ -40,6 +41,9 @@ describe('serverReachability', () => {
   });
 
   it('records the timestamp of the last transition, but not a no-op call', () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+
     markServerUnreachable();
     const firstChange = getServerReachabilityChangedAt();
     expect(firstChange).not.toBeNull();
@@ -48,8 +52,10 @@ describe('serverReachability', () => {
     markServerUnreachable();
     expect(getServerReachabilityChangedAt()).toBe(firstChange);
 
+    jest.setSystemTime(new Date('2026-01-01T00:00:05.000Z'));
     markServerReachable();
     const secondChange = getServerReachabilityChangedAt();
     expect(secondChange).not.toBeNull();
+    expect(secondChange).not.toBe(firstChange);
   });
 });

@@ -10,7 +10,11 @@ import { render, fireEvent, act } from '@testing-library/react-native';
 import { Share } from 'react-native';
 import DiagnosticsScreen from '../src/screens/DiagnosticsScreen';
 import { useOfflineContext } from '../src/store/OfflineContext';
-import { isServerReachable, getServerReachabilityChangedAt } from '../src/api/serverReachability';
+import {
+  isServerReachable,
+  getServerReachabilityChangedAt,
+  subscribeToServerReachability,
+} from '../src/api/serverReachability';
 
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ goBack: jest.fn(), navigate: jest.fn() }),
@@ -45,19 +49,33 @@ jest.mock('../src/store/OfflineContext', () => ({
 jest.mock('../src/api/serverReachability', () => ({
   isServerReachable: jest.fn(() => true),
   getServerReachabilityChangedAt: jest.fn(() => null),
+  subscribeToServerReachability: jest.fn(() => () => {}),
 }));
 
 const mockUseOfflineContext = useOfflineContext as jest.MockedFunction<typeof useOfflineContext>;
 const mockIsServerReachable = isServerReachable as jest.MockedFunction<typeof isServerReachable>;
 const mockGetServerReachabilityChangedAt =
   getServerReachabilityChangedAt as jest.MockedFunction<typeof getServerReachabilityChangedAt>;
+const mockSubscribeToServerReachability =
+  subscribeToServerReachability as jest.MockedFunction<typeof subscribeToServerReachability>;
 
 describe('DiagnosticsScreen', () => {
+  // Captures the listener DiagnosticsScreen registers, so tests can simulate a
+  // reachability transition arriving while the screen is mounted.
+  let reachabilityListener: ((reachable: boolean) => void) | undefined;
+
   beforeEach(() => {
     jest.clearAllMocks();
+    reachabilityListener = undefined;
     mockUseOfflineContext.mockReturnValue(baseOfflineContext);
     mockIsServerReachable.mockReturnValue(true);
     mockGetServerReachabilityChangedAt.mockReturnValue(null);
+    mockSubscribeToServerReachability.mockImplementation((listener) => {
+      reachabilityListener = listener;
+      return () => {
+        reachabilityListener = undefined;
+      };
+    });
     jest.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction' } as never);
   });
 
@@ -94,6 +112,20 @@ describe('DiagnosticsScreen', () => {
   it('shows "Never" for last-successful-sync when no drain has succeeded yet', async () => {
     const { findAllByText } = await renderScreen();
     expect((await findAllByText('Never')).length).toBeGreaterThan(0);
+  });
+
+  it('updates the reachability row live when a transition arrives, without a manual refresh', async () => {
+    const { findByText, getAllByText, queryAllByText } = await renderScreen();
+    expect(getAllByText('Connected').length).toBeGreaterThan(0);
+    expect(queryAllByText('Disconnected').length).toBe(0);
+
+    mockGetServerReachabilityChangedAt.mockReturnValue('2026-07-12T10:00:00.000Z');
+    await act(async () => {
+      reachabilityListener?.(false);
+    });
+
+    expect(await findByText('Disconnected')).toBeTruthy();
+    expect(await findByText(new Date('2026-07-12T10:00:00.000Z').toLocaleString())).toBeTruthy();
   });
 
   it('includes server reachability, sync freshness, and dead-letter fields in the share report', async () => {

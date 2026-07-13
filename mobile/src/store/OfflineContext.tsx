@@ -54,10 +54,12 @@ interface OfflineContextValue {
    */
   lastSyncedAt: string | null;
   /**
-   * Consecutive stalled/failed drains since the last success (mirrors
-   * `failureCountRef`, the counter behind `syncError`'s cap). Surfaced in
-   * Diagnostics alongside `syncError` so it's clear *why* sync is stuck, not
-   * just that it is (#700).
+   * Current streak of stalled/failed drains (mirrors `failureCountRef`, the
+   * counter behind `syncError`'s cap). Resets to 0 on a successful drain, and
+   * also on a fresh trigger (reconnect, foreground, or a new write) even
+   * before that trigger's own drain has resolved — the same reset points as
+   * `syncError`. Surfaced in Diagnostics alongside `syncError` so it's clear
+   * *why* sync is stuck, not just that it is (#700).
    */
   consecutiveFailureCount: number;
 }

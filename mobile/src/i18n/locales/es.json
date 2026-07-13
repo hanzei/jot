@@ -501,7 +501,7 @@
     "syncOk": "Correcto",
     "syncFailed": "Fallido",
     "consecutiveFailures": "Fallos consecutivos",
-    "deadLetterCount": "Fallos de sincronización (dead letter)",
+    "deadLetterCount": "Fallos de sincronización permanentes",
     "server": "Servidor",
     "serverUrl": "URL",
     "generationId": "Generación de conexión",
