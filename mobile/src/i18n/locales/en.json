@@ -335,6 +335,7 @@
     "uploadQueuedToast": "Image will upload when you're back online",
     "retryUpload": "Retry uploading {{filename}}",
     "dismissUpload": "Dismiss {{filename}}",
+    "cancelUpload": "Cancel uploading {{filename}}",
     "errorWrongType": "Only images can be attached.",
     "errorTooLarge": "Image exceeds the {{maxMB}} MB limit.",
     "errorTooMany": "Notes can have up to {{max}} images."

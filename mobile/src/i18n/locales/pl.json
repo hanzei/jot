@@ -306,6 +306,7 @@
     "uploadQueuedToast": "Obraz zostanie wysłany, gdy wrócisz do sieci",
     "retryUpload": "Ponów wysyłanie {{filename}}",
     "dismissUpload": "Odrzuć {{filename}}",
+    "cancelUpload": "Anuluj wysyłanie {{filename}}",
     "errorWrongType": "Można dodawać tylko obrazy.",
     "errorTooLarge": "Obraz przekracza limit {{maxMB}} MB.",
     "errorTooMany": "Notatka może zawierać maksymalnie {{max}} obrazów."

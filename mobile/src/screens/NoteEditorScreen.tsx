@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, useContext } from 'react';
+import axios from 'axios';
 import {
   Animated,
   Easing,
@@ -412,6 +413,9 @@ export default function NoteEditorScreen() {
   pendingImageUploadsRef.current = pendingImageUploads;
   const imageUploadFilesRef = useRef(new Map<string, ImageUploadFile>());
   const activeImageUploadIdsRef = useRef(new Set<string>());
+  // Lets the gallery's cancel button abort an in-flight upload (issue #695).
+  // Only holds an entry while a request for that upload id is actually in flight.
+  const imageUploadAbortControllersRef = useRef(new Map<string, AbortController>());
 
   const displayedImages = useMemo(
     () => (existingNote?.images ?? []).filter((img) => !removedImageIds.has(img.id)),
@@ -426,6 +430,14 @@ export default function NoteEditorScreen() {
   }, [t]);
 
   const removeUploadTile = useCallback((uploadId: string) => {
+    // Abort a request actually in flight for this tile (the 'uploading'
+    // state's cancel button, issue #695) so a stalled/slow upload doesn't
+    // keep running after the user has dismissed its tile.
+    const controller = imageUploadAbortControllersRef.current.get(uploadId);
+    if (controller) {
+      controller.abort();
+      imageUploadAbortControllersRef.current.delete(uploadId);
+    }
     setImageUploads((prev) => prev.filter((u) => u.id !== uploadId));
     imageUploadFilesRef.current.delete(uploadId);
     // Only hits the DB when this tile had actually fallen back to the
@@ -451,15 +463,19 @@ export default function NoteEditorScreen() {
     // pressable state).
     if (activeImageUploadIdsRef.current.has(uploadId)) return;
     activeImageUploadIdsRef.current.add(uploadId);
+    const controller = new AbortController();
+    imageUploadAbortControllersRef.current.set(uploadId, controller);
     uploadImageMutation.mutateAsync({
       noteId: currentNoteId,
       uploadId,
       file,
+      signal: controller.signal,
       onProgress: (percent) => {
         setImageUploads((prev) => prev.map((u) => (u.id === uploadId ? { ...u, progress: percent } : u)));
       },
     }).then((result) => {
       activeImageUploadIdsRef.current.delete(uploadId);
+      imageUploadAbortControllersRef.current.delete(uploadId);
       // Either it uploaded, or it fell back to the persisted offline queue
       // (issue #618) — either way the ephemeral tile is done; a queued upload
       // is now rendered from `pendingImageUploads` instead, under the same id.
@@ -468,6 +484,10 @@ export default function NoteEditorScreen() {
       if (result.status === 'queued') showToast(t('images.uploadQueuedToast'), 'info');
     }).catch((error) => {
       activeImageUploadIdsRef.current.delete(uploadId);
+      imageUploadAbortControllersRef.current.delete(uploadId);
+      // A user-initiated cancel (the tile's cancel button, issue #695) has
+      // already dropped the tile in removeUploadTile — nothing left to do.
+      if (axios.isCancel(error)) return;
       console.error('Failed to upload note image:', error);
       const status = (error as { response?: { status?: number } })?.response?.status;
       const message = status === 413 ? t('images.errorTooLarge', { maxMB: IMAGE_MAX_MB }) : t('images.uploadFailed');
@@ -1164,6 +1184,10 @@ export default function NoteEditorScreen() {
   // Flush pending save on unmount (prevent data loss), skip if intentionally exiting
   useEffect(() => {
     isMountedRef.current = true;
+    // Captured once: the ref's Map identity never changes across the
+    // component's lifetime (only mutated in place), so reading it here and
+    // using it in the cleanup below sees the same, up-to-date entries.
+    const uploadAbortControllers = imageUploadAbortControllersRef.current;
     return () => {
       isMountedRef.current = false;
       if (debounceRef.current) {
@@ -1173,6 +1197,13 @@ export default function NoteEditorScreen() {
       if (!intentionalExitRef.current && hasPendingChangesRef.current) {
         flushInBackground();
       }
+      // Abort any uploads still in flight so they don't keep running in the
+      // background for up to the full timeout and fire state updates after
+      // this screen has unmounted (issue #695).
+      for (const controller of uploadAbortControllers.values()) {
+        controller.abort();
+      }
+      uploadAbortControllers.clear();
     };
   }, [flushInBackground]);
 
