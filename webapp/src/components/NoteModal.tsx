@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo, useRef, useCallback, type ReactElement } from 'react';
-import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, GripVertical, Pin } from 'lucide-react';
-import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react';
+import { useState, useEffect, useMemo, useRef, useCallback, type ReactElement, type ReactNode } from 'react';
+import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, GripVertical, Pin, EllipsisVertical } from 'lucide-react';
+import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, IMAGE_MAX_PER_NOTE, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListItems, listToText, type Note, type NoteType, type NoteImage, type CreateNoteRequest, type UpdateNoteRequest, type ConvertNoteTypeRequest, type PatchNoteItemRequest, type Label, type User, type Collaborator } from '@jot/shared';
 import { notes, images as imagesApi } from '@/utils/api';
@@ -35,6 +35,15 @@ import { CSS } from '@dnd-kit/utilities';
 
 // Undo window for a client-deferred note image removal (spec: ~10s).
 const IMAGE_REMOVE_UNDO_MS = 10_000;
+
+// Keyboard-shortcut hint chip shown at the trailing edge of overflow menu items.
+function MenuKbd({ children }: { children: ReactNode }) {
+  return (
+    <kbd aria-hidden="true" className="ml-2 inline-flex rounded border border-gray-300 dark:border-slate-600 bg-gray-100 dark:bg-slate-700 px-1.5 py-0.5 font-mono text-xs text-gray-500 dark:text-gray-400">
+      {children}
+    </kbd>
+  );
+}
 
 // Validation functions
 type TFunction = (key: string, opts?: Record<string, unknown>) => string;
@@ -2799,17 +2808,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                     >
                       <Image className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                     </button>
-                    {noteDeepLinkHref && (
-                      <a
-                        href={noteDeepLinkHref}
-                        className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                        title={t('nav.openMobileApp')}
-                        aria-label={t('nav.openMobileApp')}
-                        data-testid="note-open-mobile-app-toolbar-link"
-                      >
-                        <Smartphone className="h-5 w-5 text-gray-600 dark:text-gray-300" />
-                      </a>
-                    )}
                     <button
                       onClick={handlePinToggle}
                       className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
@@ -2833,45 +2831,91 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                         <Archive className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                       )}
                     </button>
-                    {isOwner && onShare && (
-                      <button
-                        onClick={() => onShare(note)}
-                        className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                        title={t('note.share')}
-                        aria-label={t('note.share')}
-                      >
-                        <UserPlus className="h-5 w-5 text-gray-600 dark:text-gray-300" />
-                      </button>
-                    )}
-                    {onDuplicate && (
-                      <button
-                        onClick={handleDuplicate}
-                        className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                        title={t('note.duplicate')}
-                        aria-label={t('note.duplicate')}
-                      >
-                        <Copy className="h-5 w-5 text-gray-600 dark:text-gray-300" />
-                      </button>
-                    )}
-                    {onConvert && (
-                      <button
-                        onClick={handleConvertClick}
-                        className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                        title={noteType === 'list' ? t('note.convertToText') : t('note.convertToList')}
-                        aria-label={noteType === 'list' ? t('note.convertToText') : t('note.convertToList')}
-                      >
-                        <ArrowLeftRight className="h-5 w-5 text-gray-600 dark:text-gray-300" />
-                      </button>
-                    )}
-                    {isOwner && onDelete && (
-                      <button
-                        onClick={handleDelete}
-                        className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                        title={t('note.delete')}
-                        aria-label={t('note.delete')}
-                      >
-                        <Trash2 className="h-5 w-5 text-gray-600 dark:text-gray-300" />
-                      </button>
+                    {/* Overflow menu — mirrors the mobile three-dot layout so the
+                        toolbar stays uncluttered as more actions are added. */}
+                    {(noteDeepLinkHref || (isOwner && onShare) || onDuplicate || onConvert || (isOwner && onDelete)) && (
+                      <Menu as="div" className="relative">
+                        <MenuButton
+                          onMouseDown={(e) => e.stopPropagation()}
+                          className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                          title={t('note.menuOptions')}
+                          aria-label={t('note.menuOptions')}
+                        >
+                          <EllipsisVertical className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                        </MenuButton>
+                        <MenuItems
+                          transition
+                          className="absolute left-0 bottom-full mb-1 w-56 origin-bottom-left bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black/5 dark:ring-slate-600/20 focus:outline-none z-20 border border-gray-200 dark:border-slate-600 transition duration-100 ease-out data-[closed]:scale-95 data-[closed]:opacity-0 motion-reduce:transition-none"
+                        >
+                          <div className="py-1">
+                            {noteDeepLinkHref && (
+                              <MenuItem>
+                                <a
+                                  href={noteDeepLinkHref}
+                                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700"
+                                  data-testid="note-open-mobile-app-toolbar-link"
+                                >
+                                  <Smartphone className="h-4 w-4 mr-2" />
+                                  {t('nav.openMobileApp')}
+                                </a>
+                              </MenuItem>
+                            )}
+                            {isOwner && onShare && (
+                              <MenuItem>
+                                <button
+                                  onClick={() => onShare(note)}
+                                  className="flex items-center justify-between w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700"
+                                >
+                                  <span className="flex items-center">
+                                    <UserPlus className="h-4 w-4 mr-2" />
+                                    {t('note.share')}
+                                  </span>
+                                  <MenuKbd>S</MenuKbd>
+                                </button>
+                              </MenuItem>
+                            )}
+                            {onDuplicate && (
+                              <MenuItem>
+                                <button
+                                  onClick={handleDuplicate}
+                                  className="flex items-center justify-between w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700"
+                                >
+                                  <span className="flex items-center">
+                                    <Copy className="h-4 w-4 mr-2" />
+                                    {t('note.duplicate')}
+                                  </span>
+                                  <MenuKbd>D</MenuKbd>
+                                </button>
+                              </MenuItem>
+                            )}
+                            {onConvert && (
+                              <MenuItem>
+                                <button
+                                  onClick={handleConvertClick}
+                                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700"
+                                >
+                                  <ArrowLeftRight className="h-4 w-4 mr-2" />
+                                  {noteType === 'list' ? t('note.convertToText') : t('note.convertToList')}
+                                </button>
+                              </MenuItem>
+                            )}
+                            {isOwner && onDelete && (
+                              <MenuItem>
+                                <button
+                                  onClick={handleDelete}
+                                  className="flex items-center justify-between w-full px-4 py-2 text-sm text-red-600 dark:text-red-400 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700"
+                                >
+                                  <span className="flex items-center">
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    {t('note.delete')}
+                                  </span>
+                                  <MenuKbd>Del</MenuKbd>
+                                </button>
+                              </MenuItem>
+                            )}
+                          </div>
+                        </MenuItems>
+                      </Menu>
                     )}
                   </>
                 )}

@@ -201,21 +201,34 @@ export class DashboardPage {
     await this.page.getByRole('menuitem', { name: 'Duplicate' }).click();
   }
 
-  async duplicateCurrentNoteFromModal() {
+  /**
+   * Opens the note modal's three-dot overflow menu (Share/Duplicate/Convert/
+   * Delete live here now, mirroring the mobile layout) and returns the active
+   * dialog for chaining menu-item clicks.
+   */
+  async openModalOverflowMenu(): Promise<Locator> {
     const activeDialog = this.page.getByRole('dialog').last();
-    await activeDialog.getByRole('button', { name: 'Duplicate' }).click();
+    const menuButton = activeDialog.getByRole('button', { name: 'Note options' });
+    await menuButton.click();
+    await expect(menuButton).toHaveAttribute('aria-expanded', 'true');
+    return activeDialog;
+  }
+
+  async duplicateCurrentNoteFromModal() {
+    const activeDialog = await this.openModalOverflowMenu();
+    await activeDialog.getByRole('menuitem', { name: 'Duplicate' }).click();
   }
 
   /** Converts the open text note to a list. Text -> list has no confirmation dialog. */
   async convertCurrentNoteToList() {
-    const activeDialog = this.page.getByRole('dialog').last();
-    await activeDialog.getByRole('button', { name: 'Convert to list' }).click();
+    const activeDialog = await this.openModalOverflowMenu();
+    await activeDialog.getByRole('menuitem', { name: 'Convert to list' }).click();
   }
 
   /** Converts the open list note to text, confirming the lossy-conversion dialog. */
   async convertCurrentNoteToText() {
-    const activeDialog = this.page.getByRole('dialog').last();
-    await activeDialog.getByRole('button', { name: 'Convert to text' }).click();
+    const activeDialog = await this.openModalOverflowMenu();
+    await activeDialog.getByRole('menuitem', { name: 'Convert to text' }).click();
     const confirmDialog = this.page.getByRole('dialog').last();
     await confirmDialog.getByRole('button', { name: 'Convert to text' }).click();
   }

@@ -525,7 +525,8 @@ test.describe('Notes', () => {
 
     await page.reload();
     await dashboardPage.openNote('Groceries List');
-    await page.getByRole('dialog').last().getByRole('button', { name: 'Convert to text' }).click();
+    const convertDialog = await dashboardPage.openModalOverflowMenu();
+    await convertDialog.getByRole('menuitem', { name: 'Convert to text' }).click();
     await expect(page.getByText(/lose the assignment of 1 item/)).toBeVisible();
     await page.getByRole('dialog').last().getByRole('button', { name: 'Convert to text' }).click();
     await expect(page.getByText('Note converted')).toBeVisible();

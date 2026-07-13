@@ -86,7 +86,18 @@ vi.mock('@headlessui/react', () => {
     <div className={className} data-testid="dialog-backdrop" />
   )
 
-  return { Dialog, DialogPanel, DialogTitle, DialogBackdrop }
+  // Overflow menu primitives are rendered eagerly (always expanded) so tests can
+  // query the menu items without opening the menu first.
+  const Menu = ({ children }: { children?: ReactNode }) => <div>{children}</div>
+  const MenuButton = ({ children, className, ...rest }: { children?: ReactNode; className?: string } & Record<string, unknown>) => (
+    <button className={className} {...rest}>{children}</button>
+  )
+  const MenuItems = ({ children, className }: { children?: ReactNode; className?: string }) => (
+    <div className={className}>{children}</div>
+  )
+  const MenuItem = ({ children }: { children?: ReactNode }) => <div>{children}</div>
+
+  return { Dialog, DialogPanel, DialogTitle, DialogBackdrop, Menu, MenuButton, MenuItems, MenuItem }
 })
 
 // Mock @dnd-kit components
