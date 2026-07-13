@@ -306,6 +306,7 @@
     "uploadQueuedToast": "L'image sera envoyée dès que vous serez de nouveau en ligne",
     "retryUpload": "Réessayer d'envoyer {{filename}}",
     "dismissUpload": "Ignorer {{filename}}",
+    "cancelUpload": "Annuler l'envoi de {{filename}}",
     "errorWrongType": "Seules les images peuvent être jointes.",
     "errorTooLarge": "L'image dépasse la limite de {{maxMB}} Mo.",
     "errorTooMany": "Une note peut contenir jusqu'à {{max}} images."

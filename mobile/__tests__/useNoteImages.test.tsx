@@ -1,6 +1,7 @@
 import React from 'react';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import axios from 'axios';
 import { useUploadNoteImage, useDeleteNoteImage } from '../src/hooks/useNoteImages';
 import { noteLocalQueryKey } from '../src/hooks/queryKeys';
 import * as imagesApi from '../src/api/images';
@@ -112,7 +113,7 @@ describe('useNoteImages hooks', () => {
       const outcome = await result.current.mutateAsync({ noteId: 'note-1', uploadId: 'upload-1', file });
 
       expect(outcome).toEqual({ status: 'uploaded', image });
-      expect(mockImagesApi.uploadNoteImage).toHaveBeenCalledWith('note-1', file, undefined);
+      expect(mockImagesApi.uploadNoteImage).toHaveBeenCalledWith('note-1', file, undefined, undefined);
       expect(mockNoteQueries.patchLocalNoteImages).toHaveBeenCalledWith(
         expect.anything(),
         'note-1',
@@ -193,7 +194,48 @@ describe('useNoteImages hooks', () => {
       const outcome = await result.current.mutateAsync({ noteId: 'note-1', uploadId: 'upload-1', file });
 
       expect(outcome).toEqual({ status: 'uploaded', image });
-      expect(mockImagesApi.uploadNoteImage).toHaveBeenCalledWith('note-1', file, undefined);
+      expect(mockImagesApi.uploadNoteImage).toHaveBeenCalledWith('note-1', file, undefined, undefined);
+      expect(mockEnqueueImageUpload).not.toHaveBeenCalled();
+    });
+
+    it('passes the caller-provided abort signal through to the upload request', async () => {
+      const image = makeImage();
+      mockImagesApi.uploadNoteImage.mockResolvedValueOnce(image);
+      const { result } = renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
+      const file = { uri: 'file:///photo.png', name: 'photo.png', mimeType: 'image/png' };
+      const controller = new AbortController();
+
+      await result.current.mutateAsync({ noteId: 'note-1', uploadId: 'upload-1', file, signal: controller.signal });
+
+      expect(mockImagesApi.uploadNoteImage).toHaveBeenCalledWith('note-1', file, undefined, controller.signal);
+    });
+
+    it('propagates a cancelled upload without queuing it or converting it into a permanent error (issue #695)', async () => {
+      const controller = new AbortController();
+      const cancelError = new axios.CanceledError('canceled');
+      mockImagesApi.uploadNoteImage.mockRejectedValueOnce(cancelError);
+
+      const { result } = renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
+      const file = { uri: 'file:///photo.png', name: 'photo.png', mimeType: 'image/png' };
+
+      await expect(
+        result.current.mutateAsync({ noteId: 'note-1', uploadId: 'upload-1', file, signal: controller.signal }),
+      ).rejects.toBe(cancelError);
+      expect(mockNoteQueries.patchLocalNoteImages).not.toHaveBeenCalled();
+      expect(mockEnqueueImageUpload).not.toHaveBeenCalled();
+    });
+
+    it('propagates a cancelled upload as-is even in local mode', async () => {
+      mockIsLocalModeActive.mockReturnValue(true);
+      const cancelError = new axios.CanceledError('canceled');
+      mockImagesApi.uploadNoteImage.mockRejectedValueOnce(cancelError);
+
+      const { result } = renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
+      const file = { uri: 'file:///photo.png', name: 'photo.png', mimeType: 'image/png' };
+
+      await expect(
+        result.current.mutateAsync({ noteId: 'note-1', uploadId: 'upload-1', file }),
+      ).rejects.toBe(cancelError);
       expect(mockEnqueueImageUpload).not.toHaveBeenCalled();
     });
   });

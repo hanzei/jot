@@ -335,6 +335,7 @@
     "uploadQueuedToast": "De afbeelding wordt geüpload zodra je weer online bent",
     "retryUpload": "{{filename}} opnieuw uploaden",
     "dismissUpload": "{{filename}} negeren",
+    "cancelUpload": "Uploaden van {{filename}} annuleren",
     "errorWrongType": "Er kunnen alleen afbeeldingen worden toegevoegd.",
     "errorTooLarge": "De afbeelding overschrijdt de limiet van {{maxMB}} MB.",
     "errorTooMany": "Notities kunnen tot {{max}} afbeeldingen bevatten."

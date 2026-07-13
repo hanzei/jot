@@ -139,6 +139,29 @@ describe('NoteImageGallery', () => {
       expect(getByText('Uploading… 42%')).toBeTruthy();
     });
 
+    it('lets an in-flight upload be cancelled from its tile (issue #695)', () => {
+      const onDismissUpload = jest.fn();
+      const { getByTestId } = render(
+        <NoteImageGallery
+          images={[]}
+          editable
+          uploads={[makeUpload({ progress: 42 })]}
+          onDismissUpload={onDismissUpload}
+        />,
+      );
+
+      fireEvent.press(getByTestId('dismiss-upload-upload-1'));
+
+      expect(onDismissUpload).toHaveBeenCalledWith('upload-1');
+    });
+
+    it('does not render a cancel button on an uploading tile without an onDismissUpload handler', () => {
+      const { queryByTestId } = render(
+        <NoteImageGallery images={[]} editable uploads={[makeUpload({ progress: 42 })]} />,
+      );
+      expect(queryByTestId('dismiss-upload-upload-1')).toBeNull();
+    });
+
     it('renders an errored upload with retry and dismiss actions', () => {
       const onRetryUpload = jest.fn();
       const onDismissUpload = jest.fn();

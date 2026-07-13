@@ -335,6 +335,7 @@
     "uploadQueuedToast": "L'immagine verrà caricata quando sarai di nuovo online",
     "retryUpload": "Riprova a caricare {{filename}}",
     "dismissUpload": "Ignora {{filename}}",
+    "cancelUpload": "Annulla il caricamento di {{filename}}",
     "errorWrongType": "È possibile allegare solo immagini.",
     "errorTooLarge": "L'immagine supera il limite di {{maxMB}} MB.",
     "errorTooMany": "Le note possono contenere fino a {{max}} immagini."
