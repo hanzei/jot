@@ -1,9 +1,16 @@
 import React from 'react';
 import { Alert } from 'react-native';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { fireEvent, render, waitFor, act } from '@testing-library/react-native';
 import type { DrawerContentComponentProps } from '@react-navigation/drawer';
 import DrawerContent from '../src/components/DrawerContent';
+import { ConfirmContext } from '../src/hooks/useConfirm';
 import type { Label } from '@jot/shared';
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => { resolve = res; });
+  return { promise, resolve };
+}
 
 const mockSwitchActiveServer = jest.fn();
 const mockRevalidateSession = jest.fn(async () => true);
@@ -46,13 +53,31 @@ jest.mock('../src/components/UserAvatar', () => ({
   },
 }));
 
-jest.mock('../src/hooks/useLabels', () => ({
-  useLabels: () => ({ data: mockLabelsData }),
-  useLabelCounts: () => ({ data: mockLabelCountsData }),
-  useCreateLabel: () => ({ mutateAsync: mockCreateLabelMutateAsync, isPending: false }),
-  useRenameLabel: () => ({ mutateAsync: mockRenameLabelMutateAsync, isPending: false }),
-  useDeleteLabel: () => ({ mutateAsync: mockDeleteLabelMutateAsync, isPending: false }),
-}));
+jest.mock('../src/hooks/useLabels', () => {
+  const ReactActual = jest.requireActual('react');
+  // Mirrors react-query's isPending: true only while the mock's promise is
+  // in flight, so tests can drive a real pending -> resolved transition with a
+  // deferred promise instead of a static flag (#698).
+  function useTrackedMutation(mutateAsyncMock: (...args: unknown[]) => Promise<unknown>) {
+    const [isPending, setIsPending] = ReactActual.useState(false);
+    const mutateAsync = ReactActual.useCallback(async (...args: unknown[]) => {
+      setIsPending(true);
+      try {
+        return await mutateAsyncMock(...args);
+      } finally {
+        setIsPending(false);
+      }
+    }, [mutateAsyncMock]);
+    return { mutateAsync, isPending };
+  }
+  return {
+    useLabels: () => ({ data: mockLabelsData }),
+    useLabelCounts: () => ({ data: mockLabelCountsData }),
+    useCreateLabel: () => useTrackedMutation(mockCreateLabelMutateAsync),
+    useRenameLabel: () => useTrackedMutation(mockRenameLabelMutateAsync),
+    useDeleteLabel: () => useTrackedMutation(mockDeleteLabelMutateAsync),
+  };
+});
 
 jest.mock('../src/theme/ThemeContext', () => ({
   useTheme: () => ({
@@ -401,6 +426,126 @@ describe('DrawerContent', () => {
       expect(mockCreateLabelMutateAsync).toHaveBeenCalledWith({ name: 'Errands' });
     });
     expect(alertSpy).toHaveBeenCalledWith('labels.createSuccess');
+  });
+
+  it('shows a pending spinner on the create-label submit button while the write is in flight (#698)', async () => {
+    const { promise, resolve } = deferred<Label>();
+    mockCreateLabelMutateAsync.mockReturnValue(promise);
+    const props = makeProps();
+
+    const { getByTestId, queryByTestId } = render(<DrawerContent {...props} />);
+
+    fireEvent.press(getByTestId('drawer-label-create'));
+    fireEvent.changeText(getByTestId('create-label-input'), 'Errands');
+    fireEvent.press(getByTestId('create-label-submit'));
+
+    await waitFor(() => {
+      expect(getByTestId('create-label-submit-spinner')).toBeTruthy();
+    });
+
+    await act(async () => {
+      resolve({
+        id: 'label-new',
+        user_id: 'user-1',
+        name: 'Errands',
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z',
+      });
+    });
+
+    await waitFor(() => {
+      expect(queryByTestId('create-label-submit-spinner')).toBeNull();
+    });
+  });
+
+  it('shows a pending spinner on the rename-label submit button while the write is in flight (#698)', async () => {
+    mockLabelsData.push({
+      id: 'label-1',
+      user_id: 'user-1',
+      name: 'Work',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    });
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
+    const { promise, resolve } = deferred<Label>();
+    mockRenameLabelMutateAsync.mockReturnValue(promise);
+    const props = makeProps();
+
+    const { getByTestId, queryByTestId } = render(<DrawerContent {...props} />);
+
+    fireEvent.press(getByTestId('drawer-label-menu-label-1'));
+    const renameButton = (alertSpy.mock.calls[0]?.[2] as Array<{ text?: string; onPress?: () => void }>).find(
+      (button) => button.text === 'labels.rename',
+    );
+    act(() => { renameButton?.onPress?.(); });
+
+    fireEvent.changeText(getByTestId('rename-label-input'), 'Personal');
+    fireEvent.press(getByTestId('rename-label-submit'));
+
+    await waitFor(() => {
+      expect(getByTestId('rename-label-submit-spinner')).toBeTruthy();
+    });
+
+    await act(async () => {
+      resolve({
+        id: 'label-1',
+        user_id: 'user-1',
+        name: 'Personal',
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z',
+      });
+    });
+
+    await waitFor(() => {
+      expect(queryByTestId('rename-label-submit-spinner')).toBeNull();
+    });
+  });
+
+  it('shows a pending spinner on the label row while deleting, instead of leaving it with no feedback (#698)', async () => {
+    mockLabelsData.push({
+      id: 'label-1',
+      user_id: 'user-1',
+      name: 'Work',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    });
+    jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
+    const { promise, resolve } = deferred<void>();
+    mockDeleteLabelMutateAsync.mockReturnValue(promise);
+    const props = makeProps();
+
+    const { getByTestId, queryByTestId } = render(
+      <ConfirmContext.Provider value={{ confirm: async () => true }}>
+        <DrawerContent {...props} />
+      </ConfirmContext.Provider>,
+    );
+
+    fireEvent.press(getByTestId('drawer-label-menu-label-1'));
+    const alertCall = (Alert.alert as jest.Mock).mock.calls[0];
+    const deleteButton = (alertCall?.[2] as Array<{ text?: string; onPress?: () => void }>).find(
+      (button) => button.text === 'labels.delete',
+    );
+
+    await act(async () => {
+      deleteButton?.onPress?.();
+    });
+
+    await waitFor(() => {
+      expect(getByTestId('drawer-label-deleting-label-1')).toBeTruthy();
+    });
+    expect(queryByTestId('drawer-label-menu-label-1')).toBeNull();
+    expect(getByTestId('drawer-label-label-1').props.accessibilityState).toEqual(
+      expect.objectContaining({ disabled: true }),
+    );
+
+    await act(async () => {
+      resolve();
+    });
+
+    await waitFor(() => {
+      expect(queryByTestId('drawer-label-deleting-label-1')).toBeNull();
+    });
+    expect(getByTestId('drawer-label-menu-label-1')).toBeTruthy();
   });
 
   const serverEntries = [

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Modal, Pressable, TextInput, TouchableOpacity } from 'react-native';
+import { View, Text, Modal, Pressable, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../theme/ThemeContext';
 import { styles } from './styles';
@@ -73,10 +73,13 @@ export default function CreateLabelModal({
               onPress={onSubmit}
               disabled={!value.trim() || isPending}
               testID="create-label-submit"
+              accessibilityState={{ disabled: !value.trim() || isPending, busy: isPending }}
             >
-              <Text style={styles.modalPrimaryText}>
-                {isPending ? t('settings.saving') : t('labels.createSave')}
-              </Text>
+              {isPending ? (
+                <ActivityIndicator size="small" color="#fff" testID="create-label-submit-spinner" />
+              ) : (
+                <Text style={styles.modalPrimaryText}>{t('labels.createSave')}</Text>
+              )}
             </TouchableOpacity>
           </View>
         </Pressable>

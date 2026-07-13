@@ -34,6 +34,11 @@ export default function LabelPicker({
   onLabelsChanged,
 }: LabelPickerProps) {
   const [newLabelText, setNewLabelText] = useState('');
+  // id of the label row currently being toggled and whether a brand-new label
+  // is being created, so the affected row/button can show a spinner instead of
+  // silently sitting for up to the ~5s write timeout (#698).
+  const [togglingLabelId, setTogglingLabelId] = useState<string | null>(null);
+  const [isCreatingLabel, setIsCreatingLabel] = useState(false);
   const { colors } = useTheme();
   const { t } = useTranslation();
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
@@ -46,6 +51,7 @@ export default function LabelPicker({
 
   const handleToggleLabel = async (label: Label) => {
     if (isMutating) return;
+    setTogglingLabelId(label.id);
     try {
       if (noteLabelIds.has(label.id)) {
         await removeLabel.mutateAsync({ noteId, labelId: label.id });
@@ -55,18 +61,23 @@ export default function LabelPicker({
       onLabelsChanged?.();
     } catch {
       Alert.alert(t('common.error'), t('labels.failedUpdate'));
+    } finally {
+      setTogglingLabelId(null);
     }
   };
 
   const handleAddNewLabel = async () => {
     const name = newLabelText.trim();
     if (!name || isMutating) return;
+    setIsCreatingLabel(true);
     try {
       await addLabel.mutateAsync({ noteId, name });
       setNewLabelText('');
       onLabelsChanged?.();
     } catch {
       Alert.alert(t('common.error'), t('labels.failedCreate'));
+    } finally {
+      setIsCreatingLabel(false);
     }
   };
 
@@ -94,8 +105,11 @@ export default function LabelPicker({
                     onPress={() => handleToggleLabel(label)}
                     disabled={isMutating}
                     testID={`label-item-${label.id}`}
+                    accessibilityState={{ checked: noteLabelIds.has(label.id), busy: togglingLabelId === label.id }}
                   >
-                    {noteLabelIds.has(label.id) ? (
+                    {togglingLabelId === label.id ? (
+                      <ActivityIndicator size="small" color={colors.primary} testID={`label-item-${label.id}-spinner`} />
+                    ) : noteLabelIds.has(label.id) ? (
                       <SquareCheck size={22} color={colors.primary} />
                     ) : (
                       <Square size={22} color={colors.iconMuted} />
@@ -123,13 +137,18 @@ export default function LabelPicker({
               <TouchableOpacity
                 style={[styles.addBtn, !newLabelText.trim() && styles.addBtnDisabled]}
                 onPress={handleAddNewLabel}
-                disabled={!newLabelText.trim()}
+                disabled={!newLabelText.trim() || isMutating}
                 testID="add-label-btn"
+                accessibilityState={{ disabled: !newLabelText.trim() || isMutating, busy: isCreatingLabel }}
               >
-                <Plus
-                  size={22}
-                  color={newLabelText.trim() ? colors.primary : colors.iconMuted}
-                />
+                {isCreatingLabel ? (
+                  <ActivityIndicator size="small" color={colors.primary} testID="add-label-btn-spinner" />
+                ) : (
+                  <Plus
+                    size={22}
+                    color={newLabelText.trim() ? colors.primary : colors.iconMuted}
+                  />
+                )}
               </TouchableOpacity>
             </View>
           </Pressable>
