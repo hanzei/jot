@@ -220,7 +220,10 @@ handling and loop safety are two halves of the same system.)
   a pending indicator while the server is reachable and skipping it (the write
   already resolves via the local/queue path) when it's known unreachable. The
   same class of bug on the label-picker screen's own actions (creating,
-  renaming, deleting a label) is a different surface and remains open in #698.
+  renaming, deleting a label) was a different surface, fixed in #698 by
+  surfacing a spinner on the affected row/button (drawer label create/rename
+  modals, the deleted label's row, and the label-picker toggle/add controls)
+  instead of leaving them to sit silently for the write timeout.
 - **Unbounded read retries that ignore reachability** — `retrySync` used to
   hammer a down server for ~67 s; fixed in #699 by consulting
   `isServerReachable()` and capping `SYNC_RETRY_MAX_ATTEMPTS` at 2 (~31 s
