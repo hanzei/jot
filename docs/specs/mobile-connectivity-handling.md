@@ -214,12 +214,13 @@ handling and loop safety are two halves of the same system.)
 - **A blocking network call that could be optimistic** — logout waits ~15 s on a
   down server before clearing the local session (issue #696).
 - **Awaiting a write, then navigating, with no feedback** — menu/action handlers
-  freeze ~5 s with no spinner; fixed for the note-editor's overflow-menu actions
-  (move to trash, restore, delete-forever, convert, share, manage labels,
-  redirect-share) in #697 by showing a pending indicator while the server is
-  reachable and skipping it (the write already resolves via the local/queue
-  path) when it's known unreachable. #698 (label-management actions, a
-  different surface) remains open.
+  freeze ~5 s with no spinner; fixed in #697 for the note-editor's own
+  overflow-menu actions (move to trash, restore, delete-forever, convert,
+  share, and the "Manage labels" entry that opens the label picker) by showing
+  a pending indicator while the server is reachable and skipping it (the write
+  already resolves via the local/queue path) when it's known unreachable. The
+  same class of bug on the label-picker screen's own actions (creating,
+  renaming, deleting a label) is a different surface and remains open in #698.
 - **Unbounded read retries that ignore reachability** — `retrySync` hammers a
   down server for ~67 s (issue #699).
 - **Conflating device connectivity with server reachability** — the umbrella

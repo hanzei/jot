@@ -809,13 +809,27 @@ export default function NoteEditorScreen() {
   // request of a fresh outage), the write may genuinely block for up to the
   // write timeout, so surface that wait instead of leaving the screen looking
   // frozen (issue #697).
+  //
+  // pendingCountRef tracks overlapping calls (e.g. Pin and Archive tapped in
+  // quick succession — only the overflow menu button is disabled while
+  // pending, so other toolbar actions can still start one of these). The
+  // indicator only clears once every in-flight call has finished, so one
+  // call's finally doesn't hide the spinner while a sibling call is still
+  // awaiting its write.
+  const pendingCountRef = useRef(0);
   const withPendingIndicator = useCallback(async <T,>(fn: () => Promise<T>): Promise<T> => {
     const showPending = isServerReachable();
-    if (showPending) setIsMenuActionPending(true);
+    if (showPending) {
+      pendingCountRef.current += 1;
+      setIsMenuActionPending(true);
+    }
     try {
       return await fn();
     } finally {
-      if (showPending && isMountedRef.current) setIsMenuActionPending(false);
+      if (showPending) {
+        pendingCountRef.current -= 1;
+        if (pendingCountRef.current === 0 && isMountedRef.current) setIsMenuActionPending(false);
+      }
     }
   }, []);
 

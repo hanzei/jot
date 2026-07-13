@@ -109,10 +109,16 @@ jest.mock('../src/store/serverAccounts', () => ({
   getActiveServer: () => mockGetActiveServer(),
 }));
 
-jest.mock('../src/components/LabelPicker', () => ({
-  __esModule: true,
-  default: () => null,
-}));
+// Render a detectable marker only while the picker is visible so tests can
+// assert the save-first flow actually opened it.
+jest.mock('../src/components/LabelPicker', () => {
+  const { Text } = jest.requireActual('react-native');
+  return {
+    __esModule: true,
+    default: ({ visible }: { visible: boolean }) =>
+      visible ? <Text testID="label-picker-open" /> : null,
+  };
+});
 
 jest.mock('react-i18next', () => {
   // Stable `t` identity across renders, mirroring production: an unstable `t`
@@ -311,6 +317,46 @@ describe('NoteEditorScreen menu-action pending indicator (#697)', () => {
 
       await act(async () => { resolve({}); });
       await waitFor(() => { expect(mockNavigate).toHaveBeenCalledWith('Share', { noteId: 'note-1' }); });
+    });
+  });
+
+  describe('manage labels (withSavedNote)', () => {
+    it('shows the pending indicator while a pending edit is flushed before opening the label picker', async () => {
+      const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
+      const { promise, resolve } = deferred<Record<string, unknown>>();
+      mockUpdateMutateAsync.mockReturnValue(promise);
+
+      fireEvent.press(getByTestId('content-preview'));
+      fireEvent.changeText(getByTestId('note-content-input'), 'Existing content, edited');
+
+      fireEvent.press(getByTestId('toolbar-menu-btn'));
+      fireEvent.press(getByTestId('editor-menu-label'));
+
+      await waitFor(() => { expect(getByTestId('menu-action-pending')).toBeTruthy(); });
+      expect(queryByTestId('label-picker-open')).toBeNull();
+
+      await act(async () => { resolve({}); });
+
+      await waitFor(() => { expect(queryByTestId('menu-action-pending')).toBeNull(); });
+      expect(getByTestId('label-picker-open')).toBeTruthy();
+    });
+
+    it('does not show the pending indicator when known unreachable', async () => {
+      markServerUnreachable();
+      const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
+      const { promise, resolve } = deferred<Record<string, unknown>>();
+      mockUpdateMutateAsync.mockReturnValue(promise);
+
+      fireEvent.press(getByTestId('content-preview'));
+      fireEvent.changeText(getByTestId('note-content-input'), 'Existing content, edited');
+
+      fireEvent.press(getByTestId('toolbar-menu-btn'));
+      fireEvent.press(getByTestId('editor-menu-label'));
+
+      expect(queryByTestId('menu-action-pending')).toBeNull();
+
+      await act(async () => { resolve({}); });
+      await waitFor(() => { expect(getByTestId('label-picker-open')).toBeTruthy(); });
     });
   });
 
