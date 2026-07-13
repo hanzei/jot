@@ -1033,6 +1033,10 @@ export default function NoteEditorScreen() {
   // Flush pending save on unmount (prevent data loss), skip if intentionally exiting
   useEffect(() => {
     isMountedRef.current = true;
+    // Captured once: the ref's Map identity never changes across the
+    // component's lifetime (only mutated in place), so reading it here and
+    // using it in the cleanup below sees the same, up-to-date entries.
+    const uploadAbortControllers = imageUploadAbortControllersRef.current;
     return () => {
       isMountedRef.current = false;
       if (debounceRef.current) {
@@ -1042,6 +1046,13 @@ export default function NoteEditorScreen() {
       if (!intentionalExitRef.current && hasPendingChangesRef.current) {
         flushInBackground();
       }
+      // Abort any uploads still in flight so they don't keep running in the
+      // background for up to the full timeout and fire state updates after
+      // this screen has unmounted (issue #695).
+      for (const controller of uploadAbortControllers.values()) {
+        controller.abort();
+      }
+      uploadAbortControllers.clear();
     };
   }, [flushInBackground]);
 
