@@ -73,6 +73,7 @@ export default function CreateLabelModal({
               onPress={onSubmit}
               disabled={!value.trim() || isPending}
               testID="create-label-submit"
+              accessibilityLabel={t('labels.createSave')}
               accessibilityState={{ disabled: !value.trim() || isPending, busy: isPending }}
             >
               {isPending ? (

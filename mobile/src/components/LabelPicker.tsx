@@ -105,6 +105,7 @@ export default function LabelPicker({
                     onPress={() => handleToggleLabel(label)}
                     disabled={isMutating}
                     testID={`label-item-${label.id}`}
+                    accessibilityRole="checkbox"
                     accessibilityState={{ checked: noteLabelIds.has(label.id), busy: togglingLabelId === label.id }}
                   >
                     {togglingLabelId === label.id ? (

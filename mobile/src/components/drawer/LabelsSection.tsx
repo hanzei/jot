@@ -14,9 +14,9 @@ interface LabelsSectionProps {
   onOpenRenameModal: (label: Label) => void;
   onDeleteLabel: (label: Label) => void;
   onCreateLabelPress: () => void;
-  /** id of the label currently being deleted, so its row can show a spinner
+  /** ids of labels currently being deleted, so each row can show a spinner
       instead of sitting with no feedback for the ~5s write timeout (#698). */
-  deletingLabelId: string | null;
+  deletingLabelIds: Set<string>;
 }
 
 export default function LabelsSection({
@@ -27,7 +27,7 @@ export default function LabelsSection({
   onOpenRenameModal,
   onDeleteLabel,
   onCreateLabelPress,
-  deletingLabelId,
+  deletingLabelIds,
 }: LabelsSectionProps) {
   const { t } = useTranslation();
   const { colors } = useTheme();
@@ -74,7 +74,7 @@ export default function LabelsSection({
           <View style={[styles.navDivider, { backgroundColor: colors.divider }]} />
           {labels.map((label) => {
             const isActive = activeLabelId === label.id;
-            const isDeleting = deletingLabelId === label.id;
+            const isDeleting = deletingLabelIds.has(label.id);
             const labelCount = labelCounts?.[label.id] ?? 0;
             const labelAccessibilityName = `${label.name}, ${labelCount}`;
             return (

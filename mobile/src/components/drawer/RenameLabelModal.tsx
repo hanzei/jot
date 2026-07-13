@@ -74,6 +74,7 @@ export default function RenameLabelModal({
               onPress={onSubmit}
               disabled={!value.trim() || isPending}
               testID="rename-label-submit"
+              accessibilityLabel={t('labels.renameSave')}
               accessibilityState={{ disabled: !value.trim() || isPending, busy: isPending }}
             >
               {isPending ? (
