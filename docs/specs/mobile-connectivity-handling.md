@@ -221,8 +221,10 @@ handling and loop safety are two halves of the same system.)
   already resolves via the local/queue path) when it's known unreachable. The
   same class of bug on the label-picker screen's own actions (creating,
   renaming, deleting a label) is a different surface and remains open in #698.
-- **Unbounded read retries that ignore reachability** — `retrySync` hammers a
-  down server for ~67 s (issue #699).
+- **Unbounded read retries that ignore reachability** — `retrySync` used to
+  hammer a down server for ~67 s; fixed in #699 by consulting
+  `isServerReachable()` and capping `SYNC_RETRY_MAX_ATTEMPTS` at 2 (~31 s
+  worst case, near-immediate on a known-down server).
 - **Conflating device connectivity with server reachability** — the umbrella
   cause; if you find code branching only on `isConnected` for a *write*, it
   probably wants `isOnlineWriteAllowed()`.

@@ -126,9 +126,9 @@ describe('background read-sync retry', () => {
 
     renderHook(() => useOfflineNotes(), { wrapper: createWrapper() });
 
-    await act(async () => { await jest.advanceTimersByTimeAsync(60000 * 4); });
-    // 4 attempts (initial + 3 retries), then give up without writing.
-    expect(mockNotesApi.getNotes).toHaveBeenCalledTimes(4);
+    await act(async () => { await jest.advanceTimersByTimeAsync(60000 * 2); });
+    // 2 attempts (initial + 1 retry), then give up without writing.
+    expect(mockNotesApi.getNotes).toHaveBeenCalledTimes(2);
     expect(mockSyncQueue.saveServerNotesScope).not.toHaveBeenCalled();
     expect(warnSpy).toHaveBeenCalledWith('Background notes sync failed after retries:', expect.anything());
     warnSpy.mockRestore();
