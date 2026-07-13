@@ -200,6 +200,12 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       setSyncError(true);
       return;
     }
+    // Logged per attempt (capped at MAX_CONSECUTIVE_DRAIN_FAILURES, so at most
+    // a handful of lines) so a "share diagnostics" log trail shows the retry
+    // progression, not just the final consecutiveFailureCount snapshot (#700).
+    console.warn(
+      `Queue drain stalled (attempt ${failureCountRef.current}/${MAX_CONSECUTIVE_DRAIN_FAILURES}); retrying with backoff.`,
+    );
     const delay = Math.min(
       DRAIN_BACKOFF_BASE_MS * 2 ** (failureCountRef.current - 1),
       DRAIN_BACKOFF_MAX_MS,
@@ -288,6 +294,15 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
         stalled = true;
         onDrainStalled();
       } else {
+        // Only log a recovery when there was actually a failure streak to
+        // recover from — logging every routine successful drain (the common
+        // case, firing on nearly every enqueue) would drown out everything
+        // else in the log buffer (#700).
+        if (failureCountRef.current > 0) {
+          console.info(
+            `Queue drain succeeded after ${failureCountRef.current} failed attempt(s); sync recovered.`,
+          );
+        }
         failureCountRef.current = 0;
         setConsecutiveFailureCount(0);
         clearDrainTimer();

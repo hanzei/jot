@@ -58,4 +58,23 @@ describe('serverReachability', () => {
     expect(secondChange).not.toBeNull();
     expect(secondChange).not.toBe(firstChange);
   });
+
+  it('logs a transition (but not a no-op call) so a diagnostics report has a timeline, not just a snapshot', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {});
+
+    markServerUnreachable();
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(infoSpy).not.toHaveBeenCalled();
+
+    // A redundant call (already unreachable) must not log again.
+    markServerUnreachable();
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+
+    markServerReachable();
+    expect(infoSpy).toHaveBeenCalledTimes(1);
+
+    warnSpy.mockRestore();
+    infoSpy.mockRestore();
+  });
 });

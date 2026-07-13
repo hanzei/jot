@@ -49,6 +49,14 @@ function setReachable(next: boolean): void {
   if (serverReachable === next) return;
   serverReachable = next;
   lastChangedAt = new Date().toISOString();
+  // Log the transition (not just the current belief) so a "share diagnostics"
+  // report's log trail shows when/how often the server flapped, not just its
+  // current state (#700).
+  if (next) {
+    console.info('Server reachability: server is reachable again.');
+  } else {
+    console.warn('Server reachability: server became unreachable.');
+  }
   for (const listener of listeners) listener(next);
 }
 
