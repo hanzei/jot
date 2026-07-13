@@ -16,8 +16,15 @@ type ReconnectResyncListener = () => void;
 const listeners = new Set<ReconnectResyncListener>();
 
 export function publishReconnectResync(): void {
+  // Isolate each listener: one throwing synchronously must not abort iteration
+  // (which would drop the resync for every later subscriber — notes, labels, or
+  // users) or propagate to the SSE status callback that publishes this.
   for (const listener of listeners) {
-    listener();
+    try {
+      listener();
+    } catch (err) {
+      console.warn('Reconnect-resync listener threw:', err);
+    }
   }
 }
 

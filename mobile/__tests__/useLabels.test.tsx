@@ -493,4 +493,33 @@ describe('useLabels catch-up on SSE reconnect', () => {
     });
     expect(mockLabelsApi.getLabels).toHaveBeenCalledTimes(2);
   });
+
+  it('skips a concurrent resync while one is already in flight (Sync Loop Safety)', async () => {
+    let resolveGet: (() => void) | undefined;
+    mockLabelsApi.getLabels.mockImplementation(
+      () => new Promise((resolve) => { resolveGet = () => resolve([]); }),
+    );
+    renderHook(() => useLabels(), { wrapper: createWrapper() });
+
+    // The mount-time sync is now in flight (getLabels pending).
+    await waitFor(() => expect(mockLabelsApi.getLabels).toHaveBeenCalledTimes(1));
+
+    // A resync arriving mid-flight is skipped rather than firing a second fetch.
+    await act(async () => {
+      publishReconnectResync();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(mockLabelsApi.getLabels).toHaveBeenCalledTimes(1);
+
+    // Once the in-flight sync completes, a later resync runs normally.
+    await act(async () => {
+      resolveGet?.();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    await act(async () => {
+      publishReconnectResync();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(mockLabelsApi.getLabels).toHaveBeenCalledTimes(2);
+  });
 });

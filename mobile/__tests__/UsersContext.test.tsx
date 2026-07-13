@@ -111,4 +111,37 @@ describe('UsersContext catch-up on SSE reconnect', () => {
     });
     expect(mockGetUsers).toHaveBeenCalledTimes(2);
   });
+
+  it('skips a concurrent load while one is already in flight (Sync Loop Safety)', async () => {
+    let resolveGet: ((users: User[]) => void) | undefined;
+    mockGetUsers.mockImplementation(
+      () => new Promise<User[]>((resolve) => { resolveGet = resolve; }),
+    );
+    render(
+      <UsersProvider>
+        <Probe />
+      </UsersProvider>,
+    );
+
+    // The mount-time load is now in flight (getUsers pending).
+    await waitFor(() => expect(mockGetUsers).toHaveBeenCalledTimes(1));
+
+    // A resync arriving mid-flight is skipped rather than firing a second load.
+    await act(async () => {
+      publishReconnectResync();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(mockGetUsers).toHaveBeenCalledTimes(1);
+
+    // Once the in-flight load completes, a later resync runs normally.
+    await act(async () => {
+      resolveGet?.([]);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    await act(async () => {
+      publishReconnectResync();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(mockGetUsers).toHaveBeenCalledTimes(2);
+  });
 });

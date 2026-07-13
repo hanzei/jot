@@ -100,6 +100,10 @@ function useBackgroundSyncQuery<T>(
   const { isConnected } = useNetworkStatus();
   const isConnectedRef = useRef(isConnected);
   isConnectedRef.current = isConnected;
+  // Re-entrancy guard: skip a resync while one is already running so the online
+  // effect and the SSE-reconnect subscription can't start duplicate refreshes
+  // (Sync Loop Safety), mirroring useOfflineNotes.
+  const isSyncingRef = useRef(false);
 
   const query = useQuery<T>({
     queryKey: getQueryKey(),
@@ -112,6 +116,8 @@ function useBackgroundSyncQuery<T>(
     // Local mode has no server to read from; keep the local cache and skip the
     // background resync entirely (issue #514).
     if (isLocalModeActive()) return;
+    if (isSyncingRef.current) return;
+    isSyncingRef.current = true;
     const key = getQueryKey();
     try {
       const data = await retrySync(serverFn, {
@@ -124,6 +130,8 @@ function useBackgroundSyncQuery<T>(
       if (err instanceof SyncAbortedError) return;
       // Retries exhausted (or a permanent error): local cache remains.
       console.warn('Background sync failed after retries:', err);
+    } finally {
+      isSyncingRef.current = false;
     }
   }, [queryClient, getQueryKey, serverFn]);
 
