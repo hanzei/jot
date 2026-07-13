@@ -55,7 +55,11 @@ load-bearing rules:
   state (banners, the failed-note badge), not blocking dialogs. Distinguish *transient*
   (queued, will retry) from *permanent* (a real error to show the user).
 - **Recovery + loop safety.** Re-arm reachability on any successful response / SSE reopen
-  / device reconnect, then drain. Retries follow the **Sync Loop Safety** rules below.
+  / device reconnect, then drain. On SSE **reopen** also publish a one-shot catch-up
+  resync (`src/store/resyncEvents.ts`) so the read caches (notes, labels, users) re-pull
+  events missed while the stream was down (e.g. while backgrounded) — a bare foreground
+  doesn't flip `isConnected`, so the `isConnected`-keyed refresh alone misses it. Retries
+  follow the **Sync Loop Safety** rules below.
 
 ## Sync Loop Safety
 

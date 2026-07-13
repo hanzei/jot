@@ -95,6 +95,14 @@ mode" for the write paths.
 - Background refresh (`retrySync`) uses bounded attempts + backoff and should
   consult `isServerReachable()` so it fast-fails a known-down server instead of
   burning the full retry budget against it.
+- Background refresh is triggered by more than the `isConnected` flip. SSE is a
+  live stream with no backfill, so events emitted while it was down (e.g. the app
+  was backgrounded, which tears the stream down) never arrive. On SSE **reconnect**
+  the read caches (notes, labels, users) run a one-shot catch-up resync via the
+  `resyncEvents` bus (`src/store/resyncEvents.ts`), published by `useSSE` on every
+  reconnect (not the first connect — that's covered by the mount-time sync). This
+  closes the gap a bare foreground leaves: foregrounding on a stable network does
+  not flip `isConnected`, so the `isConnected`-keyed refresh alone would miss it.
 - A failed background read is **not** an error dialog — it's a *staleness*
   signal. The user keeps seeing cached data; ideally the UI can show when data
   was last synced (a diagnostic surface exists; a user-facing one is future
@@ -162,6 +170,11 @@ Rules of thumb:
 
 - **Re-arm reachability** on any successful response, an SSE (re)open, and a
   device offline→online transition, then drain the queue.
+- **Catch up reads on SSE (re)open.** In addition to re-arming reachability and
+  draining the (outgoing) queue, an SSE reconnect publishes a one-shot resync
+  (`resyncEvents`) that re-pulls the read caches (notes, labels, users), since any
+  live event missed while the stream was down is never re-delivered. The
+  heaviest path (notes) guards against a re-entrant sync per the loop rules below.
 - **Backoff**: every retry uses exponential backoff (start ≥ 1 s, cap 60 s);
   never a tight loop.
 - **Re-entrancy**: a sync already in progress is skipped, not queued a second
@@ -200,6 +213,7 @@ handling and loop safety are two halves of the same system.)
 | Optimistic writes + offline fallback | `src/hooks/useNotes.ts`, `useLabels.ts`, `useNoteImages.ts` |
 | Local-first read queries | `src/hooks/useOfflineNotes.ts` |
 | SSE stream + reconnect | `src/api/events.ts` |
+| Catch-up resync signal on SSE reconnect | `src/store/resyncEvents.ts` (published by `src/hooks/useSSE.ts`) |
 | Diagnostics (developer-facing state) | `src/screens/DiagnosticsScreen.tsx` |
 
 ---

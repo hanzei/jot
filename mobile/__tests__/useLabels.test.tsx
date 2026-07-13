@@ -1,5 +1,5 @@
 import React from 'react';
-import { renderHook, waitFor } from '@testing-library/react-native';
+import { renderHook, waitFor, act } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   useCreateLabel,
@@ -7,7 +7,9 @@ import {
   useRemoveLabelFromNote,
   useRenameLabel,
   useDeleteLabel,
+  useLabels,
 } from '../src/hooks/useLabels';
+import { publishReconnectResync } from '../src/store/resyncEvents';
 import * as labelsApi from '../src/api/labels';
 import * as noteQueriesModule from '../src/db/noteQueries';
 
@@ -16,6 +18,13 @@ jest.mock('../src/api/labels');
 jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },
 }));
+
+jest.mock('expo-sqlite', () => {
+  // Stable reference across renders so the db-dependent server-sync callback in
+  // useBackgroundSyncQuery doesn't churn and re-fire its effects.
+  const db = {};
+  return { useSQLiteContext: jest.fn(() => db) };
+});
 
 jest.mock('../src/hooks/useNetworkStatus', () => ({
   useNetworkStatus: jest.fn().mockReturnValue({ isConnected: true }),
@@ -458,5 +467,30 @@ describe('useLabels write hooks', () => {
       await waitFor(() => expect(result.current.isError).toBe(true));
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('useLabels catch-up on SSE reconnect', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockUseNetworkStatus.mockReturnValue({ isConnected: true });
+    mockNoteQueries.getStoredLabels.mockResolvedValue([]);
+    mockLabelsApi.getLabels.mockResolvedValue([]);
+  });
+
+  it('re-pulls labels from the server when a reconnect resync is published', async () => {
+    renderHook(() => useLabels(), { wrapper: createWrapper() });
+
+    // Initial background sync fetches once.
+    await waitFor(() => expect(mockLabelsApi.getLabels).toHaveBeenCalledTimes(1));
+
+    // A reconnect (e.g. foreground after backgrounding) re-pulls the list so a
+    // label created/renamed/deleted on another device while the stream was down
+    // appears in the drawer.
+    await act(async () => {
+      publishReconnectResync();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(mockLabelsApi.getLabels).toHaveBeenCalledTimes(2);
   });
 });

@@ -9,6 +9,7 @@ import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { retrySync, SyncAbortedError, SyncCanceller } from '../utils/retryWithBackoff';
 import { refreshIconCacheForUsers } from '../utils/profileIconCache';
 import { subscribeToProfileIconUpdates } from './profileIconEvents';
+import { subscribeToReconnectResync } from './resyncEvents';
 
 interface UsersState {
   usersById: Map<string, User>;
@@ -77,6 +78,19 @@ export function UsersProvider({ children }: { children: React.ReactNode }) {
     loadUsers(canceller);
     return () => canceller.cancel();
   }, [isAuthenticated, isConnected, loadUsers]);
+
+  // Catch up on SSE reconnect: a collaborator's profile change (or a newly-shared
+  // user) that happened while the stream was down (e.g. app backgrounded) never
+  // arrives as a live event, and a bare foreground doesn't flip isConnected to
+  // re-run the effect above, so re-pull the user list here.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    return subscribeToReconnectResync(() => {
+      if (!isConnectedRef.current) return;
+      const canceller = new SyncCanceller();
+      loadUsers(canceller);
+    });
+  }, [isAuthenticated, loadUsers]);
 
   // Apply live profile_icon_updated SSE events (routed via the module bus because
   // UsersProvider sits above SSEProvider in the tree). Updating usersById is what

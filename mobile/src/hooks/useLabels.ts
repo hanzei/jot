@@ -30,6 +30,7 @@ import { enqueueOperation, rethrowIfNotQueueable, saveServerNotes, saveServerLab
 import { isOnlineWriteAllowed } from '../api/serverReachability';
 import { useNetworkStatus } from './useNetworkStatus';
 import { retrySync, SyncAbortedError, SyncCanceller } from '../utils/retryWithBackoff';
+import { subscribeToReconnectResync } from '../store/resyncEvents';
 import { useAuth } from '../store/AuthContext';
 import { isLocalModeActive } from '../store/localMode';
 import { isServerSwitchInProgress } from '../api/client';
@@ -107,28 +108,43 @@ function useBackgroundSyncQuery<T>(
     gcTime: Infinity,
   });
 
-  useEffect(() => {
+  const syncFromServer = useCallback(async (canceller: SyncCanceller) => {
     // Local mode has no server to read from; keep the local cache and skip the
     // background resync entirely (issue #514).
-    if (!isConnected || isLocalModeActive()) return;
+    if (isLocalModeActive()) return;
     const key = getQueryKey();
+    try {
+      const data = await retrySync(serverFn, {
+        isConnected: () => isConnectedRef.current,
+        canceller,
+      });
+      if (!canceller.cancelled) queryClient.setQueryData(key, data);
+    } catch (err) {
+      // Cancelled or offline: expected; keep the local cache.
+      if (err instanceof SyncAbortedError) return;
+      // Retries exhausted (or a permanent error): local cache remains.
+      console.warn('Background sync failed after retries:', err);
+    }
+  }, [queryClient, getQueryKey, serverFn]);
+
+  useEffect(() => {
+    if (!isConnected || isLocalModeActive()) return;
     const canceller = new SyncCanceller();
-    (async () => {
-      try {
-        const data = await retrySync(serverFn, {
-          isConnected: () => isConnectedRef.current,
-          canceller,
-        });
-        if (!canceller.cancelled) queryClient.setQueryData(key, data);
-      } catch (err) {
-        // Cancelled or offline: expected; keep the local cache.
-        if (err instanceof SyncAbortedError) return;
-        // Retries exhausted (or a permanent error): local cache remains.
-        console.warn('Background sync failed after retries:', err);
-      }
-    })();
+    syncFromServer(canceller);
     return () => { canceller.cancel(); };
-  }, [isConnected, queryClient, getQueryKey, serverFn]);
+  }, [isConnected, syncFromServer]);
+
+  // Catch up on SSE reconnect: a label created/renamed/deleted on another device
+  // while the stream was down (e.g. app backgrounded) never arrives as a live
+  // event, and a bare foreground doesn't flip isConnected to re-run the effect
+  // above, so re-pull the label list/counts here.
+  useEffect(() => {
+    return subscribeToReconnectResync(() => {
+      if (!isConnectedRef.current || isLocalModeActive()) return;
+      const canceller = new SyncCanceller();
+      syncFromServer(canceller);
+    });
+  }, [syncFromServer]);
 
   return query;
 }
