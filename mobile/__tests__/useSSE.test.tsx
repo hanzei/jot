@@ -51,6 +51,14 @@ const mockPublishProfileIconUpdate = (
   jest.requireMock('../src/store/profileIconEvents') as { publishProfileIconUpdate: jest.Mock }
 ).publishProfileIconUpdate;
 
+jest.mock('../src/store/resyncEvents', () => ({
+  publishReconnectResync: jest.fn(),
+}));
+
+const mockPublishReconnectResync = (
+  jest.requireMock('../src/store/resyncEvents') as { publishReconnectResync: jest.Mock }
+).publishReconnectResync;
+
 let mockProtectedNoteIds = new Set<string>();
 jest.mock('../src/db/syncQueue', () => ({
   saveServerNote: jest.fn().mockResolvedValue(undefined),
@@ -67,9 +75,13 @@ const flushMicrotasks = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 // Mock SSEConnectionManager
 let capturedCallback: ((event: SSEEvent) => void) | null = null;
-const mockConnect = jest.fn().mockImplementation(async (cb: (event: SSEEvent) => void) => {
-  capturedCallback = cb;
-});
+let capturedStatusCallback: ((status: string) => void) | null = null;
+const mockConnect = jest.fn().mockImplementation(
+  async (cb: (event: SSEEvent) => void, onStatus?: (status: string) => void) => {
+    capturedCallback = cb;
+    capturedStatusCallback = onStatus ?? null;
+  },
+);
 const mockDisconnect = jest.fn();
 const mockManagerIsConnected = jest.fn(() => false);
 
@@ -112,6 +124,7 @@ describe('useSSE', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     capturedCallback = null;
+    capturedStatusCallback = null;
     mockIsAuthenticated = true;
     mockIsConnected = true;
     mockProtectedNoteIds = new Set<string>();
@@ -269,6 +282,38 @@ describe('useSSE', () => {
     });
 
     expect(mockPublishProfileIconUpdate).toHaveBeenCalledWith(updatedUser);
+  });
+
+  // SSE is a live stream with no backfill, so anything that changed while it was
+  // down (notably while the app was backgrounded) must be caught up on reconnect.
+  // The first connect is already covered by the read hooks' mount-time sync, so it
+  // must NOT publish; every subsequent connect must.
+  it('publishes a reconnect resync on every connect after the first', () => {
+    const { Wrapper } = createWrapper();
+    renderHook(() => useSSE(), { wrapper: Wrapper });
+
+    // Initial connect: no catch-up (mount-time sync already ran).
+    act(() => capturedStatusCallback?.('connecting'));
+    act(() => capturedStatusCallback?.('connected'));
+    expect(mockPublishReconnectResync).not.toHaveBeenCalled();
+
+    // A drop + reconnect (e.g. foreground after backgrounding): catch up now.
+    act(() => capturedStatusCallback?.('reconnecting'));
+    act(() => capturedStatusCallback?.('connected'));
+    expect(mockPublishReconnectResync).toHaveBeenCalledTimes(1);
+
+    // Every further reconnect publishes again.
+    act(() => capturedStatusCallback?.('connected'));
+    expect(mockPublishReconnectResync).toHaveBeenCalledTimes(2);
+  });
+
+  it('forwards status changes to the onStatusChange callback', () => {
+    const onStatusChange = jest.fn();
+    const { Wrapper } = createWrapper();
+    renderHook(() => useSSE(undefined, onStatusChange), { wrapper: Wrapper });
+
+    act(() => capturedStatusCallback?.('connected'));
+    expect(onStatusChange).toHaveBeenCalledWith('connected');
   });
 
   it('patches local images and invalidates queries on note_image_added event', async () => {

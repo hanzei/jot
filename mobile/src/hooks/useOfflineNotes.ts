@@ -9,6 +9,7 @@ import type { GetNotesParams, Note } from '@jot/shared';
 import { useNetworkStatus } from './useNetworkStatus';
 import { isLocalModeActive } from '../store/localMode';
 import { retrySync, SyncAbortedError, SyncCanceller } from '../utils/retryWithBackoff';
+import { subscribeToReconnectResync } from '../store/resyncEvents';
 import {
   noteLocalQueryKey,
   noteLocalQueryScopeKey,
@@ -25,6 +26,11 @@ export function useOfflineNotes(params?: GetNotesParams, options?: { enabled?: b
   const isConnectedRef = useRef(isConnected);
   isConnectedRef.current = isConnected;
   const enabled = options?.enabled ?? true;
+  // Re-entrancy guard: skip a resync while one is already running rather than
+  // firing a second (Sync Loop Safety in mobile/CLAUDE.md). This also dedupes the
+  // rare double-trigger when a device reconnect flips isConnected *and* the SSE
+  // reconnect fires its catch-up at nearly the same time.
+  const isSyncingRef = useRef(false);
 
   // Primary query: reads from local SQLite (instant on subsequent launches)
   const query = useQuery<Note[]>({
@@ -39,6 +45,8 @@ export function useOfflineNotes(params?: GetNotesParams, options?: { enabled?: b
     // No server to sync against in local mode — also guards the manual `refetch`
     // (pull-to-refresh) path, not just the background effect (#514).
     if (isLocalModeActive()) return;
+    if (isSyncingRef.current) return;
+    isSyncingRef.current = true;
     try {
       const serverNotes = await retrySync(() => getNotes(paramsRef.current), {
         isConnected: () => isConnectedRef.current,
@@ -55,6 +63,8 @@ export function useOfflineNotes(params?: GetNotesParams, options?: { enabled?: b
       if (err instanceof SyncAbortedError) return;
       // Retries exhausted (or a permanent error): local data is used as fallback.
       console.warn('Background notes sync failed after retries:', err);
+    } finally {
+      isSyncingRef.current = false;
     }
   }, [db, queryClient]);
 
@@ -66,6 +76,18 @@ export function useOfflineNotes(params?: GetNotesParams, options?: { enabled?: b
     syncFromServer(canceller).catch(() => {});
     return () => canceller.cancel();
   }, [enabled, isConnected, syncFromServer]);
+
+  // Catch up on SSE reconnect: events missed while the stream was down (e.g. the
+  // app was backgrounded) never arrive, and a bare foreground doesn't flip
+  // isConnected, so the effect above wouldn't otherwise re-run (#708 follow-up).
+  useEffect(() => {
+    if (!enabled) return;
+    return subscribeToReconnectResync(() => {
+      if (!isConnectedRef.current || isLocalModeActive()) return;
+      const canceller = new SyncCanceller();
+      syncFromServer(canceller).catch(() => {});
+    });
+  }, [enabled, syncFromServer]);
 
   const [refetchCount, setRefetchCount] = useState(0);
 
@@ -101,52 +123,68 @@ export function useOfflineNote(id: string | null) {
     gcTime: Infinity,
   });
 
-  // Background fetch from server when online (with retry/backoff) to keep local cache fresh
-  useEffect(() => {
+  // Fetch the note from the server (with retry/backoff) and refresh the local
+  // cache. Shared by the online background effect and the SSE-reconnect catch-up.
+  const syncFromServer = useCallback(async (canceller: SyncCanceller) => {
     // Local mode is the source of truth: there is no server to refresh from (#514).
+    if (!id || isLocalModeActive()) return;
+    try {
+      const serverNote = await retrySync(() => getNote(id), {
+        isConnected: () => isConnectedRef.current,
+        canceller,
+      });
+      if (canceller.cancelled) return;
+      await saveServerNote(db, serverNote);
+      queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
+    } catch (err) {
+      // Cancelled or offline: expected; keep the local cache.
+      if (err instanceof SyncAbortedError) return;
+      const status = axios.isAxiosError(err) ? err.response?.status : undefined;
+      if (status === 404 || status === 410) {
+        // Note no longer exists on server — tombstone it locally, unless it has
+        // a pending or failed local op: a queued edit/restore may be racing the
+        // fetch, or a dead-lettered edit may be the version we're preserving, so
+        // let the drain/resolution reconcile it rather than hide the optimistic
+        // edit (#487/#492). (404/410 are permanent, so retrySync surfaces them
+        // immediately.) Guard the queue read + tombstone so a failure here doesn't
+        // escape the fire-and-forget effect as an unhandled rejection; the local
+        // cache remains as fallback and a later sync retries.
+        try {
+          const protectedNoteIds = await getProtectedNoteIds(db);
+          // Re-check cancelled: the effect may have torn down (id change/unmount)
+          // during the await above, in which case we must not write.
+          if (!canceller.cancelled && !protectedNoteIds.has(id)) {
+            await markLocalNoteDeleted(db, id);
+            queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
+          }
+        } catch (tombstoneErr) {
+          console.warn(`Failed to tombstone note id=${id} after server reported it gone:`, tombstoneErr);
+        }
+        return;
+      }
+      // Retries exhausted (or another error): local cache is used as fallback.
+      console.warn(`Background note sync failed for id=${id} after retries:`, err);
+    }
+  }, [id, db, queryClient]);
+
+  // Background fetch from server when online to keep local cache fresh.
+  useEffect(() => {
     if (!id || !isConnected || isLocalModeActive()) return;
     const canceller = new SyncCanceller();
-    (async () => {
-      try {
-        const serverNote = await retrySync(() => getNote(id), {
-          isConnected: () => isConnectedRef.current,
-          canceller,
-        });
-        if (canceller.cancelled) return;
-        await saveServerNote(db, serverNote);
-        queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
-      } catch (err) {
-        // Cancelled or offline: expected; keep the local cache.
-        if (err instanceof SyncAbortedError) return;
-        const status = axios.isAxiosError(err) ? err.response?.status : undefined;
-        if (status === 404 || status === 410) {
-          // Note no longer exists on server — tombstone it locally, unless it has
-          // a pending or failed local op: a queued edit/restore may be racing the
-          // fetch, or a dead-lettered edit may be the version we're preserving, so
-          // let the drain/resolution reconcile it rather than hide the optimistic
-          // edit (#487/#492). (404/410 are permanent, so retrySync surfaces them
-          // immediately.) Guard the queue read + tombstone so a failure here doesn't
-          // escape the fire-and-forget effect as an unhandled rejection; the local
-          // cache remains as fallback and a later sync retries.
-          try {
-            const protectedNoteIds = await getProtectedNoteIds(db);
-            // Re-check cancelled: the effect may have torn down (id change/unmount)
-            // during the await above, in which case we must not write.
-            if (!canceller.cancelled && !protectedNoteIds.has(id)) {
-              await markLocalNoteDeleted(db, id);
-              queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
-            }
-          } catch (tombstoneErr) {
-            console.warn(`Failed to tombstone note id=${id} after server reported it gone:`, tombstoneErr);
-          }
-          return;
-        }
-        // Retries exhausted (or another error): local cache is used as fallback.
-        console.warn(`Background note sync failed for id=${id} after retries:`, err);
-      }
-    })();
+    syncFromServer(canceller).catch(() => {});
     return () => { canceller.cancel(); };
-  }, [id, isConnected, db, queryClient]);
+  }, [id, isConnected, syncFromServer]);
+
+  // Catch up on SSE reconnect: refresh the open note's full body/items in case it
+  // was edited on another device while the stream was down (e.g. app backgrounded).
+  useEffect(() => {
+    if (!id) return;
+    return subscribeToReconnectResync(() => {
+      if (!isConnectedRef.current || isLocalModeActive()) return;
+      const canceller = new SyncCanceller();
+      syncFromServer(canceller).catch(() => {});
+    });
+  }, [id, syncFromServer]);
 
   return query;
 }

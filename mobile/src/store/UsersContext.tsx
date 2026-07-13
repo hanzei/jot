@@ -9,6 +9,7 @@ import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { retrySync, SyncAbortedError, SyncCanceller } from '../utils/retryWithBackoff';
 import { refreshIconCacheForUsers } from '../utils/profileIconCache';
 import { subscribeToProfileIconUpdates } from './profileIconEvents';
+import { subscribeToReconnectResync } from './resyncEvents';
 
 interface UsersState {
   usersById: Map<string, User>;
@@ -32,6 +33,10 @@ export function UsersProvider({ children }: { children: React.ReactNode }) {
   const isMountedRef = useRef(true);
   const isConnectedRef = useRef(isConnected);
   isConnectedRef.current = isConnected;
+  // Re-entrancy guard: skip a load while one is already running so the
+  // isConnected/mount effect and the SSE-reconnect subscription can't start
+  // duplicate refreshes (Sync Loop Safety), mirroring useOfflineNotes.
+  const isSyncingRef = useRef(false);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -39,30 +44,36 @@ export function UsersProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const loadUsers = useCallback(async (canceller?: SyncCanceller) => {
-    // Load from SQLite first for immediate offline display
+    if (isSyncingRef.current) return;
+    isSyncingRef.current = true;
     try {
-      const localUsers = await getLocalUsers(db);
-      if (isMountedRef.current) {
-        setUsersById(buildUsersMap(user, localUsers));
-      }
-    } catch { /* ignore — server fetch will follow */ }
+      // Load from SQLite first for immediate offline display
+      try {
+        const localUsers = await getLocalUsers(db);
+        if (isMountedRef.current) {
+          setUsersById(buildUsersMap(user, localUsers));
+        }
+      } catch { /* ignore — server fetch will follow */ }
 
-    try {
-      // Fetch from server (with retry/backoff) and persist to SQLite
-      const users = await retrySync(getUsers, {
-        isConnected: () => isConnectedRef.current,
-        canceller,
-      });
-      if (!isMountedRef.current || canceller?.cancelled) return;
-      await saveUsers(db, users);
-      setUsersById(buildUsersMap(user, users));
-      // Warm the icon cache opportunistically; errors are non-fatal.
-      void refreshIconCacheForUsers(users, getBaseUrl());
-    } catch (err) {
-      // Cancelled or offline: expected; SQLite data is used as fallback.
-      if (err instanceof SyncAbortedError) return;
-      // Retries exhausted (or a permanent error): SQLite data is the fallback.
-      console.warn('Background users sync failed after retries:', err);
+      try {
+        // Fetch from server (with retry/backoff) and persist to SQLite
+        const users = await retrySync(getUsers, {
+          isConnected: () => isConnectedRef.current,
+          canceller,
+        });
+        if (!isMountedRef.current || canceller?.cancelled) return;
+        await saveUsers(db, users);
+        setUsersById(buildUsersMap(user, users));
+        // Warm the icon cache opportunistically; errors are non-fatal.
+        void refreshIconCacheForUsers(users, getBaseUrl());
+      } catch (err) {
+        // Cancelled or offline: expected; SQLite data is used as fallback.
+        if (err instanceof SyncAbortedError) return;
+        // Retries exhausted (or a permanent error): SQLite data is the fallback.
+        console.warn('Background users sync failed after retries:', err);
+      }
+    } finally {
+      isSyncingRef.current = false;
     }
   }, [db, user]);
 
@@ -77,6 +88,19 @@ export function UsersProvider({ children }: { children: React.ReactNode }) {
     loadUsers(canceller);
     return () => canceller.cancel();
   }, [isAuthenticated, isConnected, loadUsers]);
+
+  // Catch up on SSE reconnect: a collaborator's profile change (or a newly-shared
+  // user) that happened while the stream was down (e.g. app backgrounded) never
+  // arrives as a live event, and a bare foreground doesn't flip isConnected to
+  // re-run the effect above, so re-pull the user list here.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    return subscribeToReconnectResync(() => {
+      if (!isConnectedRef.current) return;
+      const canceller = new SyncCanceller();
+      loadUsers(canceller);
+    });
+  }, [isAuthenticated, loadUsers]);
 
   // Apply live profile_icon_updated SSE events (routed via the module bus because
   // UsersProvider sits above SSEProvider in the tree). Updating usersById is what

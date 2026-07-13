@@ -13,6 +13,7 @@ import { getProtectedNoteIds, saveServerNote } from '../db/syncQueue';
 import { getNote } from '../api/notes';
 import { isSseQuiesced, subscribeToServerSwitchLifecycle } from '../store/serverSwitchLifecycle';
 import { publishProfileIconUpdate } from '../store/profileIconEvents';
+import { publishReconnectResync } from '../store/resyncEvents';
 import {
   labelCountsQueryKey,
   labelsQueryKey,
@@ -36,6 +37,10 @@ export function useSSE(
   onNoteUpdatedRef.current = onNoteUpdatedByOther;
   const onStatusChangeRef = useRef(onStatusChange);
   onStatusChangeRef.current = onStatusChange;
+  // Tracks whether the stream has connected at least once this session, so the
+  // catch-up resync fires only on a *re*connect and not the initial connect
+  // (whose catch-up is already covered by the read hooks' mount-time sync).
+  const hasConnectedOnceRef = useRef(false);
   const dbRef = useRef(db);
   dbRef.current = db;
   const userIdRef = useRef(user?.id);
@@ -229,14 +234,32 @@ export function useSSE(
           }
         }
       })();
-    }, (status) => onStatusChangeRef.current?.(status));
-    // No catch-up invalidation here: startConnection runs on every reconnect,
-    // foreground, and server-switch, and a blanket invalidate only re-reads the
-    // (still-stale) local SQLite — it doesn't fetch from the server. The actual
-    // catch-up after a reconnect is useOfflineNotes' background server resync,
-    // which fires on the same isConnected flip, and live SSE events deliver any
-    // subsequent changes. Invalidating here just added a redundant refetch that
-    // raced the resync and contributed to the on-reconnect screen flashing.
+    }, (status) => {
+      // Catch-up after a *re*connect: SSE is a live stream with no backfill, so
+      // any event emitted while it was down (notably while the app was
+      // backgrounded — which calls stopConnection below) is lost. The read-side
+      // background syncs otherwise only re-run on an isConnected flip, which does
+      // not happen when the app is merely foregrounded on a stable network, so
+      // publish a resync signal that the note/label/user caches listen for. It
+      // fires on every reconnect (foreground, watchdog stall recovery,
+      // server-switch), but never the first connect — that's already covered by
+      // the read hooks' mount-time sync, and firing it here would just add a
+      // redundant fetch at launch.
+      //
+      // We publish the *fetch* trigger, not a blanket query invalidation: an
+      // invalidate only re-reads the (still-stale) local SQLite without hitting
+      // the server, and doing so before fresh data lands is what caused the old
+      // on-reconnect screen flash. The subscribers fetch → persist → invalidate,
+      // so the UI only updates once fresh data is in SQLite.
+      if (status === 'connected') {
+        if (hasConnectedOnceRef.current) {
+          publishReconnectResync();
+        } else {
+          hasConnectedOnceRef.current = true;
+        }
+      }
+      onStatusChangeRef.current?.(status);
+    });
   }, [queryClient]);
 
   const stopConnection = useCallback(() => {

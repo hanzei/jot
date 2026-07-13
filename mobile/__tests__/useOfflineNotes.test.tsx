@@ -7,9 +7,10 @@
  */
 
 import React from 'react';
-import { renderHook, waitFor } from '@testing-library/react-native';
+import { renderHook, waitFor, act } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useOfflineNotes, useOfflineNote } from '../src/hooks/useOfflineNotes';
+import { publishReconnectResync } from '../src/store/resyncEvents';
 import * as notesApi from '../src/api/notes';
 import * as noteQueriesModule from '../src/db/noteQueries';
 import * as syncQueueModule from '../src/db/syncQueue';
@@ -17,9 +18,12 @@ import type { Note } from '@jot/shared';
 
 jest.mock('../src/api/notes');
 
-jest.mock('expo-sqlite', () => ({
-  useSQLiteContext: jest.fn(() => ({ __db: true })),
-}));
+jest.mock('expo-sqlite', () => {
+  // A stable reference across renders, mirroring the real provider — otherwise a
+  // fresh object each render would churn the db-dependent useCallbacks/effects.
+  const db = { __db: true };
+  return { useSQLiteContext: jest.fn(() => db) };
+});
 
 jest.mock('../src/hooks/useNetworkStatus', () => ({
   useNetworkStatus: jest.fn().mockReturnValue({ isConnected: true }),
@@ -99,6 +103,57 @@ describe('useOfflineNotes background sync (#487)', () => {
       expect.any(Array),
       params,
     );
+  });
+});
+
+describe('useOfflineNotes catch-up on SSE reconnect', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('re-syncs from the server when a reconnect resync is published', async () => {
+    mockNotesApi.getNotes.mockResolvedValue([makeTextNote('n1')]);
+    renderHook(() => useOfflineNotes(), { wrapper: createWrapper() });
+
+    // Initial mount-time sync.
+    await waitFor(() => expect(mockNotesApi.getNotes).toHaveBeenCalledTimes(1));
+
+    // A reconnect (e.g. foreground after backgrounding) triggers a catch-up pull
+    // even though isConnected never flipped.
+    await act(async () => {
+      publishReconnectResync();
+      await flushMicrotasks();
+    });
+    expect(mockNotesApi.getNotes).toHaveBeenCalledTimes(2);
+  });
+
+  it('skips a concurrent resync while one is already in flight (Sync Loop Safety)', async () => {
+    let resolveGet: ((notes: Note[]) => void) | undefined;
+    mockNotesApi.getNotes.mockImplementation(
+      () => new Promise<Note[]>((resolve) => { resolveGet = resolve; }),
+    );
+    renderHook(() => useOfflineNotes(), { wrapper: createWrapper() });
+
+    // The mount-time sync is now in flight (getNotes pending).
+    await waitFor(() => expect(mockNotesApi.getNotes).toHaveBeenCalledTimes(1));
+
+    // A resync arriving mid-flight is skipped rather than firing a second fetch.
+    await act(async () => {
+      publishReconnectResync();
+      await flushMicrotasks();
+    });
+    expect(mockNotesApi.getNotes).toHaveBeenCalledTimes(1);
+
+    // Once the in-flight sync completes, a later resync runs normally.
+    await act(async () => {
+      resolveGet?.([]);
+      await flushMicrotasks();
+    });
+    await act(async () => {
+      publishReconnectResync();
+      await flushMicrotasks();
+    });
+    expect(mockNotesApi.getNotes).toHaveBeenCalledTimes(2);
   });
 });
 
