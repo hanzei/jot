@@ -68,6 +68,11 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
   const [activeServerId, setActiveServerId] = useState<string | null>(null);
   const [isServerActionPending, setIsServerActionPending] = useState(false);
   const serverSwitchingRef = useRef(false);
+  // ids of labels currently being deleted, so each row can show a spinner
+  // instead of sitting with no feedback for the ~5s write timeout (#698). A
+  // set (not a single id) because the confirm dialog closes before the delete
+  // resolves, so a second delete can start while the first is still in flight.
+  const [deletingLabelIds, setDeletingLabelIds] = useState<Set<string>>(() => new Set());
 
   const activeRoute = props.state.routes[props.state.index]?.name;
   const activeParams = props.state.routes[props.state.index]?.params as
@@ -142,12 +147,19 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
       destructive: true,
     });
     if (!confirmed) return;
+    setDeletingLabelIds((prev) => new Set(prev).add(label.id));
     try {
       await deleteLabel.mutateAsync({ labelId: label.id });
       handleDeleteLabelSuccess(label.id);
       Alert.alert(t('labels.deleteSuccess'));
     } catch (error) {
       Alert.alert(t('common.error'), extractErrorMessage(error, t('labels.deleteError')));
+    } finally {
+      setDeletingLabelIds((prev) => {
+        const next = new Set(prev);
+        next.delete(label.id);
+        return next;
+      });
     }
   }, [confirm, deleteLabel, handleDeleteLabelSuccess, t]);
 
@@ -473,6 +485,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
             onOpenRenameModal={openRenameModal}
             onDeleteLabel={handleDeleteLabel}
             onCreateLabelPress={handleCreateLabelPress}
+            deletingLabelIds={deletingLabelIds}
           />
 
           <View style={[styles.navDivider, { backgroundColor: colors.divider }]} />

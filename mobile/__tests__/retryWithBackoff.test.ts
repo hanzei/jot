@@ -157,6 +157,35 @@ describe('retrySync', () => {
     expect(fn).not.toHaveBeenCalled();
   });
 
+  it('aborts immediately with SyncAbortedError("unreachable") when the server is known-unreachable at start', async () => {
+    const fn = jest.fn().mockResolvedValue('ok');
+    const result = await retrySync(fn, {
+      isConnected: () => true,
+      isServerReachable: () => false,
+    }).catch((e) => e);
+    expect(result).toBeInstanceOf(SyncAbortedError);
+    expect((result as SyncAbortedError).reason).toBe('unreachable');
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it('stops with SyncAbortedError("unreachable") when the server goes unreachable during backoff', async () => {
+    let reachable = true;
+    const fn = jest.fn().mockRejectedValue(makeNetworkError());
+    const promise = retrySync(fn, {
+      isConnected: () => true,
+      isServerReachable: () => reachable,
+      baseDelayMs: 1000,
+    }).catch((e) => e);
+
+    await jest.advanceTimersByTimeAsync(0); // first attempt fails, enters backoff
+    reachable = false; // server goes unreachable during the backoff
+    await jest.advanceTimersByTimeAsync(1000); // backoff elapses; loop sees unreachable
+    const result = await promise;
+    expect(result).toBeInstanceOf(SyncAbortedError);
+    expect((result as SyncAbortedError).reason).toBe('unreachable');
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
   it('stops with SyncAbortedError("offline") when connectivity drops after a transient failure', async () => {
     let connected = true;
     const fn = jest.fn().mockRejectedValue(makeNetworkError());
@@ -189,6 +218,10 @@ describe('retrySync', () => {
     expect(result).toBeInstanceOf(SyncAbortedError);
     expect((result as SyncAbortedError).reason).toBe('cancelled');
     expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('caps the default attempts at 2 (initial + 1 retry)', () => {
+    expect(SYNC_RETRY_MAX_ATTEMPTS).toBe(2);
   });
 
   it('defaults to a bounded number of attempts', async () => {

@@ -48,9 +48,14 @@ const mockGetQueuedImageUploadCount = getQueuedImageUploadCount as jest.MockedFu
 
 // Captures the latest syncError value exposed through the context.
 let lastSyncError = false;
+// Captures the latest lastSyncedAt/consecutiveFailureCount exposed through the context.
+let lastSyncedAt: string | null = null;
+let lastConsecutiveFailureCount = 0;
 function SyncErrorProbe() {
-  const { syncError } = useOfflineContext();
+  const { syncError, lastSyncedAt: syncedAt, consecutiveFailureCount } = useOfflineContext();
   lastSyncError = syncError;
+  lastSyncedAt = syncedAt;
+  lastConsecutiveFailureCount = consecutiveFailureCount;
   return <Text>{String(syncError)}</Text>;
 }
 
@@ -87,6 +92,8 @@ describe('OfflineProvider queue draining', () => {
     jest.clearAllMocks();
     enqueueListener = null;
     lastSyncError = false;
+    lastSyncedAt = null;
+    lastConsecutiveFailureCount = 0;
     mockRevalidate.mockResolvedValue(true);
     mockDrainQueue.mockResolvedValue({ idMappings: [], discardedOperations: [], syncedSettings: false });
     mockGetPendingCount.mockResolvedValue(0);
@@ -338,5 +345,68 @@ describe('OfflineProvider queue draining', () => {
 
     expect(mockDrainQueue).toHaveBeenCalledTimes(7);
     expect(lastSyncError).toBe(false);
+  });
+
+  it('records lastSyncedAt after a successful drain and tracks the consecutive-failure count', async () => {
+    // Every drain leaves entries behind → stalls, bumping the failure counter.
+    mockGetPendingCount.mockResolvedValue(1);
+    renderProvider();
+    await flush();
+
+    expect(lastSyncedAt).toBeNull();
+    expect(lastConsecutiveFailureCount).toBe(1);
+
+    await act(async () => {
+      jest.advanceTimersByTime(60000);
+    });
+    await flush();
+    expect(lastConsecutiveFailureCount).toBe(2);
+
+    // The queue clears on the next attempt: drain succeeds, resetting the
+    // failure count and stamping lastSyncedAt.
+    mockGetPendingCount.mockResolvedValue(0);
+    await act(async () => {
+      jest.advanceTimersByTime(60000);
+    });
+    await flush();
+
+    expect(lastConsecutiveFailureCount).toBe(0);
+    expect(lastSyncedAt).not.toBeNull();
+  });
+
+  it('logs each stalled drain attempt and only logs a recovery when there was a failure streak', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {});
+
+    // A routine successful drain (no prior failures) must not log a recovery —
+    // it fires on nearly every enqueue and would drown out everything else.
+    renderProvider();
+    await flush();
+    expect(infoSpy).not.toHaveBeenCalled();
+    warnSpy.mockClear();
+
+    // Every subsequent drain leaves entries behind, so it stalls and logs.
+    mockGetPendingCount.mockResolvedValue(1);
+    act(() => {
+      enqueueListener?.();
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+    });
+    await flush();
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0][0]).toMatch(/stalled \(attempt 1\/6\)/);
+
+    // Recovering from that failure streak logs a recovery line.
+    mockGetPendingCount.mockResolvedValue(0);
+    await act(async () => {
+      jest.advanceTimersByTime(60000);
+    });
+    await flush();
+    expect(infoSpy).toHaveBeenCalledTimes(1);
+    expect(infoSpy.mock.calls[0][0]).toMatch(/succeeded after 1 failed attempt/);
+
+    warnSpy.mockRestore();
+    infoSpy.mockRestore();
   });
 });

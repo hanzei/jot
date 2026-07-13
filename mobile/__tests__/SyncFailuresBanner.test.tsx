@@ -18,6 +18,8 @@ const baseContext = {
   syncFailuresBannerDismissed: false,
   dismissSyncFailuresBanner: mockDismiss,
   refreshSyncFailures: jest.fn(),
+  lastSyncedAt: null,
+  consecutiveFailureCount: 0,
 };
 
 jest.mock('../src/store/OfflineContext', () => ({

@@ -24,6 +24,12 @@ import {
 } from '../store/serverSwitchLifecycle';
 import { getSseState, type SseState } from '../api/sseState';
 import { getPendingCount } from '../db/syncQueue';
+import {
+  isServerReachable,
+  getServerReachabilityChangedAt,
+  subscribeToServerReachability,
+} from '../api/serverReachability';
+import { useOfflineContext } from '../store/OfflineContext';
 import { getLogs, clearLogs, type LogEntry } from '../utils/logger';
 import appConfig from '../../app.json';
 
@@ -36,6 +42,14 @@ interface DiagnosticsSnapshot {
   logs: LogEntry[];
   isConnected: boolean;
   serverUrl: string;
+  isServerReachable: boolean;
+  serverReachabilityChangedAt: string | null;
+}
+
+/** Formats an ISO timestamp for display, or a placeholder if never set. */
+function formatTimestamp(iso: string | null, never: string): string {
+  if (!iso) return never;
+  return new Date(iso).toLocaleString();
 }
 
 export default function DiagnosticsScreen() {
@@ -46,6 +60,7 @@ export default function DiagnosticsScreen() {
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
   const serverUrl = useActiveServerBaseUrl();
+  const { syncError, syncFailureCount, lastSyncedAt, consecutiveFailureCount } = useOfflineContext();
 
   const [snapshot, setSnapshot] = useState<DiagnosticsSnapshot>(() => ({
     pendingQueueCount: 0,
@@ -54,6 +69,8 @@ export default function DiagnosticsScreen() {
     logs: getLogs().slice(-50),
     isConnected: false,
     serverUrl: '',
+    isServerReachable: isServerReachable(),
+    serverReachabilityChangedAt: getServerReachabilityChangedAt(),
   }));
 
   const refresh = useCallback(async () => {
@@ -70,12 +87,27 @@ export default function DiagnosticsScreen() {
       logs: getLogs().slice(-50),
       isConnected,
       serverUrl: serverUrl ?? '',
+      isServerReachable: isServerReachable(),
+      serverReachabilityChangedAt: getServerReachabilityChangedAt(),
     });
   }, [db, isConnected, serverUrl]);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // Reflect a reachability transition immediately rather than waiting for the
+  // next mount or manual refresh — the belief flips from write/SSE outcomes
+  // that can happen at any time while this screen is open.
+  useEffect(() => {
+    return subscribeToServerReachability((reachable) => {
+      setSnapshot((prev) => ({
+        ...prev,
+        isServerReachable: reachable,
+        serverReachabilityChangedAt: getServerReachabilityChangedAt(),
+      }));
+    });
+  }, []);
 
   const handleClearLogs = useCallback(() => {
     clearLogs();
@@ -91,7 +123,11 @@ export default function DiagnosticsScreen() {
         url: snapshot.serverUrl,
         generationId: snapshot.lifecycle.generationId,
       },
-      network: { isConnected: snapshot.isConnected },
+      network: {
+        isConnected: snapshot.isConnected,
+        isServerReachable: snapshot.isServerReachable,
+        serverReachabilityChangedAt: snapshot.serverReachabilityChangedAt,
+      },
       sse: {
         isConnected: snapshot.sse.isConnected,
         reconnectAttempts: snapshot.sse.reconnectAttempts,
@@ -100,6 +136,10 @@ export default function DiagnosticsScreen() {
         pendingQueueCount: snapshot.pendingQueueCount,
         isSyncPaused: snapshot.lifecycle.isSyncPaused,
         isSseQuiesced: snapshot.lifecycle.isSseQuiesced,
+        lastSyncedAt,
+        syncError,
+        consecutiveFailureCount,
+        deadLetterCount: syncFailureCount,
       },
       lifecycle: {
         isSwitching: snapshot.lifecycle.isSwitching,
@@ -109,7 +149,7 @@ export default function DiagnosticsScreen() {
       recentLogs: snapshot.logs,
     };
     await Share.share({ message: JSON.stringify(report, null, 2) });
-  }, [snapshot]);
+  }, [snapshot, lastSyncedAt, syncError, consecutiveFailureCount, syncFailureCount]);
 
   const { lifecycle, sse } = snapshot;
 
@@ -139,6 +179,15 @@ export default function DiagnosticsScreen() {
             label={t('diagnostics.network')}
             value={snapshot.isConnected ? t('diagnostics.connected') : t('diagnostics.disconnected')}
             valueColor={snapshot.isConnected ? STATUS_GREEN : colors.error}
+          />
+          <DiagRow
+            label={t('diagnostics.serverReachable')}
+            value={snapshot.isServerReachable ? t('diagnostics.connected') : t('diagnostics.disconnected')}
+            valueColor={snapshot.isServerReachable ? STATUS_GREEN : colors.error}
+          />
+          <DiagRow
+            label={t('diagnostics.serverReachableChangedAt')}
+            value={formatTimestamp(snapshot.serverReachabilityChangedAt, t('diagnostics.never'))}
           />
         </View>
 
@@ -173,6 +222,25 @@ export default function DiagnosticsScreen() {
             label={t('diagnostics.sseQuiesced')}
             value={lifecycle.isSseQuiesced ? t('diagnostics.yes') : t('diagnostics.no')}
             valueColor={lifecycle.isSseQuiesced ? STATUS_ORANGE : undefined}
+          />
+          <DiagRow
+            label={t('diagnostics.lastSyncedAt')}
+            value={formatTimestamp(lastSyncedAt, t('diagnostics.never'))}
+          />
+          <DiagRow
+            label={t('diagnostics.syncStatus')}
+            value={syncError ? t('diagnostics.syncFailed') : t('diagnostics.syncOk')}
+            valueColor={syncError ? colors.error : STATUS_GREEN}
+          />
+          <DiagRow
+            label={t('diagnostics.consecutiveFailures')}
+            value={String(consecutiveFailureCount)}
+            valueColor={consecutiveFailureCount > 0 ? STATUS_ORANGE : undefined}
+          />
+          <DiagRow
+            label={t('diagnostics.deadLetterCount')}
+            value={String(syncFailureCount)}
+            valueColor={syncFailureCount > 0 ? STATUS_ORANGE : undefined}
           />
         </View>
 

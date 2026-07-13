@@ -92,26 +92,26 @@ describe('clearLogs', () => {
 });
 
 describe('ring buffer behaviour', () => {
-  it('stores up to 200 entries', () => {
-    for (let i = 0; i < 200; i++) {
+  it('stores up to 1000 entries', () => {
+    for (let i = 0; i < 1000; i++) {
       console.warn(`msg-${i}`);
     }
-    expect(getLogs()).toHaveLength(200);
+    expect(getLogs()).toHaveLength(1000);
   });
 
   it('evicts the oldest entry when the buffer is full', () => {
-    for (let i = 0; i < 205; i++) {
+    for (let i = 0; i < 1005; i++) {
       console.warn(`msg-${i}`);
     }
     const logs = getLogs();
-    expect(logs).toHaveLength(200);
+    expect(logs).toHaveLength(1000);
     // The first 5 messages (msg-0 through msg-4) should be gone
     expect(logs[0].msg).toBe('msg-5');
-    expect(logs[199].msg).toBe('msg-204');
+    expect(logs[999].msg).toBe('msg-1004');
   });
 
   it('returns entries in chronological order after wrap-around', () => {
-    for (let i = 0; i < 210; i++) {
+    for (let i = 0; i < 1010; i++) {
       console.warn(`msg-${i}`);
     }
     const logs = getLogs();

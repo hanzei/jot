@@ -173,23 +173,49 @@ describe('API Client', () => {
   });
 
   describe('auth.logout', () => {
-    it('calls POST /logout and clears stored session and cached profile', async () => {
-      mockAxiosInstance.post.mockResolvedValueOnce({});
+    it('clears stored session and cached profile immediately, without waiting for POST /logout to resolve', async () => {
+      await setServerUrl('https://logout-immediate.example.com');
+      const serverId = await getActiveTestServerId();
+      memory.set(getServerScopedStorageKey(serverId, 'session'), 'logout-token');
 
+      let resolvePost!: (value: unknown) => void;
+      mockAxiosInstance.post.mockReturnValueOnce(new Promise((resolve) => { resolvePost = resolve; }));
+
+      // The POST promise is left pending (never resolved) for the duration of
+      // this test, yet auth.logout() must still resolve and clear local state.
       await auth.logout();
 
-      expect(mockAxiosInstance.post).toHaveBeenCalledWith('/logout');
-      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith(expect.stringMatching(/^jot_server_v1_.*_session$/));
-      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith(expect.stringMatching(/^jot_server_v1_.*_cached_profile$/));
+      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith(getServerScopedStorageKey(serverId, 'session'));
+      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith(getServerScopedStorageKey(serverId, 'cached_profile'));
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith('/logout', undefined, {
+        headers: { Cookie: 'jot_session=logout-token' },
+      });
+
+      resolvePost({});
     });
 
-    it('clears stored session and cached profile even when server call fails', async () => {
+    it('does not throw when the background POST /logout rejects', async () => {
+      await setServerUrl('https://logout-reject.example.com');
+      const serverId = await getActiveTestServerId();
+      memory.set(getServerScopedStorageKey(serverId, 'session'), 'logout-token');
       mockAxiosInstance.post.mockRejectedValueOnce(new Error('Network Error'));
 
+      await expect(auth.logout()).resolves.toBeUndefined();
+
+      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith(getServerScopedStorageKey(serverId, 'session'));
+      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith(getServerScopedStorageKey(serverId, 'cached_profile'));
+    });
+
+    it('skips the background network call when there is no stored session', async () => {
+      await setServerUrl('https://logout-no-session.example.com');
+      const serverId = await getActiveTestServerId();
+      memory.delete(getServerScopedStorageKey(serverId, 'session'));
+
+      mockAxiosInstance.post.mockClear();
       await auth.logout();
 
-      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith(expect.stringMatching(/^jot_server_v1_.*_session$/));
-      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith(expect.stringMatching(/^jot_server_v1_.*_cached_profile$/));
+      expect(mockAxiosInstance.post).not.toHaveBeenCalled();
+      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith(getServerScopedStorageKey(serverId, 'cached_profile'));
     });
   });
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Modal, Pressable, TextInput, TouchableOpacity } from 'react-native';
+import { View, Text, Modal, Pressable, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../theme/ThemeContext';
 import { styles } from './styles';
@@ -74,10 +74,14 @@ export default function RenameLabelModal({
               onPress={onSubmit}
               disabled={!value.trim() || isPending}
               testID="rename-label-submit"
+              accessibilityLabel={t('labels.renameSave')}
+              accessibilityState={{ disabled: !value.trim() || isPending, busy: isPending }}
             >
-              <Text style={styles.modalPrimaryText}>
-                {isPending ? t('settings.saving') : t('labels.renameSave')}
-              </Text>
+              {isPending ? (
+                <ActivityIndicator size="small" color="#fff" testID="rename-label-submit-spinner" />
+              ) : (
+                <Text style={styles.modalPrimaryText}>{t('labels.renameSave')}</Text>
+              )}
             </TouchableOpacity>
           </View>
         </Pressable>
