@@ -139,20 +139,6 @@ export const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
   },
-  metaAddLabels: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  metaAddLabelsText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
   contentInput: {
     fontSize: 16,
     lineHeight: 24,

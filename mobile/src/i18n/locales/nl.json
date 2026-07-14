@@ -343,7 +343,6 @@
   "labels": {
     "title": "Labels",
     "noLabels": "Nog geen labels",
-    "addLabels": "Labels toevoegen",
     "newLabelPlaceholder": "Nieuw label",
     "newSidebar": "Nieuw label",
     "createInputLabel": "Nieuwe labelnaam",

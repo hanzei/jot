@@ -314,7 +314,6 @@
   "labels": {
     "title": "Étiquettes",
     "noLabels": "Aucune étiquette pour l'instant",
-    "addLabels": "Ajouter des étiquettes",
     "newLabelPlaceholder": "Nouvelle étiquette",
     "newSidebar": "Nouvelle étiquette",
     "createInputLabel": "Nom de la nouvelle étiquette",

@@ -33,7 +33,7 @@ import {
 import { Gesture } from 'react-native-gesture-handler';
 import { LinearTransition, useSharedValue, runOnJS } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { Archive, ArrowLeft, Check, ChevronRight, CircleAlert, EllipsisVertical, FileText, Image, List, Palette, Pin, Plus, Tag } from 'lucide-react-native';
+import { Archive, ArrowLeft, Check, ChevronRight, CircleAlert, EllipsisVertical, FileText, Image, List, Palette, Pin, Plus } from 'lucide-react-native';
 import { useNavigation, useRoute, RouteProp, type NavigationAction } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
@@ -2471,12 +2471,12 @@ export default function NoteEditorScreen() {
 
         {/* Collaborators + labels, mirroring the webapp's single-note view.
             Tapping a collaborator avatar opens the share screen; tapping a
-            label chip (or "Add labels") opens the label picker — the same
-            targets as the overflow menu's Share / Labels actions. Shown for
-            shared and/or labelled notes, plus the "Add labels" affordance on
-            any editable note. Read-only (trashed) notes render it as plain,
-            non-interactive display, matching the menu hiding those actions. */}
-        {(displayCollaborators.length > 0 || labels.length > 0 || !isReadOnly) && (
+            label chip opens the label picker — the same targets as the overflow
+            menu's Share / Labels actions. Shown only for shared and/or labelled
+            notes; labels are added on an empty note via the overflow menu.
+            Read-only (trashed) notes render it as plain, non-interactive
+            display, matching the menu hiding those actions. */}
+        {(displayCollaborators.length > 0 || labels.length > 0) && (
           <View style={styles.metaRow} testID="note-meta-row">
             {displayCollaborators.length > 0 && (() => {
               const avatars = displayCollaborators.map((c, index) => (
@@ -2529,18 +2529,6 @@ export default function NoteEditorScreen() {
                 </View>
               )
             ))}
-
-            {!isReadOnly && (
-              <TouchableOpacity
-                style={[styles.metaAddLabels, { borderColor: colors.primary }]}
-                onPress={openLabelPicker}
-                testID="note-meta-add-labels"
-                accessibilityLabel={t('labels.addLabels')}
-              >
-                <Tag size={14} color={colors.primary} />
-                <Text style={[styles.metaAddLabelsText, { color: colors.primary }]}>{t('labels.addLabels')}</Text>
-              </TouchableOpacity>
-            )}
           </View>
         )}
       </ScrollViewContainer>
