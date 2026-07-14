@@ -50,7 +50,29 @@ interface QueueEntry {
   method: string;
   body: string | null;
   created_at: string;
+  /**
+   * Count of transient drain failures for this specific entry (issue #714).
+   * Defaults to 0 for rows written before migration 6 / by older code paths.
+   */
+  attempts?: number;
 }
+
+/**
+ * How many times a single queue entry may fail transiently before it is
+ * dead-lettered and the drain continues past it (issue #714). A persistently
+ * 5xx-ing op, or one whose processing throws a non-HTTP error, would otherwise
+ * sit at the FIFO head forever and block every later write.
+ *
+ * Kept below OfflineContext's MAX_CONSECUTIVE_DRAIN_FAILURES so the backoff
+ * retries within a single online session are enough to walk a poison entry to
+ * its cap and unwedge the queue before the scheduler pauses auto-retries.
+ * The counter also persists across reconnects/restarts, so even a paused
+ * scheduler resumes the walk on the next external trigger.
+ */
+export const MAX_ENTRY_DRAIN_ATTEMPTS = 5;
+
+/** dead_letter.status sentinel for a non-HTTP local processing error (issue #714). */
+export const PROCESSING_ERROR_STATUS = 0;
 
 export interface EnqueueParams {
   operation: QueueOperation;
@@ -79,6 +101,29 @@ export function isTransientHttpStatus(status: number | undefined): boolean {
   if (status === undefined) return true;
   if (status === 401 || status === 408 || status === 429) return true;
   return status >= 500;
+}
+
+/**
+ * Of the *transient* failures, which ones block the whole queue rather than
+ * being specific to the entry at the head (issue #714)? A global failure stops
+ * the drain without charging the entry's attempt counter — every entry would
+ * fail the same way — whereas an entry-specific transient failure walks that
+ * entry toward being dead-lettered so it can't wedge the head forever.
+ *
+ * Global: a transport-level failure with no server response (network down or a
+ * client timeout), plus statuses that apply queue-wide (401 needs re-auth, 408
+ * request timeout, 429 rate limit). Entry-specific: a 5xx tied to this op's
+ * payload, and any non-HTTP error thrown while processing the entry itself
+ * (corrupted body, a local DB error) — those are charged and eventually
+ * dead-lettered.
+ */
+export function isGlobalDrainFailure(err: unknown, status: number | undefined): boolean {
+  // A non-HTTP error thrown while processing an entry is specific to that entry.
+  if (!axios.isAxiosError(err)) return false;
+  // Transport-level failure with no server response: network down or timeout.
+  if (err.response === undefined) return true;
+  // Statuses that block the whole queue regardless of the specific entry.
+  return status === 401 || status === 408 || status === 429;
 }
 
 /**
@@ -205,6 +250,43 @@ export async function enqueueOperation(db: SQLiteDatabase, params: EnqueueParams
 export async function getPendingCount(db: SQLiteDatabase): Promise<number> {
   const row = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM sync_queue');
   return row?.count ?? 0;
+}
+
+/** Head-of-line diagnostics for the sync queue (issue #714). */
+export interface SyncQueueStats {
+  pendingCount: number;
+  /**
+   * The oldest pending entry — the FIFO head that a wedge blocks on — or null
+   * when the queue is empty. `attempts` shows how many times draining it has
+   * failed transiently (approaching MAX_ENTRY_DRAIN_ATTEMPTS = dead-letter).
+   */
+  head: { id: number; operation: QueueOperation; created_at: string; attempts: number } | null;
+  /** Highest attempt count across all pending entries. */
+  maxAttempts: number;
+}
+
+/**
+ * Summarize the sync queue for the Diagnostics screen so a head-of-line wedge is
+ * legible: which op is stuck at the head, how old it is, and how many transient
+ * failures it (or any entry) has racked up (issue #714). A pending count alone
+ * can't distinguish "healthy backlog" from "one poison entry blocking the rest".
+ */
+export async function getSyncQueueStats(db: SQLiteDatabase): Promise<SyncQueueStats> {
+  const head = await db.getFirstAsync<{
+    id: number;
+    operation: QueueOperation;
+    created_at: string;
+    attempts: number | null;
+  }>('SELECT id, operation, created_at, attempts FROM sync_queue ORDER BY id ASC LIMIT 1');
+  const pendingCount = await getPendingCount(db);
+  const maxRow = await db.getFirstAsync<{ max: number | null }>('SELECT MAX(attempts) as max FROM sync_queue');
+  return {
+    pendingCount,
+    head: head
+      ? { id: head.id, operation: head.operation, created_at: head.created_at, attempts: head.attempts ?? 0 }
+      : null,
+    maxAttempts: maxRow?.max ?? 0,
+  };
 }
 
 function parseQueueBody(body: string | null): Record<string, unknown> | null {
@@ -407,7 +489,12 @@ function hasStringId(data: unknown): data is { id: string } {
 export interface DiscardedOperation {
   operation: QueueOperation;
   endpoint: string;
-  /** Permanent HTTP status code that caused the discard (a non-transient 4xx). */
+  /**
+   * The status that caused the discard: a permanent (non-transient 4xx) HTTP
+   * status, a transient HTTP status (5xx) that never recovered after
+   * MAX_ENTRY_DRAIN_ATTEMPTS tries, or PROCESSING_ERROR_STATUS (0) for a
+   * non-HTTP local processing error (issue #714).
+   */
   status: number;
 }
 
@@ -431,11 +518,25 @@ export interface DeadLetteredOperation {
   note_id: string | null;
   created_at: string;
   failed_at: string;
+  /**
+   * Transient drain attempts made before giving up (0 for a permanent first-try
+   * discard); #714. Optional so callers constructing a DeadLetteredOperation by
+   * hand don't have to supply it — reads normalize it to a concrete value.
+   */
+  attempts?: number;
+  /** Last error text, when the discard came from a repeated transient/processing failure (#714). Optional; see `attempts`. */
+  error_message?: string | null;
 }
 
-/** Read all preserved dead-lettered ops, oldest first. */
+/**
+ * Read all preserved dead-lettered ops, oldest first. Normalizes the #714
+ * columns (`attempts`, `error_message`) at the database boundary so every
+ * consumer sees concrete values even for rows written before those columns
+ * existed (defaulted by migration 6) or by older code paths.
+ */
 export async function getDeadLetteredOperations(db: SQLiteDatabase): Promise<DeadLetteredOperation[]> {
-  return db.getAllAsync<DeadLetteredOperation>('SELECT * FROM dead_letter ORDER BY id ASC');
+  const rows = await db.getAllAsync<DeadLetteredOperation>('SELECT * FROM dead_letter ORDER BY id ASC');
+  return rows.map((row) => ({ ...row, attempts: row.attempts ?? 0, error_message: row.error_message ?? null }));
 }
 
 /** Count of preserved dead-lettered ops; drives the "N changes couldn't be saved" banner (#493). */
@@ -467,10 +568,11 @@ async function recordDeadLetter(
   body: Record<string, unknown> | undefined,
   status: number,
   noteId: string | null,
+  options?: { attempts?: number; errorMessage?: string | null },
 ): Promise<void> {
   await db.runAsync(
-    `INSERT INTO dead_letter (operation, endpoint, method, body, status, note_id, created_at, failed_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO dead_letter (operation, endpoint, method, body, status, note_id, created_at, failed_at, attempts, error_message)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       entry.operation,
       endpoint,
@@ -480,6 +582,8 @@ async function recordDeadLetter(
       noteId,
       entry.created_at,
       new Date().toISOString(),
+      options?.attempts ?? 0,
+      options?.errorMessage ?? null,
     ],
   );
 }
@@ -490,8 +594,22 @@ async function recordDeadLetter(
  * discard the entry and continue: idempotent 409 conflicts resolve silently, while
  * every other permanent status dead-letters the op (preserved in the `dead_letter`
  * table with the affected note flagged `sync_state = 'failed'`) so the optimistic
- * edit isn't lost (#492). On a transient failure (network/timeout/5xx), stop draining
- * and retry the remaining entries on the next reconnect.
+ * edit isn't lost (#492).
+ *
+ * Transient failures split two ways (issue #714):
+ *   - *Global* connectivity failures — no server response (network error/timeout)
+ *     or a whole-queue-blocking status (401 re-auth, 408, 429 rate-limit) — stop
+ *     the drain without charging the head entry, since every entry would fail the
+ *     same way; the remainder retries on the next reconnect.
+ *   - *Entry-specific* failures — a 5xx tied to this op's payload, or a non-HTTP
+ *     error thrown while processing this entry (corrupted body, a local DB error)
+ *     — increment the entry's `attempts` counter and stop. Once an entry has
+ *     failed MAX_ENTRY_DRAIN_ATTEMPTS times it is dead-lettered and the drain
+ *     continues *past* it, so one reproducibly-failing op can no longer wedge the
+ *     FIFO head and starve later writes for unrelated notes (the head-of-line
+ *     bug). A long server-wide 5xx outage can therefore dead-letter the head after
+ *     the cap even though the op was fine — an accepted trade-off: the op is
+ *     preserved in dead_letter and recoverable via the failed-changes review flow.
  *
  * Handles offline-create ID reconciliation: when a `create` or `duplicate` operation
  * succeeds, the server echoes back the client-supplied ID unchanged. The canonical
@@ -510,6 +628,13 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
   const idMap = new Map<string, string>();
   const idMappings: Array<{ localId: string; serverNote: Note }> = [];
   const discardedOperations: DiscardedOperation[] = [];
+  // Notes whose offline `create`/`duplicate` was dead-lettered this drain: the
+  // note never reached the server, so every later queued op for it would 404 and
+  // dead-letter one-by-one (a pile of rows for a single note). Instead we drop
+  // those dependents in place — the note is already flagged `failed`, and the
+  // "Keep my version" fork rebuilds from the note's *local* content, which still
+  // carries the whole chained edit (issue #714 cascade).
+  const abandonedCreateNoteIds = new Set<string>();
   let syncedSettings = false;
 
   for (const entry of entries) {
@@ -517,10 +642,29 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
     // (id-remapped) endpoint/body that were actually sent to the server.
     let endpoint = entry.endpoint;
     let body: Record<string, unknown> | undefined;
+    // Flipped true the instant the server request returns 2xx. After that point a
+    // throw is a *local reconciliation* failure, not a failed write, so it must
+    // not retry or dead-letter the entry (issue #714 — mirrors imageUploadQueue's
+    // "the upload already landed, so remove the queue entry first").
+    let requestLanded = false;
     try {
       if (entry.body) {
         body = JSON.parse(entry.body) as Record<string, unknown>;
         body = remapIdsInBody(body, idMap);
+      }
+
+      // If this op targets a note whose create was just dead-lettered, replaying
+      // it against a note the server never got is pointless — drop it (the note
+      // stays flagged failed) rather than round-tripping to a guaranteed 404.
+      if (abandonedCreateNoteIds.size > 0) {
+        const touched = affectedNoteIds(endpoint, body);
+        if (touched.length > 0 && touched.every((id) => abandonedCreateNoteIds.has(id))) {
+          console.warn(
+            `Dropping queued operation id=${entry.id} (${entry.operation}): its note's create was dead-lettered.`,
+          );
+          await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
+          continue;
+        }
       }
 
       // Remap local IDs in the endpoint path, matching only complete path segments
@@ -544,6 +688,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           if (version !== null) body.base_version = version;
         }
         const response = await api.post(endpoint, body);
+        requestLanded = true;
 
         if (entry.operation === 'create' || entry.operation === 'duplicate') {
           // The server keeps the client-supplied `id`, so the id is stable —
@@ -619,6 +764,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           if (version !== null) body.base_version = version;
         }
         const response = await api.patch(endpoint, body);
+        requestLanded = true;
         if (entry.operation === 'updateSettings') {
           syncedSettings = true;
         } else if (updateNoteID !== undefined) {
@@ -631,6 +777,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         }
       } else if (entry.method === 'DELETE') {
         const response = await api.delete(endpoint);
+        requestLanded = true;
         if (entry.operation === 'removeLabelFromNote') {
           // The server returns the updated note; persist it so the local
           // labels_json drops the removed label and stays consistent.
@@ -651,6 +798,18 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         await clearNoteSyncFailed(db, noteId);
       }
     } catch (err) {
+      if (requestLanded) {
+        // The server write already succeeded; only a later local reconciliation
+        // step (saveNote, patchLocalItem, version bump, the entry delete itself)
+        // threw. Retrying or dead-lettering would re-send a write the server has
+        // already applied, so drop the entry and move on — the local cache is
+        // reconciled by the next server fetch / SSE event. Attempt counting is
+        // reserved for failures *before* the request lands (issue #714).
+        console.warn(`Queue entry id=${entry.id} landed server-side; post-response reconciliation failed:`, err);
+        await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
+        continue;
+      }
+
       const status = axios.isAxiosError(err) ? err.response?.status : undefined;
 
       // `isTransientHttpStatus(undefined)` is true, so reaching this branch
@@ -733,9 +892,17 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           // Only link dead_letter.note_id when there's a single clear note (per the
           // schema contract); a multi-note op like reorder stores NULL. The note(s)
           // are still each flagged failed below regardless.
-          await recordDeadLetter(db, entry, endpoint, body, status, noteIds.length === 1 ? noteIds[0] : null);
+          await recordDeadLetter(db, entry, endpoint, body, status, noteIds.length === 1 ? noteIds[0] : null, {
+            attempts: entry.attempts ?? 0,
+            errorMessage: axios.isAxiosError(err) ? err.message : null,
+          });
           for (const noteId of noteIds) {
             await markNoteSyncFailed(db, noteId);
+          }
+          // A dead-lettered create never reached the server, so drop its note's
+          // later queued ops instead of 404-ing each one (issue #714 cascade).
+          if (entry.operation === 'create' || entry.operation === 'duplicate') {
+            for (const noteId of noteIds) abandonedCreateNoteIds.add(noteId);
           }
         } else if (entry.operation === 'create' || entry.operation === 'duplicate') {
           // Replaying a create/duplicate whose original already committed: the
@@ -746,11 +913,54 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         }
 
         await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
-      } else {
-        // Transient failure (network/timeout/401/408/429/5xx) or an unexpected
-        // non-HTTP error — stop draining and retry the rest on the next reconnect.
-        console.warn(`Queue drain stopped at entry id=${entry.id}:`, err);
+      } else if (isGlobalDrainFailure(err, status)) {
+        // No usable server response (network error/timeout) or a status that
+        // blocks the whole queue regardless of this entry (401 re-auth, 408,
+        // 429 rate-limit). Every entry would fail the same way, so stop the
+        // drain without charging this entry's attempt counter and retry the
+        // remainder on the next reconnect (issue #714).
+        console.warn(`Queue drain stopped at entry id=${entry.id} (connectivity):`, err);
         break;
+      } else {
+        // Entry-specific transient failure: a 5xx tied to this op's payload, or a
+        // non-HTTP error thrown while processing this entry (corrupted body, a
+        // local DB error). Charge the entry's attempt counter; once it has failed
+        // MAX_ENTRY_DRAIN_ATTEMPTS times, dead-letter it and continue *past* it so
+        // it can't wedge the FIFO head forever (issue #714). Below the cap, stop
+        // and retry the whole queue on the next drain (preserving FIFO/backoff).
+        const attempts = (entry.attempts ?? 0) + 1;
+        await db.runAsync('UPDATE sync_queue SET attempts = ? WHERE id = ?', [attempts, entry.id]);
+
+        if (attempts < MAX_ENTRY_DRAIN_ATTEMPTS) {
+          console.warn(
+            `Queue drain stopped at entry id=${entry.id} (attempt ${attempts}/${MAX_ENTRY_DRAIN_ATTEMPTS}):`,
+            err,
+          );
+          break;
+        }
+
+        // Cap reached — dead-letter and continue. Use the effective (id-remapped)
+        // endpoint/body so the row agrees with what was actually sent. HTTP 5xx
+        // keeps its status; a non-HTTP throw records PROCESSING_ERROR_STATUS (0).
+        const deadLetterStatus = status ?? PROCESSING_ERROR_STATUS;
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        console.warn(
+          `Dead-lettering queued operation id=${entry.id} after ${attempts} failed attempts ` +
+            `(${deadLetterStatus === PROCESSING_ERROR_STATUS ? 'processing error' : `HTTP ${deadLetterStatus}`}): ${errorMessage}`,
+        );
+        const noteIds = affectedNoteIds(endpoint, body);
+        discardedOperations.push({ operation: entry.operation, endpoint, status: deadLetterStatus });
+        await recordDeadLetter(db, entry, endpoint, body, deadLetterStatus, noteIds.length === 1 ? noteIds[0] : null, {
+          attempts,
+          errorMessage,
+        });
+        for (const noteId of noteIds) {
+          await markNoteSyncFailed(db, noteId);
+        }
+        if (entry.operation === 'create' || entry.operation === 'duplicate') {
+          for (const noteId of noteIds) abandonedCreateNoteIds.add(noteId);
+        }
+        await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
       }
     }
   }

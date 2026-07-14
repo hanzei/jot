@@ -398,7 +398,16 @@ describe('getDeadLetteredOperations', () => {
     const db = { getAllAsync: jest.fn().mockResolvedValue(rows) };
     const result = await getDeadLetteredOperations(db as never);
     expect(db.getAllAsync).toHaveBeenCalledWith('SELECT * FROM dead_letter ORDER BY id ASC');
-    expect(result).toBe(rows);
+    expect(result).toEqual([{ ...rows[0], attempts: 0, error_message: null }]);
+  });
+
+  it('normalizes the #714 columns for rows missing them (older data)', async () => {
+    // A row written before migration 6 comes back without attempts/error_message.
+    const rows = [{ id: 1, operation: 'update', endpoint: '/notes/n1', method: 'PATCH', body: null, status: 400, note_id: 'n1', created_at: '', failed_at: '' }];
+    const db = { getAllAsync: jest.fn().mockResolvedValue(rows) };
+    const [dl] = await getDeadLetteredOperations(db as never);
+    expect(dl.attempts).toBe(0);
+    expect(dl.error_message).toBeNull();
   });
 });
 

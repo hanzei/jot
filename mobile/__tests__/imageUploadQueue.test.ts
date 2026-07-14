@@ -16,7 +16,7 @@ import {
 } from '../src/db/imageUploadQueue';
 import { uploadNoteImage } from '../src/api/images';
 import { patchLocalNoteImages, getPendingCreateNoteIds } from '../src/db/noteQueries';
-import { subscribeToEnqueue } from '../src/db/syncQueue';
+import { subscribeToEnqueue, MAX_ENTRY_DRAIN_ATTEMPTS } from '../src/db/syncQueue';
 
 jest.mock('../src/api/images', () => ({
   uploadNoteImage: jest.fn(),
@@ -222,6 +222,40 @@ describe('drainImageUploadQueue', () => {
 
     expect(mockUploadNoteImage).toHaveBeenCalledTimes(1);
     expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 0 });
+  });
+
+  it('charges the attempt counter and stops below the cap on a persistent 5xx (#714)', async () => {
+    const entry = makeEntry({ id: 'up-5xx' });
+    const db = makeDb({ getAllAsync: jest.fn().mockResolvedValue([entry]) });
+    const err = Object.assign(new Error('Server Error'), { isAxiosError: true, response: { status: 503 } });
+    mockUploadNoteImage.mockRejectedValueOnce(err);
+
+    const result = await drainImageUploadQueue(db as never);
+
+    expect(db.runAsync).toHaveBeenCalledWith('UPDATE pending_image_uploads SET attempts = ? WHERE id = ?', [1, 'up-5xx']);
+    expect(db.runAsync).not.toHaveBeenCalledWith(expect.stringContaining("SET status = 'error'"), expect.anything());
+    expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 0 });
+  });
+
+  it('flags a persistently-failing upload as errored at the cap and continues past it (#714)', async () => {
+    const stuck = makeEntry({ id: 'up-stuck', note_id: 'n1', attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1 });
+    const ok = makeEntry({ id: 'up-ok', note_id: 'n2' });
+    const db = makeDb({ getAllAsync: jest.fn().mockResolvedValue([stuck, ok]) });
+    const err = Object.assign(new Error('Server Error'), { isAxiosError: true, response: { status: 500 } });
+    mockUploadNoteImage.mockRejectedValueOnce(err); // up-stuck hits the cap
+    mockUploadNoteImage.mockResolvedValueOnce({ id: 'img1' }); // up-ok uploads fine
+
+    const result = await drainImageUploadQueue(db as never);
+
+    expect(db.runAsync).toHaveBeenCalledWith(
+      'UPDATE pending_image_uploads SET attempts = ? WHERE id = ?',
+      [MAX_ENTRY_DRAIN_ATTEMPTS, 'up-stuck'],
+    );
+    expect(db.runAsync).toHaveBeenCalledWith(expect.stringContaining("SET status = 'error'"), ['Server Error', 'up-stuck']);
+    // The drain continued past the flagged entry to the next upload.
+    expect(mockUploadNoteImage).toHaveBeenCalledTimes(2);
+    expect(result.uploadedNoteIds).toEqual(['n2']);
+    expect(result.discardedCount).toBe(1);
   });
 
   it('flags a permanently-rejected upload as errored instead of discarding it silently', async () => {

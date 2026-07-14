@@ -50,14 +50,23 @@ const migration1 = async (db: SQLiteDatabase): Promise<void> => {
       endpoint TEXT NOT NULL,
       method TEXT NOT NULL,
       body TEXT,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      -- How many times draining this specific entry has failed transiently. Once
+      -- it reaches MAX_ENTRY_DRAIN_ATTEMPTS the entry is dead-lettered and the
+      -- drain continues past it, so one reproducibly-failing op can't wedge the
+      -- whole queue (issue #714).
+      attempts INTEGER NOT NULL DEFAULT 0
     );
 
     -- Dead-lettered sync operations: writes the server permanently rejected
-    -- (non-transient 4xx, excluding idempotent 409s). Preserved with their full
-    -- body + metadata so a failed optimistic edit is never silently dropped and
-    -- can later be surfaced/resolved (issue #492). note_id links the row to the
-    -- affected note (NULL for ops not tied to a single note, e.g. settings).
+    -- (non-transient 4xx, excluding idempotent 409s), or a transient/processing
+    -- failure that never succeeded after MAX_ENTRY_DRAIN_ATTEMPTS tries (#714).
+    -- Preserved with their full body + metadata so a failed optimistic edit is
+    -- never silently dropped and can later be surfaced/resolved (issue #492).
+    -- note_id links the row to the affected note (NULL for ops not tied to a
+    -- single note, e.g. settings). status is the HTTP status that caused the
+    -- discard, or 0 for a non-HTTP local processing error; error_message keeps
+    -- the last error text for the diagnostics/review surface (#714).
     CREATE TABLE IF NOT EXISTS dead_letter (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       operation TEXT NOT NULL,
@@ -67,7 +76,9 @@ const migration1 = async (db: SQLiteDatabase): Promise<void> => {
       status INTEGER NOT NULL,
       note_id TEXT,
       created_at TEXT NOT NULL,
-      failed_at TEXT NOT NULL
+      failed_at TEXT NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      error_message TEXT
     );
 
     CREATE TABLE IF NOT EXISTS users (
@@ -164,6 +175,11 @@ const migration4 = async (db: SQLiteDatabase): Promise<void> => {
       status TEXT NOT NULL DEFAULT 'queued',
       error_message TEXT,
       created_at TEXT NOT NULL,
+      -- Transient-failure attempt counter, mirroring sync_queue.attempts: once it
+      -- reaches MAX_ENTRY_DRAIN_ATTEMPTS the upload is flagged error and the drain
+      -- continues, so one persistently-failing upload can't wedge the rest of the
+      -- queue (issue #714).
+      attempts INTEGER NOT NULL DEFAULT 0,
       FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
     );
 
@@ -219,7 +235,28 @@ const migration5 = async (db: SQLiteDatabase): Promise<void> => {
   }
 };
 
-export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4, migration5];
+// Migration 6: give the sync queues a per-entry transient-failure counter so a
+// single reproducibly-failing op can be dead-lettered and skipped instead of
+// wedging the whole queue in strict FIFO order (issue #714). Adds
+// sync_queue.attempts, pending_image_uploads.attempts, and dead_letter.attempts
+// + dead_letter.error_message. Fresh installs already get these from the CREATE
+// TABLE statements above; these column-probed ALTERs cover existing installs.
+// Additive only, per the project's "preserve existing installations" rule.
+const migration6 = async (db: SQLiteDatabase): Promise<void> => {
+  const addColumnIfMissing = async (table: string, column: string, definition: string): Promise<void> => {
+    const cols = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(${table})`);
+    if (!cols.some((c) => c.name === column)) {
+      await db.runAsync(`ALTER TABLE ${table} ADD COLUMN ${definition}`);
+    }
+  };
+
+  await addColumnIfMissing('sync_queue', 'attempts', 'attempts INTEGER NOT NULL DEFAULT 0');
+  await addColumnIfMissing('pending_image_uploads', 'attempts', 'attempts INTEGER NOT NULL DEFAULT 0');
+  await addColumnIfMissing('dead_letter', 'attempts', 'attempts INTEGER NOT NULL DEFAULT 0');
+  await addColumnIfMissing('dead_letter', 'error_message', 'error_message TEXT');
+};
+
+export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4, migration5, migration6];
 
 export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   // Run PRAGMAs separately: sqlite3_exec (used by execAsync) stops on the

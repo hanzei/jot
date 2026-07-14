@@ -32,6 +32,27 @@ const ALL_NOTE_ITEM_COLS = [
   'assigned_to', 'created_at', 'updated_at',
 ].map((name) => ({ name }));
 
+// Fully-migrated column sets probed by migration6 (issue #714), in the order it
+// probes them: sync_queue.attempts, pending_image_uploads.attempts,
+// dead_letter.attempts, dead_letter.error_message.
+const SYNC_QUEUE_COLS_FULL = [
+  'id', 'operation', 'endpoint', 'method', 'body', 'created_at', 'attempts',
+].map((name) => ({ name }));
+const IMAGE_UPLOAD_COLS_FULL = [
+  'id', 'note_id', 'local_path', 'filename', 'mime_type', 'size_bytes',
+  'status', 'error_message', 'created_at', 'attempts',
+].map((name) => ({ name }));
+const DEAD_LETTER_COLS_FULL = [
+  'id', 'operation', 'endpoint', 'method', 'body', 'status', 'note_id',
+  'created_at', 'failed_at', 'attempts', 'error_message',
+].map((name) => ({ name }));
+
+// migration6 (issue #714) probes four more table_info results after migration5:
+// sync_queue.attempts, pending_image_uploads.attempts, dead_letter.attempts, and
+// dead_letter.error_message. Existing sequential mocks end at migration5, so each
+// chain appends these full column sets (an exhausted mockResolvedValueOnce returns
+// undefined → `.some` throws, and full sets mean no spurious ALTER).
+
 describe('migrateDatabase', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -48,7 +69,11 @@ describe('migrateDatabase', () => {
           .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS)
           .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
           .mockResolvedValueOnce(ALL_NOTES_COLS) // migration3 images_json probe
-          .mockResolvedValueOnce([]), // migration5 labels backfill: no notes
+          .mockResolvedValueOnce([]) // migration5 labels backfill: no notes
+          .mockResolvedValueOnce(SYNC_QUEUE_COLS_FULL)
+          .mockResolvedValueOnce(IMAGE_UPLOAD_COLS_FULL)
+          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL)
+          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL), // migration6 probes (issue #714)
       });
       await migrateDatabase(db as unknown as SQLiteDatabase);
 
@@ -84,7 +109,11 @@ describe('migrateDatabase', () => {
           .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS)
           .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
           .mockResolvedValueOnce(ALL_NOTES_COLS) // migration3 images_json probe
-          .mockResolvedValueOnce([]), // migration5 labels backfill: no notes
+          .mockResolvedValueOnce([]) // migration5 labels backfill: no notes
+          .mockResolvedValueOnce(SYNC_QUEUE_COLS_FULL)
+          .mockResolvedValueOnce(IMAGE_UPLOAD_COLS_FULL)
+          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL)
+          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL), // migration6 probes (issue #714)
       });
       await migrateDatabase(db as unknown as SQLiteDatabase);
 
@@ -100,7 +129,11 @@ describe('migrateDatabase', () => {
           .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS)
           .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
           .mockResolvedValueOnce(ALL_NOTES_COLS) // migration3 images_json probe
-          .mockResolvedValueOnce([]), // migration5 labels backfill: no notes
+          .mockResolvedValueOnce([]) // migration5 labels backfill: no notes
+          .mockResolvedValueOnce(SYNC_QUEUE_COLS_FULL)
+          .mockResolvedValueOnce(IMAGE_UPLOAD_COLS_FULL)
+          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL)
+          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL), // migration6 probes (issue #714)
       });
       await migrateDatabase(db as unknown as SQLiteDatabase);
 
@@ -117,7 +150,11 @@ describe('migrateDatabase', () => {
           .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS)
           .mockResolvedValueOnce(notesColsWithoutVersion) // migration2 version probe
           .mockResolvedValueOnce(ALL_NOTES_COLS) // migration3 images_json probe
-          .mockResolvedValueOnce([]), // migration5 labels backfill: no notes
+          .mockResolvedValueOnce([]) // migration5 labels backfill: no notes
+          .mockResolvedValueOnce(SYNC_QUEUE_COLS_FULL)
+          .mockResolvedValueOnce(IMAGE_UPLOAD_COLS_FULL)
+          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL)
+          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL), // migration6 probes (issue #714)
       });
       await migrateDatabase(db as unknown as SQLiteDatabase);
 
@@ -136,7 +173,11 @@ describe('migrateDatabase', () => {
           .mockResolvedValueOnce(noteItemColsWithoutNew)
           .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
           .mockResolvedValueOnce(ALL_NOTES_COLS) // migration3 images_json probe
-          .mockResolvedValueOnce([]), // migration5 labels backfill: no notes
+          .mockResolvedValueOnce([]) // migration5 labels backfill: no notes
+          .mockResolvedValueOnce(SYNC_QUEUE_COLS_FULL)
+          .mockResolvedValueOnce(IMAGE_UPLOAD_COLS_FULL)
+          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL)
+          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL), // migration6 probes (issue #714)
       });
       await migrateDatabase(db as unknown as SQLiteDatabase);
 
@@ -155,13 +196,58 @@ describe('migrateDatabase', () => {
           .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS)
           .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
           .mockResolvedValueOnce(notesColsWithoutImages) // migration3 images_json probe
-          .mockResolvedValueOnce([]), // migration5 labels backfill: no notes
+          .mockResolvedValueOnce([]) // migration5 labels backfill: no notes
+          .mockResolvedValueOnce(SYNC_QUEUE_COLS_FULL)
+          .mockResolvedValueOnce(IMAGE_UPLOAD_COLS_FULL)
+          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL)
+          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL), // migration6 probes (issue #714)
       });
       await migrateDatabase(db as unknown as SQLiteDatabase);
 
       expect(db.runAsync).toHaveBeenCalledWith(
         `ALTER TABLE notes ADD COLUMN images_json TEXT NOT NULL DEFAULT '[]'`,
       );
+    });
+
+    it('adds the attempts/error_message columns when they are missing (issue #714)', async () => {
+      const db = makeDb({
+        getAllAsync: jest.fn()
+          .mockResolvedValueOnce(ALL_NOTES_COLS)
+          .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS)
+          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
+          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration3 images_json probe
+          .mockResolvedValueOnce([]) // migration5 labels backfill: no notes
+          // migration6 probes: every target column is still missing.
+          .mockResolvedValueOnce(SYNC_QUEUE_COLS_FULL.filter((c) => c.name !== 'attempts'))
+          .mockResolvedValueOnce(IMAGE_UPLOAD_COLS_FULL.filter((c) => c.name !== 'attempts'))
+          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL.filter((c) => c.name !== 'attempts' && c.name !== 'error_message'))
+          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL.filter((c) => c.name !== 'attempts' && c.name !== 'error_message')),
+      });
+      await migrateDatabase(db as unknown as SQLiteDatabase);
+
+      expect(db.runAsync).toHaveBeenCalledWith('ALTER TABLE sync_queue ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0');
+      expect(db.runAsync).toHaveBeenCalledWith('ALTER TABLE pending_image_uploads ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0');
+      expect(db.runAsync).toHaveBeenCalledWith('ALTER TABLE dead_letter ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0');
+      expect(db.runAsync).toHaveBeenCalledWith('ALTER TABLE dead_letter ADD COLUMN error_message TEXT');
+    });
+
+    it('skips the migration6 ALTERs when the columns already exist (issue #714)', async () => {
+      const db = makeDb({
+        getAllAsync: jest.fn()
+          .mockResolvedValueOnce(ALL_NOTES_COLS)
+          .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS)
+          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
+          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration3 images_json probe
+          .mockResolvedValueOnce([]) // migration5 labels backfill: no notes
+          .mockResolvedValueOnce(SYNC_QUEUE_COLS_FULL)
+          .mockResolvedValueOnce(IMAGE_UPLOAD_COLS_FULL)
+          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL)
+          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL),
+      });
+      await migrateDatabase(db as unknown as SQLiteDatabase);
+
+      expect(runSqls(db).some((s) => s.includes('ADD COLUMN attempts'))).toBe(false);
+      expect(runSqls(db).some((s) => s.includes('ADD COLUMN error_message'))).toBe(false);
     });
   });
 
@@ -196,7 +282,11 @@ describe('migrateDatabase', () => {
           .mockResolvedValueOnce(rows)
           .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
           .mockResolvedValueOnce(ALL_NOTES_COLS) // migration3 images_json probe
-          .mockResolvedValueOnce([]), // migration5 labels backfill: no notes
+          .mockResolvedValueOnce([]) // migration5 labels backfill: no notes
+          .mockResolvedValueOnce(SYNC_QUEUE_COLS_FULL)
+          .mockResolvedValueOnce(IMAGE_UPLOAD_COLS_FULL)
+          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL)
+          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL), // migration6 probes (issue #714)
       });
       await migrateDatabase(db as unknown as SQLiteDatabase);
 
@@ -221,7 +311,11 @@ describe('migrateDatabase', () => {
           .mockResolvedValueOnce(noteItemColsWithoutBoth)
           .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
           .mockResolvedValueOnce(ALL_NOTES_COLS) // migration3 images_json probe
-          .mockResolvedValueOnce([]), // migration5 labels backfill: no notes
+          .mockResolvedValueOnce([]) // migration5 labels backfill: no notes
+          .mockResolvedValueOnce(SYNC_QUEUE_COLS_FULL)
+          .mockResolvedValueOnce(IMAGE_UPLOAD_COLS_FULL)
+          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL)
+          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL), // migration6 probes (issue #714)
       });
       await migrateDatabase(db as unknown as SQLiteDatabase);
 
@@ -250,7 +344,11 @@ describe('migrateDatabase', () => {
             { labels_json: 'not json' }, // malformed row is tolerated and skipped
             { labels_json: '5' }, // valid JSON but not an array — tolerated and skipped
             { labels_json: '{}' }, // valid JSON object (not an array) — tolerated and skipped
-          ]),
+          ])
+          .mockResolvedValueOnce(SYNC_QUEUE_COLS_FULL)
+          .mockResolvedValueOnce(IMAGE_UPLOAD_COLS_FULL)
+          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL)
+          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL), // migration6 probes (issue #714)
       });
       await migrateDatabase(db as unknown as SQLiteDatabase);
 
@@ -269,7 +367,11 @@ describe('migrateDatabase', () => {
           .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS)
           .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
           .mockResolvedValueOnce(ALL_NOTES_COLS) // migration3 images_json probe
-          .mockResolvedValueOnce([]), // migration5 labels backfill: no notes
+          .mockResolvedValueOnce([]) // migration5 labels backfill: no notes
+          .mockResolvedValueOnce(SYNC_QUEUE_COLS_FULL)
+          .mockResolvedValueOnce(IMAGE_UPLOAD_COLS_FULL)
+          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL)
+          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL), // migration6 probes (issue #714)
       });
       await migrateDatabase(db as unknown as SQLiteDatabase);
 
