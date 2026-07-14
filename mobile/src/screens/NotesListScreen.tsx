@@ -31,6 +31,8 @@ import { normalizeNoteSort, sortNotesForDisplay } from '../utils/noteSort';
 import { isSortWarningDismissed, dismissSortWarning } from '../utils/sortWarningDismissed';
 import { emptyTrash as emptyTrashNotes } from '../api/notes';
 import { getLocalNotes, permanentDeleteLocalNote } from '../db/noteQueries';
+import { enqueueOperation, isQueueableError } from '../db/syncQueue';
+import { isOnlineWriteAllowed } from '../api/serverReachability';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { useBannerShown } from '../hooks/useBannerShown';
 import { styles } from './notesList/styles';
@@ -165,13 +167,24 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
       return;
     }
 
-    try {
-      const response = await updateMe({ note_sort: nextSort });
-      if (requestId !== sortRequestIdRef.current) {
-        return;
+    // The enqueue itself is a local SQLite write and can still fail; swallow
+    // that here (reporting success/failure via the return) rather than let it
+    // escape as an unhandled rejection out of the void-invoked caller.
+    const enqueueSort = async (): Promise<boolean> => {
+      try {
+        await enqueueOperation(db, {
+          operation: 'updateSettings',
+          endpoint: '/users/me',
+          method: 'PATCH',
+          body: { note_sort: nextSort },
+        });
+        return true;
+      } catch {
+        return false;
       }
-      setSettings(response.settings);
-    } catch {
+    };
+
+    const rollback = () => {
       if (requestId !== sortRequestIdRef.current) {
         return;
       }
@@ -180,8 +193,39 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         setSettings(previousSettings);
       }
       Alert.alert(t('common.error'), t('dashboard.sortUpdateFailed'));
+    };
+
+    if (!isOnlineWriteAllowed(isConnected)) {
+      // Server known-unreachable: skip the doomed round-trip and enqueue the
+      // change for replay instead of eating the write timeout (#716). If even
+      // the local enqueue fails, fall back to the same rollback + alert as a
+      // permanent failure rather than leaving the UI showing an unsaved change.
+      if (!(await enqueueSort())) {
+        rollback();
+      }
+      return;
     }
-  }, [setSettings, settings, sortMode, isLocalMode, t]);
+
+    try {
+      const response = await updateMe({ note_sort: nextSort });
+      if (requestId !== sortRequestIdRef.current) {
+        return;
+      }
+      setSettings(response.settings);
+    } catch (err) {
+      if (requestId !== sortRequestIdRef.current) {
+        return;
+      }
+      if (isQueueableError(err)) {
+        // Transient failure: keep the optimistic sort and queue the change for
+        // replay instead of rolling back and showing a blocking dialog (#716).
+        if (await enqueueSort()) {
+          return;
+        }
+      }
+      rollback();
+    }
+  }, [setSettings, settings, sortMode, isLocalMode, isConnected, db, t]);
 
   const handleSortChipPress = useCallback((nextSort: NoteSort) => {
     setIsSortControlsOpen(false);
@@ -268,7 +312,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     if (trashCountRef.current === 0) {
       return;
     }
-    if (!isConnected) {
+    if (!isOnlineWriteAllowed(isConnected)) {
       Alert.alert(t('common.error'), t('dashboard.emptyTrashOffline'));
       return;
     }

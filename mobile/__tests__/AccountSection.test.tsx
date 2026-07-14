@@ -5,6 +5,7 @@ import { useAuth } from '../src/store/AuthContext';
 import { updateMe } from '../src/api/settings';
 import { cacheAuthProfile } from '../src/api/client';
 import { enqueueOperation } from '../src/db/syncQueue';
+import { markServerReachable, markServerUnreachable } from '../src/api/serverReachability';
 import i18n from '../src/i18n';
 
 jest.mock('../src/store/AuthContext', () => ({
@@ -66,7 +67,12 @@ function mockAuth(isLocalMode: boolean) {
 describe('AccountSection', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
+    markServerReachable();
     await i18n.changeLanguage('en');
+  });
+
+  afterEach(() => {
+    markServerReachable();
   });
 
   it('saves the profile to the server in server mode', async () => {
@@ -105,5 +111,49 @@ describe('AccountSection', () => {
     expect(mockUpdateMe).not.toHaveBeenCalled();
     expect(mockEnqueueOperation).not.toHaveBeenCalled();
     expect(mockCacheAuthProfile).not.toHaveBeenCalled();
+  });
+
+  it('skips the network round-trip and enqueues when the server is known-unreachable', async () => {
+    mockAuth(false);
+    markServerUnreachable();
+
+    const { getByTestId, getByText } = render(<AccountSection />);
+    fireEvent.changeText(getByTestId('settings-first-name'), 'Renamed');
+    fireEvent.press(getByTestId('settings-save-profile'));
+
+    await waitFor(() => {
+      expect(getByText(i18n.t('settings.profileUpdated'))).toBeTruthy();
+    });
+
+    // The doomed round-trip is skipped entirely; the change goes straight to the queue.
+    expect(mockUpdateMe).not.toHaveBeenCalled();
+    expect(mockEnqueueOperation).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        operation: 'updateSettings',
+        endpoint: '/users/me',
+        method: 'PATCH',
+        body: expect.objectContaining({ first_name: 'Renamed' }),
+      }),
+    );
+  });
+
+  it('rolls back and re-enables the save button when the local enqueue itself fails', async () => {
+    mockAuth(false);
+    markServerUnreachable();
+    mockEnqueueOperation.mockRejectedValueOnce(new Error('sqlite write failed'));
+
+    const { getByTestId, getByText } = render(<AccountSection />);
+    fireEvent.changeText(getByTestId('settings-first-name'), 'Renamed');
+    fireEvent.press(getByTestId('settings-save-profile'));
+
+    // The button must not stay stuck on "Saving…" forever: the same finally
+    // that guards the network path also runs for a failed enqueue.
+    await waitFor(() => {
+      expect(getByText(i18n.t('settings.failedUpdateProfile'))).toBeTruthy();
+    });
+    expect(getByText(i18n.t('settings.saveChanges'))).toBeTruthy();
+    // Rolled back to the original profile since nothing was queued for replay.
+    expect(setUser).toHaveBeenLastCalledWith(expect.objectContaining({ first_name: 'Alice' }));
   });
 });
