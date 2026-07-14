@@ -2031,7 +2031,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
             }))),
           };
       await onConvert(note.id, data);
-      onClose();
+      // Keep the modal open on the converted note. onRefresh refetches the note
+      // into the parent's editingNote state; because it's fire-and-forget, its
+      // setState lands after this function's `finally` clears savingRef, so the
+      // adoption effect picks up the converted note instead of being skipped.
+      onRefresh?.();
     } catch (error) {
       console.error('Failed to convert note:', error);
       showError(t('note.failedConvert'));

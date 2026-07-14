@@ -84,6 +84,21 @@ test.describe('Note modal overflow menu', () => {
     await expect(dialog.getByRole('button', { name: 'Close' })).toBeVisible();
   });
 
+  test('keeps the modal open on the converted note', async ({ dashboardPage, page }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createListNote('Convert Stay Open', ['milk']);
+    await dashboardPage.openNote('Convert Stay Open');
+
+    await dashboardPage.convertCurrentNoteToText();
+    await expect(page.getByText('Note converted')).toBeVisible();
+
+    // The modal stays open on the converted note instead of closing, and now
+    // renders as a text note (no list "Add item" control).
+    const dialog = page.getByRole('dialog').last();
+    await expect(dialog.getByRole('button', { name: 'Close' })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Add item' })).toHaveCount(0);
+  });
+
   test('opens the label picker from the overflow menu', async ({ dashboardPage, page }) => {
     await dashboardPage.goto();
     await dashboardPage.createNote('Label Menu Note');

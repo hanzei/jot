@@ -1995,12 +1995,13 @@ describe('NoteModal', () => {
       expect(onClose).toHaveBeenCalled()
     })
 
-    it('converts a text note to a list with no confirmation dialog', async () => {
+    it('converts a text note to a list and stays open, refreshing the note', async () => {
       const note = createMockNote({ note_type: 'text', content: '# Groceries\n- [x] Milk\n- Eggs' })
       const onConvert = vi.fn().mockResolvedValue(undefined)
       const onClose = vi.fn()
+      const onRefresh = vi.fn()
 
-      renderNoteModal({ ...defaultProps, note, onConvert, onClose })
+      renderNoteModal({ ...defaultProps, note, onConvert, onClose, onRefresh })
 
       fireEvent.click(screen.getByRole('button', { name: 'Convert to list' }))
       await vi.runAllTimersAsync()
@@ -2015,7 +2016,10 @@ describe('NoteModal', () => {
           { text: 'Eggs', position: 2, completed: false },
         ],
       })
-      expect(onClose).toHaveBeenCalled()
+      // The modal stays open on the converted note (refreshed via onRefresh),
+      // rather than closing.
+      expect(onClose).not.toHaveBeenCalled()
+      expect(onRefresh).toHaveBeenCalled()
     })
 
     it('confirms before converting a list to text and warns about dropped assignments', async () => {
@@ -2024,8 +2028,9 @@ describe('NoteModal', () => {
       const note = createMockNote({ note_type: 'list', title: 'Groceries', items })
       const onConvert = vi.fn().mockResolvedValue(undefined)
       const onClose = vi.fn()
+      const onRefresh = vi.fn()
 
-      renderNoteModal({ ...defaultProps, note, onConvert, onClose })
+      renderNoteModal({ ...defaultProps, note, onConvert, onClose, onRefresh })
 
       fireEvent.click(screen.getByRole('button', { name: 'Convert to text' }))
       expect(screen.getByText(/lose the assignment of 1 item/)).toBeInTheDocument()
@@ -2039,7 +2044,9 @@ describe('NoteModal', () => {
         base_version: 1,
         content: '# Groceries\n\n- [ ] First item\n- [x] Second item',
       })
-      expect(onClose).toHaveBeenCalled()
+      // The modal stays open on the converted note rather than closing.
+      expect(onClose).not.toHaveBeenCalled()
+      expect(onRefresh).toHaveBeenCalled()
     })
 
     it('cancels a list-to-text conversion without calling onConvert', async () => {
