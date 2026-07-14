@@ -7,6 +7,8 @@ import { useTheme } from '../../theme/ThemeContext';
 import { updateMe } from '../../api/settings';
 import { cacheAuthProfile } from '../../api/client';
 import { enqueueOperation, isQueueableError } from '../../db/syncQueue';
+import { isOnlineWriteAllowed } from '../../api/serverReachability';
+import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { displayMessage, extractApiError } from '../../i18n/utils';
 import { styles } from './styles';
 
@@ -15,6 +17,7 @@ export default function AccountSection() {
   const { colors } = useTheme();
   const { t } = useTranslation();
   const db = useSQLiteContext();
+  const { isConnected } = useNetworkStatus();
 
   const [firstName, setFirstName] = useState(user?.first_name ?? '');
   const [lastName, setLastName] = useState(user?.last_name ?? '');
@@ -58,6 +61,20 @@ export default function AccountSection() {
       return;
     }
 
+    if (!isOnlineWriteAllowed(isConnected)) {
+      // Server known-unreachable: skip the doomed round-trip and enqueue the
+      // change for replay, matching the hook-layer gate (#716).
+      await enqueueOperation(db, {
+        operation: 'updateSettings',
+        endpoint: '/users/me',
+        method: 'PATCH',
+        body: profileUpdate,
+      });
+      setProfileSuccess(t('settings.profileUpdated'));
+      setProfileSaving(false);
+      return;
+    }
+
     try {
       const { user: updatedUser, settings: updatedSettings } = await updateMe(profileUpdate);
       setUser(updatedUser);
@@ -83,7 +100,7 @@ export default function AccountSection() {
     } finally {
       setProfileSaving(false);
     }
-  }, [firstName, lastName, setSettings, setUser, t, username, user, settings, db, isLocalMode]);
+  }, [firstName, lastName, setSettings, setUser, t, username, user, settings, db, isLocalMode, isConnected]);
 
   return (
     <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>

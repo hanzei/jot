@@ -4,6 +4,8 @@ import * as SecureStore from 'expo-secure-store';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import NotesListScreen from '../src/screens/NotesListScreen';
 import { lightColors } from '../src/theme/colors';
+import { ConfirmContext } from '../src/hooks/useConfirm';
+import { markServerReachable, markServerUnreachable } from '../src/api/serverReachability';
 import type { Label, NoteSort } from '@jot/shared';
 
 jest.mock('@react-navigation/native', () => {
@@ -69,6 +71,20 @@ jest.mock('../src/api/settings', () => ({
   updateMe: jest.fn(),
 }));
 
+jest.mock('../src/api/notes', () => ({
+  emptyTrash: jest.fn(),
+}));
+
+jest.mock('../src/db/noteQueries', () => ({
+  getLocalNotes: jest.fn().mockResolvedValue([]),
+  permanentDeleteLocalNote: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('../src/db/syncQueue', () => ({
+  ...jest.requireActual('../src/db/syncQueue'),
+  enqueueOperation: jest.fn().mockResolvedValue(undefined),
+}));
+
 jest.mock('../src/components/NoteCard', () => {
   const ReactNative = jest.requireActual<typeof import('react-native')>('react-native');
 
@@ -121,6 +137,9 @@ const mockUseAuth = jest.requireMock('../src/store/AuthContext').useAuth as jest
 const mockUseTheme = jest.requireMock('../src/theme/ThemeContext').useTheme as jest.Mock;
 const mockUseToast = jest.requireMock('../src/hooks/useToast').useToast as jest.Mock;
 const mockUpdateMe = jest.requireMock('../src/api/settings').updateMe as jest.Mock;
+const mockEmptyTrash = jest.requireMock('../src/api/notes').emptyTrash as jest.Mock;
+const mockGetLocalNotes = jest.requireMock('../src/db/noteQueries').getLocalNotes as jest.Mock;
+const mockEnqueueOperation = jest.requireMock('../src/db/syncQueue').enqueueOperation as jest.Mock;
 
 const mockMutateAsync = jest.fn();
 const mockUser = {
@@ -189,6 +208,8 @@ describe('NotesListScreen sorting', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    markServerReachable();
+    mockGetLocalNotes.mockResolvedValue([]);
     mockUseToast.mockReturnValue({ showToast: jest.fn() });
     notesHooks.useUpdateNote.mockReturnValue({ mutateAsync: mockMutateAsync });
     notesHooks.useDeleteNote.mockReturnValue({ mutateAsync: mockMutateAsync });
@@ -211,6 +232,10 @@ describe('NotesListScreen sorting', () => {
       isRefetching: false,
     });
     mockUseOfflineNote.mockReturnValue({ data: null });
+  });
+
+  afterEach(() => {
+    markServerReachable();
   });
 
   it('normalizes an unsupported saved sort preference back to manual', () => {
@@ -328,6 +353,91 @@ describe('NotesListScreen sorting', () => {
 
     expect(screen.queryByTestId('sort-disabled-notice')).toBeNull();
     expect(setSettings).toHaveBeenLastCalledWith(expect.objectContaining({ note_sort: 'manual' }));
+    alertSpy.mockRestore();
+  });
+
+  it('enqueues the sort change without a network call when the server is known-unreachable', async () => {
+    markServerUnreachable();
+    const setSettings = jest.fn();
+    mockUseAuth.mockReturnValue({
+      user: mockUser,
+      settings: baseSettings,
+      setSettings,
+    });
+    mockUseOfflineNotes.mockReturnValue({
+      data: [
+        buildNote({ id: 'unpinned-bravo', title: 'sort-demo-bravo', pinned: false }),
+        buildNote({ id: 'unpinned-alpha', title: 'sort-demo-alpha', pinned: false }),
+      ],
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn(),
+      isRefetching: false,
+    });
+
+    render(<NotesListScreen variant="notes" />);
+
+    openSortControls();
+    fireEvent.press(screen.getByTestId('sort-chip-created_at'));
+
+    await waitFor(() => {
+      expect(mockEnqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          operation: 'updateSettings',
+          endpoint: '/users/me',
+          method: 'PATCH',
+          body: { note_sort: 'created_at' },
+        }),
+      );
+    });
+
+    // The doomed round-trip is skipped entirely, and the optimistic sort stands.
+    expect(mockUpdateMe).not.toHaveBeenCalled();
+    expect(setSettings).toHaveBeenLastCalledWith(expect.objectContaining({ note_sort: 'created_at' }));
+  });
+
+  it('enqueues the sort change (without rolling back) when persistence fails transiently', async () => {
+    const setSettings = jest.fn();
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
+    mockUseAuth.mockReturnValue({
+      user: mockUser,
+      settings: baseSettings,
+      setSettings,
+    });
+    mockUseOfflineNotes.mockReturnValue({
+      data: [
+        buildNote({ id: 'unpinned-bravo', title: 'sort-demo-bravo', pinned: false }),
+        buildNote({ id: 'unpinned-alpha', title: 'sort-demo-alpha', pinned: false }),
+      ],
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn(),
+      isRefetching: false,
+    });
+    // A transient (queueable) failure: a network error surfaced as an axios error.
+    mockUpdateMe.mockRejectedValue(Object.assign(new Error('Network Error'), { isAxiosError: true }));
+
+    render(<NotesListScreen variant="notes" />);
+
+    openSortControls();
+    fireEvent.press(screen.getByTestId('sort-chip-created_at'));
+
+    await waitFor(() => {
+      expect(mockEnqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          operation: 'updateSettings',
+          endpoint: '/users/me',
+          method: 'PATCH',
+          body: { note_sort: 'created_at' },
+        }),
+      );
+    });
+
+    // No rollback and no blocking dialog for a transient failure.
+    expect(alertSpy).not.toHaveBeenCalled();
+    expect(setSettings).toHaveBeenLastCalledWith(expect.objectContaining({ note_sort: 'created_at' }));
     alertSpy.mockRestore();
   });
 
@@ -496,6 +606,84 @@ describe('NotesListScreen sorting', () => {
       expect(refetch).toHaveBeenCalledTimes(1);
       expect(refreshUsers).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+describe('NotesListScreen empty trash', () => {
+  const confirmingConfirm = jest.fn().mockResolvedValue(true);
+
+  const renderTrashScreen = () =>
+    render(
+      <ConfirmContext.Provider value={{ confirm: confirmingConfirm }}>
+        <NotesListScreen variant="trash" />
+      </ConfirmContext.Provider>,
+    );
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    markServerReachable();
+    confirmingConfirm.mockResolvedValue(true);
+    mockGetLocalNotes.mockResolvedValue([
+      buildNote({ id: 'trashed-1', title: 'Trashed note' }),
+    ]);
+    mockUseToast.mockReturnValue({ showToast: jest.fn() });
+    notesHooks.useUpdateNote.mockReturnValue({ mutateAsync: mockMutateAsync });
+    notesHooks.useDeleteNote.mockReturnValue({ mutateAsync: mockMutateAsync });
+    notesHooks.useRestoreNote.mockReturnValue({ mutateAsync: mockMutateAsync });
+    notesHooks.usePermanentDeleteNote.mockReturnValue({ mutateAsync: mockMutateAsync });
+    notesHooks.useReorderNotes.mockReturnValue({ mutateAsync: mockMutateAsync });
+    notesHooks.useDuplicateNote.mockReturnValue({ mutateAsync: mockMutateAsync });
+    mockUseUsers.mockReturnValue({ refreshUsers: jest.fn().mockResolvedValue(undefined) });
+    mockUseTheme.mockReturnValue({ colors: lightColors });
+    mockUseAuth.mockReturnValue({
+      user: mockUser,
+      settings: baseSettings,
+      setSettings: jest.fn(),
+    });
+    mockUseOfflineNotes.mockReturnValue({
+      data: [buildNote({ id: 'trashed-1', title: 'Trashed note' })],
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn(),
+      isRefetching: false,
+    });
+    mockUseOfflineNote.mockReturnValue({ data: null });
+  });
+
+  afterEach(() => {
+    markServerReachable();
+  });
+
+  it('skips the network call and shows a bounded error when the server is known-unreachable', async () => {
+    markServerUnreachable();
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
+
+    renderTrashScreen();
+
+    await waitFor(() => expect(screen.getByTestId('empty-trash-button')).toBeTruthy());
+    fireEvent.press(screen.getByTestId('empty-trash-button'));
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith('Error', "Empty Trash isn't available offline");
+    });
+
+    expect(mockEmptyTrash).not.toHaveBeenCalled();
+    alertSpy.mockRestore();
+  });
+
+  it('empties the trash normally when the server is reachable', async () => {
+    mockEmptyTrash.mockResolvedValue({ deleted_count: 1 });
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
+
+    renderTrashScreen();
+
+    await waitFor(() => expect(screen.getByTestId('empty-trash-button')).toBeTruthy());
+    fireEvent.press(screen.getByTestId('empty-trash-button'));
+
+    await waitFor(() => {
+      expect(mockEmptyTrash).toHaveBeenCalled();
+    });
+    alertSpy.mockRestore();
   });
 });
 

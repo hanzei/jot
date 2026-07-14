@@ -13,6 +13,7 @@ import { useAuth } from '../src/store/AuthContext';
 import { updateMe, listSessions } from '../src/api/settings';
 import { cacheAuthProfile } from '../src/api/client';
 import { enqueueOperation } from '../src/db/syncQueue';
+import { markServerReachable, markServerUnreachable } from '../src/api/serverReachability';
 import type { User } from '@jot/shared';
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -148,7 +149,12 @@ function setupAuth(overrides?: { settings?: typeof baseSettings; user?: User }) 
 describe('SettingsScreen offline / queued settings changes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    markServerReachable();
     mockListSessions.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    markServerReachable();
   });
 
   // ── language ────────────────────────────────────────────────────────────
@@ -252,6 +258,32 @@ describe('SettingsScreen offline / queued settings changes', () => {
 
       expect(mockEnqueueOperation).not.toHaveBeenCalled();
     });
+
+    it('skips the network round-trip and enqueues directly when the server is known-unreachable', async () => {
+      const { setSettings } = setupAuth();
+      markServerUnreachable();
+
+      const { getByTestId } = render(<SettingsScreen />);
+      await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
+
+      fireEvent.press(getByTestId('settings-language-dropdown'));
+      fireEvent.press(getByTestId('settings-language-de'));
+
+      await waitFor(() => expect(mockEnqueueOperation).toHaveBeenCalled());
+
+      // The doomed round-trip is skipped entirely.
+      expect(mockUpdateMe).not.toHaveBeenCalled();
+      expect(setSettings).toHaveBeenCalledWith(expect.objectContaining({ language: 'de' }));
+      expect(mockEnqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          operation: 'updateSettings',
+          endpoint: '/users/me',
+          method: 'PATCH',
+          body: { language: 'de' },
+        }),
+      );
+    });
   });
 
   // ── theme ────────────────────────────────────────────────────────────────
@@ -349,6 +381,31 @@ describe('SettingsScreen offline / queued settings changes', () => {
       });
 
       expect(mockEnqueueOperation).not.toHaveBeenCalled();
+    });
+
+    it('skips the network round-trip and enqueues directly when the server is known-unreachable', async () => {
+      const { setSettings } = setupAuth();
+      markServerUnreachable();
+
+      const { getByTestId } = render(<SettingsScreen />);
+      await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
+
+      fireEvent.press(getByTestId('settings-theme-dropdown'));
+      fireEvent.press(getByTestId('settings-theme-dark'));
+
+      await waitFor(() => expect(mockEnqueueOperation).toHaveBeenCalled());
+
+      expect(mockUpdateMe).not.toHaveBeenCalled();
+      expect(setSettings).toHaveBeenCalledWith(expect.objectContaining({ theme: 'dark' }));
+      expect(mockEnqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          operation: 'updateSettings',
+          endpoint: '/users/me',
+          method: 'PATCH',
+          body: { theme: 'dark' },
+        }),
+      );
     });
   });
 
@@ -455,6 +512,30 @@ describe('SettingsScreen offline / queued settings changes', () => {
       expect(setUser).toHaveBeenCalledTimes(2);
       expect(setUser).toHaveBeenNthCalledWith(2, baseUser);
       expect(mockEnqueueOperation).not.toHaveBeenCalled();
+    });
+
+    it('skips the network round-trip and enqueues directly when the server is known-unreachable', async () => {
+      const { setUser } = setupAuth();
+      markServerUnreachable();
+
+      const { getByTestId } = render(<SettingsScreen />);
+      await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
+
+      fireEvent.press(getByTestId('settings-save-profile'));
+
+      await waitFor(() => expect(mockEnqueueOperation).toHaveBeenCalled());
+
+      expect(mockUpdateMe).not.toHaveBeenCalled();
+      expect(setUser).toHaveBeenCalledWith(expect.objectContaining({ username: 'alice' }));
+      expect(mockEnqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          operation: 'updateSettings',
+          endpoint: '/users/me',
+          method: 'PATCH',
+          body: expect.objectContaining({ username: 'alice' }),
+        }),
+      );
     });
   });
 });

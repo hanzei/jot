@@ -31,6 +31,8 @@ import { normalizeNoteSort, sortNotesForDisplay } from '../utils/noteSort';
 import { isSortWarningDismissed, dismissSortWarning } from '../utils/sortWarningDismissed';
 import { emptyTrash as emptyTrashNotes } from '../api/notes';
 import { getLocalNotes, permanentDeleteLocalNote } from '../db/noteQueries';
+import { enqueueOperation, isQueueableError } from '../db/syncQueue';
+import { isOnlineWriteAllowed } from '../api/serverReachability';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { useBannerShown } from '../hooks/useBannerShown';
 import { styles } from './notesList/styles';
@@ -165,14 +167,37 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
       return;
     }
 
+    if (!isOnlineWriteAllowed(isConnected)) {
+      // Server known-unreachable: skip the doomed round-trip and enqueue the
+      // change for replay instead of eating the write timeout (#716).
+      await enqueueOperation(db, {
+        operation: 'updateSettings',
+        endpoint: '/users/me',
+        method: 'PATCH',
+        body: { note_sort: nextSort },
+      });
+      return;
+    }
+
     try {
       const response = await updateMe({ note_sort: nextSort });
       if (requestId !== sortRequestIdRef.current) {
         return;
       }
       setSettings(response.settings);
-    } catch {
+    } catch (err) {
       if (requestId !== sortRequestIdRef.current) {
+        return;
+      }
+      if (isQueueableError(err)) {
+        // Transient failure: keep the optimistic sort and queue the change for
+        // replay instead of rolling back and showing a blocking dialog (#716).
+        await enqueueOperation(db, {
+          operation: 'updateSettings',
+          endpoint: '/users/me',
+          method: 'PATCH',
+          body: { note_sort: nextSort },
+        });
         return;
       }
       setSortMode(previousSort);
@@ -181,7 +206,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
       }
       Alert.alert(t('common.error'), t('dashboard.sortUpdateFailed'));
     }
-  }, [setSettings, settings, sortMode, isLocalMode, t]);
+  }, [setSettings, settings, sortMode, isLocalMode, isConnected, db, t]);
 
   const handleSortChipPress = useCallback((nextSort: NoteSort) => {
     setIsSortControlsOpen(false);
@@ -268,7 +293,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     if (trashCountRef.current === 0) {
       return;
     }
-    if (!isConnected) {
+    if (!isOnlineWriteAllowed(isConnected)) {
       Alert.alert(t('common.error'), t('dashboard.emptyTrashOffline'));
       return;
     }

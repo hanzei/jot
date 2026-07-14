@@ -15,6 +15,8 @@ import { useTheme } from '../../theme/ThemeContext';
 import { updateMe } from '../../api/settings';
 import { cacheAuthProfile } from '../../api/client';
 import { enqueueOperation, isQueueableError } from '../../db/syncQueue';
+import { isOnlineWriteAllowed } from '../../api/serverReachability';
+import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { SUPPORTED_LANGUAGES, getLanguagePreference, resolveLanguage, type LanguagePreference } from '../../i18n/language';
 import { displayMessage, extractApiError } from '../../i18n/utils';
 import i18n from '../../i18n';
@@ -26,6 +28,7 @@ export default function AppearanceSection() {
   const { colors } = useTheme();
   const { t } = useTranslation();
   const db = useSQLiteContext();
+  const { isConnected } = useNetworkStatus();
 
   const [languagePref, setLanguagePref] = useState<LanguagePreference>(
     getLanguagePreference(settings?.language),
@@ -54,31 +57,45 @@ export default function AppearanceSection() {
       if (user) void cacheAuthProfile({ user, settings: newSettings });
     }
 
-    if (!isLocalMode) {
-      try {
-        const { settings: updatedSettings } = await updateMe({ language });
-        setSettings(updatedSettings);
-        if (user) void cacheAuthProfile({ user, settings: updatedSettings });
-      } catch (err: unknown) {
-        if (isQueueableError(err)) {
-          await enqueueOperation(db, {
-            operation: 'updateSettings',
-            endpoint: '/users/me',
-            method: 'PATCH',
-            body: { language },
-          });
-        } else {
-          setLanguagePref(previousLanguage);
-          void i18n.changeLanguage(resolveLanguage(previousLanguage));
-          if (previousSettings) {
-            setSettings(previousSettings);
-            if (user) void cacheAuthProfile({ user, settings: previousSettings });
-          }
-          setLanguageError(extractApiError(err) ?? 'settings.failedUpdateLanguage');
+    if (isLocalMode) {
+      return;
+    }
+
+    if (!isOnlineWriteAllowed(isConnected)) {
+      // Server known-unreachable: skip the doomed round-trip and enqueue the
+      // change for replay instead of eating the write timeout (#716).
+      await enqueueOperation(db, {
+        operation: 'updateSettings',
+        endpoint: '/users/me',
+        method: 'PATCH',
+        body: { language },
+      });
+      return;
+    }
+
+    try {
+      const { settings: updatedSettings } = await updateMe({ language });
+      setSettings(updatedSettings);
+      if (user) void cacheAuthProfile({ user, settings: updatedSettings });
+    } catch (err: unknown) {
+      if (isQueueableError(err)) {
+        await enqueueOperation(db, {
+          operation: 'updateSettings',
+          endpoint: '/users/me',
+          method: 'PATCH',
+          body: { language },
+        });
+      } else {
+        setLanguagePref(previousLanguage);
+        void i18n.changeLanguage(resolveLanguage(previousLanguage));
+        if (previousSettings) {
+          setSettings(previousSettings);
+          if (user) void cacheAuthProfile({ user, settings: previousSettings });
         }
+        setLanguageError(extractApiError(err) ?? 'settings.failedUpdateLanguage');
       }
     }
-  }, [languagePref, settings, user, setSettings, isLocalMode, db]);
+  }, [languagePref, settings, user, setSettings, isLocalMode, isConnected, db]);
 
   const handleThemeChange = useCallback(async (theme: ThemePreference) => {
     const prev = themePref;
@@ -92,30 +109,44 @@ export default function AppearanceSection() {
       if (user) void cacheAuthProfile({ user, settings: newSettings });
     }
 
-    if (!isLocalMode) {
-      try {
-        const { settings: updatedSettings } = await updateMe({ theme });
-        setSettings(updatedSettings);
-        if (user) void cacheAuthProfile({ user, settings: updatedSettings });
-      } catch (err: unknown) {
-        if (isQueueableError(err)) {
-          await enqueueOperation(db, {
-            operation: 'updateSettings',
-            endpoint: '/users/me',
-            method: 'PATCH',
-            body: { theme },
-          });
-        } else {
-          setThemePref(prev);
-          if (previousSettings) {
-            setSettings(previousSettings);
-            if (user) void cacheAuthProfile({ user, settings: previousSettings });
-          }
-          setThemeError(extractApiError(err) ?? 'settings.failedUpdateTheme');
+    if (isLocalMode) {
+      return;
+    }
+
+    if (!isOnlineWriteAllowed(isConnected)) {
+      // Server known-unreachable: skip the doomed round-trip and enqueue the
+      // change for replay instead of eating the write timeout (#716).
+      await enqueueOperation(db, {
+        operation: 'updateSettings',
+        endpoint: '/users/me',
+        method: 'PATCH',
+        body: { theme },
+      });
+      return;
+    }
+
+    try {
+      const { settings: updatedSettings } = await updateMe({ theme });
+      setSettings(updatedSettings);
+      if (user) void cacheAuthProfile({ user, settings: updatedSettings });
+    } catch (err: unknown) {
+      if (isQueueableError(err)) {
+        await enqueueOperation(db, {
+          operation: 'updateSettings',
+          endpoint: '/users/me',
+          method: 'PATCH',
+          body: { theme },
+        });
+      } else {
+        setThemePref(prev);
+        if (previousSettings) {
+          setSettings(previousSettings);
+          if (user) void cacheAuthProfile({ user, settings: previousSettings });
         }
+        setThemeError(extractApiError(err) ?? 'settings.failedUpdateTheme');
       }
     }
-  }, [settings, user, setSettings, isLocalMode, themePref, db]);
+  }, [settings, user, setSettings, isLocalMode, isConnected, themePref, db]);
 
   const languageOptions: { value: LanguagePreference; label: string }[] = [
     { value: 'system', label: t('settings.languageSystem') },
