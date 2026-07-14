@@ -210,20 +210,24 @@ describe('NoteEditorScreen menu-action pending indicator (#697)', () => {
   });
 
   describe('move to trash', () => {
-    it('shows the pending indicator while the server is reachable and the delete is in flight', async () => {
+    it('shows the pending indicator once the delay elapses while the delete is in flight', async () => {
+      jest.useFakeTimers();
       const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
       const { promise, resolve } = deferred<void>();
       mockDeleteMutateAsync.mockReturnValue(promise);
 
       fireEvent.press(getByTestId('toolbar-menu-btn'));
-      fireEvent.press(getByTestId('editor-menu-trash'));
+      await act(async () => { fireEvent.press(getByTestId('editor-menu-trash')); });
 
-      await waitFor(() => { expect(getByTestId('menu-action-pending')).toBeTruthy(); });
+      // Not shown until the delay threshold is crossed.
+      expect(queryByTestId('menu-action-pending')).toBeNull();
+      await act(async () => { jest.advanceTimersByTime(600); });
+      expect(getByTestId('menu-action-pending')).toBeTruthy();
       expect(getByTestId('toolbar-menu-btn').props.accessibilityState.disabled).toBe(true);
 
       await act(async () => { resolve(); });
-
-      await waitFor(() => { expect(queryByTestId('menu-action-pending')).toBeNull(); });
+      await act(async () => { jest.advanceTimersByTime(300); });
+      expect(queryByTestId('menu-action-pending')).toBeNull();
       expect(mockGoBack).toHaveBeenCalled();
     });
 
@@ -247,19 +251,22 @@ describe('NoteEditorScreen menu-action pending indicator (#697)', () => {
   });
 
   describe('convert note type', () => {
-    it('shows the pending indicator while reachable and converting', async () => {
+    it('shows the pending indicator once the delay elapses while converting', async () => {
+      jest.useFakeTimers();
       const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
       const { promise, resolve } = deferred<void>();
       mockConvertMutateAsync.mockReturnValue(promise);
 
       fireEvent.press(getByTestId('toolbar-menu-btn'));
-      fireEvent.press(getByTestId('editor-menu-convert'));
+      await act(async () => { fireEvent.press(getByTestId('editor-menu-convert')); });
 
-      await waitFor(() => { expect(getByTestId('menu-action-pending')).toBeTruthy(); });
+      expect(queryByTestId('menu-action-pending')).toBeNull();
+      await act(async () => { jest.advanceTimersByTime(600); });
+      expect(getByTestId('menu-action-pending')).toBeTruthy();
 
       await act(async () => { resolve(); });
-
-      await waitFor(() => { expect(queryByTestId('menu-action-pending')).toBeNull(); });
+      await act(async () => { jest.advanceTimersByTime(300); });
+      expect(queryByTestId('menu-action-pending')).toBeNull();
       expect(mockReplace).toHaveBeenCalledWith('NoteEditor', { noteId: 'note-1' });
     });
 
@@ -280,7 +287,8 @@ describe('NoteEditorScreen menu-action pending indicator (#697)', () => {
   });
 
   describe('share (withSavedNote)', () => {
-    it('shows the pending indicator while a pending edit is flushed before navigating to Share', async () => {
+    it('shows the pending indicator once the delay elapses while a pending edit is flushed before navigating to Share', async () => {
+      jest.useFakeTimers();
       const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
       const { promise, resolve } = deferred<Record<string, unknown>>();
       mockUpdateMutateAsync.mockReturnValue(promise);
@@ -291,13 +299,15 @@ describe('NoteEditorScreen menu-action pending indicator (#697)', () => {
       fireEvent.changeText(getByTestId('note-content-input'), 'Existing content, edited');
 
       fireEvent.press(getByTestId('toolbar-menu-btn'));
-      fireEvent.press(getByTestId('editor-menu-share'));
+      await act(async () => { fireEvent.press(getByTestId('editor-menu-share')); });
 
-      await waitFor(() => { expect(getByTestId('menu-action-pending')).toBeTruthy(); });
+      expect(queryByTestId('menu-action-pending')).toBeNull();
+      await act(async () => { jest.advanceTimersByTime(600); });
+      expect(getByTestId('menu-action-pending')).toBeTruthy();
 
       await act(async () => { resolve({}); });
-
-      await waitFor(() => { expect(queryByTestId('menu-action-pending')).toBeNull(); });
+      await act(async () => { jest.advanceTimersByTime(300); });
+      expect(queryByTestId('menu-action-pending')).toBeNull();
       expect(mockNavigate).toHaveBeenCalledWith('Share', { noteId: 'note-1' });
     });
 
@@ -320,17 +330,11 @@ describe('NoteEditorScreen menu-action pending indicator (#697)', () => {
     });
   });
 
-  describe('manage labels', () => {
-    // Opening the label picker deliberately does NOT go through the
-    // withSavedNote pending indicator: on an existing note the picker opens
-    // instantly, and the loading bar previously only flashed in and shoved the
-    // note down (reported as distracting). Body edits keep autosaving on their
-    // own; the label picker mutates labels independently.
-    it('opens the label picker instantly without the pending indicator, even with a pending edit', async () => {
+  describe('manage labels (withSavedNote)', () => {
+    it('shows the pending indicator once the delay elapses while a pending edit is flushed before opening the label picker', async () => {
+      jest.useFakeTimers();
       const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
-      // A slow (never-resolving) update would surface the bar if labels still
-      // waited on a flush; assert it never does.
-      const { promise } = deferred<Record<string, unknown>>();
+      const { promise, resolve } = deferred<Record<string, unknown>>();
       mockUpdateMutateAsync.mockReturnValue(promise);
 
       fireEvent.press(getByTestId('content-preview'));
@@ -339,22 +343,35 @@ describe('NoteEditorScreen menu-action pending indicator (#697)', () => {
       fireEvent.press(getByTestId('toolbar-menu-btn'));
       await act(async () => { fireEvent.press(getByTestId('editor-menu-label')); });
 
-      expect(getByTestId('label-picker-open')).toBeTruthy();
+      // Not shown immediately — only after the delay, and not until then.
       expect(queryByTestId('menu-action-pending')).toBeNull();
+      await act(async () => { jest.advanceTimersByTime(600); });
+      expect(getByTestId('menu-action-pending')).toBeTruthy();
+      expect(queryByTestId('label-picker-open')).toBeNull();
+
+      await act(async () => { resolve({}); });
+      // Held for the min-visible window, then hidden; the picker is now open.
+      await act(async () => { jest.advanceTimersByTime(300); });
+      expect(queryByTestId('menu-action-pending')).toBeNull();
+      expect(getByTestId('label-picker-open')).toBeTruthy();
     });
 
-    it('opens the label picker without the pending indicator when known unreachable', async () => {
+    it('does not show the pending indicator when known unreachable', async () => {
       markServerUnreachable();
       const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
+      const { promise, resolve } = deferred<Record<string, unknown>>();
+      mockUpdateMutateAsync.mockReturnValue(promise);
 
       fireEvent.press(getByTestId('content-preview'));
       fireEvent.changeText(getByTestId('note-content-input'), 'Existing content, edited');
 
       fireEvent.press(getByTestId('toolbar-menu-btn'));
-      await act(async () => { fireEvent.press(getByTestId('editor-menu-label')); });
+      fireEvent.press(getByTestId('editor-menu-label'));
 
-      expect(getByTestId('label-picker-open')).toBeTruthy();
       expect(queryByTestId('menu-action-pending')).toBeNull();
+
+      await act(async () => { resolve({}); });
+      await waitFor(() => { expect(getByTestId('label-picker-open')).toBeTruthy(); });
     });
   });
 
@@ -383,13 +400,15 @@ describe('NoteEditorScreen menu-action pending indicator (#697)', () => {
       const { promise, resolve } = deferred<void>();
       mockDeleteMutateAsync.mockReturnValue(promise);
 
-      fireEvent.press(getByTestId('share-server-option-server-b'));
+      await act(async () => { fireEvent.press(getByTestId('share-server-option-server-b')); });
 
-      await waitFor(() => { expect(getByTestId('menu-action-pending')).toBeTruthy(); });
+      expect(queryByTestId('menu-action-pending')).toBeNull();
+      await act(async () => { jest.advanceTimersByTime(600); });
+      expect(getByTestId('menu-action-pending')).toBeTruthy();
 
       await act(async () => { resolve(); });
-
-      await waitFor(() => { expect(queryByTestId('menu-action-pending')).toBeNull(); });
+      await act(async () => { jest.advanceTimersByTime(300); });
+      expect(queryByTestId('menu-action-pending')).toBeNull();
       expect(mockDeleteMutateAsync).toHaveBeenCalledWith('note-1');
     });
 

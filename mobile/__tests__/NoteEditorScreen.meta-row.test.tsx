@@ -197,8 +197,8 @@ describe('NoteEditorScreen collaborators + labels row', () => {
     });
 
     await waitFor(() => expect(getByTestId('label-picker-open')).toBeTruthy());
-    // Opening the picker must not surface the menu-action loading bar, which
-    // otherwise flashed in and shoved the note down.
+    // On a saved note the open is instant — well under the pending bar's show
+    // delay — so the loading bar never flashes in and shoves the note down.
     expect(queryByTestId('menu-action-pending')).toBeNull();
   });
 
