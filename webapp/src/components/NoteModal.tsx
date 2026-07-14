@@ -2853,7 +2853,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                         </MenuButton>
                         <MenuItems
                           transition
-                          className="absolute left-0 bottom-full mb-1 w-56 origin-bottom-left bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black/5 dark:ring-slate-600/20 focus:outline-none z-20 border border-gray-200 dark:border-slate-600 transition duration-100 ease-out data-[closed]:scale-95 data-[closed]:opacity-0 motion-reduce:transition-none"
+                          anchor={{ to: 'top start', gap: 4 }}
+                          className="w-56 origin-bottom-left bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black/5 dark:ring-slate-600/20 focus:outline-none z-50 border border-gray-200 dark:border-slate-600 transition duration-100 ease-out data-[closed]:scale-95 data-[closed]:opacity-0 motion-reduce:transition-none"
                         >
                           <div className="py-1">
                             {noteDeepLinkHref && (
@@ -2866,6 +2867,17 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                                   <Smartphone className="h-4 w-4 mr-2" />
                                   {t('nav.openMobileApp')}
                                 </a>
+                              </MenuItem>
+                            )}
+                            {onConvert && (
+                              <MenuItem>
+                                <button
+                                  onClick={handleConvertClick}
+                                  className={OVERFLOW_ITEM}
+                                >
+                                  <ArrowLeftRight className="h-4 w-4 mr-2" />
+                                  {noteType === 'list' ? t('note.convertToText') : t('note.convertToList')}
+                                </button>
                               </MenuItem>
                             )}
                             {isOwner && onShare && (
@@ -2893,17 +2905,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                                     {t('note.duplicate')}
                                   </span>
                                   <MenuKbd>D</MenuKbd>
-                                </button>
-                              </MenuItem>
-                            )}
-                            {onConvert && (
-                              <MenuItem>
-                                <button
-                                  onClick={handleConvertClick}
-                                  className={OVERFLOW_ITEM}
-                                >
-                                  <ArrowLeftRight className="h-4 w-4 mr-2" />
-                                  {noteType === 'list' ? t('note.convertToText') : t('note.convertToList')}
                                 </button>
                               </MenuItem>
                             )}

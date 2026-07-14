@@ -24,17 +24,18 @@ test.describe('Note modal overflow menu', () => {
     await expect(dialog.getByRole('button', { name: 'Archive note' })).toBeVisible();
 
     // Overflow actions are hidden until the three-dot menu is opened. The note
-    // is a list note, so its convert action is labeled "Convert to text".
-    await expect(dialog.getByRole('menuitem', { name: 'Duplicate' })).toHaveCount(0);
-    await expect(dialog.getByRole('menuitem', { name: 'Delete' })).toHaveCount(0);
-    await expect(dialog.getByRole('menuitem', { name: 'Convert to text' })).toHaveCount(0);
+    // is a list note, so its convert action is labeled "Convert to text". The
+    // menu renders in a portal outside the dialog, so query at page scope.
+    await expect(page.getByRole('menuitem', { name: 'Duplicate' })).toHaveCount(0);
+    await expect(page.getByRole('menuitem', { name: 'Delete' })).toHaveCount(0);
+    await expect(page.getByRole('menuitem', { name: 'Convert to text' })).toHaveCount(0);
 
     await dashboardPage.openModalOverflowMenu();
 
     // Now the overflow actions are reachable as menu items.
-    await expect(dialog.getByRole('menuitem', { name: 'Duplicate' })).toBeVisible();
-    await expect(dialog.getByRole('menuitem', { name: 'Convert to text' })).toBeVisible();
-    await expect(dialog.getByRole('menuitem', { name: 'Delete' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Duplicate' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Convert to text' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Delete' })).toBeVisible();
   });
 
   test('duplicates a note from the overflow menu', async ({ dashboardPage, page }) => {
@@ -55,8 +56,8 @@ test.describe('Note modal overflow menu', () => {
     await dashboardPage.createNote('Delete From Menu');
     await dashboardPage.openNote('Delete From Menu');
 
-    const dialog = await dashboardPage.openModalOverflowMenu();
-    await dialog.getByRole('menuitem', { name: 'Delete' }).click();
+    await dashboardPage.openModalOverflowMenu();
+    await page.getByRole('menuitem', { name: 'Delete' }).click();
 
     const confirmDialog = page.getByRole('dialog').last();
     await confirmDialog.getByRole('button', { name: 'Delete' }).click();
@@ -75,7 +76,7 @@ test.describe('Note modal overflow menu', () => {
 
     await menuButton.click();
     await expect(menuButton).toHaveAttribute('aria-expanded', 'true');
-    await expect(dialog.getByRole('menuitem', { name: 'Duplicate' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Duplicate' })).toBeVisible();
 
     // Clicking the trigger again closes the menu; the modal itself stays open.
     await menuButton.click();

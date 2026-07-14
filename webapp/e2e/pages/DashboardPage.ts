@@ -203,32 +203,31 @@ export class DashboardPage {
 
   /**
    * Opens the note modal's three-dot overflow menu (Share/Duplicate/Convert/
-   * Delete live here now, mirroring the mobile layout) and returns the active
-   * dialog for chaining menu-item clicks.
+   * Delete live here now, mirroring the mobile layout). The menu is rendered in
+   * a portal (headlessui `anchor`) outside the dialog to avoid clipping, so its
+   * items must be queried at page scope, not scoped to the dialog.
    */
-  async openModalOverflowMenu(): Promise<Locator> {
-    const activeDialog = this.page.getByRole('dialog').last();
-    const menuButton = activeDialog.getByRole('button', { name: 'Note options' });
+  async openModalOverflowMenu(): Promise<void> {
+    const menuButton = this.page.getByRole('dialog').last().getByRole('button', { name: 'Note options' });
     await menuButton.click();
     await expect(menuButton).toHaveAttribute('aria-expanded', 'true');
-    return activeDialog;
   }
 
   async duplicateCurrentNoteFromModal() {
-    const activeDialog = await this.openModalOverflowMenu();
-    await activeDialog.getByRole('menuitem', { name: 'Duplicate' }).click();
+    await this.openModalOverflowMenu();
+    await this.page.getByRole('menuitem', { name: 'Duplicate' }).click();
   }
 
   /** Converts the open text note to a list. Text -> list has no confirmation dialog. */
   async convertCurrentNoteToList() {
-    const activeDialog = await this.openModalOverflowMenu();
-    await activeDialog.getByRole('menuitem', { name: 'Convert to list' }).click();
+    await this.openModalOverflowMenu();
+    await this.page.getByRole('menuitem', { name: 'Convert to list' }).click();
   }
 
   /** Converts the open list note to text, confirming the lossy-conversion dialog. */
   async convertCurrentNoteToText() {
-    const activeDialog = await this.openModalOverflowMenu();
-    await activeDialog.getByRole('menuitem', { name: 'Convert to text' }).click();
+    await this.openModalOverflowMenu();
+    await this.page.getByRole('menuitem', { name: 'Convert to text' }).click();
     const confirmDialog = this.page.getByRole('dialog').last();
     await confirmDialog.getByRole('button', { name: 'Convert to text' }).click();
   }
