@@ -400,6 +400,24 @@ describe('drainQueue', () => {
     expect(db.runAsync).not.toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [70]);
   });
 
+  it('drops an entry whose server write landed but post-response reconciliation threw, without dead-lettering (#714)', async () => {
+    const clientId = 'Landed00000000000000ab'; // 22-char server-valid id
+    const db = makeMockDb([
+      // Sitting at the cap: proves a landed-then-reconcile-fail is NOT dead-lettered.
+      { id: 80, operation: 'create', endpoint: '/notes', method: 'POST', body: JSON.stringify({ id: clientId, content: 'x', note_type: 'text' }), created_at: '', attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1 },
+    ]);
+    mockApi.post.mockResolvedValueOnce({ data: { id: clientId } } as never); // request lands
+    mockSaveNote.mockRejectedValueOnce(new Error('local db write failed')); // reconciliation throws
+
+    const { discardedOperations } = await drainQueue(db as never);
+
+    // The entry is removed because the write landed — not retried, not dead-lettered.
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [80]);
+    expect(discardedOperations).toHaveLength(0);
+    expect((db.runAsync.mock.calls as unknown[][]).some((c) => String(c[0]).startsWith('INSERT INTO dead_letter'))).toBe(false);
+    expect((db.runAsync.mock.calls as unknown[][]).some((c) => String(c[0]).startsWith('UPDATE sync_queue SET attempts'))).toBe(false);
+  });
+
   it('keeps a client-supplied create id stable: adopts the server note, clears pending, no reconcile (#475)', async () => {
     const clientId = 'AbcdefghijklmnopqrstUv'; // 22-char server-valid id
     const serverNote = {

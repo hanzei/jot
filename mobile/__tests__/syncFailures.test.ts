@@ -118,8 +118,6 @@ function dl(overrides: Partial<DeadLetteredOperation>): DeadLetteredOperation {
     note_id: 'n1',
     created_at: '',
     failed_at: '',
-    attempts: 0,
-    error_message: null,
     ...overrides,
   };
 }

@@ -518,15 +518,25 @@ export interface DeadLetteredOperation {
   note_id: string | null;
   created_at: string;
   failed_at: string;
-  /** Transient drain attempts made before giving up (0 for a permanent first-try discard); #714. */
-  attempts: number;
-  /** Last error text, when the discard came from a repeated transient/processing failure (#714). */
-  error_message: string | null;
+  /**
+   * Transient drain attempts made before giving up (0 for a permanent first-try
+   * discard); #714. Optional so callers constructing a DeadLetteredOperation by
+   * hand don't have to supply it — reads normalize it to a concrete value.
+   */
+  attempts?: number;
+  /** Last error text, when the discard came from a repeated transient/processing failure (#714). Optional; see `attempts`. */
+  error_message?: string | null;
 }
 
-/** Read all preserved dead-lettered ops, oldest first. */
+/**
+ * Read all preserved dead-lettered ops, oldest first. Normalizes the #714
+ * columns (`attempts`, `error_message`) at the database boundary so every
+ * consumer sees concrete values even for rows written before those columns
+ * existed (defaulted by migration 6) or by older code paths.
+ */
 export async function getDeadLetteredOperations(db: SQLiteDatabase): Promise<DeadLetteredOperation[]> {
-  return db.getAllAsync<DeadLetteredOperation>('SELECT * FROM dead_letter ORDER BY id ASC');
+  const rows = await db.getAllAsync<DeadLetteredOperation>('SELECT * FROM dead_letter ORDER BY id ASC');
+  return rows.map((row) => ({ ...row, attempts: row.attempts ?? 0, error_message: row.error_message ?? null }));
 }
 
 /** Count of preserved dead-lettered ops; drives the "N changes couldn't be saved" banner (#493). */
@@ -632,6 +642,11 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
     // (id-remapped) endpoint/body that were actually sent to the server.
     let endpoint = entry.endpoint;
     let body: Record<string, unknown> | undefined;
+    // Flipped true the instant the server request returns 2xx. After that point a
+    // throw is a *local reconciliation* failure, not a failed write, so it must
+    // not retry or dead-letter the entry (issue #714 — mirrors imageUploadQueue's
+    // "the upload already landed, so remove the queue entry first").
+    let requestLanded = false;
     try {
       if (entry.body) {
         body = JSON.parse(entry.body) as Record<string, unknown>;
@@ -673,6 +688,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           if (version !== null) body.base_version = version;
         }
         const response = await api.post(endpoint, body);
+        requestLanded = true;
 
         if (entry.operation === 'create' || entry.operation === 'duplicate') {
           // The server keeps the client-supplied `id`, so the id is stable —
@@ -748,6 +764,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           if (version !== null) body.base_version = version;
         }
         const response = await api.patch(endpoint, body);
+        requestLanded = true;
         if (entry.operation === 'updateSettings') {
           syncedSettings = true;
         } else if (updateNoteID !== undefined) {
@@ -760,6 +777,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         }
       } else if (entry.method === 'DELETE') {
         const response = await api.delete(endpoint);
+        requestLanded = true;
         if (entry.operation === 'removeLabelFromNote') {
           // The server returns the updated note; persist it so the local
           // labels_json drops the removed label and stays consistent.
@@ -780,6 +798,18 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         await clearNoteSyncFailed(db, noteId);
       }
     } catch (err) {
+      if (requestLanded) {
+        // The server write already succeeded; only a later local reconciliation
+        // step (saveNote, patchLocalItem, version bump, the entry delete itself)
+        // threw. Retrying or dead-lettering would re-send a write the server has
+        // already applied, so drop the entry and move on — the local cache is
+        // reconciled by the next server fetch / SSE event. Attempt counting is
+        // reserved for failures *before* the request lands (issue #714).
+        console.warn(`Queue entry id=${entry.id} landed server-side; post-response reconciliation failed:`, err);
+        await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
+        continue;
+      }
+
       const status = axios.isAxiosError(err) ? err.response?.status : undefined;
 
       // `isTransientHttpStatus(undefined)` is true, so reaching this branch
