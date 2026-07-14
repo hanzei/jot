@@ -112,6 +112,47 @@ export const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 0,
   },
+  // Collaborators + labels row below the note body (mirrors the webapp's
+  // single-note view). Wraps so avatars, label chips, and the "Add labels"
+  // button flow onto multiple lines when they don't fit.
+  metaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 8,
+    paddingTop: 12,
+    paddingBottom: 4,
+  },
+  metaAvatars: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  metaAvatarOverlap: {
+    marginLeft: -6,
+  },
+  metaLabelChip: {
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  metaLabelText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  metaAddLabels: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  metaAddLabelsText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
   contentInput: {
     fontSize: 16,
     lineHeight: 24,
