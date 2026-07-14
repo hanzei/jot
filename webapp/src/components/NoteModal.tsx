@@ -45,6 +45,14 @@ function MenuKbd({ children }: { children: ReactNode }) {
   );
 }
 
+// Shared styling for the note-modal overflow menu items. OVERFLOW_ITEM is the
+// plain row; the SPLIT variant adds justify-between for rows with a trailing
+// MenuKbd chip; DANGER recolors the destructive (delete) row.
+const OVERFLOW_ITEM_BASE = 'flex items-center w-full px-4 py-2 text-sm data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700';
+const OVERFLOW_ITEM = `${OVERFLOW_ITEM_BASE} text-gray-700 dark:text-gray-200`;
+const OVERFLOW_ITEM_SPLIT = `${OVERFLOW_ITEM_BASE} justify-between text-gray-700 dark:text-gray-200`;
+const OVERFLOW_ITEM_DANGER = `${OVERFLOW_ITEM_BASE} justify-between text-red-600 dark:text-red-400`;
+
 // Validation functions
 type TFunction = (key: string, opts?: Record<string, unknown>) => string;
 
@@ -2852,7 +2860,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                               <MenuItem>
                                 <a
                                   href={noteDeepLinkHref}
-                                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700"
+                                  className={OVERFLOW_ITEM}
                                   data-testid="note-open-mobile-app-toolbar-link"
                                 >
                                   <Smartphone className="h-4 w-4 mr-2" />
@@ -2864,7 +2872,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                               <MenuItem>
                                 <button
                                   onClick={() => onShare(note)}
-                                  className="flex items-center justify-between w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700"
+                                  className={OVERFLOW_ITEM_SPLIT}
                                 >
                                   <span className="flex items-center">
                                     <UserPlus className="h-4 w-4 mr-2" />
@@ -2878,7 +2886,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                               <MenuItem>
                                 <button
                                   onClick={handleDuplicate}
-                                  className="flex items-center justify-between w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700"
+                                  className={OVERFLOW_ITEM_SPLIT}
                                 >
                                   <span className="flex items-center">
                                     <Copy className="h-4 w-4 mr-2" />
@@ -2892,7 +2900,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                               <MenuItem>
                                 <button
                                   onClick={handleConvertClick}
-                                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700"
+                                  className={OVERFLOW_ITEM}
                                 >
                                   <ArrowLeftRight className="h-4 w-4 mr-2" />
                                   {noteType === 'list' ? t('note.convertToText') : t('note.convertToList')}
@@ -2903,7 +2911,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                               <MenuItem>
                                 <button
                                   onClick={handleDelete}
-                                  className="flex items-center justify-between w-full px-4 py-2 text-sm text-red-600 dark:text-red-400 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700"
+                                  className={OVERFLOW_ITEM_DANGER}
                                 >
                                   <span className="flex items-center">
                                     <Trash2 className="h-4 w-4 mr-2" />

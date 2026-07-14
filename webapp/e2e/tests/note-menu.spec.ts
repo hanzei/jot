@@ -23,16 +23,17 @@ test.describe('Note modal overflow menu', () => {
     await expect(dialog.getByRole('button', { name: 'Pin note' })).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Archive note' })).toBeVisible();
 
-    // Overflow actions are hidden until the three-dot menu is opened.
+    // Overflow actions are hidden until the three-dot menu is opened. The note
+    // is a list note, so its convert action is labeled "Convert to text".
     await expect(dialog.getByRole('menuitem', { name: 'Duplicate' })).toHaveCount(0);
     await expect(dialog.getByRole('menuitem', { name: 'Delete' })).toHaveCount(0);
-    await expect(dialog.getByRole('menuitem', { name: 'Convert to list' })).toHaveCount(0);
+    await expect(dialog.getByRole('menuitem', { name: 'Convert to text' })).toHaveCount(0);
 
     await dashboardPage.openModalOverflowMenu();
 
     // Now the overflow actions are reachable as menu items.
     await expect(dialog.getByRole('menuitem', { name: 'Duplicate' })).toBeVisible();
-    await expect(dialog.getByRole('menuitem', { name: 'Convert to list' })).toBeVisible();
+    await expect(dialog.getByRole('menuitem', { name: 'Convert to text' })).toBeVisible();
     await expect(dialog.getByRole('menuitem', { name: 'Delete' })).toBeVisible();
   });
 
