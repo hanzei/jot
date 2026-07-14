@@ -221,4 +221,20 @@ describe('NoteEditorScreen collaborators + labels row', () => {
       expect(mockNavigate).toHaveBeenCalledWith('Share', { noteId: 'note-1' });
     });
   });
+
+  it('renders collaborators non-interactively on a read-only (trashed) note', async () => {
+    // Opened from the trash: read-only, so the avatars mirror the menu having
+    // no Share action here — they display but do not navigate.
+    mockUseRoute.mockReturnValue({ params: { noteId: 'note-1', readOnly: true } });
+    const { getByTestId, getByText } = render(<NoteEditorScreen />);
+    await waitFor(() => expect(getByTestId('note-meta-collaborators')).toBeTruthy());
+    expect(getByText('alice')).toBeTruthy();
+    expect(getByText('bob')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(getByTestId('note-meta-collaborators'));
+    });
+
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
 });

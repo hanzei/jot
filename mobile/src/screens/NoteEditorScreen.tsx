@@ -2457,42 +2457,36 @@ export default function NoteEditorScreen() {
             non-interactive display, matching the menu hiding those actions. */}
         {(collaborators.length > 0 || labels.length > 0 || !isReadOnly) && (
           <View style={styles.metaRow} testID="note-meta-row">
-            {collaborators.length > 0 && (
-              canShareWithCollaborators ? (
+            {collaborators.length > 0 && (() => {
+              const avatars = collaborators.map((c, index) => (
+                <View key={c.userId} style={index === 0 ? undefined : styles.metaAvatarOverlap}>
+                  <UserAvatar
+                    userId={c.userId}
+                    username={c.username}
+                    hasProfileIcon={c.hasProfileIcon}
+                    iconVersion={c.iconVersion}
+                    size="small"
+                  />
+                </View>
+              ));
+              // Tappable only when the note can actually be (re)shared: a
+              // read-only (trashed) note has no Share action in the menu, so
+              // its avatars stay a plain, non-interactive display too.
+              return canShareWithCollaborators && !isReadOnly ? (
                 <TouchableOpacity
                   style={styles.metaAvatars}
                   onPress={openShareScreen}
                   testID="note-meta-collaborators"
                   accessibilityLabel={t('note.share')}
                 >
-                  {collaborators.map((c, index) => (
-                    <View key={c.userId} style={index === 0 ? undefined : styles.metaAvatarOverlap}>
-                      <UserAvatar
-                        userId={c.userId}
-                        username={c.username}
-                        hasProfileIcon={c.hasProfileIcon}
-                        iconVersion={c.iconVersion}
-                        size="small"
-                      />
-                    </View>
-                  ))}
+                  {avatars}
                 </TouchableOpacity>
               ) : (
                 <View style={styles.metaAvatars} testID="note-meta-collaborators">
-                  {collaborators.map((c, index) => (
-                    <View key={c.userId} style={index === 0 ? undefined : styles.metaAvatarOverlap}>
-                      <UserAvatar
-                        userId={c.userId}
-                        username={c.username}
-                        hasProfileIcon={c.hasProfileIcon}
-                        iconVersion={c.iconVersion}
-                        size="small"
-                      />
-                    </View>
-                  ))}
+                  {avatars}
                 </View>
-              )
-            )}
+              );
+            })()}
 
             {labels.map((label) => (
               !isReadOnly ? (
@@ -2501,7 +2495,7 @@ export default function NoteEditorScreen() {
                   style={[styles.metaLabelChip, { backgroundColor: hasNoteColor ? 'rgba(0,0,0,0.08)' : colors.borderLight }]}
                   onPress={openLabelPicker}
                   testID={`note-meta-label-${label.id}`}
-                  accessibilityLabel={t('labels.title')}
+                  accessibilityLabel={`${t('labels.title')}: ${label.name}`}
                 >
                   <Text style={[styles.metaLabelText, { color: hasNoteColor ? '#666' : colors.textSecondary }]}>{label.name}</Text>
                 </TouchableOpacity>
