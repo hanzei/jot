@@ -201,21 +201,33 @@ export class DashboardPage {
     await this.page.getByRole('menuitem', { name: 'Duplicate' }).click();
   }
 
+  /**
+   * Opens the note modal's three-dot overflow menu (Share/Duplicate/Convert/
+   * Delete live here now, mirroring the mobile layout). The menu is rendered in
+   * a portal (headlessui `anchor`) outside the dialog to avoid clipping, so its
+   * items must be queried at page scope, not scoped to the dialog.
+   */
+  async openModalOverflowMenu(): Promise<void> {
+    const menuButton = this.page.getByRole('dialog').last().getByRole('button', { name: 'Note options' });
+    await menuButton.click();
+    await expect(menuButton).toHaveAttribute('aria-expanded', 'true');
+  }
+
   async duplicateCurrentNoteFromModal() {
-    const activeDialog = this.page.getByRole('dialog').last();
-    await activeDialog.getByRole('button', { name: 'Duplicate' }).click();
+    await this.openModalOverflowMenu();
+    await this.page.getByRole('menuitem', { name: 'Duplicate' }).click();
   }
 
   /** Converts the open text note to a list. Text -> list has no confirmation dialog. */
   async convertCurrentNoteToList() {
-    const activeDialog = this.page.getByRole('dialog').last();
-    await activeDialog.getByRole('button', { name: 'Convert to list' }).click();
+    await this.openModalOverflowMenu();
+    await this.page.getByRole('menuitem', { name: 'Convert to list' }).click();
   }
 
   /** Converts the open list note to text, confirming the lossy-conversion dialog. */
   async convertCurrentNoteToText() {
-    const activeDialog = this.page.getByRole('dialog').last();
-    await activeDialog.getByRole('button', { name: 'Convert to text' }).click();
+    await this.openModalOverflowMenu();
+    await this.page.getByRole('menuitem', { name: 'Convert to text' }).click();
     const confirmDialog = this.page.getByRole('dialog').last();
     await confirmDialog.getByRole('button', { name: 'Convert to text' }).click();
   }
@@ -439,11 +451,22 @@ export class DashboardPage {
     ).toBeVisible();
   }
 
+  /** Opens the label picker for the open note via the overflow menu. */
+  async openLabelPickerFromModal() {
+    await this.openModalOverflowMenu();
+    await this.page.getByRole('menuitem', { name: 'Labels' }).click();
+  }
+
+  /** Opens the share modal for the open note via the overflow menu. */
+  async openShareModalFromModal() {
+    await this.openModalOverflowMenu();
+    await this.page.getByRole('menuitem', { name: 'Share' }).click();
+  }
+
   /** Opens a note and creates a new label, attaching it to the note. */
   async addLabelToNote(noteTitle: string, labelName: string) {
     await this.openNote(noteTitle);
-    await this.page.getByRole('button', { name: 'Add labels' }).waitFor();
-    await this.page.getByRole('button', { name: 'Add labels' }).click();
+    await this.openLabelPickerFromModal();
     await this.selectOrCreateLabelInPicker(labelName);
     // Closing the modal also dismisses the picker (outside-click fires on mousedown)
     await this.closeActiveDialog();

@@ -86,7 +86,18 @@ vi.mock('@headlessui/react', () => {
     <div className={className} data-testid="dialog-backdrop" />
   )
 
-  return { Dialog, DialogPanel, DialogTitle, DialogBackdrop }
+  // Overflow menu primitives are rendered eagerly (always expanded) so tests can
+  // query the menu items without opening the menu first.
+  const Menu = ({ children }: { children?: ReactNode }) => <div>{children}</div>
+  const MenuButton = ({ children, className, ...rest }: { children?: ReactNode; className?: string } & Record<string, unknown>) => (
+    <button className={className} {...rest}>{children}</button>
+  )
+  const MenuItems = ({ children, className }: { children?: ReactNode; className?: string }) => (
+    <div className={className}>{children}</div>
+  )
+  const MenuItem = ({ children }: { children?: ReactNode }) => <div>{children}</div>
+
+  return { Dialog, DialogPanel, DialogTitle, DialogBackdrop, Menu, MenuButton, MenuItems, MenuItem }
 })
 
 // Mock @dnd-kit components
@@ -1803,10 +1814,13 @@ describe('NoteModal', () => {
       expect(screen.getByRole('button', { name: 'Add labels' })).toBeInTheDocument()
     })
 
-    it('shows label add button for existing notes', () => {
+    it('exposes label management via the overflow menu for existing notes', () => {
       const note = createMockNote()
       renderNoteModal({ ...defaultProps, note })
-      expect(screen.getByRole('button', { name: 'Add labels' })).toBeInTheDocument()
+      // Existing notes manage labels from the overflow menu, not an inline
+      // "Add labels" button.
+      expect(screen.queryByRole('button', { name: 'Add labels' })).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Labels' })).toBeInTheDocument()
     })
   })
 
@@ -1981,12 +1995,13 @@ describe('NoteModal', () => {
       expect(onClose).toHaveBeenCalled()
     })
 
-    it('converts a text note to a list with no confirmation dialog', async () => {
+    it('converts a text note to a list and stays open, refreshing the note', async () => {
       const note = createMockNote({ note_type: 'text', content: '# Groceries\n- [x] Milk\n- Eggs' })
       const onConvert = vi.fn().mockResolvedValue(undefined)
       const onClose = vi.fn()
+      const onRefresh = vi.fn()
 
-      renderNoteModal({ ...defaultProps, note, onConvert, onClose })
+      renderNoteModal({ ...defaultProps, note, onConvert, onClose, onRefresh })
 
       fireEvent.click(screen.getByRole('button', { name: 'Convert to list' }))
       await vi.runAllTimersAsync()
@@ -2001,7 +2016,10 @@ describe('NoteModal', () => {
           { text: 'Eggs', position: 2, completed: false },
         ],
       })
-      expect(onClose).toHaveBeenCalled()
+      // The modal stays open on the converted note (refreshed via onRefresh),
+      // rather than closing.
+      expect(onClose).not.toHaveBeenCalled()
+      expect(onRefresh).toHaveBeenCalled()
     })
 
     it('confirms before converting a list to text and warns about dropped assignments', async () => {
@@ -2010,8 +2028,9 @@ describe('NoteModal', () => {
       const note = createMockNote({ note_type: 'list', title: 'Groceries', items })
       const onConvert = vi.fn().mockResolvedValue(undefined)
       const onClose = vi.fn()
+      const onRefresh = vi.fn()
 
-      renderNoteModal({ ...defaultProps, note, onConvert, onClose })
+      renderNoteModal({ ...defaultProps, note, onConvert, onClose, onRefresh })
 
       fireEvent.click(screen.getByRole('button', { name: 'Convert to text' }))
       expect(screen.getByText(/lose the assignment of 1 item/)).toBeInTheDocument()
@@ -2025,7 +2044,9 @@ describe('NoteModal', () => {
         base_version: 1,
         content: '# Groceries\n\n- [ ] First item\n- [x] Second item',
       })
-      expect(onClose).toHaveBeenCalled()
+      // The modal stays open on the converted note rather than closing.
+      expect(onClose).not.toHaveBeenCalled()
+      expect(onRefresh).toHaveBeenCalled()
     })
 
     it('cancels a list-to-text conversion without calling onConvert', async () => {

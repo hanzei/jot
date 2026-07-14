@@ -505,9 +505,9 @@ test.describe('Notes', () => {
       { text: 'Eggs', completed: false },
     ]);
 
-    // Give the converted list a title, so it round-trips back as an h1 line
-    // below, and so it becomes findable via the title-based note-lookup helpers.
-    await dashboardPage.noteCardByText('Groceries').click();
+    // The modal stays open on the converted list note. Give it a title so it
+    // round-trips back as an h1 line below and is findable via the title-based
+    // note-lookup helpers.
     await page.fill('input[placeholder="Note title..."]', 'Groceries List');
     await dashboardPage.closeNoteModal();
 
@@ -525,7 +525,8 @@ test.describe('Notes', () => {
 
     await page.reload();
     await dashboardPage.openNote('Groceries List');
-    await page.getByRole('dialog').last().getByRole('button', { name: 'Convert to text' }).click();
+    await dashboardPage.openModalOverflowMenu();
+    await page.getByRole('menuitem', { name: 'Convert to text' }).click();
     await expect(page.getByText(/lose the assignment of 1 item/)).toBeVisible();
     await page.getByRole('dialog').last().getByRole('button', { name: 'Convert to text' }).click();
     await expect(page.getByText('Note converted')).toBeVisible();

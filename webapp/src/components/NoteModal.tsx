@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo, useRef, useCallback, type ReactElement } from 'react';
-import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, GripVertical, Pin } from 'lucide-react';
-import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react';
+import { useState, useEffect, useMemo, useRef, useCallback, type ReactElement, type ReactNode } from 'react';
+import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, GripVertical, Pin, EllipsisVertical } from 'lucide-react';
+import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, IMAGE_MAX_PER_NOTE, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListItems, listToText, type Note, type NoteType, type NoteImage, type CreateNoteRequest, type UpdateNoteRequest, type ConvertNoteTypeRequest, type PatchNoteItemRequest, type Label, type User, type Collaborator } from '@jot/shared';
 import { notes, images as imagesApi } from '@/utils/api';
@@ -35,6 +35,32 @@ import { CSS } from '@dnd-kit/utilities';
 
 // Undo window for a client-deferred note image removal (spec: ~10s).
 const IMAGE_REMOVE_UNDO_MS = 10_000;
+
+// A single label pill shown in the note modal's avatars/labels row.
+function LabelChip({ name }: { name: string }) {
+  return (
+    <span className="inline-flex items-center bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full px-2 py-0.5 text-xs">
+      {name}
+    </span>
+  );
+}
+
+// Keyboard-shortcut hint chip shown at the trailing edge of overflow menu items.
+function MenuKbd({ children }: { children: ReactNode }) {
+  return (
+    <kbd aria-hidden="true" className="ml-2 inline-flex rounded border border-gray-300 dark:border-slate-600 bg-gray-100 dark:bg-slate-700 px-1.5 py-0.5 font-mono text-xs text-gray-500 dark:text-gray-400">
+      {children}
+    </kbd>
+  );
+}
+
+// Shared styling for the note-modal overflow menu items. OVERFLOW_ITEM is the
+// plain row; the SPLIT variant adds justify-between for rows with a trailing
+// MenuKbd chip; DANGER recolors the destructive (delete) row.
+const OVERFLOW_ITEM_BASE = 'flex items-center w-full px-4 py-2 text-sm data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700';
+const OVERFLOW_ITEM = `${OVERFLOW_ITEM_BASE} text-gray-700 dark:text-gray-200`;
+const OVERFLOW_ITEM_SPLIT = `${OVERFLOW_ITEM_BASE} justify-between text-gray-700 dark:text-gray-200`;
+const OVERFLOW_ITEM_DANGER = `${OVERFLOW_ITEM_BASE} justify-between text-red-600 dark:text-red-400`;
 
 // Validation functions
 type TFunction = (key: string, opts?: Record<string, unknown>) => string;
@@ -2005,7 +2031,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
             }))),
           };
       await onConvert(note.id, data);
-      onClose();
+      // Keep the modal open on the converted note. onRefresh refetches the note
+      // into the parent's editingNote state; because it's fire-and-forget, its
+      // setState lands after this function's `finally` clears savingRef, so the
+      // adoption effect picks up the converted note instead of being skipped.
+      onRefresh?.();
     } catch (error) {
       console.error('Failed to convert note:', error);
       showError(t('note.failedConvert'));
@@ -2655,48 +2685,75 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
             {/* Avatars + Labels row */}
             <div className="flex flex-wrap items-center gap-2">
-              {/* Share avatars */}
+              {/* Share avatars — clicking opens the share modal (owners only) */}
               {note?.is_shared && (() => {
                 const avatars = buildShareAvatars(note, currentUserId, usersById);
                 if (avatars.length === 0) return null;
-                return (
-                  <div className="flex items-center">
-                    {avatars.map((a, index) => (
-                      <div key={a.key} title={a.displayName}>
-                        <LetterAvatar
-                          firstName={a.firstName}
-                          username={a.username}
-                          userId={a.userId}
-                          hasProfileIcon={a.hasProfileIcon}
-                          iconVersion={a.iconVersion}
-                          className={`w-6 h-6 ring-2 ring-white dark:ring-slate-800 ${index > 0 ? '-ml-1' : ''}`}
-                        />
-                      </div>
-                    ))}
+                const avatarEls = avatars.map((a, index) => (
+                  <div key={a.key} title={a.displayName}>
+                    <LetterAvatar
+                      firstName={a.firstName}
+                      username={a.username}
+                      userId={a.userId}
+                      hasProfileIcon={a.hasProfileIcon}
+                      iconVersion={a.iconVersion}
+                      className={`w-6 h-6 ring-2 ring-white dark:ring-slate-800 ${index > 0 ? '-ml-1' : ''}`}
+                    />
                   </div>
+                ));
+                return isOwner && onShare ? (
+                  <button
+                    type="button"
+                    onClick={() => onShare(note)}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    className="flex items-center rounded-full transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                    title={t('note.share')}
+                    aria-label={t('note.share')}
+                  >
+                    {avatarEls}
+                  </button>
+                ) : (
+                  <div className="flex items-center">{avatarEls}</div>
                 );
               })()}
-              {/* Label badges + add button */}
-              {noteLabels.map(label => (
-                <span
-                  key={label.id}
-                  className="inline-flex items-center bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full px-2 py-0.5 text-xs"
-                >
-                  {label.name}
-                </span>
-              ))}
+              {/* Label picker anchor. Saved notes manage labels via the overflow
+                  menu and reopen the picker by clicking their label chips. Unsaved
+                  notes have no overflow menu, so they keep the inline chips plus an
+                  explicit "Add labels" button. */}
               <div className="relative">
-                <button
-                  onClick={() => setShowLabelPicker(v => !v)}
-                  onMouseDown={(event) => event.stopPropagation()}
-                  className="inline-flex items-center gap-1 rounded-full border border-dashed border-blue-300 dark:border-blue-700 bg-blue-50/80 dark:bg-blue-900/20 px-2 py-1 text-xs font-medium text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
-                  title={t('labels.addLabels')}
-                  aria-label={t('labels.addLabels')}
-                  aria-expanded={showLabelPicker}
-                >
-                  <Tag className="h-3.5 w-3.5" aria-hidden="true" />
-                  <span>{t('labels.addLabels')}</span>
-                </button>
+                {note ? (
+                  noteLabels.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowLabelPicker(v => !v)}
+                      onMouseDown={(event) => event.stopPropagation()}
+                      className="-mx-1 inline-flex flex-wrap items-center gap-2 rounded-md px-1 py-0.5 transition-colors hover:bg-black/5 dark:hover:bg-white/10"
+                      aria-label={t('labels.title')}
+                      aria-expanded={showLabelPicker}
+                    >
+                      {noteLabels.map(label => (
+                        <LabelChip key={label.id} name={label.name} />
+                      ))}
+                    </button>
+                  )
+                ) : (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {noteLabels.map(label => (
+                      <LabelChip key={label.id} name={label.name} />
+                    ))}
+                    <button
+                      onClick={() => setShowLabelPicker(v => !v)}
+                      onMouseDown={(event) => event.stopPropagation()}
+                      className="inline-flex items-center gap-1 rounded-full border border-dashed border-blue-300 dark:border-blue-700 bg-blue-50/80 dark:bg-blue-900/20 px-2 py-1 text-xs font-medium text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+                      title={t('labels.addLabels')}
+                      aria-label={t('labels.addLabels')}
+                      aria-expanded={showLabelPicker}
+                    >
+                      <Tag className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span>{t('labels.addLabels')}</span>
+                    </button>
+                  </div>
+                )}
                 {showLabelPicker && (
                   note ? (
                     <LabelPicker note={{...note, labels: noteLabels}} onRefresh={onRefresh} onNoteUpdate={(n) => setNoteLabels(n.labels ?? [])} onError={showError} onClose={() => setShowLabelPicker(false)} />
@@ -2799,17 +2856,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                     >
                       <Image className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                     </button>
-                    {noteDeepLinkHref && (
-                      <a
-                        href={noteDeepLinkHref}
-                        className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                        title={t('nav.openMobileApp')}
-                        aria-label={t('nav.openMobileApp')}
-                        data-testid="note-open-mobile-app-toolbar-link"
-                      >
-                        <Smartphone className="h-5 w-5 text-gray-600 dark:text-gray-300" />
-                      </a>
-                    )}
                     <button
                       onClick={handlePinToggle}
                       className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
@@ -2833,46 +2879,104 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                         <Archive className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                       )}
                     </button>
-                    {isOwner && onShare && (
-                      <button
-                        onClick={() => onShare(note)}
-                        className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                        title={t('note.share')}
-                        aria-label={t('note.share')}
-                      >
-                        <UserPlus className="h-5 w-5 text-gray-600 dark:text-gray-300" />
-                      </button>
-                    )}
-                    {onDuplicate && (
-                      <button
-                        onClick={handleDuplicate}
-                        className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                        title={t('note.duplicate')}
-                        aria-label={t('note.duplicate')}
-                      >
-                        <Copy className="h-5 w-5 text-gray-600 dark:text-gray-300" />
-                      </button>
-                    )}
-                    {onConvert && (
-                      <button
-                        onClick={handleConvertClick}
-                        className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                        title={noteType === 'list' ? t('note.convertToText') : t('note.convertToList')}
-                        aria-label={noteType === 'list' ? t('note.convertToText') : t('note.convertToList')}
-                      >
-                        <ArrowLeftRight className="h-5 w-5 text-gray-600 dark:text-gray-300" />
-                      </button>
-                    )}
-                    {isOwner && onDelete && (
-                      <button
-                        onClick={handleDelete}
-                        className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                        title={t('note.delete')}
-                        aria-label={t('note.delete')}
-                      >
-                        <Trash2 className="h-5 w-5 text-gray-600 dark:text-gray-300" />
-                      </button>
-                    )}
+                    {/* Overflow menu — mirrors the mobile three-dot layout so the
+                        toolbar stays uncluttered as more actions are added. Labels
+                        is always available, so the menu always renders here. */}
+                    <Menu as="div" className="relative">
+                        <MenuButton
+                          onMouseDown={(e) => e.stopPropagation()}
+                          className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                          title={t('note.menuOptions')}
+                          aria-label={t('note.menuOptions')}
+                        >
+                          <EllipsisVertical className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                        </MenuButton>
+                        <MenuItems
+                          transition
+                          anchor={{ to: 'top start', gap: 4 }}
+                          className="w-56 origin-bottom-left bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black/5 dark:ring-slate-600/20 focus:outline-none z-50 border border-gray-200 dark:border-slate-600 transition duration-100 ease-out data-[closed]:scale-95 data-[closed]:opacity-0 motion-reduce:transition-none"
+                        >
+                          <div className="py-1">
+                            {noteDeepLinkHref && (
+                              <MenuItem>
+                                <a
+                                  href={noteDeepLinkHref}
+                                  className={OVERFLOW_ITEM}
+                                  data-testid="note-open-mobile-app-toolbar-link"
+                                >
+                                  <Smartphone className="h-4 w-4 mr-2" />
+                                  {t('nav.openMobileApp')}
+                                </a>
+                              </MenuItem>
+                            )}
+                            {onConvert && (
+                              <MenuItem>
+                                <button
+                                  onClick={handleConvertClick}
+                                  className={OVERFLOW_ITEM}
+                                >
+                                  <ArrowLeftRight className="h-4 w-4 mr-2" />
+                                  {noteType === 'list' ? t('note.convertToText') : t('note.convertToList')}
+                                </button>
+                              </MenuItem>
+                            )}
+                            {isOwner && onShare && (
+                              <MenuItem>
+                                <button
+                                  onClick={() => onShare(note)}
+                                  className={OVERFLOW_ITEM_SPLIT}
+                                >
+                                  <span className="flex items-center">
+                                    <UserPlus className="h-4 w-4 mr-2" />
+                                    {t('note.share')}
+                                  </span>
+                                  <MenuKbd>S</MenuKbd>
+                                </button>
+                              </MenuItem>
+                            )}
+                            {onDuplicate && (
+                              <MenuItem>
+                                <button
+                                  onClick={handleDuplicate}
+                                  className={OVERFLOW_ITEM_SPLIT}
+                                >
+                                  <span className="flex items-center">
+                                    <Copy className="h-4 w-4 mr-2" />
+                                    {t('note.duplicate')}
+                                  </span>
+                                  <MenuKbd>D</MenuKbd>
+                                </button>
+                              </MenuItem>
+                            )}
+                            <MenuItem>
+                              <button
+                                onClick={() => setShowLabelPicker(true)}
+                                className={OVERFLOW_ITEM_SPLIT}
+                              >
+                                <span className="flex items-center">
+                                  <Tag className="h-4 w-4 mr-2" />
+                                  {t('labels.title')}
+                                </span>
+                                <MenuKbd>L</MenuKbd>
+                              </button>
+                            </MenuItem>
+                            {isOwner && onDelete && (
+                              <MenuItem>
+                                <button
+                                  onClick={handleDelete}
+                                  className={OVERFLOW_ITEM_DANGER}
+                                >
+                                  <span className="flex items-center">
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    {t('note.delete')}
+                                  </span>
+                                  <MenuKbd>Del</MenuKbd>
+                                </button>
+                              </MenuItem>
+                            )}
+                          </div>
+                        </MenuItems>
+                      </Menu>
                   </>
                 )}
               </div>
