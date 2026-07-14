@@ -4,7 +4,24 @@ import AboutSection from '../src/screens/settings/AboutSection';
 import { useAuth } from '../src/store/AuthContext';
 import { getAboutInfo } from '../src/api/settings';
 import { getActiveServer } from '../src/store/serverAccounts';
+import { getCurrentLocale } from '../src/i18n/utils';
 import type { User, AboutInfo } from '@jot/shared';
+
+// App build info the component reads. Mock the appInfo module boundary rather
+// than expo-constants/process.env so all three fields (version, commit,
+// buildTime) are controllable and their conditional render branches covered —
+// the env-var path is exercised separately in appInfo.test.ts.
+const APP_VERSION = '0.1.0';
+const APP_COMMIT = 'abc1234';
+const APP_BUILD_TIME = '2026-07-01T00:00:00Z';
+
+jest.mock('../src/utils/appInfo', () => ({
+  getAppBuildInfo: () => ({
+    version: '0.1.0',
+    commit: 'abc1234',
+    buildTime: '2026-07-01T00:00:00Z',
+  }),
+}));
 
 jest.mock('../src/store/AuthContext', () => ({
   useAuth: jest.fn(),
@@ -20,11 +37,6 @@ jest.mock('../src/api/client', () => ({
 
 jest.mock('../src/store/serverAccounts', () => ({
   getActiveServer: jest.fn(),
-}));
-
-jest.mock('expo-constants', () => ({
-  __esModule: true,
-  default: { expoConfig: { version: '0.1.0' } },
 }));
 
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
@@ -57,7 +69,7 @@ describe('AboutSection', () => {
     mockGetAboutInfo.mockResolvedValue(serverInfo);
   });
 
-  it('shows the mobile app version alongside the server version once expanded', async () => {
+  it('shows the mobile app version/commit/build time alongside the server version once expanded', async () => {
     const { getByTestId, getByText, findByText } = render(<AboutSection />);
 
     // Let the active-server lookup settle before expanding, so it doesn't race
@@ -67,9 +79,14 @@ describe('AboutSection', () => {
 
     fireEvent.press(getByTestId('settings-about-toggle'));
 
-    // App Info section shows the app's own (package.json/app.json-sourced) version.
+    // App Info section shows the app's own version, commit, and build time.
     expect(getByText('App Info')).toBeTruthy();
-    expect(getByText('0.1.0')).toBeTruthy();
+    expect(getByText(APP_VERSION)).toBeTruthy();
+    expect(getByText(APP_COMMIT)).toBeTruthy();
+    // Build time is rendered via the component's own formatDate/locale, so
+    // compute the expected string the same way to stay timezone-independent.
+    const expectedBuildTime = new Date(APP_BUILD_TIME).toLocaleString(getCurrentLocale());
+    expect(getByText(expectedBuildTime)).toBeTruthy();
 
     // Server Info section shows the fetched server version, once loaded.
     await waitFor(() => expect(mockGetAboutInfo).toHaveBeenCalled());
