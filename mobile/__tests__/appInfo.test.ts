@@ -1,19 +1,20 @@
-describe('getAppBuildInfo', () => {
-  const ORIGINAL_ENV = process.env;
+import { getAppBuildInfo } from '../src/utils/appInfo';
 
+describe('getAppBuildInfo', () => {
+  // Mutate process.env in place (never reassign it): the transformed source
+  // reads env vars via expo/virtual/env, whose `env` export is bound to this
+  // same process.env object reference at import time.
   beforeEach(() => {
-    jest.resetModules();
-    process.env = { ...ORIGINAL_ENV };
     delete process.env.EXPO_PUBLIC_COMMIT_SHA;
     delete process.env.EXPO_PUBLIC_BUILD_DATE;
   });
 
-  afterAll(() => {
-    process.env = ORIGINAL_ENV;
+  afterEach(() => {
+    delete process.env.EXPO_PUBLIC_COMMIT_SHA;
+    delete process.env.EXPO_PUBLIC_BUILD_DATE;
   });
 
   it('reports the app.json version with no commit/build time when unset', () => {
-    const { getAppBuildInfo } = require('../src/utils/appInfo');
     expect(getAppBuildInfo()).toEqual({
       version: '0.1.0',
       commit: undefined,
@@ -25,7 +26,6 @@ describe('getAppBuildInfo', () => {
     process.env.EXPO_PUBLIC_COMMIT_SHA = 'abc1234';
     process.env.EXPO_PUBLIC_BUILD_DATE = '2026-07-14T12:00:00Z';
 
-    const { getAppBuildInfo } = require('../src/utils/appInfo');
     expect(getAppBuildInfo()).toEqual({
       version: '0.1.0',
       commit: 'abc1234',
