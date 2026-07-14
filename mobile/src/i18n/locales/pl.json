@@ -315,7 +315,6 @@
   "labels": {
     "title": "Etykiety",
     "noLabels": "Brak etykiet",
-    "addLabels": "Dodaj etykiety",
     "newLabelPlaceholder": "Nowa etykieta",
     "newSidebar": "Nowa etykieta",
     "createInputLabel": "Nazwa nowej etykiety",

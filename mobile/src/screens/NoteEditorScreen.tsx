@@ -33,7 +33,7 @@ import {
 import { Gesture } from 'react-native-gesture-handler';
 import { LinearTransition, useSharedValue, runOnJS } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { Archive, ArrowLeft, Check, ChevronRight, CircleAlert, EllipsisVertical, FileText, Image, List, Palette, Pin, Plus, Tag } from 'lucide-react-native';
+import { Archive, ArrowLeft, Check, ChevronRight, CircleAlert, EllipsisVertical, FileText, Image, List, Palette, Pin, Plus } from 'lucide-react-native';
 import { useNavigation, useRoute, RouteProp, type NavigationAction } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
@@ -96,6 +96,11 @@ const MARKDOWN_TOOLBAR_ID = 'markdown-formatting-toolbar';
 // Duration (ms) of the row slide when the active list reflows after a toggle/delete.
 const LIST_REFLOW_ANIM_MS = 150;
 const MAX_EXIT_SAVE_RETRIES = 3;
+// Menu-action pending bar: only show it once an action has been in flight for
+// this long, so fast actions never flash it; and once shown, keep it up for at
+// least the min-visible window so it can't blink out a frame later.
+const PENDING_BAR_DELAY_MS = 600;
+const PENDING_BAR_MIN_VISIBLE_MS = 300;
 // Duration of the zoom-open / zoom-closed transform animation.
 const ZOOM_MS = 280;
 // Override the reorderable list's default cell animation so the dragged row is
@@ -937,27 +942,80 @@ export default function NoteEditorScreen() {
   // write timeout, so surface that wait instead of leaving the screen looking
   // frozen (issue #697).
   //
+  // The bar is shown on a delay, not immediately: a fast action (the common
+  // case — an existing note with no pending edits) finishes before
+  // PENDING_BAR_DELAY_MS and never surfaces the bar at all, so it no longer
+  // flashes in and shoves the note down. Once the bar does appear it stays up
+  // for at least PENDING_BAR_MIN_VISIBLE_MS, so an action finishing just past
+  // the delay threshold doesn't produce a one-frame blink either.
+  //
   // pendingCountRef tracks overlapping calls (e.g. Pin and Archive tapped in
-  // quick succession — only the overflow menu button is disabled while
-  // pending, so other toolbar actions can still start one of these). The
-  // indicator only clears once every in-flight call has finished, so one
-  // call's finally doesn't hide the spinner while a sibling call is still
-  // awaiting its write.
+  // quick succession). The indicator's show-delay is armed once while any call
+  // is pending, and it only hides once every in-flight call has finished, so
+  // one call's finally doesn't hide the bar while a sibling is still awaiting
+  // its write.
   const pendingCountRef = useRef(0);
+  const pendingDelayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Timestamp (ms) at which the bar became visible, or 0 while it is hidden.
+  const pendingShownAtRef = useRef(0);
   const withPendingIndicator = useCallback(async <T,>(fn: () => Promise<T>): Promise<T> => {
     const showPending = isServerReachable();
     if (showPending) {
       pendingCountRef.current += 1;
-      setIsMenuActionPending(true);
+      // A fresh action cancels any in-flight min-visible hide: the bar should
+      // stay up (or appear) rather than blink off between back-to-back actions.
+      if (pendingHideTimerRef.current) {
+        clearTimeout(pendingHideTimerRef.current);
+        pendingHideTimerRef.current = null;
+      }
+      // Arm the delayed show once, only while the bar isn't already visible.
+      if (pendingShownAtRef.current === 0 && pendingDelayTimerRef.current === null) {
+        pendingDelayTimerRef.current = setTimeout(() => {
+          pendingDelayTimerRef.current = null;
+          if (pendingCountRef.current > 0 && isMountedRef.current) {
+            pendingShownAtRef.current = Date.now();
+            setIsMenuActionPending(true);
+          }
+        }, PENDING_BAR_DELAY_MS);
+      }
     }
     try {
       return await fn();
     } finally {
       if (showPending) {
         pendingCountRef.current -= 1;
-        if (pendingCountRef.current === 0 && isMountedRef.current) setIsMenuActionPending(false);
+        if (pendingCountRef.current === 0) {
+          if (pendingDelayTimerRef.current !== null) {
+            // Finished before the delay elapsed — the bar never showed, so just
+            // cancel the pending show.
+            clearTimeout(pendingDelayTimerRef.current);
+            pendingDelayTimerRef.current = null;
+          } else if (pendingShownAtRef.current > 0) {
+            // The bar is visible — keep it up for the remainder of the minimum
+            // visible window so it doesn't blink out.
+            const remaining = PENDING_BAR_MIN_VISIBLE_MS - (Date.now() - pendingShownAtRef.current);
+            const hide = () => {
+              pendingHideTimerRef.current = null;
+              pendingShownAtRef.current = 0;
+              if (isMountedRef.current) setIsMenuActionPending(false);
+            };
+            if (remaining <= 0) hide();
+            else pendingHideTimerRef.current = setTimeout(hide, remaining);
+          }
+        }
       }
     }
+  }, []);
+
+  // Clear the menu-action pending bar's show/hide timers on unmount so a timer
+  // armed just before the screen closed can't fire a state update afterwards.
+  // Kept as its own mount/unmount-only effect (empty deps) rather than folded
+  // into the flush-on-unmount effect below, whose dependency changes on every
+  // render and would otherwise clear a live show-delay before it could fire.
+  useEffect(() => () => {
+    if (pendingDelayTimerRef.current) clearTimeout(pendingDelayTimerRef.current);
+    if (pendingHideTimerRef.current) clearTimeout(pendingHideTimerRef.current);
   }, []);
 
   // Redirect the shared note to a different server: stash the text targeted at
@@ -2097,22 +2155,13 @@ export default function NoteEditorScreen() {
 
   // Save-first openers shared by the overflow menu and the inline
   // labels/collaborators row below the note body, so tapping a label chip or a
-  // collaborator avatar behaves exactly like the matching menu action.
-  const openLabelPicker = useCallback(async () => {
-    // Opening the picker only needs a note id. An existing note already has
-    // one, so open immediately — no await, and deliberately none of
-    // withSavedNote's pending bar, which flashed in and shoved the note down.
-    // Any unsaved body edits keep autosaving on their own; the label picker
-    // mutates labels independently, so there is nothing to flush first here.
-    // Only a brand-new note must be created first to obtain an id to attach
-    // labels to.
-    if (noteIdRef.current) {
-      setLabelPickerVisible(true);
-      return;
-    }
-    const saved = await flushPendingChanges();
-    if (saved && noteIdRef.current) setLabelPickerVisible(true);
-  }, [flushPendingChanges]);
+  // collaborator avatar behaves exactly like the matching menu action. Both go
+  // through withSavedNote: a brand-new note is created first so the picker /
+  // share screen has an id to act on. The pending bar no longer flashes for the
+  // common fast case — withPendingIndicator now only surfaces it after a delay.
+  const openLabelPicker = useCallback(() => {
+    void withSavedNote(() => setLabelPickerVisible(true));
+  }, [withSavedNote]);
   const openShareScreen = useCallback(() => {
     void withSavedNote((id) => navigation.navigate('Share', { noteId: id }));
   }, [withSavedNote, navigation]);
@@ -2471,12 +2520,12 @@ export default function NoteEditorScreen() {
 
         {/* Collaborators + labels, mirroring the webapp's single-note view.
             Tapping a collaborator avatar opens the share screen; tapping a
-            label chip (or "Add labels") opens the label picker — the same
-            targets as the overflow menu's Share / Labels actions. Shown for
-            shared and/or labelled notes, plus the "Add labels" affordance on
-            any editable note. Read-only (trashed) notes render it as plain,
-            non-interactive display, matching the menu hiding those actions. */}
-        {(displayCollaborators.length > 0 || labels.length > 0 || !isReadOnly) && (
+            label chip opens the label picker — the same targets as the overflow
+            menu's Share / Labels actions. Shown only for shared and/or labelled
+            notes; labels are added on an empty note via the overflow menu.
+            Read-only (trashed) notes render it as plain, non-interactive
+            display, matching the menu hiding those actions. */}
+        {(displayCollaborators.length > 0 || labels.length > 0) && (
           <View style={styles.metaRow} testID="note-meta-row">
             {displayCollaborators.length > 0 && (() => {
               const avatars = displayCollaborators.map((c, index) => (
@@ -2529,18 +2578,6 @@ export default function NoteEditorScreen() {
                 </View>
               )
             ))}
-
-            {!isReadOnly && (
-              <TouchableOpacity
-                style={[styles.metaAddLabels, { borderColor: colors.primary }]}
-                onPress={openLabelPicker}
-                testID="note-meta-add-labels"
-                accessibilityLabel={t('labels.addLabels')}
-              >
-                <Tag size={14} color={colors.primary} />
-                <Text style={[styles.metaAddLabelsText, { color: colors.primary }]}>{t('labels.addLabels')}</Text>
-              </TouchableOpacity>
-            )}
           </View>
         )}
       </ScrollViewContainer>

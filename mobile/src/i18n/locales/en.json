@@ -344,7 +344,6 @@
   "labels": {
     "title": "Labels",
     "noLabels": "No labels yet",
-    "addLabels": "Add labels",
     "newSidebar": "New Label",
     "newLabelPlaceholder": "New label",
     "createInputLabel": "New label name",

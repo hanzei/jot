@@ -197,20 +197,15 @@ describe('NoteEditorScreen collaborators + labels row', () => {
     });
 
     await waitFor(() => expect(getByTestId('label-picker-open')).toBeTruthy());
-    // Opening the picker must not surface the menu-action loading bar, which
-    // otherwise flashed in and shoved the note down.
+    // On a saved note the open is instant — well under the pending bar's show
+    // delay — so the loading bar never flashes in and shoves the note down.
     expect(queryByTestId('menu-action-pending')).toBeNull();
   });
 
-  it('opens the label picker when "Add labels" is tapped', async () => {
-    const { getByTestId } = render(<NoteEditorScreen />);
-    await waitFor(() => expect(getByTestId('note-meta-add-labels')).toBeTruthy());
-
-    await act(async () => {
-      fireEvent.press(getByTestId('note-meta-add-labels'));
-    });
-
-    await waitFor(() => expect(getByTestId('label-picker-open')).toBeTruthy());
+  it('does not render an "Add labels" affordance in the meta row', async () => {
+    const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
+    await waitFor(() => expect(getByTestId('note-meta-row')).toBeTruthy());
+    expect(queryByTestId('note-meta-add-labels')).toBeNull();
   });
 
   it('navigates to the share screen when a collaborator avatar is tapped', async () => {
