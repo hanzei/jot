@@ -100,8 +100,9 @@ test.describe('Note modal overflow menu', () => {
     await dashboardPage.addLabelToNote('Chip Note', 'chiplabel');
 
     await dashboardPage.openNote('Chip Note');
-    // The rendered label chips act as a button that reopens the picker.
-    await page.getByRole('button', { name: 'Labels' }).click();
+    // The rendered label chips act as a button that reopens the picker. Match
+    // exactly so this never resolves to an "Add labels" button.
+    await page.getByRole('button', { name: 'Labels', exact: true }).click();
 
     await expect(page.getByRole('textbox', { name: 'Search or create label...' })).toBeVisible();
   });

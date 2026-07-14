@@ -36,6 +36,15 @@ import { CSS } from '@dnd-kit/utilities';
 // Undo window for a client-deferred note image removal (spec: ~10s).
 const IMAGE_REMOVE_UNDO_MS = 10_000;
 
+// A single label pill shown in the note modal's avatars/labels row.
+function LabelChip({ name }: { name: string }) {
+  return (
+    <span className="inline-flex items-center bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full px-2 py-0.5 text-xs">
+      {name}
+    </span>
+  );
+}
+
 // Keyboard-shortcut hint chip shown at the trailing edge of overflow menu items.
 function MenuKbd({ children }: { children: ReactNode }) {
   return (
@@ -2719,24 +2728,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                       aria-expanded={showLabelPicker}
                     >
                       {noteLabels.map(label => (
-                        <span
-                          key={label.id}
-                          className="inline-flex items-center bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full px-2 py-0.5 text-xs"
-                        >
-                          {label.name}
-                        </span>
+                        <LabelChip key={label.id} name={label.name} />
                       ))}
                     </button>
                   )
                 ) : (
                   <div className="flex flex-wrap items-center gap-2">
                     {noteLabels.map(label => (
-                      <span
-                        key={label.id}
-                        className="inline-flex items-center bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full px-2 py-0.5 text-xs"
-                      >
-                        {label.name}
-                      </span>
+                      <LabelChip key={label.id} name={label.name} />
                     ))}
                     <button
                       onClick={() => setShowLabelPicker(v => !v)}
