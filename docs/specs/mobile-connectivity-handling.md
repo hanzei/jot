@@ -181,6 +181,22 @@ Rules of thumb:
   time.
 - **Cap**: consecutive failures are capped before surfacing an error, so a
   persistently failing server doesn't busy-loop.
+- **Queue liveness (head-of-line safety)**: the drain is strict FIFO, so the
+  failure cap above protects CPU/network but *not* queue liveness — a single
+  entry that reproducibly fails (a server that 5xx's one payload forever, or a
+  non-HTTP error thrown while processing a corrupted body) would otherwise wedge
+  the head and starve every later write. Each entry therefore carries a
+  persisted `attempts` counter (`sync_queue.attempts`,
+  `pending_image_uploads.attempts`). A *global* connectivity failure (no server
+  response, or 401/408/429) stops the drain without charging the head entry; an
+  *entry-specific* failure (a 5xx, or a non-HTTP processing throw) charges it.
+  Once an entry has failed `MAX_ENTRY_DRAIN_ATTEMPTS` times it is **dead-lettered
+  and the drain continues past it** (`#492`'s dead-letter table gains the op, the
+  note is flagged `sync_state = 'failed'`), so unrelated later writes drain. A
+  dead-lettered `create` also drops its note's dependent queued ops rather than
+  404-ing each one. (A long server-wide 5xx outage can dead-letter the head after
+  the cap even though the op was fine — accepted, since the op is preserved and
+  recoverable via the failed-changes review flow.)
 
 (These are the *Sync Loop Safety* rules in `mobile/CLAUDE.md`; connectivity
 handling and loop safety are two halves of the same system.)
@@ -208,7 +224,7 @@ handling and loop safety are two halves of the same system.)
 | Device connectivity + queue drain | `src/store/OfflineContext.tsx` |
 | Server-reachability belief + write gate | `src/api/serverReachability.ts` (`isServerReachable`, `isOnlineWriteAllowed`) |
 | Timeouts + interceptors + reachability wiring | `src/api/client.ts` |
-| Sync queue + transient/permanent split | `src/db/syncQueue.ts` (`rethrowIfNotQueueable`, `isQueueableError`) |
+| Sync queue + transient/permanent split + head-of-line dead-lettering | `src/db/syncQueue.ts` (`rethrowIfNotQueueable`, `isQueueableError`, `isGlobalDrainFailure`, `MAX_ENTRY_DRAIN_ATTEMPTS`, `getSyncQueueStats`) |
 | Bounded read retries | `src/utils/retryWithBackoff.ts` (`retrySync`) |
 | Optimistic writes + offline fallback | `src/hooks/useNotes.ts`, `useLabels.ts`, `useNoteImages.ts` |
 | Local-first read queries | `src/hooks/useOfflineNotes.ts` |
@@ -249,3 +265,9 @@ handling and loop safety are two halves of the same system.)
 - **Conflating device connectivity with server reachability** — the umbrella
   cause; if you find code branching only on `isConnected` for a *write*, it
   probably wants `isOnlineWriteAllowed()`.
+- **Breaking a FIFO queue drain on any transient error with no per-entry cap** —
+  one reproducibly-failing entry (persistent 5xx, or a non-HTTP throw
+  misclassified as transient) wedged the head and silently starved every later
+  write (issue #714); fixed by charging a per-entry `attempts` counter for
+  entry-specific failures (not global connectivity ones) and dead-lettering +
+  continuing past an entry once it hits `MAX_ENTRY_DRAIN_ATTEMPTS`.

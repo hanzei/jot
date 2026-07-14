@@ -3,7 +3,7 @@
  */
 
 import { generateClientNoteId, isUnsyncedNoteId, removeLocalNotesNotIn, getLocalLabelCounts, saveNote, addLabelToLocalNote, removeLabelFromLocalNote, getLocalNotes } from '../src/db/noteQueries';
-import { drainQueue, isTransientHttpStatus } from '../src/db/syncQueue';
+import { drainQueue, getSyncQueueStats, isTransientHttpStatus, MAX_ENTRY_DRAIN_ATTEMPTS, PROCESSING_ERROR_STATUS } from '../src/db/syncQueue';
 import api from '../src/api/client';
 
 function makeAxiosError(status: number) {
@@ -75,9 +75,43 @@ describe('isTransientHttpStatus', () => {
   });
 });
 
+// ── getSyncQueueStats ───────────────────────────────────────────────────────
+
+describe('getSyncQueueStats', () => {
+  it('reports the FIFO head, pending count, and max attempts (#714)', async () => {
+    const db = {
+      getFirstAsync: jest.fn()
+        .mockResolvedValueOnce({ id: 3, operation: 'update', created_at: '2024-01-01T00:00:00Z', attempts: 2 })
+        .mockResolvedValueOnce({ count: 4 })
+        .mockResolvedValueOnce({ max: 2 }),
+    };
+
+    const stats = await getSyncQueueStats(db as never);
+
+    expect(stats).toEqual({
+      pendingCount: 4,
+      head: { id: 3, operation: 'update', created_at: '2024-01-01T00:00:00Z', attempts: 2 },
+      maxAttempts: 2,
+    });
+  });
+
+  it('returns an empty summary when the queue is empty', async () => {
+    const db = {
+      getFirstAsync: jest.fn()
+        .mockResolvedValueOnce(null) // no head row
+        .mockResolvedValueOnce({ count: 0 })
+        .mockResolvedValueOnce({ max: null }),
+    };
+
+    const stats = await getSyncQueueStats(db as never);
+
+    expect(stats).toEqual({ pendingCount: 0, head: null, maxAttempts: 0 });
+  });
+});
+
 // ── drainQueue ─────────────────────────────────────────────────────────────
 
-function makeMockDb(entries: { id: number; operation: string; endpoint: string; method: string; body: string | null; created_at: string }[]) {
+function makeMockDb(entries: { id: number; operation: string; endpoint: string; method: string; body: string | null; created_at: string; attempts?: number }[]) {
   return {
     getAllAsync: jest.fn().mockResolvedValue([...entries]),
     runAsync: jest.fn().mockResolvedValue(undefined),
@@ -258,6 +292,112 @@ describe('drainQueue', () => {
 
     expect(db.runAsync).not.toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [16]);
     expect(discardedOperations).toHaveLength(0);
+  });
+
+  // ── head-of-line handling: per-entry attempt counter + dead-letter (#714) ──
+
+  it('increments the attempt counter and stops (no dead-letter) below the cap on a persistent 5xx (#714)', async () => {
+    const db = makeMockDb([
+      { id: 30, operation: 'update', endpoint: '/notes/abc', method: 'PATCH', body: '{}', created_at: '', attempts: 0 },
+    ]);
+    mockApi.patch.mockRejectedValueOnce(makeAxiosError(500));
+
+    const { discardedOperations } = await drainQueue(db as never);
+
+    expect(db.runAsync).toHaveBeenCalledWith('UPDATE sync_queue SET attempts = ? WHERE id = ?', [1, 30]);
+    expect(db.runAsync).not.toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [30]);
+    expect(discardedOperations).toHaveLength(0);
+  });
+
+  it('dead-letters a persistently-failing 5xx entry at the cap and drains past it (#714)', async () => {
+    const db = makeMockDb([
+      { id: 31, operation: 'update', endpoint: '/notes/stuck', method: 'PATCH', body: '{}', created_at: '', attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1 },
+      { id: 32, operation: 'update', endpoint: '/notes/ok', method: 'PATCH', body: '{}', created_at: '' },
+    ]);
+    mockApi.patch.mockRejectedValueOnce(makeAxiosError(503)); // id 31 — one more failure hits the cap
+    mockApi.patch.mockResolvedValueOnce({ data: {} } as never); // id 32 — the unaffected note
+
+    const { discardedOperations } = await drainQueue(db as never);
+
+    // The stuck entry is charged, dead-lettered, and removed from the queue...
+    expect(db.runAsync).toHaveBeenCalledWith('UPDATE sync_queue SET attempts = ? WHERE id = ?', [MAX_ENTRY_DRAIN_ATTEMPTS, 31]);
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [31]);
+    expect(discardedOperations).toEqual([{ operation: 'update', endpoint: '/notes/stuck', status: 503 }]);
+    // ...and the later entry for an unaffected note still drains.
+    expect(mockApi.patch).toHaveBeenCalledWith('/notes/ok', {});
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [32]);
+  });
+
+  it('dead-letters a non-HTTP processing error at the cap and continues past it (#714)', async () => {
+    const db = makeMockDb([
+      { id: 40, operation: 'update', endpoint: '/notes/corrupt', method: 'PATCH', body: '{}', created_at: '', attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1 },
+      { id: 41, operation: 'update', endpoint: '/notes/ok', method: 'PATCH', body: '{}', created_at: '' },
+    ]);
+    mockApi.patch.mockRejectedValueOnce(new Error('boom')); // non-axios throw processing id 40
+    mockApi.patch.mockResolvedValueOnce({ data: {} } as never);
+
+    const { discardedOperations } = await drainQueue(db as never);
+
+    // A non-HTTP throw is recorded with the processing-error sentinel status (0).
+    expect(discardedOperations).toEqual([
+      { operation: 'update', endpoint: '/notes/corrupt', status: PROCESSING_ERROR_STATUS },
+    ]);
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [40]);
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [41]);
+  });
+
+  it('records attempts and error_message on the dead_letter row (#714)', async () => {
+    const db = makeMockDb([
+      { id: 50, operation: 'update', endpoint: '/notes/x', method: 'PATCH', body: '{}', created_at: '', attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1 },
+    ]);
+    mockApi.patch.mockRejectedValueOnce(makeAxiosError(500));
+
+    await drainQueue(db as never);
+
+    const insert = (db.runAsync.mock.calls as unknown[][]).find((c) =>
+      String(c[0]).startsWith('INSERT INTO dead_letter'),
+    );
+    expect(insert).toBeTruthy();
+    // args: [operation, endpoint, method, body, status, note_id, created_at, failed_at, attempts, error_message]
+    const args = insert![1] as unknown[];
+    expect(args[4]).toBe(500); // status
+    expect(args[8]).toBe(MAX_ENTRY_DRAIN_ATTEMPTS); // attempts
+    expect(typeof args[9]).toBe('string'); // error_message preserved
+    expect(args[9]).toBeTruthy();
+  });
+
+  it('drops later queued ops for a note whose create was dead-lettered, without hitting the server (#714 cascade)', async () => {
+    const clientId = 'Cascade0000000000000ab'; // 22-char server-valid id
+    const db = makeMockDb([
+      { id: 60, operation: 'create', endpoint: '/notes', method: 'POST', body: JSON.stringify({ id: clientId, content: 'x', note_type: 'text' }), created_at: '', attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1 },
+      { id: 61, operation: 'update', endpoint: `/notes/${clientId}`, method: 'PATCH', body: '{"title":"later"}', created_at: '' },
+    ]);
+    mockApi.post.mockRejectedValueOnce(makeAxiosError(500)); // create hits the cap and dead-letters
+
+    const { discardedOperations } = await drainQueue(db as never);
+
+    // The create is dead-lettered...
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [60]);
+    // ...and the dependent update is dropped without an API call (no orphan 404).
+    expect(mockApi.patch).not.toHaveBeenCalled();
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [61]);
+    // Only the create surfaces as discarded; the dependent drop is silent.
+    expect(discardedOperations).toEqual([{ operation: 'create', endpoint: '/notes', status: 500 }]);
+  });
+
+  it('does not charge the attempt counter on a global connectivity failure (network error) (#714)', async () => {
+    const db = makeMockDb([
+      { id: 70, operation: 'update', endpoint: '/notes/abc', method: 'PATCH', body: '{}', created_at: '', attempts: 2 },
+    ]);
+    // An axios error with no response models a network failure/timeout at the transport.
+    mockApi.patch.mockRejectedValueOnce(
+      Object.assign(new Error('Network Error'), { isAxiosError: true, response: undefined }),
+    );
+
+    await drainQueue(db as never);
+
+    expect(db.runAsync).not.toHaveBeenCalledWith('UPDATE sync_queue SET attempts = ? WHERE id = ?', [3, 70]);
+    expect(db.runAsync).not.toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [70]);
   });
 
   it('keeps a client-supplied create id stable: adopts the server note, clears pending, no reconcile (#475)', async () => {

@@ -23,7 +23,7 @@ import {
   type ServerSwitchLifecycleState,
 } from '../store/serverSwitchLifecycle';
 import { getSseState, type SseState } from '../api/sseState';
-import { getPendingCount } from '../db/syncQueue';
+import { getSyncQueueStats, MAX_ENTRY_DRAIN_ATTEMPTS, type SyncQueueStats } from '../db/syncQueue';
 import {
   isServerReachable,
   getServerReachabilityChangedAt,
@@ -37,6 +37,8 @@ const APP_VERSION: string = appConfig.expo.version;
 
 interface DiagnosticsSnapshot {
   pendingQueueCount: number;
+  syncQueueHead: SyncQueueStats['head'];
+  syncQueueMaxAttempts: number;
   lifecycle: ServerSwitchLifecycleState;
   sse: SseState;
   logs: LogEntry[];
@@ -52,6 +54,19 @@ function formatTimestamp(iso: string | null, never: string): string {
   return new Date(iso).toLocaleString();
 }
 
+/** Compact "how long has the head entry been waiting" string, for spotting a wedge. */
+function formatAge(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return '—';
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ${m % 60}m`;
+  return `${Math.floor(h / 24)}d ${h % 24}h`;
+}
+
 export default function DiagnosticsScreen() {
   const { colors } = useTheme();
   const { t } = useTranslation();
@@ -64,6 +79,8 @@ export default function DiagnosticsScreen() {
 
   const [snapshot, setSnapshot] = useState<DiagnosticsSnapshot>(() => ({
     pendingQueueCount: 0,
+    syncQueueHead: null,
+    syncQueueMaxAttempts: 0,
     lifecycle: getServerSwitchLifecycleState(),
     sse: getSseState(),
     logs: getLogs().slice(-50),
@@ -74,14 +91,16 @@ export default function DiagnosticsScreen() {
   }));
 
   const refresh = useCallback(async () => {
-    let pendingQueueCount = 0;
+    let stats: SyncQueueStats = { pendingCount: 0, head: null, maxAttempts: 0 };
     try {
-      pendingQueueCount = await getPendingCount(db);
+      stats = await getSyncQueueStats(db);
     } catch {
-      // DB read failure — show 0 rather than blocking the snapshot update
+      // DB read failure — show an empty queue rather than blocking the snapshot update
     }
     setSnapshot({
-      pendingQueueCount,
+      pendingQueueCount: stats.pendingCount,
+      syncQueueHead: stats.head,
+      syncQueueMaxAttempts: stats.maxAttempts,
       lifecycle: getServerSwitchLifecycleState(),
       sse: getSseState(),
       logs: getLogs().slice(-50),
@@ -134,6 +153,10 @@ export default function DiagnosticsScreen() {
       },
       sync: {
         pendingQueueCount: snapshot.pendingQueueCount,
+        headOperation: snapshot.syncQueueHead?.operation ?? null,
+        headQueuedAt: snapshot.syncQueueHead?.created_at ?? null,
+        headAttempts: snapshot.syncQueueHead?.attempts ?? 0,
+        maxAttempts: snapshot.syncQueueMaxAttempts,
         isSyncPaused: snapshot.lifecycle.isSyncPaused,
         isSseQuiesced: snapshot.lifecycle.isSseQuiesced,
         lastSyncedAt,
@@ -213,6 +236,24 @@ export default function DiagnosticsScreen() {
             value={String(snapshot.pendingQueueCount)}
             valueColor={snapshot.pendingQueueCount > 0 ? STATUS_ORANGE : undefined}
           />
+          {snapshot.syncQueueHead && (
+            <>
+              <DiagRow
+                label={t('diagnostics.headOperation')}
+                value={snapshot.syncQueueHead.operation}
+                mono
+              />
+              <DiagRow
+                label={t('diagnostics.headWaiting')}
+                value={formatAge(snapshot.syncQueueHead.created_at)}
+              />
+              <DiagRow
+                label={t('diagnostics.headAttempts')}
+                value={`${snapshot.syncQueueMaxAttempts} / ${MAX_ENTRY_DRAIN_ATTEMPTS}`}
+                valueColor={snapshot.syncQueueMaxAttempts > 0 ? STATUS_ORANGE : undefined}
+              />
+            </>
+          )}
           <DiagRow
             label={t('diagnostics.syncPaused')}
             value={lifecycle.isSyncPaused ? t('diagnostics.yes') : t('diagnostics.no')}
