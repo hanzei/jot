@@ -321,6 +321,12 @@ export async function switchActiveServer(serverId: string): Promise<boolean> {
     applyServerUrl(active.serverUrl);
     activeServerId = active.serverId;
     sessionCache = undefined;
+    // The reachability belief is process-global, not per-server: reset it to
+    // the optimistic default so a stale "unreachable" verdict from the
+    // previous server doesn't fast-fail reads/writes against a healthy new
+    // one, and a stale "reachable" verdict doesn't delay noticing a down one
+    // any longer than the first real request (#715).
+    markServerReachable();
     clearServerSwitchLifecycleDegraded();
     completeServerSwitchLifecycle();
     return true;

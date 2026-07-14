@@ -13,6 +13,7 @@ import {
   WRITE_REQUEST_TIMEOUT_MS,
 } from '../src/api/client';
 import { getActiveServer, getServerScopedStorageKey } from '../src/store/serverAccounts';
+import { isServerReachable, markServerReachable, markServerUnreachable } from '../src/api/serverReachability';
 
 jest.mock('axios', () => {
   class MockCanceledError extends Error {
@@ -435,6 +436,59 @@ describe('API Client', () => {
 
       await switchActiveServer(serverB.serverId);
       expect(await getStoredSession()).toBe('token-b');
+    });
+  });
+
+  describe('reachability belief reset on server switch', () => {
+    afterEach(() => {
+      // Reset to the default so state doesn't leak into other test files.
+      markServerReachable();
+    });
+
+    it('resets an unreachable belief from a down server when switching to a healthy one', async () => {
+      await setServerUrl('https://reachability-down.example.com');
+      const serverA = await getActiveServer();
+      if (!serverA) {
+        throw new Error('missing server A');
+      }
+      await setServerUrl('https://reachability-healthy.example.com');
+      const serverB = await getActiveServer();
+      if (!serverB) {
+        throw new Error('missing server B');
+      }
+
+      await switchActiveServer(serverA.serverId);
+      markServerUnreachable();
+      expect(isServerReachable()).toBe(false);
+
+      await switchActiveServer(serverB.serverId);
+
+      expect(isServerReachable()).toBe(true);
+    });
+
+    it('resets an unreachable belief picked up on the new server when switching back', async () => {
+      await setServerUrl('https://reachability-a.example.com');
+      const serverA = await getActiveServer();
+      if (!serverA) {
+        throw new Error('missing server A');
+      }
+      await setServerUrl('https://reachability-b.example.com');
+      const serverB = await getActiveServer();
+      if (!serverB) {
+        throw new Error('missing server B');
+      }
+
+      await switchActiveServer(serverA.serverId);
+      expect(isServerReachable()).toBe(true);
+
+      await switchActiveServer(serverB.serverId);
+      markServerUnreachable(); // simulate B turning out to be down
+      expect(isServerReachable()).toBe(false);
+
+      await switchActiveServer(serverA.serverId);
+
+      // Switching back to A must not inherit B's stale "unreachable" verdict.
+      expect(isServerReachable()).toBe(true);
     });
   });
 });
