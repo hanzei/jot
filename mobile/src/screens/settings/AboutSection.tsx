@@ -8,8 +8,11 @@ import { getAboutInfo } from '../../api/settings';
 import { subscribeToClientActiveServerChanges } from '../../api/client';
 import { getActiveServer } from '../../store/serverAccounts';
 import { displayMessage, getCurrentLocale } from '../../i18n/utils';
+import { getAppBuildInfo } from '../../utils/appInfo';
 import type { AboutInfo } from '@jot/shared';
 import { styles } from './styles';
+
+const appBuildInfo = getAppBuildInfo();
 
 function formatDate(iso: string, locale?: string): string {
   const dt = new Date(iso);
@@ -140,6 +143,15 @@ export default function AboutSection() {
               />
             </View>
           )}
+          <View style={[styles.aboutDivider, { backgroundColor: colors.divider }]} />
+          <View style={styles.aboutSection}>
+            <Text style={[styles.aboutSectionTitle, { color: colors.textMuted }]}>{t('about.appInfo')}</Text>
+            <AboutRow label={t('about.appVersion')} value={appBuildInfo.version} />
+            {appBuildInfo.commit && <AboutRow label={t('about.commit')} value={appBuildInfo.commit} />}
+            {appBuildInfo.buildTime && (
+              <AboutRow label={t('about.buildTime')} value={formatDate(appBuildInfo.buildTime, currentLocale)} />
+            )}
+          </View>
           <View style={[styles.aboutDivider, { backgroundColor: colors.divider }]} />
           <View style={styles.aboutSection}>
             <Text style={[styles.aboutSectionTitle, { color: colors.textMuted }]}>{t('about.serverInfo')}</Text>
