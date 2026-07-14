@@ -13,6 +13,7 @@ import { OfflineProvider, useOfflineContext } from '../src/store/OfflineContext'
 import { drainQueue, getPendingCount } from '../src/db/syncQueue';
 import { getQueuedImageUploadCount } from '../src/db/imageUploadQueue';
 import { setLocalModeActive } from '../src/store/localMode';
+import * as serverReachability from '../src/api/serverReachability';
 
 // Capture the enqueue listener registered by the provider so tests can fire it.
 let enqueueListener: (() => void) | null = null;
@@ -318,6 +319,46 @@ describe('OfflineProvider queue draining', () => {
     });
     await flush();
     expect(mockDrainQueue).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips the network drain while the server is known-unreachable (#718)', async () => {
+    const reachableSpy = jest.spyOn(serverReachability, 'isServerReachable').mockReturnValue(false);
+
+    renderProvider();
+    await flush();
+    // Mount drain must not fire the network — the server is known-down.
+    expect(mockDrainQueue).not.toHaveBeenCalled();
+
+    // A foreground trigger while still unreachable must not fire it either.
+    const handler = getAppStateHandler();
+    await act(async () => {
+      handler('active');
+    });
+    await flush();
+    expect(mockDrainQueue).not.toHaveBeenCalled();
+
+    reachableSpy.mockRestore();
+  });
+
+  it('resumes draining once reachability is re-armed (#718)', async () => {
+    const reachableSpy = jest.spyOn(serverReachability, 'isServerReachable').mockReturnValue(false);
+
+    renderProvider();
+    await flush();
+    expect(mockDrainQueue).not.toHaveBeenCalled();
+
+    // Reachability is re-armed (e.g. a successful response, SSE reopen, or a
+    // device reconnect) and a fresh trigger fires — the drain resumes as today.
+    reachableSpy.mockReturnValue(true);
+    const handler = getAppStateHandler();
+    await act(async () => {
+      handler('active');
+    });
+    await flush();
+
+    expect(mockDrainQueue).toHaveBeenCalledTimes(1);
+
+    reachableSpy.mockRestore();
   });
 
   it('resets the retry budget and resumes draining when a new write is enqueued after the cap', async () => {
