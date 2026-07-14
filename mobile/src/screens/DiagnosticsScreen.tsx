@@ -249,8 +249,8 @@ export default function DiagnosticsScreen() {
               />
               <DiagRow
                 label={t('diagnostics.headAttempts')}
-                value={`${snapshot.syncQueueMaxAttempts} / ${MAX_ENTRY_DRAIN_ATTEMPTS}`}
-                valueColor={snapshot.syncQueueMaxAttempts > 0 ? STATUS_ORANGE : undefined}
+                value={`${snapshot.syncQueueHead.attempts} / ${MAX_ENTRY_DRAIN_ATTEMPTS}`}
+                valueColor={snapshot.syncQueueHead.attempts > 0 ? STATUS_ORANGE : undefined}
               />
             </>
           )}

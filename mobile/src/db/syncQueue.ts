@@ -278,10 +278,10 @@ export async function getSyncQueueStats(db: SQLiteDatabase): Promise<SyncQueueSt
     created_at: string;
     attempts: number | null;
   }>('SELECT id, operation, created_at, attempts FROM sync_queue ORDER BY id ASC LIMIT 1');
-  const countRow = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM sync_queue');
+  const pendingCount = await getPendingCount(db);
   const maxRow = await db.getFirstAsync<{ max: number | null }>('SELECT MAX(attempts) as max FROM sync_queue');
   return {
-    pendingCount: countRow?.count ?? 0,
+    pendingCount,
     head: head
       ? { id: head.id, operation: head.operation, created_at: head.created_at, attempts: head.attempts ?? 0 }
       : null,
