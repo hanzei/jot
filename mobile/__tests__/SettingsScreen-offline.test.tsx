@@ -14,6 +14,7 @@ import { updateMe, listSessions } from '../src/api/settings';
 import { cacheAuthProfile } from '../src/api/client';
 import { enqueueOperation } from '../src/db/syncQueue';
 import { markServerReachable, markServerUnreachable } from '../src/api/serverReachability';
+import i18n from '../src/i18n';
 import type { User } from '@jot/shared';
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -284,6 +285,27 @@ describe('SettingsScreen offline / queued settings changes', () => {
         }),
       );
     });
+
+    it('reverts the language when the local enqueue itself fails while known-unreachable', async () => {
+      const { setSettings } = setupAuth();
+      markServerUnreachable();
+      mockEnqueueOperation.mockRejectedValueOnce(new Error('sqlite write failed'));
+
+      const { getByTestId, getByText } = render(<SettingsScreen />);
+      await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
+
+      fireEvent.press(getByTestId('settings-language-dropdown'));
+      fireEvent.press(getByTestId('settings-language-de'));
+
+      // Nothing was queued for replay, so the optimistic language change is
+      // rolled back rather than left dangling forever.
+      await waitFor(() => {
+        expect(getByText(i18n.t('settings.failedUpdateLanguage'))).toBeTruthy();
+      });
+      const allCalls = setSettings.mock.calls;
+      const lastCall = allCalls[allCalls.length - 1][0];
+      expect(lastCall).toEqual(expect.objectContaining({ language: 'en' }));
+    });
   });
 
   // ── theme ────────────────────────────────────────────────────────────────
@@ -406,6 +428,25 @@ describe('SettingsScreen offline / queued settings changes', () => {
           body: { theme: 'dark' },
         }),
       );
+    });
+
+    it('reverts the theme when the local enqueue itself fails while known-unreachable', async () => {
+      const { setSettings } = setupAuth();
+      markServerUnreachable();
+      mockEnqueueOperation.mockRejectedValueOnce(new Error('sqlite write failed'));
+
+      const { getByTestId, getByText } = render(<SettingsScreen />);
+      await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
+
+      fireEvent.press(getByTestId('settings-theme-dropdown'));
+      fireEvent.press(getByTestId('settings-theme-dark'));
+
+      await waitFor(() => {
+        expect(getByText(i18n.t('settings.failedUpdateTheme'))).toBeTruthy();
+      });
+      const allCalls = setSettings.mock.calls;
+      const lastCall = allCalls[allCalls.length - 1][0];
+      expect(lastCall).toEqual(expect.objectContaining({ theme: 'system' }));
     });
   });
 

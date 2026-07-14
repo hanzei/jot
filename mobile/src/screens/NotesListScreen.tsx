@@ -167,15 +167,42 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
       return;
     }
 
+    // The enqueue itself is a local SQLite write and can still fail; swallow
+    // that here (reporting success/failure via the return) rather than let it
+    // escape as an unhandled rejection out of the void-invoked caller.
+    const enqueueSort = async (): Promise<boolean> => {
+      try {
+        await enqueueOperation(db, {
+          operation: 'updateSettings',
+          endpoint: '/users/me',
+          method: 'PATCH',
+          body: { note_sort: nextSort },
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    const rollback = () => {
+      if (requestId !== sortRequestIdRef.current) {
+        return;
+      }
+      setSortMode(previousSort);
+      if (previousSettings) {
+        setSettings(previousSettings);
+      }
+      Alert.alert(t('common.error'), t('dashboard.sortUpdateFailed'));
+    };
+
     if (!isOnlineWriteAllowed(isConnected)) {
       // Server known-unreachable: skip the doomed round-trip and enqueue the
-      // change for replay instead of eating the write timeout (#716).
-      await enqueueOperation(db, {
-        operation: 'updateSettings',
-        endpoint: '/users/me',
-        method: 'PATCH',
-        body: { note_sort: nextSort },
-      });
+      // change for replay instead of eating the write timeout (#716). If even
+      // the local enqueue fails, fall back to the same rollback + alert as a
+      // permanent failure rather than leaving the UI showing an unsaved change.
+      if (!(await enqueueSort())) {
+        rollback();
+      }
       return;
     }
 
@@ -192,19 +219,11 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
       if (isQueueableError(err)) {
         // Transient failure: keep the optimistic sort and queue the change for
         // replay instead of rolling back and showing a blocking dialog (#716).
-        await enqueueOperation(db, {
-          operation: 'updateSettings',
-          endpoint: '/users/me',
-          method: 'PATCH',
-          body: { note_sort: nextSort },
-        });
-        return;
+        if (await enqueueSort()) {
+          return;
+        }
       }
-      setSortMode(previousSort);
-      if (previousSettings) {
-        setSettings(previousSettings);
-      }
-      Alert.alert(t('common.error'), t('dashboard.sortUpdateFailed'));
+      rollback();
     }
   }, [setSettings, settings, sortMode, isLocalMode, isConnected, db, t]);
 

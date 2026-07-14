@@ -63,15 +63,27 @@ export default function AccountSection() {
 
     if (!isOnlineWriteAllowed(isConnected)) {
       // Server known-unreachable: skip the doomed round-trip and enqueue the
-      // change for replay, matching the hook-layer gate (#716).
-      await enqueueOperation(db, {
-        operation: 'updateSettings',
-        endpoint: '/users/me',
-        method: 'PATCH',
-        body: profileUpdate,
-      });
-      setProfileSuccess(t('settings.profileUpdated'));
-      setProfileSaving(false);
+      // change for replay, matching the hook-layer gate (#716). The enqueue
+      // itself is a local SQLite write and can still fail, so it gets the same
+      // try/catch/finally as the network path below rather than escaping as an
+      // unhandled rejection out of the void-invoked handler.
+      try {
+        await enqueueOperation(db, {
+          operation: 'updateSettings',
+          endpoint: '/users/me',
+          method: 'PATCH',
+          body: profileUpdate,
+        });
+        setProfileSuccess(t('settings.profileUpdated'));
+      } catch (err: unknown) {
+        if (previousUser) {
+          setUser(previousUser);
+          if (settings) void cacheAuthProfile({ user: previousUser, settings });
+        }
+        setProfileError(extractApiError(err) ?? 'settings.failedUpdateProfile');
+      } finally {
+        setProfileSaving(false);
+      }
       return;
     }
 

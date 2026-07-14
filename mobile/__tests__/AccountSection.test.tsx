@@ -137,4 +137,23 @@ describe('AccountSection', () => {
       }),
     );
   });
+
+  it('rolls back and re-enables the save button when the local enqueue itself fails', async () => {
+    mockAuth(false);
+    markServerUnreachable();
+    mockEnqueueOperation.mockRejectedValueOnce(new Error('sqlite write failed'));
+
+    const { getByTestId, getByText } = render(<AccountSection />);
+    fireEvent.changeText(getByTestId('settings-first-name'), 'Renamed');
+    fireEvent.press(getByTestId('settings-save-profile'));
+
+    // The button must not stay stuck on "Saving…" forever: the same finally
+    // that guards the network path also runs for a failed enqueue.
+    await waitFor(() => {
+      expect(getByText(i18n.t('settings.failedUpdateProfile'))).toBeTruthy();
+    });
+    expect(getByText(i18n.t('settings.saveChanges'))).toBeTruthy();
+    // Rolled back to the original profile since nothing was queued for replay.
+    expect(setUser).toHaveBeenLastCalledWith(expect.objectContaining({ first_name: 'Alice' }));
+  });
 });

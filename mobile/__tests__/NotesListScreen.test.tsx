@@ -397,6 +397,41 @@ describe('NotesListScreen sorting', () => {
     expect(setSettings).toHaveBeenLastCalledWith(expect.objectContaining({ note_sort: 'created_at' }));
   });
 
+  it('rolls back the sort change when the local enqueue itself fails while known-unreachable', async () => {
+    markServerUnreachable();
+    mockEnqueueOperation.mockRejectedValueOnce(new Error('sqlite write failed'));
+    const setSettings = jest.fn();
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
+    mockUseAuth.mockReturnValue({
+      user: mockUser,
+      settings: baseSettings,
+      setSettings,
+    });
+    mockUseOfflineNotes.mockReturnValue({
+      data: [
+        buildNote({ id: 'unpinned-bravo', title: 'sort-demo-bravo', pinned: false }),
+        buildNote({ id: 'unpinned-alpha', title: 'sort-demo-alpha', pinned: false }),
+      ],
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn(),
+      isRefetching: false,
+    });
+
+    render(<NotesListScreen variant="notes" />);
+
+    openSortControls();
+    fireEvent.press(screen.getByTestId('sort-chip-created_at'));
+
+    // Since the local SQLite enqueue itself failed (not just the network), the
+    // change can never replay — roll back rather than silently pretending it saved.
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith('Error', 'Failed to update sort preference');
+    });
+    expect(setSettings).toHaveBeenLastCalledWith(expect.objectContaining({ note_sort: 'manual' }));
+    alertSpy.mockRestore();
+  });
+
   it('enqueues the sort change (without rolling back) when persistence fails transiently', async () => {
     const setSettings = jest.fn();
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());

@@ -63,13 +63,26 @@ export default function AppearanceSection() {
 
     if (!isOnlineWriteAllowed(isConnected)) {
       // Server known-unreachable: skip the doomed round-trip and enqueue the
-      // change for replay instead of eating the write timeout (#716).
-      await enqueueOperation(db, {
-        operation: 'updateSettings',
-        endpoint: '/users/me',
-        method: 'PATCH',
-        body: { language },
-      });
+      // change for replay instead of eating the write timeout (#716). The
+      // enqueue is a local SQLite write and can still fail, so it gets the
+      // same rollback/error handling as the updateMe path below rather than
+      // escaping as an unhandled rejection out of the void-invoked handler.
+      try {
+        await enqueueOperation(db, {
+          operation: 'updateSettings',
+          endpoint: '/users/me',
+          method: 'PATCH',
+          body: { language },
+        });
+      } catch (err: unknown) {
+        setLanguagePref(previousLanguage);
+        void i18n.changeLanguage(resolveLanguage(previousLanguage));
+        if (previousSettings) {
+          setSettings(previousSettings);
+          if (user) void cacheAuthProfile({ user, settings: previousSettings });
+        }
+        setLanguageError(extractApiError(err) ?? 'settings.failedUpdateLanguage');
+      }
       return;
     }
 
@@ -115,13 +128,25 @@ export default function AppearanceSection() {
 
     if (!isOnlineWriteAllowed(isConnected)) {
       // Server known-unreachable: skip the doomed round-trip and enqueue the
-      // change for replay instead of eating the write timeout (#716).
-      await enqueueOperation(db, {
-        operation: 'updateSettings',
-        endpoint: '/users/me',
-        method: 'PATCH',
-        body: { theme },
-      });
+      // change for replay instead of eating the write timeout (#716). The
+      // enqueue is a local SQLite write and can still fail, so it gets the
+      // same rollback/error handling as the updateMe path below rather than
+      // escaping as an unhandled rejection out of the void-invoked handler.
+      try {
+        await enqueueOperation(db, {
+          operation: 'updateSettings',
+          endpoint: '/users/me',
+          method: 'PATCH',
+          body: { theme },
+        });
+      } catch (err: unknown) {
+        setThemePref(prev);
+        if (previousSettings) {
+          setSettings(previousSettings);
+          if (user) void cacheAuthProfile({ user, settings: previousSettings });
+        }
+        setThemeError(extractApiError(err) ?? 'settings.failedUpdateTheme');
+      }
       return;
     }
 
