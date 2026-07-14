@@ -22,6 +22,11 @@ jest.mock('../src/store/serverAccounts', () => ({
   getActiveServer: jest.fn(),
 }));
 
+jest.mock('expo-constants', () => ({
+  __esModule: true,
+  default: { expoConfig: { version: '0.1.0' } },
+}));
+
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 const mockGetAboutInfo = getAboutInfo as jest.MockedFunction<typeof getAboutInfo>;
 const mockGetActiveServer = getActiveServer as jest.MockedFunction<typeof getActiveServer>;

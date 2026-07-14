@@ -23,5 +23,5 @@ module.exports = {
   env: {
     jest: true,
   },
-  ignorePatterns: ['node_modules/', 'babel.config.js', '.eslintrc.js', 'jest.config.js', 'jest.setup.js', 'metro.config.js'],
+  ignorePatterns: ['node_modules/', 'app.config.js', 'babel.config.js', '.eslintrc.js', 'jest.config.js', 'jest.setup.js', 'metro.config.js'],
 };
