@@ -175,15 +175,16 @@ describe('NoteEditorScreen collaborators + labels row', () => {
   });
 
   it('renders the note labels and collaborators', async () => {
-    const { getByText, getByTestId } = render(<NoteEditorScreen />);
+    const { getByText, getByTestId, queryByText } = render(<NoteEditorScreen />);
     await waitFor(() => {
       expect(getByTestId('note-meta-label-lbl-1')).toBeTruthy();
     });
     expect(getByText('Geschenkideen')).toBeTruthy();
-    // Owner + shared collaborator avatars are shown.
+    // Collaborator avatars exclude the current user (alice, u1), matching the
+    // dashboard cards; the shared collaborator (bob) is shown.
     expect(getByTestId('note-meta-collaborators')).toBeTruthy();
-    expect(getByText('alice')).toBeTruthy();
     expect(getByText('bob')).toBeTruthy();
+    expect(queryByText('alice')).toBeNull();
   });
 
   it('opens the label picker when a label chip is tapped', async () => {
@@ -196,6 +197,9 @@ describe('NoteEditorScreen collaborators + labels row', () => {
     });
 
     await waitFor(() => expect(getByTestId('label-picker-open')).toBeTruthy());
+    // Opening the picker must not surface the menu-action loading bar, which
+    // otherwise flashed in and shoved the note down.
+    expect(queryByTestId('menu-action-pending')).toBeNull();
   });
 
   it('opens the label picker when "Add labels" is tapped', async () => {
@@ -226,10 +230,10 @@ describe('NoteEditorScreen collaborators + labels row', () => {
     // Opened from the trash: read-only, so the avatars mirror the menu having
     // no Share action here — they display but do not navigate.
     mockUseRoute.mockReturnValue({ params: { noteId: 'note-1', readOnly: true } });
-    const { getByTestId, getByText } = render(<NoteEditorScreen />);
+    const { getByTestId, getByText, queryByText } = render(<NoteEditorScreen />);
     await waitFor(() => expect(getByTestId('note-meta-collaborators')).toBeTruthy());
-    expect(getByText('alice')).toBeTruthy();
     expect(getByText('bob')).toBeTruthy();
+    expect(queryByText('alice')).toBeNull();
 
     await act(async () => {
       fireEvent.press(getByTestId('note-meta-collaborators'));

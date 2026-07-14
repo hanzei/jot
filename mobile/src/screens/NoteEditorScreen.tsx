@@ -1651,6 +1651,15 @@ export default function NoteEditorScreen() {
     return buildCollaborators(existingNote.user_id, existingNote.shared_with, usersById);
   }, [existingNote, usersById]);
 
+  // Avatars shown in the meta row exclude the current user, matching the
+  // dashboard note cards (you never see yourself in a note's avatar stack).
+  // The full `collaborators` list is kept intact for task assignment, where
+  // assigning an item to yourself is valid.
+  const displayCollaborators = useMemo(
+    () => collaborators.filter((c) => c.userId !== currentUser?.id),
+    [collaborators, currentUser?.id],
+  );
+
   const isNoteShared = useMemo(() => {
     return (existingNote?.shared_with && existingNote.shared_with.length > 0) || existingNote?.is_shared;
   }, [existingNote?.shared_with, existingNote?.is_shared]);
@@ -2089,9 +2098,21 @@ export default function NoteEditorScreen() {
   // Save-first openers shared by the overflow menu and the inline
   // labels/collaborators row below the note body, so tapping a label chip or a
   // collaborator avatar behaves exactly like the matching menu action.
-  const openLabelPicker = useCallback(() => {
-    void withSavedNote(() => setLabelPickerVisible(true));
-  }, [withSavedNote]);
+  const openLabelPicker = useCallback(async () => {
+    // Opening the picker only needs a note id. An existing note already has
+    // one, so open immediately — no await, and deliberately none of
+    // withSavedNote's pending bar, which flashed in and shoved the note down.
+    // Any unsaved body edits keep autosaving on their own; the label picker
+    // mutates labels independently, so there is nothing to flush first here.
+    // Only a brand-new note must be created first to obtain an id to attach
+    // labels to.
+    if (noteIdRef.current) {
+      setLabelPickerVisible(true);
+      return;
+    }
+    const saved = await flushPendingChanges();
+    if (saved && noteIdRef.current) setLabelPickerVisible(true);
+  }, [flushPendingChanges]);
   const openShareScreen = useCallback(() => {
     void withSavedNote((id) => navigation.navigate('Share', { noteId: id }));
   }, [withSavedNote, navigation]);
@@ -2455,10 +2476,10 @@ export default function NoteEditorScreen() {
             shared and/or labelled notes, plus the "Add labels" affordance on
             any editable note. Read-only (trashed) notes render it as plain,
             non-interactive display, matching the menu hiding those actions. */}
-        {(collaborators.length > 0 || labels.length > 0 || !isReadOnly) && (
+        {(displayCollaborators.length > 0 || labels.length > 0 || !isReadOnly) && (
           <View style={styles.metaRow} testID="note-meta-row">
-            {collaborators.length > 0 && (() => {
-              const avatars = collaborators.map((c, index) => (
+            {displayCollaborators.length > 0 && (() => {
+              const avatars = displayCollaborators.map((c, index) => (
                 <View key={c.userId} style={index === 0 ? undefined : styles.metaAvatarOverlap}>
                   <UserAvatar
                     userId={c.userId}
