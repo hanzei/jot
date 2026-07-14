@@ -14,6 +14,12 @@ jobs:
   build-apk:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    # On a v* tag build, expose the tag as APP_VERSION so app.config.js stamps
+    # it as the app's version (native versionName + the About screen). Empty on
+    # branch/PR builds, where app.json's static version is used instead. Set at
+    # job level so both `expo prebuild` and the gradle build see it.
+    env:
+      APP_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
@@ -79,6 +85,10 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
 
+      - name: Get build date
+        id: build-date
+        run: echo "value=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
       - uses: gradle/actions/setup-gradle@50e97c2cd7a37755bbfafc9c5b7cafaece252f6e # v6
 
       - name: Build release APK
@@ -86,6 +96,8 @@ jobs:
         # override and takes precedence over gradle.properties, so the build only
         # compiles native code for arm64-v8a. Android lint (lintVital*) is skipped:
         # it adds several minutes and is not needed to produce the APK artifact.
+        # EXPO_PUBLIC_* vars are inlined into the JS bundle by Metro during this
+        # step, surfacing commit/build-date info in the app's About section.
         run: >-
           ./gradlew assembleRelease
           -PreactNativeArchitectures=arm64-v8a
@@ -97,6 +109,8 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          EXPO_PUBLIC_COMMIT_SHA: ${{ github.sha }}
+          EXPO_PUBLIC_BUILD_DATE: ${{ steps.build-date.outputs.value }}
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

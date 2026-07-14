@@ -228,6 +228,7 @@
     "username": "Gebruikersnaam",
     "role": "Rol",
     "accountCreated": "Account aangemaakt",
+    "appInfo": "App-informatie",
     "serverInfo": "Serverinformatie",
     "appVersion": "Versie",
     "commit": "Commit",

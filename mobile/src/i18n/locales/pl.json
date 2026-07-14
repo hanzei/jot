@@ -199,6 +199,7 @@
     "username": "Nazwa użytkownika",
     "role": "Rola",
     "accountCreated": "Konto utworzone",
+    "appInfo": "Informacje o aplikacji",
     "serverInfo": "Informacje o serwerze",
     "appVersion": "Wersja",
     "commit": "Commit",

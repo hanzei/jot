@@ -228,6 +228,7 @@
     "username": "Username",
     "role": "Role",
     "accountCreated": "Account Created",
+    "appInfo": "App Info",
     "serverInfo": "Server Info",
     "serverOrigin": "Server origin",
     "appVersion": "Version",
