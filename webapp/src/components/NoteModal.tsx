@@ -2672,48 +2672,85 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
             {/* Avatars + Labels row */}
             <div className="flex flex-wrap items-center gap-2">
-              {/* Share avatars */}
+              {/* Share avatars — clicking opens the share modal (owners only) */}
               {note?.is_shared && (() => {
                 const avatars = buildShareAvatars(note, currentUserId, usersById);
                 if (avatars.length === 0) return null;
-                return (
-                  <div className="flex items-center">
-                    {avatars.map((a, index) => (
-                      <div key={a.key} title={a.displayName}>
-                        <LetterAvatar
-                          firstName={a.firstName}
-                          username={a.username}
-                          userId={a.userId}
-                          hasProfileIcon={a.hasProfileIcon}
-                          iconVersion={a.iconVersion}
-                          className={`w-6 h-6 ring-2 ring-white dark:ring-slate-800 ${index > 0 ? '-ml-1' : ''}`}
-                        />
-                      </div>
-                    ))}
+                const avatarEls = avatars.map((a, index) => (
+                  <div key={a.key} title={a.displayName}>
+                    <LetterAvatar
+                      firstName={a.firstName}
+                      username={a.username}
+                      userId={a.userId}
+                      hasProfileIcon={a.hasProfileIcon}
+                      iconVersion={a.iconVersion}
+                      className={`w-6 h-6 ring-2 ring-white dark:ring-slate-800 ${index > 0 ? '-ml-1' : ''}`}
+                    />
                   </div>
+                ));
+                return isOwner && onShare ? (
+                  <button
+                    type="button"
+                    onClick={() => onShare(note)}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    className="flex items-center rounded-full transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                    title={t('note.share')}
+                    aria-label={t('note.share')}
+                  >
+                    {avatarEls}
+                  </button>
+                ) : (
+                  <div className="flex items-center">{avatarEls}</div>
                 );
               })()}
-              {/* Label badges + add button */}
-              {noteLabels.map(label => (
-                <span
-                  key={label.id}
-                  className="inline-flex items-center bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full px-2 py-0.5 text-xs"
-                >
-                  {label.name}
-                </span>
-              ))}
+              {/* Label picker anchor. Saved notes manage labels via the overflow
+                  menu and reopen the picker by clicking their label chips. Unsaved
+                  notes have no overflow menu, so they keep the inline chips plus an
+                  explicit "Add labels" button. */}
               <div className="relative">
-                <button
-                  onClick={() => setShowLabelPicker(v => !v)}
-                  onMouseDown={(event) => event.stopPropagation()}
-                  className="inline-flex items-center gap-1 rounded-full border border-dashed border-blue-300 dark:border-blue-700 bg-blue-50/80 dark:bg-blue-900/20 px-2 py-1 text-xs font-medium text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
-                  title={t('labels.addLabels')}
-                  aria-label={t('labels.addLabels')}
-                  aria-expanded={showLabelPicker}
-                >
-                  <Tag className="h-3.5 w-3.5" aria-hidden="true" />
-                  <span>{t('labels.addLabels')}</span>
-                </button>
+                {note ? (
+                  noteLabels.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowLabelPicker(v => !v)}
+                      onMouseDown={(event) => event.stopPropagation()}
+                      className="-mx-1 inline-flex flex-wrap items-center gap-2 rounded-md px-1 py-0.5 transition-colors hover:bg-black/5 dark:hover:bg-white/10"
+                      aria-label={t('labels.title')}
+                      aria-expanded={showLabelPicker}
+                    >
+                      {noteLabels.map(label => (
+                        <span
+                          key={label.id}
+                          className="inline-flex items-center bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full px-2 py-0.5 text-xs"
+                        >
+                          {label.name}
+                        </span>
+                      ))}
+                    </button>
+                  )
+                ) : (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {noteLabels.map(label => (
+                      <span
+                        key={label.id}
+                        className="inline-flex items-center bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full px-2 py-0.5 text-xs"
+                      >
+                        {label.name}
+                      </span>
+                    ))}
+                    <button
+                      onClick={() => setShowLabelPicker(v => !v)}
+                      onMouseDown={(event) => event.stopPropagation()}
+                      className="inline-flex items-center gap-1 rounded-full border border-dashed border-blue-300 dark:border-blue-700 bg-blue-50/80 dark:bg-blue-900/20 px-2 py-1 text-xs font-medium text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+                      title={t('labels.addLabels')}
+                      aria-label={t('labels.addLabels')}
+                      aria-expanded={showLabelPicker}
+                    >
+                      <Tag className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span>{t('labels.addLabels')}</span>
+                    </button>
+                  </div>
+                )}
                 {showLabelPicker && (
                   note ? (
                     <LabelPicker note={{...note, labels: noteLabels}} onRefresh={onRefresh} onNoteUpdate={(n) => setNoteLabels(n.labels ?? [])} onError={showError} onClose={() => setShowLabelPicker(false)} />
@@ -2840,9 +2877,9 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                       )}
                     </button>
                     {/* Overflow menu — mirrors the mobile three-dot layout so the
-                        toolbar stays uncluttered as more actions are added. */}
-                    {(noteDeepLinkHref || (isOwner && onShare) || onDuplicate || onConvert || (isOwner && onDelete)) && (
-                      <Menu as="div" className="relative">
+                        toolbar stays uncluttered as more actions are added. Labels
+                        is always available, so the menu always renders here. */}
+                    <Menu as="div" className="relative">
                         <MenuButton
                           onMouseDown={(e) => e.stopPropagation()}
                           className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
@@ -2908,6 +2945,18 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                                 </button>
                               </MenuItem>
                             )}
+                            <MenuItem>
+                              <button
+                                onClick={() => setShowLabelPicker(true)}
+                                className={OVERFLOW_ITEM_SPLIT}
+                              >
+                                <span className="flex items-center">
+                                  <Tag className="h-4 w-4 mr-2" />
+                                  {t('labels.title')}
+                                </span>
+                                <MenuKbd>L</MenuKbd>
+                              </button>
+                            </MenuItem>
                             {isOwner && onDelete && (
                               <MenuItem>
                                 <button
@@ -2925,7 +2974,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                           </div>
                         </MenuItems>
                       </Menu>
-                    )}
                   </>
                 )}
               </div>

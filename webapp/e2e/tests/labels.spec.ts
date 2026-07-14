@@ -51,7 +51,7 @@ test.describe('Labels on Note Creation', () => {
 
     await dashboardPage.createNote('Filter Target', 'content');
     await dashboardPage.openNote('Filter Target');
-    await page.getByRole('button', { name: 'Add labels' }).click();
+    await dashboardPage.openLabelPickerFromModal();
 
     const search = page.getByRole('textbox', { name: 'Search or create label...' });
 

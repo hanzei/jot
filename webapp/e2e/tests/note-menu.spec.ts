@@ -83,4 +83,26 @@ test.describe('Note modal overflow menu', () => {
     await expect(menuButton).toHaveAttribute('aria-expanded', 'false');
     await expect(dialog.getByRole('button', { name: 'Close' })).toBeVisible();
   });
+
+  test('opens the label picker from the overflow menu', async ({ dashboardPage, page }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Label Menu Note');
+    await dashboardPage.openNote('Label Menu Note');
+
+    await dashboardPage.openLabelPickerFromModal();
+
+    await expect(page.getByRole('textbox', { name: 'Search or create label...' })).toBeVisible();
+  });
+
+  test('reopens the label picker by clicking the label chips', async ({ dashboardPage, page }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createListNote('Chip Note', ['first']);
+    await dashboardPage.addLabelToNote('Chip Note', 'chiplabel');
+
+    await dashboardPage.openNote('Chip Note');
+    // The rendered label chips act as a button that reopens the picker.
+    await page.getByRole('button', { name: 'Labels' }).click();
+
+    await expect(page.getByRole('textbox', { name: 'Search or create label...' })).toBeVisible();
+  });
 });

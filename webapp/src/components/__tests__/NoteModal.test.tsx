@@ -1814,10 +1814,13 @@ describe('NoteModal', () => {
       expect(screen.getByRole('button', { name: 'Add labels' })).toBeInTheDocument()
     })
 
-    it('shows label add button for existing notes', () => {
+    it('exposes label management via the overflow menu for existing notes', () => {
       const note = createMockNote()
       renderNoteModal({ ...defaultProps, note })
-      expect(screen.getByRole('button', { name: 'Add labels' })).toBeInTheDocument()
+      // Existing notes manage labels from the overflow menu, not an inline
+      // "Add labels" button.
+      expect(screen.queryByRole('button', { name: 'Add labels' })).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Labels' })).toBeInTheDocument()
     })
   })
 

@@ -20,7 +20,7 @@ test.describe('Sharing from NoteModal', () => {
 
     // Click share button inside the NoteModal
     const noteModal = page.getByRole('dialog');
-    await noteModal.getByRole('button', { name: /share/i }).click();
+    await dashboardPage.openShareModalFromModal();
 
     // The ShareModal opens — share with user2
     await page.getByPlaceholder(/search users/i).fill(user2Name);
@@ -53,7 +53,7 @@ test.describe('Sharing from NoteModal', () => {
     // Open note modal and share via the share button
     await dashboardPage.openNote('Unshare Modal Test');
     const noteModal = page.getByRole('dialog');
-    await noteModal.getByRole('button', { name: /share/i }).click();
+    await dashboardPage.openShareModalFromModal();
     await page.getByPlaceholder(/search users/i).fill(user2Name);
     await page.getByText(user2Name).click();
     await expect(page.getByText(/shared with \(1\)/i)).toBeVisible();
@@ -63,13 +63,41 @@ test.describe('Sharing from NoteModal', () => {
     await expect(noteModal.locator(`div[title="${user2Name}"]`)).toBeVisible();
 
     // Open share modal again and unshare
-    await noteModal.getByRole('button', { name: /share/i }).click();
+    await dashboardPage.openShareModalFromModal();
     await page.getByRole('button', { name: /remove access/i }).click();
     await expect(page.getByText(/not shared with anyone/i)).toBeVisible();
     await page.keyboard.press('Escape');
 
     // Verify the NoteModal no longer shows the share avatar
     await expect(noteModal.locator(`div[title="${user2Name}"]`)).not.toBeVisible();
+  });
+
+  test('clicking the note modal share avatars reopens the share modal', async ({ page, authenticatedUser, dashboardPage, request }) => {
+    void authenticatedUser;
+    const user2Name = uniqueUsername('share');
+
+    await request.post('/api/v1/register', {
+      data: { username: user2Name, password: 'testpass123' },
+    });
+
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Avatar Click Test');
+    await dashboardPage.openNote('Avatar Click Test');
+
+    // Share once via the overflow menu so a collaborator avatar appears.
+    await dashboardPage.openShareModalFromModal();
+    await page.getByPlaceholder(/search users/i).fill(user2Name);
+    await page.getByText(user2Name).click();
+    await expect(page.getByText(/shared with \(1\)/i)).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    const noteModal = page.getByRole('dialog');
+    const avatar = noteModal.locator(`div[title="${user2Name}"]`);
+    await expect(avatar).toBeVisible();
+
+    // Clicking the avatar list reopens the share modal.
+    await avatar.click();
+    await expect(page.getByText(/shared with \(1\)/i)).toBeVisible();
   });
 });
 

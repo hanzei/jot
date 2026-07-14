@@ -451,11 +451,22 @@ export class DashboardPage {
     ).toBeVisible();
   }
 
+  /** Opens the label picker for the open note via the overflow menu. */
+  async openLabelPickerFromModal() {
+    await this.openModalOverflowMenu();
+    await this.page.getByRole('menuitem', { name: 'Labels' }).click();
+  }
+
+  /** Opens the share modal for the open note via the overflow menu. */
+  async openShareModalFromModal() {
+    await this.openModalOverflowMenu();
+    await this.page.getByRole('menuitem', { name: 'Share' }).click();
+  }
+
   /** Opens a note and creates a new label, attaching it to the note. */
   async addLabelToNote(noteTitle: string, labelName: string) {
     await this.openNote(noteTitle);
-    await this.page.getByRole('button', { name: 'Add labels' }).waitFor();
-    await this.page.getByRole('button', { name: 'Add labels' }).click();
+    await this.openLabelPickerFromModal();
     await this.selectOrCreateLabelInPicker(labelName);
     // Closing the modal also dismisses the picker (outside-click fires on mousedown)
     await this.closeActiveDialog();
