@@ -19,6 +19,7 @@ import { useNoteShares, useShareNote, useUnshareNote } from '../hooks/useNotes';
 import UserAvatar from '../components/UserAvatar';
 import { useTheme } from '../theme/ThemeContext';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
+import { isServerReachable } from '../api/serverReachability';
 import { useUsers } from '../store/UsersContext';
 import type { User, NoteShare } from '@jot/shared';
 import type { RootStackParamList } from '../navigation/RootNavigator';
@@ -70,7 +71,8 @@ export default function ShareScreen() {
     };
   }, [searchQuery]);
 
-  // Fetch search results when debounced query changes (local filter when offline)
+  // Fetch search results when debounced query changes (local filter when
+  // offline or the server is known-unreachable, mirroring the writes' gate).
   useEffect(() => {
     if (!debouncedQuery) {
       setIsSearching(false);
@@ -79,16 +81,19 @@ export default function ShareScreen() {
       return;
     }
 
-    if (!isConnected) {
-      setIsSearching(false);
+    const filterLocalUsers = () => {
       const q = debouncedQuery.toLowerCase();
-      const filtered = Array.from(usersById.values()).filter(
+      return Array.from(usersById.values()).filter(
         (u) =>
           u.username.toLowerCase().includes(q) ||
           u.first_name.toLowerCase().includes(q) ||
           u.last_name.toLowerCase().includes(q),
       );
-      setSearchResults(filtered);
+    };
+
+    if (!isConnected || !isServerReachable()) {
+      setIsSearching(false);
+      setSearchResults(filterLocalUsers());
       setSearchError(false);
       return;
     }
@@ -102,7 +107,16 @@ export default function ShareScreen() {
         if (!cancelled) setSearchResults(users);
       })
       .catch(() => {
-        if (!cancelled) setSearchError(true);
+        if (cancelled) return;
+        // A doomed request against a server that just turned out to be
+        // unreachable (marked by the client's response interceptor) falls
+        // back to the local filter as a staleness signal; the error state is
+        // reserved for a genuine failure against a reachable server.
+        if (!isServerReachable()) {
+          setSearchResults(filterLocalUsers());
+        } else {
+          setSearchError(true);
+        }
       })
       .finally(() => {
         if (!cancelled) setIsSearching(false);
