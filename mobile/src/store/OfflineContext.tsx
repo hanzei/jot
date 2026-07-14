@@ -12,7 +12,7 @@ import NetInfo from '@react-native-community/netinfo';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useQueryClient } from '@tanstack/react-query';
 import { drainQueue, getPendingCount, getDeadLetterCount, subscribeToEnqueue } from '../db/syncQueue';
-import { markServerReachable } from '../api/serverReachability';
+import { isServerReachable, markServerReachable } from '../api/serverReachability';
 import { drainImageUploadQueue, getQueuedImageUploadCount } from '../db/imageUploadQueue';
 import { getPendingCreateNoteIds, getFailedNoteIds } from '../db/noteQueries';
 import { useAuth } from './AuthContext';
@@ -218,6 +218,14 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     // only stall and reschedule. A timer scheduled while online can fire after we
     // go offline; the offline NetInfo handler also clears it, this is a backstop.
     if (!isConnectedRef.current) return;
+    // The device may be online while the Jot server itself is known-unreachable
+    // (see serverReachability.ts). Without this check a scheduled backoff drain
+    // would still fire the head entry's request and eat the full write timeout
+    // before bailing (#718) — mirrors the read path's `retrySync`, which already
+    // fast-fails on `!isServerReachable()`. Skip the network drain and wait for an
+    // existing re-arm trigger (reconnect, foreground, or a new write) to schedule
+    // a fresh one once the server is reachable again.
+    if (!isServerReachable()) return;
     // Local mode has no server and never enqueues server ops, so the drain loop
     // stays parked (issue #514). This single guard covers every drain trigger
     // (mount, reconnect, foreground, post-enqueue), keeping the online sync engine
