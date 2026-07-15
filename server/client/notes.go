@@ -162,21 +162,28 @@ func (c *Client) ToggleNoteItemCompleted(ctx context.Context, noteID, itemID str
 	return items, nil
 }
 
-// UncheckAllNoteItems clears the completed flag on every item of a list note
-// and returns the note's full item list.
-func (c *Client) UncheckAllNoteItems(ctx context.Context, noteID string) ([]NoteItem, error) {
+// SetNoteItemsCompleted sets the completed flag to completed on each of the
+// named list items (no cascade) and returns the note's full item list. Pass the
+// complete set you want changed (e.g. every checked item to "uncheck all", or
+// that same snapshot with completed=true to undo).
+func (c *Client) SetNoteItemsCompleted(ctx context.Context, noteID string, itemIDs []string, completed bool) ([]NoteItem, error) {
 	var items []NoteItem
-	if err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/items/uncheck-all", noteID), nil, &items); err != nil {
+	if err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/items/set-completed", noteID), map[string]any{
+		"item_ids":  itemIDs,
+		"completed": completed,
+	}, &items); err != nil {
 		return nil, err
 	}
 	return items, nil
 }
 
-// DeleteCompletedNoteItems deletes every completed item of a list note and
-// returns the note's remaining items.
-func (c *Client) DeleteCompletedNoteItems(ctx context.Context, noteID string) ([]NoteItem, error) {
+// DeleteNoteItems deletes each of the named list items and returns the note's
+// remaining items.
+func (c *Client) DeleteNoteItems(ctx context.Context, noteID string, itemIDs []string) ([]NoteItem, error) {
 	var items []NoteItem
-	if err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/items/delete-completed", noteID), nil, &items); err != nil {
+	if err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/items/delete", noteID), map[string][]string{
+		"item_ids": itemIDs,
+	}, &items); err != nil {
 		return nil, err
 	}
 	return items, nil

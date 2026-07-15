@@ -192,20 +192,20 @@ func (s *NoteStore) ToggleItemCompleted(ctx context.Context, noteID, itemID stri
 	return s.inner.ToggleItemCompleted(ctx, noteID, itemID, completed)
 }
 
-func (s *NoteStore) UncheckAllItems(ctx context.Context, noteID string) (_ []NoteItem, err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.UncheckAllItems", &err,
+func (s *NoteStore) SetItemsCompleted(ctx context.Context, noteID string, itemIDs []string, completed bool) (_ []NoteItem, err error) {
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.SetItemsCompleted", &err,
 		attribute.String("note.id", noteID),
 	)
 	defer end()
-	return s.inner.UncheckAllItems(ctx, noteID)
+	return s.inner.SetItemsCompleted(ctx, noteID, itemIDs, completed)
 }
 
-func (s *NoteStore) DeleteCompletedItems(ctx context.Context, noteID string) (_ []NoteItem, err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.DeleteCompletedItems", &err,
+func (s *NoteStore) DeleteItems(ctx context.Context, noteID string, itemIDs []string) (_ []NoteItem, err error) {
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.DeleteItems", &err,
 		attribute.String("note.id", noteID),
 	)
 	defer end()
-	return s.inner.DeleteCompletedItems(ctx, noteID)
+	return s.inner.DeleteItems(ctx, noteID, itemIDs)
 }
 
 func (s *NoteStore) HasAccess(ctx context.Context, noteID string, userID string) (_ bool, err error) {

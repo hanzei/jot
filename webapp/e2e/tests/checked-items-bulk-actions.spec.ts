@@ -62,6 +62,24 @@ test.describe('Checked-item bulk actions', () => {
     }
   });
 
+  test('undo after uncheck all re-checks the items', async ({ page, dashboardPage, authenticatedUser }) => {
+    expect(authenticatedUser.username).toBeTruthy();
+    await dashboardPage.createListNote('Habits', ['Water', 'Stretch']);
+    await dashboardPage.openNote('Habits');
+
+    await checkFirstItem(page);
+    await dashboardPage.uncheckAllItemsFromModal();
+
+    // Everything is now active and the "unchecked — Undo" bar is showing.
+    await expect(page.getByText(/Completed items/)).toHaveCount(0);
+    await expect(page.getByTestId('unchecked-items-bar')).toBeVisible();
+
+    // Undo re-checks the snapshot: the completed section comes back.
+    await page.getByTestId('unchecked-items-undo').click();
+    await expect(page.getByTestId('unchecked-items-bar')).toHaveCount(0);
+    await expect(page.getByText(/Completed items/)).toBeVisible();
+  });
+
   test('delete checked hides items behind an undo bar; undo restores them', async ({ page, dashboardPage, authenticatedUser }) => {
     expect(authenticatedUser.username).toBeTruthy();
     await dashboardPage.createListNote('Trip', ['Passport', 'Tickets', 'Charger']);
@@ -90,15 +108,22 @@ test.describe('Checked-item bulk actions', () => {
 
     // Check the existing item, then add a fresh unchecked item that must survive.
     await checkFirstItem(page);
+    // Wait for the new item's create to persist, so its autosave can't race the
+    // reopen at the end of the test.
+    const keepCreated = page.waitForResponse(
+      (res) => /\/items$/.test(res.url()) && res.request().method() === 'POST',
+      { timeout: 10_000 },
+    );
     await page.getByRole('dialog').last().getByRole('button', { name: 'Add item' }).click();
     await page.keyboard.type('Keep me');
     // Active items render before the completed section, so the new unchecked
     // item is the first input.
     await dashboardPage.expectListItemValue(0, 'Keep me');
+    await keepCreated;
 
     // The bulk delete only fires after the undo window; wait for that request.
     const deleteResponse = page.waitForResponse(
-      (res) => /\/items\/delete-completed$/.test(res.url()) && res.request().method() === 'POST',
+      (res) => /\/items\/delete$/.test(res.url()) && res.request().method() === 'POST',
       { timeout: 20_000 },
     );
     await dashboardPage.deleteCheckedItemsFromModal();

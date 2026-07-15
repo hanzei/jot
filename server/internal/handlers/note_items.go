@@ -403,21 +403,49 @@ func (h *NotesHandler) ToggleNoteItemCompleted(w http.ResponseWriter, r *http.Re
 	return http.StatusOK, items, nil
 }
 
-// UncheckAllNoteItems godoc
+// validateItemIDs checks that a bulk item-ID list is present and well-formed.
+func validateItemIDs(itemIDs []string) (int, error) {
+	if len(itemIDs) == 0 {
+		return http.StatusBadRequest, errors.New("empty item IDs list")
+	}
+	for _, id := range itemIDs {
+		if !models.IsValidID(id) {
+			return http.StatusBadRequest, errors.New("invalid item ID format")
+		}
+	}
+	return http.StatusOK, nil
+}
+
+// SetNoteItemsCompletedRequest is the body for POST /notes/{id}/items/set-completed.
+type SetNoteItemsCompletedRequest struct {
+	ItemIDs []string `json:"item_ids"`
+	// Completed is a pointer so an omitted field is rejected rather than
+	// silently decoding to false.
+	Completed *bool `json:"completed"`
+}
+
+// DeleteNoteItemsRequest is the body for POST /notes/{id}/items/delete.
+type DeleteNoteItemsRequest struct {
+	ItemIDs []string `json:"item_ids"`
+}
+
+// SetNoteItemsCompleted godoc
 //
-//	@Summary	Uncheck all completed items on a list note
-//	@Description	Clears the completed flag on every item of the list and returns the note's full item list. Idempotent when nothing is completed.
+//	@Summary	Set the completed flag on a set of list items
+//	@Description	Sets completed to the given value on each of the named items (no cascade) and returns the note's full item list. Used for bulk "uncheck all" (completed=false) and its undo (completed=true); callers pass the complete set they want changed.
 //	@Tags		notes
 //	@Security	CookieAuth
+//	@Accept		json
 //	@Produce	json
-//	@Param		id	path		string	true	"Note ID"
-//	@Success	200	{array}		models.NoteItem
-//	@Failure	400	{string}	string	"bad request"
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	404	{string}	string	"not found"
-//	@Failure	500	{string}	string	"internal server error"
-//	@Router		/notes/{id}/items/uncheck-all [post]
-func (h *NotesHandler) UncheckAllNoteItems(w http.ResponseWriter, r *http.Request) (int, any, error) {
+//	@Param		id		path		string							true	"Note ID"
+//	@Param		body	body		SetNoteItemsCompletedRequest	true	"Item IDs and target completed state"
+//	@Success	200		{array}		models.NoteItem
+//	@Failure	400		{string}	string	"bad request"
+//	@Failure	401		{string}	string	"unauthorized"
+//	@Failure	404		{string}	string	"not found"
+//	@Failure	500		{string}	string	"internal server error"
+//	@Router		/notes/{id}/items/set-completed [post]
+func (h *NotesHandler) SetNoteItemsCompleted(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
 		return http.StatusUnauthorized, nil, errors.New("unauthorized")
@@ -432,30 +460,43 @@ func (h *NotesHandler) UncheckAllNoteItems(w http.ResponseWriter, r *http.Reques
 		return status, nil, err
 	}
 
-	items, err := h.noteStore.UncheckAllItems(r.Context(), noteID)
+	var req SetNoteItemsCompletedRequest
+	if err := decodeJSONBody(w, r, &req); err != nil {
+		return http.StatusBadRequest, nil, err
+	}
+	if req.Completed == nil {
+		return http.StatusBadRequest, nil, errors.New("completed is required")
+	}
+	if status, err := validateItemIDs(req.ItemIDs); err != nil {
+		return status, nil, err
+	}
+
+	items, err := h.noteStore.SetItemsCompleted(r.Context(), noteID, req.ItemIDs, *req.Completed)
 	if err != nil {
-		return http.StatusInternalServerError, nil, fmt.Errorf("uncheck all items: %w", err)
+		return http.StatusInternalServerError, nil, fmt.Errorf("set items completed: %w", err)
 	}
 
 	h.publishItemChangeEvent(r.Context(), noteID, user.ID)
 	return http.StatusOK, items, nil
 }
 
-// DeleteCompletedNoteItems godoc
+// DeleteNoteItems godoc
 //
-//	@Summary	Delete all completed items on a list note
-//	@Description	Deletes every completed item of the list and returns the note's remaining items. Idempotent when nothing is completed.
+//	@Summary	Delete a set of list items
+//	@Description	Deletes each of the named items and returns the note's remaining items. Used for bulk "delete checked items"; the caller passes the item IDs it captured.
 //	@Tags		notes
 //	@Security	CookieAuth
+//	@Accept		json
 //	@Produce	json
-//	@Param		id	path		string	true	"Note ID"
-//	@Success	200	{array}		models.NoteItem
-//	@Failure	400	{string}	string	"bad request"
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	404	{string}	string	"not found"
-//	@Failure	500	{string}	string	"internal server error"
-//	@Router		/notes/{id}/items/delete-completed [post]
-func (h *NotesHandler) DeleteCompletedNoteItems(w http.ResponseWriter, r *http.Request) (int, any, error) {
+//	@Param		id		path		string					true	"Note ID"
+//	@Param		body	body		DeleteNoteItemsRequest	true	"Item IDs to delete"
+//	@Success	200		{array}		models.NoteItem
+//	@Failure	400		{string}	string	"bad request"
+//	@Failure	401		{string}	string	"unauthorized"
+//	@Failure	404		{string}	string	"not found"
+//	@Failure	500		{string}	string	"internal server error"
+//	@Router		/notes/{id}/items/delete [post]
+func (h *NotesHandler) DeleteNoteItems(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
 		return http.StatusUnauthorized, nil, errors.New("unauthorized")
@@ -470,9 +511,17 @@ func (h *NotesHandler) DeleteCompletedNoteItems(w http.ResponseWriter, r *http.R
 		return status, nil, err
 	}
 
-	items, err := h.noteStore.DeleteCompletedItems(r.Context(), noteID)
+	var req DeleteNoteItemsRequest
+	if err := decodeJSONBody(w, r, &req); err != nil {
+		return http.StatusBadRequest, nil, err
+	}
+	if status, err := validateItemIDs(req.ItemIDs); err != nil {
+		return status, nil, err
+	}
+
+	items, err := h.noteStore.DeleteItems(r.Context(), noteID, req.ItemIDs)
 	if err != nil {
-		return http.StatusInternalServerError, nil, fmt.Errorf("delete completed items: %w", err)
+		return http.StatusInternalServerError, nil, fmt.Errorf("delete items: %w", err)
 	}
 
 	h.publishItemChangeEvent(r.Context(), noteID, user.ID)

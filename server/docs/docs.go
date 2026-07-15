@@ -1722,16 +1722,19 @@ const docTemplate = `{
                 ]
             }
         },
-        "/notes/{id}/items/delete-completed": {
+        "/notes/{id}/items/delete": {
             "post": {
-                "description": "Deletes every completed item of the list and returns the note's remaining items. Idempotent when nothing is completed.",
+                "description": "Deletes each of the named items and returns the note's remaining items. Used for bulk \"delete checked items\"; the caller passes the item IDs it captured.",
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "notes"
                 ],
-                "summary": "Delete all completed items on a list note",
+                "summary": "Delete a set of list items",
                 "parameters": [
                     {
                         "type": "string",
@@ -1739,6 +1742,15 @@ const docTemplate = `{
                         "name": "id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "description": "Item IDs to delete",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.DeleteNoteItemsRequest"
+                        }
                     }
                 ],
                 "responses": {
@@ -1846,16 +1858,19 @@ const docTemplate = `{
                 ]
             }
         },
-        "/notes/{id}/items/uncheck-all": {
+        "/notes/{id}/items/set-completed": {
             "post": {
-                "description": "Clears the completed flag on every item of the list and returns the note's full item list. Idempotent when nothing is completed.",
+                "description": "Sets completed to the given value on each of the named items (no cascade) and returns the note's full item list. Used for bulk \"uncheck all\" (completed=false) and its undo (completed=true); callers pass the complete set they want changed.",
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "notes"
                 ],
-                "summary": "Uncheck all completed items on a list note",
+                "summary": "Set the completed flag on a set of list items",
                 "parameters": [
                     {
                         "type": "string",
@@ -1863,6 +1878,15 @@ const docTemplate = `{
                         "name": "id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "description": "Item IDs and target completed state",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.SetNoteItemsCompletedRequest"
+                        }
                     }
                 ],
                 "responses": {
@@ -3217,6 +3241,17 @@ const docTemplate = `{
                 }
             }
         },
+        "handlers.DeleteNoteItemsRequest": {
+            "type": "object",
+            "properties": {
+                "item_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "handlers.DeleteUserNotesResponse": {
             "type": "object",
             "properties": {
@@ -3363,6 +3398,21 @@ const docTemplate = `{
                 },
                 "os": {
                     "type": "string"
+                }
+            }
+        },
+        "handlers.SetNoteItemsCompletedRequest": {
+            "type": "object",
+            "properties": {
+                "completed": {
+                    "description": "Completed is a pointer so an omitted field is rejected rather than\nsilently decoding to false.",
+                    "type": "boolean"
+                },
+                "item_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },

@@ -1998,69 +1998,80 @@ func (s *noteStore) ToggleItemCompleted(ctx context.Context, noteID, itemID stri
 	return s.getItemsByNoteID(ctx, noteID)
 }
 
-// UncheckAllItems clears the completed flag on every completed item of a note in
-// a single transaction and returns the note's full item list so callers
-// reconcile every affected item from one response. It is idempotent: a note with
-// no completed items is left untouched (its updated_at is not bumped).
-func (s *noteStore) UncheckAllItems(ctx context.Context, noteID string) ([]NoteItem, error) {
+// SetItemsCompleted sets the completed flag to the given value on each of the
+// named items (that belong to the note) in a single transaction and returns the
+// note's full item list so callers reconcile every affected item from one
+// response. Unlike ToggleItemCompleted it does not cascade to parents/children —
+// callers pass the complete set they want changed (e.g. every currently-checked
+// item for "uncheck all", or that same snapshot to re-check on undo), which
+// preserves the parent/child completion invariant. IDs that do not belong to the
+// note are ignored, so a replay/undo referencing a since-deleted item is a no-op.
+// The note's updated_at is bumped only when at least one row actually changed.
+func (s *noteStore) SetItemsCompleted(ctx context.Context, noteID string, itemIDs []string, completed bool) ([]NoteItem, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	res, err := tx.ExecContext(ctx,
-		s.d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = CURRENT_TIMESTAMP WHERE note_id = ? AND completed = ?`),
-		false, noteID, true,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to uncheck note items: %w", err)
-	}
-	unchecked, err := res.RowsAffected()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get rows affected: %w", err)
+	var changed int64
+	for _, itemID := range itemIDs {
+		res, execErr := tx.ExecContext(ctx,
+			s.d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = CURRENT_TIMESTAMP WHERE note_id = ? AND id = ? AND completed != ?`),
+			completed, noteID, itemID, completed,
+		)
+		if execErr != nil {
+			return nil, fmt.Errorf("failed to set note item completed: %w", execErr)
+		}
+		n, raErr := res.RowsAffected()
+		if raErr != nil {
+			return nil, fmt.Errorf("failed to get rows affected: %w", raErr)
+		}
+		changed += n
 	}
 
 	// Only bump the note when something actually changed, so a no-op call does
 	// not spuriously reorder the dashboard or emit an update to collaborators.
-	if unchecked > 0 {
+	if changed > 0 {
 		if err = touchNoteTx(ctx, tx, s.d, noteID); err != nil {
 			return nil, err
 		}
 	}
 	if err = tx.Commit(); err != nil {
-		return nil, fmt.Errorf("commit uncheck all items: %w", err)
+		return nil, fmt.Errorf("commit set items completed: %w", err)
 	}
 
 	return s.getItemsByNoteID(ctx, noteID)
 }
 
-// DeleteCompletedItems removes every completed item of a note in a single
-// transaction and returns the note's remaining items so callers reconcile from
-// one response. The parent/child completion invariant (a completed parent always
-// has all-completed children) means completed groups are removed whole; as
-// defense-in-depth against any drifted row, an item orphaned by the delete (its
-// parent was completed and removed) is re-homed to top level to preserve the
-// parent-reference invariant. Positions are left with gaps, matching
-// DeleteItemFromNote. Idempotent: a note with no completed items is left
-// untouched (its updated_at is not bumped).
-func (s *noteStore) DeleteCompletedItems(ctx context.Context, noteID string) ([]NoteItem, error) {
+// DeleteItems removes each of the named items (that belong to the note) in a
+// single transaction and returns the note's remaining items so callers reconcile
+// from one response. As defense-in-depth against a drifted row, an item orphaned
+// by the delete (its parent was among those removed) is re-homed to top level to
+// preserve the parent-reference invariant. Positions are left with gaps, matching
+// DeleteItemFromNote. IDs that do not belong to the note are ignored. The note's
+// updated_at is bumped only when at least one row was actually deleted.
+func (s *noteStore) DeleteItems(ctx context.Context, noteID string, itemIDs []string) ([]NoteItem, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	res, err := tx.ExecContext(ctx,
-		s.d.RewritePlaceholders(`DELETE FROM note_items WHERE note_id = ? AND completed = ?`),
-		noteID, true,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to delete completed note items: %w", err)
-	}
-	deleted, err := res.RowsAffected()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get rows affected: %w", err)
+	var deleted int64
+	for _, itemID := range itemIDs {
+		res, execErr := tx.ExecContext(ctx,
+			s.d.RewritePlaceholders(`DELETE FROM note_items WHERE note_id = ? AND id = ?`),
+			noteID, itemID,
+		)
+		if execErr != nil {
+			return nil, fmt.Errorf("failed to delete note item: %w", execErr)
+		}
+		n, raErr := res.RowsAffected()
+		if raErr != nil {
+			return nil, fmt.Errorf("failed to get rows affected: %w", raErr)
+		}
+		deleted += n
 	}
 
 	if deleted > 0 {
@@ -2080,7 +2091,7 @@ func (s *noteStore) DeleteCompletedItems(ctx context.Context, noteID string) ([]
 		}
 	}
 	if err = tx.Commit(); err != nil {
-		return nil, fmt.Errorf("commit delete completed items: %w", err)
+		return nil, fmt.Errorf("commit delete note items: %w", err)
 	}
 
 	return s.getItemsByNoteID(ctx, noteID)

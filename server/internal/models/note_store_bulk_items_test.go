@@ -10,22 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// forceNoteUpdatedAtPast pins the note's updated_at to a fixed past instant and
-// returns it (read back through GetByID so the comparison normalizes any
-// driver-specific timestamp formatting). A later GetByID that still equals this
-// proves the note was not touched.
-func forceNoteUpdatedAtPast(t *testing.T, store *noteStore, noteID, userID string) time.Time {
-	t.Helper()
-	past := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
-	_, err := store.db.ExecContext(t.Context(),
-		store.d.RewritePlaceholders(`UPDATE notes SET updated_at = ? WHERE id = ?`),
-		past, noteID)
-	require.NoError(t, err)
-	n, err := store.GetByID(t.Context(), noteID, userID)
-	require.NoError(t, err)
-	return n.UpdatedAt
-}
-
 // newTestBulkStore opens a fresh migrated database for driver and returns a
 // noteStore bound to it plus an owning user ID.
 func newTestBulkStore(t *testing.T, driver string) (*noteStore, string) {
@@ -55,21 +39,42 @@ func bulkItemByText(t *testing.T, items []NoteItem, text string) NoteItem {
 	return NoteItem{}
 }
 
-func TestUncheckAllItems(t *testing.T) {
+// forceNoteUpdatedAtPast pins the note's updated_at to a fixed past instant and
+// returns it (read back through GetByID so the comparison normalizes any
+// driver-specific timestamp formatting). A later GetByID that still equals this
+// proves the note was not touched.
+func forceNoteUpdatedAtPast(t *testing.T, store *noteStore, noteID, userID string) time.Time {
+	t.Helper()
+	past := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+	_, err := store.db.ExecContext(t.Context(),
+		store.d.RewritePlaceholders(`UPDATE notes SET updated_at = ? WHERE id = ?`),
+		past, noteID)
+	require.NoError(t, err)
+	n, err := store.GetByID(t.Context(), noteID, userID)
+	require.NoError(t, err)
+	return n.UpdatedAt
+}
+
+func TestSetItemsCompleted(t *testing.T) {
 	dbtest.ForEachDriver(t, func(t *testing.T, driver string) {
-		t.Run("clears every completed item and returns the full list", func(t *testing.T) {
+		t.Run("clears completed on the given items and returns the full list", func(t *testing.T) {
 			store, userID := newTestBulkStore(t, driver)
 			ctx := t.Context()
 
+			doneA, err := generateID()
+			require.NoError(t, err)
+			doneC, err := generateID()
+			require.NoError(t, err)
+
 			note, err := store.CreateWithItems(ctx, userID, "", "Chores", "", NoteTypeList, DefaultNoteColor,
 				[]NewNoteItem{
-					{Text: "done a", Position: 0, Completed: true},
+					{ID: doneA, Text: "done a", Position: 0, Completed: true},
 					{Text: "todo b", Position: 1, Completed: false},
-					{Text: "done c", Position: 2, Completed: true},
+					{ID: doneC, Text: "done c", Position: 2, Completed: true},
 				})
 			require.NoError(t, err)
 
-			items, err := store.UncheckAllItems(ctx, note.ID)
+			items, err := store.SetItemsCompleted(ctx, note.ID, []string{doneA, doneC}, false)
 			require.NoError(t, err)
 			require.Len(t, items, 3, "returns the note's full item list")
 			for _, it := range items {
@@ -77,60 +82,95 @@ func TestUncheckAllItems(t *testing.T) {
 			}
 		})
 
-		t.Run("is idempotent and does not touch the note when nothing is completed", func(t *testing.T) {
+		t.Run("re-checks the given items (undo of an uncheck)", func(t *testing.T) {
+			store, userID := newTestBulkStore(t, driver)
+			ctx := t.Context()
+
+			a, err := generateID()
+			require.NoError(t, err)
+			b, err := generateID()
+			require.NoError(t, err)
+
+			note, err := store.CreateWithItems(ctx, userID, "", "Chores", "", NoteTypeList, DefaultNoteColor,
+				[]NewNoteItem{
+					{ID: a, Text: "a", Position: 0, Completed: true},
+					{ID: b, Text: "b", Position: 1, Completed: true},
+				})
+			require.NoError(t, err)
+
+			_, err = store.SetItemsCompleted(ctx, note.ID, []string{a, b}, false)
+			require.NoError(t, err)
+
+			items, err := store.SetItemsCompleted(ctx, note.ID, []string{a, b}, true)
+			require.NoError(t, err)
+			for _, it := range items {
+				assert.True(t, it.Completed, "item %q should be re-checked", it.Text)
+			}
+		})
+
+		t.Run("ignores IDs that do not belong to the note", func(t *testing.T) {
 			store, userID := newTestBulkStore(t, driver)
 			ctx := t.Context()
 
 			note, err := store.CreateWithItems(ctx, userID, "", "Chores", "", NoteTypeList, DefaultNoteColor,
-				[]NewNoteItem{
-					{Text: "todo a", Position: 0},
-					{Text: "todo b", Position: 1},
-				})
+				[]NewNoteItem{{Text: "done", Position: 0, Completed: true}})
+			require.NoError(t, err)
+
+			items, err := store.SetItemsCompleted(ctx, note.ID, []string{"doesnotexist1234567890"}, false)
+			require.NoError(t, err)
+			require.Len(t, items, 1)
+			assert.True(t, items[0].Completed, "unrelated ID must not change anything")
+		})
+
+		t.Run("does not touch the note when nothing actually changes", func(t *testing.T) {
+			store, userID := newTestBulkStore(t, driver)
+			ctx := t.Context()
+
+			a, err := generateID()
+			require.NoError(t, err)
+			note, err := store.CreateWithItems(ctx, userID, "", "Chores", "", NoteTypeList, DefaultNoteColor,
+				[]NewNoteItem{{ID: a, Text: "todo", Position: 0, Completed: false}})
 			require.NoError(t, err)
 
 			before := forceNoteUpdatedAtPast(t, store, note.ID, userID)
 
-			items, err := store.UncheckAllItems(ctx, note.ID)
+			// Item is already uncompleted, so setting it uncompleted is a no-op.
+			_, err = store.SetItemsCompleted(ctx, note.ID, []string{a}, false)
 			require.NoError(t, err)
-			assert.Len(t, items, 2)
-			for _, it := range items {
-				assert.False(t, it.Completed)
-			}
 
 			after, err := store.GetByID(ctx, note.ID, userID)
 			require.NoError(t, err)
-			assert.True(t, after.UpdatedAt.Equal(before), "no-op uncheck must not bump the note's updated_at")
+			assert.True(t, after.UpdatedAt.Equal(before), "no-op set-completed must not bump the note's updated_at")
 		})
 	})
 }
 
-func TestDeleteCompletedItems(t *testing.T) {
+func TestDeleteItems(t *testing.T) {
 	dbtest.ForEachDriver(t, func(t *testing.T, driver string) {
-		t.Run("removes a completed group whole and keeps incomplete items", func(t *testing.T) {
+		t.Run("removes the given items and keeps the rest", func(t *testing.T) {
 			store, userID := newTestBulkStore(t, driver)
 			ctx := t.Context()
 
-			parentID, err := generateID()
+			a, err := generateID()
+			require.NoError(t, err)
+			c, err := generateID()
 			require.NoError(t, err)
 
-			// A completed parent with completed children (the normal invariant),
-			// plus a standalone incomplete item.
-			note, err := store.CreateWithItems(ctx, userID, "", "Groups", "", NoteTypeList, DefaultNoteColor,
+			note, err := store.CreateWithItems(ctx, userID, "", "Chores", "", NoteTypeList, DefaultNoteColor,
 				[]NewNoteItem{
-					{ID: parentID, Text: "Parent", Position: 0, Completed: true},
-					{Text: "Child A", Position: 1, Completed: true, ParentID: parentID},
-					{Text: "Child B", Position: 2, Completed: true, ParentID: parentID},
-					{Text: "Solo", Position: 3, Completed: false},
+					{ID: a, Text: "remove a", Position: 0},
+					{Text: "keep b", Position: 1},
+					{ID: c, Text: "remove c", Position: 2},
 				})
 			require.NoError(t, err)
 
-			items, err := store.DeleteCompletedItems(ctx, note.ID)
+			items, err := store.DeleteItems(ctx, note.ID, []string{a, c})
 			require.NoError(t, err)
-			require.Len(t, items, 1, "only the incomplete item remains")
-			assert.Equal(t, "Solo", items[0].Text)
+			require.Len(t, items, 1)
+			assert.Equal(t, "keep b", items[0].Text)
 		})
 
-		t.Run("removes a completed child but keeps its incomplete parent", func(t *testing.T) {
+		t.Run("re-homes a child orphaned by deleting its parent", func(t *testing.T) {
 			store, userID := newTestBulkStore(t, driver)
 			ctx := t.Context()
 
@@ -138,65 +178,44 @@ func TestDeleteCompletedItems(t *testing.T) {
 			require.NoError(t, err)
 
 			note, err := store.CreateWithItems(ctx, userID, "", "Groups", "", NoteTypeList, DefaultNoteColor,
-				[]NewNoteItem{
-					{ID: parentID, Text: "Parent", Position: 0, Completed: false},
-					{Text: "Child A", Position: 1, Completed: true, ParentID: parentID},
-					{Text: "Child B", Position: 2, Completed: false, ParentID: parentID},
-				})
-			require.NoError(t, err)
-
-			items, err := store.DeleteCompletedItems(ctx, note.ID)
-			require.NoError(t, err)
-			require.Len(t, items, 2)
-
-			parent := bulkItemByText(t, items, "Parent")
-			childB := bulkItemByText(t, items, "Child B")
-			assert.Nil(t, parent.ParentID, "surviving parent stays top-level")
-			require.NotNil(t, childB.ParentID)
-			assert.Equal(t, parentID, *childB.ParentID, "surviving child keeps its parent")
-		})
-
-		t.Run("re-homes a child orphaned by deleting its completed parent", func(t *testing.T) {
-			store, userID := newTestBulkStore(t, driver)
-			ctx := t.Context()
-
-			parentID, err := generateID()
-			require.NoError(t, err)
-
-			// Invariant-violating state (completed parent, incomplete child) that
-			// the cascade normally prevents. Deleting the completed parent would
-			// orphan the child; the defensive re-home must return it to top level.
-			note, err := store.CreateWithItems(ctx, userID, "", "Drifted", "", NoteTypeList, DefaultNoteColor,
 				[]NewNoteItem{
 					{ID: parentID, Text: "Parent", Position: 0, Completed: true},
 					{Text: "Child", Position: 1, Completed: false, ParentID: parentID},
 				})
 			require.NoError(t, err)
 
-			items, err := store.DeleteCompletedItems(ctx, note.ID)
+			items, err := store.DeleteItems(ctx, note.ID, []string{parentID})
 			require.NoError(t, err)
-			require.Len(t, items, 1, "the completed parent is deleted, the incomplete child survives")
-
+			require.Len(t, items, 1, "only the child remains")
 			child := bulkItemByText(t, items, "Child")
 			assert.Nil(t, child.ParentID, "orphaned child is re-homed to top level")
 		})
 
-		t.Run("is idempotent and does not touch the note when nothing is completed", func(t *testing.T) {
+		t.Run("ignores IDs that do not belong to the note", func(t *testing.T) {
 			store, userID := newTestBulkStore(t, driver)
 			ctx := t.Context()
 
 			note, err := store.CreateWithItems(ctx, userID, "", "Chores", "", NoteTypeList, DefaultNoteColor,
-				[]NewNoteItem{
-					{Text: "todo a", Position: 0},
-					{Text: "todo b", Position: 1},
-				})
+				[]NewNoteItem{{Text: "keep", Position: 0}})
+			require.NoError(t, err)
+
+			items, err := store.DeleteItems(ctx, note.ID, []string{"doesnotexist1234567890"})
+			require.NoError(t, err)
+			assert.Len(t, items, 1, "unrelated ID must not delete anything")
+		})
+
+		t.Run("does not touch the note when nothing is deleted", func(t *testing.T) {
+			store, userID := newTestBulkStore(t, driver)
+			ctx := t.Context()
+
+			note, err := store.CreateWithItems(ctx, userID, "", "Chores", "", NoteTypeList, DefaultNoteColor,
+				[]NewNoteItem{{Text: "keep", Position: 0}})
 			require.NoError(t, err)
 
 			before := forceNoteUpdatedAtPast(t, store, note.ID, userID)
 
-			items, err := store.DeleteCompletedItems(ctx, note.ID)
+			_, err = store.DeleteItems(ctx, note.ID, []string{"doesnotexist1234567890"})
 			require.NoError(t, err)
-			assert.Len(t, items, 2)
 
 			after, err := store.GetByID(ctx, note.ID, userID)
 			require.NoError(t, err)

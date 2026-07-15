@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback, type ReactElement, t
 import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, GripVertical, Pin, EllipsisVertical, Square } from 'lucide-react';
 import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, IMAGE_MAX_PER_NOTE, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListItems, listToText, type Note, type NoteType, type NoteImage, type CreateNoteRequest, type UpdateNoteRequest, type ConvertNoteTypeRequest, type PatchNoteItemRequest, type Label, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, IMAGE_MAX_PER_NOTE, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListItems, listToText, type Note, type NoteType, type NoteImage, type CreateNoteRequest, type UpdateNoteRequest, type ConvertNoteTypeRequest, type PatchNoteItemRequest, type NoteItem, type Label, type User, type Collaborator } from '@jot/shared';
 import { notes, images as imagesApi } from '@/utils/api';
 import { renderMarkdown } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
@@ -602,6 +602,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   // switches to another note first). Keyed per note — like the image-removal
   // bookkeeping — so a delete started on one note can't cancel another's.
   const pendingCompletedDeletesRef = useRef<Map<string, { ids: Set<string>; timeoutId: ReturnType<typeof setTimeout> }>>(new Map());
+  // The most recent "uncheck all" for the open note, shown as a transient
+  // "N items unchecked — Undo" bar. Unlike delete this is not deferred: the
+  // uncheck already persisted, so Undo simply re-checks the same snapshot. The
+  // bar auto-dismisses; it belongs to the current note and is cleared on switch.
+  const [recentlyUnchecked, setRecentlyUnchecked] = useState<{ ids: string[]; count: number } | null>(null);
+  const uncheckUndoTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Use useRef for timeout management instead of global window property
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -897,6 +903,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         ? incomingItems.filter(it => pendingCompleted.ids.has(it.id)).map(it => ({ id: it.id, text: it.text }))
         : [];
       setRemovedCompletedItems(stillPendingCompleted);
+
+      // The uncheck undo bar is note-specific and its action already persisted,
+      // so drop it on a note switch rather than carrying it across.
+      if (uncheckUndoTimeoutRef.current) {
+        clearTimeout(uncheckUndoTimeoutRef.current);
+        uncheckUndoTimeoutRef.current = undefined;
+      }
+      setRecentlyUnchecked(null);
     }
 
     if (note) {
@@ -1700,50 +1714,81 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
   }, []);
 
-  // Unchecks every completed item in one bulk request. Mirrors the single-item
-  // toggle: optimistic local update, then reconcile only the completed flags the
-  // server reports (never replacing the whole list, so unsaved edits survive),
-  // advance the diff baseline, and revert precisely those flags on failure.
-  const handleUncheckAllItems = useCallback(async () => {
+  // Reconciles only the completed flags the server reports (never replacing the
+  // whole list, so unsaved edits and not-yet-created items survive) and advances
+  // the diff baseline so the autosave engine does not re-patch them.
+  const reconcileCompletedFromServer = useCallback((serverItems: NoteItem[]) => {
+    const completedById = new Map(serverItems.map(item => [item.id, item.completed]));
+    commitItems(itemsRef.current.map(item => {
+      const serverCompleted = completedById.get(item.id);
+      return serverCompleted === undefined ? item : { ...item, completed: serverCompleted };
+    }));
+    for (const [id, comp] of completedById) {
+      const snap = savedItemsRef.current.get(id);
+      if (snap) savedItemsRef.current.set(id, { ...snap, completed: comp });
+    }
+  }, [commitItems]);
+
+  // Sets completed=false on the given items in one bulk request, applying an
+  // optimistic local update first and reverting precisely those flags on error.
+  // Mirrors the single-item toggle's reconcile-only-completed-flags approach.
+  const setItemsCompletedLocallyAndRemotely = useCallback(async (ids: string[], completed: boolean) => {
+    const targets = new Set(ids);
+    commitItems(itemsRef.current.map(item => (targets.has(item.id) ? { ...item, completed } : item)));
+
     const noteId = noteIdRef.current;
-    const before = itemsRef.current;
-    const completed = before.filter(item => item.completed);
-    if (completed.length === 0) return;
-
-    const revert = new Set(completed.map(item => item.id));
-    commitItems(before.map(item => (item.completed ? { ...item, completed: false } : item)));
-
     // A not-yet-persisted note has no server-side items; the bulk create on save
-    // carries the (now cleared) flags instead.
+    // carries the flags instead.
     if (!noteId) {
       markDirty();
       return;
     }
-
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = undefined;
     }
 
     try {
-      const serverItems = await notes.uncheckAllItems(noteId);
-      const completedById = new Map(serverItems.map(item => [item.id, item.completed]));
-      commitItems(itemsRef.current.map(item => {
-        const serverCompleted = completedById.get(item.id);
-        return serverCompleted === undefined ? item : { ...item, completed: serverCompleted };
-      }));
-      for (const [id, comp] of completedById) {
-        const snap = savedItemsRef.current.get(id);
-        if (snap) savedItemsRef.current.set(id, { ...snap, completed: comp });
-      }
+      const serverItems = await notes.setItemsCompleted(noteId, ids, completed);
+      reconcileCompletedFromServer(serverItems);
       onRefresh?.();
       flashSaved();
     } catch (error) {
-      console.error('Failed to uncheck all items:', error);
-      commitItems(itemsRef.current.map(item => (revert.has(item.id) ? { ...item, completed: true } : item)));
+      console.error('Failed to set items completed:', error);
+      commitItems(itemsRef.current.map(item => (targets.has(item.id) ? { ...item, completed: !completed } : item)));
       showError(t('note.failedSaveChanges'));
     }
-  }, [commitItems, markDirty, onRefresh, flashSaved, showError, t]);
+  }, [commitItems, markDirty, reconcileCompletedFromServer, onRefresh, flashSaved, showError, t]);
+
+  // Unchecks every completed item, then shows a transient "N unchecked — Undo"
+  // bar. Undo re-checks exactly that snapshot (the same bulk endpoint with
+  // completed=true), restoring the prior state.
+  const handleUncheckAllItems = useCallback(async () => {
+    const completed = itemsRef.current.filter(item => item.completed);
+    if (completed.length === 0) return;
+    const ids = completed.map(item => item.id);
+
+    await setItemsCompletedLocallyAndRemotely(ids, false);
+
+    // Only offer undo for a persisted note (the bar re-checks server-side).
+    if (!noteIdRef.current) return;
+    setRecentlyUnchecked({ ids, count: ids.length });
+    if (uncheckUndoTimeoutRef.current) clearTimeout(uncheckUndoTimeoutRef.current);
+    uncheckUndoTimeoutRef.current = setTimeout(() => {
+      uncheckUndoTimeoutRef.current = undefined;
+      setRecentlyUnchecked(null);
+    }, COMPLETED_DELETE_UNDO_MS);
+  }, [setItemsCompletedLocallyAndRemotely]);
+
+  const undoUncheckAll = useCallback(() => {
+    if (uncheckUndoTimeoutRef.current) {
+      clearTimeout(uncheckUndoTimeoutRef.current);
+      uncheckUndoTimeoutRef.current = undefined;
+    }
+    const rec = recentlyUnchecked;
+    setRecentlyUnchecked(null);
+    if (rec) void setItemsCompletedLocallyAndRemotely(rec.ids, true);
+  }, [recentlyUnchecked, setItemsCompletedLocallyAndRemotely]);
 
   // Removes the given items from the local model and diff baseline once their
   // deferred delete has actually landed (or on a fresh new-note save), so the
@@ -1775,7 +1820,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
     const timeoutId = setTimeout(() => {
       pendingCompletedDeletesRef.current.delete(noteId);
-      notes.deleteCompletedItems(noteId)
+      notes.deleteItems(noteId, [...ids])
         .then(() => {
           finalizeCompletedDeletion(ids);
           onRefresh?.();
@@ -2561,6 +2606,27 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                   onClick={undoDeleteCompletedItems}
                   className="ml-3 font-medium text-blue-300 hover:text-blue-200 hover:underline"
                   data-testid="checked-items-undo"
+                >
+                  {t('dashboard.undo')}
+                </button>
+              </div>
+            )}
+
+            {/* Inline "N items unchecked — Undo" bar. Undo re-checks the snapshot. */}
+            {recentlyUnchecked && (
+              <div
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+                className="flex items-center justify-between rounded-md bg-gray-800 dark:bg-slate-900 text-white text-sm px-3 py-2"
+                data-testid="unchecked-items-bar"
+              >
+                <span>{t('note.itemsUnchecked', { count: recentlyUnchecked.count })}</span>
+                <button
+                  type="button"
+                  onClick={undoUncheckAll}
+                  className="ml-3 font-medium text-blue-300 hover:text-blue-200 hover:underline"
+                  data-testid="unchecked-items-undo"
                 >
                   {t('dashboard.undo')}
                 </button>

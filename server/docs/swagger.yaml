@@ -114,6 +114,13 @@ definitions:
       username:
         type: string
     type: object
+  handlers.DeleteNoteItemsRequest:
+    properties:
+      item_ids:
+        items:
+          type: string
+        type: array
+    type: object
   handlers.DeleteUserNotesResponse:
     properties:
       deleted:
@@ -209,6 +216,18 @@ definitions:
         type: boolean
       os:
         type: string
+    type: object
+  handlers.SetNoteItemsCompletedRequest:
+    properties:
+      completed:
+        description: |-
+          Completed is a pointer so an omitted field is rejected rather than
+          silently decoding to false.
+        type: boolean
+      item_ids:
+        items:
+          type: string
+        type: array
     type: object
   handlers.ShareNoteRequest:
     properties:
@@ -1687,16 +1706,25 @@ paths:
       summary: Toggle a list item's completed state, cascading to children
       tags:
       - notes
-  /notes/{id}/items/delete-completed:
+  /notes/{id}/items/delete:
     post:
-      description: Deletes every completed item of the list and returns the note's
-        remaining items. Idempotent when nothing is completed.
+      consumes:
+      - application/json
+      description: Deletes each of the named items and returns the note's remaining
+        items. Used for bulk "delete checked items"; the caller passes the item IDs
+        it captured.
       parameters:
       - description: Note ID
         in: path
         name: id
         required: true
         type: string
+      - description: Item IDs to delete
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.DeleteNoteItemsRequest'
       produces:
       - application/json
       responses:
@@ -1724,7 +1752,7 @@ paths:
             type: string
       security:
       - CookieAuth: []
-      summary: Delete all completed items on a list note
+      summary: Delete a set of list items
       tags:
       - notes
   /notes/{id}/items/reorder:
@@ -1767,16 +1795,26 @@ paths:
       summary: Reorder a list note's items
       tags:
       - notes
-  /notes/{id}/items/uncheck-all:
+  /notes/{id}/items/set-completed:
     post:
-      description: Clears the completed flag on every item of the list and returns
-        the note's full item list. Idempotent when nothing is completed.
+      consumes:
+      - application/json
+      description: Sets completed to the given value on each of the named items (no
+        cascade) and returns the note's full item list. Used for bulk "uncheck all"
+        (completed=false) and its undo (completed=true); callers pass the complete
+        set they want changed.
       parameters:
       - description: Note ID
         in: path
         name: id
         required: true
         type: string
+      - description: Item IDs and target completed state
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.SetNoteItemsCompletedRequest'
       produces:
       - application/json
       responses:
@@ -1804,7 +1842,7 @@ paths:
             type: string
       security:
       - CookieAuth: []
-      summary: Uncheck all completed items on a list note
+      summary: Set the completed flag on a set of list items
       tags:
       - notes
   /notes/{id}/labels:
