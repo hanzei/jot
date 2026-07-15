@@ -22,8 +22,8 @@ test.describe('Note image gallery', () => {
     const note = notesList.find((n) => n.title === title);
     expect(note).toBeTruthy();
 
-    const firstUpload = await page.request.post('/api/v1/images', {
-      multipart: { note_id: note!.id, file: noteImageFile },
+    const firstUpload = await page.request.post(`/api/v1/notes/${note!.id}/images`, {
+      multipart: { file: noteImageFile },
     });
     expect(firstUpload.ok()).toBeTruthy();
 
@@ -37,8 +37,8 @@ test.describe('Note image gallery', () => {
     await dashboardPage.closeNoteModal();
 
     // A second image switches the gallery from a banner to a grid.
-    const secondUpload = await page.request.post('/api/v1/images', {
-      multipart: { note_id: note!.id, file: noteImageFile },
+    const secondUpload = await page.request.post(`/api/v1/notes/${note!.id}/images`, {
+      multipart: { file: noteImageFile },
     });
     expect(secondUpload.ok()).toBeTruthy();
 
@@ -65,8 +65,8 @@ test.describe('Note image gallery', () => {
     const note = notesList.find((n) => n.title === title);
     expect(note).toBeTruthy();
 
-    const firstUpload = await page.request.post('/api/v1/images', {
-      multipart: { note_id: note!.id, file: noteImageFile },
+    const firstUpload = await page.request.post(`/api/v1/notes/${note!.id}/images`, {
+      multipart: { file: noteImageFile },
     });
     expect(firstUpload.ok()).toBeTruthy();
 
@@ -80,8 +80,8 @@ test.describe('Note image gallery', () => {
     await expect(card.getByText(/^\+\d+$/)).not.toBeAttached();
 
     // A second image adds a "+N" badge on the same cover.
-    const secondUpload = await page.request.post('/api/v1/images', {
-      multipart: { note_id: note!.id, file: noteImageFile },
+    const secondUpload = await page.request.post(`/api/v1/notes/${note!.id}/images`, {
+      multipart: { file: noteImageFile },
     });
     expect(secondUpload.ok()).toBeTruthy();
 
@@ -146,8 +146,8 @@ test.describe('Note image gallery', () => {
     const note = notesList.find((n) => n.title === title);
     expect(note).toBeTruthy();
 
-    const upload = await page.request.post('/api/v1/images', {
-      multipart: { note_id: note!.id, file: noteImageFile },
+    const upload = await page.request.post(`/api/v1/notes/${note!.id}/images`, {
+      multipart: { file: noteImageFile },
     });
     expect(upload.ok()).toBeTruthy();
 
