@@ -122,6 +122,51 @@ func TestSetItemsCompleted(t *testing.T) {
 			assert.True(t, items[0].Completed, "unrelated ID must not change anything")
 		})
 
+		t.Run("checking only a parent cascades to its children", func(t *testing.T) {
+			store, userID := newTestBulkStore(t, driver)
+			ctx := t.Context()
+
+			parentID, err := generateID()
+			require.NoError(t, err)
+			note, err := store.CreateWithItems(ctx, userID, "", "Groups", "", NoteTypeList, DefaultNoteColor,
+				[]NewNoteItem{
+					{ID: parentID, Text: "Parent", Position: 0, Completed: false},
+					{Text: "Child", Position: 1, Completed: false, ParentID: parentID},
+				})
+			require.NoError(t, err)
+
+			// Only the parent ID is passed; the invariant requires its child to
+			// complete too, so the store cascades rather than leaving a completed
+			// parent with an incomplete child.
+			items, err := store.SetItemsCompleted(ctx, note.ID, []string{parentID}, true)
+			require.NoError(t, err)
+			assert.True(t, bulkItemByText(t, items, "Parent").Completed)
+			assert.True(t, bulkItemByText(t, items, "Child").Completed, "child must cascade to completed")
+		})
+
+		t.Run("unchecking only a child un-completes its parent", func(t *testing.T) {
+			store, userID := newTestBulkStore(t, driver)
+			ctx := t.Context()
+
+			parentID, err := generateID()
+			require.NoError(t, err)
+			childID, err := generateID()
+			require.NoError(t, err)
+			note, err := store.CreateWithItems(ctx, userID, "", "Groups", "", NoteTypeList, DefaultNoteColor,
+				[]NewNoteItem{
+					{ID: parentID, Text: "Parent", Position: 0, Completed: true},
+					{ID: childID, Text: "Child", Position: 1, Completed: true, ParentID: parentID},
+				})
+			require.NoError(t, err)
+
+			// Only the child ID is passed; un-completing it must also un-complete
+			// the parent so no completed parent keeps an incomplete child.
+			items, err := store.SetItemsCompleted(ctx, note.ID, []string{childID}, false)
+			require.NoError(t, err)
+			assert.False(t, bulkItemByText(t, items, "Child").Completed)
+			assert.False(t, bulkItemByText(t, items, "Parent").Completed, "parent must un-complete")
+		})
+
 		t.Run("does not touch the note when nothing actually changes", func(t *testing.T) {
 			store, userID := newTestBulkStore(t, driver)
 			ctx := t.Context()

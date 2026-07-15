@@ -3243,6 +3243,9 @@ const docTemplate = `{
         },
         "handlers.DeleteNoteItemsRequest": {
             "type": "object",
+            "required": [
+                "item_ids"
+            ],
             "properties": {
                 "item_ids": {
                     "type": "array",
@@ -3403,6 +3406,10 @@ const docTemplate = `{
         },
         "handlers.SetNoteItemsCompletedRequest": {
             "type": "object",
+            "required": [
+                "completed",
+                "item_ids"
+            ],
             "properties": {
                 "completed": {
                     "description": "Completed is a pointer so an omitted field is rejected rather than\nsilently decoding to false.",

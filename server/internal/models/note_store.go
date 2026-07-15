@@ -2001,12 +2001,13 @@ func (s *noteStore) ToggleItemCompleted(ctx context.Context, noteID, itemID stri
 // SetItemsCompleted sets the completed flag to the given value on each of the
 // named items (that belong to the note) in a single transaction and returns the
 // note's full item list so callers reconcile every affected item from one
-// response. Unlike ToggleItemCompleted it does not cascade to parents/children —
-// callers pass the complete set they want changed (e.g. every currently-checked
-// item for "uncheck all", or that same snapshot to re-check on undo), which
-// preserves the parent/child completion invariant. IDs that do not belong to the
-// note are ignored, so a replay/undo referencing a since-deleted item is a no-op.
-// The note's updated_at is bumped only when at least one row actually changed.
+// response. Each flip applies the same parent/child cascade as
+// ToggleItemCompleted (checking/unchecking a top-level item carries to its
+// children; unchecking a child un-completes its parent), so the completion
+// invariant holds even for an arbitrary ID subset — not just the complete
+// snapshot the webapp sends. IDs that do not belong to the note are ignored, so
+// a replay/undo referencing a since-deleted item is a no-op. The note's
+// updated_at is bumped only when at least one item actually changed.
 func (s *noteStore) SetItemsCompleted(ctx context.Context, noteID string, itemIDs []string, completed bool) ([]NoteItem, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -2016,6 +2017,20 @@ func (s *noteStore) SetItemsCompleted(ctx context.Context, noteID string, itemID
 
 	var changed int64
 	for _, itemID := range itemIDs {
+		var parentID sql.NullString
+		err = tx.QueryRowContext(ctx,
+			s.d.RewritePlaceholders(`SELECT parent_id FROM note_items WHERE id = ? AND note_id = ?`),
+			itemID, noteID,
+		).Scan(&parentID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				// ID does not belong to the note: ignore it.
+				err = nil
+				continue
+			}
+			return nil, fmt.Errorf("failed to load note item: %w", err)
+		}
+
 		res, execErr := tx.ExecContext(ctx,
 			s.d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = CURRENT_TIMESTAMP WHERE note_id = ? AND id = ? AND completed != ?`),
 			completed, noteID, itemID, completed,
@@ -2027,7 +2042,14 @@ func (s *noteStore) SetItemsCompleted(ctx context.Context, noteID string, itemID
 		if raErr != nil {
 			return nil, fmt.Errorf("failed to get rows affected: %w", raErr)
 		}
-		changed += n
+		// Only cascade when this item actually flipped, so a no-op call touches
+		// nothing (and a group already consistent is left alone).
+		if n > 0 {
+			changed += n
+			if err = cascadeItemCompletion(ctx, tx, s.d, noteID, itemID, parentID, completed); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	// Only bump the note when something actually changed, so a no-op call does

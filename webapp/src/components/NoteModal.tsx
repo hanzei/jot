@@ -606,8 +606,32 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   // "N items unchecked — Undo" bar. Unlike delete this is not deferred: the
   // uncheck already persisted, so Undo simply re-checks the same snapshot. The
   // bar auto-dismisses; it belongs to the current note and is cleared on switch.
-  const [recentlyUnchecked, setRecentlyUnchecked] = useState<{ ids: string[]; count: number } | null>(null);
+  const [recentlyUnchecked, setRecentlyUnchecked] = useState<{ noteId: string; ids: string[]; count: number } | null>(null);
   const uncheckUndoTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // Kept current so the unmount flush below can call the latest onRefresh
+  // without re-running (and prematurely firing) on every onRefresh change.
+  const onRefreshRef = useRef(onRefresh);
+  onRefreshRef.current = onRefresh;
+
+  // On unmount (the modal is fully closed — note switches keep it mounted) flush
+  // any deferred completed-item deletes immediately. The undo bar is gone once
+  // closed, so waiting out the timer only risks a reopen showing stale items
+  // that the lingering timer then removes; firing now keeps server and a reopen
+  // consistent. Runs once (empty deps) so it triggers on unmount only.
+  useEffect(() => {
+    const pending = pendingCompletedDeletesRef.current;
+    return () => {
+      if (pending.size === 0) return;
+      for (const [pendingNoteId, entry] of pending) {
+        clearTimeout(entry.timeoutId);
+        void notes.deleteItems(pendingNoteId, [...entry.ids]).catch(err => {
+          console.error('Failed to flush completed-item deletion on close:', err);
+        });
+      }
+      pending.clear();
+      onRefreshRef.current?.();
+    };
+  }, []);
 
   // Use useRef for timeout management instead of global window property
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -1768,11 +1792,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     if (completed.length === 0) return;
     const ids = completed.map(item => item.id);
 
+    const noteId = noteIdRef.current;
     await setItemsCompletedLocallyAndRemotely(ids, false);
 
     // Only offer undo for a persisted note (the bar re-checks server-side).
-    if (!noteIdRef.current) return;
-    setRecentlyUnchecked({ ids, count: ids.length });
+    if (!noteId) return;
+    setRecentlyUnchecked({ noteId, ids, count: ids.length });
     if (uncheckUndoTimeoutRef.current) clearTimeout(uncheckUndoTimeoutRef.current);
     uncheckUndoTimeoutRef.current = setTimeout(() => {
       uncheckUndoTimeoutRef.current = undefined;
@@ -1787,15 +1812,41 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
     const rec = recentlyUnchecked;
     setRecentlyUnchecked(null);
-    if (rec) void setItemsCompletedLocallyAndRemotely(rec.ids, true);
+    // Guard against the note having changed under the bar: only re-check if the
+    // snapshot still belongs to the note currently open.
+    if (rec && rec.noteId === noteIdRef.current) {
+      void setItemsCompletedLocallyAndRemotely(rec.ids, true);
+    }
   }, [recentlyUnchecked, setItemsCompletedLocallyAndRemotely]);
 
   // Removes the given items from the local model and diff baseline once their
-  // deferred delete has actually landed (or on a fresh new-note save), so the
-  // diff engine treats them as gone rather than re-deleting them per-item.
-  const finalizeCompletedDeletion = useCallback((ids: Set<string>) => {
-    commitItems(itemsRef.current.filter(item => !ids.has(item.id)));
+  // deferred delete has actually landed, so the diff engine treats them as gone
+  // rather than re-deleting them per-item. When the server returns the remaining
+  // items (it re-homes children orphaned by deleting their parent), their
+  // authoritative parent/completed state is merged in — otherwise a surviving
+  // child would keep a parentId pointing at a now-deleted parent, since this
+  // client suppresses its own SSE echo. Local text edits are preserved.
+  const finalizeCompletedDeletion = useCallback((ids: Set<string>, serverItems?: NoteItem[]) => {
+    const serverById = new Map((serverItems ?? []).map(item => [item.id, item]));
+    const next = itemsRef.current
+      .filter(item => !ids.has(item.id))
+      .map(item => {
+        const server = serverById.get(item.id);
+        if (!server) return item;
+        const parentId = server.parent_id ?? null;
+        if (parentId === item.parentId && server.completed === item.completed) return item;
+        return { ...item, parentId, completed: server.completed };
+      });
+    commitItems(next);
     for (const id of ids) savedItemsRef.current.delete(id);
+    // Advance the baseline for any reconciled item so the diff engine does not
+    // try to "restore" the pre-delete parent/completed on the next save.
+    for (const item of next) {
+      const snap = savedItemsRef.current.get(item.id);
+      if (snap && (snap.parentId !== item.parentId || snap.completed !== item.completed)) {
+        savedItemsRef.current.set(item.id, { ...snap, parentId: item.parentId, completed: item.completed });
+      }
+    }
     savedOrderRef.current = savedOrderRef.current.filter(id => !ids.has(id));
     setRemovedCompletedItems(prev => prev.filter(item => !ids.has(item.id)));
   }, [commitItems]);
@@ -1821,8 +1872,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     const timeoutId = setTimeout(() => {
       pendingCompletedDeletesRef.current.delete(noteId);
       notes.deleteItems(noteId, [...ids])
-        .then(() => {
-          finalizeCompletedDeletion(ids);
+        .then((remaining) => {
+          finalizeCompletedDeletion(ids, remaining);
           onRefresh?.();
         })
         .catch((error) => {

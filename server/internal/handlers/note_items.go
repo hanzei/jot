@@ -403,10 +403,17 @@ func (h *NotesHandler) ToggleNoteItemCompleted(w http.ResponseWriter, r *http.Re
 	return http.StatusOK, items, nil
 }
 
-// validateItemIDs checks that a bulk item-ID list is present and well-formed.
+// validateItemIDs checks that a bulk item-ID list is present, well-formed, and
+// not larger than a note can hold. The cap bounds how many per-item queries a
+// single bulk request can run (a practical guard against accidental overload,
+// per the project threat model); noteItemsMaxCount is the natural ceiling since
+// a note can never contain more items than that.
 func validateItemIDs(itemIDs []string) (int, error) {
 	if len(itemIDs) == 0 {
 		return http.StatusBadRequest, errors.New("empty item IDs list")
+	}
+	if len(itemIDs) > noteItemsMaxCount {
+		return http.StatusBadRequest, fmt.Errorf("cannot operate on more than %d items at once", noteItemsMaxCount)
 	}
 	for _, id := range itemIDs {
 		if !models.IsValidID(id) {
@@ -418,15 +425,15 @@ func validateItemIDs(itemIDs []string) (int, error) {
 
 // SetNoteItemsCompletedRequest is the body for POST /notes/{id}/items/set-completed.
 type SetNoteItemsCompletedRequest struct {
-	ItemIDs []string `json:"item_ids"`
+	ItemIDs []string `json:"item_ids" validate:"required"`
 	// Completed is a pointer so an omitted field is rejected rather than
 	// silently decoding to false.
-	Completed *bool `json:"completed"`
+	Completed *bool `json:"completed" validate:"required"`
 }
 
 // DeleteNoteItemsRequest is the body for POST /notes/{id}/items/delete.
 type DeleteNoteItemsRequest struct {
-	ItemIDs []string `json:"item_ids"`
+	ItemIDs []string `json:"item_ids" validate:"required"`
 }
 
 // SetNoteItemsCompleted godoc

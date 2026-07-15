@@ -120,6 +120,8 @@ definitions:
         items:
           type: string
         type: array
+    required:
+    - item_ids
     type: object
   handlers.DeleteUserNotesResponse:
     properties:
@@ -228,6 +230,9 @@ definitions:
         items:
           type: string
         type: array
+    required:
+    - completed
+    - item_ids
     type: object
   handlers.ShareNoteRequest:
     properties:
