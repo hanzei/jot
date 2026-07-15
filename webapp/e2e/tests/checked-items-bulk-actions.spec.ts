@@ -12,8 +12,11 @@ test.describe('Checked-item bulk actions', () => {
     page.locator('[data-testid="list-item-row"] input[type="checkbox"]').nth(index);
 
   // Checks the first active item and waits for the completed section to appear.
+  // A single forced click checks exactly one item: a plain .check() would
+  // re-resolve nth(0) as the checked item reflows into the completed section and
+  // end up clicking (and completing) every item in turn.
   const checkFirstItem = async (page: import('@playwright/test').Page) => {
-    await rowCheckbox(page, 0).check();
+    await rowCheckbox(page, 0).click({ force: true });
     await expect(page.getByText(/Completed items/)).toBeVisible();
   };
 
@@ -43,7 +46,11 @@ test.describe('Checked-item bulk actions', () => {
     await dashboardPage.createListNote('Chores', ['Sweep', 'Mop', 'Dust']);
     await dashboardPage.openNote('Chores');
 
+    // Complete two items (the first reflows into the completed section, so the
+    // second forced click lands on what is now the first active row).
     await checkFirstItem(page);
+    await rowCheckbox(page, 0).click({ force: true });
+    await expect(page.getByText('Completed items (2)')).toBeVisible();
 
     await dashboardPage.uncheckAllItemsFromModal();
 
