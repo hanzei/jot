@@ -133,7 +133,7 @@ func (h *NotesHandler) publishPersonalizedNoteEventWithType(ctx context.Context,
 			Type:         eventType,
 			SourceUserID: sourceUserID,
 			ClientID:     clientID,
-			Data:         sse.NoteEventData{NoteID: noteID, Note: models.NewNoteResponse(*n)},
+			Data:         sse.NoteEventData{NoteID: noteID, Note: models.NewNoteResponse(ctx, *n)},
 		})
 	}
 }
@@ -350,7 +350,7 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, an
 		return http.StatusInternalServerError, nil, fmt.Errorf("get notes: %w", err)
 	}
 
-	return http.StatusOK, models.NewNoteResponses(notes), nil
+	return http.StatusOK, models.NewNoteResponses(r.Context(), notes), nil
 }
 
 // CreateNote godoc
@@ -430,7 +430,7 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 	}
 
 	h.notesCreated.Add(r.Context(), 1)
-	sanitized := models.NewNoteResponse(*note)
+	sanitized := models.NewNoteResponse(r.Context(), *note)
 	h.publishNoteEvent(r.Context(), note.ID, sse.EventNoteCreated, sanitized, user.ID)
 	return http.StatusCreated, sanitized, nil
 }
@@ -470,7 +470,7 @@ func (h *NotesHandler) GetNote(w http.ResponseWriter, r *http.Request) (int, any
 		return http.StatusInternalServerError, nil, fmt.Errorf("get note: %w", err)
 	}
 
-	return http.StatusOK, models.NewNoteResponse(*note), nil
+	return http.StatusOK, models.NewNoteResponse(r.Context(), *note), nil
 }
 
 // DuplicateNoteRequest is the optional request body for the duplicate endpoint.
@@ -560,7 +560,7 @@ func (h *NotesHandler) DuplicateNote(w http.ResponseWriter, r *http.Request) (in
 		return http.StatusInternalServerError, nil, fmt.Errorf("duplicate note: %w", err)
 	}
 
-	sanitized := models.NewNoteResponse(*duplicatedNote)
+	sanitized := models.NewNoteResponse(r.Context(), *duplicatedNote)
 	h.publishNoteEvent(r.Context(), duplicatedNote.ID, sse.EventNoteCreated, sanitized, user.ID)
 	h.notesCreated.Add(r.Context(), 1)
 	return http.StatusCreated, sanitized, nil
@@ -691,7 +691,7 @@ func (h *NotesHandler) ConvertNoteType(w http.ResponseWriter, r *http.Request) (
 		}
 	}
 
-	sanitized := models.NewNoteResponse(*converted)
+	sanitized := models.NewNoteResponse(r.Context(), *converted)
 	h.publishUpdateEvent(r.Context(), id, sanitized, user.ID, true)
 	h.notesUpdated.Add(r.Context(), 1)
 	return http.StatusOK, sanitized, nil
@@ -813,7 +813,7 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 	// only need to be delivered to the acting user. (List items are edited via
 	// the dedicated item endpoints, which publish their own events.)
 	hasSharedFieldChange := req.Title != nil || req.Content != nil
-	sanitized := models.NewNoteResponse(*note)
+	sanitized := models.NewNoteResponse(r.Context(), *note)
 	h.publishUpdateEvent(r.Context(), id, sanitized, user.ID, hasSharedFieldChange)
 
 	h.notesUpdated.Add(r.Context(), 1)
@@ -973,7 +973,7 @@ func (h *NotesHandler) RestoreNote(w http.ResponseWriter, r *http.Request) (int,
 	}
 
 	h.notesRestored.Add(r.Context(), 1)
-	sanitized := models.NewNoteResponse(*note)
+	sanitized := models.NewNoteResponse(r.Context(), *note)
 	if audienceIDs, aErr := h.noteStore.GetNoteAudienceIDs(r.Context(), id); aErr == nil {
 		h.publishPersonalizedNoteEvent(r.Context(), id, audienceIDs, user.ID)
 	} else {

@@ -53,7 +53,7 @@ func (h *Handler) handleListNotes(userID string) mcp.ToolHandlerFor[listNotesInp
 		if err != nil {
 			return toolError("list notes: %w", err)
 		}
-		data, err := json.Marshal(models.NewNoteResponses(notes))
+		data, err := json.Marshal(models.NewNoteResponses(ctx, notes))
 		if err != nil {
 			return toolError("marshal notes: %w", err)
 		}
@@ -76,7 +76,7 @@ func (h *Handler) handleGetNote(userID string) mcp.ToolHandlerFor[getNoteInput, 
 		if err != nil {
 			return toolError("get note: %w", err)
 		}
-		data, err := json.Marshal(models.NewNoteResponse(*note))
+		data, err := json.Marshal(models.NewNoteResponse(ctx, *note))
 		if err != nil {
 			return toolError("marshal note: %w", err)
 		}
@@ -107,7 +107,7 @@ func (h *Handler) handleCreateNote(userID string) mcp.ToolHandlerFor[createNoteI
 		if err != nil {
 			return toolError("create note: %w", err)
 		}
-		data, err := json.Marshal(models.NewNoteResponse(*note))
+		data, err := json.Marshal(models.NewNoteResponse(ctx, *note))
 		if err != nil {
 			return toolError("marshal note: %w", err)
 		}
@@ -139,7 +139,7 @@ func (h *Handler) handleUpdateNote(userID string) mcp.ToolHandlerFor[updateNoteI
 		if err != nil {
 			return toolError("get updated note: %w", err)
 		}
-		data, err := json.Marshal(models.NewNoteResponse(*note))
+		data, err := json.Marshal(models.NewNoteResponse(ctx, *note))
 		if err != nil {
 			return toolError("marshal note: %w", err)
 		}

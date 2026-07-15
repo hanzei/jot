@@ -58,7 +58,7 @@ func (h *LabelsHandler) publishLabelNoteUpdates(ctx context.Context, noteIDs []s
 			Type:         sse.EventNoteUpdated,
 			SourceUserID: userID,
 			ClientID:     clientIDFromContext(ctx),
-			Data:         sse.NoteEventData{NoteID: noteID, Note: models.NewNoteResponse(*note)},
+			Data:         sse.NoteEventData{NoteID: noteID, Note: models.NewNoteResponse(ctx, *note)},
 		})
 	}
 }
@@ -286,7 +286,7 @@ func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, a
 	if err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("get note: %w", err)
 	}
-	response := models.NewNoteResponse(*note)
+	response := models.NewNoteResponse(r.Context(), *note)
 
 	if h.hub != nil {
 		h.hub.Publish(r.Context(), []string{user.ID}, sse.Event{
@@ -333,7 +333,7 @@ func (h *LabelsHandler) RemoveLabel(w http.ResponseWriter, r *http.Request) (int
 	if err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("get note: %w", err)
 	}
-	response := models.NewNoteResponse(*note)
+	response := models.NewNoteResponse(r.Context(), *note)
 
 	if h.hub != nil {
 		h.hub.Publish(r.Context(), []string{user.ID}, sse.Event{

@@ -1,9 +1,10 @@
 package models
 
 import (
+	"context"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/hanzei/jot/server/internal/logutil"
 )
 
 // noteCommon holds the fields shared by both note-response variants; it is
@@ -76,7 +77,7 @@ type ListNoteResponse struct {
 // write time (CreateNote, ConvertNoteType); an unrecognized value here would
 // indicate a data inconsistency, so it is logged and falls back to the text
 // shape rather than panicking.
-func NewNoteResponse(n Note) any {
+func NewNoteResponse(ctx context.Context, n Note) any {
 	if n.NoteType == NoteTypeList {
 		items := n.Items
 		if items == nil {
@@ -91,7 +92,7 @@ func NewNoteResponse(n Note) any {
 	}
 
 	if n.NoteType != NoteTypeText {
-		logrus.Warnf("NewNoteResponse: unknown note type %q for note %s, serializing as text", n.NoteType, n.ID)
+		logutil.FromContext(ctx).WithField("note_id", n.ID).Warnf("NewNoteResponse: unknown note type %q, serializing as text", n.NoteType)
 	}
 
 	return TextNoteResponse{
@@ -102,10 +103,10 @@ func NewNoteResponse(n Note) any {
 
 // NewNoteResponses maps NewNoteResponse over a slice of note pointers, as
 // returned by the note store's list queries.
-func NewNoteResponses(notes []*Note) []any {
+func NewNoteResponses(ctx context.Context, notes []*Note) []any {
 	responses := make([]any, len(notes))
 	for i, n := range notes {
-		responses[i] = NewNoteResponse(*n)
+		responses[i] = NewNoteResponse(ctx, *n)
 	}
 	return responses
 }

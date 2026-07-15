@@ -3,6 +3,7 @@ package client
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -140,12 +141,16 @@ func (n *Note) MarshalJSON() ([]byte, error) {
 		if n.List == nil {
 			return nil, errors.New("client: list note has nil List fields")
 		}
+		items := n.List.Items
+		if items == nil {
+			items = []NoteItem{}
+		}
 		return json.Marshal(struct {
 			noteCommon
 			Title                 string     `json:"title"`
 			Items                 []NoteItem `json:"items"`
 			CheckedItemsCollapsed bool       `json:"checked_items_collapsed"`
-		}{n.common(), n.List.Title, n.List.Items, n.List.CheckedItemsCollapsed})
+		}{n.common(), n.List.Title, items, n.List.CheckedItemsCollapsed})
 	}
 	if n.Text == nil {
 		return nil, errors.New("client: text note has nil Text fields")
@@ -161,7 +166,7 @@ func (n *Note) MarshalJSON() ([]byte, error) {
 func (n *Note) UnmarshalJSON(data []byte) error {
 	var common noteCommon
 	if err := json.Unmarshal(data, &common); err != nil {
-		return err
+		return fmt.Errorf("unmarshal note common fields: %w", err)
 	}
 
 	*n = Note{
@@ -189,7 +194,7 @@ func (n *Note) UnmarshalJSON(data []byte) error {
 			CheckedItemsCollapsed bool       `json:"checked_items_collapsed"`
 		}
 		if err := json.Unmarshal(data, &list); err != nil {
-			return err
+			return fmt.Errorf("unmarshal list note fields: %w", err)
 		}
 		n.List = &ListNoteFields{Title: list.Title, Items: list.Items, CheckedItemsCollapsed: list.CheckedItemsCollapsed}
 		return nil
@@ -199,7 +204,7 @@ func (n *Note) UnmarshalJSON(data []byte) error {
 		Content string `json:"content"`
 	}
 	if err := json.Unmarshal(data, &text); err != nil {
-		return err
+		return fmt.Errorf("unmarshal text note fields: %w", err)
 	}
 	n.Text = &TextNoteFields{Content: text.Content}
 	return nil

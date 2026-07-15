@@ -129,7 +129,7 @@ func (h *Handler) handleAddLabelToNote(userID string) mcp.ToolHandlerFor[addLabe
 		if err != nil {
 			return toolError("get note after label add: %w", err)
 		}
-		data, err := json.Marshal(models.NewNoteResponse(*note))
+		data, err := json.Marshal(models.NewNoteResponse(ctx, *note))
 		if err != nil {
 			return toolError("marshal note: %w", err)
 		}
@@ -159,7 +159,7 @@ func (h *Handler) handleRemoveLabelFromNote(userID string) mcp.ToolHandlerFor[re
 		if err != nil {
 			return toolError("get note after label remove: %w", err)
 		}
-		data, err := json.Marshal(models.NewNoteResponse(*note))
+		data, err := json.Marshal(models.NewNoteResponse(ctx, *note))
 		if err != nil {
 			return toolError("marshal note: %w", err)
 		}
