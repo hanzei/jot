@@ -141,6 +141,16 @@ export const notes = {
   // caller to reconcile every affected item from one response.
   toggleItemCompleted: (noteId: string, itemId: string, completed: boolean): Promise<NoteItem[]> =>
     api.post(`/notes/${noteId}/items/${itemId}/toggle-completed`, { completed }).then(res => res.data),
+
+  // Bulk operations over an explicit set of item IDs. Each is one atomic server
+  // request (rather than a per-item burst) and returns the note's item list for
+  // the caller to reconcile from a single response. Callers pass the exact set
+  // they captured, so an item toggled after the click is never affected.
+  setItemsCompleted: (noteId: string, itemIds: string[], completed: boolean): Promise<NoteItem[]> =>
+    api.post(`/notes/${noteId}/items/set-completed`, { item_ids: itemIds, completed }).then(res => res.data),
+
+  deleteItems: (noteId: string, itemIds: string[]): Promise<NoteItem[]> =>
+    api.post(`/notes/${noteId}/items/delete`, { item_ids: itemIds }).then(res => res.data),
 };
 
 export const labels = {

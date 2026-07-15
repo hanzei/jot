@@ -403,6 +403,138 @@ func (h *NotesHandler) ToggleNoteItemCompleted(w http.ResponseWriter, r *http.Re
 	return http.StatusOK, items, nil
 }
 
+// validateItemIDs checks that a bulk item-ID list is present, well-formed, and
+// not larger than a note can hold. The cap bounds how many per-item queries a
+// single bulk request can run (a practical guard against accidental overload,
+// per the project threat model); noteItemsMaxCount is the natural ceiling since
+// a note can never contain more items than that.
+func validateItemIDs(itemIDs []string) (int, error) {
+	if len(itemIDs) == 0 {
+		return http.StatusBadRequest, errors.New("empty item IDs list")
+	}
+	if len(itemIDs) > noteItemsMaxCount {
+		return http.StatusBadRequest, fmt.Errorf("cannot operate on more than %d items at once", noteItemsMaxCount)
+	}
+	for _, id := range itemIDs {
+		if !models.IsValidID(id) {
+			return http.StatusBadRequest, errors.New("invalid item ID format")
+		}
+	}
+	return http.StatusOK, nil
+}
+
+// SetNoteItemsCompletedRequest is the body for POST /notes/{id}/items/set-completed.
+type SetNoteItemsCompletedRequest struct {
+	ItemIDs []string `json:"item_ids" validate:"required"`
+	// Completed is a pointer so an omitted field is rejected rather than
+	// silently decoding to false.
+	Completed *bool `json:"completed" validate:"required"`
+}
+
+// DeleteNoteItemsRequest is the body for POST /notes/{id}/items/delete.
+type DeleteNoteItemsRequest struct {
+	ItemIDs []string `json:"item_ids" validate:"required"`
+}
+
+// SetNoteItemsCompleted godoc
+//
+//	@Summary	Set the completed flag on a set of list items
+//	@Description	Sets completed to the given value on each of the named items (no cascade) and returns the note's full item list. Used for bulk "uncheck all" (completed=false) and its undo (completed=true); callers pass the complete set they want changed.
+//	@Tags		notes
+//	@Security	CookieAuth
+//	@Accept		json
+//	@Produce	json
+//	@Param		id		path		string							true	"Note ID"
+//	@Param		body	body		SetNoteItemsCompletedRequest	true	"Item IDs and target completed state"
+//	@Success	200		{array}		models.NoteItem
+//	@Failure	400		{string}	string	"bad request"
+//	@Failure	401		{string}	string	"unauthorized"
+//	@Failure	404		{string}	string	"not found"
+//	@Failure	500		{string}	string	"internal server error"
+//	@Router		/notes/{id}/items/set-completed [post]
+func (h *NotesHandler) SetNoteItemsCompleted(w http.ResponseWriter, r *http.Request) (int, any, error) {
+	user, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	}
+
+	noteID := chi.URLParam(r, "id")
+	if !models.IsValidID(noteID) {
+		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
+	}
+
+	if _, status, err := h.loadListNoteForItemOp(r.Context(), noteID, user.ID); err != nil {
+		return status, nil, err
+	}
+
+	var req SetNoteItemsCompletedRequest
+	if err := decodeJSONBody(w, r, &req); err != nil {
+		return http.StatusBadRequest, nil, err
+	}
+	if req.Completed == nil {
+		return http.StatusBadRequest, nil, errors.New("completed is required")
+	}
+	if status, err := validateItemIDs(req.ItemIDs); err != nil {
+		return status, nil, err
+	}
+
+	items, err := h.noteStore.SetItemsCompleted(r.Context(), noteID, req.ItemIDs, *req.Completed)
+	if err != nil {
+		return http.StatusInternalServerError, nil, fmt.Errorf("set items completed: %w", err)
+	}
+
+	h.publishItemChangeEvent(r.Context(), noteID, user.ID)
+	return http.StatusOK, items, nil
+}
+
+// DeleteNoteItems godoc
+//
+//	@Summary	Delete a set of list items
+//	@Description	Deletes each of the named items and returns the note's remaining items. Used for bulk "delete checked items"; the caller passes the item IDs it captured.
+//	@Tags		notes
+//	@Security	CookieAuth
+//	@Accept		json
+//	@Produce	json
+//	@Param		id		path		string					true	"Note ID"
+//	@Param		body	body		DeleteNoteItemsRequest	true	"Item IDs to delete"
+//	@Success	200		{array}		models.NoteItem
+//	@Failure	400		{string}	string	"bad request"
+//	@Failure	401		{string}	string	"unauthorized"
+//	@Failure	404		{string}	string	"not found"
+//	@Failure	500		{string}	string	"internal server error"
+//	@Router		/notes/{id}/items/delete [post]
+func (h *NotesHandler) DeleteNoteItems(w http.ResponseWriter, r *http.Request) (int, any, error) {
+	user, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	}
+
+	noteID := chi.URLParam(r, "id")
+	if !models.IsValidID(noteID) {
+		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
+	}
+
+	if _, status, err := h.loadListNoteForItemOp(r.Context(), noteID, user.ID); err != nil {
+		return status, nil, err
+	}
+
+	var req DeleteNoteItemsRequest
+	if err := decodeJSONBody(w, r, &req); err != nil {
+		return http.StatusBadRequest, nil, err
+	}
+	if status, err := validateItemIDs(req.ItemIDs); err != nil {
+		return status, nil, err
+	}
+
+	items, err := h.noteStore.DeleteItems(r.Context(), noteID, req.ItemIDs)
+	if err != nil {
+		return http.StatusInternalServerError, nil, fmt.Errorf("delete items: %w", err)
+	}
+
+	h.publishItemChangeEvent(r.Context(), noteID, user.ID)
+	return http.StatusOK, items, nil
+}
+
 // publishItemChangeEvent broadcasts a personalized note_updated event to every
 // collaborator after an item-level change. Items are shared content, so each
 // audience member receives their own personalized copy of the note (preserving

@@ -1722,6 +1722,79 @@ const docTemplate = `{
                 ]
             }
         },
+        "/notes/{id}/items/delete": {
+            "post": {
+                "description": "Deletes each of the named items and returns the note's remaining items. Used for bulk \"delete checked items\"; the caller passes the item IDs it captured.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notes"
+                ],
+                "summary": "Delete a set of list items",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Note ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Item IDs to delete",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.DeleteNoteItemsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.NoteItem"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ]
+            }
+        },
         "/notes/{id}/items/reorder": {
             "post": {
                 "consumes": [
@@ -1752,6 +1825,79 @@ const docTemplate = `{
                 "responses": {
                     "204": {
                         "description": "no content"
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/notes/{id}/items/set-completed": {
+            "post": {
+                "description": "Sets completed to the given value on each of the named items (no cascade) and returns the note's full item list. Used for bulk \"uncheck all\" (completed=false) and its undo (completed=true); callers pass the complete set they want changed.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notes"
+                ],
+                "summary": "Set the completed flag on a set of list items",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Note ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Item IDs and target completed state",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.SetNoteItemsCompletedRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.NoteItem"
+                            }
+                        }
                     },
                     "400": {
                         "description": "bad request",
@@ -3095,6 +3241,20 @@ const docTemplate = `{
                 }
             }
         },
+        "handlers.DeleteNoteItemsRequest": {
+            "type": "object",
+            "required": [
+                "item_ids"
+            ],
+            "properties": {
+                "item_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "handlers.DeleteUserNotesResponse": {
             "type": "object",
             "properties": {
@@ -3241,6 +3401,25 @@ const docTemplate = `{
                 },
                 "os": {
                     "type": "string"
+                }
+            }
+        },
+        "handlers.SetNoteItemsCompletedRequest": {
+            "type": "object",
+            "required": [
+                "completed",
+                "item_ids"
+            ],
+            "properties": {
+                "completed": {
+                    "description": "Completed is a pointer so an omitted field is rejected rather than\nsilently decoding to false.",
+                    "type": "boolean"
+                },
+                "item_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },

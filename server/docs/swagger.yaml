@@ -114,6 +114,15 @@ definitions:
       username:
         type: string
     type: object
+  handlers.DeleteNoteItemsRequest:
+    properties:
+      item_ids:
+        items:
+          type: string
+        type: array
+    required:
+    - item_ids
+    type: object
   handlers.DeleteUserNotesResponse:
     properties:
       deleted:
@@ -209,6 +218,21 @@ definitions:
         type: boolean
       os:
         type: string
+    type: object
+  handlers.SetNoteItemsCompletedRequest:
+    properties:
+      completed:
+        description: |-
+          Completed is a pointer so an omitted field is rejected rather than
+          silently decoding to false.
+        type: boolean
+      item_ids:
+        items:
+          type: string
+        type: array
+    required:
+    - completed
+    - item_ids
     type: object
   handlers.ShareNoteRequest:
     properties:
@@ -1687,6 +1711,55 @@ paths:
       summary: Toggle a list item's completed state, cascading to children
       tags:
       - notes
+  /notes/{id}/items/delete:
+    post:
+      consumes:
+      - application/json
+      description: Deletes each of the named items and returns the note's remaining
+        items. Used for bulk "delete checked items"; the caller passes the item IDs
+        it captured.
+      parameters:
+      - description: Note ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Item IDs to delete
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.DeleteNoteItemsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.NoteItem'
+            type: array
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Delete a set of list items
+      tags:
+      - notes
   /notes/{id}/items/reorder:
     post:
       consumes:
@@ -1725,6 +1798,56 @@ paths:
       security:
       - CookieAuth: []
       summary: Reorder a list note's items
+      tags:
+      - notes
+  /notes/{id}/items/set-completed:
+    post:
+      consumes:
+      - application/json
+      description: Sets completed to the given value on each of the named items (no
+        cascade) and returns the note's full item list. Used for bulk "uncheck all"
+        (completed=false) and its undo (completed=true); callers pass the complete
+        set they want changed.
+      parameters:
+      - description: Note ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Item IDs and target completed state
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.SetNoteItemsCompletedRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.NoteItem'
+            type: array
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Set the completed flag on a set of list items
       tags:
       - notes
   /notes/{id}/labels:
