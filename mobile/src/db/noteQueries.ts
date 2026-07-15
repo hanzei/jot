@@ -882,6 +882,27 @@ export async function reorderLocalItems(db: SQLiteDatabase, noteId: string, item
   });
 }
 
+export async function setLocalItemsCompleted(db: SQLiteDatabase, noteId: string, itemIds: string[], completed: boolean): Promise<void> {
+  if (itemIds.length === 0) return;
+  const now = new Date().toISOString();
+  await withSerializedTransaction(db, async () => {
+    for (const id of itemIds) {
+      await db.runAsync('UPDATE note_items SET completed = ?, updated_at = ? WHERE id = ? AND note_id = ?', [completed ? 1 : 0, now, id, noteId]);
+    }
+    await touchLocalNote(db, noteId);
+  });
+}
+
+export async function deleteLocalItems(db: SQLiteDatabase, noteId: string, itemIds: string[]): Promise<void> {
+  if (itemIds.length === 0) return;
+  await withSerializedTransaction(db, async () => {
+    for (const id of itemIds) {
+      await db.runAsync('DELETE FROM note_items WHERE id = ? AND note_id = ?', [id, noteId]);
+    }
+    await touchLocalNote(db, noteId);
+  });
+}
+
 // Mirrors the server's ID alphabet/length (see server internal/models/id.go) so a
 // client-generated note ID is accepted as-is by the server.
 const SERVER_ID_CHARS = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';

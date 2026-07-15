@@ -1,7 +1,7 @@
 import React from 'react';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useCreateNote, useUpdateNote, useDeleteNote, useDuplicateNote, useConvertNoteType, useCreateNoteItem, useToggleNoteItemCompleted, useShareNote, useUnshareNote } from '../src/hooks/useNotes';
+import { useCreateNote, useUpdateNote, useDeleteNote, useDuplicateNote, useConvertNoteType, useCreateNoteItem, useToggleNoteItemCompleted, useUncheckAllItems, useDeleteCompletedItems, useShareNote, useUnshareNote } from '../src/hooks/useNotes';
 import { noteLocalQueryKey, notesLocalQueryKey, notesLocalQueryScopeKey } from '../src/hooks/queryKeys';
 import * as notesApi from '../src/api/notes';
 import * as usersApi from '../src/api/users';
@@ -38,6 +38,8 @@ jest.mock('../src/db/noteQueries', () => ({
   patchLocalItem: jest.fn().mockResolvedValue(undefined),
   deleteLocalItem: jest.fn().mockResolvedValue(undefined),
   reorderLocalItems: jest.fn().mockResolvedValue(undefined),
+  setLocalItemsCompleted: jest.fn().mockResolvedValue(undefined),
+  deleteLocalItems: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('../src/db/syncQueue', () => ({
@@ -624,6 +626,70 @@ describe('useNotes hooks', () => {
       );
     });
 
+    it('useUncheckAllItems falls back to the local queue on a transient failure', async () => {
+      mockNotesApi.uncheckAllItems.mockRejectedValueOnce(makeAxiosError(503));
+
+      const { result } = renderHook(() => useUncheckAllItems(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync({ noteId: 'n1', itemIds: ['i1', 'i2'] });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(mockNoteQueries.setLocalItemsCompleted).toHaveBeenCalledWith(expect.anything(), 'n1', ['i1', 'i2'], false);
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          operation: 'uncheckAllItems',
+          endpoint: '/notes/n1/items/set-completed',
+          method: 'POST',
+          body: { item_ids: ['i1', 'i2'], completed: false },
+        }),
+      );
+    });
+
+    it('useUncheckAllItems surfaces a permanent failure (4xx) without queuing', async () => {
+      mockNotesApi.uncheckAllItems.mockRejectedValueOnce(makeAxiosError(400));
+
+      const { result } = renderHook(() => useUncheckAllItems(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync({ noteId: 'n1', itemIds: ['i1'] }).catch(() => {});
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
+    });
+
+    it('useDeleteCompletedItems falls back to the local queue on a transient failure', async () => {
+      mockNotesApi.deleteCompletedItems.mockRejectedValueOnce(makeAxiosError(503));
+
+      const { result } = renderHook(() => useDeleteCompletedItems(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync({ noteId: 'n1', itemIds: ['i1', 'i2'] });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(mockNoteQueries.deleteLocalItems).toHaveBeenCalledWith(expect.anything(), 'n1', ['i1', 'i2']);
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          operation: 'deleteCompletedItems',
+          endpoint: '/notes/n1/items/delete',
+          method: 'POST',
+          body: { item_ids: ['i1', 'i2'] },
+        }),
+      );
+    });
+
+    it('useDeleteCompletedItems surfaces a permanent failure (4xx) without queuing', async () => {
+      mockNotesApi.deleteCompletedItems.mockRejectedValueOnce(makeAxiosError(400));
+
+      const { result } = renderHook(() => useDeleteCompletedItems(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync({ noteId: 'n1', itemIds: ['i1'] }).catch(() => {});
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
+    });
+
     it('useCreateNoteItem surfaces a permanent failure (4xx) without queuing', async () => {
       mockNotesApi.createNoteItem.mockRejectedValueOnce(makeAxiosError(400));
 
@@ -816,6 +882,108 @@ describe('useNotes hooks', () => {
       const cached = queryClient.getQueryData(noteLocalQueryKey('n1')) as { items: Array<{ id: string; completed: boolean }> };
       expect(cached.items.find((i) => i.id === 'p')!.completed).toBe(false);
       expect(cached.items.find((i) => i.id === 'c')!.completed).toBe(false);
+      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
+    });
+
+    it('useUncheckAllItems unchecks exactly the given ids in the cache before the request resolves', async () => {
+      const { wrapper, queryClient } = createWrapperWithClient();
+      const completedListNote = {
+        ...listNote,
+        items: [
+          { ...listNote.items[0], completed: true },
+          { ...listNote.items[1], completed: true },
+        ],
+      };
+      queryClient.setQueryData(noteLocalQueryKey('n1'), completedListNote);
+
+      const pending = deferred<unknown[]>();
+      mockNotesApi.uncheckAllItems.mockReset();
+      mockNotesApi.uncheckAllItems.mockReturnValueOnce(pending.promise as never);
+
+      const { result } = renderHook(() => useUncheckAllItems(), { wrapper });
+      result.current.mutate({ noteId: 'n1', itemIds: ['p', 'c'] });
+
+      await waitFor(() => {
+        const cached = queryClient.getQueryData(noteLocalQueryKey('n1')) as { items: Array<{ id: string; completed: boolean }> };
+        expect(cached.items.find((i) => i.id === 'p')!.completed).toBe(false);
+        expect(cached.items.find((i) => i.id === 'c')!.completed).toBe(false);
+      });
+      expect(mockNotesApi.uncheckAllItems).toHaveBeenCalledWith('n1', ['p', 'c']);
+
+      pending.resolve([]);
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    });
+
+    it('useUncheckAllItems rolls back the optimistic uncheck on a permanent failure', async () => {
+      const { wrapper, queryClient } = createWrapperWithClient();
+      const completedListNote = {
+        ...listNote,
+        items: [
+          { ...listNote.items[0], completed: true },
+          { ...listNote.items[1], completed: true },
+        ],
+      };
+      queryClient.setQueryData(noteLocalQueryKey('n1'), completedListNote);
+      mockNotesApi.uncheckAllItems.mockRejectedValueOnce(makeAxiosError(404));
+
+      const { result } = renderHook(() => useUncheckAllItems(), { wrapper });
+      await result.current.mutateAsync({ noteId: 'n1', itemIds: ['p', 'c'] }).catch(() => {});
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      const cached = queryClient.getQueryData(noteLocalQueryKey('n1')) as { items: Array<{ id: string; completed: boolean }> };
+      expect(cached.items.find((i) => i.id === 'p')!.completed).toBe(true);
+      expect(cached.items.find((i) => i.id === 'c')!.completed).toBe(true);
+      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
+    });
+
+    it('useDeleteCompletedItems removes exactly the given ids from the cache before the request resolves', async () => {
+      const { wrapper, queryClient } = createWrapperWithClient();
+      const completedListNote = {
+        ...listNote,
+        items: [
+          { ...listNote.items[0], completed: true },
+          { ...listNote.items[1], completed: true },
+        ],
+      };
+      queryClient.setQueryData(noteLocalQueryKey('n1'), completedListNote);
+
+      const pending = deferred<unknown[]>();
+      mockNotesApi.deleteCompletedItems.mockReset();
+      mockNotesApi.deleteCompletedItems.mockReturnValueOnce(pending.promise as never);
+
+      const { result } = renderHook(() => useDeleteCompletedItems(), { wrapper });
+      result.current.mutate({ noteId: 'n1', itemIds: ['p', 'c'] });
+
+      await waitFor(() => {
+        const cached = queryClient.getQueryData(noteLocalQueryKey('n1')) as { items: Array<{ id: string }> };
+        expect(cached.items).toHaveLength(0);
+      });
+      expect(mockNotesApi.deleteCompletedItems).toHaveBeenCalledWith('n1', ['p', 'c']);
+
+      pending.resolve([]);
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    });
+
+    it('useDeleteCompletedItems rolls back the optimistic delete on a permanent failure', async () => {
+      const { wrapper, queryClient } = createWrapperWithClient();
+      const completedListNote = {
+        ...listNote,
+        items: [
+          { ...listNote.items[0], completed: true },
+          { ...listNote.items[1], completed: true },
+        ],
+      };
+      queryClient.setQueryData(noteLocalQueryKey('n1'), completedListNote);
+      mockNotesApi.deleteCompletedItems.mockRejectedValueOnce(makeAxiosError(404));
+
+      const { result } = renderHook(() => useDeleteCompletedItems(), { wrapper });
+      await result.current.mutateAsync({ noteId: 'n1', itemIds: ['p', 'c'] }).catch(() => {});
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      const cached = queryClient.getQueryData(noteLocalQueryKey('n1')) as { items: Array<{ id: string }> };
+      expect(cached.items).toHaveLength(2);
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
     });
   });

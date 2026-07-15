@@ -284,7 +284,11 @@
     "filterByLabel": "Filtruj według etykiety: {{label}}",
     "saveFailedExitTitle": "Zapisywanie nie powiodło się",
     "saveFailedExitMessage": "Nie można było zapisać zmian. Spróbuj ponownie lub odrzuć je, aby wyjść.",
-    "discardAndLeave": "Odrzuć i wyjdź"
+    "discardAndLeave": "Odrzuć i wyjdź",
+    "uncheckAllItems": "Odznacz wszystkie elementy",
+    "deleteCheckedItems": "Usuń zaznaczone elementy",
+    "deleteCheckedItemsConfirm_one": "Usunąć {{count}} zaznaczony element? Tej operacji nie można cofnąć.",
+    "deleteCheckedItemsConfirm_other": "Usunąć {{count}} zaznaczone elementy? Tej operacji nie można cofnąć."
   },
   "images": {
     "openLightbox": "Wyświetl {{filename}}",

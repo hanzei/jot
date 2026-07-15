@@ -7,6 +7,7 @@ import {
   saveNotes,
   saveLabels,
   patchLocalItem,
+  deleteLocalItems,
   reconcileServerNotesScope,
   markNoteSyncFailed,
   clearNoteSyncFailed,
@@ -33,6 +34,8 @@ export type QueueOperation =
   | 'deleteItem'
   | 'reorderItems'
   | 'toggleItemCompleted'
+  | 'uncheckAllItems'
+  | 'deleteCompletedItems'
   | 'share'
   | 'unshare'
   | 'createLabel'
@@ -147,6 +150,7 @@ const GONE_IDEMPOTENT_OPERATIONS: ReadonlySet<QueueOperation> = new Set([
   'permanentDelete',
   'restore',
   'deleteItem',
+  'deleteCompletedItems',
   'unshare',
   'removeLabelFromNote',
   'deleteLabel',
@@ -737,6 +741,22 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
               });
             }
           }
+        } else if (entry.operation === 'uncheckAllItems') {
+          // endpoint: /notes/{noteId}/items/set-completed. Returns the note's
+          // full, authoritative item list, like toggleItemCompleted.
+          await reconcileItemsFromResponse(db, endpoint.split('/')[2], response?.data);
+        } else if (entry.operation === 'deleteCompletedItems') {
+          // endpoint: /notes/{noteId}/items/delete. Returns the note's
+          // *remaining* items; any queued id no longer present was deleted (or
+          // never existed) and should be removed locally too.
+          const noteId = endpoint.split('/')[2];
+          const remaining = response?.data;
+          await reconcileItemsFromResponse(db, noteId, remaining);
+          if (Array.isArray(remaining) && Array.isArray(body?.item_ids)) {
+            const remainingIds = new Set((remaining as NoteItem[]).map((item) => item.id));
+            const deletedIds = (body.item_ids as string[]).filter((id) => !remainingIds.has(id));
+            if (deletedIds.length > 0) await deleteLocalItems(db, noteId, deletedIds);
+          }
         } else if (entry.operation === 'share') {
           // Share returns 204 (no body) and the optimistic local note carries a
           // synthetic `optimistic_<userId>` share row; re-fetch the canonical note
@@ -978,6 +998,26 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
 async function saveNoteFromResponse(db: SQLiteDatabase, data: unknown): Promise<void> {
   if (hasStringId(data)) {
     await saveNote(db, data as Note);
+  }
+}
+
+/**
+ * Reconciles every field of each item the server returned during queue drain,
+ * matching the toggleItemCompleted branch: these endpoints return the note's
+ * authoritative item list (set-completed) or remaining items (delete), so a
+ * stale local parent_id/position left by an earlier partial sync gets
+ * corrected too, not just `completed`.
+ */
+async function reconcileItemsFromResponse(db: SQLiteDatabase, noteId: string, items: unknown): Promise<void> {
+  if (!Array.isArray(items)) return;
+  for (const item of items as NoteItem[]) {
+    await patchLocalItem(db, noteId, item.id, {
+      text: item.text,
+      completed: item.completed,
+      position: item.position,
+      parent_id: item.parent_id,
+      assigned_to: item.assigned_to,
+    });
   }
 }
 

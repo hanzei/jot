@@ -284,7 +284,11 @@
     "filterByLabel": "Filtrer par étiquette : {{label}}",
     "saveFailedExitTitle": "Échec de l’enregistrement",
     "saveFailedExitMessage": "Vos modifications n’ont pas pu être enregistrées. Réessayez ou abandonnez-les pour quitter.",
-    "discardAndLeave": "Abandonner et quitter"
+    "discardAndLeave": "Abandonner et quitter",
+    "uncheckAllItems": "Décocher tous les éléments",
+    "deleteCheckedItems": "Supprimer les éléments cochés",
+    "deleteCheckedItemsConfirm_one": "Supprimer {{count}} élément coché ? Cette action est irréversible.",
+    "deleteCheckedItemsConfirm_other": "Supprimer {{count}} éléments cochés ? Cette action est irréversible."
   },
   "images": {
     "openLightbox": "Voir {{filename}}",

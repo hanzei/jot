@@ -284,7 +284,11 @@
     "filterByLabel": "Nach Label filtern: {{label}}",
     "saveFailedExitTitle": "Speichern fehlgeschlagen",
     "saveFailedExitMessage": "Deine Änderungen konnten nicht gespeichert werden. Erneut versuchen oder verwerfen und verlassen.",
-    "discardAndLeave": "Verwerfen & verlassen"
+    "discardAndLeave": "Verwerfen & verlassen",
+    "uncheckAllItems": "Alle Häkchen entfernen",
+    "deleteCheckedItems": "Erledigte Einträge löschen",
+    "deleteCheckedItemsConfirm_one": "{{count}} erledigten Eintrag löschen? Dies kann nicht rückgängig gemacht werden.",
+    "deleteCheckedItemsConfirm_other": "{{count}} erledigte Einträge löschen? Dies kann nicht rückgängig gemacht werden."
   },
   "images": {
     "openLightbox": "{{filename}} anzeigen",

@@ -313,7 +313,11 @@
     "filterByLabel": "Filtra per etichetta: {{label}}",
     "saveFailedExitTitle": "Salvataggio fallito",
     "saveFailedExitMessage": "Le modifiche non hanno potuto essere salvate. Riprova o scartale per uscire.",
-    "discardAndLeave": "Scarta ed esci"
+    "discardAndLeave": "Scarta ed esci",
+    "uncheckAllItems": "Deseleziona tutti gli elementi",
+    "deleteCheckedItems": "Elimina elementi completati",
+    "deleteCheckedItemsConfirm_one": "Eliminare {{count}} elemento completato? Questa azione è irreversibile.",
+    "deleteCheckedItemsConfirm_other": "Eliminare {{count}} elementi completati? Questa azione è irreversibile."
   },
   "images": {
     "openLightbox": "Visualizza {{filename}}",

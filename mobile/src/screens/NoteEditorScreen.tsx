@@ -37,7 +37,7 @@ import { Archive, ArrowLeft, Check, ChevronRight, CircleAlert, EllipsisVertical,
 import { useNavigation, useRoute, RouteProp, type NavigationAction } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
-import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useDuplicateNote, useConvertNoteType, useCreateNoteItem, useUpdateNoteItem, useDeleteNoteItem, useReorderNoteItems, useToggleNoteItemCompleted } from '../hooks/useNotes';
+import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useDuplicateNote, useConvertNoteType, useCreateNoteItem, useUpdateNoteItem, useDeleteNoteItem, useReorderNoteItems, useToggleNoteItemCompleted, useUncheckAllItems, useDeleteCompletedItems } from '../hooks/useNotes';
 import { useOfflineNote } from '../hooks/useOfflineNotes';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { useFailedNoteIds } from '../store/OfflineContext';
@@ -201,6 +201,8 @@ export default function NoteEditorScreen() {
   const deleteItemMutation = useDeleteNoteItem();
   const reorderItemsMutation = useReorderNoteItems();
   const toggleItemCompletedMutation = useToggleNoteItemCompleted();
+  const uncheckAllItemsMutation = useUncheckAllItems();
+  const deleteCompletedItemsMutation = useDeleteCompletedItems();
   const uploadImageMutation = useUploadNoteImage();
   const deleteImageMutation = useDeleteNoteImage();
   const retryPendingImageUploadMutation = useRetryPendingImageUpload();
@@ -412,6 +414,10 @@ export default function NoteEditorScreen() {
   reorderItemsRef.current = reorderItemsMutation.mutateAsync;
   const toggleItemCompletedRef = useRef(toggleItemCompletedMutation.mutateAsync);
   toggleItemCompletedRef.current = toggleItemCompletedMutation.mutateAsync;
+  const uncheckAllItemsRef = useRef(uncheckAllItemsMutation.mutateAsync);
+  uncheckAllItemsRef.current = uncheckAllItemsMutation.mutateAsync;
+  const deleteCompletedItemsRef = useRef(deleteCompletedItemsMutation.mutateAsync);
+  deleteCompletedItemsRef.current = deleteCompletedItemsMutation.mutateAsync;
 
   const displayedImageUploadsRef = useRef(displayedImageUploads);
   displayedImageUploadsRef.current = displayedImageUploads;
@@ -1389,6 +1395,105 @@ export default function NoteEditorScreen() {
     },
     [markDirtyAndScheduleUpdate, t],
   );
+
+  // Unchecks every currently-completed item in one bulk request (overflow
+  // menu). Non-destructive and easy to redo by hand, so no confirmation.
+  const handleUncheckAllItems = useCallback(async () => {
+    const noteId = noteIdRef.current;
+    const before = itemsRef.current;
+    const completed = before.filter((item) => item.completed);
+    if (completed.length === 0) return;
+    const ids = completed.map((item) => item.id);
+
+    const optimistic = before.map((item) => (item.completed ? { ...item, completed: false } : item));
+    itemsRef.current = optimistic;
+    setItems(optimistic);
+
+    if (!noteId) {
+      // Unsaved new note: let the bulk-create carry the completed flags.
+      markDirtyAndScheduleUpdate();
+      return;
+    }
+
+    await withPendingIndicator(async () => {
+      try {
+        const serverItems = await uncheckAllItemsRef.current({ noteId, itemIds: ids });
+        if (serverItems.length > 0) {
+          const completedById = new Map(serverItems.map((item) => [item.id, item.completed]));
+          const reconciled = itemsRef.current.map((item) => {
+            const c = completedById.get(item.id);
+            return c === undefined ? item : { ...item, completed: c };
+          });
+          itemsRef.current = reconciled;
+          setItems(reconciled);
+          for (const [id, comp] of completedById) {
+            const snap = savedItemsRef.current.get(id);
+            if (snap) savedItemsRef.current.set(id, { ...snap, completed: comp });
+          }
+        } else {
+          // Offline: the local write already applied the uncheck; advance the
+          // save baseline so the diff engine does not re-patch it later.
+          for (const id of ids) {
+            const snap = savedItemsRef.current.get(id);
+            if (snap) savedItemsRef.current.set(id, { ...snap, completed: false });
+          }
+        }
+      } catch {
+        const reverted = itemsRef.current.map((item) => (ids.includes(item.id) ? { ...item, completed: true } : item));
+        itemsRef.current = reverted;
+        setItems(reverted);
+        setSaveError(t('note.failedSaveChanges'));
+      }
+    });
+  }, [markDirtyAndScheduleUpdate, t, withPendingIndicator]);
+
+  // Deletes every currently-completed item after a confirm dialog (overflow
+  // menu); mobile has no in-editor undo-bar equivalent to the web's
+  // deferred-delete flow, so this confirms up front instead. Deleting exactly
+  // the completed set never orphans a child: the completed-cascade invariant
+  // (applyCompletedCascade / collectToggleCascade) guarantees a completed
+  // parent's children are completed too, so they are always in the same set.
+  const handleDeleteCompletedItems = useCallback(async () => {
+    const noteId = noteIdRef.current;
+    // Matches web: an unsaved note has no server-side items to delete, and the
+    // eventual bulk-create only carries what's left in `items` at save time.
+    if (!noteId) return;
+    const pendingCount = itemsRef.current.filter((item) => item.completed).length;
+    if (pendingCount === 0) return;
+
+    const confirmed = await confirm({
+      title: t('note.deleteCheckedItems'),
+      message: t('note.deleteCheckedItemsConfirm', { count: pendingCount }),
+      confirmLabel: t('common.delete'),
+      destructive: true,
+    });
+    if (!confirmed) return;
+
+    const before = itemsRef.current;
+    const completed = before.filter((item) => item.completed);
+    if (completed.length === 0) return;
+    const ids = completed.map((item) => item.id);
+    const remaining = before.filter((item) => !item.completed);
+    const beforeSavedItems = new Map(savedItemsRef.current);
+    const beforeSavedOrder = [...savedOrderRef.current];
+
+    itemsRef.current = remaining;
+    setItems(remaining);
+    for (const id of ids) savedItemsRef.current.delete(id);
+    savedOrderRef.current = savedOrderRef.current.filter((id) => !ids.includes(id));
+
+    await withPendingIndicator(async () => {
+      try {
+        await deleteCompletedItemsRef.current({ noteId, itemIds: ids });
+      } catch {
+        itemsRef.current = before;
+        setItems(before);
+        savedItemsRef.current = beforeSavedItems;
+        savedOrderRef.current = beforeSavedOrder;
+        setSaveError(t('note.failedSaveChanges'));
+      }
+    });
+  }, [confirm, t, withPendingIndicator]);
 
   const handleItemTextChange = useCallback(
     (index: number, text: string) => {
@@ -2668,6 +2773,8 @@ export default function NoteEditorScreen() {
         onDuplicate={handleDuplicate}
         onConvert={handleConvertNoteType}
         onManageLabels={openLabelPicker}
+        onUncheckAllItems={noteType === 'list' && checkedItems.length > 0 ? handleUncheckAllItems : undefined}
+        onDeleteCheckedItems={noteType === 'list' && checkedItems.length > 0 ? handleDeleteCompletedItems : undefined}
         onMoveToTrash={handleDelete}
         onRestore={handleRestoreNote}
         onDeletePermanently={handleDeletePermanently}
