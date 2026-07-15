@@ -40,9 +40,11 @@ func TestDuplicateNoteEndpoint(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, owner.User.ID, duplicated.UserID)
-		// Text notes have no title; the duplicate copies the content.
-		assert.Empty(t, duplicated.Title)
-		assert.Equal(t, source.Content, duplicated.Content)
+		// Text notes have no title key at all; the duplicate copies the content.
+		assert.Nil(t, duplicated.List)
+		require.NotNil(t, duplicated.Text)
+		require.NotNil(t, source.Text)
+		assert.Equal(t, source.Text.Content, duplicated.Text.Content)
 		assert.Equal(t, source.Color, duplicated.Color)
 		assert.False(t, duplicated.Pinned)
 		assert.False(t, duplicated.Archived)
@@ -95,7 +97,8 @@ func TestDuplicateNoteEndpoint(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, collaborator.User.ID, duplicated.UserID)
-		assert.Equal(t, "Copy of Shared Tasks", duplicated.Title)
+		require.NotNil(t, duplicated.List)
+		assert.Equal(t, "Copy of Shared Tasks", duplicated.List.Title)
 		assert.Equal(t, client.NoteTypeList, duplicated.NoteType)
 		assert.Equal(t, "#00bcd4", duplicated.Color)
 		assert.False(t, duplicated.Pinned)
@@ -104,19 +107,19 @@ func TestDuplicateNoteEndpoint(t *testing.T) {
 		assert.Empty(t, duplicated.SharedWith)
 		require.Len(t, duplicated.Labels, 1)
 		assert.Equal(t, "collab-label", duplicated.Labels[0].Name)
-		require.Len(t, duplicated.Items, 2)
-		assert.Equal(t, "Outline release", duplicated.Items[0].Text)
-		assert.Equal(t, 0, duplicated.Items[0].Position)
-		assert.Nil(t, duplicated.Items[0].ParentID)
-		assert.False(t, duplicated.Items[0].Completed)
-		assert.Empty(t, duplicated.Items[0].AssignedTo)
-		assert.Equal(t, "Notify team", duplicated.Items[1].Text)
-		assert.Equal(t, 1, duplicated.Items[1].Position)
+		require.Len(t, duplicated.List.Items, 2)
+		assert.Equal(t, "Outline release", duplicated.List.Items[0].Text)
+		assert.Equal(t, 0, duplicated.List.Items[0].Position)
+		assert.Nil(t, duplicated.List.Items[0].ParentID)
+		assert.False(t, duplicated.List.Items[0].Completed)
+		assert.Empty(t, duplicated.List.Items[0].AssignedTo)
+		assert.Equal(t, "Notify team", duplicated.List.Items[1].Text)
+		assert.Equal(t, 1, duplicated.List.Items[1].Position)
 		// The nested child is re-pointed at the duplicated parent's new ID.
-		require.NotNil(t, duplicated.Items[1].ParentID)
-		assert.Equal(t, duplicated.Items[0].ID, *duplicated.Items[1].ParentID)
-		assert.True(t, duplicated.Items[1].Completed)
-		assert.Empty(t, duplicated.Items[1].AssignedTo)
+		require.NotNil(t, duplicated.List.Items[1].ParentID)
+		assert.Equal(t, duplicated.List.Items[0].ID, *duplicated.List.Items[1].ParentID)
+		assert.True(t, duplicated.List.Items[1].Completed)
+		assert.Empty(t, duplicated.List.Items[1].AssignedTo)
 
 		notes, err := collaborator.Client.ListNotes(t.Context(), nil)
 		require.NoError(t, err)
@@ -137,18 +140,19 @@ func TestCreateNotePersistsCompletedItems(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	require.Len(t, created.Items, 2)
-	assert.False(t, created.Items[0].Completed)
-	assert.True(t, created.Items[1].Completed)
+	require.NotNil(t, created.List)
+	require.Len(t, created.List.Items, 2)
+	assert.False(t, created.List.Items[0].Completed)
+	assert.True(t, created.List.Items[1].Completed)
 
 	fetched, err := user.Client.GetNote(t.Context(), created.ID)
 	require.NoError(t, err)
-	require.Len(t, fetched.Items, 2)
-	assert.False(t, fetched.Items[0].Completed)
-	assert.Nil(t, fetched.Items[0].ParentID)
-	assert.True(t, fetched.Items[1].Completed)
-	require.NotNil(t, fetched.Items[1].ParentID)
-	assert.Equal(t, fetched.Items[0].ID, *fetched.Items[1].ParentID)
+	require.Len(t, fetched.List.Items, 2)
+	assert.False(t, fetched.List.Items[0].Completed)
+	assert.Nil(t, fetched.List.Items[0].ParentID)
+	assert.True(t, fetched.List.Items[1].Completed)
+	require.NotNil(t, fetched.List.Items[1].ParentID)
+	assert.Equal(t, fetched.List.Items[0].ID, *fetched.List.Items[1].ParentID)
 }
 
 // TestDuplicateNoteIdempotency covers the client-supplied ID path that makes
@@ -268,13 +272,14 @@ func TestDuplicateNoteIdempotency(t *testing.T) {
 		})
 		require.Equal(t, http.StatusCreated, status)
 		require.NotNil(t, note)
-		require.Len(t, note.Items, 2)
+		require.NotNil(t, note.List)
+		require.Len(t, note.List.Items, 2)
 
-		assert.Equal(t, newItemID0, note.Items[0].ID)
-		assert.Equal(t, newItemID1, note.Items[1].ID)
+		assert.Equal(t, newItemID0, note.List.Items[0].ID)
+		assert.Equal(t, newItemID1, note.List.Items[1].ID)
 		// parent_id of the child must point at the duplicated parent, not the source parent.
-		require.NotNil(t, note.Items[1].ParentID)
-		assert.Equal(t, newItemID0, *note.Items[1].ParentID)
+		require.NotNil(t, note.List.Items[1].ParentID)
+		assert.Equal(t, newItemID0, *note.List.Items[1].ParentID)
 	})
 
 	t.Run("replaying a duplicate with the same item ids returns 409", func(t *testing.T) {
@@ -340,8 +345,9 @@ func TestDuplicateNoteIdempotency(t *testing.T) {
 
 		duplicated, err := user.Client.DuplicateNote(t.Context(), source.ID)
 		require.NoError(t, err)
-		require.Len(t, duplicated.Items, 1)
-		assert.NotEmpty(t, duplicated.Items[0].ID)
-		assert.NotEqual(t, sourceItems[0].ID, duplicated.Items[0].ID)
+		require.NotNil(t, duplicated.List)
+		require.Len(t, duplicated.List.Items, 1)
+		assert.NotEmpty(t, duplicated.List.Items[0].ID)
+		assert.NotEqual(t, sourceItems[0].ID, duplicated.List.Items[0].ID)
 	})
 }

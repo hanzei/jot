@@ -1,6 +1,10 @@
 package client
 
-import "time"
+import (
+	"encoding/json"
+	"errors"
+	"time"
+)
 
 // NoteType distinguishes text notes from list/checklist notes.
 type NoteType string
@@ -45,31 +49,160 @@ type AuthResponse struct {
 	Settings *UserSettings `json:"settings"`
 }
 
-// Note is a single note returned by the API.
-// The server enforces type-specific field semantics: text notes always have
-// empty Title, nil Items, and CheckedItemsCollapsed=false; list notes always
-// have empty Content. The flat struct is kept for Go SDK simplicity — use
-// NoteType to determine which fields are meaningful.
+// Note is a single note returned by the API, modeled as a discriminated
+// union on NoteType: exactly one of Text or List is populated, matching
+// which fields the server actually puts on the wire for that note type (a
+// text note's JSON has no items/checked_items_collapsed keys at all; a list
+// note's JSON has no content key). Common fields shared by both variants are
+// promoted onto Note directly.
 type Note struct {
-	ID                    string      `json:"id"`
-	UserID                string      `json:"user_id"`
-	Title                 string      `json:"title"`
-	Content               string      `json:"content"`
-	NoteType              NoteType    `json:"note_type"`
-	Version               int         `json:"version"`
-	Color                 string      `json:"color"`
-	Pinned                bool        `json:"pinned"`
-	Archived              bool        `json:"archived"`
-	Position              int         `json:"position"`
-	CheckedItemsCollapsed bool        `json:"checked_items_collapsed"`
-	Items                 []NoteItem  `json:"items,omitempty"`
-	SharedWith            []NoteShare `json:"shared_with,omitempty"`
-	IsShared              bool        `json:"is_shared"`
-	Labels                []Label     `json:"labels"`
-	Images                []NoteImage `json:"images,omitempty"`
-	DeletedAt             *time.Time  `json:"deleted_at"`
-	CreatedAt             time.Time   `json:"created_at"`
-	UpdatedAt             time.Time   `json:"updated_at"`
+	ID         string      `json:"id"`
+	UserID     string      `json:"user_id"`
+	NoteType   NoteType    `json:"note_type"`
+	Version    int         `json:"version"`
+	Color      string      `json:"color"`
+	Pinned     bool        `json:"pinned"`
+	Archived   bool        `json:"archived"`
+	Position   int         `json:"position"`
+	SharedWith []NoteShare `json:"shared_with,omitempty"`
+	IsShared   bool        `json:"is_shared"`
+	Labels     []Label     `json:"labels"`
+	Images     []NoteImage `json:"images,omitempty"`
+	DeletedAt  *time.Time  `json:"deleted_at"`
+	CreatedAt  time.Time   `json:"created_at"`
+	UpdatedAt  time.Time   `json:"updated_at"`
+
+	// Text holds the fields owned by a text note. Non-nil iff NoteType == NoteTypeText.
+	Text *TextNoteFields
+	// List holds the fields owned by a list note. Non-nil iff NoteType == NoteTypeList.
+	List *ListNoteFields
+}
+
+// TextNoteFields holds the fields a text note owns on the wire.
+type TextNoteFields struct {
+	Content string
+}
+
+// ListNoteFields holds the fields a list note owns on the wire.
+type ListNoteFields struct {
+	Title                 string
+	Items                 []NoteItem
+	CheckedItemsCollapsed bool
+}
+
+// noteCommon mirrors the fields shared by both note variants; it is embedded
+// into the wire structs built by Note.MarshalJSON/UnmarshalJSON so the
+// common-field tags are only declared once.
+type noteCommon struct {
+	ID         string      `json:"id"`
+	UserID     string      `json:"user_id"`
+	NoteType   NoteType    `json:"note_type"`
+	Version    int         `json:"version"`
+	Color      string      `json:"color"`
+	Pinned     bool        `json:"pinned"`
+	Archived   bool        `json:"archived"`
+	Position   int         `json:"position"`
+	SharedWith []NoteShare `json:"shared_with,omitempty"`
+	IsShared   bool        `json:"is_shared"`
+	Labels     []Label     `json:"labels"`
+	Images     []NoteImage `json:"images,omitempty"`
+	DeletedAt  *time.Time  `json:"deleted_at"`
+	CreatedAt  time.Time   `json:"created_at"`
+	UpdatedAt  time.Time   `json:"updated_at"`
+}
+
+func (n *Note) common() noteCommon {
+	return noteCommon{
+		ID:         n.ID,
+		UserID:     n.UserID,
+		NoteType:   n.NoteType,
+		Version:    n.Version,
+		Color:      n.Color,
+		Pinned:     n.Pinned,
+		Archived:   n.Archived,
+		Position:   n.Position,
+		SharedWith: n.SharedWith,
+		IsShared:   n.IsShared,
+		Labels:     n.Labels,
+		Images:     n.Images,
+		DeletedAt:  n.DeletedAt,
+		CreatedAt:  n.CreatedAt,
+		UpdatedAt:  n.UpdatedAt,
+	}
+}
+
+// MarshalJSON emits only the fields owned by n's NoteType, so a round-trip
+// through the client never reintroduces the flattened shape the server
+// stopped sending. Pointer receiver so Note has one consistent receiver type
+// across Marshal/UnmarshalJSON (UnmarshalJSON must be a pointer method).
+func (n *Note) MarshalJSON() ([]byte, error) {
+	if n.NoteType == NoteTypeList {
+		if n.List == nil {
+			return nil, errors.New("client: list note has nil List fields")
+		}
+		return json.Marshal(struct {
+			noteCommon
+			Title                 string     `json:"title"`
+			Items                 []NoteItem `json:"items"`
+			CheckedItemsCollapsed bool       `json:"checked_items_collapsed"`
+		}{n.common(), n.List.Title, n.List.Items, n.List.CheckedItemsCollapsed})
+	}
+	if n.Text == nil {
+		return nil, errors.New("client: text note has nil Text fields")
+	}
+	return json.Marshal(struct {
+		noteCommon
+		Content string `json:"content"`
+	}{n.common(), n.Text.Content})
+}
+
+// UnmarshalJSON reads either wire shape (text or list) based on note_type
+// and populates the matching Text/List field, leaving the other nil.
+func (n *Note) UnmarshalJSON(data []byte) error {
+	var common noteCommon
+	if err := json.Unmarshal(data, &common); err != nil {
+		return err
+	}
+
+	*n = Note{
+		ID:         common.ID,
+		UserID:     common.UserID,
+		NoteType:   common.NoteType,
+		Version:    common.Version,
+		Color:      common.Color,
+		Pinned:     common.Pinned,
+		Archived:   common.Archived,
+		Position:   common.Position,
+		SharedWith: common.SharedWith,
+		IsShared:   common.IsShared,
+		Labels:     common.Labels,
+		Images:     common.Images,
+		DeletedAt:  common.DeletedAt,
+		CreatedAt:  common.CreatedAt,
+		UpdatedAt:  common.UpdatedAt,
+	}
+
+	if common.NoteType == NoteTypeList {
+		var list struct {
+			Title                 string     `json:"title"`
+			Items                 []NoteItem `json:"items"`
+			CheckedItemsCollapsed bool       `json:"checked_items_collapsed"`
+		}
+		if err := json.Unmarshal(data, &list); err != nil {
+			return err
+		}
+		n.List = &ListNoteFields{Title: list.Title, Items: list.Items, CheckedItemsCollapsed: list.CheckedItemsCollapsed}
+		return nil
+	}
+
+	var text struct {
+		Content string `json:"content"`
+	}
+	if err := json.Unmarshal(data, &text); err != nil {
+		return err
+	}
+	n.Text = &TextNoteFields{Content: text.Content}
+	return nil
 }
 
 // NoteImage is a single image attached to a note. It intentionally mirrors

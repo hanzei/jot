@@ -943,11 +943,11 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "notes (TextNoteResponse for text notes, ListNoteResponse for list notes)",
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/models.Note"
+                                "$ref": "#/definitions/models.TextNoteResponse"
                             }
                         }
                     },
@@ -1000,9 +1000,9 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "201": {
-                        "description": "Created",
+                        "description": "note (TextNoteResponse for a text note, ListNoteResponse for a list note)",
                         "schema": {
-                            "$ref": "#/definitions/models.Note"
+                            "$ref": "#/definitions/models.TextNoteResponse"
                         }
                     },
                     "400": {
@@ -1260,9 +1260,9 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "note (TextNoteResponse for a text note, ListNoteResponse for a list note)",
                         "schema": {
-                            "$ref": "#/definitions/models.Note"
+                            "$ref": "#/definitions/models.ListNoteResponse"
                         }
                     },
                     "400": {
@@ -1382,9 +1382,9 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "note (TextNoteResponse for a text note, ListNoteResponse for a list note)",
                         "schema": {
-                            "$ref": "#/definitions/models.Note"
+                            "$ref": "#/definitions/models.ListNoteResponse"
                         }
                     },
                     "400": {
@@ -1457,9 +1457,9 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "note (TextNoteResponse for a text note, ListNoteResponse for a list note)",
                         "schema": {
-                            "$ref": "#/definitions/models.Note"
+                            "$ref": "#/definitions/models.TextNoteResponse"
                         }
                     },
                     "400": {
@@ -1531,9 +1531,9 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "201": {
-                        "description": "Created",
+                        "description": "note (TextNoteResponse for a text note, ListNoteResponse for a list note)",
                         "schema": {
-                            "$ref": "#/definitions/models.Note"
+                            "$ref": "#/definitions/models.ListNoteResponse"
                         }
                     },
                     "400": {
@@ -2029,9 +2029,9 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "note (TextNoteResponse for a text note, ListNoteResponse for a list note)",
                         "schema": {
-                            "$ref": "#/definitions/models.Note"
+                            "$ref": "#/definitions/models.ListNoteResponse"
                         }
                     },
                     "400": {
@@ -2099,9 +2099,9 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "note (TextNoteResponse for a text note, ListNoteResponse for a list note)",
                         "schema": {
-                            "$ref": "#/definitions/models.Note"
+                            "$ref": "#/definitions/models.TextNoteResponse"
                         }
                     },
                     "401": {
@@ -2150,9 +2150,9 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "note (TextNoteResponse for a text note, ListNoteResponse for a list note)",
                         "schema": {
-                            "$ref": "#/definitions/models.Note"
+                            "$ref": "#/definitions/models.TextNoteResponse"
                         }
                     },
                     "400": {
@@ -3523,7 +3523,7 @@ const docTemplate = `{
                 }
             }
         },
-        "models.Note": {
+        "models.ListNoteResponse": {
             "type": "object",
             "properties": {
                 "archived": {
@@ -3533,9 +3533,6 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "color": {
-                    "type": "string"
-                },
-                "content": {
                     "type": "string"
                 },
                 "created_at": {
@@ -3593,7 +3590,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "version": {
-                    "description": "Version is an optimistic-concurrency counter bumped on every shared-content\n(title/content) change. Clients echo the version their edit was based on as\nbase_version on update so a stale write can be rejected (issue #489).",
                     "type": "integer"
                 }
             }
@@ -3702,6 +3698,68 @@ const docTemplate = `{
                 "NoteTypeText",
                 "NoteTypeList"
             ]
+        },
+        "models.TextNoteResponse": {
+            "type": "object",
+            "properties": {
+                "archived": {
+                    "type": "boolean"
+                },
+                "color": {
+                    "type": "string"
+                },
+                "content": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "deleted_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "images": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.NoteImage"
+                    }
+                },
+                "is_shared": {
+                    "type": "boolean"
+                },
+                "labels": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.Label"
+                    }
+                },
+                "note_type": {
+                    "$ref": "#/definitions/models.NoteType"
+                },
+                "pinned": {
+                    "type": "boolean"
+                },
+                "position": {
+                    "type": "integer"
+                },
+                "shared_with": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.NoteShare"
+                    }
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
         },
         "models.User": {
             "type": "object",

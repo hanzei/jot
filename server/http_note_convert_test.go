@@ -40,18 +40,19 @@ func TestConvertNoteTypeEndpoint(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, client.NoteTypeList, converted.NoteType)
-		assert.Empty(t, converted.Title)
-		assert.Empty(t, converted.Content)
+		assert.Nil(t, converted.Text)
+		require.NotNil(t, converted.List)
+		assert.Empty(t, converted.List.Title)
 		assert.Equal(t, "#fbbc04", converted.Color)
 		assert.True(t, converted.Pinned)
 		require.Len(t, converted.Labels, 1)
 		assert.Equal(t, "chores", converted.Labels[0].Name)
-		require.Len(t, converted.Items, 3)
-		assert.Equal(t, "Groceries", converted.Items[0].Text)
-		assert.False(t, converted.Items[0].Completed)
-		assert.Equal(t, "Milk", converted.Items[1].Text)
-		assert.Equal(t, "Eggs", converted.Items[2].Text)
-		assert.True(t, converted.Items[2].Completed)
+		require.Len(t, converted.List.Items, 3)
+		assert.Equal(t, "Groceries", converted.List.Items[0].Text)
+		assert.False(t, converted.List.Items[0].Completed)
+		assert.Equal(t, "Milk", converted.List.Items[1].Text)
+		assert.Equal(t, "Eggs", converted.List.Items[2].Text)
+		assert.True(t, converted.List.Items[2].Completed)
 	})
 
 	t.Run("converts a list note to text, rendering the title as an h1 line", func(t *testing.T) {
@@ -75,9 +76,9 @@ func TestConvertNoteTypeEndpoint(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, client.NoteTypeText, converted.NoteType)
-		assert.Empty(t, converted.Title)
-		assert.Equal(t, "# Groceries\n\n- [x] Milk\n- [ ] Eggs", converted.Content)
-		assert.Empty(t, converted.Items)
+		assert.Nil(t, converted.List)
+		require.NotNil(t, converted.Text)
+		assert.Equal(t, "# Groceries\n\n- [x] Milk\n- [ ] Eggs", converted.Text.Content)
 	})
 
 	t.Run("drops per-item assignments when converting a list to text", func(t *testing.T) {
@@ -107,10 +108,11 @@ func TestConvertNoteTypeEndpoint(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, client.NoteTypeText, converted.NoteType)
 
-		// Assignment is gone: the item row itself was deleted by the conversion.
+		// Assignment is gone: the item row itself was deleted by the conversion,
+		// and a text note has no items key at all.
 		fetched, err := owner.Client.GetNote(ctx, source.ID)
 		require.NoError(t, err)
-		assert.Empty(t, fetched.Items)
+		assert.Nil(t, fetched.List)
 	})
 
 	t.Run("rejects converting a note to its own type", func(t *testing.T) {
@@ -156,8 +158,9 @@ func TestConvertNoteTypeEndpoint(t *testing.T) {
 		replayed, err := user.Client.ConvertNoteType(ctx, source.ID, convertReq)
 		require.NoError(t, err)
 		assert.Equal(t, client.NoteTypeList, replayed.NoteType)
-		require.Len(t, replayed.Items, 1)
-		assert.Equal(t, "original", replayed.Items[0].Text)
+		require.NotNil(t, replayed.List)
+		require.Len(t, replayed.List.Items, 1)
+		assert.Equal(t, "original", replayed.List.Items[0].Text)
 		// No-op: the replay must not bump the version again.
 		assert.Equal(t, first.Version, replayed.Version)
 	})
@@ -186,7 +189,8 @@ func TestConvertNoteTypeEndpoint(t *testing.T) {
 		fetched, err := user.Client.GetNote(ctx, source.ID)
 		require.NoError(t, err)
 		assert.Equal(t, client.NoteTypeText, fetched.NoteType)
-		assert.Equal(t, "changed", fetched.Content)
+		require.NotNil(t, fetched.Text)
+		assert.Equal(t, "changed", fetched.Text.Content)
 	})
 
 	t.Run("returns 404 for a note the caller cannot access", func(t *testing.T) {

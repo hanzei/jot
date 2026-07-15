@@ -34,7 +34,7 @@ func TestNoteUpdateOptimisticConcurrency(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.Equal(t, 2, updated.Version)
-		assert.Equal(t, "changed", updated.Content)
+		assert.Equal(t, "changed", updated.Text.Content)
 	})
 
 	t.Run("matching base_version succeeds", func(t *testing.T) {
@@ -47,7 +47,7 @@ func TestNoteUpdateOptimisticConcurrency(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.Equal(t, note.Version+1, updated.Version)
-		assert.Equal(t, "on top of base", updated.Content)
+		assert.Equal(t, "on top of base", updated.Text.Content)
 	})
 
 	t.Run("stale base_version is rejected with 409 and content is preserved", func(t *testing.T) {
@@ -73,7 +73,7 @@ func TestNoteUpdateOptimisticConcurrency(t *testing.T) {
 		// The winning write must survive untouched.
 		fetched, err := user.Client.GetNote(ctx, note.ID)
 		require.NoError(t, err)
-		assert.Equal(t, "winner wrote this", fetched.Content)
+		assert.Equal(t, "winner wrote this", fetched.Text.Content)
 		assert.Equal(t, winner.Version, fetched.Version)
 	})
 
@@ -88,7 +88,7 @@ func TestNoteUpdateOptimisticConcurrency(t *testing.T) {
 		// A versionless write lands as last-write-wins regardless of staleness.
 		updated, err := user.Client.UpdateTextNote(ctx, note.ID, &client.UpdateTextNoteRequest{Content: ptr("v3")})
 		require.NoError(t, err)
-		assert.Equal(t, "v3", updated.Content)
+		assert.Equal(t, "v3", updated.Text.Content)
 		assert.Equal(t, 3, updated.Version)
 	})
 

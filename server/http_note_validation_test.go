@@ -61,7 +61,7 @@ func TestNoteValidation(t *testing.T) {
 				Title: strings.Repeat("a", 200),
 			})
 			require.NoError(t, err)
-			assert.Len(t, []rune(note.Title), 200)
+			assert.Len(t, []rune(note.List.Title), 200)
 		})
 
 		t.Run("multi-byte characters counted as characters not bytes", func(t *testing.T) {
@@ -71,7 +71,7 @@ func TestNoteValidation(t *testing.T) {
 				Title: title200,
 			})
 			require.NoError(t, err)
-			assert.Equal(t, title200, note.Title)
+			assert.Equal(t, title200, note.List.Title)
 
 			// 201 multi-byte characters must be rejected.
 			_, err = user.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
@@ -94,7 +94,7 @@ func TestNoteValidation(t *testing.T) {
 				Content: strings.Repeat("a", 10000),
 			})
 			require.NoError(t, err)
-			assert.Len(t, []rune(note.Content), 10000)
+			assert.Len(t, []rune(note.Text.Content), 10000)
 		})
 	})
 
@@ -141,8 +141,8 @@ func TestNoteValidation(t *testing.T) {
 				},
 			})
 			require.NoError(t, err)
-			require.Len(t, note.Items, 1)
-			assert.Len(t, []rune(note.Items[0].Text), 500)
+			require.Len(t, note.List.Items, 1)
+			assert.Len(t, []rune(note.List.Items[0].Text), 500)
 		})
 
 		t.Run("exceeding max on item create returns 400", func(t *testing.T) {
@@ -340,12 +340,13 @@ func TestNoteValidation(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		require.Len(t, note.Items, 1)
+		require.Len(t, note.List.Items, 1)
 
-		require.NoError(t, user.Client.DeleteNoteItem(t.Context(), note.ID, note.Items[0].ID))
+		require.NoError(t, user.Client.DeleteNoteItem(t.Context(), note.ID, note.List.Items[0].ID))
 
 		reloaded, err := user.Client.GetNote(t.Context(), note.ID)
 		require.NoError(t, err)
-		assert.Empty(t, reloaded.Items)
+		require.NotNil(t, reloaded.List)
+		assert.Empty(t, reloaded.List.Items)
 	})
 }

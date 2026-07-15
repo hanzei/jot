@@ -58,7 +58,7 @@ func (h *LabelsHandler) publishLabelNoteUpdates(ctx context.Context, noteIDs []s
 			Type:         sse.EventNoteUpdated,
 			SourceUserID: userID,
 			ClientID:     clientIDFromContext(ctx),
-			Data:         sse.NoteEventData{NoteID: noteID, Note: note},
+			Data:         sse.NoteEventData{NoteID: noteID, Note: models.NewNoteResponse(*note)},
 		})
 	}
 }
@@ -242,7 +242,7 @@ func (h *LabelsHandler) RenameLabel(w http.ResponseWriter, r *http.Request) (int
 //	@Produce	json
 //	@Param		id		path		string			true	"Note ID"
 //	@Param		body	body		AddLabelRequest	true	"Label name"
-//	@Success	200		{object}	models.Note
+//	@Success	200		{object}	models.ListNoteResponse	"note (TextNoteResponse for a text note, ListNoteResponse for a list note)"
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	403		{string}	string	"no access to note"
@@ -286,17 +286,18 @@ func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, a
 	if err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("get note: %w", err)
 	}
+	response := models.NewNoteResponse(*note)
 
 	if h.hub != nil {
 		h.hub.Publish(r.Context(), []string{user.ID}, sse.Event{
 			Type:         sse.EventNoteUpdated,
 			SourceUserID: user.ID,
 			ClientID:     clientIDFromContext(r.Context()),
-			Data:         sse.NoteEventData{NoteID: noteID, Note: note},
+			Data:         sse.NoteEventData{NoteID: noteID, Note: response},
 		})
 	}
 
-	return http.StatusOK, note, nil
+	return http.StatusOK, response, nil
 }
 
 // RemoveLabel godoc
@@ -307,7 +308,7 @@ func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, a
 //	@Produce	json
 //	@Param		id			path		string	true	"Note ID"
 //	@Param		label_id	path		string	true	"Label ID"
-//	@Success	200			{object}	models.Note
+//	@Success	200			{object}	models.TextNoteResponse	"note (TextNoteResponse for a text note, ListNoteResponse for a list note)"
 //	@Failure	401			{string}	string	"unauthorized"
 //	@Failure	403			{string}	string	"no access to note"
 //	@Failure	500			{string}	string	"internal server error"
@@ -332,17 +333,18 @@ func (h *LabelsHandler) RemoveLabel(w http.ResponseWriter, r *http.Request) (int
 	if err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("get note: %w", err)
 	}
+	response := models.NewNoteResponse(*note)
 
 	if h.hub != nil {
 		h.hub.Publish(r.Context(), []string{user.ID}, sse.Event{
 			Type:         sse.EventNoteUpdated,
 			SourceUserID: user.ID,
 			ClientID:     clientIDFromContext(r.Context()),
-			Data:         sse.NoteEventData{NoteID: noteID, Note: note},
+			Data:         sse.NoteEventData{NoteID: noteID, Note: response},
 		})
 	}
 
-	return http.StatusOK, note, nil
+	return http.StatusOK, response, nil
 }
 
 // DeleteLabel godoc

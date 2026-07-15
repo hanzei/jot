@@ -14,7 +14,6 @@ import (
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/sse"
-	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 )
@@ -130,12 +129,11 @@ func (h *NotesHandler) publishPersonalizedNoteEventWithType(ctx context.Context,
 			logutil.FromContext(ctx).WithError(err).WithField("note_id", noteID).WithField("user_id", uid).Warn("Failed to fetch personalized note for SSE publish")
 			continue
 		}
-		sanitized := sanitizeNote(*n)
 		h.hub.Publish(ctx, []string{uid}, sse.Event{
 			Type:         eventType,
 			SourceUserID: sourceUserID,
 			ClientID:     clientID,
-			Data:         sse.NoteEventData{NoteID: noteID, Note: sanitized},
+			Data:         sse.NoteEventData{NoteID: noteID, Note: models.NewNoteResponse(*n)},
 		})
 	}
 }
@@ -196,23 +194,6 @@ type UpdateNoteRequest struct {
 
 type EmptyTrashResponse struct {
 	Deleted int `json:"deleted"`
-}
-
-// sanitizeNote strips fields that do not belong to the note's type before
-// serializing to a JSON response. The internal models.Note struct is unified
-// (single DB table), so enforcement is done at the handler layer only.
-func sanitizeNote(n models.Note) models.Note {
-	switch n.NoteType {
-	case models.NoteTypeText:
-		n.Title = ""
-		n.Items = nil
-		n.CheckedItemsCollapsed = false
-	case models.NoteTypeList:
-		n.Content = ""
-	default:
-		logrus.Warnf("sanitizeNote: unknown note type %q for note %s", n.NoteType, n.ID)
-	}
-	return n
 }
 
 func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
@@ -342,7 +323,7 @@ func buildCreateNoteItems(items []CreateNoteItem) ([]models.NewNoteItem, int, er
 //	@Param		search		query		string	false	"Full-text search query"
 //	@Param		label		query		string	false	"Filter by label ID"
 //	@Param		my_tasks	query		boolean	false	"Return only notes with tasks assigned to current user"
-//	@Success	200			{array}		models.Note
+//	@Success	200			{array}		models.TextNoteResponse	"notes (TextNoteResponse for text notes, ListNoteResponse for list notes)"
 //	@Failure	400			{string}	string	"search query too long"
 //	@Failure	401			{string}	string	"unauthorized"
 //	@Failure	500			{string}	string	"internal server error"
@@ -369,11 +350,7 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, an
 		return http.StatusInternalServerError, nil, fmt.Errorf("get notes: %w", err)
 	}
 
-	sanitized := make([]models.Note, len(notes))
-	for i, n := range notes {
-		sanitized[i] = sanitizeNote(*n)
-	}
-	return http.StatusOK, sanitized, nil
+	return http.StatusOK, models.NewNoteResponses(notes), nil
 }
 
 // CreateNote godoc
@@ -384,7 +361,7 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, an
 //	@Accept		json
 //	@Produce	json
 //	@Param		body	body		CreateNoteRequest	true	"Note to create"
-//	@Success	201		{object}	models.Note
+//	@Success	201		{object}	models.TextNoteResponse	"note (TextNoteResponse for a text note, ListNoteResponse for a list note)"
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	404		{string}	string	"label not found"
@@ -453,7 +430,7 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 	}
 
 	h.notesCreated.Add(r.Context(), 1)
-	sanitized := sanitizeNote(*note)
+	sanitized := models.NewNoteResponse(*note)
 	h.publishNoteEvent(r.Context(), note.ID, sse.EventNoteCreated, sanitized, user.ID)
 	return http.StatusCreated, sanitized, nil
 }
@@ -465,7 +442,7 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 //	@Security	CookieAuth
 //	@Produce	json
 //	@Param		id	path		string	true	"Note ID"
-//	@Success	200	{object}	models.Note
+//	@Success	200	{object}	models.ListNoteResponse	"note (TextNoteResponse for a text note, ListNoteResponse for a list note)"
 //	@Failure	400	{string}	string	"bad request"
 //	@Failure	401	{string}	string	"unauthorized"
 //	@Failure	404	{string}	string	"not found"
@@ -493,7 +470,7 @@ func (h *NotesHandler) GetNote(w http.ResponseWriter, r *http.Request) (int, any
 		return http.StatusInternalServerError, nil, fmt.Errorf("get note: %w", err)
 	}
 
-	return http.StatusOK, sanitizeNote(*note), nil
+	return http.StatusOK, models.NewNoteResponse(*note), nil
 }
 
 // DuplicateNoteRequest is the optional request body for the duplicate endpoint.
@@ -530,7 +507,7 @@ func validateDuplicateItemIDs(itemIDs map[string]string) error {
 //	@Produce	json
 //	@Param		id		path		string				true	"Note ID"
 //	@Param		body	body		DuplicateNoteRequest	false	"Optional client-supplied ID for idempotent replay"
-//	@Success	201		{object}	models.Note
+//	@Success	201		{object}	models.ListNoteResponse	"note (TextNoteResponse for a text note, ListNoteResponse for a list note)"
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	404		{string}	string	"not found"
@@ -583,7 +560,7 @@ func (h *NotesHandler) DuplicateNote(w http.ResponseWriter, r *http.Request) (in
 		return http.StatusInternalServerError, nil, fmt.Errorf("duplicate note: %w", err)
 	}
 
-	sanitized := sanitizeNote(*duplicatedNote)
+	sanitized := models.NewNoteResponse(*duplicatedNote)
 	h.publishNoteEvent(r.Context(), duplicatedNote.ID, sse.EventNoteCreated, sanitized, user.ID)
 	h.notesCreated.Add(r.Context(), 1)
 	return http.StatusCreated, sanitized, nil
@@ -650,7 +627,7 @@ func normalizeConvertNoteTypeRequest(req *ConvertNoteTypeRequest) (content strin
 //	@Produce	json
 //	@Param		id		path		string					true	"Note ID"
 //	@Param		body	body		ConvertNoteTypeRequest	true	"Target note type and precomputed content/items"
-//	@Success	200		{object}	models.Note
+//	@Success	200		{object}	models.TextNoteResponse	"note (TextNoteResponse for a text note, ListNoteResponse for a list note)"
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	404		{string}	string	"not found"
@@ -714,8 +691,8 @@ func (h *NotesHandler) ConvertNoteType(w http.ResponseWriter, r *http.Request) (
 		}
 	}
 
-	sanitized := sanitizeNote(*converted)
-	h.publishUpdateEvent(r.Context(), id, &sanitized, user.ID, true)
+	sanitized := models.NewNoteResponse(*converted)
+	h.publishUpdateEvent(r.Context(), id, sanitized, user.ID, true)
 	h.notesUpdated.Add(r.Context(), 1)
 	return http.StatusOK, sanitized, nil
 }
@@ -780,7 +757,7 @@ func (h *NotesHandler) validateUpdateNoteFields(ctx context.Context, id, userID 
 //	@Produce	json
 //	@Param		id		path		string				true	"Note ID"
 //	@Param		body	body		UpdateNoteRequest	true	"Fields to update"
-//	@Success	200		{object}	models.Note
+//	@Success	200		{object}	models.ListNoteResponse	"note (TextNoteResponse for a text note, ListNoteResponse for a list note)"
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	404		{string}	string	"not found"
@@ -836,8 +813,8 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 	// only need to be delivered to the acting user. (List items are edited via
 	// the dedicated item endpoints, which publish their own events.)
 	hasSharedFieldChange := req.Title != nil || req.Content != nil
-	sanitized := sanitizeNote(*note)
-	h.publishUpdateEvent(r.Context(), id, &sanitized, user.ID, hasSharedFieldChange)
+	sanitized := models.NewNoteResponse(*note)
+	h.publishUpdateEvent(r.Context(), id, sanitized, user.ID, hasSharedFieldChange)
 
 	h.notesUpdated.Add(r.Context(), 1)
 	return http.StatusOK, sanitized, nil
@@ -846,7 +823,7 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 // publishUpdateEvent sends SSE notifications after a note update. If shared fields
 // changed, every collaborator gets a personalized event; otherwise only the acting
 // user is notified.
-func (h *NotesHandler) publishUpdateEvent(ctx context.Context, noteID string, note *models.Note, userID string, sharedFieldChanged bool) {
+func (h *NotesHandler) publishUpdateEvent(ctx context.Context, noteID string, note any, userID string, sharedFieldChanged bool) {
 	if sharedFieldChanged {
 		audienceIDs, err := h.noteStore.GetNoteAudienceIDs(ctx, noteID)
 		if err != nil {
@@ -962,7 +939,7 @@ func (h *NotesHandler) EmptyTrash(w http.ResponseWriter, r *http.Request) (int, 
 //	@Security	CookieAuth
 //	@Produce	json
 //	@Param		id	path		string	true	"Note ID"
-//	@Success	200	{object}	models.Note
+//	@Success	200	{object}	models.TextNoteResponse	"note (TextNoteResponse for a text note, ListNoteResponse for a list note)"
 //	@Failure	400	{string}	string	"bad request"
 //	@Failure	401	{string}	string	"unauthorized"
 //	@Failure	404	{string}	string	"not found"
@@ -996,7 +973,7 @@ func (h *NotesHandler) RestoreNote(w http.ResponseWriter, r *http.Request) (int,
 	}
 
 	h.notesRestored.Add(r.Context(), 1)
-	sanitized := sanitizeNote(*note)
+	sanitized := models.NewNoteResponse(*note)
 	if audienceIDs, aErr := h.noteStore.GetNoteAudienceIDs(r.Context(), id); aErr == nil {
 		h.publishPersonalizedNoteEvent(r.Context(), id, audienceIDs, user.ID)
 	} else {

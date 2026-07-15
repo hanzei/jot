@@ -309,7 +309,8 @@ func TestPerUserNoteState(t *testing.T) {
 
 		ownerNote, err := owner.Client.GetNote(t.Context(), note.ID)
 		require.NoError(t, err)
-		assert.Equal(t, "Updated Content", ownerNote.Content)
+		require.NotNil(t, ownerNote.Text)
+		assert.Equal(t, "Updated Content", ownerNote.Text.Content)
 	})
 
 	t.Run("shared fields title is visible to all collaborators on list notes", func(t *testing.T) {
@@ -330,7 +331,8 @@ func TestPerUserNoteState(t *testing.T) {
 
 		ownerNote, err := owner.Client.GetNote(t.Context(), note.ID)
 		require.NoError(t, err)
-		assert.Equal(t, "Updated Title", ownerNote.Title)
+		require.NotNil(t, ownerNote.List)
+		assert.Equal(t, "Updated Title", ownerNote.List.Title)
 	})
 
 	t.Run("collaborator can reorder notes independently from owner", func(t *testing.T) {
@@ -450,7 +452,8 @@ func TestEdgeCases(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.Equal(t, client.NoteTypeList, note.NoteType)
-		assert.Len(t, note.Items, 1)
+		require.NotNil(t, note.List)
+		assert.Len(t, note.List.Items, 1)
 	})
 
 	t.Run("create note rejects non-list note_type when items are provided", func(t *testing.T) {

@@ -40,10 +40,10 @@ func createGroupNote(t *testing.T, user *TestUser) (noteID, parentID, childAID, 
 	})
 	require.NoError(t, err)
 
-	parent := itemByText(t, note.Items, "Parent")
-	childA := itemByText(t, note.Items, "Child A")
-	childB := itemByText(t, note.Items, "Child B")
-	solo := itemByText(t, note.Items, "Solo")
+	parent := itemByText(t, note.List.Items, "Parent")
+	childA := itemByText(t, note.List.Items, "Child A")
+	childB := itemByText(t, note.List.Items, "Child B")
+	solo := itemByText(t, note.List.Items, "Solo")
 
 	// Sanity check that the bulk-create path reconstructed grouping from
 	// indent_level: both children point at the parent, the others are top-level.
@@ -77,7 +77,7 @@ func TestNoteGrouping(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		assert.Nil(t, itemByText(t, note.Items, "Lonely").ParentID)
+		assert.Nil(t, itemByText(t, note.List.Items, "Lonely").ParentID)
 	})
 
 	t.Run("toggle parent cascades to children", func(t *testing.T) {
@@ -168,7 +168,7 @@ func TestNoteGrouping(t *testing.T) {
 
 		note, err := user.Client.GetNote(t.Context(), noteID)
 		require.NoError(t, err)
-		assert.False(t, itemByText(t, note.Items, "Parent").Completed, "generic patch enforces the same invariant as toggle-completed")
+		assert.False(t, itemByText(t, note.List.Items, "Parent").Completed, "generic patch enforces the same invariant as toggle-completed")
 	})
 
 	t.Run("patching completed on a parent cascades to children the same as toggle", func(t *testing.T) {
@@ -184,8 +184,8 @@ func TestNoteGrouping(t *testing.T) {
 
 		note, err := user.Client.GetNote(t.Context(), noteID)
 		require.NoError(t, err)
-		assert.True(t, itemByText(t, note.Items, "Child A").Completed)
-		assert.True(t, itemByText(t, note.Items, "Child B").Completed)
+		assert.True(t, itemByText(t, note.List.Items, "Child A").Completed)
+		assert.True(t, itemByText(t, note.List.Items, "Child B").Completed)
 	})
 
 	t.Run("patching parent_id and completed together evaluates the invariant against the new parent", func(t *testing.T) {
@@ -204,9 +204,9 @@ func TestNoteGrouping(t *testing.T) {
 		})
 		require.NoError(t, err)
 		noteID := note.ID
-		parentAID := itemByText(t, note.Items, "Parent A").ID
-		parentBID := itemByText(t, note.Items, "Parent B").ID
-		childA1ID := itemByText(t, note.Items, "Child A1").ID
+		parentAID := itemByText(t, note.List.Items, "Parent A").ID
+		parentBID := itemByText(t, note.List.Items, "Parent B").ID
+		childA1ID := itemByText(t, note.List.Items, "Child A1").ID
 
 		// Move Child A1 into Parent B's group and uncheck it in one request. The
 		// invariant must be enforced against the group it ends up in (B), not
@@ -220,9 +220,9 @@ func TestNoteGrouping(t *testing.T) {
 
 		updated, err := user.Client.GetNote(t.Context(), noteID)
 		require.NoError(t, err)
-		assert.False(t, itemByText(t, updated.Items, "Parent B").Completed, "new parent can't stay completed with an incomplete child")
-		assert.True(t, itemByText(t, updated.Items, "Child B1").Completed, "unrelated sibling in the new group is untouched")
-		assert.True(t, itemByText(t, updated.Items, "Parent A").Completed, "old parent is untouched: it has no children left")
+		assert.False(t, itemByText(t, updated.List.Items, "Parent B").Completed, "new parent can't stay completed with an incomplete child")
+		assert.True(t, itemByText(t, updated.List.Items, "Child B1").Completed, "unrelated sibling in the new group is untouched")
+		assert.True(t, itemByText(t, updated.List.Items, "Parent A").Completed, "old parent is untouched: it has no children left")
 
 		_ = parentAID
 	})
@@ -239,8 +239,8 @@ func TestNoteGrouping(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		parentID := itemByText(t, note.Items, "Parent").ID
-		lonerID := itemByText(t, note.Items, "Loner").ID
+		parentID := itemByText(t, note.List.Items, "Parent").ID
+		lonerID := itemByText(t, note.List.Items, "Loner").ID
 
 		// Re-parent Loner (still incomplete) under the already-completed Parent,
 		// without touching `completed` in the request at all.
@@ -251,8 +251,8 @@ func TestNoteGrouping(t *testing.T) {
 
 		updated, err := user.Client.GetNote(t.Context(), note.ID)
 		require.NoError(t, err)
-		assert.False(t, itemByText(t, updated.Items, "Parent").Completed, "parent can't stay completed once it gains an incomplete child")
-		assert.False(t, itemByText(t, updated.Items, "Loner").Completed, "the moved item's own completed flag is untouched")
+		assert.False(t, itemByText(t, updated.List.Items, "Parent").Completed, "parent can't stay completed once it gains an incomplete child")
+		assert.False(t, itemByText(t, updated.List.Items, "Loner").Completed, "the moved item's own completed flag is untouched")
 	})
 
 	t.Run("toggle without completed field is rejected", func(t *testing.T) {
@@ -358,8 +358,8 @@ func TestNoteGrouping(t *testing.T) {
 		require.NoError(t, err)
 
 		// Children survive (no data loss) and become top-level via ON DELETE SET NULL.
-		childA := itemByText(t, note.Items, "Child A")
-		childB := itemByText(t, note.Items, "Child B")
+		childA := itemByText(t, note.List.Items, "Child A")
+		childB := itemByText(t, note.List.Items, "Child B")
 		assert.Nil(t, childA.ParentID, "orphaned child is promoted to top-level")
 		assert.Nil(t, childB.ParentID, "orphaned child is promoted to top-level")
 		assert.Equal(t, childAID, childA.ID)

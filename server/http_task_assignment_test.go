@@ -32,7 +32,8 @@ func getNoteItems(t *testing.T, user *TestUser, noteID string) []client.NoteItem
 	t.Helper()
 	note, err := user.Client.GetNote(t.Context(), noteID)
 	require.NoError(t, err)
-	return note.Items
+	require.NotNil(t, note.List)
+	return note.List.Items
 }
 
 func TestTaskAssignment(t *testing.T) {
@@ -48,7 +49,8 @@ func TestTaskAssignment(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		assert.Empty(t, note.Items[0].AssignedTo)
+		require.NotNil(t, note.List)
+		assert.Empty(t, note.List.Items[0].AssignedTo)
 	})
 
 	t.Run("assigned_to is ignored on note creation", func(t *testing.T) {
@@ -77,7 +79,8 @@ func TestTaskAssignment(t *testing.T) {
 		require.NoError(t, err)
 		var note client.Note
 		require.NoError(t, json.Unmarshal(respBody, &note))
-		assert.Empty(t, note.Items[0].AssignedTo, "assigned_to should be ignored on create")
+		require.NotNil(t, note.List)
+		assert.Empty(t, note.List.Items[0].AssignedTo, "assigned_to should be ignored on create")
 	})
 
 	t.Run("assign item to shared user on update", func(t *testing.T) {

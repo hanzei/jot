@@ -95,7 +95,8 @@ func TestExportExcludesTrashedNotes(t *testing.T) {
 	export, err := user.Client.ExportNotes(t.Context())
 	require.NoError(t, err)
 	require.Len(t, export.Notes, 1)
-	assert.Equal(t, active.Content, export.Notes[0].Content)
+	require.NotNil(t, active.Text)
+	assert.Equal(t, active.Text.Content, export.Notes[0].Content)
 }
 
 func TestExportIncludesArchivedNotes(t *testing.T) {
@@ -168,9 +169,10 @@ func TestImportJotJSONBasic(t *testing.T) {
 	notes, err := user.Client.ListNotes(t.Context(), nil)
 	require.NoError(t, err)
 	require.Len(t, notes, 1)
-	// Title is stripped for text notes on import; only content is preserved.
-	assert.Empty(t, notes[0].Title)
-	assert.Equal(t, "World", notes[0].Content)
+	// Title is stripped for text notes on import: the wire union gives a text
+	// note no title key at all, so there is nothing left to carry it.
+	require.NotNil(t, notes[0].Text)
+	assert.Equal(t, "World", notes[0].Text.Content)
 }
 
 func TestImportJotJSONInvalidFormat(t *testing.T) {
@@ -337,8 +339,12 @@ func TestImportJotJSONRoundTrip(t *testing.T) {
 	byContent := map[string]client.Note{}
 	byTitle := map[string]client.Note{}
 	for _, n := range allNotes {
-		byContent[n.Content] = n
-		byTitle[n.Title] = n
+		if n.Text != nil {
+			byContent[n.Text.Content] = n
+		}
+		if n.List != nil {
+			byTitle[n.List.Title] = n
+		}
 	}
 
 	// Pinned note (text note — identified by content).
@@ -356,10 +362,11 @@ func TestImportJotJSONRoundTrip(t *testing.T) {
 	tn, ok := byTitle["List Note"]
 	require.True(t, ok)
 	assert.Equal(t, client.NoteTypeList, tn.NoteType)
-	assert.True(t, tn.CheckedItemsCollapsed)
-	require.Len(t, tn.Items, 2)
+	require.NotNil(t, tn.List)
+	assert.True(t, tn.List.CheckedItemsCollapsed)
+	require.Len(t, tn.List.Items, 2)
 	itemsByPos := map[int]client.NoteItem{}
-	for _, item := range tn.Items {
+	for _, item := range tn.List.Items {
 		itemsByPos[item.Position] = item
 	}
 	assert.Equal(t, "Item 1", itemsByPos[0].Text)

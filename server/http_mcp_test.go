@@ -59,18 +59,19 @@ func TestMCPCreateAndGetNote(t *testing.T) {
 
 	var created client.Note
 	callTool(t, sess, "create_note", map[string]any{
-		"title":   "Hello MCP",
-		"content": "Created via MCP",
+		"note_type": "list",
+		"title":     "Hello MCP",
 	}, &created)
 
-	assert.Equal(t, "Hello MCP", created.Title)
-	assert.Equal(t, "Created via MCP", created.Content)
+	require.NotNil(t, created.List)
+	assert.Equal(t, "Hello MCP", created.List.Title)
 	assert.NotEmpty(t, created.ID)
 
 	var fetched client.Note
 	callTool(t, sess, "get_note", map[string]any{"id": created.ID}, &fetched)
 	assert.Equal(t, created.ID, fetched.ID)
-	assert.Equal(t, "Hello MCP", fetched.Title)
+	require.NotNil(t, fetched.List)
+	assert.Equal(t, "Hello MCP", fetched.List.Title)
 }
 
 func TestMCPUpdateNote(t *testing.T) {
@@ -79,7 +80,7 @@ func TestMCPUpdateNote(t *testing.T) {
 	sess := setupMCPSession(t, ts, tu)
 
 	var created client.Note
-	callTool(t, sess, "create_note", map[string]any{"title": "Before"}, &created)
+	callTool(t, sess, "create_note", map[string]any{"note_type": "list", "title": "Before"}, &created)
 
 	newTitle := "After"
 	var updated client.Note
@@ -87,11 +88,13 @@ func TestMCPUpdateNote(t *testing.T) {
 		"id":    created.ID,
 		"title": newTitle,
 	}, &updated)
-	assert.Equal(t, "After", updated.Title)
+	require.NotNil(t, updated.List)
+	assert.Equal(t, "After", updated.List.Title)
 
 	var fetched client.Note
 	callTool(t, sess, "get_note", map[string]any{"id": created.ID}, &fetched)
-	assert.Equal(t, "After", fetched.Title)
+	require.NotNil(t, fetched.List)
+	assert.Equal(t, "After", fetched.List.Title)
 }
 
 func TestMCPDeleteNote(t *testing.T) {

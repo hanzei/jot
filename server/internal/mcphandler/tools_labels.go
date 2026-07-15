@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/hanzei/jot/server/internal/models"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -128,7 +129,7 @@ func (h *Handler) handleAddLabelToNote(userID string) mcp.ToolHandlerFor[addLabe
 		if err != nil {
 			return toolError("get note after label add: %w", err)
 		}
-		data, err := json.Marshal(note)
+		data, err := json.Marshal(models.NewNoteResponse(*note))
 		if err != nil {
 			return toolError("marshal note: %w", err)
 		}
@@ -158,7 +159,7 @@ func (h *Handler) handleRemoveLabelFromNote(userID string) mcp.ToolHandlerFor[re
 		if err != nil {
 			return toolError("get note after label remove: %w", err)
 		}
-		data, err := json.Marshal(note)
+		data, err := json.Marshal(models.NewNoteResponse(*note))
 		if err != nil {
 			return toolError("marshal note: %w", err)
 		}

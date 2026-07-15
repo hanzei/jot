@@ -202,7 +202,7 @@ func TestImportNotesAppearInNotesList(t *testing.T) {
 
 	found := false
 	for _, n := range notes {
-		if n.Content == "# Findable Import\n\nunique text" {
+		if n.Text != nil && n.Text.Content == "# Findable Import\n\nunique text" {
 			found = true
 			break
 		}
@@ -225,7 +225,7 @@ func TestImportPinnedAndArchivedNote(t *testing.T) {
 		require.NoError(t, err)
 		var found bool
 		for _, n := range notes {
-			if n.Content == "# Pinned Import" {
+			if n.Text != nil && n.Text.Content == "# Pinned Import" {
 				found = true
 				assert.True(t, n.Pinned)
 				break
@@ -245,7 +245,7 @@ func TestImportPinnedAndArchivedNote(t *testing.T) {
 		require.NoError(t, err)
 		var found bool
 		for _, n := range notes {
-			if n.Content == "# Archived Import" {
+			if n.Text != nil && n.Text.Content == "# Archived Import" {
 				found = true
 				assert.True(t, n.Archived)
 				break
@@ -454,7 +454,7 @@ func TestImportUsememosArchivedImportedAsArchived(t *testing.T) {
 	notes, err := user.Client.ListNotes(t.Context(), &client.ListNotesOptions{Archived: true})
 	require.NoError(t, err)
 	require.Len(t, notes, 1, "expected exactly one archived note")
-	assert.Equal(t, "Archived memo", notes[0].Content)
+	assert.Equal(t, "Archived memo", notes[0].Text.Content)
 	assert.True(t, notes[0].Archived)
 }
 
@@ -475,7 +475,7 @@ func TestImportUsememosPinnedImportedAsPinned(t *testing.T) {
 	notes, err := user.Client.ListNotes(t.Context(), nil)
 	require.NoError(t, err)
 	require.Len(t, notes, 1, "expected exactly one note")
-	assert.Equal(t, "Pinned memo", notes[0].Content)
+	assert.Equal(t, "Pinned memo", notes[0].Text.Content)
 	assert.True(t, notes[0].Pinned)
 }
 
@@ -497,8 +497,8 @@ func TestImportUsememosTagsExtractedAndStripped(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, notes, 1)
 
-	assert.NotContains(t, notes[0].Content, "#golang")
-	assert.NotContains(t, notes[0].Content, "#testing")
+	assert.NotContains(t, notes[0].Text.Content, "#golang")
+	assert.NotContains(t, notes[0].Text.Content, "#testing")
 
 	labelNames := make([]string, 0, len(notes[0].Labels))
 	for _, l := range notes[0].Labels {
@@ -526,8 +526,8 @@ func TestImportUsememosTagsInCodeFenceNotExtracted(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, notes, 1)
 
-	assert.Contains(t, notes[0].Content, "#notag")
-	assert.NotContains(t, notes[0].Content, "#realtag")
+	assert.Contains(t, notes[0].Text.Content, "#notag")
+	assert.NotContains(t, notes[0].Text.Content, "#realtag")
 
 	labelNames := make([]string, 0, len(notes[0].Labels))
 	for _, l := range notes[0].Labels {
@@ -556,25 +556,25 @@ func TestImportUsememosChecklistImportedAsListNote(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, notes, 1)
 	assert.Equal(t, client.NoteTypeList, notes[0].NoteType)
-	assert.Empty(t, notes[0].Content)
+	assert.Nil(t, notes[0].Text)
 
 	note, err := user.Client.GetNote(t.Context(), notes[0].ID)
 	require.NoError(t, err)
-	require.Len(t, note.Items, 3)
+	require.Len(t, note.List.Items, 3)
 
-	assert.Equal(t, "buy milk", note.Items[0].Text)
-	assert.False(t, note.Items[0].Completed)
-	assert.Nil(t, note.Items[0].ParentID)
+	assert.Equal(t, "buy milk", note.List.Items[0].Text)
+	assert.False(t, note.List.Items[0].Completed)
+	assert.Nil(t, note.List.Items[0].ParentID)
 
-	assert.Equal(t, "walk the dog", note.Items[1].Text)
-	assert.True(t, note.Items[1].Completed)
-	assert.Nil(t, note.Items[1].ParentID)
+	assert.Equal(t, "walk the dog", note.List.Items[1].Text)
+	assert.True(t, note.List.Items[1].Completed)
+	assert.Nil(t, note.List.Items[1].ParentID)
 
-	assert.Equal(t, "feed the cat", note.Items[2].Text)
-	assert.False(t, note.Items[2].Completed)
+	assert.Equal(t, "feed the cat", note.List.Items[2].Text)
+	assert.False(t, note.List.Items[2].Completed)
 	// Imported at indent level 1, so nested under the preceding top-level item.
-	require.NotNil(t, note.Items[2].ParentID)
-	assert.Equal(t, note.Items[1].ID, *note.Items[2].ParentID)
+	require.NotNil(t, note.List.Items[2].ParentID)
+	assert.Equal(t, note.List.Items[1].ID, *note.List.Items[2].ParentID)
 }
 
 func TestImportUsememosTitledChecklistImportedAsListNote(t *testing.T) {
@@ -598,16 +598,17 @@ func TestImportUsememosTitledChecklistImportedAsListNote(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, notes, 1)
 	assert.Equal(t, client.NoteTypeList, notes[0].NoteType)
-	assert.Equal(t, "Groceries", notes[0].Title)
-	assert.Empty(t, notes[0].Content)
+	require.NotNil(t, notes[0].List)
+	assert.Equal(t, "Groceries", notes[0].List.Title)
+	assert.Nil(t, notes[0].Text)
 
 	note, err := user.Client.GetNote(t.Context(), notes[0].ID)
 	require.NoError(t, err)
-	require.Len(t, note.Items, 2)
-	assert.Equal(t, "buy milk", note.Items[0].Text)
-	assert.False(t, note.Items[0].Completed)
-	assert.Equal(t, "walk the dog", note.Items[1].Text)
-	assert.True(t, note.Items[1].Completed)
+	require.Len(t, note.List.Items, 2)
+	assert.Equal(t, "buy milk", note.List.Items[0].Text)
+	assert.False(t, note.List.Items[0].Completed)
+	assert.Equal(t, "walk the dog", note.List.Items[1].Text)
+	assert.True(t, note.List.Items[1].Completed)
 }
 
 func TestImportUsememosHeadingOnlyStaysTextNote(t *testing.T) {
@@ -631,8 +632,9 @@ func TestImportUsememosHeadingOnlyStaysTextNote(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, notes, 1)
 	assert.Equal(t, client.NoteTypeText, notes[0].NoteType)
-	assert.Empty(t, notes[0].Title)
-	assert.Equal(t, content, notes[0].Content)
+	assert.Nil(t, notes[0].List)
+	require.NotNil(t, notes[0].Text)
+	assert.Equal(t, content, notes[0].Text.Content)
 }
 
 func TestImportUsememosMixedContentStaysTextNote(t *testing.T) {
@@ -656,7 +658,7 @@ func TestImportUsememosMixedContentStaysTextNote(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, notes, 1)
 	assert.Equal(t, client.NoteTypeText, notes[0].NoteType)
-	assert.Equal(t, content, notes[0].Content)
+	assert.Equal(t, content, notes[0].Text.Content)
 }
 
 func TestImportUsememosChecklistWithTags(t *testing.T) {
@@ -690,10 +692,10 @@ func TestImportUsememosChecklistWithTags(t *testing.T) {
 
 	note, err := user.Client.GetNote(t.Context(), notes[0].ID)
 	require.NoError(t, err)
-	require.Len(t, note.Items, 2)
-	assert.Equal(t, "buy milk", note.Items[0].Text)
-	assert.Equal(t, "walk the dog", note.Items[1].Text)
-	assert.True(t, note.Items[1].Completed)
+	require.Len(t, note.List.Items, 2)
+	assert.Equal(t, "buy milk", note.List.Items[0].Text)
+	assert.Equal(t, "walk the dog", note.List.Items[1].Text)
+	assert.True(t, note.List.Items[1].Completed)
 }
 
 func TestImportUsememosPagination(t *testing.T) {
@@ -814,7 +816,7 @@ func TestImportUsememosOlderAPIFormat(t *testing.T) {
 	require.NoError(t, err)
 	var found bool
 	for _, n := range archived {
-		if n.Content == "Old archived" {
+		if n.Text != nil && n.Text.Content == "Old archived" {
 			found = true
 			assert.True(t, n.Archived)
 		}
@@ -859,7 +861,8 @@ func TestImportUsememosDeletedMemoFromServerSkipped(t *testing.T) {
 	notes, err := user.Client.ListNotes(t.Context(), nil)
 	require.NoError(t, err)
 	for _, n := range notes {
-		assert.NotEqual(t, "should be skipped", n.Content, "DELETED memo must not be imported")
+		require.NotNil(t, n.Text)
+		assert.NotEqual(t, "should be skipped", n.Text.Content, "DELETED memo must not be imported")
 	}
 }
 
@@ -885,7 +888,7 @@ func TestImportUsememosEmptyMemoSkipped(t *testing.T) {
 	notes, err := user.Client.ListNotes(t.Context(), nil)
 	require.NoError(t, err)
 	require.Len(t, notes, 1)
-	assert.Equal(t, "real content", notes[0].Content)
+	assert.Equal(t, "real content", notes[0].Text.Content)
 }
 
 // TestImportUsememosAPITagsMergedWithExtracted verifies that tags returned by
@@ -964,7 +967,7 @@ func TestImportUsememosArchivedFetchedSeparately(t *testing.T) {
 	require.NoError(t, err)
 	var foundArchived bool
 	for _, n := range archived {
-		if n.Content == "archived memo" {
+		if n.Text != nil && n.Text.Content == "archived memo" {
 			foundArchived = true
 			assert.True(t, n.Archived)
 		}

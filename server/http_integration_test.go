@@ -401,7 +401,7 @@ func TestNotesEndpoints(t *testing.T) {
 			Color:   "#ffeb3b",
 		})
 		require.NoError(t, err)
-		assert.Equal(t, "This is a test note", note.Content)
+		assert.Equal(t, "This is a test note", note.Text.Content)
 	})
 
 	created, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
@@ -412,7 +412,7 @@ func TestNotesEndpoints(t *testing.T) {
 	t.Run("get specific note", func(t *testing.T) {
 		note, err := user.Client.GetNote(t.Context(), created.ID)
 		require.NoError(t, err)
-		assert.Equal(t, "Test Content", note.Content)
+		assert.Equal(t, "Test Content", note.Text.Content)
 	})
 
 	t.Run("update note", func(t *testing.T) {
@@ -422,7 +422,7 @@ func TestNotesEndpoints(t *testing.T) {
 			Color:   client.Ptr("#ff0000"),
 		})
 		require.NoError(t, err)
-		assert.Equal(t, "Updated Content", updated.Content)
+		assert.Equal(t, "Updated Content", updated.Text.Content)
 	})
 
 	t.Run("delete note", func(t *testing.T) {
@@ -1037,12 +1037,12 @@ func TestListItemGrouping(t *testing.T) {
 		// preceding top-level item.
 		note, err := user.Client.GetNote(t.Context(), created.ID)
 		require.NoError(t, err)
-		require.Len(t, note.Items, 3)
-		assert.Nil(t, note.Items[0].ParentID)
-		require.NotNil(t, note.Items[1].ParentID)
-		require.NotNil(t, note.Items[2].ParentID)
-		assert.Equal(t, note.Items[0].ID, *note.Items[1].ParentID)
-		assert.Equal(t, note.Items[0].ID, *note.Items[2].ParentID)
+		require.Len(t, note.List.Items, 3)
+		assert.Nil(t, note.List.Items[0].ParentID)
+		require.NotNil(t, note.List.Items[1].ParentID)
+		require.NotNil(t, note.List.Items[2].ParentID)
+		assert.Equal(t, note.List.Items[0].ID, *note.List.Items[1].ParentID)
+		assert.Equal(t, note.List.Items[0].ID, *note.List.Items[2].ParentID)
 	})
 
 	t.Run("child promoted to top-level via PATCH parent_id", func(t *testing.T) {
@@ -1056,11 +1056,11 @@ func TestListItemGrouping(t *testing.T) {
 
 		note, err := user.Client.GetNote(t.Context(), created.ID)
 		require.NoError(t, err)
-		require.Len(t, note.Items, 3)
-		assert.Nil(t, note.Items[0].ParentID)
-		require.NotNil(t, note.Items[1].ParentID)
-		assert.Equal(t, note.Items[0].ID, *note.Items[1].ParentID)
-		assert.Nil(t, note.Items[2].ParentID)
+		require.Len(t, note.List.Items, 3)
+		assert.Nil(t, note.List.Items[0].ParentID)
+		require.NotNil(t, note.List.Items[1].ParentID)
+		assert.Equal(t, note.List.Items[0].ID, *note.List.Items[1].ParentID)
+		assert.Nil(t, note.List.Items[2].ParentID)
 	})
 
 	t.Run("parent defaults to top-level when omitted", func(t *testing.T) {
@@ -1071,8 +1071,8 @@ func TestListItemGrouping(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		require.Len(t, note.Items, 1)
-		assert.Nil(t, note.Items[0].ParentID)
+		require.Len(t, note.List.Items, 1)
+		assert.Nil(t, note.List.Items[0].ParentID)
 	})
 
 	t.Run("indent level > 1 rejected on create", func(t *testing.T) {

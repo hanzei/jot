@@ -47,14 +47,14 @@ func TestGetNotesByLabel(t *testing.T) {
 		notes, err := user.Client.ListNotes(t.Context(), &client.ListNotesOptions{Label: labelIDByName["work"]})
 		require.NoError(t, err)
 		require.Len(t, notes, 1)
-		assert.Equal(t, "Work Note", notes[0].Content)
+		assert.Equal(t, "Work Note", notes[0].Text.Content)
 	})
 
 	t.Run("filter by different label returns correct notes", func(t *testing.T) {
 		notes, err := user.Client.ListNotes(t.Context(), &client.ListNotesOptions{Label: labelIDByName["personal"]})
 		require.NoError(t, err)
 		require.Len(t, notes, 1)
-		assert.Equal(t, "Personal Note", notes[0].Content)
+		assert.Equal(t, "Personal Note", notes[0].Text.Content)
 	})
 
 	t.Run("no label param returns all notes", func(t *testing.T) {
@@ -416,7 +416,7 @@ func TestCreateNoteWithLabels(t *testing.T) {
 		notes, err := user.Client.ListNotes(t.Context(), &client.ListNotesOptions{Label: note.Labels[0].ID})
 		require.NoError(t, err)
 		require.Len(t, notes, 1)
-		assert.Equal(t, "Filterable", notes[0].Content)
+		assert.Equal(t, "Filterable", notes[0].Text.Content)
 	})
 
 	t.Run("empty and whitespace-only label names are ignored", func(t *testing.T) {
@@ -446,7 +446,7 @@ func TestCreateNoteWithLabels(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, note.Labels, 1)
 		assert.Equal(t, "shopping", note.Labels[0].Name)
-		require.Len(t, note.Items, 2)
+		require.Len(t, note.List.Items, 2)
 	})
 }
 
