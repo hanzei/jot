@@ -223,10 +223,16 @@ annotations.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/api/notes/{id}/images` | Upload an image to a note (multipart `file`). 201 → `NoteImage`. Requires note write access (owner or shared). |
+| `POST` | `/api/images` | Upload an image (multipart `file`, `note_id`). 201 → `NoteImage`. Requires write access to `note_id` (owner or shared). |
 | `GET` | `/api/images/{id}` | Stream the full-size image bytes. Requires access to the parent note. |
 | `GET` | `/api/images/{id}/thumbnail` | Resized thumbnail for grid tiles. *(v1.1)* |
 | `DELETE` | `/api/images/{id}` | Hard-delete the image row (client-deferred; fired after the undo toast expires). Reclaims the blob if unreferenced (§10). Requires note access. |
+
+> Originally shipped as `POST /api/notes/{id}/images` (create nested under the
+> note); moved to the fully top-level `POST /api/images` with `note_id` in the
+> form body (issue #732) so image URLs — already note-independent for
+> read/thumbnail/delete — are consistently addressed by image id alone across
+> the whole lifecycle, matching the content-addressed, refcounted blob model.
 
 **Authorization**: every route resolves the parent note and reuses the existing
 "owner **or** shared-with" check (same predicate as note read/update). No new

@@ -80,7 +80,7 @@ func (c *Client) ChangePassword(ctx context.Context, currentPassword, newPasswor
 // data is read fully; filename is used only for the multipart header.
 func (c *Client) UploadProfileIcon(ctx context.Context, filename string, data io.Reader) (*User, error) {
 	var user User
-	if err := c.doMultipartUpload(ctx, "/api/v1/users/me/profile-icon", filename, data, &user); err != nil {
+	if err := c.doMultipartUpload(ctx, "/api/v1/users/me/profile-icon", filename, data, nil, &user); err != nil {
 		return nil, err
 	}
 	return &user, nil
