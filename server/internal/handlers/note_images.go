@@ -110,7 +110,7 @@ func (h *NotesHandler) reclaimNoteImageBlob(ctx context.Context, sha string) {
 //	@Security	CookieAuth
 //	@Accept		multipart/form-data
 //	@Produce	json
-//	@Param		note_id	formData	string	true	"Note ID"
+//	@Param		id		path		string	true	"Note ID"
 //	@Param		file	formData	file	true	"Image file (PNG, JPEG, WebP, or GIF)"
 //	@Success	201		{object}	models.NoteImage
 //	@Failure	400		{string}	string	"bad request"
@@ -118,24 +118,14 @@ func (h *NotesHandler) reclaimNoteImageBlob(ctx context.Context, sha string) {
 //	@Failure	404		{string}	string	"not found"
 //	@Failure	413		{string}	string	"file too large"
 //	@Failure	500		{string}	string	"internal server error"
-//	@Router		/images [post]
+//	@Router		/notes/{id}/images [post]
 func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
 		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
-	// note_id lives in the multipart form rather than the path (issue #732:
-	// /images is the single canonical base for the whole image lifecycle), so
-	// the form must be parsed before the note can be resolved.
-	r.Body = http.MaxBytesReader(w, r.Body, h.uploadMaxBytes+multipartOverheadBytes)
-	if parseErr := r.ParseMultipartForm(h.uploadMaxBytes); parseErr != nil {
-		// wrapHandler promotes a wrapped *http.MaxBytesError to 413 regardless
-		// of the status returned here.
-		return http.StatusBadRequest, nil, fmt.Errorf("parse multipart upload: %w", parseErr)
-	}
-
-	noteID := r.FormValue("note_id")
+	noteID := chi.URLParam(r, "id")
 	if !models.IsValidID(noteID) {
 		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
 	}
@@ -149,16 +139,23 @@ func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (
 	}
 
 	// Fast-path pre-check: reject a note that's already at capacity before
-	// doing the expensive part of upload work (hashing, decoding, blob
-	// storage) for it. This is only an optimization — CreateNoteImage
-	// enforces the cap atomically inside a transaction, so concurrent
-	// uploads can't race past it even though this check runs outside one.
+	// doing any upload work (hashing, decoding, blob storage) for it. This is
+	// only an optimization — CreateNoteImage enforces the cap atomically
+	// inside a transaction, so concurrent uploads can't race past it even
+	// though this check runs outside one.
 	existingCount, err := h.noteStore.GetNoteImageCountByNoteID(r.Context(), noteID)
 	if err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("count note images: %w", err)
 	}
 	if existingCount >= imageMaxPerNote {
 		return http.StatusBadRequest, nil, fmt.Errorf("note cannot have more than %d images", imageMaxPerNote)
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, h.uploadMaxBytes+multipartOverheadBytes)
+	if parseErr := r.ParseMultipartForm(h.uploadMaxBytes); parseErr != nil {
+		// wrapHandler promotes a wrapped *http.MaxBytesError to 413 regardless
+		// of the status returned here.
+		return http.StatusBadRequest, nil, fmt.Errorf("parse multipart upload: %w", parseErr)
 	}
 
 	file, header, err := r.FormFile("file")

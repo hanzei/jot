@@ -153,20 +153,15 @@ func (c *Client) doNoContent(ctx context.Context, method, path string, body any)
 }
 
 // doMultipartUpload POSTs a single-file multipart form to path (field name
-// "file", named filename), plus any extra string fields, and decodes a JSON
-// response into result. data is read fully. Shared by every single-file
-// upload endpoint (profile icon, note images).
-func (c *Client) doMultipartUpload(ctx context.Context, path, filename string, data io.Reader, fields map[string]string, result any) error {
+// "file", named filename) and decodes a JSON response into result. data is
+// read fully. Shared by every single-file upload endpoint (profile icon,
+// note images).
+func (c *Client) doMultipartUpload(ctx context.Context, path, filename string, data io.Reader, result any) error {
 	if data == nil {
 		return fmt.Errorf("data reader must not be nil")
 	}
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
-	for name, value := range fields {
-		if err := mw.WriteField(name, value); err != nil {
-			return fmt.Errorf("write form field %q: %w", name, err)
-		}
-	}
 	part, err := mw.CreateFormFile("file", filename)
 	if err != nil {
 		return fmt.Errorf("create form file: %w", err)

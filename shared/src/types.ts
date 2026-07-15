@@ -90,7 +90,7 @@ export interface NoteShare {
 /**
  * Metadata for an image attached to a note. Embedded on `Note.images`; a
  * narrow field set by design so the note list payload stays small. Image
- * bytes are fetched out-of-band from `GET /api/v1/images/{id}` (and
+ * bytes are fetched out-of-band from `GET /api/images/{id}` (and
  * `/thumbnail`), never inlined here.
  */
 export interface NoteImage {

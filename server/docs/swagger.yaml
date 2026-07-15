@@ -821,53 +821,6 @@ paths:
       summary: Get public server configuration
       tags:
       - system
-  /images:
-    post:
-      consumes:
-      - multipart/form-data
-      parameters:
-      - description: Note ID
-        in: formData
-        name: note_id
-        required: true
-        type: string
-      - description: Image file (PNG, JPEG, WebP, or GIF)
-        in: formData
-        name: file
-        required: true
-        type: file
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/models.NoteImage'
-        "400":
-          description: bad request
-          schema:
-            type: string
-        "401":
-          description: unauthorized
-          schema:
-            type: string
-        "404":
-          description: not found
-          schema:
-            type: string
-        "413":
-          description: file too large
-          schema:
-            type: string
-        "500":
-          description: internal server error
-          schema:
-            type: string
-      security:
-      - CookieAuth: []
-      summary: Upload an image to a note
-      tags:
-      - notes
   /images/{id}:
     delete:
       parameters:
@@ -1498,6 +1451,53 @@ paths:
       security:
       - CookieAuth: []
       summary: Duplicate an existing note
+      tags:
+      - notes
+  /notes/{id}/images:
+    post:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: Note ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Image file (PNG, JPEG, WebP, or GIF)
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.NoteImage'
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+        "413":
+          description: file too large
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Upload an image to a note
       tags:
       - notes
   /notes/{id}/items:

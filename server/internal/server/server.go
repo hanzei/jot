@@ -287,7 +287,7 @@ func (s *Server) setupRoutes() error {
 			r.Post("/notes/{id}/duplicate", s.wrapHandler(s.notesHandler.DuplicateNote))
 			r.Post("/notes/{id}/convert", s.wrapHandler(s.notesHandler.ConvertNoteType))
 
-			r.With(expensiveLimit).Post("/images", s.wrapHandler(s.notesHandler.UploadNoteImage))
+			r.With(expensiveLimit).Post("/notes/{id}/images", s.wrapHandler(s.notesHandler.UploadNoteImage))
 			r.Get("/images/{id}", s.wrapHandler(s.notesHandler.GetNoteImage))
 			r.Get("/images/{id}/thumbnail", s.wrapHandler(s.notesHandler.GetNoteImageThumbnail))
 			r.Delete("/images/{id}", s.wrapHandler(s.notesHandler.DeleteNoteImage))
