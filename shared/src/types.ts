@@ -58,6 +58,15 @@ export interface Label {
   updated_at: string;
 }
 
+export interface LabelCount {
+  label_id: string;
+  count: number;
+}
+
+export interface LabelCountsResponse {
+  counts: LabelCount[];
+}
+
 export type NoteType = 'text' | 'list';
 
 export interface NoteItem {
