@@ -2,12 +2,29 @@ package models
 
 import (
 	"testing"
+	"time"
 
 	"github.com/hanzei/jot/server/internal/database/dbtest"
 	"github.com/hanzei/jot/server/internal/database/dialect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// forceNoteUpdatedAtPast pins the note's updated_at to a fixed past instant and
+// returns it (read back through GetByID so the comparison normalizes any
+// driver-specific timestamp formatting). A later GetByID that still equals this
+// proves the note was not touched.
+func forceNoteUpdatedAtPast(t *testing.T, store *noteStore, noteID, userID string) time.Time {
+	t.Helper()
+	past := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+	_, err := store.db.ExecContext(t.Context(),
+		store.d.RewritePlaceholders(`UPDATE notes SET updated_at = ? WHERE id = ?`),
+		past, noteID)
+	require.NoError(t, err)
+	n, err := store.GetByID(t.Context(), noteID, userID)
+	require.NoError(t, err)
+	return n.UpdatedAt
+}
 
 // newTestBulkStore opens a fresh migrated database for driver and returns a
 // noteStore bound to it plus an owning user ID.
@@ -60,7 +77,7 @@ func TestUncheckAllItems(t *testing.T) {
 			}
 		})
 
-		t.Run("is idempotent when nothing is completed", func(t *testing.T) {
+		t.Run("is idempotent and does not touch the note when nothing is completed", func(t *testing.T) {
 			store, userID := newTestBulkStore(t, driver)
 			ctx := t.Context()
 
@@ -71,12 +88,18 @@ func TestUncheckAllItems(t *testing.T) {
 				})
 			require.NoError(t, err)
 
+			before := forceNoteUpdatedAtPast(t, store, note.ID, userID)
+
 			items, err := store.UncheckAllItems(ctx, note.ID)
 			require.NoError(t, err)
 			assert.Len(t, items, 2)
 			for _, it := range items {
 				assert.False(t, it.Completed)
 			}
+
+			after, err := store.GetByID(ctx, note.ID, userID)
+			require.NoError(t, err)
+			assert.True(t, after.UpdatedAt.Equal(before), "no-op uncheck must not bump the note's updated_at")
 		})
 	})
 }
@@ -158,7 +181,7 @@ func TestDeleteCompletedItems(t *testing.T) {
 			assert.Nil(t, child.ParentID, "orphaned child is re-homed to top level")
 		})
 
-		t.Run("is idempotent when nothing is completed", func(t *testing.T) {
+		t.Run("is idempotent and does not touch the note when nothing is completed", func(t *testing.T) {
 			store, userID := newTestBulkStore(t, driver)
 			ctx := t.Context()
 
@@ -169,9 +192,15 @@ func TestDeleteCompletedItems(t *testing.T) {
 				})
 			require.NoError(t, err)
 
+			before := forceNoteUpdatedAtPast(t, store, note.ID, userID)
+
 			items, err := store.DeleteCompletedItems(ctx, note.ID)
 			require.NoError(t, err)
 			assert.Len(t, items, 2)
+
+			after, err := store.GetByID(ctx, note.ID, userID)
+			require.NoError(t, err)
+			assert.True(t, after.UpdatedAt.Equal(before), "no-op delete must not bump the note's updated_at")
 		})
 	})
 }

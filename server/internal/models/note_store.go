@@ -2001,7 +2001,7 @@ func (s *noteStore) ToggleItemCompleted(ctx context.Context, noteID, itemID stri
 // UncheckAllItems clears the completed flag on every completed item of a note in
 // a single transaction and returns the note's full item list so callers
 // reconcile every affected item from one response. It is idempotent: a note with
-// no completed items is left unchanged (the note's updated_at is still bumped).
+// no completed items is left untouched (its updated_at is not bumped).
 func (s *noteStore) UncheckAllItems(ctx context.Context, noteID string) ([]NoteItem, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -2009,15 +2009,24 @@ func (s *noteStore) UncheckAllItems(ctx context.Context, noteID string) ([]NoteI
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if _, err = tx.ExecContext(ctx,
+	res, err := tx.ExecContext(ctx,
 		s.d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = CURRENT_TIMESTAMP WHERE note_id = ? AND completed = ?`),
 		false, noteID, true,
-	); err != nil {
+	)
+	if err != nil {
 		return nil, fmt.Errorf("failed to uncheck note items: %w", err)
 	}
+	unchecked, err := res.RowsAffected()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get rows affected: %w", err)
+	}
 
-	if err = touchNoteTx(ctx, tx, s.d, noteID); err != nil {
-		return nil, err
+	// Only bump the note when something actually changed, so a no-op call does
+	// not spuriously reorder the dashboard or emit an update to collaborators.
+	if unchecked > 0 {
+		if err = touchNoteTx(ctx, tx, s.d, noteID); err != nil {
+			return nil, err
+		}
 	}
 	if err = tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit uncheck all items: %w", err)
@@ -2033,7 +2042,8 @@ func (s *noteStore) UncheckAllItems(ctx context.Context, noteID string) ([]NoteI
 // defense-in-depth against any drifted row, an item orphaned by the delete (its
 // parent was completed and removed) is re-homed to top level to preserve the
 // parent-reference invariant. Positions are left with gaps, matching
-// DeleteItemFromNote. Idempotent: a note with no completed items is unchanged.
+// DeleteItemFromNote. Idempotent: a note with no completed items is left
+// untouched (its updated_at is not bumped).
 func (s *noteStore) DeleteCompletedItems(ctx context.Context, noteID string) ([]NoteItem, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -2041,25 +2051,33 @@ func (s *noteStore) DeleteCompletedItems(ctx context.Context, noteID string) ([]
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if _, err = tx.ExecContext(ctx,
+	res, err := tx.ExecContext(ctx,
 		s.d.RewritePlaceholders(`DELETE FROM note_items WHERE note_id = ? AND completed = ?`),
 		noteID, true,
-	); err != nil {
+	)
+	if err != nil {
 		return nil, fmt.Errorf("failed to delete completed note items: %w", err)
 	}
-
-	// Defense-in-depth: re-home any child whose parent was just removed.
-	if _, err = tx.ExecContext(ctx,
-		s.d.RewritePlaceholders(`UPDATE note_items SET parent_id = NULL, updated_at = CURRENT_TIMESTAMP
-			WHERE note_id = ? AND parent_id IS NOT NULL
-			  AND parent_id NOT IN (SELECT id FROM note_items WHERE note_id = ?)`),
-		noteID, noteID,
-	); err != nil {
-		return nil, fmt.Errorf("failed to re-home orphaned note items: %w", err)
+	deleted, err := res.RowsAffected()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get rows affected: %w", err)
 	}
 
-	if err = touchNoteTx(ctx, tx, s.d, noteID); err != nil {
-		return nil, err
+	if deleted > 0 {
+		// Defense-in-depth: re-home any child whose parent was just removed.
+		if _, err = tx.ExecContext(ctx,
+			s.d.RewritePlaceholders(`UPDATE note_items SET parent_id = NULL, updated_at = CURRENT_TIMESTAMP
+				WHERE note_id = ? AND parent_id IS NOT NULL
+				  AND parent_id NOT IN (SELECT id FROM note_items WHERE note_id = ?)`),
+			noteID, noteID,
+		); err != nil {
+			return nil, fmt.Errorf("failed to re-home orphaned note items: %w", err)
+		}
+
+		// Only bump the note when something was actually deleted.
+		if err = touchNoteTx(ctx, tx, s.d, noteID); err != nil {
+			return nil, err
+		}
 	}
 	if err = tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit delete completed items: %w", err)

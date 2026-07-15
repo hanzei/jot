@@ -597,9 +597,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   // deferred bulk delete lands, so the diff engine never re-deletes them.
   const [removedCompletedItems, setRemovedCompletedItems] = useState<{ id: string; text: string }[]>([]);
   const hiddenCompletedItemIds = useMemo(() => new Set(removedCompletedItems.map(i => i.id)), [removedCompletedItems]);
-  // The single pending deferred bulk delete (ref, not state, so its timer keeps
-  // running and the DELETE still fires even if the modal unmounts first).
-  const pendingCompletedDeleteRef = useRef<{ ids: Set<string>; timeoutId: ReturnType<typeof setTimeout> } | null>(null);
+  // Pending deferred bulk deletes, keyed by note ID (ref, not state, so timers
+  // keep running and each DELETE still fires even if the modal unmounts or
+  // switches to another note first). Keyed per note — like the image-removal
+  // bookkeeping — so a delete started on one note can't cancel another's.
+  const pendingCompletedDeletesRef = useRef<Map<string, { ids: Set<string>; timeoutId: ReturnType<typeof setTimeout> }>>(new Map());
 
   // Use useRef for timeout management instead of global window property
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -889,7 +891,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       // Same rationale for the "checked items deleted" undo bar: its deferred
       // bulk-delete timer keeps running across a note switch, so re-derive the
       // hidden set from whichever incoming items are still mid-window.
-      const pendingCompleted = pendingCompletedDeleteRef.current;
+      const pendingCompleted = note?.id ? pendingCompletedDeletesRef.current.get(note.id) : undefined;
       const incomingItems = note?.note_type === 'list' ? note.items ?? [] : [];
       const stillPendingCompleted = pendingCompleted
         ? incomingItems.filter(it => pendingCompleted.ids.has(it.id)).map(it => ({ id: it.id, text: it.text }))
@@ -1761,20 +1763,18 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   // never per-item-deletes them, and an SSE refresh can't resurrect them.
   const handleDeleteCompletedItems = useCallback(() => {
     const noteId = noteIdRef.current;
-    const pendingIds = pendingCompletedDeleteRef.current?.ids ?? new Set<string>();
+    if (!noteId) return;
+    const existing = pendingCompletedDeletesRef.current.get(noteId);
+    const pendingIds = existing?.ids ?? new Set<string>();
     const toRemove = itemsRef.current.filter(item => item.completed && !pendingIds.has(item.id));
     if (toRemove.length === 0) return;
 
     setRemovedCompletedItems(prev => [...prev, ...toRemove.map(item => ({ id: item.id, text: item.text }))]);
     const ids = new Set<string>([...pendingIds, ...toRemove.map(item => item.id)]);
-    if (pendingCompletedDeleteRef.current) clearTimeout(pendingCompletedDeleteRef.current.timeoutId);
+    if (existing) clearTimeout(existing.timeoutId);
 
     const timeoutId = setTimeout(() => {
-      pendingCompletedDeleteRef.current = null;
-      if (!noteId) {
-        finalizeCompletedDeletion(ids);
-        return;
-      }
+      pendingCompletedDeletesRef.current.delete(noteId);
       notes.deleteCompletedItems(noteId)
         .then(() => {
           finalizeCompletedDeletion(ids);
@@ -1787,16 +1787,19 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
           showError(t('note.failedSaveChanges'));
         });
     }, COMPLETED_DELETE_UNDO_MS);
-    pendingCompletedDeleteRef.current = { ids, timeoutId };
+    pendingCompletedDeletesRef.current.set(noteId, { ids, timeoutId });
   }, [finalizeCompletedDeletion, onRefresh, showError, t]);
 
   const undoDeleteCompletedItems = useCallback(() => {
-    const entry = pendingCompletedDeleteRef.current;
+    const noteId = noteIdRef.current;
+    const entry = noteId ? pendingCompletedDeletesRef.current.get(noteId) : undefined;
     if (entry) {
       clearTimeout(entry.timeoutId);
-      pendingCompletedDeleteRef.current = null;
+      pendingCompletedDeletesRef.current.delete(noteId!);
+      setRemovedCompletedItems(prev => prev.filter(item => !entry.ids.has(item.id)));
+    } else {
+      setRemovedCompletedItems([]);
     }
-    setRemovedCompletedItems([]);
   }, []);
 
   // Persists local edits to the server as granular operations. The optional
@@ -2546,6 +2549,9 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                 delete (rendered inside the Dialog, not the app-wide toast). */}
             {removedCompletedItems.length > 0 && (
               <div
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
                 className="flex items-center justify-between rounded-md bg-gray-800 dark:bg-slate-900 text-white text-sm px-3 py-2"
                 data-testid="checked-items-removed-bar"
               >
