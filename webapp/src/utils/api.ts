@@ -141,6 +141,15 @@ export const notes = {
   // caller to reconcile every affected item from one response.
   toggleItemCompleted: (noteId: string, itemId: string, completed: boolean): Promise<NoteItem[]> =>
     api.post(`/notes/${noteId}/items/${itemId}/toggle-completed`, { completed }).then(res => res.data),
+
+  // Bulk clear operations over a list's completed items. Each is one atomic
+  // server request (rather than a per-item burst) and returns the note's full
+  // item list for the caller to reconcile from a single response.
+  uncheckAllItems: (noteId: string): Promise<NoteItem[]> =>
+    api.post(`/notes/${noteId}/items/uncheck-all`).then(res => res.data),
+
+  deleteCompletedItems: (noteId: string): Promise<NoteItem[]> =>
+    api.post(`/notes/${noteId}/items/delete-completed`).then(res => res.data),
 };
 
 export const labels = {

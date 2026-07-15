@@ -1998,6 +1998,76 @@ func (s *noteStore) ToggleItemCompleted(ctx context.Context, noteID, itemID stri
 	return s.getItemsByNoteID(ctx, noteID)
 }
 
+// UncheckAllItems clears the completed flag on every completed item of a note in
+// a single transaction and returns the note's full item list so callers
+// reconcile every affected item from one response. It is idempotent: a note with
+// no completed items is left unchanged (the note's updated_at is still bumped).
+func (s *noteStore) UncheckAllItems(ctx context.Context, noteID string) ([]NoteItem, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err = tx.ExecContext(ctx,
+		s.d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = CURRENT_TIMESTAMP WHERE note_id = ? AND completed = ?`),
+		false, noteID, true,
+	); err != nil {
+		return nil, fmt.Errorf("failed to uncheck note items: %w", err)
+	}
+
+	if err = touchNoteTx(ctx, tx, s.d, noteID); err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit uncheck all items: %w", err)
+	}
+
+	return s.getItemsByNoteID(ctx, noteID)
+}
+
+// DeleteCompletedItems removes every completed item of a note in a single
+// transaction and returns the note's remaining items so callers reconcile from
+// one response. The parent/child completion invariant (a completed parent always
+// has all-completed children) means completed groups are removed whole; as
+// defense-in-depth against any drifted row, an item orphaned by the delete (its
+// parent was completed and removed) is re-homed to top level to preserve the
+// parent-reference invariant. Positions are left with gaps, matching
+// DeleteItemFromNote. Idempotent: a note with no completed items is unchanged.
+func (s *noteStore) DeleteCompletedItems(ctx context.Context, noteID string) ([]NoteItem, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err = tx.ExecContext(ctx,
+		s.d.RewritePlaceholders(`DELETE FROM note_items WHERE note_id = ? AND completed = ?`),
+		noteID, true,
+	); err != nil {
+		return nil, fmt.Errorf("failed to delete completed note items: %w", err)
+	}
+
+	// Defense-in-depth: re-home any child whose parent was just removed.
+	if _, err = tx.ExecContext(ctx,
+		s.d.RewritePlaceholders(`UPDATE note_items SET parent_id = NULL, updated_at = CURRENT_TIMESTAMP
+			WHERE note_id = ? AND parent_id IS NOT NULL
+			  AND parent_id NOT IN (SELECT id FROM note_items WHERE note_id = ?)`),
+		noteID, noteID,
+	); err != nil {
+		return nil, fmt.Errorf("failed to re-home orphaned note items: %w", err)
+	}
+
+	if err = touchNoteTx(ctx, tx, s.d, noteID); err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit delete completed items: %w", err)
+	}
+
+	return s.getItemsByNoteID(ctx, noteID)
+}
+
 func (s *noteStore) HasAccess(ctx context.Context, noteID string, userID string) (bool, error) {
 	// Use the same predicate as GetByID: a note_user_state row exists for both
 	// owners and collaborators, so this is a single consistent access check.

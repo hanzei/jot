@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback, type ReactElement, type ReactNode } from 'react';
-import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, GripVertical, Pin, EllipsisVertical } from 'lucide-react';
+import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, GripVertical, Pin, EllipsisVertical, Square } from 'lucide-react';
 import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, IMAGE_MAX_PER_NOTE, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListItems, listToText, type Note, type NoteType, type NoteImage, type CreateNoteRequest, type UpdateNoteRequest, type ConvertNoteTypeRequest, type PatchNoteItemRequest, type Label, type User, type Collaborator } from '@jot/shared';
@@ -35,6 +35,9 @@ import { CSS } from '@dnd-kit/utilities';
 
 // Undo window for a client-deferred note image removal (spec: ~10s).
 const IMAGE_REMOVE_UNDO_MS = 10_000;
+// Undo window for the client-deferred "delete checked items" bulk action. The
+// single bulk DELETE only fires once this elapses without an undo.
+const COMPLETED_DELETE_UNDO_MS = 10_000;
 
 // A single label pill shown in the note modal's avatars/labels row.
 function LabelChip({ name }: { name: string }) {
@@ -586,6 +589,18 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   // fires — even if this component unmounts before the undo window elapses.
   const pendingImageRemovalsRef = useRef<Map<string, { timeoutId: ReturnType<typeof setTimeout> }>>(new Map());
 
+  // Checked list items currently showing the inline "checked items deleted —
+  // Undo" bar. Rendered inside the DialogPanel (not the app-wide toast) for the
+  // same reason as image removal above. hiddenCompletedItemIds is derived from
+  // this so the two never drift. Only id/text are needed for the bar's count;
+  // the items themselves stay in the local model (merely hidden) until the
+  // deferred bulk delete lands, so the diff engine never re-deletes them.
+  const [removedCompletedItems, setRemovedCompletedItems] = useState<{ id: string; text: string }[]>([]);
+  const hiddenCompletedItemIds = useMemo(() => new Set(removedCompletedItems.map(i => i.id)), [removedCompletedItems]);
+  // The single pending deferred bulk delete (ref, not state, so its timer keeps
+  // running and the DELETE still fires even if the modal unmounts first).
+  const pendingCompletedDeleteRef = useRef<{ ids: Set<string>; timeoutId: ReturnType<typeof setTimeout> } | null>(null);
+
   // Use useRef for timeout management instead of global window property
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const errorTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -786,7 +801,9 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   // Separate completed and uncompleted items with memoization
   const { uncompletedItems, completedItems, completedItemTexts } = useMemo(() => {
     const uncompletedItems = items.filter(item => !item.completed);
-    const completedItems = items.filter(item => item.completed);
+    // Items mid-undo-window are completed but hidden from view until their
+    // deferred bulk delete lands (or is undone), mirroring image removal.
+    const completedItems = items.filter(item => item.completed && !hiddenCompletedItemIds.has(item.id));
     const seen = new Set<string>();
     const completedItemTexts: string[] = [];
     for (const item of completedItems) {
@@ -797,7 +814,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       }
     }
     return { uncompletedItems, completedItems, completedItemTexts };
-  }, [items]);
+  }, [items, hiddenCompletedItemIds]);
 
   // Softly animate the modal's height when its contents structurally change
   // (an item checked off, added/removed, or the completed section toggled), so
@@ -868,6 +885,16 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       // (re-)opened, not cleared on switch.
       const stillPending = (note?.images ?? []).filter(img => pendingImageRemovalsRef.current.has(img.id));
       setRemovedImages(stillPending);
+
+      // Same rationale for the "checked items deleted" undo bar: its deferred
+      // bulk-delete timer keeps running across a note switch, so re-derive the
+      // hidden set from whichever incoming items are still mid-window.
+      const pendingCompleted = pendingCompletedDeleteRef.current;
+      const incomingItems = note?.note_type === 'list' ? note.items ?? [] : [];
+      const stillPendingCompleted = pendingCompleted
+        ? incomingItems.filter(it => pendingCompleted.ids.has(it.id)).map(it => ({ id: it.id, text: it.text }))
+        : [];
+      setRemovedCompletedItems(stillPendingCompleted);
     }
 
     if (note) {
@@ -1671,6 +1698,107 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
   }, []);
 
+  // Unchecks every completed item in one bulk request. Mirrors the single-item
+  // toggle: optimistic local update, then reconcile only the completed flags the
+  // server reports (never replacing the whole list, so unsaved edits survive),
+  // advance the diff baseline, and revert precisely those flags on failure.
+  const handleUncheckAllItems = useCallback(async () => {
+    const noteId = noteIdRef.current;
+    const before = itemsRef.current;
+    const completed = before.filter(item => item.completed);
+    if (completed.length === 0) return;
+
+    const revert = new Set(completed.map(item => item.id));
+    commitItems(before.map(item => (item.completed ? { ...item, completed: false } : item)));
+
+    // A not-yet-persisted note has no server-side items; the bulk create on save
+    // carries the (now cleared) flags instead.
+    if (!noteId) {
+      markDirty();
+      return;
+    }
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = undefined;
+    }
+
+    try {
+      const serverItems = await notes.uncheckAllItems(noteId);
+      const completedById = new Map(serverItems.map(item => [item.id, item.completed]));
+      commitItems(itemsRef.current.map(item => {
+        const serverCompleted = completedById.get(item.id);
+        return serverCompleted === undefined ? item : { ...item, completed: serverCompleted };
+      }));
+      for (const [id, comp] of completedById) {
+        const snap = savedItemsRef.current.get(id);
+        if (snap) savedItemsRef.current.set(id, { ...snap, completed: comp });
+      }
+      onRefresh?.();
+      flashSaved();
+    } catch (error) {
+      console.error('Failed to uncheck all items:', error);
+      commitItems(itemsRef.current.map(item => (revert.has(item.id) ? { ...item, completed: true } : item)));
+      showError(t('note.failedSaveChanges'));
+    }
+  }, [commitItems, markDirty, onRefresh, flashSaved, showError, t]);
+
+  // Removes the given items from the local model and diff baseline once their
+  // deferred delete has actually landed (or on a fresh new-note save), so the
+  // diff engine treats them as gone rather than re-deleting them per-item.
+  const finalizeCompletedDeletion = useCallback((ids: Set<string>) => {
+    commitItems(itemsRef.current.filter(item => !ids.has(item.id)));
+    for (const id of ids) savedItemsRef.current.delete(id);
+    savedOrderRef.current = savedOrderRef.current.filter(id => !ids.has(id));
+    setRemovedCompletedItems(prev => prev.filter(item => !ids.has(item.id)));
+  }, [commitItems]);
+
+  // Deletes all checked items, client-deferred behind an in-modal undo bar (the
+  // app-wide toast lives outside the Dialog portal, so clicking it would close
+  // the modal — same constraint as image removal). The items hide immediately;
+  // the single bulk DELETE fires only once the undo window elapses. Until then
+  // they remain in the local model (merely hidden) so an autosave in the window
+  // never per-item-deletes them, and an SSE refresh can't resurrect them.
+  const handleDeleteCompletedItems = useCallback(() => {
+    const noteId = noteIdRef.current;
+    const pendingIds = pendingCompletedDeleteRef.current?.ids ?? new Set<string>();
+    const toRemove = itemsRef.current.filter(item => item.completed && !pendingIds.has(item.id));
+    if (toRemove.length === 0) return;
+
+    setRemovedCompletedItems(prev => [...prev, ...toRemove.map(item => ({ id: item.id, text: item.text }))]);
+    const ids = new Set<string>([...pendingIds, ...toRemove.map(item => item.id)]);
+    if (pendingCompletedDeleteRef.current) clearTimeout(pendingCompletedDeleteRef.current.timeoutId);
+
+    const timeoutId = setTimeout(() => {
+      pendingCompletedDeleteRef.current = null;
+      if (!noteId) {
+        finalizeCompletedDeletion(ids);
+        return;
+      }
+      notes.deleteCompletedItems(noteId)
+        .then(() => {
+          finalizeCompletedDeletion(ids);
+          onRefresh?.();
+        })
+        .catch((error) => {
+          console.error('Failed to delete completed items:', error);
+          // The delete never happened — un-hide so nothing silently disappears.
+          setRemovedCompletedItems(prev => prev.filter(item => !ids.has(item.id)));
+          showError(t('note.failedSaveChanges'));
+        });
+    }, COMPLETED_DELETE_UNDO_MS);
+    pendingCompletedDeleteRef.current = { ids, timeoutId };
+  }, [finalizeCompletedDeletion, onRefresh, showError, t]);
+
+  const undoDeleteCompletedItems = useCallback(() => {
+    const entry = pendingCompletedDeleteRef.current;
+    if (entry) {
+      clearTimeout(entry.timeoutId);
+      pendingCompletedDeleteRef.current = null;
+    }
+    setRemovedCompletedItems([]);
+  }, []);
+
   // Persists local edits to the server as granular operations. The optional
   // argument is ignored (kept for call-site compatibility); the latest state is
   // always read from itemsRef/autoSaveDraftRef so queued saves pick up the most
@@ -2414,6 +2542,25 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
               </div>
             ))}
 
+            {/* Inline "checked items deleted — Undo" bar for the deferred bulk
+                delete (rendered inside the Dialog, not the app-wide toast). */}
+            {removedCompletedItems.length > 0 && (
+              <div
+                className="flex items-center justify-between rounded-md bg-gray-800 dark:bg-slate-900 text-white text-sm px-3 py-2"
+                data-testid="checked-items-removed-bar"
+              >
+                <span>{t('note.checkedItemsDeleted', { count: removedCompletedItems.length })}</span>
+                <button
+                  type="button"
+                  onClick={undoDeleteCompletedItems}
+                  className="ml-3 font-medium text-blue-300 hover:text-blue-200 hover:underline"
+                  data-testid="checked-items-undo"
+                >
+                  {t('dashboard.undo')}
+                </button>
+              </div>
+            )}
+
             {/* Note type selector (only for new notes) */}
             {!note && (
               <div className="flex space-x-2">
@@ -2960,6 +3107,32 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                                 <MenuKbd>L</MenuKbd>
                               </button>
                             </MenuItem>
+                            {noteType === 'list' && completedItems.length > 0 && (
+                              <>
+                                <MenuItem>
+                                  <button
+                                    onClick={handleUncheckAllItems}
+                                    className={OVERFLOW_ITEM}
+                                    data-testid="note-uncheck-all"
+                                  >
+                                    <Square className="h-4 w-4 mr-2" />
+                                    {t('note.uncheckAllItems')}
+                                  </button>
+                                </MenuItem>
+                                <MenuItem>
+                                  <button
+                                    onClick={handleDeleteCompletedItems}
+                                    className={OVERFLOW_ITEM_DANGER}
+                                    data-testid="note-delete-checked"
+                                  >
+                                    <span className="flex items-center">
+                                      <Trash2 className="h-4 w-4 mr-2" />
+                                      {t('note.deleteCheckedItems')}
+                                    </span>
+                                  </button>
+                                </MenuItem>
+                              </>
+                            )}
                             {isOwner && onDelete && (
                               <MenuItem>
                                 <button

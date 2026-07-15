@@ -232,6 +232,18 @@ export class DashboardPage {
     await confirmDialog.getByRole('button', { name: 'Convert to text' }).click();
   }
 
+  /** Unchecks all completed items on the open list via the overflow menu. */
+  async uncheckAllItemsFromModal() {
+    await this.openModalOverflowMenu();
+    await this.page.getByTestId('note-uncheck-all').click();
+  }
+
+  /** Deletes all checked items on the open list via the overflow menu. */
+  async deleteCheckedItemsFromModal() {
+    await this.openModalOverflowMenu();
+    await this.page.getByTestId('note-delete-checked').click();
+  }
+
   async archiveCurrentNoteFromModal() {
     const activeDialog = this.page.getByRole('dialog').last();
     await activeDialog.getByRole('button', { name: 'Archive note' }).click();

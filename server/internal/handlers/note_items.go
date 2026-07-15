@@ -403,6 +403,82 @@ func (h *NotesHandler) ToggleNoteItemCompleted(w http.ResponseWriter, r *http.Re
 	return http.StatusOK, items, nil
 }
 
+// UncheckAllNoteItems godoc
+//
+//	@Summary	Uncheck all completed items on a list note
+//	@Description	Clears the completed flag on every item of the list and returns the note's full item list. Idempotent when nothing is completed.
+//	@Tags		notes
+//	@Security	CookieAuth
+//	@Produce	json
+//	@Param		id	path		string	true	"Note ID"
+//	@Success	200	{array}		models.NoteItem
+//	@Failure	400	{string}	string	"bad request"
+//	@Failure	401	{string}	string	"unauthorized"
+//	@Failure	404	{string}	string	"not found"
+//	@Failure	500	{string}	string	"internal server error"
+//	@Router		/notes/{id}/items/uncheck-all [post]
+func (h *NotesHandler) UncheckAllNoteItems(w http.ResponseWriter, r *http.Request) (int, any, error) {
+	user, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	}
+
+	noteID := chi.URLParam(r, "id")
+	if !models.IsValidID(noteID) {
+		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
+	}
+
+	if _, status, err := h.loadListNoteForItemOp(r.Context(), noteID, user.ID); err != nil {
+		return status, nil, err
+	}
+
+	items, err := h.noteStore.UncheckAllItems(r.Context(), noteID)
+	if err != nil {
+		return http.StatusInternalServerError, nil, fmt.Errorf("uncheck all items: %w", err)
+	}
+
+	h.publishItemChangeEvent(r.Context(), noteID, user.ID)
+	return http.StatusOK, items, nil
+}
+
+// DeleteCompletedNoteItems godoc
+//
+//	@Summary	Delete all completed items on a list note
+//	@Description	Deletes every completed item of the list and returns the note's remaining items. Idempotent when nothing is completed.
+//	@Tags		notes
+//	@Security	CookieAuth
+//	@Produce	json
+//	@Param		id	path		string	true	"Note ID"
+//	@Success	200	{array}		models.NoteItem
+//	@Failure	400	{string}	string	"bad request"
+//	@Failure	401	{string}	string	"unauthorized"
+//	@Failure	404	{string}	string	"not found"
+//	@Failure	500	{string}	string	"internal server error"
+//	@Router		/notes/{id}/items/delete-completed [post]
+func (h *NotesHandler) DeleteCompletedNoteItems(w http.ResponseWriter, r *http.Request) (int, any, error) {
+	user, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	}
+
+	noteID := chi.URLParam(r, "id")
+	if !models.IsValidID(noteID) {
+		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
+	}
+
+	if _, status, err := h.loadListNoteForItemOp(r.Context(), noteID, user.ID); err != nil {
+		return status, nil, err
+	}
+
+	items, err := h.noteStore.DeleteCompletedItems(r.Context(), noteID)
+	if err != nil {
+		return http.StatusInternalServerError, nil, fmt.Errorf("delete completed items: %w", err)
+	}
+
+	h.publishItemChangeEvent(r.Context(), noteID, user.ID)
+	return http.StatusOK, items, nil
+}
+
 // publishItemChangeEvent broadcasts a personalized note_updated event to every
 // collaborator after an item-level change. Items are shared content, so each
 // audience member receives their own personalized copy of the note (preserving
