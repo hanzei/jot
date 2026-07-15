@@ -45,6 +45,7 @@ export async function uploadNoteImage(
   signal?: AbortSignal,
 ): Promise<NoteImage> {
   const formData = new FormData();
+  formData.append('note_id', noteId);
   formData.append('file', {
     uri: Platform.OS === 'ios' ? file.uri.replace('file://', '') : file.uri,
     name: file.name,
@@ -52,7 +53,7 @@ export async function uploadNoteImage(
   } as unknown as Blob);
 
   let lastPercent = -1;
-  const res = await api.post(`/notes/${noteId}/images`, formData, {
+  const res = await api.post('/images', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: NOTE_IMAGE_UPLOAD_TIMEOUT_MS,
     signal,

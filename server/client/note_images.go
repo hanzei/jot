@@ -11,7 +11,8 @@ import (
 // used only for the multipart header.
 func (c *Client) UploadNoteImage(ctx context.Context, noteID, filename string, data io.Reader) (*NoteImage, error) {
 	var img NoteImage
-	if err := c.doMultipartUpload(ctx, fmt.Sprintf("/api/v1/notes/%s/images", noteID), filename, data, &img); err != nil {
+	fields := map[string]string{"note_id": noteID}
+	if err := c.doMultipartUpload(ctx, "/api/v1/images", filename, data, fields, &img); err != nil {
 		return nil, err
 	}
 	return &img, nil

@@ -50,7 +50,7 @@ describe('uploadNoteImage', () => {
     await uploadNoteImage('note-1', file);
 
     expect(mockAxiosInstance.post).toHaveBeenCalledWith(
-      '/notes/note-1/images',
+      '/images',
       expect.anything(),
       expect.objectContaining({ timeout: NOTE_IMAGE_UPLOAD_TIMEOUT_MS }),
     );
@@ -64,7 +64,7 @@ describe('uploadNoteImage', () => {
     await uploadNoteImage('note-1', file, undefined, controller.signal);
 
     expect(mockAxiosInstance.post).toHaveBeenCalledWith(
-      '/notes/note-1/images',
+      '/images',
       expect.anything(),
       expect.objectContaining({ signal: controller.signal }),
     );

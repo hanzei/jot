@@ -211,8 +211,9 @@ export const images = {
 
   upload: (noteId: string, file: File, onProgress?: (percent: number) => void): Promise<NoteImage> => {
     const formData = new FormData();
+    formData.append('note_id', noteId);
     formData.append('file', file);
-    return api.post(`/notes/${noteId}/images`, formData, {
+    return api.post('/images', formData, {
       onUploadProgress: (event) => {
         if (!onProgress || !event.total) return;
         onProgress(Math.round((event.loaded / event.total) * 100));
