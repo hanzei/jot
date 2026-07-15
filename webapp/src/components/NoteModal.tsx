@@ -2683,39 +2683,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
               </div>
             )}
 
-            {/* Avatars + Labels row */}
+            {/* Labels + Avatars row */}
             <div className="flex flex-wrap items-center gap-2">
-              {/* Share avatars — clicking opens the share modal (owners only) */}
-              {note?.is_shared && (() => {
-                const avatars = buildShareAvatars(note, currentUserId, usersById);
-                if (avatars.length === 0) return null;
-                const avatarEls = avatars.map((a, index) => (
-                  <div key={a.key} title={a.displayName}>
-                    <LetterAvatar
-                      firstName={a.firstName}
-                      username={a.username}
-                      userId={a.userId}
-                      hasProfileIcon={a.hasProfileIcon}
-                      iconVersion={a.iconVersion}
-                      className={`w-6 h-6 ring-2 ring-white dark:ring-slate-800 ${index > 0 ? '-ml-1' : ''}`}
-                    />
-                  </div>
-                ));
-                return isOwner && onShare ? (
-                  <button
-                    type="button"
-                    onClick={() => onShare(note)}
-                    onMouseDown={(event) => event.stopPropagation()}
-                    className="flex items-center rounded-full transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                    title={t('note.share')}
-                    aria-label={t('note.share')}
-                  >
-                    {avatarEls}
-                  </button>
-                ) : (
-                  <div className="flex items-center">{avatarEls}</div>
-                );
-              })()}
               {/* Label picker anchor. Saved notes manage labels via the overflow
                   menu and reopen the picker by clicking their label chips. Unsaved
                   notes have no overflow menu, so they keep the inline chips plus an
@@ -2762,6 +2731,37 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                   )
                 )}
               </div>
+              {/* Share avatars — clicking opens the share modal (owners only) */}
+              {note?.is_shared && (() => {
+                const avatars = buildShareAvatars(note, currentUserId, usersById);
+                if (avatars.length === 0) return null;
+                const avatarEls = avatars.map((a) => (
+                  <div key={a.key} title={a.displayName}>
+                    <LetterAvatar
+                      firstName={a.firstName}
+                      username={a.username}
+                      userId={a.userId}
+                      hasProfileIcon={a.hasProfileIcon}
+                      iconVersion={a.iconVersion}
+                      className="w-6 h-6 ring-2 ring-white dark:ring-slate-800"
+                    />
+                  </div>
+                ));
+                return isOwner && onShare ? (
+                  <button
+                    type="button"
+                    onClick={() => onShare(note)}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    className="flex items-center -space-x-1 rounded-full transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                    title={t('note.share')}
+                    aria-label={t('note.share')}
+                  >
+                    {avatarEls}
+                  </button>
+                ) : (
+                  <div className="flex items-center -space-x-1">{avatarEls}</div>
+                );
+              })()}
             </div>
 
           </div>
