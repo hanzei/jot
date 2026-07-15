@@ -51,6 +51,7 @@ import {
   reorderLocalItems,
   setLocalItemsCompleted,
   deleteLocalItems,
+  reconcileLocalItems,
 } from '../db/noteQueries';
 import { enqueueOperation, rethrowIfNotQueueable } from '../db/syncQueue';
 import { isOnlineWriteAllowed } from '../api/serverReachability';
@@ -1064,9 +1065,10 @@ export function useUncheckAllItems() {
       if (isOnlineWriteAllowed(isConnectedRef.current)) {
         try {
           const serverItems = await uncheckAllItems(noteId, itemIds);
-          for (const item of serverItems) {
-            await patchLocalItem(db, noteId, item.id, { completed: item.completed });
-          }
+          // The server returns the note's full, authoritative item list, so
+          // reconcile every field (and prune any local row it no longer
+          // contains) rather than just patching `completed`.
+          await reconcileLocalItems(db, noteId, serverItems);
           return serverItems;
         } catch (err) {
           // Transient failure: fall through to the offline path so the change is
@@ -1124,7 +1126,10 @@ export function useDeleteCompletedItems() {
       if (isOnlineWriteAllowed(isConnectedRef.current)) {
         try {
           const serverItems = await deleteCompletedItems(noteId, itemIds);
-          await deleteLocalItems(db, noteId, itemIds);
+          // The server returns the note's full, authoritative remaining item
+          // list; reconciling against it (rather than deleting exactly
+          // `itemIds`) prunes precisely what the server actually removed.
+          await reconcileLocalItems(db, noteId, serverItems);
           return serverItems;
         } catch (err) {
           // Transient failure: fall through to the offline path so the delete is

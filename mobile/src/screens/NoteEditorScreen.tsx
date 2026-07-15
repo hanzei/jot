@@ -110,6 +110,33 @@ const ZOOM_MS = 280;
 // reference stays stable across renders.
 const DRAG_CELL_ANIMATIONS = { opacity: 1, transform: [] };
 
+// Re-inserts each id in `idsToRestore` back into `currentIds`, anchored right
+// after its nearest still-present predecessor in `originalOrder` (or at the
+// start, if none precedes it). Used to revert a failed bulk delete: reverting
+// to a stale full snapshot would also discard any edit or addition made to
+// *other* items while the request was in flight, so instead only the deleted
+// ids are restored, on top of whatever `currentIds` has become by the time
+// the failure is handled.
+function reinsertIds(currentIds: string[], originalOrder: string[], idsToRestore: Set<string>): string[] {
+  const present = new Set(currentIds);
+  const result = [...currentIds];
+  for (let i = 0; i < originalOrder.length; i++) {
+    const id = originalOrder[i];
+    if (!idsToRestore.has(id)) continue;
+    let anchor: string | null = null;
+    for (let j = i - 1; j >= 0; j--) {
+      if (present.has(originalOrder[j])) {
+        anchor = originalOrder[j];
+        break;
+      }
+    }
+    const insertAt = anchor ? result.indexOf(anchor) + 1 : 0;
+    result.splice(insertAt, 0, id);
+    present.add(id);
+  }
+  return result;
+}
+
 export default function NoteEditorScreen() {
   const navigation = useNavigation<EditorNavProp>();
   const route = useRoute<EditorRouteProp>();
@@ -1454,10 +1481,6 @@ export default function NoteEditorScreen() {
   // (applyCompletedCascade / collectToggleCascade) guarantees a completed
   // parent's children are completed too, so they are always in the same set.
   const handleDeleteCompletedItems = useCallback(async () => {
-    const noteId = noteIdRef.current;
-    // Matches web: an unsaved note has no server-side items to delete, and the
-    // eventual bulk-create only carries what's left in `items` at save time.
-    if (!noteId) return;
     const pendingCount = itemsRef.current.filter((item) => item.completed).length;
     if (pendingCount === 0) return;
 
@@ -1473,6 +1496,7 @@ export default function NoteEditorScreen() {
     const completed = before.filter((item) => item.completed);
     if (completed.length === 0) return;
     const ids = completed.map((item) => item.id);
+    const idSet = new Set(ids);
     const remaining = before.filter((item) => !item.completed);
     const beforeSavedItems = new Map(savedItemsRef.current);
     const beforeSavedOrder = [...savedOrderRef.current];
@@ -1480,20 +1504,40 @@ export default function NoteEditorScreen() {
     itemsRef.current = remaining;
     setItems(remaining);
     for (const id of ids) savedItemsRef.current.delete(id);
-    savedOrderRef.current = savedOrderRef.current.filter((id) => !ids.includes(id));
+    savedOrderRef.current = savedOrderRef.current.filter((id) => !idSet.has(id));
+
+    const noteId = noteIdRef.current;
+    if (!noteId) {
+      // Unsaved new note: let the bulk-create carry what's left in `items`.
+      markDirtyAndScheduleUpdate();
+      return;
+    }
 
     await withPendingIndicator(async () => {
       try {
         await deleteCompletedItemsRef.current({ noteId, itemIds: ids });
       } catch {
-        itemsRef.current = before;
-        setItems(before);
-        savedItemsRef.current = beforeSavedItems;
-        savedOrderRef.current = beforeSavedOrder;
+        // Restore only the deleted items, on top of whatever itemsRef.current
+        // has become since — an edit or addition made to another item while
+        // the request was in flight must survive the revert, not just the
+        // stale `before` snapshot.
+        const byId = new Map(before.map((item) => [item.id, item]));
+        const revertedIds = reinsertIds(itemsRef.current.map((item) => item.id), before.map((item) => item.id), idSet);
+        const currentById = new Map(itemsRef.current.map((item) => [item.id, item]));
+        const reverted = revertedIds.map((id) => currentById.get(id) ?? byId.get(id)!);
+        itemsRef.current = reverted;
+        setItems(reverted);
+
+        for (const id of ids) {
+          const snap = beforeSavedItems.get(id);
+          if (snap) savedItemsRef.current.set(id, snap);
+        }
+        savedOrderRef.current = reinsertIds(savedOrderRef.current, beforeSavedOrder, idSet);
+
         setSaveError(t('note.failedSaveChanges'));
       }
     });
-  }, [confirm, t, withPendingIndicator]);
+  }, [confirm, markDirtyAndScheduleUpdate, t, withPendingIndicator]);
 
   const handleItemTextChange = useCallback(
     (index: number, text: string) => {

@@ -40,6 +40,7 @@ jest.mock('../src/db/noteQueries', () => ({
   reorderLocalItems: jest.fn().mockResolvedValue(undefined),
   setLocalItemsCompleted: jest.fn().mockResolvedValue(undefined),
   deleteLocalItems: jest.fn().mockResolvedValue(undefined),
+  reconcileLocalItems: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('../src/db/syncQueue', () => ({
