@@ -2024,8 +2024,8 @@ func (s *noteStore) SetItemsCompleted(ctx context.Context, noteID string, itemID
 		).Scan(&parentID)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				// ID does not belong to the note: ignore it.
-				err = nil
+				// ID does not belong to the note: ignore it (err is reassigned
+				// on the next iteration or by the touch/commit calls below).
 				continue
 			}
 			return nil, fmt.Errorf("failed to load note item: %w", err)
