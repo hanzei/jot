@@ -313,7 +313,11 @@
     "filterByLabel": "Filtrar por etiqueta: {{label}}",
     "saveFailedExitTitle": "Falha ao salvar",
     "saveFailedExitMessage": "Não foi possível salvar as alterações. Tente novamente ou descarte-as para sair.",
-    "discardAndLeave": "Descartar e sair"
+    "discardAndLeave": "Descartar e sair",
+    "uncheckAllItems": "Desmarcar todos os itens",
+    "deleteCheckedItems": "Excluir itens marcados",
+    "deleteCheckedItemsConfirm_one": "Excluir {{count}} item marcado? Esta ação não pode ser desfeita.",
+    "deleteCheckedItemsConfirm_other": "Excluir {{count}} itens marcados? Esta ação não pode ser desfeita."
   },
   "images": {
     "openLightbox": "Ver {{filename}}",

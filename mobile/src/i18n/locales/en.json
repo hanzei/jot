@@ -313,7 +313,11 @@
     "filterByLabel": "Filter by label: {{label}}",
     "saveFailedExitTitle": "Save failed",
     "saveFailedExitMessage": "Your changes couldn't be saved. Retry or discard them to leave.",
-    "discardAndLeave": "Discard & leave"
+    "discardAndLeave": "Discard & leave",
+    "uncheckAllItems": "Uncheck all items",
+    "deleteCheckedItems": "Delete checked items",
+    "deleteCheckedItemsConfirm_one": "Delete {{count}} checked item? This cannot be undone.",
+    "deleteCheckedItemsConfirm_other": "Delete {{count}} checked items? This cannot be undone."
   },
   "images": {
     "openLightbox": "View {{filename}}",

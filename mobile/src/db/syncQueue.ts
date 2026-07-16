@@ -6,7 +6,7 @@ import {
   saveNote,
   saveNotes,
   saveLabels,
-  patchLocalItem,
+  reconcileLocalItems,
   reconcileServerNotesScope,
   markNoteSyncFailed,
   clearNoteSyncFailed,
@@ -33,6 +33,8 @@ export type QueueOperation =
   | 'deleteItem'
   | 'reorderItems'
   | 'toggleItemCompleted'
+  | 'uncheckAllItems'
+  | 'deleteCompletedItems'
   | 'share'
   | 'unshare'
   | 'createLabel'
@@ -147,6 +149,7 @@ const GONE_IDEMPOTENT_OPERATIONS: ReadonlySet<QueueOperation> = new Set([
   'permanentDelete',
   'restore',
   'deleteItem',
+  'deleteCompletedItems',
   'unshare',
   'removeLabelFromNote',
   'deleteLabel',
@@ -716,27 +719,20 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           // The server returns the updated note; persist it so labels_json
           // reflects the server-assigned label id (replacing any local id).
           await saveNoteFromResponse(db, response?.data);
-        } else if (entry.operation === 'toggleItemCompleted') {
-          const items = response?.data as NoteItem[] | undefined;
-          if (Array.isArray(items) && items.length > 0) {
-            // endpoint: /notes/{noteId}/items/{itemId}/toggle-completed
-            // The server returns the note's full, authoritative item list (not
-            // just the toggled item), so reconcile every field here rather than
-            // just `completed` — otherwise a local item left stale by an earlier
-            // partial sync (e.g. parent_id/position from a reorder) never gets
-            // corrected, and the toggle can end up applied to the wrong item's
-            // row once rendered.
-            const noteId = endpoint.split('/')[2];
-            for (const item of items) {
-              await patchLocalItem(db, noteId, item.id, {
-                text: item.text,
-                completed: item.completed,
-                position: item.position,
-                parent_id: item.parent_id,
-                assigned_to: item.assigned_to,
-              });
-            }
-          }
+        } else if (
+          entry.operation === 'toggleItemCompleted' ||
+          entry.operation === 'uncheckAllItems' ||
+          entry.operation === 'deleteCompletedItems'
+        ) {
+          // endpoints: .../toggle-completed, .../items/set-completed,
+          // .../items/delete. All three return the note's full, authoritative
+          // item list (the delete endpoint's is the post-delete remainder), so
+          // reconcile every field and prune any local row absent from it —
+          // not just patch `completed` on the rows present — otherwise a
+          // stale local row (e.g. leftover parent_id/position from an earlier
+          // partial sync, or one deleted by another session while this
+          // device was offline) never gets corrected.
+          await reconcileItemsFromResponse(db, endpoint.split('/')[2], response?.data);
         } else if (entry.operation === 'share') {
           // Share returns 204 (no body) and the optimistic local note carries a
           // synthetic `optimistic_<userId>` share row; re-fetch the canonical note
@@ -979,6 +975,19 @@ async function saveNoteFromResponse(db: SQLiteDatabase, data: unknown): Promise<
   if (hasStringId(data)) {
     await saveNote(db, data as Note);
   }
+}
+
+/**
+ * Reconciles local item rows against a server-authoritative full item list
+ * returned during queue drain (toggle-completed/set-completed/delete): upserts
+ * every returned item and prunes any local row absent from it. `items` is
+ * `unknown` since it's a raw response body; anything other than an array
+ * (e.g. a malformed/legacy response) is skipped rather than wiping the note's
+ * items.
+ */
+async function reconcileItemsFromResponse(db: SQLiteDatabase, noteId: string, items: unknown): Promise<void> {
+  if (!Array.isArray(items)) return;
+  await reconcileLocalItems(db, noteId, items as NoteItem[]);
 }
 
 /**

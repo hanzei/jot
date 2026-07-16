@@ -313,7 +313,11 @@
     "filterByLabel": "Filtrar por etiqueta: {{label}}",
     "saveFailedExitTitle": "Error al guardar",
     "saveFailedExitMessage": "No se pudieron guardar los cambios. Reintenta o descártalos para salir.",
-    "discardAndLeave": "Descartar y salir"
+    "discardAndLeave": "Descartar y salir",
+    "uncheckAllItems": "Desmarcar todos los elementos",
+    "deleteCheckedItems": "Eliminar elementos marcados",
+    "deleteCheckedItemsConfirm_one": "¿Eliminar {{count}} elemento marcado? Esta acción no se puede deshacer.",
+    "deleteCheckedItemsConfirm_other": "¿Eliminar {{count}} elementos marcados? Esta acción no se puede deshacer."
   },
   "images": {
     "openLightbox": "Ver {{filename}}",

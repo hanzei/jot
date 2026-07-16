@@ -97,6 +97,12 @@ jest.mock('../src/hooks/useNotes', () => ({
   useToggleNoteItemCompleted: () => ({
     mutateAsync: jest.fn().mockResolvedValue([]),
   }),
+  useUncheckAllItems: () => ({
+    mutateAsync: jest.fn().mockResolvedValue([]),
+  }),
+  useDeleteCompletedItems: () => ({
+    mutateAsync: jest.fn().mockResolvedValue([]),
+  }),
 }));
 
 jest.mock('../src/hooks/useNoteImages', () => ({

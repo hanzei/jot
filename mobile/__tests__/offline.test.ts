@@ -726,13 +726,103 @@ describe('drainQueue', () => {
     await drainQueue(db as never);
 
     expect(db.runAsync).toHaveBeenCalledWith(
-      expect.stringContaining('parent_id = ?'),
+      expect.stringContaining('UPDATE note_items SET text'),
       expect.arrayContaining(['Replace faucet', 1, 'kitchen', 'i1', 'n1']),
     );
     expect(db.runAsync).toHaveBeenCalledWith(
-      expect.stringContaining('parent_id = ?'),
+      expect.stringContaining('UPDATE note_items SET text'),
       expect.arrayContaining(['Hgg', 4, 'mirror', 'i2', 'n1']),
     );
+  });
+
+  it('reconciles all authoritative fields from an uncheckAllItems (set-completed) replay, upserting a locally-missing item', async () => {
+    const db = makeMockDb([
+      {
+        id: 43,
+        operation: 'uncheckAllItems',
+        endpoint: '/notes/n1/items/set-completed',
+        method: 'POST',
+        body: JSON.stringify({ item_ids: ['i1', 'i2'], completed: false }),
+        created_at: '',
+      },
+    ]);
+    mockApi.post.mockResolvedValueOnce({
+      data: [
+        { id: 'i1', text: 'Milk', completed: false, position: 0, parent_id: null, assigned_to: '' },
+        // i2: simulates an item created on another device while this one was
+        // offline, so no local row exists yet — the upsert's UPDATE is a no-op
+        // against a real DB and the INSERT OR IGNORE is what actually creates it.
+        { id: 'i2', text: 'Eggs', completed: false, position: 1, parent_id: null, assigned_to: '' },
+      ],
+    } as never);
+
+    await drainQueue(db as never);
+
+    expect(db.runAsync).toHaveBeenCalledWith(
+      expect.stringContaining('UPDATE note_items SET text'),
+      expect.arrayContaining(['Milk', 0, null, 'i1', 'n1']),
+    );
+    expect(db.runAsync).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT OR IGNORE INTO note_items'),
+      expect.arrayContaining(['i2', 'n1', 'Eggs', 0, 1, null, '']),
+    );
+    expect(db.runAsync).toHaveBeenCalledWith(
+      expect.stringContaining('DELETE FROM note_items WHERE note_id = ? AND id NOT IN'),
+      ['n1', 'i1', 'i2'],
+    );
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [43]);
+  });
+
+  it('prunes a local item absent from a deleteCompletedItems replay\'s remaining-items response', async () => {
+    // The endpoint's response is the note's full, authoritative remaining item
+    // list post-delete — not just the requested ids' outcome — so any local
+    // row absent from it must be removed too, including one that was never in
+    // the queued item_ids (e.g. cascade-deleted alongside its parent, or
+    // removed by another session while this device was offline).
+    const db = makeMockDb([
+      {
+        id: 44,
+        operation: 'deleteCompletedItems',
+        endpoint: '/notes/n1/items/delete',
+        method: 'POST',
+        body: JSON.stringify({ item_ids: ['i1'] }),
+        created_at: '',
+      },
+    ]);
+    mockApi.post.mockResolvedValueOnce({
+      data: [{ id: 'i3', text: 'Bread', completed: false, position: 0, parent_id: null, assigned_to: '' }],
+    } as never);
+
+    await drainQueue(db as never);
+
+    // i1 (requested) and i2 (never requested, but absent from the
+    // authoritative response) are both pruned via the same NOT IN delete.
+    expect(db.runAsync).toHaveBeenCalledWith(
+      expect.stringContaining('DELETE FROM note_items WHERE note_id = ? AND id NOT IN'),
+      ['n1', 'i3'],
+    );
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [44]);
+  });
+
+  it('resolves a deleteCompletedItems replay silently on a 404 (note already gone)', async () => {
+    const db = makeMockDb([
+      {
+        id: 45,
+        operation: 'deleteCompletedItems',
+        endpoint: '/notes/n1/items/delete',
+        method: 'POST',
+        body: JSON.stringify({ item_ids: ['i1'] }),
+        created_at: '',
+      },
+    ]);
+    mockApi.post.mockRejectedValueOnce(makeAxiosError(404));
+
+    const { discardedOperations } = await drainQueue(db as never);
+
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [45]);
+    const calls = (db.runAsync as jest.Mock).mock.calls as unknown[][];
+    expect(calls.some((c) => String(c[0]).startsWith('INSERT INTO dead_letter'))).toBe(false);
+    expect(discardedOperations).toEqual([{ operation: 'deleteCompletedItems', endpoint: '/notes/n1/items/delete', status: 404 }]);
   });
 
   it('persists the note returned by a removeLabelFromNote replay', async () => {

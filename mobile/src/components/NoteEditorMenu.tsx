@@ -8,7 +8,7 @@ import {
   Pressable,
 } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
-import { ArrowLeftRight, Copy, Share2, Tag, Trash2, Undo2, UserPlus, type LucideIcon } from 'lucide-react-native';
+import { ArrowLeftRight, Copy, Share2, Square, Tag, Trash2, Undo2, UserPlus, type LucideIcon } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import type { NoteType } from '@jot/shared';
@@ -32,6 +32,9 @@ interface NoteEditorMenuProps {
   onDuplicate?: () => void;
   onConvert?: () => void;
   onManageLabels?: () => void;
+  /** Shown only when the list has completed items (list notes only). */
+  onUncheckAllItems?: () => void;
+  onDeleteCheckedItems?: () => void;
   onMoveToTrash?: () => void;
   // Trashed-note actions.
   onRestore?: () => void;
@@ -63,6 +66,8 @@ export default function NoteEditorMenu({
   onDuplicate,
   onConvert,
   onManageLabels,
+  onUncheckAllItems,
+  onDeleteCheckedItems,
   onMoveToTrash,
   onRestore,
   onDeletePermanently,
@@ -134,6 +139,23 @@ export default function NoteEditorMenu({
         label: t('labels.title'),
         onPress: run(onManageLabels),
         testId: 'editor-menu-label',
+      });
+    }
+    if (onUncheckAllItems) {
+      actions.push({
+        icon: Square,
+        label: t('note.uncheckAllItems'),
+        onPress: run(onUncheckAllItems),
+        testId: 'editor-menu-uncheck-all',
+      });
+    }
+    if (onDeleteCheckedItems) {
+      actions.push({
+        icon: Trash2,
+        label: t('note.deleteCheckedItems'),
+        onPress: run(onDeleteCheckedItems),
+        destructive: true,
+        testId: 'editor-menu-delete-checked',
       });
     }
     if (onMoveToTrash) {

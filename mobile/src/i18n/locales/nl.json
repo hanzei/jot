@@ -313,7 +313,11 @@
     "filterByLabel": "Filteren op label: {{label}}",
     "saveFailedExitTitle": "Opslaan mislukt",
     "saveFailedExitMessage": "Je wijzigingen konden niet worden opgeslagen. Probeer het opnieuw of verwerp ze om te verlaten.",
-    "discardAndLeave": "Verwerpen en verlaten"
+    "discardAndLeave": "Verwerpen en verlaten",
+    "uncheckAllItems": "Alle items uitvinken",
+    "deleteCheckedItems": "Aangevinkte items verwijderen",
+    "deleteCheckedItemsConfirm_one": "{{count}} aangevinkt item verwijderen? Dit kan niet ongedaan worden gemaakt.",
+    "deleteCheckedItemsConfirm_other": "{{count}} aangevinkte items verwijderen? Dit kan niet ongedaan worden gemaakt."
   },
   "images": {
     "openLightbox": "{{filename}} bekijken",

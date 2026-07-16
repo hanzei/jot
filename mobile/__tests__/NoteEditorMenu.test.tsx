@@ -94,6 +94,37 @@ describe('NoteEditorMenu', () => {
     expect(queryByTestId('editor-menu-trash')).toBeNull();
   });
 
+  it('hides the checked-items bulk actions when their callbacks are absent', () => {
+    const { queryByTestId } = render(
+      <NoteEditorMenu visible onClose={noop} onSend={noop} onMoveToTrash={noop} noteType="list" />,
+    );
+
+    expect(queryByTestId('editor-menu-uncheck-all')).toBeNull();
+    expect(queryByTestId('editor-menu-delete-checked')).toBeNull();
+  });
+
+  it('shows Uncheck all items / Delete checked items when the list has completed items', () => {
+    const onUncheckAllItems = jest.fn();
+    const onDeleteCheckedItems = jest.fn();
+    const { getByTestId } = render(
+      <NoteEditorMenu
+        visible
+        onClose={noop}
+        onSend={noop}
+        onMoveToTrash={noop}
+        noteType="list"
+        onUncheckAllItems={onUncheckAllItems}
+        onDeleteCheckedItems={onDeleteCheckedItems}
+      />,
+    );
+
+    fireEvent.press(getByTestId('editor-menu-uncheck-all'));
+    expect(onUncheckAllItems).toHaveBeenCalledTimes(1);
+
+    fireEvent.press(getByTestId('editor-menu-delete-checked'));
+    expect(onDeleteCheckedItems).toHaveBeenCalledTimes(1);
+  });
+
   it('closes the sheet before running an action', () => {
     const onClose = jest.fn();
     const onDuplicate = jest.fn();

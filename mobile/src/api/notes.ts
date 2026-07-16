@@ -70,6 +70,20 @@ export async function toggleItemCompleted(noteId: string, itemId: string, comple
   return res.data;
 }
 
+// Bulk operations over an explicit set of item IDs, mirroring the webapp's
+// setItemsCompleted/deleteItems. The caller passes the exact completed-item
+// ids it captured at action time; each is one atomic server request that
+// returns the note's item list for reconciliation.
+export async function uncheckAllItems(noteId: string, itemIds: string[]): Promise<NoteItem[]> {
+  const res = await api.post(`/notes/${noteId}/items/set-completed`, { item_ids: itemIds, completed: false });
+  return res.data;
+}
+
+export async function deleteCompletedItems(noteId: string, itemIds: string[]): Promise<NoteItem[]> {
+  const res = await api.post(`/notes/${noteId}/items/delete`, { item_ids: itemIds });
+  return res.data;
+}
+
 export async function restoreNote(id: string): Promise<void> {
   await api.post(`/notes/${id}/restore`);
 }

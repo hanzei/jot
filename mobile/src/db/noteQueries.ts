@@ -882,6 +882,76 @@ export async function reorderLocalItems(db: SQLiteDatabase, noteId: string, item
   });
 }
 
+export async function setLocalItemsCompleted(db: SQLiteDatabase, noteId: string, itemIds: string[], completed: boolean): Promise<void> {
+  if (itemIds.length === 0) return;
+  const now = new Date().toISOString();
+  await withSerializedTransaction(db, async () => {
+    for (const id of itemIds) {
+      await db.runAsync('UPDATE note_items SET completed = ?, updated_at = ? WHERE id = ? AND note_id = ?', [completed ? 1 : 0, now, id, noteId]);
+    }
+    await touchLocalNote(db, noteId);
+  });
+}
+
+export async function deleteLocalItems(db: SQLiteDatabase, noteId: string, itemIds: string[]): Promise<void> {
+  if (itemIds.length === 0) return;
+  await withSerializedTransaction(db, async () => {
+    for (const id of itemIds) {
+      await db.runAsync('DELETE FROM note_items WHERE id = ? AND note_id = ?', [id, noteId]);
+    }
+    await touchLocalNote(db, noteId);
+  });
+}
+
+export interface ServerItemInput {
+  id: string;
+  text: string;
+  completed: boolean;
+  position: number;
+  parent_id: string | null;
+  assigned_to: string;
+}
+
+/**
+ * Reconciles local item rows for a note against a server-authoritative full
+ * item list (returned by toggle-completed/set-completed/delete): upserts
+ * every returned item and removes any local row not present in the set, all
+ * in one transaction. Used where the response is the complete current truth,
+ * so a stale local row (e.g. one deleted by another session while this
+ * device was offline) can't linger indefinitely — patching only the rows
+ * present in the response would leave such a row behind forever.
+ */
+export async function reconcileLocalItems(db: SQLiteDatabase, noteId: string, items: ServerItemInput[]): Promise<void> {
+  const now = new Date().toISOString();
+  await withSerializedTransaction(db, async () => {
+    for (const item of items) {
+      await db.runAsync(
+        `UPDATE note_items SET text = ?, completed = ?, position = ?, parent_id = ?, assigned_to = ?, updated_at = ?
+         WHERE id = ? AND note_id = ?`,
+        [item.text, item.completed ? 1 : 0, item.position, item.parent_id, item.assigned_to, now, item.id, noteId],
+      );
+      // No-ops (via INSERT OR IGNORE) unless the UPDATE above matched zero rows,
+      // i.e. this item doesn't exist locally yet (e.g. created on another
+      // device while this one was offline).
+      await db.runAsync(
+        `INSERT OR IGNORE INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [item.id, noteId, item.text, item.completed ? 1 : 0, item.position, item.parent_id, item.assigned_to, now, now],
+      );
+    }
+    if (items.length > 0) {
+      const placeholders = items.map(() => '?').join(', ');
+      await db.runAsync(
+        `DELETE FROM note_items WHERE note_id = ? AND id NOT IN (${placeholders})`,
+        [noteId, ...items.map((item) => item.id)],
+      );
+    } else {
+      await db.runAsync('DELETE FROM note_items WHERE note_id = ?', [noteId]);
+    }
+    await touchLocalNote(db, noteId);
+  });
+}
+
 // Mirrors the server's ID alphabet/length (see server internal/models/id.go) so a
 // client-generated note ID is accepted as-is by the server.
 const SERVER_ID_CHARS = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';

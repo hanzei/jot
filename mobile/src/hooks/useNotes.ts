@@ -16,6 +16,8 @@ import {
   deleteNoteItem,
   reorderNoteItems,
   toggleItemCompleted,
+  uncheckAllItems,
+  deleteCompletedItems,
 } from '../api/notes';
 import { shareNote, unshareNote } from '../api/users';
 import { useOfflineNote } from './useOfflineNotes';
@@ -47,6 +49,9 @@ import {
   patchLocalItem,
   deleteLocalItem,
   reorderLocalItems,
+  setLocalItemsCompleted,
+  deleteLocalItems,
+  reconcileLocalItems,
 } from '../db/noteQueries';
 import { enqueueOperation, rethrowIfNotQueueable } from '../db/syncQueue';
 import { isOnlineWriteAllowed } from '../api/serverReachability';
@@ -89,6 +94,13 @@ function collectToggleCascade(items: NoteItem[], itemId: string, completed: bool
 /** Returns a copy of `items` with the completed-toggle cascade applied. */
 function applyToggleToItems(items: NoteItem[], itemId: string, completed: boolean): NoteItem[] {
   const ids = new Set(collectToggleCascade(items, itemId, completed));
+  if (ids.size === 0) return items;
+  return items.map((i) => (ids.has(i.id) ? { ...i, completed } : i));
+}
+
+/** Returns a copy of `items` with `completed` set on every id in `itemIds`. */
+function applySetCompletedToItems(items: NoteItem[], itemIds: string[], completed: boolean): NoteItem[] {
+  const ids = new Set(itemIds);
   if (ids.size === 0) return items;
   return items.map((i) => (ids.has(i.id) ? { ...i, completed } : i));
 }
@@ -1019,6 +1031,125 @@ export function useToggleNoteItemCompleted() {
       return [];
     },
     // Revert the optimistic toggle if the write ultimately fails.
+    onError: (_err, { noteId }, context) => rollbackOptimisticNote(queryClient, noteId, context),
+    onSuccess: (_data, { noteId }) => {
+      queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+    },
+  });
+}
+
+/**
+ * Bulk-uncheck a caller-supplied set of item ids (the note's currently
+ * completed items, captured at action time). Mirrors useToggleNoteItemCompleted's
+ * online-try / offline-queue / optimistic-rollback structure, but over a set
+ * of ids instead of a single item with cascade.
+ */
+export function useUncheckAllItems() {
+  const db = useSQLiteContext();
+  const queryClient = useQueryClient();
+  const { isConnected } = useNetworkStatus();
+  const isConnectedRef = useRef(isConnected);
+  isConnectedRef.current = isConnected;
+
+  return useMutation({
+    onMutate: ({ noteId, itemIds }: { noteId: string; itemIds: string[] }) =>
+      applyOptimisticNote(queryClient, noteId, (note) =>
+        note.note_type === 'list' && note.items
+          ? { ...note, items: applySetCompletedToItems(note.items, itemIds, false) }
+          : note,
+      ),
+    mutationFn: async ({ noteId, itemIds }: { noteId: string; itemIds: string[] }): Promise<NoteItem[]> => {
+      assertSwitchWriteAllowed();
+      if (itemIds.length === 0) return [];
+      if (isOnlineWriteAllowed(isConnectedRef.current)) {
+        try {
+          const serverItems = await uncheckAllItems(noteId, itemIds);
+          // The server returns the note's full, authoritative item list, so
+          // reconcile every field (and prune any local row it no longer
+          // contains) rather than just patching `completed`.
+          await reconcileLocalItems(db, noteId, serverItems);
+          return serverItems;
+        } catch (err) {
+          // Transient failure: fall through to the offline path so the change is
+          // applied locally and queued for replay instead of being lost.
+          rethrowIfNotQueueable(err);
+        }
+      }
+
+      // Offline (or a transient online failure): apply locally, enqueue a
+      // single bulk op carrying the exact ids captured at click time.
+      await setLocalItemsCompleted(db, noteId, itemIds, false);
+      await enqueueOperation(db, {
+        operation: 'uncheckAllItems',
+        endpoint: `/notes/${noteId}/items/set-completed`,
+        method: 'POST',
+        body: { item_ids: itemIds, completed: false } as Record<string, unknown>,
+      });
+      return [];
+    },
+    // Revert the optimistic uncheck if the write ultimately fails.
+    onError: (_err, { noteId }, context) => rollbackOptimisticNote(queryClient, noteId, context),
+    onSuccess: (_data, { noteId }) => {
+      queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+    },
+  });
+}
+
+/**
+ * Bulk-delete a caller-supplied set of item ids (the note's currently
+ * completed items, captured at action time). Mirrors useToggleNoteItemCompleted's
+ * online-try / offline-queue / optimistic-rollback structure. Deleting exactly
+ * the completed set never orphans a child: the completed-cascade invariant
+ * (applyCompletedCascade / collectToggleCascade) guarantees a completed
+ * parent's children are completed too, so they are always included in the
+ * same delete.
+ */
+export function useDeleteCompletedItems() {
+  const db = useSQLiteContext();
+  const queryClient = useQueryClient();
+  const { isConnected } = useNetworkStatus();
+  const isConnectedRef = useRef(isConnected);
+  isConnectedRef.current = isConnected;
+
+  return useMutation({
+    onMutate: ({ noteId, itemIds }: { noteId: string; itemIds: string[] }) =>
+      applyOptimisticNote(queryClient, noteId, (note) => {
+        if (note.note_type !== 'list' || !note.items) return note;
+        const ids = new Set(itemIds);
+        return { ...note, items: note.items.filter((item) => !ids.has(item.id)) };
+      }),
+    mutationFn: async ({ noteId, itemIds }: { noteId: string; itemIds: string[] }): Promise<NoteItem[]> => {
+      assertSwitchWriteAllowed();
+      if (itemIds.length === 0) return [];
+      if (isOnlineWriteAllowed(isConnectedRef.current)) {
+        try {
+          const serverItems = await deleteCompletedItems(noteId, itemIds);
+          // The server returns the note's full, authoritative remaining item
+          // list; reconciling against it (rather than deleting exactly
+          // `itemIds`) prunes precisely what the server actually removed.
+          await reconcileLocalItems(db, noteId, serverItems);
+          return serverItems;
+        } catch (err) {
+          // Transient failure: fall through to the offline path so the delete is
+          // applied locally and queued for replay instead of being lost.
+          rethrowIfNotQueueable(err);
+        }
+      }
+
+      // Offline (or a transient online failure): delete locally, enqueue a
+      // single bulk op carrying the exact ids captured at click time.
+      await deleteLocalItems(db, noteId, itemIds);
+      await enqueueOperation(db, {
+        operation: 'deleteCompletedItems',
+        endpoint: `/notes/${noteId}/items/delete`,
+        method: 'POST',
+        body: { item_ids: itemIds } as Record<string, unknown>,
+      });
+      return [];
+    },
+    // Revert the optimistic delete if the write ultimately fails.
     onError: (_err, { noteId }, context) => rollbackOptimisticNote(queryClient, noteId, context),
     onSuccess: (_data, { noteId }) => {
       queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
