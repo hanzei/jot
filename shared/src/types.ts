@@ -87,7 +87,6 @@ export interface NoteShare {
   note_id: string;
   shared_with_user_id: string;
   shared_by_user_id: string;
-  permission_level: string;
   username?: string;
   first_name?: string;
   last_name?: string;
