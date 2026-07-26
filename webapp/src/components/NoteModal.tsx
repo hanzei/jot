@@ -3190,6 +3190,30 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                                 </button>
                               </MenuItem>
                             )}
+                            {noteType === 'list' && completedItems.length > 0 && (
+                              <>
+                                <MenuItem>
+                                  <button
+                                    onClick={handleUncheckAllItems}
+                                    className={OVERFLOW_ITEM}
+                                    data-testid="note-uncheck-all"
+                                  >
+                                    <Square className="h-4 w-4 mr-2" />
+                                    {t('note.uncheckAllItems')}
+                                  </button>
+                                </MenuItem>
+                                <MenuItem>
+                                  <button
+                                    onClick={handleDeleteCompletedItems}
+                                    className={OVERFLOW_ITEM}
+                                    data-testid="note-delete-checked"
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    {t('note.deleteCheckedItems')}
+                                  </button>
+                                </MenuItem>
+                              </>
+                            )}
                             {isOwner && onShare && (
                               <MenuItem>
                                 <button
@@ -3230,32 +3254,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                                 <MenuKbd>L</MenuKbd>
                               </button>
                             </MenuItem>
-                            {noteType === 'list' && completedItems.length > 0 && (
-                              <>
-                                <MenuItem>
-                                  <button
-                                    onClick={handleUncheckAllItems}
-                                    className={OVERFLOW_ITEM}
-                                    data-testid="note-uncheck-all"
-                                  >
-                                    <Square className="h-4 w-4 mr-2" />
-                                    {t('note.uncheckAllItems')}
-                                  </button>
-                                </MenuItem>
-                                <MenuItem>
-                                  <button
-                                    onClick={handleDeleteCompletedItems}
-                                    className={OVERFLOW_ITEM_DANGER}
-                                    data-testid="note-delete-checked"
-                                  >
-                                    <span className="flex items-center">
-                                      <Trash2 className="h-4 w-4 mr-2" />
-                                      {t('note.deleteCheckedItems')}
-                                    </span>
-                                  </button>
-                                </MenuItem>
-                              </>
-                            )}
                             {isOwner && onDelete && (
                               <MenuItem>
                                 <button
