@@ -175,6 +175,10 @@ Do not maintain endpoint tables in this file. Use the generated OpenAPI spec as 
 
 If handler annotations or request/response types change, regenerate docs with `task gen-docs`.
 
+### API Conventions
+
+- Resource-cap / limit-exceeded conditions (e.g., the per-user PAT cap, the per-note item/image cap) return HTTP 422 Unprocessable Entity, not 400. Reserve 400 for malformed/invalid input.
+
 ### Database Migrations
 
 Migration files live in `server/internal/database/migrations/` and are named `NNN_description.sql`. They are embedded into the binary at compile time via `embed.FS` and applied automatically at startup in sequential order. To add a new migration, create the next numbered file.

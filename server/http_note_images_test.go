@@ -154,7 +154,7 @@ func TestUploadNoteImageMaxPerNoteEnforced(t *testing.T) {
 	img := image.NewRGBA(image.Rect(0, 0, 4, 4))
 	img.Set(0, 0, color.RGBA{R: 255, G: 255, B: 255, A: 255})
 	_, err = user.Client.UploadNoteImage(t.Context(), note.ID, "eleventh.png", bytes.NewReader(encodePNG(t, img)))
-	assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+	assert.Equal(t, http.StatusUnprocessableEntity, client.StatusCode(err))
 }
 
 func TestGetNoteImage(t *testing.T) {

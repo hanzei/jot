@@ -95,6 +95,22 @@ func TestCreateNoteItem(t *testing.T) {
 		assert.Equal(t, 400, client.StatusCode(err))
 	})
 
+	t.Run("exceeding per-note cap returns 422", func(t *testing.T) {
+		ts := setupTestServer(t)
+		user := ts.createTestUser(t, "user1", "password123", false)
+
+		items := make([]client.CreateNoteItem, 500)
+		for i := range items {
+			items[i] = client.CreateNoteItem{Text: "item", Position: i}
+		}
+		note, err := user.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{Title: "List", Items: items})
+		require.NoError(t, err)
+
+		_, err = user.Client.CreateNoteItem(t.Context(), note.ID, &client.CreateNoteItemRequest{Text: "one too many", Position: 500})
+		require.Error(t, err)
+		assert.Equal(t, 422, client.StatusCode(err))
+	})
+
 	t.Run("non-collaborator cannot add item", func(t *testing.T) {
 		ts := setupTestServer(t)
 		owner := ts.createTestUser(t, "owner", "password123", false)
