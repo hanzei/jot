@@ -15,6 +15,12 @@ import (
 
 var ErrPATNotFound = errors.New("personal access token not found")
 
+// patTokenPrefix identifies raw PAT tokens as belonging to Jot (e.g. for
+// GitHub secret scanning / gitleaks / trufflehog detection). It is prepended
+// to newly generated tokens only; tokens issued before this prefix was
+// introduced remain valid and are matched by hash alone.
+const patTokenPrefix = "jot_pat_"
+
 type PersonalAccessToken struct {
 	ID        string    `json:"id"`
 	UserID    string    `json:"user_id"`
@@ -36,7 +42,7 @@ func generatePATToken() (string, error) {
 	if _, err := rand.Read(bytes); err != nil {
 		return "", fmt.Errorf("generate token: %w", err)
 	}
-	return hex.EncodeToString(bytes), nil
+	return patTokenPrefix + hex.EncodeToString(bytes), nil
 }
 
 func hashPATToken(rawToken string) string {

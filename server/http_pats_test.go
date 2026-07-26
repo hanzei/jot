@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -65,6 +66,7 @@ func TestPATs(t *testing.T) {
 		assert.NotEmpty(t, pat.ID)
 		assert.Equal(t, "my CI token", pat.Name)
 		assert.NotEmpty(t, pat.Token, "token must be present in create response")
+		assert.True(t, strings.HasPrefix(pat.Token, "jot_pat_"), "token must carry the jot_pat_ prefix")
 		assert.False(t, pat.CreatedAt.IsZero())
 	})
 

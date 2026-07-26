@@ -876,7 +876,7 @@ describe('drainQueue', () => {
       id: 'n1', title: 'Shared', content: '', note_type: 'text', color: '#fff', pinned: false,
       archived: false, position: 0, version: 1, checked_items_collapsed: false, is_shared: true,
       deleted_at: null, user_id: 'u1', created_at: '', updated_at: '', labels: [],
-      shared_with: [{ id: 's-real', note_id: 'n1', shared_with_user_id: 'u2', shared_by_user_id: 'u1', permission_level: 'write', username: 'bob', first_name: '', last_name: '', has_profile_icon: false, created_at: '', updated_at: '' }],
+      shared_with: [{ id: 's-real', note_id: 'n1', shared_with_user_id: 'u2', shared_by_user_id: 'u1', username: 'bob', first_name: '', last_name: '', has_profile_icon: false, created_at: '', updated_at: '' }],
     };
     const db = makeMockDb([
       { id: 60, operation: 'share', endpoint: '/notes/n1/share', method: 'POST', body: JSON.stringify({ user_id: 'u2' }), created_at: '' },

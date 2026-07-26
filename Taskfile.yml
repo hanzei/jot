@@ -11,9 +11,9 @@ tasks:
         sh: date -u +%Y-%m-%dT%H:%M:%SZ
       LDFLAGS: "-X 'github.com/hanzei/jot/server/internal/server.commit={{.COMMIT}}' -X 'github.com/hanzei/jot/server/internal/server.version=dev' -X 'github.com/hanzei/jot/server/internal/server.buildTime={{.BUILD_TIME}}'"
     env:
-      CORS_ALLOWED_ORIGIN: http://localhost:5173
-      PASSWORD_MIN_LENGTH: "4" # dev only: weak password minimum for local convenience — do not use in production
-      COOKIE_SECURE: "false" # dev only: allows jotctl to work over http://localhost — do not use in production
+      JOT_CORS_ALLOWED_ORIGIN: http://localhost:5173
+      JOT_PASSWORD_MIN_LENGTH: "4" # dev only: weak password minimum for local convenience — do not use in production
+      JOT_COOKIE_SECURE: "false" # dev only: allows jotctl to work over http://localhost — do not use in production
     cmds:
       - rm -f jot
       - go build -buildvcs=false -ldflags "{{.LDFLAGS}}" -o jot .

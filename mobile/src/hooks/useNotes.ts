@@ -911,7 +911,6 @@ export function useShareNote() {
           note_id: noteId,
           shared_with_user_id: user.id,
           shared_by_user_id: currentUser?.id ?? '',
-          permission_level: 'write',
           username: user.username,
           first_name: user.first_name,
           last_name: user.last_name,

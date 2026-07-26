@@ -85,47 +85,47 @@ func Load() (*Config, error) {
 		RateLimitEnabled:    true,
 	}
 
-	port, err := parseIntRangeEnv("PORT", 8080, 1, 65535)
+	port, err := parseIntRangeEnv("JOT_PORT", 8080, 1, 65535)
 	if err != nil {
 		return nil, err
 	}
 	cfg.Port = port
 
-	metricsPort, err := parseIntRangeEnv("METRICS_PORT", 8081, 1, 65535)
+	metricsPort, err := parseIntRangeEnv("JOT_METRICS_PORT", 8081, 1, 65535)
 	if err != nil {
 		return nil, err
 	}
 	cfg.MetricsPort = metricsPort
 
-	if v := os.Getenv("METRICS_HOST"); v != "" {
+	if v := os.Getenv("JOT_METRICS_HOST"); v != "" {
 		cfg.MetricsHost = v
 	}
 
-	metricsEnabled, err := parseBoolEnv("METRICS_ENABLED", false)
+	metricsEnabled, err := parseBoolEnv("JOT_METRICS_ENABLED", false)
 	if err != nil {
 		return nil, err
 	}
 	cfg.MetricsEnabled = metricsEnabled
 
-	if v := os.Getenv("DB_DRIVER"); v != "" {
+	if v := os.Getenv("JOT_DB_DRIVER"); v != "" {
 		cfg.DBDriver = v
 	}
-	if v := os.Getenv("DB_DSN"); v != "" {
+	if v := os.Getenv("JOT_DB_DSN"); v != "" {
 		cfg.DBDSN = v
 	}
 
-	if v := os.Getenv("UPLOAD_DIR"); v != "" {
+	if v := os.Getenv("JOT_UPLOAD_DIR"); v != "" {
 		cfg.UploadDir = filepath.Clean(v)
 	}
 
 	// Keep default and bounds in sync with shared/src/constants.ts UPLOAD_MAX_BYTES.
-	uploadMaxBytes, err := parseIntRangeEnv("UPLOAD_MAX_BYTES", 25<<20, 1<<20, 500<<20)
+	uploadMaxBytes, err := parseIntRangeEnv("JOT_UPLOAD_MAX_BYTES", 25<<20, 1<<20, 500<<20)
 	if err != nil {
 		return nil, err
 	}
 	cfg.UploadMaxBytes = uploadMaxBytes
 
-	if v := os.Getenv("STATIC_DIR"); v != "" {
+	if v := os.Getenv("JOT_STATIC_DIR"); v != "" {
 		cfg.StaticDir = filepath.Clean(v)
 	} else {
 		workDir, wdErr := os.Getwd()
@@ -135,26 +135,27 @@ func Load() (*Config, error) {
 		cfg.StaticDir = filepath.Join(workDir, "..", "webapp", "build")
 	}
 
-	cfg.CORSAllowedOrigin = os.Getenv("CORS_ALLOWED_ORIGIN")
+	cfg.CORSAllowedOrigin = os.Getenv("JOT_CORS_ALLOWED_ORIGIN")
 
-	cookieSecure, err := parseBoolEnv("COOKIE_SECURE", true)
+	cookieSecure, err := parseBoolEnv("JOT_COOKIE_SECURE", true)
 	if err != nil {
 		return nil, err
 	}
 	cfg.CookieSecure = cookieSecure
 
-	registrationEnabled, err := parseBoolEnv("REGISTRATION_ENABLED", true)
+	registrationEnabled, err := parseBoolEnv("JOT_REGISTRATION_ENABLED", true)
 	if err != nil {
 		return nil, err
 	}
 	cfg.RegistrationEnabled = registrationEnabled
 
-	passwordMinLength, err := parseIntRangeEnv("PASSWORD_MIN_LENGTH", 10, 1, 72)
+	passwordMinLength, err := parseIntRangeEnv("JOT_PASSWORD_MIN_LENGTH", 10, 1, 72)
 	if err != nil {
 		return nil, err
 	}
 	cfg.PasswordMinLength = passwordMinLength
 
+	// Spec-standard OpenTelemetry SDK vars stay unprefixed; the SDK expects these exact names.
 	cfg.OTelEndpoint = os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 
 	if v := os.Getenv("OTEL_SERVICE_NAME"); v != "" {
@@ -167,7 +168,8 @@ func Load() (*Config, error) {
 	}
 	cfg.OTelInsecure = otelInsecure
 
-	otelTracesEnabled, err := parseBoolEnv("OTEL_TRACES_ENABLED", false)
+	// Jot-specific signal toggles (no standard OTel equivalent) get the JOT_ prefix.
+	otelTracesEnabled, err := parseBoolEnv("JOT_OTEL_TRACES_ENABLED", false)
 	if err != nil {
 		return nil, err
 	}
@@ -176,37 +178,37 @@ func Load() (*Config, error) {
 	// There is no single OTEL_ENABLED switch: OTel setup runs whenever at
 	// least one of traces/metrics/logs is enabled, so each signal is opt-in
 	// independently and all three default to false.
-	otelMetricsEnabled, err := parseBoolEnv("OTEL_METRICS_ENABLED", false)
+	otelMetricsEnabled, err := parseBoolEnv("JOT_OTEL_METRICS_ENABLED", false)
 	if err != nil {
 		return nil, err
 	}
 	cfg.OTelMetricsEnabled = otelMetricsEnabled
 
-	otelLogsEnabled, err := parseBoolEnv("OTEL_LOGS_ENABLED", false)
+	otelLogsEnabled, err := parseBoolEnv("JOT_OTEL_LOGS_ENABLED", false)
 	if err != nil {
 		return nil, err
 	}
 	cfg.OTelLogsEnabled = otelLogsEnabled
 
-	rateLimitEnabled, err := parseBoolEnv("RATE_LIMIT_ENABLED", true)
+	rateLimitEnabled, err := parseBoolEnv("JOT_RATE_LIMIT_ENABLED", true)
 	if err != nil {
 		return nil, err
 	}
 	cfg.RateLimitEnabled = rateLimitEnabled
 
-	rateLimitPerMinute, err := parseIntRangeEnv("RATE_LIMIT_PER_MINUTE", 300, 1, 1_000_000)
+	rateLimitPerMinute, err := parseIntRangeEnv("JOT_RATE_LIMIT_PER_MINUTE", 300, 1, 1_000_000)
 	if err != nil {
 		return nil, err
 	}
 	cfg.RateLimitPerMinute = rateLimitPerMinute
 
-	rateLimitAuthPerMinute, err := parseIntRangeEnv("RATE_LIMIT_AUTH_PER_MINUTE", 20, 1, 1_000_000)
+	rateLimitAuthPerMinute, err := parseIntRangeEnv("JOT_RATE_LIMIT_AUTH_PER_MINUTE", 20, 1, 1_000_000)
 	if err != nil {
 		return nil, err
 	}
 	cfg.RateLimitAuthPerMinute = rateLimitAuthPerMinute
 
-	rateLimitExpensivePerMinute, err := parseIntRangeEnv("RATE_LIMIT_EXPENSIVE_PER_MINUTE", 20, 1, 1_000_000)
+	rateLimitExpensivePerMinute, err := parseIntRangeEnv("JOT_RATE_LIMIT_EXPENSIVE_PER_MINUTE", 20, 1, 1_000_000)
 	if err != nil {
 		return nil, err
 	}

@@ -287,6 +287,53 @@ func TestMigration000007Backfill(t *testing.T) {
 	})
 }
 
+// TestMigration000008DropPermissionLevel seeds a note_shares row at the
+// pre-drop schema (v7), applies 000008, and asserts the row survives with its
+// remaining columns intact and permission_level gone. On SQLite this exercises
+// the table-rebuild path (DROP COLUMN can't remove a column referenced by a
+// CHECK constraint), so this also guards against the rebuild losing rows or
+// forgetting to recreate the indexes/foreign keys.
+func TestMigration000008DropPermissionLevel(t *testing.T) {
+	dsntest.ForEachDriver(t, func(t *testing.T, driver string) {
+		db := dsntest.RawDB(t, driver)
+		d := &dialect.Dialect{Driver: driver}
+		ctx := t.Context()
+
+		m := newMigrator(t, db, driver)
+
+		// Step to v7 — permission_level still present.
+		require.NoError(t, m.Migrate(7))
+
+		_, err := db.ExecContext(ctx, d.RewritePlaceholders(`INSERT INTO users (id, username, password_hash) VALUES ('user000000000000000001', 'alice', 'x')`))
+		require.NoError(t, err)
+		_, err = db.ExecContext(ctx, d.RewritePlaceholders(`INSERT INTO users (id, username, password_hash) VALUES ('user000000000000000002', 'bob', 'x')`))
+		require.NoError(t, err)
+		_, err = db.ExecContext(ctx, d.RewritePlaceholders(`INSERT INTO notes (id, user_id, note_type) VALUES ('note000000000000000001', 'user000000000000000001', 'list')`))
+		require.NoError(t, err)
+		_, err = db.ExecContext(ctx,
+			d.RewritePlaceholders(`INSERT INTO note_shares (id, note_id, shared_with_user_id, shared_by_user_id, permission_level) VALUES (?, ?, ?, ?, 'edit')`),
+			"share00000000000000001", "note000000000000000001", "user000000000000000002", "user000000000000000001",
+		)
+		require.NoError(t, err)
+
+		require.NoError(t, m.Migrate(8))
+
+		var noteID, sharedWithUserID, sharedByUserID string
+		require.NoError(t, db.QueryRowContext(ctx,
+			d.RewritePlaceholders(`SELECT note_id, shared_with_user_id, shared_by_user_id FROM note_shares WHERE id = ?`),
+			"share00000000000000001",
+		).Scan(&noteID, &sharedWithUserID, &sharedByUserID))
+		assert.Equal(t, "note000000000000000001", noteID)
+		assert.Equal(t, "user000000000000000002", sharedWithUserID)
+		assert.Equal(t, "user000000000000000001", sharedByUserID)
+
+		var dummy string
+		err = db.QueryRowContext(ctx, `SELECT permission_level FROM note_shares LIMIT 1`).Scan(&dummy)
+		require.Error(t, err, "permission_level column should be dropped")
+		assert.Contains(t, err.Error(), "permission_level")
+	})
+}
+
 // buildQueryTokens mirrors the store's query tokenizer for migration-level
 // search assertions: lowercase, split on non-alphanumeric runes.
 func buildQueryTokens(query string) []string {

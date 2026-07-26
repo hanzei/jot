@@ -1018,7 +1018,7 @@ describe('useNotes hooks', () => {
       checked_items_collapsed: false, is_shared: true, deleted_at: null,
       user_id: 'u1', created_at: 'old', updated_at: 'old',
       labels: [{ id: 'l1', user_id: 'u1', name: 'Work', created_at: '', updated_at: '' }],
-      shared_with: [{ id: 's1', note_id: '123', shared_with_user_id: 'u2', shared_by_user_id: 'u1', permission_level: 'write', username: 'bob', first_name: 'Bob', last_name: 'B', has_profile_icon: false, created_at: '', updated_at: '' }],
+      shared_with: [{ id: 's1', note_id: '123', shared_with_user_id: 'u2', shared_by_user_id: 'u1', username: 'bob', first_name: 'Bob', last_name: 'B', has_profile_icon: false, created_at: '', updated_at: '' }],
     };
     const sourceListNote = {
       id: '456', title: 'My List', content: '', note_type: 'list',

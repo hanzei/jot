@@ -53,8 +53,8 @@ compiled web app, while SQLite keeps the default deployment small and portable.
 - **Single binary**: Build one Go binary that serves the API and compiled web
   assets.
 - **SQLite by default, Postgres optional**: Start with a local SQLite file or
-  point `DB_DRIVER=postgres` at a Postgres DSN.
-- **Filesystem blob storage**: Uploaded images are stored under `UPLOAD_DIR` as
+  point `JOT_DB_DRIVER=postgres` at a Postgres DSN.
+- **Filesystem blob storage**: Uploaded images are stored under `JOT_UPLOAD_DIR` as
   content-addressed blobs.
 - **Admin tools**: The first registered user becomes admin; admins can manage
   users in the web UI or with `jotctl`.
@@ -104,7 +104,7 @@ compiled web app, while SQLite keeps the default deployment small and portable.
 
    # Start the server, which serves both API and frontend.
    cd server
-   COOKIE_SECURE=false go run main.go
+   JOT_COOKIE_SECURE=false go run main.go
    ```
 
 ### Task Automation
@@ -149,7 +149,7 @@ Run the Vite dev server for instant hot module replacement:
 
 ```bash
 # Terminal 1: start the Go backend.
-COOKIE_SECURE=false task run-server
+JOT_COOKIE_SECURE=false task run-server
 
 # Terminal 2: start the Vite dev server with HMR.
 task run-webapp
@@ -195,23 +195,24 @@ to Jot, choose the target server if needed, and save it as a new note.
 ## Environment Variables
 
 Configure the server with environment variables or a `.env` file.
+App-specific variables use a `JOT_` prefix.
 
 ### Core server
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `PORT` | `8080` | HTTP port for the main web/API server. |
-| `STATIC_DIR` | `../webapp/build` from `server/` | Directory containing the compiled web app. |
-| `CORS_ALLOWED_ORIGIN` | empty | Allowed browser origin for credentialed cross-origin API calls, such as `http://localhost:5173` during Vite development. |
+| `JOT_PORT` | `8080` | HTTP port for the main web/API server. |
+| `JOT_STATIC_DIR` | `../webapp/build` from `server/` | Directory containing the compiled web app. |
+| `JOT_CORS_ALLOWED_ORIGIN` | empty | Allowed browser origin for credentialed cross-origin API calls, such as `http://localhost:5173` during Vite development. |
 
 ### Database and uploads
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `DB_DRIVER` | `sqlite` | Database driver: `sqlite` or `postgres`. |
-| `DB_DSN` | `./jot.db` | SQLite file path or Postgres connection string. |
-| `UPLOAD_DIR` | `./uploads` | Filesystem root for uploaded image blobs and thumbnails. |
-| `UPLOAD_MAX_BYTES` | `26214400` | Maximum upload size per note image, from 1 MiB to 500 MiB. |
+| `JOT_DB_DRIVER` | `sqlite` | Database driver: `sqlite` or `postgres`. |
+| `JOT_DB_DSN` | `./jot.db` | SQLite file path or Postgres connection string. |
+| `JOT_UPLOAD_DIR` | `./uploads` | Filesystem root for uploaded image blobs and thumbnails. |
+| `JOT_UPLOAD_MAX_BYTES` | `26214400` | Maximum upload size per note image, from 1 MiB to 500 MiB. |
 
 Timestamps are always stored as UTC, whichever driver you use. Jot pins every
 Postgres session it opens to `SET TIME ZONE 'UTC'`, so a server or database
@@ -223,9 +224,9 @@ another client, expect timestamp columns to hold UTC wall-clock values.
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `COOKIE_SECURE` | `true` | Sets the session cookie `Secure` flag. Use `false` only for local HTTP development. |
-| `REGISTRATION_ENABLED` | `true` | Set to `false` to disable public registration; admins can still create users. |
-| `PASSWORD_MIN_LENGTH` | `10` | Minimum password length, from 1 to 72 characters. |
+| `JOT_COOKIE_SECURE` | `true` | Sets the session cookie `Secure` flag. Use `false` only for local HTTP development. |
+| `JOT_REGISTRATION_ENABLED` | `true` | Set to `false` to disable public registration; admins can still create users. |
+| `JOT_PASSWORD_MIN_LENGTH` | `10` | Minimum password length, from 1 to 72 characters. |
 
 ### Rate limiting
 
@@ -244,30 +245,30 @@ reverse-proxy caveat below.)
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `RATE_LIMIT_ENABLED` | `true` | Set to `false` to disable rate limiting entirely. |
-| `RATE_LIMIT_PER_MINUTE` | `300` | Baseline requests/min per authenticated user, across all `/api/v1` routes. |
-| `RATE_LIMIT_AUTH_PER_MINUTE` | `20` | Requests/min per client IP, shared by `/register`, `/login`, and `/logout` (none of which have an authenticated user to key on yet). |
-| `RATE_LIMIT_EXPENSIVE_PER_MINUTE` | `20` | Requests/min per user, shared by note search (a full-text index query), import, and image upload (decode/resize/thumbnail) — the costliest operations per request. These also count against the baseline limit above; the expensive limit is an additional, stricter cap on top of it. Plain note listing (no `search` query) is unaffected by this limit and only counts against the baseline. |
+| `JOT_RATE_LIMIT_ENABLED` | `true` | Set to `false` to disable rate limiting entirely. |
+| `JOT_RATE_LIMIT_PER_MINUTE` | `300` | Baseline requests/min per authenticated user, across all `/api/v1` routes. |
+| `JOT_RATE_LIMIT_AUTH_PER_MINUTE` | `20` | Requests/min per client IP, shared by `/register`, `/login`, and `/logout` (none of which have an authenticated user to key on yet). |
+| `JOT_RATE_LIMIT_EXPENSIVE_PER_MINUTE` | `20` | Requests/min per user, shared by note search (a full-text index query), import, and image upload (decode/resize/thumbnail) — the costliest operations per request. These also count against the baseline limit above; the expensive limit is an additional, stricter cap on top of it. Plain note listing (no `search` query) is unaffected by this limit and only counts against the baseline. |
 
-**Reverse-proxy caveat:** `RATE_LIMIT_AUTH_PER_MINUTE` is keyed by the direct
+**Reverse-proxy caveat:** `JOT_RATE_LIMIT_AUTH_PER_MINUTE` is keyed by the direct
 TCP peer address, not a client-supplied header (which would be trivially
 spoofable). If Jot runs behind a reverse proxy that terminates TLS — a common
-setup, since `COOKIE_SECURE` defaults to requiring HTTPS — every client behind
+setup, since `JOT_COOKIE_SECURE` defaults to requiring HTTPS — every client behind
 that proxy shares one IP and therefore one bucket: one user's failed logins
 can throttle everyone else's login/register/logout attempts for up to a
-minute. If you run Jot behind such a proxy, raise `RATE_LIMIT_AUTH_PER_MINUTE`
+minute. If you run Jot behind such a proxy, raise `JOT_RATE_LIMIT_AUTH_PER_MINUTE`
 accordingly.
 
 ### Metrics and observability
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `METRICS_ENABLED` | `false` | Enables the separate Prometheus metrics HTTP server. |
-| `METRICS_HOST` | `127.0.0.1` | Bind host for the metrics server. |
-| `METRICS_PORT` | `8081` | Bind port for the metrics server. |
-| `OTEL_TRACES_ENABLED` | `false` | Enables OpenTelemetry tracing. |
-| `OTEL_METRICS_ENABLED` | `false` | Enables OTLP metric export. |
-| `OTEL_LOGS_ENABLED` | `false` | Enables OpenTelemetry log export. |
+| `JOT_METRICS_ENABLED` | `false` | Enables the separate Prometheus metrics HTTP server. |
+| `JOT_METRICS_HOST` | `127.0.0.1` | Bind host for the metrics server. |
+| `JOT_METRICS_PORT` | `8081` | Bind port for the metrics server. |
+| `JOT_OTEL_TRACES_ENABLED` | `false` | Enables OpenTelemetry tracing. |
+| `JOT_OTEL_METRICS_ENABLED` | `false` | Enables OTLP metric export. |
+| `JOT_OTEL_LOGS_ENABLED` | `false` | Enables OpenTelemetry log export. |
 | `OTEL_SERVICE_NAME` | `jot` | Service name reported to OpenTelemetry. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | empty | OTLP gRPC endpoint, for example `localhost:4317`; stdout exporters are used for traces/logs when empty and their signals are enabled. |
 | `OTEL_EXPORTER_OTLP_INSECURE` | `false` | Uses insecure OTLP gRPC transport for local collectors. |
@@ -276,17 +277,17 @@ accordingly.
 ### Backups
 
 Uploaded blobs (e.g. note images) are stored on the filesystem under
-`UPLOAD_DIR`, content-addressed by hash, not in the database — `UPLOAD_DIR`
-must always be included in backups alongside the database, regardless of
-`DB_DRIVER`.
+`JOT_UPLOAD_DIR`, content-addressed by hash, not in the database —
+`JOT_UPLOAD_DIR` must always be included in backups alongside the database,
+regardless of `JOT_DB_DRIVER`.
 
-- **SQLite (default)**: a full backup is the `DB_DSN` file + `UPLOAD_DIR`. In
+- **SQLite (default)**: a full backup is the `JOT_DB_DSN` file + `JOT_UPLOAD_DIR`. In
   Docker, both live under the mounted `/data` volume by default, so backing up
   `./data` covers everything.
-- **Postgres**: `DB_DSN` is a connection string, not a file — back up the
+- **Postgres**: `JOT_DB_DSN` is a connection string, not a file — back up the
   database itself using Postgres's own tooling (e.g. `pg_dump`/WAL archiving),
-  and separately back up `UPLOAD_DIR` (still local/volume-mounted, since blob
-  storage does not follow `DB_DRIVER`).
+  and separately back up `JOT_UPLOAD_DIR` (still local/volume-mounted, since blob
+  storage does not follow `JOT_DB_DRIVER`).
 
 ## API Reference
 
@@ -331,9 +332,9 @@ Useful environment variables:
 
 ## Observability
 
-Set `METRICS_ENABLED=true` to expose Prometheus metrics on
+Set `JOT_METRICS_ENABLED=true` to expose Prometheus metrics on
 `http://127.0.0.1:8081/metrics` by default. Set one or more of
-`OTEL_TRACES_ENABLED`, `OTEL_METRICS_ENABLED`, or `OTEL_LOGS_ENABLED` to enable
+`JOT_OTEL_TRACES_ENABLED`, `JOT_OTEL_METRICS_ENABLED`, or `JOT_OTEL_LOGS_ENABLED` to enable
 OpenTelemetry SDK setup. When `OTEL_EXPORTER_OTLP_ENDPOINT` is set, enabled
 signals are exported over OTLP gRPC; otherwise enabled traces/logs use stdout
 exporters for local debugging.
@@ -389,8 +390,8 @@ Create `.env` file for production:
 
 ```bash
 # Production environment
-DB_DSN=/var/lib/jot/jot.db
-PORT=8080
+JOT_DB_DSN=/var/lib/jot/jot.db
+JOT_PORT=8080
 ```
 
 ## Docker Deployment
@@ -407,7 +408,7 @@ docker run -d \
 
 # Or use docker-compose
 curl -O https://raw.githubusercontent.com/hanzei/jot/master/docker-compose.yml
-# add COOKIE_SECURE=false under jot.environment for local HTTP use
+# add JOT_COOKIE_SECURE=false under jot.environment for local HTTP use
 docker-compose up -d
 ```
 
@@ -431,7 +432,7 @@ For production HTTPS, keep the default secure cookie behavior.
 
 For local HTTP-only testing, override with:
 ```bash
-docker run -p 8080:8080 -e COOKIE_SECURE=false -v ./data:/data jot
+docker run -p 8080:8080 -e JOT_COOKIE_SECURE=false -v ./data:/data jot
 ```
 
 ### Available Tags
@@ -448,7 +449,7 @@ services:
   jot:
     image: hanzei/jot:latest
     environment:
-      - DB_DSN=/data/production.db
+      - JOT_DB_DSN=/data/production.db
     volumes:
       - ./custom-data:/data
     ports:
@@ -477,7 +478,7 @@ services:
 3. **Port conflicts**:
    ```bash
    # Use different port
-   PORT=9000 go run main.go
+   JOT_PORT=9000 go run main.go
    ```
 
 4. **Migration errors**:
@@ -505,7 +506,7 @@ services:
 
 ```bash
 # Run the server directly
-COOKIE_SECURE=false go run main.go
+JOT_COOKIE_SECURE=false go run main.go
 
 # Frontend development build (separate dev server)
 cd webapp && npm run dev
