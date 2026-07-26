@@ -40,6 +40,7 @@ type SSEEvent struct {
 	Type         string
 	SourceUserID string
 	TargetUserID string
+	ClientID     string              // tab/device that triggered the mutation; empty if server-side in origin
 	NoteData     *SSENoteData        // set for note_created/updated/deleted/shared/unshared
 	LabelsData   *SSELabelsData      // set for labels_changed
 	ProfileData  *SSEProfileIconData // set for profile_icon_updated
@@ -51,6 +52,7 @@ type sseEventWire struct {
 	Type         string          `json:"type"`
 	SourceUserID string          `json:"source_user_id"`
 	TargetUserID string          `json:"target_user_id,omitempty"`
+	ClientID     string          `json:"client_id,omitempty"`
 	Data         json.RawMessage `json:"data,omitempty"`
 }
 
@@ -75,6 +77,7 @@ func parseSSEEvent(raw []byte) (SSEEvent, bool) {
 		Type:         wire.Type,
 		SourceUserID: wire.SourceUserID,
 		TargetUserID: wire.TargetUserID,
+		ClientID:     wire.ClientID,
 	}
 
 	var ok bool
