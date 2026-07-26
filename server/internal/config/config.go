@@ -155,10 +155,7 @@ func Load() (*Config, error) {
 	}
 	cfg.PasswordMinLength = passwordMinLength
 
-	// OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_INSECURE, and
-	// OTEL_SERVICE_NAME are spec-standard OpenTelemetry SDK env vars — they
-	// are intentionally NOT prefixed with JOT_ so the OTel SDK's own
-	// conventions keep working as documented upstream.
+	// Spec-standard OpenTelemetry SDK vars stay unprefixed; the SDK expects these exact names.
 	cfg.OTelEndpoint = os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 
 	if v := os.Getenv("OTEL_SERVICE_NAME"); v != "" {
@@ -171,9 +168,7 @@ func Load() (*Config, error) {
 	}
 	cfg.OTelInsecure = otelInsecure
 
-	// Unlike the vars above, these three signal toggles are jot-specific
-	// (there is no such standard OTel env var), so they get the JOT_ prefix
-	// like the rest of the app's own config.
+	// Jot-specific signal toggles (no standard OTel equivalent) get the JOT_ prefix.
 	otelTracesEnabled, err := parseBoolEnv("JOT_OTEL_TRACES_ENABLED", false)
 	if err != nil {
 		return nil, err

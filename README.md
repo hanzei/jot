@@ -194,15 +194,8 @@ to Jot, choose the target server if needed, and save it as a new note.
 
 ## Environment Variables
 
-Configure the server with environment variables or a `.env` file. All
-app-specific variables are namespaced with a `JOT_` prefix.
-
-> **Upgrading from an earlier version?** App-specific variable names changed
-> to add a `JOT_` prefix (e.g. `DB_DSN` → `JOT_DB_DSN`). The old unprefixed
-> names are no longer read — update your `.env` file, Docker environment, or
-> systemd unit before upgrading. See
-> [Migrating to `JOT_`-prefixed environment variables](#migrating-to-jot-prefixed-environment-variables)
-> for the full before→after table.
+Configure the server with environment variables or a `.env` file.
+App-specific variables use a `JOT_` prefix.
 
 ### Core server
 
@@ -270,13 +263,6 @@ accordingly.
 | `JOT_OTEL_TRACES_ENABLED` | `false` | Enables OpenTelemetry tracing. |
 | `JOT_OTEL_METRICS_ENABLED` | `false` | Enables OTLP metric export. |
 | `JOT_OTEL_LOGS_ENABLED` | `false` | Enables OpenTelemetry log export. |
-
-The following are spec-standard OpenTelemetry SDK variables and are
-intentionally **not** prefixed with `JOT_` — the OTel SDK expects these exact
-names, so they were never renamed:
-
-| Variable | Default | Description |
-| --- | --- | --- |
 | `OTEL_SERVICE_NAME` | `jot` | Service name reported to OpenTelemetry. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | empty | OTLP gRPC endpoint, for example `localhost:4317`; stdout exporters are used for traces/logs when empty and their signals are enabled. |
 | `OTEL_EXPORTER_OTLP_INSECURE` | `false` | Uses insecure OTLP gRPC transport for local collectors. |
@@ -296,46 +282,6 @@ regardless of `JOT_DB_DRIVER`.
   database itself using Postgres's own tooling (e.g. `pg_dump`/WAL archiving),
   and separately back up `JOT_UPLOAD_DIR` (still local/volume-mounted, since blob
   storage does not follow `JOT_DB_DRIVER`).
-
-### Migrating to `JOT_`-prefixed environment variables
-
-Every app-specific environment variable now uses a `JOT_` prefix to avoid
-collisions with other apps on shared hosts (e.g. `PORT`, `DB_DSN`) and to
-freeze a clean, unambiguous config contract ahead of v1. **The old
-unprefixed names are no longer read at all** — this is a breaking change,
-not a deprecation. Update your `.env` file, Docker/Compose environment, or
-systemd unit to the new names before upgrading, or the server will silently
-fall back to defaults for anything still using an old name.
-
-| Old name (no longer read) | New name |
-| --- | --- |
-| `PORT` | `JOT_PORT` |
-| `DB_DRIVER` | `JOT_DB_DRIVER` |
-| `DB_DSN` | `JOT_DB_DSN` |
-| `STATIC_DIR` | `JOT_STATIC_DIR` |
-| `UPLOAD_DIR` | `JOT_UPLOAD_DIR` |
-| `UPLOAD_MAX_BYTES` | `JOT_UPLOAD_MAX_BYTES` |
-| `CORS_ALLOWED_ORIGIN` | `JOT_CORS_ALLOWED_ORIGIN` |
-| `COOKIE_SECURE` | `JOT_COOKIE_SECURE` |
-| `REGISTRATION_ENABLED` | `JOT_REGISTRATION_ENABLED` |
-| `PASSWORD_MIN_LENGTH` | `JOT_PASSWORD_MIN_LENGTH` |
-| `METRICS_ENABLED` | `JOT_METRICS_ENABLED` |
-| `METRICS_HOST` | `JOT_METRICS_HOST` |
-| `METRICS_PORT` | `JOT_METRICS_PORT` |
-| `RATE_LIMIT_ENABLED` | `JOT_RATE_LIMIT_ENABLED` |
-| `RATE_LIMIT_PER_MINUTE` | `JOT_RATE_LIMIT_PER_MINUTE` |
-| `RATE_LIMIT_AUTH_PER_MINUTE` | `JOT_RATE_LIMIT_AUTH_PER_MINUTE` |
-| `RATE_LIMIT_EXPENSIVE_PER_MINUTE` | `JOT_RATE_LIMIT_EXPENSIVE_PER_MINUTE` |
-| `OTEL_TRACES_ENABLED` | `JOT_OTEL_TRACES_ENABLED` |
-| `OTEL_METRICS_ENABLED` | `JOT_OTEL_METRICS_ENABLED` |
-| `OTEL_LOGS_ENABLED` | `JOT_OTEL_LOGS_ENABLED` |
-
-`OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`,
-`OTEL_EXPORTER_OTLP_INSECURE`, `OTEL_EXPORTER_OTLP_HEADERS`, and
-`OTEL_RESOURCE_ATTRIBUTES` are unchanged — they're spec-standard
-OpenTelemetry SDK variables, not app-specific ones. `JOTCTL_*` variables
-(used by the `jotctl` CLI, see below) are also unaffected — they already had
-a dedicated prefix.
 
 ## API Reference
 

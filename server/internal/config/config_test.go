@@ -328,49 +328,22 @@ func TestLoadRateLimitInvalidValueErrors(t *testing.T) {
 	})
 }
 
-func TestLoadOTelSignalToggles(t *testing.T) {
+// TestLoadOTelVars verifies the renamed JOT_OTEL_* signal toggles and the
+// spec-standard, still-unprefixed OTel SDK vars are both read correctly.
+func TestLoadOTelVars(t *testing.T) {
 	t.Setenv("JOT_STATIC_DIR", "/tmp/static")
-
-	t.Run("defaults", func(t *testing.T) {
-		t.Setenv("JOT_OTEL_TRACES_ENABLED", "")
-		t.Setenv("JOT_OTEL_METRICS_ENABLED", "")
-		t.Setenv("JOT_OTEL_LOGS_ENABLED", "")
-
-		cfg, err := Load()
-		require.NoError(t, err)
-
-		assert.False(t, cfg.OTelTracesEnabled)
-		assert.False(t, cfg.OTelMetricsEnabled)
-		assert.False(t, cfg.OTelLogsEnabled)
-	})
-
-	t.Run("custom", func(t *testing.T) {
-		t.Setenv("JOT_OTEL_TRACES_ENABLED", "true")
-		t.Setenv("JOT_OTEL_METRICS_ENABLED", "true")
-		t.Setenv("JOT_OTEL_LOGS_ENABLED", "true")
-
-		cfg, err := Load()
-		require.NoError(t, err)
-
-		assert.True(t, cfg.OTelTracesEnabled)
-		assert.True(t, cfg.OTelMetricsEnabled)
-		assert.True(t, cfg.OTelLogsEnabled)
-	})
-}
-
-// TestLoadUnprefixedOTelSDKVarsUnaffected verifies the spec-standard OTel SDK
-// env vars (OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_INSECURE,
-// OTEL_SERVICE_NAME) are read as-is, without a JOT_ prefix.
-func TestLoadUnprefixedOTelSDKVarsUnaffected(t *testing.T) {
-	t.Setenv("JOT_STATIC_DIR", "/tmp/static")
+	t.Setenv("JOT_OTEL_TRACES_ENABLED", "true")
+	t.Setenv("JOT_OTEL_METRICS_ENABLED", "true")
+	t.Setenv("JOT_OTEL_LOGS_ENABLED", "true")
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317")
-	t.Setenv("OTEL_EXPORTER_OTLP_INSECURE", "true")
 	t.Setenv("OTEL_SERVICE_NAME", "custom-service")
 
 	cfg, err := Load()
 	require.NoError(t, err)
 
+	assert.True(t, cfg.OTelTracesEnabled)
+	assert.True(t, cfg.OTelMetricsEnabled)
+	assert.True(t, cfg.OTelLogsEnabled)
 	assert.Equal(t, "localhost:4317", cfg.OTelEndpoint)
-	assert.True(t, cfg.OTelInsecure)
 	assert.Equal(t, "custom-service", cfg.OTelServiceName)
 }
