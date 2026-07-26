@@ -92,7 +92,7 @@ func main() {
 			logrus.Infof("OpenTelemetry enabled (stdout exporter, service: %s)", cfg.OTelServiceName)
 		}
 	} else if cfg.OTelEndpoint != "" {
-		logrus.Warn("OTEL_EXPORTER_OTLP_ENDPOINT is set but no OTel signals are enabled (OTEL_TRACES_ENABLED / OTEL_METRICS_ENABLED / OTEL_LOGS_ENABLED); nothing will be exported")
+		logrus.Warn("OTEL_EXPORTER_OTLP_ENDPOINT is set but no OTel signals are enabled (JOT_OTEL_TRACES_ENABLED / JOT_OTEL_METRICS_ENABLED / JOT_OTEL_LOGS_ENABLED); nothing will be exported")
 	}
 
 	s, err := server.New(cfg)
