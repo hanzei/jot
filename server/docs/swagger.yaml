@@ -153,9 +153,19 @@ definitions:
       skipped:
         type: integer
     type: object
+  handlers.LabelCount:
+    properties:
+      count:
+        type: integer
+      label_id:
+        type: string
+    type: object
   handlers.LabelCountsResponse:
-    additionalProperties:
-      type: integer
+    properties:
+      counts:
+        items:
+          $ref: '#/definitions/handlers.LabelCount'
+        type: array
     type: object
   handlers.LoginRequest:
     properties:

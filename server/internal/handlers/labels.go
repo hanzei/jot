@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -40,7 +41,16 @@ type RenameLabelRequest struct {
 	Name string `json:"name"`
 }
 
-type LabelCountsResponse map[string]int
+// LabelCount is the note count for a single label.
+type LabelCount struct {
+	LabelID string `json:"label_id"`
+	Count   int    `json:"count"`
+}
+
+// LabelCountsResponse is an extensible envelope wrapping per-label note counts.
+type LabelCountsResponse struct {
+	Counts []LabelCount `json:"counts"`
+}
 
 func (h *LabelsHandler) publishLabelNoteUpdates(ctx context.Context, noteIDs []string, userID string) {
 	if h.hub == nil {
@@ -108,7 +118,18 @@ func (h *LabelsHandler) GetLabelCounts(w http.ResponseWriter, r *http.Request) (
 		return http.StatusInternalServerError, nil, fmt.Errorf("get label counts: %w", err)
 	}
 
-	return http.StatusOK, counts, nil
+	labelIDs := make([]string, 0, len(counts))
+	for labelID := range counts {
+		labelIDs = append(labelIDs, labelID)
+	}
+	sort.Strings(labelIDs)
+
+	resp := LabelCountsResponse{Counts: make([]LabelCount, 0, len(counts))}
+	for _, labelID := range labelIDs {
+		resp.Counts = append(resp.Counts, LabelCount{LabelID: labelID, Count: counts[labelID]})
+	}
+
+	return http.StatusOK, resp, nil
 }
 
 // CreateLabel godoc

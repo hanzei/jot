@@ -15,11 +15,26 @@ func (c *Client) ListLabels(ctx context.Context) ([]Label, error) {
 	return labels, nil
 }
 
-// ListLabelCounts returns note counts per label for the authenticated user.
+// LabelCount is the note count for a single label.
+type LabelCount struct {
+	LabelID string `json:"label_id"`
+	Count   int    `json:"count"`
+}
+
+// labelCountsResponse is the envelope returned by GET /labels/counts.
+type labelCountsResponse struct {
+	Counts []LabelCount `json:"counts"`
+}
+
+// ListLabelCounts returns note counts per label for the authenticated user, keyed by label ID.
 func (c *Client) ListLabelCounts(ctx context.Context) (map[string]int, error) {
-	counts := map[string]int{}
-	if err := c.doJSON(ctx, http.MethodGet, "/api/v1/labels/counts", nil, &counts); err != nil {
+	var resp labelCountsResponse
+	if err := c.doJSON(ctx, http.MethodGet, "/api/v1/labels/counts", nil, &resp); err != nil {
 		return nil, err
+	}
+	counts := make(map[string]int, len(resp.Counts))
+	for _, c := range resp.Counts {
+		counts[c.LabelID] = c.Count
 	}
 	return counts, nil
 }
