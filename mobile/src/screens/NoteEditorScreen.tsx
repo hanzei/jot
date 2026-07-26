@@ -2676,6 +2676,27 @@ export default function NoteEditorScreen() {
             display, matching the menu hiding those actions. */}
         {(displayCollaborators.length > 0 || labels.length > 0) && (
           <View style={styles.metaRow} testID="note-meta-row">
+            {labels.map((label) => (
+              !isReadOnly ? (
+                <TouchableOpacity
+                  key={label.id}
+                  style={[styles.metaLabelChip, { backgroundColor: hasNoteColor ? 'rgba(0,0,0,0.08)' : colors.borderLight }]}
+                  onPress={openLabelPicker}
+                  testID={`note-meta-label-${label.id}`}
+                  accessibilityLabel={`${t('labels.title')}: ${label.name}`}
+                >
+                  <Text style={[styles.metaLabelText, { color: hasNoteColor ? '#666' : colors.textSecondary }]}>{label.name}</Text>
+                </TouchableOpacity>
+              ) : (
+                <View
+                  key={label.id}
+                  style={[styles.metaLabelChip, { backgroundColor: hasNoteColor ? 'rgba(0,0,0,0.08)' : colors.borderLight }]}
+                >
+                  <Text style={[styles.metaLabelText, { color: hasNoteColor ? '#666' : colors.textSecondary }]}>{label.name}</Text>
+                </View>
+              )
+            ))}
+
             {displayCollaborators.length > 0 && (() => {
               const avatars = displayCollaborators.map((c, index) => (
                 <View key={c.userId} style={index === 0 ? undefined : styles.metaAvatarOverlap}>
@@ -2706,27 +2727,6 @@ export default function NoteEditorScreen() {
                 </View>
               );
             })()}
-
-            {labels.map((label) => (
-              !isReadOnly ? (
-                <TouchableOpacity
-                  key={label.id}
-                  style={[styles.metaLabelChip, { backgroundColor: hasNoteColor ? 'rgba(0,0,0,0.08)' : colors.borderLight }]}
-                  onPress={openLabelPicker}
-                  testID={`note-meta-label-${label.id}`}
-                  accessibilityLabel={`${t('labels.title')}: ${label.name}`}
-                >
-                  <Text style={[styles.metaLabelText, { color: hasNoteColor ? '#666' : colors.textSecondary }]}>{label.name}</Text>
-                </TouchableOpacity>
-              ) : (
-                <View
-                  key={label.id}
-                  style={[styles.metaLabelChip, { backgroundColor: hasNoteColor ? 'rgba(0,0,0,0.08)' : colors.borderLight }]}
-                >
-                  <Text style={[styles.metaLabelText, { color: hasNoteColor ? '#666' : colors.textSecondary }]}>{label.name}</Text>
-                </View>
-              )
-            ))}
           </View>
         )}
       </ScrollViewContainer>
