@@ -20,7 +20,6 @@ function makeShare(overrides: Partial<NoteShare> & { shared_with_user_id: string
     id: 's1',
     note_id: 'n1',
     shared_by_user_id: 'owner',
-    permission_level: 'edit',
     created_at: '',
     updated_at: '',
     ...overrides,

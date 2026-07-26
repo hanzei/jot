@@ -3900,9 +3900,6 @@ const docTemplate = `{
                 "note_id": {
                     "type": "string"
                 },
-                "permission_level": {
-                    "type": "string"
-                },
                 "shared_by_user_id": {
                     "type": "string"
                 },
