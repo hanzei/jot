@@ -13,9 +13,10 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@typescript-eslint/eslint-plugin": "^8.59.2",
     "@typescript-eslint/parser": "^8.59.2",
-    "eslint": "^9.39.4",
+    "eslint": "^10.8.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.5"
   }
