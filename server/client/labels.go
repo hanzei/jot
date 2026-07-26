@@ -15,15 +15,15 @@ func (c *Client) ListLabels(ctx context.Context) ([]Label, error) {
 	return labels, nil
 }
 
-// LabelCount is the note count for a single label.
-type LabelCount struct {
+// labelCount is the note count for a single label.
+type labelCount struct {
 	LabelID string `json:"label_id"`
 	Count   int    `json:"count"`
 }
 
 // labelCountsResponse is the envelope returned by GET /labels/counts.
 type labelCountsResponse struct {
-	Counts []LabelCount `json:"counts"`
+	Counts []labelCount `json:"counts"`
 }
 
 // ListLabelCounts returns note counts per label for the authenticated user, keyed by label ID.
