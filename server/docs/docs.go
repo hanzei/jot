@@ -3302,10 +3302,26 @@ const docTemplate = `{
                 }
             }
         },
+        "handlers.LabelCount": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "label_id": {
+                    "type": "string"
+                }
+            }
+        },
         "handlers.LabelCountsResponse": {
             "type": "object",
-            "additionalProperties": {
-                "type": "integer"
+            "properties": {
+                "counts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/handlers.LabelCount"
+                    }
+                }
             }
         },
         "handlers.LoginRequest": {

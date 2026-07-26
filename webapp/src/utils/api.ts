@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, NoteItem, CreateNoteRequest, UpdateNoteRequest, ConvertNoteTypeRequest, CreateNoteItemRequest, PatchNoteItemRequest, User, CreateUserRequest, UserListResponse, AdminStatsResponse, ShareNoteRequest, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, Label, ActiveSession, EmptyTrashResponse, PersonalAccessToken, CreatePATRequest, NoteImage } from '@jot/shared';
+import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, NoteItem, CreateNoteRequest, UpdateNoteRequest, ConvertNoteTypeRequest, CreateNoteItemRequest, PatchNoteItemRequest, User, CreateUserRequest, UserListResponse, AdminStatsResponse, ShareNoteRequest, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, Label, ActiveSession, EmptyTrashResponse, PersonalAccessToken, CreatePATRequest, NoteImage, LabelCountsResponse } from '@jot/shared';
 import { removeUser } from '@/utils/auth';
 
 // Unique ID for this browser tab, used to suppress SSE echoes of our own mutations.
@@ -158,7 +158,9 @@ export const labels = {
     api.get('/labels').then(res => res.data),
 
   getCounts: (): Promise<Record<string, number>> =>
-    api.get('/labels/counts').then(res => res.data),
+    api.get<LabelCountsResponse>('/labels/counts').then(res =>
+      Object.fromEntries(res.data.counts.map(({ label_id, count }) => [label_id, count]))
+    ),
 
   create: (name: string): Promise<Label> =>
     api.post('/labels', { name }).then(res => res.data),
