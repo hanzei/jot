@@ -45,7 +45,7 @@ describe('collaborators', () => {
       const shares: NoteShare[] = [
         {
           id: 's1', note_id: 'n1', shared_with_user_id: 'user-2', shared_by_user_id: 'owner-id',
-          permission_level: 'edit', username: 'alice_old', first_name: 'OldAlice',
+          username: 'alice_old', first_name: 'OldAlice',
           created_at: '', updated_at: '',
         },
       ];
@@ -63,7 +63,7 @@ describe('collaborators', () => {
       const shares: NoteShare[] = [
         {
           id: 's1', note_id: 'n1', shared_with_user_id: 'user-2', shared_by_user_id: 'owner-id',
-          permission_level: 'edit', username: 'alice', first_name: 'Alice',
+          username: 'alice', first_name: 'Alice',
           created_at: '', updated_at: '',
         },
       ];
@@ -79,7 +79,7 @@ describe('collaborators', () => {
       const shares: NoteShare[] = [
         {
           id: 's1', note_id: 'n1', shared_with_user_id: 'owner-id', shared_by_user_id: 'owner-id',
-          permission_level: 'edit', username: 'owneruser', created_at: '', updated_at: '',
+          username: 'owneruser', created_at: '', updated_at: '',
         },
       ];
       const usersById = new Map<string, User>();

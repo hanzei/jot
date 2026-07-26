@@ -541,7 +541,6 @@ describe('API Module', () => {
             note_id: '1',
             shared_with_user_id: 'user2',
             shared_by_user_id: 'user1',
-            permission_level: 'read',
             username: 'testuser',
             first_name: '',
             last_name: '',

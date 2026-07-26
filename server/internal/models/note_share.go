@@ -12,7 +12,7 @@ func scanNoteShare(rows *sql.Rows) (NoteShare, error) {
 	var share NoteShare
 	err := rows.Scan(
 		&share.ID, &share.NoteID, &share.SharedWithUserID, &share.SharedByUserID,
-		&share.PermissionLevel, &share.Username, &share.FirstName, &share.LastName,
+		&share.Username, &share.FirstName, &share.LastName,
 		&share.HasProfileIcon, &share.CreatedAt, &share.UpdatedAt,
 	)
 	return share, err
@@ -20,7 +20,7 @@ func scanNoteShare(rows *sql.Rows) (NoteShare, error) {
 
 func (s *noteStore) GetNoteShares(ctx context.Context, noteID string) ([]NoteShare, error) {
 	query := `SELECT ns.id, ns.note_id, ns.shared_with_user_id, ns.shared_by_user_id,
-			  ns.permission_level, u.username, u.first_name, u.last_name,
+			  u.username, u.first_name, u.last_name,
 			  u.profile_icon IS NOT NULL AS has_profile_icon,
 			  ns.created_at, ns.updated_at
 			  FROM note_shares ns
@@ -56,8 +56,8 @@ func (s *noteStore) ShareNote(ctx context.Context, noteID string, sharedByUserID
 	}
 
 	_, err = tx.ExecContext(ctx,
-		s.d.RewritePlaceholders(`INSERT INTO note_shares (id, note_id, shared_with_user_id, shared_by_user_id, permission_level)
-		 VALUES (?, ?, ?, ?, 'edit')`),
+		s.d.RewritePlaceholders(`INSERT INTO note_shares (id, note_id, shared_with_user_id, shared_by_user_id)
+		 VALUES (?, ?, ?, ?)`),
 		shareID, noteID, sharedWithUserID, sharedByUserID,
 	)
 	if err != nil {
@@ -244,7 +244,7 @@ func (s *noteStore) getSharesByNoteIDs(ctx context.Context, noteIDs []string) (m
 		}
 
 		query := `SELECT ns.id, ns.note_id, ns.shared_with_user_id, ns.shared_by_user_id,
-				  ns.permission_level, u.username, u.first_name, u.last_name,
+				  u.username, u.first_name, u.last_name,
 				  u.profile_icon IS NOT NULL AS has_profile_icon,
 				  ns.created_at, ns.updated_at
 				  FROM note_shares ns
