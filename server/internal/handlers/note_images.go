@@ -117,6 +117,7 @@ func (h *NotesHandler) reclaimNoteImageBlob(ctx context.Context, sha string) {
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	404		{string}	string	"not found"
 //	@Failure	413		{string}	string	"file too large"
+//	@Failure	422		{string}	string	"note image cap exceeded"
 //	@Failure	500		{string}	string	"internal server error"
 //	@Router		/notes/{id}/images [post]
 func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (int, any, error) {
@@ -148,7 +149,7 @@ func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (
 		return http.StatusInternalServerError, nil, fmt.Errorf("count note images: %w", err)
 	}
 	if existingCount >= imageMaxPerNote {
-		return http.StatusBadRequest, nil, fmt.Errorf("note cannot have more than %d images", imageMaxPerNote)
+		return http.StatusUnprocessableEntity, nil, fmt.Errorf("note cannot have more than %d images", imageMaxPerNote)
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, h.uploadMaxBytes+multipartOverheadBytes)
@@ -203,7 +204,7 @@ func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (
 		// references this hash (dedup).
 		h.reclaimNoteImageBlob(r.Context(), sha)
 		if errors.Is(err, models.ErrNoteImageCapExceeded) {
-			return http.StatusBadRequest, nil, fmt.Errorf("note cannot have more than %d images", imageMaxPerNote)
+			return http.StatusUnprocessableEntity, nil, fmt.Errorf("note cannot have more than %d images", imageMaxPerNote)
 		}
 		return http.StatusInternalServerError, nil, fmt.Errorf("create note image: %w", err)
 	}
