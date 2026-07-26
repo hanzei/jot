@@ -241,6 +241,27 @@ func TestConvertNoteTypeEndpoint(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
+	t.Run("rejects too many items when converting to a list", func(t *testing.T) {
+		ts := setupTestServer(t)
+		user := ts.createTestUser(t, "convert-too-many-items", "password123", false)
+		ctx := t.Context()
+
+		source, err := user.Client.CreateTextNote(ctx, &client.CreateTextNoteRequest{Content: "hi"})
+		require.NoError(t, err)
+
+		items := make([]client.CreateNoteItem, 501)
+		for i := range items {
+			items[i] = client.CreateNoteItem{Text: "item", Position: i}
+		}
+
+		_, err = user.Client.ConvertNoteType(ctx, source.ID, &client.ConvertNoteTypeRequest{
+			NoteType: client.NoteTypeList,
+			Items:    items,
+		})
+		require.Error(t, err)
+		assert.Equal(t, http.StatusUnprocessableEntity, client.StatusCode(err))
+	})
+
 	t.Run("rejects content over the max length when converting to text", func(t *testing.T) {
 		ts := setupTestServer(t)
 		user := ts.createTestUser(t, "convert-too-long", "password123", false)

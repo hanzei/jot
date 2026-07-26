@@ -1264,6 +1264,10 @@ paths:
           description: note with this ID already exists
           schema:
             type: string
+        "422":
+          description: note item cap exceeded
+          schema:
+            type: string
         "500":
           description: internal server error
           schema:
@@ -1431,6 +1435,10 @@ paths:
           description: 'version conflict: note changed since base_version'
           schema:
             type: string
+        "422":
+          description: note item cap exceeded
+          schema:
+            type: string
         "500":
           description: internal server error
           schema:
@@ -1525,6 +1533,10 @@ paths:
           description: file too large
           schema:
             type: string
+        "422":
+          description: note image cap exceeded
+          schema:
+            type: string
         "500":
           description: internal server error
           schema:
@@ -1571,6 +1583,10 @@ paths:
             type: string
         "409":
           description: item already exists
+          schema:
+            type: string
+        "422":
+          description: note item cap exceeded
           schema:
             type: string
         "500":
@@ -2275,6 +2291,10 @@ paths:
             type: string
         "401":
           description: unauthorized
+          schema:
+            type: string
+        "422":
+          description: personal access token cap exceeded
           schema:
             type: string
       security:

@@ -227,7 +227,7 @@ func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
 		return http.StatusBadRequest, fmt.Errorf("content must be %d characters or fewer", noteContentMaxLength)
 	}
 	if len(req.Items) > noteItemsMaxCount {
-		return http.StatusBadRequest, fmt.Errorf("note cannot have more than %d items", noteItemsMaxCount)
+		return http.StatusUnprocessableEntity, fmt.Errorf("note cannot have more than %d items", noteItemsMaxCount)
 	}
 
 	if len(req.Items) > 0 {
@@ -389,6 +389,7 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, an
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	404		{string}	string	"label not found"
 //	@Failure	409		{string}	string	"note with this ID already exists"
+//	@Failure	422		{string}	string	"note item cap exceeded"
 //	@Failure	500		{string}	string	"internal server error"
 //	@Router		/notes [post]
 func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, any, error) {
@@ -620,7 +621,7 @@ func normalizeConvertNoteTypeRequest(req *ConvertNoteTypeRequest) (content strin
 			return "", nil, http.StatusBadRequest, errors.New("content must not be set when converting to a list")
 		}
 		if len(req.Items) > noteItemsMaxCount {
-			return "", nil, http.StatusBadRequest, fmt.Errorf("note cannot have more than %d items", noteItemsMaxCount)
+			return "", nil, http.StatusUnprocessableEntity, fmt.Errorf("note cannot have more than %d items", noteItemsMaxCount)
 		}
 		built, status, err := buildCreateNoteItems(req.Items)
 		if err != nil {
@@ -655,6 +656,7 @@ func normalizeConvertNoteTypeRequest(req *ConvertNoteTypeRequest) (content strin
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	404		{string}	string	"not found"
 //	@Failure	409		{string}	string	"version conflict: note changed since base_version"
+//	@Failure	422		{string}	string	"note item cap exceeded"
 //	@Failure	500		{string}	string	"internal server error"
 //	@Router		/notes/{id}/convert [post]
 func (h *NotesHandler) ConvertNoteType(w http.ResponseWriter, r *http.Request) (int, any, error) {
