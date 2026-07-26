@@ -285,7 +285,7 @@ func (h *NotesHandler) importJotJSON(ctx context.Context, userID string, data []
 // validateJotImportNote validates a single note from a Jot JSON export and converts
 // it to the store import type. idx is 1-based and used only in error messages.
 func validateJotImportNote(idx int, n jotImportNote) (models.JotImportNote, error) {
-	if n.NoteType != models.NoteTypeText && n.NoteType != models.NoteTypeList {
+	if !n.NoteType.Valid() {
 		return models.JotImportNote{}, fmt.Errorf("note #%d: unsupported note_type %q", idx, n.NoteType)
 	}
 	if utf8.RuneCountInString(n.Title) > noteTitleMaxLength {

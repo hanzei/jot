@@ -62,6 +62,19 @@ func (d *Dialect) CaseInsensitiveEquals(col string) string {
 	return fmt.Sprintf("LOWER(%s) = LOWER(?)", col)
 }
 
+// LabelNameConflictTarget returns the ON CONFLICT inference clause that matches
+// the case-insensitive unique index on label names. Both backends enforce
+// per-user case-insensitive uniqueness, but by different means: SQLite's
+// labels.name is COLLATE NOCASE, so the plain UNIQUE(user_id, name) constraint
+// already is case-insensitive, while PostgreSQL uses a unique index on the
+// LOWER(name) expression, which ON CONFLICT can only infer if it is spelled out.
+func (d *Dialect) LabelNameConflictTarget() string {
+	if d.Driver == DriverPostgres {
+		return "(user_id, LOWER(name))"
+	}
+	return "(user_id, name)"
+}
+
 // LimitAll returns the dialect-correct expression for "no upper bound" in a
 // LIMIT clause. Use it as: "LIMIT " + d.LimitAll() + " OFFSET ?".
 // SQLite uses -1; PostgreSQL uses ALL.

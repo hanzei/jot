@@ -1,0 +1,5 @@
+-- Intentionally empty. The PostgreSQL migration of the same number brings that
+-- backend in line with this schema: it drops the notes.note_type CHECK SQLite
+-- never had, and adds the case-insensitive label-name uniqueness SQLite already
+-- gets from `name TEXT NOT NULL COLLATE NOCASE` + `UNIQUE(user_id, name)`.
+-- Kept as a placeholder so migration numbers stay aligned across both dialects.

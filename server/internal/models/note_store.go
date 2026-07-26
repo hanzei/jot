@@ -61,6 +61,10 @@ func (s *noteStore) Create(ctx context.Context, userID, noteID, title, content s
 // Returns ErrNoteExists if the note ID is taken, and ErrNoteItemExists /
 // ErrInvalidParentRef for the corresponding item-level conflicts.
 func (s *noteStore) CreateWithItems(ctx context.Context, userID, noteID, title, content string, noteType NoteType, color string, items []NewNoteItem) (*Note, error) {
+	if !noteType.Valid() {
+		return nil, ErrInvalidNoteType
+	}
+
 	if noteID == "" {
 		var err error
 		noteID, err = generateID()
@@ -399,7 +403,7 @@ func duplicateLabelsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, note
 		var resolvedLabelID string
 		if err = tx.QueryRowContext(ctx,
 			d.RewritePlaceholders(`INSERT INTO labels (id, user_id, name) VALUES (?, ?, ?)
-			 ON CONFLICT(user_id, name) DO UPDATE SET name=excluded.name
+			 ON CONFLICT `+d.LabelNameConflictTarget()+` DO UPDATE SET name=excluded.name
 			 RETURNING id`),
 			labelID, userID, label.Name,
 		).Scan(&resolvedLabelID); err != nil {
@@ -848,6 +852,10 @@ func (s *noteStore) updateNoteContentTx(ctx context.Context, tx *sql.Tx, id, tit
 // regardless of direction (a text note has none, so the delete is a no-op in
 // that direction).
 func (s *noteStore) ConvertType(ctx context.Context, id, userID string, targetType NoteType, content string, targetItems []NewNoteItem, baseVersion *int) (*Note, error) {
+	if !targetType.Valid() {
+		return nil, ErrInvalidNoteType
+	}
+
 	hasAccess, err := s.HasAccess(ctx, id, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check access: %w", err)
@@ -1482,7 +1490,7 @@ func (s *noteStore) DeleteAllByUser(ctx context.Context, userID string) (int, []
 // attached to the purged notes, for the caller to reclaim (see
 // deleteNoteDependenciesTx).
 func (s *noteStore) PurgeOldTrashedNotes(ctx context.Context, olderThan time.Duration) ([]string, error) {
-	cutoff := time.Now().Add(-olderThan)
+	cutoff := Now().Add(-olderThan)
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -2545,7 +2553,7 @@ func insertImportedLabelsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect,
 		var resolvedLabelID string
 		if err = tx.QueryRowContext(ctx,
 			d.RewritePlaceholders(`INSERT INTO labels (id, user_id, name) VALUES (?, ?, ?)
-			 ON CONFLICT(user_id, name) DO UPDATE SET name=excluded.name
+			 ON CONFLICT `+d.LabelNameConflictTarget()+` DO UPDATE SET name=excluded.name
 			 RETURNING id`),
 			labelID, userID, labelName,
 		).Scan(&resolvedLabelID); err != nil {

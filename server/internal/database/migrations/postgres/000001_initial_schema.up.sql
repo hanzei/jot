@@ -20,7 +20,10 @@ CREATE TABLE notes (
     user_id    TEXT NOT NULL,
     title      TEXT NOT NULL DEFAULT '',
     content    TEXT NOT NULL DEFAULT '',
-    note_type  TEXT NOT NULL DEFAULT 'text' CHECK (note_type IN ('text', 'list')),
+    -- No CHECK on note_type: allowed values are validated in the application
+    -- layer, and SQLite's initial schema has no CHECK either. Keeping the two
+    -- dialects identical means data valid on one backend is valid on the other.
+    note_type  TEXT NOT NULL DEFAULT 'text',
     deleted_at TIMESTAMP DEFAULT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -88,18 +91,23 @@ CREATE TABLE user_settings (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Labels table (no COLLATE NOCASE; case-insensitive matching done in application layer)
+-- Labels table
 CREATE TABLE labels (
     id         TEXT      PRIMARY KEY,
     user_id    TEXT      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name       TEXT      NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(user_id, name),
     UNIQUE(id, user_id)
 );
 
 CREATE INDEX idx_labels_user_id ON labels(user_id);
+
+-- Label names are unique per user case-insensitively, matching the
+-- COLLATE NOCASE + UNIQUE(user_id, name) pair SQLite uses. This is the index
+-- ON CONFLICT (user_id, LOWER(name)) infers, so keep the expression in sync
+-- with dialect.Dialect.LabelNameConflictTarget.
+CREATE UNIQUE INDEX idx_labels_user_id_lower_name ON labels (user_id, LOWER(name));
 
 -- Note labels table
 CREATE TABLE note_labels (

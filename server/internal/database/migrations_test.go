@@ -298,3 +298,102 @@ func buildQueryTokens(query string) []string {
 	}
 	return tokens
 }
+
+// TestMigration000008PostgresBackfill exercises the upgrade path for
+// PostgreSQL installations created before the cross-backend parity fix. Those
+// databases ran the original 000001, which had a notes.note_type CHECK SQLite
+// never had and only case-sensitive label-name uniqueness — so 000008 has to
+// drop the CHECK and merge label names that differ only in case before it can
+// add the case-insensitive unique index. New installations reach the same
+// schema straight from 000001, which is why every statement in 000008 is a
+// no-op when there is nothing to do.
+func TestMigration000008PostgresBackfill(t *testing.T) {
+	db := dsntest.RawDB(t, driverPostgres)
+	d := &dialect.Dialect{Driver: driverPostgres}
+	ctx := t.Context()
+
+	m := newMigrator(t, db, driverPostgres)
+	require.NoError(t, m.Migrate(7))
+
+	// Put the schema back the way the original 000001 left it. Both constraints
+	// are added unnamed, so PostgreSQL derives the same names it did there —
+	// which is what 000008's DROP CONSTRAINT statements have to match.
+	_, err := db.ExecContext(ctx, `
+		ALTER TABLE notes ADD CHECK (note_type IN ('text', 'list'));
+		DROP INDEX idx_labels_user_id_lower_name;
+		ALTER TABLE labels ADD UNIQUE (user_id, name);
+	`)
+	require.NoError(t, err)
+
+	_, err = db.ExecContext(ctx, `INSERT INTO users (id, username, password_hash) VALUES ('user000000000000000008', 'carol', 'x')`)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO notes (id, user_id, note_type) VALUES
+			('note000000000000000081', 'user000000000000000008', 'text'),
+			('note000000000000000082', 'user000000000000000008', 'text');
+		INSERT INTO labels (id, user_id, name, created_at) VALUES
+			('labl000000000000000081', 'user000000000000000008', 'Work', '2024-01-01 00:00:00'),
+			('labl000000000000000082', 'user000000000000000008', 'work', '2024-02-01 00:00:00'),
+			('labl000000000000000083', 'user000000000000000008', 'WORK', '2024-03-01 00:00:00'),
+			('labl000000000000000084', 'user000000000000000008', 'Home', '2024-01-01 00:00:00');
+		INSERT INTO note_labels (id, note_id, label_id, user_id) VALUES
+			('nlbl000000000000000081', 'note000000000000000081', 'labl000000000000000081', 'user000000000000000008'),
+			('nlbl000000000000000082', 'note000000000000000081', 'labl000000000000000082', 'user000000000000000008'),
+			('nlbl000000000000000083', 'note000000000000000082', 'labl000000000000000083', 'user000000000000000008'),
+			('nlbl000000000000000084', 'note000000000000000082', 'labl000000000000000084', 'user000000000000000008');
+	`)
+	require.NoError(t, err)
+
+	require.NoError(t, m.Migrate(8))
+
+	t.Run("merges labels that differ only in case, keeping the oldest", func(t *testing.T) {
+		rows, err := db.QueryContext(ctx, `SELECT id, name FROM labels WHERE user_id = 'user000000000000000008' ORDER BY id`)
+		require.NoError(t, err)
+		defer func() { _ = rows.Close() }()
+
+		got := map[string]string{}
+		for rows.Next() {
+			var id, name string
+			require.NoError(t, rows.Scan(&id, &name))
+			got[id] = name
+		}
+		require.NoError(t, rows.Err())
+
+		assert.Equal(t, map[string]string{
+			"labl000000000000000081": "Work",
+			"labl000000000000000084": "Home",
+		}, got)
+	})
+
+	t.Run("repoints associations at the surviving label without duplicating them", func(t *testing.T) {
+		rows, err := db.QueryContext(ctx, `SELECT note_id, label_id FROM note_labels ORDER BY note_id, label_id`)
+		require.NoError(t, err)
+		defer func() { _ = rows.Close() }()
+
+		var got [][2]string
+		for rows.Next() {
+			var noteID, labelID string
+			require.NoError(t, rows.Scan(&noteID, &labelID))
+			got = append(got, [2]string{noteID, labelID})
+		}
+		require.NoError(t, rows.Err())
+
+		assert.Equal(t, [][2]string{
+			// The second association on this note collapsed into the first.
+			{"note000000000000000081", "labl000000000000000081"},
+			{"note000000000000000082", "labl000000000000000081"},
+			{"note000000000000000082", "labl000000000000000084"},
+		}, got)
+	})
+
+	t.Run("drops the note_type CHECK", func(t *testing.T) {
+		_, err := db.ExecContext(ctx, `INSERT INTO notes (id, user_id, note_type) VALUES ('note000000000000000083', 'user000000000000000008', 'not-a-note-type')`)
+		assert.NoError(t, err)
+	})
+
+	t.Run("enforces case-insensitive label names from then on", func(t *testing.T) {
+		_, err := db.ExecContext(ctx, `INSERT INTO labels (id, user_id, name) VALUES ('labl000000000000000085', 'user000000000000000008', 'wOrK')`)
+		require.Error(t, err)
+		assert.True(t, d.IsUniqueConstraintError(err), "want a unique violation, got %v", err)
+	})
+}

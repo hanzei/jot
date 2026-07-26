@@ -136,3 +136,15 @@ func TestIsUniqueConstraintError(t *testing.T) {
 		assert.False(t, d.IsUniqueConstraintError(nil))
 	})
 }
+
+func TestLabelNameConflictTarget(t *testing.T) {
+	t.Run("SQLite infers the plain unique constraint, which is COLLATE NOCASE", func(t *testing.T) {
+		d := &dialect.Dialect{Driver: "sqlite"}
+		assert.Equal(t, "(user_id, name)", d.LabelNameConflictTarget())
+	})
+
+	t.Run("Postgres infers the unique index on the LOWER(name) expression", func(t *testing.T) {
+		d := &dialect.Dialect{Driver: "postgres"}
+		assert.Equal(t, "(user_id, LOWER(name))", d.LabelNameConflictTarget())
+	})
+}

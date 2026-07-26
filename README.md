@@ -213,6 +213,12 @@ Configure the server with environment variables or a `.env` file.
 | `UPLOAD_DIR` | `./uploads` | Filesystem root for uploaded image blobs and thumbnails. |
 | `UPLOAD_MAX_BYTES` | `26214400` | Maximum upload size per note image, from 1 MiB to 500 MiB. |
 
+Timestamps are always stored as UTC, whichever driver you use. Jot pins every
+Postgres session it opens to `SET TIME ZONE 'UTC'`, so a server or database
+configured for a local time zone does not shift stored timestamps — no
+`TimeZone` setting on your side is needed. If you query the database with
+another client, expect timestamp columns to hold UTC wall-clock values.
+
 ### Access control
 
 | Variable | Default | Description |

@@ -161,6 +161,8 @@ They return an HTTP status code, a response body (serialized to JSON by `wrapHan
 
 **MCP server** — `internal/mcphandler` exposes note and label CRUD as Model Context Protocol tools over the streamable-HTTP transport. It is mounted behind auth middleware so every MCP session is scoped to the authenticated user.
 
+**Timestamps** — every timestamp column is naive (SQLite `DATETIME`, Postgres `TIMESTAMP WITHOUT TIME ZONE`) and holds a UTC wall clock. Use `models.Now()` rather than `time.Now()` for anything written to, or compared against, one of those columns. Timestamps the database generates itself (`DEFAULT CURRENT_TIMESTAMP`) are UTC too: SQLite's always is, and Postgres pools open through a connector that runs `SET TIME ZONE 'UTC'` on every session (`internal/database`.`utcConnector`).
+
 **Observability** — `internal/telemetry` sets up optional OpenTelemetry traces (OTLP gRPC) and Prometheus metrics (separate port). Structured logs are integrated with the OTel LoggerProvider.
 
 **Blob storage** — `internal/blobstore` defines a `Blobstore` interface (`Put`/`Open`/`Delete`) for content-addressed binary storage, keyed by hex-encoded SHA-256 hash. `FSBlobstore` is the v1 implementation, rooted at config `UPLOAD_DIR` (default `./uploads`), laid out as `UPLOAD_DIR/blobs/<sha[0:2]>/<sha[2:4]>/<sha>`. All paths are derived solely from the validated hash, never from caller-supplied filenames, so there is no path traversal risk; filesystem access additionally goes through `os.Root` (opened on `UPLOAD_DIR`, same traversal-resistant pattern used for static file serving in `server.go`) as defense-in-depth. `Put` is a no-op when the hash already exists (dedup). A full backup is now **DB + `UPLOAD_DIR`**.
@@ -182,6 +184,8 @@ If handler annotations or request/response types change, regenerate docs with `t
 ### Database Migrations
 
 Migration files live in `server/internal/database/migrations/` and are named `NNN_description.sql`. They are embedded into the binary at compile time via `embed.FS` and applied automatically at startup in sequential order. To add a new migration, create the next numbered file.
+
+There is one directory per dialect (`migrations/sqlite/`, `migrations/postgres/`) and the numbering is kept aligned between them: a migration that only one backend needs still gets an explanatory placeholder file in the other. Both schemas must enforce the same invariants — a constraint on one dialect only means data valid on one backend fails to load into the other.
 
 ### Authentication
 
