@@ -86,6 +86,29 @@ func TestLabelNameCaseInsensitivity(t *testing.T) {
 			assert.ErrorIs(t, err, ErrLabelNameConflict)
 		})
 
+		t.Run("names differing only in non-ASCII case are distinct labels", func(t *testing.T) {
+			// SQLite's fold covers ASCII A-Z only and cannot be made
+			// Unicode-aware without ICU, so PostgreSQL is held to the same rule.
+			// Both the lookup and the unique index must agree on it, or
+			// GetOrCreateLabel would return a label the index does not consider
+			// a conflict.
+			store, userID := newTestLabelStore(t, driver)
+			ctx := t.Context()
+
+			upper, err := store.GetOrCreateLabel(ctx, userID, "ÄPFEL")
+			require.NoError(t, err)
+
+			lower, err := store.GetOrCreateLabel(ctx, userID, "äpfel")
+			require.NoError(t, err)
+
+			assert.NotEqual(t, upper.ID, lower.ID)
+			assert.Equal(t, "äpfel", lower.Name)
+
+			labels, err := store.GetLabels(ctx, userID)
+			require.NoError(t, err)
+			assert.Len(t, labels, 2)
+		})
+
 		t.Run("different users may each own the same name", func(t *testing.T) {
 			store, userID := newTestLabelStore(t, driver)
 			ctx := t.Context()

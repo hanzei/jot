@@ -87,17 +87,19 @@ func TestInsertIgnore(t *testing.T) {
 	})
 }
 
-func TestCaseInsensitiveEquals(t *testing.T) {
-	t.Run("SQLite uses LOWER(col) = LOWER(?)", func(t *testing.T) {
+func TestLabelNameEquals(t *testing.T) {
+	t.Run("SQLite uses LOWER(col) = LOWER(?), which folds ASCII A-Z only", func(t *testing.T) {
 		d := &dialect.Dialect{Driver: "sqlite"}
-		assert.Equal(t, "LOWER(name) = LOWER(?)", d.CaseInsensitiveEquals("name"))
+		assert.Equal(t, "LOWER(name) = LOWER(?)", d.LabelNameEquals("name"))
 	})
 
-	t.Run("PostgreSQL uses LOWER(col) = LOWER(?)", func(t *testing.T) {
+	t.Run("PostgreSQL folds under COLLATE C to match SQLite", func(t *testing.T) {
 		// Deliberately not ILIKE: ILIKE would interpret `%`/`_` in the bound
-		// value as pattern wildcards, matching the wrong label.
+		// value as pattern wildcards, matching the wrong label. COLLATE "C"
+		// holds LOWER() to ASCII A-Z, so "ÄPFEL" and "äpfel" stay distinct here
+		// exactly as they do on SQLite.
 		d := &dialect.Dialect{Driver: "postgres"}
-		assert.Equal(t, "LOWER(name) = LOWER(?)", d.CaseInsensitiveEquals("name"))
+		assert.Equal(t, `LOWER(name COLLATE "C") = LOWER(? COLLATE "C")`, d.LabelNameEquals("name"))
 	})
 }
 
@@ -143,8 +145,10 @@ func TestLabelNameConflictTarget(t *testing.T) {
 		assert.Equal(t, "(user_id, name)", d.LabelNameConflictTarget())
 	})
 
-	t.Run("Postgres infers the unique index on the LOWER(name) expression", func(t *testing.T) {
+	t.Run("Postgres infers the unique index on the folded expression", func(t *testing.T) {
+		// Must match the index the migrations create verbatim in meaning,
+		// COLLATE included, or ON CONFLICT has nothing to infer against.
 		d := &dialect.Dialect{Driver: "postgres"}
-		assert.Equal(t, "(user_id, LOWER(name))", d.LabelNameConflictTarget())
+		assert.Equal(t, `(user_id, LOWER(name COLLATE "C"))`, d.LabelNameConflictTarget())
 	})
 }

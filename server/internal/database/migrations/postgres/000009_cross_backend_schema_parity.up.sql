@@ -8,17 +8,18 @@
 ALTER TABLE notes DROP CONSTRAINT IF EXISTS notes_note_type_check;
 
 -- 2. Enforce case-insensitive uniqueness of label names per user, matching
---    SQLite's COLLATE NOCASE column. Existing rows may already violate it
---    ("Work" and "work" for the same user), so merge those first: keep the
---    oldest label of each case-insensitive name and repoint its duplicates'
---    note associations at it.
+--    SQLite's COLLATE NOCASE column. COLLATE "C" restricts the fold to ASCII
+--    A-Z, which is all SQLite folds; see the note on the index below. Existing
+--    rows may already violate it ("Work" and "work" for the same user), so
+--    merge those first: keep the oldest label of each folded name and repoint
+--    its duplicates' note associations at it.
 CREATE TEMP TABLE label_dedup_map AS
 SELECT l.id AS dup_id,
        l.user_id,
        (SELECT k.id
           FROM labels k
          WHERE k.user_id = l.user_id
-           AND LOWER(k.name) = LOWER(l.name)
+           AND LOWER(k.name COLLATE "C") = LOWER(l.name COLLATE "C")
          ORDER BY k.created_at, k.id
          LIMIT 1) AS keep_id
   FROM labels l;
@@ -50,8 +51,9 @@ DELETE FROM labels l
 DROP TABLE label_dedup_map;
 
 -- The case-sensitive constraint is subsumed by the case-insensitive index, and
--- ON CONFLICT (user_id, LOWER(name)) needs the latter to infer against.
--- Note LOWER() is locale-aware on PostgreSQL but ASCII-only on SQLite, so
--- names differing only in non-ASCII case still collide on PostgreSQL alone.
+-- ON CONFLICT needs the latter to infer against. COLLATE "C" keeps LOWER() to
+-- ASCII A-Z so PostgreSQL folds exactly what SQLite folds: without it "ÄPFEL"
+-- and "äpfel" would collide here but not on SQLite, and a SQLite database
+-- holding both could not be loaded into PostgreSQL at all.
 ALTER TABLE labels DROP CONSTRAINT IF EXISTS labels_user_id_name_key;
-CREATE UNIQUE INDEX IF NOT EXISTS idx_labels_user_id_lower_name ON labels (user_id, LOWER(name));
+CREATE UNIQUE INDEX IF NOT EXISTS idx_labels_user_id_lower_name ON labels (user_id, LOWER(name COLLATE "C"));

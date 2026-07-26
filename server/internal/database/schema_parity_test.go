@@ -60,6 +60,22 @@ func TestSchemaParity(t *testing.T) {
 			assert.True(t, d.IsUniqueConstraintError(err), "want a unique violation, got %v", err)
 		})
 
+		t.Run("label names differing only in non-ASCII case do not collide", func(t *testing.T) {
+			// The shared fold is ASCII A-Z only, because that is all SQLite can
+			// do. If PostgreSQL folded these together it would be the stricter
+			// backend, and a SQLite database holding both rows could not be
+			// loaded into it — the exact failure this parity work exists to stop.
+			_, err := db.ExecContext(ctx, d.RewritePlaceholders(
+				`INSERT INTO labels (id, user_id, name) VALUES (?, ?, ?)`),
+				"labl000000000000upperÄ", "user000000000000parity", "ÄPFEL")
+			require.NoError(t, err)
+
+			_, err = db.ExecContext(ctx, d.RewritePlaceholders(
+				`INSERT INTO labels (id, user_id, name) VALUES (?, ?, ?)`),
+				"labl000000000000lowerä", "user000000000000parity", "äpfel")
+			assert.NoError(t, err)
+		})
+
 		t.Run("label names may repeat across users", func(t *testing.T) {
 			_, err := db.ExecContext(ctx, d.RewritePlaceholders(
 				`INSERT INTO users (id, username, password_hash) VALUES (?, ?, ?)`),

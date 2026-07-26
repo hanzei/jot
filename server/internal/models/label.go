@@ -105,7 +105,7 @@ func (s *labelStore) GetOrCreateLabel(ctx context.Context, userID, name string) 
 	var l Label
 	selectQ := s.d.RewritePlaceholders(
 		"SELECT id, user_id, name, created_at, updated_at FROM labels WHERE user_id = ? AND " +
-			s.d.CaseInsensitiveEquals("name"),
+			s.d.LabelNameEquals("name"),
 	)
 	err := s.db.QueryRowContext(ctx, selectQ, userID, name).Scan(
 		&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt,

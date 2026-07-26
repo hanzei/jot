@@ -2,4 +2,6 @@
 -- backend in line with this schema: it drops the notes.note_type CHECK SQLite
 -- never had, and adds the case-insensitive label-name uniqueness SQLite already
 -- gets from `name TEXT NOT NULL COLLATE NOCASE` + `UNIQUE(user_id, name)`.
+-- That fold covers ASCII A-Z only, and PostgreSQL is pinned to the same rule
+-- with COLLATE "C", so neither backend rejects a name the other accepts.
 -- Kept as a placeholder so migration numbers stay aligned across both dialects.

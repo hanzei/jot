@@ -104,10 +104,12 @@ CREATE TABLE labels (
 CREATE INDEX idx_labels_user_id ON labels(user_id);
 
 -- Label names are unique per user case-insensitively, matching the
--- COLLATE NOCASE + UNIQUE(user_id, name) pair SQLite uses. This is the index
--- ON CONFLICT (user_id, LOWER(name)) infers, so keep the expression in sync
--- with dialect.Dialect.LabelNameConflictTarget.
-CREATE UNIQUE INDEX idx_labels_user_id_lower_name ON labels (user_id, LOWER(name));
+-- COLLATE NOCASE + UNIQUE(user_id, name) pair SQLite uses. COLLATE "C" is what
+-- makes the two agree: it restricts LOWER() to folding ASCII A-Z, exactly what
+-- SQLite does, where the locale-aware default would also fold accented letters
+-- and reject pairs SQLite accepts. This is the index ON CONFLICT infers, so
+-- keep the expression in sync with dialect.Dialect.LabelNameConflictTarget.
+CREATE UNIQUE INDEX idx_labels_user_id_lower_name ON labels (user_id, LOWER(name COLLATE "C"));
 
 -- Note labels table
 CREATE TABLE note_labels (
