@@ -1029,6 +1029,12 @@ const docTemplate = `{
                             "type": "string"
                         }
                     },
+                    "422": {
+                        "description": "note item cap exceeded",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "internal server error",
                         "schema": {
@@ -1486,6 +1492,12 @@ const docTemplate = `{
                             "type": "string"
                         }
                     },
+                    "422": {
+                        "description": "note item cap exceeded",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "internal server error",
                         "schema": {
@@ -1633,6 +1645,12 @@ const docTemplate = `{
                             "type": "string"
                         }
                     },
+                    "422": {
+                        "description": "note image cap exceeded",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "internal server error",
                         "schema": {
@@ -1704,6 +1722,12 @@ const docTemplate = `{
                     },
                     "409": {
                         "description": "item already exists",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "422": {
+                        "description": "note item cap exceeded",
                         "schema": {
                             "type": "string"
                         }
@@ -2601,6 +2625,12 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "422": {
+                        "description": "personal access token cap exceeded",
                         "schema": {
                             "type": "string"
                         }
