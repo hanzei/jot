@@ -197,12 +197,10 @@ to Jot, choose the target server if needed, and save it as a new note.
 Configure the server with environment variables or a `.env` file. All
 app-specific variables are namespaced with a `JOT_` prefix.
 
-> **Upgrading from an earlier version?** The unprefixed legacy names (e.g.
-> `DB_DSN`, `PORT`, `COOKIE_SECURE`) still work as a deprecated fallback — if
-> a `JOT_`-prefixed variable isn't set, Jot falls back to its legacy name and
-> logs a deprecation warning. This fallback is planned for removal at the
-> v1.0 stable release, so migrate your `.env` file, Docker environment, or
-> systemd unit to the `JOT_` names below at your convenience. See
+> **Upgrading from an earlier version?** App-specific variable names changed
+> to add a `JOT_` prefix (e.g. `DB_DSN` → `JOT_DB_DSN`). The old unprefixed
+> names are no longer read — update your `.env` file, Docker environment, or
+> systemd unit before upgrading. See
 > [Migrating to `JOT_`-prefixed environment variables](#migrating-to-jot-prefixed-environment-variables)
 > for the full before→after table.
 
@@ -275,8 +273,7 @@ accordingly.
 
 The following are spec-standard OpenTelemetry SDK variables and are
 intentionally **not** prefixed with `JOT_` — the OTel SDK expects these exact
-names, and there is no legacy-fallback behavior for them since they were
-never renamed:
+names, so they were never renamed:
 
 | Variable | Default | Description |
 | --- | --- | --- |
@@ -304,14 +301,13 @@ regardless of `JOT_DB_DRIVER`.
 
 Every app-specific environment variable now uses a `JOT_` prefix to avoid
 collisions with other apps on shared hosts (e.g. `PORT`, `DB_DSN`) and to
-freeze a clean, unambiguous config contract ahead of v1. The unprefixed
-legacy names below still work today as a deprecated fallback — Jot reads the
-`JOT_`-prefixed name first, and only falls back to the legacy name (logging a
-warning) when the new one isn't set. **This fallback will be removed at the
-v1.0 stable release**, so update your `.env` file, Docker/Compose
-environment, or systemd unit at your convenience before then.
+freeze a clean, unambiguous config contract ahead of v1. **The old
+unprefixed names are no longer read at all** — this is a breaking change,
+not a deprecation. Update your `.env` file, Docker/Compose environment, or
+systemd unit to the new names before upgrading, or the server will silently
+fall back to defaults for anything still using an old name.
 
-| Legacy name (deprecated) | New name |
+| Old name (no longer read) | New name |
 | --- | --- |
 | `PORT` | `JOT_PORT` |
 | `DB_DRIVER` | `JOT_DB_DRIVER` |

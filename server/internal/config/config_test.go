@@ -360,8 +360,7 @@ func TestLoadOTelSignalToggles(t *testing.T) {
 
 // TestLoadUnprefixedOTelSDKVarsUnaffected verifies the spec-standard OTel SDK
 // env vars (OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_INSECURE,
-// OTEL_SERVICE_NAME) are read as-is, without a JOT_ prefix and without legacy
-// fallback machinery — the OTel SDK's own conventions apply here, not Jot's.
+// OTEL_SERVICE_NAME) are read as-is, without a JOT_ prefix.
 func TestLoadUnprefixedOTelSDKVarsUnaffected(t *testing.T) {
 	t.Setenv("JOT_STATIC_DIR", "/tmp/static")
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317")
@@ -374,51 +373,4 @@ func TestLoadUnprefixedOTelSDKVarsUnaffected(t *testing.T) {
 	assert.Equal(t, "localhost:4317", cfg.OTelEndpoint)
 	assert.True(t, cfg.OTelInsecure)
 	assert.Equal(t, "custom-service", cfg.OTelServiceName)
-}
-
-// TestLoadLegacyEnvFallback verifies that pre-JOT_-prefix env var names
-// still work as a deprecated fallback, for backward compatibility with
-// existing installs during the transition period (removal targeted at the
-// v1.0 stable release).
-func TestLoadLegacyEnvFallback(t *testing.T) {
-	t.Setenv("JOT_STATIC_DIR", "/tmp/static")
-	t.Setenv("PORT", "9000")
-	t.Setenv("DB_DRIVER", "postgres")
-	t.Setenv("COOKIE_SECURE", "false")
-	t.Setenv("RATE_LIMIT_PER_MINUTE", "42")
-	t.Setenv("OTEL_TRACES_ENABLED", "true")
-
-	cfg, err := Load()
-	require.NoError(t, err)
-
-	assert.Equal(t, 9000, cfg.Port)
-	assert.Equal(t, "postgres", cfg.DBDriver)
-	assert.False(t, cfg.CookieSecure)
-	assert.Equal(t, 42, cfg.RateLimitPerMinute)
-	assert.True(t, cfg.OTelTracesEnabled)
-}
-
-// TestLoadJOTPrefixTakesPrecedenceOverLegacy verifies that when both the
-// JOT_-prefixed var and its legacy equivalent are set, the JOT_-prefixed
-// one wins.
-func TestLoadJOTPrefixTakesPrecedenceOverLegacy(t *testing.T) {
-	t.Setenv("JOT_STATIC_DIR", "/tmp/static")
-	t.Setenv("JOT_PORT", "3000")
-	t.Setenv("PORT", "9000")
-
-	cfg, err := Load()
-	require.NoError(t, err)
-	assert.Equal(t, 3000, cfg.Port)
-}
-
-// TestLoadLegacyInvalidValueErrorsMentionLegacyName verifies parse errors on
-// a legacy var reference the legacy name the user actually set, not the new
-// JOT_-prefixed one, so the error is actionable.
-func TestLoadLegacyInvalidValueErrorsMentionLegacyName(t *testing.T) {
-	t.Setenv("JOT_STATIC_DIR", "/tmp/static")
-	t.Setenv("PORT", "notanumber")
-
-	_, err := Load()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid PORT value")
 }
