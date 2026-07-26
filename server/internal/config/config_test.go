@@ -10,15 +10,15 @@ import (
 )
 
 func TestLoadDefaults(t *testing.T) {
-	t.Setenv("PORT", "")
-	t.Setenv("DB_DRIVER", "")
-	t.Setenv("DB_DSN", "")
-	t.Setenv("UPLOAD_DIR", "")
-	t.Setenv("STATIC_DIR", "")
-	t.Setenv("CORS_ALLOWED_ORIGIN", "")
-	t.Setenv("COOKIE_SECURE", "")
-	t.Setenv("REGISTRATION_ENABLED", "")
-	t.Setenv("PASSWORD_MIN_LENGTH", "")
+	t.Setenv("JOT_PORT", "")
+	t.Setenv("JOT_DB_DRIVER", "")
+	t.Setenv("JOT_DB_DSN", "")
+	t.Setenv("JOT_UPLOAD_DIR", "")
+	t.Setenv("JOT_STATIC_DIR", "")
+	t.Setenv("JOT_CORS_ALLOWED_ORIGIN", "")
+	t.Setenv("JOT_COOKIE_SECURE", "")
+	t.Setenv("JOT_REGISTRATION_ENABLED", "")
+	t.Setenv("JOT_PASSWORD_MIN_LENGTH", "")
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -35,15 +35,15 @@ func TestLoadDefaults(t *testing.T) {
 }
 
 func TestLoadCustomValues(t *testing.T) {
-	t.Setenv("PORT", "3000")
-	t.Setenv("DB_DRIVER", "postgres")
-	t.Setenv("DB_DSN", "postgres://user:pass@localhost/jot")
-	t.Setenv("UPLOAD_DIR", "/var/lib/jot/uploads/")
-	t.Setenv("STATIC_DIR", "/var/www/")
-	t.Setenv("CORS_ALLOWED_ORIGIN", "https://example.com")
-	t.Setenv("COOKIE_SECURE", "false")
-	t.Setenv("REGISTRATION_ENABLED", "false")
-	t.Setenv("PASSWORD_MIN_LENGTH", "4")
+	t.Setenv("JOT_PORT", "3000")
+	t.Setenv("JOT_DB_DRIVER", "postgres")
+	t.Setenv("JOT_DB_DSN", "postgres://user:pass@localhost/jot")
+	t.Setenv("JOT_UPLOAD_DIR", "/var/lib/jot/uploads/")
+	t.Setenv("JOT_STATIC_DIR", "/var/www/")
+	t.Setenv("JOT_CORS_ALLOWED_ORIGIN", "https://example.com")
+	t.Setenv("JOT_COOKIE_SECURE", "false")
+	t.Setenv("JOT_REGISTRATION_ENABLED", "false")
+	t.Setenv("JOT_PASSWORD_MIN_LENGTH", "4")
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -59,40 +59,39 @@ func TestLoadCustomValues(t *testing.T) {
 	assert.Equal(t, 4, cfg.PasswordMinLength)
 }
 
-
 func TestLoadInvalidPort(t *testing.T) {
-	t.Setenv("STATIC_DIR", "/tmp/static")
+	t.Setenv("JOT_STATIC_DIR", "/tmp/static")
 
 	t.Run("non-numeric", func(t *testing.T) {
-		t.Setenv("PORT", "notanumber")
+		t.Setenv("JOT_PORT", "notanumber")
 		_, err := Load()
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid PORT value")
+		assert.Contains(t, err.Error(), "invalid JOT_PORT value")
 	})
 
 	t.Run("zero", func(t *testing.T) {
-		t.Setenv("PORT", "0")
+		t.Setenv("JOT_PORT", "0")
 		_, err := Load()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "must be between 1 and 65535")
 	})
 
 	t.Run("negative", func(t *testing.T) {
-		t.Setenv("PORT", "-1")
+		t.Setenv("JOT_PORT", "-1")
 		_, err := Load()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "must be between 1 and 65535")
 	})
 
 	t.Run("too high", func(t *testing.T) {
-		t.Setenv("PORT", "65536")
+		t.Setenv("JOT_PORT", "65536")
 		_, err := Load()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "must be between 1 and 65535")
 	})
 
 	t.Run("max valid", func(t *testing.T) {
-		t.Setenv("PORT", "65535")
+		t.Setenv("JOT_PORT", "65535")
 		cfg, err := Load()
 		require.NoError(t, err)
 		assert.Equal(t, 65535, cfg.Port)
@@ -100,11 +99,11 @@ func TestLoadInvalidPort(t *testing.T) {
 }
 
 func TestLoadStaticDirDefault(t *testing.T) {
-	t.Setenv("PORT", "")
-	t.Setenv("DB_DSN", "")
-	t.Setenv("STATIC_DIR", "")
-	t.Setenv("CORS_ALLOWED_ORIGIN", "")
-	t.Setenv("COOKIE_SECURE", "")
+	t.Setenv("JOT_PORT", "")
+	t.Setenv("JOT_DB_DSN", "")
+	t.Setenv("JOT_STATIC_DIR", "")
+	t.Setenv("JOT_CORS_ALLOWED_ORIGIN", "")
+	t.Setenv("JOT_COOKIE_SECURE", "")
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -112,8 +111,8 @@ func TestLoadStaticDirDefault(t *testing.T) {
 }
 
 func TestLoadCookieSecureDefault(t *testing.T) {
-	t.Setenv("COOKIE_SECURE", "")
-	t.Setenv("STATIC_DIR", "/tmp/static")
+	t.Setenv("JOT_COOKIE_SECURE", "")
+	t.Setenv("JOT_STATIC_DIR", "/tmp/static")
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -121,8 +120,8 @@ func TestLoadCookieSecureDefault(t *testing.T) {
 }
 
 func TestLoadCookieSecureExplicitTrue(t *testing.T) {
-	t.Setenv("COOKIE_SECURE", "true")
-	t.Setenv("STATIC_DIR", "/tmp/static")
+	t.Setenv("JOT_COOKIE_SECURE", "true")
+	t.Setenv("JOT_STATIC_DIR", "/tmp/static")
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -130,8 +129,8 @@ func TestLoadCookieSecureExplicitTrue(t *testing.T) {
 }
 
 func TestLoadRegistrationEnabledDefault(t *testing.T) {
-	t.Setenv("REGISTRATION_ENABLED", "")
-	t.Setenv("STATIC_DIR", "/tmp/static")
+	t.Setenv("JOT_REGISTRATION_ENABLED", "")
+	t.Setenv("JOT_STATIC_DIR", "/tmp/static")
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -139,8 +138,8 @@ func TestLoadRegistrationEnabledDefault(t *testing.T) {
 }
 
 func TestLoadRegistrationDisabled(t *testing.T) {
-	t.Setenv("REGISTRATION_ENABLED", "false")
-	t.Setenv("STATIC_DIR", "/tmp/static")
+	t.Setenv("JOT_REGISTRATION_ENABLED", "false")
+	t.Setenv("JOT_STATIC_DIR", "/tmp/static")
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -148,8 +147,8 @@ func TestLoadRegistrationDisabled(t *testing.T) {
 }
 
 func TestLoadRegistrationExplicitTrue(t *testing.T) {
-	t.Setenv("REGISTRATION_ENABLED", "true")
-	t.Setenv("STATIC_DIR", "/tmp/static")
+	t.Setenv("JOT_REGISTRATION_ENABLED", "true")
+	t.Setenv("JOT_STATIC_DIR", "/tmp/static")
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -161,8 +160,8 @@ func TestLoadRegistrationInvalidValueErrors(t *testing.T) {
 	// (which previously left registration enabled contrary to intent).
 	for _, v := range []string{"False", "0", "no", "disabled"} {
 		t.Run(v, func(t *testing.T) {
-			t.Setenv("REGISTRATION_ENABLED", v)
-			t.Setenv("STATIC_DIR", "/tmp/static")
+			t.Setenv("JOT_REGISTRATION_ENABLED", v)
+			t.Setenv("JOT_STATIC_DIR", "/tmp/static")
 
 			_, err := Load()
 			assert.Error(t, err)
@@ -171,8 +170,8 @@ func TestLoadRegistrationInvalidValueErrors(t *testing.T) {
 }
 
 func TestLoadCORSAllowedOriginSet(t *testing.T) {
-	t.Setenv("CORS_ALLOWED_ORIGIN", "https://app.example.com")
-	t.Setenv("STATIC_DIR", "/tmp/static")
+	t.Setenv("JOT_CORS_ALLOWED_ORIGIN", "https://app.example.com")
+	t.Setenv("JOT_STATIC_DIR", "/tmp/static")
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -180,38 +179,38 @@ func TestLoadCORSAllowedOriginSet(t *testing.T) {
 }
 
 func TestLoadUploadMaxBytes(t *testing.T) {
-	t.Setenv("STATIC_DIR", "/tmp/static")
+	t.Setenv("JOT_STATIC_DIR", "/tmp/static")
 
 	t.Run("default", func(t *testing.T) {
-		t.Setenv("UPLOAD_MAX_BYTES", "")
+		t.Setenv("JOT_UPLOAD_MAX_BYTES", "")
 		cfg, err := Load()
 		require.NoError(t, err)
 		assert.Equal(t, 25<<20, cfg.UploadMaxBytes)
 	})
 
 	t.Run("custom", func(t *testing.T) {
-		t.Setenv("UPLOAD_MAX_BYTES", "1048576")
+		t.Setenv("JOT_UPLOAD_MAX_BYTES", "1048576")
 		cfg, err := Load()
 		require.NoError(t, err)
 		assert.Equal(t, 1<<20, cfg.UploadMaxBytes)
 	})
 
 	t.Run("non-numeric", func(t *testing.T) {
-		t.Setenv("UPLOAD_MAX_BYTES", "notanumber")
+		t.Setenv("JOT_UPLOAD_MAX_BYTES", "notanumber")
 		_, err := Load()
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid UPLOAD_MAX_BYTES value")
+		assert.Contains(t, err.Error(), "invalid JOT_UPLOAD_MAX_BYTES value")
 	})
 
 	t.Run("too low", func(t *testing.T) {
-		t.Setenv("UPLOAD_MAX_BYTES", "1")
+		t.Setenv("JOT_UPLOAD_MAX_BYTES", "1")
 		_, err := Load()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "must be between")
 	})
 
 	t.Run("too high", func(t *testing.T) {
-		t.Setenv("UPLOAD_MAX_BYTES", fmt.Sprint(501<<20))
+		t.Setenv("JOT_UPLOAD_MAX_BYTES", fmt.Sprint(501<<20))
 		_, err := Load()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "must be between")
@@ -219,52 +218,52 @@ func TestLoadUploadMaxBytes(t *testing.T) {
 }
 
 func TestLoadPasswordMinLength(t *testing.T) {
-	t.Setenv("STATIC_DIR", "/tmp/static")
+	t.Setenv("JOT_STATIC_DIR", "/tmp/static")
 
 	t.Run("default", func(t *testing.T) {
-		t.Setenv("PASSWORD_MIN_LENGTH", "")
+		t.Setenv("JOT_PASSWORD_MIN_LENGTH", "")
 		cfg, err := Load()
 		require.NoError(t, err)
 		assert.Equal(t, 10, cfg.PasswordMinLength)
 	})
 
 	t.Run("custom", func(t *testing.T) {
-		t.Setenv("PASSWORD_MIN_LENGTH", "4")
+		t.Setenv("JOT_PASSWORD_MIN_LENGTH", "4")
 		cfg, err := Load()
 		require.NoError(t, err)
 		assert.Equal(t, 4, cfg.PasswordMinLength)
 	})
 
 	t.Run("non-numeric", func(t *testing.T) {
-		t.Setenv("PASSWORD_MIN_LENGTH", "notanumber")
+		t.Setenv("JOT_PASSWORD_MIN_LENGTH", "notanumber")
 		_, err := Load()
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid PASSWORD_MIN_LENGTH value")
+		assert.Contains(t, err.Error(), "invalid JOT_PASSWORD_MIN_LENGTH value")
 	})
 
 	t.Run("zero", func(t *testing.T) {
-		t.Setenv("PASSWORD_MIN_LENGTH", "0")
+		t.Setenv("JOT_PASSWORD_MIN_LENGTH", "0")
 		_, err := Load()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "must be between 1 and 72")
 	})
 
 	t.Run("negative", func(t *testing.T) {
-		t.Setenv("PASSWORD_MIN_LENGTH", "-1")
+		t.Setenv("JOT_PASSWORD_MIN_LENGTH", "-1")
 		_, err := Load()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "must be between 1 and 72")
 	})
 
 	t.Run("too high", func(t *testing.T) {
-		t.Setenv("PASSWORD_MIN_LENGTH", "73")
+		t.Setenv("JOT_PASSWORD_MIN_LENGTH", "73")
 		_, err := Load()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "must be between 1 and 72")
 	})
 
 	t.Run("max valid", func(t *testing.T) {
-		t.Setenv("PASSWORD_MIN_LENGTH", "72")
+		t.Setenv("JOT_PASSWORD_MIN_LENGTH", "72")
 		cfg, err := Load()
 		require.NoError(t, err)
 		assert.Equal(t, 72, cfg.PasswordMinLength)
@@ -272,13 +271,13 @@ func TestLoadPasswordMinLength(t *testing.T) {
 }
 
 func TestLoadRateLimitValues(t *testing.T) {
-	t.Setenv("STATIC_DIR", "/tmp/static")
+	t.Setenv("JOT_STATIC_DIR", "/tmp/static")
 
 	t.Run("defaults", func(t *testing.T) {
-		t.Setenv("RATE_LIMIT_ENABLED", "")
-		t.Setenv("RATE_LIMIT_PER_MINUTE", "")
-		t.Setenv("RATE_LIMIT_AUTH_PER_MINUTE", "")
-		t.Setenv("RATE_LIMIT_EXPENSIVE_PER_MINUTE", "")
+		t.Setenv("JOT_RATE_LIMIT_ENABLED", "")
+		t.Setenv("JOT_RATE_LIMIT_PER_MINUTE", "")
+		t.Setenv("JOT_RATE_LIMIT_AUTH_PER_MINUTE", "")
+		t.Setenv("JOT_RATE_LIMIT_EXPENSIVE_PER_MINUTE", "")
 
 		cfg, err := Load()
 		require.NoError(t, err)
@@ -290,10 +289,10 @@ func TestLoadRateLimitValues(t *testing.T) {
 	})
 
 	t.Run("custom", func(t *testing.T) {
-		t.Setenv("RATE_LIMIT_ENABLED", "false")
-		t.Setenv("RATE_LIMIT_PER_MINUTE", "600")
-		t.Setenv("RATE_LIMIT_AUTH_PER_MINUTE", "5")
-		t.Setenv("RATE_LIMIT_EXPENSIVE_PER_MINUTE", "10")
+		t.Setenv("JOT_RATE_LIMIT_ENABLED", "false")
+		t.Setenv("JOT_RATE_LIMIT_PER_MINUTE", "600")
+		t.Setenv("JOT_RATE_LIMIT_AUTH_PER_MINUTE", "5")
+		t.Setenv("JOT_RATE_LIMIT_EXPENSIVE_PER_MINUTE", "10")
 
 		cfg, err := Load()
 		require.NoError(t, err)
@@ -306,25 +305,45 @@ func TestLoadRateLimitValues(t *testing.T) {
 }
 
 func TestLoadRateLimitInvalidValueErrors(t *testing.T) {
-	t.Setenv("STATIC_DIR", "/tmp/static")
+	t.Setenv("JOT_STATIC_DIR", "/tmp/static")
 
 	t.Run("enabled not a bool", func(t *testing.T) {
-		t.Setenv("RATE_LIMIT_ENABLED", "yes")
+		t.Setenv("JOT_RATE_LIMIT_ENABLED", "yes")
 		_, err := Load()
 		assert.Error(t, err)
 	})
 
 	t.Run("per-minute not a number", func(t *testing.T) {
-		t.Setenv("RATE_LIMIT_ENABLED", "")
-		t.Setenv("RATE_LIMIT_PER_MINUTE", "notanumber")
+		t.Setenv("JOT_RATE_LIMIT_ENABLED", "")
+		t.Setenv("JOT_RATE_LIMIT_PER_MINUTE", "notanumber")
 		_, err := Load()
 		assert.Error(t, err)
 	})
 
 	t.Run("per-minute zero", func(t *testing.T) {
-		t.Setenv("RATE_LIMIT_PER_MINUTE", "0")
+		t.Setenv("JOT_RATE_LIMIT_PER_MINUTE", "0")
 		_, err := Load()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "must be between")
 	})
+}
+
+// TestLoadOTelVars verifies the renamed JOT_OTEL_* signal toggles and the
+// spec-standard, still-unprefixed OTel SDK vars are both read correctly.
+func TestLoadOTelVars(t *testing.T) {
+	t.Setenv("JOT_STATIC_DIR", "/tmp/static")
+	t.Setenv("JOT_OTEL_TRACES_ENABLED", "true")
+	t.Setenv("JOT_OTEL_METRICS_ENABLED", "true")
+	t.Setenv("JOT_OTEL_LOGS_ENABLED", "true")
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317")
+	t.Setenv("OTEL_SERVICE_NAME", "custom-service")
+
+	cfg, err := Load()
+	require.NoError(t, err)
+
+	assert.True(t, cfg.OTelTracesEnabled)
+	assert.True(t, cfg.OTelMetricsEnabled)
+	assert.True(t, cfg.OTelLogsEnabled)
+	assert.Equal(t, "localhost:4317", cfg.OTelEndpoint)
+	assert.Equal(t, "custom-service", cfg.OTelServiceName)
 }

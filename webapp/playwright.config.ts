@@ -51,14 +51,14 @@ export default defineConfig({
     reuseExistingServer: false,
     timeout: 60_000,
     env: {
-      DB_DSN: E2E_DB_DSN,
-      STATIC_DIR: path.resolve(__dirname, 'build'),
-      PORT: '8080',
+      JOT_DB_DSN: E2E_DB_DSN,
+      JOT_STATIC_DIR: path.resolve(__dirname, 'build'),
+      JOT_PORT: '8080',
       JWT_SECRET: 'e2e-test-secret',
-      COOKIE_SECURE: 'false',
+      JOT_COOKIE_SECURE: 'false',
       // E2E tests register a fresh user per test across parallel workers,
       // which blows past the per-IP auth rate limit almost immediately.
-      RATE_LIMIT_ENABLED: 'false',
+      JOT_RATE_LIMIT_ENABLED: 'false',
     },
   },
 });

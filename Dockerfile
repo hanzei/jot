@@ -70,9 +70,9 @@ RUN mkdir -p /data/uploads
 EXPOSE 8080
 
 # Set environment variables
-ENV DB_DSN=/data/jot.db
-ENV UPLOAD_DIR=/data/uploads
-ENV STATIC_DIR=/app/webapp/build
+ENV JOT_DB_DSN=/data/jot.db
+ENV JOT_UPLOAD_DIR=/data/uploads
+ENV JOT_STATIC_DIR=/app/webapp/build
 
 # Run the application
 CMD ["./main"]

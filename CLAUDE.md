@@ -163,7 +163,9 @@ They return an HTTP status code, a response body (serialized to JSON by `wrapHan
 
 **Observability** — `internal/telemetry` sets up optional OpenTelemetry traces (OTLP gRPC) and Prometheus metrics (separate port). Structured logs are integrated with the OTel LoggerProvider.
 
-**Blob storage** — `internal/blobstore` defines a `Blobstore` interface (`Put`/`Open`/`Delete`) for content-addressed binary storage, keyed by hex-encoded SHA-256 hash. `FSBlobstore` is the v1 implementation, rooted at config `UPLOAD_DIR` (default `./uploads`), laid out as `UPLOAD_DIR/blobs/<sha[0:2]>/<sha[2:4]>/<sha>`. All paths are derived solely from the validated hash, never from caller-supplied filenames, so there is no path traversal risk; filesystem access additionally goes through `os.Root` (opened on `UPLOAD_DIR`, same traversal-resistant pattern used for static file serving in `server.go`) as defense-in-depth. `Put` is a no-op when the hash already exists (dedup). A full backup is now **DB + `UPLOAD_DIR`**.
+**Blob storage** — `internal/blobstore` defines a `Blobstore` interface (`Put`/`Open`/`Delete`) for content-addressed binary storage, keyed by hex-encoded SHA-256 hash. `FSBlobstore` is the v1 implementation, rooted at config `JOT_UPLOAD_DIR` (default `./uploads`), laid out as `JOT_UPLOAD_DIR/blobs/<sha[0:2]>/<sha[2:4]>/<sha>`. All paths are derived solely from the validated hash, never from caller-supplied filenames, so there is no path traversal risk; filesystem access additionally goes through `os.Root` (opened on `JOT_UPLOAD_DIR`, same traversal-resistant pattern used for static file serving in `server.go`) as defense-in-depth. `Put` is a no-op when the hash already exists (dedup). A full backup is now **DB + `JOT_UPLOAD_DIR`**.
+
+**Configuration** — `internal/config` reads all app-specific server settings from `JOT_`-prefixed environment variables (e.g. `JOT_PORT`, `JOT_DB_DSN`); new config vars should follow this convention. Spec-standard OpenTelemetry SDK vars (`OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_INSECURE`, `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES`) are a deliberate exception and stay unprefixed so the OTel SDK's own conventions apply.
 
 ### API Specification
 
@@ -286,7 +288,7 @@ task run-server
 task run-webapp
 ```
 
-The server at `localhost:8080` serves the API. Vite is configured with a proxy to forward API calls during development. Note: `run-server` sets `PASSWORD_MIN_LENGTH=4` for local convenience — do not use this in production.
+The server at `localhost:8080` serves the API. Vite is configured with a proxy to forward API calls during development. Note: `run-server` sets `JOT_PASSWORD_MIN_LENGTH=4` for local convenience — do not use this in production.
 
 ### Docker (Production)
 

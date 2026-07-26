@@ -7,10 +7,10 @@
       "runtimeArgs": ["run", "."],
       "cwd": "server",
       "env": {
-        "CORS_ALLOWED_ORIGIN": "http://localhost:5173",
-        "PASSWORD_MIN_LENGTH": "4",
-        "COOKIE_SECURE": "false",
-        "STATIC_DIR": "."
+        "JOT_CORS_ALLOWED_ORIGIN": "http://localhost:5173",
+        "JOT_PASSWORD_MIN_LENGTH": "4",
+        "JOT_COOKIE_SECURE": "false",
+        "JOT_STATIC_DIR": "."
       },
       "port": 8080
     },
