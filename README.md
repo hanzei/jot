@@ -301,12 +301,6 @@ Authorization: Bearer <personal-access-token>
 The MCP server exposes note and label tools. PATs are created from Settings in
 the web app and are only shown once.
 
-Newly issued PATs carry a `jot_pat_` prefix (e.g. `jot_pat_<64 hex chars>`) so
-leaked tokens are recognizable to secret scanners (GitHub secret scanning,
-gitleaks, trufflehog). Tokens issued before this prefix was introduced remain
-bare hex strings and continue to authenticate normally — only newly created
-tokens get the prefix.
-
 ## jotctl admin CLI
 
 `jotctl` manages users and demo data from a terminal.
