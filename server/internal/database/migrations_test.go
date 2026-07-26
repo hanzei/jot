@@ -346,25 +346,25 @@ func buildQueryTokens(query string) []string {
 	return tokens
 }
 
-// TestMigration000008PostgresBackfill exercises the upgrade path for
+// TestMigration000009PostgresBackfill exercises the upgrade path for
 // PostgreSQL installations created before the cross-backend parity fix. Those
 // databases ran the original 000001, which had a notes.note_type CHECK SQLite
-// never had and only case-sensitive label-name uniqueness — so 000008 has to
+// never had and only case-sensitive label-name uniqueness — so 000009 has to
 // drop the CHECK and merge label names that differ only in case before it can
 // add the case-insensitive unique index. New installations reach the same
-// schema straight from 000001, which is why every statement in 000008 is a
+// schema straight from 000001, which is why every statement in 000009 is a
 // no-op when there is nothing to do.
-func TestMigration000008PostgresBackfill(t *testing.T) {
+func TestMigration000009PostgresBackfill(t *testing.T) {
 	db := dsntest.RawDB(t, driverPostgres)
 	d := &dialect.Dialect{Driver: driverPostgres}
 	ctx := t.Context()
 
 	m := newMigrator(t, db, driverPostgres)
-	require.NoError(t, m.Migrate(7))
+	require.NoError(t, m.Migrate(8))
 
 	// Put the schema back the way the original 000001 left it. Both constraints
 	// are added unnamed, so PostgreSQL derives the same names it did there —
-	// which is what 000008's DROP CONSTRAINT statements have to match.
+	// which is what 000009's DROP CONSTRAINT statements have to match.
 	_, err := db.ExecContext(ctx, `
 		ALTER TABLE notes ADD CHECK (note_type IN ('text', 'list'));
 		DROP INDEX idx_labels_user_id_lower_name;
@@ -391,7 +391,7 @@ func TestMigration000008PostgresBackfill(t *testing.T) {
 	`)
 	require.NoError(t, err)
 
-	require.NoError(t, m.Migrate(8))
+	require.NoError(t, m.Migrate(9))
 
 	t.Run("merges labels that differ only in case, keeping the oldest", func(t *testing.T) {
 		rows, err := db.QueryContext(ctx, `SELECT id, name FROM labels WHERE user_id = 'user000000000000000008' ORDER BY id`)
