@@ -19,7 +19,13 @@ export interface LogEntry {
   msg: string;
 }
 
-const BUFFER_SIZE = 1000;
+// The ring buffer no longer carries the log history — the file below does. It
+// covers the two jobs a file read is a poor fit for: the Diagnostics preview,
+// which re-reads on every connectivity flip and must stay cheap, and serving
+// logs at all when persistence is unavailable (see getPersistedLogs). Sized for
+// those, not for history; entries are dominated by `msg`, which for an error is
+// a full stack trace.
+const BUFFER_SIZE = 200;
 const buffer: LogEntry[] = new Array(BUFFER_SIZE);
 let writeIndex = 0;
 let count = 0;

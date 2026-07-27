@@ -100,10 +100,13 @@ across app versions. Build them with `documentPath()` (durable) or
 `initLogger()` at the top of `App.tsx`, before React mounts) and keeps entries
 in two places:
 
-- An in-memory ring buffer of the last **1000** entries for the current process
-  — `getLogs()`.
-- A JSONL file under the document directory — `getPersistedLogs()` — so the
-  logs explaining a crash survive the restart that follows it.
+- A JSONL file under the document directory — `getPersistedLogs()`. This is the
+  log history, and it survives the restart that follows a crash.
+- An in-memory ring buffer of the last **200** entries — `getLogs()`. This is
+  *not* the history: it exists so the Diagnostics preview (which re-reads on
+  every connectivity flip) doesn't parse the file each time, and so logs still
+  exist when persistence is unavailable. Prefer `getPersistedLogs()` anywhere
+  the full record matters.
 
 **Retention is size-based only.** The active file rotates once it passes 512 KiB
 and exactly one rotated generation is kept, capping logs at ~1 MiB. There is
