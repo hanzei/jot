@@ -27,18 +27,7 @@ jest.mock('../src/db/noteQueries', () => ({
   getPendingCreateNoteIds: jest.fn().mockResolvedValue(new Set()),
 }));
 
-const mockCopyAsync = jest.fn().mockResolvedValue(undefined);
-const mockGetInfoAsync = jest.fn().mockResolvedValue({ exists: true });
-const mockMakeDirectoryAsync = jest.fn().mockResolvedValue(undefined);
-const mockDeleteAsync = jest.fn().mockResolvedValue(undefined);
-
-jest.mock('expo-file-system/legacy', () => ({
-  documentDirectory: 'file:///docs/',
-  getInfoAsync: (path: string) => mockGetInfoAsync(path),
-  makeDirectoryAsync: (path: string, opts: unknown) => mockMakeDirectoryAsync(path, opts),
-  copyAsync: (opts: unknown) => mockCopyAsync(opts),
-  deleteAsync: (path: string, opts: unknown) => mockDeleteAsync(path, opts),
-}));
+const fs = globalThis.mockFileSystem;
 
 const mockUploadNoteImage = uploadNoteImage as jest.Mock;
 const mockPatchLocalNoteImages = patchLocalNoteImages as jest.Mock;
@@ -70,7 +59,12 @@ function makeEntry(overrides: Partial<PendingImageUploadEntry> = {}): PendingIma
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockGetInfoAsync.mockResolvedValue({ exists: true });
+  fs.reset();
+  // The stable file copy backing the default `makeEntry()` row, so tests can
+  // assert it is (or is not) cleaned up.
+  fs.files.set('file:///docs/pending-image-uploads/upload-1', 'png-bytes');
+  // The picked source file that enqueueImageUpload copies from.
+  fs.files.set('file:///cache/photo.png', 'png-bytes');
   mockGetPendingCreateNoteIds.mockResolvedValue(new Set());
 });
 
@@ -81,10 +75,7 @@ describe('enqueueImageUpload', () => {
 
     await enqueueImageUpload(db as never, { id: 'upload-1', noteId: 'note-1', file });
 
-    expect(mockCopyAsync).toHaveBeenCalledWith({
-      from: 'file:///cache/photo.png',
-      to: 'file:///docs/pending-image-uploads/upload-1',
-    });
+    expect(fs.files.get('file:///docs/pending-image-uploads/upload-1')).toBe('png-bytes');
     expect(db.runAsync).toHaveBeenCalledWith(
       expect.stringContaining('INSERT INTO pending_image_uploads'),
       ['upload-1', 'note-1', 'file:///docs/pending-image-uploads/upload-1', 'photo.png', 'image/png', 2048, expect.any(String)],
@@ -92,13 +83,13 @@ describe('enqueueImageUpload', () => {
   });
 
   it('creates the pending-uploads directory when it does not exist', async () => {
-    mockGetInfoAsync.mockResolvedValueOnce({ exists: false });
     const db = makeDb();
     const file = { uri: 'file:///cache/photo.png', name: 'photo.png', mimeType: 'image/png' };
+    expect(fs.dirs.has('file:///docs/pending-image-uploads')).toBe(false);
 
     await enqueueImageUpload(db as never, { id: 'upload-1', noteId: 'note-1', file });
 
-    expect(mockMakeDirectoryAsync).toHaveBeenCalledWith('file:///docs/pending-image-uploads/', { intermediates: true });
+    expect(fs.dirs.has('file:///docs/pending-image-uploads')).toBe(true);
   });
 
   it('notifies enqueue listeners so the sync engine picks it up promptly', async () => {
@@ -154,7 +145,7 @@ describe('retryImageUpload / dismissImageUpload', () => {
     await dismissImageUpload(db as never, 'upload-1');
 
     expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM pending_image_uploads WHERE id = ?', ['upload-1']);
-    expect(mockDeleteAsync).toHaveBeenCalledWith('file:///docs/pending-image-uploads/upload-1', { idempotent: true });
+    expect(fs.files.has('file:///docs/pending-image-uploads/upload-1')).toBe(false);
   });
 
   it('is a no-op (beyond the delete statement) when the id is unknown', async () => {
@@ -162,7 +153,7 @@ describe('retryImageUpload / dismissImageUpload', () => {
 
     await dismissImageUpload(db as never, 'missing');
 
-    expect(mockDeleteAsync).not.toHaveBeenCalled();
+    expect(fs.files.has('file:///docs/pending-image-uploads/upload-1')).toBe(true);
   });
 });
 
@@ -183,7 +174,7 @@ describe('drainImageUploadQueue', () => {
     });
     expect(mockPatchLocalNoteImages).toHaveBeenCalledWith(db, 'note-1', expect.any(Function));
     expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM pending_image_uploads WHERE id = ?', [entry.id]);
-    expect(mockDeleteAsync).toHaveBeenCalledWith(entry.local_path, { idempotent: true });
+    expect(fs.files.has(entry.local_path)).toBe(false);
     expect(result).toEqual({ uploadedNoteIds: ['note-1'], discardedCount: 0 });
   });
 
@@ -197,7 +188,7 @@ describe('drainImageUploadQueue', () => {
     const result = await drainImageUploadQueue(db as never);
 
     expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM pending_image_uploads WHERE id = ?', [entry.id]);
-    expect(mockDeleteAsync).toHaveBeenCalledWith(entry.local_path, { idempotent: true });
+    expect(fs.files.has(entry.local_path)).toBe(false);
     expect(result).toEqual({ uploadedNoteIds: ['note-1'], discardedCount: 0 });
   });
 
@@ -273,7 +264,7 @@ describe('drainImageUploadQueue', () => {
       expect.stringContaining("SET status = 'error'"),
       [permanentError.message, entry.id],
     );
-    expect(mockDeleteAsync).not.toHaveBeenCalled();
+    expect(fs.files.has('file:///docs/pending-image-uploads/upload-1')).toBe(true);
     expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 1 });
   });
 
@@ -286,7 +277,7 @@ describe('drainImageUploadQueue', () => {
     const result = await drainImageUploadQueue(db as never);
 
     expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM pending_image_uploads WHERE id = ?', [entry.id]);
-    expect(mockDeleteAsync).toHaveBeenCalledWith(entry.local_path, { idempotent: true });
+    expect(fs.files.has(entry.local_path)).toBe(false);
     expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 1 });
   });
 });

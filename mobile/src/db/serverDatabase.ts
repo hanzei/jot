@@ -1,6 +1,6 @@
 import { backupDatabaseAsync, defaultDatabaseDirectory, openDatabaseAsync, SQLiteDatabase } from 'expo-sqlite';
 import * as SecureStore from 'expo-secure-store';
-import * as FileSystem from 'expo-file-system/legacy';
+import { fileExists, moveFile } from '../utils/fs';
 import { migrateDatabase } from './schema';
 
 const DEFAULT_DATABASE_NAME = 'jot_default.db';
@@ -49,8 +49,7 @@ async function archiveLegacyDbIfPresent(): Promise<void> {
     return;
   }
 
-  const legacyInfo = await FileSystem.getInfoAsync(legacyUri);
-  if (!legacyInfo.exists) {
+  if (!fileExists(legacyUri)) {
     return;
   }
 
@@ -61,16 +60,15 @@ async function archiveLegacyDbIfPresent(): Promise<void> {
     return;
   }
 
-  await FileSystem.moveAsync({ from: legacyUri, to: archiveUri });
+  await moveFile(legacyUri, archiveUri);
 
   // Best-effort move sidecar WAL/SHM files if present.
   for (const suffix of ['-wal', '-shm']) {
     const sidecarFrom = `${legacyUri}${suffix}`;
     const sidecarTo = `${archiveUri}${suffix}`;
-    const sidecarInfo = await FileSystem.getInfoAsync(sidecarFrom);
-    if (sidecarInfo.exists) {
+    if (fileExists(sidecarFrom)) {
       try {
-        await FileSystem.moveAsync({ from: sidecarFrom, to: sidecarTo });
+        await moveFile(sidecarFrom, sidecarTo);
       } catch (error) {
         console.warn(`Failed to move SQLite sidecar file (${suffix}) during archive:`, error);
       }
@@ -90,8 +88,7 @@ async function migrateLegacySqliteToServerDb(targetDb: SQLiteDatabase, activeSer
     return;
   }
 
-  const legacyInfo = await FileSystem.getInfoAsync(legacyUri);
-  if (!legacyInfo.exists) {
+  if (!fileExists(legacyUri)) {
     await SecureStore.setItemAsync(LEGACY_MIGRATION_MARKER_KEY, '1');
     return;
   }

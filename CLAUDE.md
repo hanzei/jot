@@ -260,11 +260,12 @@ Types are distributed across the `@jot/shared` package (`shared/src/`) and impor
 
 ### Technology Stack
 
-- **React Native 0.83** + **Expo 55**
+- **React Native 0.86** + **Expo 57**
 - **React Navigation 7** — drawer + native stack navigation
 - **Tanstack React Query 5** — data fetching and caching
 - **Expo Secure Store** — credential storage
 - **Expo SQLite** — local offline persistence
+- **Expo FileSystem** — blob/file storage, wrapped by `src/utils/fs.ts`
 - **react-native-sse** — SSE client for real-time updates
 - **@jot/shared** — shared types and utilities (local file dependency)
 
@@ -272,6 +273,10 @@ Types are distributed across the `@jot/shared` package (`shared/src/`) and impor
 
 - Framework: **Jest**
 - Test files in `__tests__/`
+- Filesystem access is backed by an in-memory `expo-file-system` mock defined in
+  `jest.setup.js` and reachable as `globalThis.mockFileSystem` (seed
+  `.files`/`.dirs`, stub `.downloadFileAsync`, `.reset()` per test). Prefer it
+  over stubbing individual calls so the real `src/utils/fs.ts` logic runs.
 - Run: `task test-mobile`
 
 ---

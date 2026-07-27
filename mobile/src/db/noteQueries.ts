@@ -1,5 +1,5 @@
 import { SQLiteDatabase } from 'expo-sqlite';
-import * as FileSystem from 'expo-file-system/legacy';
+import { deleteFileIfExists } from '../utils/fs';
 import type { Note, NoteItem, GetNotesParams, Label, NoteShare, NoteImage } from '@jot/shared';
 import { getStrongRandomBytes } from '../utils/random';
 import { withSerializedTransaction } from './transaction';
@@ -388,9 +388,9 @@ export async function permanentDeleteLocalNote(db: SQLiteDatabase, id: string): 
     'SELECT local_path FROM pending_image_uploads WHERE note_id = ?',
     [id],
   );
-  await Promise.allSettled(
-    pendingUploads.map((row) => FileSystem.deleteAsync(row.local_path, { idempotent: true })),
-  );
+  for (const row of pendingUploads) {
+    deleteFileIfExists(row.local_path);
+  }
   await db.runAsync('DELETE FROM notes WHERE id = ?', [id]);
 }
 

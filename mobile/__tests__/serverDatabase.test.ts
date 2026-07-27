@@ -1,6 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
 import * as SQLite from 'expo-sqlite';
-import * as FileSystem from 'expo-file-system/legacy';
 import { getDatabaseNameForServer, initializeServerDatabase } from '../src/db/serverDatabase';
 
 describe('server database isolation', () => {
@@ -13,10 +12,7 @@ describe('server database isolation', () => {
     backupDatabaseAsync: jest.Mock;
     defaultDatabaseDirectory: string;
   };
-  const mockFs = FileSystem as unknown as {
-    getInfoAsync: jest.Mock;
-    moveAsync: jest.Mock;
-  };
+  const fs = globalThis.mockFileSystem;
   const store = new Map<string, string>();
 
   const makeDb = () => ({
@@ -34,8 +30,7 @@ describe('server database isolation', () => {
     mockSecureStore.setItemAsync.mockImplementation(async (key: string, value: string) => {
       store.set(key, value);
     });
-    mockFs.getInfoAsync.mockResolvedValue({ exists: false });
-    mockFs.moveAsync.mockResolvedValue(undefined);
+    fs.reset();
     mockSQLite.defaultDatabaseDirectory = 'file:///db';
   });
 
@@ -74,12 +69,10 @@ describe('server database isolation', () => {
       .mockResolvedValueOnce({ count: 1 });
 
     mockSQLite.openDatabaseAsync.mockResolvedValue(legacyDb);
-    mockFs.getInfoAsync.mockImplementation(async (uri: string) => {
-      if (uri === 'file:///db/jot.db') return { exists: true };
-      if (uri === 'file:///db/jot.db-wal') return { exists: true };
-      if (uri === 'file:///db/jot.db-shm') return { exists: true };
-      return { exists: false };
-    });
+    // A legacy database plus its WAL/SHM sidecars, all of which must be archived.
+    for (const uri of ['file:///db/jot.db', 'file:///db/jot.db-wal', 'file:///db/jot.db-shm']) {
+      fs.files.set(uri, 'sqlite-bytes');
+    }
 
     await initializeServerDatabase(targetDb as unknown as Parameters<typeof initializeServerDatabase>[0], 'srv_1234abcd');
 
@@ -90,7 +83,12 @@ describe('server database isolation', () => {
       destDatabase: targetDb,
     });
     expect(legacyDb.closeAsync).toHaveBeenCalled();
-    expect(mockFs.moveAsync).toHaveBeenCalledTimes(3);
+    // The db and both sidecars were moved aside to a timestamped archive name.
+    expect(fs.files.has('file:///db/jot.db')).toBe(false);
+    expect(fs.files.has('file:///db/jot.db-wal')).toBe(false);
+    expect(fs.files.has('file:///db/jot.db-shm')).toBe(false);
+    const archived = [...fs.files.keys()].filter((uri) => uri.includes('jot_legacy_'));
+    expect(archived).toHaveLength(3);
     expect(mockSecureStore.setItemAsync).toHaveBeenCalledWith('jot_sqlite_legacy_migrated_v1', '1');
   });
 });

@@ -1,13 +1,12 @@
 import { SQLiteDatabase } from 'expo-sqlite';
-import * as FileSystem from 'expo-file-system/legacy';
 import axios from 'axios';
 import type { NoteImage } from '@jot/shared';
 import { uploadNoteImage, type ImageUploadFile } from '../api/images';
 import { patchLocalNoteImages, getPendingCreateNoteIds } from './noteQueries';
 import { isTransientHttpStatus, isGlobalDrainFailure, MAX_ENTRY_DRAIN_ATTEMPTS, notifyEnqueueListeners } from './syncQueue';
-import { ensureDirExists } from '../utils/fsCache';
+import { copyFile, deleteFileIfExists, documentPath, ensureDirExists } from '../utils/fs';
 
-const PENDING_UPLOADS_DIR = `${FileSystem.documentDirectory ?? ''}pending-image-uploads/`;
+const PENDING_UPLOADS_DIR = documentPath('pending-image-uploads');
 
 export type PendingImageUploadStatus = 'queued' | 'error';
 
@@ -41,9 +40,9 @@ export async function enqueueImageUpload(
   db: SQLiteDatabase,
   params: { id: string; noteId: string; file: ImageUploadFile },
 ): Promise<void> {
-  await ensureDirExists(PENDING_UPLOADS_DIR);
-  const localPath = `${PENDING_UPLOADS_DIR}${params.id}`;
-  await FileSystem.copyAsync({ from: params.file.uri, to: localPath });
+  ensureDirExists(PENDING_UPLOADS_DIR);
+  const localPath = `${PENDING_UPLOADS_DIR}/${params.id}`;
+  await copyFile(params.file.uri, localPath);
 
   await db.runAsync(
     `INSERT INTO pending_image_uploads (id, note_id, local_path, filename, mime_type, size_bytes, status, created_at)
@@ -76,18 +75,10 @@ export async function getQueuedImageUploadCount(db: SQLiteDatabase): Promise<num
   return row?.count ?? 0;
 }
 
-async function deleteStableFile(localPath: string): Promise<void> {
-  try {
-    await FileSystem.deleteAsync(localPath, { idempotent: true });
-  } catch {
-    // Best-effort cleanup; an orphaned file is harmless beyond wasted disk space.
-  }
-}
-
 /** Drop a queue entry for good: its row and its stable file copy. Shared by the upload-success and note-gone-404/403 paths of {@link drainImageUploadQueue}. */
 async function discardEntry(db: SQLiteDatabase, entry: Pick<PendingImageUploadEntry, 'id' | 'local_path'>): Promise<void> {
   await db.runAsync('DELETE FROM pending_image_uploads WHERE id = ?', [entry.id]);
-  await deleteStableFile(entry.local_path);
+  deleteFileIfExists(entry.local_path);
 }
 
 /** Re-queue a permanently-failed upload (e.g. after the user fixes something) so the next drain retries it. Resets the attempt counter so the manual retry gets a fresh budget (#714). */
@@ -103,7 +94,7 @@ export async function dismissImageUpload(db: SQLiteDatabase, id: string): Promis
     [id],
   );
   await db.runAsync('DELETE FROM pending_image_uploads WHERE id = ?', [id]);
-  if (row) await deleteStableFile(row.local_path);
+  if (row) deleteFileIfExists(row.local_path);
 }
 
 export interface ImageUploadDrainResult {

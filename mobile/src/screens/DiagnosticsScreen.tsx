@@ -30,10 +30,13 @@ import {
   subscribeToServerReachability,
 } from '../api/serverReachability';
 import { useOfflineContext } from '../store/OfflineContext';
-import { getLogs, clearLogs, type LogEntry } from '../utils/logger';
+import { getLogs, getPersistedLogs, clearLogs, type LogEntry } from '../utils/logger';
 import appConfig from '../../app.json';
 
 const APP_VERSION: string = appConfig.expo.version;
+
+/** Cap on log entries embedded in a shared diagnostics report, to keep the payload shareable. */
+const SHARED_REPORT_LOG_LIMIT = 500;
 
 interface DiagnosticsSnapshot {
   pendingQueueCount: number;
@@ -169,7 +172,9 @@ export default function DiagnosticsScreen() {
         degraded: snapshot.lifecycle.degraded,
         degradedMessage: snapshot.lifecycle.degradedMessage,
       },
-      recentLogs: snapshot.logs,
+      // Persisted rather than in-memory: a report filed after a restart is
+      // exactly the case where the interesting entries predate this session.
+      recentLogs: getPersistedLogs().slice(-SHARED_REPORT_LOG_LIMIT),
     };
     await Share.share({ message: JSON.stringify(report, null, 2) });
   }, [snapshot, lastSyncedAt, syncError, consecutiveFailureCount, syncFailureCount]);
