@@ -82,6 +82,7 @@ describe('downloadAndCacheIcon', () => {
     expect(fs.downloadFileAsync).toHaveBeenCalledWith(
       networkUrl,
       expect.objectContaining({ uri: expectedPath }),
+      { idempotent: true },
     );
     expect(fs.files.has(expectedPath)).toBe(true);
   });
@@ -141,6 +142,7 @@ describe('refreshIconCacheForUsers', () => {
     expect(fs.downloadFileAsync).toHaveBeenCalledWith(
       `${baseUrl}/api/v1/users/u1/profile-icon`,
       expect.objectContaining({ uri: expect.stringContaining('u1') }),
+      { idempotent: true },
     );
   });
 
@@ -183,6 +185,7 @@ describe('refreshIconCacheForUsers', () => {
     expect(fs.downloadFileAsync).toHaveBeenCalledWith(
       `${baseUrl}/api/v1/users/u2/profile-icon`,
       expect.objectContaining({ uri: expect.stringContaining('u2') }),
+      { idempotent: true },
     );
   });
 });

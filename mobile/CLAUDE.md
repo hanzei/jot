@@ -105,8 +105,8 @@ in two places:
 - A JSONL file under the document directory — `getPersistedLogs()` — so the
   logs explaining a crash survive the restart that follows it.
 
-**Retention is size-based only.** The active file rotates once it passes 256 KiB
-and exactly one rotated generation is kept, capping logs at ~512 KiB. There is
+**Retention is size-based only.** The active file rotates once it passes 512 KiB
+and exactly one rotated generation is kept, capping logs at ~1 MiB. There is
 deliberately no age-based expiry: a quiet install keeps its history until new
 entries push it out.
 

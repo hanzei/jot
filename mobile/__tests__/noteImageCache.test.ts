@@ -53,6 +53,7 @@ describe('downloadAndCacheNoteImage', () => {
     expect(fs.downloadFileAsync).toHaveBeenCalledWith(
       networkUrl,
       expect.objectContaining({ uri: `${CACHE_DIR}/img-1` }),
+      { idempotent: true },
     );
   });
 
@@ -74,6 +75,16 @@ describe('downloadAndCacheNoteImage', () => {
 
     expect(result).toBeNull();
     expect(fs.files.has(`${CACHE_DIR}/img-1`)).toBe(false);
+  });
+
+  it('overwrites a leftover partial file rather than failing on an existing destination', async () => {
+    // The modern API rejects an existing destination unless `idempotent` is set,
+    // so a retry after a partial download would fail without it.
+    seedCachedImage('img-1');
+
+    const result = await downloadAndCacheNoteImage('img-1', 'original', networkUrl);
+
+    expect(result).toBe(`${CACHE_DIR}/img-1`);
   });
 
   it('returns null when offline (the download throws)', async () => {

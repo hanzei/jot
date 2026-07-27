@@ -60,7 +60,16 @@ async function archiveLegacyDbIfPresent(): Promise<void> {
     return;
   }
 
-  await moveFile(legacyUri, archiveUri);
+  // Best-effort, like the sidecar moves below: this runs from the SQLiteProvider's
+  // onInit, so letting it throw would strand the app on the database-error screen
+  // over a purely cosmetic cleanup — the legacy data has already been copied into
+  // the target database by this point.
+  try {
+    await moveFile(legacyUri, archiveUri);
+  } catch (error) {
+    console.warn('Failed to archive the legacy SQLite database:', error);
+    return;
+  }
 
   // Best-effort move sidecar WAL/SHM files if present.
   for (const suffix of ['-wal', '-shm']) {

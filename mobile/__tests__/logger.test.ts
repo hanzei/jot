@@ -137,6 +137,71 @@ describe('persistence', () => {
     expect(getPersistedLogs().map((e) => e.msg)).toEqual(['older', 'newer']);
   });
 
+  it('rejects a record missing its level, which the log renderers would crash on', () => {
+    fs.dirs.add('file:///docs/logs');
+    fs.files.set(
+      CURRENT_LOG_FILE,
+      [
+        JSON.stringify({ ts: '2024-01-01T00:00:00Z', level: 'warn', msg: 'valid' }),
+        // Parses as JSON, but `entry.level.toUpperCase()` in LogLine would throw.
+        JSON.stringify({ ts: '2024-01-01T00:00:01Z', msg: 'no level' }),
+        JSON.stringify({ ts: '2024-01-01T00:00:02Z', level: 42, msg: 'non-string level' }),
+        JSON.stringify({ ts: '2024-01-01T00:00:03Z', level: 'trace', msg: 'unknown level' }),
+        JSON.stringify({ ts: '2024-01-01T00:00:04Z', level: 'error', msg: 'also valid' }),
+      ].join('\n'),
+    );
+
+    expect(getPersistedLogs().map((e) => e.msg)).toEqual(['valid', 'also valid']);
+  });
+
+  it('keeps the batch for the next flush when a write fails', () => {
+    console.warn('should survive a failed flush');
+
+    fs.failWrites = true;
+    flushLogs();
+    expect(fs.files.has(CURRENT_LOG_FILE)).toBe(false);
+
+    // One failure is under MAX_FLUSH_FAILURES, so persistence is still on and
+    // the retry must land the entry that the failed attempt was holding.
+    fs.failWrites = false;
+    flushLogs();
+
+    expect(fs.files.get(CURRENT_LOG_FILE)).toContain('should survive a failed flush');
+  });
+
+  it('disables persistence after repeated flush failures and stops retrying writes', () => {
+    // Runs against a fresh copy of the module: disabling persistence is
+    // one-way, so it must not leak into the other tests in this file.
+    const patchedConsole = { warn: console.warn, error: console.error, info: console.info };
+    try {
+      jest.isolateModules(() => {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const logger = require('../src/utils/logger') as typeof import('../src/utils/logger');
+        logger.initLogger();
+
+        fs.failWrites = true;
+        console.warn('entry');
+        // MAX_FLUSH_FAILURES is 3.
+        for (let i = 0; i < 3; i++) {
+          logger.flushLogs();
+        }
+
+        // Writes work again, but persistence has given up for this process.
+        fs.failWrites = false;
+        console.warn('after giving up');
+        logger.flushLogs();
+        expect(fs.files.has(CURRENT_LOG_FILE)).toBe(false);
+
+        // The in-memory buffer keeps working, and reads fall back to it.
+        expect(logger.getLogs().map((e) => e.msg)).toContain('after giving up');
+        expect(logger.getPersistedLogs().map((e) => e.msg)).toContain('after giving up');
+      });
+    } finally {
+      fs.failWrites = false;
+      Object.assign(console, patchedConsole);
+    }
+  });
+
   it('skips a torn final line left by a process that died mid-write', () => {
     fs.dirs.add('file:///docs/logs');
     fs.files.set(
@@ -148,15 +213,15 @@ describe('persistence', () => {
   });
 
   it('rotates once the active file exceeds the size cap, keeping one generation', () => {
-    // Fill the active file past the 256 KiB cap.
+    // Fill the active file past the 512 KiB cap.
     fs.dirs.add('file:///docs/logs');
-    fs.files.set(CURRENT_LOG_FILE, 'x'.repeat(256 * 1024 + 1));
+    fs.files.set(CURRENT_LOG_FILE, 'x'.repeat(512 * 1024 + 1));
 
     console.warn('after rotation');
     flushLogs();
 
     // The oversized contents moved aside; the active file restarted.
-    expect(fs.files.get(PREVIOUS_LOG_FILE)).toHaveLength(256 * 1024 + 1);
+    expect(fs.files.get(PREVIOUS_LOG_FILE)).toHaveLength(512 * 1024 + 1);
     expect(fs.files.get(CURRENT_LOG_FILE)).toContain('after rotation');
     expect((fs.files.get(CURRENT_LOG_FILE) ?? '').length).toBeLessThan(1024);
   });
@@ -164,7 +229,7 @@ describe('persistence', () => {
   it('discards the older generation on a second rotation, so at most two files exist', () => {
     fs.dirs.add('file:///docs/logs');
     fs.files.set(PREVIOUS_LOG_FILE, 'first-generation');
-    fs.files.set(CURRENT_LOG_FILE, 'x'.repeat(256 * 1024 + 1));
+    fs.files.set(CURRENT_LOG_FILE, 'x'.repeat(512 * 1024 + 1));
 
     console.warn('after second rotation');
     flushLogs();

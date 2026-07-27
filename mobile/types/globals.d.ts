@@ -12,7 +12,12 @@ declare global {
     files: Map<string, string>;
     /** Existing directory uris. */
     dirs: Set<string>;
-    /** Stubbed download; override per test to simulate failures. */
+    /** Set to true to make every file create/write throw, simulating a full disk. */
+    failWrites: boolean;
+    /**
+     * Stubbed download; override per test to simulate failures. Rejects on an
+     * existing destination unless called with `{ idempotent: true }`.
+     */
     downloadFileAsync: jest.Mock;
     /** Restore an empty filesystem with only the document and cache roots. */
     reset(): void;

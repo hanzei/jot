@@ -16,7 +16,11 @@ async function openUrl(url: string) {
     if (!supported) return;
     await Linking.openURL(url);
   } catch (e) {
-    console.warn('LinkText: failed to open url', url, e);
+    // Only the scheme: the URL comes from note text, and logs are persisted to
+    // disk and embedded in shared diagnostics reports. The scheme is what makes
+    // an open fail, so it keeps the diagnostic value without the note content.
+    const scheme = url.split(':', 1)[0];
+    console.warn(`LinkText: failed to open url with scheme "${scheme}"`, e);
   }
 }
 

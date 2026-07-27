@@ -11,6 +11,8 @@ import {
 
 export type LogLevel = 'info' | 'warn' | 'error';
 
+const LOG_LEVELS: readonly LogLevel[] = ['info', 'warn', 'error'];
+
 export interface LogEntry {
   ts: string;
   level: LogLevel;
@@ -39,7 +41,7 @@ const LOG_DIR = documentPath('logs');
 const CURRENT_LOG_FILE = `${LOG_DIR}/jot.jsonl`;
 const PREVIOUS_LOG_FILE = `${LOG_DIR}/jot.1.jsonl`;
 
-const MAX_LOG_FILE_BYTES = 256 * 1024;
+const MAX_LOG_FILE_BYTES = 512 * 1024;
 /** Cap on entries returned by {@link getPersistedLogs} so the log screen can't be handed an unbounded list. */
 const MAX_PERSISTED_ENTRIES = 2000;
 const FLUSH_INTERVAL_MS = 2000;
@@ -101,6 +103,11 @@ export function flushLogs(): void {
     appendTextFile(CURRENT_LOG_FILE, `${batch.map((entry) => JSON.stringify(entry)).join('\n')}\n`);
     flushFailures = 0;
   } catch {
+    // Put the batch back so a transient failure (a momentarily full disk, say)
+    // defers those entries to the next flush rather than dropping them. Bounded
+    // growth: persistence switches off after MAX_FLUSH_FAILURES, and push()
+    // stops appending once it does.
+    pending = batch.concat(pending);
     flushFailures += 1;
     if (flushFailures >= MAX_FLUSH_FAILURES) {
       persistenceEnabled = false;
@@ -153,11 +160,15 @@ function parseLogFile(uri: string): LogEntry[] {
     if (!line) continue;
     try {
       const parsed: unknown = JSON.parse(line);
+      // `level` is validated against the union, not merely as a string: the log
+      // renderers call `entry.level.toUpperCase()` and key colours off it, so a
+      // record missing the field would crash the screen showing it.
       if (
         parsed &&
         typeof parsed === 'object' &&
         typeof (parsed as LogEntry).ts === 'string' &&
-        typeof (parsed as LogEntry).msg === 'string'
+        typeof (parsed as LogEntry).msg === 'string' &&
+        LOG_LEVELS.includes((parsed as LogEntry).level)
       ) {
         entries.push(parsed as LogEntry);
       }

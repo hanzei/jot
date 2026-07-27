@@ -36,10 +36,12 @@ class MockFile {
     return Promise.resolve(this.textSync());
   }
   create({ overwrite = false } = {}) {
+    if (global.mockFileSystem.failWrites) throw new Error('ENOSPC: no space left on device');
     if (fsFiles.has(this.uri) && !overwrite) throw new Error(`EEXIST: ${this.uri}`);
     fsFiles.set(this.uri, '');
   }
   write(content, { append = false } = {}) {
+    if (global.mockFileSystem.failWrites) throw new Error('ENOSPC: no space left on device');
     const previous = append ? (fsFiles.get(this.uri) ?? '') : '';
     fsFiles.set(this.uri, previous + content);
   }
@@ -63,8 +65,8 @@ class MockFile {
   move(destination, options) {
     return Promise.resolve(this.moveSync(destination, options));
   }
-  static downloadFileAsync(url, destination) {
-    return global.mockFileSystem.downloadFileAsync(url, destination);
+  static downloadFileAsync(url, destination, options) {
+    return global.mockFileSystem.downloadFileAsync(url, destination, options);
   }
 }
 
@@ -111,12 +113,22 @@ jest.mock('expo-file-system', () => ({
 global.mockFileSystem = {
   files: fsFiles,
   dirs: fsDirs,
-  /** Overridable by tests; resolves by default so downloads "succeed" with empty content. */
-  downloadFileAsync: jest.fn((url, destination) => {
+  /** Set to true to make every file create/write throw, simulating a full disk. */
+  failWrites: false,
+  /**
+   * Overridable by tests; resolves by default so downloads "succeed" with empty
+   * content. Models the real API's refusal to overwrite an existing destination
+   * unless `idempotent` is set, so a caller that forgets to pass it fails here.
+   */
+  downloadFileAsync: jest.fn((url, destination, options) => {
+    if (fsFiles.has(destination.uri) && !options?.idempotent) {
+      return Promise.reject(new Error(`DestinationAlreadyExists: ${destination.uri}`));
+    }
     fsFiles.set(destination.uri, '');
     return Promise.resolve(destination);
   }),
   reset() {
+    this.failWrites = false;
     fsFiles.clear();
     fsDirs.clear();
     fsDirs.add('file:///docs');
