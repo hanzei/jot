@@ -283,7 +283,7 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
         />
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto py-1" role="listbox">
+      <div className="flex-1 min-h-0 overflow-y-auto scrollbar-subtle py-1" role="listbox">
         {filteredLabels.length === 0 && !showCreate && (
           <p className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">{t('labels.noLabels')}</p>
         )}

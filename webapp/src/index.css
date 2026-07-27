@@ -65,6 +65,66 @@ body {
   .field-sizing-content {
     field-sizing: content;
   }
+
+  /* Thin, unobtrusive scrollbar for internal scroll containers (sidebar, popovers,
+     modal bodies). Without it, platforms that render classic scrollbars — Windows,
+     Linux, and any mouse attached to a Mac — put a wide grey gutter inside narrow
+     containers like the sidebar.
+
+     `scrollbar-width`/`scrollbar-color` are the standard properties (Firefox,
+     Chromium 121+); the `::-webkit-scrollbar` block below covers Safari and older
+     Chromium. Both are declared, and browsers that honour the standard properties
+     ignore the webkit pseudo-elements, so the two never fight. */
+  .scrollbar-subtle {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-gray-300) transparent;
+  }
+
+  :where(.dark) .scrollbar-subtle {
+    scrollbar-color: var(--color-slate-600) transparent;
+  }
+
+  .scrollbar-subtle:hover {
+    scrollbar-color: var(--color-gray-400) transparent;
+  }
+
+  :where(.dark) .scrollbar-subtle:hover {
+    scrollbar-color: var(--color-slate-500) transparent;
+  }
+
+  .scrollbar-subtle::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  .scrollbar-subtle::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* The transparent border plus `background-clip: content-box` inset the thumb,
+     leaving it ~6px wide with breathing room on both sides. */
+  .scrollbar-subtle::-webkit-scrollbar-thumb {
+    background-color: var(--color-gray-300);
+    background-clip: content-box;
+    border: 2px solid transparent;
+    border-radius: 9999px;
+  }
+
+  .scrollbar-subtle:hover::-webkit-scrollbar-thumb {
+    background-color: var(--color-gray-400);
+  }
+
+  :where(.dark) .scrollbar-subtle::-webkit-scrollbar-thumb {
+    background-color: var(--color-slate-600);
+  }
+
+  :where(.dark) .scrollbar-subtle:hover::-webkit-scrollbar-thumb {
+    background-color: var(--color-slate-500);
+  }
+
+  .scrollbar-subtle::-webkit-scrollbar-corner {
+    background: transparent;
+  }
 }
 
 @layer components {

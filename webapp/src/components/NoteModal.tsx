@@ -429,7 +429,7 @@ function SortableItem({ id, index, item, onUpdateListItem, onRemoveListItem, isC
               id={`suggestions-${id}`}
               role="listbox"
               aria-label={t('note.completedSuggestions')}
-              className="absolute z-20 top-full left-0 mt-0.5 min-w-40 max-w-64 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-md shadow-lg max-h-36 overflow-y-auto"
+              className="absolute z-20 top-full left-0 mt-0.5 min-w-40 max-w-64 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-md shadow-lg max-h-36 overflow-y-auto scrollbar-subtle"
             >
               {suggestions.map((text, i) => (
                 <div
@@ -2606,7 +2606,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
           )}
 
           {/* Content */}
-          <div className="p-2 sm:p-4 pt-10 space-y-4 overflow-y-auto max-h-[calc(90vh-8rem)]">
+          <div className="p-2 sm:p-4 pt-10 space-y-4 overflow-y-auto scrollbar-subtle max-h-[calc(90vh-8rem)]">
             {/* Image gallery, rendered above the title. Persisted images come
                 from the note prop so SSE-driven updates from OTHER clients
                 render live; displayedImages layers this session's own

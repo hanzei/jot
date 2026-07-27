@@ -125,7 +125,7 @@ export default function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardSho
         <DialogPanel
           transition
           data-testid="keyboard-shortcuts-dialog"
-          className="mx-auto w-full max-w-lg rounded-lg bg-white dark:bg-slate-800 p-6 shadow-xl border border-gray-200 dark:border-slate-700 max-h-[90vh] overflow-y-auto transition duration-200 ease-out data-[closed]:scale-95 data-[closed]:opacity-0 motion-reduce:transition-none"
+          className="mx-auto w-full max-w-lg rounded-lg bg-white dark:bg-slate-800 p-6 shadow-xl border border-gray-200 dark:border-slate-700 max-h-[90vh] overflow-y-auto scrollbar-subtle transition duration-200 ease-out data-[closed]:scale-95 data-[closed]:opacity-0 motion-reduce:transition-none"
         >
           <div className="flex items-center justify-between mb-4">
             <DialogTitle className="text-lg font-medium text-gray-900 dark:text-white">

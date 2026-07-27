@@ -98,7 +98,10 @@ const Sidebar = ({ tabs, bottomTabs, children, collapsed, onCollapse }: SidebarP
         <nav className="flex flex-col shrink-0 space-y-1.5 pt-4 px-2 pb-2">
           {tabs.map(renderTab)}
         </nav>
-        <div className="flex-1 overflow-y-auto min-h-0" onClick={() => handleTabClick()}>
+        <div
+          className="flex-1 overflow-y-auto overscroll-contain min-h-0 scrollbar-subtle"
+          onClick={() => handleTabClick()}
+        >
           {children}
           {bottomTabs && bottomTabs.length > 0 && (
             <nav aria-label="Secondary navigation" className="flex flex-col space-y-1.5 pt-2 px-2 pb-2">
