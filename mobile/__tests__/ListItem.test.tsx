@@ -66,6 +66,22 @@ describe('ListItem', () => {
     expect(queryByTestId('list-item-delete')).not.toBeNull();
   });
 
+  it('reserves the delete button width with a spacer while unfocused', () => {
+    // The delete button only renders while focused; a same-sized spacer must
+    // take its place the rest of the time so the text input's width — and
+    // therefore its line breaks — doesn't change when the row is selected.
+    const { getByTestId, queryByTestId } = render(
+      <ListItem text="Task" completed={false} onDelete={jest.fn()} />,
+    );
+
+    expect(queryByTestId('list-item-delete-spacer')).not.toBeNull();
+    expect(queryByTestId('list-item-delete')).toBeNull();
+
+    fireEvent(getByTestId('list-item-text'), 'focus');
+    expect(queryByTestId('list-item-delete-spacer')).toBeNull();
+    expect(queryByTestId('list-item-delete')).not.toBeNull();
+  });
+
   it('does not show delete button when not editable', () => {
     const { queryByTestId } = render(
       <ListItem text="Task" completed={false} editable={false} onDelete={jest.fn()} />,
