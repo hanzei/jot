@@ -6,7 +6,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ArrowLeft } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
-import { getLogs, type LogEntry } from '../utils/logger';
+import { getPersistedLogs, type LogEntry } from '../utils/logger';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 const STATUS_ORANGE = '#f97316';
@@ -18,7 +18,9 @@ export default function LogsFullscreenScreen() {
   const insets = React.useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
-  const logs = getLogs().slice().reverse();
+  // Persisted logs span previous sessions too, so a crash-and-restart doesn't
+  // hide the entries that explain the crash. Newest first.
+  const logs = React.useMemo(() => getPersistedLogs().reverse(), []);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.background }]}>

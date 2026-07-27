@@ -1,7 +1,6 @@
-import * as FileSystem from 'expo-file-system/legacy';
-import { ensureDirExists } from './fsCache';
+import { cachePath, deleteFileIfExists, downloadFile, ensureDirExists, fileExists } from './fs';
 
-const CACHE_DIR = `${FileSystem.cacheDirectory ?? ''}note-images/`;
+const CACHE_DIR = cachePath('note-images');
 
 export type NoteImageVariant = 'original' | 'thumbnail';
 
@@ -17,18 +16,13 @@ function cacheKey(imageId: string, variant: NoteImageVariant): string {
 }
 
 function imageFilePath(imageId: string, variant: NoteImageVariant): string {
-  return `${CACHE_DIR}${cacheKey(imageId, variant)}`;
+  return `${CACHE_DIR}/${cacheKey(imageId, variant)}`;
 }
 
 // Returns the local file URI for a cached note image, or null if not cached.
 export async function getCachedNoteImageUri(imageId: string, variant: NoteImageVariant): Promise<string | null> {
   const path = imageFilePath(imageId, variant);
-  try {
-    const info = await FileSystem.getInfoAsync(path);
-    return info.exists ? path : null;
-  } catch {
-    return null;
-  }
+  return fileExists(path) ? path : null;
 }
 
 // Downloads a note image (original or thumbnail) from networkUrl and stores it
@@ -43,21 +37,15 @@ export async function downloadAndCacheNoteImage(
   const key = cacheKey(imageId, variant);
   if (inProgress.has(key)) return null;
   inProgress.add(key);
+  const path = imageFilePath(imageId, variant);
   try {
-    await ensureDirExists(CACHE_DIR);
-    const path = imageFilePath(imageId, variant);
-    const result = await FileSystem.downloadAsync(networkUrl, path);
-    if (result.status === 200) {
-      return path;
-    }
-    // Non-200 means the download failed (e.g. server error). Remove the incomplete file.
-    await FileSystem.deleteAsync(path, { idempotent: true });
-    return null;
+    ensureDirExists(CACHE_DIR);
+    await downloadFile(networkUrl, path);
+    return path;
   } catch {
-    // Clean up any partially-written file to prevent corrupt cache entries.
-    try {
-      await FileSystem.deleteAsync(imageFilePath(imageId, variant), { idempotent: true });
-    } catch { /* ignore cleanup errors */ }
+    // A non-2xx response or a transport error both reject here. Clean up any
+    // partially-written file to prevent corrupt cache entries.
+    deleteFileIfExists(path);
     return null;
   } finally {
     inProgress.delete(key);
@@ -67,8 +55,6 @@ export async function downloadAndCacheNoteImage(
 // Removes both cached variants of an image. Called when an image is removed
 // from a note (locally or via SSE) so its cache entries don't linger forever.
 export async function deleteCachedNoteImage(imageId: string): Promise<void> {
-  await Promise.allSettled([
-    FileSystem.deleteAsync(imageFilePath(imageId, 'original'), { idempotent: true }),
-    FileSystem.deleteAsync(imageFilePath(imageId, 'thumbnail'), { idempotent: true }),
-  ]);
+  deleteFileIfExists(imageFilePath(imageId, 'original'));
+  deleteFileIfExists(imageFilePath(imageId, 'thumbnail'));
 }
