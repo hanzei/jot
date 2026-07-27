@@ -241,7 +241,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
                 {showSuggestions && (
                   <div 
                     ref={suggestionsRef}
-                    className="absolute z-10 mt-1 w-full bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-md shadow-lg max-h-48 overflow-y-auto"
+                    className="absolute z-10 mt-1 w-full bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-md shadow-lg max-h-48 overflow-y-auto scrollbar-subtle"
                   >
                     {filteredUsers.map((user, index) => {
                       const hasName = !!(user.first_name || user.last_name);
@@ -286,7 +286,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
                 <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
                   {t('share.sharedWith', { count: shares.length })}
                 </h4>
-                <div className="space-y-2 max-h-40 overflow-y-auto">
+                <div className="space-y-2 max-h-40 overflow-y-auto scrollbar-subtle">
                   {shares.map((share) => (
                     <div key={share.id} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-slate-700 rounded">
                       <div>

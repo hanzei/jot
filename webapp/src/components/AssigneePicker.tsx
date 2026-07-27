@@ -118,7 +118,7 @@ export default function AssigneePicker({ collaborators, currentAssigneeId, onAss
         role="listbox"
         aria-labelledby={labelId}
         aria-activedescendant={`${instanceId}-option-${focusedIndex}`}
-        className="max-h-48 overflow-y-auto py-1 focus:outline-none"
+        className="max-h-48 overflow-y-auto scrollbar-subtle py-1 focus:outline-none"
         tabIndex={0}
         onKeyDown={handleKeyDown}
       >
