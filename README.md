@@ -115,25 +115,37 @@ This project includes a [Taskfile](https://taskfile.dev/) for common development
 # Install Task (if not already installed)
 go install github.com/go-task/task/v3/cmd/task@latest
 
-# Available commands
+# Available commands (task --list for the full set)
 task run-server      # Start the Jot server
 task run-webapp      # Start webapp dev server with HMR
-task test            # Run all tests
+task check           # Pre-PR gate: lint + all tests except e2e
+task check-server    # Lint + test one area (also check-webapp/-mobile/-shared)
+task test            # All tests except e2e
+task lint            # All linters
 task test-server     # Run server tests
 task test-webapp     # Run webapp tests
 task test-e2e        # Run Playwright end-to-end tests
 task test-mobile     # Run mobile app tests
+task test-shared     # Run shared package tests
 task coverage        # Run server tests with coverage report
-task lint            # Run linters
 task lint-server     # Run server linting with golangci-lint
 task lint-webapp     # Run webapp linting
 task lint-mobile     # Run mobile app linting
 task lint-shared     # Run shared package linting
-task test-shared     # Run shared package tests
 task check-translations # Check locale files for missing/extra keys
 task gen-docs        # Regenerate Swagger API docs
+task build-webapp    # Build the webapp into webapp/build
 task build-jotctl    # Build the jotctl admin CLI binary
 task clean           # Remove generated files and node packages
+```
+
+Every `test-*` task forwards extra arguments after `--`, so you can scope a run
+instead of waiting for the whole suite:
+
+```bash
+task test-server -- -run TestCreateNote   # one Go test
+task test-webapp -- src/utils             # one Vitest path
+task test-e2e -- notes.spec.ts            # one Playwright spec
 ```
 
 3. **Access the application**:

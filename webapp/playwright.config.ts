@@ -49,12 +49,15 @@ export default defineConfig({
     cwd: path.resolve(__dirname, '../server'),
     url: 'http://localhost:8080/readyz',
     reuseExistingServer: false,
-    timeout: 60_000,
+    // Generous because this command does a full webapp build *and* compiles
+    // the server. On a cold Go build cache that alone can take minutes, and a
+    // startup timeout surfaces as every test failing for no visible reason.
+    // `task test-e2e` pre-warms the Go build cache to keep this well under.
+    timeout: 180_000,
     env: {
       JOT_DB_DSN: E2E_DB_DSN,
       JOT_STATIC_DIR: path.resolve(__dirname, 'build'),
       JOT_PORT: '8080',
-      JWT_SECRET: 'e2e-test-secret',
       JOT_COOKIE_SECURE: 'false',
       // E2E tests register a fresh user per test across parallel workers,
       // which blows past the per-IP auth rate limit almost immediately.

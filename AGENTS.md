@@ -1,46 +1,17 @@
 # Jot Development Agent Instructions
 
-## Cursor Cloud specific instructions
+All agent instructions live in **[`CLAUDE.md`](./CLAUDE.md)** — read that file.
+It is the single source of truth for build/test commands, architecture,
+conventions, and the pre-PR checklist, regardless of which agent or tool you
+are running.
 
-### Services overview
+Additional per-area instructions apply when you work in these directories, and
+are worth reading before you touch them:
 
-Jot is a self-hosted note-taking app: a Go API server (port 8080) serves both the REST API and the compiled React SPA from `webapp/build/`. SQLite is the only data store (file-based, no external DB needed). A React Native/Expo mobile app also exists but is optional for web development.
+- [`server/CLAUDE.md`](./server/CLAUDE.md) — Go naming and error-handling conventions
+- [`webapp/CLAUDE.md`](./webapp/CLAUDE.md) — i18n rules for the web app
+- [`mobile/CLAUDE.md`](./mobile/CLAUDE.md) — offline/connectivity invariants, filesystem and logging rules
 
-### Running the server
-
-Build and run from `server/`:
-
-```bash
-cd server && go build -buildvcs=false -o jot . && COOKIE_SECURE=false ./jot
-```
-
-`COOKIE_SECURE=false` is required for non-HTTPS local development (session cookies won't be set otherwise). The `task run-server` command also works if the `task` binary is available.
-
-The webapp must be built first (`cd webapp && npm run build`) so the server can serve the static files from `../webapp/build/`.
-
-### Key dev commands
-
-All `task` commands are documented in `README.md`, `CLAUDE.md`, and `Taskfile.yml`. Key ones:
-| Task | What it does |
-|------|-------------|
-| `task test-server` | Go unit/integration tests |
-| `task test-webapp` | Vitest unit tests |
-| `task test-mobile` | Jest mobile tests |
-| `task test-e2e` | Playwright e2e (requires webapp built first) |
-| `task lint` | All linters (server + webapp + mobile) |
-
-### Non-obvious caveats
-
-- **Go 1.26.0** and **task** are preinstalled by the VM update script. Go lives at `/usr/local/go/bin/go`; task lives at `$HOME/go/bin/`. The SQLite driver is now pure Go (`modernc.org/sqlite`), so CGO/gcc is **not** required. **golangci-lint v2.11.3** is a Go tool pinned in `go.mod` — run it via `go tool golangci-lint run` (no separate binary install needed; `go mod download` pulls it automatically).
-- **Node 24+** is used (matching the Dockerfile). Install via `nvm install 24 && nvm alias default 24`.
-- **Playwright e2e tests**: Chromium is preinstalled by the VM update script (`npx playwright install chromium`), and webapp deps are preinstalled via `npm ci`. The Playwright config auto-starts the Go server and uses a temp DB, so no manual server startup is needed — just run `npm run test:e2e` from `webapp/`. If Chromium is missing for some reason, run `npx playwright install --with-deps chromium` in `webapp/`.
-- **Auth is session-cookie based** (not JWT). The first registered user becomes admin.
-- The mobile app (`mobile/`) uses Expo and requires emulator/device access; it is not testable in a headless cloud environment for GUI flows.
-- A `@jot/shared` package exists at `shared/` and is referenced by both `webapp` and `mobile` via `file:../shared`. Its deps must be installed before webapp/mobile deps.
-- The update script uses `npm ci` (not `npm install`) for `webapp/` to get deterministic installs from the lockfile.
-
-### Pull request artifacts
-
-- When creating or updating PRs, include screenshots for visual/UI changes whenever possible.
-- Include a short demo video for flows/features that can be demonstrated in motion whenever possible.
-- If no visual artifact is feasible (for example, backend-only changes), briefly note that in the PR description.
+This file exists only so agents that look for `AGENTS.md` find their way to
+`CLAUDE.md`. Do not add instructions here — they will drift out of sync with
+`CLAUDE.md` and it will not be obvious which copy is current.

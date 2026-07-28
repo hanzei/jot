@@ -112,3 +112,26 @@ jobs:
             fi
           done
           echo "All migration numbers are unique."
+
+      - name: Check sqlite and postgres migrations are in sync
+        run: |
+          set -euo pipefail
+          # Every schema change must ship as two files — one per dialect —
+          # because each dialect has its own embedded migration tree. A
+          # dialect-only migration still passes `task test-server` locally
+          # (the Postgres tests skip without TEST_POSTGRES_DSN), so catch it
+          # here with an error that names the actual problem.
+          for dialect in sqlite postgres; do
+            ls server/internal/database/migrations/${dialect}/ \
+              | sort > "/tmp/migrations-${dialect}.txt"
+          done
+          if ! diff -u /tmp/migrations-sqlite.txt /tmp/migrations-postgres.txt \
+              --label sqlite --label postgres; then
+            echo
+            echo "sqlite and postgres migration sets differ (see diff above)."
+            echo "Every migration needs a matching file with the same name in"
+            echo "both server/internal/database/migrations/sqlite/ and"
+            echo "server/internal/database/migrations/postgres/."
+            exit 1
+          fi
+          echo "sqlite and postgres migration sets match."
