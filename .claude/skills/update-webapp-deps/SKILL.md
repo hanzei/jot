@@ -52,9 +52,29 @@ Split what you find:
   stylesheet, not just `package.json`.
 - **ESLint**: `eslint` with `@typescript-eslint/*`, `eslint-plugin-react`,
   `eslint-plugin-react-hooks`, `eslint-plugin-react-refresh`, `globals`. The plugins gate
-  the ESLint major — bumping `eslint` ahead of them produces config-resolution errors, not
-  lint errors. Note `shared/` deliberately runs a newer ESLint major; that's fine, they
-  have separate configs.
+  the ESLint major — bumping `eslint` ahead of them produces config-resolution errors
+  rather than lint errors, so it looks like a broken config instead of a version problem.
+
+  `shared/` is already on ESLint 10 while this package is on 9. The drift is harmless
+  (separate lockfiles, separate `node_modules`, separate flat configs, lint always runs
+  from the workspace directory) and it is not a stylistic choice — two plugins hold this
+  package back. Check the current peer ranges before assuming it's still true:
+
+  ```bash
+  npm info eslint-plugin-react peerDependencies.eslint
+  npm info eslint-plugin-react-hooks peerDependencies.eslint
+  ```
+
+  At the versions pinned today, `eslint-plugin-react@7.37.5` accepts up to `^9.7` and
+  `eslint-plugin-react-hooks@7.0.1` up to `^9.0.0`; `eslint-plugin-react-refresh` (`^9 ||
+  ^10`) and `@typescript-eslint@8.65` (`^8.57 || ^9 || ^10`) are already ESLint 10-ready.
+  So ESLint 10 lands here when — and only when — both react plugins publish support.
+
+  **When you do make that jump, declare `@eslint/js` explicitly.** `eslint.config.js`
+  imports it, but this package doesn't list it as a devDependency — under ESLint 9 the
+  import resolves through a hoisted transitive copy. ESLint 10 stopped providing that, and
+  the identical omission in `shared/` broke CI (#749). Add `@eslint/js` at the matching
+  major in the same commit as the `eslint` bump. `mobile/` has the same latent gap.
 - **Workbox**: every `workbox-*` package plus `vite-plugin-pwa` — mismatched Workbox
   versions produce a service worker that builds but fails at runtime, which unit tests
   will not catch. After any Workbox or PWA change, run `npm run build` and confirm the

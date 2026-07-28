@@ -53,11 +53,22 @@ lockfile that doesn't match `package.json`.
 - **typescript** — a major here means nothing on its own; the consumers compile this
   source. Bump it in `shared/`, `webapp/`, and `mobile/` together, or not at all. All
   three are currently on the same range for exactly this reason.
-- **eslint / @typescript-eslint** — `shared/` is intentionally allowed to run ahead of the
-  consumers (it has a much smaller plugin surface, so it can adopt a new major before
-  `eslint-plugin-react*` catches up). Flat-config changes still need a look at
-  `shared/eslint.config.*`. If you bump the consumers' eslint later, check whether the
-  shared config still applies cleanly.
+- **eslint / @typescript-eslint** — `shared/` runs ESLint 10 while `webapp/` and `mobile/`
+  are still on 9. That drift is contained and fine: each workspace has its own lockfile,
+  `node_modules`, and flat config, and lint always runs from the workspace directory, so
+  the versions never meet. It's also not a preference — the consumers are *blocked*, see
+  the note in `update-webapp-deps`, while `shared/` has neither react plugin and could
+  move.
+
+  Because it moved first, `shared/` is a useful canary: it already proves
+  `@typescript-eslint` 8.65 works under ESLint 10. When the consumers eventually follow,
+  the open question is only their react plugins.
+
+- **@eslint/js must track the `eslint` major.** `shared/eslint.config.js` imports it
+  directly, and bumping `eslint` to 10 without bumping `@eslint/js` broke CI once already
+  (#749 — under ESLint 9 the import resolved through a hoisted transitive copy, which
+  ESLint 10 stopped providing). It's an explicit devDependency here now; keep the two
+  majors in step.
 - **vitest** — only runs `shared/`'s own tests; a major is low-risk here, but keep it
   aligned with webapp's vitest when convenient so the two suites behave the same.
 

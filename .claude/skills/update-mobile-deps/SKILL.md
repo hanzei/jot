@@ -86,6 +86,16 @@ npx npm-check-updates -u --filter @react-navigation/drawer,@react-navigation/nat
 Keep the `@react-navigation/*` packages on the same major; they share internals and a
 partial bump fails at runtime rather than at build time.
 
+**ESLint here is on 9 while `shared/` is on 10.** The drift is harmless — separate
+lockfiles, `node_modules`, and flat configs, and lint runs from this directory — and it's
+forced rather than chosen: `eslint-plugin-react` and `eslint-plugin-react-hooks` don't
+accept ESLint 10 at the versions pinned here. Check
+`npm info eslint-plugin-react peerDependencies.eslint` before assuming that's still true.
+When ESLint 10 does become possible, add `@eslint/js` as an explicit devDependency in the
+same commit: `eslint.config.js` imports it but doesn't declare it, and under ESLint 9 that
+only works because a transitive copy gets hoisted. The same omission in `shared/` broke CI
+when it moved to 10 (#749).
+
 Commit `package-lock.json` — CI installs with `npm ci`.
 
 Re-run `npx expo install --check` afterwards. A community package can pull in a
