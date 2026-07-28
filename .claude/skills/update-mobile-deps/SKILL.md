@@ -16,13 +16,20 @@ CI cannot see. So the version source of truth matters more here than the freshne
 
 ## Two classes of dependency
 
-**Expo-governed — never bump by hand.** Anything matching `expo`, `expo-*`,
-`react-native`, `react`, `react-dom`, `@types/react`, `jest-expo`, `babel-preset-expo`,
-`@react-native/*`, and the native `react-native-*` modules that Expo tracks
-(`react-native-gesture-handler`, `react-native-reanimated`, `react-native-screens`,
-`react-native-safe-area-context`, `react-native-svg`, `react-native-worklets`). You can
-spot most of them by their specifier style in `package.json`: `~57.0.1` or an exact pin
-like `19.2.3` / `0.86.0` / `15.15.4`, rather than a caret range.
+**Expo-governed — never bump by hand.** `npx expo install --check` is the source of truth
+here: it compares the installed tree against the versions this SDK was built against, so
+run it rather than working from a remembered list. In practice it covers `expo`, `expo-*`,
+`react`, `react-dom`, `react-native`, `@types/react`, `jest-expo`, `babel-preset-expo`, and
+the native `react-native-*` modules Expo tracks (`react-native-gesture-handler`,
+`react-native-reanimated`, `react-native-screens`, `react-native-safe-area-context`,
+`react-native-svg`, `react-native-worklets`). The specifier style is a decent tell:
+`~57.0.1` or an exact pin like `19.2.3` / `0.86.0` / `15.15.4`, rather than a caret range.
+
+`@react-native/jest-preset` is a related but separate case — it's a React Native monorepo
+package rather than an Expo one, so `expo install --check` may not report it, but it is
+pinned to the React Native version (`0.86.1` against RN `0.86.0`) and must move with it.
+Don't generalise that to the whole `@react-native/*` namespace; check each package against
+the React Native version it's built for.
 
 **Ordinary npm packages — bump normally.** `@react-navigation/*`,
 `@tanstack/react-query`, `axios`, `i18next`, `react-i18next`, `lucide-react-native`,
@@ -33,6 +40,11 @@ despite the names), plus the dev tooling: `eslint`, `@typescript-eslint/*`, `typ
 
 `react-test-renderer` is a special case: it must exactly equal the `react` version, so it
 moves only when Expo moves React.
+
+`typescript` is in the ordinary list but is **not** a mobile-local decision: `shared/`,
+`webapp/`, and `mobile/` are deliberately on the same range because both consumers
+type-check `shared/src` with their own compiler. Take a TypeScript major across all three
+together or leave it — a solo bump here is either pointless or breaks a sibling.
 
 ## Before you start
 
@@ -68,7 +80,7 @@ user actually wants, say so and treat it as its own change:
 ## 2. Update the ordinary packages
 
 ```bash
-npm outdated                                   # works offline, no tool install needed
+npm outdated                                   # no extra tool to install; still queries the registry
 npx npm-check-updates --filter '@react-navigation/*,@tanstack/react-query,axios,i18next,react-i18next,lucide-react-native,react-native-sse,react-native-markdown-display,react-native-reorderable-list,expo-quick-actions,expo-share-intent,eslint,@typescript-eslint/*,typescript,jest,@testing-library/react-native,@types/jest'
 ```
 
@@ -144,7 +156,7 @@ extra step, since they back offline persistence, credentials, and the animation 
 
 ## 5. Commit and describe
 
-```
+```text
 chore(mobile): update React Navigation to 7.14 and align expo-* with SDK 57
 ```
 

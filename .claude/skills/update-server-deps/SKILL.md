@@ -107,7 +107,7 @@ Two things reliably break here — expect them rather than being surprised:
 
   ```bash
   task gen-docs
-  git diff --stat server/docs/
+  git diff --stat docs/          # pathspec is relative to CWD; you are in server/
   ```
 
   Read that diff. Pure formatting churn is fine; a disappeared endpoint or a mangled
@@ -134,8 +134,13 @@ go build ./...
 task build-jotctl        # the CLI has its own main; it can break independently
 task test-server
 task lint-server
-task gen-docs && git diff --exit-code server/docs/
+task gen-docs && git diff --exit-code docs/
 ```
+
+Note the pathspec: git resolves it relative to the current directory, so from `server/` it
+must be `docs/`. Writing `server/docs/` there fails with a `fatal: ambiguous argument`
+instead of checking anything. CI runs the equivalent `git diff --exit-code server/docs/`
+from the repository root, so both point at the same generated directory.
 
 Optional but cheap and worth doing when the point of the update was security:
 
@@ -156,7 +161,7 @@ TEST_POSTGRES_DSN='postgres://...' task test-server
 One commit per batch, with the versions in the message so `git log` is a usable upgrade
 history:
 
-```
+```text
 chore(server): update OpenTelemetry to v1.45.0 / v0.21.0
 ```
 

@@ -27,7 +27,7 @@ git checkout -b chore/update-shared-deps   # or the branch you were told to use
 
 ```bash
 cd shared
-npm outdated             # works offline, no tool install needed
+npm outdated             # no extra tool to install; still queries the registry
 npx npm-check-updates    # shows majors that `npm outdated` presents as satisfied ranges
 ```
 
@@ -90,14 +90,21 @@ task test-webapp
 task test-mobile
 ```
 
-If either consumer has stale `node_modules`, refresh the link first
-(`cd webapp && npm install`) — `file:` dependencies are installed as a copy or symlink
-depending on npm version, and a stale copy will happily type-check the old source and
-tell you everything is fine.
+Refresh **both** consumers' installs before those checks mean anything — `file:`
+dependencies are installed as a copy or a symlink depending on npm version, and a stale
+copy will happily type-check the old source and tell you everything is fine:
+
+```bash
+# paths are relative to shared/, where §1 left you
+(cd ../webapp && npm install) && (cd ../mobile && npm install)
+```
+
+Skipping `mobile/` here is the easy mistake: `task lint-mobile` and `task test-mobile` then
+pass against a snapshot of `shared/src` taken before your change.
 
 ## 4. Commit and describe
 
-```
+```text
 chore(shared): update devDependencies (typescript 6.0.3 -> 6.1.0, vitest 4.1.10 -> 4.2.0)
 ```
 

@@ -27,7 +27,7 @@ If `shared/` is being updated in the same sweep, do it first — see `update-sha
 
 ```bash
 cd webapp
-npm outdated                   # works offline, no tool install needed
+npm outdated                   # no extra tool to install; still queries the registry
 npx npm-check-updates          # reveals majors hidden behind satisfied ^ ranges
 npm audit                      # relevant to the overrides block, see §4
 ```
@@ -35,9 +35,12 @@ npm audit                      # relevant to the overrides block, see §4
 Split what you find:
 
 - **Patch/minor across the board** — one batch.
-- **Framework majors** — React, Vite, Tailwind, ESLint, Vitest, React Router,
-  TypeScript. One commit each, changelog read first.
+- **Framework majors** — React, Vite, Tailwind, ESLint, Vitest, React Router. One commit
+  each, changelog read first.
 - **Toolchain-coupled sets** — see below.
+- **TypeScript** — not a webapp-local decision. `shared/`, `webapp/`, and `mobile/` are
+  deliberately on the same range because both consumers type-check `shared/src` with their
+  own compiler. Bump a TypeScript major across all three together, or not at all.
 
 ### Sets that move together
 
@@ -104,9 +107,13 @@ npm run build         # catches Vite/Tailwind/PWA breakage that tests miss
 Then the browser path, which is the only thing that exercises the real bundle:
 
 ```bash
-cd webapp && npx playwright install chromium   # required if @playwright/test moved
+npx playwright install chromium   # required if @playwright/test moved
 task test-e2e
 ```
+
+`npx playwright` resolves to the `@playwright/test` binary in `node_modules/.bin`, so the
+browser it downloads matches the version in the lockfile — that pairing is the point, and
+it breaks if you run a globally installed Playwright instead.
 
 `task check-translations` is unaffected by dependency work but is cheap; run it if
 i18next or react-i18next moved.
@@ -142,7 +149,7 @@ those places in the same commit, or hold the dependency back.
 
 One commit per batch:
 
-```
+```text
 chore(webapp): update Vite to 8.1.0 and vite-plugin-pwa to 1.4.0
 ```
 
