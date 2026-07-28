@@ -59,6 +59,19 @@ Use the following Task commands for development:
 - `task build-jotctl` - Build the `jotctl` admin CLI binary
 - `task clean` - Remove generated files and node packages
 
+## Dependency Updates
+
+There is no Dependabot/Renovate configuration; dependency updates are done deliberately,
+one workspace at a time, via the skills in `.claude/skills/`:
+
+- `update-server-deps` — Go modules, `go.mod` tool directives (golangci-lint, swag), Go toolchain version
+- `update-shared-deps` — `@jot/shared` devDependencies
+- `update-webapp-deps` — webapp npm packages, `overrides` block, Playwright browsers
+- `update-mobile-deps` — Expo/React Native packages (Expo SDK dictates most versions)
+
+For a full sweep, update in the order **shared → webapp → mobile** (both consumers compile
+`shared/src` directly through the `file:../shared` link); `server/` is independent.
+
 ---
 
 ## Codebase Overview
