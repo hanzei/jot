@@ -47,6 +47,25 @@ export default [
       },
     },
   },
+  // Ratchet for the React Compiler rules that eslint-plugin-react-hooks 7.1
+  // added to its recommended set. They are enabled repo-wide; the files below
+  // still have pre-existing violations and are exempted until each is fixed.
+  //
+  // Only ever remove entries from this list. When it is empty, delete the block.
+  // Tracked in #768.
+  {
+    files: [
+      'src/components/NoteModal.tsx',
+      'src/components/ShareModal.tsx',
+      'src/pages/Dashboard.tsx',
+    ],
+    rules: {
+      'react-hooks/set-state-in-effect': 'off',
+      'react-hooks/refs': 'off',
+      'react-hooks/preserve-manual-memoization': 'off',
+      'react-hooks/immutability': 'off',
+    },
+  },
   {
     files: ['vite.config.ts', 'playwright.config.ts', 'scripts/**/*.ts'],
     languageOptions: {
