@@ -1,5 +1,5 @@
-import React, { useContext, useEffect, useRef, useState } from 'react';
-import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useContext, useEffect, useState } from 'react';
+import { Animated, StyleSheet, Text, TouchableOpacity, useAnimatedValue, View } from 'react-native';
 import { X, type LucideIcon } from 'lucide-react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
@@ -50,10 +50,12 @@ export default function Banner({
 }: BannerProps) {
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
   const [shouldRender, setShouldRender] = useState(visible);
-  const opacity = useRef(new Animated.Value(visible ? 1 : 0)).current;
+  const opacity = useAnimatedValue(visible ? 1 : 0);
 
   useEffect(() => {
     if (visible) {
+      // Grandfathered: mounts the banner before the fade-in; the exit fade needs the node to outlive visible=false.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShouldRender(true);
     }
     Animated.timing(opacity, {

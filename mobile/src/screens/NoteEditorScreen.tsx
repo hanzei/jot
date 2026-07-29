@@ -17,6 +17,7 @@ import {
   Modal,
   Share,
   StyleSheet,
+  useAnimatedValue,
   useWindowDimensions,
   type TextInputProps,
   type TextInput as TextInputType,
@@ -260,6 +261,8 @@ export default function NoteEditorScreen() {
   }, [syncToast]);
 
   useEffect(() => {
+    // Grandfathered: clears localized messages when the language changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSaveError(null);
     setSyncToast(null);
   }, [i18n.language]);
@@ -343,9 +346,9 @@ export default function NoteEditorScreen() {
   // full screen on open, and back down on close. Decided once at mount; the
   // native present/dismiss is disabled so this transform is the only motion.
   const { width: screenW, height: screenH } = useWindowDimensions();
-  const zoomEnabled = useRef(!!originRect && !isReduceMotionEnabledSync()).current;
+  const [zoomEnabled] = useState(() => !!originRect && !isReduceMotionEnabledSync());
   // 0 = scaled/positioned onto the card, 1 = full screen.
-  const zoom = useRef(new Animated.Value(zoomEnabled ? 0 : 1)).current;
+  const zoom = useAnimatedValue(zoomEnabled ? 0 : 1);
   // Holds the editor invisible for the first frame of a zoom-open. With the
   // native driver the transform/opacity aren't written as static props on the
   // JS render — the native animation node applies them, and it only attaches
@@ -727,6 +730,8 @@ export default function NoteEditorScreen() {
   // now differs from the local ID we hold, and update noteId + route params accordingly.
   useEffect(() => {
     if (existingNote && noteId && existingNote.id !== noteId) {
+      // Grandfathered: adopts the server id once the offline queue drains.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setNoteId(existingNote.id);
       navigation.setParams({ noteId: existingNote.id });
     }
@@ -2188,7 +2193,7 @@ export default function NoteEditorScreen() {
         const baseLevel = moved.parentId ? 1 : 0;
         const canIndent = !itemHasChildren(itemsRef.current, moved.id) && !!above;
         const canOutdent = baseLevel === 1;
-        const targetLevel = indentLevelFromDrag(dragTranslateX.value, baseLevel, canIndent, canOutdent);
+        const targetLevel = indentLevelFromDrag(dragTranslateX.get(), baseLevel, canIndent, canOutdent);
         let newParentId: string | null;
         if (targetLevel !== baseLevel) {
           // The horizontal drag past a step is an explicit indent intent.
@@ -2253,7 +2258,7 @@ export default function NoteEditorScreen() {
         .activeOffsetY([-10, 10])
         .onChange((event) => {
           'worklet';
-          dragTranslateX.value = event.translationX;
+          dragTranslateX.set(event.translationX);
         }),
     [dragTranslateX],
   );

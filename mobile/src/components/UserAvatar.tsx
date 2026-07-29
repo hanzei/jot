@@ -33,6 +33,8 @@ export default function UserAvatar({ userId, username, hasProfileIcon, iconVersi
 
   // Reset the image error state when the avatar identity changes.
   React.useEffect(() => {
+    // Grandfathered: clears the stale load-error flag when the avatar identity changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setImageError(false);
   }, [baseUrl, userId, iconVersion]);
 

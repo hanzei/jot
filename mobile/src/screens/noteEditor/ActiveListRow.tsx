@@ -69,7 +69,7 @@ function ActiveListRow({
 
   useReorderableDragStart(() => {
     'worklet';
-    dragTranslateX.value = 0;
+    dragTranslateX.set(0);
   });
 
   // While this row is the lifted one, snap the live horizontal drag distance to a
@@ -78,10 +78,10 @@ function ActiveListRow({
   // re-render catches up (see the effect below) — that hold is what removes the
   // snap-back flash on release.
   useAnimatedReaction(
-    () => dragTranslateX.value,
+    () => dragTranslateX.get(),
     (translateX) => {
       if (!isActive) return;
-      displayLevel.value = indentLevelFromDrag(translateX, indentBaseLevel, canIndent, canOutdent);
+      displayLevel.set(indentLevelFromDrag(translateX, indentBaseLevel, canIndent, canOutdent));
     },
     [isActive, indentBaseLevel, canIndent, canOutdent],
   );
@@ -91,7 +91,7 @@ function ActiveListRow({
   // and ListItem's marginLeft renders it. Bring `displayLevel` back in step so the
   // transform contributes nothing and the two never disagree.
   useEffect(() => {
-    displayLevel.value = indentBaseLevel;
+    displayLevel.set(indentBaseLevel);
   }, [indentBaseLevel, displayLevel]);
 
   const handleDrag = useCallback(() => {
@@ -100,7 +100,7 @@ function ActiveListRow({
   }, [drag]);
 
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: (displayLevel.value - indentBaseLevel) * INDENT_PX }],
+    transform: [{ translateX: (displayLevel.get() - indentBaseLevel) * INDENT_PX }],
   }));
 
   return (

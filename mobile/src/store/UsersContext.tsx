@@ -81,6 +81,8 @@ export function UsersProvider({ children }: { children: React.ReactNode }) {
   // resumes once connectivity returns instead of waiting for the next mount.
   useEffect(() => {
     if (!isAuthenticated) {
+      // Grandfathered: empties the user cache on sign-out.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setUsersById(new Map());
       return;
     }

@@ -84,6 +84,8 @@ export default function AboutSection() {
     if (aboutExpanded && !aboutInfo && !aboutError) {
       let cancelled = false;
       const requestId = ++aboutRequestSeqRef.current;
+      // Grandfathered: loading flag for the lazily-triggered about-info fetch.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAboutLoading(true);
       getAboutInfo()
         .then((nextAboutInfo) => {

@@ -39,6 +39,8 @@ export default function AppearanceSection() {
   const [openDropdown, setOpenDropdown] = useState<'language' | 'theme' | null>(null);
 
   useEffect(() => {
+    // Grandfathered: mirrors persisted language/theme preferences into local state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLanguagePref(getLanguagePreference(settings?.language));
     setThemePref(settings?.theme ?? 'system');
   }, [settings?.language, settings?.theme]);

@@ -75,6 +75,8 @@ export default function ShareScreen() {
   // offline or the server is known-unreachable, mirroring the writes' gate).
   useEffect(() => {
     if (!debouncedQuery) {
+      // Grandfathered: resets search state when the debounced query is cleared.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsSearching(false);
       setSearchResults([]);
       setSearchError(false);

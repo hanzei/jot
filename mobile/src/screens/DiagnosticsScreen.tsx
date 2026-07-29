@@ -115,6 +115,8 @@ export default function DiagnosticsScreen() {
   }, [db, isConnected, serverUrl]);
 
   useEffect(() => {
+    // Grandfathered: initial snapshot; refresh() setStates internally.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     refresh();
   }, [refresh]);
 

@@ -135,11 +135,9 @@ function ListItem({
   // Pop the checkbox in on mount when this row is the one the user just checked
   // off. Runs once (mount-only) so re-renders don't re-trigger it; respects the
   // OS Reduce Motion setting like the rest of the editor's animations.
-  const checkScaleRef = useRef<Animated.Value | null>(null);
-  if (checkScaleRef.current === null) {
-    checkScaleRef.current = new Animated.Value(popOnMount && !isReduceMotionEnabledSync() ? 0.5 : 1);
-  }
-  const checkScale = checkScaleRef.current;
+  const [checkScale] = useState(
+    () => new Animated.Value(popOnMount && !isReduceMotionEnabledSync() ? 0.5 : 1),
+  );
   useEffect(() => {
     if (!popOnMount || isReduceMotionEnabledSync()) return;
     const animation = Animated.spring(checkScale, {

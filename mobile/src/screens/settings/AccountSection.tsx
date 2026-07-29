@@ -27,12 +27,16 @@ export default function AccountSection() {
   const [profileSuccess, setProfileSuccess] = useState('');
 
   useEffect(() => {
+    // Grandfathered: reseeds the profile form when the loaded user changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setFirstName(user?.first_name ?? '');
     setLastName(user?.last_name ?? '');
     setUsername(user?.username ?? '');
   }, [user?.first_name, user?.last_name, user?.username]);
 
   useEffect(() => {
+    // Grandfathered: clears the success message when the language changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setProfileSuccess('');
   }, [settings?.language]);
 

@@ -99,6 +99,8 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   }, [searchText]);
 
   useEffect(() => {
+    // Grandfathered: mirrors the persisted sort preference into local state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSortMode(normalizeNoteSort(settings?.note_sort));
   }, [settings?.note_sort]);
 
@@ -234,6 +236,8 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
   useEffect(() => {
     let cancelled = false;
+    // Grandfathered: resets before the async dismissed-warning lookup.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSortWarningDismissed(null);
     void isSortWarningDismissed(sortMode).then((dismissed) => {
       if (!cancelled) setSortWarningDismissed(dismissed);
@@ -367,6 +371,8 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
   // Clear local order overrides when server data, variant, or sort mode changes
   useEffect(() => {
+    // Grandfathered: drops local drag order when server data, variant, or sort changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLocalOrder(EMPTY_LOCAL_ORDER);
   }, [notes, variant, sortMode]);
 

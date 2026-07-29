@@ -45,6 +45,8 @@ export default function ServerSetupGate({
     let mounted = true;
 
     if (existingServerUrl) {
+      // Grandfathered: one-shot bootstrap from the persisted server URL.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setServerUrlInput(existingServerUrl);
       setIsServerReady(true);
       setIsCheckingExistingServer(false);

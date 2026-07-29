@@ -40,6 +40,8 @@ export function SSEProvider({ children }: { children: React.ReactNode }) {
   // stays silent.
   useEffect(() => {
     if (sseStatus !== 'reconnecting') {
+      // Grandfathered: clears the reconnect banner as soon as the stream leaves 'reconnecting'.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSseReconnecting(false);
       return;
     }
