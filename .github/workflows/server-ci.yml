@@ -121,8 +121,12 @@ jobs:
           # dialect-only migration still passes `task test-server` locally
           # (the Postgres tests skip without TEST_POSTGRES_DSN), so catch it
           # here with an error that names the actual problem.
+          # Only top-level *.sql, matching the //go:embed scope in
+          # database.go — anything else is not embedded, so a difference
+          # there is not a migration mismatch.
           for dialect in sqlite postgres; do
-            ls server/internal/database/migrations/${dialect}/ \
+            ls server/internal/database/migrations/${dialect}/*.sql \
+              | xargs -I{} basename {} \
               | sort > "/tmp/migrations-${dialect}.txt"
           done
           if ! diff -u /tmp/migrations-sqlite.txt /tmp/migrations-postgres.txt \

@@ -1,5 +1,11 @@
 # Jot Project Instructions
 
+Per-area instructions live alongside the code and also apply when you work
+there: [`server/CLAUDE.md`](server/CLAUDE.md) (Go naming and error handling),
+[`webapp/CLAUDE.md`](webapp/CLAUDE.md) (i18n rules), and
+[`mobile/CLAUDE.md`](mobile/CLAUDE.md) (offline/connectivity invariants,
+filesystem and logging rules).
+
 ## Development Status Notice
 
 - Jot is under heavy initial development.
@@ -95,7 +101,7 @@ Jot is a self-hosted note-taking application. The backend is a Go HTTP API and t
 Orientation, not an inventory — directories are listed, individual files are
 not. Run `ls` rather than trusting this tree to be exhaustive.
 
-```
+```text
 /
 ├── shared/          # @jot/shared — types, constants, and utilities shared by webapp & mobile
 │   └── src/             # types.ts is the single source of truth for domain interfaces
@@ -219,7 +225,7 @@ If handler annotations or request/response types change, regenerate docs with `t
 
 There are **two** migration trees, one per supported dialect:
 
-```
+```text
 server/internal/database/migrations/sqlite/000009_add_thing.up.sql
 server/internal/database/migrations/postgres/000009_add_thing.up.sql
 ```
