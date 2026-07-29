@@ -90,6 +90,19 @@ output. They stop at the first failing suite.
 and run via `go tool` — do not `go install` a separate copy, it will drift
 from the version CI uses.
 
+## Dependency Updates
+
+There is no Dependabot/Renovate configuration; dependency updates are done deliberately,
+one workspace at a time, via the skills in `.claude/skills/`:
+
+- `update-server-deps` — Go modules, `go.mod` tool directives (golangci-lint, swag), Go toolchain version
+- `update-shared-deps` — `@jot/shared` devDependencies
+- `update-webapp-deps` — webapp npm packages, `overrides` block, Playwright browsers
+- `update-mobile-deps` — Expo/React Native packages (Expo SDK dictates most versions)
+
+For a full sweep, update in the order **shared → webapp → mobile** (both consumers compile
+`shared/src` directly through the `file:../shared` link); `server/` is independent.
+
 ---
 
 ## Codebase Overview
