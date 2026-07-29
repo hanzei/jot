@@ -12,6 +12,8 @@ import (
 	"net/url"
 )
 
+const paramItemIDs = "item_ids"
+
 // ListNotes returns notes for the authenticated user.
 // Pass nil for opts to use defaults (active, non-archived notes).
 func (c *Client) ListNotes(ctx context.Context, opts *ListNotesOptions) ([]Note, error) {
@@ -169,8 +171,8 @@ func (c *Client) ToggleNoteItemCompleted(ctx context.Context, noteID, itemID str
 func (c *Client) SetNoteItemsCompleted(ctx context.Context, noteID string, itemIDs []string, completed bool) ([]NoteItem, error) {
 	var items []NoteItem
 	if err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/items/set-completed", noteID), map[string]any{
-		"item_ids":  itemIDs,
-		"completed": completed,
+		paramItemIDs: itemIDs,
+		"completed":  completed,
 	}, &items); err != nil {
 		return nil, err
 	}
@@ -182,7 +184,7 @@ func (c *Client) SetNoteItemsCompleted(ctx context.Context, noteID string, itemI
 func (c *Client) DeleteNoteItems(ctx context.Context, noteID string, itemIDs []string) ([]NoteItem, error) {
 	var items []NoteItem
 	if err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/items/delete", noteID), map[string][]string{
-		"item_ids": itemIDs,
+		paramItemIDs: itemIDs,
 	}, &items); err != nil {
 		return nil, err
 	}
@@ -197,7 +199,7 @@ func (c *Client) DeleteNoteItem(ctx context.Context, noteID, itemID string) erro
 // ReorderNoteItems sets the order of a list note's items by item ID.
 func (c *Client) ReorderNoteItems(ctx context.Context, noteID string, itemIDs []string) error {
 	return c.doNoContent(ctx, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/items/reorder", noteID), map[string][]string{
-		"item_ids": itemIDs,
+		paramItemIDs: itemIDs,
 	})
 }
 

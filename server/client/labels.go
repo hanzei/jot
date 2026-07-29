@@ -6,6 +6,8 @@ import (
 	"net/http"
 )
 
+const paramName = "name"
+
 // ListLabels returns all labels for the authenticated user.
 func (c *Client) ListLabels(ctx context.Context) ([]Label, error) {
 	var labels []Label
@@ -43,7 +45,7 @@ func (c *Client) ListLabelCounts(ctx context.Context) (map[string]int, error) {
 func (c *Client) CreateLabel(ctx context.Context, name string) (*Label, error) {
 	var label Label
 	if err := c.doJSON(ctx, http.MethodPost, "/api/v1/labels", map[string]string{
-		"name": name,
+		paramName: name,
 	}, &label); err != nil {
 		return nil, err
 	}
@@ -55,8 +57,8 @@ func (c *Client) CreateLabel(ctx context.Context, name string) (*Label, error) {
 func (c *Client) CreateLabelWithID(ctx context.Context, id, name string) (*Label, error) {
 	var label Label
 	if err := c.doJSON(ctx, http.MethodPost, "/api/v1/labels", map[string]string{
-		"id":   id,
-		"name": name,
+		"id":      id,
+		paramName: name,
 	}, &label); err != nil {
 		return nil, err
 	}
@@ -68,7 +70,7 @@ func (c *Client) CreateLabelWithID(ctx context.Context, id, name string) (*Label
 func (c *Client) AddLabel(ctx context.Context, noteID, name string) (*Note, error) {
 	var note Note
 	if err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/labels", noteID), map[string]string{
-		"name": name,
+		paramName: name,
 	}, &note); err != nil {
 		return nil, err
 	}
@@ -79,7 +81,7 @@ func (c *Client) AddLabel(ctx context.Context, noteID, name string) (*Note, erro
 func (c *Client) RenameLabel(ctx context.Context, labelID, name string) (*Label, error) {
 	var label Label
 	if err := c.doJSON(ctx, http.MethodPatch, fmt.Sprintf("/api/v1/labels/%s", labelID), map[string]string{
-		"name": name,
+		paramName: name,
 	}, &label); err != nil {
 		return nil, err
 	}
