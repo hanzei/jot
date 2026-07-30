@@ -1,6 +1,6 @@
 import { SQLiteDatabase } from 'expo-sqlite';
 import { deleteFileIfExists } from '../utils/fs';
-import type { Note, NoteItem, GetNotesParams, Label, NoteShare, NoteImage } from '@jot/shared';
+import type { Note, NoteItem, GetNotesParams, Label, NoteShare, NoteImage, ShareHistorySource } from '@jot/shared';
 import { getStrongRandomBytes } from '../utils/random';
 import { withSerializedTransaction } from './transaction';
 import { isLocalModeActive } from '../store/localMode';
@@ -246,6 +246,26 @@ export async function getLocalNotes(db: SQLiteDatabase, params?: GetNotesParams)
     return notes.filter((n) => n.labels.some((l) => l.id === params.label));
   }
   return notes;
+}
+
+/**
+ * The share records of every locally known note, as the minimal shape
+ * `recentShareTargets` reads. Deliberately not built on `getLocalNotes`: only
+ * the share column is needed, so this skips the note items join and the row
+ * conversion entirely.
+ *
+ * Archived and trashed notes are included — having filed a note away says
+ * nothing about whether its collaborator is still someone you share with.
+ */
+export async function getLocalShareHistory(db: SQLiteDatabase): Promise<ShareHistorySource[]> {
+  const rows = await db.getAllAsync<{ shared_with_json: string }>(
+    'SELECT shared_with_json FROM notes WHERE is_shared = 1',
+  );
+  return rows.map((row) => {
+    let shared_with: NoteShare[] = [];
+    try { shared_with = JSON.parse(row.shared_with_json) as NoteShare[]; } catch { /* ignore */ }
+    return { shared_with };
+  });
 }
 
 export async function getLocalNote(db: SQLiteDatabase, id: string): Promise<Note | null> {

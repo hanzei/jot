@@ -345,6 +345,10 @@
   "share": {
     "searchUsersPlaceholder": "Benutzer nach Namen suchen...",
     "noUsersFound": "Keine Benutzer gefunden",
+    "recentlySharedWith": "Zuletzt geteilt mit",
+    "allUsers": "Alle Benutzer",
+    "everyoneHasAccess": "Alle haben bereits Zugriff auf diese Notiz.",
+    "noOtherUsers": "Es gibt keine anderen Benutzer zum Teilen.",
     "sharedWith": "Geteilt mit ({{count}})",
     "removeAccess": "Zugriff entfernen",
     "notSharedYet": "Diese Notiz wurde noch nicht geteilt.",
