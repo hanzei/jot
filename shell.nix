@@ -2,8 +2,7 @@
 pkgs.mkShell {
   nativeBuildInputs = with pkgs; [
     nodejs_24 # keep in sync with .nvmrc
-    go
-    go-task
+    go # `task` deliberately comes from bootstrap.sh, which pins its version
     watchman
     playwright-driver.browsers
   ];

@@ -65,5 +65,23 @@ Add --with-deps on a bare Linux box to also pull the system libraries:
   cd webapp && npx playwright install --with-deps chromium
 
 EOF
+
+  # Inside nix-shell, PLAYWRIGHT_BROWSERS_PATH points into the read-only nix
+  # store, so the commands above cannot write there. Telling someone to install
+  # into an immutable path just trades this error for a confusing permission
+  # one.
+  case "${PLAYWRIGHT_BROWSERS_PATH:-}" in
+    /nix/store/*)
+      cat >&2 <<EOF
+PLAYWRIGHT_BROWSERS_PATH points into the read-only nix store
+($PLAYWRIGHT_BROWSERS_PATH), so those commands cannot write there. Either bump
+nixpkgs so playwright-driver.browsers matches the pinned @playwright/test, or
+install into a writable cache for this shell:
+  PLAYWRIGHT_BROWSERS_PATH=~/.cache/ms-playwright npx playwright install chromium
+and keep that same value set when running the tests.
+
+EOF
+      ;;
+  esac
   exit 1
 fi

@@ -118,10 +118,12 @@ compiled web app, while SQLite keeps the default deployment small and portable.
   already has `node_modules`;
 - warns when Node or Go is older than this repo expects, without changing either.
 
-It is idempotent, so re-running it on a provisioned checkout is close to a no-op —
-use it to pick up dependency changes after a pull. Two escape hatches:
-`JOT_BOOTSTRAP_SKIP=1` skips everything, `JOT_BOOTSTRAP_SKIP_NPM=1` skips just the
-npm installs.
+It is idempotent, so re-running it on a provisioned checkout is close to a no-op.
+That cuts both ways: because it skips any package that already has
+`node_modules`, it will **not** pick up dependency changes after a pull — when a
+lockfile moves, run `npm ci` in the affected package yourself. Two escape
+hatches: `JOT_BOOTSTRAP_SKIP=1` skips everything, `JOT_BOOTSTRAP_SKIP_NPM=1`
+skips just the npm installs.
 
 It deliberately does **not** download Playwright browsers (the slowest step, and
 most work never touches e2e) and does **not** install or switch Node/Go versions.
@@ -131,8 +133,13 @@ carrying their own copy of the setup steps.
 ### Task Automation
 
 This project includes a [Taskfile](https://taskfile.dev/) for common development
-tasks. `scripts/bootstrap.sh` installs it; if you would rather do it by hand:
-`go install github.com/go-task/task/v3/cmd/task@latest`.
+tasks. `scripts/bootstrap.sh` installs it. To do it by hand instead, use the
+version the script pins (`TASK_VERSION` at the top of `scripts/bootstrap.sh`)
+rather than `@latest`, so every checkout runs the same Task:
+
+```bash
+go install github.com/go-task/task/v3/cmd/task@<TASK_VERSION>
+```
 
 ```bash
 # Available commands (task --list for the full set)

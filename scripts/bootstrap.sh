@@ -135,16 +135,23 @@ install_task() {
 
   export PATH="$gobin:$PATH"
 
-  # A hook runs in its own shell, so exporting PATH here is not enough for the
-  # session that follows. CLAUDE_ENV_FILE is how a Claude Code session inherits
-  # environment changes from a SessionStart hook.
+  # A hook runs in its own shell, so the export above only covers the rest of
+  # this script. CLAUDE_ENV_FILE is how a Claude Code session inherits
+  # environment changes from a SessionStart hook, so the session that follows
+  # can run the documented commands with no manual step.
   if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
     echo "export PATH=\"$gobin:\$PATH\"" >>"$CLAUDE_ENV_FILE"
     log "added $gobin to PATH for this session"
-  else
-    warn "task was installed to $gobin, which is not on your PATH." \
-      "Add it to use the documented commands: export PATH=\"$gobin:\$PATH\""
+    return
   fi
+
+  # Outside such a session there is no hand-off: a child process cannot change
+  # its parent shell's environment, and sourcing this script instead would leak
+  # `set -u`/`pipefail` into an interactive shell. So print the one line that
+  # fixes it, for now and for good.
+  warn "task was installed to $gobin, which is not on your PATH." \
+    "For this shell:      export PATH=\"$gobin:\$PATH\"" \
+    "For every shell:     add that line to ~/.bashrc, ~/.zshrc, or your shell's profile."
 }
 
 # ---------------------------------------------------------------------------
