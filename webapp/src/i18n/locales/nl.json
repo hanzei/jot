@@ -376,6 +376,7 @@
     "colorSand": "Zand",
     "colorGray": "Grijs",
     "itemTooLong": "Itemtekst mag niet meer dan {{max}} tekens bevatten",
+    "tooManyItems": "Een notitie kan niet meer dan {{max}} items bevatten",
     "itemInvalidChars": "Itemtekst mag geen < of > tekens bevatten",
     "titleTooLong": "Titel mag niet meer dan {{max}} tekens bevatten",
     "contentTooLong": "Inhoud mag niet meer dan {{max}} tekens bevatten",

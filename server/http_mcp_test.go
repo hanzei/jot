@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/hanzei/jot/server/client"
@@ -146,7 +147,7 @@ func TestMCPLabelCRUD(t *testing.T) {
 
 	// Rename it.
 	var renamed client.Label
-	callTool(t, sess, "rename_label", map[string]any{"id": labelID, "name": "personal"}, &renamed)
+	callTool(t, sess, "update_label", map[string]any{"id": labelID, "name": "personal"}, &renamed)
 	assert.Equal(t, "personal", renamed.Name)
 
 	// Remove it from the note.
@@ -183,6 +184,235 @@ func TestMCPPermanentDelete(t *testing.T) {
 	var trashed []client.Note
 	callTool(t, sess, "list_notes", map[string]any{"trashed": true}, &trashed)
 	assert.Empty(t, trashed)
+}
+
+// callToolExpectError calls a named MCP tool and asserts it returned a
+// tool-level error, returning the error text for further assertions.
+func callToolExpectError(t *testing.T, sess *mcp.ClientSession, name string, args any) string {
+	t.Helper()
+	result, err := sess.CallTool(t.Context(), &mcp.CallToolParams{
+		Name:      name,
+		Arguments: args,
+	})
+	require.NoError(t, err)
+	require.True(t, result.IsError, "expected tool error from %s", name)
+	require.NotEmpty(t, result.Content)
+	text, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok, "expected TextContent, got %T", result.Content[0])
+	return text.Text
+}
+
+// TestMCPCreateNoteWithItems verifies that a list note can be created with its
+// items in a single call, in the order supplied.
+func TestMCPCreateNoteWithItems(t *testing.T) {
+	ts := setupTestServer(t)
+	tu := ts.createTestUser(t, "mcpitems1", "password123", false)
+	sess := setupMCPSession(t, ts, tu)
+
+	var created client.Note
+	callTool(t, sess, "create_note", map[string]any{
+		"title": "Groceries",
+		"items": []map[string]any{
+			{"text": "Milk"},
+			{"text": "Bread", "completed": true},
+			{"text": "Eggs"},
+		},
+	}, &created)
+
+	assert.Equal(t, client.NoteTypeList, created.NoteType)
+	require.Len(t, created.Items, 3)
+	assert.Equal(t, "Milk", created.Items[0].Text)
+	assert.False(t, created.Items[0].Completed)
+	assert.Equal(t, "Bread", created.Items[1].Text)
+	assert.True(t, created.Items[1].Completed)
+	assert.Equal(t, "Eggs", created.Items[2].Text)
+	for _, item := range created.Items {
+		assert.NotEmpty(t, item.ID, "each item must get a server-generated ID")
+	}
+
+	// The items must be readable back through get_note.
+	var fetched client.Note
+	callTool(t, sess, "get_note", map[string]any{"id": created.ID}, &fetched)
+	require.Len(t, fetched.Items, 3)
+
+	t.Run("note_type must agree with items", func(t *testing.T) {
+		msg := callToolExpectError(t, sess, "create_note", map[string]any{
+			"note_type": "text",
+			"items":     []map[string]any{{"text": "nope"}},
+		})
+		assert.Contains(t, msg, "note_type must be")
+	})
+}
+
+// TestMCPNoteItemCRUD walks the full item lifecycle over MCP: create, update,
+// and delete, against a list note created without items.
+func TestMCPNoteItemCRUD(t *testing.T) {
+	ts := setupTestServer(t)
+	tu := ts.createTestUser(t, "mcpitems2", "password123", false)
+	sess := setupMCPSession(t, ts, tu)
+
+	var note client.Note
+	callTool(t, sess, "create_note", map[string]any{
+		"title":     "Packing list",
+		"note_type": "list",
+	}, &note)
+	require.Empty(t, note.Items)
+
+	// Items are appended in call order when position is omitted.
+	var first client.NoteItem
+	callTool(t, sess, "create_note_item", map[string]any{
+		"note_id": note.ID,
+		"text":    "Passport",
+	}, &first)
+	assert.Equal(t, "Passport", first.Text)
+	assert.False(t, first.Completed)
+	require.NotEmpty(t, first.ID)
+
+	var second client.NoteItem
+	callTool(t, sess, "create_note_item", map[string]any{
+		"note_id":   note.ID,
+		"text":      "Charger",
+		"completed": true,
+	}, &second)
+	assert.True(t, second.Completed)
+	assert.Greater(t, second.Position, first.Position, "omitted position must append to the end")
+	assert.NotEqual(t, first.ID, second.ID)
+
+	var withItems client.Note
+	callTool(t, sess, "get_note", map[string]any{"id": note.ID}, &withItems)
+	require.Len(t, withItems.Items, 2)
+
+	// Partial update: only the named field changes.
+	var updated client.NoteItem
+	callTool(t, sess, "update_note_item", map[string]any{
+		"note_id":   note.ID,
+		"item_id":   first.ID,
+		"completed": true,
+	}, &updated)
+	assert.True(t, updated.Completed)
+	assert.Equal(t, "Passport", updated.Text, "omitted fields must keep their value")
+
+	callTool(t, sess, "update_note_item", map[string]any{
+		"note_id": note.ID,
+		"item_id": first.ID,
+		"text":    "Passport and visa",
+	}, &updated)
+	assert.Equal(t, "Passport and visa", updated.Text)
+	assert.True(t, updated.Completed)
+
+	// Nest the second item under the first.
+	callTool(t, sess, "update_note_item", map[string]any{
+		"note_id":   note.ID,
+		"item_id":   second.ID,
+		"parent_id": first.ID,
+	}, &updated)
+	require.NotNil(t, updated.ParentID)
+	assert.Equal(t, first.ID, *updated.ParentID)
+
+	// Delete leaves only the remaining item.
+	callTool(t, sess, "delete_note_item", map[string]any{
+		"note_id": note.ID,
+		"item_id": second.ID,
+	}, nil)
+
+	callTool(t, sess, "get_note", map[string]any{"id": note.ID}, &withItems)
+	require.Len(t, withItems.Items, 1)
+	assert.Equal(t, first.ID, withItems.Items[0].ID)
+}
+
+// TestMCPNoteItemErrors covers the guardrails on the item tools.
+func TestMCPNoteItemErrors(t *testing.T) {
+	ts := setupTestServer(t)
+	tu := ts.createTestUser(t, "mcpitems3", "password123", false)
+	sess := setupMCPSession(t, ts, tu)
+
+	var textNote client.Note
+	callTool(t, sess, "create_note", map[string]any{"content": "just text"}, &textNote)
+
+	var listNote client.Note
+	callTool(t, sess, "create_note", map[string]any{
+		"title":     "List",
+		"note_type": "list",
+	}, &listNote)
+
+	t.Run("items rejected on a text note", func(t *testing.T) {
+		msg := callToolExpectError(t, sess, "create_note_item", map[string]any{
+			"note_id": textNote.ID,
+			"text":    "nope",
+		})
+		assert.Contains(t, msg, "list notes")
+	})
+
+	t.Run("unknown note", func(t *testing.T) {
+		callToolExpectError(t, sess, "create_note_item", map[string]any{
+			"note_id": "aaaaaaaaaaaaaaaaaaaaaa",
+			"text":    "nope",
+		})
+	})
+
+	t.Run("unknown item", func(t *testing.T) {
+		callToolExpectError(t, sess, "update_note_item", map[string]any{
+			"note_id": listNote.ID,
+			"item_id": "aaaaaaaaaaaaaaaaaaaaaa",
+			"text":    "nope",
+		})
+	})
+
+	t.Run("item text too long", func(t *testing.T) {
+		msg := callToolExpectError(t, sess, "create_note_item", map[string]any{
+			"note_id": listNote.ID,
+			"text":    strings.Repeat("a", 501),
+		})
+		assert.Contains(t, msg, "500 characters or fewer")
+	})
+
+	t.Run("too many items on create", func(t *testing.T) {
+		items := make([]map[string]any, 501)
+		for i := range items {
+			items[i] = map[string]any{"text": "x"}
+		}
+		msg := callToolExpectError(t, sess, "create_note", map[string]any{"items": items})
+		assert.Contains(t, msg, "more than 500 items")
+	})
+}
+
+// TestMCPNoteItemCrossUserIsolation verifies that item tools honor note access,
+// so one user cannot read or mutate items on another user's note.
+func TestMCPNoteItemCrossUserIsolation(t *testing.T) {
+	ts := setupTestServer(t)
+	alice := ts.createTestUser(t, "alice_mcp_items", "password123", false)
+	bob := ts.createTestUser(t, "bob_mcp_items", "password123", false)
+
+	aliceSess := setupMCPSession(t, ts, alice)
+	bobSess := setupMCPSession(t, ts, bob)
+
+	var aliceNote client.Note
+	callTool(t, aliceSess, "create_note", map[string]any{
+		"title": "Alice's list",
+		"items": []map[string]any{{"text": "secret"}},
+	}, &aliceNote)
+	require.Len(t, aliceNote.Items, 1)
+	aliceItemID := aliceNote.Items[0].ID
+
+	callToolExpectError(t, bobSess, "create_note_item", map[string]any{
+		"note_id": aliceNote.ID,
+		"text":    "intruder",
+	})
+	callToolExpectError(t, bobSess, "update_note_item", map[string]any{
+		"note_id": aliceNote.ID,
+		"item_id": aliceItemID,
+		"text":    "tampered",
+	})
+	callToolExpectError(t, bobSess, "delete_note_item", map[string]any{
+		"note_id": aliceNote.ID,
+		"item_id": aliceItemID,
+	})
+
+	// Alice's item must be untouched.
+	var fetched client.Note
+	callTool(t, aliceSess, "get_note", map[string]any{"id": aliceNote.ID}, &fetched)
+	require.Len(t, fetched.Items, 1)
+	assert.Equal(t, "secret", fetched.Items[0].Text)
 }
 
 // TestMCPCrossUserIsolation verifies that a user cannot access another user's

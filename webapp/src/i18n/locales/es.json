@@ -376,6 +376,7 @@
     "colorSand": "Arena",
     "colorGray": "Gris",
     "itemTooLong": "El texto del elemento no puede superar los {{max}} caracteres",
+    "tooManyItems": "Una nota no puede tener más de {{max}} elementos",
     "itemInvalidChars": "El texto del elemento no puede contener los caracteres < o >",
     "titleTooLong": "El título no puede superar los {{max}} caracteres",
     "contentTooLong": "El contenido no puede superar los {{max}} caracteres",

@@ -1671,6 +1671,17 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     const firstLineText = (before + lines[0]).slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH);
 
     const remainingLines = lines.slice(1);
+
+    // Pasting many lines is the one path that can add items in bulk, so it is
+    // where the server-side cap is realistically hit. Reject up front instead
+    // of letting the save fail with a 422 after the items are already on screen.
+    // Checked before building newItems so a huge clipboard payload does not
+    // allocate an object and a generated ID per line only to be discarded.
+    if (currentItems.length + remainingLines.length > VALIDATION.ITEM_MAX_COUNT) {
+      showError(t('note.tooManyItems', { max: VALIDATION.ITEM_MAX_COUNT }));
+      return;
+    }
+
     const newItems: ListItem[] = remainingLines.map((line, i) => {
       const isLast = i === remainingLines.length - 1;
       const lineText = isLast ? line + after : line;

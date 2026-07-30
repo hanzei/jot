@@ -4,6 +4,7 @@
 package mcphandler
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -60,6 +61,7 @@ func (h *Handler) buildServer(req *http.Request) *mcp.Server {
 
 	srv := mcp.NewServer(&mcp.Implementation{Name: "jot"}, nil)
 	h.registerNoteTools(srv, user.ID)
+	h.registerNoteItemTools(srv, user.ID)
 	h.registerLabelTools(srv, user.ID)
 	return srv
 }
@@ -69,6 +71,24 @@ func toolTextResult(data []byte) *mcp.CallToolResult {
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{&mcp.TextContent{Text: string(data)}},
 	}
+}
+
+// toolDeletedResult builds the confirmation the delete tools return: the ID of
+// what was removed, "deleted": true, and any extra context fields. Its return
+// signature matches [mcp.ToolHandlerFor] so callers can return it directly.
+func toolDeletedResult(id string, extra map[string]any) (*mcp.CallToolResult, any, error) {
+	payload := make(map[string]any, len(extra)+2)
+	for k, v := range extra {
+		payload[k] = v
+	}
+	payload["id"] = id
+	payload["deleted"] = true
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return toolError("marshal response: %w", err)
+	}
+	return toolTextResult(data), nil, nil
 }
 
 // toolError returns a tool-level error from a [mcp.ToolHandlerFor] handler.

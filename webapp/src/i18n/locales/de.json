@@ -376,6 +376,7 @@
     "colorSand": "Sand",
     "colorGray": "Grau",
     "itemTooLong": "Elementtext darf höchstens {{max}} Zeichen lang sein",
+    "tooManyItems": "Eine Notiz darf höchstens {{max}} Elemente enthalten",
     "itemInvalidChars": "Elementtext darf keine < oder > Zeichen enthalten",
     "titleTooLong": "Titel darf höchstens {{max}} Zeichen lang sein",
     "contentTooLong": "Inhalt darf höchstens {{max}} Zeichen lang sein",
