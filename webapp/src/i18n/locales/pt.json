@@ -376,6 +376,7 @@
     "colorSand": "Areia",
     "colorGray": "Cinza",
     "itemTooLong": "O texto do item não pode ter mais de {{max}} caracteres",
+    "tooManyItems": "Uma nota não pode ter mais de {{max}} itens",
     "itemInvalidChars": "O texto do item não pode conter os caracteres < ou >",
     "titleTooLong": "O título não pode ter mais de {{max}} caracteres",
     "contentTooLong": "O conteúdo não pode ter mais de {{max}} caracteres",

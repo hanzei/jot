@@ -376,6 +376,7 @@
     "colorSand": "Sabbia",
     "colorGray": "Grigio",
     "itemTooLong": "Il testo dell'elemento non può superare i {{max}} caratteri",
+    "tooManyItems": "Una nota non può contenere più di {{max}} elementi",
     "itemInvalidChars": "Il testo dell'elemento non può contenere i caratteri < o >",
     "titleTooLong": "Il titolo non può superare i {{max}} caratteri",
     "contentTooLong": "Il contenuto non può superare i {{max}} caratteri",

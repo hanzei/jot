@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
+	"strings"
 )
 
 // Config holds all server configuration values.
@@ -67,6 +69,19 @@ func parseIntRangeEnv(name string, defaultVal, min, max int) (int, error) {
 	return n, nil
 }
 
+// parseEnumEnv reads a string environment variable and validates it is one of
+// allowed. Returns defaultVal when the variable is not set.
+func parseEnumEnv(name, defaultVal string, allowed ...string) (string, error) {
+	v := os.Getenv(name)
+	if v == "" {
+		return defaultVal, nil
+	}
+	if slices.Contains(allowed, v) {
+		return v, nil
+	}
+	return "", fmt.Errorf("invalid %s value %q: must be one of %s", name, v, strings.Join(allowed, ", "))
+}
+
 // Load reads configuration from environment variables, applying defaults
 // for any values not set.
 //
@@ -107,9 +122,14 @@ func Load() (*Config, error) {
 	}
 	cfg.MetricsEnabled = metricsEnabled
 
-	if v := os.Getenv("JOT_DB_DRIVER"); v != "" {
-		cfg.DBDriver = v
+	// Keep the allowed set in sync with the drivers supported by
+	// internal/database.New and internal/database/dialect.
+	dbDriver, err := parseEnumEnv("JOT_DB_DRIVER", cfg.DBDriver, "sqlite", "postgres")
+	if err != nil {
+		return nil, err
 	}
+	cfg.DBDriver = dbDriver
+
 	if v := os.Getenv("JOT_DB_DSN"); v != "" {
 		cfg.DBDSN = v
 	}

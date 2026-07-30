@@ -1685,6 +1685,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       };
     });
 
+    // Pasting many lines is the one path that can add items in bulk, so it is
+    // where the server-side cap is realistically hit. Reject up front instead
+    // of letting the save fail with a 422 after the items are already on screen.
+    if (currentItems.length + newItems.length > VALIDATION.ITEM_MAX_COUNT) {
+      showError(t('note.tooManyItems', { max: VALIDATION.ITEM_MAX_COUNT }));
+      return;
+    }
+
     const allLineTexts = [firstLineText, ...newItems.map(item => item.text)];
     for (const lineText of allLineTexts) {
       const validationError = validateItemText(lineText, t);

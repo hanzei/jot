@@ -13,6 +13,17 @@ const (
 	DefaultNoteColor          = "#ffffff"
 )
 
+// Note item limits, enforced by every write surface (the REST handlers and the
+// MCP server). They live here rather than in one handler package so both can
+// share a single definition.
+// Keep in sync with shared/src/constants.ts VALIDATION.
+const (
+	// NoteItemTextMaxLength is the per-item text limit, in Unicode code points.
+	NoteItemTextMaxLength = 500
+	// NoteItemsMaxCount caps how many items a single list note can hold.
+	NoteItemsMaxCount = 500
+)
+
 var ErrNoteNoAccess = errors.New("no access to note")
 var ErrNoteNotFound = errors.New("note not found")
 var ErrNoteNotOwnedByUser = errors.New("note not found or not owned by user")

@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/hanzei/jot/server/internal/models"
 )
 
 // decodeJSONBody limits the request body to maxJSONBodySize and decodes it
@@ -24,13 +26,14 @@ var hexColorRegex = regexp.MustCompile(`^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
 
 // Keep in sync with shared/src/constants.ts VALIDATION for clients.
 // All character limits are measured in Unicode code points (utf8.RuneCountInString).
-// noteItemsMaxCount is a server-only resource cap with no shared-constants counterpart.
 // passwordMinLength is configurable via config.Config.PasswordMinLength (env PASSWORD_MIN_LENGTH).
 const (
-	noteTitleMaxLength    = 200
-	noteContentMaxLength  = 10000
-	noteItemTextMaxLength = 500
-	noteItemsMaxCount     = 500
+	noteTitleMaxLength   = 200
+	noteContentMaxLength = 10000
+	// The item limits are shared with the MCP server, so they are defined once
+	// in models rather than duplicated per write surface.
+	noteItemTextMaxLength = models.NoteItemTextMaxLength
+	noteItemsMaxCount     = models.NoteItemsMaxCount
 	searchQueryMaxLength  = 500
 	patNameMaxLength      = 100
 	// maxPATsPerUser caps the number of personal access tokens a user can hold.

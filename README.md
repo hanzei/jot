@@ -358,8 +358,12 @@ task build-jotctl
 ./server/jotctl users list
 ./server/jotctl users create --username alice --password change-me
 ./server/jotctl users set-role <user-id> admin
-./server/jotctl seed
+./server/jotctl dev seed
 ```
+
+Development-only helpers live under `jotctl dev`: `dev seed` adds test data and
+`dev reset` deletes all non-admin users and every note. Do not run them against
+a production server.
 
 Useful environment variables:
 

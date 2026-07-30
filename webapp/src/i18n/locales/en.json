@@ -376,6 +376,7 @@
     "colorSand": "Sand",
     "colorGray": "Gray",
     "itemTooLong": "Item text must be {{max}} characters or less",
+    "tooManyItems": "A note cannot have more than {{max}} items",
     "itemInvalidChars": "Item text cannot contain < or > characters",
     "titleTooLong": "Title must be {{max}} characters or less",
     "contentTooLong": "Content must be {{max}} characters or less",
