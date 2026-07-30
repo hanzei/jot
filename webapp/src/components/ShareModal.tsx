@@ -46,7 +46,9 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
 
   useEffect(() => {
     if (note && isOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #768
       loadShares();
+      // eslint-disable-next-line react-hooks/immutability -- pre-existing, tracked in #768
       loadUsers();
     }
   }, [note, isOpen, loadShares]);
@@ -59,6 +61,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
         const fullName = `${user.first_name} ${user.last_name}`.toLowerCase();
         return user.username.toLowerCase().includes(q) || fullName.includes(q);
       });
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #768
       setFilteredUsers(filtered);
       setShowSuggestions(filtered.length > 0);
       setSelectedUserIndex(-1);

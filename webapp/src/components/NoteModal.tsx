@@ -611,6 +611,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   // Kept current so the unmount flush below can call the latest onRefresh
   // without re-running (and prematurely firing) on every onRefresh change.
   const onRefreshRef = useRef(onRefresh);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #768
   onRefreshRef.current = onRefresh;
 
   // On unmount (the modal is fully closed — note switches keep it mounted) flush
@@ -874,6 +875,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     class: colorMeta[value]?.class ?? '',
   }));
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- pre-existing, tracked in #768
   const noteDeepLinkHref = useMemo(() => {
     if (!note?.id || !window.matchMedia('(pointer: coarse)').matches) {
       return null;
@@ -1004,6 +1006,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   useEffect(() => {
     if (optimisticImages.length === 0 || !note) return;
     const confirmedIds = new Set((note.images ?? []).map(img => img.id));
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #768
     setOptimisticImages(prev => {
       const next = prev.filter(e => e.noteId !== note.id || !confirmedIds.has(e.image.id));
       return next.length === prev.length ? prev : next;
@@ -2121,6 +2124,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }, 0);
   };
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- pre-existing, tracked in #768
   const collaborators = useMemo<Collaborator[]>(() => {
     if (!note?.is_shared) return [];
     return buildCollaborators(note.user_id, note.shared_with, usersById);
@@ -2459,6 +2463,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
   // Stable ref always holds the latest handler so the listener never goes stale.
   const modalShortcutRef = useRef<((e: KeyboardEvent) => void) | null>(null);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #768
   modalShortcutRef.current = (e: KeyboardEvent) => {
     if (e.defaultPrevented) return;
     if (showDeleteConfirm) return;
