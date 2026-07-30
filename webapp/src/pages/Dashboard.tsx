@@ -276,7 +276,9 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
         }
       })
       .catch(error => {
-        if (isMountedRef.current) {
+        // Same request-id guard as the success path: a superseded request that
+        // fails must not toast over notes a newer request already rendered.
+        if (isMountedRef.current && requestId === loadNotesRequestIdRef.current) {
           console.error('Failed to load notes:', error);
           showToast(t('dashboard.failedLoadNotes'), 'error');
         }

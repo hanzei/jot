@@ -24,6 +24,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
   const [success, setSuccess] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
+  const sharesRequestIdRef = useRef(0);
 
   // Candidate collaborators for the current query, derived during render rather
   // than mirrored into state from an effect.
@@ -46,27 +47,41 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
   // Written as a promise chain rather than an `async` function so state is only
   // ever set from a continuation — an effect may call this without triggering a
   // cascading render (react-hooks/set-state-in-effect).
+  //
+  // The modal stays mounted across note switches, so a slow response for the
+  // note we just left could otherwise land after the new note's and show the
+  // wrong collaborators. The request id discards superseded responses wherever
+  // this is called from, including the handleShare/handleUnshare refreshes.
   const loadShares = useCallback(() => {
     if (!note) return Promise.resolve();
 
+    const requestId = ++sharesRequestIdRef.current;
+    const isCurrent = () => requestId === sharesRequestIdRef.current;
+
     return notes.getShares(note.id)
-      .then(sharesList => { setShares(sharesList || []); })
+      .then(sharesList => { if (isCurrent()) setShares(sharesList || []); })
       .catch(error => {
         console.error('Failed to load shares:', error);
-        setShares([]);
+        if (isCurrent()) setShares([]);
       });
   }, [note]);
 
   useEffect(() => {
     if (!note || !isOpen) return;
 
+    // The user list is only ever fetched here, so an effect-scoped flag is
+    // enough to drop a response whose run has been superseded.
+    let cancelled = false;
+
     loadShares();
     usersApi.search()
-      .then(usersList => { setUsers(usersList || []); })
+      .then(usersList => { if (!cancelled) setUsers(usersList || []); })
       .catch(error => {
         console.error('Failed to load users:', error);
-        setUsers([]);
+        if (!cancelled) setUsers([]);
       });
+
+    return () => { cancelled = true; };
   }, [note, isOpen, loadShares]);
 
   // Handle click outside to close suggestions
