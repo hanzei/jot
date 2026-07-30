@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react';
 import { X, Trash2, ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -17,7 +17,6 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [shares, setShares] = useState<NoteShare[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedUserIndex, setSelectedUserIndex] = useState(-1);
   const [isLoading, setIsLoading] = useState(false);
@@ -25,6 +24,19 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
   const [success, setSuccess] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
+  const sharesRequestIdRef = useRef(0);
+
+  // Candidate collaborators for the current query, derived during render rather
+  // than mirrored into state from an effect.
+  const filteredUsers = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return [];
+    return users.filter(user => {
+      if (shares.some(share => share.shared_with_user_id === user.id)) return false;
+      const fullName = `${user.first_name} ${user.last_name}`.toLowerCase();
+      return user.username.toLowerCase().includes(q) || fullName.includes(q);
+    });
+  }, [searchQuery, users, shares]);
 
   // Softly animate the modal's height when its contents change (a collaborator
   // added/removed, suggestions toggled, or a status message shown/hidden).
@@ -32,45 +44,45 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
     `${shares.length}:${showSuggestions}:${filteredUsers.length}:${!!error}:${!!success}`;
   const panelRef = useSizeTransition<HTMLDivElement>(sizeTransitionKey);
 
-  const loadShares = useCallback(async () => {
-    if (!note) return;
-    
-    try {
-      const sharesList = await notes.getShares(note.id);
-      setShares(sharesList || []);
-    } catch (error) {
-      console.error('Failed to load shares:', error);
-      setShares([]);
-    }
+  // Written as a promise chain rather than an `async` function so state is only
+  // ever set from a continuation — an effect may call this without triggering a
+  // cascading render (react-hooks/set-state-in-effect).
+  //
+  // The modal stays mounted across note switches, so a slow response for the
+  // note we just left could otherwise land after the new note's and show the
+  // wrong collaborators. The request id discards superseded responses wherever
+  // this is called from, including the handleShare/handleUnshare refreshes.
+  const loadShares = useCallback(() => {
+    if (!note) return Promise.resolve();
+
+    const requestId = ++sharesRequestIdRef.current;
+    const isCurrent = () => requestId === sharesRequestIdRef.current;
+
+    return notes.getShares(note.id)
+      .then(sharesList => { if (isCurrent()) setShares(sharesList || []); })
+      .catch(error => {
+        console.error('Failed to load shares:', error);
+        if (isCurrent()) setShares([]);
+      });
   }, [note]);
 
   useEffect(() => {
-    if (note && isOpen) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #768
-      loadShares();
-      // eslint-disable-next-line react-hooks/immutability -- pre-existing, tracked in #768
-      loadUsers();
-    }
-  }, [note, isOpen, loadShares]);
+    if (!note || !isOpen) return;
 
-  useEffect(() => {
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const filtered = users.filter(user => {
-        if (shares.some(share => share.shared_with_user_id === user.id)) return false;
-        const fullName = `${user.first_name} ${user.last_name}`.toLowerCase();
-        return user.username.toLowerCase().includes(q) || fullName.includes(q);
+    // The user list is only ever fetched here, so an effect-scoped flag is
+    // enough to drop a response whose run has been superseded.
+    let cancelled = false;
+
+    loadShares();
+    usersApi.search()
+      .then(usersList => { if (!cancelled) setUsers(usersList || []); })
+      .catch(error => {
+        console.error('Failed to load users:', error);
+        if (!cancelled) setUsers([]);
       });
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #768
-      setFilteredUsers(filtered);
-      setShowSuggestions(filtered.length > 0);
-      setSelectedUserIndex(-1);
-    } else {
-      setFilteredUsers([]);
-      setShowSuggestions(false);
-      setSelectedUserIndex(-1);
-    }
-  }, [searchQuery, users, shares]);
+
+    return () => { cancelled = true; };
+  }, [note, isOpen, loadShares]);
 
   // Handle click outside to close suggestions
   useEffect(() => {
@@ -91,16 +103,6 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
-
-  const loadUsers = async () => {
-    try {
-      const usersList = await usersApi.search();
-      setUsers(usersList || []);
-    } catch (error) {
-      console.error('Failed to load users:', error);
-      setUsers([]);
-    }
-  };
 
   const handleShare = async (userId: string) => {
     if (!note || !userId.trim()) return;
@@ -140,6 +142,16 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
     } catch {
       setError(t('share.failedUnshare'));
     }
+  };
+
+  // Suggestion visibility is driven from the event handlers that can change it
+  // (typing, focus, selection, Escape, click-outside) instead of an effect that
+  // mirrors `searchQuery`. The dropdown additionally renders only when there is
+  // something to show, so an empty result set hides it without extra state.
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    setShowSuggestions(true);
+    setSelectedUserIndex(-1);
   };
 
   const handleUserSelect = (user: User) => {
@@ -232,7 +244,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
                   id="user-search"
                   autoCapitalize="none"
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => handleSearchChange(e.target.value)}
                   onFocus={handleInputFocus}
                   onKeyDown={handleKeyDown}
                   placeholder={t('share.searchUsersPlaceholder')}
@@ -241,7 +253,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
                 />
                 <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 
-                {showSuggestions && (
+                {showSuggestions && filteredUsers.length > 0 && (
                   <div 
                     ref={suggestionsRef}
                     className="absolute z-10 mt-1 w-full bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-md shadow-lg max-h-48 overflow-y-auto scrollbar-subtle"
