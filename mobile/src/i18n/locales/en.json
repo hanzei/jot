@@ -374,6 +374,10 @@
   "share": {
     "searchUsersPlaceholder": "Search users by username...",
     "noUsersFound": "No users found",
+    "recentlySharedWith": "Recently shared with",
+    "allUsers": "All users",
+    "everyoneHasAccess": "Everyone already has access to this note.",
+    "noOtherUsers": "There are no other users to share with.",
     "sharedWith": "Shared with ({{count}})",
     "removeAccess": "Remove access",
     "notSharedYet": "This note is not shared with anyone yet.",

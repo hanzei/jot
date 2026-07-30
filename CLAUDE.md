@@ -192,6 +192,19 @@ not. Run `ls` rather than trusting this tree to be exhaustive.
 └── docker-compose.yml
 ```
 
+### Shared package (`@jot/shared`)
+
+Both consumers compile `shared/src` directly rather than a build artifact, so
+its source has to satisfy the stricter of the two toolchains — the mobile app's
+Babel/Jest setup. In practice that means **avoid syntax Babel lowers into
+`@babel/runtime` helpers**: iterable spread (`[...map.values()]`) and `for...of`
+compile to helper imports that mobile has no dependency on, and the failure is
+not local — every mobile test suite fails to load, because `jest.setup.js`
+imports i18n which imports `@jot/shared`. Prefer `Array.from`, `.forEach`, and
+indexed loops here; the webapp and server are unaffected either way.
+
+Run `task test-mobile` after touching `shared/src`, not just `task test-shared`.
+
 ---
 
 ## Server (Go)

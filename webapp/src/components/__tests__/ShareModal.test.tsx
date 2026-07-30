@@ -120,8 +120,8 @@ describe('ShareModal', () => {
       })
     })
 
-    it('hides suggestions when input is cleared', async () => {
-      mockUsersSearch.mockResolvedValue([mockUser2])
+    it('falls back to the full directory when the input is cleared', async () => {
+      mockUsersSearch.mockResolvedValue([mockUser2, mockUser3])
       const user = userEvent.setup()
       render(<ShareModal {...defaultProps} />)
 
@@ -130,11 +130,13 @@ describe('ShareModal', () => {
       const input = screen.getByRole('textbox')
       await user.type(input, 'ali')
       await waitFor(() => expect(screen.getByText('Alice Smith')).toBeInTheDocument())
+      expect(screen.queryByText('Bob Jones')).not.toBeInTheDocument()
 
       await user.clear(input)
-      await waitFor(() => {
-        expect(screen.queryByText('Alice Smith')).not.toBeInTheDocument()
-      })
+
+      await waitFor(() => expect(screen.getByText(/all users/i)).toBeInTheDocument())
+      expect(screen.getByText('Alice Smith')).toBeInTheDocument()
+      expect(screen.getByText('Bob Jones')).toBeInTheDocument()
     })
 
     it('filters out users who are already shared', async () => {
@@ -153,6 +155,103 @@ describe('ShareModal', () => {
       })
       // Alice is already shared, should not appear as suggestion
       expect(screen.queryAllByText('Alice Smith')).toHaveLength(1) // only in shares list
+    })
+  })
+
+  describe('recent collaborators', () => {
+    // Bob was shared with more recently than Alice, so he leads the recents.
+    const notesList = [
+      createMockNote({
+        id: 'note1',
+        shared_with: [
+          { ...mockShare1, shared_with_user_id: 'user2', created_at: '2024-01-01T00:00:00Z' },
+        ],
+      }),
+      createMockNote({
+        id: 'note2',
+        shared_with: [
+          { ...mockShare1, id: 'share2', note_id: 'note2', shared_with_user_id: 'user3', created_at: '2024-06-01T00:00:00Z' },
+        ],
+      }),
+    ]
+    const recentProps = { ...defaultProps, notesList, currentUserId: 'user1' }
+
+    it('offers recent collaborators on focus, before typing', async () => {
+      mockUsersSearch.mockResolvedValue([mockUser2, mockUser3])
+      const user = userEvent.setup()
+      render(<ShareModal {...recentProps} />)
+
+      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled())
+      await user.click(screen.getByRole('textbox'))
+
+      await waitFor(() => expect(screen.getByText(/recently shared with/i)).toBeInTheDocument())
+      expect(screen.getByText('Bob Jones')).toBeInTheDocument()
+      expect(screen.getByText('Alice Smith')).toBeInTheDocument()
+    })
+
+    it('orders recent collaborators by most recent share, ahead of the rest', async () => {
+      const mockUser4: User = { ...mockUser2, id: 'user4', username: 'aaron', first_name: 'Aaron', last_name: 'Zeta' }
+      mockUsersSearch.mockResolvedValue([mockUser2, mockUser3, mockUser4])
+      const user = userEvent.setup()
+      render(<ShareModal {...recentProps} />)
+
+      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled())
+      await user.click(screen.getByRole('textbox'))
+
+      await waitFor(() => expect(screen.getByText(/recently shared with/i)).toBeInTheDocument())
+
+      // Aaron sorts first alphabetically but has no share history, so he lands
+      // under "All users" behind both recents.
+      const rendered = screen
+        .getAllByText(/Bob Jones|Alice Smith|Aaron Zeta/)
+        .map(el => el.textContent)
+      expect(rendered).toEqual(['Bob Jones', 'Alice Smith', 'Aaron Zeta'])
+    })
+
+    it('ranks recent collaborators first while searching, without group headings', async () => {
+      // Both match "s" (Alice Smith, Bob's username is bob... use a shared match).
+      const mockUser4: User = { ...mockUser2, id: 'user4', username: 'sam', first_name: 'Sam', last_name: 'Adams' }
+      mockUsersSearch.mockResolvedValue([mockUser2, mockUser3, mockUser4])
+      const user = userEvent.setup()
+      render(<ShareModal {...recentProps} />)
+
+      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled())
+      await user.type(screen.getByRole('textbox'), 's')
+
+      await waitFor(() => expect(screen.getByText('Sam Adams')).toBeInTheDocument())
+      expect(screen.queryByText(/recently shared with/i)).not.toBeInTheDocument()
+      expect(screen.queryByText(/all users/i)).not.toBeInTheDocument()
+
+      // Alice is a recent collaborator, Sam is not — recency wins over alphabet.
+      const rendered = screen.getAllByText(/Alice Smith|Sam Adams/).map(el => el.textContent)
+      expect(rendered).toEqual(['Alice Smith', 'Sam Adams'])
+    })
+
+    it('explains an empty dropdown when everyone already has access', async () => {
+      mockGetShares.mockResolvedValue([mockShare1])
+      mockUsersSearch.mockResolvedValue([mockUser2])
+      const user = userEvent.setup()
+      render(<ShareModal {...recentProps} />)
+
+      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled())
+      await user.click(screen.getByRole('textbox'))
+
+      await waitFor(() => {
+        expect(screen.getByText(/everyone already has access/i)).toBeInTheDocument()
+      })
+    })
+
+    it('explains an empty dropdown on a single-user instance', async () => {
+      mockUsersSearch.mockResolvedValue([])
+      const user = userEvent.setup()
+      render(<ShareModal {...recentProps} />)
+
+      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled())
+      await user.click(screen.getByRole('textbox'))
+
+      await waitFor(() => {
+        expect(screen.getByText(/no other users to share with/i)).toBeInTheDocument()
+      })
     })
   })
 

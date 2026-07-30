@@ -2,7 +2,14 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react';
 import { X, Trash2, ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { ROLES, type Note, type NoteShare, type User } from '@jot/shared';
+import {
+  ROLES,
+  buildShareSuggestions,
+  recentShareTargets,
+  type Note,
+  type NoteShare,
+  type User,
+} from '@jot/shared';
 import { notes, users as usersApi } from '@/utils/api';
 import { useSizeTransition } from '@/hooks/useSizeTransition';
 
@@ -10,13 +17,25 @@ interface ShareModalProps {
   note: Note | null;
   isOpen: boolean;
   onClose: () => void;
+  /**
+   * The notes currently loaded by the caller, used to derive who the user last
+   * shared with. Only their embedded `shared_with` records are read, so the
+   * suggestions cost no extra request — but they also only reflect the notes
+   * the caller happens to hold (the current view).
+   */
+  notesList?: Note[];
+  currentUserId?: string;
 }
 
-export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
+export default function ShareModal({ note, isOpen, onClose, notesList, currentUserId }: ShareModalProps) {
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
   const [shares, setShares] = useState<NoteShare[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  // Distinguishes "the directory hasn't arrived yet" from "there is genuinely
+  // nobody left to suggest", so the empty dropdown never accuses a populated
+  // instance of having no other users.
+  const [usersLoaded, setUsersLoaded] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedUserIndex, setSelectedUserIndex] = useState(-1);
   const [isLoading, setIsLoading] = useState(false);
@@ -26,22 +45,47 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
   const suggestionsRef = useRef<HTMLDivElement>(null);
   const sharesRequestIdRef = useRef(0);
 
+  const trimmedQuery = searchQuery.trim();
+  const isSearching = trimmedQuery.length > 0;
+
+  const sharedUserIds = useMemo(
+    () => new Set(shares.map(share => share.shared_with_user_id)),
+    [shares],
+  );
+
+  const recentUserIds = useMemo(
+    () => recentShareTargets(notesList, currentUserId ?? ''),
+    [notesList, currentUserId],
+  );
+
   // Candidate collaborators for the current query, derived during render rather
-  // than mirrored into state from an effect.
-  const filteredUsers = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return [];
-    return users.filter(user => {
-      if (shares.some(share => share.shared_with_user_id === user.id)) return false;
-      const fullName = `${user.first_name} ${user.last_name}`.toLowerCase();
-      return user.username.toLowerCase().includes(q) || fullName.includes(q);
-    });
-  }, [searchQuery, users, shares]);
+  // than mirrored into state from an effect. An empty query is not "no
+  // candidates" but "everyone": the resting state of the dropdown doubles as a
+  // directory, so the common case of sharing with a frequent collaborator never
+  // requires recalling and typing their username.
+  const suggestions = useMemo(() => {
+    const q = trimmedQuery.toLowerCase();
+    const matches = q
+      ? users.filter(user => {
+          const fullName = `${user.first_name} ${user.last_name}`.toLowerCase();
+          return user.username.toLowerCase().includes(q) || fullName.includes(q);
+        })
+      : users;
+    return buildShareSuggestions(matches, recentUserIds, sharedUserIds);
+  }, [trimmedQuery, users, recentUserIds, sharedUserIds]);
+
+  // Render order, flattened. Keyboard selection indexes into this in both
+  // presentations — while searching the two groups are rendered as one ranked
+  // list, so the flat order and the visual order stay identical either way.
+  const orderedSuggestions = useMemo(
+    () => [...suggestions.recent, ...suggestions.others],
+    [suggestions],
+  );
 
   // Softly animate the modal's height when its contents change (a collaborator
   // added/removed, suggestions toggled, or a status message shown/hidden).
   const sizeTransitionKey =
-    `${shares.length}:${showSuggestions}:${filteredUsers.length}:${!!error}:${!!success}`;
+    `${shares.length}:${showSuggestions}:${orderedSuggestions.length}:${!!error}:${!!success}`;
   const panelRef = useSizeTransition<HTMLDivElement>(sizeTransitionKey);
 
   // Written as a promise chain rather than an `async` function so state is only
@@ -75,10 +119,16 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
 
     loadShares();
     usersApi.search()
-      .then(usersList => { if (!cancelled) setUsers(usersList || []); })
+      .then(usersList => {
+        if (cancelled) return;
+        setUsers(usersList || []);
+        setUsersLoaded(true);
+      })
       .catch(error => {
         console.error('Failed to load users:', error);
-        if (!cancelled) setUsers([]);
+        if (cancelled) return;
+        setUsers([]);
+        setUsersLoaded(true);
       });
 
     return () => { cancelled = true; };
@@ -160,13 +210,13 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (!showSuggestions || filteredUsers.length === 0) return;
+    if (!showSuggestions || orderedSuggestions.length === 0) return;
 
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
-        setSelectedUserIndex(prev => 
-          prev < filteredUsers.length - 1 ? prev + 1 : prev
+        setSelectedUserIndex(prev =>
+          prev < orderedSuggestions.length - 1 ? prev + 1 : prev
         );
         break;
       case 'ArrowUp':
@@ -175,8 +225,8 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
         break;
       case 'Enter':
         e.preventDefault();
-        if (selectedUserIndex >= 0 && selectedUserIndex < filteredUsers.length) {
-          handleUserSelect(filteredUsers[selectedUserIndex]);
+        if (selectedUserIndex >= 0 && selectedUserIndex < orderedSuggestions.length) {
+          handleUserSelect(orderedSuggestions[selectedUserIndex]);
         }
         break;
       case 'Escape':
@@ -187,9 +237,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
   };
 
   const handleInputFocus = () => {
-    if (searchQuery.trim() && filteredUsers.length > 0) {
-      setShowSuggestions(true);
-    }
+    setShowSuggestions(true);
   };
 
   const handleClose = () => {
@@ -201,6 +249,51 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
     setSelectedUserIndex(-1);
     onClose();
   };
+
+  // `index` is the row's position in `orderedSuggestions` so that keyboard
+  // selection lines up with the rendered order in the grouped presentation too.
+  const renderSuggestion = (user: User, index: number) => {
+    const hasName = !!(user.first_name || user.last_name);
+    const displayName = hasName
+      ? `${user.first_name} ${user.last_name}`.trim()
+      : user.username;
+    const isAdmin = user.role === ROLES.ADMIN;
+    const secondaryText = hasName
+      ? user.username + (isAdmin ? ' · Admin' : '')
+      : (isAdmin ? 'Admin' : '');
+    return (
+      <div
+        key={user.id}
+        className={`px-3 py-2 cursor-pointer text-sm ${
+          index === selectedUserIndex
+            ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-300'
+            : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-700'
+        }`}
+        onClick={() => handleUserSelect(user)}
+        onMouseEnter={() => setSelectedUserIndex(index)}
+      >
+        <div className="font-medium">{displayName}</div>
+        {secondaryText && (
+          <div className="text-xs text-gray-500 dark:text-gray-400">{secondaryText}</div>
+        )}
+      </div>
+    );
+  };
+
+  const renderGroupHeading = (label: string) => (
+    <div className="px-3 pt-2 pb-1 text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+      {label}
+    </div>
+  );
+
+  // Only meaningful once the directory has loaded and the user is not searching
+  // — a fruitless search keeps its own "no users found" message below the input.
+  const emptySuggestionsMessage =
+    usersLoaded && !isSearching && orderedSuggestions.length === 0
+      ? users.length === 0
+        ? t('share.noOtherUsers')
+        : t('share.everyoneHasAccess')
+      : '';
 
   if (!note) return null;
 
@@ -253,43 +346,45 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
                 />
                 <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 
-                {showSuggestions && filteredUsers.length > 0 && (
-                  <div 
+                {showSuggestions && (orderedSuggestions.length > 0 || emptySuggestionsMessage) && (
+                  <div
                     ref={suggestionsRef}
+                    data-testid="share-suggestions"
                     className="absolute z-10 mt-1 w-full bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-md shadow-lg max-h-48 overflow-y-auto scrollbar-subtle"
                   >
-                    {filteredUsers.map((user, index) => {
-                      const hasName = !!(user.first_name || user.last_name);
-                      const displayName = hasName
-                        ? `${user.first_name} ${user.last_name}`.trim()
-                        : user.username;
-                      const isAdmin = user.role === ROLES.ADMIN;
-                      const secondaryText = hasName
-                        ? user.username + (isAdmin ? ' · Admin' : '')
-                        : (isAdmin ? 'Admin' : '');
-                      return (
-                        <div
-                          key={user.id}
-                          className={`px-3 py-2 cursor-pointer text-sm ${
-                            index === selectedUserIndex
-                              ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-300'
-                              : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-700'
-                          }`}
-                          onClick={() => handleUserSelect(user)}
-                          onMouseEnter={() => setSelectedUserIndex(index)}
-                        >
-                          <div className="font-medium">{displayName}</div>
-                          {secondaryText && (
-                            <div className="text-xs text-gray-500 dark:text-gray-400">{secondaryText}</div>
-                          )}
-                        </div>
-                      );
-                    })}
+                    {isSearching ? (
+                      // Searching is a "find this person" intent, so the groups
+                      // collapse into one ranked list: splitting the matches
+                      // could push an exact match below the fold.
+                      orderedSuggestions.map(renderSuggestion)
+                    ) : (
+                      <>
+                        {suggestions.recent.length > 0 && (
+                          <div data-testid="share-recent-suggestions">
+                            {renderGroupHeading(t('share.recentlySharedWith'))}
+                            {suggestions.recent.map(renderSuggestion)}
+                          </div>
+                        )}
+                        {suggestions.others.length > 0 && (
+                          <div data-testid="share-all-users">
+                            {renderGroupHeading(t('share.allUsers'))}
+                            {suggestions.others.map((user, index) =>
+                              renderSuggestion(user, suggestions.recent.length + index)
+                            )}
+                          </div>
+                        )}
+                        {emptySuggestionsMessage && (
+                          <p className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
+                            {emptySuggestionsMessage}
+                          </p>
+                        )}
+                      </>
+                    )}
                   </div>
                 )}
               </div>
-              
-              {searchQuery && filteredUsers.length === 0 && !isLoading && (
+
+              {isSearching && orderedSuggestions.length === 0 && !isLoading && (
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                   {t('share.noUsersFound', { query: searchQuery })}
                 </p>

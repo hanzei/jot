@@ -1377,6 +1377,8 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
             note={sharingNote}
             isOpen={isShareModalOpen}
             onClose={handleShareModalClose}
+            notesList={notesList}
+            currentUserId={user?.id}
           />
         )}
       </PageContent>
