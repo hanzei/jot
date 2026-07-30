@@ -50,7 +50,10 @@ export function UsersProvider({ children }: { children: React.ReactNode }) {
       // Load from SQLite first for immediate offline display
       try {
         const localUsers = await getLocalUsers(db);
-        if (isMountedRef.current) {
+        // Cancellation is checked as well as mount: sign-out cancels this load and
+        // clears the cache while the provider stays mounted, so publishing here
+        // would refill it with the previous user's collaborators.
+        if (isMountedRef.current && !canceller?.cancelled) {
           setUsersById(buildUsersMap(user, localUsers));
         }
       } catch { /* ignore — server fetch will follow */ }
@@ -63,6 +66,8 @@ export function UsersProvider({ children }: { children: React.ReactNode }) {
         });
         if (!isMountedRef.current || canceller?.cancelled) return;
         await saveUsers(db, users);
+        // Re-check: the persist above is another await the cancel can land in.
+        if (!isMountedRef.current || canceller?.cancelled) return;
         setUsersById(buildUsersMap(user, users));
         // Warm the icon cache opportunistically; errors are non-fatal.
         void refreshIconCacheForUsers(users, getBaseUrl());
