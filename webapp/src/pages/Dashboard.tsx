@@ -66,14 +66,18 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   const [trashCount, setTrashCount] = useState(0);
   const [isEmptyingTrash, setIsEmptyingTrash] = useState(false);
   const [showEmptyTrashConfirm, setShowEmptyTrashConfirm] = useState(false);
-  const initialSearchQuery = searchParams.get('search') ?? '';
-  const [searchQuery, setSearchQueryState] = useState(initialSearchQuery);
-  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(initialSearchQuery);
-  const initialLabel = searchParams.get('label');
-  const [showArchived, setShowArchived] = useState(!initialLabel && searchParams.get('view') === 'archive');
-  const [showBin, setShowBin] = useState(!initialLabel && searchParams.get('view') === 'bin');
-  const [showMyTasks, setShowMyTasks] = useState(!initialLabel && searchParams.get('view') === 'my-tasks');
-  const [selectedLabelId, setSelectedLabelId] = useState<string | null>(initialLabel);
+  const urlSearchQuery = searchParams.get('search') ?? '';
+  const [searchQuery, setSearchQueryState] = useState(urlSearchQuery);
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(urlSearchQuery);
+  // The URL is the single source of truth for which view is on screen, so these
+  // are derived rather than mirrored into state — every action that changes the
+  // view already writes it to the query string.
+  // Label takes precedence over view: if both are present, ignore view.
+  const selectedLabelId = searchParams.get('label');
+  const activeView = selectedLabelId ? null : searchParams.get('view');
+  const showArchived = activeView === 'archive';
+  const showBin = activeView === 'bin';
+  const showMyTasks = activeView === 'my-tasks';
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   // Prefill for a note created via the /new deep link (PWA shortcut or share
@@ -87,7 +91,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   const [sectionActive, setSectionActive] = useState({ pinned: false, other: false, archived: false });
   const user = getUser();
   const isMountedRef = useRef(true);
-  const selectedLabelIdRef = useRef<string | null>(initialLabel);
+  const selectedLabelIdRef = useRef<string | null>(selectedLabelId);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const lastFocusedElementRef = useRef<Element | null>(null);
   const openNoteIdRef = useRef<string | null>(null);
@@ -101,40 +105,33 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
     return () => { isMountedRef.current = false; };
   }, []);
 
-  // Sync local state from URL when navigating via links (e.g., logo click).
-  // Label takes precedence over view — if both are present, ignore view.
-  useEffect(() => {
-    const label = searchParams.get('label');
-    const nextSearch = searchParams.get('search') ?? '';
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #768
-    setSearchQueryState(nextSearch);
+  // The search box can't be derived from the URL — it leads it, and only the
+  // debounced value is written back. So adopt the URL value whenever it changes
+  // underneath us (logo click, back button, a link with ?search=). Adjusting
+  // during render rather than in an effect avoids rendering one frame with the
+  // stale query (react-hooks/set-state-in-effect).
+  const [lastUrlSearchQuery, setLastUrlSearchQuery] = useState(urlSearchQuery);
+  if (lastUrlSearchQuery !== urlSearchQuery) {
+    setLastUrlSearchQuery(urlSearchQuery);
+    setSearchQueryState(urlSearchQuery);
     // URL-driven navigation should update both states immediately.
-    setDebouncedSearchQuery(nextSearch);
-    setShowArchived(!label && searchParams.get('view') === 'archive');
-    setShowBin(!label && searchParams.get('view') === 'bin');
-    setShowMyTasks(!label && searchParams.get('view') === 'my-tasks');
-    setSelectedLabelId(label);
-  }, [searchParams]);
+    setDebouncedSearchQuery(urlSearchQuery);
+  }
+
+  // Leaving the bin cancels a pending empty-trash confirmation. The condition
+  // is false again after the update, so this settles in a single re-render.
+  if (!showBin && showEmptyTrashConfirm) {
+    setShowEmptyTrashConfirm(false);
+  }
 
   useEffect(() => {
     selectedLabelIdRef.current = selectedLabelId;
   }, [selectedLabelId]);
 
-  useEffect(() => {
-    if (!showBin) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #768
-      setShowEmptyTrashConfirm(false);
-    }
-  }, [showBin]);
-
+  // Every caller that clears `searchQuery` clears `debouncedSearchQuery` with
+  // it, so an empty query never has to wait out the debounce here.
   useEffect(() => {
     if (searchQuery === debouncedSearchQuery) {
-      return;
-    }
-
-    if (!searchQuery) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #768
-      setDebouncedSearchQuery('');
       return;
     }
 
@@ -166,12 +163,8 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   }, []);
 
   const handleViewChange = useCallback((view: 'notes' | 'archive' | 'bin' | 'my-tasks') => {
-    setShowArchived(view === 'archive');
-    setShowBin(view === 'bin');
-    setShowMyTasks(view === 'my-tasks');
     setSearchQueryState('');
     setDebouncedSearchQuery('');
-    setSelectedLabelId(null);
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);
       next.delete('search');
@@ -190,6 +183,8 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   }, [setSearchParams]);
 
   const handleLabelClick = useCallback((labelId: string) => {
+    setSearchQueryState('');
+    setDebouncedSearchQuery('');
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);
       next.set('label', labelId);
@@ -216,25 +211,29 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
     })
   );
 
-  const loadUsers = useCallback(async () => {
-    try {
-      const usersData = await usersApi.search();
-      if (isMountedRef.current) {
+  // The loaders below split fetching from committing: the `async` half only
+  // awaits network work and the state updates live in `.then`/`.catch`
+  // continuations, so an effect can call them without setting state
+  // synchronously (react-hooks/set-state-in-effect).
+  const loadUsers = useCallback(() => {
+    return usersApi.search()
+      .then(usersData => {
+        if (!isMountedRef.current) return;
         const map = new Map<string, User>();
         const currentUser = getUser();
         if (currentUser) map.set(currentUser.id, currentUser);
         for (const u of usersData) map.set(u.id, u);
         setUsersById(map);
-      }
-    } catch (error) {
-      if (isMountedRef.current) console.error('Failed to load users:', error);
-    }
+      })
+      .catch(error => {
+        if (isMountedRef.current) console.error('Failed to load users:', error);
+      });
   }, []);
 
-  const loadNotes = useCallback(async () => {
+  const loadNotes = useCallback(() => {
     const requestId = ++loadNotesRequestIdRef.current;
 
-    try {
+    const fetchNotes = async () => {
       let notesData: Note[] = [];
       let nextTrashCount = 0;
 
@@ -266,20 +265,27 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
         }
       }
 
-      if (isMountedRef.current && requestId === loadNotesRequestIdRef.current) {
-        setNotesList(notesData);
-        setTrashCount(nextTrashCount);
-      }
-    } catch (error) {
-      if (isMountedRef.current) {
-        console.error('Failed to load notes:', error);
-        showToast(t('dashboard.failedLoadNotes'), 'error');
-      }
-    } finally {
-      if (isMountedRef.current && requestId === loadNotesRequestIdRef.current) {
-        setLoading(false);
-      }
-    }
+      return { notesData, nextTrashCount };
+    };
+
+    return fetchNotes()
+      .then(({ notesData, nextTrashCount }) => {
+        if (isMountedRef.current && requestId === loadNotesRequestIdRef.current) {
+          setNotesList(notesData);
+          setTrashCount(nextTrashCount);
+        }
+      })
+      .catch(error => {
+        if (isMountedRef.current) {
+          console.error('Failed to load notes:', error);
+          showToast(t('dashboard.failedLoadNotes'), 'error');
+        }
+      })
+      .finally(() => {
+        if (isMountedRef.current && requestId === loadNotesRequestIdRef.current) {
+          setLoading(false);
+        }
+      });
   }, [showArchived, showBin, debouncedSearchQuery, selectedLabelId, showMyTasks, showToast, t]);
 
   // Register Dashboard-specific label callbacks so the layout can notify us
@@ -316,13 +322,11 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   }, [editingNote, isModalOpen, labelsList, selectedLabelId, showArchived, showBin, showMyTasks, t]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #768
-    loadUsers();
+    void loadUsers();
   }, [loadUsers]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #768
-    loadNotes();
+    void loadNotes();
   }, [loadNotes]);
 
   const restoreReturnUrl = useCallback(() => {
@@ -449,7 +453,6 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
           return;
         }
 
-        setSelectedLabelId(null);
         setSearchParams((prev) => {
           if (!prev.has('label')) {
             return prev;
@@ -900,10 +903,15 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
     }
   }, [noteSort, showToast, t]);
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #768
+  // Dismissal is remembered per sort order, so switching sorts re-reads it.
+  // Adjusting during render rather than in an effect avoids showing the warning
+  // for a frame under a sort where it was already dismissed
+  // (react-hooks/set-state-in-effect).
+  const [sortWarningSort, setSortWarningSort] = useState(noteSort);
+  if (sortWarningSort !== noteSort) {
+    setSortWarningSort(noteSort);
     setSortWarningDismissed(isSortWarningDismissed(noteSort));
-  }, [noteSort]);
+  }
 
   const handleDismissSortWarning = useCallback(() => {
     dismissSortWarning(noteSort);
