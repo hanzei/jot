@@ -90,34 +90,45 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
     return `${new Intl.NumberFormat(i18n.resolvedLanguage, { maximumFractionDigits }).format(size)} ${units[unitIndex]}`;
   }, [i18n.resolvedLanguage]);
 
-  const fetchUsers = useCallback(async () => {
-    try {
-      setUsersLoading(true);
-      setUsersLoaded(false);
-      const response = await admin.getUsers();
-      setUsers(response.users || []);
-      setUsersLoaded(true);
-    } catch (err) {
-      setError(t('admin.failedLoadUsers'));
-      console.error(err);
-    } finally {
-      setUsersLoading(false);
-    }
-  }, [t]);
+  // fetchUsers / fetchStats never flip their loading flags on synchronously:
+  // the mount effect below calls them, and a synchronous setState there is a
+  // cascading render (react-hooks/set-state-in-effect). The initial
+  // usersLoading / usersLoaded / statsLoading state already describes the first
+  // load; refreshStats re-arms the flags for event-handler refreshes.
+  const fetchUsers = useCallback(() => (
+    admin.getUsers()
+      .then((response) => {
+        setUsers(response.users || []);
+        setUsersLoaded(true);
+      })
+      .catch((err: unknown) => {
+        setError(t('admin.failedLoadUsers'));
+        console.error(err);
+      })
+      .finally(() => {
+        setUsersLoading(false);
+      })
+  ), [t]);
 
-  const fetchStats = useCallback(async () => {
-    try {
-      setStatsLoading(true);
-      setStatsError('');
-      const response = await admin.getStats();
-      setStats(response);
-    } catch (err) {
-      setStatsError(t('admin.failedLoadStats'));
-      console.error(err);
-    } finally {
-      setStatsLoading(false);
-    }
-  }, [t]);
+  const fetchStats = useCallback(() => (
+    admin.getStats()
+      .then((response) => {
+        setStats(response);
+      })
+      .catch((err: unknown) => {
+        setStatsError(t('admin.failedLoadStats'));
+        console.error(err);
+      })
+      .finally(() => {
+        setStatsLoading(false);
+      })
+  ), [t]);
+
+  const refreshStats = useCallback(() => {
+    setStatsLoading(true);
+    setStatsError('');
+    void fetchStats();
+  }, [fetchStats]);
 
   useEffect(() => {
     void fetchUsers();
@@ -126,7 +137,7 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
 
   const handleCreateUserSuccess = (newUser: User) => {
     setUsers(prev => [newUser, ...prev]);
-    void fetchStats();
+    refreshStats();
   };
 
   const handleRoleToggle = async (targetUser: User) => {
@@ -165,7 +176,7 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
     try {
       await admin.deleteUser(targetUser.id);
       setUsers(prev => prev.filter(u => u.id !== targetUser.id));
-      void fetchStats();
+      refreshStats();
     } catch (err: unknown) {
       if (isAxiosError(err)) {
         const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';

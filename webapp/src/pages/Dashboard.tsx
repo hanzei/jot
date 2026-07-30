@@ -106,6 +106,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   useEffect(() => {
     const label = searchParams.get('label');
     const nextSearch = searchParams.get('search') ?? '';
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #768
     setSearchQueryState(nextSearch);
     // URL-driven navigation should update both states immediately.
     setDebouncedSearchQuery(nextSearch);
@@ -121,6 +122,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
 
   useEffect(() => {
     if (!showBin) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #768
       setShowEmptyTrashConfirm(false);
     }
   }, [showBin]);
@@ -131,6 +133,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
     }
 
     if (!searchQuery) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #768
       setDebouncedSearchQuery('');
       return;
     }
@@ -313,10 +316,12 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   }, [editingNote, isModalOpen, labelsList, selectedLabelId, showArchived, showBin, showMyTasks, t]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #768
     loadUsers();
   }, [loadUsers]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #768
     loadNotes();
   }, [loadNotes]);
 
@@ -896,6 +901,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   }, [noteSort, showToast, t]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #768
     setSortWarningDismissed(isSortWarningDismissed(noteSort));
   }, [noteSort]);
 
