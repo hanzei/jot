@@ -144,6 +144,10 @@ export default function PATsSection() {
           onChangeText={setNewPATName}
           placeholder={t('settings.patsNamePlaceholder')}
           placeholderTextColor={colors.textMuted}
+          // maxLength counts UTF-16 units while the server counts code points, so
+          // astral input is cut early. Accepted here: the limit is generous and a
+          // silently shortened token name is a smaller cost than hand-rolling the
+          // input-level enforcement TextInput gives for free (see issue #772).
           maxLength={VALIDATION.PAT_NAME_MAX_LENGTH}
           returnKeyType="done"
           onSubmitEditing={() => { void handleCreatePAT(); }}

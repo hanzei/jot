@@ -2,7 +2,7 @@ import { useState, useEffect, useEffectEvent, useMemo, useRef, useCallback, type
 import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, GripVertical, Pin, EllipsisVertical, Square } from 'lucide-react';
 import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, IMAGE_MAX_PER_NOTE, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListItems, listToText, type Note, type NoteType, type NoteImage, type CreateNoteRequest, type UpdateNoteRequest, type ConvertNoteTypeRequest, type PatchNoteItemRequest, type NoteItem, type Label, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, IMAGE_MAX_PER_NOTE, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListItems, listToText, exceedsCodePointLimit, truncateToCodePoints, type Note, type NoteType, type NoteImage, type CreateNoteRequest, type UpdateNoteRequest, type ConvertNoteTypeRequest, type PatchNoteItemRequest, type NoteItem, type Label, type User, type Collaborator } from '@jot/shared';
 import { notes, images as imagesApi } from '@/utils/api';
 import { renderMarkdown } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
@@ -78,18 +78,18 @@ export const ROW_REVEAL_CLASSES =
 const validateItemText = (text: string, t: TFunction): string | null => {
   const trimmed = text.trim();
   if (trimmed.length === 0) return null; // Allow empty items (will be removed on save)
-  if (trimmed.length > VALIDATION.ITEM_TEXT_MAX_LENGTH) return t('note.itemTooLong', { max: VALIDATION.ITEM_TEXT_MAX_LENGTH });
+  if (exceedsCodePointLimit(trimmed, VALIDATION.ITEM_TEXT_MAX_LENGTH)) return t('note.itemTooLong', { max: VALIDATION.ITEM_TEXT_MAX_LENGTH });
   if (/[<>]/g.test(trimmed)) return t('note.itemInvalidChars');
   return null;
 };
 
 const validateTitle = (title: string, t: TFunction): string | null => {
-  if (title.length > VALIDATION.TITLE_MAX_LENGTH) return t('note.titleTooLong', { max: VALIDATION.TITLE_MAX_LENGTH });
+  if (exceedsCodePointLimit(title, VALIDATION.TITLE_MAX_LENGTH)) return t('note.titleTooLong', { max: VALIDATION.TITLE_MAX_LENGTH });
   return null;
 };
 
 const validateContent = (content: string, t: TFunction): string | null => {
-  if (content.length > VALIDATION.CONTENT_MAX_LENGTH) return t('note.contentTooLong', { max: VALIDATION.CONTENT_MAX_LENGTH });
+  if (exceedsCodePointLimit(content, VALIDATION.CONTENT_MAX_LENGTH)) return t('note.contentTooLong', { max: VALIDATION.CONTENT_MAX_LENGTH });
   return null;
 };
 
@@ -1668,7 +1668,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     const currentItems = itemsRef.current;
     const insertAfterPos = currentItems.findIndex(item => item.id === currentItem.id);
 
-    const firstLineText = (before + lines[0]).slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH);
+    const firstLineText = truncateToCodePoints(before + lines[0], VALIDATION.ITEM_TEXT_MAX_LENGTH);
 
     const remainingLines = lines.slice(1);
 
@@ -1687,7 +1687,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       const lineText = isLast ? line + after : line;
       return {
         id: generateItemId(),
-        text: lineText.slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH),
+        text: truncateToCodePoints(lineText, VALIDATION.ITEM_TEXT_MAX_LENGTH),
         completed: false,
         position: 0,
         // Pasted lines join the same group as the item they split from.
@@ -2037,7 +2037,10 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
     
     const currentItems = itemsRef.current;
-    const textValue = newText.slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH);
+    // Backstop for the gap between this and validateItemText, which measures
+    // the trimmed text: whitespace padding can push the stored text over the
+    // limit the server enforces on the raw string.
+    const textValue = truncateToCodePoints(newText, VALIDATION.ITEM_TEXT_MAX_LENGTH);
     const updatedItems = currentItems.map(item => {
       if (item.id === itemId) {
         return { ...item, text: textValue };
