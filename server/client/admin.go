@@ -28,9 +28,9 @@ func (c *Client) AdminGetStats(ctx context.Context) (*AdminStatsResponse, error)
 func (c *Client) AdminCreateUser(ctx context.Context, username, password string, role Role) (*User, error) {
 	var user User
 	if err := c.doJSON(ctx, http.MethodPost, "/api/v1/admin/users", map[string]string{
-		"username": username,
-		"password": password,
-		"role":     string(role),
+		paramUsername: username,
+		paramPassword: password,
+		"role":        string(role),
 	}, &user); err != nil {
 		return nil, err
 	}

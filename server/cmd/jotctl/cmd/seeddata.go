@@ -35,7 +35,10 @@ type seedUser struct {
 	notes       []seedNote
 }
 
-const seedPassword = "test"
+const (
+	seedPassword    = "test"
+	seedUsernameBob = "bob"
+)
 
 // seedDataset covers every valid theme (system/light/dark), every NoteSort
 // (manual/updated_at/created_at), and a representative spread of note states.
@@ -56,15 +59,15 @@ var seedDataset = []seedUser{
 					"Install with `npm install`:\n\n```bash\nnpm install\nnpm start\n```\n\n" +
 					"See [the docs](https://example.com) for full reference.",
 				labels:     []string{"work"},
-				shareWith:  []string{"bob"},
+				shareWith:  []string{seedUsernameBob},
 				imageCount: 1, // banner
 			},
 			{
-				noteType:  "text",
+				noteType:  client.NoteTypeText,
 				content:   "Pick up groceries on the way home",
 				pinned:    true,
 				labels:    []string{"personal"},
-				shareWith: []string{"bob"},
+				shareWith: []string{seedUsernameBob},
 			},
 			{
 				noteType:   client.NoteTypeText,
@@ -79,10 +82,10 @@ var seedDataset = []seedUser{
 			},
 			// active list notes (3)
 			{
-				noteType:   "list",
+				noteType:   client.NoteTypeList,
 				title:      "Sprint tasks",
 				labels:     []string{"urgent"},
-				shareWith:  []string{"bob"},
+				shareWith:  []string{seedUsernameBob},
 				imageCount: 2, // grid
 				items: []seedItem{
 					{text: "Review pull requests", completed: true},
@@ -91,7 +94,7 @@ var seedDataset = []seedUser{
 				},
 			},
 			{
-				noteType:              "list",
+				noteType:              client.NoteTypeList,
 				title:                 "Reading list",
 				checkedItemsCollapsed: true,
 				items: []seedItem{
@@ -145,7 +148,7 @@ var seedDataset = []seedUser{
 		},
 	},
 	{
-		username:  "bob",
+		username:  seedUsernameBob,
 		firstName: "Bob",
 		lastName:  "Smith",
 		password:  seedPassword,

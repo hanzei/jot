@@ -394,6 +394,7 @@ func (h *NotesHandler) ImportNotes(w http.ResponseWriter, r *http.Request) (int,
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, 32<<20)
+	//nolint:gosec // r.Body is already bounded by the MaxBytesReader above
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		return http.StatusBadRequest, nil, errors.New("invalid multipart form")
 	}
