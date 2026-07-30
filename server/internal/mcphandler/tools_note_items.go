@@ -59,11 +59,18 @@ func validateItemText(text string) error {
 	return nil
 }
 
-// itemCapError translates the store's cap sentinel into the same message the
-// REST API returns, so both surfaces describe the limit identically.
+// errItemCapExceeded is the message both cap paths report — the pre-check in
+// buildCreateNoteItems and the store's atomic check — kept in one place so they
+// cannot drift. It matches the wording the REST API returns.
+func errItemCapExceeded() error {
+	return fmt.Errorf("note cannot have more than %d items", models.NoteItemsMaxCount)
+}
+
+// itemCapError translates the store's cap sentinel into that message, so both
+// surfaces describe the limit identically.
 func itemCapError(err error) error {
 	if errors.Is(err, models.ErrNoteItemCapExceeded) {
-		return fmt.Errorf("note cannot have more than %d items", models.NoteItemsMaxCount)
+		return errItemCapExceeded()
 	}
 	return err
 }
@@ -88,7 +95,7 @@ func buildCreateNoteItems(specs []createNoteItemSpec) ([]models.NewNoteItem, err
 		return nil, nil
 	}
 	if len(specs) > models.NoteItemsMaxCount {
-		return nil, fmt.Errorf("note cannot have more than %d items", models.NoteItemsMaxCount)
+		return nil, errItemCapExceeded()
 	}
 	items := make([]models.NewNoteItem, 0, len(specs))
 	for i, spec := range specs {
