@@ -220,7 +220,7 @@ func TestDuplicateNoteIdempotency(t *testing.T) {
 
 	t.Run("omitting the body generates a server-side id (backward-compatible)", func(t *testing.T) {
 		ts := setupTestServer(t)
-		user := ts.createTestUser(t, "dupid-noBody", "password123", false)
+		user := ts.createTestUser(t, "dupid-nobody", "password123", false)
 
 		source, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "original"})
 		require.NoError(t, err)

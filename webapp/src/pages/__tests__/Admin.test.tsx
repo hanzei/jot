@@ -193,10 +193,10 @@ describe('Admin', () => {
 
       const usernameInput = within(dialog).getByLabelText('Username')
       await user.type(usernameInput, 'bad*name')
-      expect(within(dialog).queryByText('Username can only contain letters, numbers, underscores, and hyphens')).not.toBeInTheDocument()
+      expect(within(dialog).queryByText('Username can only contain lowercase letters, numbers, underscores, and hyphens')).not.toBeInTheDocument()
 
       await user.tab()
-      expect(within(dialog).getByText('Username can only contain letters, numbers, underscores, and hyphens')).toBeInTheDocument()
+      expect(within(dialog).getByText('Username can only contain lowercase letters, numbers, underscores, and hyphens')).toBeInTheDocument()
     })
 
     it('shows password validation error on blur', async () => {

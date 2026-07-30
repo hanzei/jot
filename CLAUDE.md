@@ -281,6 +281,10 @@ If handler annotations or request/response types change, regenerate docs with `t
 ### API Conventions
 
 - Resource-cap / limit-exceeded conditions (e.g., the per-user PAT cap, the per-note item/image cap) return HTTP 422 Unprocessable Entity, not 400. Reserve 400 for malformed/invalid input.
+- **Creates return 201 Created.** A create that may instead match an existing resource returns 201 when it inserted and 200 when it handed back what was already there — `POST /labels` is the one such endpoint (see below), and the status code is the only signal a client gets about which happened.
+- **`POST /labels` is deliberately get-or-create.** Both clients add labels by typing a name rather than picking an ID, and mobile's offline replay needs the create to be idempotent, so a name that matches an existing label returns it instead of erroring. The client-supplied-ID form is a strict create: a replayed ID is a 409.
+- **Verbs:** `PATCH` for a partial update of a resource; `PUT` for a full replacement of a singleton subresource — `PUT /admin/users/{id}/role` is the model case. `PUT /users/me/password` follows the same spelling by convention even though it is really an action (it requires `current_password`, returns 204, and is not idempotent); it is the deliberate exception, not a precedent to extend. `POST` for creates and for named actions on a resource (`/notes/{id}/duplicate`, `/notes/{id}/restore`).
+- **Usernames are lower case.** Validation rejects anything else (`server/internal/handlers/validation.go`), which is what makes the plain UNIQUE index on `users.username` case-insensitive in effect without an expression index or a per-dialect collation. Login folds its input before the lookup, so typing `Ben` still signs in as `ben`. Keep the rule in sync with `webapp/src/utils/userValidation.ts` and the mobile register/connect screens.
 
 ### Database Migrations
 

@@ -65,7 +65,7 @@
     "registrationFailed": "Registration failed",
     "usernameMin": "Username must be at least 2 characters",
     "usernameMax": "Username must be 30 characters or fewer",
-    "usernameChars": "Username can only contain letters, numbers, underscores, and hyphens",
+    "usernameChars": "Username can only contain lowercase letters, numbers, underscores, and hyphens",
     "usernameEdge": "Username cannot start or end with underscore or hyphen",
     "passwordMin": "Password must be at least {{min}} characters",
     "serverUrlPlaceholder": "Server URL",

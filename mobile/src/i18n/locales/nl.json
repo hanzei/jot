@@ -65,7 +65,7 @@
     "registrationFailed": "Registratie mislukt",
     "usernameMin": "Gebruikersnaam moet minimaal 2 tekens bevatten",
     "usernameMax": "Gebruikersnaam mag niet meer dan 30 tekens bevatten",
-    "usernameChars": "Gebruikersnaam mag alleen letters, cijfers, underscores en koppeltekens bevatten",
+    "usernameChars": "Gebruikersnaam mag alleen kleine letters, cijfers, underscores en koppeltekens bevatten",
     "usernameEdge": "Gebruikersnaam mag niet beginnen of eindigen met een underscore of koppelteken",
     "passwordMin": "Wachtwoord moet minimaal {{min}} tekens bevatten",
     "serverUrlPlaceholder": "Server-URL",

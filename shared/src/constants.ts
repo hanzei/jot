@@ -3,6 +3,15 @@ export const SUPPORTED_LANGUAGES = ['en', 'de', 'es', 'fr', 'pt', 'it', 'nl', 'p
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 export type LanguagePreference = 'system' | SupportedLanguage;
 
+// Usernames are lower case only. That is what makes them case-insensitively
+// unique: the server refuses to store upper case rather than folding on
+// comparison, so "Ben" and "ben" can never be two accounts. Keep in sync with
+// validateUsername in server/internal/handlers/validation.go.
+export const USERNAME_PATTERN = /^[a-z0-9_-]+$/;
+
+// Usernames may not start or end with an underscore or hyphen.
+export const USERNAME_EDGE_PATTERN = /^[_-]|[_-]$/;
+
 export const VALIDATION = {
   TITLE_MAX_LENGTH: 200,
   CONTENT_MAX_LENGTH: 10000,

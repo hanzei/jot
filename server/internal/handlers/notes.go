@@ -264,7 +264,7 @@ func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
 
 func (h *NotesHandler) createNoteLabels(ctx context.Context, noteID, userID string, rawLabels []string) (int, error) {
 	for _, name := range normalizeLabels(rawLabels) {
-		label, err := h.labelStore.GetOrCreateLabel(ctx, userID, name)
+		label, _, err := h.labelStore.GetOrCreateLabel(ctx, userID, name)
 		if err != nil {
 			return http.StatusInternalServerError, fmt.Errorf("get or create label: %w", err)
 		}

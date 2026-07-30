@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/hanzei/jot/server/internal/database/dialect"
@@ -92,6 +93,14 @@ func (s *userStore) Create(ctx context.Context, username, password string) (*Use
 	return &user, nil
 }
 
+// GetByUsername looks up a user by username, folding the argument to lower case
+// first. Stored usernames are lower case by construction (handlers reject
+// anything else, and migration 000010 folded the rows that predate that rule),
+// so folding the lookup key is what lets someone who registered as "ben" sign in
+// by typing "Ben". ASCII is the whole alphabet here — the username character set
+// is [a-z0-9_-] — so strings.ToLower matches the byte comparison the query does
+// on either backend, with none of the Unicode-collation divergence that the
+// label-name fold in internal/database/dialect has to reconcile.
 func (s *userStore) GetByUsername(ctx context.Context, username string) (*User, error) {
 	var user User
 	query := `SELECT id, username, first_name, last_name, password_hash, role,
@@ -99,7 +108,7 @@ func (s *userStore) GetByUsername(ctx context.Context, username string) (*User, 
 			         created_at, updated_at
 			  FROM users WHERE username = ?`
 
-	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), username).Scan(
+	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), strings.ToLower(username)).Scan(
 		&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.PasswordHash,
 		&user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt,
 	)

@@ -113,7 +113,7 @@ func (h *Handler) handleAddLabelToNote(userID string) mcp.ToolHandlerFor[addLabe
 		if in.Name == "" {
 			return toolError("name is required")
 		}
-		label, err := h.labelStore.GetOrCreateLabel(ctx, userID, in.Name)
+		label, _, err := h.labelStore.GetOrCreateLabel(ctx, userID, in.Name)
 		if err != nil {
 			return toolError("get or create label: %w", err)
 		}

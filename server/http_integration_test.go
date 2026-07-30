@@ -111,6 +111,25 @@ func (ts *TestServer) newClient() *client.Client {
 	return client.New(ts.HTTPServer.URL)
 }
 
+// postJSON issues a POST with a JSON body as user and returns the status code.
+// The [client.Client] SDK only surfaces a status code for failures, so tests
+// that distinguish one success code from another go through this instead.
+func (ts *TestServer) postJSON(t *testing.T, user *TestUser, path string, body any) int {
+	t.Helper()
+
+	encoded, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, ts.HTTPServer.URL+path, bytes.NewReader(encoded))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := user.Client.HTTPClient().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	return resp.StatusCode
+}
+
 func (ts *TestServer) createTestUser(t *testing.T, username, password string, isAdmin bool) *TestUser {
 	t.Helper()
 
@@ -305,6 +324,25 @@ func TestRegisterEndpoint(t *testing.T) {
 		_, err := c.Register(t.Context(), "longpwuser", strings.Repeat("a", 73))
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
+
+	t.Run("username containing upper case is rejected", func(t *testing.T) {
+		c := ts.newClient()
+		_, err := c.Register(t.Context(), "MixedCase", "password123")
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+	})
+
+	t.Run("a username taken in another case cannot be registered", func(t *testing.T) {
+		c1 := ts.newClient()
+		_, err := c1.Register(t.Context(), "casetaken", "password123")
+		require.NoError(t, err)
+
+		// Rejected as invalid rather than as a conflict: upper case never
+		// reaches the uniqueness check, which is what keeps "Casetaken" and
+		// "casetaken" from being two accounts.
+		c2 := ts.newClient()
+		_, err = c2.Register(t.Context(), "Casetaken", "password123")
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+	})
 }
 
 func TestRegisterDisabled(t *testing.T) {
@@ -362,6 +400,18 @@ func TestLoginEndpoint(t *testing.T) {
 		loginClient := ts.newClient()
 		_, err := loginClient.Login(t.Context(), "loginuser", "wrongpassword")
 		assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
+	})
+
+	t.Run("username is case-insensitive at login", func(t *testing.T) {
+		// Registration stores lower case only, so typing the username with
+		// capitals must still find the account rather than reading as a wrong
+		// username and failing with 401.
+		for _, typed := range []string{"LoginUser", "LOGINUSER"} {
+			loginClient := ts.newClient()
+			auth, err := loginClient.Login(t.Context(), typed, "password123")
+			require.NoError(t, err, "login with %q", typed)
+			assert.Equal(t, "loginuser", auth.User.Username)
+		}
 	})
 }
 

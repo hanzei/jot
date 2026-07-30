@@ -1,6 +1,4 @@
-import { PASSWORD_MIN_LENGTH, VALIDATION } from '@jot/shared';
-
-const USERNAME_REGEX = /^[a-zA-Z0-9_-]+$/;
+import { PASSWORD_MIN_LENGTH, USERNAME_EDGE_PATTERN, USERNAME_PATTERN, VALIDATION } from '@jot/shared';
 
 export type UsernameValidationErrorCode = 'min' | 'max' | 'chars' | 'edge';
 
@@ -11,15 +9,10 @@ export const getUsernameValidationError = (username: string): UsernameValidation
   if (username.length > VALIDATION.USERNAME_MAX_LENGTH) {
     return 'max';
   }
-  if (!USERNAME_REGEX.test(username)) {
+  if (!USERNAME_PATTERN.test(username)) {
     return 'chars';
   }
-  if (
-    username.startsWith('_') ||
-    username.startsWith('-') ||
-    username.endsWith('_') ||
-    username.endsWith('-')
-  ) {
+  if (USERNAME_EDGE_PATTERN.test(username)) {
     return 'edge';
   }
   return null;

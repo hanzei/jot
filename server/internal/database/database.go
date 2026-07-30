@@ -165,6 +165,20 @@ func runMigrations(db *sql.DB, driverName string) error {
 		return fmt.Errorf("create migrate instance: %w", err)
 	}
 
+	// Migration 000010 folds usernames to lower case and cannot do so while two
+	// accounts differ only by case. Report that up front, while the offending
+	// usernames are still readable, rather than as a bare constraint violation.
+	switch currentVersion, _, versionErr := m.Version(); {
+	case errors.Is(versionErr, migrate.ErrNilVersion):
+		// Brand-new database: no rows exist yet to collide.
+	case versionErr != nil:
+		return fmt.Errorf("read migration version: %w", versionErr)
+	case currentVersion < usernameFoldMigrationVersion:
+		if err := checkUsernameCollisions(context.Background(), db); err != nil {
+			return err
+		}
+	}
+
 	if err := m.Up(); err != nil {
 		if errors.Is(err, migrate.ErrNoChange) {
 			return nil
