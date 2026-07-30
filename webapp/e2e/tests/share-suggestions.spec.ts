@@ -1,4 +1,13 @@
 import { test, expect, uniqueUsername } from '../fixtures';
+import type { APIRequestContext } from '@playwright/test';
+
+async function registerUsers(request: APIRequestContext, usernames: string[]) {
+  for (const username of usernames) {
+    await request.post('/api/v1/register', {
+      data: { username, password: 'testpass123' },
+    });
+  }
+}
 
 /**
  * The share modal's empty-query state. Sharing with someone you already
@@ -16,24 +25,10 @@ test.describe('Share suggestions', () => {
     void authenticatedUser;
     const collaborator = uniqueUsername('recent');
     const stranger = uniqueUsername('stranger');
-
-    for (const username of [collaborator, stranger]) {
-      await request.post('/api/v1/register', {
-        data: { username, password: 'testpass123' },
-      });
-    }
+    await registerUsers(request, [collaborator, stranger]);
 
     await dashboardPage.goto();
-
-    // Establish a share history: share the first note with `collaborator`.
-    await dashboardPage.createNote('First Shared Note');
-    await dashboardPage.openNote('First Shared Note');
-    await dashboardPage.openShareModalFromModal();
-    await page.getByPlaceholder(/search users/i).fill(collaborator);
-    await page.getByText(collaborator).click();
-    await expect(page.getByText(/shared with \(1\)/i)).toBeVisible();
-    await page.keyboard.press('Escape');
-    await page.keyboard.press('Escape');
+    await dashboardPage.createAndShareNote('First Shared Note', collaborator);
 
     // A second note: focusing the field alone should now surface the
     // collaborator, with no typing at all.
@@ -67,22 +62,10 @@ test.describe('Share suggestions', () => {
     const suffix = `${Date.now()}${Math.floor(Math.random() * 9000 + 1000)}`;
     const collaborator = `zmatch${suffix}`;
     const stranger = `amatch${suffix}`;
-
-    for (const username of [collaborator, stranger]) {
-      await request.post('/api/v1/register', {
-        data: { username, password: 'testpass123' },
-      });
-    }
+    await registerUsers(request, [collaborator, stranger]);
 
     await dashboardPage.goto();
-    await dashboardPage.createNote('History Note');
-    await dashboardPage.openNote('History Note');
-    await dashboardPage.openShareModalFromModal();
-    await page.getByPlaceholder(/search users/i).fill(collaborator);
-    await page.getByText(collaborator).click();
-    await expect(page.getByText(/shared with \(1\)/i)).toBeVisible();
-    await page.keyboard.press('Escape');
-    await page.keyboard.press('Escape');
+    await dashboardPage.createAndShareNote('History Note', collaborator);
 
     await dashboardPage.createNote('Search Ranking Note');
     await dashboardPage.openNote('Search Ranking Note');

@@ -227,9 +227,12 @@ describe('ShareScreen empty-query suggestions', () => {
 
     await waitFor(() => expect(screen.getByTestId('share-recent-suggestions')).toBeTruthy());
 
+    // Bob was shared with in May, Carol in February — recency sets the order.
     const recent = screen.getByTestId('share-recent-suggestions');
-    expect(within(recent).getByText('@bob')).toBeTruthy();
-    expect(within(recent).getByText('@carol')).toBeTruthy();
+    const recentOrder = within(recent)
+      .getAllByText(/^@/)
+      .map((node) => [node.props.children].flat().join(''));
+    expect(recentOrder).toEqual(['@bob', '@carol']);
     // Dave has no share history, so he only appears under "All users".
     expect(within(recent).queryByText('@dave')).toBeNull();
     expect(within(screen.getByTestId('share-all-users')).getByText('@dave')).toBeTruthy();

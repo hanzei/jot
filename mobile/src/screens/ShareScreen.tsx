@@ -238,6 +238,21 @@ export default function ShareScreen() {
     [handleShare, pendingUserIds, colors],
   );
 
+  /** One labelled group of the empty-query suggestions; nothing when empty. */
+  const renderSuggestionSection = (title: string, data: User[], testID: string) =>
+    data.length > 0 ? (
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>{title}</Text>
+        <FlatList
+          data={data}
+          keyExtractor={(u) => u.id}
+          renderItem={renderSearchResult}
+          scrollEnabled={false}
+          testID={testID}
+        />
+      </View>
+    ) : null;
+
   const renderSharedUser = useCallback(
     ({ item }: { item: NoteShare }) => (
       <View style={[styles.userRow, { borderBottomColor: colors.borderLight }]} testID={`shared-user-${item.shared_with_user_id}`}>
@@ -330,34 +345,12 @@ export default function ShareScreen() {
           </View>
         ) : (
           <>
-            {suggestions.recent.length > 0 && (
-              <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>
-                  {t('share.recentlySharedWith')}
-                </Text>
-                <FlatList
-                  data={suggestions.recent}
-                  keyExtractor={(u) => u.id}
-                  renderItem={renderSearchResult}
-                  scrollEnabled={false}
-                  testID="share-recent-suggestions"
-                />
-              </View>
+            {renderSuggestionSection(
+              t('share.recentlySharedWith'),
+              suggestions.recent,
+              'share-recent-suggestions',
             )}
-            {suggestions.others.length > 0 && (
-              <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>
-                  {t('share.allUsers')}
-                </Text>
-                <FlatList
-                  data={suggestions.others}
-                  keyExtractor={(u) => u.id}
-                  renderItem={renderSearchResult}
-                  scrollEnabled={false}
-                  testID="share-all-users"
-                />
-              </View>
-            )}
+            {renderSuggestionSection(t('share.allUsers'), suggestions.others, 'share-all-users')}
             {/* An empty directory means it hasn't loaded yet — on a genuinely
                 single-user instance it still holds the signed-in user. */}
             {rankedResults.length === 0 && directoryUsers.length > 0 && (
