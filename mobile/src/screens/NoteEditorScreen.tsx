@@ -261,8 +261,7 @@ export default function NoteEditorScreen() {
   }, [syncToast]);
 
   useEffect(() => {
-    // Grandfathered: clears localized messages when the language changes.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
     setSaveError(null);
     setSyncToast(null);
   }, [i18n.language]);
@@ -324,22 +323,31 @@ export default function NoteEditorScreen() {
 
   // Refs for current state to avoid stale closures in debounced save
   const noteIdRef = useRef(noteId);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   noteIdRef.current = noteId;
   const noteTypeRef = useRef(noteType);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   noteTypeRef.current = noteType;
   const titleRef = useRef(title);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   titleRef.current = title;
   const contentRef = useRef(content);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   contentRef.current = content;
   const itemsRef = useRef(items);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   itemsRef.current = items;
   const checkedItemsCollapsedRef = useRef(checkedItemsCollapsed);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   checkedItemsCollapsedRef.current = checkedItemsCollapsed;
   const pinnedRef = useRef(pinned);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   pinnedRef.current = pinned;
   const archivedRef = useRef(archived);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   archivedRef.current = archived;
   const colorRef = useRef(color);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   colorRef.current = color;
 
   // Zoom transition: animate the whole editor from the tapped card's rect up to
@@ -431,27 +439,38 @@ export default function NoteEditorScreen() {
     };
   }, [originRect, zoom, screenW, screenH]);
   const createMutateRef = useRef(createMutation.mutateAsync);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   createMutateRef.current = createMutation.mutateAsync;
   const updateMutateRef = useRef(updateMutation.mutateAsync);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   updateMutateRef.current = updateMutation.mutateAsync;
   const createItemRef = useRef(createItemMutation.mutateAsync);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   createItemRef.current = createItemMutation.mutateAsync;
   const updateItemRef = useRef(updateItemMutation.mutateAsync);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   updateItemRef.current = updateItemMutation.mutateAsync;
   const deleteItemRef = useRef(deleteItemMutation.mutateAsync);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   deleteItemRef.current = deleteItemMutation.mutateAsync;
   const reorderItemsRef = useRef(reorderItemsMutation.mutateAsync);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   reorderItemsRef.current = reorderItemsMutation.mutateAsync;
   const toggleItemCompletedRef = useRef(toggleItemCompletedMutation.mutateAsync);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   toggleItemCompletedRef.current = toggleItemCompletedMutation.mutateAsync;
   const uncheckAllItemsRef = useRef(uncheckAllItemsMutation.mutateAsync);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   uncheckAllItemsRef.current = uncheckAllItemsMutation.mutateAsync;
   const deleteCompletedItemsRef = useRef(deleteCompletedItemsMutation.mutateAsync);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   deleteCompletedItemsRef.current = deleteCompletedItemsMutation.mutateAsync;
 
   const displayedImageUploadsRef = useRef(displayedImageUploads);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   displayedImageUploadsRef.current = displayedImageUploads;
   const pendingImageUploadsRef = useRef(pendingImageUploads);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   pendingImageUploadsRef.current = pendingImageUploads;
   const imageUploadFilesRef = useRef(new Map<string, ImageUploadFile>());
   const activeImageUploadIdsRef = useRef(new Set<string>());
@@ -628,6 +647,7 @@ export default function NoteEditorScreen() {
   const savedOrderRef = useRef<string[]>([]);
   const savedScalarsRef = useRef({ title: '', content: '', pinned: false, archived: false, color: '#ffffff', checked_items_collapsed: false });
   const isHydratingRef = useRef(initialNoteId !== null && !existingNote);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isHydratingRef.current = initialNoteId !== null && !existingNote;
 
   const titleInputRef = useRef<TextInputType>(null);
@@ -730,8 +750,7 @@ export default function NoteEditorScreen() {
   // now differs from the local ID we hold, and update noteId + route params accordingly.
   useEffect(() => {
     if (existingNote && noteId && existingNote.id !== noteId) {
-      // Grandfathered: adopts the server id once the offline queue drains.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
       setNoteId(existingNote.id);
       navigation.setParams({ noteId: existingNote.id });
     }
@@ -1174,6 +1193,7 @@ export default function NoteEditorScreen() {
   // dependency exactly. (A direct showToast dependency would let an unstable
   // toast identity re-run that effect, and re-fire the flush, on every render.)
   const showToastRef = useRef(showToast);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   showToastRef.current = showToast;
   const flushInBackground = useCallback(() => {
     void flushSave(true)
@@ -2158,6 +2178,7 @@ export default function NoteEditorScreen() {
     [items],
   );
   const itemIndexMapRef = useRef(itemIndexMap);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   itemIndexMapRef.current = itemIndexMap;
 
   const uncheckedItems = useMemo(() => items.filter((item) => !item.completed), [items]);
@@ -2178,8 +2199,10 @@ export default function NoteEditorScreen() {
 
   // Refs to avoid recreating handleListReorder on every items change
   const checkedItemsRef = useRef(checkedItems);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   checkedItemsRef.current = checkedItems;
   const uncheckedItemsRef = useRef(uncheckedItems);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   uncheckedItemsRef.current = uncheckedItems;
 
   // Commits a finished drag: applies the vertical move (if any) and the indent

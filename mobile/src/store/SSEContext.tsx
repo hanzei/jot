@@ -40,8 +40,7 @@ export function SSEProvider({ children }: { children: React.ReactNode }) {
   // stays silent.
   useEffect(() => {
     if (sseStatus !== 'reconnecting') {
-      // Grandfathered: clears the reconnect banner as soon as the stream leaves 'reconnecting'.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
       setSseReconnecting(false);
       return;
     }
@@ -77,6 +76,7 @@ export function useSSEContext(): SSEContextValue {
 export function useSSESubscription(noteId: string | null, onUpdated: () => void): void {
   const context = useContext(SSEContext);
   const onUpdatedRef = useRef(onUpdated);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   onUpdatedRef.current = onUpdated;
 
   React.useEffect(() => {

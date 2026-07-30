@@ -66,6 +66,7 @@ export default function ConnectToServerScreen() {
   const { completeServerUpgrade } = useAuth();
   const { isConnected } = useNetworkStatus();
   const isConnectedRef = useRef(isConnected);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
 
   const [step, setStep] = useState<Step>({ name: 'serverUrl' });

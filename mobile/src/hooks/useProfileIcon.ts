@@ -13,8 +13,7 @@ export function useProfileIcon(
   const [localUri, setLocalUri] = useState<string | null>(null);
 
   useEffect(() => {
-    // Grandfathered: drops the previous URI before the async cache lookup resolves.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
     setLocalUri(null);
     if (!hasProfileIcon || !userId || !iconVersion || !networkUrl) return;
 

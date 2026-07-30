@@ -95,6 +95,7 @@ const CI_WAIT_TIMEOUT_MS = 4000;
 
 function RevalidateConsumer() {
   const { user, isAuthenticated, isLoading, revalidateSession } = useAuth();
+  // eslint-disable-next-line react-hooks/globals -- test probe captures render output by design
   revalidateFn = revalidateSession;
   return (
     <>

@@ -153,8 +153,7 @@ export default function DraggableMasonry({
     sections.forEach((s) => {
       next[s.key] = s.data.map((n) => n.id);
     });
-    // Grandfathered: syncs per-section order from props outside a drag.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
     setOrders(next);
   }, [sections, isDragging]);
 
@@ -168,8 +167,7 @@ export default function DraggableMasonry({
   }, [sections]);
 
   useEffect(() => {
-    // Grandfathered: prunes cached heights for notes no longer in the list.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
     setHeights((prev) => {
       let changed = false;
       const next: Record<string, number> = {};
@@ -193,8 +191,7 @@ export default function DraggableMasonry({
   // reflows immediately. Ids no longer present anywhere in `sections` are
   // dropped so this cache doesn't grow unbounded.
   useEffect(() => {
-    // Grandfathered: commits newly measured heights in per-section batches.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
     setCommittedHeights((prev) => {
       let changed = false;
       const next: Record<string, number> = {};
@@ -277,15 +274,20 @@ export default function DraggableMasonry({
   }, [sections, orders, committedHeights, columnWidth, columns]);
 
   const placedRef = useRef(packedBySection);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   placedRef.current = packedBySection;
   const ordersRef = useRef(orders);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   ordersRef.current = orders;
   const activeIdRef = useRef<string | null>(null);
   const columnWidthRef = useRef(columnWidth);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   columnWidthRef.current = columnWidth;
   const columnsRef = useRef(columns);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   columnsRef.current = columns;
   const sectionKeysRef = useRef(sections.map((s) => s.key));
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   sectionKeysRef.current = sections.map((s) => s.key);
 
   const handleMeasureHeight = useCallback((id: string, height: number) => {
@@ -365,6 +367,7 @@ export default function DraggableMasonry({
     >
       <View style={styles.content} onLayout={handleContentLayout}>
         {columnWidth > 0 &&
+          // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
           sections.map((section, sectionIndex) => {
             const packed = packedBySection[section.key];
             if (!packed) return null;

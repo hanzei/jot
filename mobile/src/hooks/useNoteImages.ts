@@ -33,6 +33,7 @@ export function useUploadNoteImage() {
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
   const isConnectedRef = useRef(isConnected);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
 
   return useMutation({
@@ -115,6 +116,7 @@ export function useDeleteNoteImage() {
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
   const isConnectedRef = useRef(isConnected);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
 
   return useMutation({

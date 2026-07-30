@@ -54,8 +54,7 @@ export default function Banner({
 
   useEffect(() => {
     if (visible) {
-      // Grandfathered: mounts the banner before the fade-in; the exit fade needs the node to outlive visible=false.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
       setShouldRender(true);
     }
     Animated.timing(opacity, {

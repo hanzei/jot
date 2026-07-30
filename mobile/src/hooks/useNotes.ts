@@ -165,6 +165,7 @@ export function useCreateNote() {
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
   const isConnectedRef = useRef(isConnected);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
   const { user } = useAuth();
 
@@ -281,6 +282,7 @@ export function useUpdateNote() {
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
   const isConnectedRef = useRef(isConnected);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
 
   return useMutation({
@@ -417,6 +419,7 @@ export function useConvertNoteType() {
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
   const isConnectedRef = useRef(isConnected);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
 
   return useMutation({
@@ -476,6 +479,7 @@ export function useCreateNoteItem() {
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
   const isConnectedRef = useRef(isConnected);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
 
   return useMutation({
@@ -528,6 +532,7 @@ export function useUpdateNoteItem() {
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
   const isConnectedRef = useRef(isConnected);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
 
   return useMutation({
@@ -563,6 +568,7 @@ export function useDeleteNoteItem() {
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
   const isConnectedRef = useRef(isConnected);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
 
   return useMutation({
@@ -597,6 +603,7 @@ export function useReorderNoteItems() {
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
   const isConnectedRef = useRef(isConnected);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
 
   return useMutation({
@@ -632,6 +639,7 @@ export function useDeleteNote() {
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
   const isConnectedRef = useRef(isConnected);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
 
   return useMutation({
@@ -666,6 +674,7 @@ export function useDuplicateNote() {
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
   const isConnectedRef = useRef(isConnected);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
 
   return useMutation({
@@ -757,6 +766,7 @@ export function useRestoreNote() {
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
   const isConnectedRef = useRef(isConnected);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
 
   return useMutation({
@@ -791,6 +801,7 @@ export function usePermanentDeleteNote() {
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
   const isConnectedRef = useRef(isConnected);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
 
   return useMutation({
@@ -825,6 +836,7 @@ export function useReorderNotes() {
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
   const isConnectedRef = useRef(isConnected);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
 
   return useMutation({
@@ -874,6 +886,7 @@ export function useShareNote() {
   const queryClient = useQueryClient();
   const { isConnected } = useNetworkStatus();
   const isConnectedRef = useRef(isConnected);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
   const { user: currentUser } = useAuth();
 
@@ -940,6 +953,7 @@ export function useUnshareNote() {
   const queryClient = useQueryClient();
   const { isConnected } = useNetworkStatus();
   const isConnectedRef = useRef(isConnected);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
 
   return useMutation({
@@ -988,6 +1002,7 @@ export function useToggleNoteItemCompleted() {
   const queryClient = useQueryClient();
   const { isConnected } = useNetworkStatus();
   const isConnectedRef = useRef(isConnected);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
 
   return useMutation({
@@ -1049,6 +1064,7 @@ export function useUncheckAllItems() {
   const queryClient = useQueryClient();
   const { isConnected } = useNetworkStatus();
   const isConnectedRef = useRef(isConnected);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
 
   return useMutation({
@@ -1110,6 +1126,7 @@ export function useDeleteCompletedItems() {
   const queryClient = useQueryClient();
   const { isConnected } = useNetworkStatus();
   const isConnectedRef = useRef(isConnected);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
 
   return useMutation({

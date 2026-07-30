@@ -32,6 +32,7 @@ export function UsersProvider({ children }: { children: React.ReactNode }) {
   const [usersById, setUsersById] = useState<Map<string, User>>(new Map());
   const isMountedRef = useRef(true);
   const isConnectedRef = useRef(isConnected);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
   // Re-entrancy guard: skip a load while one is already running so the
   // isConnected/mount effect and the SSE-reconnect subscription can't start
@@ -86,8 +87,7 @@ export function UsersProvider({ children }: { children: React.ReactNode }) {
   // resumes once connectivity returns instead of waiting for the next mount.
   useEffect(() => {
     if (!isAuthenticated) {
-      // Grandfathered: empties the user cache on sign-out.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
       setUsersById(new Map());
       return;
     }

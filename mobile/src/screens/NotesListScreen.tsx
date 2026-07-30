@@ -84,6 +84,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sortRequestIdRef = useRef(0);
   const trashCountRef = useRef(0);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   trashCountRef.current = trashCount;
   const { refreshUsers } = useUsers();
 
@@ -99,8 +100,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   }, [searchText]);
 
   useEffect(() => {
-    // Grandfathered: mirrors the persisted sort preference into local state.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
     setSortMode(normalizeNoteSort(settings?.note_sort));
   }, [settings?.note_sort]);
 
@@ -236,8 +236,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
   useEffect(() => {
     let cancelled = false;
-    // Grandfathered: resets before the async dismissed-warning lookup.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
     setSortWarningDismissed(null);
     void isSortWarningDismissed(sortMode).then((dismissed) => {
       if (!cancelled) setSortWarningDismissed(dismissed);
@@ -371,8 +370,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
   // Clear local order overrides when server data, variant, or sort mode changes
   useEffect(() => {
-    // Grandfathered: drops local drag order when server data, variant, or sort changes.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
     setLocalOrder(EMPTY_LOCAL_ORDER);
   }, [notes, variant, sortMode]);
 
@@ -407,8 +405,10 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
   // Refs to avoid stale closures in handleDragEnd
   const displayPinnedRef = useRef(displayPinned);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   displayPinnedRef.current = displayPinned;
   const displayUnpinnedRef = useRef(displayUnpinned);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   displayUnpinnedRef.current = displayUnpinned;
 
   const hasPinned = pinnedNotes.length > 0;

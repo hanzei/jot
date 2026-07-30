@@ -21,8 +21,7 @@ export default function ChangePasswordSection() {
   const [passwordSuccess, setPasswordSuccess] = useState('');
 
   useEffect(() => {
-    // Grandfathered: clears the success message when the language changes.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
     setPasswordSuccess('');
   }, [settings?.language]);
 

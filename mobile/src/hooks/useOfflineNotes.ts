@@ -22,8 +22,10 @@ export function useOfflineNotes(params?: GetNotesParams, options?: { enabled?: b
   const queryClient = useQueryClient();
   const { isConnected } = useNetworkStatus();
   const paramsRef = useRef(params);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   paramsRef.current = params;
   const isConnectedRef = useRef(isConnected);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
   const enabled = options?.enabled ?? true;
   // Re-entrancy guard: skip a resync while one is already running rather than
@@ -113,6 +115,7 @@ export function useOfflineNote(id: string | null) {
   const queryClient = useQueryClient();
   const { isConnected } = useNetworkStatus();
   const isConnectedRef = useRef(isConnected);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
 
   const query = useQuery<Note | null>({
