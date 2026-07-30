@@ -196,14 +196,27 @@ not. Run `ls` rather than trusting this tree to be exhaustive.
 
 Both consumers compile `shared/src` directly rather than a build artifact, so
 its source has to satisfy the stricter of the two toolchains — the mobile app's
-Babel/Jest setup. In practice that means **avoid syntax Babel lowers into
-`@babel/runtime` helpers**: iterable spread (`[...map.values()]`) and `for...of`
-compile to helper imports that mobile has no dependency on, and the failure is
-not local — every mobile test suite fails to load, because `jest.setup.js`
-imports i18n which imports `@jot/shared`. Prefer `Array.from`, `.forEach`, and
-indexed loops here; the webapp and server are unaffected either way.
+Babel/Jest setup. One construct to avoid: **array destructuring**, in either
+form (`.map(([id]) => id)` or `const [a, b] = pair`). Babel lowers it to a
+`@babel/runtime` helper, and that helper is resolved relative to `shared/`,
+which has no `@babel/runtime`. Mobile's copy does not apply —
+`mobile/node_modules/@jot/shared` is a symlink and Node resolves the realpath,
+so the lookup walks up from `shared/` and never reaches `mobile/node_modules`.
+Use index access (`entry[0]`) instead; it compiles to nothing.
 
-Run `task test-mobile` after touching `shared/src`, not just `task test-shared`.
+Iterable spread (`[...map.values()]`), `for...of`, and value imports between
+shared modules are all fine — only destructuring pulls a helper in.
+
+The failure is not local, which makes it hard to place: **every** mobile suite
+fails to *load*, because `jest.setup.js` imports i18n which imports
+`@jot/shared`, and the error names the file's first import line rather than the
+destructuring. Run `task test-mobile` after touching `shared/src`, not just
+`task test-shared`.
+
+(Adding `@babel/runtime` to `shared/` does fix it, and is the lever to reach for
+if this ever constrains real code — but `shared/` has no runtime dependencies
+today, and both consumers would inherit one that exists purely to satisfy
+mobile's transform.)
 
 ---
 
