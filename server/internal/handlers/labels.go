@@ -175,6 +175,9 @@ func (h *LabelsHandler) CreateLabel(w http.ResponseWriter, r *http.Request) (int
 			if errors.Is(err, models.ErrLabelIDConflict) {
 				return http.StatusConflict, nil, errors.New("label already exists")
 			}
+			if errors.Is(err, models.ErrLabelNameConflict) {
+				return http.StatusConflict, nil, errors.New("label name already exists")
+			}
 			return http.StatusInternalServerError, nil, fmt.Errorf("create label: %w", err)
 		}
 	} else {

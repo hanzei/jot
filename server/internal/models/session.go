@@ -104,7 +104,7 @@ func (s *sessionStore) Create(ctx context.Context, userID, userAgent string) (*S
 		userAgent = string(runes[:maxUserAgentLength])
 	}
 
-	now := time.Now()
+	now := Now()
 	expiresAt := now.Add(SessionDuration)
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -155,7 +155,7 @@ func (s *sessionStore) GetByToken(ctx context.Context, rawToken string) (*Sessio
 	var session Session
 	query := `SELECT token_hash, user_id, user_agent, created_at, expires_at FROM sessions WHERE token_hash = ? AND expires_at > ?`
 
-	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), HashSessionToken(rawToken), time.Now()).Scan(
+	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), HashSessionToken(rawToken), Now()).Scan(
 		&session.TokenHash, &session.UserID, &session.UserAgent, &session.CreatedAt, &session.ExpiresAt,
 	)
 	if err != nil {
@@ -171,7 +171,7 @@ func (s *sessionStore) GetByToken(ctx context.Context, rawToken string) (*Sessio
 func (s *sessionStore) GetByUserID(ctx context.Context, userID string) (sessions []*Session, err error) {
 	query := `SELECT token_hash, user_id, user_agent, created_at, expires_at FROM sessions WHERE user_id = ? AND expires_at > ? ORDER BY created_at DESC`
 
-	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), userID, time.Now())
+	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), userID, Now())
 	if err != nil {
 		return nil, fmt.Errorf("failed to get sessions by user ID: %w", err)
 	}
@@ -229,7 +229,7 @@ func (s *sessionStore) DeleteByUserID(ctx context.Context, userID string) error 
 
 func (s *sessionStore) DeleteExpired(ctx context.Context) error {
 	query := `DELETE FROM sessions WHERE expires_at <= ?`
-	result, err := s.db.ExecContext(ctx, s.d.RewritePlaceholders(query), time.Now())
+	result, err := s.db.ExecContext(ctx, s.d.RewritePlaceholders(query), Now())
 	if err != nil {
 		return fmt.Errorf("failed to delete expired sessions: %w", err)
 	}
@@ -242,7 +242,7 @@ func (s *sessionStore) DeleteExpired(ctx context.Context) error {
 // UpdateExpiry extends a session identified by its stored token hash.
 func (s *sessionStore) UpdateExpiry(ctx context.Context, tokenHash string, expiresAt time.Time) error {
 	query := `UPDATE sessions SET expires_at = ? WHERE token_hash = ? AND expires_at > ?`
-	result, err := s.db.ExecContext(ctx, s.d.RewritePlaceholders(query), expiresAt, tokenHash, time.Now())
+	result, err := s.db.ExecContext(ctx, s.d.RewritePlaceholders(query), expiresAt, tokenHash, Now())
 	if err != nil {
 		return fmt.Errorf("failed to update session expiry: %w", err)
 	}

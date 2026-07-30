@@ -276,6 +276,15 @@ func TestNoteValidation(t *testing.T) {
 				"title":     "some title",
 			}))
 		})
+
+		t.Run("unknown note type returns 400", func(t *testing.T) {
+			// The note_type column carries no CHECK on either backend, so this
+			// rejection is the application's alone.
+			assert.Equal(t, http.StatusBadRequest, postNote(t, map[string]any{
+				"note_type": "canvas",
+				"content":   "some content",
+			}))
+		})
 	})
 
 	t.Run("type-field mismatch on update", func(t *testing.T) {

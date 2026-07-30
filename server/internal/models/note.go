@@ -24,6 +24,14 @@ const (
 	NoteItemsMaxCount = 500
 )
 
+// Valid reports whether t is a note type the application understands. Neither
+// backend constrains the note_type column — SQLite never did, and the
+// PostgreSQL CHECK was dropped so the two schemas agree — so this is the only
+// thing keeping an unknown type out of the table.
+func (t NoteType) Valid() bool {
+	return t == NoteTypeText || t == NoteTypeList
+}
+
 var ErrNoteNoAccess = errors.New("no access to note")
 var ErrNoteNotFound = errors.New("note not found")
 var ErrNoteNotOwnedByUser = errors.New("note not found or not owned by user")
@@ -39,6 +47,7 @@ var ErrInvalidParentRef = errors.New("invalid parent reference")
 var ErrNoteImageNotFound = errors.New("note image not found")
 var ErrNoteImageCapExceeded = errors.New("note image limit reached")
 var ErrNoteTypeUnchanged = errors.New("note is already of the requested type")
+var ErrInvalidNoteType = errors.New("invalid note type")
 
 // NoteItemPatch carries the fields that may be changed by a partial single-item
 // update. Nil fields are left untouched (resolved against the item's current

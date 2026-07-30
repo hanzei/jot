@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -68,6 +69,35 @@ func IsolatedDSN(t *testing.T, driver string) string {
 		t.Fatalf("dsntest: unsupported driver %q", driver)
 		return ""
 	}
+}
+
+// IsolatedDSNInTimeZone is IsolatedDSN, except that for postgres the new
+// database's default TimeZone is set to tz, so any session that does not pin
+// its own time zone inherits it. Use it to prove behavior does not depend on
+// the server's time zone. SQLite has no session time zone — its
+// CURRENT_TIMESTAMP is always UTC — so tz is ignored there.
+func IsolatedDSNInTimeZone(t *testing.T, driver, tz string) string {
+	t.Helper()
+
+	dsn := IsolatedDSN(t, driver)
+	if driver != "postgres" {
+		return dsn
+	}
+
+	u, err := url.Parse(dsn)
+	require.NoError(t, err)
+
+	admin, err := sql.Open("postgres", os.Getenv(EnvPostgresDSN))
+	require.NoError(t, err)
+	defer func() { _ = admin.Close() }()
+
+	// #nosec G201 -- both the database name and tz are quoted by pq, and the
+	// name is a generated identifier rather than user input
+	_, err = admin.ExecContext(t.Context(), fmt.Sprintf("ALTER DATABASE %s SET TimeZone TO %s",
+		pq.QuoteIdentifier(strings.TrimPrefix(u.Path, "/")), pq.QuoteLiteral(tz)))
+	require.NoError(t, err)
+
+	return dsn
 }
 
 // RawDB opens a fresh, isolated database for driver with no migrations

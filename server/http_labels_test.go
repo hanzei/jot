@@ -237,6 +237,15 @@ func TestCreateLabelWithClientID(t *testing.T) {
 		require.Error(t, err)
 		assert.Equal(t, http.StatusConflict, client.StatusCode(err))
 	})
+
+	t.Run("name differing only in case with a different ID returns 409", func(t *testing.T) {
+		_, err := user.Client.CreateLabelWithID(t.Context(), "gggggggggggggggggggggg", "CasedName")
+		require.NoError(t, err)
+
+		_, err = user.Client.CreateLabelWithID(t.Context(), "hhhhhhhhhhhhhhhhhhhhhh", "casedname")
+		require.Error(t, err)
+		assert.Equal(t, http.StatusConflict, client.StatusCode(err))
+	})
 }
 
 func TestGetLabelCounts(t *testing.T) {
