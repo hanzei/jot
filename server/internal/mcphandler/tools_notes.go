@@ -24,7 +24,7 @@ func (h *Handler) registerNoteTools(srv *mcp.Server, userID string) {
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "create_note",
-		Description: "Create a new note. Omit optional fields to use their defaults (empty text note, white background, not pinned).",
+		Description: "Create a new note. Omit optional fields to use their defaults (empty text note, white background, not pinned). Supplying items creates a list note; use the note item tools to change them afterwards.",
 	}, h.handleCreateNote(userID))
 
 	mcp.AddTool(srv, &mcp.Tool{
@@ -86,27 +86,61 @@ func (h *Handler) handleGetNote(userID string) mcp.ToolHandlerFor[getNoteInput, 
 
 // -- create_note --------------------------------------------------------------
 
+// createNoteItemSpec is one list item supplied to create_note. It deliberately
+// carries no ID or parent: IDs are server-generated, and nesting is applied
+// afterwards with update_note_item, which can reference the created item IDs.
+type createNoteItemSpec struct {
+	Text      string `json:"text"                jsonschema:"required,Item text"`
+	Completed bool   `json:"completed,omitempty" jsonschema:"Whether the item starts out checked off (default false)"`
+}
+
 type createNoteInput struct {
 	Title    string          `json:"title,omitempty"     jsonschema:"Note title"`
 	Content  string          `json:"content,omitempty"   jsonschema:"Note body text (for text notes)"`
 	NoteType models.NoteType `json:"note_type,omitempty" jsonschema:"Note type: text (default) or list"`
 	Color    string          `json:"color,omitempty"     jsonschema:"Background color as a hex string, e.g. #ffffff"`
+	// Items is ordered: the first entry becomes the first list item.
+	Items []createNoteItemSpec `json:"items,omitempty" jsonschema:"List items in display order. Implies note_type list."`
 }
 
 func (h *Handler) handleCreateNote(userID string) mcp.ToolHandlerFor[createNoteInput, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in createNoteInput) (*mcp.CallToolResult, any, error) {
+		// Items only exist on list notes, so they imply the type — matching the
+		// REST API, which defaults note_type to list when items are supplied.
 		noteType := in.NoteType
-		if noteType == "" {
+		switch {
+		case len(in.Items) > 0 && noteType == "":
+			noteType = models.NoteTypeList
+		case len(in.Items) > 0 && noteType != models.NoteTypeList:
+			return toolError("note_type must be %q when items are provided", models.NoteTypeList)
+		case noteType == "":
 			noteType = models.NoteTypeText
 		}
+
+		items, err := buildCreateNoteItems(in.Items)
+		if err != nil {
+			return toolError("%w", err)
+		}
+
 		color := in.Color
 		if color == "" {
-			color = "#ffffff"
+			color = models.DefaultNoteColor
 		}
-		note, err := h.noteStore.Create(ctx, userID, "", in.Title, in.Content, noteType, color)
+		note, err := h.noteStore.CreateWithItems(ctx, userID, "", in.Title, in.Content, noteType, color, items)
 		if err != nil {
-			return toolError("create note: %w", err)
+			return toolError("create note: %w", itemCapError(err))
 		}
+
+		// CreateWithItems builds its return value from the arguments and does
+		// not read the inserted items back, so refetch to return the note with
+		// its items (and their generated IDs) — the same thing the REST API does.
+		if len(items) > 0 {
+			note, err = h.noteStore.GetByID(ctx, note.ID, userID)
+			if err != nil {
+				return toolError("get created note: %w", err)
+			}
+		}
+
 		data, err := json.Marshal(note)
 		if err != nil {
 			return toolError("marshal note: %w", err)
@@ -170,11 +204,7 @@ func (h *Handler) handleDeleteNote(userID string) mcp.ToolHandlerFor[deleteNoteI
 				return toolError("delete note: %w", err)
 			}
 		}
-		data, err := json.Marshal(map[string]any{"id": in.ID, "deleted": true, "permanent": in.Permanent})
-		if err != nil {
-			return toolError("marshal response: %w", err)
-		}
-		return toolTextResult(data), nil, nil
+		return toolDeletedResult(in.ID, map[string]any{"permanent": in.Permanent})
 	}
 }
 

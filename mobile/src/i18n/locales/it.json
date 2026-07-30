@@ -374,6 +374,10 @@
   "share": {
     "searchUsersPlaceholder": "Cerca utenti per nome...",
     "noUsersFound": "Nessun utente trovato",
+    "recentlySharedWith": "Condiviso di recente con",
+    "allUsers": "Tutti gli utenti",
+    "everyoneHasAccess": "Tutti hanno già accesso a questa nota.",
+    "noOtherUsers": "Non ci sono altri utenti con cui condividere.",
     "sharedWith": "Condiviso con ({{count}})",
     "removeAccess": "Rimuovi accesso",
     "notSharedYet": "Questa nota non è ancora stata condivisa con nessuno.",

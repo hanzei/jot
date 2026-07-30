@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo, useRef, useCallback, type ReactElement, type ReactNode } from 'react';
+import { useState, useEffect, useEffectEvent, useMemo, useRef, useCallback, type ReactElement, type ReactNode } from 'react';
 import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, GripVertical, Pin, EllipsisVertical, Square } from 'lucide-react';
 import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, IMAGE_MAX_PER_NOTE, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListItems, listToText, type Note, type NoteType, type NoteImage, type CreateNoteRequest, type UpdateNoteRequest, type ConvertNoteTypeRequest, type PatchNoteItemRequest, type NoteItem, type Label, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, IMAGE_MAX_PER_NOTE, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListItems, listToText, exceedsCodePointLimit, truncateToCodePoints, type Note, type NoteType, type NoteImage, type CreateNoteRequest, type UpdateNoteRequest, type ConvertNoteTypeRequest, type PatchNoteItemRequest, type NoteItem, type Label, type User, type Collaborator } from '@jot/shared';
 import { notes, images as imagesApi } from '@/utils/api';
 import { renderMarkdown } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
@@ -78,18 +78,18 @@ export const ROW_REVEAL_CLASSES =
 const validateItemText = (text: string, t: TFunction): string | null => {
   const trimmed = text.trim();
   if (trimmed.length === 0) return null; // Allow empty items (will be removed on save)
-  if (trimmed.length > VALIDATION.ITEM_TEXT_MAX_LENGTH) return t('note.itemTooLong', { max: VALIDATION.ITEM_TEXT_MAX_LENGTH });
+  if (exceedsCodePointLimit(trimmed, VALIDATION.ITEM_TEXT_MAX_LENGTH)) return t('note.itemTooLong', { max: VALIDATION.ITEM_TEXT_MAX_LENGTH });
   if (/[<>]/g.test(trimmed)) return t('note.itemInvalidChars');
   return null;
 };
 
 const validateTitle = (title: string, t: TFunction): string | null => {
-  if (title.length > VALIDATION.TITLE_MAX_LENGTH) return t('note.titleTooLong', { max: VALIDATION.TITLE_MAX_LENGTH });
+  if (exceedsCodePointLimit(title, VALIDATION.TITLE_MAX_LENGTH)) return t('note.titleTooLong', { max: VALIDATION.TITLE_MAX_LENGTH });
   return null;
 };
 
 const validateContent = (content: string, t: TFunction): string | null => {
-  if (content.length > VALIDATION.CONTENT_MAX_LENGTH) return t('note.contentTooLong', { max: VALIDATION.CONTENT_MAX_LENGTH });
+  if (exceedsCodePointLimit(content, VALIDATION.CONTENT_MAX_LENGTH)) return t('note.contentTooLong', { max: VALIDATION.CONTENT_MAX_LENGTH });
   return null;
 };
 
@@ -608,11 +608,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   // bar auto-dismisses; it belongs to the current note and is cleared on switch.
   const [recentlyUnchecked, setRecentlyUnchecked] = useState<{ noteId: string; ids: string[]; count: number } | null>(null);
   const uncheckUndoTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  // Kept current so the unmount flush below can call the latest onRefresh
-  // without re-running (and prematurely firing) on every onRefresh change.
-  const onRefreshRef = useRef(onRefresh);
-  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #768
-  onRefreshRef.current = onRefresh;
+  // Always calls the latest onRefresh, so the unmount flush below doesn't have
+  // to re-run (and prematurely fire) on every onRefresh change.
+  const notifyRefresh = useEffectEvent(() => {
+    onRefresh?.();
+  });
 
   // On unmount (the modal is fully closed — note switches keep it mounted) flush
   // any deferred completed-item deletes immediately. The undo bar is gone once
@@ -630,7 +630,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         });
       }
       pending.clear();
-      onRefreshRef.current?.();
+      notifyRefresh();
     };
   }, []);
 
@@ -875,13 +875,15 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     class: colorMeta[value]?.class ?? '',
   }));
 
-  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- pre-existing, tracked in #768
-  const noteDeepLinkHref = useMemo(() => {
-    if (!note?.id || !window.matchMedia('(pointer: coarse)').matches) {
-      return null;
-    }
-    return buildMobileDeepLink(`/notes/${note.id}`, window.location.origin);
-  }, [note?.id]);
+  // Only offered on touch devices, where the mobile app can actually be
+  // installed. Read once on mount: a pointer type doesn't change under a live
+  // modal, and keeping the `window` reads out of render leaves this a plain
+  // derivation of note.id.
+  const [isCoarsePointer] = useState(() => window.matchMedia('(pointer: coarse)').matches);
+  const [appOrigin] = useState(() => window.location.origin);
+  const noteDeepLinkHref = note?.id && isCoarsePointer
+    ? buildMobileDeepLink(`/notes/${note.id}`, appOrigin)
+    : null;
 
   useEffect(() => {
     // Decide whether to adopt the incoming note prop into local editor state.
@@ -999,19 +1001,20 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   }, [optimisticImages]);
 
   // Once note.images actually contains an optimistically-added image (a
-  // later refresh caught up), drop it from the local overlay so it isn't
-  // rendered twice and doesn't grow unbounded across a long session. Only
-  // prunes entries for the currently-open note — entries for a note that's
-  // no longer open are reconciled the next time that note is reopened.
-  useEffect(() => {
-    if (optimisticImages.length === 0 || !note) return;
+  // later refresh caught up), drop it from the local overlay so it doesn't
+  // grow unbounded across a long session. Only prunes entries for the
+  // currently-open note — entries for a note that's no longer open are
+  // reconciled the next time that note is reopened. displayedImages already
+  // ignores confirmed entries, so this is bookkeeping rather than a visual
+  // change; adjusting during render (the pruned result is stable on the next
+  // pass) keeps it out of an effect (react-hooks/set-state-in-effect).
+  if (optimisticImages.length > 0 && note) {
     const confirmedIds = new Set((note.images ?? []).map(img => img.id));
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #768
-    setOptimisticImages(prev => {
-      const next = prev.filter(e => e.noteId !== note.id || !confirmedIds.has(e.image.id));
-      return next.length === prev.length ? prev : next;
-    });
-  }, [note, optimisticImages.length]);
+    const remaining = optimisticImages.filter(e => e.noteId !== note.id || !confirmedIds.has(e.image.id));
+    if (remaining.length !== optimisticImages.length) {
+      setOptimisticImages(remaining);
+    }
+  }
 
   // Revoke any outstanding local preview URLs on unmount. Deliberately does
   // NOT clear pendingImageRemovalsRef's timers — those must keep running so
@@ -1665,15 +1668,26 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     const currentItems = itemsRef.current;
     const insertAfterPos = currentItems.findIndex(item => item.id === currentItem.id);
 
-    const firstLineText = (before + lines[0]).slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH);
+    const firstLineText = truncateToCodePoints(before + lines[0], VALIDATION.ITEM_TEXT_MAX_LENGTH);
 
     const remainingLines = lines.slice(1);
+
+    // Pasting many lines is the one path that can add items in bulk, so it is
+    // where the server-side cap is realistically hit. Reject up front instead
+    // of letting the save fail with a 422 after the items are already on screen.
+    // Checked before building newItems so a huge clipboard payload does not
+    // allocate an object and a generated ID per line only to be discarded.
+    if (currentItems.length + remainingLines.length > VALIDATION.ITEM_MAX_COUNT) {
+      showError(t('note.tooManyItems', { max: VALIDATION.ITEM_MAX_COUNT }));
+      return;
+    }
+
     const newItems: ListItem[] = remainingLines.map((line, i) => {
       const isLast = i === remainingLines.length - 1;
       const lineText = isLast ? line + after : line;
       return {
         id: generateItemId(),
-        text: lineText.slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH),
+        text: truncateToCodePoints(lineText, VALIDATION.ITEM_TEXT_MAX_LENGTH),
         completed: false,
         position: 0,
         // Pasted lines join the same group as the item they split from.
@@ -2023,7 +2037,10 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
     
     const currentItems = itemsRef.current;
-    const textValue = newText.slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH);
+    // Backstop for the gap between this and validateItemText, which measures
+    // the trimmed text: whitespace padding can push the stored text over the
+    // limit the server enforces on the raw string.
+    const textValue = truncateToCodePoints(newText, VALIDATION.ITEM_TEXT_MAX_LENGTH);
     const updatedItems = currentItems.map(item => {
       if (item.id === itemId) {
         return { ...item, text: textValue };
@@ -2124,11 +2141,10 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }, 0);
   };
 
-  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- pre-existing, tracked in #768
   const collaborators = useMemo<Collaborator[]>(() => {
     if (!note?.is_shared) return [];
     return buildCollaborators(note.user_id, note.shared_with, usersById);
-  }, [note?.is_shared, note?.user_id, note?.shared_with, usersById]);
+  }, [note, usersById]);
 
   const assignItem = async (itemId: string, userId: string) => {
     const updatedItems = itemsRef.current.map(item =>
@@ -2461,10 +2477,9 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     });
   };
 
-  // Stable ref always holds the latest handler so the listener never goes stale.
-  const modalShortcutRef = useRef<((e: KeyboardEvent) => void) | null>(null);
-  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #768
-  modalShortcutRef.current = (e: KeyboardEvent) => {
+  // An effect event so the window listener below can be registered once and
+  // still see the latest props/state on every keypress.
+  const handleModalShortcut = useEffectEvent((e: KeyboardEvent) => {
     if (e.defaultPrevented) return;
     if (showDeleteConfirm) return;
 
@@ -2498,10 +2513,10 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       if (!onDelete || !isOwner) return;
       handleDelete();
     }
-  };
+  });
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => modalShortcutRef.current?.(e);
+    const handler = (e: KeyboardEvent) => handleModalShortcut(e);
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, []);

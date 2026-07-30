@@ -53,7 +53,7 @@ import AddImageActionSheet from '../components/AddImageActionSheet';
 import { useUploadNoteImage, useDeleteNoteImage } from '../hooks/useNoteImages';
 import { usePendingImageUploads, useRetryPendingImageUpload, useDismissPendingImageUpload } from '../hooks/usePendingImageUploads';
 import type { ImageUploadFile } from '../api/images';
-import { buildCollaborators, generateId, VALIDATION, IMAGE_MAX_PER_NOTE, type Collaborator, type NoteType, type NoteImage, type CreateNoteRequest, type UpdateNoteRequest, type UpdateListNoteRequest, type UpdateTextNoteRequest, type PatchNoteItemRequest, type Label } from '@jot/shared';
+import { buildCollaborators, generateId, VALIDATION, IMAGE_MAX_PER_NOTE, exceedsCodePointLimit, truncateToCodePoints, type Collaborator, type NoteType, type NoteImage, type CreateNoteRequest, type UpdateNoteRequest, type UpdateListNoteRequest, type UpdateTextNoteRequest, type PatchNoteItemRequest, type Label } from '@jot/shared';
 import { validateImageFile as validateImageFileRaw, IMAGE_MAX_MB } from '../utils/imageValidation';
 import { useAuth } from '../store/AuthContext';
 import { useUsers } from '../store/UsersContext';
@@ -1306,8 +1306,13 @@ export default function NoteEditorScreen() {
 
   const handleTitleChange = useCallback(
     (newTitle: string) => {
-      if (newTitle.length > VALIDATION.TITLE_MAX_LENGTH) return;
-      setTitle(newTitle);
+      // Clamped rather than rejected so a long paste keeps what fits, which is
+      // what the TextInput's maxLength used to do before it was dropped for
+      // counting UTF-16 units instead of code points. Typing past a full title
+      // clamps to the same string, so don't schedule a save for a no-op.
+      const clamped = truncateToCodePoints(newTitle, VALIDATION.TITLE_MAX_LENGTH);
+      if (clamped === titleRef.current) return;
+      setTitle(clamped);
       markDirtyAndScheduleUpdate();
     },
     [markDirtyAndScheduleUpdate],
@@ -1315,7 +1320,7 @@ export default function NoteEditorScreen() {
 
   const handleContentChange = useCallback(
     (newContent: string) => {
-      if (newContent.length > VALIDATION.CONTENT_MAX_LENGTH) return;
+      if (exceedsCodePointLimit(newContent, VALIDATION.CONTENT_MAX_LENGTH)) return;
       setContent(newContent);
       markDirtyAndScheduleUpdate();
     },
@@ -1549,7 +1554,7 @@ export default function NoteEditorScreen() {
       if (!text.includes('\n')) {
         // Clamp like the paste paths below: the server rejects longer item text
         // with a 400, which would wedge the save (or dead-letter it offline).
-        const clamped = text.slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH);
+        const clamped = truncateToCodePoints(text, VALIDATION.ITEM_TEXT_MAX_LENGTH);
         setItems((prev) => prev.map((item, i) => (i === index ? { ...item, text: clamped } : item)));
         markDirtyAndScheduleUpdate();
         return;
@@ -1559,7 +1564,7 @@ export default function NoteEditorScreen() {
       const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
 
       if (lines.length <= 1) {
-        const singleText = (lines[0] ?? '').slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH);
+        const singleText = truncateToCodePoints(lines[0] ?? '', VALIDATION.ITEM_TEXT_MAX_LENGTH);
         setItems((prev) => prev.map((item, i) => (i === index ? { ...item, text: singleText } : item)));
         markDirtyAndScheduleUpdate();
         return;
@@ -1570,7 +1575,7 @@ export default function NoteEditorScreen() {
       if (isCompleted) {
         setItems((prev) =>
           prev.map((item, i) =>
-            i === index ? { ...item, text: lines.join(' ').slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH) } : item,
+            i === index ? { ...item, text: truncateToCodePoints(lines.join(' '), VALIDATION.ITEM_TEXT_MAX_LENGTH) } : item,
           ),
         );
         markDirtyAndScheduleUpdate();
@@ -1585,14 +1590,14 @@ export default function NoteEditorScreen() {
         const sourceParentId = prev[index]?.parentId ?? null;
         const newItems: LocalItem[] = remainingLines.map((line, i) => ({
           id: newIds[i],
-          text: line.slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH),
+          text: truncateToCodePoints(line, VALIDATION.ITEM_TEXT_MAX_LENGTH),
           completed: false,
           position: 0,
           parentId: sourceParentId,
           assigned_to: '',
         }));
         const updated = prev.map((item, i) =>
-          i === index ? { ...item, text: firstLine.slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH) } : item,
+          i === index ? { ...item, text: truncateToCodePoints(firstLine, VALIDATION.ITEM_TEXT_MAX_LENGTH) } : item,
         );
         updated.splice(index + 1, 0, ...newItems);
         return updated.map((item, i) => ({ ...item, position: i }));
@@ -2384,7 +2389,7 @@ export default function NoteEditorScreen() {
 
   const applyToolbarEdit = useCallback((updater: (prev: string) => string) => {
     const next = updater(contentRef.current);
-    if (next === contentRef.current || next.length > VALIDATION.CONTENT_MAX_LENGTH) {
+    if (next === contentRef.current || exceedsCodePointLimit(next, VALIDATION.CONTENT_MAX_LENGTH)) {
       return;
     }
     setContent(next);
@@ -2560,7 +2565,6 @@ export default function NoteEditorScreen() {
             autoFocus={openedAsNewList}
             placeholder={t('note.titlePlaceholder')}
             placeholderTextColor={hasNoteColor ? '#999' : colors.placeholder}
-            maxLength={VALIDATION.TITLE_MAX_LENGTH}
             returnKeyType="next"
             onSubmitEditing={handleTitleSubmit}
             blurOnSubmit={false}

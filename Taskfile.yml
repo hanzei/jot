@@ -1,6 +1,12 @@
 version: "3"
 
 tasks:
+  # Convenience alias only — on a fresh checkout `task` itself does not exist
+  # yet, so the script has to be runnable directly: ./scripts/bootstrap.sh
+  bootstrap:
+    desc: Install task and npm dependencies for a checkout (idempotent)
+    cmd: ./scripts/bootstrap.sh
+
   run-server:
     desc: Start the Jot server
     dir: server
@@ -109,9 +115,15 @@ tasks:
 
   test-e2e:
     desc: Run end-to-end tests
-    deps: [warm-server-build]
     dir: webapp
-    cmd: npm run test:e2e -- {{.CLI_ARGS}}
+    cmds:
+      # Browsers are not part of bootstrap (too slow for the many sessions that
+      # never run e2e), so check here first: a missing or version-mismatched
+      # Chromium otherwise surfaces as every spec failing with "Executable
+      # doesn't exist at ...".
+      - ../scripts/check-playwright-browser.sh
+      - task: warm-server-build
+      - npm run test:e2e -- {{.CLI_ARGS}}
 
   # Playwright's webServer runs `go run main.go` under a fixed startup
   # timeout. Compiling the server here first means that step hits a warm

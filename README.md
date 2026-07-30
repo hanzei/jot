@@ -94,28 +94,56 @@ compiled web app, while SQLite keeps the default deployment small and portable.
    cd jot
    ```
 
-2. **Build and run** (recommended for most development):
+2. **Bootstrap the checkout**:
    ```bash
-   # Build the frontend.
-   cd webapp
-   npm ci
-   npm run build
-   cd ..
-
-   # Start the server, which serves both API and frontend.
-   cd server
-   JOT_COOKIE_SECURE=false go run main.go
+   ./scripts/bootstrap.sh
    ```
+
+   See [Bootstrap script](#bootstrap-script) below for what it does.
+
+3. **Build and run** (recommended for most development):
+   ```bash
+   task build-webapp   # Build the frontend into webapp/build.
+   task run-server     # Start the server, which serves both API and frontend.
+   ```
+
+### Bootstrap script
+
+`scripts/bootstrap.sh` is the single source of truth for local setup. It:
+
+- installs [Task](https://taskfile.dev/) if it is missing — every documented
+  command below goes through it, so it cannot itself be installed with a task;
+- runs `npm ci` in `shared/` → `webapp/` → `mobile/`, in that order (`@jot/shared`
+  is a `file:../shared` dependency of the other two), skipping any package that
+  already has `node_modules`;
+- warns when Node or Go is older than this repo expects, without changing either.
+
+It is idempotent, so re-running it on a provisioned checkout is close to a no-op.
+That cuts both ways: because it skips any package that already has
+`node_modules`, it will **not** pick up dependency changes after a pull — when a
+lockfile moves, run `npm ci` in the affected package yourself. Two escape
+hatches: `JOT_BOOTSTRAP_SKIP=1` skips everything, `JOT_BOOTSTRAP_SKIP_NPM=1`
+skips just the npm installs.
+
+It deliberately does **not** download Playwright browsers (the slowest step, and
+most work never touches e2e) and does **not** install or switch Node/Go versions.
+`nix-shell` and Claude Code's `SessionStart` hook both run this script rather than
+carrying their own copy of the setup steps.
 
 ### Task Automation
 
-This project includes a [Taskfile](https://taskfile.dev/) for common development tasks:
+This project includes a [Taskfile](https://taskfile.dev/) for common development
+tasks. `scripts/bootstrap.sh` installs it. To do it by hand instead, use the
+version the script pins (`TASK_VERSION` at the top of `scripts/bootstrap.sh`)
+rather than `@latest`, so every checkout runs the same Task:
 
 ```bash
-# Install Task (if not already installed)
-go install github.com/go-task/task/v3/cmd/task@latest
+go install github.com/go-task/task/v3/cmd/task@<TASK_VERSION>
+```
 
+```bash
 # Available commands (task --list for the full set)
+task bootstrap       # Install task + npm dependencies (same as scripts/bootstrap.sh)
 task run-server      # Start the Jot server
 task run-webapp      # Start webapp dev server with HMR
 task check           # Pre-PR gate: lint + all tests except e2e
@@ -148,7 +176,13 @@ task test-webapp -- src/utils             # one Vitest path
 task test-e2e -- notes.spec.ts            # one Playwright spec
 ```
 
-3. **Access the application**:
+`task test-e2e` needs the Chromium build that the pinned `@playwright/test`
+expects. Bootstrap does not download it, so the first run on a new machine stops
+with the install command (`cd webapp && npx playwright install chromium`) instead
+of failing every spec. Check it on its own with
+`./scripts/check-playwright-browser.sh`.
+
+4. **Access the application**:
    - Open `http://localhost:8080` in your browser
    - Register your first account with a username and password (becomes admin automatically)
    - Open the Admin page to view the instance overview cards and manage users
@@ -324,8 +358,12 @@ task build-jotctl
 ./server/jotctl users list
 ./server/jotctl users create --username alice --password change-me
 ./server/jotctl users set-role <user-id> admin
-./server/jotctl seed
+./server/jotctl dev seed
 ```
+
+Development-only helpers live under `jotctl dev`: `dev seed` adds test data and
+`dev reset` deletes all non-admin users and every note. Do not run them against
+a production server.
 
 Useful environment variables:
 

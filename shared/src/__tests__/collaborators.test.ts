@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildCollaborators, displayName } from '../collaborators';
+import { buildCollaborators, buildShareSuggestions, displayName, recentShareTargets } from '../collaborators';
 import type { Collaborator } from '../collaborators';
 import type { User, NoteShare } from '../types';
 
@@ -179,5 +179,132 @@ describe('buildCollaborators', () => {
     const result = buildCollaborators('owner-id', shares, usersById);
 
     expect(result[1].hasProfileIcon).toBe(true);
+  });
+});
+
+function makeNote(shares: Partial<NoteShare>[]): { shared_with: NoteShare[] } {
+  return {
+    shared_with: shares.map((s, i) =>
+      makeShare({ shared_with_user_id: `user-${i}`, ...s }),
+    ),
+  };
+}
+
+describe('recentShareTargets', () => {
+  it('orders collaborators by most recent share', () => {
+    const notes = [
+      makeNote([{ shared_with_user_id: 'bob', created_at: '2026-01-01T10:00:00Z' }]),
+      makeNote([{ shared_with_user_id: 'carol', created_at: '2026-03-01T10:00:00Z' }]),
+      makeNote([{ shared_with_user_id: 'dave', created_at: '2026-02-01T10:00:00Z' }]),
+    ];
+
+    expect(recentShareTargets(notes, 'owner')).toEqual(['carol', 'dave', 'bob']);
+  });
+
+  it('deduplicates a collaborator to their most recent share', () => {
+    const notes = [
+      makeNote([{ shared_with_user_id: 'bob', created_at: '2026-01-01T10:00:00Z' }]),
+      makeNote([{ shared_with_user_id: 'carol', created_at: '2026-02-01T10:00:00Z' }]),
+      makeNote([{ shared_with_user_id: 'bob', created_at: '2026-03-01T10:00:00Z' }]),
+    ];
+
+    expect(recentShareTargets(notes, 'owner')).toEqual(['bob', 'carol']);
+  });
+
+  it('ignores shares the current user did not create', () => {
+    const notes = [
+      makeNote([
+        { shared_with_user_id: 'bob', shared_by_user_id: 'someone-else', created_at: '2026-03-01T10:00:00Z' },
+        { shared_with_user_id: 'carol', shared_by_user_id: 'owner', created_at: '2026-01-01T10:00:00Z' },
+      ]),
+    ];
+
+    expect(recentShareTargets(notes, 'owner')).toEqual(['carol']);
+  });
+
+  it('caps the result at the requested limit', () => {
+    const notes = [
+      makeNote([
+        { shared_with_user_id: 'a', created_at: '2026-01-05T10:00:00Z' },
+        { shared_with_user_id: 'b', created_at: '2026-01-04T10:00:00Z' },
+        { shared_with_user_id: 'c', created_at: '2026-01-03T10:00:00Z' },
+      ]),
+    ];
+
+    expect(recentShareTargets(notes, 'owner', 2)).toEqual(['a', 'b']);
+  });
+
+  it('defaults to at most five collaborators', () => {
+    const notes = [
+      makeNote(
+        Array.from({ length: 8 }, (_, i) => ({
+          shared_with_user_id: `user-${i}`,
+          created_at: `2026-01-0${i + 1}T10:00:00Z`,
+        })),
+      ),
+    ];
+
+    expect(recentShareTargets(notes, 'owner')).toHaveLength(5);
+  });
+
+  it('handles notes without shares, and missing input', () => {
+    expect(recentShareTargets([{}, { shared_with: [] }], 'owner')).toEqual([]);
+    expect(recentShareTargets(undefined, 'owner')).toEqual([]);
+    expect(recentShareTargets([makeNote([{ shared_with_user_id: 'bob' }])], '')).toEqual([]);
+  });
+
+  it('does not crash on unparsable timestamps', () => {
+    const notes = [
+      makeNote([{ shared_with_user_id: 'bob', created_at: 'not-a-date' }]),
+      makeNote([{ shared_with_user_id: 'carol', created_at: '2026-01-01T10:00:00Z' }]),
+    ];
+
+    expect(recentShareTargets(notes, 'owner')).toEqual(['carol', 'bob']);
+  });
+});
+
+describe('buildShareSuggestions', () => {
+  const alice = makeUser({ id: 'alice', username: 'alice' });
+  const bob = makeUser({ id: 'bob', username: 'bob', first_name: 'Bob', last_name: 'Smith' });
+  const carol = makeUser({ id: 'carol', username: 'carol' });
+
+  it('puts recent collaborators first, in the order given', () => {
+    const { recent, others } = buildShareSuggestions(
+      [alice, bob, carol],
+      ['carol', 'alice'],
+      new Set(),
+    );
+
+    expect(recent.map(u => u.id)).toEqual(['carol', 'alice']);
+    expect(others.map(u => u.id)).toEqual(['bob']);
+  });
+
+  it('sorts the remaining users by display name, not username', () => {
+    // Bob sorts under "Bob Smith", ahead of carol, despite the usernames.
+    const { others } = buildShareSuggestions([carol, bob, alice], [], new Set());
+
+    expect(others.map(u => u.id)).toEqual(['alice', 'bob', 'carol']);
+  });
+
+  it('excludes users in the excluded set from both groups', () => {
+    const { recent, others } = buildShareSuggestions(
+      [alice, bob, carol],
+      ['alice'],
+      new Set(['alice', 'bob']),
+    );
+
+    expect(recent).toEqual([]);
+    expect(others.map(u => u.id)).toEqual(['carol']);
+  });
+
+  it('drops recent IDs that are no longer share candidates', () => {
+    const { recent, others } = buildShareSuggestions([alice], ['deleted-user', 'alice'], new Set());
+
+    expect(recent.map(u => u.id)).toEqual(['alice']);
+    expect(others).toEqual([]);
+  });
+
+  it('returns empty groups for an empty candidate list', () => {
+    expect(buildShareSuggestions([], ['alice'], new Set())).toEqual({ recent: [], others: [] });
   });
 });

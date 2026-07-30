@@ -69,6 +69,20 @@ type resetSummary struct {
 	NotesDeleted int `json:"notes_deleted"`
 }
 
+// newDevCmd groups the development-only commands. They are namespaced under
+// `jotctl dev` rather than exposed at the top level so they are not part of
+// the stable admin command surface, and so the destructive `reset` cannot be
+// reached by a stray tab-completion next to `jotctl users`.
+func (a *App) newDevCmd() *cobra.Command {
+	devCmd := &cobra.Command{
+		Use:   "dev",
+		Short: "Development-only helpers (test data; not for production use)",
+	}
+	devCmd.AddCommand(a.newSeedCmd())
+	devCmd.AddCommand(a.newResetCmd())
+	return devCmd
+}
+
 func (a *App) newSeedCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "seed",

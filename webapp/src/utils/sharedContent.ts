@@ -1,4 +1,4 @@
-import { VALIDATION } from '@jot/shared';
+import { VALIDATION, truncateToCodePoints } from '@jot/shared';
 
 export interface SharedContentParams {
   title?: string | null;
@@ -20,5 +20,5 @@ export function buildSharedContent({ title, text, url }: SharedContentParams): s
   if (trimmedUrl && trimmedUrl !== trimmedText && trimmedUrl !== trimmedTitle) parts.push(trimmedUrl);
 
   const combined = parts.join('\n\n').trim();
-  return combined.slice(0, VALIDATION.CONTENT_MAX_LENGTH);
+  return truncateToCodePoints(combined, VALIDATION.CONTENT_MAX_LENGTH);
 }

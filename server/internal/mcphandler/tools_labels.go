@@ -15,9 +15,9 @@ func (h *Handler) registerLabelTools(srv *mcp.Server, userID string) {
 	}, h.handleListLabels(userID))
 
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "rename_label",
-		Description: "Rename an existing label.",
-	}, h.handleRenameLabel(userID))
+		Name:        "update_label",
+		Description: "Update an existing label. The name is the only editable field.",
+	}, h.handleUpdateLabel(userID))
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "delete_label",
@@ -53,15 +53,15 @@ func (h *Handler) handleListLabels(userID string) mcp.ToolHandlerFor[listLabelsI
 	}
 }
 
-// -- rename_label -------------------------------------------------------------
+// -- update_label -------------------------------------------------------------
 
-type renameLabelInput struct {
+type updateLabelInput struct {
 	ID   string `json:"id"   jsonschema:"required,Label ID"`
 	Name string `json:"name" jsonschema:"required,New label name"`
 }
 
-func (h *Handler) handleRenameLabel(userID string) mcp.ToolHandlerFor[renameLabelInput, any] {
-	return func(ctx context.Context, _ *mcp.CallToolRequest, in renameLabelInput) (*mcp.CallToolResult, any, error) {
+func (h *Handler) handleUpdateLabel(userID string) mcp.ToolHandlerFor[updateLabelInput, any] {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, in updateLabelInput) (*mcp.CallToolResult, any, error) {
 		if in.ID == "" {
 			return toolError("id is required")
 		}
@@ -70,7 +70,7 @@ func (h *Handler) handleRenameLabel(userID string) mcp.ToolHandlerFor[renameLabe
 		}
 		label, err := h.labelStore.RenameLabel(ctx, in.ID, userID, in.Name)
 		if err != nil {
-			return toolError("rename label: %w", err)
+			return toolError("update label: %w", err)
 		}
 		data, err := json.Marshal(label)
 		if err != nil {
@@ -94,11 +94,7 @@ func (h *Handler) handleDeleteLabel(userID string) mcp.ToolHandlerFor[deleteLabe
 		if err := h.labelStore.DeleteLabel(ctx, in.ID, userID); err != nil {
 			return toolError("delete label: %w", err)
 		}
-		data, err := json.Marshal(map[string]any{"id": in.ID, "deleted": true})
-		if err != nil {
-			return toolError("marshal response: %w", err)
-		}
-		return toolTextResult(data), nil, nil
+		return toolDeletedResult(in.ID, nil)
 	}
 }
 

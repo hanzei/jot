@@ -28,4 +28,14 @@ describe('buildSharedContent', () => {
     const result = buildSharedContent({ text: long });
     expect(result.length).toBe(VALIDATION.CONTENT_MAX_LENGTH);
   });
+
+  it('caps by code point and keeps astral characters whole', () => {
+    // Shared text is a prime source of emoji. A UTF-16 slice would cut the
+    // last one in half, and the lone surrogate becomes U+FFFD on save.
+    const long = `a${'\u{1F600}'.repeat(VALIDATION.CONTENT_MAX_LENGTH)}`;
+    const result = buildSharedContent({ text: long });
+
+    expect([...result]).toHaveLength(VALIDATION.CONTENT_MAX_LENGTH);
+    expect(result).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/);
+  });
 });

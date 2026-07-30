@@ -1,4 +1,4 @@
-import { VALIDATION } from '@jot/shared';
+import { VALIDATION, truncateToCodePoints } from '@jot/shared';
 
 // Minimal shape of the payload delivered by expo-share-intent. Kept local (and
 // independent of the library types) so this helper stays pure and unit-testable
@@ -33,5 +33,5 @@ export function extractSharedText(shareIntent: ShareIntentLike | null | undefine
     return null;
   }
 
-  return combined.slice(0, VALIDATION.CONTENT_MAX_LENGTH);
+  return truncateToCodePoints(combined, VALIDATION.CONTENT_MAX_LENGTH);
 }
