@@ -626,4 +626,19 @@ export class DashboardPage {
     await this.page.getByText(username).click();
     await this.page.keyboard.press('Escape');
   }
+
+  /**
+   * Creates a note and shares it, leaving a share-history record behind.
+   *
+   * Waits for the collaborator avatar to appear on the card before returning:
+   * the share is only useful to a caller once it is reflected in the notes
+   * list, and `shareNoteWithUser` closes the modal without waiting for the
+   * request to land.
+   */
+  async createAndShareNote(noteTitle: string, username: string) {
+    await this.createNote(noteTitle);
+    await this.shareNoteWithUser(noteTitle, username);
+    const card = this.page.locator('[data-testid="note-card"]').filter({ hasText: noteTitle });
+    await expect(card.locator('svg[role="img"], img[alt]').first()).toBeVisible();
+  }
 }

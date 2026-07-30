@@ -719,6 +719,61 @@ describe('NoteModal', () => {
       expect(screen.getByText(/Item text must be 500 characters or less/)).toBeInTheDocument()
     })
 
+    it('measures item length in code points, not UTF-16 units', async () => {
+      renderNoteModal(defaultProps)
+
+      fireEvent.click(screen.getByText('List'))
+      fireEvent.click(screen.getByText('Add item'))
+
+      // 300 emoji is 600 UTF-16 units but only 300 code points, which is what
+      // the server counts — it accepts this, so the client must too.
+      const itemInput = screen.getByTestId('list-item-input')
+      const emojiText = '😀'.repeat(300)
+      fireEvent.change(itemInput, { target: { value: emojiText } })
+
+      expect(screen.queryByText(/Item text must be 500 characters or less/)).not.toBeInTheDocument()
+      expect(itemInput).toHaveValue(emojiText)
+    })
+
+    it('does not split a surrogate pair when truncating pasted item text', async () => {
+      renderNoteModal(defaultProps)
+
+      fireEvent.click(screen.getByText('List'))
+      fireEvent.click(screen.getByText('Add item'))
+
+      // The leading 'a' makes the 500th UTF-16 unit land between the halves of
+      // an emoji, so a .slice truncation leaves a lone surrogate — ill-formed
+      // UTF-16 that Go replaces with U+FFFD on save, silently corrupting the
+      // stored text. Truncating by code point keeps every emoji whole.
+      const longLine = `a${'😀'.repeat(600)}`
+      fireEvent.paste(screen.getByTestId('list-item-input'), {
+        clipboardData: { getData: () => `${longLine}\n${longLine}` },
+      })
+
+      const values = screen.getAllByTestId('list-item-input').map(el => (el as HTMLTextAreaElement).value)
+      expect(values.length).toBeGreaterThan(1)
+      for (const value of values) {
+        expect(value).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/)
+        expect([...value]).toHaveLength(VALIDATION.ITEM_TEXT_MAX_LENGTH)
+      }
+    })
+
+    it('measures title length in code points, not UTF-16 units', async () => {
+      renderNoteModal(defaultProps)
+
+      fireEvent.click(screen.getByText('List'))
+
+      // 150 emoji is 300 UTF-16 units but only 150 code points, so the server
+      // accepts it. The input is controlled and its onChange bails out on a
+      // validation error, so a rejected title never reaches the value.
+      const titleInput = screen.getByPlaceholderText('Note title...')
+      const emojiTitle = '😀'.repeat(150)
+      fireEvent.change(titleInput, { target: { value: emojiTitle } })
+
+      expect(screen.queryByText(/Title must be 200 characters or less/)).not.toBeInTheDocument()
+      expect(titleInput).toHaveValue(emojiTitle)
+    })
+
     it('shows error messages for validation failures', async () => {
       renderNoteModal(defaultProps)
 

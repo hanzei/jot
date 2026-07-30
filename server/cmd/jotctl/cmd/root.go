@@ -55,8 +55,7 @@ func (a *App) newRootCmd() *cobra.Command {
 	root.PersistentFlags().BoolVar(&a.jsonOutput, "json", false, "Output as JSON")
 	root.AddCommand(a.newLoginCmd())
 	root.AddCommand(a.newLogoutCmd())
-	root.AddCommand(a.newSeedCmd())
-	root.AddCommand(a.newResetCmd())
+	root.AddCommand(a.newDevCmd())
 	root.AddCommand(a.newUsersCmd())
 	root.AddCommand(a.newVersionCmd())
 
@@ -80,6 +79,7 @@ func (a *App) loadSession() error {
 	}
 
 	a.client.HTTPClient().Jar.SetCookies(u, []*http.Cookie{
+		//nolint:gosec // outgoing cookie sent by this CLI client, not a server response; Secure/HttpOnly/SameSite are response-only attributes
 		{Name: sessionCookieName, Value: sf.SessionToken},
 	})
 

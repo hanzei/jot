@@ -345,6 +345,10 @@
   "share": {
     "searchUsersPlaceholder": "Szukaj użytkowników po nazwie...",
     "noUsersFound": "Nie znaleziono użytkowników",
+    "recentlySharedWith": "Ostatnio udostępnione",
+    "allUsers": "Wszyscy użytkownicy",
+    "everyoneHasAccess": "Wszyscy mają już dostęp do tej notatki.",
+    "noOtherUsers": "Nie ma innych użytkowników, którym można udostępnić.",
     "sharedWith": "Udostępniono ({{count}})",
     "removeAccess": "Usuń dostęp",
     "notSharedYet": "Ta notatka nie jest jeszcze nikomu udostępniona.",

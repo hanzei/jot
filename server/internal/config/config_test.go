@@ -98,6 +98,38 @@ func TestLoadInvalidPort(t *testing.T) {
 	})
 }
 
+func TestLoadDBDriver(t *testing.T) {
+	t.Setenv("JOT_STATIC_DIR", "/tmp/static")
+
+	t.Run("default", func(t *testing.T) {
+		t.Setenv("JOT_DB_DRIVER", "")
+		cfg, err := Load()
+		require.NoError(t, err)
+		assert.Equal(t, "sqlite", cfg.DBDriver)
+	})
+
+	for _, driver := range []string{"sqlite", "postgres"} {
+		t.Run(driver, func(t *testing.T) {
+			t.Setenv("JOT_DB_DRIVER", driver)
+			cfg, err := Load()
+			require.NoError(t, err)
+			assert.Equal(t, driver, cfg.DBDriver)
+		})
+	}
+
+	// An unsupported driver must fail at config load with a clear message
+	// rather than deep inside sql.Open or the migration runner.
+	for _, v := range []string{"sqlite3", "postgresql", "mysql", "SQLite"} {
+		t.Run("invalid "+v, func(t *testing.T) {
+			t.Setenv("JOT_DB_DRIVER", v)
+			_, err := Load()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "invalid JOT_DB_DRIVER value")
+			assert.Contains(t, err.Error(), "sqlite, postgres")
+		})
+	}
+}
+
 func TestLoadStaticDirDefault(t *testing.T) {
 	t.Setenv("JOT_PORT", "")
 	t.Setenv("JOT_DB_DSN", "")

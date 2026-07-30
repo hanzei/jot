@@ -90,9 +90,14 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
   }, [menuStyle]);
 
   // Reset the highlight to the top whenever the query changes the option list.
-  useEffect(() => {
+  // Adjusting during render rather than in an effect avoids rendering one frame
+  // with a stale highlight (react-hooks/set-state-in-effect); React re-runs this
+  // component immediately without committing the intermediate state.
+  const [queryAtHighlightReset, setQueryAtHighlightReset] = useState(trimmedQuery);
+  if (queryAtHighlightReset !== trimmedQuery) {
+    setQueryAtHighlightReset(trimmedQuery);
     setHighlightIndex(0);
-  }, [trimmedQuery]);
+  }
 
   // `position: fixed` lets the menu escape the modal's overflow-y-auto content
   // area, which would otherwise clip it — the labels row is the last child, so
@@ -283,7 +288,7 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
         />
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto py-1" role="listbox">
+      <div className="flex-1 min-h-0 overflow-y-auto scrollbar-subtle py-1" role="listbox">
         {filteredLabels.length === 0 && !showCreate && (
           <p className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">{t('labels.noLabels')}</p>
         )}

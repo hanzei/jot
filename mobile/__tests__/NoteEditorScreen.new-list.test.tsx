@@ -1,6 +1,7 @@
 import React from 'react';
 import { Alert } from 'react-native';
-import { render } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
+import { VALIDATION } from '@jot/shared';
 import NoteEditorScreen from '../src/screens/NoteEditorScreen';
 
 const mockUseRoute = jest.fn();
@@ -167,5 +168,32 @@ describe('NoteEditorScreen new-list quick action', () => {
 
     expect(getByTestId('note-content-input')).toBeTruthy();
     expect(queryByTestId('add-list-item')).toBeNull();
+  });
+
+  it('measures the title limit in code points, not UTF-16 units', () => {
+    mockUseRoute.mockReturnValue({ params: { noteId: null, initialNoteType: 'list' } });
+    const { getByTestId } = render(<NoteEditorScreen />);
+
+    // 150 emoji is 300 UTF-16 units but only 150 code points, which is what the
+    // server counts against TITLE_MAX_LENGTH — so it must be accepted whole.
+    const title = '\u{1F600}'.repeat(150);
+    const titleInput = getByTestId('note-title-input');
+    fireEvent.changeText(titleInput, title);
+
+    expect(titleInput.props.value).toBe(title);
+  });
+
+  it('clamps an over-limit title without splitting a surrogate pair', () => {
+    mockUseRoute.mockReturnValue({ params: { noteId: null, initialNoteType: 'list' } });
+    const { getByTestId } = render(<NoteEditorScreen />);
+
+    // The leading 'a' puts the 200th UTF-16 unit inside an emoji, so a .slice
+    // would leave a lone surrogate that the server stores as U+FFFD.
+    const titleInput = getByTestId('note-title-input');
+    fireEvent.changeText(titleInput, `a${'\u{1F600}'.repeat(300)}`);
+
+    const value: string = titleInput.props.value;
+    expect([...value]).toHaveLength(VALIDATION.TITLE_MAX_LENGTH);
+    expect(value).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/);
   });
 });

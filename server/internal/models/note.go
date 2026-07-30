@@ -13,6 +13,17 @@ const (
 	DefaultNoteColor          = "#ffffff"
 )
 
+// Note item limits, enforced by every write surface (the REST handlers and the
+// MCP server). They live here rather than in one handler package so both can
+// share a single definition.
+// Keep in sync with shared/src/constants.ts VALIDATION.
+const (
+	// NoteItemTextMaxLength is the per-item text limit, in Unicode code points.
+	NoteItemTextMaxLength = 500
+	// NoteItemsMaxCount caps how many items a single list note can hold.
+	NoteItemsMaxCount = 500
+)
+
 // Valid reports whether t is a note type the application understands. Neither
 // backend constrains the note_type column — SQLite never did, and the
 // PostgreSQL CHECK was dropped so the two schemas agree — so this is the only

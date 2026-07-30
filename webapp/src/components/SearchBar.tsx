@@ -46,6 +46,8 @@ const SearchBar = ({ value, onChange, onSubmit, inputRef, shortcutHint, stopEsca
             value={value}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyDown}
+            // Counts UTF-16 units, not the code points the server counts. A query
+            // of astral characters is cut early; accepted, same as PAT names (#772).
             maxLength={VALIDATION.SEARCH_QUERY_MAX_LENGTH}
           />
           {value ? (

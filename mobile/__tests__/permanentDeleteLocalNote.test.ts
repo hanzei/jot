@@ -10,11 +10,11 @@
 
 import { permanentDeleteLocalNote } from '../src/db/noteQueries';
 
-const mockDeleteAsync = jest.fn().mockResolvedValue(undefined);
+const fs = globalThis.mockFileSystem;
 
-jest.mock('expo-file-system/legacy', () => ({
-  deleteAsync: (path: string, opts: unknown) => mockDeleteAsync(path, opts),
-}));
+beforeEach(() => {
+  fs.reset();
+});
 
 function makeDb(pendingUploadRows: { local_path: string }[]) {
   return {
@@ -23,15 +23,16 @@ function makeDb(pendingUploadRows: { local_path: string }[]) {
   };
 }
 
-beforeEach(() => {
-  jest.clearAllMocks();
-});
-
 it('deletes stable files for any queued offline uploads before deleting the note', async () => {
-  const db = makeDb([
-    { local_path: 'file:///docs/pending-image-uploads/upload-1' },
-    { local_path: 'file:///docs/pending-image-uploads/upload-2' },
-  ]);
+  const paths = [
+    'file:///docs/pending-image-uploads/upload-1',
+    'file:///docs/pending-image-uploads/upload-2',
+  ];
+  const unrelated = 'file:///docs/pending-image-uploads/upload-other';
+  for (const path of [...paths, unrelated]) {
+    fs.files.set(path, 'bytes');
+  }
+  const db = makeDb(paths.map((local_path) => ({ local_path })));
 
   await permanentDeleteLocalNote(db as never, 'note-1');
 
@@ -39,8 +40,10 @@ it('deletes stable files for any queued offline uploads before deleting the note
     'SELECT local_path FROM pending_image_uploads WHERE note_id = ?',
     ['note-1'],
   );
-  expect(mockDeleteAsync).toHaveBeenCalledWith('file:///docs/pending-image-uploads/upload-1', { idempotent: true });
-  expect(mockDeleteAsync).toHaveBeenCalledWith('file:///docs/pending-image-uploads/upload-2', { idempotent: true });
+  expect(fs.files.has(paths[0])).toBe(false);
+  expect(fs.files.has(paths[1])).toBe(false);
+  // A file belonging to a different note is left alone.
+  expect(fs.files.has(unrelated)).toBe(true);
   expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM notes WHERE id = ?', ['note-1']);
 });
 
@@ -49,6 +52,13 @@ it('deletes the note with no extra file cleanup when nothing is queued for it', 
 
   await permanentDeleteLocalNote(db as never, 'note-1');
 
-  expect(mockDeleteAsync).not.toHaveBeenCalled();
+  expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM notes WHERE id = ?', ['note-1']);
+});
+
+it('still deletes the note when a queued upload file is already gone', async () => {
+  const db = makeDb([{ local_path: 'file:///docs/pending-image-uploads/missing' }]);
+
+  await permanentDeleteLocalNote(db as never, 'note-1');
+
   expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM notes WHERE id = ?', ['note-1']);
 });

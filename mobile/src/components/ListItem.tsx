@@ -72,6 +72,15 @@ const DRAG_HANDLE_MARGIN_RIGHT = 4;
 // aligned with the active rows above.
 export const DRAG_HANDLE_WIDTH = DRAG_HANDLE_ICON_SIZE + DRAG_HANDLE_PADDING * 2 + DRAG_HANDLE_MARGIN_RIGHT;
 
+// Delete (x) button geometry, mirroring the drag handle above: the button only
+// renders while a row is focused, so its width is reserved with a same-sized
+// spacer the rest of the time. Without that, focusing a row would shrink the
+// text input's available width, reflowing text and causing an unwanted line
+// break right when the item was selected.
+const DELETE_BTN_ICON_SIZE = 22;
+const DELETE_BTN_PADDING = 4;
+const DELETE_BTN_WIDTH = DELETE_BTN_ICON_SIZE + DELETE_BTN_PADDING * 2;
+
 // Delay before hiding focus-gated controls (delete/assign) and suggestions on
 // blur, so a tap on those controls — which blurs the input first — still lands
 // before they unmount.
@@ -290,20 +299,24 @@ function ListItem({
               </View>
             </TouchableOpacity>
           ) : null}
-          {editable && onDelete && isFocused && (
-            <TouchableOpacity
-              onPress={onDelete}
-              style={styles.deleteBtn}
-              // Keep the tap target generous even though the button's own padding
-              // is small — a smaller footprint keeps the row height stable when
-              // this button appears on focus (see deleteBtn style note).
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              testID="list-item-delete"
-              accessibilityLabel={t('note.removeItem')}
-            >
-              <X size={22} color={effectiveIconMuted} />
-            </TouchableOpacity>
-          )}
+          {editable && onDelete ? (
+            isFocused ? (
+              <TouchableOpacity
+                onPress={onDelete}
+                style={styles.deleteBtn}
+                // Keep the tap target generous even though the button's own padding
+                // is small — a smaller footprint keeps the row height stable when
+                // this button appears on focus (see deleteBtn style note).
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                testID="list-item-delete"
+                accessibilityLabel={t('note.removeItem')}
+              >
+                <X size={DELETE_BTN_ICON_SIZE} color={effectiveIconMuted} />
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.deleteBtnSpacer} testID="list-item-delete-spacer" />
+            )
+          ) : null}
         </View>
         {showSuggestions && suggestions.length > 0 && !completed && (
           <ScrollView
@@ -380,7 +393,11 @@ const styles = StyleSheet.create({
     // A larger padding made the focused row taller than the unfocused one,
     // shifting every item below it down when a row was selected. The tap target
     // is kept comfortable via hitSlop on the button itself.
-    padding: 4,
+    padding: DELETE_BTN_PADDING,
+    marginLeft: 'auto',
+  },
+  deleteBtnSpacer: {
+    width: DELETE_BTN_WIDTH,
     marginLeft: 'auto',
   },
   assignBtn: {

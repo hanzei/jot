@@ -4,10 +4,138 @@ jest.mock('expo-secure-store', () => ({
   deleteItemAsync: jest.fn().mockResolvedValue(undefined),
 }));
 
-jest.mock('expo-file-system/legacy', () => ({
-  getInfoAsync: jest.fn().mockResolvedValue({ exists: false, isDirectory: false }),
-  moveAsync: jest.fn().mockResolvedValue(undefined),
+// In-memory expo-file-system. `src/utils/fs.ts` is the only module that imports
+// the real package, so this backs every filesystem operation in tests and lets
+// modules built on it (notably the logger's rotation) run their real logic.
+// Tests reach it through `global.mockFileSystem`.
+const fsFiles = new Map();
+const fsDirs = new Set(['file:///docs', 'file:///cache']);
+
+const normalizeUri = (uri) => String(uri).replace(/\/+$/, '');
+const joinUris = (uris) =>
+  normalizeUri(uris.map((u) => (typeof u === 'string' ? u : u.uri)).join('/'));
+
+class MockFile {
+  constructor(...uris) {
+    this.uri = joinUris(uris);
+  }
+  get exists() {
+    return fsFiles.has(this.uri);
+  }
+  get size() {
+    return fsFiles.has(this.uri) ? Buffer.byteLength(fsFiles.get(this.uri), 'utf8') : 0;
+  }
+  get name() {
+    return this.uri.slice(this.uri.lastIndexOf('/') + 1);
+  }
+  textSync() {
+    if (!fsFiles.has(this.uri)) throw new Error(`ENOENT: ${this.uri}`);
+    return fsFiles.get(this.uri);
+  }
+  text() {
+    return Promise.resolve(this.textSync());
+  }
+  create({ overwrite = false } = {}) {
+    if (global.mockFileSystem.failWrites) throw new Error('ENOSPC: no space left on device');
+    if (fsFiles.has(this.uri) && !overwrite) throw new Error(`EEXIST: ${this.uri}`);
+    fsFiles.set(this.uri, '');
+  }
+  write(content, { append = false } = {}) {
+    if (global.mockFileSystem.failWrites) throw new Error('ENOSPC: no space left on device');
+    const previous = append ? (fsFiles.get(this.uri) ?? '') : '';
+    fsFiles.set(this.uri, previous + content);
+  }
+  delete() {
+    if (!fsFiles.has(this.uri)) throw new Error(`ENOENT: ${this.uri}`);
+    fsFiles.delete(this.uri);
+  }
+  copySync(destination, { overwrite = false } = {}) {
+    if (!fsFiles.has(this.uri)) throw new Error(`ENOENT: ${this.uri}`);
+    if (fsFiles.has(destination.uri) && !overwrite) throw new Error(`EEXIST: ${destination.uri}`);
+    fsFiles.set(destination.uri, fsFiles.get(this.uri));
+  }
+  copy(destination, options) {
+    return Promise.resolve(this.copySync(destination, options));
+  }
+  moveSync(destination, options) {
+    this.copySync(destination, options);
+    fsFiles.delete(this.uri);
+    this.uri = destination.uri;
+  }
+  move(destination, options) {
+    return Promise.resolve(this.moveSync(destination, options));
+  }
+  static downloadFileAsync(url, destination, options) {
+    return global.mockFileSystem.downloadFileAsync(url, destination, options);
+  }
+}
+
+class MockDirectory {
+  constructor(...uris) {
+    this.uri = joinUris(uris);
+  }
+  get exists() {
+    return fsDirs.has(this.uri);
+  }
+  get name() {
+    return this.uri.slice(this.uri.lastIndexOf('/') + 1);
+  }
+  create({ intermediates = false, idempotent = false } = {}) {
+    if (fsDirs.has(this.uri) && !idempotent) throw new Error(`EEXIST: ${this.uri}`);
+    if (intermediates) {
+      const parts = this.uri.split('/');
+      for (let i = 4; i <= parts.length; i++) fsDirs.add(parts.slice(0, i).join('/'));
+    }
+    fsDirs.add(this.uri);
+  }
+  list() {
+    if (!fsDirs.has(this.uri)) throw new Error(`ENOENT: ${this.uri}`);
+    const prefix = `${this.uri}/`;
+    return [...fsFiles.keys()]
+      .filter((uri) => uri.startsWith(prefix) && !uri.slice(prefix.length).includes('/'))
+      .map((uri) => new MockFile(uri));
+  }
+}
+
+jest.mock('expo-file-system', () => ({
+  File: MockFile,
+  Directory: MockDirectory,
+  Paths: {
+    get document() {
+      return new MockDirectory('file:///docs');
+    },
+    get cache() {
+      return new MockDirectory('file:///cache');
+    },
+  },
 }));
+
+global.mockFileSystem = {
+  files: fsFiles,
+  dirs: fsDirs,
+  /** Set to true to make every file create/write throw, simulating a full disk. */
+  failWrites: false,
+  /**
+   * Overridable by tests; resolves by default so downloads "succeed" with empty
+   * content. Models the real API's refusal to overwrite an existing destination
+   * unless `idempotent` is set, so a caller that forgets to pass it fails here.
+   */
+  downloadFileAsync: jest.fn((url, destination, options) => {
+    if (fsFiles.has(destination.uri) && !options?.idempotent) {
+      return Promise.reject(new Error(`DestinationAlreadyExists: ${destination.uri}`));
+    }
+    fsFiles.set(destination.uri, '');
+    return Promise.resolve(destination);
+  }),
+  reset() {
+    this.failWrites = false;
+    fsFiles.clear();
+    fsDirs.clear();
+    fsDirs.add('file:///docs');
+    fsDirs.add('file:///cache');
+    this.downloadFileAsync.mockClear();
+  },
+};
 
 jest.mock('expo-localization', () => ({
   getLocales: jest.fn(() => [{ languageTag: 'en-US', languageCode: 'en' }]),

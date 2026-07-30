@@ -1,5 +1,11 @@
 # Jot Project Instructions
 
+Per-area instructions live alongside the code and also apply when you work
+there: [`server/CLAUDE.md`](server/CLAUDE.md) (Go naming and error handling),
+[`webapp/CLAUDE.md`](webapp/CLAUDE.md) (i18n rules), and
+[`mobile/CLAUDE.md`](mobile/CLAUDE.md) (offline/connectivity invariants,
+filesystem and logging rules).
+
 ## Development Status Notice
 
 - Jot is under heavy initial development.
@@ -24,7 +30,14 @@
 ## Git Workflow
 
 - Don't commit to `master` unless specifically asked; always use a separate feature branch.
-- Before creating a PR, run all tests and ensure they pass. Also run the linter.
+- Before creating a PR, run `task check` (lint + tests) and ensure it passes. See the CI Checklist at the end of this file for the full pre-PR gate.
+
+### Pull request artifacts
+
+- Include screenshots for visual/UI changes whenever possible.
+- Include a short demo video for flows that are better shown in motion.
+- If no visual artifact is feasible (backend-only changes, for example), say so briefly in the PR description.
+- Call out API-breaking changes per the Development Status Notice above.
 
 ## Code Review Loop
 
@@ -36,28 +49,78 @@ When a PR does qualify:
 2. Address every piece of valid feedback the review returns (fix bugs, improve clarity, align with conventions).
 3. Only proceed to commit/push after the review pass finishes — do not repeat the loop.
 
+## Environment Setup
+
+`scripts/bootstrap.sh` provisions a checkout: it installs `task`, runs `npm ci`
+in `shared/` → `webapp/` → `mobile/` (skipping packages that already have
+`node_modules`), and warns about Node/Go version skew. It is the single source
+of truth for setup — `.claude/settings.json` runs it from a `SessionStart` hook
+and `shell.nix` runs it on shell entry, so **a session should already be
+provisioned and `task ...` should work as the first command**. Do not add setup
+steps to those entry points; add them to the script.
+
+If `task` is somehow missing, run `./scripts/bootstrap.sh` (directly — `task`
+cannot install itself) rather than working around it with raw `go test`/`npm run`.
+`JOT_BOOTSTRAP_SKIP=1` and `JOT_BOOTSTRAP_SKIP_NPM=1` opt out. The README
+documents the script for humans; do not restate its steps elsewhere.
+
+Playwright browsers are deliberately not part of bootstrap. `task test-e2e`
+checks for them first and stops with the install command if they are missing or
+version-mismatched.
+
 ## Development Tasks
 
 Use the following Task commands for development:
 
+**Verification** — prefer the narrowest one that covers what you touched:
+
+- `task check-server` / `check-webapp` / `check-mobile` / `check-shared` - Lint + test one area
+- `task check` - Pre-PR gate: `task lint` then `task test` (everything except e2e)
+- `task test` - All tests except e2e (shared + server + webapp + mobile)
+- `task lint` - All linters (shared + server + webapp + mobile)
+- `task test-server` / `test-webapp` / `test-mobile` / `test-shared` - One test suite
+- `task lint-server` / `lint-webapp` / `lint-mobile` / `lint-shared` - One linter
+- `task test-e2e` - Playwright end-to-end tests (`webapp/e2e/`)
+- `task check-translations` - Verify locale files stay in sync with `en.json`
+- `task coverage` - Run server tests with coverage report
+
+Every `test-*` task forwards `{{.CLI_ARGS}}`, so scope a run with `--`:
+
+```bash
+task test-server -- -run TestCreateNote     # one Go test
+task test-webapp -- NoteModal               # one Vitest file pattern
+task test-e2e -- notes.spec.ts              # one Playwright spec
+```
+
+`task test` and `task lint` run their suites **serially** (not in parallel) so
+a failure is attributable to one suite rather than buried in interleaved
+output. They stop at the first failing suite.
+
+**Running and building:**
+
 - `task run-server` - Start the Jot server
 - `task run-webapp` - Start webapp dev server with HMR
-- `task test` - Run all tests (server + webapp + mobile + shared)
-- `task test-server` - Run server tests
-- `task test-webapp` - Run webapp tests
-- `task test-e2e` - Run Playwright end-to-end tests (`webapp/e2e/`)
-- `task coverage` - Run server tests with coverage report
-- `task lint` - Run linters (server + webapp + mobile + shared)
-- `task lint-server` - Run server linting with golangci-lint
-- `task lint-webapp` - Run webapp linting
-- `task check-translations` - Verify locale files stay in sync with `en.json`
-- `task test-mobile` - Run mobile app tests
-- `task lint-mobile` - Run mobile app linting
-- `task test-shared` - Run shared package tests
-- `task lint-shared` - Run shared package linting
-- `task gen-docs` - Regenerate Swagger API docs from handler annotations (requires `swag` CLI)
+- `task build-webapp` - Build the webapp into `webapp/build`
 - `task build-jotctl` - Build the `jotctl` admin CLI binary
+- `task gen-docs` - Regenerate Swagger API docs from handler annotations
 - `task clean` - Remove generated files and node packages
+
+`golangci-lint` and `swag` are pinned as `tool` directives in `server/go.mod`
+and run via `go tool` — do not `go install` a separate copy, it will drift
+from the version CI uses.
+
+## Dependency Updates
+
+There is no Dependabot/Renovate configuration; dependency updates are done deliberately,
+one workspace at a time, via the skills in `.claude/skills/`:
+
+- `update-server-deps` — Go modules, `go.mod` tool directives (golangci-lint, swag), Go toolchain version
+- `update-shared-deps` — `@jot/shared` devDependencies
+- `update-webapp-deps` — webapp npm packages, `overrides` block, Playwright browsers
+- `update-mobile-deps` — Expo/React Native packages (Expo SDK dictates most versions)
+
+For a full sweep, update in the order **shared → webapp → mobile** (both consumers compile
+`shared/src` directly through the `file:../shared` link); `server/` is independent.
 
 ---
 
@@ -67,30 +130,27 @@ Jot is a self-hosted note-taking application. The backend is a Go HTTP API and t
 
 ### Directory Structure
 
-```
+Orientation, not an inventory — directories are listed, individual files are
+not. Run `ls` rather than trusting this tree to be exhaustive.
+
+```text
 /
 ├── shared/          # @jot/shared — types, constants, and utilities shared by webapp & mobile
-│   ├── src/
-│   │   ├── types.ts          # All TypeScript interfaces (single source of truth)
-│   │   ├── constants.ts      # Validation limits, roles, defaults
-│   │   ├── collaborators.ts  # buildCollaborators, displayName
-│   │   ├── colors.ts         # Avatar colors, note color palettes, hash function
-│   │   └── index.ts          # Barrel export
-│   └── package.json
+│   └── src/             # types.ts is the single source of truth for domain interfaces
 ├── server/          # Go backend
 │   ├── main.go
-│   ├── go.mod
 │   ├── client/          # Go client SDK types (used by jotctl)
-│   ├── cmd/
-│   │   └── jotctl/      # Admin CLI tool (build with task build-jotctl)
-│   │       ├── main.go
-│   │       └── cmd/     # Cobra command definitions
+│   ├── cmd/jotctl/      # Admin CLI tool (build with task build-jotctl)
 │   ├── internal/
 │   │   ├── auth/        # Session-cookie + PAT auth middleware and utilities
-│   │   ├── blobstore/   # Content-addressed blob storage (Blobstore interface, fsBlobstore)
+│   │   ├── blobstore/   # Filesystem note-image storage (ImageStore) + orphan reclaim
 │   │   ├── config/      # Server configuration (env vars, defaults)
 │   │   ├── database/    # Database bootstrap and migration runner
-│   │   │   └── migrations/  # Sequential SQL migration files (embedded into binary)
+│   │   │   ├── migrations/sqlite/    # SQLite migrations (embedded into binary)
+│   │   │   ├── migrations/postgres/  # Postgres migrations (embedded into binary)
+│   │   │   ├── dialect/  # Per-dialect SQL differences
+│   │   │   ├── dsntest/  # Postgres DSN/raw-connection test helpers
+│   │   │   └── dbtest/   # Fully migrated test databases
 │   │   ├── handlers/    # HTTP request handlers
 │   │   ├── logutil/     # Request-scoped logger utilities
 │   │   ├── mcphandler/  # Model Context Protocol (MCP) server (note/label tools)
@@ -105,28 +165,58 @@ Jot is a self-hosted note-taking application. The backend is a Go HTTP API and t
 │   │   ├── hooks/       # Custom React hooks
 │   │   ├── i18n/        # Internationalization (8 languages)
 │   │   ├── pages/       # Route-level page components
+│   │   ├── test/        # Vitest setup and shared test helpers
 │   │   └── utils/       # API client, auth helpers
-│   ├── e2e/             # Playwright end-to-end tests
-│   │   ├── fixtures/    # Test fixtures and helpers
-│   │   ├── pages/       # Page Object Model classes
-│   │   └── tests/       # E2E test specs
-│   └── package.json
+│   └── e2e/             # Playwright end-to-end tests
+│       ├── fixtures/    # Test fixtures and helpers
+│       ├── pages/       # Page Object Model classes
+│       └── tests/       # E2E test specs
 ├── mobile/          # React Native/Expo mobile app
-│   ├── src/
-│   │   ├── api/         # API client modules
-│   │   ├── components/  # React Native components
-│   │   ├── db/          # Local SQLite/offline persistence
-│   │   ├── hooks/       # Custom hooks (API, auth, sync)
-│   │   ├── i18n/        # Internationalization (8 languages)
-│   │   ├── navigation/  # React Navigation setup
-│   │   ├── screens/     # Screen components
-│   │   └── store/       # Context/state providers
-│   └── package.json
+│   └── src/
+│       ├── api/         # API client modules
+│       ├── components/  # React Native components
+│       ├── db/          # Local SQLite/offline persistence
+│       ├── hooks/       # Custom hooks (API, auth, sync)
+│       ├── i18n/        # Internationalization (8 languages)
+│       ├── navigation/  # React Navigation setup
+│       ├── screens/     # Screen components
+│       ├── store/       # Context/state providers
+│       ├── theme/       # Colors, spacing, typography tokens
+│       └── utils/       # Filesystem wrapper, logger, helpers
+├── docs/specs/      # Design docs for cross-cutting features — read these before
+│                    # touching file attachments or mobile connectivity
 ├── images/          # Documentation images
+├── scripts/         # bootstrap.sh (setup) + check-playwright-browser.sh
 ├── Taskfile.yml
 ├── Dockerfile       # Multi-stage production build
 └── docker-compose.yml
 ```
+
+### Shared package (`@jot/shared`)
+
+Both consumers compile `shared/src` directly rather than a build artifact, so
+its source has to satisfy the stricter of the two toolchains — the mobile app's
+Babel/Jest setup. One construct to avoid: **array destructuring**, in either
+form (`.map(([id]) => id)` or `const [a, b] = pair`). Babel lowers it to a
+`@babel/runtime` helper, and that helper is resolved relative to `shared/`,
+which has no `@babel/runtime`. Mobile's copy does not apply —
+`mobile/node_modules/@jot/shared` is a symlink and Node resolves the realpath,
+so the lookup walks up from `shared/` and never reaches `mobile/node_modules`.
+Use index access (`entry[0]`) instead; it compiles to nothing.
+
+Iterable spread (`[...map.values()]`), `for...of`, and value imports between
+shared modules are all fine — only destructuring pulls a helper in.
+
+The failure is not local, which makes it hard to place: **every** mobile suite
+fails to *load*, because `jest.setup.js` imports i18n which imports
+`@jot/shared`, and the error names the file's first import line rather than the
+destructuring. Run `task test-mobile` after touching `shared/src`, not just
+`task test-shared`.
+
+(Adding `@babel/runtime` to `shared/` does fix it, and is the lever to reach for
+if this ever constrains real code — but `shared/` has no runtime dependencies
+today, and both consumers would inherit one that exists purely to satisfy
+mobile's transform.)
 
 ---
 
@@ -137,7 +227,9 @@ Jot is a self-hosted note-taking application. The backend is a Go HTTP API and t
 - **Go 1.26**
 - **Chi v5** — HTTP router with middleware
 - **go-chi/cors** — CORS middleware
-- **SQLite 3** — File-based database (pure Go, no CGO required)
+- **SQLite 3** — Default database (pure Go via `modernc.org/sqlite`, no CGO required)
+- **Postgres** — Optional alternative backend (`lib/pq`), selected with `JOT_DB_DRIVER=postgres`
+- **golang-migrate** — Migration runner, one embedded migration tree per dialect
 - **bcrypt** — Password hashing
 - **logrus** — Structured logging
 - **testify** — Test assertions
@@ -165,7 +257,14 @@ They return an HTTP status code, a response body (serialized to JSON by `wrapHan
 
 **Observability** — `internal/telemetry` sets up optional OpenTelemetry traces (OTLP gRPC) and Prometheus metrics (separate port). Structured logs are integrated with the OTel LoggerProvider.
 
-**Blob storage** — `internal/blobstore` defines a `Blobstore` interface (`Put`/`Open`/`Delete`) for content-addressed binary storage, keyed by hex-encoded SHA-256 hash. `FSBlobstore` is the v1 implementation, rooted at config `JOT_UPLOAD_DIR` (default `./uploads`), laid out as `JOT_UPLOAD_DIR/blobs/<sha[0:2]>/<sha[2:4]>/<sha>`. All paths are derived solely from the validated hash, never from caller-supplied filenames, so there is no path traversal risk; filesystem access additionally goes through `os.Root` (opened on `JOT_UPLOAD_DIR`, same traversal-resistant pattern used for static file serving in `server.go`) as defense-in-depth. `Put` is a no-op when the hash already exists (dedup). A full backup is now **DB + `JOT_UPLOAD_DIR`**.
+**Blob storage** — `internal/blobstore` exposes `ImageStore` (`NewImageStore`), filesystem storage for note-image bytes, rooted at config `JOT_UPLOAD_DIR` (default `./uploads`). It stores two things under that one root:
+
+- **Originals** — content-addressed by hex-encoded SHA-256, at `blobs/<sha[0:2]>/<sha[2:4]>/<sha>`. `Put` verifies the bytes actually hash to the claimed key before committing, which is what makes it safe for `Put` to dedup by mere existence check. `Open`/`Delete` round it out.
+- **Thumbnails** — `PutThumbnail`/`OpenThumbnail`, at `thumb/<sha[0:2]>/<sha[2:4]>/<sha>.jpg`, keyed by the *original's* hash (a resized derivative has no hash of its own). Unverified and disposable: regenerate on a miss rather than treating `ErrNotFound` as an error. Generating them is the caller's job in `internal/handlers`, not `ImageStore`'s. `Delete` removes an original *and* its thumbnail, so there is no `DeleteThumbnail`.
+
+All paths derive solely from the validated hash, never from caller-supplied filenames, so there is no path traversal risk; filesystem access additionally goes through `os.Root` (opened on `JOT_UPLOAD_DIR`, same traversal-resistant pattern used for static file serving in `server.go`) as defense-in-depth.
+
+Because dedup means several rows can share one hash, hard-delete paths must not call `Delete` directly — they call `blobstore.ReclaimIfOrphaned`, which drops the blob only once the refcount (`RefCounter`, satisfied by `*models.NoteStore`) reaches zero. A full backup is **DB + `JOT_UPLOAD_DIR`**. See `docs/specs/file-attachments.md`.
 
 **Configuration** — `internal/config` reads all app-specific server settings from `JOT_`-prefixed environment variables (e.g. `JOT_PORT`, `JOT_DB_DSN`); new config vars should follow this convention. Spec-standard OpenTelemetry SDK vars (`OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_INSECURE`, `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES`) are a deliberate exception and stay unprefixed so the OTel SDK's own conventions apply.
 
@@ -185,7 +284,38 @@ If handler annotations or request/response types change, regenerate docs with `t
 
 ### Database Migrations
 
-Migration files live in `server/internal/database/migrations/` and are named `NNN_description.sql`. They are embedded into the binary at compile time via `embed.FS` and applied automatically at startup in sequential order. To add a new migration, create the next numbered file.
+There are **two** migration trees, one per supported dialect:
+
+```text
+server/internal/database/migrations/sqlite/000009_add_thing.up.sql
+server/internal/database/migrations/postgres/000009_add_thing.up.sql
+```
+
+Each is embedded into the binary via `//go:embed migrations/<dialect>/*.sql`
+and run by golang-migrate at startup against whichever driver is configured
+(`database.go`). Filenames are `NNNNNN_description.up.sql` — **six** zero-padded
+digits, and the `.up.` segment is required; golang-migrate ignores anything
+that doesn't parse, and `embed` silently ignores anything outside those two
+directories.
+
+**Every schema change needs both files, with the same name in both trees.**
+Writing only one is the easiest mistake to make here and the hardest to
+notice: the Postgres store tests skip unless `TEST_POSTGRES_DSN` is set, so a
+sqlite-only migration passes `task test-server` locally and only fails in CI.
+The `migrations` job in `.github/workflows/server-ci.yml` diffs the two
+directories to catch it early.
+
+The two files are usually near-identical but never copies. Differences already
+in the tree, as a guide to what to watch for:
+
+- Column types — `BLOB` → `BYTEA`, `DATETIME` → `TIMESTAMP` (`000001`).
+- Whole strategies, where the feature has no common form: note search is an
+  FTS5 virtual table plus sync triggers on SQLite, and a `TSVECTOR` side table
+  on Postgres (`000007`). Aim for equivalent *behaviour*, not equivalent SQL —
+  that migration's header comments explain how the two are kept consistent.
+
+`internal/database/dialect` holds the per-dialect differences needed at query
+time; check whether a schema change needs a counterpart there too.
 
 There is one directory per dialect (`migrations/sqlite/`, `migrations/postgres/`) and the numbering is kept aligned between them: a migration that only one backend needs still gets an explanatory placeholder file in the other. Both schemas must enforce the same invariants — a constraint on one dialect only means data valid on one backend fails to load into the other.
 
@@ -202,9 +332,9 @@ There is one directory per dialect (`migrations/sqlite/`, `migrations/postgres/`
 
 ### Server Tests
 
-- Integration tests live in `server/` root (e.g. `http_integration_test.go`, `http_notes_sharing_test.go`, `http_labels_test.go`, `http_import_test.go`, `http_profile_icon_test.go`, `http_pats_test.go`, `http_mcp_test.go`, `http_task_assignment_test.go`, `http_note_duplicate_test.go`, `http_note_validation_test.go`, `http_security_headers_test.go`, `http_auth_middleware_test.go`, `http_user_flows_test.go`)
+- Integration tests live in `server/` root as `http_<area>_test.go` (`ls server/http_*_test.go` for the current set); add new ones following that naming
 - Unit tests alongside source: e.g., `server/internal/models/note_test.go`
-- Tests spin up an `httptest.Server` against a temporary SQLite database (`/tmp/test_*.db`)
+- Tests spin up an `httptest.Server` against a per-test SQLite database under `t.TempDir()` — build one with `setupTestServer`/`setupTestServerWithConfig` rather than wiring a server by hand
 - Helper types: `TestResponse`, `TestUser`, `TestServer`
 - Use `t.Run` subtests for grouping related cases; see `server/CLAUDE.md` for the full Go test naming and table-driven test conventions
 - Run: `task test-server`
@@ -216,15 +346,17 @@ There is one directory per dialect (`migrations/sqlite/`, `migrations/postgres/`
 
 ### Technology Stack
 
-- **React 19** + **TypeScript 5**
-- **Vite 7** — build tool and dev server
-- **React Router 7** (`react-router`) — client-side routing
+- **React 19** + **TypeScript 6**
+- **Vite 8** — build tool and dev server
+- **React Router 8** (`react-router`) — client-side routing
 - **axios** — HTTP client (with request/response interceptors for auth)
-- **Tailwind CSS** — utility-first styling (no scoped styles)
+- **Tailwind CSS 4** — utility-first styling (no scoped styles)
 - **@dnd-kit** — drag-and-drop for note reordering
 - **@headlessui/react** — unstyled accessible components
-- **@heroicons/react** — icon set
-- **Vite PWA plugin** — service worker and offline support
+- **lucide-react** — icon set (the mobile app uses `lucide-react-native`)
+- **marked** + **dompurify** — Markdown rendering and sanitization
+- **i18next** / **react-i18next** — translations
+- **vite-plugin-pwa** — service worker and offline support
 
 ### Key Files
 
@@ -256,7 +388,9 @@ Types are distributed across the `@jot/shared` package (`shared/src/`) and impor
 - Pattern: Page Object Model — add page classes in `e2e/pages/`, tests in `e2e/tests/`
 - Fixtures: `e2e/fixtures/index.ts` provides `authenticatedUser` and page objects
 - **Add e2e tests for every new user-facing feature** (new pages, workflows, admin actions)
-- Run: `task test-e2e`
+- Run: `task test-e2e` (scope to one spec with `task test-e2e -- notes.spec.ts`)
+- No server needs to be running first: Playwright's `webServer` builds the webapp, starts the Go server on a throwaway DB, and tears it down. `task test-e2e` pre-compiles the server so that startup stays inside the Playwright timeout on a cold build cache.
+- Browsers are not provisioned by bootstrap. `task test-e2e` runs `scripts/check-playwright-browser.sh` first, which fails with the exact `npx playwright install chromium` command when the pinned Chromium build is missing — that is a one-command fix, not a broken suite.
 
 ---
 
@@ -264,11 +398,12 @@ Types are distributed across the `@jot/shared` package (`shared/src/`) and impor
 
 ### Technology Stack
 
-- **React Native 0.83** + **Expo 55**
+- **React Native 0.86** + **Expo 57**
 - **React Navigation 7** — drawer + native stack navigation
 - **Tanstack React Query 5** — data fetching and caching
 - **Expo Secure Store** — credential storage
 - **Expo SQLite** — local offline persistence
+- **Expo FileSystem** — blob/file storage, wrapped by `src/utils/fs.ts`
 - **react-native-sse** — SSE client for real-time updates
 - **@jot/shared** — shared types and utilities (local file dependency)
 
@@ -276,6 +411,10 @@ Types are distributed across the `@jot/shared` package (`shared/src/`) and impor
 
 - Framework: **Jest**
 - Test files in `__tests__/`
+- Filesystem access is backed by an in-memory `expo-file-system` mock defined in
+  `jest.setup.js` and reachable as `globalThis.mockFileSystem` (seed
+  `.files`/`.dirs`, stub `.downloadFileAsync`, `.reset()` per test). Prefer it
+  over stubbing individual calls so the real `src/utils/fs.ts` logic runs.
 - Run: `task test-mobile`
 
 ---
@@ -294,6 +433,36 @@ task run-webapp
 
 The server at `localhost:8080` serves the API. Vite is configured with a proxy to forward API calls during development. Note: `run-server` sets `JOT_PASSWORD_MIN_LENGTH=4` for local convenience — do not use this in production.
 
+To serve the built SPA from the Go binary instead of Vite, run `task build-webapp` first; the server reads `webapp/build/` (override with `JOT_STATIC_DIR`).
+
+### Toolchain and no-`task` fallbacks
+
+Setup is `./scripts/bootstrap.sh` (see [Environment Setup](#environment-setup)); the notes below are what it checks and what to fall back to.
+
+- **Go 1.26** (`go.mod`), **Node 24** (`.nvmrc`, Dockerfile, CI). Older Go works only via toolchain auto-download; older Node is untested. Bootstrap warns on both but changes neither.
+- The SQLite driver is pure Go (`modernc.org/sqlite`) — **no CGO or gcc required**.
+- `@jot/shared` is a `file:../shared` dependency of both webapp and mobile. Install its deps before theirs. Use `npm ci`, not `npm install`.
+
+If `task` isn't available, these are the underlying commands:
+
+| Task | Equivalent |
+|------|-----------|
+| `task run-server` | `cd server && go build -buildvcs=false -o jot . && JOT_COOKIE_SECURE=false JOT_PASSWORD_MIN_LENGTH=4 JOT_CORS_ALLOWED_ORIGIN=http://localhost:5173 ./jot` |
+| `task test-server` | `cd server && go test ./...` |
+| `task lint-server` | `cd server && go tool golangci-lint run` |
+| `task test-webapp` | `cd webapp && npm run test:run` |
+| `task lint-webapp` | `cd webapp && npm run lint && npm run lint:ts` |
+| `task test-e2e` | `cd webapp && npm run test:e2e` |
+| `task test-mobile` | `cd mobile && npm test -- --ci` |
+| `task build-webapp` | `cd webapp && npm run build` |
+| `task gen-docs` | `cd server && go tool swag init --generalInfo main.go --output docs --parseDependency --parseInternal` |
+
+`JOT_COOKIE_SECURE=false` is required for non-HTTPS local development — session
+cookies are `Secure` by default and the browser will drop them over
+`http://localhost`, which looks like a broken login rather than a config
+problem. Note the `JOT_` prefix: all app config is `JOT_`-prefixed, and an
+unprefixed `COOKIE_SECURE=false` is silently ignored.
+
 ### Docker (Production)
 
 Multi-stage `Dockerfile`:
@@ -311,7 +480,9 @@ Persistent data is mounted at `/data` (default `docker-compose.yml` maps host `.
 
 ### CI Checklist (before opening a PR)
 
-1. `task test` — all unit/integration tests pass (server, webapp, mobile, shared)
-2. `task lint` — no lint errors
-3. `task test-e2e` — Playwright e2e tests pass (add new e2e tests for any new user-facing features; not included in `task test`)
-4. `task check-translations` — all locale files are in sync with `en.json` (run if any i18n keys were added or changed)
+1. `task check` — lint + all tests (server, webapp, mobile, shared). Equivalent to `task lint` followed by `task test`.
+2. `task test-e2e` — Playwright e2e tests (**not** part of `task check`; add new e2e tests for any new user-facing feature)
+3. `task check-translations` — locale files in sync with `en.json` (already covered by `task check-webapp`; run separately if you only touched i18n)
+4. `task gen-docs` — if handler annotations or request/response types changed. CI fails if `server/docs/` is stale.
+
+While iterating, use the scoped tasks (`task check-server`, `task test-server -- -run TestX`) and save the full gate for just before pushing.

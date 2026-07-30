@@ -7,6 +7,11 @@ import (
 	"net/http"
 )
 
+const (
+	paramUsername = "username"
+	paramPassword = "password"
+)
+
 // Config returns the public server configuration (unauthenticated).
 func (c *Client) Config(ctx context.Context) (*ServerConfig, error) {
 	var resp ServerConfig
@@ -20,8 +25,8 @@ func (c *Client) Config(ctx context.Context) (*ServerConfig, error) {
 func (c *Client) Register(ctx context.Context, username, password string) (*AuthResponse, error) {
 	var resp AuthResponse
 	err := c.doJSON(ctx, http.MethodPost, "/api/v1/register", map[string]string{
-		"username": username,
-		"password": password,
+		paramUsername: username,
+		paramPassword: password,
 	}, &resp)
 	if err != nil {
 		return nil, err
@@ -33,8 +38,8 @@ func (c *Client) Register(ctx context.Context, username, password string) (*Auth
 func (c *Client) Login(ctx context.Context, username, password string) (*AuthResponse, error) {
 	var resp AuthResponse
 	err := c.doJSON(ctx, http.MethodPost, "/api/v1/login", map[string]string{
-		"username": username,
-		"password": password,
+		paramUsername: username,
+		paramPassword: password,
 	}, &resp)
 	if err != nil {
 		return nil, err

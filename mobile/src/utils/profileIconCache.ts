@@ -1,7 +1,6 @@
-import * as FileSystem from 'expo-file-system/legacy';
-import { ensureDirExists } from './fsCache';
+import { cachePath, deleteFileIfExists, downloadFile, ensureDirExists, fileExists, listFileNames } from './fs';
 
-const CACHE_DIR = `${FileSystem.cacheDirectory ?? ''}profile-icons/`;
+const CACHE_DIR = cachePath('profile-icons');
 
 // Tracks downloads in progress to avoid concurrent duplicate downloads.
 const inProgress = new Set<string>();
@@ -11,35 +10,23 @@ function safeVersion(updatedAt: string): string {
 }
 
 function iconFilePath(userId: string, updatedAt: string): string {
-  return `${CACHE_DIR}${userId}_${safeVersion(updatedAt)}`;
+  return `${CACHE_DIR}/${userId}_${safeVersion(updatedAt)}`;
 }
 
 // Returns the local file URI for a cached icon, or null if not cached.
 export async function getCachedIconUri(userId: string, updatedAt: string): Promise<string | null> {
   if (!updatedAt) return null;
   const path = iconFilePath(userId, updatedAt);
-  try {
-    const info = await FileSystem.getInfoAsync(path);
-    return info.exists ? path : null;
-  } catch {
-    return null;
-  }
+  return fileExists(path) ? path : null;
 }
 
 // Removes cached icon files for userId that don't match currentUpdatedAt.
-async function purgeStaleIcons(userId: string, currentUpdatedAt: string): Promise<void> {
-  try {
-    const dirInfo = await FileSystem.getInfoAsync(CACHE_DIR);
-    if (!dirInfo.exists) return;
-    const files = await FileSystem.readDirectoryAsync(CACHE_DIR);
-    const currentFile = `${userId}_${safeVersion(currentUpdatedAt)}`;
-    for (const file of files) {
-      if (file.startsWith(`${userId}_`) && file !== currentFile) {
-        await FileSystem.deleteAsync(`${CACHE_DIR}${file}`, { idempotent: true });
-      }
+function purgeStaleIcons(userId: string, currentUpdatedAt: string): void {
+  const currentFile = `${userId}_${safeVersion(currentUpdatedAt)}`;
+  for (const file of listFileNames(CACHE_DIR)) {
+    if (file.startsWith(`${userId}_`) && file !== currentFile) {
+      deleteFileIfExists(`${CACHE_DIR}/${file}`);
     }
-  } catch {
-    // Ignore cleanup errors — stale files will be overwritten on next download.
   }
 }
 
@@ -55,22 +42,16 @@ export async function downloadAndCacheIcon(
   const key = `${userId}_${updatedAt}`;
   if (inProgress.has(key)) return null;
   inProgress.add(key);
+  const path = iconFilePath(userId, updatedAt);
   try {
-    await ensureDirExists(CACHE_DIR);
-    const path = iconFilePath(userId, updatedAt);
-    const result = await FileSystem.downloadAsync(networkUrl, path);
-    if (result.status === 200) {
-      await purgeStaleIcons(userId, updatedAt);
-      return path;
-    }
-    // Non-200 means the download failed (e.g. server error). Remove the incomplete file.
-    await FileSystem.deleteAsync(path, { idempotent: true });
-    return null;
+    ensureDirExists(CACHE_DIR);
+    await downloadFile(networkUrl, path);
+    purgeStaleIcons(userId, updatedAt);
+    return path;
   } catch {
-    // Clean up any partially-written file to prevent corrupt cache entries.
-    try {
-      await FileSystem.deleteAsync(iconFilePath(userId, updatedAt), { idempotent: true });
-    } catch { /* ignore cleanup errors */ }
+    // A non-2xx response or a transport error both reject here. Clean up any
+    // partially-written file to prevent corrupt cache entries.
+    deleteFileIfExists(path);
     return null;
   } finally {
     inProgress.delete(key);

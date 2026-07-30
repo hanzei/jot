@@ -67,6 +67,69 @@ body {
   }
 }
 
+/* Thin, unobtrusive scrollbar for internal scroll containers (sidebar, popovers,
+   modal bodies). Without it, platforms that render classic scrollbars — Windows,
+   Linux, and any mouse attached to a Mac — put a wide grey gutter inside narrow
+   containers like the sidebar.
+
+   `scrollbar-width`/`scrollbar-color` are the standard properties (Firefox,
+   Chromium 121+); the `::-webkit-scrollbar` rules cover Safari and older
+   Chromium. Both are declared, and browsers that honour the standard properties
+   ignore the webkit pseudo-elements, so the two never fight.
+
+   Rule order is load-bearing: the light and dark variants have equal specificity,
+   so each dark rule has to follow its light counterpart to win. */
+@utility scrollbar-subtle {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-gray-300) transparent;
+
+  :where(.dark) & {
+    scrollbar-color: var(--color-slate-600) transparent;
+  }
+
+  &:hover {
+    scrollbar-color: var(--color-gray-400) transparent;
+  }
+
+  :where(.dark) &:hover {
+    scrollbar-color: var(--color-slate-500) transparent;
+  }
+
+  &::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* The transparent border plus `background-clip: content-box` inset the thumb,
+     leaving it ~6px wide with breathing room on both sides. */
+  &::-webkit-scrollbar-thumb {
+    background-color: var(--color-gray-300);
+    background-clip: content-box;
+    border: 2px solid transparent;
+    border-radius: 9999px;
+  }
+
+  &:hover::-webkit-scrollbar-thumb {
+    background-color: var(--color-gray-400);
+  }
+
+  :where(.dark) &::-webkit-scrollbar-thumb {
+    background-color: var(--color-slate-600);
+  }
+
+  :where(.dark) &:hover::-webkit-scrollbar-thumb {
+    background-color: var(--color-slate-500);
+  }
+
+  &::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+
 @layer components {
   /* Rendered markdown content — applied to both note cards and the modal preview div. */
   .markdown-content h1 {

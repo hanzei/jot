@@ -14,7 +14,7 @@ func TestSeedCmd(t *testing.T) {
 		ts := setupTestServer(t)
 		admin := ts.createAdmin(t, "admin", "adminp")
 
-		res := runJotCTL(t, ts, admin, "seed")
+		res := runJotCTL(t, ts, admin, "dev", "seed")
 		require.NoError(t, res.Err)
 		assert.Contains(t, res.Stdout, "Done.")
 
@@ -36,7 +36,7 @@ func TestSeedCmd(t *testing.T) {
 		ts := setupTestServer(t)
 		admin := ts.createAdmin(t, "admin", "adminp")
 
-		res := runJotCTL(t, ts, admin, "--json", "seed")
+		res := runJotCTL(t, ts, admin, "--json", "dev", "seed")
 		require.NoError(t, res.Err)
 
 		var summary seedSummary
@@ -50,7 +50,7 @@ func TestSeedCmd(t *testing.T) {
 		ts := setupTestServer(t)
 		admin := ts.createAdmin(t, "admin", "adminp")
 
-		res := runJotCTL(t, ts, admin, "seed")
+		res := runJotCTL(t, ts, admin, "dev", "seed")
 		require.NoError(t, res.Err)
 
 		alice := client.New(ts.httpServer.URL)
@@ -76,11 +76,11 @@ func TestSeedCmd(t *testing.T) {
 		ts := setupTestServer(t)
 		admin := ts.createAdmin(t, "admin", "adminp")
 
-		res := runJotCTL(t, ts, admin, "--json", "seed")
+		res := runJotCTL(t, ts, admin, "--json", "dev", "seed")
 		require.NoError(t, res.Err)
 
 		// Second seed should create no new users.
-		res2 := runJotCTL(t, ts, admin, "--json", "seed")
+		res2 := runJotCTL(t, ts, admin, "--json", "dev", "seed")
 		require.NoError(t, res2.Err)
 
 		var summary seedSummary
@@ -94,11 +94,11 @@ func TestResetCmd(t *testing.T) {
 	admin := ts.createAdmin(t, "admin", "adminp")
 
 	// Seed first so there's something to reset.
-	res := runJotCTL(t, ts, admin, "seed")
+	res := runJotCTL(t, ts, admin, "dev", "seed")
 	require.NoError(t, res.Err)
 
 	t.Run("deletes non-admin users", func(t *testing.T) {
-		res := runJotCTL(t, ts, admin, "reset", "--yes")
+		res := runJotCTL(t, ts, admin, "dev", "reset", "--yes")
 		require.NoError(t, res.Err)
 		assert.Contains(t, res.Stdout, "Done.")
 
@@ -111,10 +111,10 @@ func TestResetCmd(t *testing.T) {
 
 	t.Run("json output", func(t *testing.T) {
 		// Re-seed so there's something to delete.
-		res := runJotCTL(t, ts, admin, "seed")
+		res := runJotCTL(t, ts, admin, "dev", "seed")
 		require.NoError(t, res.Err)
 
-		res = runJotCTL(t, ts, admin, "--json", "reset", "--yes")
+		res = runJotCTL(t, ts, admin, "--json", "dev", "reset", "--yes")
 		require.NoError(t, res.Err)
 
 		var summary resetSummary

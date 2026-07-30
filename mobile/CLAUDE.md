@@ -70,6 +70,58 @@ The mobile app uses SSE, React Query, and an offline SQLite sync layer — all s
 - Cap the number of consecutive sync attempts before surfacing an error to the user.
 - Prefer idempotent writes (upsert, not insert-then-update) so a replayed sync event is harmless.
 
+## Filesystem Access
+
+All filesystem work goes through **`src/utils/fs.ts`** — it is the only module
+allowed to import `expo-file-system`. Do not add `expo-file-system` imports
+elsewhere, and never import `expo-file-system/legacy` (the pre-SDK-54 API; the
+codebase no longer uses it).
+
+The wrapper exists because the modern `File`/`Directory` API differs from the
+legacy one in ways that are easy to get wrong per call site:
+
+- Most operations are **synchronous** (`write`, `delete`, `create`, `exists`,
+  `size`) — only `copy`/`move`/download are promise-based.
+- `File.delete()` **throws** when the target is missing. Use
+  `deleteFileIfExists()` for the old idempotent-delete behaviour.
+- `File.downloadFileAsync()` **rejects** on a non-2xx response instead of
+  resolving with a status code, and refuses an existing destination unless
+  `idempotent` is set. `downloadFile()` handles both; callers branch with
+  `try`/`catch`, not on a status field.
+
+Paths are passed as `file:///` URI strings, not `File` instances, because some
+are persisted (`pending_image_uploads.local_path`) and must stay comparable
+across app versions. Build them with `documentPath()` (durable) or
+`cachePath()` (OS may purge).
+
+## Diagnostics Logging
+
+`src/utils/logger.ts` patches `console.info/warn/error` (installed by
+`initLogger()` at the top of `App.tsx`, before React mounts) and keeps entries
+in two places:
+
+- A JSONL file under the document directory — `getPersistedLogs()`. This is the
+  log history, and it survives the restart that follows a crash.
+- An in-memory ring buffer of the last **200** entries — `getLogs()`. This is
+  *not* the history: it exists so the Diagnostics preview (which re-reads on
+  every connectivity flip) doesn't parse the file each time, and so logs still
+  exist when persistence is unavailable. Prefer `getPersistedLogs()` anywhere
+  the full record matters.
+
+**Retention is size-based only.** The active file rotates once it passes 512 KiB
+and exactly one rotated generation is kept, capping logs at ~1 MiB. There is
+deliberately no age-based expiry: a quiet install keeps its history until new
+entries push it out.
+
+Writes are batched (flushed every 2 s, on a 200-entry burst, and when the app
+backgrounds) rather than hitting disk per call. The logger must **never**
+`console.*` on its own failure path — that recurses through the patched
+console; repeated flush failures instead disable persistence and leave the
+in-memory buffer working.
+
+Anything logged now lands on disk and rides along in shared diagnostics
+reports, so don't log note content, credentials, or tokens.
+
 ## Safe Area Insets
 
 Screens use `headerShown: false`, so any screen or component rendering content

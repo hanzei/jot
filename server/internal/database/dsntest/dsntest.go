@@ -28,10 +28,15 @@ import (
 // ./...` stays green with no setup required on a developer machine.
 const EnvPostgresDSN = "TEST_POSTGRES_DSN"
 
+// driverSQLite is the sql.Open/migration driver name for SQLite, duplicated
+// from internal/database rather than imported to avoid an import cycle (see
+// the package doc comment above).
+const driverSQLite = "sqlite"
+
 // Drivers returns the database drivers store and migration tests should run
 // against: always "sqlite", plus "postgres" when EnvPostgresDSN is set.
 func Drivers() []string {
-	drivers := []string{"sqlite"}
+	drivers := []string{driverSQLite}
 	if os.Getenv(EnvPostgresDSN) != "" {
 		drivers = append(drivers, "postgres")
 	}
@@ -56,7 +61,7 @@ func IsolatedDSN(t *testing.T, driver string) string {
 	t.Helper()
 
 	switch driver {
-	case "sqlite":
+	case driverSQLite:
 		return t.TempDir() + "/test.db"
 	case "postgres":
 		return isolatedPostgresDSN(t)
@@ -105,7 +110,7 @@ func RawDB(t *testing.T, driver string) *sql.DB {
 	t.Cleanup(func() { _ = db.Close() })
 	require.NoError(t, db.PingContext(t.Context()))
 
-	if driver == "sqlite" {
+	if driver == driverSQLite {
 		// Serialize access like production so modernc.org/sqlite doesn't deadlock.
 		db.SetMaxOpenConns(1)
 		_, err = db.ExecContext(t.Context(), `PRAGMA foreign_keys = ON`)

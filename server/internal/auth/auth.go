@@ -112,6 +112,7 @@ func (s *SessionService) RenewSessionIfExpiringSoon(ctx context.Context, w http.
 }
 
 func (s *SessionService) setSessionCookie(w http.ResponseWriter, value string, maxAge int) {
+	//nolint:gosec // HttpOnly/SameSite are already set; Secure is config-driven (s.cookieSecure) rather than a literal, which gosec cannot verify statically
 	http.SetCookie(w, &http.Cookie{
 		Name:     SessionCookieName,
 		Value:    value,

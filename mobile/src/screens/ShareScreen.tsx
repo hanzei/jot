@@ -14,14 +14,17 @@ import { ArrowLeft, Plus, Search, X } from 'lucide-react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
+import { useSQLiteContext } from 'expo-sqlite';
 import { searchUsers } from '../api/users';
 import { useNoteShares, useShareNote, useUnshareNote } from '../hooks/useNotes';
 import UserAvatar from '../components/UserAvatar';
 import { useTheme } from '../theme/ThemeContext';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { isServerReachable } from '../api/serverReachability';
+import { useAuth } from '../store/AuthContext';
 import { useUsers } from '../store/UsersContext';
-import type { User, NoteShare } from '@jot/shared';
+import { getLocalShareHistory } from '../db/noteQueries';
+import { buildShareSuggestions, recentShareTargets, type User, type NoteShare } from '@jot/shared';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 type ShareRouteProp = RouteProp<RootStackParamList, 'Share'>;
@@ -46,6 +49,28 @@ export default function ShareScreen() {
 
   const { isConnected } = useNetworkStatus();
   const { usersById } = useUsers();
+  const { user: currentUser } = useAuth();
+  const db = useSQLiteContext();
+
+  // Past collaborators, derived from the share records already persisted with
+  // the local notes — no request, so the suggestions are there offline too.
+  // Loaded once on mount: the list only needs to be right when the screen opens.
+  const [recentUserIds, setRecentUserIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getLocalShareHistory(db)
+      .then((notes) => {
+        if (!cancelled) setRecentUserIds(recentShareTargets(notes, currentUser?.id ?? ''));
+      })
+      .catch((err) => {
+        console.warn('Failed to load recent share targets:', err);
+        if (!cancelled) setRecentUserIds([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [db, currentUser?.id]);
 
   const [pendingUserIds, setPendingUserIds] = useState<Set<string>>(new Set());
   const pendingUserIdsRef = useRef<Set<string>>(new Set());
@@ -127,14 +152,39 @@ export default function ShareScreen() {
     };
   }, [debouncedQuery, isConnected, usersById]);
 
-  const sharedUserIds = useMemo(
-    () => new Set((currentShares ?? []).map((s) => s.shared_with_user_id)),
-    [currentShares],
+  // `usersById` is seeded with the signed-in user, who can never be a share
+  // target, so they are excluded alongside the note's existing collaborators.
+  const excludedUserIds = useMemo(() => {
+    const excluded = new Set((currentShares ?? []).map((s) => s.shared_with_user_id));
+    if (currentUser) excluded.add(currentUser.id);
+    return excluded;
+  }, [currentShares, currentUser]);
+
+  const directoryUsers = useMemo(() => Array.from(usersById.values()), [usersById]);
+
+  const hasOtherUsers = useMemo(
+    () => directoryUsers.some((u) => u.id !== currentUser?.id),
+    [directoryUsers, currentUser?.id],
   );
 
-  const filteredResults = useMemo(
-    () => searchResults.filter((u) => !sharedUserIds.has(u.id)),
-    [searchResults, sharedUserIds],
+  // With no query the whole directory is the candidate set, so the resting
+  // state of the screen answers "who do I usually share with?" instead of
+  // waiting for a name to be typed.
+  const suggestions = useMemo(
+    () =>
+      buildShareSuggestions(
+        debouncedQuery ? searchResults : directoryUsers,
+        recentUserIds,
+        excludedUserIds,
+      ),
+    [debouncedQuery, searchResults, directoryUsers, recentUserIds, excludedUserIds],
+  );
+
+  // Searching collapses the groups into one ranked list — past collaborators
+  // first, then everyone else — since the intent is to find a specific person.
+  const rankedResults = useMemo(
+    () => [...suggestions.recent, ...suggestions.others],
+    [suggestions],
   );
 
   const handleShare = useCallback(
@@ -187,6 +237,21 @@ export default function ShareScreen() {
     ),
     [handleShare, pendingUserIds, colors],
   );
+
+  /** One labelled group of the empty-query suggestions; nothing when empty. */
+  const renderSuggestionSection = (title: string, data: User[], testID: string) =>
+    data.length > 0 ? (
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>{title}</Text>
+        <FlatList
+          data={data}
+          keyExtractor={(u) => u.id}
+          renderItem={renderSearchResult}
+          scrollEnabled={false}
+          testID={testID}
+        />
+      </View>
+    ) : null;
 
   const renderSharedUser = useCallback(
     ({ item }: { item: NoteShare }) => (
@@ -259,18 +324,18 @@ export default function ShareScreen() {
       </View>
 
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom }}>
-        {debouncedQuery.length > 0 && (
+        {debouncedQuery.length > 0 ? (
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>{t('share.results')}</Text>
             {isSearching ? (
               <ActivityIndicator size="small" color={colors.primary} style={styles.spinner} />
             ) : searchError ? (
               <Text style={[styles.errorText, { color: colors.error }]}>{t('share.searchFailed')}</Text>
-            ) : filteredResults.length === 0 ? (
+            ) : rankedResults.length === 0 ? (
               <Text style={[styles.emptyText, { color: colors.textMuted }]}>{t('share.noUsersFound')}</Text>
             ) : (
               <FlatList
-                data={filteredResults}
+                data={rankedResults}
                 keyExtractor={(u) => u.id}
                 renderItem={renderSearchResult}
                 scrollEnabled={false}
@@ -278,6 +343,24 @@ export default function ShareScreen() {
               />
             )}
           </View>
+        ) : (
+          <>
+            {renderSuggestionSection(
+              t('share.recentlySharedWith'),
+              suggestions.recent,
+              'share-recent-suggestions',
+            )}
+            {renderSuggestionSection(t('share.allUsers'), suggestions.others, 'share-all-users')}
+            {/* An empty directory means it hasn't loaded yet — on a genuinely
+                single-user instance it still holds the signed-in user. */}
+            {rankedResults.length === 0 && directoryUsers.length > 0 && (
+              <View style={styles.section}>
+                <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+                  {hasOtherUsers ? t('share.everyoneHasAccess') : t('share.noOtherUsers')}
+                </Text>
+              </View>
+            )}
+          </>
         )}
 
         <View style={styles.section}>
