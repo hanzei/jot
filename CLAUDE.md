@@ -49,6 +49,25 @@ When a PR does qualify:
 2. Address every piece of valid feedback the review returns (fix bugs, improve clarity, align with conventions).
 3. Only proceed to commit/push after the review pass finishes — do not repeat the loop.
 
+## Environment Setup
+
+`scripts/bootstrap.sh` provisions a checkout: it installs `task`, runs `npm ci`
+in `shared/` → `webapp/` → `mobile/` (skipping packages that already have
+`node_modules`), and warns about Node/Go version skew. It is the single source
+of truth for setup — `.claude/settings.json` runs it from a `SessionStart` hook
+and `shell.nix` runs it on shell entry, so **a session should already be
+provisioned and `task ...` should work as the first command**. Do not add setup
+steps to those entry points; add them to the script.
+
+If `task` is somehow missing, run `./scripts/bootstrap.sh` (directly — `task`
+cannot install itself) rather than working around it with raw `go test`/`npm run`.
+`JOT_BOOTSTRAP_SKIP=1` and `JOT_BOOTSTRAP_SKIP_NPM=1` opt out. The README
+documents the script for humans; do not restate its steps elsewhere.
+
+Playwright browsers are deliberately not part of bootstrap. `task test-e2e`
+checks for them first and stops with the install command if they are missing or
+version-mismatched.
+
 ## Development Tasks
 
 Use the following Task commands for development:
@@ -167,6 +186,7 @@ not. Run `ls` rather than trusting this tree to be exhaustive.
 ├── docs/specs/      # Design docs for cross-cutting features — read these before
 │                    # touching file attachments or mobile connectivity
 ├── images/          # Documentation images
+├── scripts/         # bootstrap.sh (setup) + check-playwright-browser.sh
 ├── Taskfile.yml
 ├── Dockerfile       # Multi-stage production build
 └── docker-compose.yml
@@ -340,6 +360,7 @@ Types are distributed across the `@jot/shared` package (`shared/src/`) and impor
 - **Add e2e tests for every new user-facing feature** (new pages, workflows, admin actions)
 - Run: `task test-e2e` (scope to one spec with `task test-e2e -- notes.spec.ts`)
 - No server needs to be running first: Playwright's `webServer` builds the webapp, starts the Go server on a throwaway DB, and tears it down. `task test-e2e` pre-compiles the server so that startup stays inside the Playwright timeout on a cold build cache.
+- Browsers are not provisioned by bootstrap. `task test-e2e` runs `scripts/check-playwright-browser.sh` first, which fails with the exact `npx playwright install chromium` command when the pinned Chromium build is missing — that is a one-command fix, not a broken suite.
 
 ---
 
@@ -386,7 +407,9 @@ To serve the built SPA from the Go binary instead of Vite, run `task build-webap
 
 ### Toolchain and no-`task` fallbacks
 
-- **Go 1.26** (`go.mod`), **Node 24** (`.nvmrc`, Dockerfile, CI). Older Go works only via toolchain auto-download; older Node is untested.
+Setup is `./scripts/bootstrap.sh` (see [Environment Setup](#environment-setup)); the notes below are what it checks and what to fall back to.
+
+- **Go 1.26** (`go.mod`), **Node 24** (`.nvmrc`, Dockerfile, CI). Older Go works only via toolchain auto-download; older Node is untested. Bootstrap warns on both but changes neither.
 - The SQLite driver is pure Go (`modernc.org/sqlite`) — **no CGO or gcc required**.
 - `@jot/shared` is a `file:../shared` dependency of both webapp and mobile. Install its deps before theirs. Use `npm ci`, not `npm install`.
 
