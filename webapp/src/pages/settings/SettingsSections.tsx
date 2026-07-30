@@ -332,6 +332,10 @@ export const IdentitySecurityColumn = ({
           value={newPATName}
           onChange={(e) => setNewPATName(e.target.value)}
           placeholder={t('settings.patsNamePlaceholder')}
+          // maxLength counts UTF-16 units while the server counts code points, so
+          // astral input is cut early. Accepted here: the limit is generous and a
+          // silently shortened token name is a smaller cost than dropping the
+          // browser's own enforcement (see issue #772).
           maxLength={VALIDATION.PAT_NAME_MAX_LENGTH}
           className="flex-1 min-w-0 border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
         />
