@@ -205,7 +205,12 @@ var validLanguages = map[string]bool{
 	"nl":     true,
 	"pl":     true,
 }
-var validThemes = map[string]bool{"system": true, "light": true, "dark": true}
+
+// defaultTheme is both the fallback applied when no theme has been chosen
+// yet and a valid theme value meaning "follow the OS preference".
+const defaultTheme = "system"
+
+var validThemes = map[string]bool{defaultTheme: true, "light": true, "dark": true}
 var validNoteSorts = map[string]bool{"manual": true, "updated_at": true, "created_at": true}
 
 // validateSettingsFields validates language, theme, and note sort.
@@ -226,7 +231,7 @@ func validateSettingsFields(current *models.UserSettings, language, theme, noteS
 		th = *theme
 	}
 	if th == "" {
-		th = "system"
+		th = defaultTheme
 	}
 	if !validThemes[th] {
 		return "", "", "", false, errors.New("invalid theme: must be 'system', 'light', or 'dark'")
@@ -425,7 +430,7 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) (int, any, erro
 }
 
 var allowedImageTypes = map[string]bool{
-	"image/jpeg": true,
+	mimeTypeJPEG: true,
 	"image/png":  true,
 	"image/webp": true,
 }
@@ -582,6 +587,7 @@ func (h *AuthHandler) UploadProfileIcon(w http.ResponseWriter, r *http.Request) 
 
 	const fileLimit = int64(5 << 20)
 	r.Body = http.MaxBytesReader(w, r.Body, fileLimit+multipartOverheadBytes)
+	//nolint:gosec // r.Body is already bounded by the MaxBytesReader above
 	if err := r.ParseMultipartForm(fileLimit); err != nil {
 		return http.StatusBadRequest, nil, fmt.Errorf("file too large (max %d MB)", fileLimit>>20)
 	}
@@ -606,7 +612,7 @@ func (h *AuthHandler) UploadProfileIcon(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		return http.StatusBadRequest, nil, fmt.Errorf("unsupported or corrupt image: %w", err)
 	}
-	contentType = "image/jpeg"
+	contentType = mimeTypeJPEG
 
 	if err = h.userStore.UpdateProfileIcon(r.Context(), currentUser.ID, data, contentType); err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("update profile icon for user %s: %w", currentUser.ID, err)

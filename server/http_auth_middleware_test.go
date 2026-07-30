@@ -30,6 +30,7 @@ func TestAuthMiddlewareInvalidCookie(t *testing.T) {
 	ts := setupTestServer(t)
 	c := ts.newClient()
 	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/me", nil)
+	//nolint:gosec // outgoing cookie added to a test request, not a server response
 	req.AddCookie(&http.Cookie{Name: "jot_session", Value: "not-a-real-token"})
 	resp, err := c.HTTPClient().Do(req)
 	if err == nil {

@@ -30,9 +30,11 @@ const imageMaxPerNote = 10
 // original at full size.
 const thumbnailMaxDimension = 512
 
+const mimeTypeJPEG = "image/jpeg"
+
 var allowedNoteImageTypes = map[string]bool{
 	"image/png":  true,
-	"image/jpeg": true,
+	mimeTypeJPEG: true,
 	"image/webp": true,
 	"image/gif":  true,
 }
@@ -153,6 +155,7 @@ func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, h.uploadMaxBytes+multipartOverheadBytes)
+	//nolint:gosec // r.Body is already bounded by the MaxBytesReader above
 	if parseErr := r.ParseMultipartForm(h.uploadMaxBytes); parseErr != nil {
 		// wrapHandler promotes a wrapped *http.MaxBytesError to 413 regardless
 		// of the status returned here.
@@ -323,7 +326,7 @@ func (h *NotesHandler) GetNoteImageThumbnail(w http.ResponseWriter, r *http.Requ
 	}
 	defer thumb.Close()
 
-	w.Header().Set("Content-Type", "image/jpeg")
+	w.Header().Set("Content-Type", mimeTypeJPEG)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
 	w.Header().Set("ETag", `"`+img.SHA256+`-thumb"`)

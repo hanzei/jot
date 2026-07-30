@@ -62,7 +62,7 @@ func (a *App) runLogin(cmd *cobra.Command, server, username, password string) er
 
 	if password == "" {
 		a.printf("Password: ")
-		pw, err := term.ReadPassword(int(os.Stdin.Fd())) //nolint:gosec // file descriptors are always small non-negative integers
+		pw, err := term.ReadPassword(int(os.Stdin.Fd()))
 		if err != nil {
 			return fmt.Errorf("read password: %w", err)
 		}
@@ -121,6 +121,7 @@ func (a *App) runLogout(cmd *cobra.Command, _ []string) error {
 		u, urlErr := url.Parse(sf.Server)
 		if urlErr == nil {
 			c.HTTPClient().Jar.SetCookies(u, []*http.Cookie{
+				//nolint:gosec // outgoing cookie sent by this CLI client, not a server response; Secure/HttpOnly/SameSite are response-only attributes
 				{Name: sessionCookieName, Value: sf.SessionToken},
 			})
 		}

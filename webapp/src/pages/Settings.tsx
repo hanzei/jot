@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/i18n';
 import { auth, users, notes as notesApi, sessions as sessionsApi, pats as patsApi, isAxiosError } from '@/utils/api';
@@ -60,22 +60,24 @@ const Settings = ({ passwordMinLength }: SettingsProps) => {
   const [revokingPATIds, setRevokingPATIds] = useState<Set<string>>(new Set());
   const [newlyCreatedPAT, setNewlyCreatedPAT] = useState<PersonalAccessToken | null>(null);
 
-  const loadSessions = useCallback(async () => {
-    setSessionsLoading(true);
-    setSessionsError('');
-    try {
-      const data = await sessionsApi.list();
-      setActiveSessions(data);
-    } catch {
-      setSessionsError('settings.sessionsLoadFailed');
-    } finally {
-      setSessionsLoading(false);
-    }
-  }, []);
-
+  // Loads once on mount. The initial `sessionsLoading` / `sessionsError` state
+  // already describes the loading state, so this only sets state from the async
+  // continuations — a synchronous setState here would be a cascading render
+  // (react-hooks/set-state-in-effect). Mirrors the PAT effect below.
   useEffect(() => {
-    loadSessions();
-  }, [loadSessions]);
+    let mounted = true;
+    sessionsApi.list()
+      .then((data) => {
+        if (mounted) setActiveSessions(data);
+      })
+      .catch(() => {
+        if (mounted) setSessionsError('settings.sessionsLoadFailed');
+      })
+      .finally(() => {
+        if (mounted) setSessionsLoading(false);
+      });
+    return () => { mounted = false; };
+  }, []);
 
   useEffect(() => {
     let mounted = true;

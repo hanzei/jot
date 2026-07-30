@@ -80,6 +80,7 @@ func (a *App) loadSession() error {
 	}
 
 	a.client.HTTPClient().Jar.SetCookies(u, []*http.Cookie{
+		//nolint:gosec // outgoing cookie sent by this CLI client, not a server response; Secure/HttpOnly/SameSite are response-only attributes
 		{Name: sessionCookieName, Value: sf.SessionToken},
 	})
 
