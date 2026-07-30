@@ -72,6 +72,12 @@ Thumbs.db
 *.sqlite
 *.sqlite3
 
+# Note-image blob storage (JOT_UPLOAD_DIR, default ./uploads) — runtime data
+# written by a locally run server, the filesystem half of a backup alongside
+# the database above.
+server/uploads/
+uploads/
+
 # Mobile build artifacts
 mobile/.expo/
 mobile/android/
