@@ -763,10 +763,15 @@ describe('NoteModal', () => {
 
       fireEvent.click(screen.getByText('List'))
 
+      // 150 emoji is 300 UTF-16 units but only 150 code points, so the server
+      // accepts it. The input is controlled and its onChange bails out on a
+      // validation error, so a rejected title never reaches the value.
       const titleInput = screen.getByPlaceholderText('Note title...')
-      fireEvent.change(titleInput, { target: { value: '😀'.repeat(150) } })
+      const emojiTitle = '😀'.repeat(150)
+      fireEvent.change(titleInput, { target: { value: emojiTitle } })
 
       expect(screen.queryByText(/Title must be 200 characters or less/)).not.toBeInTheDocument()
+      expect(titleInput).toHaveValue(emojiTitle)
     })
 
     it('shows error messages for validation failures', async () => {
