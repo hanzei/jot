@@ -106,6 +106,9 @@ export function recentShareTargets(
   return Array.from(lastSharedAt.entries())
     .sort((a, b) => b[1] - a[1])
     .slice(0, limit)
+    // Not `.map(([userId]) => userId)`: array destructuring anywhere in
+    // shared/src pulls in a @babel/runtime helper that mobile cannot resolve,
+    // and every mobile suite then fails to load. See CLAUDE.md.
     .map(entry => entry[0]);
 }
 
