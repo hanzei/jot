@@ -2,7 +2,7 @@ import { useState, useEffect, useEffectEvent, useMemo, useRef, useCallback, type
 import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, Pin, EllipsisVertical, Square } from 'lucide-react';
 import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListItems, listToText, exceedsCodePointLimit, truncateToCodePoints, type Note, type NoteType, type CreateNoteRequest, type UpdateNoteRequest, type ConvertNoteTypeRequest, type PatchNoteItemRequest, type Label, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListItems, listToText, exceedsCodePointLimit, truncateToCodePoints, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type Label, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
 import { renderMarkdown } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
@@ -12,7 +12,8 @@ import SortableItem from '@/components/SortableItem';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
 import { useNoteImages } from '@/hooks/useNoteImages';
-import { useCompletedItems, type CompletedItemsBaseline } from '@/hooks/useCompletedItems';
+import { useCompletedItems } from '@/hooks/useCompletedItems';
+import { useNoteDraft, type AutoSaveDraft } from '@/hooks/useNoteDraft';
 import { useSizeTransition } from '@/hooks/useSizeTransition';
 import { buildShareAvatars } from '@/utils/shareAvatars';
 import { buildMobileDeepLink } from '@/utils/deepLink';
@@ -100,15 +101,6 @@ const validateContent = (content: string, t: TFunction): string | null => {
 // updates target the right row without a create round-trip.
 const generateItemId = () => generateId();
 
-// Mergeable fields of a list item, used as the per-item baseline for diffing
-// local edits against the last-known server state.
-type ItemSnapshot = Pick<ListItem, 'text' | 'completed' | 'parentId' | 'assignedTo'>;
-const itemSnapshot = (item: ListItem): ItemSnapshot => ({
-  text: item.text,
-  completed: item.completed,
-  parentId: item.parentId,
-  assignedTo: item.assignedTo,
-});
 const TEXT_NOTE_MIN_HEIGHT_PX = 96;
 const TEXT_NOTE_RESIZE_DEBOUNCE_MS = 120;
 
@@ -134,28 +126,10 @@ interface NoteModalProps {
   initialContent?: string;
 }
 
-interface AutoSaveDraft {
-  title?: string;
-  content?: string;
-  pinned?: boolean;
-  archived?: boolean;
-  color?: string;
-  checked_items_collapsed?: boolean;
-}
-
 export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, onDelete, onDuplicate, onConvert, isOwner = true, usersById, currentUserId, uploadMaxBytes = UPLOAD_MAX_BYTES, initialType, initialContent }: NoteModalProps) {
   const { t, i18n } = useTranslation();
   const { showToast } = useToast();
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [noteType, setNoteType] = useState<NoteType>('text');
-  const [color, setColor] = useState('#ffffff');
-  const [pinned, setPinned] = useState(false);
-  const [archived, setArchived] = useState(false);
-  const [items, setItems] = useState<ListItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [showSaved, setShowSaved] = useState(false);
-  const [checkedItemsCollapsed, setCheckedItemsCollapsed] = useState(false);
   const [noteLabels, setNoteLabels] = useState<Label[]>(note?.labels ?? []);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showLabelPicker, setShowLabelPicker] = useState(false);
@@ -182,6 +156,29 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }, 5000);
   }, []);
 
+  // The note's editable state — scalar fields plus list items — and the
+  // autosave engine that persists them by diffing against the server baseline.
+  const {
+    title, setTitle,
+    content, setContent,
+    noteType, setNoteType,
+    color, setColor,
+    pinned, setPinned,
+    archived, setArchived,
+    checkedItemsCollapsed, setCheckedItemsCollapsed,
+    items, itemsRef, commitItems,
+    showSaved, flashSaved, markDirty,
+    setSavedBaseline, markScalarSaved, applyDraftScalars, isDirty, hasUnflushedWork, baseline,
+    autoSaveNote, scheduleAutoSave, cancelPendingSave, flushSave,
+    beginExclusiveSave, endExclusiveSave, isSaving, requestAnotherSavePass,
+  } = useNoteDraft({ note, onRefresh, showError });
+
+  useEffect(() => {
+    return () => {
+      if (errorTimeoutRef.current) clearTimeout(errorTimeoutRef.current);
+    };
+  }, []);
+
   // Note image add/remove UI (upload queue, optimistic overlay, deferred
   // removal undo, drag-to-upload). Uploads require an existing note — an id to
   // attach to — so the hook gates all of it on `note` being set.
@@ -204,36 +201,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     resetForNoteSwitch: resetImagesForNoteSwitch,
   } = useNoteImages({ note, uploadMaxBytes, onRefresh, showError });
 
-  // Use useRef for timeout management instead of global window property
-  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const noteIdRef = useRef<string | null>(note?.id ?? null);
-  const noteTypeRef = useRef<NoteType>(note?.note_type ?? 'text');
-  const autoSaveDraftRef = useRef<AutoSaveDraft>({
-    title: '',
-    content: '',
-    pinned: false,
-    archived: false,
-    color: '#ffffff',
-    checked_items_collapsed: false,
-  });
-  const itemsRef = useRef<ListItem[]>([]);
-  // Baseline of the last-known server state, used to diff local edits into
-  // granular per-item operations (and field-only scalar patches) instead of
-  // re-sending the whole note. This is what stops a save in one tab from
-  // overwriting concurrent edits made in another.
-  const savedScalarsRef = useRef<AutoSaveDraft>({
-    title: '',
-    content: '',
-    pinned: false,
-    archived: false,
-    color: '#ffffff',
-    checked_items_collapsed: false,
-  });
-  const savedItemsRef = useRef<Map<string, ItemSnapshot>>(new Map());
-  const savedOrderRef = useRef<string[]>([]);
-  // Set while a save is in flight to request one more pass once it finishes,
-  // so edits made during the save are not lost.
-  const pendingSaveRef = useRef(false);
   // Tracks the note id whose state we have adopted into local editor state, so
   // we can tell "switched to a different note" (always adopt) apart from "same
   // note refreshed by an SSE event" (only adopt when there are no local edits).
@@ -241,11 +208,9 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const itemInputRefs = useRef<Map<string, HTMLTextAreaElement>>(new Map());
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const colorPickerRef = useRef<HTMLDivElement>(null);
-  const savingRef = useRef(false);
   // Set to true when the backdrop mousedown handler has already handled a dismiss,
   // so Dialog.onClose (which HeadlessUI fires after the mousedown) skips its logic.
   const backdropHandledRef = useRef(false);
-  const savedTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const resizeContentTextarea = useCallback((textarea: HTMLTextAreaElement | null) => {
     if (!textarea) return;
     textarea.style.height = 'auto';
@@ -260,73 +225,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
-
-  const commitItems = useCallback((nextItems: ListItem[]) => {
-    itemsRef.current = nextItems;
-    setItems(nextItems);
-    // If a save is in flight, request another pass so these edits are flushed.
-    if (savingRef.current) {
-      pendingSaveRef.current = true;
-    }
-  }, []);
-
-  // Cancels a pending debounced text-save so it can't fire a duplicate pass
-  // after an immediate save has already been sent.
-  const cancelPendingSave = useCallback(() => {
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = undefined;
-    }
-  }, []);
-
-  const flashSaved = useCallback(() => {
-    setShowSaved(true);
-    if (savedTimeoutRef.current) clearTimeout(savedTimeoutRef.current);
-    savedTimeoutRef.current = setTimeout(() => setShowSaved(false), 2000);
-  }, []);
-
-  const markDirty = useCallback(() => {
-    setShowSaved(false);
-    if (savedTimeoutRef.current) {
-      clearTimeout(savedTimeoutRef.current);
-      savedTimeoutRef.current = undefined;
-    }
-  }, []);
-
-  // Records the current local state as the server baseline (called after a
-  // successful save and when adopting a fresh note from props).
-  const setSavedBaseline = useCallback((draft: AutoSaveDraft, listItems: ListItem[]) => {
-    savedScalarsRef.current = { ...draft };
-    const map = new Map<string, ItemSnapshot>();
-    for (const it of listItems) {
-      map.set(it.id, itemSnapshot(it));
-    }
-    savedItemsRef.current = map;
-    savedOrderRef.current = listItems.map(it => it.id);
-  }, []);
-
-  // The two baseline mutations the completed-item bulk actions need. Handed
-  // over as named operations so the hook never touches the diff refs directly.
-  const completedItemsBaseline = useMemo<CompletedItemsBaseline>(() => ({
-    syncCompleted: (completedById) => {
-      for (const [id, comp] of completedById) {
-        const snap = savedItemsRef.current.get(id);
-        if (snap) savedItemsRef.current.set(id, { ...snap, completed: comp });
-      }
-    },
-    applyBulkDeletion: (deletedIds, remainingItems) => {
-      for (const id of deletedIds) savedItemsRef.current.delete(id);
-      // Advance the baseline for any reconciled item so the diff engine does not
-      // try to "restore" the pre-delete parent/completed on the next save.
-      for (const item of remainingItems) {
-        const snap = savedItemsRef.current.get(item.id);
-        if (snap && (snap.parentId !== item.parentId || snap.completed !== item.completed)) {
-          savedItemsRef.current.set(item.id, { ...snap, parentId: item.parentId, completed: item.completed });
-        }
-      }
-      savedOrderRef.current = savedOrderRef.current.filter(id => !deletedIds.has(id));
-    },
-  }), []);
 
   // Bulk actions on the checked items: deferred delete and uncheck-all, each
   // behind its own in-modal undo bar.
@@ -343,131 +241,13 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     note,
     itemsRef,
     commitItems,
-    baseline: completedItemsBaseline,
+    baseline,
     cancelPendingSave,
     markDirty,
     flashSaved,
     showError,
     onRefresh,
   });
-
-  // True when local editor state differs from the server baseline. Used to
-  // avoid clobbering unsaved edits when an SSE refresh re-supplies the note.
-  const isDirty = useCallback((): boolean => {
-    const cur = autoSaveDraftRef.current;
-    const base = savedScalarsRef.current;
-    if (cur.pinned !== base.pinned || cur.archived !== base.archived || cur.color !== base.color) return true;
-    if (noteTypeRef.current === 'list') {
-      if (cur.title !== base.title || cur.checked_items_collapsed !== base.checked_items_collapsed) return true;
-    } else if (cur.content !== base.content) {
-      return true;
-    }
-    const items = itemsRef.current;
-    if (items.length !== savedOrderRef.current.length) return true;
-    for (let i = 0; i < items.length; i++) {
-      const it = items[i];
-      if (savedOrderRef.current[i] !== it.id) return true;
-      const snap = savedItemsRef.current.get(it.id);
-      if (!snap || snap.text !== it.text || snap.completed !== it.completed
-        || snap.parentId !== it.parentId || snap.assignedTo !== it.assignedTo) {
-        return true;
-      }
-    }
-    return false;
-  }, []);
-
-  // Builds a note patch containing only the scalar fields that changed vs the
-  // baseline, so a list-item edit never re-sends (and clobbers) the title, and
-  // a title edit never re-sends stale items.
-  const buildScalarPatch = useCallback((): UpdateNoteRequest | null => {
-    const cur = autoSaveDraftRef.current;
-    const base = savedScalarsRef.current;
-    const patch: Record<string, unknown> = {};
-    if (cur.pinned !== base.pinned) patch.pinned = cur.pinned;
-    if (cur.archived !== base.archived) patch.archived = cur.archived;
-    if (cur.color !== base.color) patch.color = cur.color;
-    if (noteTypeRef.current === 'list') {
-      if (cur.title !== base.title) patch.title = cur.title;
-      if (cur.checked_items_collapsed !== base.checked_items_collapsed) patch.checked_items_collapsed = cur.checked_items_collapsed;
-    } else if (cur.content !== base.content) {
-      patch.content = cur.content;
-    }
-    return Object.keys(patch).length > 0 ? (patch as UpdateNoteRequest) : null;
-  }, []);
-
-  // Persists item changes as granular create/patch/delete/reorder operations
-  // (diffed against the baseline). The baseline is advanced incrementally after
-  // each successful op so that if a later op fails (e.g. network error), the
-  // already-applied ops are not re-sent on the next retry — which would
-  // otherwise re-create items and get stuck on 409 Conflict.
-  const persistItemDiff = useCallback(async (noteId: string, listItems: ListItem[]) => {
-    const base = savedItemsRef.current;
-    const curIds = new Set(listItems.map(it => it.id));
-
-    for (const it of listItems) {
-      const snap = base.get(it.id);
-      if (!snap) {
-        try {
-          await notes.createItem(noteId, {
-            id: it.id,
-            text: it.text,
-            position: it.position,
-            completed: it.completed,
-            parent_id: it.parentId ?? '',
-            ...(it.assignedTo ? { assigned_to: it.assignedTo } : {}),
-          });
-        } catch (err) {
-          // 409 means a prior attempt already created this item; treat as done.
-          const status = (err as { response?: { status?: number } })?.response?.status;
-          if (status !== 409) throw err;
-        }
-        base.set(it.id, itemSnapshot(it));
-        continue;
-      }
-      const data: PatchNoteItemRequest = {};
-      if (it.text !== snap.text) data.text = it.text;
-      if (it.completed !== snap.completed) data.completed = it.completed;
-      if (it.parentId !== snap.parentId) data.parent_id = it.parentId ?? '';
-      if (it.assignedTo !== snap.assignedTo) data.assigned_to = it.assignedTo;
-      if (Object.keys(data).length > 0) {
-        await notes.updateItem(noteId, it.id, data);
-        base.set(it.id, itemSnapshot(it));
-      }
-    }
-
-    for (const id of [...base.keys()]) {
-      if (!curIds.has(id)) {
-        await notes.deleteItem(noteId, id);
-        base.delete(id);
-      }
-    }
-
-    const curOrder = listItems.map(it => it.id);
-    const orderChanged = curOrder.length !== savedOrderRef.current.length
-      || curOrder.some((id, i) => savedOrderRef.current[i] !== id);
-    if (orderChanged && curOrder.length > 0) {
-      await notes.reorderItems(noteId, curOrder);
-    }
-    savedOrderRef.current = curOrder;
-  }, []);
-
-  // Flushes all pending scalar and item changes to the server in one pass.
-  const flushSave = useCallback(async () => {
-    const noteId = noteIdRef.current;
-    if (!noteId) return;
-    const scalarPatch = buildScalarPatch();
-    if (scalarPatch) {
-      // Snapshot the scalar state now, before awaiting, so the baseline reflects
-      // exactly what was sent — not any later edits made while the request (or a
-      // subsequent failing item op) was in flight.
-      const scalarSnapshot = { ...autoSaveDraftRef.current };
-      await notes.update(noteId, scalarPatch);
-      savedScalarsRef.current = scalarSnapshot;
-    }
-    if (noteTypeRef.current === 'list') {
-      await persistItemDiff(noteId, itemsRef.current);
-    }
-  }, [buildScalarPatch, persistItemDiff]);
 
   // Separate completed and uncompleted items with memoization
   const { uncompletedItems, completedItems, completedItemTexts } = useMemo(() => {
@@ -532,7 +312,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     // here never loses data; the next idle refresh reconciles.
     const incomingId = note?.id ?? null;
     const sameNote = incomingId !== null && incomingId === adoptedNoteIdRef.current;
-    if (sameNote && (savingRef.current || saveTimeoutRef.current || isDirty())) {
+    if (sameNote && hasUnflushedWork()) {
       return;
     }
     const previousAdoptedId = adoptedNoteIdRef.current;
@@ -550,11 +330,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
 
     if (note) {
-      // Adopting a note necessarily writes the whole editor state from the
-      // incoming prop. Doing that during render instead would mean running the
-      // dirty/in-flight guards above as a render-phase side effect, which is a
-      // separate change from this extraction.
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
       setNoteType(note.note_type);
       setColor(note.color);
       setPinned(note.pinned);
@@ -582,6 +357,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         commitItems([]);
         draft = { title: '', content: note.content, pinned: note.pinned, archived: note.archived, color: note.color, checked_items_collapsed: false };
       }
+      // Adopting a note necessarily writes the whole editor state from the
+      // incoming prop. Doing that during render instead would mean running the
+      // dirty/in-flight guards above as a render-phase side effect, which is a
+      // separate change from this extraction.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
       setNoteLabels(note.labels ?? []);
       setSavedBaseline(draft, listItems);
     } else {
@@ -595,34 +375,9 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       setNoteLabels([]);
       setSavedBaseline({ title: '', content: '', pinned: false, archived: false, color: '#ffffff', checked_items_collapsed: false }, []);
     }
-  }, [commitItems, note, isDirty, resetImagesForNoteSwitch, resetCompletedItemsForNoteSwitch, setSavedBaseline, initialType, initialContent]);
-
-  useEffect(() => {
-    noteIdRef.current = note?.id ?? null;
-  }, [note?.id]);
-
-  useEffect(() => {
-    noteTypeRef.current = noteType;
-  }, [noteType]);
-
-  useEffect(() => {
-    autoSaveDraftRef.current = {
-      title,
-      content,
-      pinned,
-      archived,
-      color,
-      checked_items_collapsed: checkedItemsCollapsed,
-    };
-  }, [archived, checkedItemsCollapsed, color, content, pinned, title]);
-
-  useEffect(() => {
-    return () => {
-      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-      if (errorTimeoutRef.current) clearTimeout(errorTimeoutRef.current);
-      if (savedTimeoutRef.current) clearTimeout(savedTimeoutRef.current);
-    };
-  }, []);
+  }, [commitItems, note, hasUnflushedWork, resetImagesForNoteSwitch, resetCompletedItemsForNoteSwitch,
+      setSavedBaseline, setTitle, setContent, setNoteType, setColor, setPinned, setArchived,
+      setCheckedItemsCollapsed, initialType, initialContent]);
 
   useEffect(() => {
     if (!showColorPicker) return;
@@ -703,10 +458,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   // It refuses to nest an item that already has children (that would create a
   // grandchild, which the server rejects) and is a no-op when nothing changes.
   const indentListItem = async (itemId: string, delta: 1 | -1) => {
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = undefined;
-    }
+    cancelPendingSave();
     const currentItems = itemsRef.current;
     const target = currentItems.find(item => item.id === itemId);
     if (!target) return;
@@ -791,10 +543,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     afterItemId: string,
     overrides: { text?: string; parentId?: string | null; assignedTo?: string } = {},
   ) => {
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = undefined;
-    }
+    cancelPendingSave();
     const currentItems = itemsRef.current;
     const afterItemPos = currentItems.findIndex(item => item.id === afterItemId);
     const afterItem = afterItemPos >= 0 ? currentItems[afterItemPos] : undefined;
@@ -821,10 +570,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     beforeItemId: string,
     overrides: { parentId?: string | null; assignedTo?: string } = {},
   ) => {
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = undefined;
-    }
+    cancelPendingSave();
     const currentItems = itemsRef.current;
     const beforeItemPos = currentItems.findIndex(item => item.id === beforeItemId);
     const beforeItem = beforeItemPos >= 0 ? currentItems[beforeItemPos] : undefined;
@@ -848,10 +594,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   // inserts a new item directly after it containing the text from splitPos
   // onward, inheriting the same group (parentId) and assignee.
   const splitListItem = (itemId: string, splitPos: number) => {
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = undefined;
-    }
+    cancelPendingSave();
     const currentItems = itemsRef.current;
     const itemPos = currentItems.findIndex(item => item.id === itemId);
     if (itemPos === -1) return itemId;
@@ -1051,10 +794,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     updatedItems.splice(insertAfterPos + 1, 0, ...newItems);
 
     commitItems(normalizeItemOrder(updatedItems));
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = undefined;
-    }
+    cancelPendingSave();
     autoSaveNote();
 
     const lastNewItem = newItems[newItems.length - 1];
@@ -1074,44 +814,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     const newItems = normalizeItemOrder(itemsRef.current.filter(item => item.id !== itemId));
 
     commitItems(newItems);
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = undefined;
-    }
+    cancelPendingSave();
     autoSaveNote();
-  };
-
-  // Persists local edits to the server as granular operations. The optional
-  // argument is ignored (kept for call-site compatibility); the latest state is
-  // always read from itemsRef/autoSaveDraftRef so queued saves pick up the most
-  // recent edits.
-  const autoSaveNote = async () => {
-    if (!noteIdRef.current) return;
-    // Cancel any pending debounced text-save so it can't fire a duplicate pass.
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = undefined;
-    }
-    if (savingRef.current) {
-      pendingSaveRef.current = true;
-      return;
-    }
-
-    savingRef.current = true;
-    markDirty();
-    try {
-      do {
-        pendingSaveRef.current = false;
-        await flushSave();
-        onRefresh?.();
-        flashSaved();
-      } while (pendingSaveRef.current);
-    } catch (error) {
-      console.error('Failed to auto-save note:', error);
-      showError(t('note.failedSaveChanges'));
-    } finally {
-      savingRef.current = false;
-    }
   };
 
   // handleItemCompletedToggle checks/unchecks an item through the dedicated
@@ -1143,19 +847,19 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
     // A not-yet-persisted note has no server-side item to toggle; the bulk
     // create on save carries the completed flags instead.
-    if (!noteIdRef.current) return;
+    if (!note?.id) return;
 
     cancelPendingSave();
 
     try {
-      const serverItems = await notes.toggleItemCompleted(noteIdRef.current, itemId, completed);
+      const serverItems = await notes.toggleItemCompleted(note.id, itemId, completed);
       const completedById = new Map(serverItems.map(item => [item.id, item.completed]));
       commitItems(itemsRef.current.map(item => {
         const serverCompleted = completedById.get(item.id);
         return serverCompleted === undefined ? item : { ...item, completed: serverCompleted };
       }));
       // Advance the baseline so the diff engine does not re-patch completed.
-      completedItemsBaseline.syncCompleted(completedById);
+      baseline.syncCompleted(completedById);
       onRefresh?.();
       flashSaved();
     } catch (error) {
@@ -1195,14 +899,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     
     // Auto-save text changes if editing an existing note (with debouncing)
     if (note) {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-      
-      saveTimeoutRef.current = setTimeout(async () => {
-        saveTimeoutRef.current = undefined;
-        await autoSaveNote();
-      }, VALIDATION.AUTO_SAVE_TIMEOUT_MS);
+      scheduleAutoSave();
     }
   };
 
@@ -1245,10 +942,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         item.id === currentItemId ? { ...item, text: suggestionText } : item
       );
       commitItems(updatedItems);
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-        saveTimeoutRef.current = undefined;
-      }
+      cancelPendingSave();
       autoSaveNote();
       return;
     }
@@ -1267,10 +961,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
     commitItems(normalizeItemOrder(withoutBoth));
 
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = undefined;
-    }
+    cancelPendingSave();
     autoSaveNote();
 
     // Restore focus to the item now sitting at the same position
@@ -1299,25 +990,18 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const persistExistingNote = useCallback(async () => {
     if (!note) return;
 
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = undefined;
-    }
+    cancelPendingSave();
 
     // Flush any pending scalar and item changes as granular operations.
     await flushSave();
     onRefresh?.();
-  }, [flushSave, note, onRefresh]);
+  }, [cancelPendingSave, flushSave, note, onRefresh]);
 
   const handleSave = async () => {
-    if (savingRef.current) return;
-    savingRef.current = true;
+    if (!beginExclusiveSave()) return;
     // Cancel any pending debounced autosave to avoid a stale write racing
     // with this immediate save.
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = undefined;
-    }
+    cancelPendingSave();
     setLoading(true);
     try {
       if (note) {
@@ -1354,7 +1038,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       console.error('Failed to save note:', error);
       showError(t('note.failedSaveChanges'));
     } finally {
-      savingRef.current = false;
+      endExclusiveSave();
       setLoading(false);
     }
   };
@@ -1362,7 +1046,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   // List -> text is lossy (assignments, real checkbox/nesting structure), so
   // it's confirmed first; text -> list just reflows lines and runs directly.
   const handleConvertClick = () => {
-    if (!note || !onConvert || loading || savingRef.current) return;
+    if (!note || !onConvert || loading || isSaving()) return;
     if (noteType === 'list') {
       setShowConvertConfirm(true);
     } else {
@@ -1374,14 +1058,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     if (!note || !onConvert) return;
     const targetType: NoteType = noteType === 'list' ? 'text' : 'list';
 
-    savingRef.current = true;
+    beginExclusiveSave();
     setLoading(true);
     try {
       await persistExistingNote();
     } catch (error) {
       console.error('Failed to save note before conversion:', error);
       showError(t('note.failedSaveChanges'));
-      savingRef.current = false;
+      endExclusiveSave();
       setLoading(false);
       setShowConvertConfirm(false);
       return;
@@ -1429,23 +1113,23 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       console.error('Failed to convert note:', error);
       showError(t('note.failedConvert'));
     } finally {
-      savingRef.current = false;
+      endExclusiveSave();
       setLoading(false);
       setShowConvertConfirm(false);
     }
   };
 
   const handleDuplicate = async () => {
-    if (!note || !onDuplicate || loading || savingRef.current) return;
+    if (!note || !onDuplicate || loading || isSaving()) return;
 
-    savingRef.current = true;
+    beginExclusiveSave();
     setLoading(true);
     try {
       await persistExistingNote();
     } catch (error) {
       console.error('Failed to save note before duplicate:', error);
       showError(t('note.failedSaveChanges'));
-      savingRef.current = false;
+      endExclusiveSave();
       setLoading(false);
       return;
     }
@@ -1457,7 +1141,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       console.error('Failed to duplicate note:', error);
       showError(t('note.failedDuplicate'));
     } finally {
-      savingRef.current = false;
+      endExclusiveSave();
       setLoading(false);
     }
   };
@@ -1472,7 +1156,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       // Send only the field that changed so concurrent item/title edits made
       // elsewhere are not overwritten.
       await notes.update(note.id, { pinned: newPinnedState });
-      savedScalarsRef.current.pinned = newPinnedState;
+      markScalarSaved({ pinned: newPinnedState });
       onRefresh?.();
       showToast(
         newPinnedState ? t('dashboard.notePinned') : t('dashboard.noteUnpinned'),
@@ -1482,7 +1166,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
           onClick: async () => {
             try {
               await notes.update(note.id, { pinned: !newPinnedState });
-              savedScalarsRef.current.pinned = !newPinnedState;
+              markScalarSaved({ pinned: !newPinnedState });
               setPinned(!newPinnedState);
               onRefresh?.();
             } catch (undoError) {
@@ -1506,7 +1190,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
     try {
       await notes.update(note.id, { archived: newArchivedState });
-      savedScalarsRef.current.archived = newArchivedState;
+      markScalarSaved({ archived: newArchivedState });
       showToast(
         newArchivedState ? t('dashboard.noteArchived') : t('dashboard.noteUnarchived'),
         'success',
@@ -1515,7 +1199,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
           onClick: async () => {
             try {
               await notes.update(note.id, { archived: !newArchivedState });
-              savedScalarsRef.current.archived = !newArchivedState;
+              markScalarSaved({ archived: !newArchivedState });
               setArchived(!newArchivedState);
               onRefresh?.();
             } catch (undoError) {
@@ -1561,7 +1245,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
     try {
       await notes.update(note.id, { checked_items_collapsed: newCollapsedState });
-      savedScalarsRef.current.checked_items_collapsed = newCollapsedState;
+      markScalarSaved({ checked_items_collapsed: newCollapsedState });
       onRefresh?.();
     } catch (error) {
       console.error('Failed to update collapse state:', error);
@@ -1589,16 +1273,13 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
   const handleCloseRequest = async () => {
     if (hasUnsavedChanges()) {
-      if (savingRef.current) {
+      if (isSaving()) {
         // An auto-save is already in flight. Cancel any pending debounced
         // text-save and request one more pass; the in-flight autoSaveNote loop
         // keeps running after unmount (refs persist in its closure) and flushes
         // the latest edits, so closing now does not drop them.
-        if (saveTimeoutRef.current) {
-          clearTimeout(saveTimeoutRef.current);
-          saveTimeoutRef.current = undefined;
-        }
-        pendingSaveRef.current = true;
+        cancelPendingSave();
+        requestAnotherSavePass();
         onClose();
         return;
       }
@@ -1890,11 +1571,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                   setTitle(newTitle);
                   if (note) {
                     markDirty();
-                    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-                    saveTimeoutRef.current = setTimeout(async () => {
-                      saveTimeoutRef.current = undefined;
-                      await autoSaveNote();
-                    }, VALIDATION.AUTO_SAVE_TIMEOUT_MS);
+                    scheduleAutoSave();
                   }
                 }}
                 onKeyDown={(e) => {
@@ -1945,11 +1622,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                       setContent(newContent);
                       if (note) {
                         markDirty();
-                        if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-                        saveTimeoutRef.current = setTimeout(async () => {
-                          saveTimeoutRef.current = undefined;
-                          await autoSaveNote();
-                        }, VALIDATION.AUTO_SAVE_TIMEOUT_MS);
+                        scheduleAutoSave();
                       }
                     }}
                   />
@@ -2222,7 +1895,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                   setColor(nextColor);
                   if (note) {
                     markDirty();
-                    autoSaveDraftRef.current = { ...autoSaveDraftRef.current, color: nextColor };
+                    applyDraftScalars({ color: nextColor });
                     autoSaveNote();
                   }
                   colorPickerRef.current?.querySelectorAll<HTMLButtonElement>('button')[nextIndex]?.focus();
@@ -2238,7 +1911,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                       setShowColorPicker(false);
                       if (note) {
                         markDirty();
-                        autoSaveDraftRef.current = { ...autoSaveDraftRef.current, color: newColor };
+                        applyDraftScalars({ color: newColor });
                         autoSaveNote();
                       }
                     }}
