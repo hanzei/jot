@@ -21,6 +21,7 @@ export default function ChangePasswordSection() {
   const [passwordSuccess, setPasswordSuccess] = useState('');
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
     setPasswordSuccess('');
   }, [settings?.language]);
 

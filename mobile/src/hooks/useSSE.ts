@@ -34,16 +34,20 @@ export function useSSE(
   const db = useSQLiteContext();
   const managerRef = useRef<SSEConnectionManager | null>(null);
   const onNoteUpdatedRef = useRef(onNoteUpdatedByOther);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   onNoteUpdatedRef.current = onNoteUpdatedByOther;
   const onStatusChangeRef = useRef(onStatusChange);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   onStatusChangeRef.current = onStatusChange;
   // Tracks whether the stream has connected at least once this session, so the
   // catch-up resync fires only on a *re*connect and not the initial connect
   // (whose catch-up is already covered by the read hooks' mount-time sync).
   const hasConnectedOnceRef = useRef(false);
   const dbRef = useRef(db);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   dbRef.current = db;
   const userIdRef = useRef(user?.id);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   userIdRef.current = user?.id;
 
   const startConnection = useCallback(() => {

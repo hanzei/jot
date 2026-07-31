@@ -149,6 +149,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
   const prevConnectedRef = useRef(true);
   const isConnectedRef = useRef(true);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
 
   // Re-entrancy guard: never run two drains concurrently.
@@ -334,6 +335,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     }
   }, [db, queryClient, onDrainStalled, clearDrainTimer, scheduleDrain, revalidateSession, refreshPendingNoteIds, refreshSyncFailures]);
 
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   performDrainRef.current = performDrain;
 
   const handleReconnect = useCallback(async () => {

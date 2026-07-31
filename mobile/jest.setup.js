@@ -201,6 +201,24 @@ jest.mock('expo-haptics', () => ({
 
 jest.mock('react-native-reanimated', () => {
   const RN = require('react-native');
+  // Mirrors reanimated's SharedValue: the `.value` accessor plus the
+  // `.get()`/`.set()` pair (the React Compiler-safe API the app uses). `.set()`
+  // takes a value or an updater, as the real one does.
+  const makeSharedValue = (init) => {
+    let current = init;
+    return {
+      get value() {
+        return current;
+      },
+      set value(next) {
+        current = next;
+      },
+      get: () => current,
+      set: (next) => {
+        current = typeof next === 'function' ? next(current) : next;
+      },
+    };
+  };
   return {
     __esModule: true,
     default: {
@@ -213,11 +231,11 @@ jest.mock('react-native-reanimated', () => {
     },
     useAnimatedStyle: () => ({}),
     useAnimatedReaction: jest.fn(),
-    useSharedValue: (init) => ({ value: init }),
+    useSharedValue: (init) => makeSharedValue(init),
     useAnimatedRef: () => ({ current: null }),
-    useScrollViewOffset: () => ({ value: 0 }),
+    useScrollViewOffset: () => makeSharedValue(0),
     useFrameCallback: () => ({ setActive: jest.fn(), isActive: false }),
-    useDerivedValue: (fn) => ({ value: typeof fn === 'function' ? undefined : fn }),
+    useDerivedValue: (fn) => makeSharedValue(typeof fn === 'function' ? undefined : fn),
     withTiming: (val) => val,
     withSpring: (val) => val,
     runOnJS: (fn) => fn,

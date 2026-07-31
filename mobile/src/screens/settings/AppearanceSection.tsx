@@ -39,6 +39,7 @@ export default function AppearanceSection() {
   const [openDropdown, setOpenDropdown] = useState<'language' | 'theme' | null>(null);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
     setLanguagePref(getLanguagePreference(settings?.language));
     setThemePref(settings?.theme ?? 'system');
   }, [settings?.language, settings?.theme]);
