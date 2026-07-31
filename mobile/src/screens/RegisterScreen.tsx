@@ -15,7 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { AuthStackParamList } from '../navigation/AuthStack';
-import { USERNAME_EDGE_PATTERN, USERNAME_PATTERN, VALIDATION } from '@jot/shared';
+import { VALIDATION, getUsernameValidationError } from '@jot/shared';
 import { displayMessage } from '../i18n/utils';
 import ServerSetupGate from '../components/ServerSetupGate';
 import FadeInView from '../components/FadeInView';
@@ -34,20 +34,19 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const usernameErrorTranslations = {
+    min: t('auth.usernameMin'),
+    max: t('auth.usernameMax'),
+    chars: t('auth.usernameChars'),
+    edge: t('auth.usernameEdge'),
+  } as const;
+
   const validate = (): string | null => {
     const trimmedUsername = username.trim();
     if (!trimmedUsername) return t('auth.usernameRequired');
-    if (trimmedUsername.length < VALIDATION.USERNAME_MIN_LENGTH) {
-      return t('auth.usernameMin');
-    }
-    if (trimmedUsername.length > VALIDATION.USERNAME_MAX_LENGTH) {
-      return t('auth.usernameMax');
-    }
-    if (!USERNAME_PATTERN.test(trimmedUsername)) {
-      return t('auth.usernameChars');
-    }
-    if (USERNAME_EDGE_PATTERN.test(trimmedUsername)) {
-      return t('auth.usernameEdge');
+    const usernameError = getUsernameValidationError(trimmedUsername);
+    if (usernameError) {
+      return usernameErrorTranslations[usernameError];
     }
     if (!password.trim()) return t('auth.passwordRequired');
     if ([...password].length < VALIDATION.PASSWORD_MIN_LENGTH) return t('auth.passwordMin', { min: VALIDATION.PASSWORD_MIN_LENGTH });
