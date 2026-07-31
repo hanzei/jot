@@ -3,7 +3,19 @@ import { Plus, FileText, Archive, Trash2, ClipboardCheck, ArrowUpDown, Search, X
 import { useTranslation } from 'react-i18next';
 import { notes, users as usersApi } from '@/utils/api';
 import { getUser, getSettings, setSettings } from '@/utils/auth';
-import { UPLOAD_MAX_BYTES, type Note, type NoteImage, type NoteType, type User, type SSEEvent, type NoteSort, type ConvertNoteTypeRequest } from '@jot/shared';
+import {
+  UPLOAD_MAX_BYTES,
+  NOTE_SORT_OPTIONS,
+  normalizeNoteSort,
+  sortNotesForDisplay,
+  type Note,
+  type NoteImage,
+  type NoteType,
+  type User,
+  type SSEEvent,
+  type NoteSort,
+  type ConvertNoteTypeRequest,
+} from '@jot/shared';
 import { useSearchParams, useParams, useNavigate, useMatch } from 'react-router';
 import PageContent from '@/components/PageContent';
 import SearchBar from '@/components/SearchBar';
@@ -14,7 +26,6 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
 import { useAuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { isAnyModalDialogOpen, isEditableElementFocused, isOverlayControlFocused } from '@/utils/keyboardShortcuts';
-import { NOTE_SORT_OPTIONS, normalizeNoteSort, sortNotesForDisplay } from '@/utils/noteSort';
 import { isSortWarningDismissed, dismissSortWarning } from '@/utils/sortWarningDismissed';
 import { buildSharedContent } from '@/utils/sharedContent';
 import {

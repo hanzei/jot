@@ -2,9 +2,9 @@ import React from 'react';
 import { View, Text, TextInput, ScrollView, TouchableOpacity } from 'react-native';
 import { ArrowUpDown, LayoutGrid, List, Menu, Search, X } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
-import type { NoteSort } from '@jot/shared';
+import { NOTE_SORT_OPTIONS, type NoteSort } from '@jot/shared';
 import { useTheme } from '../../theme/ThemeContext';
-import { NOTE_SORT_OPTIONS, getNoteSortLabel } from '../../utils/noteSort';
+import { getNoteSortLabel } from '../../utils/noteSort';
 import type { DashboardLayout } from '../../utils/dashboardLayout';
 import { styles } from './styles';
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { getUsernameValidationError } from '../userValidation';
+import { getUsernameValidationError } from '../usernameValidation';
 
 describe('getUsernameValidationError', () => {
   it('accepts a lowercase username', () => {

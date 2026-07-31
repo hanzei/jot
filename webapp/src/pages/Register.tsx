@@ -4,8 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { Eye, EyeOff, TriangleAlert } from 'lucide-react';
 import { auth } from '@/utils/api';
 import { setUser, setSettings } from '@/utils/auth';
-import { getUsernameValidationError, isPasswordTooShort } from '@/utils/userValidation';
-import { VALIDATION } from '@jot/shared';
+import { isPasswordTooShort } from '@/utils/userValidation';
+import { VALIDATION, getUsernameValidationError } from '@jot/shared';
 
 interface RegisterProps {
   onRegister: () => void;

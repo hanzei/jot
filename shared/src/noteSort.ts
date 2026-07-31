@@ -1,11 +1,11 @@
-import type { Note, NoteSort } from '@jot/shared';
+import type { Note, NoteSort } from './types';
 
 export const NOTE_SORT_OPTIONS = ['manual', 'updated_at', 'created_at'] as const;
 
 export const normalizeNoteSort = (value?: string): NoteSort =>
   NOTE_SORT_OPTIONS.includes(value as NoteSort) ? (value as NoteSort) : 'manual';
 
-const compareDescendingTimestamps = (left: string, right: string): number => {
+export const compareDescendingTimestamps = (left: string, right: string): number => {
   const leftTime = Date.parse(left);
   const rightTime = Date.parse(right);
 
