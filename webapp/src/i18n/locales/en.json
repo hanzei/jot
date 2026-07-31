@@ -260,7 +260,7 @@
     "createNewUser": "Create New User",
     "usernameLabel": "Username",
     "usernamePlaceholder": "Username (2-30 characters)",
-    "usernameHint": "{{min}}–{{max}} characters. Letters, numbers, underscores, and hyphens.",
+    "usernameHint": "{{min}}–{{max}} characters. Lowercase letters, numbers, underscores, and hyphens.",
     "usernameCharacterCount": "{{current}}/{{max}}",
     "usernameMin": "Username must be at least {{min}} characters",
     "usernameMax": "Username must be {{max}} characters or fewer",

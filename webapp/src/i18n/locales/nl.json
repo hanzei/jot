@@ -260,7 +260,7 @@
     "createNewUser": "Nieuwe gebruiker aanmaken",
     "usernameLabel": "Gebruikersnaam",
     "usernamePlaceholder": "Gebruikersnaam (2–30 tekens)",
-    "usernameHint": "{{min}}–{{max}} tekens. Letters, cijfers, underscores en koppeltekens.",
+    "usernameHint": "{{min}}–{{max}} tekens. Kleine letters, cijfers, underscores en koppeltekens.",
     "usernameCharacterCount": "{{current}}/{{max}}",
     "usernameMin": "Gebruikersnaam moet minimaal {{min}} tekens bevatten",
     "usernameMax": "Gebruikersnaam mag niet meer dan {{max}} tekens bevatten",

@@ -174,7 +174,7 @@ describe('Admin', () => {
 
       const dialog = await openCreateModal(user)
 
-      expect(within(dialog).getByText('2–30 characters. Letters, numbers, underscores, and hyphens.')).toBeInTheDocument()
+      expect(within(dialog).getByText('2–30 characters. Lowercase letters, numbers, underscores, and hyphens.')).toBeInTheDocument()
       expect(within(dialog).getByText('At least 10 characters')).toBeInTheDocument()
       expect(within(dialog).getByText(`0/${VALIDATION.USERNAME_MAX_LENGTH}`)).toBeInTheDocument()
 

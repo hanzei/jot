@@ -260,7 +260,7 @@
     "createNewUser": "Crea nuovo utente",
     "usernameLabel": "Nome utente",
     "usernamePlaceholder": "Nome utente (2–30 caratteri)",
-    "usernameHint": "{{min}}–{{max}} caratteri. Lettere, numeri, trattini bassi e trattini.",
+    "usernameHint": "{{min}}–{{max}} caratteri. Lettere minuscole, numeri, trattini bassi e trattini.",
     "usernameCharacterCount": "{{current}}/{{max}}",
     "usernameMin": "Il nome utente deve contenere almeno {{min}} caratteri",
     "usernameMax": "Il nome utente non può superare i {{max}} caratteri",

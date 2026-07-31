@@ -260,7 +260,7 @@
     "createNewUser": "Neuen Benutzer erstellen",
     "usernameLabel": "Benutzername",
     "usernamePlaceholder": "Benutzername (2–30 Zeichen)",
-    "usernameHint": "{{min}}–{{max}} Zeichen. Buchstaben, Zahlen, Unterstriche und Bindestriche.",
+    "usernameHint": "{{min}}–{{max}} Zeichen. Kleinbuchstaben, Zahlen, Unterstriche und Bindestriche.",
     "usernameCharacterCount": "{{current}}/{{max}}",
     "usernameMin": "Benutzername muss mindestens {{min}} Zeichen lang sein",
     "usernameMax": "Benutzername darf nicht länger als {{max}} Zeichen sein",

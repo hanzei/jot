@@ -260,7 +260,7 @@
     "createNewUser": "Crear nuevo usuario",
     "usernameLabel": "Nombre de usuario",
     "usernamePlaceholder": "Nombre de usuario (2–30 caracteres)",
-    "usernameHint": "{{min}}–{{max}} caracteres. Letras, números, guiones bajos y guiones.",
+    "usernameHint": "{{min}}–{{max}} caracteres. Letras minúsculas, números, guiones bajos y guiones.",
     "usernameCharacterCount": "{{current}}/{{max}}",
     "usernameMin": "El nombre de usuario debe tener al menos {{min}} caracteres",
     "usernameMax": "El nombre de usuario no puede superar los {{max}} caracteres",

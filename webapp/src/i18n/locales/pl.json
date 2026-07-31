@@ -260,7 +260,7 @@
     "createNewUser": "Utwórz nowego użytkownika",
     "usernameLabel": "Nazwa użytkownika",
     "usernamePlaceholder": "Nazwa użytkownika (2–30 znaków)",
-    "usernameHint": "{{min}}–{{max}} znaków. Litery, cyfry, podkreślenia i myślniki.",
+    "usernameHint": "{{min}}–{{max}} znaków. Małe litery, cyfry, podkreślenia i myślniki.",
     "usernameCharacterCount": "{{current}}/{{max}}",
     "usernameMin": "Nazwa użytkownika musi mieć co najmniej {{min}} znaków",
     "usernameMax": "Nazwa użytkownika nie może przekraczać {{max}} znaków",

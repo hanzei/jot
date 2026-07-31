@@ -8,9 +8,10 @@ describe('getUsernameValidationError', () => {
   });
 
   it('rejects uppercase characters', () => {
-    // Usernames are case-insensitively unique because upper case cannot be
-    // stored at all — the client has to reject it for the same reason the
-    // server does, or the form only fails after a round trip.
+    // Rejecting upper case on the way in is what keeps usernames
+    // case-insensitively unique; rows written before the rule are left as they
+    // are. The client mirrors the server rule so the form fails immediately
+    // rather than after a round trip.
     expect(getUsernameValidationError('Ben')).toBe('chars');
     expect(getUsernameValidationError('BEN')).toBe('chars');
   });

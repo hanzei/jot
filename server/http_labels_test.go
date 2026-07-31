@@ -205,7 +205,7 @@ func TestCreateLabelWithClientID(t *testing.T) {
 
 	t.Run("client-supplied ID always creates, so it returns 201", func(t *testing.T) {
 		status := ts.postJSON(t, user, "/api/v1/labels", map[string]string{
-			"id": "hhhhhhhhhhhhhhhhhhhhhh", "name": "idstatus",
+			"id": "iiiiiiiiiiiiiiiiiiiiii", "name": "idstatus",
 		})
 		assert.Equal(t, http.StatusCreated, status)
 	})
