@@ -113,10 +113,6 @@ compiled web app, while SQLite keeps the default deployment small and portable.
 
 - installs [Task](https://taskfile.dev/) if it is missing — every documented
   command below goes through it, so it cannot itself be installed with a task;
-- builds the `covdata` Go tool when the active toolchain ships without it, which
-  is the case whenever Go downloads a toolchain module rather than using a full
-  local installation — `task coverage` fails with `go: no such tool "covdata"`
-  otherwise;
 - runs `npm ci` in `shared/` → `webapp/` → `mobile/`, in that order (`@jot/shared`
   is a `file:../shared` dependency of the other two), skipping any package that
   already has `node_modules`;

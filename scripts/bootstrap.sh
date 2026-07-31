@@ -9,8 +9,6 @@
 #
 # What it does:
 #   * installs `task` (the Taskfile runner) if it is missing
-#   * builds the `covdata` Go tool when the active toolchain ships without it,
-#     so `task coverage` works
 #   * `npm ci` in shared/ -> webapp/ -> mobile/, skipping any that already have
 #     node_modules
 #   * warns — loudly, without changing anything — when Node or Go is older than
@@ -157,82 +155,6 @@ install_task() {
 }
 
 # ---------------------------------------------------------------------------
-# covdata — `task coverage` passes -coverpkg, which makes `go test` synthesize
-# an empty profile for every package that has no tests of its own, and that
-# shells out to the covdata tool. A full Go installation has it. A toolchain
-# module — what Go downloads when the local go is older than server/go.mod's,
-# as CI images and fresh agent containers usually are — ships a trimmed
-# pkg/tool that omits it, and the coverage run dies with
-# `go: no such tool "covdata"`. The module does carry the matching source, so
-# build the tool with the very toolchain that is missing it.
-# ---------------------------------------------------------------------------
-
-install_covdata() {
-  # check_go has already reported a missing go; nothing to add here.
-  command -v go >/dev/null 2>&1 || return
-
-  # Both queries run from server/, so Go resolves the same toolchain
-  # `task coverage` will use. Asked from the repo root it answers for the
-  # local installation instead — whose covdata the coverage run never touches.
-  local goroot tooldir tmpdir tools
-  # Empty when Go cannot resolve the toolchain at all (an old local go with no
-  # network, say). check_go covers that case; leave it alone here.
-  goroot="$(cd "$REPO_ROOT/server" && go env GOROOT 2>/dev/null)"
-  [ -n "$goroot" ] || return
-
-  # `go tool` lists what the toolchain actually has. Note the here-string:
-  # piping into `grep -q` makes grep exit at the first match, `go tool` take a
-  # SIGPIPE, and `pipefail` report the whole test as failed, which reads as
-  # "covdata missing" on every run.
-  tools="$(cd "$REPO_ROOT/server" && go tool)"
-  if grep -qx covdata <<<"$tools"; then
-    return
-  fi
-
-  if [ ! -d "$goroot/src/cmd/covdata" ]; then
-    warn "The Go toolchain in $goroot has no covdata tool and no source to build one from." \
-      "'task coverage' will fail with: go: no such tool \"covdata\"" \
-      "Installing a full go$(cd "$REPO_ROOT/server" && go env GOVERSION | sed 's/^go//') distribution fixes it."
-    return
-  fi
-
-  log "building covdata (the active Go toolchain ships without it; task coverage needs it)"
-
-  tmpdir="$(mktemp -d)" || return
-  if ! (cd "$goroot/src" && GOTOOLCHAIN=local GOFLAGS= "$goroot/bin/go" build -o "$tmpdir/covdata" cmd/covdata); then
-    rm -rf "$tmpdir"
-    warn "Could not build covdata — 'task coverage' will fail with: go: no such tool \"covdata\"" \
-      "Everything else still works; a full Go distribution ships the tool."
-    return
-  fi
-
-  # $goroot is under the module cache when it is a toolchain module, and Go
-  # extracts that read-only. Widen just long enough to drop the tool in.
-  tooldir="$goroot/pkg/tool/$(go env GOHOSTOS)_$(go env GOHOSTARCH)"
-  local relocked=""
-  if [ ! -w "$tooldir" ]; then
-    if chmod u+w "$tooldir" 2>/dev/null; then
-      relocked=1
-    else
-      rm -rf "$tmpdir"
-      warn "Cannot write to $tooldir, so covdata could not be installed." \
-        "'task coverage' will fail with: go: no such tool \"covdata\""
-      return
-    fi
-  fi
-
-  if cp "$tmpdir/covdata" "$tooldir/covdata"; then
-    chmod 0555 "$tooldir/covdata"
-    log "installed covdata into $tooldir"
-  else
-    warn "Could not install covdata into $tooldir — 'task coverage' will fail."
-  fi
-
-  [ -n "$relocked" ] && chmod u-w "$tooldir"
-  rm -rf "$tmpdir"
-}
-
-# ---------------------------------------------------------------------------
 # npm workspaces — shared first: webapp and mobile both depend on it through
 # `file:../shared`, so installing them first links an empty directory.
 # ---------------------------------------------------------------------------
@@ -265,7 +187,6 @@ install_npm_deps() {
 check_node
 check_go
 install_task
-install_covdata
 install_npm_deps
 
 if [ "$failures" -gt 0 ]; then
