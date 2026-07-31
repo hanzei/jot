@@ -264,8 +264,16 @@ export function useNoteImages({ note, uploadMaxBytes, onRefresh, showError }: Us
     e.preventDefault();
     imageDragCounterRef.current = 0;
     setIsDraggingImage(false);
-    queueImageFiles(droppedFiles.filter(f => f.type.startsWith('image/')));
-  }, [note, queueImageFiles]);
+    const imageFiles = droppedFiles.filter(f => f.type.startsWith('image/'));
+    // A drop of nothing but non-images never reaches queueImageFiles' own
+    // validation, so say why here instead of letting the overlay just vanish.
+    // Mixed drops keep uploading their images silently, as before.
+    if (imageFiles.length === 0) {
+      showError(t('images.errorWrongType'));
+      return;
+    }
+    queueImageFiles(imageFiles);
+  }, [note, queueImageFiles, showError, t]);
 
   const handleModalPaste = useCallback((e: React.ClipboardEvent) => {
     if (!note) return;
@@ -302,6 +310,14 @@ export function useNoteImages({ note, uploadMaxBytes, onRefresh, showError }: Us
       // already cancelled — nothing left to do.
       if (!entry) return;
       imagesApi.delete(image.id).then(() => {
+        // Drop the optimistic entry too, if this image was uploaded in this
+        // same session and note.images hasn't caught up yet. The render-time
+        // prune only clears entries that note.images confirms, and a deleted
+        // image never will be — so leaving it would let displayedImages put
+        // the tile straight back once clearImageRemovalState un-hides it.
+        // Only on success: a failed delete must keep the entry so the restore
+        // below still has something to show.
+        setOptimisticImages(prev => prev.filter(e => e.image.id !== image.id));
         // note_image_removed's SSE echo is dropped for this client (same
         // self-echo suppression as uploads), and the modal may have
         // already unmounted (closed) by the time this fires, so

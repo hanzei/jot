@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Note, NoteItem } from '@jot/shared';
 import { notes } from '@/utils/api';
@@ -79,11 +79,14 @@ export function useCompletedItems({
   // bar auto-dismisses; it belongs to the current note and is cleared on switch.
   const [recentlyUnchecked, setRecentlyUnchecked] = useState<{ noteId: string; ids: string[]; count: number } | null>(null);
   const uncheckUndoTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  // Always calls the latest onRefresh, so the unmount flush below doesn't have
-  // to re-run (and prematurely fire) on every onRefresh change.
-  const notifyRefresh = useEffectEvent(() => {
-    onRefresh?.();
-  });
+  // Holds the latest onRefresh so the unmount flush below doesn't have to
+  // re-run (and prematurely fire) on every onRefresh change. A ref rather than
+  // useEffectEvent because the flush calls it once its requests settle, which
+  // is after unmount — effect events may only be called from a live effect.
+  const onRefreshRef = useRef(onRefresh);
+  useEffect(() => {
+    onRefreshRef.current = onRefresh;
+  }, [onRefresh]);
 
   // On unmount (the modal is fully closed — note switches keep it mounted) flush
   // any deferred completed-item deletes immediately. The undo bar is gone once
@@ -94,14 +97,20 @@ export function useCompletedItems({
     const pending = pendingCompletedDeletesRef.current;
     return () => {
       if (pending.size === 0) return;
+      // Snapshot the callback while still mounted, then refresh only once every
+      // DELETE has settled — refreshing while they are still in flight makes the
+      // note list refetch the very items being deleted and render them back.
+      const refresh = onRefreshRef.current;
+      const flushes: Promise<unknown>[] = [];
       for (const [pendingNoteId, entry] of pending) {
         clearTimeout(entry.timeoutId);
-        void notes.deleteItems(pendingNoteId, [...entry.ids]).catch(err => {
+        flushes.push(notes.deleteItems(pendingNoteId, [...entry.ids]).catch(err => {
           console.error('Failed to flush completed-item deletion on close:', err);
-        });
+        }));
       }
       pending.clear();
-      notifyRefresh();
+      // Each flush swallows its own rejection, so this never rejects.
+      void Promise.all(flushes).then(() => refresh?.());
     };
   }, []);
 
@@ -117,10 +126,12 @@ export function useCompletedItems({
     baseline.syncCompleted(completedById);
   }, [baseline, commitItems, itemsRef]);
 
-  // Sets completed=false on the given items in one bulk request, applying an
+  // Sets completed on the given items in one bulk request, applying an
   // optimistic local update first and reverting precisely those flags on error.
   // Mirrors the single-item toggle's reconcile-only-completed-flags approach.
-  const setItemsCompletedLocallyAndRemotely = useCallback(async (ids: string[], completed: boolean) => {
+  // Resolves false when the request failed and the local state was rolled back,
+  // so callers don't offer an undo for something that never happened.
+  const setItemsCompletedLocallyAndRemotely = useCallback(async (ids: string[], completed: boolean): Promise<boolean> => {
     const targets = new Set(ids);
     commitItems(itemsRef.current.map(item => (targets.has(item.id) ? { ...item, completed } : item)));
 
@@ -128,7 +139,7 @@ export function useCompletedItems({
     // carries the flags instead.
     if (!noteId) {
       markDirty();
-      return;
+      return true;
     }
     cancelPendingSave();
 
@@ -137,10 +148,12 @@ export function useCompletedItems({
       reconcileCompletedFromServer(serverItems);
       onRefresh?.();
       flashSaved();
+      return true;
     } catch (error) {
       console.error('Failed to set items completed:', error);
       commitItems(itemsRef.current.map(item => (targets.has(item.id) ? { ...item, completed: !completed } : item)));
       showError(t('note.failedSaveChanges'));
+      return false;
     }
   }, [cancelPendingSave, commitItems, itemsRef, markDirty, noteId, reconcileCompletedFromServer, onRefresh, flashSaved, showError, t]);
 
@@ -152,7 +165,12 @@ export function useCompletedItems({
     if (completed.length === 0) return;
     const ids = completed.map(item => item.id);
 
-    await setItemsCompletedLocallyAndRemotely(ids, false);
+    const unchecked = await setItemsCompletedLocallyAndRemotely(ids, false);
+
+    // The request failed and the items were rolled back to checked, so there is
+    // nothing to undo — showing the bar would invite re-checking what is
+    // already checked.
+    if (!unchecked) return;
 
     // Only offer undo for a persisted note (the bar re-checks server-side).
     if (!noteId) return;
