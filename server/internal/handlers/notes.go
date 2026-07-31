@@ -240,6 +240,10 @@ func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
 		req.NoteType = models.NoteTypeText
 	}
 
+	if !req.NoteType.Valid() {
+		return http.StatusBadRequest, fmt.Errorf("note_type must be %q or %q", models.NoteTypeText, models.NoteTypeList)
+	}
+
 	if req.NoteType == models.NoteTypeText && req.Title != "" {
 		return http.StatusBadRequest, errors.New("text notes cannot have a title")
 	}
@@ -612,7 +616,7 @@ type ConvertNoteTypeRequest struct {
 // depending on the target type; supplying the other is rejected so a client
 // can't accidentally send a stale value for the direction it isn't using.
 func normalizeConvertNoteTypeRequest(req *ConvertNoteTypeRequest) (content string, items []models.NewNoteItem, status int, err error) {
-	if req.NoteType != models.NoteTypeText && req.NoteType != models.NoteTypeList {
+	if !req.NoteType.Valid() {
 		return "", nil, http.StatusBadRequest, errors.New("note_type must be 'text' or 'list'")
 	}
 

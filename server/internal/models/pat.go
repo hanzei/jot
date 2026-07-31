@@ -66,7 +66,7 @@ func (s *patStore) Create(ctx context.Context, userID, name string) (*PersonalAc
 	}
 
 	tokenHash := hashPATToken(rawToken)
-	now := time.Now()
+	now := Now()
 
 	query := `INSERT INTO personal_access_tokens (id, user_id, token_hash, name, created_at) VALUES (?, ?, ?, ?, ?)`
 	if _, err := s.db.ExecContext(ctx, s.d.RewritePlaceholders(query), id, userID, tokenHash, name, now); err != nil {

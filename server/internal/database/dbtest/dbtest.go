@@ -44,3 +44,16 @@ func New(t *testing.T, driver string) *sql.DB {
 	t.Cleanup(func() { _ = db.Close() })
 	return db
 }
+
+// NewInTimeZone is New, except that the database itself defaults to the tz time
+// zone rather than the server's. Timestamp behavior must not depend on it: the
+// application writes UTC and pins its PostgreSQL sessions to UTC. tz is ignored
+// for sqlite, whose CURRENT_TIMESTAMP is always UTC.
+func NewInTimeZone(t *testing.T, driver, tz string) *sql.DB {
+	t.Helper()
+
+	db, err := database.New(driver, dsntest.IsolatedDSNInTimeZone(t, driver, tz))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	return db
+}

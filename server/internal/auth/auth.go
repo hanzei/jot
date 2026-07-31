@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/hanzei/jot/server/internal/models"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 )
+
 const (
 	SessionCookieName = "jot_session"
 )
@@ -98,7 +98,7 @@ func (s *SessionService) GetSessionAndUser(r *http.Request) (_ *models.Session, 
 // cookie; only its hash is stored, so the cookie value cannot be derived from
 // the session record itself.
 func (s *SessionService) RenewSessionIfExpiringSoon(ctx context.Context, w http.ResponseWriter, session *models.Session, rawToken string) error {
-	now := time.Now()
+	now := models.Now()
 	if session.ExpiresAt.Sub(now) >= models.SessionRenewWindow {
 		return nil
 	}

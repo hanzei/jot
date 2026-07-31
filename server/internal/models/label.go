@@ -105,7 +105,7 @@ func (s *labelStore) GetOrCreateLabel(ctx context.Context, userID, name string) 
 	var l Label
 	selectQ := s.d.RewritePlaceholders(
 		"SELECT id, user_id, name, created_at, updated_at FROM labels WHERE user_id = ? AND " +
-			s.d.CaseInsensitiveEquals("name"),
+			s.d.LabelNameEquals("name"),
 	)
 	err := s.db.QueryRowContext(ctx, selectQ, userID, name).Scan(
 		&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt,
@@ -127,7 +127,7 @@ func (s *labelStore) GetOrCreateLabel(ctx context.Context, userID, name string) 
 	// inserts the same label between our SELECT and INSERT.
 	insertQ := s.d.RewritePlaceholders(
 		`INSERT INTO labels (id, user_id, name) VALUES (?, ?, ?)
-		 ON CONFLICT(user_id, name) DO NOTHING
+		 ON CONFLICT ` + s.d.LabelNameConflictTarget() + ` DO NOTHING
 		 RETURNING id, user_id, name, created_at, updated_at`,
 	)
 	err = s.db.QueryRowContext(ctx, insertQ, id, userID, name).Scan(
@@ -164,7 +164,23 @@ func (s *labelStore) CreateLabel(ctx context.Context, userID, id, name string) (
 		return &l, nil
 	}
 	if s.d.IsUniqueConstraintError(err) {
-		return nil, ErrLabelIDConflict
+		// The insert can violate either the primary key (the same
+		// client-supplied ID replayed) or the per-user case-insensitive name
+		// index (a different label already owns the name). Only the former is
+		// an idempotent replay, so tell the two apart rather than reporting
+		// every conflict as an ID conflict.
+		var existingID string
+		idErr := s.db.QueryRowContext(ctx,
+			s.d.RewritePlaceholders(`SELECT id FROM labels WHERE id = ?`), id,
+		).Scan(&existingID)
+		switch {
+		case idErr == nil:
+			return nil, ErrLabelIDConflict
+		case errors.Is(idErr, sql.ErrNoRows):
+			return nil, ErrLabelNameConflict
+		default:
+			return nil, fmt.Errorf("classify label conflict: %w", idErr)
+		}
 	}
 	return nil, fmt.Errorf("create label: %w", err)
 }

@@ -1,0 +1,121 @@
+package database
+
+import (
+	"database/sql"
+	"testing"
+	"time"
+
+	"github.com/hanzei/jot/server/internal/database/dialect"
+	"github.com/hanzei/jot/server/internal/database/dsntest"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// newMigratedDB opens a fresh, fully migrated database for driver. It is the
+// same thing dbtest.New does, spelled out here because dbtest imports this
+// package and cannot be imported back from its own tests.
+func newMigratedDB(t *testing.T, driver string) *sql.DB {
+	t.Helper()
+
+	db, err := New(driver, dsntest.IsolatedDSN(t, driver))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	return db
+}
+
+// TestSchemaParity pins the invariants SQLite and PostgreSQL must enforce
+// identically. Both are asserted through behavior rather than by inspecting
+// catalog tables, so the test says the same thing on either backend.
+func TestSchemaParity(t *testing.T) {
+	dsntest.ForEachDriver(t, func(t *testing.T, driver string) {
+		db := newMigratedDB(t, driver)
+		d := &dialect.Dialect{Driver: driver}
+		ctx := t.Context()
+
+		_, err := db.ExecContext(ctx, d.RewritePlaceholders(
+			`INSERT INTO users (id, username, password_hash) VALUES (?, ?, ?)`),
+			"user000000000000parity", "parity", "x")
+		require.NoError(t, err)
+
+		t.Run("note_type is not constrained by the database", func(t *testing.T) {
+			// Allowed values are validated in the application layer. Neither
+			// backend may add a CHECK, or data written on one could fail to
+			// replicate to the other.
+			_, err := db.ExecContext(ctx, d.RewritePlaceholders(
+				`INSERT INTO notes (id, user_id, note_type) VALUES (?, ?, ?)`),
+				"note000000000000parity", "user000000000000parity", "not-a-note-type")
+			assert.NoError(t, err)
+		})
+
+		t.Run("label names are unique per user case-insensitively", func(t *testing.T) {
+			_, err := db.ExecContext(ctx, d.RewritePlaceholders(
+				`INSERT INTO labels (id, user_id, name) VALUES (?, ?, ?)`),
+				"labl00000000000000work", "user000000000000parity", "Work")
+			require.NoError(t, err)
+
+			_, err = db.ExecContext(ctx, d.RewritePlaceholders(
+				`INSERT INTO labels (id, user_id, name) VALUES (?, ?, ?)`),
+				"labl00000000000000wrk2", "user000000000000parity", "work")
+			require.Error(t, err)
+			assert.True(t, d.IsUniqueConstraintError(err), "want a unique violation, got %v", err)
+		})
+
+		t.Run("label names differing only in non-ASCII case do not collide", func(t *testing.T) {
+			// The shared fold is ASCII A-Z only, because that is all SQLite can
+			// do. If PostgreSQL folded these together it would be the stricter
+			// backend, and a SQLite database holding both rows could not be
+			// loaded into it — the exact failure this parity work exists to stop.
+			_, err := db.ExecContext(ctx, d.RewritePlaceholders(
+				`INSERT INTO labels (id, user_id, name) VALUES (?, ?, ?)`),
+				"labl000000000000upperÄ", "user000000000000parity", "ÄPFEL")
+			require.NoError(t, err)
+
+			_, err = db.ExecContext(ctx, d.RewritePlaceholders(
+				`INSERT INTO labels (id, user_id, name) VALUES (?, ?, ?)`),
+				"labl000000000000lowerä", "user000000000000parity", "äpfel")
+			assert.NoError(t, err)
+		})
+
+		t.Run("label names may repeat across users", func(t *testing.T) {
+			_, err := db.ExecContext(ctx, d.RewritePlaceholders(
+				`INSERT INTO users (id, username, password_hash) VALUES (?, ?, ?)`),
+				"user00000000000parity2", "parity2", "x")
+			require.NoError(t, err)
+
+			_, err = db.ExecContext(ctx, d.RewritePlaceholders(
+				`INSERT INTO labels (id, user_id, name) VALUES (?, ?, ?)`),
+				"labl0000000000000work2", "user00000000000parity2", "work")
+			assert.NoError(t, err)
+		})
+	})
+}
+
+// TestDatabaseTimestampsAreUTC covers the PostgreSQL half of the timestamp
+// story: timestamp columns are TIMESTAMP WITHOUT TIME ZONE, so a DB-side
+// default resolved in a non-UTC session would silently store local wall clock.
+// Pinning every session to UTC keeps those defaults comparable with the UTC
+// times the application generates. SQLite has no session time zone, so there is
+// nothing to assert for it.
+func TestDatabaseTimestampsAreUTC(t *testing.T) {
+	db, err := New(driverPostgres, dsntest.IsolatedDSNInTimeZone(t, driverPostgres, "America/New_York"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	ctx := t.Context()
+
+	var tz string
+	require.NoError(t, db.QueryRowContext(ctx, `SHOW TimeZone`).Scan(&tz))
+	assert.Equal(t, "UTC", tz, "sessions must be pinned to UTC regardless of the database's own time zone")
+
+	before := time.Now().UTC()
+	_, err = db.ExecContext(ctx, `INSERT INTO users (id, username, password_hash) VALUES ('user0000000000000000tz', 'tz', 'x')`)
+	require.NoError(t, err)
+
+	// created_at comes from DEFAULT CURRENT_TIMESTAMP. lib/pq reads a naive
+	// timestamp back as UTC, so a session left on America/New_York would show
+	// up here as several hours in the past.
+	var createdAt time.Time
+	require.NoError(t, db.QueryRowContext(ctx,
+		`SELECT created_at FROM users WHERE id = 'user0000000000000000tz'`).Scan(&createdAt))
+
+	assert.WithinRange(t, createdAt, before.Add(-time.Minute), time.Now().UTC().Add(time.Minute))
+}

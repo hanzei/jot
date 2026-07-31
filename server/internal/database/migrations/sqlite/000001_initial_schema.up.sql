@@ -88,7 +88,9 @@ CREATE TABLE user_settings (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Labels table (COLLATE NOCASE for case-insensitive uniqueness on SQLite)
+-- Labels table. COLLATE NOCASE makes UNIQUE(user_id, name) case-insensitive
+-- over ASCII A-Z only, which is the rule both backends implement; PostgreSQL
+-- matches it with a UNIQUE index on (user_id, LOWER(name COLLATE "C")).
 CREATE TABLE labels (
     id         TEXT     PRIMARY KEY,
     user_id    TEXT     NOT NULL REFERENCES users(id) ON DELETE CASCADE,

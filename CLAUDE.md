@@ -253,6 +253,8 @@ They return an HTTP status code, a response body (serialized to JSON by `wrapHan
 
 **MCP server** — `internal/mcphandler` exposes note and label CRUD as Model Context Protocol tools over the streamable-HTTP transport. It is mounted behind auth middleware so every MCP session is scoped to the authenticated user.
 
+**Timestamps** — every timestamp column is naive (SQLite `DATETIME`, Postgres `TIMESTAMP WITHOUT TIME ZONE`) and holds a UTC wall clock. Use `models.Now()` rather than `time.Now()` for anything written to, or compared against, one of those columns. Timestamps the database generates itself (`DEFAULT CURRENT_TIMESTAMP`) are UTC too: SQLite's always is, and Postgres pools open through a connector that runs `SET TIME ZONE 'UTC'` on every session (`internal/database`.`utcConnector`).
+
 **Observability** — `internal/telemetry` sets up optional OpenTelemetry traces (OTLP gRPC) and Prometheus metrics (separate port). Structured logs are integrated with the OTel LoggerProvider.
 
 **Blob storage** — `internal/blobstore` exposes `ImageStore` (`NewImageStore`), filesystem storage for note-image bytes, rooted at config `JOT_UPLOAD_DIR` (default `./uploads`). It stores two things under that one root:
@@ -314,6 +316,8 @@ in the tree, as a guide to what to watch for:
 
 `internal/database/dialect` holds the per-dialect differences needed at query
 time; check whether a schema change needs a counterpart there too.
+
+There is one directory per dialect (`migrations/sqlite/`, `migrations/postgres/`) and the numbering is kept aligned between them: a migration that only one backend needs still gets an explanatory placeholder file in the other. Both schemas must enforce the same invariants — a constraint on one dialect only means data valid on one backend fails to load into the other.
 
 ### Authentication
 
