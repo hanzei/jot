@@ -111,16 +111,27 @@ from the version CI uses.
 
 ## Dependency Updates
 
-There is no Dependabot/Renovate configuration; dependency updates are done deliberately,
-one workspace at a time, via the skills in `.claude/skills/`:
+Three separate things update dependencies here, and they are easy to confuse:
 
-- `update-server-deps` — Go modules, `go.mod` tool directives (golangci-lint, swag), Go toolchain version
-- `update-shared-deps` — `@jot/shared` devDependencies
-- `update-webapp-deps` — webapp npm packages, `overrides` block, Playwright browsers
-- `update-mobile-deps` — Expo/React Native packages (Expo SDK dictates most versions)
+- **Dependabot version updates** (`.github/dependabot.yml`) cover **GitHub Actions only** —
+  one grouped PR a month. Actions are pinned to commit SHAs and drift silently otherwise.
+- **Dependabot security updates** are enabled at the repository level, not by that file, and
+  open advisory-driven PRs for **every** ecosystem including the ones the config omits.
+  Adding or removing `dependabot.yml` does not affect them.
+- **Everything else** — npm workspaces and the Go module — is updated deliberately, one
+  workspace at a time, via the skills in `.claude/skills/`:
+
+  - `update-server-deps` — Go modules, `go.mod` tool directives (golangci-lint, swag), Go toolchain version
+  - `update-shared-deps` — `@jot/shared` devDependencies
+  - `update-webapp-deps` — webapp npm packages, `overrides` block, Playwright browsers
+  - `update-mobile-deps` — Expo/React Native packages (Expo SDK dictates most versions)
 
 For a full sweep, update in the order **shared → webapp → mobile** (both consumers compile
 `shared/src` directly through the `file:../shared` link); `server/` is independent.
+
+Those ecosystems are kept out of `dependabot.yml` on purpose — the coupling constraints that
+make them manual are documented in the comments at the top of that file. Do not add them
+without reading those first.
 
 ---
 
