@@ -16,6 +16,8 @@ const {
   mockDeleteItem,
   mockReorderItems,
   mockToggleItemCompleted,
+  mockSetItemsCompleted,
+  mockDeleteItems,
   mockImagesUpload,
   mockImagesDelete,
   dragEndRef,
@@ -37,6 +39,11 @@ const {
   // tests that need cascade override this with the full item list.
   mockToggleItemCompleted: vi.fn().mockImplementation((_noteId, itemId, completed) =>
     Promise.resolve([{ id: itemId, completed }])),
+  // Bulk endpoints behind the checked-item overflow actions. Both echo back
+  // what the server would report so the reconcile paths run for real.
+  mockSetItemsCompleted: vi.fn().mockImplementation((_noteId, ids: string[], completed: boolean) =>
+    Promise.resolve(ids.map(id => ({ id, completed })))),
+  mockDeleteItems: vi.fn().mockResolvedValue([]),
   mockImagesUpload: vi.fn().mockResolvedValue({
     id: 'uploaded1', filename: 'upload.png', content_type: 'image/png', width: 10, height: 10, created_at: '2024-01-01T00:00:00Z',
   }),
@@ -52,6 +59,8 @@ vi.mock('@/utils/api', () => ({
     deleteItem: mockDeleteItem,
     reorderItems: mockReorderItems,
     toggleItemCompleted: mockToggleItemCompleted,
+    setItemsCompleted: mockSetItemsCompleted,
+    deleteItems: mockDeleteItems,
     addLabel: vi.fn(),
     removeLabel: vi.fn(),
   },
@@ -651,6 +660,79 @@ describe('NoteModal', () => {
 
       expect(mockImagesDelete).toHaveBeenCalledWith('img1')
       expect(onRefresh).toHaveBeenCalled()
+    })
+
+    it('reports a wrong-type error when a drop contains only non-image files', async () => {
+      const note = createMockNote({ images: [] })
+      renderNoteModal({ ...defaultProps, note })
+
+      const panel = screen.getByTestId('dialog-panel')
+      const pdf = new File(['x'], 'doc.pdf', { type: 'application/pdf' })
+      fireEvent.drop(panel, { dataTransfer: { files: [pdf] } })
+      await flushMicrotasks()
+
+      // Filtering to image/* removes every file, so the batch never reaches
+      // queueImageFiles' own validation — the drop must not silently no-op.
+      expect(mockImagesUpload).not.toHaveBeenCalled()
+      expect(screen.getByText('Only images can be attached.')).toBeInTheDocument()
+    })
+
+    it('still uploads the images in a mixed drop without erroring on the non-images', async () => {
+      const note = createMockNote({ images: [] })
+      renderNoteModal({ ...defaultProps, note })
+
+      const panel = screen.getByTestId('dialog-panel')
+      const image = makeImageFile()
+      const pdf = new File(['x'], 'doc.pdf', { type: 'application/pdf' })
+      fireEvent.drop(panel, { dataTransfer: { files: [pdf, image] } })
+      await flushMicrotasks()
+
+      expect(mockImagesUpload).toHaveBeenCalledWith('1', image, expect.any(Function))
+      expect(screen.queryByText('Only images can be attached.')).not.toBeInTheDocument()
+    })
+
+    it('does not resurrect an image uploaded this session once its deferred delete lands', async () => {
+      // Removing an image that note.images has not caught up with yet (its
+      // note_image_added echo was suppressed for this client) leaves it in the
+      // local overlay. Once the DELETE lands, un-hiding the tile must not let
+      // the overlay put it straight back — note.images will never confirm a
+      // deleted image, so the render-time prune can't clear it either.
+      mockImagesUpload.mockResolvedValueOnce({
+        id: 'newimg', filename: 'uploaded.png', content_type: 'image/png', width: 10, height: 10, created_at: '2023-01-01T00:00:00Z',
+      })
+      const note = createMockNote({ images: [] })
+      renderNoteModal({ ...defaultProps, note })
+
+      await uploadViaPicker(makeImageFile('uploaded.png'))
+      expect(screen.getByAltText('uploaded.png')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remove uploaded.png' }))
+      expect(screen.queryByAltText('uploaded.png')).not.toBeInTheDocument()
+
+      await vi.advanceTimersByTimeAsync(10_000)
+      await flushMicrotasks()
+
+      expect(mockImagesDelete).toHaveBeenCalledWith('newimg')
+      expect(screen.queryByAltText('uploaded.png')).not.toBeInTheDocument()
+    })
+
+    it('restores an image uploaded this session when its deferred delete fails', async () => {
+      // The mirror of the case above: a failed DELETE must leave the overlay
+      // entry alone so the tile comes back rather than disappearing silently.
+      mockImagesUpload.mockResolvedValueOnce({
+        id: 'newimg', filename: 'uploaded.png', content_type: 'image/png', width: 10, height: 10, created_at: '2023-01-01T00:00:00Z',
+      })
+      mockImagesDelete.mockRejectedValueOnce(new Error('network error'))
+      const note = createMockNote({ images: [] })
+      renderNoteModal({ ...defaultProps, note })
+
+      await uploadViaPicker(makeImageFile('uploaded.png'))
+      fireEvent.click(screen.getByRole('button', { name: 'Remove uploaded.png' }))
+
+      await vi.advanceTimersByTimeAsync(10_000)
+      await flushMicrotasks()
+
+      expect(screen.getByAltText('uploaded.png')).toBeInTheDocument()
     })
   })
 
@@ -2171,5 +2253,82 @@ describe('NoteModal', () => {
       expect(screen.getByTestId('note-content-preview')).toBeInTheDocument()
     })
 
+  })
+  describe('Checked-item bulk actions', () => {
+    const listItem = (id: string, overrides: Partial<NoteItem> = {}): NoteItem => ({
+      id,
+      note_id: '1',
+      text: id,
+      completed: false,
+      position: 0,
+      parent_id: null,
+      assigned_to: '',
+      created_at: '2023-01-01T00:00:00Z',
+      updated_at: '2023-01-01T00:00:00Z',
+      ...overrides,
+    })
+
+    // Only flush microtasks: vi.runAllTimersAsync() would also fire the undo
+    // bar's own 10s auto-dismiss, hiding the very thing under test.
+    const settle = () => act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const noteWithCheckedItems = () => createMockNote({
+      note_type: 'list',
+      items: [
+        listItem('a', { text: 'Active', position: 0 }),
+        listItem('c1', { text: 'Done one', completed: true, position: 1 }),
+        listItem('c2', { text: 'Done two', completed: true, position: 2 }),
+      ],
+    })
+
+    it('shows the undo bar after unchecking all items succeeds', async () => {
+      renderNoteModal({ ...defaultProps, note: noteWithCheckedItems() })
+
+      fireEvent.click(screen.getByTestId('note-uncheck-all'))
+      await settle()
+
+      expect(mockSetItemsCompleted).toHaveBeenCalledWith('1', ['c1', 'c2'], false)
+      expect(screen.getByTestId('unchecked-items-bar')).toBeInTheDocument()
+    })
+
+    it('does not offer undo when unchecking all items fails', async () => {
+      mockSetItemsCompleted.mockRejectedValueOnce(new Error('network error'))
+      renderNoteModal({ ...defaultProps, note: noteWithCheckedItems() })
+
+      fireEvent.click(screen.getByTestId('note-uncheck-all'))
+      await settle()
+
+      // The items were rolled back to checked, so there is nothing to undo —
+      // offering it would invite re-checking what is already checked.
+      expect(screen.queryByTestId('unchecked-items-bar')).not.toBeInTheDocument()
+      expect(screen.getByText('Failed to save changes. Please try again.')).toBeInTheDocument()
+      expect(screen.getByText('Completed items (2)')).toBeInTheDocument()
+    })
+
+    it('flushes a pending checked-item delete on close and refreshes only once it lands', async () => {
+      let resolveDelete: (value: unknown) => void = () => {}
+      mockDeleteItems.mockImplementationOnce(() => new Promise(resolve => { resolveDelete = resolve }))
+      const onRefresh = vi.fn()
+      const { unmount } = renderNoteModal({ ...defaultProps, note: noteWithCheckedItems(), onRefresh })
+
+      fireEvent.click(screen.getByTestId('note-delete-checked'))
+      onRefresh.mockClear() // drop any calls made by the click itself
+
+      unmount()
+      await settle()
+
+      expect(mockDeleteItems).toHaveBeenCalledWith('1', ['c1', 'c2'])
+      // Refreshing while the DELETE is still in flight makes the note list
+      // refetch the very items being deleted and render them back.
+      expect(onRefresh).not.toHaveBeenCalled()
+
+      resolveDelete([])
+      await settle()
+
+      expect(onRefresh).toHaveBeenCalled()
+    })
   })
 })
