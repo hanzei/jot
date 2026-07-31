@@ -94,13 +94,13 @@ func (s *userStore) Create(ctx context.Context, username, password string) (*Use
 }
 
 // GetByUsername looks up a user by username, folding the argument to lower case
-// first. Stored usernames are lower case by construction (handlers reject
-// anything else, and migration 000010 folded the rows that predate that rule),
-// so folding the lookup key is what lets someone who registered as "ben" sign in
-// by typing "Ben". ASCII is the whole alphabet here — the username character set
-// is [a-z0-9_-] — so strings.ToLower matches the byte comparison the query does
-// on either backend, with none of the Unicode-collation divergence that the
-// label-name fold in internal/database/dialect has to reconcile.
+// first. Stored usernames are lower case by construction — the handlers reject
+// anything else — so folding the lookup key is what lets someone who registered
+// as "ben" sign in by typing "Ben". ASCII is the whole alphabet here — the
+// username character set is [a-z0-9_-] — so strings.ToLower matches the byte
+// comparison the query does on either backend, with none of the
+// Unicode-collation divergence the label-name fold in
+// internal/database/dialect has to reconcile.
 func (s *userStore) GetByUsername(ctx context.Context, username string) (*User, error) {
 	var user User
 	query := `SELECT id, username, first_name, last_name, password_hash, role,
@@ -198,16 +198,23 @@ func (s *userStore) GetAll(ctx context.Context) ([]*User, error) {
 }
 
 // Search returns users whose username, first name, or last name contain the
-// given search term (case-insensitive). Results are ordered by creation date
-// descending.
+// given search term, without regard to case on either backend. Results are
+// ordered by creation date descending.
+//
+// The case folding has to be explicit: a plain LIKE folds ASCII case on SQLite
+// but not on PostgreSQL, so the share and assignee pickers would quietly match
+// case-sensitively on a PostgreSQL deployment. Usernames are lower case now, but
+// first and last names are free-form and still need it.
 func (s *userStore) Search(ctx context.Context, term string) ([]*User, error) {
 	like := "%" + term + "%"
 	query := `SELECT id, username, first_name, last_name, password_hash, role,
 			         profile_icon IS NOT NULL AS has_profile_icon,
 			         created_at, updated_at
 			  FROM users
-			  WHERE username LIKE ? OR first_name LIKE ? OR last_name LIKE ?
-			  ORDER BY created_at DESC`
+			  WHERE ` + s.d.CaseInsensitiveLike("username") +
+		` OR ` + s.d.CaseInsensitiveLike("first_name") +
+		` OR ` + s.d.CaseInsensitiveLike("last_name") +
+		` ORDER BY created_at DESC`
 
 	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), like, like, like)
 	if err != nil {
