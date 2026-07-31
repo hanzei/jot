@@ -36,7 +36,7 @@
     "registrationFailed": "Rejestracja nie powiodła się",
     "usernameMin": "Nazwa użytkownika musi mieć co najmniej 2 znaki",
     "usernameMax": "Nazwa użytkownika nie może przekraczać 30 znaków",
-    "usernameChars": "Nazwa użytkownika może zawierać tylko litery, cyfry, podkreślenia i myślniki",
+    "usernameChars": "Nazwa użytkownika może zawierać tylko małe litery, cyfry, podkreślenia i myślniki",
     "usernameEdge": "Nazwa użytkownika nie może zaczynać się ani kończyć podkreśleniem lub myślnikiem",
     "passwordMin": "Hasło musi mieć co najmniej {{min}} znaków",
     "serverUrlPlaceholder": "URL serwera",

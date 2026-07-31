@@ -36,7 +36,7 @@
     "registrationFailed": "Échec de l'inscription",
     "usernameMin": "Le nom d'utilisateur doit comporter au moins 2 caractères",
     "usernameMax": "Le nom d'utilisateur ne peut pas dépasser 30 caractères",
-    "usernameChars": "Le nom d'utilisateur ne peut contenir que des lettres, des chiffres, des tirets bas et des tirets",
+    "usernameChars": "Le nom d'utilisateur ne peut contenir que des lettres minuscules, des chiffres, des tirets bas et des tirets",
     "usernameEdge": "Le nom d'utilisateur ne peut pas commencer ou se terminer par un tiret bas ou un tiret",
     "passwordMin": "Le mot de passe doit comporter au moins {{min}} caractères",
     "serverUrlPlaceholder": "URL du serveur",

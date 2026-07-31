@@ -100,7 +100,11 @@ func (s *labelStore) GetLabelCounts(ctx context.Context, userID string) (map[str
 
 // GetOrCreateLabel finds an existing label by name for a user or creates a new one.
 // Uses a select-then-insert strategy with a conflict guard to handle concurrent callers.
-func (s *labelStore) GetOrCreateLabel(ctx context.Context, userID, name string) (*Label, error) {
+// GetOrCreateLabel returns the caller's label with the given name, inserting it
+// when it does not exist yet. The bool reports whether a row was inserted, so
+// HTTP callers can answer 201 for a create and 200 for a match on an existing
+// label; a caller that only wants the label can discard it.
+func (s *labelStore) GetOrCreateLabel(ctx context.Context, userID, name string) (*Label, bool, error) {
 	// Attempt a case-insensitive lookup first.
 	var l Label
 	selectQ := s.d.RewritePlaceholders(
@@ -111,16 +115,16 @@ func (s *labelStore) GetOrCreateLabel(ctx context.Context, userID, name string) 
 		&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt,
 	)
 	if err == nil {
-		return &l, nil
+		return &l, false, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("failed to get or create label: %w", err)
+		return nil, false, fmt.Errorf("failed to get or create label: %w", err)
 	}
 
 	// Not found; generate an ID and insert.
 	id, err := generateID()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate label ID: %w", err)
+		return nil, false, fmt.Errorf("failed to generate label ID: %w", err)
 	}
 
 	// ON CONFLICT DO NOTHING handles the rare case where a concurrent request
@@ -134,10 +138,10 @@ func (s *labelStore) GetOrCreateLabel(ctx context.Context, userID, name string) 
 		&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt,
 	)
 	if err == nil {
-		return &l, nil
+		return &l, true, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("failed to get or create label: %w", err)
+		return nil, false, fmt.Errorf("failed to get or create label: %w", err)
 	}
 
 	// A concurrent insert won the race; retry the SELECT to get the existing row.
@@ -145,9 +149,9 @@ func (s *labelStore) GetOrCreateLabel(ctx context.Context, userID, name string) 
 		&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get or create label after conflict: %w", err)
+		return nil, false, fmt.Errorf("failed to get or create label after conflict: %w", err)
 	}
-	return &l, nil
+	return &l, false, nil
 }
 
 // CreateLabel inserts a new label with the given client-supplied id for idempotent offline replay.

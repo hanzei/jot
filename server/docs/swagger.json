@@ -597,7 +597,13 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "an existing label with that name was returned unchanged",
+                        "schema": {
+                            "$ref": "#/definitions/models.Label"
+                        }
+                    },
+                    "201": {
+                        "description": "a new label was created",
                         "schema": {
                             "$ref": "#/definitions/models.Label"
                         }

@@ -14,6 +14,28 @@ test.describe('Authentication', () => {
     await registerPage.expectError('Username must be at least 2 characters');
   });
 
+  test('shows error for username containing uppercase', async ({ registerPage }) => {
+    await registerPage.goto();
+    await registerPage.register('MixedCase', 'password123');
+    await registerPage.expectError('Username can only contain lowercase letters, numbers, underscores, and hyphens');
+  });
+
+  test('logs in when the username is typed with different casing', async ({ page, loginPage, registerPage, dashboardPage }) => {
+    const username = uniqueUsername('case');
+    const password = 'password123';
+
+    await registerPage.goto();
+    await registerPage.register(username, password);
+    await expect(page).toHaveURL('/');
+    await dashboardPage.logout();
+    await expect(page).toHaveURL('/login');
+
+    // Stored usernames are lower case, so login has to fold what was typed
+    // rather than treat it as a different account.
+    await loginPage.login(username.toUpperCase(), password);
+    await expect(page).toHaveURL('/');
+  });
+
   test('shows error when passwords do not match', async ({ registerPage }) => {
     const username = uniqueUsername('reg');
     await registerPage.goto();

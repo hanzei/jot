@@ -174,7 +174,7 @@ describe('Admin', () => {
 
       const dialog = await openCreateModal(user)
 
-      expect(within(dialog).getByText('2–30 characters. Letters, numbers, underscores, and hyphens.')).toBeInTheDocument()
+      expect(within(dialog).getByText('2–30 characters. Lowercase letters, numbers, underscores, and hyphens.')).toBeInTheDocument()
       expect(within(dialog).getByText('At least 10 characters')).toBeInTheDocument()
       expect(within(dialog).getByText(`0/${VALIDATION.USERNAME_MAX_LENGTH}`)).toBeInTheDocument()
 
@@ -193,10 +193,10 @@ describe('Admin', () => {
 
       const usernameInput = within(dialog).getByLabelText('Username')
       await user.type(usernameInput, 'bad*name')
-      expect(within(dialog).queryByText('Username can only contain letters, numbers, underscores, and hyphens')).not.toBeInTheDocument()
+      expect(within(dialog).queryByText('Username can only contain lowercase letters, numbers, underscores, and hyphens')).not.toBeInTheDocument()
 
       await user.tab()
-      expect(within(dialog).getByText('Username can only contain letters, numbers, underscores, and hyphens')).toBeInTheDocument()
+      expect(within(dialog).getByText('Username can only contain lowercase letters, numbers, underscores, and hyphens')).toBeInTheDocument()
     })
 
     it('shows password validation error on blur', async () => {

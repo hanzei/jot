@@ -15,7 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { AuthStackParamList } from '../navigation/AuthStack';
-import { VALIDATION } from '@jot/shared';
+import { USERNAME_EDGE_PATTERN, USERNAME_PATTERN, VALIDATION } from '@jot/shared';
 import { displayMessage } from '../i18n/utils';
 import ServerSetupGate from '../components/ServerSetupGate';
 import FadeInView from '../components/FadeInView';
@@ -43,10 +43,10 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
     if (trimmedUsername.length > VALIDATION.USERNAME_MAX_LENGTH) {
       return t('auth.usernameMax');
     }
-    if (!/^[a-zA-Z0-9_-]+$/.test(trimmedUsername)) {
+    if (!USERNAME_PATTERN.test(trimmedUsername)) {
       return t('auth.usernameChars');
     }
-    if (/^[_-]|[_-]$/.test(trimmedUsername)) {
+    if (USERNAME_EDGE_PATTERN.test(trimmedUsername)) {
       return t('auth.usernameEdge');
     }
     if (!password.trim()) return t('auth.passwordRequired');

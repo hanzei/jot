@@ -65,7 +65,7 @@
     "registrationFailed": "Registrazione non riuscita",
     "usernameMin": "Il nome utente deve contenere almeno 2 caratteri",
     "usernameMax": "Il nome utente non può superare i 30 caratteri",
-    "usernameChars": "Il nome utente può contenere solo lettere, numeri, trattini bassi e trattini",
+    "usernameChars": "Il nome utente può contenere solo lettere minuscole, numeri, trattini bassi e trattini",
     "usernameEdge": "Il nome utente non può iniziare o terminare con trattino basso o trattino",
     "passwordMin": "La password deve contenere almeno {{min}} caratteri",
     "serverUrlPlaceholder": "URL del server",

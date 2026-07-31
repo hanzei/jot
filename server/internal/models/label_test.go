@@ -36,11 +36,13 @@ func TestLabelNameCaseInsensitivity(t *testing.T) {
 			store, userID := newTestLabelStore(t, driver)
 			ctx := t.Context()
 
-			created, err := store.GetOrCreateLabel(ctx, userID, "Work")
+			created, wasCreated, err := store.GetOrCreateLabel(ctx, userID, "Work")
 			require.NoError(t, err)
+			assert.True(t, wasCreated, "the first call inserts the label")
 
-			same, err := store.GetOrCreateLabel(ctx, userID, "wOrK")
+			same, wasCreated, err := store.GetOrCreateLabel(ctx, userID, "wOrK")
 			require.NoError(t, err)
+			assert.False(t, wasCreated, "a different casing matches the existing label")
 
 			assert.Equal(t, created.ID, same.ID)
 			assert.Equal(t, "Work", same.Name, "the stored name keeps its original casing")
@@ -95,11 +97,13 @@ func TestLabelNameCaseInsensitivity(t *testing.T) {
 			store, userID := newTestLabelStore(t, driver)
 			ctx := t.Context()
 
-			upper, err := store.GetOrCreateLabel(ctx, userID, "ÄPFEL")
+			upper, wasCreated, err := store.GetOrCreateLabel(ctx, userID, "ÄPFEL")
 			require.NoError(t, err)
+			assert.True(t, wasCreated)
 
-			lower, err := store.GetOrCreateLabel(ctx, userID, "äpfel")
+			lower, wasCreated, err := store.GetOrCreateLabel(ctx, userID, "äpfel")
 			require.NoError(t, err)
+			assert.True(t, wasCreated, "a non-ASCII case difference is a separate label, so this inserts")
 
 			assert.NotEqual(t, upper.ID, lower.ID)
 			assert.Equal(t, "äpfel", lower.Name)
@@ -118,9 +122,9 @@ func TestLabelNameCaseInsensitivity(t *testing.T) {
 				"user0000000000000labl2", "labeler2", "x")
 			require.NoError(t, err)
 
-			mine, err := store.GetOrCreateLabel(ctx, userID, "Work")
+			mine, _, err := store.GetOrCreateLabel(ctx, userID, "Work")
 			require.NoError(t, err)
-			theirs, err := store.GetOrCreateLabel(ctx, "user0000000000000labl2", "work")
+			theirs, _, err := store.GetOrCreateLabel(ctx, "user0000000000000labl2", "work")
 			require.NoError(t, err)
 
 			assert.NotEqual(t, mine.ID, theirs.ID)

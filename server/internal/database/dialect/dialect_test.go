@@ -103,6 +103,24 @@ func TestLabelNameEquals(t *testing.T) {
 	})
 }
 
+func TestCaseInsensitiveLike(t *testing.T) {
+	t.Run("SQLite folds both sides rather than leaning on LIKE's own folding", func(t *testing.T) {
+		// SQLite's LIKE already folds ASCII case, so the LOWER() calls are
+		// redundant here — they are what makes the expression identical to the
+		// PostgreSQL one, which has no such default.
+		d := &dialect.Dialect{Driver: "sqlite"}
+		assert.Equal(t, "LOWER(username) LIKE LOWER(?)", d.CaseInsensitiveLike("username"))
+	})
+
+	t.Run("PostgreSQL folds under COLLATE C, since its LIKE is case-sensitive", func(t *testing.T) {
+		// Without this, the same search is case-insensitive on SQLite and
+		// case-sensitive on PostgreSQL. ILIKE would fix the case-sensitivity but
+		// folds per locale, which SQLite cannot match.
+		d := &dialect.Dialect{Driver: "postgres"}
+		assert.Equal(t, `LOWER(username COLLATE "C") LIKE LOWER(? COLLATE "C")`, d.CaseInsensitiveLike("username"))
+	})
+}
+
 func TestLimitAll(t *testing.T) {
 	t.Run("SQLite returns -1", func(t *testing.T) {
 		d := &dialect.Dialect{Driver: "sqlite"}

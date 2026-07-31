@@ -53,19 +53,18 @@ func (d *Dialect) InsertIgnore(table, cols, placeholders string) string {
 	}
 }
 
-// labelNameFold returns the SQL expression that reduces a label name to the key
-// per-user label uniqueness is enforced on. It is the single definition of that
-// rule: every label-name comparison, unique index and ON CONFLICT target on
-// either backend is built from it.
+// asciiFold returns the SQL expression that case-folds expr identically on both
+// backends. It is the single definition of that rule: every case-insensitive
+// comparison, unique index and ON CONFLICT target is built from it.
 //
 // The rule is "fold ASCII A–Z to lower case and leave every other character
-// alone", so "Work" and "work" collide while "ÄPFEL" and "äpfel" do not.
+// alone", so "Work" and "work" match while "ÄPFEL" and "äpfel" do not.
 // SQLite fixes it — its LOWER() and COLLATE NOCASE fold only A–Z and cannot be
 // made Unicode-aware without the ICU extension — so PostgreSQL is pinned to the
 // same rule with COLLATE "C" rather than the other way round. Left on its
 // locale-aware default, PostgreSQL would be the stricter of the two, and a
 // SQLite database holding both "ÄPFEL" and "äpfel" could not be loaded into it.
-func (d *Dialect) labelNameFold(expr string) string {
+func (d *Dialect) asciiFold(expr string) string {
 	if d.Driver == DriverPostgres {
 		return fmt.Sprintf(`LOWER(%s COLLATE "C")`, expr)
 	}
@@ -73,25 +72,42 @@ func (d *Dialect) labelNameFold(expr string) string {
 }
 
 // LabelNameEquals returns a label-name equality expression for use in a WHERE
-// clause, folded per labelNameFold. The returned string uses ? placeholder
+// clause, folded per asciiFold. The returned string uses ? placeholder
 // syntax. Both sides are folded so the bound value is compared as a literal —
 // deliberately not ILIKE, whose `%`/`_` would be interpreted as pattern
 // wildcards (e.g. a label named "in_progress" would match "inXprogress").
 func (d *Dialect) LabelNameEquals(col string) string {
-	return d.labelNameFold(col) + " = " + d.labelNameFold("?")
+	return d.asciiFold(col) + " = " + d.asciiFold("?")
 }
 
 // LabelNameConflictTarget returns the ON CONFLICT inference clause that matches
-// the unique index enforcing labelNameFold. The two backends reach that rule
+// the unique index enforcing asciiFold. The two backends reach that rule
 // differently: SQLite's labels.name is COLLATE NOCASE, so the plain
 // UNIQUE(user_id, name) constraint already implements the fold, while
 // PostgreSQL indexes the folded expression, which ON CONFLICT can only infer if
 // it is spelled out. Keep this in sync with the index the migrations create.
 func (d *Dialect) LabelNameConflictTarget() string {
 	if d.Driver == DriverPostgres {
-		return "(user_id, " + d.labelNameFold("name") + ")"
+		return "(user_id, " + d.asciiFold("name") + ")"
 	}
 	return "(user_id, name)"
+}
+
+// CaseInsensitiveLike returns a LIKE expression that matches without regard to
+// case on both backends, for use in a WHERE clause. The returned string uses ?
+// placeholder syntax and expects the bound value to carry its own % wildcards.
+//
+// Plain LIKE cannot be used: SQLite folds ASCII case in LIKE by default while
+// PostgreSQL does not, so the same query is case-insensitive on one backend and
+// case-sensitive on the other. Folding both sides through asciiFold makes them
+// agree — and pins the fold to ASCII, so a search behaves the same way whichever
+// backend serves it. ILIKE would be the natural PostgreSQL spelling but folds
+// per locale, which SQLite cannot match.
+//
+// Unlike LabelNameEquals the bound value keeps its wildcard meaning here, since
+// substring search is the point; LOWER() leaves % and _ untouched.
+func (d *Dialect) CaseInsensitiveLike(col string) string {
+	return d.asciiFold(col) + " LIKE " + d.asciiFold("?")
 }
 
 // LimitAll returns the dialect-correct expression for "no upper bound" in a

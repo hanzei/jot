@@ -20,7 +20,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '../theme/ThemeContext';
 import { probeServerReachability } from '../api/client';
 import type { RootStackParamList } from '../navigation/RootNavigator';
-import { VALIDATION } from '@jot/shared';
+import { USERNAME_EDGE_PATTERN, USERNAME_PATTERN, VALIDATION } from '@jot/shared';
 import { displayMessage } from '../i18n/utils';
 import {
   registerOnServer,
@@ -247,8 +247,8 @@ export default function ConnectToServerScreen() {
     if (!trimmedUsername) return t('auth.usernameRequired');
     if (trimmedUsername.length < VALIDATION.USERNAME_MIN_LENGTH) return t('auth.usernameMin');
     if (trimmedUsername.length > VALIDATION.USERNAME_MAX_LENGTH) return t('auth.usernameMax');
-    if (!/^[a-zA-Z0-9_-]+$/.test(trimmedUsername)) return t('auth.usernameChars');
-    if (/^[_-]|[_-]$/.test(trimmedUsername)) return t('auth.usernameEdge');
+    if (!USERNAME_PATTERN.test(trimmedUsername)) return t('auth.usernameChars');
+    if (USERNAME_EDGE_PATTERN.test(trimmedUsername)) return t('auth.usernameEdge');
     if (!password.trim()) return t('auth.passwordRequired');
     if ([...password].length < VALIDATION.PASSWORD_MIN_LENGTH) {
       return t('auth.passwordMin', { min: VALIDATION.PASSWORD_MIN_LENGTH });
