@@ -54,8 +54,11 @@ let lastSyncedAt: string | null = null;
 let lastConsecutiveFailureCount = 0;
 function SyncErrorProbe() {
   const { syncError, lastSyncedAt: syncedAt, consecutiveFailureCount } = useOfflineContext();
+  // eslint-disable-next-line react-hooks/globals -- test probe captures render output by design
   lastSyncError = syncError;
+  // eslint-disable-next-line react-hooks/globals -- test probe captures render output by design
   lastSyncedAt = syncedAt;
+  // eslint-disable-next-line react-hooks/globals -- test probe captures render output by design
   lastConsecutiveFailureCount = consecutiveFailureCount;
   return <Text>{String(syncError)}</Text>;
 }

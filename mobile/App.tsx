@@ -146,6 +146,7 @@ export default function App() {
 
   // Reset DB error when the active database changes (e.g. server switch).
   React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
     setDbInitError(null);
   }, [databaseName]);
 

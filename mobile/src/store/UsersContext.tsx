@@ -32,6 +32,7 @@ export function UsersProvider({ children }: { children: React.ReactNode }) {
   const [usersById, setUsersById] = useState<Map<string, User>>(new Map());
   const isMountedRef = useRef(true);
   const isConnectedRef = useRef(isConnected);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
   // Re-entrancy guard: skip a load while one is already running so the
   // isConnected/mount effect and the SSE-reconnect subscription can't start
@@ -50,7 +51,10 @@ export function UsersProvider({ children }: { children: React.ReactNode }) {
       // Load from SQLite first for immediate offline display
       try {
         const localUsers = await getLocalUsers(db);
-        if (isMountedRef.current) {
+        // Cancellation is checked as well as mount: sign-out cancels this load and
+        // clears the cache while the provider stays mounted, so publishing here
+        // would refill it with the previous user's collaborators.
+        if (isMountedRef.current && !canceller?.cancelled) {
           setUsersById(buildUsersMap(user, localUsers));
         }
       } catch { /* ignore — server fetch will follow */ }
@@ -63,6 +67,8 @@ export function UsersProvider({ children }: { children: React.ReactNode }) {
         });
         if (!isMountedRef.current || canceller?.cancelled) return;
         await saveUsers(db, users);
+        // Re-check: the persist above is another await the cancel can land in.
+        if (!isMountedRef.current || canceller?.cancelled) return;
         setUsersById(buildUsersMap(user, users));
         // Warm the icon cache opportunistically; errors are non-fatal.
         void refreshIconCacheForUsers(users, getBaseUrl());
@@ -81,6 +87,7 @@ export function UsersProvider({ children }: { children: React.ReactNode }) {
   // resumes once connectivity returns instead of waiting for the next mount.
   useEffect(() => {
     if (!isAuthenticated) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
       setUsersById(new Map());
       return;
     }

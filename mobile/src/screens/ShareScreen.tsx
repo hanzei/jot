@@ -81,8 +81,10 @@ export default function ShareScreen() {
 
   // Stable mutation refs to avoid recreating callbacks on every render
   const shareMutateRef = useRef(shareMutation.mutateAsync);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   shareMutateRef.current = shareMutation.mutateAsync;
   const unshareMutateRef = useRef(unshareMutation.mutateAsync);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   unshareMutateRef.current = unshareMutation.mutateAsync;
 
   // Debounce search query
@@ -100,6 +102,7 @@ export default function ShareScreen() {
   // offline or the server is known-unreachable, mirroring the writes' gate).
   useEffect(() => {
     if (!debouncedQuery) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
       setIsSearching(false);
       setSearchResults([]);
       setSearchError(false);

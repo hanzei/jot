@@ -99,6 +99,7 @@ function useBackgroundSyncQuery<T>(
   const queryClient = useQueryClient();
   const { isConnected } = useNetworkStatus();
   const isConnectedRef = useRef(isConnected);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
   // Re-entrancy guard: skip a resync while one is already running so the online
   // effect and the SSE-reconnect subscription can't start duplicate refreshes
@@ -194,6 +195,7 @@ export function useCreateLabel() {
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
   const isConnectedRef = useRef(isConnected);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
   const { user } = useAuth();
 
@@ -245,6 +247,7 @@ export function useAddLabelToNote() {
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
   const isConnectedRef = useRef(isConnected);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
   const { user } = useAuth();
 
@@ -322,6 +325,7 @@ export function useRemoveLabelFromNote() {
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
   const isConnectedRef = useRef(isConnected);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
 
   return useMutation({
@@ -371,6 +375,7 @@ export function useRenameLabel() {
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
   const isConnectedRef = useRef(isConnected);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
 
   const { user } = useAuth();
@@ -430,6 +435,7 @@ export function useDeleteLabel() {
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
   const isConnectedRef = useRef(isConnected);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
 
   return useMutation({

@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useAnimatedValue,
   View,
 } from 'react-native';
 import { CircleAlert, CircleCheck, Info, X, type LucideIcon } from 'lucide-react-native';
@@ -72,8 +73,8 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
   const autoDismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const actionInFlightRef = useRef(false);
   const [isActionInFlight, setIsActionInFlight] = useState(false);
-  const opacity = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(12)).current;
+  const opacity = useAnimatedValue(0);
+  const translateY = useAnimatedValue(12);
   const { color: typeColor, icon: Icon } = TYPE_CONFIG[toast.type];
 
   const clearAutoDismissTimer = useCallback(() => {

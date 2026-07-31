@@ -84,6 +84,7 @@ export default function AboutSection() {
     if (aboutExpanded && !aboutInfo && !aboutError) {
       let cancelled = false;
       const requestId = ++aboutRequestSeqRef.current;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
       setAboutLoading(true);
       getAboutInfo()
         .then((nextAboutInfo) => {

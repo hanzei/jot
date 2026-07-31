@@ -6,6 +6,7 @@ import { UsersProvider, useUsers } from '../src/store/UsersContext';
 import { publishProfileIconUpdate } from '../src/store/profileIconEvents';
 import { publishReconnectResync } from '../src/store/resyncEvents';
 import { getUsers } from '../src/api/users';
+import { getLocalUsers } from '../src/db/userQueries';
 
 const existingUser: User = {
   id: 'collab-1', username: 'bob', first_name: 'Bob', last_name: 'B',
@@ -19,8 +20,9 @@ jest.mock('expo-sqlite', () => {
   return { useSQLiteContext: jest.fn(() => db) };
 });
 
+let mockAuthState = { user: null as User | null, isAuthenticated: true };
 jest.mock('../src/store/AuthContext', () => ({
-  useAuth: () => ({ user: null, isAuthenticated: true }),
+  useAuth: () => mockAuthState,
 }));
 
 let mockUsersConnected = false;
@@ -49,6 +51,7 @@ jest.mock('../src/utils/profileIconCache', () => ({
 }));
 
 const mockGetUsers = getUsers as jest.Mock;
+const mockGetLocalUsers = getLocalUsers as jest.Mock;
 
 function Probe() {
   const { usersById } = useUsers();
@@ -143,5 +146,50 @@ describe('UsersContext catch-up on SSE reconnect', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(mockGetUsers).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('UsersContext sign-out', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockAuthState = { user: null, isAuthenticated: true };
+  });
+
+  afterEach(() => {
+    mockAuthState = { user: null, isAuthenticated: true };
+    mockGetLocalUsers.mockImplementation(() => Promise.resolve([existingUser]));
+  });
+
+  it('does not refill the cache from a local read that resolves after sign-out', async () => {
+    let resolveLocal: ((users: User[]) => void) | undefined;
+    mockGetLocalUsers.mockImplementation(
+      () => new Promise<User[]>((resolve) => { resolveLocal = resolve; }),
+    );
+
+    const { getByTestId, rerender } = render(
+      <UsersProvider>
+        <Probe />
+      </UsersProvider>,
+    );
+
+    // The mount-time load is in flight, parked on the SQLite read.
+    await waitFor(() => expect(mockGetLocalUsers).toHaveBeenCalledTimes(1));
+
+    // Sign out: the effect cleanup cancels that load and the re-run empties the
+    // cache. The provider stays mounted, so isMountedRef alone wouldn't catch it.
+    mockAuthState = { user: null, isAuthenticated: false };
+    rerender(
+      <UsersProvider>
+        <Probe />
+      </UsersProvider>,
+    );
+
+    await act(async () => {
+      resolveLocal?.([existingUser]);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    // The previous user's collaborators must not reappear after sign-out.
+    expect(getByTestId('icon-version').props.children).toBe('none');
   });
 });

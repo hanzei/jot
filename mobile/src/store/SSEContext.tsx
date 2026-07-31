@@ -40,6 +40,7 @@ export function SSEProvider({ children }: { children: React.ReactNode }) {
   // stays silent.
   useEffect(() => {
     if (sseStatus !== 'reconnecting') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
       setSseReconnecting(false);
       return;
     }
@@ -75,6 +76,7 @@ export function useSSEContext(): SSEContextValue {
 export function useSSESubscription(noteId: string | null, onUpdated: () => void): void {
   const context = useContext(SSEContext);
   const onUpdatedRef = useRef(onUpdated);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   onUpdatedRef.current = onUpdated;
 
   React.useEffect(() => {

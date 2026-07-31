@@ -116,6 +116,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     }
   }, [activeLabelId, props.navigation]);
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- pre-existing, tracked in #777
   const handleSubmitRename = useCallback(async () => {
     const label = renameLabelTarget;
     const name = renameValue.trim();
@@ -134,6 +135,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     }
   }, [handleLabelRenameSuccess, renameLabel, renameLabelTarget, renameValue, t]);
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- pre-existing, tracked in #777
   const openRenameModal = useCallback((label: Label) => {
     setRenameLabelTarget(label);
     setRenameValue(label.name);
@@ -163,6 +165,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     }
   }, [confirm, deleteLabel, handleDeleteLabelSuccess, t]);
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- pre-existing, tracked in #777
   const handleSubmitCreateLabel = useCallback(async () => {
     const name = newLabelValue.trim();
     if (!name || createLabel.isPending) {
@@ -179,6 +182,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     }
   }, [createLabel, newLabelValue, t]);
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- pre-existing, tracked in #777
   const closeCreateLabelModal = useCallback(() => {
     if (createLabel.isPending) {
       return;
@@ -193,6 +197,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     }
   }, [renameLabel.isPending]);
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- pre-existing, tracked in #777
   const handleCreateLabelPress = useCallback(() => {
     setNewLabelValue('');
     setIsCreateLabelVisible(true);
@@ -222,6 +227,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     }
   }, [loadServerPickerData, t]);
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- pre-existing, tracked in #777
   const handleOpenServerPicker = useCallback(() => {
     setIsServerPickerVisible(true);
     void refreshServerPickerData();
@@ -277,6 +283,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     }
   }, [isServerActionPending, loadServerPickerData, props.navigation, revalidateSession, refreshServerPickerData, servers, t]);
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- pre-existing, tracked in #777
   const handleOpenServerSetup = useCallback(() => {
     if (isServerActionPending) {
       return;
@@ -285,6 +292,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     setIsServerSetupVisible(true);
   }, [isServerActionPending]);
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- pre-existing, tracked in #777
   const handleDeleteServer = useCallback((server: ServerAccountEntry) => {
     if (isServerActionPending) {
       return;
@@ -326,6 +334,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     );
   }, [isServerActionPending, activeServerId, clearAuth, revalidateSession, t]);
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- pre-existing, tracked in #777
   const handleOpenRenameServer = useCallback((server: ServerAccountEntry) => {
     if (isServerActionPending) {
       return;
@@ -335,6 +344,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     setIsServerPickerVisible(false);
   }, [isServerActionPending]);
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- pre-existing, tracked in #777
   const handleDismissRenameServer = useCallback(() => {
     if (isServerActionPending) {
       return;
@@ -344,6 +354,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     setIsServerPickerVisible(true);
   }, [isServerActionPending]);
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- pre-existing, tracked in #777
   const handleSubmitRenameServer = useCallback(async () => {
     if (!renameServerTarget || isServerActionPending) {
       return;
@@ -373,6 +384,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     }
   }, [renameServerTarget, renameServerValue, isServerActionPending, t]);
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- pre-existing, tracked in #777
   const handleBackToDashboardFromServerSetup = useCallback(() => {
     setIsServerSetupVisible(false);
     if (servers.length > 0) {

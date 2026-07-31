@@ -45,6 +45,7 @@ export default function ServerSetupGate({
     let mounted = true;
 
     if (existingServerUrl) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
       setServerUrlInput(existingServerUrl);
       setIsServerReady(true);
       setIsCheckingExistingServer(false);

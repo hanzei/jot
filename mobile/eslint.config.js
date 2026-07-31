@@ -38,13 +38,10 @@ export default [
     rules: {
       ...js.configs.recommended.rules,
       ...tseslint.configs.recommended.rules,
-      // eslint-plugin-react-hooks v6+ recommended bundles a large set of new
-      // React Compiler readiness rules (refs, set-state-in-effect, purity,
-      // immutability, etc.) that this codebase's non-compiler patterns (ref
-      // mirroring, setState-in-effect for derived state) predate. Keep only
-      // the two rules this project has always linted against.
-      'react-hooks/rules-of-hooks': 'error',
-      'react-hooks/exhaustive-deps': 'warn',
+      // Spread wholesale, matching webapp/eslint.config.js: no rule is disabled
+      // here, so new rules in future plugin bumps apply by default. Pre-existing
+      // violations are suppressed at their exact sites and tracked in #777.
+      ...reactHooks.configs.recommended.rules,
       ...react.configs.recommended.rules,
       'react/react-in-jsx-scope': 'off',
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],

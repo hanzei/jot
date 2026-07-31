@@ -27,12 +27,14 @@ export default function AccountSection() {
   const [profileSuccess, setProfileSuccess] = useState('');
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
     setFirstName(user?.first_name ?? '');
     setLastName(user?.last_name ?? '');
     setUsername(user?.username ?? '');
   }, [user?.first_name, user?.last_name, user?.username]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
     setProfileSuccess('');
   }, [settings?.language]);
 
