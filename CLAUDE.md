@@ -118,9 +118,14 @@ one workspace at a time, via the skills in `.claude/skills/`:
 - `update-shared-deps` — `@jot/shared` devDependencies
 - `update-webapp-deps` — webapp npm packages, `overrides` block, Playwright browsers
 - `update-mobile-deps` — Expo/React Native packages (Expo SDK dictates most versions)
+- `update-docker-deps` — Dockerfile base images, CI container images, `docker-compose.yml`, `.dockerignore`
+- `update-github-actions` — pinned action SHAs in `.github/workflows/`, runner labels, permissions
 
 For a full sweep, update in the order **shared → webapp → mobile** (both consumers compile
-`shared/src` directly through the `file:../shared` link); `server/` is independent.
+`shared/src` directly through the `file:../shared` link); `server/` is independent. The
+Docker and Actions skills are independent of all four and of each other, but the base
+images they touch mirror versions owned by the language skills — run those first if both
+are in scope.
 
 ---
 
@@ -480,7 +485,9 @@ docker compose up -d
 
 Persistent data is mounted at `/data` (default `docker-compose.yml` maps host `./data` to `/data`).
 
-**Workflow pinning policy:** In GitHub Actions workflows, pin every external action `uses:` reference (`owner/repo@...`) to a full commit SHA and add an inline comment with the intended major version tag (for example, `# v6`). Do not use floating action refs such as `@v4`, `@v6`, `@main`, or `@latest`.
+**Workflow pinning policy:** In GitHub Actions workflows, pin every external action `uses:` reference (`owner/repo@...`) to a full commit SHA and add an inline comment with the intended major version tag (for example, `# v6`). Do not use floating action refs such as `@v4`, `@v6`, `@main`, or `@latest`. The
+`update-github-actions` skill covers re-pinning them; `update-docker-deps` covers the
+image side of the build.
 
 ### CI Checklist (before opening a PR)
 
