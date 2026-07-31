@@ -87,7 +87,10 @@ tasks:
     desc: Run server tests with coverage
     dir: server
     cmds:
-      - go test -coverprofile=coverage.out ./...
+      # -coverpkg=./... credits the root-package integration suite (http_*_test.go)
+      # to the packages it actually exercises. Without it, handlers/auth/mcphandler
+      # read as untested.
+      - go test -coverpkg=./... -coverprofile=coverage.out ./...
       - go tool cover -html=coverage.out -o coverage.html
 
   lint:
