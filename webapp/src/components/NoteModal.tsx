@@ -1,5 +1,5 @@
 import { useState, useEffect, useEffectEvent, useMemo, useRef, useCallback, type ReactElement, type ReactNode } from 'react';
-import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, GripVertical, Pin, EllipsisVertical, Square } from 'lucide-react';
+import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, Pin, EllipsisVertical, Square } from 'lucide-react';
 import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, IMAGE_MAX_PER_NOTE, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListItems, listToText, exceedsCodePointLimit, truncateToCodePoints, type Note, type NoteType, type NoteImage, type CreateNoteRequest, type UpdateNoteRequest, type ConvertNoteTypeRequest, type PatchNoteItemRequest, type NoteItem, type Label, type User, type Collaborator } from '@jot/shared';
@@ -8,7 +8,7 @@ import { renderMarkdown } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
 import NoteImageGallery, { type PendingImageUpload } from '@/components/NoteImageGallery';
 import LetterAvatar from '@/components/LetterAvatar';
-import AssigneePicker from '@/components/AssigneePicker';
+import SortableItem from '@/components/SortableItem';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
 import { useSizeTransition } from '@/hooks/useSizeTransition';
@@ -38,9 +38,11 @@ import {
   SortableContext,
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
-  useSortable,
 } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
+
+// Re-exported so the row-reveal styling has a single import site for callers
+// that reach for it through the modal rather than the row component.
+export { ROW_REVEAL_CLASSES } from '@/components/SortableItem';
 
 // Undo window for a client-deferred note image removal (spec: ~10s).
 const IMAGE_REMOVE_UNDO_MS = 10_000;
@@ -76,13 +78,6 @@ const OVERFLOW_ITEM_DANGER = `${OVERFLOW_ITEM_BASE} justify-between text-red-600
 
 // Validation functions
 type TFunction = (key: string, opts?: Record<string, unknown>) => string;
-
-// Per-row controls (delete, assign) are hidden until the row is hovered
-// (desktop) or a field within it is focused (works on touch). While hidden the
-// control is also non-interactive, so an invisible button can't be tapped by
-// accident — important on touch devices, where there's no hover to reveal it.
-export const ROW_REVEAL_CLASSES =
-  'opacity-0 pointer-events-none group-hover/item:opacity-100 group-hover/item:pointer-events-auto group-focus-within/item:opacity-100 group-focus-within/item:pointer-events-auto';
 
 const validateItemText = (text: string, t: TFunction): string | null => {
   const trimmed = text.trim();
@@ -150,288 +145,6 @@ interface AutoSaveDraft {
   archived?: boolean;
   color?: string;
   checked_items_collapsed?: boolean;
-}
-
-interface SortableItemProps {
-  id: string;
-  index: number;
-  item: ListItem;
-  onUpdateListItem: (index: number, field: 'text' | 'completed', value: string | boolean) => Promise<void>;
-  onRemoveListItem: (itemId: string) => void;
-  isCompleted?: boolean;
-  onKeyDown?: (index: number, e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
-  onPaste?: (index: number, e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
-  inputRef?: React.RefCallback<HTMLTextAreaElement>;
-  onIndentChange?: (itemId: string, delta: 1 | -1) => void;
-  isShared?: boolean;
-  collaborators?: Collaborator[];
-  usersById?: Map<string, User>;
-  onAssignItem?: (itemId: string, userId: string) => void;
-  completedItemTexts?: string[];
-  onAcceptSuggestion?: (currentItemId: string, suggestionText: string) => void;
-}
-
-function SortableItem({ id, index, item, onUpdateListItem, onRemoveListItem, isCompleted = false, onKeyDown, onPaste, inputRef, onIndentChange, isShared, collaborators, usersById, onAssignItem, completedItemTexts = [], onAcceptSuggestion }: SortableItemProps) {
-  const { t } = useTranslation();
-  const [showAssigneePicker, setShowAssigneePicker] = useState(false);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
-  const suggestionsRef = useRef<HTMLDivElement>(null);
-  const listItemTextRef = useRef<HTMLTextAreaElement | null>(null);
-  const closeAssigneePicker = useCallback(() => setShowAssigneePicker(false), []);
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({
-    id,
-    disabled: isCompleted
-  });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    marginLeft: indentOf(item) * VALIDATION.INDENT_PX_PER_LEVEL,
-  };
-
-  const assignedUser = item.assignedTo ? usersById?.get(item.assignedTo) : undefined;
-  const showAssignUI = isShared && collaborators && collaborators.length > 0 && onAssignItem;
-  const placeholder = item.text ? '' : t('note.itemPlaceholder');
-  const autoResizeListItemText = useCallback((textarea: HTMLTextAreaElement | null) => {
-    if (!textarea) return;
-    textarea.style.height = 'auto';
-    textarea.style.height = `${textarea.scrollHeight}px`;
-  }, []);
-
-  const setListItemTextRef = useCallback((textarea: HTMLTextAreaElement | null) => {
-    listItemTextRef.current = textarea;
-    autoResizeListItemText(textarea);
-    inputRef?.(textarea);
-  }, [autoResizeListItemText, inputRef]);
-
-  useEffect(() => {
-    autoResizeListItemText(listItemTextRef.current);
-  }, [item.text, autoResizeListItemText]);
-
-  const suggestions = useMemo(() => {
-    const trimmed = item.text.trim();
-    if (!trimmed) return [];
-    const q = trimmed.toLowerCase();
-    const results: string[] = [];
-    for (const text of completedItemTexts) {
-      const lower = text.toLowerCase();
-      if (lower.includes(q) && lower !== q) {
-        results.push(text);
-        if (results.length === 5) break;
-      }
-    }
-    return results;
-  }, [item.text, completedItemTexts]);
-
-  const selectSuggestion = (text: string) => {
-    if (onAcceptSuggestion) {
-      onAcceptSuggestion(item.id, text);
-    } else {
-      onUpdateListItem(index, 'text', text);
-    }
-    setShowSuggestions(false);
-    setSelectedSuggestionIndex(-1);
-  };
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      data-testid="list-item-row"
-      className={`group/item flex items-start gap-2 ${isDragging ? 'opacity-50' : ''} ${
-        isCompleted ? 'opacity-60' : ''
-      }`}
-      {...attributes}
-    >
-      {!isCompleted && (
-        <div
-          {...listeners}
-          className="cursor-grab active:cursor-grabbing p-1 text-gray-400 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-100"
-        >
-          <GripVertical className="w-4 h-4" />
-        </div>
-      )}
-      {isCompleted && <div className="w-6 h-4"></div>}
-      
-      <input
-        type="checkbox"
-        checked={item.completed}
-        onChange={(e) => onUpdateListItem(index, 'completed', e.target.checked)}
-        className="h-4 w-4 text-blue-600 rounded mt-0.5 flex-shrink-0"
-      />
-      <div className="flex flex-1 items-start min-w-0">
-        <div className="relative min-w-0 flex-1">
-          <textarea
-            data-testid="list-item-input"
-            placeholder={placeholder}
-            rows={1}
-            autoCapitalize="sentences"
-            className={`w-full pt-0 pb-1 pl-1 pr-0 bg-transparent border-none outline-none min-w-0 resize-none overflow-hidden whitespace-pre-wrap break-words placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
-              isCompleted ? 'line-through text-gray-500 dark:text-gray-400' : ''
-            }`}
-            value={item.text}
-            onInput={(e) => autoResizeListItemText(e.currentTarget)}
-            onChange={(e) => {
-              onUpdateListItem(index, 'text', e.target.value);
-              if (e.target.value.trim()) setShowSuggestions(true);
-              setSelectedSuggestionIndex(-1);
-            }}
-            onFocus={() => {
-              if (suggestions.length > 0) setShowSuggestions(true);
-            }}
-            onBlur={(e) => {
-              const related = e.relatedTarget as Node | null;
-              if (suggestionsRef.current?.contains(related)) return;
-              // Delay to allow touch tap on suggestion to fire click first
-              setTimeout(() => {
-                setShowSuggestions(false);
-                setSelectedSuggestionIndex(-1);
-              }, 150);
-            }}
-            aria-autocomplete="list"
-            aria-expanded={showSuggestions && suggestions.length > 0}
-            aria-controls={showSuggestions && suggestions.length > 0 ? `suggestions-${id}` : undefined}
-            aria-activedescendant={selectedSuggestionIndex >= 0 ? `suggestion-${id}-${selectedSuggestionIndex}` : undefined}
-            onKeyDown={(e) => {
-              const suggestionsVisible = showSuggestions && suggestions.length > 0;
-              if (suggestionsVisible && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229) {
-                if (e.key === 'ArrowDown') {
-                  e.preventDefault();
-                  setSelectedSuggestionIndex(prev => Math.min(prev + 1, suggestions.length - 1));
-                  return;
-                }
-                if (e.key === 'ArrowUp') {
-                  e.preventDefault();
-                  setSelectedSuggestionIndex(prev => Math.max(prev - 1, -1));
-                  return;
-                }
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  // Only accept a suggestion the user explicitly highlighted
-                  // (arrow keys or hover). With none highlighted, Enter keeps
-                  // its normal add/split behavior below — the dropdown being
-                  // merely visible must not hijack creating a new item.
-                  if (selectedSuggestionIndex >= 0) {
-                    e.preventDefault();
-                    selectSuggestion(suggestions[selectedSuggestionIndex]);
-                    return;
-                  }
-                  setShowSuggestions(false);
-                  setSelectedSuggestionIndex(-1);
-                }
-                if (e.key === 'Escape' || e.key === 'Tab') {
-                  e.preventDefault();
-                  setShowSuggestions(false);
-                  setSelectedSuggestionIndex(-1);
-                  return;
-                }
-              }
-              if (e.key === 'Tab' && onIndentChange && !isCompleted) {
-                e.preventDefault();
-                onIndentChange(item.id, e.shiftKey ? -1 : 1);
-                return;
-              }
-              if (onKeyDown) onKeyDown(index, e);
-            }}
-            onPaste={(e) => onPaste?.(index, e)}
-            ref={setListItemTextRef}
-          />
-          {showSuggestions && suggestions.length > 0 && !isCompleted && (
-            <div
-              ref={suggestionsRef}
-              id={`suggestions-${id}`}
-              role="listbox"
-              aria-label={t('note.completedSuggestions')}
-              className="absolute z-20 top-full left-0 mt-0.5 min-w-40 max-w-64 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-md shadow-lg max-h-36 overflow-y-auto scrollbar-subtle"
-            >
-              {suggestions.map((text, i) => (
-                <div
-                  key={i}
-                  id={`suggestion-${id}-${i}`}
-                  role="option"
-                  aria-selected={i === selectedSuggestionIndex}
-                  className={`px-3 py-1.5 text-sm cursor-pointer truncate ${
-                    i === selectedSuggestionIndex
-                      ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-300'
-                      : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-700'
-                  }`}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => selectSuggestion(text)}
-                  onMouseEnter={() => setSelectedSuggestionIndex(i)}
-                >
-                  {text}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {showAssignUI && (() => {
-          const assigneeDisplayName = assignedUser
-            ? [assignedUser.first_name, assignedUser.last_name].filter(Boolean).join(' ') || assignedUser.username
-            : '?';
-          return (
-          <div className={`relative flex-shrink-0 ${item.assignedTo || !isCompleted ? 'ml-1' : ''}`}>
-            {item.assignedTo ? (
-              <button
-                onClick={() => setShowAssigneePicker(true)}
-                title={t('note.assignedTo', { name: assigneeDisplayName })}
-                aria-label={t('note.assignedTo', { name: assigneeDisplayName })}
-                className={`rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800 ${isCompleted ? 'cursor-default' : 'cursor-pointer'}`}
-                disabled={isCompleted}
-              >
-                <LetterAvatar
-                  firstName={assignedUser?.first_name}
-                  username={assignedUser?.username || '?'}
-                  userId={item.assignedTo}
-                  hasProfileIcon={assignedUser?.has_profile_icon}
-                  iconVersion={assignedUser?.updated_at}
-                  className="w-5 h-5"
-                />
-              </button>
-            ) : (
-              !isCompleted && (
-                <button
-                  onClick={() => setShowAssigneePicker(true)}
-                  className={`w-5 h-5 rounded-full border border-dashed border-gray-300 dark:border-gray-400 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-white/10 transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 ${ROW_REVEAL_CLASSES}`}
-                  title={t('note.assignItem')}
-                  aria-label={t('note.assignItem')}
-                >
-                  <UserPlus className="h-3 w-3 text-gray-400 dark:text-gray-300" aria-hidden="true" />
-                </button>
-              )
-            )}
-            {showAssigneePicker && (
-              <AssigneePicker
-                collaborators={collaborators}
-                currentAssigneeId={item.assignedTo}
-                onAssign={(userId) => onAssignItem(item.id, userId)}
-                onClose={closeAssigneePicker}
-              />
-            )}
-          </div>
-          );
-        })()}
-      </div>
-
-      <button
-        onClick={() => onRemoveListItem(item.id)}
-        aria-label={t('note.removeItem')}
-        title={t('note.removeItem')}
-        data-testid="list-item-delete"
-        className={`ml-auto w-5 h-5 flex-shrink-0 flex items-center justify-center rounded text-gray-400 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-100 transition-opacity ${ROW_REVEAL_CLASSES}`}
-      >
-        <X className="h-4 w-4" />
-      </button>
-    </div>
-  );
 }
 
 export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, onDelete, onDuplicate, onConvert, isOwner = true, usersById, currentUserId, uploadMaxBytes = UPLOAD_MAX_BYTES, initialType, initialContent }: NoteModalProps) {
