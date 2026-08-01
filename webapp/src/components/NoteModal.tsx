@@ -2,7 +2,7 @@ import { useState, useEffect, useEffectEvent, useMemo, useRef, useCallback, type
 import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, Pin, EllipsisVertical, Square } from 'lucide-react';
 import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListItems, listToText, exceedsCodePointLimit, truncateToCodePoints, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type Label, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListItems, listToText, exceedsCodePointLimit, truncateToCodePoints, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
 import { renderMarkdown } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
@@ -130,7 +130,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const { t, i18n } = useTranslation();
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [noteLabels, setNoteLabels] = useState<Label[]>(note?.labels ?? []);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showLabelPicker, setShowLabelPicker] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
@@ -167,6 +166,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     archived, setArchived,
     checkedItemsCollapsed, setCheckedItemsCollapsed,
     items, itemsRef, commitItems,
+    noteLabels, setNoteLabels,
     showSaved, flashSaved, markDirty,
     setSavedBaseline, markScalarSaved, applyDraftScalars, isDirty, hasUnflushedWork, baseline,
     autoSaveNote, scheduleAutoSave, cancelPendingSave, flushSave,
@@ -357,11 +357,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         commitItems([]);
         draft = { title: '', content: note.content, pinned: note.pinned, archived: note.archived, color: note.color, checked_items_collapsed: false };
       }
-      // Adopting a note necessarily writes the whole editor state from the
-      // incoming prop. Doing that during render instead would mean running the
-      // dirty/in-flight guards above as a render-phase side effect, which is a
-      // separate change from this extraction.
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
       setNoteLabels(note.labels ?? []);
       setSavedBaseline(draft, listItems);
     } else {
@@ -377,7 +372,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
   }, [commitItems, note, hasUnflushedWork, resetImagesForNoteSwitch, resetCompletedItemsForNoteSwitch,
       setSavedBaseline, setTitle, setContent, setNoteType, setColor, setPinned, setArchived,
-      setCheckedItemsCollapsed, initialType, initialContent]);
+      setCheckedItemsCollapsed, setNoteLabels, initialType, initialContent]);
 
   useEffect(() => {
     if (!showColorPicker) return;
