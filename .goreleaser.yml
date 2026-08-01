@@ -5,8 +5,11 @@ project_name: jot
 builds:
   - id: server
     dir: server
+    # The SQLite driver is pure Go (modernc.org/sqlite), so the server needs no
+    # CGO and no C cross-toolchain for arm64. Keep this in sync with the
+    # Dockerfile's backend-builder stage, which builds with CGO_ENABLED=0 too.
     env:
-      - CGO_ENABLED=1
+      - CGO_ENABLED=0
     goos:
       - linux
     goarch:
@@ -17,12 +20,6 @@ builds:
       - -X 'github.com/hanzei/jot/server/internal/server.version={{.Version}}'
       - -X 'github.com/hanzei/jot/server/internal/server.commit={{.ShortCommit}}'
       - -X 'github.com/hanzei/jot/server/internal/server.buildTime={{.Date}}'
-    overrides:
-      - goos: linux
-        goarch: arm64
-        env:
-          - CGO_ENABLED=1
-          - CC=aarch64-linux-gnu-gcc
 
   - id: jotctl
     dir: server
@@ -44,11 +41,11 @@ builds:
 archives:
   - id: server
     ids: [server]
-    format: tar.gz
+    formats: [tar.gz]
   - id: jotctl
     ids: [jotctl]
     name_template: "jotctl_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    format: tar.gz
+    formats: [tar.gz]
 
 checksum:
   name_template: checksums.txt
