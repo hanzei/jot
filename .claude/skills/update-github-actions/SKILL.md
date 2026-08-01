@@ -6,8 +6,14 @@ description: Update GitHub Actions workflows — re-pin every external action to
 # Update GitHub Actions
 
 Eight workflows live in `.github/workflows/`: `server-ci`, `webapp-ci`, `shared-ci`,
-`mobile-ci`, `mobile-apk`, `docker`, `docker-cleanup`, and `release`. There is no
-Dependabot, so re-pinning is manual and deliberate.
+`mobile-ci`, `mobile-apk`, `docker`, `docker-cleanup`, and `release`.
+
+Dependabot (`.github/dependabot.yml`) opens one grouped PR a month that re-pins these
+actions to current SHAs, so routine drift is already handled — this skill is for the work
+Dependabot cannot do: bumping majors, reconciling the same action pinned to two different
+SHAs across workflows, and reviewing runner labels, permissions, and path filters. Expect
+the inventory in step 1 to be closer to current than it would be otherwise; that is
+Dependabot working, not a reason to skip the sweep.
 
 The pinning policy (root `CLAUDE.md`) is absolute: every external `uses:` is a **full
 40-character commit SHA** with an inline `# vN` comment naming the intended major. No
