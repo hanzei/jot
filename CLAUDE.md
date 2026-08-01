@@ -482,6 +482,20 @@ Persistent data is mounted at `/data` (default `docker-compose.yml` maps host `.
 
 **Workflow pinning policy:** In GitHub Actions workflows, pin every external action `uses:` reference (`owner/repo@...`) to a full commit SHA and add an inline comment with the intended major version tag (for example, `# v6`). Do not use floating action refs such as `@v4`, `@v6`, `@main`, or `@latest`.
 
+**Base image pinning policy:** Pin every image Jot *builds on* to a digest, keeping the
+readable tag in the reference: `FROM alpine:3.22@sha256:...`. This covers all three
+`Dockerfile` stages and container images referenced from workflows (the Postgres service
+in `server-ci.yml`). A bare tag like `alpine:3.22` is republished on every patch release,
+so two builds of the same commit can produce different images. The exception is
+`docker-compose.yml`'s `hanzei/jot:latest` — that is Jot's own published image and is
+meant to float, since pinning it would freeze users on one release.
+
+Pin the digest of the **manifest index**, not of a single-platform manifest — images are
+built for `linux/amd64` and `linux/arm64`, and a platform-specific digest resolves on one
+leg of the matrix while failing on the other. Digests do not update themselves; the
+`update-docker-deps` skill owns re-resolving them, and that is the only thing that pulls
+in base-image security patches.
+
 ### CI Checklist (before opening a PR)
 
 1. `task check` — lint + all tests (server, webapp, mobile, shared). Equivalent to `task lint` followed by `task test`.

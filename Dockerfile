@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Multi-stage build for Jot application
-FROM node:24-alpine AS frontend-builder
+FROM node:24-alpine@sha256:f70403e87646dc51b45295f4b8b70cdad0b63d2297c4c9899119b03f7af7a6b3 AS frontend-builder
 
 WORKDIR /app/webapp
 
@@ -21,7 +21,7 @@ COPY webapp/ ./
 RUN npm run build
 
 # Backend build stage
-FROM golang:1.26-alpine AS backend-builder
+FROM golang:1.26-alpine@sha256:0178a641fbb4858c5f1b48e34bdaabe0350a330a1b1149aabd498d0699ff5fb2 AS backend-builder
 
 WORKDIR /src
 
@@ -50,7 +50,7 @@ RUN --mount=type=cache,id=gomodcache-${TARGETARCH},target=/go/pkg/mod \
     -o main .
 
 # Production stage
-FROM alpine:3.22
+FROM alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce
 
 # Install runtime dependencies
 RUN apk --no-cache add ca-certificates
