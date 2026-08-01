@@ -41,8 +41,10 @@ grep -nE '^(# syntax|FROM )' Dockerfile
 grep -rnE '^\s+image:|image: ' docker-compose.yml .github/workflows/
 ```
 
-Today that is `node:24-alpine`, `golang:1.26-alpine`, `alpine:3.22`,
-`postgres:16-alpine@sha256:...`, and `hanzei/jot:latest` in the compose file.
+Today that is `node:24-alpine`, `golang:1.26-alpine`, and `alpine:3.22` — each with a
+digest (see §3a) — plus `postgres:16-alpine@sha256:...` in `server-ci.yml` and
+`hanzei/jot:latest` in the compose file. That last one is Jot's own published image and
+is deliberately left floating; everything else is pinned.
 
 ## 2. The two mirrored base images
 
@@ -73,8 +75,50 @@ before bumping; three things in this repo depend on what Alpine ships:
   scratch base removes `wget` and the healthcheck starts failing while the app is
   perfectly healthy. Change the healthcheck in the same commit if you change the base.
 
-Pin the minor (`alpine:3.23`), never `alpine:latest` — a floating runtime base makes
-two builds of the same commit produce different images.
+## 3a. Re-resolving digests
+
+Every base image is pinned as tag **plus digest** (`FROM alpine:3.22@sha256:...`), per the
+base-image pinning policy in root `CLAUDE.md`. The tag is the readable label; the digest
+is the constraint. Bumping a base image therefore means resolving the new tag to a digest,
+not just editing the tag.
+
+**Pin the digest of the manifest index, never a single-platform manifest.** Images build
+for `linux/amd64` and `linux/arm64`; a platform-specific digest resolves on one leg of the
+matrix and fails on the other, so the mistake shows up as an arm64-only CI failure. With a
+daemon:
+
+```bash
+docker buildx imagetools inspect alpine:3.23 --format '{{.Manifest.Digest}}'
+```
+
+Without one — the common case in a sandbox — go straight to the registry:
+
+```bash
+repo=library/alpine tag=3.23
+tok=$(curl -sS "https://auth.docker.io/token?service=registry.docker.io&scope=repository:${repo}:pull" | jq -r .token)
+curl -sSI -H "Authorization: Bearer $tok" \
+  -H 'Accept: application/vnd.oci.image.index.v1+json' \
+  -H 'Accept: application/vnd.docker.distribution.manifest.list.v2+json' \
+  "https://registry-1.docker.io/v2/${repo}/manifests/${tag}" \
+  | tr -d '\r' | awk -F': ' 'tolower($1)=="docker-content-digest"{print $2}'
+```
+
+Then confirm what you got is actually an index covering both architectures — this is the
+check that catches the single-platform mistake before CI does:
+
+```bash
+curl -sS -H "Authorization: Bearer $tok" \
+  -H 'Accept: application/vnd.oci.image.index.v1+json' \
+  "https://registry-1.docker.io/v2/${repo}/manifests/<digest>" \
+  | jq -r '.mediaType, ([.manifests[]? | select(.platform.os=="linux") | .platform.architecture] | join(", "))'
+```
+
+Expect an index media type and both `amd64` and `arm64` in the architecture list.
+
+Digests do not update themselves. This skill is the only thing that pulls base-image
+security patches into the build, so re-resolve all three whenever you run it, even if no
+tag changed — a tag that still reads `3.22` may point at a newer patch image than the
+pinned digest.
 
 ## 4. The `# syntax` directive
 
@@ -93,11 +137,9 @@ in a trailing comment:
 image: postgres:16-alpine@sha256:e013e867... # 16-alpine
 ```
 
-Re-resolve the digest and keep the comment matching the tag:
-
-```bash
-docker buildx imagetools inspect postgres:16-alpine --format '{{.Manifest.Digest}}'
-```
+Re-resolve it the same way as the base images (§3a) — `repo=library/postgres tag=16-alpine`
+for the daemon-free route — and keep the trailing comment matching the tag. Unlike a
+`FROM` line, YAML has nowhere to put the tag inline, which is why the comment carries it.
 
 A Postgres **major** bump is not a routine version bump: the store and migration tests
 run the whole migration tree against this server, so it is a genuine compatibility test
