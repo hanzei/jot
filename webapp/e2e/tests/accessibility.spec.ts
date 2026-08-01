@@ -1,0 +1,133 @@
+import { test, expect, E2E_ADMIN_CREDENTIALS } from '../fixtures';
+import { expectNoViolations, type AcceptedViolation } from '../fixtures/axe';
+import type { Page } from '@playwright/test';
+
+/**
+ * Automated WCAG A/AA scans over the app's main surfaces, in both themes.
+ *
+ * Scope and limits are worth stating up front, because a green axe run reads as
+ * a stronger claim than it is: axe catches roughly a third of WCAG issues, and
+ * essentially none of the keyboard and focus behaviour that a modal-heavy app
+ * actually breaks on. That half lives in `keyboard-focus.spec.ts`; the two
+ * specs are complements and neither is sufficient alone.
+ *
+ * Every surface is scanned twice, once per theme. Contrast is the reason: it is
+ * the one rule whose result depends on rendered colour, so a light-only scan
+ * says nothing about the `dark:` variants — and Jot styles nearly every surface
+ * in both.
+ */
+
+const THEMES = ['light', 'dark'] as const;
+
+/**
+ * The one violation in the baseline that is not fixable without redesigning the
+ * note grid — see docs/specs/accessibility.md for the full reasoning.
+ *
+ * Scoped to the sortable wrapper by its `data-drag-disabled` attribute, so
+ * `nested-interactive` still fails for any other element on these pages.
+ */
+const NOTE_CARD_NESTED_INTERACTIVE: AcceptedViolation = {
+  rule: 'nested-interactive',
+  match: 'data-drag-disabled',
+  reason:
+    'The whole note card is the drag surface, so @dnd-kit gives its wrapper role="button", ' +
+    'and the card contains the overflow-menu button. Clearing this means either a dedicated ' +
+    'drag handle or demoting the card from a single activatable target — both redesigns. ' +
+    'Tracked in https://github.com/hanzei/jot/issues/799.',
+};
+
+/**
+ * Confirms the emulated colour scheme actually reached the DOM.
+ *
+ * Without this the dark-theme scans are the failure mode that looks like a
+ * pass: if `applyTheme` stopped honouring the system preference, every "dark"
+ * scan would quietly run against light markup and still go green.
+ */
+async function expectTheme(page: Page, theme: (typeof THEMES)[number]) {
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.classList.contains('dark')))
+    .toBe(theme === 'dark');
+}
+
+for (const theme of THEMES) {
+  test.describe(`Accessibility (${theme} theme)`, () => {
+    test.use({ colorScheme: theme });
+
+    test('login page has no WCAG A/AA violations', async ({ page, loginPage }) => {
+      await loginPage.goto();
+      await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
+      await expectTheme(page, theme);
+
+      await expectNoViolations(page);
+    });
+
+    test('register page has no WCAG A/AA violations', async ({ page, registerPage }) => {
+      await registerPage.goto();
+      await expect(page.getByRole('button', { name: 'Create account' })).toBeVisible();
+      await expectTheme(page, theme);
+
+      await expectNoViolations(page);
+    });
+
+    test('dashboard has no WCAG A/AA violations', async ({ page, authenticatedUser, dashboardPage }) => {
+      void authenticatedUser;
+      await dashboardPage.goto();
+      // Scan a populated dashboard, not the empty state: the note grid, the
+      // label chips and the card overflow buttons are the bulk of the markup
+      // and none of them render until a note exists.
+      await dashboardPage.createNoteWithLabels('A11y Text Note', '', ['a11y-label']);
+      await dashboardPage.createListNote('A11y List Note', ['first item', 'second item']);
+      await expectTheme(page, theme);
+
+      await expectNoViolations(page, { accept: [NOTE_CARD_NESTED_INTERACTIVE] });
+    });
+
+    test('note modal has no WCAG A/AA violations', async ({ page, authenticatedUser, dashboardPage }) => {
+      void authenticatedUser;
+      await dashboardPage.goto();
+      await dashboardPage.createListNote('A11y Modal Note', ['first item', 'second item']);
+      await dashboardPage.openNote('A11y Modal Note');
+      await expect(page.locator('[role="dialog"][aria-modal="true"] [data-testid="list-item-input"]').first()).toBeVisible();
+      await expectTheme(page, theme);
+
+      // The dashboard behind the open modal is still in the accessibility
+      // tree, so its note cards are part of this scan too.
+      await expectNoViolations(page, { accept: [NOTE_CARD_NESTED_INTERACTIVE] });
+    });
+
+    test('settings page has no WCAG A/AA violations', async ({ page, authenticatedUser, settingsPage }) => {
+      void authenticatedUser;
+      await settingsPage.goto();
+      await expect(page.getByRole('heading', { name: 'Active Sessions' })).toBeVisible();
+      await expectTheme(page, theme);
+
+      await expectNoViolations(page);
+    });
+
+    test('my tasks view has no WCAG A/AA violations', async ({ page, authenticatedUser, dashboardPage }) => {
+      void authenticatedUser;
+      await dashboardPage.goto();
+      await dashboardPage.createListNote('A11y Tasks Note', ['first item']);
+      await dashboardPage.switchToMyTasks();
+      await expect(page).toHaveURL(/view=my-tasks/);
+      await expectTheme(page, theme);
+
+      await expectNoViolations(page);
+    });
+
+    test('admin page has no WCAG A/AA violations', async ({ page }) => {
+      // The admin surface needs the bootstrap admin, which global setup
+      // registers as the instance's first (and therefore only) admin user.
+      // This scan is read-only, so unlike 00-admin.spec.ts it does not need to
+      // run serially — nothing here depends on aggregate counts holding still.
+      const login = await page.request.post('/api/v1/login', { data: E2E_ADMIN_CREDENTIALS });
+      expect(login.ok(), `admin login failed with ${login.status()}`).toBeTruthy();
+
+      await page.goto('/admin');
+      await expect(page.getByRole('heading', { name: 'User Management' })).toBeVisible();
+      await expectTheme(page, theme);
+
+      await expectNoViolations(page);
+    });
+  });
+}

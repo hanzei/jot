@@ -40,7 +40,17 @@ export default defineConfig({
     {
       name: 'mobile-chrome',
       use: { ...devices['Pixel 5'] },
-      testIgnore: ['**/keyboard-shortcuts.spec.ts', '**/00-admin.spec.ts', '**/notes-grouping.spec.ts'],
+      testIgnore: [
+        '**/keyboard-shortcuts.spec.ts',
+        '**/00-admin.spec.ts',
+        '**/notes-grouping.spec.ts',
+        // Both a11y specs are desktop-only. The axe scans would re-check the
+        // same components against the same rules — the markup does not change
+        // with the viewport — and the keyboard/focus specs assume a physical
+        // keyboard the mobile emulation does not model.
+        '**/accessibility.spec.ts',
+        '**/keyboard-focus.spec.ts',
+      ],
       dependencies: ['admin'],
     },
   ],

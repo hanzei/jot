@@ -1,5 +1,36 @@
 # Webapp Project Instructions
 
+## Accessibility
+
+Two e2e specs enforce this, and both **block** — a new violation fails
+`task test-e2e`:
+
+- `e2e/tests/accessibility.spec.ts` — axe-core scans (WCAG 2.0/2.1 A and AA) of
+  the main surfaces, each in the light *and* dark theme.
+- `e2e/tests/keyboard-focus.spec.ts` — the half axe cannot see: focus trapping
+  and restore for every modal, keyboard drag-and-drop, toast live regions.
+
+When you add UI:
+
+- **A new page or view gets a scan** in `accessibility.spec.ts` — a few lines,
+  since the fixtures and page objects already exist.
+- **A new modal gets a focus test**, and a **new drag interaction gets a
+  keyboard test**, in `keyboard-focus.spec.ts`. `@headlessui/react` and
+  `@dnd-kit` do the work, but only if they are wired up right, and only these
+  tests would notice if they stopped.
+- **Every interactive element needs an accessible name** and every decorative
+  one needs `aria-hidden="true"` (plus `tabIndex={-1}` if it would otherwise be
+  focusable).
+- **Check contrast in both themes.** A `dark:` variant that passes in light and
+  fails in dark is the most common regression here.
+
+Fix a failing scan rather than suppressing it. Suppression
+(`AcceptedViolation` in `e2e/fixtures/axe.ts`) is for violations whose fix is a
+redesign, and needs a reason and a tracking issue.
+
+[`docs/specs/accessibility.md`](../docs/specs/accessibility.md) has the
+baseline, the fixes, and the one accepted violation.
+
 ## i18n / Translations
 
 When adding new i18n keys to `src/i18n/locales/en.json`, you **must** also add

@@ -2123,7 +2123,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                     <span>{t('note.saved')}</span>
                   </div>
                 ) : note ? (
-                  <p className="text-xs text-gray-400 dark:text-gray-500">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
                     {t('note.lastEdited', { date: new Date(note.updated_at).toLocaleString(i18n.resolvedLanguage) })}
                   </p>
                 ) : null}
