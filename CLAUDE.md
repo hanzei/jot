@@ -114,24 +114,36 @@ from the version CI uses.
 Three separate things update dependencies here, and they are easy to confuse:
 
 - **Dependabot version updates** (`.github/dependabot.yml`) cover **GitHub Actions only** —
-  one grouped PR a month. Actions are pinned to commit SHAs and drift silently otherwise.
+  one grouped PR a month, re-pinning action SHAs as they drift. That is a strict subset of
+  what `update-github-actions` does: Dependabot keeps existing pins current between sweeps,
+  the skill handles major bumps, one-SHA-everywhere divergence, runner labels, permissions,
+  and path filters. They are complements, not alternatives — do not remove either on the
+  assumption the other covers it.
 - **Dependabot security updates** are enabled at the repository level, not by that file, and
   open advisory-driven PRs for **every** ecosystem including the ones the config omits.
   Adding or removing `dependabot.yml` does not affect them.
-- **Everything else** — npm workspaces and the Go module — is updated deliberately, one
-  workspace at a time, via the skills in `.claude/skills/`:
+- **Everything else** is updated deliberately, one workspace at a time, via the skills in
+  `.claude/skills/`:
 
   - `update-server-deps` — Go modules, `go.mod` tool directives (golangci-lint, swag), Go toolchain version
   - `update-shared-deps` — `@jot/shared` devDependencies
   - `update-webapp-deps` — webapp npm packages, `overrides` block, Playwright browsers
   - `update-mobile-deps` — Expo/React Native packages (Expo SDK dictates most versions)
+  - `update-docker-deps` — Dockerfile base images, CI container images, `docker-compose.yml`, `.dockerignore`
+  - `update-github-actions` — pinned action SHAs in `.github/workflows/`, runner labels, permissions
 
 For a full sweep, update in the order **shared → webapp → mobile** (both consumers compile
-`shared/src` directly through the `file:../shared` link); `server/` is independent.
+`shared/src` directly through the `file:../shared` link); `server/` is independent. The
+Docker and Actions skills are independent of all four and of each other, but the base
+images they touch mirror versions owned by the language skills. When Docker and a
+language update are both in scope, run the owning language skill first
+(`update-server-deps` for Go, `update-webapp-deps` for Node) and `update-docker-deps`
+after it, so the Dockerfile lands aligned with `server/go.mod` and `.nvmrc` rather than
+drifting until the next image build.
 
-Those ecosystems are kept out of `dependabot.yml` on purpose — the coupling constraints that
-make them manual are documented in the comments at the top of that file. Do not add them
-without reading those first.
+npm, the Go module, and Docker are kept out of `dependabot.yml` on purpose — the coupling
+constraints that make them manual are documented in the comments at the top of that file.
+Do not add them without reading those first.
 
 ---
 
@@ -491,7 +503,9 @@ docker compose up -d
 
 Persistent data is mounted at `/data` (default `docker-compose.yml` maps host `./data` to `/data`).
 
-**Workflow pinning policy:** In GitHub Actions workflows, pin every external action `uses:` reference (`owner/repo@...`) to a full commit SHA and add an inline comment with the intended major version tag (for example, `# v6`). Do not use floating action refs such as `@v4`, `@v6`, `@main`, or `@latest`.
+**Workflow pinning policy:** In GitHub Actions workflows, pin every external action `uses:` reference (`owner/repo@...`) to a full commit SHA and add an inline comment with the intended major version tag (for example, `# v6`). Do not use floating action refs such as `@v4`, `@v6`, `@main`, or `@latest`. The
+`update-github-actions` skill covers re-pinning them; `update-docker-deps` covers the
+image side of the build.
 
 ### CI Checklist (before opening a PR)
 

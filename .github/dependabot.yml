@@ -1,9 +1,9 @@
 # Dependabot version updates.
 #
-# Deliberately narrow: GitHub Actions only. The npm workspaces and the Go
-# module are updated by hand via the skills in `.claude/skills/`, which encode
-# ordering and coupling constraints Dependabot cannot express — see
-# "Dependency Updates" in CLAUDE.md for why each ecosystem is absent:
+# Deliberately narrow: GitHub Actions only. Every other ecosystem is updated by
+# hand via the skills in `.claude/skills/`, which encode ordering and coupling
+# constraints Dependabot cannot express — see "Dependency Updates" in CLAUDE.md
+# for why each ecosystem is absent:
 #
 #   npm     — shared/ must be updated before webapp/ and mobile/ (both compile
 #             `shared/src` directly through the `file:../shared` link), mobile's
@@ -16,7 +16,14 @@
 #             runs `task gen-docs`, which CI then fails on.
 #   docker  — the Dockerfile's Node and Go base images are pinned to the same
 #             versions as `.nvmrc` and `server/go.mod`; bumping the image alone
-#             would silently desync them.
+#             would silently desync them. Owned by `update-docker-deps`.
+#
+# The one ecosystem that is here also has a skill: `update-github-actions`. The
+# two do not overlap so much as nest. Dependabot re-pins existing actions to
+# current SHAs, which is the part that rots on its own; the skill bumps majors,
+# reconciles an action pinned to two different SHAs across workflows, and
+# reviews runner labels, permissions, and path filters — none of which
+# Dependabot touches. Keep both.
 #
 # Security updates are a separate, settings-level feature and are unaffected by
 # this file — they continue to open PRs for every ecosystem, including the ones
@@ -28,9 +35,8 @@ updates:
     directory: "/"
     schedule:
       interval: "monthly"
-    # One PR for all action bumps rather than one per action. There are 13
-    # distinct actions across the workflows, and they are otherwise updated by
-    # nobody — the SHA pins do not drift on their own.
+    # One PR for all action bumps rather than one per action — 13 distinct
+    # actions across 66 `uses:` refs would otherwise be 13 PRs a month.
     groups:
       github-actions:
         patterns:
