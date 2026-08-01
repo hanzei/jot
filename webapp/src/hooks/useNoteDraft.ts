@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, type Note, type NoteType, type PatchNoteItemRequest, type UpdateNoteRequest } from '@jot/shared';
+import { VALIDATION, type Label, type Note, type NoteType, type PatchNoteItemRequest, type UpdateNoteRequest } from '@jot/shared';
 import { notes } from '@/utils/api';
 import type { ListItem } from '@/utils/noteItems';
 import type { CompletedItemsBaseline } from '@/hooks/useCompletedItems';
@@ -68,6 +68,7 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
   const [archived, setArchived] = useState(false);
   const [checkedItemsCollapsed, setCheckedItemsCollapsed] = useState(false);
   const [items, setItems] = useState<ListItem[]>([]);
+  const [noteLabels, setNoteLabels] = useState<Label[]>([]);
   const [showSaved, setShowSaved] = useState(false);
 
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -393,6 +394,11 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
     checkedItemsCollapsed, setCheckedItemsCollapsed,
     // List items
     items, itemsRef, commitItems,
+    // Labels — adopted from the note prop alongside the scalar fields, but not
+    // part of the autosave engine: LabelPicker mutates the server directly and
+    // reports the result back through setNoteLabels, so there is never
+    // unflushed local label state to protect.
+    noteLabels, setNoteLabels,
     // Save status indicator
     showSaved, flashSaved, markDirty,
     // Baseline
