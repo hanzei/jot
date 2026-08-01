@@ -207,8 +207,7 @@ not. Run `ls` rather than trusting this tree to be exhaustive.
 │       ├── theme/       # Colors, spacing, typography tokens
 │       └── utils/       # Filesystem wrapper, logger, helpers
 ├── docs/specs/      # Design docs for cross-cutting features — read these before
-│                    # touching file attachments, mobile connectivity, or
-│                    # webapp accessibility
+│                    # touching file attachments or mobile connectivity
 ├── images/          # Documentation images
 ├── scripts/         # bootstrap.sh (setup) + check-playwright-browser.sh
 ├── Taskfile.yml

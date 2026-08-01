@@ -21,7 +21,7 @@ const THEMES = ['light', 'dark'] as const;
 
 /**
  * The one violation in the baseline that is not fixable without redesigning the
- * note grid — see docs/specs/accessibility.md for the full reasoning.
+ * note grid. The options and their trade-offs are in the linked issue.
  *
  * Scoped to the sortable wrapper by its `data-drag-disabled` attribute, so
  * `nested-interactive` still fails for any other element on these pages.

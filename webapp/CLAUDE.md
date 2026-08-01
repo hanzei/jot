@@ -26,10 +26,15 @@ When you add UI:
 
 Fix a failing scan rather than suppressing it. Suppression
 (`AcceptedViolation` in `e2e/fixtures/axe.ts`) is for violations whose fix is a
-redesign, and needs a reason and a tracking issue.
+redesign, and needs a reason and a tracking issue. There is exactly one today,
+`nested-interactive` on the note-card sortable wrappers
+([#799](https://github.com/hanzei/jot/issues/799)).
 
-[`docs/specs/accessibility.md`](../docs/specs/accessibility.md) has the
-baseline, the fixes, and the one accepted violation.
+What these checks are *not*: axe catches roughly a third of WCAG issues, nothing
+here runs a real screen reader, and a green suite is a regression guard rather
+than a conformance claim. Both specs are also desktop-only — they are excluded
+from the `mobile-chrome` project, since the markup does not change with the
+viewport and the keyboard tests assume a physical keyboard.
 
 ## i18n / Translations
 
