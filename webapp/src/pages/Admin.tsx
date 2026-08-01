@@ -325,7 +325,7 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
                               <span className="text-xs text-gray-500 dark:text-gray-400">({user.username})</span>
                             )}
                             {user.id === currentUser?.id && (
-                              <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-gray-400">{t('admin.youBadge')}</span>
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300">{t('admin.youBadge')}</span>
                             )}
                           </div>
                           <p className="text-sm text-gray-500 dark:text-gray-400" title={user.id}>
@@ -363,7 +363,7 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
                           disabled={user.id === currentUser?.id || deleteLoading.has(user.id)}
                           onClick={() => handleDeleteUser(user)}
                           aria-label={t('admin.deleteUserLabel', { username: user.username })}
-                          className="text-sm px-3 py-1 rounded-md border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 bg-white dark:bg-slate-700 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                          className="text-sm px-3 py-1 rounded-md border border-red-300 dark:border-red-700 text-red-600 dark:text-red-300 bg-white dark:bg-slate-700 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                           {deleteLoading.has(user.id) ? t('admin.deleting') : t('admin.deleteUser')}
                         </button>

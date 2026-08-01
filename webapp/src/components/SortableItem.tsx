@@ -51,6 +51,7 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
     attributes,
     listeners,
     setNodeRef,
+    setActivatorNodeRef,
     transform,
     transition,
     isDragging,
@@ -117,15 +118,30 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
       className={`group/item flex items-start gap-2 ${isDragging ? 'opacity-50' : ''} ${
         isCompleted ? 'opacity-60' : ''
       }`}
-      {...attributes}
     >
       {!isCompleted && (
-        <div
+        // dnd-kit's `attributes` (role, tabIndex, drag instructions) belong on
+        // the same element as its `listeners`: the KeyboardSensor activates on
+        // keydown, so splitting them leaves a focusable element that does
+        // nothing and a grip that keyboard users cannot reach at all. Both go
+        // on a real <button>, which also keeps the grip out of the row's own
+        // semantics — a row carrying role="button" would be an interactive
+        // control wrapping the checkbox, textarea and per-row buttons.
+        <button
+          type="button"
+          ref={setActivatorNodeRef}
+          aria-label={t('note.reorderItem')}
+          title={t('note.reorderItem')}
+          {...attributes}
           {...listeners}
-          className="cursor-grab active:cursor-grabbing p-1 text-gray-400 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-100"
+          // gray-500, not gray-400: the note's colour is applied to the whole
+          // modal panel, and the grip is a graphical control, so it needs 3:1
+          // against the worst swatch (WCAG 1.4.11). gray-400 manages 1.8 there.
+          // axe does not measure SVG contrast, so nothing catches this for us.
+          className="cursor-grab active:cursor-grabbing p-1 text-gray-500 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-100"
         >
-          <GripVertical className="w-4 h-4" />
-        </div>
+          <GripVertical className="w-4 h-4" aria-hidden="true" />
+        </button>
       )}
       {isCompleted && <div className="w-6 h-4"></div>}
 
@@ -133,6 +149,7 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
         type="checkbox"
         checked={item.completed}
         onChange={(e) => onUpdateListItem(index, 'completed', e.target.checked)}
+        aria-label={t('note.itemCompleted')}
         className="h-4 w-4 text-blue-600 rounded mt-0.5 flex-shrink-0"
       />
       <div className="flex flex-1 items-start min-w-0">
@@ -164,8 +181,17 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
                 setSelectedSuggestionIndex(-1);
               }, 150);
             }}
+            // Stays a native textbox. `aria-autocomplete`, `aria-controls` and
+            // `aria-activedescendant` are all allowed on one, and together they
+            // are the whole autocomplete contract: a list may appear, here it
+            // is, and this is the entry currently highlighted.
+            //
+            // `aria-expanded` is the one attribute a textbox may not carry, and
+            // role="combobox" is not a way around it — ARIA in HTML permits no
+            // role override on <textarea>, and combobox additionally *requires*
+            // aria-controls, which does not exist while the list is collapsed.
+            aria-label={t('note.itemLabel')}
             aria-autocomplete="list"
-            aria-expanded={showSuggestions && suggestions.length > 0}
             aria-controls={showSuggestions && suggestions.length > 0 ? `suggestions-${id}` : undefined}
             aria-activedescendant={selectedSuggestionIndex >= 0 ? `suggestion-${id}-${selectedSuggestionIndex}` : undefined}
             onKeyDown={(e) => {

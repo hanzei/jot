@@ -618,6 +618,16 @@ export class DashboardPage {
     expect(binBox!.y).toBeGreaterThan(archiveBox!.y);
   }
 
+  /**
+   * Recolours the note open in the modal. The whole panel takes the note's
+   * colour, so this changes the background every piece of modal chrome sits on.
+   */
+  async setNoteColorFromModal(colorName: string) {
+    const dialog = this.page.getByRole('dialog').last();
+    await dialog.getByRole('button', { name: 'Select note color' }).click();
+    await dialog.getByRole('button', { name: colorName, exact: true }).click();
+  }
+
   /** Shares a note with a user via the card context menu and share modal. */
   async shareNoteWithUser(noteTitle: string, username: string) {
     await this.openNoteMenu(noteTitle);

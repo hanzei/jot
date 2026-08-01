@@ -2105,20 +2105,24 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                 )}
               </div>
 
-              {/* Right: last edited / save status */}
-              <div className="flex items-center" role="status" aria-live="polite">
+              {/* Right: last edited / save status.
+                  Every token in here sits on the note's colour, since that is
+                  applied to the whole DialogPanel — so they are chosen against
+                  the *worst* swatch (red-200 in light, yellow-900 in dark), not
+                  against white. */}
+              <div className="flex items-center" role="status" aria-live="polite" data-testid="note-save-status">
                 {loading ? (
                   <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
                     <span>{t('note.saving')}</span>
                   </div>
                 ) : showSaved ? (
-                  <div className="flex items-center space-x-1 text-sm text-green-600 dark:text-green-400 transition-opacity">
+                  <div className="flex items-center space-x-1 text-sm text-green-800 dark:text-green-400 transition-opacity">
                     <Check className="h-4 w-4" />
                     <span>{t('note.saved')}</span>
                   </div>
                 ) : note ? (
-                  <p className="text-xs text-gray-400 dark:text-gray-500">
+                  <p className="text-xs text-gray-600 dark:text-gray-300">
                     {t('note.lastEdited', { date: new Date(note.updated_at).toLocaleString(i18n.resolvedLanguage) })}
                   </p>
                 ) : null}

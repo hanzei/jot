@@ -376,10 +376,17 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
                     const normalizedIndentLevel = item.parent_id ? 1 : 0;
                     return (
                       <div key={item.id} className="flex items-start min-w-0 text-sm" style={{ marginLeft: normalizedIndentLevel * VALIDATION.INDENT_PX_PER_LEVEL }}>
+                        {/* Decorative: this preview only ever renders
+                            uncompleted items, so the box conveys nothing a
+                            screen reader needs, and leaving it in the tree
+                            adds an unlabelled control plus a tab stop inside
+                            a card that is itself a single tab stop. */}
                         <input
                           type="checkbox"
                           checked={item.completed}
                           readOnly
+                          tabIndex={-1}
+                          aria-hidden="true"
                           className="h-4 w-4 text-blue-600 rounded mr-2 mt-0.5 flex-shrink-0"
                         />
                         <span className="min-w-0 whitespace-pre-wrap break-words text-gray-700 dark:text-gray-200">
