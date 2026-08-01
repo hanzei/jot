@@ -31,6 +31,7 @@ func countBlobs(t *testing.T, uploadDir string) blobCounts {
 // on-disk blob/thumbnail only goes away if the delete path explicitly
 // reclaims it.
 func TestDeleteNotePermanentReclaimsImageBlobs(t *testing.T) {
+	t.Parallel()
 	var uploadDir string
 	ts := setupTestServerWithConfig(t, func(cfg *config.Config) { uploadDir = cfg.UploadDir })
 	user := ts.createTestUser(t, "cleanuppermanent", "password123", false)
@@ -52,6 +53,7 @@ func TestDeleteNotePermanentReclaimsImageBlobs(t *testing.T) {
 // respects the same refcount/dedup rule as the standalone image-delete
 // endpoint: a blob shared with a still-live note must survive.
 func TestDeleteNotePermanentDedupBlobSurvives(t *testing.T) {
+	t.Parallel()
 	var uploadDir string
 	ts := setupTestServerWithConfig(t, func(cfg *config.Config) { uploadDir = cfg.UploadDir })
 	user := ts.createTestUser(t, "cleanupdedup", "password123", false)
@@ -83,6 +85,7 @@ func TestDeleteNotePermanentDedupBlobSurvives(t *testing.T) {
 
 // TestEmptyTrashReclaimsImageBlobs covers the bulk permanent-delete path.
 func TestEmptyTrashReclaimsImageBlobs(t *testing.T) {
+	t.Parallel()
 	var uploadDir string
 	ts := setupTestServerWithConfig(t, func(cfg *config.Config) { uploadDir = cfg.UploadDir })
 	user := ts.createTestUser(t, "cleanupemptytrash", "password123", false)
@@ -112,6 +115,7 @@ func TestEmptyTrashReclaimsImageBlobs(t *testing.T) {
 // endpoint (DELETE /admin/users/{id}/notes), which removes every note a user
 // owns regardless of state.
 func TestAdminDeleteUserNotesReclaimsImageBlobs(t *testing.T) {
+	t.Parallel()
 	var uploadDir string
 	ts := setupTestServerWithConfig(t, func(cfg *config.Config) { uploadDir = cfg.UploadDir })
 	admin := ts.createTestUser(t, "cleanupadmin1", "password123", true)
@@ -134,6 +138,7 @@ func TestAdminDeleteUserNotesReclaimsImageBlobs(t *testing.T) {
 // outright: their owned notes (and note_images) cascade away via the users
 // FK, not via any note-store delete method.
 func TestAdminDeleteUserReclaimsOwnedImageBlobs(t *testing.T) {
+	t.Parallel()
 	var uploadDir string
 	ts := setupTestServerWithConfig(t, func(cfg *config.Config) { uploadDir = cfg.UploadDir })
 	admin := ts.createTestUser(t, "cleanupadmin2", "password123", true)
@@ -155,6 +160,7 @@ func TestAdminDeleteUserReclaimsOwnedImageBlobs(t *testing.T) {
 // collaborator uploaded onto someone else's note. The note (and its owner)
 // survive; only the collaborator's image row and blob should go.
 func TestAdminDeleteUserReclaimsUploaderImageBlobs(t *testing.T) {
+	t.Parallel()
 	var uploadDir string
 	ts := setupTestServerWithConfig(t, func(cfg *config.Config) { uploadDir = cfg.UploadDir })
 	admin := ts.createTestUser(t, "cleanupadmin3", "password123", true)
@@ -182,6 +188,7 @@ func TestAdminDeleteUserReclaimsUploaderImageBlobs(t *testing.T) {
 // tool's permanent branch, a separate code path from the HTTP handler that
 // shares the same underlying store method.
 func TestMCPDeleteNotePermanentReclaimsImageBlobs(t *testing.T) {
+	t.Parallel()
 	var uploadDir string
 	ts := setupTestServerWithConfig(t, func(cfg *config.Config) { uploadDir = cfg.UploadDir })
 	user := ts.createTestUser(t, "cleanupmcp", "password123", false)
@@ -198,4 +205,3 @@ func TestMCPDeleteNotePermanentReclaimsImageBlobs(t *testing.T) {
 
 	assert.Equal(t, blobCounts{blobs: 0, thumbs: 0}, countBlobs(t, uploadDir))
 }
-

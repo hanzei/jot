@@ -21,6 +21,15 @@ func doGet(t *testing.T, client *http.Client, url string) (int, http.Header) {
 	return resp.StatusCode, resp.Header
 }
 
+// TestRateLimiting is deliberately left serial while the rest of the suite runs
+// in parallel. Isolation is not the problem — the limiter is per-server and
+// keyed by user ID or client IP, so a per-test server already has its own
+// buckets. The window is. httprate uses a sliding one-minute window, so these
+// subtests are asserting on the count of requests *within* a window that is
+// decaying underneath them; a subtest that got descheduled long enough would
+// see its early requests age out and the request it expects to be rejected
+// would succeed instead. The whole function is under a second, so serializing
+// it costs nothing worth the flake risk.
 func TestRateLimiting(t *testing.T) {
 	t.Run("disabled by default in tests, unaffected by burst traffic", func(t *testing.T) {
 		ts := setupTestServer(t)

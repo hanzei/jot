@@ -23,6 +23,7 @@ func createListNote(t *testing.T, user *TestUser, title string, items ...client.
 }
 
 func TestCreateNoteItem(t *testing.T) {
+	t.Parallel()
 	t.Run("client-supplied ID is honored", func(t *testing.T) {
 		ts := setupTestServer(t)
 		user := ts.createTestUser(t, "user1", "password123", false)
@@ -124,6 +125,7 @@ func TestCreateNoteItem(t *testing.T) {
 }
 
 func TestUpdateNoteItem(t *testing.T) {
+	t.Parallel()
 	t.Run("partial update only changes provided fields", func(t *testing.T) {
 		ts := setupTestServer(t)
 		user := ts.createTestUser(t, "user1", "password123", false)
@@ -150,6 +152,7 @@ func TestUpdateNoteItem(t *testing.T) {
 }
 
 func TestDeleteNoteItem(t *testing.T) {
+	t.Parallel()
 	t.Run("deletes a single item", func(t *testing.T) {
 		ts := setupTestServer(t)
 		user := ts.createTestUser(t, "user1", "password123", false)
@@ -177,6 +180,7 @@ func TestDeleteNoteItem(t *testing.T) {
 }
 
 func TestReorderNoteItems(t *testing.T) {
+	t.Parallel()
 	t.Run("reorders by item ID", func(t *testing.T) {
 		ts := setupTestServer(t)
 		user := ts.createTestUser(t, "user1", "password123", false)
@@ -214,6 +218,7 @@ func TestReorderNoteItems(t *testing.T) {
 // changes preserved (the bug was that a full-note save from one client
 // overwrote the other's items).
 func TestConcurrentListItemEdits(t *testing.T) {
+	t.Parallel()
 	t.Run("edits to different items both survive", func(t *testing.T) {
 		ts := setupTestServer(t)
 		owner := ts.createTestUser(t, "owner", "password123", false)

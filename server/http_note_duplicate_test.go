@@ -12,6 +12,7 @@ import (
 )
 
 func TestDuplicateNoteEndpoint(t *testing.T) {
+	t.Parallel()
 	t.Run("duplicates a text note without shares and places it first", func(t *testing.T) {
 		ts := setupTestServer(t)
 		owner := ts.createTestUser(t, "owner", "password123", false)
@@ -126,6 +127,7 @@ func TestDuplicateNoteEndpoint(t *testing.T) {
 }
 
 func TestCreateNotePersistsCompletedItems(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "completed-items", "password123", false)
 
@@ -154,6 +156,7 @@ func TestCreateNotePersistsCompletedItems(t *testing.T) {
 // TestDuplicateNoteIdempotency covers the client-supplied ID path that makes
 // an offline-duplicate's replayed POST /notes/{id}/duplicate idempotent.
 func TestDuplicateNoteIdempotency(t *testing.T) {
+	t.Parallel()
 	// postDuplicateRaw sends a raw JSON body to POST /api/v1/notes/{id}/duplicate
 	// and returns the HTTP status code plus the decoded response note (nil on non-201).
 	postDuplicateRaw := func(t *testing.T, httpClient *http.Client, baseURL, sourceID string, body map[string]any) (int, *client.Note) {
