@@ -2634,16 +2634,6 @@ export default function NoteEditorScreen() {
               </TouchableOpacity>
             )}
 
-            {/* Android: formatting toolbar in layout (shown when editing) */}
-            {Platform.OS === 'android' && isEditingContent && !isReadOnly && (
-              <MarkdownToolbarContent
-                onBold={() => wrapMobileSelection('**', '**')}
-                onItalic={() => wrapMobileSelection('*', '*')}
-                onHeading={insertMobileHeading}
-                onBullet={insertMobileBullet}
-              />
-            )}
-
             {/* iOS: formatting toolbar as InputAccessoryView (docks above keyboard) */}
             {Platform.OS === 'ios' && noteType === 'text' && (
               <InputAccessoryView nativeID={MARKDOWN_TOOLBAR_ID}>
@@ -2762,6 +2752,18 @@ export default function NoteEditorScreen() {
           </View>
         )}
       </ScrollViewContainer>
+
+      {/* Android: formatting toolbar fixed directly above the action bar below
+          (shown when editing), rather than inline in the scrollable content
+          where its position would drift with the content length. */}
+      {Platform.OS === 'android' && noteType === 'text' && isEditingContent && !isReadOnly && (
+        <MarkdownToolbarContent
+          onBold={() => wrapMobileSelection('**', '**')}
+          onItalic={() => wrapMobileSelection('*', '*')}
+          onHeading={insertMobileHeading}
+          onBullet={insertMobileBullet}
+        />
+      )}
 
       <View style={[styles.toolbar, { backgroundColor: noteBackground, borderTopColor: hasNoteColor ? 'transparent' : colors.border, paddingBottom: insets.bottom || 8 }]}>
         {/* Color. Works on unsaved notes (deferred via autosave), so it is only
