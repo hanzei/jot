@@ -134,7 +134,11 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
           title={t('note.reorderItem')}
           {...attributes}
           {...listeners}
-          className="cursor-grab active:cursor-grabbing p-1 text-gray-400 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-100"
+          // gray-500, not gray-400: the note's colour is applied to the whole
+          // modal panel, and the grip is a graphical control, so it needs 3:1
+          // against the worst swatch (WCAG 1.4.11). gray-400 manages 1.8 there.
+          // axe does not measure SVG contrast, so nothing catches this for us.
+          className="cursor-grab active:cursor-grabbing p-1 text-gray-500 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-100"
         >
           <GripVertical className="w-4 h-4" aria-hidden="true" />
         </button>
@@ -177,14 +181,17 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
                 setSelectedSuggestionIndex(-1);
               }, 150);
             }}
-            // The row is a combobox, not a plain text field: it autocompletes
-            // from previously completed items. Saying so is what makes
-            // aria-expanded/-controls/-activedescendant below legal ARIA —
-            // none of them are allowed on a bare textbox.
-            role="combobox"
+            // Stays a native textbox. `aria-autocomplete`, `aria-controls` and
+            // `aria-activedescendant` are all allowed on one, and together they
+            // are the whole autocomplete contract: a list may appear, here it
+            // is, and this is the entry currently highlighted.
+            //
+            // `aria-expanded` is the one attribute a textbox may not carry, and
+            // role="combobox" is not a way around it — ARIA in HTML permits no
+            // role override on <textarea>, and combobox additionally *requires*
+            // aria-controls, which does not exist while the list is collapsed.
             aria-label={t('note.itemLabel')}
             aria-autocomplete="list"
-            aria-expanded={showSuggestions && suggestions.length > 0}
             aria-controls={showSuggestions && suggestions.length > 0 ? `suggestions-${id}` : undefined}
             aria-activedescendant={selectedSuggestionIndex >= 0 ? `suggestion-${id}-${selectedSuggestionIndex}` : undefined}
             onKeyDown={(e) => {

@@ -19,6 +19,12 @@ import type { Page } from '@playwright/test';
 
 const THEMES = ['light', 'dark'] as const;
 
+/** Every swatch in the note colour picker, by its accessible name. */
+const NOTE_COLOURS = [
+  'Coral', 'Yellow', 'Lime', 'Teal', 'Periwinkle',
+  'Lavender', 'Pink', 'Sand', 'Gray', 'White',
+] as const;
+
 /**
  * The one violation in the baseline that is not fixable without redesigning the
  * note grid. The options and their trade-offs are in the linked issue.
@@ -93,6 +99,40 @@ for (const theme of THEMES) {
       // The dashboard behind the open modal is still in the accessibility
       // tree, so its note cards are part of this scan too.
       await expectNoViolations(page, { accept: [NOTE_CARD_NESTED_INTERACTIVE] });
+    });
+
+    test('note modal has no WCAG A/AA violations in any note colour', async ({ page, authenticatedUser, dashboardPage }) => {
+      void authenticatedUser;
+      // Ten colours × two save states = twenty scans, plus a two-second settle
+      // per colour. Comfortably past the 30s default, and slower again on CI.
+      test.setTimeout(150_000);
+      await dashboardPage.goto();
+      await dashboardPage.createListNote('A11y Colour Note', ['first item']);
+      await dashboardPage.openNote('A11y Colour Note');
+      await expect(page.locator('[role="dialog"][aria-modal="true"] [data-testid="list-item-input"]').first()).toBeVisible();
+      await expectTheme(page, theme);
+
+      // The note's colour is applied to the whole DialogPanel, so every piece
+      // of modal chrome — "Last edited", the drag grips, the icon buttons —
+      // sits on it. A scan of the default white note says nothing about the
+      // other nine backgrounds, and the muted tokens are the ones at risk.
+      const saveStatus = page.getByTestId('note-save-status');
+      for (const colour of NOTE_COLOURS) {
+        await dashboardPage.setNoteColorFromModal(colour);
+
+        // Recolouring saves, so the status region shows a green "Saved" for two
+        // seconds and then settles back to a grey "Last edited". Both ride on
+        // the note colour and use different tokens, so scanning only whichever
+        // happened to be on screen would leave one of them unchecked — and
+        // would pass or fail at random. Take them in order instead: the green
+        // one scoped to the status region, which finishes well inside its
+        // window, then the whole modal once it has settled.
+        await expect(saveStatus.getByText('Saved')).toBeVisible();
+        await expectNoViolations(page, { include: ['[data-testid="note-save-status"]'] });
+
+        await expect(saveStatus.getByText(/Last edited/)).toBeVisible();
+        await expectNoViolations(page, { accept: [NOTE_CARD_NESTED_INTERACTIVE] });
+      }
     });
 
     test('settings page has no WCAG A/AA violations', async ({ page, authenticatedUser, settingsPage }) => {
