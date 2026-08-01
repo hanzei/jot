@@ -28,9 +28,24 @@ git checkout -b chore/update-github-actions   # or the branch you were told to u
 grep -rhoE 'uses: [^ ]+@[0-9a-f]{40} # \S+' .github/workflows | sort -u
 ```
 
-Then check nothing has already diverged — the same action pinned to two different SHAs
-in two workflows is the failure mode this repo is most prone to, because
-`actions/checkout` appears in seven files:
+That lists what is pinned, but by construction it can only show refs that are *already*
+compliant — an `actions/cache@v4` slipped in by hand is invisible to it. So start from
+the complement: every external `uses:` that is **not** a SHA-plus-comment pin.
+
+```bash
+grep -rnE '^\s*(- )?uses:' .github/workflows \
+  | grep -v 'uses: \./' \
+  | grep -vE 'uses: [^ ]+@[0-9a-f]{40} +# \S+'
+```
+
+Empty output means every external ref satisfies the policy. Anything printed is a
+violation — fix those before bumping anything, since the next check assumes compliance.
+The `./` exclusion is for local composite actions and reusable workflows, which are
+versioned by the commit you are on and take no pin.
+
+Only then check for divergence — the same action pinned to two different SHAs in two
+workflows, the failure mode this repo is most prone to because `actions/checkout`
+appears in seven files:
 
 ```bash
 grep -rhoE '[A-Za-z0-9._/-]+@[0-9a-f]{40}' .github/workflows \
@@ -47,7 +62,9 @@ those patch moves is most of the value of this sweep.
 
 ```bash
 git ls-remote https://github.com/actions/checkout 'refs/tags/v6' 'refs/tags/v6^{}'
-git ls-remote --tags --refs https://github.com/actions/checkout | tail   # what majors exist
+# which majors exist — one deterministic row per major tag, newest last
+git ls-remote --tags --refs https://github.com/actions/checkout 'refs/tags/v*' \
+  | grep -E 'refs/tags/v[0-9]+$'
 ```
 
 **Use the `^{}` line when it appears.** An annotated tag's plain ref is the tag *object*,
@@ -70,7 +87,7 @@ together — a scripted replace is more reliable than seven manual edits:
 
 ```bash
 grep -rl 'actions/upload-artifact@OLDSHA' .github/workflows \
-  | xargs sed -i 's|actions/upload-artifact@OLDSHA # v7|actions/upload-artifact@NEWSHA # v8|g'
+  | xargs sed -i 's|actions/upload-artifact@OLDSHA # v<old>|actions/upload-artifact@NEWSHA # v<new>|g'
 ```
 
 Update the `# vN` comment whenever the major changes. It is the only human-readable
@@ -145,8 +162,16 @@ There is no local runner, so verification is mostly static:
 
 ```bash
 actionlint            # if installed: syntax, expression, and shellcheck on run: blocks
+
+# both §1 checks again — every external ref pinned, and each action on one SHA
+grep -rnE '^\s*(- )?uses:' .github/workflows | grep -v 'uses: \./' \
+  | grep -vE 'uses: [^ ]+@[0-9a-f]{40} +# \S+'
 grep -rhoE '[A-Za-z0-9._/-]+@[0-9a-f]{40}' .github/workflows | sort -u | cut -d@ -f1 | uniq -d
 ```
+
+Both must print nothing. Re-running the first one here is the point: a hand-edited
+`uses:` line is exactly what a sweep introduces, and it is the one mistake the
+divergence check cannot see.
 
 Then push and read the run list: confirm every workflow that should have triggered did,
 and that no job failed at startup with `Unable to resolve action` — that error means a
@@ -158,7 +183,7 @@ One commit per major, batched commits for same-major re-pins:
 
 ```text
 chore(ci): re-pin actions to current v6/v7 releases
-chore(ci): update actions/upload-artifact to v8
+chore(ci): update actions/download-artifact to v8
 ```
 
 In the PR description, list each action with old → new SHA and old → new major, call out

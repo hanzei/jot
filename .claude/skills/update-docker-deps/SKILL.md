@@ -1,6 +1,6 @@
 ---
 name: update-docker-deps
-description: Update the Docker build tooling — base images in the Dockerfile (node, golang, alpine), the BuildKit syntax directive, container images used by CI services, docker-compose.yml, and .dockerignore. Use this whenever the user asks to update, upgrade, or refresh the Docker build, the Dockerfile, base images, the Alpine or Node or Go builder stage, the Postgres service image, or docker-compose. Prefer this over editing a `FROM` line directly — each base image is mirrored in `.nvmrc`, `go.mod`, CI workflows, and the README, and a lone bump produces a failure that only appears during the image build.
+description: Update the Docker build tooling — base images in the Dockerfile (node, golang, alpine), the BuildKit syntax directive, container images used by CI services, docker-compose.yml, and .dockerignore. Use this whenever the user asks to update, upgrade, or refresh the Docker build, the Dockerfile, base images, the Alpine or Node or Go builder stage, the Postgres service image, or docker-compose. Prefer this over editing a `FROM` line directly — the Node and Go base images are mirrored in `.nvmrc`, `server/go.mod`, CI workflows, and the README, and a lone bump produces a failure that only appears during the image build.
 ---
 
 # Update Docker build tooling
@@ -134,9 +134,18 @@ docker build --no-cache --progress=plain . 2>&1 | grep -m1 'transferring context
 
 ```bash
 docker build -t jot:check .
-docker compose up -d && curl -fsS localhost:8080/readyz && docker compose down
 docker images jot:check --format '{{.Size}}'     # compare against the previous build
+
+cid=$(docker run -d -p 8080:8080 jot:check)
+trap 'docker rm -f "$cid" >/dev/null' EXIT
+curl --retry 10 --retry-connrefused -fsS localhost:8080/readyz
 ```
+
+Run the built image, not `docker compose up`. The compose file pins
+`image: hanzei/jot:latest` and has no `build:` section, so it pulls the published image
+and tells you nothing about your change. The `trap` matters because the readiness check
+is the step most likely to fail — without it a failed run leaves a container holding
+port 8080 and the next attempt fails for the wrong reason.
 
 The arm64 leg is the one that breaks quietly, since only CI builds it:
 
