@@ -197,7 +197,14 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (*Server, error) {
 	}, "purge old trashed notes")
 
 	if err := s.setupRoutes(); err != nil {
+		// Unlike the failure paths above, both periodic tasks are already
+		// running by this point, and the second one runs immediately rather
+		// than waiting for its first tick — so it may be inside
+		// PurgeOldTrashedNotes (db) or ReclaimIfOrphaned (imageStore) right
+		// now. cancel() only signals; wait for the goroutines to actually
+		// stop before closing what they are still using.
 		cancel()
+		s.bgWg.Wait()
 		_ = imageStore.Close()
 		_ = db.Close()
 		return nil, fmt.Errorf("setup routes: %w", err)
