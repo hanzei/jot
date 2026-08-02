@@ -34,6 +34,7 @@ func waitForSSEEvent(ch <-chan client.SSEEvent, predicate func(client.SSEEvent) 
 }
 
 func TestProfileIconUploadSendsSSEToCollaborator(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	iconOwner := ts.createTestUser(t, "iconowner", "password123", false)
 	collaborator := ts.createTestUser(t, "collaborator", "password123", false)
@@ -69,6 +70,7 @@ func TestProfileIconUploadSendsSSEToCollaborator(t *testing.T) {
 }
 
 func TestProfileIconDeleteSendsSSEToCollaborator(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	iconOwner := ts.createTestUser(t, "deliconowner", "password123", false)
 	collaborator := ts.createTestUser(t, "delcollaborator", "password123", false)
@@ -104,6 +106,7 @@ func TestProfileIconDeleteSendsSSEToCollaborator(t *testing.T) {
 }
 
 func TestProfileIconUploadNoSSEToNonCollaborator(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	iconOwner := ts.createTestUser(t, "iconowneriso", "password123", false)
 	stranger := ts.createTestUser(t, "stranger", "password123", false)

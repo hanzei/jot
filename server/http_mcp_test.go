@@ -44,6 +44,7 @@ func callTool(t *testing.T, sess *mcp.ClientSession, name string, args any, dst 
 }
 
 func TestMCPListNotes(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	tu := ts.createTestUser(t, "mcpuser", "password123", false)
 	sess := setupMCPSession(t, ts, tu)
@@ -54,6 +55,7 @@ func TestMCPListNotes(t *testing.T) {
 }
 
 func TestMCPCreateAndGetNote(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	tu := ts.createTestUser(t, "mcpuser2", "password123", false)
 	sess := setupMCPSession(t, ts, tu)
@@ -75,6 +77,7 @@ func TestMCPCreateAndGetNote(t *testing.T) {
 }
 
 func TestMCPUpdateNote(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	tu := ts.createTestUser(t, "mcpuser3", "password123", false)
 	sess := setupMCPSession(t, ts, tu)
@@ -96,6 +99,7 @@ func TestMCPUpdateNote(t *testing.T) {
 }
 
 func TestMCPDeleteNote(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	tu := ts.createTestUser(t, "mcpuser4", "password123", false)
 	sess := setupMCPSession(t, ts, tu)
@@ -118,6 +122,7 @@ func TestMCPDeleteNote(t *testing.T) {
 }
 
 func TestMCPLabelCRUD(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	tu := ts.createTestUser(t, "mcpuser5", "password123", false)
 	sess := setupMCPSession(t, ts, tu)
@@ -167,6 +172,7 @@ func TestMCPLabelCRUD(t *testing.T) {
 // TestMCPPermanentDelete verifies that the permanent flag on delete_note
 // removes a trashed note from the trash entirely.
 func TestMCPPermanentDelete(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	tu := ts.createTestUser(t, "mcpuser6", "password123", false)
 	sess := setupMCPSession(t, ts, tu)
@@ -205,6 +211,7 @@ func callToolExpectError(t *testing.T, sess *mcp.ClientSession, name string, arg
 // TestMCPCreateNoteWithItems verifies that a list note can be created with its
 // items in a single call, in the order supplied.
 func TestMCPCreateNoteWithItems(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	tu := ts.createTestUser(t, "mcpitems1", "password123", false)
 	sess := setupMCPSession(t, ts, tu)
@@ -247,6 +254,7 @@ func TestMCPCreateNoteWithItems(t *testing.T) {
 // TestMCPNoteItemCRUD walks the full item lifecycle over MCP: create, update,
 // and delete, against a list note created without items.
 func TestMCPNoteItemCRUD(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	tu := ts.createTestUser(t, "mcpitems2", "password123", false)
 	sess := setupMCPSession(t, ts, tu)
@@ -322,6 +330,7 @@ func TestMCPNoteItemCRUD(t *testing.T) {
 
 // TestMCPNoteItemErrors covers the guardrails on the item tools.
 func TestMCPNoteItemErrors(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	tu := ts.createTestUser(t, "mcpitems3", "password123", false)
 	sess := setupMCPSession(t, ts, tu)
@@ -379,6 +388,7 @@ func TestMCPNoteItemErrors(t *testing.T) {
 // TestMCPNoteItemCrossUserIsolation verifies that item tools honor note access,
 // so one user cannot read or mutate items on another user's note.
 func TestMCPNoteItemCrossUserIsolation(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	alice := ts.createTestUser(t, "alice_mcp_items", "password123", false)
 	bob := ts.createTestUser(t, "bob_mcp_items", "password123", false)
@@ -418,6 +428,7 @@ func TestMCPNoteItemCrossUserIsolation(t *testing.T) {
 // TestMCPCrossUserIsolation verifies that a user cannot access another user's
 // notes via MCP tools.
 func TestMCPCrossUserIsolation(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	alice := ts.createTestUser(t, "alice_mcp", "password123", false)
 	bob := ts.createTestUser(t, "bob_mcp", "password123", false)
@@ -439,6 +450,7 @@ func TestMCPCrossUserIsolation(t *testing.T) {
 }
 
 func TestMCPUnauthenticated(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 
 	// Connect without a session cookie.

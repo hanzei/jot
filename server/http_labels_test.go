@@ -13,6 +13,7 @@ import (
 )
 
 func TestGetNotesByLabel(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "labeluser", "password123", false)
 
@@ -96,6 +97,7 @@ func TestGetNotesByLabel(t *testing.T) {
 }
 
 func TestCreateLabel(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "createlabel", "password123", false)
 
@@ -192,6 +194,7 @@ func TestCreateLabel(t *testing.T) {
 }
 
 func TestCreateLabelWithClientID(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "labelwithid", "password123", false)
 
@@ -270,6 +273,7 @@ func TestCreateLabelWithClientID(t *testing.T) {
 }
 
 func TestGetLabelCounts(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "countlabels", "password123", false)
 
@@ -355,6 +359,7 @@ func createNoteWithLabelsFixture(t *testing.T) *TestUser {
 }
 
 func TestCreateNoteWithLabels(t *testing.T) {
+	t.Parallel()
 	t.Run("note created with labels has those labels attached", func(t *testing.T) {
 		user := createNoteWithLabelsFixture(t)
 		note, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
@@ -481,6 +486,7 @@ func TestCreateNoteWithLabels(t *testing.T) {
 }
 
 func TestRenameLabel(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "renameowner", "password123", false)
 
@@ -544,6 +550,7 @@ func TestRenameLabel(t *testing.T) {
 }
 
 func TestDeleteLabel(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 
 	t.Run("delete label removes note_labels rows and keeps notes", func(t *testing.T) {

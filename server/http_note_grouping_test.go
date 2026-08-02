@@ -58,6 +58,7 @@ func createGroupNote(t *testing.T, user *TestUser) (noteID, parentID, childAID, 
 }
 
 func TestNoteGrouping(t *testing.T) {
+	t.Parallel()
 	t.Run("bulk create backfills parent_id from indent_level", func(t *testing.T) {
 		ts := setupTestServer(t)
 		user := ts.createTestUser(t, "grpuser1", "password123", false)

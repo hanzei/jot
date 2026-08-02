@@ -14,6 +14,7 @@ import (
 // instead of silently overwriting a concurrent change from another device (issue
 // #489).
 func TestNoteUpdateOptimisticConcurrency(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "concurrencyuser", "password123", false)
 	ctx := t.Context()

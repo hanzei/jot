@@ -13,6 +13,7 @@ import (
 )
 
 func TestNoteValidation(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "validationuser", "password123", false)
 

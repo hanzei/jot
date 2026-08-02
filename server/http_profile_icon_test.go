@@ -13,6 +13,7 @@ import (
 )
 
 func TestGetProfileIconNoIconReturns404(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "noiconuser", "password123", false)
 	_, _, err := user.Client.GetProfileIcon(t.Context(), user.User.ID)
@@ -20,6 +21,7 @@ func TestGetProfileIconNoIconReturns404(t *testing.T) {
 }
 
 func TestGetProfileIconUnknownUserReturns404(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "iconrequester", "password123", false)
 	_, _, err := user.Client.GetProfileIcon(t.Context(), "unknownuser1234567890ab")
@@ -27,6 +29,7 @@ func TestGetProfileIconUnknownUserReturns404(t *testing.T) {
 }
 
 func TestGetProfileIconUnauthenticatedReturns401(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "iconauth", "password123", false)
 
@@ -45,6 +48,7 @@ func TestGetProfileIconUnauthenticatedReturns401(t *testing.T) {
 }
 
 func TestGetProfileIconOtherUserCanFetch(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	iconOwner := ts.createTestUser(t, "iconowner", "password123", false)
 	otherUser := ts.createTestUser(t, "iconviewer", "password123", false)
@@ -59,6 +63,7 @@ func TestGetProfileIconOtherUserCanFetch(t *testing.T) {
 }
 
 func TestDeleteProfileIconReturns204(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "deliconuser", "password123", false)
 
@@ -70,6 +75,7 @@ func TestDeleteProfileIconReturns204(t *testing.T) {
 }
 
 func TestDeleteProfileIconMakesIconInaccessible(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "deliconuser2", "password123", false)
 
@@ -84,12 +90,14 @@ func TestDeleteProfileIconMakesIconInaccessible(t *testing.T) {
 }
 
 func TestDeleteProfileIconIdempotent(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "nodeliconuser", "password123", false)
 	require.NoError(t, user.Client.DeleteProfileIcon(t.Context()))
 }
 
 func TestDeleteProfileIconUnauthenticatedReturns401(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	c := ts.newClient()
 	err := c.DeleteProfileIcon(t.Context())

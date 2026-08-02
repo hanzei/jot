@@ -362,6 +362,9 @@ There is one directory per dialect (`migrations/sqlite/`, `migrations/postgres/`
 - Integration tests live in `server/` root as `http_<area>_test.go` (`ls server/http_*_test.go` for the current set); add new ones following that naming
 - Unit tests alongside source: e.g., `server/internal/models/note_test.go`
 - Tests spin up an `httptest.Server` against a per-test SQLite database under `t.TempDir()` — build one with `setupTestServer`/`setupTestServerWithConfig` rather than wiring a server by hand
+- **Every top-level integration test calls `t.Parallel()` as its first statement** — new ones must too. Nothing is shared between them: each gets its own database, upload dir, `httptest.Server` on port 0, and its own `*logrus.Logger` writing to that test's `t.Log` (via `server.NewWithLogger`). Do not reintroduce process-global mutation in the harness — `logrus.SetOutput`, `os.Setenv`, `os.Chdir` — it is what kept this suite serial. The one deliberate opt-out is `TestRateLimiting`, commented in place.
+- Subtests are a separate decision: they share their parent's server, so only add `t.Parallel()` inside a `t.Run` when those cases genuinely touch disjoint data.
+- Password hashing drops to `bcrypt.MinCost` under `go test` (`models.passwordHashCost`, gated on `testing.Testing()`). At `DefaultCost` bcrypt was 65% of this package's CPU time.
 - Helper types: `TestResponse`, `TestUser`, `TestServer`
 - Use `t.Run` subtests for grouping related cases; see `server/CLAUDE.md` for the full Go test naming and table-driven test conventions
 - Run: `task test-server`
