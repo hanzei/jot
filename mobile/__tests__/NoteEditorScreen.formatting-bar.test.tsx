@@ -329,6 +329,20 @@ describe('NoteEditorScreen formatting bar', () => {
     expect(input().props.selection).toBeUndefined();
   });
 
+  it('does not force the caret when the edit leaves it where it already is', async () => {
+    const { input, type, placeCaret, press } = renderEditor();
+
+    await type('- one');
+    await placeCaret(0); // start of the line: the marker is removed after the caret
+
+    await press('format-bullet-btn');
+
+    expect(input().props.value).toBe('one');
+    // Forcing {0,0} here would never be released — the input reports no
+    // selection change — leaving the prop controlled with a stale value.
+    expect(input().props.selection).toBeUndefined();
+  });
+
   it('says why a formatting press did nothing at the length cap', async () => {
     const { input, type, placeCaret, press } = renderEditor();
 

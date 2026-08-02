@@ -2466,8 +2466,15 @@ export default function NoteEditorScreen() {
     }
 
     const selection = clampSelection(next.selection, next.text);
+    const caret = contentSelectionRef.current;
+    // Nothing to force when the caret is already where the edit wants it — e.g.
+    // clearing a bullet with the caret at the start of the line, where the
+    // removed characters all sit after it. The input would report no selection
+    // change, so the forced value would never be released and the prop would
+    // stay controlled with a value that goes stale on the next tap.
+    const caretAlreadyThere = selection.start === caret.start && selection.end === caret.end;
     contentSelectionRef.current = selection;
-    setForcedSelection(selection);
+    setForcedSelection(caretAlreadyThere ? null : selection);
     if (next.text !== previous) {
       setContent(next.text);
       markDirtyAndScheduleUpdate();
