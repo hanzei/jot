@@ -195,6 +195,32 @@ describe('UsersContext sign-out', () => {
     mockAuthState = { user: null, isAuthenticated: true };
   });
 
+  it('serves an empty map on the first render after sign-out', async () => {
+    await seedExistingUser();
+
+    const { getByTestId, rerender } = render(
+      <UsersProvider>
+        <Probe />
+      </UsersProvider>,
+    );
+
+    // Loaded and visible while signed in.
+    await waitFor(() => {
+      expect(getByTestId('icon-version').props.children).toBe(existingUser.updated_at);
+    });
+
+    mockAuthState = { user: null, isAuthenticated: false };
+    rerender(
+      <UsersProvider>
+        <Probe />
+      </UsersProvider>,
+    );
+
+    // Masked during render, so consumers never observe the previous session's
+    // collaborators — clearing this in an effect left them readable for a frame.
+    expect(getByTestId('icon-version').props.children).toBe('none');
+  });
+
   it('does not refill the cache from a local read that resolves after sign-out', async () => {
     await seedExistingUser();
     // Park the real SQLite read mid-flight so the sign-out lands while it is
@@ -213,8 +239,9 @@ describe('UsersContext sign-out', () => {
     // The mount-time load is in flight, parked on the SQLite read.
     await waitFor(() => expect(mockGetLocalUsers).toHaveBeenCalledTimes(1));
 
-    // Sign out: the effect cleanup cancels that load and the re-run empties the
-    // cache. The provider stays mounted, so isMountedRef alone wouldn't catch it.
+    // Sign out: the effect cleanup cancels that load, and the provider serves an
+    // empty map while signed out. The provider stays mounted, so isMountedRef
+    // alone wouldn't catch it.
     mockAuthState = { user: null, isAuthenticated: false };
     rerender(
       <UsersProvider>

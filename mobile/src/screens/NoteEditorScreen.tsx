@@ -154,7 +154,7 @@ export default function NoteEditorScreen() {
   const navigation = useNavigation<EditorNavProp>();
   const route = useRoute<EditorRouteProp>();
   const { noteId: initialNoteId, sharedText, initialNoteType, readOnly, originRect, originColor } = route.params;
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const failedNoteIds = useFailedNoteIds();
 
   // A new note opened from a share intent arrives with sharedText to pre-fill
@@ -183,6 +183,9 @@ export default function NoteEditorScreen() {
   const [color, setColor] = useState(originColor || '#ffffff');
   const [labels, setLabels] = useState<Label[]>([]);
   const [hasCreated, setHasCreated] = useState(initialNoteId !== null);
+  // saveError and syncToast below hold a translation key, not a translated
+  // string, so a language switch re-renders them in the new language rather
+  // than leaving a stale one on screen.
   const [saveError, setSaveError] = useState<string | null>(null);
   const [colorPickerVisible, setColorPickerVisible] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
@@ -278,12 +281,6 @@ export default function NoteEditorScreen() {
   }, [syncToast]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
-    setSaveError(null);
-    setSyncToast(null);
-  }, [i18n.language]);
-
-  useEffect(() => {
     const sub = Keyboard.addListener('keyboardDidHide', () => {
       setIsEditingContent(false);
     });
@@ -335,8 +332,8 @@ export default function NoteEditorScreen() {
   // this banner is the only signal that the note has diverged on the server.
   useSSESubscription(noteId, useCallback(() => {
     if (!hasPendingChangesRef.current) return;
-    setSyncToast((prev) => prev ?? t('note.updatedByAnotherUser'));
-  }, [t]));
+    setSyncToast((prev) => prev ?? 'note.updatedByAnotherUser');
+  }, []));
 
   // Refs for current state to avoid stale closures in debounced save
   const noteIdRef = useRef(noteId);
@@ -955,7 +952,7 @@ export default function NoteEditorScreen() {
     } catch (err) {
       console.error('Failed to save note:', err);
       if (isMountedRef.current && !unmounting) {
-        setSaveError(t('note.failedSaveChanges'));
+        setSaveError('note.failedSaveChanges');
       }
       return false;
     } finally {
@@ -963,7 +960,7 @@ export default function NoteEditorScreen() {
         saveInFlightRef.current = null;
       }
     }
-  }, [t, persistItemDiff]);
+  }, [persistItemDiff]);
 
   const scheduleUpdate = useCallback(() => {
     if (debounceRef.current) {
@@ -1485,10 +1482,10 @@ export default function NoteEditorScreen() {
         );
         itemsRef.current = reverted;
         setItems(reverted);
-        setSaveError(t('note.failedSaveChanges'));
+        setSaveError('note.failedSaveChanges');
       }
     },
-    [markDirtyAndScheduleUpdate, t],
+    [markDirtyAndScheduleUpdate],
   );
 
   // Unchecks every currently-completed item in one bulk request (overflow
@@ -1537,10 +1534,10 @@ export default function NoteEditorScreen() {
         const reverted = itemsRef.current.map((item) => (ids.includes(item.id) ? { ...item, completed: true } : item));
         itemsRef.current = reverted;
         setItems(reverted);
-        setSaveError(t('note.failedSaveChanges'));
+        setSaveError('note.failedSaveChanges');
       }
     });
-  }, [markDirtyAndScheduleUpdate, t, withPendingIndicator]);
+  }, [markDirtyAndScheduleUpdate, withPendingIndicator]);
 
   // Deletes every currently-completed item after a confirm dialog (overflow
   // menu); mobile has no in-editor undo-bar equivalent to the web's
@@ -1602,7 +1599,7 @@ export default function NoteEditorScreen() {
         }
         savedOrderRef.current = reinsertIds(savedOrderRef.current, beforeSavedOrder, idSet);
 
-        setSaveError(t('note.failedSaveChanges'));
+        setSaveError('note.failedSaveChanges');
       }
     });
   }, [confirm, markDirtyAndScheduleUpdate, t, withPendingIndicator]);
@@ -2613,7 +2610,7 @@ export default function NoteEditorScreen() {
           }}
           testID="save-error-banner"
         >
-          <Text style={[styles.errorText, { color: colors.error }]}>{saveError}</Text>
+          <Text style={[styles.errorText, { color: colors.error }]}>{t(saveError)}</Text>
         </TouchableOpacity>
       )}
 
@@ -2623,7 +2620,7 @@ export default function NoteEditorScreen() {
           onPress={() => setSyncToast(null)}
           testID="sync-toast"
         >
-          <Text style={[styles.syncToastText, { color: colors.warningText }]}>{syncToast}</Text>
+          <Text style={[styles.syncToastText, { color: colors.warningText }]}>{t(syncToast)}</Text>
         </TouchableOpacity>
       )}
 

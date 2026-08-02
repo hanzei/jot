@@ -21,7 +21,6 @@ interface UserAvatarProps {
 }
 
 export default function UserAvatar({ userId, username, hasProfileIcon, iconVersion, size = 'medium' }: UserAvatarProps) {
-  const [imageError, setImageError] = useState(false);
   const baseUrl = useActiveServerBaseUrl();
   const dimension = SIZE_MAP[size];
   const fontSize = size === 'small' ? 10 : size === 'medium' ? 15 : 22;
@@ -31,11 +30,12 @@ export default function UserAvatar({ userId, username, hasProfileIcon, iconVersi
 
   const localUri = useProfileIcon(userId, hasProfileIcon ?? false, iconVersion, networkUrl);
 
-  // Reset the image error state when the avatar identity changes.
-  React.useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
-    setImageError(false);
-  }, [baseUrl, userId, iconVersion]);
+  // A load failure is recorded against the avatar identity that failed, so a
+  // new identity starts clean without an effect resetting the flag — which
+  // would have shown the initials fallback for one frame after every change.
+  const avatarKey = `${baseUrl} ${userId ?? ''} ${iconVersion ?? ''}`;
+  const [erroredKey, setErroredKey] = useState<string | null>(null);
+  const imageError = erroredKey === avatarKey;
 
   const safeUsername = username || 'U';
   const bgColor = getAvatarColor(safeUsername);
@@ -51,7 +51,7 @@ export default function UserAvatar({ userId, username, hasProfileIcon, iconVersi
         style={[styles.avatar, { width: dimension, height: dimension, borderRadius: dimension / 2 }]}
         accessibilityRole="image"
         accessibilityLabel={`${safeUsername} profile picture`}
-        onError={() => setImageError(true)}
+        onError={() => setErroredKey(avatarKey)}
       />
     );
   }

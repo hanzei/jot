@@ -1,7 +1,6 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, TouchableOpacity, TextInput } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { useAuth } from '../../store/AuthContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { changePassword } from '../../api/settings';
 import { VALIDATION } from '@jot/shared';
@@ -9,7 +8,6 @@ import { displayMessage, extractApiError } from '../../i18n/utils';
 import { styles } from './styles';
 
 export default function ChangePasswordSection() {
-  const { settings } = useAuth();
   const { colors } = useTheme();
   const { t } = useTranslation();
 
@@ -18,12 +16,9 @@ export default function ChangePasswordSection() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordError, setPasswordError] = useState('');
+  // Holds a translation key, translated at render, so switching language
+  // re-renders it in the new language instead of leaving a stale string.
   const [passwordSuccess, setPasswordSuccess] = useState('');
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
-    setPasswordSuccess('');
-  }, [settings?.language]);
 
   const handleChangePassword = useCallback(async () => {
     setPasswordError('');
@@ -45,7 +40,7 @@ export default function ChangePasswordSection() {
     setPasswordSaving(true);
     try {
       await changePassword({ current_password: currentPassword, new_password: newPassword });
-      setPasswordSuccess(t('settings.passwordChanged'));
+      setPasswordSuccess('settings.passwordChanged');
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
@@ -96,7 +91,9 @@ export default function ChangePasswordSection() {
       {passwordError !== '' && (
         <Text style={[styles.errorText, { color: colors.error }]}>{displayMessage(t, passwordError)}</Text>
       )}
-      {passwordSuccess !== '' && <Text style={[styles.successText, { color: colors.success }]}>{passwordSuccess}</Text>}
+      {passwordSuccess !== '' && (
+        <Text style={[styles.successText, { color: colors.success }]}>{displayMessage(t, passwordSuccess)}</Text>
+      )}
       <TouchableOpacity
         style={[styles.primaryButton, { backgroundColor: colors.primary }, passwordSaving && styles.buttonDisabled]}
         onPress={handleChangePassword}

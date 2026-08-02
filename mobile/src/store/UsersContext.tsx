@@ -18,6 +18,8 @@ interface UsersState {
 
 const UsersContext = createContext<UsersState | undefined>(undefined);
 
+const EMPTY_USERS: Map<string, User> = new Map();
+
 function buildUsersMap(seedUser: User | null | undefined, list: User[]): Map<string, User> {
   const map = new Map<string, User>();
   if (seedUser) map.set(seedUser.id, seedUser as User);
@@ -29,7 +31,12 @@ export function UsersProvider({ children }: { children: React.ReactNode }) {
   const db = useSQLiteContext();
   const { user, isAuthenticated } = useAuth();
   const { isConnected } = useNetworkStatus();
-  const [usersById, setUsersById] = useState<Map<string, User>>(new Map());
+  const [loadedUsersById, setUsersById] = useState<Map<string, User>>(new Map());
+  // Signed-out consumers see an empty map immediately, masked during render
+  // rather than cleared by an effect — the effect ran a frame late, leaving the
+  // previous session's collaborators readable in between. The next sign-in
+  // replaces the map outright (loadUsers rebuilds it), so nothing carries over.
+  const usersById = isAuthenticated ? loadedUsersById : EMPTY_USERS;
   const isMountedRef = useRef(true);
   const isConnectedRef = useRef(isConnected);
   // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
@@ -86,11 +93,7 @@ export function UsersProvider({ children }: { children: React.ReactNode }) {
   // Re-runs on reconnect (isConnected false → true) so a transient failure
   // resumes once connectivity returns instead of waiting for the next mount.
   useEffect(() => {
-    if (!isAuthenticated) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
-      setUsersById(new Map());
-      return;
-    }
+    if (!isAuthenticated) return;
     const canceller = new SyncCanceller();
     loadUsers(canceller);
     return () => canceller.cancel();
