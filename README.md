@@ -214,7 +214,7 @@ variable is unset:
 ```bash
 docker run --rm -d --name jot-test-postgres \
   -e POSTGRES_USER=jot -e POSTGRES_PASSWORD=jot -e POSTGRES_DB=jot_test \
-  -p 5432:5432 postgres:16-alpine
+  -p 5432:5432 postgres:18-alpine
 
 TEST_POSTGRES_DSN="postgres://jot:jot@localhost:5432/jot_test?sslmode=disable" task test-server
 ```
