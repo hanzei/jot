@@ -160,31 +160,39 @@ jest.mock('expo-share-intent', () => ({
   }),
 }));
 
-const mockDb = {
-  execAsync: jest.fn().mockResolvedValue(undefined),
-  runAsync: jest.fn().mockResolvedValue({ lastInsertRowId: 1, changes: 1 }),
-  getFirstAsync: jest.fn().mockResolvedValue(null),
-  getAllAsync: jest.fn().mockResolvedValue([]),
-  closeAsync: jest.fn().mockResolvedValue(undefined),
-};
+// Real SQLite, not a stub: `__tests__/helpers/testDb.ts` implements the
+// expo-sqlite surface `src/db/` uses on top of Node's built-in `node:sqlite`,
+// so queries, constraints, migrations, and transaction rollback all execute for
+// real. Same intent as the filesystem mock above — run the app's own logic
+// rather than assert against canned return values.
+//
+// A fresh migrated in-memory database is installed before every test by
+// `jest.setupAfterEnv.js`; tests reach it through `globalThis.testDb`.
+jest.mock('expo-sqlite', () => {
+  const { getDefaultTestDb, openNamedTestDb, backupTestDb } = require('./__tests__/helpers/testDb');
+  return {
+    SQLiteProvider: ({ children, onInit }) => {
+      // Run onInit asynchronously to simulate DB initialization
+      const React = require('react');
+      const [ready, setReady] = React.useState(false);
+      React.useEffect(() => {
+        Promise.resolve(onInit?.(getDefaultTestDb())).then(() => setReady(true));
+      }, []); // eslint-disable-line react-hooks/exhaustive-deps
+      return ready ? children : null;
+    },
+    useSQLiteContext: () => getDefaultTestDb(),
+    openDatabaseAsync: jest.fn(async (name) => openNamedTestDb(name)),
+    backupDatabaseAsync: jest.fn(async ({ sourceDatabase, destDatabase }) =>
+      backupTestDb(sourceDatabase, destDatabase),
+    ),
+    defaultDatabaseDirectory: 'file:///db',
+  };
+});
 
-jest.mock('expo-sqlite', () => ({
-  SQLiteProvider: ({ children, onInit }) => {
-    // Run onInit asynchronously to simulate DB initialization
-    const React = require('react');
-    const [ready, setReady] = React.useState(false);
-    React.useEffect(() => {
-      Promise.resolve(onInit?.(mockDb)).then(() => setReady(true));
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
-    return ready ? children : null;
-  },
-  useSQLiteContext: () => mockDb,
-  openDatabaseAsync: jest.fn().mockResolvedValue(mockDb),
-  backupDatabaseAsync: jest.fn().mockResolvedValue(undefined),
-  defaultDatabaseDirectory: 'file:///db',
-}));
-
-global.mockDb = mockDb;
+// A getter, not a value: the database is replaced between tests.
+Object.defineProperty(global, 'testDb', {
+  get: () => require('./__tests__/helpers/testDb').getDefaultTestDb(),
+});
 
 jest.mock('@react-native-community/netinfo', () => ({
   __esModule: true,

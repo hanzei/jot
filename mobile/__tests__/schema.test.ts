@@ -1,384 +1,487 @@
-import { SQLiteDatabase } from 'expo-sqlite';
 import { migrateDatabase, MIGRATIONS } from '../src/db/schema';
+import { createTestDb, type TestDatabase } from './helpers/testDb';
 
-type MockDb = {
-  execAsync: jest.Mock;
-  runAsync: jest.Mock;
-  getFirstAsync: jest.Mock;
-  getAllAsync: jest.Mock;
-};
+/**
+ * These run against a real SQLite engine (see `helpers/testDb.ts`), so a
+ * migration that references a missing column, adds a column twice, or leaves
+ * the schema in a state the queries can't use fails here rather than passing
+ * against a mock. The end state is what's asserted — not the SQL text.
+ */
 
-function makeDb(overrides: Partial<MockDb> = {}): MockDb {
-  return {
-    execAsync: jest.fn().mockResolvedValue(undefined),
-    runAsync: jest.fn().mockResolvedValue({}),
-    getFirstAsync: jest.fn().mockResolvedValue({ user_version: 0 }),
-    getAllAsync: jest.fn().mockResolvedValue([]),
-    ...overrides,
-  };
+type ColumnInfo = { name: string; type: string; notnull: number; dflt_value: string | null; pk: number };
+
+/** Every table and its columns, in a form that's stable across CREATE-vs-ALTER ordering. */
+async function schemaSnapshot(db: TestDatabase): Promise<Record<string, string[]>> {
+  const tables = await db.getAllAsync<{ name: string }>(
+    `SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name`,
+  );
+  const snapshot: Record<string, string[]> = {};
+  for (const table of tables) {
+    const columns = await db.getAllAsync<ColumnInfo>(`PRAGMA table_info(${table.name})`);
+    snapshot[table.name] = columns
+      .map((c) => `${c.name} ${c.type} notnull=${c.notnull} default=${c.dflt_value ?? 'NULL'} pk=${c.pk}`)
+      .sort();
+  }
+  return snapshot;
 }
 
-const runSqls = (db: MockDb): string[] =>
-  (db.runAsync.mock.calls as unknown[][]).map((c) => c[0] as string);
+async function columnNames(db: TestDatabase, table: string): Promise<string[]> {
+  const columns = await db.getAllAsync<ColumnInfo>(`PRAGMA table_info(${table})`);
+  return columns.map((c) => c.name);
+}
 
-const ALL_NOTES_COLS = [
-  'id', 'user_id', 'title', 'content', 'note_type', 'color', 'pinned', 'archived',
-  'position', 'checked_items_collapsed', 'version', 'is_shared', 'deleted_at', 'created_at',
-  'updated_at', 'labels_json', 'shared_with_json', 'images_json', 'sync_state',
-].map((name) => ({ name }));
+async function userVersion(db: TestDatabase): Promise<number> {
+  const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
+  return row?.user_version ?? 0;
+}
 
-const ALL_NOTE_ITEM_COLS = [
-  'id', 'note_id', 'text', 'completed', 'position', 'parent_id',
-  'assigned_to', 'created_at', 'updated_at',
-].map((name) => ({ name }));
+async function indexNames(db: TestDatabase): Promise<string[]> {
+  const rows = await db.getAllAsync<{ name: string }>(
+    `SELECT name FROM sqlite_master WHERE type = 'index' AND sql IS NOT NULL ORDER BY name`,
+  );
+  return rows.map((r) => r.name);
+}
 
-// Fully-migrated column sets probed by migration6 (issue #714), in the order it
-// probes them: sync_queue.attempts, pending_image_uploads.attempts,
-// dead_letter.attempts, dead_letter.error_message.
-const SYNC_QUEUE_COLS_FULL = [
-  'id', 'operation', 'endpoint', 'method', 'body', 'created_at', 'attempts',
-].map((name) => ({ name }));
-const IMAGE_UPLOAD_COLS_FULL = [
-  'id', 'note_id', 'local_path', 'filename', 'mime_type', 'size_bytes',
-  'status', 'error_message', 'created_at', 'attempts',
-].map((name) => ({ name }));
-const DEAD_LETTER_COLS_FULL = [
-  'id', 'operation', 'endpoint', 'method', 'body', 'status', 'note_id',
-  'created_at', 'failed_at', 'attempts', 'error_message',
-].map((name) => ({ name }));
+async function freshlyMigratedDb(): Promise<TestDatabase> {
+  const db = createTestDb();
+  await migrateDatabase(db);
+  return db;
+}
 
-// migration6 (issue #714) probes four more table_info results after migration5:
-// sync_queue.attempts, pending_image_uploads.attempts, dead_letter.attempts, and
-// dead_letter.error_message. Existing sequential mocks end at migration5, so each
-// chain appends these full column sets (an exhausted mockResolvedValueOnce returns
-// undefined → `.some` throws, and full sets mean no spurious ALTER).
+/**
+ * The schema as it stood before `user_version` tracking existed: no
+ * `notes.sync_state` / `version` / `images_json`, `note_items` still keyed on
+ * `indent_level` rather than `parent_id`, and no `attempts` counters. This is
+ * the shape migration1's column probes and migration6's ALTERs exist for.
+ */
+async function preVersionedInstall(): Promise<TestDatabase> {
+  const db = createTestDb();
+  await db.execAsync(`
+    CREATE TABLE notes (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      title TEXT NOT NULL DEFAULT '',
+      content TEXT NOT NULL DEFAULT '',
+      note_type TEXT NOT NULL DEFAULT 'text',
+      color TEXT NOT NULL DEFAULT '#ffffff',
+      pinned INTEGER NOT NULL DEFAULT 0,
+      archived INTEGER NOT NULL DEFAULT 0,
+      position INTEGER NOT NULL DEFAULT 0,
+      checked_items_collapsed INTEGER NOT NULL DEFAULT 0,
+      is_shared INTEGER NOT NULL DEFAULT 0,
+      deleted_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      labels_json TEXT NOT NULL DEFAULT '[]',
+      shared_with_json TEXT NOT NULL DEFAULT '[]'
+    );
+
+    CREATE TABLE note_items (
+      id TEXT PRIMARY KEY,
+      note_id TEXT NOT NULL,
+      text TEXT NOT NULL DEFAULT '',
+      completed INTEGER NOT NULL DEFAULT 0,
+      position INTEGER NOT NULL DEFAULT 0,
+      indent_level INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE sync_queue (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      operation TEXT NOT NULL,
+      endpoint TEXT NOT NULL,
+      method TEXT NOT NULL,
+      body TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE dead_letter (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      operation TEXT NOT NULL,
+      endpoint TEXT NOT NULL,
+      method TEXT NOT NULL,
+      body TEXT,
+      status INTEGER NOT NULL,
+      note_id TEXT,
+      created_at TEXT NOT NULL,
+      failed_at TEXT NOT NULL
+    );
+
+    CREATE TABLE users (
+      id TEXT PRIMARY KEY,
+      username TEXT NOT NULL,
+      first_name TEXT NOT NULL DEFAULT '',
+      last_name TEXT NOT NULL DEFAULT '',
+      role TEXT NOT NULL DEFAULT 'user',
+      has_profile_icon INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT ''
+    );
+  `);
+  return db;
+}
+
+async function insertLegacyNote(
+  db: TestDatabase,
+  note: { id: string; note_type?: string; labels_json?: string },
+): Promise<void> {
+  await db.runAsync(
+    `INSERT INTO notes (id, user_id, title, note_type, created_at, updated_at, labels_json)
+     VALUES (?, 'u1', 'Note', ?, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', ?)`,
+    [note.id, note.note_type ?? 'text', note.labels_json ?? '[]'],
+  );
+}
 
 describe('migrateDatabase', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
+  describe('fresh install', () => {
+    it('creates the full schema and records the latest user_version', async () => {
+      const db = await freshlyMigratedDb();
+
+      expect(await userVersion(db)).toBe(MIGRATIONS.length);
+      expect(Object.keys(await schemaSnapshot(db)).sort()).toEqual([
+        'dead_letter',
+        'labels',
+        'note_items',
+        'notes',
+        'pending_image_uploads',
+        'sync_queue',
+        'users',
+      ]);
+      expect(await indexNames(db)).toEqual([
+        'idx_note_items_note_id',
+        'idx_notes_list',
+        'idx_pending_image_uploads_note_id',
+      ]);
+    });
+
+    it('produces the columns the queries rely on', async () => {
+      const db = await freshlyMigratedDb();
+
+      expect(await columnNames(db, 'notes')).toEqual(
+        expect.arrayContaining(['version', 'images_json', 'sync_state', 'labels_json', 'shared_with_json']),
+      );
+      expect(await columnNames(db, 'note_items')).toEqual(
+        expect.arrayContaining(['parent_id', 'assigned_to', 'created_at', 'updated_at']),
+      );
+      expect(await columnNames(db, 'sync_queue')).toContain('attempts');
+      expect(await columnNames(db, 'pending_image_uploads')).toContain('attempts');
+      expect(await columnNames(db, 'dead_letter')).toEqual(expect.arrayContaining(['attempts', 'error_message']));
+    });
+
+    it('issues no ALTER TABLE — every column comes from the CREATE statements', async () => {
+      const db = createTestDb();
+      await migrateDatabase(db);
+
+      const statements = db.runAsync.mock.calls.map((call) => String(call[0]));
+      expect(statements.filter((s) => s.startsWith('ALTER TABLE'))).toEqual([]);
+    });
+
+    it('is idempotent — re-running over a current database changes nothing', async () => {
+      const db = await freshlyMigratedDb();
+      const before = await schemaSnapshot(db);
+
+      await migrateDatabase(db);
+
+      expect(await schemaSnapshot(db)).toEqual(before);
+      expect(await userVersion(db)).toBe(MIGRATIONS.length);
+    });
+
+    it('skips every step when already at the latest version', async () => {
+      const db = await freshlyMigratedDb();
+      db.execAsync.mockClear();
+
+      await migrateDatabase(db);
+
+      expect(db.execAsync).not.toHaveBeenCalled();
+    });
   });
 
-  describe('fresh install (user_version = 0)', () => {
-    it('creates all tables and sets user_version to latest without ALTER TABLE', async () => {
-      // On a real fresh install, PRAGMA table_info returns all columns immediately after
-      // CREATE TABLE IF NOT EXISTS. The column-probe guards must not attempt ALTER TABLE
-      // (which would fail with "duplicate column name" on a real SQLite database).
-      const db = makeDb({
-        getAllAsync: jest.fn()
-          .mockResolvedValueOnce(ALL_NOTES_COLS)
-          .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS)
-          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
-          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration3 images_json probe
-          .mockResolvedValueOnce([]) // migration5 labels backfill: no notes
-          .mockResolvedValueOnce(SYNC_QUEUE_COLS_FULL)
-          .mockResolvedValueOnce(IMAGE_UPLOAD_COLS_FULL)
-          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL)
-          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL), // migration6 probes (issue #714)
-      });
-      await migrateDatabase(db as unknown as SQLiteDatabase);
+  describe('stepwise application', () => {
+    // Each migration has to apply cleanly to the schema the previous one left
+    // behind. Resuming from every intermediate user_version proves that, and
+    // that all paths converge on one schema.
+    it.each(MIGRATIONS.map((_, index) => index))(
+      'reaches the same schema when resumed from user_version %i',
+      async (startVersion) => {
+        const db = createTestDb();
+        for (let i = 0; i < startVersion; i++) {
+          await MIGRATIONS[i](db);
+          await db.runAsync(`PRAGMA user_version = ${i + 1}`);
+        }
+        expect(await userVersion(db)).toBe(startVersion);
 
-      expect(db.runAsync).toHaveBeenCalledWith('PRAGMA journal_mode = WAL');
-      expect(db.runAsync).toHaveBeenCalledWith('PRAGMA foreign_keys = ON');
-      expect(db.execAsync).toHaveBeenCalled();
+        await migrateDatabase(db);
 
-      const ddl = db.execAsync.mock.calls[0][0] as string;
-      expect(ddl).toContain('CREATE TABLE IF NOT EXISTS notes');
-      expect(ddl).toContain('CREATE TABLE IF NOT EXISTS note_items');
-      expect(ddl).toContain('CREATE TABLE IF NOT EXISTS sync_queue');
-      expect(ddl).toContain('CREATE TABLE IF NOT EXISTS dead_letter');
-      expect(ddl).toContain('CREATE TABLE IF NOT EXISTS users');
+        expect(await userVersion(db)).toBe(MIGRATIONS.length);
+        expect(await schemaSnapshot(db)).toEqual(await schemaSnapshot(await freshlyMigratedDb()));
+      },
+    );
 
-      // migration4 (issue #618): offline image upload queue.
-      const migration4Ddl = db.execAsync.mock.calls[1][0] as string;
-      expect(migration4Ddl).toContain('CREATE TABLE IF NOT EXISTS pending_image_uploads');
+    it('preserves rows written before the remaining migrations run', async () => {
+      const db = createTestDb();
+      await MIGRATIONS[0](db);
+      await db.runAsync('PRAGMA user_version = 1');
+      await insertLegacyNote(db, { id: 'n1' });
+      await db.runAsync(
+        `INSERT INTO sync_queue (operation, endpoint, method, body, created_at)
+         VALUES ('update_note', '/notes/n1', 'PATCH', '{}', '2026-01-01T00:00:00Z')`,
+      );
 
-      // migration5 (issue #691): canonical local label store.
-      const migration5Ddl = db.execAsync.mock.calls[2][0] as string;
-      expect(migration5Ddl).toContain('CREATE TABLE IF NOT EXISTS labels');
+      await migrateDatabase(db);
 
-      expect(runSqls(db).some((s) => s.startsWith('ALTER TABLE'))).toBe(false);
-      expect(db.runAsync).toHaveBeenCalledWith(`PRAGMA user_version = ${MIGRATIONS.length}`);
+      expect(await db.getAllAsync('SELECT id FROM notes')).toEqual([{ id: 'n1' }]);
+      const queued = await db.getAllAsync<{ endpoint: string; attempts: number }>(
+        'SELECT endpoint, attempts FROM sync_queue',
+      );
+      // The column migration6 adds takes its default on existing rows.
+      expect(queued).toEqual([{ endpoint: '/notes/n1', attempts: 0 }]);
     });
   });
 
-  describe('legacy upgrade (user_version = 0, full schema already present)', () => {
-    it('runs migration but skips ALTER TABLE when all columns exist', async () => {
-      const db = makeDb({
-        getAllAsync: jest.fn()
-          .mockResolvedValueOnce(ALL_NOTES_COLS)
-          .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS)
-          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
-          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration3 images_json probe
-          .mockResolvedValueOnce([]) // migration5 labels backfill: no notes
-          .mockResolvedValueOnce(SYNC_QUEUE_COLS_FULL)
-          .mockResolvedValueOnce(IMAGE_UPLOAD_COLS_FULL)
-          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL)
-          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL), // migration6 probes (issue #714)
-      });
-      await migrateDatabase(db as unknown as SQLiteDatabase);
+  describe('pre-versioned install', () => {
+    it('converges on the fresh-install schema', async () => {
+      const db = await preVersionedInstall();
 
-      expect(runSqls(db).some((c) => c.startsWith('ALTER TABLE'))).toBe(false);
-      expect(db.runAsync).toHaveBeenCalledWith(`PRAGMA user_version = ${MIGRATIONS.length}`);
-    });
+      await migrateDatabase(db);
 
-    it('adds sync_state column when it is missing', async () => {
-      const notesColsWithoutSyncState = ALL_NOTES_COLS.filter((c) => c.name !== 'sync_state');
-      const db = makeDb({
-        getAllAsync: jest.fn()
-          .mockResolvedValueOnce(notesColsWithoutSyncState)
-          .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS)
-          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
-          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration3 images_json probe
-          .mockResolvedValueOnce([]) // migration5 labels backfill: no notes
-          .mockResolvedValueOnce(SYNC_QUEUE_COLS_FULL)
-          .mockResolvedValueOnce(IMAGE_UPLOAD_COLS_FULL)
-          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL)
-          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL), // migration6 probes (issue #714)
-      });
-      await migrateDatabase(db as unknown as SQLiteDatabase);
-
-      expect(db.runAsync).toHaveBeenCalledWith(
-        `ALTER TABLE notes ADD COLUMN sync_state TEXT NOT NULL DEFAULT 'synced'`,
-      );
-    });
-
-    it('adds the version column when it is missing (issue #489)', async () => {
-      const notesColsWithoutVersion = ALL_NOTES_COLS.filter((c) => c.name !== 'version');
-      const db = makeDb({
-        getAllAsync: jest.fn()
-          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration1 sync_state probe
-          .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS)
-          .mockResolvedValueOnce(notesColsWithoutVersion) // migration2 version probe
-          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration3 images_json probe
-          .mockResolvedValueOnce([]) // migration5 labels backfill: no notes
-          .mockResolvedValueOnce(SYNC_QUEUE_COLS_FULL)
-          .mockResolvedValueOnce(IMAGE_UPLOAD_COLS_FULL)
-          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL)
-          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL), // migration6 probes (issue #714)
-      });
-      await migrateDatabase(db as unknown as SQLiteDatabase);
-
-      expect(db.runAsync).toHaveBeenCalledWith(
-        `ALTER TABLE notes ADD COLUMN version INTEGER NOT NULL DEFAULT 1`,
-      );
-    });
-
-    it('adds missing note_items columns', async () => {
-      const noteItemColsWithoutNew = ALL_NOTE_ITEM_COLS.filter(
-        (c) => !['created_at', 'updated_at', 'assigned_to'].includes(c.name),
-      );
-      const db = makeDb({
-        getAllAsync: jest.fn()
-          .mockResolvedValueOnce(ALL_NOTES_COLS)
-          .mockResolvedValueOnce(noteItemColsWithoutNew)
-          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
-          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration3 images_json probe
-          .mockResolvedValueOnce([]) // migration5 labels backfill: no notes
-          .mockResolvedValueOnce(SYNC_QUEUE_COLS_FULL)
-          .mockResolvedValueOnce(IMAGE_UPLOAD_COLS_FULL)
-          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL)
-          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL), // migration6 probes (issue #714)
-      });
-      await migrateDatabase(db as unknown as SQLiteDatabase);
-
-      for (const col of ['created_at', 'updated_at', 'assigned_to']) {
-        expect(db.runAsync).toHaveBeenCalledWith(
-          `ALTER TABLE note_items ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`,
-        );
+      expect(await userVersion(db)).toBe(MIGRATIONS.length);
+      const fresh = await schemaSnapshot(await freshlyMigratedDb());
+      const upgraded = await schemaSnapshot(db);
+      for (const table of Object.keys(fresh)) {
+        // note_items keeps its now-unused indent_level column; everything the
+        // current schema defines has to be present with the same definition.
+        expect(upgraded[table]).toEqual(expect.arrayContaining(fresh[table]));
       }
     });
 
-    it('adds the images_json column when it is missing (issue #616)', async () => {
-      const notesColsWithoutImages = ALL_NOTES_COLS.filter((c) => c.name !== 'images_json');
-      const db = makeDb({
-        getAllAsync: jest.fn()
-          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration1 sync_state probe
-          .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS)
-          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
-          .mockResolvedValueOnce(notesColsWithoutImages) // migration3 images_json probe
-          .mockResolvedValueOnce([]) // migration5 labels backfill: no notes
-          .mockResolvedValueOnce(SYNC_QUEUE_COLS_FULL)
-          .mockResolvedValueOnce(IMAGE_UPLOAD_COLS_FULL)
-          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL)
-          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL), // migration6 probes (issue #714)
-      });
-      await migrateDatabase(db as unknown as SQLiteDatabase);
+    it('adds the columns missing from notes', async () => {
+      const db = await preVersionedInstall();
 
-      expect(db.runAsync).toHaveBeenCalledWith(
-        `ALTER TABLE notes ADD COLUMN images_json TEXT NOT NULL DEFAULT '[]'`,
+      await migrateDatabase(db);
+
+      expect(await columnNames(db, 'notes')).toEqual(
+        expect.arrayContaining(['sync_state', 'version', 'images_json']),
       );
     });
 
-    it('adds the attempts/error_message columns when they are missing (issue #714)', async () => {
-      const db = makeDb({
-        getAllAsync: jest.fn()
-          .mockResolvedValueOnce(ALL_NOTES_COLS)
-          .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS)
-          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
-          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration3 images_json probe
-          .mockResolvedValueOnce([]) // migration5 labels backfill: no notes
-          // migration6 probes: every target column is still missing.
-          .mockResolvedValueOnce(SYNC_QUEUE_COLS_FULL.filter((c) => c.name !== 'attempts'))
-          .mockResolvedValueOnce(IMAGE_UPLOAD_COLS_FULL.filter((c) => c.name !== 'attempts'))
-          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL.filter((c) => c.name !== 'attempts' && c.name !== 'error_message'))
-          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL.filter((c) => c.name !== 'attempts' && c.name !== 'error_message')),
-      });
-      await migrateDatabase(db as unknown as SQLiteDatabase);
+    it('backfills the added notes columns with their defaults on existing rows', async () => {
+      const db = await preVersionedInstall();
+      await insertLegacyNote(db, { id: 'n1' });
 
-      expect(db.runAsync).toHaveBeenCalledWith('ALTER TABLE sync_queue ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0');
-      expect(db.runAsync).toHaveBeenCalledWith('ALTER TABLE pending_image_uploads ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0');
-      expect(db.runAsync).toHaveBeenCalledWith('ALTER TABLE dead_letter ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0');
-      expect(db.runAsync).toHaveBeenCalledWith('ALTER TABLE dead_letter ADD COLUMN error_message TEXT');
+      await migrateDatabase(db);
+
+      expect(
+        await db.getFirstAsync('SELECT sync_state, version, images_json FROM notes WHERE id = ?', ['n1']),
+      ).toEqual({ sync_state: 'synced', version: 1, images_json: '[]' });
     });
 
-    it('skips the migration6 ALTERs when the columns already exist (issue #714)', async () => {
-      const db = makeDb({
-        getAllAsync: jest.fn()
-          .mockResolvedValueOnce(ALL_NOTES_COLS)
-          .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS)
-          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
-          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration3 images_json probe
-          .mockResolvedValueOnce([]) // migration5 labels backfill: no notes
-          .mockResolvedValueOnce(SYNC_QUEUE_COLS_FULL)
-          .mockResolvedValueOnce(IMAGE_UPLOAD_COLS_FULL)
-          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL)
-          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL),
-      });
-      await migrateDatabase(db as unknown as SQLiteDatabase);
+    it('adds the columns missing from note_items', async () => {
+      const db = await preVersionedInstall();
 
-      expect(runSqls(db).some((s) => s.includes('ADD COLUMN attempts'))).toBe(false);
-      expect(runSqls(db).some((s) => s.includes('ADD COLUMN error_message'))).toBe(false);
+      await migrateDatabase(db);
+
+      expect(await columnNames(db, 'note_items')).toEqual(
+        expect.arrayContaining(['created_at', 'updated_at', 'assigned_to', 'parent_id']),
+      );
     });
-  });
 
-  describe('already at latest version', () => {
-    it('skips all migration steps', async () => {
-      const db = makeDb({
-        getFirstAsync: jest.fn().mockResolvedValue({ user_version: MIGRATIONS.length }),
-      });
-      await migrateDatabase(db as unknown as SQLiteDatabase);
+    it("renames the legacy 'todo' note type to 'list'", async () => {
+      const db = await preVersionedInstall();
+      await insertLegacyNote(db, { id: 'n1', note_type: 'todo' });
+      await insertLegacyNote(db, { id: 'n2', note_type: 'text' });
 
-      expect(db.execAsync).not.toHaveBeenCalled();
-      expect(runSqls(db)).toEqual(['PRAGMA journal_mode = WAL', 'PRAGMA foreign_keys = ON']);
+      await migrateDatabase(db);
+
+      expect(await db.getAllAsync('SELECT id, note_type FROM notes ORDER BY id')).toEqual([
+        { id: 'n1', note_type: 'list' },
+        { id: 'n2', note_type: 'text' },
+      ]);
+    });
+
+    it('adds the queue attempt counters and keeps queued rows', async () => {
+      const db = await preVersionedInstall();
+      await db.runAsync(
+        `INSERT INTO dead_letter (operation, endpoint, method, body, status, note_id, created_at, failed_at)
+         VALUES ('update_note', '/notes/n1', 'PATCH', '{}', 400, 'n1', '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z')`,
+      );
+
+      await migrateDatabase(db);
+
+      expect(
+        await db.getFirstAsync('SELECT endpoint, status, attempts, error_message FROM dead_letter'),
+      ).toEqual({ endpoint: '/notes/n1', status: 400, attempts: 0, error_message: null });
     });
   });
 
   describe('indent_level → parent_id backfill', () => {
-    it('derives parent_id from indent_level for pre-parent_id installs', async () => {
-      const noteItemColsWithIndent = ALL_NOTE_ITEM_COLS.filter((c) => c.name !== 'parent_id')
-        .concat([{ name: 'indent_level' }]);
-
-      const rows = [
-        { id: 'item1', note_id: 'note1', indent_level: 0 },
-        { id: 'item2', note_id: 'note1', indent_level: 1 },
-        { id: 'item3', note_id: 'note1', indent_level: 0 },
-        { id: 'item4', note_id: 'note1', indent_level: 1 },
-      ];
-
-      const db = makeDb({
-        getAllAsync: jest.fn()
-          .mockResolvedValueOnce(ALL_NOTES_COLS)
-          .mockResolvedValueOnce(noteItemColsWithIndent)
-          .mockResolvedValueOnce(rows)
-          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
-          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration3 images_json probe
-          .mockResolvedValueOnce([]) // migration5 labels backfill: no notes
-          .mockResolvedValueOnce(SYNC_QUEUE_COLS_FULL)
-          .mockResolvedValueOnce(IMAGE_UPLOAD_COLS_FULL)
-          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL)
-          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL), // migration6 probes (issue #714)
-      });
-      await migrateDatabase(db as unknown as SQLiteDatabase);
-
-      expect(db.runAsync).toHaveBeenCalledWith(
-        `ALTER TABLE note_items ADD COLUMN parent_id TEXT DEFAULT NULL`,
+    const seedItem = async (
+      db: TestDatabase,
+      item: { id: string; noteId: string; position: number; indent: number },
+    ): Promise<void> => {
+      await db.runAsync(
+        `INSERT INTO note_items (id, note_id, text, completed, position, indent_level)
+         VALUES (?, ?, ?, 0, ?, ?)`,
+        [item.id, item.noteId, item.id, item.position, item.indent],
       );
-      expect(db.runAsync).toHaveBeenCalledWith(
-        `UPDATE note_items SET parent_id = ? WHERE id = ?`,
-        ['item1', 'item2'],
-      );
-      expect(db.runAsync).toHaveBeenCalledWith(
-        `UPDATE note_items SET parent_id = ? WHERE id = ?`,
-        ['item3', 'item4'],
-      );
+    };
+
+    it('attaches indented items to the nearest preceding top-level item', async () => {
+      const db = await preVersionedInstall();
+      await insertLegacyNote(db, { id: 'note1' });
+      await seedItem(db, { id: 'item1', noteId: 'note1', position: 0, indent: 0 });
+      await seedItem(db, { id: 'item2', noteId: 'note1', position: 1, indent: 1 });
+      await seedItem(db, { id: 'item3', noteId: 'note1', position: 2, indent: 0 });
+      await seedItem(db, { id: 'item4', noteId: 'note1', position: 3, indent: 1 });
+
+      await migrateDatabase(db);
+
+      expect(await db.getAllAsync('SELECT id, parent_id FROM note_items ORDER BY position')).toEqual([
+        { id: 'item1', parent_id: null },
+        { id: 'item2', parent_id: 'item1' },
+        { id: 'item3', parent_id: null },
+        { id: 'item4', parent_id: 'item3' },
+      ]);
     });
 
-    it('does not backfill parent_id when indent_level column is absent', async () => {
-      const noteItemColsWithoutBoth = ALL_NOTE_ITEM_COLS.filter((c) => c.name !== 'parent_id');
-      const db = makeDb({
-        getAllAsync: jest.fn()
-          .mockResolvedValueOnce(ALL_NOTES_COLS)
-          .mockResolvedValueOnce(noteItemColsWithoutBoth)
-          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
-          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration3 images_json probe
-          .mockResolvedValueOnce([]) // migration5 labels backfill: no notes
-          .mockResolvedValueOnce(SYNC_QUEUE_COLS_FULL)
-          .mockResolvedValueOnce(IMAGE_UPLOAD_COLS_FULL)
-          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL)
-          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL), // migration6 probes (issue #714)
-      });
-      await migrateDatabase(db as unknown as SQLiteDatabase);
+    it('does not carry a parent across notes', async () => {
+      const db = await preVersionedInstall();
+      await insertLegacyNote(db, { id: 'note1' });
+      await insertLegacyNote(db, { id: 'note2' });
+      await seedItem(db, { id: 'item1', noteId: 'note1', position: 0, indent: 0 });
+      // First item of the next note is indented, with no top-level item of its own.
+      await seedItem(db, { id: 'item2', noteId: 'note2', position: 0, indent: 1 });
 
-      expect(db.runAsync).toHaveBeenCalledWith(
-        `ALTER TABLE note_items ADD COLUMN parent_id TEXT DEFAULT NULL`,
+      await migrateDatabase(db);
+
+      expect(await db.getFirstAsync('SELECT parent_id FROM note_items WHERE id = ?', ['item2'])).toEqual({
+        parent_id: null,
+      });
+    });
+
+    it('leaves parent_id null when the install never had indent_level', async () => {
+      const db = await preVersionedInstall();
+      await db.execAsync('ALTER TABLE note_items DROP COLUMN indent_level');
+      await insertLegacyNote(db, { id: 'note1' });
+      await db.runAsync(
+        `INSERT INTO note_items (id, note_id, text, completed, position) VALUES ('item1', 'note1', 'a', 0, 0)`,
       );
-      const updateCalls = (db.runAsync.mock.calls as unknown[][]).filter(
-        (c) => c[0] === `UPDATE note_items SET parent_id = ? WHERE id = ?`,
+
+      await migrateDatabase(db);
+
+      expect(await db.getAllAsync('SELECT id, parent_id FROM note_items')).toEqual([
+        { id: 'item1', parent_id: null },
+      ]);
+    });
+  });
+
+  describe('constraints the queries rely on', () => {
+    // A mock enforces none of these, so nothing else in the suite would notice
+    // if a migration dropped them.
+    it('rejects a duplicate note id', async () => {
+      const db = await freshlyMigratedDb();
+      await db.runAsync(`INSERT INTO notes (id, user_id, created_at, updated_at) VALUES ('n1', 'u1', '', '')`);
+
+      await expect(
+        db.runAsync(`INSERT INTO notes (id, user_id, created_at, updated_at) VALUES ('n1', 'u1', '', '')`),
+      ).rejects.toThrow(/UNIQUE constraint/i);
+    });
+
+    it('rejects a note_item whose note does not exist', async () => {
+      const db = await freshlyMigratedDb();
+
+      await expect(
+        db.runAsync(`INSERT INTO note_items (id, note_id, text) VALUES ('i1', 'nope', 'x')`),
+      ).rejects.toThrow(/FOREIGN KEY constraint/i);
+    });
+
+    it('cascades note_items and pending_image_uploads away with their note', async () => {
+      const db = await freshlyMigratedDb();
+      await db.runAsync(`INSERT INTO notes (id, user_id, created_at, updated_at) VALUES ('n1', 'u1', '', '')`);
+      await db.runAsync(`INSERT INTO note_items (id, note_id, text) VALUES ('i1', 'n1', 'x')`);
+      await db.runAsync(
+        `INSERT INTO pending_image_uploads (id, note_id, local_path, filename, mime_type, created_at)
+         VALUES ('up1', 'n1', 'file:///p', 'a.png', 'image/png', '')`,
       );
-      expect(updateCalls).toHaveLength(0);
+
+      await db.runAsync(`DELETE FROM notes WHERE id = 'n1'`);
+
+      expect(await db.getAllAsync('SELECT id FROM note_items')).toEqual([]);
+      expect(await db.getAllAsync('SELECT id FROM pending_image_uploads')).toEqual([]);
+    });
+
+    it('rejects a note with no user_id', async () => {
+      const db = await freshlyMigratedDb();
+
+      await expect(
+        db.runAsync(`INSERT INTO notes (id, created_at, updated_at) VALUES ('n1', '', '')`),
+      ).rejects.toThrow(/NOT NULL constraint/i);
+    });
+
+    it('applies the sync_queue defaults on a bare insert', async () => {
+      const db = await freshlyMigratedDb();
+
+      await db.runAsync(
+        `INSERT INTO sync_queue (operation, endpoint, method, created_at)
+         VALUES ('update', '/notes/n1', 'PATCH', '')`,
+      );
+
+      expect(await db.getFirstAsync('SELECT id, body, attempts FROM sync_queue')).toEqual({
+        id: 1,
+        body: null,
+        attempts: 0,
+      });
     });
   });
 
   describe('labels store backfill (issue #691)', () => {
     it('backfills the labels table from notes.labels_json, deduping by id', async () => {
-      const db = makeDb({
-        getAllAsync: jest.fn()
-          .mockResolvedValueOnce(ALL_NOTES_COLS)
-          .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS)
-          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
-          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration3 images_json probe
-          .mockResolvedValueOnce([
-            { labels_json: JSON.stringify([{ id: 'l1', user_id: 'u1', name: 'Work', created_at: 'c1', updated_at: 'u1t' }]) },
-            // A duplicate id across notes is inserted once (seen guard + INSERT OR IGNORE).
-            { labels_json: JSON.stringify([{ id: 'l1', user_id: 'u1', name: 'Work', created_at: 'c1', updated_at: 'u1t' }, { id: 'l2', user_id: 'u1', name: 'Home', created_at: 'c2', updated_at: 'u2t' }]) },
-            { labels_json: 'not json' }, // malformed row is tolerated and skipped
-            { labels_json: '5' }, // valid JSON but not an array — tolerated and skipped
-            { labels_json: '{}' }, // valid JSON object (not an array) — tolerated and skipped
-          ])
-          .mockResolvedValueOnce(SYNC_QUEUE_COLS_FULL)
-          .mockResolvedValueOnce(IMAGE_UPLOAD_COLS_FULL)
-          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL)
-          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL), // migration6 probes (issue #714)
+      const db = await preVersionedInstall();
+      await insertLegacyNote(db, {
+        id: 'n1',
+        labels_json: JSON.stringify([
+          { id: 'l1', user_id: 'u1', name: 'Work', created_at: 'c1', updated_at: 'u1t' },
+        ]),
       });
-      await migrateDatabase(db as unknown as SQLiteDatabase);
+      await insertLegacyNote(db, {
+        id: 'n2',
+        labels_json: JSON.stringify([
+          { id: 'l1', user_id: 'u1', name: 'Work', created_at: 'c1', updated_at: 'u1t' },
+          { id: 'l2', user_id: 'u1', name: 'Home', created_at: 'c2', updated_at: 'u2t' },
+        ]),
+      });
 
-      const insertCalls = (db.runAsync.mock.calls as unknown[][]).filter(
-        (c) => String(c[0]).startsWith('INSERT OR IGNORE INTO labels'),
-      );
-      expect(insertCalls).toHaveLength(2);
-      expect(insertCalls[0][1]).toEqual(['l1', 'u1', 'Work', 'c1', 'u1t']);
-      expect(insertCalls[1][1]).toEqual(['l2', 'u1', 'Home', 'c2', 'u2t']);
+      await migrateDatabase(db);
+
+      expect(await db.getAllAsync('SELECT id, user_id, name, created_at, updated_at FROM labels ORDER BY id')).toEqual([
+        { id: 'l1', user_id: 'u1', name: 'Work', created_at: 'c1', updated_at: 'u1t' },
+        { id: 'l2', user_id: 'u1', name: 'Home', created_at: 'c2', updated_at: 'u2t' },
+      ]);
+    });
+
+    it('tolerates rows whose labels_json is malformed or not an array', async () => {
+      const db = await preVersionedInstall();
+      await insertLegacyNote(db, { id: 'n1', labels_json: 'not json' });
+      await insertLegacyNote(db, { id: 'n2', labels_json: '5' });
+      await insertLegacyNote(db, { id: 'n3', labels_json: '{}' });
+      await insertLegacyNote(db, {
+        id: 'n4',
+        labels_json: JSON.stringify([{ id: 'l1', user_id: 'u1', name: 'Work' }]),
+      });
+
+      await migrateDatabase(db);
+
+      // The one well-formed label still lands; absent timestamps default to ''.
+      expect(await db.getAllAsync('SELECT id, name, created_at, updated_at FROM labels')).toEqual([
+        { id: 'l1', name: 'Work', created_at: '', updated_at: '' },
+      ]);
     });
 
     it('inserts nothing when there are no notes to backfill from', async () => {
-      const db = makeDb({
-        getAllAsync: jest.fn()
-          .mockResolvedValueOnce(ALL_NOTES_COLS)
-          .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS)
-          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration2 version probe
-          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration3 images_json probe
-          .mockResolvedValueOnce([]) // migration5 labels backfill: no notes
-          .mockResolvedValueOnce(SYNC_QUEUE_COLS_FULL)
-          .mockResolvedValueOnce(IMAGE_UPLOAD_COLS_FULL)
-          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL)
-          .mockResolvedValueOnce(DEAD_LETTER_COLS_FULL), // migration6 probes (issue #714)
-      });
-      await migrateDatabase(db as unknown as SQLiteDatabase);
+      const db = await preVersionedInstall();
 
-      const insertCalls = (db.runAsync.mock.calls as unknown[][]).filter(
-        (c) => String(c[0]).startsWith('INSERT OR IGNORE INTO labels'),
-      );
-      expect(insertCalls).toHaveLength(0);
+      await migrateDatabase(db);
+
+      expect(await db.getAllAsync('SELECT * FROM labels')).toEqual([]);
     });
   });
 });
