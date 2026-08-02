@@ -138,6 +138,43 @@ describe('useLabels write hooks', () => {
 
   // ── useCreateLabel ─────────────────────────────────────────────────────────
 
+  // The other tests here fix connectivity before mounting, so they only cover
+  // the value the hook was born with. These cover it flipping while the hook
+  // stays mounted — the case the mutation hooks' write gate has to survive.
+  describe('connectivity changes while mounted', () => {
+    it('takes the offline path when connectivity drops after mount', async () => {
+      mockUseNetworkStatus.mockReturnValue({ isConnected: true });
+
+      const { result, rerender } = renderHook(() => useCreateLabel(), { wrapper: createWrapper() });
+
+      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+      rerender(undefined);
+
+      await result.current.mutateAsync({ name: 'Home' });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(mockLabelsApi.createLabel).not.toHaveBeenCalled();
+      expect(await queuedOperations()).toEqual(['createLabel']);
+    });
+
+    it('takes the online path when connectivity returns after mount', async () => {
+      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+      const serverLabel = { id: 'srv1', user_id: 'u1', name: 'Work', created_at: '', updated_at: '' };
+      mockLabelsApi.createLabel.mockResolvedValueOnce(serverLabel as never);
+
+      const { result, rerender } = renderHook(() => useCreateLabel(), { wrapper: createWrapper() });
+
+      mockUseNetworkStatus.mockReturnValue({ isConnected: true });
+      rerender(undefined);
+
+      await result.current.mutateAsync({ name: 'Work' });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(mockLabelsApi.createLabel).toHaveBeenCalledWith('Work');
+      expect(await queuedOperations()).toEqual([]);
+    });
+  });
+
   describe('useCreateLabel', () => {
     it('creates a label via the API when online', async () => {
       const serverLabel = { id: 'srv1', user_id: 'u1', name: 'Work', created_at: '', updated_at: '' };

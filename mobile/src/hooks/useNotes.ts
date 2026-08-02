@@ -1,4 +1,3 @@
-import { useRef } from 'react';
 import { useMutation, useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
 import { useSQLiteContext } from 'expo-sqlite';
 import {
@@ -164,15 +163,12 @@ export function useCreateNote() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
-  isConnectedRef.current = isConnected;
   const { user } = useAuth();
 
   return useMutation({
     mutationFn: async (data: CreateNoteRequest): Promise<Note> => {
       assertSwitchWriteAllowed();
-      if (isOnlineWriteAllowed(isConnectedRef.current)) {
+      if (isOnlineWriteAllowed(isConnected)) {
         try {
           const note = await createNote(data);
           await saveNote(db, note);
@@ -281,9 +277,6 @@ export function useUpdateNote() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     onMutate: ({ id, data }: { id: string; data: UpdateNoteRequest }) => {
@@ -299,7 +292,7 @@ export function useUpdateNote() {
       const fields = data as { title?: string; content?: string };
       const touchesContent = fields.title !== undefined || fields.content !== undefined;
 
-      if (isOnlineWriteAllowed(isConnectedRef.current)) {
+      if (isOnlineWriteAllowed(isConnected)) {
         try {
           // Online: gate on the version we currently hold locally so the server
           // can reject a write that raced a concurrent edit on another device
@@ -418,9 +411,6 @@ export function useConvertNoteType() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     mutationFn: async (id: string): Promise<Note> => {
@@ -432,7 +422,7 @@ export function useConvertNoteType() {
       }
       const data = buildConvertNoteTypeRequest(existing);
 
-      if (isOnlineWriteAllowed(isConnectedRef.current)) {
+      if (isOnlineWriteAllowed(isConnected)) {
         try {
           const convertedNote = await convertNoteType(id, { ...data, base_version: existing.version });
           await saveNote(db, convertedNote);
@@ -478,9 +468,6 @@ export function useCreateNoteItem() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     mutationFn: async ({ noteId, item }: { noteId: string; item: CreateNoteItemRequest }): Promise<void> => {
@@ -502,7 +489,7 @@ export function useCreateNoteItem() {
         parent_id: itemWithId.parent_id ?? null,
         assigned_to: itemWithId.assigned_to ?? '',
       };
-      if (isOnlineWriteAllowed(isConnectedRef.current)) {
+      if (isOnlineWriteAllowed(isConnected)) {
         try {
           await createNoteItem(noteId, itemWithId);
           await createLocalItem(db, noteId, local);
@@ -531,14 +518,11 @@ export function useUpdateNoteItem() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     mutationFn: async ({ noteId, itemId, data }: { noteId: string; itemId: string; data: PatchNoteItemRequest }): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isOnlineWriteAllowed(isConnectedRef.current)) {
+      if (isOnlineWriteAllowed(isConnected)) {
         try {
           await updateNoteItem(noteId, itemId, data);
           await patchLocalItem(db, noteId, itemId, data);
@@ -567,14 +551,11 @@ export function useDeleteNoteItem() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     mutationFn: async ({ noteId, itemId }: { noteId: string; itemId: string }): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isOnlineWriteAllowed(isConnectedRef.current)) {
+      if (isOnlineWriteAllowed(isConnected)) {
         try {
           await deleteNoteItem(noteId, itemId);
           await deleteLocalItem(db, noteId, itemId);
@@ -602,14 +583,11 @@ export function useReorderNoteItems() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     mutationFn: async ({ noteId, itemIds }: { noteId: string; itemIds: string[] }): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isOnlineWriteAllowed(isConnectedRef.current)) {
+      if (isOnlineWriteAllowed(isConnected)) {
         try {
           await reorderNoteItems(noteId, itemIds);
           await reorderLocalItems(db, noteId, itemIds);
@@ -638,14 +616,11 @@ export function useDeleteNote() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     mutationFn: async (id: string): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isOnlineWriteAllowed(isConnectedRef.current)) {
+      if (isOnlineWriteAllowed(isConnected)) {
         try {
           await deleteNote(id);
           await markLocalNoteDeleted(db, id);
@@ -673,9 +648,6 @@ export function useDuplicateNote() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     mutationFn: async (id: string): Promise<Note> => {
@@ -685,7 +657,7 @@ export function useDuplicateNote() {
       // calling online against a note the server doesn't know yet (a 404 would
       // surface as an error instead of syncing).
       const pendingCreate = await isNotePendingCreate(db, id);
-      if (isOnlineWriteAllowed(isConnectedRef.current) && !pendingCreate) {
+      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
           const duplicatedNote = await duplicateNote(id);
           await saveNote(db, duplicatedNote);
@@ -765,14 +737,11 @@ export function useRestoreNote() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     mutationFn: async (id: string): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isOnlineWriteAllowed(isConnectedRef.current)) {
+      if (isOnlineWriteAllowed(isConnected)) {
         try {
           await restoreNote(id);
           await markLocalNoteRestored(db, id);
@@ -800,14 +769,11 @@ export function usePermanentDeleteNote() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     mutationFn: async (id: string): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isOnlineWriteAllowed(isConnectedRef.current)) {
+      if (isOnlineWriteAllowed(isConnected)) {
         try {
           await permanentDeleteNote(id);
           await permanentDeleteLocalNote(db, id);
@@ -835,14 +801,11 @@ export function useReorderNotes() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     mutationFn: async (noteIds: string[]): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isOnlineWriteAllowed(isConnectedRef.current)) {
+      if (isOnlineWriteAllowed(isConnected)) {
         try {
           await reorderNotes(noteIds);
           // Update positions in local DB to match the new order
@@ -885,9 +848,6 @@ export function useShareNote() {
   const db = useSQLiteContext();
   const queryClient = useQueryClient();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
-  isConnectedRef.current = isConnected;
   const { user: currentUser } = useAuth();
 
   return useMutation({
@@ -899,7 +859,7 @@ export function useShareNote() {
       // call would 404 (permanent) and surface as an error instead of syncing.
       const pendingCreate = await isNotePendingCreate(db, noteId);
 
-      if (isOnlineWriteAllowed(isConnectedRef.current) && !pendingCreate) {
+      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
           await shareNote(noteId, user.id);
           // Fetch updated note so shared_with_json in SQLite reflects server state
@@ -952,9 +912,6 @@ export function useUnshareNote() {
   const db = useSQLiteContext();
   const queryClient = useQueryClient();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     mutationFn: async ({ noteId, userId }: { noteId: string; userId: string }) => {
@@ -963,7 +920,7 @@ export function useUnshareNote() {
       // so queue rather than calling online against a note the server doesn't know yet.
       const pendingCreate = await isNotePendingCreate(db, noteId);
 
-      if (isOnlineWriteAllowed(isConnectedRef.current) && !pendingCreate) {
+      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
           await unshareNote(noteId, userId);
           try {
@@ -1001,9 +958,6 @@ export function useToggleNoteItemCompleted() {
   const db = useSQLiteContext();
   const queryClient = useQueryClient();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     onMutate: ({ noteId, itemId, completed }: { noteId: string; itemId: string; completed: boolean }) =>
@@ -1014,7 +968,7 @@ export function useToggleNoteItemCompleted() {
       ),
     mutationFn: async ({ noteId, itemId, completed }: { noteId: string; itemId: string; completed: boolean }): Promise<NoteItem[]> => {
       assertSwitchWriteAllowed();
-      if (isOnlineWriteAllowed(isConnectedRef.current)) {
+      if (isOnlineWriteAllowed(isConnected)) {
         try {
           const serverItems = await toggleItemCompleted(noteId, itemId, completed);
           for (const item of serverItems) {
@@ -1063,9 +1017,6 @@ export function useUncheckAllItems() {
   const db = useSQLiteContext();
   const queryClient = useQueryClient();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     onMutate: ({ noteId, itemIds }: { noteId: string; itemIds: string[] }) =>
@@ -1077,7 +1028,7 @@ export function useUncheckAllItems() {
     mutationFn: async ({ noteId, itemIds }: { noteId: string; itemIds: string[] }): Promise<NoteItem[]> => {
       assertSwitchWriteAllowed();
       if (itemIds.length === 0) return [];
-      if (isOnlineWriteAllowed(isConnectedRef.current)) {
+      if (isOnlineWriteAllowed(isConnected)) {
         try {
           const serverItems = await uncheckAllItems(noteId, itemIds);
           // The server returns the note's full, authoritative item list, so
@@ -1125,9 +1076,6 @@ export function useDeleteCompletedItems() {
   const db = useSQLiteContext();
   const queryClient = useQueryClient();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     onMutate: ({ noteId, itemIds }: { noteId: string; itemIds: string[] }) =>
@@ -1139,7 +1087,7 @@ export function useDeleteCompletedItems() {
     mutationFn: async ({ noteId, itemIds }: { noteId: string; itemIds: string[] }): Promise<NoteItem[]> => {
       assertSwitchWriteAllowed();
       if (itemIds.length === 0) return [];
-      if (isOnlineWriteAllowed(isConnectedRef.current)) {
+      if (isOnlineWriteAllowed(isConnected)) {
         try {
           const serverItems = await deleteCompletedItems(noteId, itemIds);
           // The server returns the note's full, authoritative remaining item

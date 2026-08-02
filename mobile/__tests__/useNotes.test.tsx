@@ -184,6 +184,53 @@ describe('useNotes hooks', () => {
     });
   });
 
+  // Every mutation hook here gates its network attempt on the connectivity read
+  // from the *current* render. The tests elsewhere in this file set the mock
+  // before mounting, so they only ever exercise the value the hook was born
+  // with; these two cover connectivity flipping while the hook stays mounted,
+  // which is what the gate actually has to survive on a device.
+  describe('connectivity changes while mounted', () => {
+    it('takes the offline path when connectivity drops after mount', async () => {
+      mockUseNetworkStatus.mockReturnValue({ isConnected: true });
+
+      const { result, rerender } = renderHook(() => useCreateNote(), { wrapper: createWrapper() });
+
+      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+      rerender(undefined);
+
+      await result.current.mutateAsync({ content: 'Written after going offline', note_type: 'text' });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(mockNotesApi.createNote).not.toHaveBeenCalled();
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ operation: 'create', endpoint: '/notes', method: 'POST' }),
+      );
+    });
+
+    it('takes the online path when connectivity returns after mount', async () => {
+      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+
+      const { result, rerender } = renderHook(() => useCreateNote(), { wrapper: createWrapper() });
+
+      const created = {
+        id: 'ServerNoteId00000000A', content: 'Written after reconnecting', note_type: 'text' as const,
+        user_id: 'test-user-id', color: '#ffffff', pinned: false, archived: false, trashed: false,
+        collapsed: false, position: 0, version: 1, created_at: '', updated_at: '',
+      };
+      mockNotesApi.createNote.mockResolvedValue(created as never);
+
+      mockUseNetworkStatus.mockReturnValue({ isConnected: true });
+      rerender(undefined);
+
+      await result.current.mutateAsync({ content: 'Written after reconnecting', note_type: 'text' });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(mockNotesApi.createNote).toHaveBeenCalled();
+      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
+    });
+  });
+
   describe('useCreateNote (offline)', () => {
     it('queues a create with a server-valid client id and flags it pending (#475)', async () => {
       mockUseNetworkStatus.mockReturnValue({ isConnected: false });
