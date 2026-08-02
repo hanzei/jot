@@ -602,6 +602,31 @@ Jot uses GitHub Actions for automated testing and Docker image publishing:
 - **Docker publishing**: Master branch builds are published to `hanzei/jot` on Docker Hub
 - **Multi-platform**: Images support both AMD64 and ARM64 architectures
 
+### Releasing
+
+Releases are cut by pushing a tag. Do **not** create them from the GitHub
+Releases page:
+
+```bash
+git checkout master && git pull
+git tag v0.8.8
+git push origin v0.8.8
+```
+
+The `Release` workflow takes it from there: GoReleaser creates the GitHub
+release as a draft, uploads the `jot` and `jotctl` archives for `linux/amd64`
+and `linux/arm64` plus `checksums.txt`, fills in the release notes using
+GitHub's own generator, and publishes it. The Docker jobs then build and push
+`hanzei/jot` for both architectures.
+
+Immutable releases are enabled on this repository, which is why the order
+matters: once a release is published its assets are frozen, and its tag can
+never be deleted, moved, or reused. Creating the release from the UI publishes
+it before the workflow starts, leaving the archives nowhere to go — the workflow
+fails fast if it finds a published release for the tag. A release that went out
+wrong cannot be re-cut under the same version; ship the next patch version
+instead.
+
 ## License
 
 MIT License — see [LICENSE](LICENSE) for details.
