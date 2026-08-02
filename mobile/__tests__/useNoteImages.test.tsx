@@ -129,6 +129,59 @@ describe('useNoteImages hooks', () => {
       'SELECT operation, endpoint, body FROM sync_queue ORDER BY id',
     );
 
+  // The other tests here fix connectivity before mounting, so they only cover
+  // the value a hook was born with. These cover it flipping while the hook stays
+  // mounted — the case the write gate has to survive on a device.
+  describe('connectivity changes while mounted', () => {
+    it('queues the upload when connectivity drops after mount', async () => {
+      mockUseNetworkStatus.mockReturnValue({ isConnected: true });
+
+      const { result, rerender } = renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
+
+      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+      rerender(undefined);
+
+      const file = { uri: 'file:///photo.png', name: 'photo.png', mimeType: 'image/png' };
+      await result.current.mutateAsync({ noteId: 'note-1', uploadId: 'upload-1', file });
+
+      expect(mockImagesApi.uploadNoteImage).not.toHaveBeenCalled();
+      expect(mockEnqueueImageUpload).toHaveBeenCalled();
+    });
+
+    it('uploads directly when connectivity returns after mount', async () => {
+      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+      const image = makeImage();
+      mockImagesApi.uploadNoteImage.mockResolvedValueOnce(image);
+
+      const { result, rerender } = renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
+
+      mockUseNetworkStatus.mockReturnValue({ isConnected: true });
+      rerender(undefined);
+
+      const file = { uri: 'file:///photo.png', name: 'photo.png', mimeType: 'image/png' };
+      const outcome = await result.current.mutateAsync({ noteId: 'note-1', uploadId: 'upload-1', file });
+
+      expect(outcome).toEqual({ status: 'uploaded', image });
+      expect(mockEnqueueImageUpload).not.toHaveBeenCalled();
+    });
+
+    it('queues the delete when connectivity drops after mount', async () => {
+      const image = makeImage();
+      await saveNote(db, makeTextNote({ id: 'note-1', images: [image] }));
+      mockUseNetworkStatus.mockReturnValue({ isConnected: true });
+
+      const { result, rerender } = renderHook(() => useDeleteNoteImage(), { wrapper: createWrapper() });
+
+      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+      rerender(undefined);
+
+      await result.current.mutateAsync({ noteId: 'note-1', imageId: image.id });
+
+      expect(mockImagesApi.deleteNoteImage).not.toHaveBeenCalled();
+      expect((await queuedOps()).map((op) => op.operation)).toContain('removeImage');
+    });
+  });
+
   describe('useUploadNoteImage', () => {
     it('uploads the file and patches the local image cache', async () => {
       const image = makeImage();
