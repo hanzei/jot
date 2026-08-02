@@ -511,9 +511,9 @@ Persistent data is mounted at `/data` (default `docker-compose.yml` maps host `.
 image side of the build.
 
 **Base image pinning policy:** Pin every image Jot *builds on* to a digest, keeping the
-readable tag in the reference: `FROM alpine:3.22@sha256:...`. This covers all three
+readable tag in the reference: `FROM alpine:3.24@sha256:...`. This covers all three
 `Dockerfile` stages and container images referenced from workflows (the Postgres service
-in `server-ci.yml`). A bare tag like `alpine:3.22` is republished on every patch release,
+in `server-ci.yml`). A bare tag like `alpine:3.24` is republished on every patch release,
 so two builds of the same commit can produce different images. The exception is
 `docker-compose.yml`'s `hanzei/jot:latest` — that is Jot's own published image and is
 meant to float, since pinning it would freeze users on one release.
