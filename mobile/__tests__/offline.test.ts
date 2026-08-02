@@ -9,7 +9,7 @@
 import { generateClientNoteId, isUnsyncedNoteId, removeLocalNotesNotIn, getLocalLabelCounts, saveNote, addLabelToLocalNote, removeLabelFromLocalNote, getLocalNotes } from '../src/db/noteQueries';
 import { drainQueue, getSyncQueueStats, isTransientHttpStatus, getDeadLetteredOperations, MAX_ENTRY_DRAIN_ATTEMPTS, PROCESSING_ERROR_STATUS } from '../src/db/syncQueue';
 import api from '../src/api/client';
-import { makeListNote, makeNoteItem, makeTextNote, remainingQueueIds, seedQueueEntry } from './helpers/fixtures';
+import { makeLabel, makeListNote, makeNoteItem, makeTextNote, remainingQueueIds, seedQueueEntry } from './helpers/fixtures';
 import type { TestDatabase } from './helpers/testDb';
 
 function makeAxiosError(status: number) {
@@ -619,7 +619,7 @@ describe('drainQueue', () => {
     const note = makeTextNote({
       id: 'n1',
       content: 'body',
-      labels: [{ id: 'srv_lbl', user_id: 'u1', name: 'Work', created_at: '', updated_at: '' }],
+      labels: [makeLabel({ id: 'srv_lbl', name: 'Work' })],
     });
     await seedQueueEntry(db, {
       operation: 'addLabelToNote',
@@ -801,7 +801,7 @@ describe('drainQueue', () => {
       makeTextNote({
         id: 'n1',
         content: 'body',
-        labels: [{ id: 'l1', user_id: 'u1', name: 'Work', created_at: '', updated_at: '' }],
+        labels: [makeLabel({ id: 'l1', name: 'Work' })],
       }),
     );
     await seedQueueEntry(db, {
@@ -919,8 +919,8 @@ describe('drainQueue', () => {
 // ── getLocalLabelCounts ────────────────────────────────────────────────────
 
 describe('getLocalLabelCounts', () => {
-  const home = { id: 'l1', user_id: 'u1', name: 'Home', created_at: '', updated_at: '' };
-  const work = { id: 'l2', user_id: 'u1', name: 'Work', created_at: '', updated_at: '' };
+  const home = makeLabel({ id: 'l1', name: 'Home' });
+  const work = makeLabel({ id: 'l2', name: 'Work' });
 
   it('counts active notes per label', async () => {
     await saveNote(db, makeTextNote({ id: 'n1', labels: [home, work] }));
@@ -954,8 +954,8 @@ describe('getLocalLabelCounts', () => {
 // ── removeLocalNotesNotIn label scope ───────────────────────────────────────
 
 describe('removeLocalNotesNotIn', () => {
-  const work = { id: 'l1', user_id: 'u1', name: 'Work', created_at: '', updated_at: '' };
-  const personal = { id: 'l2', user_id: 'u1', name: 'Personal', created_at: '', updated_at: '' };
+  const work = makeLabel({ id: 'l1', name: 'Work' });
+  const personal = makeLabel({ id: 'l2', name: 'Personal' });
 
   const remainingNoteIds = async (): Promise<string[]> => {
     const rows = await db.getAllAsync<{ id: string }>('SELECT id FROM notes ORDER BY id');
@@ -1078,7 +1078,7 @@ describe('removeLocalNotesNotIn with search', () => {
 // ── addLabelToLocalNote ──────────────────────────────────────────────────────
 
 describe('addLabelToLocalNote', () => {
-  const label = { id: 'l1', user_id: 'u1', name: 'Work', created_at: '', updated_at: '' };
+  const label = makeLabel({ id: 'l1', name: 'Work' });
 
   const labelsOf = async (noteId: string): Promise<unknown> => {
     const row = await db.getFirstAsync<{ labels_json: string }>(
@@ -1130,8 +1130,8 @@ describe('addLabelToLocalNote', () => {
 // ── removeLabelFromLocalNote ─────────────────────────────────────────────────
 
 describe('removeLabelFromLocalNote', () => {
-  const work = { id: 'l1', user_id: 'u1', name: 'Work', created_at: '', updated_at: '' };
-  const home = { id: 'l2', user_id: 'u1', name: 'Home', created_at: '', updated_at: '' };
+  const work = makeLabel({ id: 'l1', name: 'Work' });
+  const home = makeLabel({ id: 'l2', name: 'Home' });
 
   const labelsOf = async (noteId: string): Promise<unknown> => {
     const row = await db.getFirstAsync<{ labels_json: string }>(

@@ -12,7 +12,7 @@ import {
 } from '../src/db/noteQueries';
 import { getPendingLabelIds, saveServerLabels } from '../src/db/syncQueue';
 import type { Label } from '@jot/shared';
-import { seedQueueEntry } from './helpers/fixtures';
+import { makeLabel, seedQueueEntry } from './helpers/fixtures';
 import type { TestDatabase } from './helpers/testDb';
 
 jest.mock('../src/api/client', () => ({
@@ -26,9 +26,7 @@ beforeEach(() => {
   db = globalThis.testDb;
 });
 
-const label = (id: string, name: string): Label => ({
-  id, user_id: 'u1', name, created_at: 'c', updated_at: 'u',
-});
+const label = (id: string, name: string): Label => makeLabel({ id, name, created_at: 'c', updated_at: 'u' });
 
 const storedLabelIds = async (): Promise<string[]> => {
   const rows = await db.getAllAsync<{ id: string }>('SELECT id FROM labels ORDER BY id');

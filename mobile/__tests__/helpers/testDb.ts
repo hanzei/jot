@@ -84,6 +84,9 @@ function plainRow<T>(row: unknown): T {
 /** Every database handed out since the last reset, keyed by name. */
 const openDatabases = new Map<string, TestDatabase>();
 
+/** Close hooks for every database created since the last reset, so none leaks. */
+const openHandles = new Set<{ close: () => void }>();
+
 /**
  * Open a fresh in-memory database. The schema is *not* applied — callers that
  * want the current schema use `createMigratedTestDb()`, and migration tests
@@ -91,6 +94,11 @@ const openDatabases = new Map<string, TestDatabase>();
  */
 export function createTestDb(): TestDatabase {
   const raw = new DatabaseSync(':memory:');
+  // Tracked so `resetTestDatabases` can reclaim handles a test left open
+  // without double-closing one the test closed itself (which would throw).
+  // `closeAsync` itself stays faithful to expo-sqlite and does not guard.
+  let closed = false;
+  openHandles.add({ close: () => { if (!closed) { closed = true; raw.close(); } } });
 
   const db = {
     execAsync: jest.fn(async (source: string): Promise<void> => {
@@ -129,6 +137,7 @@ export function createTestDb(): TestDatabase {
     }),
 
     closeAsync: jest.fn(async (): Promise<void> => {
+      closed = true;
       raw.close();
     }),
   };
@@ -177,33 +186,50 @@ export async function backupTestDb(source: TestDatabase, dest: TestDatabase): Pr
   const destTables = await dest.getAllAsync<{ name: string }>(
     `SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`,
   );
-  for (const table of destTables) {
-    await dest.execAsync(`DROP TABLE IF EXISTS "${table.name}"`);
-  }
-
   const objects = await source.getAllAsync<{ type: string; name: string; sql: string }>(
     `SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'`,
   );
-  for (const object of objects) {
-    await dest.execAsync(object.sql);
-  }
-
-  for (const object of objects) {
-    if (object.type !== 'table') {
-      continue;
-    }
-    const rows = await source.getAllAsync<Record<string, unknown>>(`SELECT * FROM "${object.name}"`);
-    for (const row of rows) {
-      const columns = Object.keys(row);
-      await dest.runAsync(
-        `INSERT INTO "${object.name}" (${columns.map((c) => `"${c}"`).join(', ')})
-         VALUES (${columns.map(() => '?').join(', ')})`,
-        columns.map((c) => row[c] as never),
-      );
-    }
-  }
-
   const version = await source.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
+
+  await dest.execAsync('BEGIN');
+  try {
+    // Rows are copied in sqlite_master order, which is the source's creation
+    // order — a child table can therefore be filled before its parent. Deferring
+    // foreign keys to COMMIT makes the copy independent of that ordering while
+    // still rejecting a genuinely inconsistent source. The pragma only applies
+    // inside a transaction and resets when it ends.
+    await dest.execAsync('PRAGMA defer_foreign_keys = ON');
+
+    for (const table of destTables) {
+      await dest.execAsync(`DROP TABLE IF EXISTS "${table.name}"`);
+    }
+    for (const object of objects) {
+      await dest.execAsync(object.sql);
+    }
+
+    for (const object of objects) {
+      if (object.type !== 'table') {
+        continue;
+      }
+      const rows = await source.getAllAsync<Record<string, unknown>>(`SELECT * FROM "${object.name}"`);
+      for (const row of rows) {
+        const columns = Object.keys(row);
+        await dest.runAsync(
+          `INSERT INTO "${object.name}" (${columns.map((c) => `"${c}"`).join(', ')})
+           VALUES (${columns.map(() => '?').join(', ')})`,
+          columns.map((c) => row[c] as never),
+        );
+      }
+    }
+
+    await dest.execAsync('COMMIT');
+  } catch (error) {
+    // Leave the destination as it was rather than half-copied.
+    await dest.execAsync('ROLLBACK');
+    throw error;
+  }
+
+  // Outside the transaction: PRAGMA user_version is not transactional.
   await dest.runAsync(`PRAGMA user_version = ${version?.user_version ?? 0}`);
 }
 
@@ -213,6 +239,13 @@ export async function backupTestDb(source: TestDatabase, dest: TestDatabase): Pr
  * state leaks between tests.
  */
 export async function resetTestDatabases(): Promise<void> {
+  // Reclaim every handle from the previous test, including the default one.
+  // Each hook is a no-op if the test already closed that database itself.
+  for (const handle of openHandles) {
+    handle.close();
+  }
+  openHandles.clear();
   openDatabases.clear();
+  defaultDb = null;
   defaultDb = await createMigratedTestDb();
 }

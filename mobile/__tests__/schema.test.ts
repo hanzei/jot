@@ -1,5 +1,5 @@
 import { migrateDatabase, MIGRATIONS } from '../src/db/schema';
-import { createTestDb, type TestDatabase } from './helpers/testDb';
+import { createMigratedTestDb, createTestDb, type TestDatabase } from './helpers/testDb';
 
 /**
  * These run against a real SQLite engine (see `helpers/testDb.ts`), so a
@@ -42,11 +42,7 @@ async function indexNames(db: TestDatabase): Promise<string[]> {
   return rows.map((r) => r.name);
 }
 
-async function freshlyMigratedDb(): Promise<TestDatabase> {
-  const db = createTestDb();
-  await migrateDatabase(db);
-  return db;
-}
+const freshlyMigratedDb = createMigratedTestDb;
 
 /**
  * The schema as it stood before `user_version` tracking existed: no

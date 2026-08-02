@@ -172,11 +172,22 @@ jest.mock('expo-sqlite', () => {
   const { getDefaultTestDb, openNamedTestDb, backupTestDb } = require('./__tests__/helpers/testDb');
   return {
     SQLiteProvider: ({ children, onInit }) => {
-      // Run onInit asynchronously to simulate DB initialization
+      // Run onInit asynchronously to simulate DB initialization.
+      // onInit now runs real migrations against a real engine, so it can
+      // genuinely reject. Render the children either way — leaving `ready`
+      // false would hang the test on a missing element instead of failing on
+      // its actual assertion — and surface the reason rather than dropping it
+      // as an unhandled rejection.
       const React = require('react');
       const [ready, setReady] = React.useState(false);
       React.useEffect(() => {
-        Promise.resolve(onInit?.(getDefaultTestDb())).then(() => setReady(true));
+        Promise.resolve(onInit?.(getDefaultTestDb())).then(
+          () => setReady(true),
+          (err) => {
+            console.error('SQLiteProvider onInit failed:', err);
+            setReady(true);
+          },
+        );
       }, []); // eslint-disable-line react-hooks/exhaustive-deps
       return ready ? children : null;
     },

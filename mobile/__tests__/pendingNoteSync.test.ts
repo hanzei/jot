@@ -178,7 +178,10 @@ describe('saveServerNote / saveServerNotes', () => {
 
     // The protected set is the pending-queue read plus the failed-notes read —
     // two reads total per batch, not one per note (which would be N+1).
-    expect(db.getAllAsync).toHaveBeenCalledTimes(2);
+    const protectedSetReads = db.getAllAsync.mock.calls.filter((c) =>
+      /FROM sync_queue|FROM notes WHERE sync_state/.test(String(c[0])),
+    );
+    expect(protectedSetReads).toHaveLength(2);
     expect(await localNoteIds()).toEqual(['keep']);
   });
 

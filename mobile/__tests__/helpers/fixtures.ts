@@ -3,7 +3,7 @@
  * Every field the schema requires has a default, so a test only spells out the
  * columns its assertion actually depends on.
  */
-import type { ListNote, NoteItem, TextNote } from '@jot/shared';
+import type { Label, ListNote, NoteItem, TextNote } from '@jot/shared';
 import type { EnqueueParams } from '../../src/db/syncQueue';
 import type { TestDatabase } from './testDb';
 
@@ -28,6 +28,10 @@ export function makeTextNote(overrides: Partial<TextNote> & { id: string }): Tex
 
 export function makeListNote(overrides: Partial<ListNote> & { id: string }): ListNote {
   return { ...baseNote, note_type: 'list', title: '', checked_items_collapsed: false, ...overrides };
+}
+
+export function makeLabel(overrides: Partial<Label> & { id: string; name: string }): Label {
+  return { user_id: 'u1', created_at: '', updated_at: '', ...overrides };
 }
 
 export function makeNoteItem(overrides: Partial<NoteItem> & { id: string; note_id: string }): NoteItem {

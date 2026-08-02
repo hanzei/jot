@@ -6,7 +6,7 @@ import { useSSE } from '../src/hooks/useSSE';
 import { SSEConnectionManager } from '../src/api/events';
 import type { SSEEvent, User } from '@jot/shared';
 import type { TestDatabase } from './helpers/testDb';
-import { makeListNote, makeTextNote } from './helpers/fixtures';
+import { makeLabel, makeListNote, makeTextNote } from './helpers/fixtures';
 import { saveNote } from '../src/db/noteQueries';
 import {
   labelCountsQueryKey,
@@ -87,6 +87,14 @@ let db: TestDatabase;
  * Give a note a queued sync op, which is what makes `getProtectedNoteIds`
  * report it — the real mechanism behind the #487/#492 guards below.
  */
+const storedImages = async (noteId: string): Promise<unknown[]> => {
+  const row = await db.getFirstAsync<{ images_json: string }>(
+    'SELECT images_json FROM notes WHERE id = ?',
+    [noteId],
+  );
+  return row ? (JSON.parse(row.images_json) as unknown[]) : [];
+};
+
 const protectNote = (noteId: string) =>
   db.runAsync(
     `INSERT INTO sync_queue (operation, endpoint, method, body, created_at)
@@ -278,7 +286,7 @@ describe('useSSE', () => {
     renderHook(() => useSSE(), { wrapper: Wrapper });
     invalidateSpy.mockClear();
 
-    const label = { id: 'label-1', user_id: 'other-user', name: 'Urgent', created_at: '', updated_at: '' };
+    const label = makeLabel({ id: 'label-1', user_id: 'other-user', name: 'Urgent' });
     await act(async () => {
       capturedCallback?.({
         type: 'labels_changed',
@@ -370,9 +378,7 @@ describe('useSSE', () => {
     expect(updater([])).toEqual([image]);
     expect(updater([image])).toEqual([image]);
     // The image really landed on the stored note.
-    expect(await db.getFirstAsync('SELECT images_json FROM notes WHERE id = ?', ['note-123'])).toEqual({
-      images_json: JSON.stringify([image]),
-    });
+    expect(await storedImages('note-123')).toEqual([image]);
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: noteLocalQueryKey('note-123') });
   });
@@ -398,9 +404,7 @@ describe('useSSE', () => {
     const updater = mockPatchLocalNoteImages.mock.calls[0][2] as (images: { id: string }[]) => { id: string }[];
     expect(updater([{ id: 'img-1' }, { id: 'img-2' }])).toEqual([{ id: 'img-2' }]);
     // The removal really landed on the stored note.
-    expect(await db.getFirstAsync('SELECT images_json FROM notes WHERE id = ?', ['note-123'])).toEqual({
-      images_json: '[]',
-    });
+    expect(await storedImages('note-123')).toEqual([]);
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: noteLocalQueryKey('note-123') });
   });

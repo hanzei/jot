@@ -388,10 +388,10 @@ describe('drainQueue dead-letter persistence', () => {
 // ── getDeadLetteredOperations ───────────────────────────────────────────────
 
 describe('getDeadLetteredOperations', () => {
-  const insertDeadLetter = (endpoint: string, columns = '', values = '') =>
+  const insertDeadLetter = (endpoint: string) =>
     db.runAsync(
-      `INSERT INTO dead_letter (operation, endpoint, method, body, status, note_id, created_at, failed_at${columns})
-       VALUES ('update', ?, 'PATCH', NULL, 400, 'n1', '', ''${values})`,
+      `INSERT INTO dead_letter (operation, endpoint, method, body, status, note_id, created_at, failed_at)
+       VALUES ('update', ?, 'PATCH', NULL, 400, 'n1', '', '')`,
       [endpoint],
     );
 
