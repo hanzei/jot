@@ -274,6 +274,7 @@
     "colorGray": "Gris",
     "formatBold": "Gras",
     "formatItalic": "Italique",
+    "formatStrikethrough": "Barré",
     "formatHeading": "Titre",
     "formatBulletList": "Liste à puces",
     "formatChecklist": "Liste de tâches",

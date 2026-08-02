@@ -303,6 +303,7 @@
     "colorGray": "Grigio",
     "formatBold": "Grassetto",
     "formatItalic": "Corsivo",
+    "formatStrikethrough": "Barrato",
     "formatHeading": "Intestazione",
     "formatBulletList": "Elenco puntato",
     "formatChecklist": "Elenco di controllo",

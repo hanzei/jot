@@ -303,6 +303,7 @@
     "colorGray": "Cinza",
     "formatBold": "Negrito",
     "formatItalic": "Itálico",
+    "formatStrikethrough": "Tachado",
     "formatHeading": "Título",
     "formatBulletList": "Lista de marcadores",
     "formatChecklist": "Lista de tarefas",

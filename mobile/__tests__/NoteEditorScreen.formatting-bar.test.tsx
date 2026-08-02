@@ -244,6 +244,20 @@ describe('NoteEditorScreen formatting bar', () => {
     expect(input().props.value).toBe('make this italic');
   });
 
+  it('strikes through the selection and clears it on a second press', async () => {
+    const { input, type, placeCaret, press } = renderEditor();
+
+    await type('buy milk');
+    await placeCaret(4, 8); // "milk"
+
+    await press('format-strikethrough-btn');
+    expect(input().props.value).toBe('buy ~~milk~~');
+    expect(input().props.selection).toEqual({ start: 6, end: 10 });
+
+    await press('format-strikethrough-btn');
+    expect(input().props.value).toBe('buy milk');
+  });
+
   it('headings the caret line rather than the last line of the note', async () => {
     const { input, type, placeCaret, press } = renderEditor();
 
@@ -415,7 +429,7 @@ describe('NoteEditorScreen formatting bar', () => {
 
     // A focusable button takes input focus from the content input on tap, which
     // hides the keyboard and so tears down the editor mid-edit.
-    for (const id of ['format-bold-btn', 'format-italic-btn', 'format-heading-btn', 'format-bullet-btn', 'format-checkbox-btn']) {
+    for (const id of ['format-bold-btn', 'format-italic-btn', 'format-strikethrough-btn', 'format-heading-btn', 'format-bullet-btn', 'format-checkbox-btn']) {
       expect(getByTestId(id).props.focusable).toBe(false);
     }
   });

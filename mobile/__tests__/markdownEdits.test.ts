@@ -38,6 +38,7 @@ function show(state: EditorText): string {
 
 const bold = (state: EditorText) => toggleInlineMarker(state, '**');
 const italic = (state: EditorText) => toggleInlineMarker(state, '*');
+const strike = (state: EditorText) => toggleInlineMarker(state, '~~');
 
 describe('markdownEdits / toggleInlineMarker', () => {
   it('wraps the selection and keeps it over the same text', () => {
@@ -75,6 +76,19 @@ describe('markdownEdits / toggleInlineMarker', () => {
     const once = bold(at('[word]'));
     expect(once.text).toBe('**word**');
     expect(bold(once).text).toBe('word');
+  });
+
+  it('wraps and unwraps strikethrough', () => {
+    expect(show(strike(at('cross [this] out')))).toBe('cross ~~[this]~~ out');
+    expect(show(strike(at('cross ~~[this]~~ out')))).toBe('cross [this] out');
+    expect(show(strike(at('done|')))).toBe('done~~|~~');
+  });
+
+  it('nests strikethrough and bold without disturbing each other', () => {
+    const struck = strike(at('[word]'));
+    expect(struck.text).toBe('~~word~~');
+    // The inner selection is still just "word", so bold wraps inside.
+    expect(bold(struck).text).toBe('~~**word**~~');
   });
 
   it('handles a reversed selection', () => {

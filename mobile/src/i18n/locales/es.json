@@ -303,6 +303,7 @@
     "colorGray": "Gris",
     "formatBold": "Negrita",
     "formatItalic": "Cursiva",
+    "formatStrikethrough": "Tachado",
     "formatHeading": "Encabezado",
     "formatBulletList": "Lista de viñetas",
     "formatChecklist": "Lista de tareas",

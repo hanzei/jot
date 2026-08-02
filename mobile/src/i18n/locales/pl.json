@@ -274,6 +274,7 @@
     "colorGray": "Szary",
     "formatBold": "Pogrubienie",
     "formatItalic": "Kursywa",
+    "formatStrikethrough": "Przekreślenie",
     "formatHeading": "Nagłówek",
     "formatBulletList": "Lista punktowana",
     "formatChecklist": "Lista kontrolna",

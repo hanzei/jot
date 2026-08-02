@@ -1,13 +1,14 @@
 import React from 'react';
 import { View, TouchableOpacity } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { Bold, Heading, Italic, List, ListTodo } from 'lucide-react-native';
+import { Bold, Heading, Italic, List, ListTodo, Strikethrough } from 'lucide-react-native';
 import { useTheme } from '../../theme/ThemeContext';
 import { styles } from './styles';
 
 interface MarkdownToolbarProps {
   onBold: () => void;
   onItalic: () => void;
+  onStrikethrough: () => void;
   onHeading: () => void;
   onBullet: () => void;
   onCheckbox: () => void;
@@ -31,7 +32,7 @@ const ICON_SIZE = 20;
  * Bold would tear down the very input it was meant to edit. TalkBack is
  * unaffected; accessibility focus is separate from input focus.
  */
-export function MarkdownToolbarContent({ onBold, onItalic, onHeading, onBullet, onCheckbox }: MarkdownToolbarProps) {
+export function MarkdownToolbarContent({ onBold, onItalic, onStrikethrough, onHeading, onBullet, onCheckbox }: MarkdownToolbarProps) {
   const { t } = useTranslation();
   const { colors } = useTheme();
   return (
@@ -57,6 +58,17 @@ export function MarkdownToolbarContent({ onBold, onItalic, onHeading, onBullet, 
         testID="format-italic-btn"
       >
         <Italic size={ICON_SIZE} color={colors.text} />
+      </TouchableOpacity>
+      <TouchableOpacity
+        onPress={onStrikethrough}
+        style={styles.fmtBtn}
+        hitSlop={HIT_SLOP}
+        focusable={false}
+        accessibilityRole="button"
+        accessibilityLabel={t('note.formatStrikethrough')}
+        testID="format-strikethrough-btn"
+      >
+        <Strikethrough size={ICON_SIZE} color={colors.text} />
       </TouchableOpacity>
       <View style={[styles.fmtSep, { backgroundColor: colors.border }]} />
       {/* Cycles ## -> ### -> none, so the icon deliberately names no level. */}

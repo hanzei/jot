@@ -274,6 +274,7 @@
     "colorGray": "Grau",
     "formatBold": "Fett",
     "formatItalic": "Kursiv",
+    "formatStrikethrough": "Durchgestrichen",
     "formatHeading": "Überschrift",
     "formatBulletList": "Aufzählung",
     "formatChecklist": "Checkliste",

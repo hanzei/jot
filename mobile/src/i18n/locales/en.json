@@ -303,6 +303,7 @@
     "colorGray": "Gray",
     "formatBold": "Bold",
     "formatItalic": "Italic",
+    "formatStrikethrough": "Strikethrough",
     "formatHeading": "Heading",
     "formatBulletList": "Bullet list",
     "formatChecklist": "Checklist",

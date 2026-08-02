@@ -2505,6 +2505,10 @@ export default function NoteEditorScreen() {
     applyToolbarEdit((state) => toggleInlineMarker(state, '*'));
   }, [applyToolbarEdit]);
 
+  const toggleMobileStrikethrough = useCallback(() => {
+    applyToolbarEdit((state) => toggleInlineMarker(state, '~~'));
+  }, [applyToolbarEdit]);
+
   const toggleMobileHeading = useCallback(() => {
     applyToolbarEdit(cycleHeading);
   }, [applyToolbarEdit]);
@@ -2721,6 +2725,7 @@ export default function NoteEditorScreen() {
                 <MarkdownToolbarContent
                   onBold={toggleMobileBold}
                   onItalic={toggleMobileItalic}
+                  onStrikethrough={toggleMobileStrikethrough}
                   onHeading={toggleMobileHeading}
                   onBullet={toggleMobileBullet}
                   onCheckbox={toggleMobileCheckbox}
@@ -2842,6 +2847,7 @@ export default function NoteEditorScreen() {
         <MarkdownToolbarContent
           onBold={toggleMobileBold}
           onItalic={toggleMobileItalic}
+          onStrikethrough={toggleMobileStrikethrough}
           onHeading={toggleMobileHeading}
           onBullet={toggleMobileBullet}
           onCheckbox={toggleMobileCheckbox}

@@ -303,6 +303,7 @@
     "colorGray": "Grijs",
     "formatBold": "Vet",
     "formatItalic": "Cursief",
+    "formatStrikethrough": "Doorhalen",
     "formatHeading": "Kop",
     "formatBulletList": "Opsommingsteken",
     "formatChecklist": "Checklist",
