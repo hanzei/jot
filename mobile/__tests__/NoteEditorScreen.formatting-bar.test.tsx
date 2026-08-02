@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Platform } from 'react-native';
+import { Alert, Keyboard, Platform } from 'react-native';
 import { render, fireEvent, act } from '@testing-library/react-native';
 import { VALIDATION } from '@jot/shared';
 import NoteEditorScreen from '../src/screens/NoteEditorScreen';
@@ -152,14 +152,27 @@ function makeNote(overrides: Record<string, unknown> = {}) {
 
 describe('NoteEditorScreen formatting bar', () => {
   const originalPlatform = Platform.OS;
+  /** Every keyboard listener the screen (and its hooks) registered, by event. */
+  const keyboardListeners = new Map<string, Array<() => void>>();
+
+  const emitKeyboardEvent = async (event: string) => {
+    await act(async () => {
+      (keyboardListeners.get(event) ?? []).forEach((listener) => listener());
+    });
+  };
 
   beforeEach(() => {
     jest.clearAllMocks();
+    keyboardListeners.clear();
     mockNavigationAddListener.mockReturnValue(jest.fn());
     // A brand-new text note opens straight into the editable content input.
     mockUseRoute.mockReturnValue({ params: { noteId: null } });
     mockUseOfflineNote.mockReturnValue({ data: null });
     jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
+    jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, listener: () => void) => {
+      keyboardListeners.set(event, [...(keyboardListeners.get(event) ?? []), listener]);
+      return { remove: jest.fn() };
+    }) as never);
   });
 
   afterEach(() => {
@@ -381,6 +394,30 @@ describe('NoteEditorScreen formatting bar', () => {
 
     expect(getByTestId('format-bold-btn')).toBeTruthy();
     expect(getByTestId('format-checkbox-btn')).toBeTruthy();
+  });
+
+  it('drops the bar when the keyboard closes but keeps the action bar', async () => {
+    Platform.OS = 'android';
+    const { getByTestId, queryByTestId } = renderEditor();
+    expect(getByTestId('format-bold-btn')).toBeTruthy();
+
+    await emitKeyboardEvent('keyboardDidHide');
+
+    // The formatting bar belongs to the keyboard; the action bar does not.
+    expect(queryByTestId('format-bold-btn')).toBeNull();
+    expect(getByTestId('toolbar-color-btn')).toBeTruthy();
+    expect(getByTestId('content-preview')).toBeTruthy();
+  });
+
+  it('keeps the buttons out of the Android focus order', async () => {
+    Platform.OS = 'android';
+    const { getByTestId } = renderEditor();
+
+    // A focusable button takes input focus from the content input on tap, which
+    // hides the keyboard and so tears down the editor mid-edit.
+    for (const id of ['format-bold-btn', 'format-italic-btn', 'format-heading-btn', 'format-bullet-btn', 'format-checkbox-btn']) {
+      expect(getByTestId(id).props.focusable).toBe(false);
+    }
   });
 
   it('hides the bar when the note is not being edited', () => {

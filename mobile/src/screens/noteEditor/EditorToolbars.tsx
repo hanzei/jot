@@ -24,6 +24,12 @@ const ICON_SIZE = 20;
  * Icons rather than letter glyphs: it matches the action bar below, and it
  * keeps the buttons free of text that would otherwise need translating in
  * eight locales. The accessibility labels carry the meaning.
+ *
+ * Every button is focusable={false}: on Android a focusable view takes input
+ * focus from the content input when tapped, which hides the keyboard, and the
+ * editor treats a hidden keyboard as "done editing" — so a single press on
+ * Bold would tear down the very input it was meant to edit. TalkBack is
+ * unaffected; accessibility focus is separate from input focus.
  */
 export function MarkdownToolbarContent({ onBold, onItalic, onHeading, onBullet, onCheckbox }: MarkdownToolbarProps) {
   const { t } = useTranslation();
@@ -34,6 +40,7 @@ export function MarkdownToolbarContent({ onBold, onItalic, onHeading, onBullet, 
         onPress={onBold}
         style={styles.fmtBtn}
         hitSlop={HIT_SLOP}
+        focusable={false}
         accessibilityRole="button"
         accessibilityLabel={t('note.formatBold')}
         testID="format-bold-btn"
@@ -44,6 +51,7 @@ export function MarkdownToolbarContent({ onBold, onItalic, onHeading, onBullet, 
         onPress={onItalic}
         style={styles.fmtBtn}
         hitSlop={HIT_SLOP}
+        focusable={false}
         accessibilityRole="button"
         accessibilityLabel={t('note.formatItalic')}
         testID="format-italic-btn"
@@ -56,6 +64,7 @@ export function MarkdownToolbarContent({ onBold, onItalic, onHeading, onBullet, 
         onPress={onHeading}
         style={styles.fmtBtn}
         hitSlop={HIT_SLOP}
+        focusable={false}
         accessibilityRole="button"
         accessibilityLabel={t('note.formatHeading')}
         testID="format-heading-btn"
@@ -66,6 +75,7 @@ export function MarkdownToolbarContent({ onBold, onItalic, onHeading, onBullet, 
         onPress={onBullet}
         style={styles.fmtBtn}
         hitSlop={HIT_SLOP}
+        focusable={false}
         accessibilityRole="button"
         accessibilityLabel={t('note.formatBulletList')}
         testID="format-bullet-btn"
@@ -76,6 +86,7 @@ export function MarkdownToolbarContent({ onBold, onItalic, onHeading, onBullet, 
         onPress={onCheckbox}
         style={styles.fmtBtn}
         hitSlop={HIT_SLOP}
+        focusable={false}
         accessibilityRole="button"
         accessibilityLabel={t('note.formatChecklist')}
         testID="format-checkbox-btn"

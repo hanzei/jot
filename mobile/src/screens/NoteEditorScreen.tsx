@@ -2479,7 +2479,9 @@ export default function NoteEditorScreen() {
       setContent(next.text);
       markDirtyAndScheduleUpdate();
     }
-    contentInputRef.current?.focus();
+    // Normally still focused (the bar's buttons are focusable={false}), and
+    // re-focusing a focused input would issue a redundant show-keyboard command.
+    if (!contentInputRef.current?.isFocused()) contentInputRef.current?.focus();
   }, [markDirtyAndScheduleUpdate, showToast, t]);
 
   const handleContentSelectionChange = useCallback(
