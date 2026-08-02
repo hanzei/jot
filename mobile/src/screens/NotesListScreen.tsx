@@ -79,7 +79,12 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const [sortMode, setSortMode] = useState<NoteSort>(() => normalizeNoteSort(settings?.note_sort));
   const [isSortControlsOpen, setIsSortControlsOpen] = useState(false);
   const [layout, setLayout] = useState<DashboardLayout>(DEFAULT_DASHBOARD_LAYOUT);
-  const [sortWarningDismissed, setSortWarningDismissed] = useState<boolean | null>(null);
+  // Recorded against the sort mode it was looked up for, so switching sort
+  // reads as "not yet known" (null) during render rather than briefly showing
+  // the previous mode's answer until an effect clears it.
+  const [dismissedForSort, setDismissedForSort] = useState<{ sort: NoteSort; dismissed: boolean } | null>(null);
+  const sortWarningDismissed =
+    dismissedForSort !== null && dismissedForSort.sort === sortMode ? dismissedForSort.dismissed : null;
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sortRequestIdRef = useRef(0);
   const trashCountRef = useRef(0);
@@ -235,10 +240,8 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
   useEffect(() => {
     let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
-    setSortWarningDismissed(null);
     void isSortWarningDismissed(sortMode).then((dismissed) => {
-      if (!cancelled) setSortWarningDismissed(dismissed);
+      if (!cancelled) setDismissedForSort({ sort: sortMode, dismissed });
     });
     return () => {
       cancelled = true;
@@ -247,7 +250,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
   const handleDismissSortWarning = useCallback(() => {
     animateListReflow();
-    setSortWarningDismissed(true);
+    setDismissedForSort({ sort: sortMode, dismissed: true });
     void dismissSortWarning(sortMode);
   }, [sortMode]);
 

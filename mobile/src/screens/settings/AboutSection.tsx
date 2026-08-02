@@ -37,10 +37,14 @@ export default function AboutSection() {
   const aboutRequestSeqRef = useRef(0);
 
   const [aboutInfo, setAboutInfo] = useState<AboutInfo | null>(null);
-  const [aboutLoading, setAboutLoading] = useState(false);
   const [aboutError, setAboutError] = useState('');
   const [aboutExpanded, setAboutExpanded] = useState(false);
   const [activeServerUrl, setActiveServerUrl] = useState<string | null>(null);
+
+  // A request is in flight exactly while the section is open and neither a
+  // result nor an error has landed — the same condition the fetch effect below
+  // fires on, so it is derived rather than tracked as its own state.
+  const aboutLoading = aboutExpanded && !aboutInfo && !aboutError;
 
   useEffect(() => {
     let mounted = true;
@@ -56,7 +60,6 @@ export default function AboutSection() {
           setActiveServerUrl(nextServerUrl);
           setAboutInfo(null);
           setAboutError('');
-          setAboutLoading(false);
         }
       } catch {
         if (!mounted) return;
@@ -65,7 +68,6 @@ export default function AboutSection() {
         setActiveServerUrl(null);
         setAboutInfo(null);
         setAboutError('');
-        setAboutLoading(false);
       }
     };
 
@@ -84,8 +86,6 @@ export default function AboutSection() {
     if (aboutExpanded && !aboutInfo && !aboutError) {
       let cancelled = false;
       const requestId = ++aboutRequestSeqRef.current;
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
-      setAboutLoading(true);
       getAboutInfo()
         .then((nextAboutInfo) => {
           if (!cancelled && aboutRequestSeqRef.current === requestId) {
@@ -95,11 +95,6 @@ export default function AboutSection() {
         .catch(() => {
           if (!cancelled && aboutRequestSeqRef.current === requestId) {
             setAboutError('about.failedLoad');
-          }
-        })
-        .finally(() => {
-          if (!cancelled && aboutRequestSeqRef.current === requestId) {
-            setAboutLoading(false);
           }
         });
       return () => {

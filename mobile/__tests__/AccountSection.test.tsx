@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import AccountSection from '../src/screens/settings/AccountSection';
 import { useAuth } from '../src/store/AuthContext';
 import { updateMe } from '../src/api/settings';
@@ -155,5 +155,26 @@ describe('AccountSection', () => {
     expect(getByText(i18n.t('settings.saveChanges'))).toBeTruthy();
     // Rolled back to the original profile since nothing was queued for replay.
     expect(setUser).toHaveBeenLastCalledWith(expect.objectContaining({ first_name: 'Alice' }));
+  });
+
+  it('re-translates the success message when the language changes', async () => {
+    mockAuth(true);
+
+    const { getByTestId, getByText } = render(<AccountSection />);
+    fireEvent.changeText(getByTestId('settings-first-name'), 'Renamed');
+    fireEvent.press(getByTestId('settings-save-profile'));
+
+    await waitFor(() => {
+      expect(getByText(i18n.t('settings.profileUpdated'))).toBeTruthy();
+    });
+
+    await act(async () => {
+      await i18n.changeLanguage('de');
+    });
+
+    // The message is held as a translation key, so a language switch re-renders
+    // it in the new language. It used to be stored pre-translated, which forced
+    // an effect to clear it here rather than leave a stale English string.
+    expect(getByText(i18n.t('settings.profileUpdated', { lng: 'de' }))).toBeTruthy();
   });
 });

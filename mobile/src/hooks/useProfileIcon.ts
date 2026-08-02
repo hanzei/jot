@@ -10,11 +10,15 @@ export function useProfileIcon(
   iconVersion: string | undefined,
   networkUrl: string,
 ): string | null {
-  const [localUri, setLocalUri] = useState<string | null>(null);
+  // The resolved URI is stored with the inputs it was resolved for, so a URI
+  // left over from a previous icon is discarded during render. Clearing it in
+  // the effect instead would paint the old icon for one frame after the inputs
+  // change.
+  const iconKey = `${userId ?? ''} ${iconVersion ?? ''} ${networkUrl}`;
+  const [resolved, setResolved] = useState<{ key: string; uri: string } | null>(null);
+  const localUri = resolved !== null && resolved.key === iconKey ? resolved.uri : null;
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
-    setLocalUri(null);
     if (!hasProfileIcon || !userId || !iconVersion || !networkUrl) return;
 
     let cancelled = false;
@@ -23,13 +27,13 @@ export function useProfileIcon(
       const cached = await getCachedIconUri(userId!, iconVersion!);
       if (cancelled) return;
       if (cached) {
-        setLocalUri(cached);
+        setResolved({ key: iconKey, uri: cached });
         return;
       }
       // Cache miss — display network URL, download in background.
       const downloaded = await downloadAndCacheIcon(userId!, iconVersion!, networkUrl);
       if (!cancelled && downloaded) {
-        setLocalUri(downloaded);
+        setResolved({ key: iconKey, uri: downloaded });
       }
     }
 
@@ -37,7 +41,7 @@ export function useProfileIcon(
     return () => {
       cancelled = true;
     };
-  }, [userId, hasProfileIcon, iconVersion, networkUrl]);
+  }, [userId, hasProfileIcon, iconVersion, networkUrl, iconKey]);
 
   return localUri;
 }

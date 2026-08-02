@@ -32,20 +32,24 @@ const SSEContext = createContext<SSEContextValue>({
 export function SSEProvider({ children }: { children: React.ReactNode }) {
   const listenersRef = useRef<Set<(event: SSEEvent) => void>>(new Set());
   const [sseStatus, setSseStatus] = useState<SSEStatus>('connecting');
-  const [sseReconnecting, setSseReconnecting] = useState(false);
+  const [bannerDelayElapsed, setBannerDelayElapsed] = useState(false);
 
   // Only a genuine reconnect (a connection attempt that failed and is retrying)
   // can surface the banner — an in-progress initial connect never does — and
   // even then only once it outlasts the delay, so a quick self-healing retry
-  // stays silent.
+  // stays silent. Leaving 'reconnecting' therefore hides the banner by itself,
+  // without a second piece of state to keep in step.
+  const sseReconnecting = sseStatus === 'reconnecting' && bannerDelayElapsed;
+
   useEffect(() => {
-    if (sseStatus !== 'reconnecting') {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
-      setSseReconnecting(false);
-      return;
-    }
-    const timer = setTimeout(() => setSseReconnecting(true), SSE_BANNER_DELAY_MS);
-    return () => clearTimeout(timer);
+    if (sseStatus !== 'reconnecting') return;
+    const timer = setTimeout(() => setBannerDelayElapsed(true), SSE_BANNER_DELAY_MS);
+    return () => {
+      clearTimeout(timer);
+      // Re-arm the delay so the next reconnect waits it out again instead of
+      // showing the banner immediately.
+      setBannerDelayElapsed(false);
+    };
   }, [sseStatus]);
 
   const handleNoteUpdated: SSENotificationCallback = useCallback((event) => {

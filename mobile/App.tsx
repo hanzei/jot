@@ -29,6 +29,7 @@ import {
   subscribeToClientActiveServerChanges,
 } from './src/api/client';
 import { getDatabaseNameForServer, initializeServerDatabase } from './src/db/serverDatabase';
+import { useDbInitError } from './src/hooks/useDbInitError';
 import { ShareIntentProvider } from 'expo-share-intent';
 import { useShareIntentNavigation } from './src/hooks/useShareIntentNavigation';
 import { useQuickActionRouting } from './src/hooks/useQuickActionRouting';
@@ -96,7 +97,6 @@ export default function App() {
   const [isServerContextReady, setIsServerContextReady] = React.useState(false);
   const [serverContextInitError, setServerContextInitError] = React.useState<string | null>(null);
   const [serverContextInitAttempt, setServerContextInitAttempt] = React.useState(0);
-  const [dbInitError, setDbInitError] = React.useState<Error | null>(null);
   const [dbInitAttempt, setDbInitAttempt] = React.useState(0);
 
   React.useEffect(() => {
@@ -139,16 +139,17 @@ export default function App() {
       initializeServerDatabase(db, activeServerId),
     [activeServerId],
   );
+  // Identifies one SQLiteProvider instance: a server switch (new databaseName)
+  // or a retry (bumped attempt) mounts a fresh one. An error belongs to the
+  // instance that raised it, so switching servers or retrying drops it during
+  // render rather than in an effect a frame later.
+  const dbInstance = `sqlite-${databaseName}-${dbInitAttempt}`;
+  const { hasError: hasDbInitError, reportError: reportDbInitError } = useDbInitError(dbInstance);
+
   const handleDatabaseError = React.useCallback((error: Error) => {
     console.warn('Database initialization failed:', error);
-    setDbInitError(error);
-  }, []);
-
-  // Reset DB error when the active database changes (e.g. server switch).
-  React.useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
-    setDbInitError(null);
-  }, [databaseName]);
+    reportDbInitError(error);
+  }, [reportDbInitError]);
 
   if (!isServerContextReady) {
     return (
@@ -176,7 +177,7 @@ export default function App() {
     );
   }
 
-  if (dbInitError) {
+  if (hasDbInitError) {
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>
@@ -186,10 +187,7 @@ export default function App() {
                 {t('common.dbOpenError')}
               </Text>
               <TouchableOpacity
-                onPress={() => {
-                  setDbInitError(null);
-                  setDbInitAttempt((prev) => prev + 1);
-                }}
+                onPress={() => setDbInitAttempt((prev) => prev + 1)}
                 style={{ paddingHorizontal: 14, paddingVertical: 10 }}
               >
                 <Text>{t('common.retry')}</Text>
@@ -208,7 +206,7 @@ export default function App() {
           <QueryClientProvider client={queryClient}>
             <AuthProvider>
               <SQLiteProvider
-                key={`sqlite-${databaseName}-${dbInitAttempt}`}
+                key={dbInstance}
                 databaseName={databaseName}
                 onInit={handleDatabaseInit}
                 onError={handleDatabaseError}

@@ -23,6 +23,9 @@ export default function AccountSection() {
   const [lastName, setLastName] = useState(user?.last_name ?? '');
   const [username, setUsername] = useState(user?.username ?? '');
   const [profileSaving, setProfileSaving] = useState(false);
+  // Both hold a translation key (or, for errors, a server message that isn't
+  // one) and are translated at render, so switching language re-renders them in
+  // the new language instead of leaving a stale string on screen.
   const [profileError, setProfileError] = useState('');
   const [profileSuccess, setProfileSuccess] = useState('');
 
@@ -32,11 +35,6 @@ export default function AccountSection() {
     setLastName(user?.last_name ?? '');
     setUsername(user?.username ?? '');
   }, [user?.first_name, user?.last_name, user?.username]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
-    setProfileSuccess('');
-  }, [settings?.language]);
 
   const handleSaveProfile = useCallback(async () => {
     setProfileError('');
@@ -58,7 +56,7 @@ export default function AccountSection() {
     // persisted to the on-device identity by AuthContext. Skip the `PATCH /users/me`
     // round-trip (and the offline-queue fallback, which never drains in local mode).
     if (isLocalMode) {
-      setProfileSuccess(t('settings.profileUpdated'));
+      setProfileSuccess('settings.profileUpdated');
       setProfileSaving(false);
       return;
     }
@@ -76,7 +74,7 @@ export default function AccountSection() {
           method: 'PATCH',
           body: profileUpdate,
         });
-        setProfileSuccess(t('settings.profileUpdated'));
+        setProfileSuccess('settings.profileUpdated');
       } catch (err: unknown) {
         if (previousUser) {
           setUser(previousUser);
@@ -94,7 +92,7 @@ export default function AccountSection() {
       setUser(updatedUser);
       setSettings(updatedSettings);
       void cacheAuthProfile({ user: updatedUser, settings: updatedSettings });
-      setProfileSuccess(t('settings.profileUpdated'));
+      setProfileSuccess('settings.profileUpdated');
     } catch (err: unknown) {
       if (isQueueableError(err)) {
         await enqueueOperation(db, {
@@ -103,7 +101,7 @@ export default function AccountSection() {
           method: 'PATCH',
           body: profileUpdate,
         });
-        setProfileSuccess(t('settings.profileUpdated'));
+        setProfileSuccess('settings.profileUpdated');
       } else {
         if (previousUser) {
           setUser(previousUser);
@@ -114,7 +112,7 @@ export default function AccountSection() {
     } finally {
       setProfileSaving(false);
     }
-  }, [firstName, lastName, setSettings, setUser, t, username, user, settings, db, isLocalMode, isConnected]);
+  }, [firstName, lastName, setSettings, setUser, username, user, settings, db, isLocalMode, isConnected]);
 
   return (
     <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -156,7 +154,9 @@ export default function AccountSection() {
       {profileError !== '' && (
         <Text style={[styles.errorText, { color: colors.error }]}>{displayMessage(t, profileError)}</Text>
       )}
-      {profileSuccess !== '' && <Text style={[styles.successText, { color: colors.success }]}>{profileSuccess}</Text>}
+      {profileSuccess !== '' && (
+        <Text style={[styles.successText, { color: colors.success }]}>{displayMessage(t, profileSuccess)}</Text>
+      )}
       <TouchableOpacity
         style={[styles.primaryButton, { backgroundColor: colors.primary }, profileSaving && styles.buttonDisabled]}
         onPress={handleSaveProfile}

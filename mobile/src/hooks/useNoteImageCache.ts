@@ -12,11 +12,15 @@ export function useCachedNoteImageUri(
   variant: NoteImageVariant,
   networkUrl: string,
 ): string | null {
-  const [localUri, setLocalUri] = useState<string | null>(null);
+  // The resolved URI is stored with the inputs it was resolved for, so a URI
+  // left over from a previous image is discarded during render. Clearing it in
+  // the effect instead would paint the old image for one frame after the inputs
+  // change.
+  const imageKey = `${imageId} ${variant} ${networkUrl}`;
+  const [resolved, setResolved] = useState<{ key: string; uri: string } | null>(null);
+  const localUri = resolved !== null && resolved.key === imageKey ? resolved.uri : null;
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
-    setLocalUri(null);
     if (!imageId || !networkUrl) return;
 
     let cancelled = false;
@@ -25,13 +29,13 @@ export function useCachedNoteImageUri(
       const cached = await getCachedNoteImageUri(imageId, variant);
       if (cancelled) return;
       if (cached) {
-        setLocalUri(cached);
+        setResolved({ key: imageKey, uri: cached });
         return;
       }
       // Cache miss — display the network URL in the meantime, download in background.
       const downloaded = await downloadAndCacheNoteImage(imageId, variant, networkUrl);
       if (!cancelled && downloaded) {
-        setLocalUri(downloaded);
+        setResolved({ key: imageKey, uri: downloaded });
       }
     }
 
@@ -39,7 +43,7 @@ export function useCachedNoteImageUri(
     return () => {
       cancelled = true;
     };
-  }, [imageId, variant, networkUrl]);
+  }, [imageId, variant, networkUrl, imageKey]);
 
   return localUri;
 }
