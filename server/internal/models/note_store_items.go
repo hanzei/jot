@@ -109,16 +109,32 @@ func (s *noteStore) CreateItemWithCompleted(ctx context.Context, noteID string, 
 		return nil, fmt.Errorf("failed to generate item ID: %w", err)
 	}
 
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err = validateParentRefTx(ctx, tx, s.d, noteID, itemID, parentID); err != nil {
+		return nil, err
+	}
+
 	query := s.d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, position, completed, parent_id, assigned_to)
 			  VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING created_at, updated_at`)
 	var item NoteItem
-	err = s.db.QueryRowContext(ctx, query, itemID, noteID, text, position, completed, nullableParentID(parentID),
+	if err = tx.QueryRowContext(ctx, query, itemID, noteID, text, position, completed, nullableParentID(parentID),
 		nullableAssignedTo(assignedTo),
 	).Scan(
 		&item.CreatedAt, &item.UpdatedAt,
-	)
-	if err != nil {
+	); err != nil {
 		return nil, fmt.Errorf("failed to create note item: %w", err)
+	}
+
+	if err = touchNoteTx(ctx, tx, s.d, noteID); err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit create note item: %w", err)
 	}
 
 	item.ID = itemID
@@ -381,8 +397,9 @@ func (s *noteStore) ReorderItems(ctx context.Context, noteID string, itemIDs []s
 // unchecking a group never splits it), while unchecking a child also
 // un-completes its parent. The reverse does not happen: completing the last
 // incomplete child never auto-completes the parent — that still requires
-// checking the parent itself. parentID is the item's parent_id as it stood
-// before this change.
+// checking the parent itself. parentID is the parent the item belongs to
+// after this change, as passed by ToggleItemCompleted (its unchanged parent)
+// and PatchItem (its resolved, post-patch parent).
 func cascadeItemCompletion(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, itemID string, parentID sql.NullString, newCompleted bool) error {
 	if !parentID.Valid {
 		if _, err := tx.ExecContext(ctx,
@@ -468,17 +485,16 @@ func (s *noteStore) SetItemsCompleted(ctx context.Context, noteID string, itemID
 	var changed int64
 	for _, itemID := range itemIDs {
 		var parentID sql.NullString
-		err = tx.QueryRowContext(ctx,
+		scanErr := tx.QueryRowContext(ctx,
 			s.d.RewritePlaceholders(`SELECT parent_id FROM note_items WHERE id = ? AND note_id = ?`),
 			itemID, noteID,
 		).Scan(&parentID)
-		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				// ID does not belong to the note: ignore it (err is reassigned
-				// on the next iteration or by the touch/commit calls below).
+		if scanErr != nil {
+			if errors.Is(scanErr, sql.ErrNoRows) {
+				// ID does not belong to the note: ignore it.
 				continue
 			}
-			return nil, fmt.Errorf("failed to load note item: %w", err)
+			return nil, fmt.Errorf("failed to load note item: %w", scanErr)
 		}
 
 		res, execErr := tx.ExecContext(ctx,

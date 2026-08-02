@@ -28,15 +28,19 @@ func buildSearchTokens(search string) []string {
 	return tokens
 }
 
+// noteSelectColumns is the note column list shared by every query that scans
+// its rows with scanNote, in the exact order scanNote expects.
+const noteSelectColumns = `n.id, n.user_id, n.title, n.content, n.note_type, n.version,
+				  nus.color, nus.pinned, nus.archived, nus.position, nus.unpinned_position, nus.checked_items_collapsed,
+				  n.deleted_at, n.created_at, n.updated_at`
+
 func buildGetByUserIDQuery(d *dialect.Dialect, userID string, archived bool, trashed bool, search string, labelID string, myTasks bool) (string, []any) {
 	// No DISTINCT: every join below is one-to-one with a note (the per-user
 	// state join, the full-text search join, and — for My Tasks — an IN
 	// subquery rather than a row-multiplying note_items join), so each note
 	// yields exactly one row. This also lets ORDER BY reference the search
 	// rank, which Postgres forbids under SELECT DISTINCT.
-	const selectCols = `SELECT n.id, n.user_id, n.title, n.content, n.note_type, n.version,
-				  nus.color, nus.pinned, nus.archived, nus.position, nus.unpinned_position, nus.checked_items_collapsed,
-				  n.deleted_at, n.created_at, n.updated_at`
+	const selectCols = `SELECT ` + noteSelectColumns
 
 	var b strings.Builder
 	b.WriteString(selectCols)
@@ -206,9 +210,7 @@ func (s *noteStore) batchLoadNoteAssociations(ctx context.Context, notes []*Note
 }
 
 func (s *noteStore) GetByID(ctx context.Context, id string, userID string) (*Note, error) {
-	query := `SELECT n.id, n.user_id, n.title, n.content, n.note_type, n.version,
-			  nus.color, nus.pinned, nus.archived, nus.position, nus.unpinned_position, nus.checked_items_collapsed,
-			  n.deleted_at, n.created_at, n.updated_at
+	query := `SELECT ` + noteSelectColumns + `
 			  FROM active_notes n
 			  INNER JOIN note_user_state nus ON n.id = nus.note_id AND nus.user_id = ?
 			  WHERE n.id = ?`
@@ -250,9 +252,7 @@ func (s *noteStore) GetByIDAnyState(ctx context.Context, id string, userID strin
 		return nil, ErrNoteNotFound
 	}
 
-	query := `SELECT n.id, n.user_id, n.title, n.content, n.note_type, n.version,
-			  nus.color, nus.pinned, nus.archived, nus.position, nus.unpinned_position, nus.checked_items_collapsed,
-			  n.deleted_at, n.created_at, n.updated_at
+	query := `SELECT ` + noteSelectColumns + `
 			  FROM notes n
 			  INNER JOIN note_user_state nus ON n.id = nus.note_id AND nus.user_id = ?
 			  WHERE n.id = ? AND n.user_id = ?`

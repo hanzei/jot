@@ -112,7 +112,10 @@ func (s *noteStore) ImportJotNotes(ctx context.Context, userID string, notes []J
 		return err
 	}
 
-	return tx.Commit()
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit import notes transaction: %w", err)
+	}
+	return nil
 }
 
 // insertImportedNoteTx inserts a single note, its list items, and its labels

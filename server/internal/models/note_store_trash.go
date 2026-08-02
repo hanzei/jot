@@ -26,10 +26,6 @@ func (s *noteStore) getTrashedOwnedNoteIDsTx(ctx context.Context, tx *sql.Tx, us
 		return nil, fmt.Errorf("failed to query trashed notes: %w", err)
 	}
 
-	scanString := func(rows *sql.Rows) (string, error) {
-		var id string
-		return id, rows.Scan(&id)
-	}
 	ids, err := collectRows(rows, scanString)
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan trashed note IDs: %w", err)
@@ -57,10 +53,7 @@ func deleteNoteDependenciesTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialec
 	if err != nil {
 		return nil, fmt.Errorf("failed to query note image hashes: %w", err)
 	}
-	shas, err := collectRows(rows, func(rows *sql.Rows) (string, error) {
-		var sha string
-		return sha, rows.Scan(&sha)
-	})
+	shas, err := collectRows(rows, scanString)
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan note image hashes: %w", err)
 	}
@@ -313,10 +306,7 @@ func (s *noteStore) DeleteAllByUser(ctx context.Context, userID string) (int, []
 	if err != nil {
 		return 0, nil, fmt.Errorf("failed to query owned notes: %w", err)
 	}
-	noteIDs, err := collectRows(rows, func(rows *sql.Rows) (string, error) {
-		var id string
-		return id, rows.Scan(&id)
-	})
+	noteIDs, err := collectRows(rows, scanString)
 	if err != nil {
 		return 0, nil, fmt.Errorf("failed to scan owned note IDs: %w", err)
 	}
@@ -361,10 +351,7 @@ func (s *noteStore) PurgeOldTrashedNotes(ctx context.Context, olderThan time.Dur
 	if err != nil {
 		return nil, fmt.Errorf("failed to query old trashed notes: %w", err)
 	}
-	noteIDs, err := collectRows(rows, func(rows *sql.Rows) (string, error) {
-		var id string
-		return id, rows.Scan(&id)
-	})
+	noteIDs, err := collectRows(rows, scanString)
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan old trashed note IDs: %w", err)
 	}

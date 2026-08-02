@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/hanzei/jot/server/internal/database/dialect"
-	"github.com/sirupsen/logrus"
+	"github.com/hanzei/jot/server/internal/logutil"
 )
 
 // touchNoteTx bumps a note's updated_at so item-level changes are reflected in
@@ -34,7 +34,7 @@ func (s *noteStore) ReorderNotes(ctx context.Context, userID string, noteIDs []s
 	}
 	defer func() {
 		if rollbackErr := tx.Rollback(); rollbackErr != nil && !errors.Is(rollbackErr, sql.ErrTxDone) {
-			logrus.WithError(rollbackErr).Error("Failed to rollback transaction")
+			logutil.FromContext(ctx).WithError(rollbackErr).Error("Failed to rollback transaction")
 		}
 	}()
 
