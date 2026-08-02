@@ -29,6 +29,7 @@ import {
   subscribeToClientActiveServerChanges,
 } from './src/api/client';
 import { getDatabaseNameForServer, initializeServerDatabase } from './src/db/serverDatabase';
+import { useDbInitError } from './src/hooks/useDbInitError';
 import { ShareIntentProvider } from 'expo-share-intent';
 import { useShareIntentNavigation } from './src/hooks/useShareIntentNavigation';
 import { useQuickActionRouting } from './src/hooks/useQuickActionRouting';
@@ -96,7 +97,6 @@ export default function App() {
   const [isServerContextReady, setIsServerContextReady] = React.useState(false);
   const [serverContextInitError, setServerContextInitError] = React.useState<string | null>(null);
   const [serverContextInitAttempt, setServerContextInitAttempt] = React.useState(0);
-  const [dbInitError, setDbInitError] = React.useState<{ instance: string; error: Error } | null>(null);
   const [dbInitAttempt, setDbInitAttempt] = React.useState(0);
 
   React.useEffect(() => {
@@ -140,16 +140,16 @@ export default function App() {
     [activeServerId],
   );
   // Identifies one SQLiteProvider instance: a server switch (new databaseName)
-  // or a retry (bumped attempt) mounts a fresh one.
+  // or a retry (bumped attempt) mounts a fresh one. An error belongs to the
+  // instance that raised it, so switching servers or retrying drops it during
+  // render rather than in an effect a frame later.
   const dbInstance = `sqlite-${databaseName}-${dbInitAttempt}`;
+  const { hasError: hasDbInitError, reportError: reportDbInitError } = useDbInitError(dbInstance);
+
   const handleDatabaseError = React.useCallback((error: Error) => {
     console.warn('Database initialization failed:', error);
-    setDbInitError({ instance: dbInstance, error });
-  }, [dbInstance]);
-
-  // An error belongs to the instance that raised it, so switching servers or
-  // retrying drops it during render rather than in an effect a frame later.
-  const hasDbInitError = dbInitError !== null && dbInitError.instance === dbInstance;
+    reportDbInitError(error);
+  }, [reportDbInitError]);
 
   if (!isServerContextReady) {
     return (

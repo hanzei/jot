@@ -189,10 +189,50 @@ describe('UsersContext catch-up on SSE reconnect', () => {
 describe('UsersContext sign-out', () => {
   beforeEach(() => {
     mockAuthState = { user: null, isAuthenticated: true };
+    // clearAllMocks resets calls but not implementations, and the tests here
+    // park the local read mid-flight, so restore it rather than leaving the
+    // next test to inherit a promise that never resolves.
+    mockGetLocalUsers.mockImplementation(jest.requireActual('../src/db/userQueries').getLocalUsers);
   });
 
   afterEach(() => {
     mockAuthState = { user: null, isAuthenticated: true };
+  });
+
+  it('does not show account A’s collaborators to account B before B’s load resolves', async () => {
+    await seedExistingUser();
+
+    // Account A signed in, collaborators loaded.
+    mockAuthState = { user: { id: 'user-a' } as User, isAuthenticated: true };
+    const { getByTestId, rerender } = render(
+      <UsersProvider>
+        <Probe />
+      </UsersProvider>,
+    );
+    await waitFor(() => {
+      expect(getByTestId('icon-version').props.children).toBe(existingUser.updated_at);
+    });
+
+    // A signs out, then B signs in. Park B's load so the assertion lands in the
+    // window before it resolves — masking on `isAuthenticated` alone reopened
+    // here, because the state still held A's map until loadUsers replaced it.
+    mockGetLocalUsers.mockImplementation(() => new Promise<User[]>(() => {}));
+
+    mockAuthState = { user: null, isAuthenticated: false };
+    rerender(
+      <UsersProvider>
+        <Probe />
+      </UsersProvider>,
+    );
+
+    mockAuthState = { user: { id: 'user-b' } as User, isAuthenticated: true };
+    rerender(
+      <UsersProvider>
+        <Probe />
+      </UsersProvider>,
+    );
+
+    expect(getByTestId('icon-version').props.children).toBe('none');
   });
 
   it('serves an empty map on the first render after sign-out', async () => {

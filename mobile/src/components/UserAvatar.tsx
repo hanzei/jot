@@ -30,19 +30,23 @@ export default function UserAvatar({ userId, username, hasProfileIcon, iconVersi
 
   const localUri = useProfileIcon(userId, hasProfileIcon ?? false, iconVersion, networkUrl);
 
-  // A load failure is recorded against the avatar identity that failed, so a
-  // new identity starts clean without an effect resetting the flag — which
-  // would have shown the initials fallback for one frame after every change.
-  const avatarKey = `${baseUrl} ${userId ?? ''} ${iconVersion ?? ''}`;
-  const [erroredKey, setErroredKey] = useState<string | null>(null);
-  const imageError = erroredKey === avatarKey;
-
   const safeUsername = username || 'U';
   const bgColor = getAvatarColor(safeUsername);
   const letter = safeUsername.charAt(0).toUpperCase();
 
   // Prefer local cache; fall back to network URL; fall back to initials on error.
   const imageUri = localUri || networkUrl;
+
+  // A load failure is recorded against both the avatar identity and the exact
+  // URI that failed, so a new identity starts clean without an effect resetting
+  // the flag — which would have shown the initials fallback for one frame after
+  // every change. The URI has to be part of it because useProfileIcon resolves
+  // the local cache asynchronously: keying on identity alone meant a failed
+  // network URL kept the initials up even once a good cached file arrived under
+  // the same identity.
+  const avatarKey = `${baseUrl} ${userId ?? ''} ${iconVersion ?? ''} ${imageUri}`;
+  const [erroredKey, setErroredKey] = useState<string | null>(null);
+  const imageError = erroredKey === avatarKey;
 
   if (hasProfileIcon && userId && imageUri && !imageError) {
     return (

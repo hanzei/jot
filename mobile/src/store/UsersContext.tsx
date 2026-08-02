@@ -31,12 +31,18 @@ export function UsersProvider({ children }: { children: React.ReactNode }) {
   const db = useSQLiteContext();
   const { user, isAuthenticated } = useAuth();
   const { isConnected } = useNetworkStatus();
-  const [loadedUsersById, setUsersById] = useState<Map<string, User>>(new Map());
-  // Signed-out consumers see an empty map immediately, masked during render
-  // rather than cleared by an effect — the effect ran a frame late, leaving the
-  // previous session's collaborators readable in between. The next sign-in
-  // replaces the map outright (loadUsers rebuilds it), so nothing carries over.
-  const usersById = isAuthenticated ? loadedUsersById : EMPTY_USERS;
+  // The map is tagged with the account it was loaded for and only surfaces while
+  // that account is the signed-in one. Masking during render rather than clearing
+  // in an effect closes two windows the effect left open: the frame after
+  // sign-out where the previous session's collaborators were still readable, and
+  // — because loadUsers only replaces the map once it resolves — every render of
+  // account B's session before its own load lands.
+  const [loaded, setLoaded] = useState<{ ownerId: string | null; byId: Map<string, User> }>({
+    ownerId: null,
+    byId: new Map(),
+  });
+  const ownerId = user?.id ?? null;
+  const usersById = isAuthenticated && loaded.ownerId === ownerId ? loaded.byId : EMPTY_USERS;
   const isMountedRef = useRef(true);
   const isConnectedRef = useRef(isConnected);
   // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
@@ -62,7 +68,7 @@ export function UsersProvider({ children }: { children: React.ReactNode }) {
         // clears the cache while the provider stays mounted, so publishing here
         // would refill it with the previous user's collaborators.
         if (isMountedRef.current && !canceller?.cancelled) {
-          setUsersById(buildUsersMap(user, localUsers));
+          setLoaded({ ownerId: user?.id ?? null, byId: buildUsersMap(user, localUsers) });
         }
       } catch { /* ignore — server fetch will follow */ }
 
@@ -76,7 +82,7 @@ export function UsersProvider({ children }: { children: React.ReactNode }) {
         await saveUsers(db, users);
         // Re-check: the persist above is another await the cancel can land in.
         if (!isMountedRef.current || canceller?.cancelled) return;
-        setUsersById(buildUsersMap(user, users));
+        setLoaded({ ownerId: user?.id ?? null, byId: buildUsersMap(user, users) });
         // Warm the icon cache opportunistically; errors are non-fatal.
         void refreshIconCacheForUsers(users, getBaseUrl());
       } catch (err) {
@@ -120,10 +126,13 @@ export function UsersProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     return subscribeToProfileIconUpdates((updatedUser) => {
       if (!isMountedRef.current) return;
-      setUsersById((prev) => {
-        const next = new Map(prev);
+      // Keeps the owner tag: an event that arrives for a map belonging to a
+      // previous account updates that map and stays masked, rather than
+      // re-tagging it to the account now signed in.
+      setLoaded((prev) => {
+        const next = new Map(prev.byId);
         next.set(updatedUser.id, updatedUser);
-        return next;
+        return { ownerId: prev.ownerId, byId: next };
       });
       void upsertUser(db, updatedUser).catch((err) => {
         console.warn('Failed to persist profile icon update:', err);
