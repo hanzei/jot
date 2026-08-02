@@ -768,4 +768,158 @@ describe('useSSE', () => {
 
     expect(mockConnect).toHaveBeenCalled();
   });
+
+  // #806: a failed SQLite write must be logged, not swallowed — otherwise a note
+  // created/updated on another device silently never appears locally.
+  describe('logs a warning when the local write fails', () => {
+    let warnSpy: jest.SpiedFunction<typeof console.warn>;
+
+    beforeEach(() => {
+      warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      warnSpy.mockRestore();
+    });
+
+    it('on note_updated when saveServerNote throws', async () => {
+      mockSaveServerNote.mockRejectedValueOnce(new Error('constraint violation'));
+      const { Wrapper } = createWrapper();
+      renderHook(() => useSSE(), { wrapper: Wrapper });
+
+      const note = makeTextNote({ id: 'note-123' });
+      await act(async () => {
+        capturedCallback?.({
+          type: 'note_updated',
+          source_user_id: 'other-user',
+          data: { note_id: 'note-123', note },
+        });
+      });
+
+      await waitFor(() => expect(warnSpy).toHaveBeenCalledWith(
+        'Failed to persist SSE note_updated for note id=note-123:',
+        expect.any(Error),
+      ));
+    });
+
+    it('on note_created when saveServerNote throws', async () => {
+      mockSaveServerNote.mockRejectedValueOnce(new Error('NOT NULL constraint failed'));
+      const { Wrapper } = createWrapper();
+      renderHook(() => useSSE(), { wrapper: Wrapper });
+
+      const note = makeTextNote({ id: 'new-note' });
+      await act(async () => {
+        capturedCallback?.({
+          type: 'note_created',
+          source_user_id: 'other-user',
+          data: { note_id: 'new-note', note },
+        });
+      });
+
+      await waitFor(() => expect(warnSpy).toHaveBeenCalledWith(
+        'Failed to persist SSE note_created for note id=new-note:',
+        expect.any(Error),
+      ));
+    });
+
+    it('on note_deleted when markLocalNoteDeleted throws', async () => {
+      mockMarkLocalNoteDeleted.mockRejectedValueOnce(new Error('db locked'));
+      const { Wrapper } = createWrapper();
+      renderHook(() => useSSE(), { wrapper: Wrapper });
+
+      await act(async () => {
+        capturedCallback?.({
+          type: 'note_deleted',
+          source_user_id: 'other-user',
+          data: { note_id: 'note-123', note: null },
+        });
+      });
+
+      await waitFor(() => expect(warnSpy).toHaveBeenCalledWith(
+        'Failed to persist SSE note_deleted for note id=note-123:',
+        expect.any(Error),
+      ));
+    });
+
+    it('on note_unshared (recipient) when permanentDeleteLocalNote throws', async () => {
+      mockPermanentDeleteLocalNote.mockRejectedValueOnce(new Error('db locked'));
+      const { Wrapper } = createWrapper();
+      renderHook(() => useSSE(), { wrapper: Wrapper });
+
+      await act(async () => {
+        capturedCallback?.({
+          type: 'note_unshared',
+          source_user_id: 'other-user',
+          target_user_id: 'current-user',
+          data: { note_id: 'note-123', note: null },
+        });
+      });
+
+      await waitFor(() => expect(warnSpy).toHaveBeenCalledWith(
+        'Failed to persist SSE note_unshared for note id=note-123:',
+        expect.any(Error),
+      ));
+    });
+
+    it('on note_unshared (owner/collaborator) when saveServerNote throws', async () => {
+      mockGetNote.mockResolvedValueOnce(makeTextNote({ id: 'note-123' }));
+      mockSaveServerNote.mockRejectedValueOnce(new Error('network error'));
+      const { Wrapper } = createWrapper();
+      renderHook(() => useSSE(), { wrapper: Wrapper });
+
+      await act(async () => {
+        capturedCallback?.({
+          type: 'note_unshared',
+          source_user_id: 'current-user',
+          target_user_id: 'someone-else',
+          data: { note_id: 'note-123', note: null },
+        });
+      });
+
+      await waitFor(() => expect(warnSpy).toHaveBeenCalledWith(
+        'Failed to persist SSE note_unshared for note id=note-123:',
+        expect.any(Error),
+      ));
+    });
+
+    it('on note_image_added when patchLocalNoteImages throws', async () => {
+      mockPatchLocalNoteImages.mockRejectedValueOnce(new Error('note not found'));
+      const { Wrapper } = createWrapper();
+      renderHook(() => useSSE(), { wrapper: Wrapper });
+
+      const image = { id: 'img-1', filename: 'a.png', content_type: 'image/png', width: 10, height: 10, created_at: '2024-01-01T00:00:00Z' };
+      await act(async () => {
+        capturedCallback?.({
+          type: 'note_image_added',
+          source_user_id: 'other-user',
+          data: { note_id: 'note-123', image },
+        });
+      });
+
+      await waitFor(() => expect(warnSpy).toHaveBeenCalledWith(
+        'Failed to persist SSE note_image_added for note id=note-123:',
+        expect.any(Error),
+      ));
+    });
+
+    it('on labels_changed when upsertLabel throws', async () => {
+      mockUpsertLabel.mockRejectedValueOnce(new Error('constraint violation'));
+      const { Wrapper } = createWrapper();
+      renderHook(() => useSSE(), { wrapper: Wrapper });
+
+      const label = makeLabel({ id: 'label-1', user_id: 'other-user', name: 'Urgent' });
+      await act(async () => {
+        capturedCallback?.({
+          type: 'labels_changed',
+          source_user_id: 'other-user',
+          data: { label },
+        });
+      });
+
+      await waitFor(() => expect(warnSpy).toHaveBeenCalledWith(
+        'Failed to persist SSE labels_changed for label id=label-1:',
+        expect.any(Error),
+      ));
+    });
+  });
 });
