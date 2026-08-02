@@ -49,6 +49,7 @@ func buildInfo() aboutResponse {
 
 type Server struct {
 	cfg             *config.Config
+	log             *logrus.Logger
 	router          chi.Router
 	db              *sql.DB
 	httpServer      *http.Server
@@ -77,9 +78,23 @@ type Server struct {
 	rateLimiter     *rateLimiter
 }
 
+// New builds a server that logs through the logrus standard logger.
 func New(cfg *config.Config) (*Server, error) {
+	return NewWithLogger(cfg, logrus.StandardLogger())
+}
+
+// NewWithLogger builds a server that sends every log line it owns — request
+// logs, background-task errors, startup and shutdown messages — to log rather
+// than to the logrus standard logger. Production uses [New]; the integration
+// suite uses this to give each test server a logger writing to that test's own
+// t.Log, which is what lets those tests run in parallel without fighting over
+// the standard logger's output.
+func NewWithLogger(cfg *config.Config, log *logrus.Logger) (*Server, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("config must not be nil")
+	}
+	if log == nil {
+		return nil, fmt.Errorf("logger must not be nil")
 	}
 
 	db, err := database.New(cfg.DBDriver, cfg.DBDSN)
@@ -144,6 +159,7 @@ func New(cfg *config.Config) (*Server, error) {
 
 	s := &Server{
 		cfg:             cfg,
+		log:             log,
 		router:          chi.NewRouter(),
 		db:              db,
 		startReady:      make(chan struct{}),
@@ -164,24 +180,31 @@ func New(cfg *config.Config) (*Server, error) {
 		rateLimiter:     rl,
 	}
 
-	startPeriodicTask(&s.bgWg, ctx, time.Hour, false, func() error {
+	s.startPeriodicTask(ctx, time.Hour, false, func() error {
 		return sessionStore.DeleteExpired(ctx)
 	}, "delete expired sessions")
-	startPeriodicTask(&s.bgWg, ctx, time.Hour, true, func() error {
+	s.startPeriodicTask(ctx, time.Hour, true, func() error {
 		shas, err := noteStore.PurgeOldTrashedNotes(ctx, 7*24*time.Hour)
 		if err != nil {
 			return err
 		}
 		for _, sha := range shas {
 			if err := blobstore.ReclaimIfOrphaned(ctx, noteStore, imageStore, sha); err != nil {
-				logrus.WithError(err).WithField("sha256", sha).Error("Failed to reclaim orphaned note image blob/thumbnail")
+				log.WithError(err).WithField("sha256", sha).Error("Failed to reclaim orphaned note image blob/thumbnail")
 			}
 		}
 		return nil
 	}, "purge old trashed notes")
 
 	if err := s.setupRoutes(); err != nil {
+		// Unlike the failure paths above, both periodic tasks are already
+		// running by this point, and the second one runs immediately rather
+		// than waiting for its first tick — so it may be inside
+		// PurgeOldTrashedNotes (db) or ReclaimIfOrphaned (imageStore) right
+		// now. cancel() only signals; wait for the goroutines to actually
+		// stop before closing what they are still using.
 		cancel()
+		s.bgWg.Wait()
 		_ = imageStore.Close()
 		_ = db.Close()
 		return nil, fmt.Errorf("setup routes: %w", err)
@@ -197,7 +220,7 @@ func (s *Server) setupRoutes() error {
 	// otelhttp sets the span name before chi populates RoutePattern, so a
 	// second middleware renames the span after routing is complete.
 	s.router.Use(chiRouteSpanNamer)
-	s.router.Use(requestLoggerMiddleware)
+	s.router.Use(s.requestLoggerMiddleware)
 	s.router.Use(middleware.Recoverer)
 	s.router.Use(securityHeaders(s.cfg.CookieSecure))
 
@@ -352,7 +375,7 @@ func (s *Server) setupRoutes() error {
 
 	safeStaticDir := strings.NewReplacer("\n", "", "\r", "").Replace(s.cfg.StaticDir)
 
-	logrus.Infof("Serving static files from: %s", safeStaticDir) // #nosec G706 -- safeStaticDir has newlines stripped
+	s.log.Infof("Serving static files from: %s", safeStaticDir) // #nosec G706 -- safeStaticDir has newlines stripped
 	staticRoot, err := os.OpenRoot(s.cfg.StaticDir)
 	if err != nil {
 		return fmt.Errorf("open static directory %s: %w", safeStaticDir, err)
@@ -580,12 +603,12 @@ func chiRouteSpanNamer(next http.Handler) http.Handler {
 	})
 }
 
-func requestLoggerMiddleware(next http.Handler) http.Handler {
+func (s *Server) requestLoggerMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 
-		entry := logrus.WithFields(logrus.Fields{
+		entry := s.log.WithFields(logrus.Fields{
 			"request_id": middleware.GetReqID(r.Context()),
 			"method":     r.Method,
 			"path":       r.URL.Path,
@@ -634,10 +657,10 @@ func (s *Server) Start(addr string) error {
 		go func() {
 			defer s.bgWg.Done()
 			if err := metricsServer.Serve(metricsListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				logrus.WithError(err).Error("Metrics server stopped unexpectedly")
+				s.log.WithError(err).Error("Metrics server stopped unexpectedly")
 			}
 		}()
-		logrus.Infof("Metrics server listening on %s", metricsAddr)
+		s.log.Infof("Metrics server listening on %s", metricsAddr)
 	}
 
 	listener, err := (&net.ListenConfig{}).Listen(s.ctx, "tcp", addr)
@@ -709,7 +732,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	s.serverMu.RUnlock()
 	if metricsServer != nil {
 		if err := metricsServer.Shutdown(ctx); err != nil {
-			logrus.WithError(err).Warn("Metrics server shutdown error")
+			s.log.WithError(err).Warn("Metrics server shutdown error")
 		}
 	}
 
@@ -768,15 +791,15 @@ func (s *Server) StopBackgroundTasks() {
 	s.bgWg.Wait()
 }
 
-// startPeriodicTask starts a background goroutine tracked by wg that calls fn on every interval.
+// startPeriodicTask starts a background goroutine tracked by s.bgWg that calls fn on every interval.
 // If runNow is true, fn is also called once immediately before the first tick.
-func startPeriodicTask(wg *sync.WaitGroup, ctx context.Context, interval time.Duration, runNow bool, fn func() error, logMsg string) {
-	wg.Add(1)
+func (s *Server) startPeriodicTask(ctx context.Context, interval time.Duration, runNow bool, fn func() error, logMsg string) {
+	s.bgWg.Add(1)
 	go func() {
-		defer wg.Done()
+		defer s.bgWg.Done()
 		if runNow {
 			if err := fn(); err != nil {
-				logrus.WithError(err).Errorf("Failed to %s", logMsg)
+				s.log.WithError(err).Errorf("Failed to %s", logMsg)
 			}
 		}
 		ticker := time.NewTicker(interval)
@@ -785,7 +808,7 @@ func startPeriodicTask(wg *sync.WaitGroup, ctx context.Context, interval time.Du
 			select {
 			case <-ticker.C:
 				if err := fn(); err != nil {
-					logrus.WithError(err).Errorf("Failed to %s", logMsg)
+					s.log.WithError(err).Errorf("Failed to %s", logMsg)
 				}
 			case <-ctx.Done():
 				return
