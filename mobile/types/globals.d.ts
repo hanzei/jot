@@ -22,6 +22,14 @@ declare global {
     /** Restore an empty filesystem with only the document and cache roots. */
     reset(): void;
   };
+
+  /**
+   * The test's SQLite database — a real `node:sqlite` engine behind the
+   * `expo-sqlite` API (`__tests__/helpers/testDb.ts`), replaced with a fresh
+   * migrated one before every test. Also what the mocked `useSQLiteContext()`
+   * and `SQLiteProvider` hand out.
+   */
+  var testDb: import('../__tests__/helpers/testDb').TestDatabase;
 }
 
 export {};

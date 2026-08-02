@@ -13,6 +13,7 @@ export default [
       'babel.config.js',
       'jest.config.js',
       'jest.setup.js',
+      'jest.setupAfterEnv.js',
       'metro.config.js',
     ],
   },

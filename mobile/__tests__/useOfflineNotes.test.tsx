@@ -15,55 +15,48 @@ import * as notesApi from '../src/api/notes';
 import * as noteQueriesModule from '../src/db/noteQueries';
 import * as syncQueueModule from '../src/db/syncQueue';
 import type { Note } from '@jot/shared';
+import { makeTextNote as buildTextNote } from './helpers/fixtures';
+import type { TestDatabase } from './helpers/testDb';
 
 jest.mock('../src/api/notes');
-
-jest.mock('expo-sqlite', () => {
-  // A stable reference across renders, mirroring the real provider — otherwise a
-  // fresh object each render would churn the db-dependent useCallbacks/effects.
-  const db = { __db: true };
-  return { useSQLiteContext: jest.fn(() => db) };
-});
 
 jest.mock('../src/hooks/useNetworkStatus', () => ({
   useNetworkStatus: jest.fn().mockReturnValue({ isConnected: true }),
 }));
 
-jest.mock('../src/db/noteQueries', () => ({
-  getLocalNotes: jest.fn().mockResolvedValue([]),
-  getLocalNote: jest.fn().mockResolvedValue(null),
-  markLocalNoteDeleted: jest.fn().mockResolvedValue(undefined),
-}));
+// The db layer runs for real against the test database (see helpers/testDb.ts);
+// the writers stay spies so the existing call assertions keep working while the
+// SQL underneath them actually executes. `useSQLiteContext()` comes from the
+// global mock and returns one stable database per test, which is what the
+// db-dependent useCallbacks/effects need to avoid churning.
+jest.mock('../src/db/noteQueries', () => {
+  const actual = jest.requireActual('../src/db/noteQueries');
+  return {
+    ...actual,
+    getLocalNotes: jest.fn(actual.getLocalNotes),
+    getLocalNote: jest.fn(actual.getLocalNote),
+    markLocalNoteDeleted: jest.fn(actual.markLocalNoteDeleted),
+  };
+});
 
-jest.mock('../src/db/syncQueue', () => ({
-  ...jest.requireActual('../src/db/syncQueue'),
-  saveServerNotesScope: jest.fn().mockResolvedValue(undefined),
-  saveServerNote: jest.fn().mockResolvedValue(undefined),
-  getProtectedNoteIds: jest.fn().mockResolvedValue(new Set<string>()),
-}));
+jest.mock('../src/db/syncQueue', () => {
+  const actual = jest.requireActual('../src/db/syncQueue');
+  return {
+    ...actual,
+    saveServerNotesScope: jest.fn(actual.saveServerNotesScope),
+    saveServerNote: jest.fn(actual.saveServerNote),
+    getProtectedNoteIds: jest.fn(actual.getProtectedNoteIds),
+  };
+});
 
 const mockNotesApi = notesApi as jest.Mocked<typeof notesApi>;
 const mockNoteQueries = noteQueriesModule as jest.Mocked<typeof noteQueriesModule>;
 const mockSyncQueue = syncQueueModule as jest.Mocked<typeof syncQueueModule>;
 
+let db: TestDatabase;
+
 function makeTextNote(id: string): Note {
-  return {
-    id,
-    user_id: 'u1',
-    note_type: 'text',
-    version: 1,
-    content: 'server body',
-    color: '#ffffff',
-    pinned: false,
-    archived: false,
-    position: 0,
-    is_shared: false,
-    deleted_at: null,
-    created_at: '',
-    updated_at: '',
-    labels: [],
-    shared_with: [],
-  };
+  return buildTextNote({ id, content: 'server body', created_at: '', updated_at: '' });
 }
 
 function makeAxiosError(status: number) {
@@ -84,14 +77,19 @@ function createWrapper() {
   };
 }
 
-describe('useOfflineNotes background sync (#487)', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
+beforeEach(() => {
+  jest.clearAllMocks();
+  db = globalThis.testDb;
+});
 
+describe('useOfflineNotes background sync (#487)', () => {
   it('reconciles server notes through saveServerNotesScope (save + queue-aware prune)', async () => {
     const params = { archived: true } as const;
-    mockNotesApi.getNotes.mockResolvedValue([makeTextNote('n-pending'), makeTextNote('n-clean')]);
+    const notes = [
+      { ...makeTextNote('n-pending'), archived: true },
+      { ...makeTextNote('n-clean'), archived: true },
+    ];
+    mockNotesApi.getNotes.mockResolvedValue(notes);
 
     renderHook(() => useOfflineNotes(params), { wrapper: createWrapper() });
 
@@ -103,14 +101,37 @@ describe('useOfflineNotes background sync (#487)', () => {
       expect.any(Array),
       params,
     );
+    // The fetched notes really landed in SQLite.
+    await waitFor(async () =>
+      expect(await db.getAllAsync('SELECT id FROM notes ORDER BY id')).toEqual([
+        { id: 'n-clean' },
+        { id: 'n-pending' },
+      ]),
+    );
+  });
+
+  it('leaves a note with a queued local edit untouched by the server fetch', async () => {
+    // The end-to-end form of #487: the queue row, the protected-set read, and the
+    // skipped write are all real here.
+    await noteQueriesModule.saveNote(db, buildTextNote({ id: 'n1', content: 'local edit' }));
+    await db.runAsync(
+      `INSERT INTO sync_queue (operation, endpoint, method, body, created_at)
+       VALUES ('update', '/notes/n1', 'PATCH', '{}', '')`,
+    );
+    mockNotesApi.getNotes.mockResolvedValue([makeTextNote('n1')]);
+
+    renderHook(() => useOfflineNotes(), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(mockSyncQueue.saveServerNotesScope).toHaveBeenCalled());
+    await waitFor(async () =>
+      expect(await db.getFirstAsync('SELECT content FROM notes WHERE id = ?', ['n1'])).toEqual({
+        content: 'local edit',
+      }),
+    );
   });
 });
 
 describe('useOfflineNotes catch-up on SSE reconnect', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
   it('re-syncs from the server when a reconnect resync is published', async () => {
     mockNotesApi.getNotes.mockResolvedValue([makeTextNote('n1')]);
     renderHook(() => useOfflineNotes(), { wrapper: createWrapper() });
@@ -158,10 +179,6 @@ describe('useOfflineNotes catch-up on SSE reconnect', () => {
 });
 
 describe('useOfflineNote background fetch (#487)', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
   it('persists the single-note fetch through the queue-aware saveServerNote writer', async () => {
     mockNotesApi.getNote.mockResolvedValue(makeTextNote('note-1'));
 
@@ -172,30 +189,51 @@ describe('useOfflineNote background fetch (#487)', () => {
       expect.anything(),
       expect.objectContaining({ id: 'note-1' }),
     );
+    await waitFor(async () =>
+      expect(await db.getFirstAsync('SELECT id, content FROM notes WHERE id = ?', ['note-1'])).toEqual({
+        id: 'note-1',
+        content: 'server body',
+      }),
+    );
   });
 
   it('tombstones a note the server reports gone (404) when it has no pending op', async () => {
+    await noteQueriesModule.saveNote(db, buildTextNote({ id: 'gone' }));
     mockNotesApi.getNote.mockRejectedValue(makeAxiosError(404));
-    mockSyncQueue.getProtectedNoteIds.mockResolvedValue(new Set<string>());
 
     renderHook(() => useOfflineNote('gone'), { wrapper: createWrapper() });
 
     await waitFor(() =>
       expect(mockNoteQueries.markLocalNoteDeleted).toHaveBeenCalledWith(expect.anything(), 'gone'),
     );
+    // The tombstone is a real deleted_at, not just a call that happened.
+    await waitFor(async () => {
+      const row = await db.getFirstAsync<{ deleted_at: string | null }>(
+        'SELECT deleted_at FROM notes WHERE id = ?',
+        ['gone'],
+      );
+      expect(row?.deleted_at).toBeTruthy();
+    });
   });
 
   it('does not tombstone a 404 note that still has a pending or failed local op (#487/#492)', async () => {
     // A queued edit/restore may be racing the fetch, or a dead-lettered edit may be
     // the version we're preserving; let the drain/resolution reconcile it rather
     // than hide the optimistic edit.
+    await noteQueriesModule.saveNote(db, buildTextNote({ id: 'racing' }));
+    await db.runAsync(
+      `INSERT INTO sync_queue (operation, endpoint, method, body, created_at)
+       VALUES ('restore', '/notes/racing/restore', 'POST', NULL, '')`,
+    );
     mockNotesApi.getNote.mockRejectedValue(makeAxiosError(404));
-    mockSyncQueue.getProtectedNoteIds.mockResolvedValue(new Set(['racing']));
 
     renderHook(() => useOfflineNote('racing'), { wrapper: createWrapper() });
 
     await waitFor(() => expect(mockSyncQueue.getProtectedNoteIds).toHaveBeenCalled());
     await flushMicrotasks();
     expect(mockNoteQueries.markLocalNoteDeleted).not.toHaveBeenCalled();
+    expect(await db.getFirstAsync('SELECT deleted_at FROM notes WHERE id = ?', ['racing'])).toEqual({
+      deleted_at: null,
+    });
   });
 });
