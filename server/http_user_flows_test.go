@@ -10,6 +10,7 @@ import (
 )
 
 func TestReorderNotesEndpoint(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "reorder-user", "password123", false)
 	other := ts.createTestUser(t, "reorder-other", "password123", false)
@@ -68,6 +69,7 @@ func TestReorderNotesEndpoint(t *testing.T) {
 }
 
 func TestRemoveLabelEndpoint(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "label-remove-user", "password123", false)
 	other := ts.createTestUser(t, "label-remove-other", "password123", false)
@@ -123,6 +125,7 @@ func TestRemoveLabelEndpoint(t *testing.T) {
 }
 
 func TestAdminUpdateUserRoleEndpoint(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 
 	t.Run("admin can promote user and promoted user gains admin access", func(t *testing.T) {
@@ -179,6 +182,7 @@ func TestAdminUpdateUserRoleEndpoint(t *testing.T) {
 }
 
 func TestAdminUpdateUserRolePreventsDemotingLastAdmin(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	admin := ts.createTestUser(t, "last-admin", "password123", true)
 

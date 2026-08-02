@@ -10,6 +10,7 @@ import (
 )
 
 func TestBulkNoteItemEndpoints(t *testing.T) {
+	t.Parallel()
 	t.Run("set-completed unchecks the given items and returns the full list", func(t *testing.T) {
 		ts := setupTestServer(t)
 		user := ts.createTestUser(t, "bulk1", "password123", false)

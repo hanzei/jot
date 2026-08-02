@@ -13,6 +13,7 @@ import (
 )
 
 func TestNoteImageUploadSendsSSEToCollaborator(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	owner := ts.createTestUser(t, "imgsseowner", "password123", false)
 	collaborator := ts.createTestUser(t, "imgssecollab", "password123", false)
@@ -43,6 +44,7 @@ func TestNoteImageUploadSendsSSEToCollaborator(t *testing.T) {
 }
 
 func TestNoteImageDeleteSendsSSEToCollaborator(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	owner := ts.createTestUser(t, "imgssedelowner", "password123", false)
 	collaborator := ts.createTestUser(t, "imgssedelcollab", "password123", false)
@@ -74,6 +76,7 @@ func TestNoteImageDeleteSendsSSEToCollaborator(t *testing.T) {
 }
 
 func TestNoteImageUploadNoSSEToNonCollaborator(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	owner := ts.createTestUser(t, "imgsseowneriso", "password123", false)
 	stranger := ts.createTestUser(t, "imgssestranger", "password123", false)

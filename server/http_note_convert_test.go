@@ -15,6 +15,7 @@ import (
 // content/items and persists them atomically, so these tests exercise the
 // server's side of that contract with already-converted payloads.
 func TestConvertNoteTypeEndpoint(t *testing.T) {
+	t.Parallel()
 	t.Run("converts a text note to a list, preserving color/pinned/labels", func(t *testing.T) {
 		ts := setupTestServer(t)
 		user := ts.createTestUser(t, "convert-to-list", "password123", false)

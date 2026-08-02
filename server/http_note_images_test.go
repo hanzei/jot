@@ -52,6 +52,7 @@ func testPNG(t *testing.T, w, h int) []byte {
 }
 
 func TestUploadNoteImage(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "imgowner", "password123", false)
 
@@ -73,6 +74,7 @@ func TestUploadNoteImage(t *testing.T) {
 }
 
 func TestUploadNoteImageUnauthenticatedReturns401(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "imgauth", "password123", false)
 
@@ -85,6 +87,7 @@ func TestUploadNoteImageUnauthenticatedReturns401(t *testing.T) {
 }
 
 func TestUploadNoteImageUnknownNoteReturns404(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "imgnoteid", "password123", false)
 
@@ -93,6 +96,7 @@ func TestUploadNoteImageUnknownNoteReturns404(t *testing.T) {
 }
 
 func TestUploadNoteImageNonImageReturns400(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "imgnonimage", "password123", false)
 
@@ -104,6 +108,7 @@ func TestUploadNoteImageNonImageReturns400(t *testing.T) {
 }
 
 func TestUploadNoteImageCorruptImageReturns400(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "imgcorrupt", "password123", false)
 
@@ -118,6 +123,7 @@ func TestUploadNoteImageCorruptImageReturns400(t *testing.T) {
 }
 
 func TestUploadNoteImageOversizeReturns413(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServerWithConfig(t, func(cfg *config.Config) {
 		cfg.UploadMaxBytes = 200
 	})
@@ -136,6 +142,7 @@ func TestUploadNoteImageOversizeReturns413(t *testing.T) {
 }
 
 func TestUploadNoteImageMaxPerNoteEnforced(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "imgmaxcount", "password123", false)
 
@@ -158,6 +165,7 @@ func TestUploadNoteImageMaxPerNoteEnforced(t *testing.T) {
 }
 
 func TestGetNoteImage(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "imgget", "password123", false)
 
@@ -195,6 +203,7 @@ func TestGetNoteImage(t *testing.T) {
 }
 
 func TestNoteImageAccessControl(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	owner := ts.createTestUser(t, "imgaclowner", "password123", false)
 	sharedUser := ts.createTestUser(t, "imgaclshared", "password123", false)
@@ -235,6 +244,7 @@ func TestNoteImageAccessControl(t *testing.T) {
 }
 
 func TestDeleteNoteImage(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "imgdelete", "password123", false)
 
@@ -255,6 +265,7 @@ func TestDeleteNoteImage(t *testing.T) {
 }
 
 func TestDeleteNoteImageUnknownReturns404(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "imgdeleteunknown", "password123", false)
 
@@ -267,6 +278,7 @@ func TestDeleteNoteImageUnknownReturns404(t *testing.T) {
 // attached to two different notes hash to one blob, and deleting one
 // reference must not affect the other's ability to download its image.
 func TestNoteImageDedupBlobSurvivesUntilUnreferenced(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "imgdedup", "password123", false)
 
@@ -294,6 +306,7 @@ func TestNoteImageDedupBlobSurvivesUntilUnreferenced(t *testing.T) {
 }
 
 func TestGetNoteImageThumbnail(t *testing.T) {
+	t.Parallel()
 	var uploadDir string
 	ts := setupTestServerWithConfig(t, func(cfg *config.Config) {
 		uploadDir = cfg.UploadDir
@@ -366,6 +379,7 @@ func TestGetNoteImageThumbnail(t *testing.T) {
 // missing from disk: the thumbnail endpoint must surface the same 404 as
 // GetNoteImage rather than a 500 from a failed regeneration attempt.
 func TestGetNoteImageThumbnailMissingOriginalReturns404(t *testing.T) {
+	t.Parallel()
 	var uploadDir string
 	ts := setupTestServerWithConfig(t, func(cfg *config.Config) {
 		uploadDir = cfg.UploadDir
@@ -392,6 +406,7 @@ func TestGetNoteImageThumbnailMissingOriginalReturns404(t *testing.T) {
 // the thumbnail endpoint: an image's thumbnail is exactly as accessible as
 // its parent note.
 func TestNoteImageThumbnailAccessControl(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	owner := ts.createTestUser(t, "imgthumbaclowner", "password123", false)
 	sharedUser := ts.createTestUser(t, "imgthumbaclshared", "password123", false)

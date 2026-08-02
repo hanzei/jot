@@ -36,6 +36,7 @@ func getNoteItems(t *testing.T, user *TestUser, noteID string) []client.NoteItem
 }
 
 func TestTaskAssignment(t *testing.T) {
+	t.Parallel()
 	t.Run("create note items have empty assigned_to", func(t *testing.T) {
 		ts := setupTestServer(t)
 
@@ -216,6 +217,7 @@ func TestTaskAssignment(t *testing.T) {
 }
 
 func TestMyTasksFilter(t *testing.T) {
+	t.Parallel()
 	t.Run("returns notes with items assigned to current user", func(t *testing.T) {
 		ts := setupTestServer(t)
 
@@ -308,6 +310,7 @@ func TestMyTasksFilter(t *testing.T) {
 }
 
 func TestTaskAssignmentUnshareCleanup(t *testing.T) {
+	t.Parallel()
 	t.Run("unshare clears unshared users assignments", func(t *testing.T) {
 		ts := setupTestServer(t)
 
@@ -363,6 +366,7 @@ func TestTaskAssignmentUnshareCleanup(t *testing.T) {
 }
 
 func TestTaskAssignmentUserDeletion(t *testing.T) {
+	t.Parallel()
 	t.Run("deleting a user clears their assignments across all notes", func(t *testing.T) {
 		ts := setupTestServer(t)
 

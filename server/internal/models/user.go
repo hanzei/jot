@@ -6,11 +6,31 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/hanzei/jot/server/internal/database/dialect"
 	"golang.org/x/crypto/bcrypt"
 )
+
+// passwordHashCost is the bcrypt cost every password hash the server writes is
+// generated with. Under `go test` it drops to bcrypt.MinCost, because hashing
+// at the production cost dominated the integration suite: bcrypt was 65% of
+// the root server package's CPU time, and lowering it here cut that suite's
+// wall clock from ~74s to ~32s. Cost is not part of any assertion — it is
+// carried in the hash's own prefix, so a hash written at MinCost verifies with
+// the same CompareHashAndPassword call as one written at DefaultCost, and
+// nothing about the auth flow changes shape.
+//
+// testing.Testing() is false in any binary that is not a test binary, so a
+// production server cannot end up on this branch — unlike a config knob, which
+// would let a deployment silently weaken its own password hashing.
+var passwordHashCost = func() int {
+	if testing.Testing() {
+		return bcrypt.MinCost
+	}
+	return bcrypt.DefaultCost
+}()
 
 // ErrUsernameTaken is returned by UpdateUsername when the requested username is
 // already in use by another account.
@@ -49,7 +69,7 @@ func newUserStore(db *sql.DB, d *dialect.Dialect) *userStore {
 }
 
 func (s *userStore) Create(ctx context.Context, username, password string) (*User, error) {
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), passwordHashCost)
 	if err != nil {
 		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}
@@ -150,7 +170,7 @@ func (u *User) CheckPassword(password string) bool {
 // dummyPasswordHash is a bcrypt hash of a throwaway password, generated once
 // at startup for CheckPasswordDummy.
 var dummyPasswordHash = func() []byte {
-	hash, err := bcrypt.GenerateFromPassword([]byte("jot-dummy-timing-equalizer"), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte("jot-dummy-timing-equalizer"), passwordHashCost)
 	if err != nil {
 		panic(fmt.Sprintf("generate dummy password hash: %v", err))
 	}
@@ -318,7 +338,7 @@ func (s *userStore) DeleteProfileIcon(ctx context.Context, id string) error {
 }
 
 func (s *userStore) UpdatePassword(ctx context.Context, id, newPassword string) error {
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), passwordHashCost)
 	if err != nil {
 		return fmt.Errorf("failed to hash password: %w", err)
 	}
@@ -522,7 +542,7 @@ func (s *userStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID 
 }
 
 func (s *userStore) CreateByAdmin(ctx context.Context, username, password string, role string) (*User, error) {
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), passwordHashCost)
 	if err != nil {
 		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}

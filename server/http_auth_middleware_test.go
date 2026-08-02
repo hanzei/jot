@@ -13,6 +13,7 @@ import (
 )
 
 func TestAuthMiddlewareUnauthenticated(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	c := ts.newClient()
 	_, err := c.Me(t.Context())
@@ -20,6 +21,7 @@ func TestAuthMiddlewareUnauthenticated(t *testing.T) {
 }
 
 func TestAuthMiddlewareAuthenticated(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "authmwuser", "password123", false)
 	_, err := user.Client.Me(t.Context())
@@ -27,6 +29,7 @@ func TestAuthMiddlewareAuthenticated(t *testing.T) {
 }
 
 func TestAuthMiddlewareInvalidCookie(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	c := ts.newClient()
 	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/me", nil)
@@ -41,6 +44,7 @@ func TestAuthMiddlewareInvalidCookie(t *testing.T) {
 }
 
 func TestAuthMiddlewareSessionClearedAfterLogout(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "logoutuser", "password123", false)
 
@@ -54,6 +58,7 @@ func TestAuthMiddlewareSessionClearedAfterLogout(t *testing.T) {
 }
 
 func TestAdminMiddlewareNonAdminForbidden(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	_ = ts.createTestUser(t, "adminuser", "password123", true)
 	regularUser := ts.createTestUser(t, "regularuser", "password123", false)
@@ -62,6 +67,7 @@ func TestAdminMiddlewareNonAdminForbidden(t *testing.T) {
 }
 
 func TestAdminMiddlewareAdminAllowed(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	adminUser := ts.createTestUser(t, "adminuser2", "password123", true)
 	_, err := adminUser.Client.AdminListUsers(t.Context())
@@ -69,6 +75,7 @@ func TestAdminMiddlewareAdminAllowed(t *testing.T) {
 }
 
 func TestAdminMiddlewareUnauthenticated(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	c := ts.newClient()
 	_, err := c.AdminListUsers(t.Context())
@@ -76,6 +83,7 @@ func TestAdminMiddlewareUnauthenticated(t *testing.T) {
 }
 
 func TestSessionPersistsAcrossRequests(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "sessionuser", "password123", false)
 	_, err := user.Client.Me(t.Context())
@@ -85,6 +93,7 @@ func TestSessionPersistsAcrossRequests(t *testing.T) {
 }
 
 func TestSessionRenewedWhenLessThanSevenDaysLeft(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "renewuser", "password123", false)
 
@@ -113,6 +122,7 @@ func TestSessionRenewedWhenLessThanSevenDaysLeft(t *testing.T) {
 }
 
 func TestSessionNotRenewedWhenAtLeastSevenDaysLeft(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "noreneweuser", "password123", false)
 
@@ -136,6 +146,7 @@ func TestSessionNotRenewedWhenAtLeastSevenDaysLeft(t *testing.T) {
 }
 
 func TestSessionNotRenewedWhenSlightlyAboveSevenDaysLeft(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "seven-days-user", "password123", false)
 
@@ -159,6 +170,7 @@ func TestSessionNotRenewedWhenSlightlyAboveSevenDaysLeft(t *testing.T) {
 }
 
 func TestSessionTokensStoredHashed(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	_ = ts.createTestUser(t, "hashstoreuser", "password123", false)
 

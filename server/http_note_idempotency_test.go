@@ -14,6 +14,7 @@ import (
 // TestCreateNoteIdempotency covers the client-supplied note ID path that makes
 // an offline-created note's replayed POST /notes idempotent (issue #475).
 func TestCreateNoteIdempotency(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "idempotencyuser", "password123", false)
 
