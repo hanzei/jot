@@ -91,9 +91,8 @@ export function useSSE(
               // (deferring to a pending local edit on this note; see #487).
               try {
                 await saveServerNote(db, note);
-              } catch {
-                // Note has a pending/failed local op or the write failed; keep the
-                // local copy and let the queue drain / next sync reconcile it.
+              } catch (err) {
+                console.warn(`Failed to persist SSE ${event.type} for note id=${note_id}:`, err);
               }
             }
             queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(note_id) });
@@ -121,8 +120,8 @@ export function useSSE(
                 queryClient.removeQueries({ queryKey: noteLocalQueryKey(note_id) });
                 await markLocalNoteDeleted(db, note_id);
               }
-            } catch {
-              // Leave the local copy in place; a later sync reconciles it.
+            } catch (err) {
+              console.warn(`Failed to persist SSE ${event.type} for note id=${note_id}:`, err);
             }
             queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
             invalidateLabelQueries();
@@ -145,9 +144,8 @@ export function useSSE(
               } else {
                 await saveServerNote(db, await getNote(note_id));
               }
-            } catch {
-              // Pending/failed local op, fetch failure, or note inaccessible;
-              // the next background sync reconciles it.
+            } catch (err) {
+              console.warn(`Failed to persist SSE ${event.type} for note id=${note_id}:`, err);
             }
             queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(note_id) });
             queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
@@ -167,8 +165,8 @@ export function useSSE(
                   queryClient.removeQueries({ queryKey: noteLocalQueryKey(note_id) });
                   await permanentDeleteLocalNote(db, note_id);
                 }
-              } catch {
-                // Leave the local copy in place; a later sync reconciles it.
+              } catch (err) {
+                console.warn(`Failed to persist SSE ${event.type} for note id=${note_id}:`, err);
               }
             } else {
               // Owner / remaining collaborator: they keep the note but its
@@ -178,9 +176,8 @@ export function useSSE(
               // shared_with/is_shared (deferring to a pending local edit; #487).
               try {
                 await saveServerNote(db, await getNote(note_id));
-              } catch {
-                // Fetch failed or note has a pending/failed local op; the next
-                // background sync reconciles it.
+              } catch (err) {
+                console.warn(`Failed to persist SSE ${event.type} for note id=${note_id}:`, err);
               }
               queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(note_id) });
             }
@@ -202,9 +199,8 @@ export function useSSE(
                 if (!imageId) return images;
                 return images.filter((img) => img.id !== imageId);
               });
-            } catch {
-              // Note not cached locally yet, or the write failed; the next
-              // background sync/fetch reconciles it.
+            } catch (err) {
+              console.warn(`Failed to persist SSE ${event.type} for note id=${imageNoteId}:`, err);
             }
             queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(imageNoteId) });
             queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
@@ -219,8 +215,8 @@ export function useSSE(
             if (label) {
               try {
                 await upsertLabel(db, label);
-              } catch {
-                // Write failed; the next background sync reconciles the store.
+              } catch (err) {
+                console.warn(`Failed to persist SSE ${event.type} for label id=${label.id}:`, err);
               }
             }
             invalidateLabelQueries();
