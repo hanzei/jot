@@ -23,6 +23,25 @@ jobs:
           go-version: "1.26"
           cache-dependency-path: server/go.sum
 
+      # GoReleaser creates the release itself: draft first, archives uploaded,
+      # then undrafted. That is the only order immutable releases accept, and it
+      # breaks if the tag already has a *published* release — GoReleaser reuses
+      # it and every upload comes back as "422 Cannot upload assets to an
+      # immutable release" (this is what happened to v0.8.7). Stop here rather
+      # than spend two minutes cross-compiling artifacts that cannot be attached.
+      - name: Check the tag has no published release yet
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          draft=$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null || echo absent)
+          if [ "$draft" = "false" ]; then
+            echo "::error::Release $TAG is already published, so GoReleaser cannot attach its archives to it." \
+                 "Releases must be cut by pushing a tag, not from the GitHub Releases page." \
+                 "An immutable release's tag cannot be deleted or reused — ship the next patch version instead."
+            exit 1
+          fi
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
         with:

@@ -1,5 +1,14 @@
 version: 2
 
+# Immutable releases are enabled on this repository, so a published release
+# rejects every asset upload with "422 Cannot upload assets to an immutable
+# release". GoReleaser already handles that on its own — it creates the release
+# as a draft, uploads the archives, and undrafts it afterwards — but only when
+# it is the one creating the release. A release created from the GitHub UI is
+# published the moment its tag is pushed, and GoReleaser then reuses it as-is
+# and every upload fails. Cut releases by pushing a tag; see the Releasing
+# section of the README.
+
 project_name: jot
 
 builds:
@@ -51,10 +60,7 @@ checksum:
   name_template: checksums.txt
 
 changelog:
-  sort: asc
-  filters:
-    exclude:
-      - "^docs:"
-      - "^test:"
-      - "^ci:"
-      - "^chore:"
+  # Keep the notes identical to GitHub's own "Generate release notes" output,
+  # which is what every release up to v0.8.7 used. `sort` and `filters` are
+  # ignored in this mode, so they are deliberately absent.
+  use: github-native
