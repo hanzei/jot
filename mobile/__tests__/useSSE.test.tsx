@@ -4,7 +4,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AppState, AppStateStatus } from 'react-native';
 import { useSSE } from '../src/hooks/useSSE';
 import { SSEConnectionManager } from '../src/api/events';
-import type { Note, SSEEvent, User } from '@jot/shared';
+import type { SSEEvent, User } from '@jot/shared';
+import type { TestDatabase } from './helpers/testDb';
+import { makeListNote, makeTextNote } from './helpers/fixtures';
+import { saveNote } from '../src/db/noteQueries';
 import {
   labelCountsQueryKey,
   labelsQueryKey,
@@ -19,12 +22,6 @@ jest.mock('react-native', () => ({
   },
 }));
 
-jest.mock('expo-sqlite', () => ({
-  useSQLiteContext: jest.fn(() => ({
-    runAsync: jest.fn().mockResolvedValue(undefined),
-  })),
-}));
-
 // Fixed CLIENT_ID for tests — matches what useSSE imports from api/client.
 const TEST_CLIENT_ID = 'test-device-client-id';
 jest.mock('../src/api/client', () => ({
@@ -32,12 +29,20 @@ jest.mock('../src/api/client', () => ({
   CLIENT_ID: TEST_CLIENT_ID,
 }));
 
-jest.mock('../src/db/noteQueries', () => ({
-  markLocalNoteDeleted: jest.fn().mockResolvedValue(undefined),
-  permanentDeleteLocalNote: jest.fn().mockResolvedValue(undefined),
-  patchLocalNoteImages: jest.fn().mockResolvedValue(undefined),
-  upsertLabel: jest.fn().mockResolvedValue(undefined),
-}));
+// The db layer runs for real against the test database (see helpers/testDb.ts);
+// each function stays a spy so the existing call assertions keep working while
+// the SQL underneath them actually executes. `useSQLiteContext()` comes from the
+// global mock and returns one stable database per test.
+jest.mock('../src/db/noteQueries', () => {
+  const actual = jest.requireActual('../src/db/noteQueries');
+  return {
+    ...actual,
+    markLocalNoteDeleted: jest.fn(actual.markLocalNoteDeleted),
+    permanentDeleteLocalNote: jest.fn(actual.permanentDeleteLocalNote),
+    patchLocalNoteImages: jest.fn(actual.patchLocalNoteImages),
+    upsertLabel: jest.fn(actual.upsertLabel),
+  };
+});
 
 jest.mock('../src/api/notes', () => ({
   getNote: jest.fn(),
@@ -59,11 +64,14 @@ const mockPublishReconnectResync = (
   jest.requireMock('../src/store/resyncEvents') as { publishReconnectResync: jest.Mock }
 ).publishReconnectResync;
 
-let mockProtectedNoteIds = new Set<string>();
-jest.mock('../src/db/syncQueue', () => ({
-  saveServerNote: jest.fn().mockResolvedValue(undefined),
-  getProtectedNoteIds: jest.fn(() => Promise.resolve(mockProtectedNoteIds)),
-}));
+jest.mock('../src/db/syncQueue', () => {
+  const actual = jest.requireActual('../src/db/syncQueue');
+  return {
+    ...actual,
+    saveServerNote: jest.fn(actual.saveServerNote),
+    getProtectedNoteIds: jest.fn(actual.getProtectedNoteIds),
+  };
+});
 
 const mockSaveServerNote = (jest.requireMock('../src/db/syncQueue') as { saveServerNote: jest.Mock }).saveServerNote;
 const mockMarkLocalNoteDeleted = (jest.requireMock('../src/db/noteQueries') as { markLocalNoteDeleted: jest.Mock }).markLocalNoteDeleted;
@@ -72,6 +80,19 @@ const mockGetNote = (jest.requireMock('../src/api/notes') as { getNote: jest.Moc
 const mockPatchLocalNoteImages = (jest.requireMock('../src/db/noteQueries') as { patchLocalNoteImages: jest.Mock }).patchLocalNoteImages;
 const mockUpsertLabel = (jest.requireMock('../src/db/noteQueries') as { upsertLabel: jest.Mock }).upsertLabel;
 const flushMicrotasks = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+let db: TestDatabase;
+
+/**
+ * Give a note a queued sync op, which is what makes `getProtectedNoteIds`
+ * report it — the real mechanism behind the #487/#492 guards below.
+ */
+const protectNote = (noteId: string) =>
+  db.runAsync(
+    `INSERT INTO sync_queue (operation, endpoint, method, body, created_at)
+     VALUES ('update', ?, 'PATCH', '{}', '')`,
+    [`/notes/${noteId}`],
+  );
 
 // Mock SSEConnectionManager
 let capturedCallback: ((event: SSEEvent) => void) | null = null;
@@ -127,7 +148,7 @@ describe('useSSE', () => {
     capturedStatusCallback = null;
     mockIsAuthenticated = true;
     mockIsConnected = true;
-    mockProtectedNoteIds = new Set<string>();
+    db = globalThis.testDb;
     // Default: not yet connected, so foreground rebuilds like it always did.
     mockManagerIsConnected.mockReturnValue(false);
   });
@@ -164,7 +185,7 @@ describe('useSSE', () => {
     renderHook(() => useSSE(), { wrapper: Wrapper });
     invalidateSpy.mockClear();
 
-    const note = { id: 'new-note', note_type: 'text', content: 'hi' } as unknown as Note;
+    const note = makeTextNote({ id: 'new-note', content: 'hi' });
     await act(async () => {
       capturedCallback?.({
         type: 'note_created',
@@ -179,10 +200,15 @@ describe('useSSE', () => {
     await waitFor(() => expect(mockSaveServerNote).toHaveBeenCalledWith(expect.anything(), note));
     expect(mockGetNote).not.toHaveBeenCalled();
     await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() }));
+    // The row is really in SQLite — the queries read from there, not from the event.
+    expect(await db.getFirstAsync('SELECT id, content FROM notes WHERE id = ?', ['new-note'])).toEqual({
+      id: 'new-note',
+      content: 'hi',
+    });
   });
 
   it('fetches the note when a note_created/note_shared event carries no payload', async () => {
-    const fetched = { id: 'new-note', note_type: 'text', content: 'fetched' } as unknown as Note;
+    const fetched = makeTextNote({ id: 'new-note', content: 'fetched' });
     mockGetNote.mockResolvedValueOnce(fetched);
 
     const { Wrapper } = createWrapper();
@@ -230,7 +256,7 @@ describe('useSSE', () => {
     ['note_deleted', { type: 'note_deleted', source_user_id: 'other-user', data: { note_id: 'note-123', note: null } }],
     ['note_unshared', { type: 'note_unshared', source_user_id: 'current-user', target_user_id: 'someone-else', data: { note_id: 'note-123', note: null } }],
   ] as [string, SSEEvent][])('invalidates label queries on %s event', async (_label, event) => {
-    mockGetNote.mockResolvedValue({ id: 'note-123', note_type: 'text' } as unknown as Note);
+    mockGetNote.mockResolvedValue(makeTextNote({ id: 'note-123' }));
     const { queryClient, Wrapper } = createWrapper();
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
@@ -264,6 +290,10 @@ describe('useSSE', () => {
     // The label is written to the canonical store so an empty label (created on
     // another device, zero notes) appears in the drawer immediately (#691).
     await waitFor(() => expect(mockUpsertLabel).toHaveBeenCalledWith(expect.anything(), label));
+    // The row is really in the labels table, which is what the drawer reads.
+    expect(await db.getAllAsync('SELECT id, name FROM labels')).toEqual([
+      { id: 'label-1', name: 'Urgent' },
+    ]);
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: labelsQueryKey() });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: labelCountsQueryKey() });
   });
@@ -317,6 +347,9 @@ describe('useSSE', () => {
   });
 
   it('patches local images and invalidates queries on note_image_added event', async () => {
+    // patchLocalNoteImages no-ops on a missing row, so the note has to exist for
+    // the patch to be observable at all.
+    await saveNote(db, makeTextNote({ id: 'note-123' }));
     const { queryClient, Wrapper } = createWrapper();
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
@@ -336,11 +369,17 @@ describe('useSSE', () => {
     const updater = mockPatchLocalNoteImages.mock.calls[0][2] as (images: unknown[]) => unknown[];
     expect(updater([])).toEqual([image]);
     expect(updater([image])).toEqual([image]);
+    // The image really landed on the stored note.
+    expect(await db.getFirstAsync('SELECT images_json FROM notes WHERE id = ?', ['note-123'])).toEqual({
+      images_json: JSON.stringify([image]),
+    });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: noteLocalQueryKey('note-123') });
   });
 
   it('patches local images and invalidates queries on note_image_removed event', async () => {
+    const image = { id: 'img-1', filename: 'a.png', content_type: 'image/png', width: 10, height: 10, created_at: '2024-01-01T00:00:00Z' };
+    await saveNote(db, makeTextNote({ id: 'note-123', images: [image] }));
     const { queryClient, Wrapper } = createWrapper();
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
@@ -358,6 +397,10 @@ describe('useSSE', () => {
     await waitFor(() => expect(mockPatchLocalNoteImages).toHaveBeenCalledWith(expect.anything(), 'note-123', expect.any(Function)));
     const updater = mockPatchLocalNoteImages.mock.calls[0][2] as (images: { id: string }[]) => { id: string }[];
     expect(updater([{ id: 'img-1' }, { id: 'img-2' }])).toEqual([{ id: 'img-2' }]);
+    // The removal really landed on the stored note.
+    expect(await db.getFirstAsync('SELECT images_json FROM notes WHERE id = ?', ['note-123'])).toEqual({
+      images_json: '[]',
+    });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: noteLocalQueryKey('note-123') });
   });
@@ -366,7 +409,7 @@ describe('useSSE', () => {
     const { Wrapper } = createWrapper();
     renderHook(() => useSSE(), { wrapper: Wrapper });
 
-    const note = { id: 'note-123', note_type: 'text', content: 'fresh' } as unknown as Note;
+    const note = makeTextNote({ id: 'note-123', content: 'fresh' });
     await act(async () => {
       capturedCallback?.({
         type: 'note_updated',
@@ -397,7 +440,7 @@ describe('useSSE', () => {
     renderHook(() => useSSE(), { wrapper: Wrapper });
     invalidateSpy.mockClear();
 
-    const note = { id: 'note-123', note_type: 'list', title: 'Groceries' } as unknown as Note;
+    const note = makeListNote({ id: 'note-123', title: 'Groceries' });
     act(() => {
       capturedCallback?.({
         type: 'note_updated',
@@ -447,7 +490,7 @@ describe('useSSE', () => {
     // A queued edit/restore may be racing the remote delete, or a dead-lettered edit
     // may be the version we're preserving; defer to the drain/resolution rather than
     // hide the optimistic edit.
-    mockProtectedNoteIds = new Set(['note-123']);
+    await protectNote('note-123');
     const { queryClient, Wrapper } = createWrapper();
     const removeSpy = jest.spyOn(queryClient, 'removeQueries');
 
@@ -578,7 +621,7 @@ describe('useSSE', () => {
     // but its shared_with changed. The event has no payload and SQLite-backed
     // queries don't refetch on a bare invalidation, so the note is fetched and
     // saved, and both the detail and list caches are invalidated.
-    const fetched = { id: 'note-123', note_type: 'text', is_shared: false } as unknown as Note;
+    const fetched = makeTextNote({ id: 'note-123', is_shared: false });
     mockGetNote.mockResolvedValueOnce(fetched);
 
     const { queryClient, Wrapper } = createWrapper();
@@ -604,7 +647,7 @@ describe('useSSE', () => {
   });
 
   it('does not hard-remove an unshared note that has a pending or failed local op (#487/#492)', async () => {
-    mockProtectedNoteIds = new Set(['note-123']);
+    await protectNote('note-123');
     const { queryClient, Wrapper } = createWrapper();
     const removeSpy = jest.spyOn(queryClient, 'removeQueries');
 
