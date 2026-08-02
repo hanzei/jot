@@ -11,6 +11,13 @@ version: 2
 
 project_name: jot
 
+# The Go module lives in server/, not at the repo root, so `go list -m` finds
+# nothing where GoReleaser runs it and the pipe skips with "not a go module".
+# Its only output is {{ .ModulePath }} — the builds set their own `dir` — but
+# pointing it at the module keeps the release log free of a spurious skip.
+gomod:
+  dir: server
+
 builds:
   - id: server
     dir: server
