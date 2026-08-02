@@ -45,7 +45,7 @@ tag reproduces the v0.8.7 failure exactly, and there is no way to undo it once t
 publishes:
 
 ```bash
-grep -q "already has a published release" .github/workflows/release.yml \
+grep -q "Check the tag has no published release yet" .github/workflows/release.yml \
   && grep -q "use: github-native" .goreleaser.yml \
   && echo "guard present" || echo "MISSING — do not tag, see below"
 ```
