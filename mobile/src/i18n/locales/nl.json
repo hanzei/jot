@@ -305,6 +305,7 @@
     "formatItalic": "Cursief",
     "formatHeading": "Kop",
     "formatBulletList": "Opsommingsteken",
+    "formatChecklist": "Checklist",
     "completedSuggestions": "Suggesties van voltooide items",
     "indentItem": "Inspringing toevoegen",
     "outdentItem": "Inspringing verwijderen",

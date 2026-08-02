@@ -276,6 +276,7 @@
     "formatItalic": "Kursywa",
     "formatHeading": "Nagłówek",
     "formatBulletList": "Lista punktowana",
+    "formatChecklist": "Lista kontrolna",
     "completedSuggestions": "Sugestie z ukończonych elementów",
     "indentItem": "Wcięcie",
     "outdentItem": "Usuń wcięcie",

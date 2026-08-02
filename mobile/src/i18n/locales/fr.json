@@ -276,6 +276,7 @@
     "formatItalic": "Italique",
     "formatHeading": "Titre",
     "formatBulletList": "Liste à puces",
+    "formatChecklist": "Liste de tâches",
     "completedSuggestions": "Suggestions d'éléments complétés",
     "indentItem": "Indenter",
     "outdentItem": "Désindenter",

@@ -305,6 +305,7 @@
     "formatItalic": "Cursiva",
     "formatHeading": "Encabezado",
     "formatBulletList": "Lista de viñetas",
+    "formatChecklist": "Lista de tareas",
     "completedSuggestions": "Sugerencias de elementos completados",
     "indentItem": "Sangría",
     "outdentItem": "Quitar sangría",

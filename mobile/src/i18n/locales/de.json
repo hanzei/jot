@@ -276,6 +276,7 @@
     "formatItalic": "Kursiv",
     "formatHeading": "Überschrift",
     "formatBulletList": "Aufzählung",
+    "formatChecklist": "Checkliste",
     "completedSuggestions": "Vorschläge aus erledigten Einträgen",
     "indentItem": "Einrücken",
     "outdentItem": "Ausrücken",

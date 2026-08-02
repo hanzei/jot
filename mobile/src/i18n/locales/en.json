@@ -305,6 +305,7 @@
     "formatItalic": "Italic",
     "formatHeading": "Heading",
     "formatBulletList": "Bullet list",
+    "formatChecklist": "Checklist",
     "completedSuggestions": "Suggestions from completed items",
     "indentItem": "Indent",
     "outdentItem": "Outdent",

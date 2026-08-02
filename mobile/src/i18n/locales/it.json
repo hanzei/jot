@@ -305,6 +305,7 @@
     "formatItalic": "Corsivo",
     "formatHeading": "Intestazione",
     "formatBulletList": "Elenco puntato",
+    "formatChecklist": "Elenco di controllo",
     "completedSuggestions": "Suggerimenti da elementi completati",
     "indentItem": "Rientro",
     "outdentItem": "Rimuovi rientro",

@@ -305,6 +305,7 @@
     "formatItalic": "Itálico",
     "formatHeading": "Título",
     "formatBulletList": "Lista de marcadores",
+    "formatChecklist": "Lista de tarefas",
     "completedSuggestions": "Sugestões de itens concluídos",
     "indentItem": "Indentar",
     "outdentItem": "Remover recuo",
