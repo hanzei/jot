@@ -1,11 +1,13 @@
 import React from 'react';
 import { Alert, Platform } from 'react-native';
 import { render, fireEvent, act } from '@testing-library/react-native';
+import { VALIDATION } from '@jot/shared';
 import NoteEditorScreen from '../src/screens/NoteEditorScreen';
 
 const mockUseRoute = jest.fn();
 const mockNavigationAddListener = jest.fn().mockReturnValue(jest.fn());
 const mockUseOfflineNote = jest.fn();
+const mockShowToast = jest.fn();
 
 jest.mock('@react-navigation/native', () => ({
   __esModule: true,
@@ -125,7 +127,7 @@ jest.mock('../src/store/UsersContext', () => ({
 
 jest.mock('../src/hooks/useToast', () => ({
   __esModule: true,
-  useToast: () => ({ showToast: jest.fn() }),
+  useToast: () => ({ showToast: mockShowToast }),
 }));
 
 jest.mock('../src/i18n', () => ({ __esModule: true, default: {} }));
@@ -325,6 +327,38 @@ describe('NoteEditorScreen formatting bar', () => {
     // so it cannot fight the user's next tap.
     await placeCaret(4);
     expect(input().props.selection).toBeUndefined();
+  });
+
+  it('says why a formatting press did nothing at the length cap', async () => {
+    const { input, type, placeCaret, press } = renderEditor();
+
+    const full = 'x'.repeat(VALIDATION.CONTENT_MAX_LENGTH);
+    await type(full);
+    await placeCaret(full.length);
+
+    await press('format-bold-btn');
+
+    // The edit is rejected, but not silently.
+    expect(input().props.value).toBe(full);
+    expect(mockShowToast).toHaveBeenCalledWith('note.contentLimitReached', 'error');
+  });
+
+  it('keeps the newline but drops the marker when a list would exceed the cap', async () => {
+    const { input, type, placeCaret } = renderEditor();
+
+    // One character below the cap, ending in a list item: the newline still
+    // fits, the "- " it would carry over does not.
+    const base = `${'x'.repeat(VALIDATION.CONTENT_MAX_LENGTH - 7)}\n- one`;
+    expect(base).toHaveLength(VALIDATION.CONTENT_MAX_LENGTH - 1);
+    await type(base);
+    await placeCaret(base.length);
+
+    const typed = `${base}\n`;
+    await type(typed);
+
+    // The Enter survives; only the auto-continuation is given up.
+    expect(input().props.value).toBe(typed);
+    expect(mockShowToast).not.toHaveBeenCalled();
   });
 
   it('renders the bar on Android too', async () => {

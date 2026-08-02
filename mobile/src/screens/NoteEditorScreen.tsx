@@ -1363,10 +1363,15 @@ export default function NoteEditorScreen() {
     (newContent: string) => {
       // Enter at the end of a list item carries the marker to the next line
       // (and clears it on an empty item) instead of dropping out of the list.
-      const continued = continueListOnNewline(
+      let continued = continueListOnNewline(
         { text: contentRef.current, selection: contentSelectionRef.current },
         newContent,
       );
+      // The marker is extra characters the user did not type, so at the cap
+      // drop the continuation rather than the whole keystroke.
+      if (continued && exceedsCodePointLimit(continued.text, VALIDATION.CONTENT_MAX_LENGTH)) {
+        continued = null;
+      }
       const text = continued?.text ?? newContent;
       if (exceedsCodePointLimit(text, VALIDATION.CONTENT_MAX_LENGTH)) return;
       if (continued) {
@@ -2452,7 +2457,13 @@ export default function NoteEditorScreen() {
   const applyToolbarEdit = useCallback((edit: (state: EditorText) => EditorText) => {
     const previous = contentRef.current;
     const next = edit({ text: previous, selection: contentSelectionRef.current });
-    if (exceedsCodePointLimit(next.text, VALIDATION.CONTENT_MAX_LENGTH)) return;
+    // A dropped keystroke is at least visible as a character that never
+    // appeared; a dropped button press looks like a broken button, so this one
+    // says why nothing happened.
+    if (exceedsCodePointLimit(next.text, VALIDATION.CONTENT_MAX_LENGTH)) {
+      showToast(t('note.contentLimitReached'), 'error');
+      return;
+    }
 
     const selection = clampSelection(next.selection, next.text);
     contentSelectionRef.current = selection;
@@ -2462,7 +2473,7 @@ export default function NoteEditorScreen() {
       markDirtyAndScheduleUpdate();
     }
     contentInputRef.current?.focus();
-  }, [markDirtyAndScheduleUpdate]);
+  }, [markDirtyAndScheduleUpdate, showToast, t]);
 
   const handleContentSelectionChange = useCallback(
     (event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => {

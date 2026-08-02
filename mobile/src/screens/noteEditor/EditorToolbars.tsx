@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, TouchableOpacity } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { Bold, Heading, Italic, List, ListTodo } from 'lucide-react-native';
 import { useTheme } from '../../theme/ThemeContext';
 import { styles } from './styles';
 
@@ -13,14 +14,16 @@ interface MarkdownToolbarProps {
 }
 
 const HIT_SLOP = { top: 8, right: 4, bottom: 8, left: 4 };
+const ICON_SIZE = 20;
 
 /**
  * Markdown formatting buttons. Rendered inline on Android and inside an
  * InputAccessoryView on iOS — both wrap this same content, so the buttons stay
  * identical across platforms.
  *
- * Labels are glyphs rather than words so nothing here needs translating; the
- * accessibility labels carry the meaning.
+ * Icons rather than letter glyphs: it matches the action bar below, and it
+ * keeps the buttons free of text that would otherwise need translating in
+ * eight locales. The accessibility labels carry the meaning.
  */
 export function MarkdownToolbarContent({ onBold, onItalic, onHeading, onBullet, onCheckbox }: MarkdownToolbarProps) {
   const { t } = useTranslation();
@@ -35,7 +38,7 @@ export function MarkdownToolbarContent({ onBold, onItalic, onHeading, onBullet, 
         accessibilityLabel={t('note.formatBold')}
         testID="format-bold-btn"
       >
-        <Text style={[styles.fmtBtnText, { color: colors.text, fontWeight: '700' }]}>B</Text>
+        <Bold size={ICON_SIZE} color={colors.text} />
       </TouchableOpacity>
       <TouchableOpacity
         onPress={onItalic}
@@ -45,10 +48,10 @@ export function MarkdownToolbarContent({ onBold, onItalic, onHeading, onBullet, 
         accessibilityLabel={t('note.formatItalic')}
         testID="format-italic-btn"
       >
-        <Text style={[styles.fmtBtnText, { color: colors.text, fontStyle: 'italic' }]}>I</Text>
+        <Italic size={ICON_SIZE} color={colors.text} />
       </TouchableOpacity>
       <View style={[styles.fmtSep, { backgroundColor: colors.border }]} />
-      {/* Cycles ## -> ### -> none, so the label deliberately names no level. */}
+      {/* Cycles ## -> ### -> none, so the icon deliberately names no level. */}
       <TouchableOpacity
         onPress={onHeading}
         style={styles.fmtBtn}
@@ -57,7 +60,7 @@ export function MarkdownToolbarContent({ onBold, onItalic, onHeading, onBullet, 
         accessibilityLabel={t('note.formatHeading')}
         testID="format-heading-btn"
       >
-        <Text style={[styles.fmtBtnText, { color: colors.text, fontWeight: '700' }]}>H</Text>
+        <Heading size={ICON_SIZE} color={colors.text} />
       </TouchableOpacity>
       <TouchableOpacity
         onPress={onBullet}
@@ -67,7 +70,7 @@ export function MarkdownToolbarContent({ onBold, onItalic, onHeading, onBullet, 
         accessibilityLabel={t('note.formatBulletList')}
         testID="format-bullet-btn"
       >
-        <Text style={[styles.fmtBtnText, { color: colors.text }]}>•</Text>
+        <List size={ICON_SIZE} color={colors.text} />
       </TouchableOpacity>
       <TouchableOpacity
         onPress={onCheckbox}
@@ -77,7 +80,7 @@ export function MarkdownToolbarContent({ onBold, onItalic, onHeading, onBullet, 
         accessibilityLabel={t('note.formatChecklist')}
         testID="format-checkbox-btn"
       >
-        <Text style={[styles.fmtBtnText, { color: colors.text }]}>☐</Text>
+        <ListTodo size={ICON_SIZE} color={colors.text} />
       </TouchableOpacity>
     </View>
   );

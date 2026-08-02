@@ -239,9 +239,6 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  fmtBtnText: {
-    fontSize: 16,
-  },
   fmtSep: {
     width: StyleSheet.hairlineWidth,
     height: 18,

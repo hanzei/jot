@@ -306,6 +306,7 @@
     "formatHeading": "Título",
     "formatBulletList": "Lista de marcadores",
     "formatChecklist": "Lista de tarefas",
+    "contentLimitReached": "A nota atingiu o comprimento máximo",
     "completedSuggestions": "Sugestões de itens concluídos",
     "indentItem": "Indentar",
     "outdentItem": "Remover recuo",
