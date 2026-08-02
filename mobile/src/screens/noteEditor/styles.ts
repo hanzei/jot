@@ -231,12 +231,13 @@ export const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   fmtBtn: {
+    minWidth: 40,
+    minHeight: 36,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 6,
-  },
-  fmtBtnText: {
-    fontSize: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   fmtSep: {
     width: StyleSheet.hairlineWidth,

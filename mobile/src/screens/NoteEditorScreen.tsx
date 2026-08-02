@@ -19,7 +19,9 @@ import {
   StyleSheet,
   useAnimatedValue,
   useWindowDimensions,
+  type NativeSyntheticEvent,
   type TextInputProps,
+  type TextInputSelectionChangeEventData,
   type TextInput as TextInputType,
 } from 'react-native';
 import Markdown from 'react-native-markdown-display';
@@ -80,6 +82,16 @@ import {
   indentLevelFromDrag,
 } from './noteEditor/listItemModel';
 import { MarkdownToolbarContent } from './noteEditor/EditorToolbars';
+import {
+  clampSelection,
+  continueListOnNewline,
+  cycleHeading,
+  toggleBullet,
+  toggleCheckbox,
+  toggleInlineMarker,
+  type EditorText,
+  type TextSelection,
+} from './noteEditor/markdownEdits';
 import CheckedItemsSection, { type ListItemHandlers } from './noteEditor/CheckedItemsSection';
 import NoteEditorMenu from '../components/NoteEditorMenu';
 import NoteImageGallery, { type PendingImageUpload } from '../components/NoteImageGallery';
@@ -179,6 +191,11 @@ export default function NoteEditorScreen() {
   const [assigningItemId, setAssigningItemId] = useState<string | null>(null);
   const [syncToast, setSyncToast] = useState<string | null>(null);
   const [isEditingContent, setIsEditingContent] = useState(initialNoteId === null);
+  // Set only to move the caret after an edit the user did not type (a formatting
+  // button, an auto-continued list). It is released as soon as the input reports
+  // the caret actually landed there, so normal typing stays uncontrolled and
+  // never fights the native selection.
+  const [forcedSelection, setForcedSelection] = useState<TextSelection | null>(null);
   // Share-target picker: lets a share be redirected to another server before it
   // is saved (only relevant when opened from a share and 2+ servers exist).
   const [shareServers, setShareServers] = useState<ServerAccountEntry[]>([]);
@@ -652,6 +669,10 @@ export default function NoteEditorScreen() {
 
   const titleInputRef = useRef<TextInputType>(null);
   const contentInputRef = useRef<TextInputType>(null);
+  // Where the caret sits in the content input. The formatting bar edits text
+  // around it, so it has to be tracked even though the input is otherwise
+  // uncontrolled with respect to selection.
+  const contentSelectionRef = useRef<TextSelection>({ start: 0, end: 0 });
   const scrollViewRef = useRef<ScrollView>(null);
   const itemInputRefsMap = useRef(new Map<string, React.RefObject<TextInputType | null>>());
   const autoFocusItemIdRef = useRef<string | null>(null);
@@ -1340,8 +1361,25 @@ export default function NoteEditorScreen() {
 
   const handleContentChange = useCallback(
     (newContent: string) => {
-      if (exceedsCodePointLimit(newContent, VALIDATION.CONTENT_MAX_LENGTH)) return;
-      setContent(newContent);
+      // Enter at the end of a list item carries the marker to the next line
+      // (and clears it on an empty item) instead of dropping out of the list.
+      let continued = continueListOnNewline(
+        { text: contentRef.current, selection: contentSelectionRef.current },
+        newContent,
+      );
+      // The marker is extra characters the user did not type, so at the cap
+      // drop the continuation rather than the whole keystroke.
+      if (continued && exceedsCodePointLimit(continued.text, VALIDATION.CONTENT_MAX_LENGTH)) {
+        continued = null;
+      }
+      const text = continued?.text ?? newContent;
+      if (exceedsCodePointLimit(text, VALIDATION.CONTENT_MAX_LENGTH)) return;
+      if (continued) {
+        const selection = clampSelection(continued.selection, text);
+        contentSelectionRef.current = selection;
+        setForcedSelection(selection);
+      }
+      setContent(text);
       markDirtyAndScheduleUpdate();
     },
     [markDirtyAndScheduleUpdate],
@@ -2410,34 +2448,77 @@ export default function NoteEditorScreen() {
     [getItemRef, listItemHandlers, isNoteShared, collaborators, hasNoteColor, completedItemTexts, handleAcceptSuggestion, dragTranslateX, isReadOnly],
   );
 
-  const applyToolbarEdit = useCallback((updater: (prev: string) => string) => {
-    const next = updater(contentRef.current);
-    if (next === contentRef.current || exceedsCodePointLimit(next, VALIDATION.CONTENT_MAX_LENGTH)) {
+  /**
+   * Runs a formatting-bar edit against the current text and caret, then pushes
+   * both the new text and the new caret position back into the input. The
+   * caret has to be set explicitly: without it the next keystroke would land
+   * outside the markers that were just inserted.
+   */
+  const applyToolbarEdit = useCallback((edit: (state: EditorText) => EditorText) => {
+    const previous = contentRef.current;
+    const next = edit({ text: previous, selection: contentSelectionRef.current });
+    // A dropped keystroke is at least visible as a character that never
+    // appeared; a dropped button press looks like a broken button, so this one
+    // says why nothing happened.
+    if (exceedsCodePointLimit(next.text, VALIDATION.CONTENT_MAX_LENGTH)) {
+      showToast(t('note.contentLimitReached'), 'error');
       return;
     }
-    setContent(next);
-    markDirtyAndScheduleUpdate();
-    contentInputRef.current?.focus();
-  }, [markDirtyAndScheduleUpdate]);
 
-  const wrapMobileSelection = useCallback((before: string, after: string) => {
-    applyToolbarEdit((prev) => prev + before + after);
+    const selection = clampSelection(next.selection, next.text);
+    const caret = contentSelectionRef.current;
+    // Nothing to force when the caret is already where the edit wants it — e.g.
+    // clearing a bullet with the caret at the start of the line, where the
+    // removed characters all sit after it. The input would report no selection
+    // change, so the forced value would never be released and the prop would
+    // stay controlled with a value that goes stale on the next tap.
+    const caretAlreadyThere = selection.start === caret.start && selection.end === caret.end;
+    contentSelectionRef.current = selection;
+    setForcedSelection(caretAlreadyThere ? null : selection);
+    if (next.text !== previous) {
+      setContent(next.text);
+      markDirtyAndScheduleUpdate();
+    }
+    // Normally still focused (the bar's buttons are focusable={false}), and
+    // re-focusing a focused input would issue a redundant show-keyboard command.
+    if (!contentInputRef.current?.isFocused()) contentInputRef.current?.focus();
+  }, [markDirtyAndScheduleUpdate, showToast, t]);
+
+  const handleContentSelectionChange = useCallback(
+    (event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => {
+      const selection = event.nativeEvent.selection;
+      contentSelectionRef.current = selection;
+      // Release the forced caret only once the input confirms it landed there,
+      // so an event that arrives before the move is applied cannot cancel it.
+      setForcedSelection((forced) =>
+        forced && forced.start === selection.start && forced.end === selection.end ? null : forced,
+      );
+    },
+    [],
+  );
+
+  const toggleMobileBold = useCallback(() => {
+    applyToolbarEdit((state) => toggleInlineMarker(state, '**'));
   }, [applyToolbarEdit]);
 
-  const insertMobileBullet = useCallback(() => {
-    applyToolbarEdit((prev) => {
-      const insert = (prev.endsWith('\n') || prev === '') ? '- ' : '\n- ';
-      return prev + insert;
-    });
+  const toggleMobileItalic = useCallback(() => {
+    applyToolbarEdit((state) => toggleInlineMarker(state, '*'));
   }, [applyToolbarEdit]);
 
-  const insertMobileHeading = useCallback(() => {
-    applyToolbarEdit((prev) => {
-      const lines = prev.split('\n');
-      const lastLine = lines[lines.length - 1];
-      if (lastLine.startsWith('## ')) return prev;
-      return prev + (prev.endsWith('\n') || prev === '' ? '' : '\n') + '## ';
-    });
+  const toggleMobileStrikethrough = useCallback(() => {
+    applyToolbarEdit((state) => toggleInlineMarker(state, '~~'));
+  }, [applyToolbarEdit]);
+
+  const toggleMobileHeading = useCallback(() => {
+    applyToolbarEdit(cycleHeading);
+  }, [applyToolbarEdit]);
+
+  const toggleMobileBullet = useCallback(() => {
+    applyToolbarEdit(toggleBullet);
+  }, [applyToolbarEdit]);
+
+  const toggleMobileCheckbox = useCallback(() => {
+    applyToolbarEdit(toggleCheckbox);
   }, [applyToolbarEdit]);
 
   const noteBackground = hasNoteColor ? color : colors.surface;
@@ -2610,6 +2691,8 @@ export default function NoteEditorScreen() {
                 style={[styles.contentInput, { color: hasNoteColor ? '#1a1a1a' : colors.text }]}
                 value={content}
                 onChangeText={handleContentChange}
+                selection={forcedSelection ?? undefined}
+                onSelectionChange={handleContentSelectionChange}
                 textAlignVertical="top"
                 editable={!isHydrating}
                 testID="note-content-input"
@@ -2634,14 +2717,18 @@ export default function NoteEditorScreen() {
               </TouchableOpacity>
             )}
 
-            {/* iOS: formatting toolbar as InputAccessoryView (docks above keyboard) */}
-            {Platform.OS === 'ios' && noteType === 'text' && (
+            {/* iOS: formatting toolbar as InputAccessoryView (docks above keyboard).
+                Same conditions as the Android branch below — the accessory view
+                is only reachable while the content input exists. */}
+            {Platform.OS === 'ios' && noteType === 'text' && isEditingContent && !isReadOnly && (
               <InputAccessoryView nativeID={MARKDOWN_TOOLBAR_ID}>
                 <MarkdownToolbarContent
-                  onBold={() => wrapMobileSelection('**', '**')}
-                  onItalic={() => wrapMobileSelection('*', '*')}
-                  onHeading={insertMobileHeading}
-                  onBullet={insertMobileBullet}
+                  onBold={toggleMobileBold}
+                  onItalic={toggleMobileItalic}
+                  onStrikethrough={toggleMobileStrikethrough}
+                  onHeading={toggleMobileHeading}
+                  onBullet={toggleMobileBullet}
+                  onCheckbox={toggleMobileCheckbox}
                 />
               </InputAccessoryView>
             )}
@@ -2758,10 +2845,12 @@ export default function NoteEditorScreen() {
           where its position would drift with the content length. */}
       {Platform.OS === 'android' && noteType === 'text' && isEditingContent && !isReadOnly && (
         <MarkdownToolbarContent
-          onBold={() => wrapMobileSelection('**', '**')}
-          onItalic={() => wrapMobileSelection('*', '*')}
-          onHeading={insertMobileHeading}
-          onBullet={insertMobileBullet}
+          onBold={toggleMobileBold}
+          onItalic={toggleMobileItalic}
+          onStrikethrough={toggleMobileStrikethrough}
+          onHeading={toggleMobileHeading}
+          onBullet={toggleMobileBullet}
+          onCheckbox={toggleMobileCheckbox}
         />
       )}
 
