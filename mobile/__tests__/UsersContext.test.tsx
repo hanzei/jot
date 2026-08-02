@@ -6,19 +6,13 @@ import { UsersProvider, useUsers } from '../src/store/UsersContext';
 import { publishProfileIconUpdate } from '../src/store/profileIconEvents';
 import { publishReconnectResync } from '../src/store/resyncEvents';
 import { getUsers } from '../src/api/users';
-import { getLocalUsers } from '../src/db/userQueries';
+import { getLocalUsers, upsertUser } from '../src/db/userQueries';
+import type { TestDatabase } from './helpers/testDb';
 
 const existingUser: User = {
   id: 'collab-1', username: 'bob', first_name: 'Bob', last_name: 'B',
   role: 'user', has_profile_icon: true, created_at: '', updated_at: '2024-01-01T00:00:00Z',
 };
-
-jest.mock('expo-sqlite', () => {
-  // Stable reference across renders, mirroring the real provider — a fresh object
-  // each render would churn the db-dependent loadUsers callback and its effects.
-  const db = { runAsync: jest.fn().mockResolvedValue(undefined) };
-  return { useSQLiteContext: jest.fn(() => db) };
-});
 
 let mockAuthState = { user: null as User | null, isAuthenticated: true };
 jest.mock('../src/store/AuthContext', () => ({
@@ -38,12 +32,19 @@ jest.mock('../src/api/client', () => ({
   getBaseUrl: () => 'http://localhost',
 }));
 
-const mockUpsertUser = jest.fn().mockResolvedValue(undefined);
-jest.mock('../src/db/userQueries', () => ({
-  getLocalUsers: jest.fn(() => Promise.resolve([existingUser])),
-  saveUsers: jest.fn().mockResolvedValue(undefined),
-  upsertUser: (...args: unknown[]) => mockUpsertUser(...args),
-}));
+// The user store runs for real against the test database (see helpers/testDb.ts);
+// these stay spies so the two timing tests below can park a read mid-flight.
+// `useSQLiteContext()` comes from the global mock and returns one stable
+// database per test, which is what the db-dependent loadUsers callback needs.
+jest.mock('../src/db/userQueries', () => {
+  const actual = jest.requireActual('../src/db/userQueries');
+  return {
+    ...actual,
+    getLocalUsers: jest.fn(actual.getLocalUsers),
+    saveUsers: jest.fn(actual.saveUsers),
+    upsertUser: jest.fn(actual.upsertUser),
+  };
+});
 
 const mockRefreshIconCache = jest.fn().mockResolvedValue(undefined);
 jest.mock('../src/utils/profileIconCache', () => ({
@@ -52,18 +53,28 @@ jest.mock('../src/utils/profileIconCache', () => ({
 
 const mockGetUsers = getUsers as jest.Mock;
 const mockGetLocalUsers = getLocalUsers as jest.Mock;
+const mockUpsertUser = upsertUser as jest.Mock;
+
+let db: TestDatabase;
+
+/** Put the collaborator in local SQLite, the way a prior sync would have. */
+async function seedExistingUser(): Promise<void> {
+  await jest.requireActual('../src/db/userQueries').saveUsers(db, [existingUser]);
+}
 
 function Probe() {
   const { usersById } = useUsers();
   return <Text testID="icon-version">{usersById.get('collab-1')?.updated_at ?? 'none'}</Text>;
 }
 
-describe('UsersContext profile_icon_updated subscription', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
+beforeEach(() => {
+  jest.clearAllMocks();
+  db = globalThis.testDb;
+});
 
+describe('UsersContext profile_icon_updated subscription', () => {
   it('applies a bus update to usersById and persists it', async () => {
+    await seedExistingUser();
     const { getByTestId } = render(
       <UsersProvider>
         <Probe />
@@ -82,12 +93,38 @@ describe('UsersContext profile_icon_updated subscription', () => {
     await waitFor(() => expect(getByTestId('icon-version').props.children).toBe('2024-06-06T00:00:00Z'));
     expect(mockUpsertUser).toHaveBeenCalledWith(expect.anything(), updated);
     expect(mockRefreshIconCache).toHaveBeenCalledWith([updated], 'http://localhost');
+    // The upsert really reached SQLite, so the bump survives a restart.
+    await waitFor(async () =>
+      expect(await db.getFirstAsync('SELECT updated_at FROM users WHERE id = ?', ['collab-1'])).toEqual({
+        updated_at: '2024-06-06T00:00:00Z',
+      }),
+    );
+  });
+
+  it('inserts a collaborator the local store has never seen', async () => {
+    // upsertUser writes a single row without reconciling the whole table, so a
+    // brand-new collaborator arriving over the bus must INSERT rather than no-op.
+    render(
+      <UsersProvider>
+        <Probe />
+      </UsersProvider>,
+    );
+    await waitFor(() => expect(mockGetLocalUsers).toHaveBeenCalled());
+
+    act(() => {
+      publishProfileIconUpdate(existingUser);
+    });
+
+    await waitFor(async () =>
+      expect(await db.getAllAsync('SELECT id, username FROM users')).toEqual([
+        { id: 'collab-1', username: 'bob' },
+      ]),
+    );
   });
 });
 
 describe('UsersContext catch-up on SSE reconnect', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
     mockUsersConnected = true;
     mockGetUsers.mockResolvedValue([]);
   });
@@ -151,16 +188,17 @@ describe('UsersContext catch-up on SSE reconnect', () => {
 
 describe('UsersContext sign-out', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
     mockAuthState = { user: null, isAuthenticated: true };
   });
 
   afterEach(() => {
     mockAuthState = { user: null, isAuthenticated: true };
-    mockGetLocalUsers.mockImplementation(() => Promise.resolve([existingUser]));
   });
 
   it('does not refill the cache from a local read that resolves after sign-out', async () => {
+    await seedExistingUser();
+    // Park the real SQLite read mid-flight so the sign-out lands while it is
+    // still pending — the race this test exists for.
     let resolveLocal: ((users: User[]) => void) | undefined;
     mockGetLocalUsers.mockImplementation(
       () => new Promise<User[]>((resolve) => { resolveLocal = resolve; }),

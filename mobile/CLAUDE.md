@@ -122,6 +122,38 @@ in-memory buffer working.
 Anything logged now lands on disk and rides along in shared diagnostics
 reports, so don't log note content, credentials, or tokens.
 
+## Database Tests
+
+`src/db/` runs its SQL against a **real SQLite engine** in Jest, not a stub.
+`__tests__/helpers/testDb.ts` implements the `expo-sqlite` surface the app uses
+(`execAsync`, `runAsync`, `getAllAsync`, `getFirstAsync`, `withTransactionAsync`,
+`closeAsync`) on top of Node's built-in `node:sqlite`, and `jest.setup.js` mocks
+`expo-sqlite` with it. Same intent as the filesystem mock above: run the app's
+own logic rather than assert against canned return values.
+
+- A **fresh in-memory database, fully migrated**, is installed before every test
+  by `jest.setupAfterEnv.js`. Reach it as `globalThis.testDb`; it is also what
+  the mocked `useSQLiteContext()` and `SQLiteProvider` hand out. Nothing leaks
+  between tests, and no suite has to opt in.
+- Migration tests start from `createTestDb()` instead — an empty, unmigrated
+  database.
+- Every method is a `jest.fn()` wrapping real execution, so `toHaveBeenCalled`
+  still works. Prefer asserting on **query results**: pinning SQL text was what
+  let a query reference a column that does not exist and still pass.
+- Constraints, defaults, `ON DELETE CASCADE`, and transaction rollback are all
+  live. A test that seeds a `note_items` or `pending_image_uploads` row must
+  insert its parent note first, and a `withSerializedTransaction` body that
+  throws really does roll back.
+- The adapter mirrors expo-sqlite's own quirks deliberately — booleans bind as
+  1/0, `undefined` binds as NULL, `getFirstAsync` resolves `null` (not
+  `undefined`) for a missing row. Keep it that way; the point is that passing
+  here means passing on device.
+- Row builders (`makeTextNote`, `makeListNote`, `seedQueueEntry`, …) live in
+  `__tests__/helpers/fixtures.ts`.
+- `tsconfig.json` carries `"node"` in `types` so the helper can import
+  `node:sqlite`. Nothing under `src/` may rely on a Node-only global as a
+  result — the app runs on Hermes, not Node.
+
 ## Safe Area Insets
 
 Screens use `headerShown: false`, so any screen or component rendering content
