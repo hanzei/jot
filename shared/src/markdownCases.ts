@@ -57,6 +57,12 @@ export const MARKDOWN_CASES: MarkdownCase[] = [
   // Links
   { id: 'inline-link', markdown: '[text](https://example.com)', expected: 'a link labelled "text"' },
   { id: 'bare-url', markdown: 'visit https://example.com now', expected: 'an autolinked URL' },
+  { id: 'bare-url-www', markdown: 'visit www.example.com now', expected: 'an autolinked URL' },
+  {
+    id: 'bare-domain',
+    markdown: 'visit example.com now',
+    expected: 'plain text — GFM needs a scheme or www. to autolink',
+  },
   { id: 'mailto-link', markdown: '[mail](mailto:a@b.com)', expected: 'a link labelled "mail"' },
   { id: 'tel-link', markdown: '[call](tel:+15550100)', expected: 'plain text "call", not a link' },
   { id: 'javascript-link', markdown: '[click](javascript:alert(1))', expected: 'plain text "click", not a link' },
@@ -86,6 +92,11 @@ export const MARKDOWN_CASES: MarkdownCase[] = [
 
   // Tables: never rendered, shown as literal source
   { id: 'table', markdown: 'a | b\n--- | ---\n1 | 2', expected: 'literal source, header row included' },
+  {
+    id: 'table-cell-url',
+    markdown: 'a | b\n--- | ---\nhttps://example.com | 2',
+    expected: 'literal source — a URL in a cell is text, not a link',
+  },
 
   // No smart typography
   { id: 'typography-dashes', markdown: 'a -- b', expected: 'literal "--", not an en dash' },
@@ -94,6 +105,16 @@ export const MARKDOWN_CASES: MarkdownCase[] = [
   // Whitespace and raw HTML
   { id: 'soft-break', markdown: 'first\nsecond', expected: 'a line break between the two words' },
   { id: 'raw-html', markdown: '<b>bold</b> text', expected: 'literal source: <b>bold</b> text' },
+  {
+    id: 'raw-html-attribute-url',
+    markdown: '<a href="https://example.com">x</a>',
+    expected: 'literal source — the URL in the attribute is not a link',
+  },
+  {
+    id: 'raw-html-block-swallows-markdown',
+    markdown: '<div>\n**bold**\n</div>',
+    expected: 'literal source end to end, the ** included',
+  },
   {
     id: 'raw-html-script',
     markdown: '<script>alert(1)</script>',

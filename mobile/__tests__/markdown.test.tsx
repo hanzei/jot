@@ -102,6 +102,15 @@ const conformance: Record<string, () => void> = {
     expect(html('bare-url')).toContain('href="https://example.com"');
     expect(tappableText(renderCase('bare-url'))).toEqual(['https://example.com']);
   },
+  'bare-url-www': () => {
+    expect(html('bare-url-www')).toContain('href="http://www.example.com"');
+    expect(tappableText(renderCase('bare-url-www'))).toEqual(['www.example.com']);
+  },
+  'bare-domain': () => {
+    const tree = renderCase('bare-domain');
+    expect(visibleText(tree)).toBe('visit example.com now');
+    expect(tappableText(tree)).toEqual([]);
+  },
   'mailto-link': () => expect(tappableText(renderCase('mailto-link'))).toEqual(['mail']),
   'tel-link': () => {
     const tree = renderCase('tel-link');
@@ -139,12 +148,26 @@ const conformance: Record<string, () => void> = {
     expect(html('table')).not.toContain('<table');
     expect(visibleText(renderCase('table'))).toContain('a | b\n--- | ---\n1 | 2');
   },
+  'table-cell-url': () => {
+    const tree = renderCase('table-cell-url');
+    expect(visibleText(tree)).toContain('a | b\n--- | ---\nhttps://example.com | 2');
+    expect(tappableText(tree)).toEqual([]);
+  },
 
   'typography-dashes': () => expect(visibleText(renderCase('typography-dashes'))).toBe('a -- b'),
   'typography-quotes': () => expect(visibleText(renderCase('typography-quotes'))).toBe('say "hi"'),
 
   'soft-break': () => expect(visibleText(renderCase('soft-break'))).toBe('first\nsecond'),
   'raw-html': () => expect(visibleText(renderCase('raw-html'))).toBe('<b>bold</b> text'),
+  'raw-html-attribute-url': () => {
+    const tree = renderCase('raw-html-attribute-url');
+    expect(visibleText(tree)).toBe('<a href="https://example.com">x</a>');
+    expect(tappableText(tree)).toEqual([]);
+  },
+  'raw-html-block-swallows-markdown': () =>
+    expect(visibleText(renderCase('raw-html-block-swallows-markdown'))).toBe(
+      '<div>\n**bold**\n</div>',
+    ),
   'raw-html-script': () =>
     expect(visibleText(renderCase('raw-html-script'))).toBe('<script>alert(1)</script>'),
 };

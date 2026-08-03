@@ -66,6 +66,12 @@ const conformance: Record<string, () => void> = {
     expect(html).toContain('rel="noopener noreferrer"');
   },
   'bare-url': () => expect(render('bare-url')).toContain('href="https://example.com"'),
+  'bare-url-www': () => expect(render('bare-url-www')).toContain('href="http://www.example.com"'),
+  'bare-domain': () => {
+    const html = render('bare-domain');
+    expect(html).toContain('visit example.com now');
+    expect(html).not.toContain('<a');
+  },
   'mailto-link': () => expect(render('mailto-link')).toContain('href="mailto:a@b.com"'),
   'tel-link': () => {
     const html = render('tel-link');
@@ -113,6 +119,11 @@ const conformance: Record<string, () => void> = {
     expect(html).toContain('a | b<br>--- | ---<br>1 | 2');
     expect(html).not.toContain('<table');
   },
+  'table-cell-url': () => {
+    const html = render('table-cell-url');
+    expect(html).toContain('a | b<br>--- | ---<br>https://example.com | 2');
+    expect(html).not.toContain('<a');
+  },
 
   'typography-dashes': () => expect(render('typography-dashes')).toContain('a -- b'),
   'typography-quotes': () => {
@@ -126,6 +137,16 @@ const conformance: Record<string, () => void> = {
     const html = render('raw-html');
     expect(html).toContain('&lt;b&gt;bold&lt;/b&gt; text');
     expect(html).not.toContain('<b>');
+  },
+  'raw-html-attribute-url': () => {
+    const html = render('raw-html-attribute-url');
+    expect(html).toContain('&lt;a href="https://example.com"&gt;x&lt;/a&gt;');
+    expect(html).not.toContain('<a');
+  },
+  'raw-html-block-swallows-markdown': () => {
+    const html = render('raw-html-block-swallows-markdown');
+    expect(html).toContain('&lt;div&gt;<br>**bold**<br>&lt;/div&gt;');
+    expect(html).not.toContain('<strong>');
   },
   'raw-html-script': () => {
     const html = render('raw-html-script');

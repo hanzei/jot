@@ -22,7 +22,7 @@ a shared test corpus and this spec.
 
 | | Webapp | Mobile |
 |---|---|---|
-| Parser | `marked` (`gfm: true`, `breaks: true`) | `markdown-it` (`linkify: true`, `typographer: false`, `html: false`, `breaks: false`) |
+| Parser | `marked` (`gfm: true`, `breaks: true`) | `markdown-it` (`linkify: true`, `typographer: false`, `html: true`, `breaks: false`) |
 | Renderer | HTML, filtered through a DOMPurify tag allowlist | `react-native-markdown-display` render rules |
 
 ---
@@ -71,6 +71,11 @@ The user sees exactly what they typed, and can tell that Jot did not act on it.
 | `![alt](url)` | `![alt](url)`, and `![alt](url "title")` when a title is present |
 | Tables | The pipe rows as typed, header row included |
 | Raw HTML | `<b>bold</b> text` — inert text, never an element |
+
+Literal means literal all the way down: a URL inside one of these regions — a
+table cell, an `href` attribute — is text too, not a link. An HTML block also
+swallows the Markdown inside it (`<div>` / `**bold**` / `</div>` shows the `**`),
+on both clients.
 
 ### Formatting dropped, text kept
 
@@ -150,9 +155,15 @@ here so the next person does not have to rediscover them.
 - **`markdown-it`'s `.disable('image')` does not produce raw text.** It produces
   `!` followed by a *live link*, and with an empty alt an invisible clickable one.
   Mobile rewrites image tokens into text tokens in a core rule instead.
-- **`.disable('table')` on `markdown-it` does work correctly**, leaving plain
-  paragraph text. So mobile is asymmetric on purpose — parser-level disable for
-  tables, token rewrite for images. Do not "tidy" it into consistency.
+- **Nothing is disabled at parser level on mobile — everything is rewritten
+  after parsing**, and `linkify` is why. `.disable('table')` looks correct in
+  isolation (it leaves plain paragraph text), but linkify then turns a URL in a
+  cell into a live link inside text that is supposed to be literal, which the
+  webapp does not do. Same for `html: false`, which would escape the tags and
+  leave linkify free to link a URL inside an `href` attribute. Parsing them and
+  collapsing the tokens afterwards discards the parsed contents, links included.
+  This is the one place where the obvious config change silently reintroduces a
+  divergence, so it is worth re-reading before "simplifying" either option.
 - **The image reconstruction format is pinned** in `formatLiteralImage`
   (`shared/src/markdown.ts`) and used by both clients, because both rebuild it
   from parsed tokens rather than echoing the source. If one side dropped the
@@ -160,8 +171,14 @@ here so the next person does not have to rediscover them.
 - **Mobile rewrites images at parser level, not in a render rule**, because
   `react-native-markdown-display` marks every image token `block: true`, which
   would break the literal source out of its paragraph and onto its own line.
-- **Both mobile core rules run after `linkify`.** Running them before would have
+- **All mobile core rules run after `linkify`.** Running them before would have
   linkify turn the URL inside a literal `![alt](url)` into a live link.
+- **linkify is fuzzier than GFM and is trimmed back.** linkify-it autolinks a
+  bare `example.com`; marked requires a scheme or a `www.` prefix. Turning
+  `fuzzyLink` off is not the fix — it would also stop linking
+  `www.example.com`, which marked *does* link — so the extra links are made and
+  then unwrapped (`gfmAutolinksOnly`). Both clients accept the
+  `http://`-normalized target such an autolink produces.
 - **h4–h6 are styled down, not rewritten.** Both clients emit real heading
   elements and give them body size and bold weight in CSS
   (`.markdown-content :is(h4, h5, h6)`) and in the style map

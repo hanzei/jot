@@ -20,6 +20,12 @@ export const ALLOWED_LINK_SCHEMES = ['http', 'https', 'mailto'] as const;
  * rejected, and so are scheme-less targets (`/foo`, `example.com`,
  * `//example.com`) — notes are shareable, so a collaborator's note must not be
  * able to drive navigation anywhere but the web and mail.
+ *
+ * This runs on the target the *parser* produced, which is not always what the
+ * author typed: both clients autolink `www.example.com` and hand this an
+ * already-normalized `http://www.example.com`, so that is accepted by design.
+ * What each parser is willing to autolink in the first place is settled
+ * upstream of here — see `gfmAutolinksOnly` in mobile/src/utils/markdown.tsx.
  */
 export function isAllowedLinkHref(href: string): boolean {
   const scheme = /^\s*([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(href);
