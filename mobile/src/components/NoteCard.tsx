@@ -13,7 +13,7 @@ import UserAvatar from './UserAvatar';
 import CachedNoteImage from './CachedNoteImage';
 import { isWhiteHexColor } from '../utils/colorContrast';
 import { stripMarkdownForPreview } from '../utils/markdownStyles';
-import LinkText from './LinkText';
+import InlineMarkdown from './InlineMarkdown';
 import type { LayoutRect } from '../navigation/RootNavigator';
 
 const CARD_RADIUS = 12;
@@ -131,7 +131,7 @@ function ListPreview({ items, hasColor }: { items: NoteItem[]; hasColor?: boolea
             testID={`note-card-list-row-${item.id}`}
           >
             <Square size={14} color={hasColor ? '#555' : colors.textSecondary} />
-            <LinkText text={item.text} style={[styles.listText, { color: hasColor ? '#1a1a1a' : colors.text }]} />
+            <InlineMarkdown text={item.text} style={[styles.listText, { color: hasColor ? '#1a1a1a' : colors.text }]} />
           </View>
         );
       })}

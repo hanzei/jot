@@ -13,6 +13,7 @@ import { TouchableOpacity } from 'react-native-gesture-handler';
 import { GripVertical, Square, SquareCheck, UserPlus, X } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import UserAvatar from './UserAvatar';
+import InlineMarkdown from './InlineMarkdown';
 import { useTheme } from '../theme/ThemeContext';
 import { getEffectiveColors } from '../theme/colors';
 import { isReduceMotionEnabledSync } from '../utils/layoutAnimation';
@@ -224,50 +225,65 @@ function ListItem({
       </TouchableOpacity>
       <View style={styles.inputColumn}>
         <View style={styles.inputRow}>
-          <TextInput
-            ref={inputRef}
-            autoFocus={autoFocus}
-            style={[styles.textInput, { color: completed ? effectiveTextSecondary : effectiveText }, completed && styles.completedText]}
-            value={text}
-            onChangeText={(newText) => {
-              onChangeText?.(newText);
-              // Approximate the cursor moving to the end of freshly typed text;
-              // onSelectionChange refines this once the native event arrives.
-              selectionRef.current = { start: newText.length, end: newText.length };
-              if (!completed) setShowSuggestions(newText.trim().length > 0);
-            }}
-            onSelectionChange={(event) => {
-              selectionRef.current = event.nativeEvent.selection;
-            }}
-            editable={editable}
-            returnKeyType="next"
-            onSubmitEditing={() => onSubmitEditing?.(selectionRef.current.start)}
-            blurOnSubmit={false}
-            onFocus={(event) => {
-              if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
-              setIsFocused(true);
-              onFocus?.(event);
-              if (!completed) setShowSuggestions(true);
-            }}
-            onBlur={() => {
-              // Delay hiding so a tap on the delete button (which blurs the input
-              // first) still lands before the button unmounts.
-              blurTimeoutRef.current = setTimeout(() => {
-                setShowSuggestions(false);
-                setIsFocused(false);
-              }, BLUR_HIDE_DELAY_MS);
-            }}
-            multiline
-            submitBehavior="submit"
-            textAlignVertical="top"
-            inputAccessoryViewID={inputAccessoryViewID}
-            onKeyPress={({ nativeEvent }) => {
-              if (nativeEvent.key === 'Backspace' && text === '') {
-                onBackspaceOnEmpty?.();
-              }
-            }}
-            testID="list-item-text"
-          />
+          {/* A read-only row is a display surface, so it renders the inline
+              Markdown subset — the same thing the note card shows for this
+              item. An editable row stays a plain TextInput showing source;
+              giving it a rendered mode is #824, not this. */}
+          {editable ? (
+            <TextInput
+              ref={inputRef}
+              autoFocus={autoFocus}
+              style={[styles.textInput, { color: completed ? effectiveTextSecondary : effectiveText }, completed && styles.completedText]}
+              value={text}
+              onChangeText={(newText) => {
+                onChangeText?.(newText);
+                // Approximate the cursor moving to the end of freshly typed text;
+                // onSelectionChange refines this once the native event arrives.
+                selectionRef.current = { start: newText.length, end: newText.length };
+                if (!completed) setShowSuggestions(newText.trim().length > 0);
+              }}
+              onSelectionChange={(event) => {
+                selectionRef.current = event.nativeEvent.selection;
+              }}
+              returnKeyType="next"
+              onSubmitEditing={() => onSubmitEditing?.(selectionRef.current.start)}
+              blurOnSubmit={false}
+              onFocus={(event) => {
+                if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
+                setIsFocused(true);
+                onFocus?.(event);
+                if (!completed) setShowSuggestions(true);
+              }}
+              onBlur={() => {
+                // Delay hiding so a tap on the delete button (which blurs the input
+                // first) still lands before the button unmounts.
+                blurTimeoutRef.current = setTimeout(() => {
+                  setShowSuggestions(false);
+                  setIsFocused(false);
+                }, BLUR_HIDE_DELAY_MS);
+              }}
+              multiline
+              submitBehavior="submit"
+              textAlignVertical="top"
+              inputAccessoryViewID={inputAccessoryViewID}
+              onKeyPress={({ nativeEvent }) => {
+                if (nativeEvent.key === 'Backspace' && text === '') {
+                  onBackspaceOnEmpty?.();
+                }
+              }}
+              testID="list-item-text"
+            />
+          ) : (
+            <InlineMarkdown
+              text={text}
+              testID="list-item-text-readonly"
+              style={[
+                styles.textInput,
+                { color: completed ? effectiveTextSecondary : effectiveText },
+                completed && styles.completedText,
+              ]}
+            />
+          )}
           {showAssignUI && assignedTo ? (
             <TouchableOpacity
               onPress={!completed ? onAssignPress : undefined}

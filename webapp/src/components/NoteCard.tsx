@@ -14,7 +14,7 @@ import { useTranslation } from 'react-i18next';
 import { VALIDATION, type Note, type User } from '@jot/shared';
 import { notes, images as imagesApi } from '@/utils/api';
 import LetterAvatar from '@/components/LetterAvatar';
-import LinkText from '@/components/LinkText';
+import InlineMarkdown from '@/components/InlineMarkdown';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
 import { buildShareAvatars } from '@/utils/shareAvatars';
@@ -389,9 +389,10 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
                           aria-hidden="true"
                           className="h-4 w-4 text-blue-600 rounded mr-2 mt-0.5 flex-shrink-0"
                         />
-                        <span className="min-w-0 whitespace-pre-wrap break-words text-gray-700 dark:text-gray-200">
-                          <LinkText text={item.text} />
-                        </span>
+                        <InlineMarkdown
+                          text={item.text}
+                          className="min-w-0 whitespace-pre-wrap break-words text-gray-700 dark:text-gray-200"
+                        />
                       </div>
                     );
                   })}

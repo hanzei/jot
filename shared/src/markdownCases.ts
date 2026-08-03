@@ -1,13 +1,18 @@
-// The conformance corpus for Jot's Markdown support.
+// The conformance corpora for Jot's Markdown support.
 //
-// This is the single list of inputs both clients' renderer tests run against —
+// These are the single lists of inputs both clients' renderer tests run against —
 // webapp/src/utils/__tests__/markdown.test.ts and
 // mobile/__tests__/markdown.test.ts. Each side keeps its own expectations
 // (marked emits HTML, markdown-it feeds a React Native AST) but both assert one
 // expectation per id and fail if an id here has none, so a case can never be
 // covered on one client and forgotten on the other.
 //
-// Adding a case here deliberately breaks both suites until both are updated.
+// There are two, because Jot renders two different feature sets:
+//
+// - MARKDOWN_CASES     — text-note content, the full set (docs/specs §2)
+// - MARKDOWN_ITEM_CASES — list-item text, the inline subset (docs/specs §2.1)
+//
+// Adding a case to either deliberately breaks both suites until both are updated.
 // The behaviour each case pins is specified in docs/specs/markdown-rendering.md.
 
 export interface MarkdownCase {
@@ -120,4 +125,79 @@ export const MARKDOWN_CASES: MarkdownCase[] = [
     markdown: '<script>alert(1)</script>',
     expected: 'literal source, inert — nothing executed',
   },
+];
+
+/**
+ * The corpus for list-note item text, which renders an inline-only subset.
+ *
+ * The block cases below are the load-bearing ones: an item is itself a list item
+ * with its own checkbox and nesting, so heading, list, rule and fence syntax has
+ * to stay literal. It does so because items are lexed as inline content, not
+ * because anything strips it — these cases are what would catch a renderer that
+ * started lexing items as blocks.
+ */
+export const MARKDOWN_ITEM_CASES: MarkdownCase[] = [
+  // The supported subset
+  { id: 'item-bold', markdown: 'buy **milk**', expected: 'bold "milk"' },
+  { id: 'item-italic', markdown: 'buy *milk*', expected: 'italic "milk"' },
+  { id: 'item-strike', markdown: 'buy ~~milk~~', expected: 'struck-through "milk"' },
+  { id: 'item-code', markdown: 'run `npm ci`', expected: 'inline code' },
+  { id: 'item-nested-emphasis', markdown: '**bold *and italic***', expected: 'italic nested inside bold' },
+
+  // Links, under the same scheme policy as text notes
+  { id: 'item-link', markdown: '[docs](https://example.com)', expected: 'a link labelled "docs"' },
+  { id: 'item-link-formatted-label', markdown: '[**docs**](https://example.com)', expected: 'a link with a bold label' },
+  { id: 'item-bare-url', markdown: 'see https://example.com', expected: 'an autolinked URL' },
+  { id: 'item-bare-url-www', markdown: 'see www.example.com', expected: 'an autolinked URL' },
+  {
+    id: 'item-bare-domain',
+    markdown: 'see example.com',
+    expected: 'plain text — GFM needs a scheme or www. to autolink',
+  },
+  { id: 'item-mailto', markdown: '[mail](mailto:a@b.com)', expected: 'a link labelled "mail"' },
+  { id: 'item-tel-link', markdown: '[call](tel:+15550100)', expected: 'plain text "call", not a link' },
+  {
+    id: 'item-javascript-link',
+    markdown: '[click](javascript:alert(1))',
+    expected: 'plain text "click", not a link',
+  },
+  { id: 'item-relative-link', markdown: '[rel](/dashboard)', expected: 'plain text "rel", not a link' },
+  {
+    id: 'item-empty-link-label',
+    markdown: '[](https://example.com)',
+    expected: 'a link labelled with its own URL — never an invisible target',
+  },
+
+  // Block syntax stays literal: the item is already a list item
+  { id: 'item-heading-literal', markdown: '# not a heading', expected: 'literal text including the #' },
+  { id: 'item-bullet-literal', markdown: '- not a bullet', expected: 'literal text including the -' },
+  { id: 'item-ordered-literal', markdown: '1. not a list', expected: 'literal text including the 1.' },
+  {
+    id: 'item-task-literal',
+    markdown: '- [ ] not a checkbox',
+    expected: 'literal text — the item has its own checkbox',
+  },
+  { id: 'item-hr-literal', markdown: '---', expected: 'literal text, no rule' },
+  { id: 'item-blockquote-literal', markdown: '> not a quote', expected: 'literal text including the >' },
+  { id: 'item-table-literal', markdown: 'a | b', expected: 'literal text including the pipe' },
+
+  // Degraded to source, as in text notes
+  {
+    id: 'item-image',
+    markdown: 'see ![alt](https://example.com/y.png)',
+    expected: 'literal source: ![alt](https://example.com/y.png)',
+  },
+  { id: 'item-raw-html', markdown: '<b>bold</b> text', expected: 'literal source: <b>bold</b> text' },
+  {
+    id: 'item-raw-html-script',
+    markdown: '<script>alert(1)</script>',
+    expected: 'literal source, inert — nothing executed',
+  },
+
+  // Plain text that must survive untouched
+  { id: 'item-escaped-star', markdown: '\\*not emphasis\\*', expected: 'literal asterisks, no emphasis' },
+  { id: 'item-arithmetic', markdown: '2 * 3 * 4', expected: 'literal asterisks — CommonMark needs no space after the opener' },
+  { id: 'item-underscored-word', markdown: 'my_file_name.txt', expected: 'literal underscores, no emphasis' },
+  { id: 'item-ampersand', markdown: 'salt & pepper < 5', expected: 'literal & and <, correctly escaped' },
+  { id: 'item-plain', markdown: 'milk', expected: 'plain text, unchanged' },
 ];

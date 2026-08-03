@@ -1,6 +1,12 @@
-import { marked, Tokens } from 'marked';
+import { marked, Lexer, Tokens } from 'marked';
 import DOMPurify from 'dompurify';
-import { formatLiteralImage, isAllowedLinkHref } from '@jot/shared';
+import {
+  formatLiteralImage,
+  isAllowedLinkHref,
+  normalizeInlineTokens,
+  INLINE_LEXER_OPTIONS,
+  type InlineNode,
+} from '@jot/shared';
 
 // Jot's Markdown feature set is specified in docs/specs/markdown-rendering.md
 // and is shared with the mobile app, which reaches it through markdown-it.
@@ -14,6 +20,27 @@ function escapeHtml(text: string): string {
     .replace(/"/g, '&quot;');
 }
 
+/**
+ * Normalizes a link target for an `href` attribute, or returns null if Jot will
+ * not link it.
+ *
+ * The encode/decode dance is marked's own `cleanUrl`: encode, then undo the
+ * '%' → '%25' double-encoding so an already-encoded URL (e.g. .../Caf%C3%A9)
+ * round-trips unchanged instead of ending up broken. It also encodes the quote
+ * that would otherwise close the attribute early; DOMPurify is the net behind
+ * that, not the first line of defence.
+ */
+function safeLinkHref(href: string): string | null {
+  // Narrower than DOMPurify's own filtering, which would allow tel: and app
+  // deep links through.
+  if (!isAllowedLinkHref(href)) return null;
+  try {
+    return encodeURI(href).replace(/%25/g, '%');
+  } catch {
+    return null;
+  }
+}
+
 marked.use({
   // Mobile matches this via react-native-markdown-display's softbreak rule,
   // which emits a newline even though markdown-it runs with breaks: false.
@@ -24,19 +51,8 @@ marked.use({
   renderer: {
     link({ href, tokens }: Tokens.Link): string {
       const text = this.parser.parseInline(tokens);
-      // Narrower than DOMPurify's own filtering, which would allow tel: and
-      // app deep links through.
-      if (!isAllowedLinkHref(href)) return text;
-      // Same normalization as marked's own cleanUrl: encode, then undo the
-      // '%' → '%25' double-encoding so already-encoded URLs (e.g.
-      // .../Caf%C3%A9) round-trip unchanged instead of ending up broken.
-      // (javascript: and friends are stripped later by DOMPurify.)
-      let safeHref: string;
-      try {
-        safeHref = encodeURI(href).replace(/%25/g, '%');
-      } catch {
-        return text;
-      }
+      const safeHref = safeLinkHref(href);
+      if (safeHref === null) return text;
       return `<a href="${safeHref}" target="_blank" rel="noopener noreferrer">${text}</a>`;
     },
 
@@ -90,4 +106,65 @@ export function renderMarkdown(content: string): string {
   if (!content.trim()) return '';
   const raw = marked.parse(content, { async: false });
   return DOMPurify.sanitize(raw, { ALLOWED_TAGS, ALLOWED_ATTR });
+}
+
+// List-item text renders an inline-only subset — see shared/src/inlineMarkdown.ts
+// for what it is and why, and docs/specs/markdown-rendering.md §2.1 for the spec.
+// The allowlist is narrower than ALLOWED_TAGS by construction: no block element
+// can be produced, so none is permitted through.
+const INLINE_ALLOWED_TAGS = ['strong', 'em', 'del', 'code', 'a', 'br'];
+
+function renderInlineNodes(nodes: InlineNode[]): string {
+  let html = '';
+
+  for (const node of nodes) {
+    switch (node.type) {
+      case 'text':
+        html += escapeHtml(node.value);
+        break;
+      case 'code':
+        html += `<code>${escapeHtml(node.value)}</code>`;
+        break;
+      case 'br':
+        html += '<br>';
+        break;
+      case 'strong':
+        html += `<strong>${renderInlineNodes(node.children)}</strong>`;
+        break;
+      case 'em':
+        html += `<em>${renderInlineNodes(node.children)}</em>`;
+        break;
+      case 'del':
+        html += `<del>${renderInlineNodes(node.children)}</del>`;
+        break;
+      case 'link': {
+        const label = renderInlineNodes(node.children);
+        // normalizeInlineTokens has already dropped links Jot will not follow,
+        // so this only guards the encodeURI failure path.
+        const safeHref = safeLinkHref(node.href);
+        html += safeHref === null
+          ? label
+          : `<a href="${safeHref}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+        break;
+      }
+    }
+  }
+
+  return html;
+}
+
+/**
+ * Renders one list-item's text as inline Markdown.
+ *
+ * Lexed as inline content rather than parsed as a document, which is what keeps
+ * `# x`, `- [ ] x` and `---` literal without any suppression: an item is already
+ * a list item, so block syntax inside one has nothing to describe.
+ */
+export function renderInlineMarkdown(text: string): string {
+  if (!text.trim()) return '';
+  const nodes = normalizeInlineTokens(Lexer.lexInline(text, INLINE_LEXER_OPTIONS));
+  return DOMPurify.sanitize(renderInlineNodes(nodes), {
+    ALLOWED_TAGS: INLINE_ALLOWED_TAGS,
+    ALLOWED_ATTR,
+  });
 }

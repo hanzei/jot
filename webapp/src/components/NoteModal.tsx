@@ -9,6 +9,7 @@ import LabelPicker from '@/components/LabelPicker';
 import NoteImageGallery from '@/components/NoteImageGallery';
 import LetterAvatar from '@/components/LetterAvatar';
 import SortableItem from '@/components/SortableItem';
+import InlineMarkdown from '@/components/InlineMarkdown';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
 import { useNoteImages } from '@/hooks/useNoteImages';
@@ -1742,9 +1743,10 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                                       aria-hidden="true"
                                       className="h-4 w-4 rounded mt-0.5 flex-shrink-0 cursor-default"
                                     />
-                                    <span className="min-w-0 whitespace-pre-wrap break-words font-semibold text-gray-500 dark:text-gray-400">
-                                      {parent.text}
-                                    </span>
+                                    <InlineMarkdown
+                                      text={parent.text}
+                                      className="min-w-0 whitespace-pre-wrap break-words font-semibold text-gray-500 dark:text-gray-400"
+                                    />
                                   </div>,
                                 );
                               }
