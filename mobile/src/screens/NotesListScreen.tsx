@@ -370,7 +370,19 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     return [...pinned, ...other];
   }, [archivedNotes, sortMode]);
 
-  // Clear local order overrides when server data, variant, or sort mode changes
+  // Clear local order overrides when server data, variant, or sort mode changes.
+  //
+  // This fires on *any* change to `notes`, not specifically a reorder's own
+  // confirmation — that's only safe because useReorderNotes carries its own
+  // onMutate (applyOptimisticReorder in useNotes.ts) that keeps the `notes`
+  // cache in the dragged order from the moment the drag commits. Without it,
+  // an unrelated mutation touching the same cache (e.g. archiving a note
+  // right after dragging it) would recreate `notes` from whatever order the
+  // cache still held, clear localOrder here, and reveal that stale order for
+  // one render before the real refetch landed (#815). Any local optimistic
+  // override added near this pattern later needs the same guarantee: keep
+  // the shared cache in sync with the override synchronously — don't rely on
+  // this effect to fire only once the override is safe to drop.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
     setLocalOrder(EMPTY_LOCAL_ORDER);
