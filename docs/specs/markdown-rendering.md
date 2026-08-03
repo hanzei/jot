@@ -177,8 +177,18 @@ spec exists to prevent.
 The item renderers share more than the block renderers can: both clients lex with
 `marked` and normalize through `shared/src/inlineMarkdown.ts`, so the policy
 decisions are made once and only the leaf rendering differs (an HTML string vs a
-`<Text>` tree). `marked` is a **type-only** import in `shared/` — `@jot/shared`
-has no runtime dependencies and must not gain one.
+`<Text>` tree).
+
+`shared/src/inlineMarkdown.ts` **declares the marked token fields it reads
+structurally and imports nothing from `marked`** — not even types. Both consumers
+compile `shared/src` with their own tsc and resolution runs from `shared/`
+(mobile's `@jot/shared` is a symlink and resolution follows the realpath), while
+CI installs dependencies in `webapp/` and `mobile/` only. So `shared/node_modules`
+does not exist during a consumer's typecheck and even a type-only import fails to
+resolve — the same trap as the `@babel/runtime` note in `CLAUDE.md`, and the same
+fix `mobile/src/utils/markdown.tsx` uses for markdown-it. `marked` stays a
+devDependency of `shared/` for its own test suite, which `shared-ci.yml` does
+install.
 
 Mobile therefore carries two Markdown libraries for now: `marked` for items and
 `react-native-markdown-display` for text-note content. That is temporary, and

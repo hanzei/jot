@@ -15,11 +15,33 @@
 // this module, so the policy decisions — which schemes may link, what an image
 // degrades to, what happens to raw HTML — are made in exactly one place. Only the
 // leaf rendering differs: an HTML string in the webapp, a <Text> tree on mobile.
-// `marked` is a *type-only* import here; @jot/shared has no runtime dependencies
-// and this must not be the change that gives it one.
 
-import type { Token, Tokens } from 'marked';
 import { formatLiteralImage, isAllowedLinkHref } from './markdown';
+
+/**
+ * The marked token fields this module reads, declared structurally rather than
+ * imported from `marked`.
+ *
+ * This is not a style preference. Both consumers compile `shared/src` with their
+ * own tsc, and module resolution runs from `shared/` — `mobile/node_modules/@jot/shared`
+ * is a symlink and resolution follows the realpath, so a lookup never reaches the
+ * consumer's `node_modules`. CI installs dependencies in `webapp/` and `mobile/`
+ * only, so `shared/node_modules` does not exist there and even a *type-only*
+ * `import from 'marked'` fails to resolve for both consumers. It is the same trap
+ * the `@babel/runtime` note in CLAUDE.md describes, and the same fix mobile's own
+ * markdown.tsx uses for markdown-it.
+ *
+ * marked's `Token` union is structurally assignable to this, so callers pass
+ * `Lexer.lexInline(...)` output directly with no cast.
+ */
+export interface InlineMarkdownToken {
+  type: string;
+  raw: string;
+  text?: string;
+  tokens?: InlineMarkdownToken[];
+  href?: string;
+  title?: string | null;
+}
 
 /**
  * A platform-neutral inline node. Deliberately smaller than marked's token
@@ -62,17 +84,18 @@ function textNode(value: string): InlineNode {
  * formatting it had, matching how the webapp's block renderer treats the same
  * case.
  */
-function normalizeLink(token: Tokens.Link): InlineNode[] {
+function normalizeLink(token: InlineMarkdownToken): InlineNode[] {
   const children = normalizeInlineTokens(token.tokens ?? []);
+  const href = token.href ?? '';
 
-  if (!isAllowedLinkHref(token.href)) return children;
+  if (!isAllowedLinkHref(href)) return children;
 
   // `[](https://example.com)` lexes to a link with no children at all. Rendered
   // faithfully that is an invisible tappable region, so the target becomes its
   // own label — the same instinct behind mobile refusing markdown-it's
   // empty-alt image links (docs/specs/markdown-rendering.md §5).
-  const label = children.length > 0 ? children : [textNode(token.href)];
-  return [{ type: 'link', href: token.href, children: label }];
+  const label = children.length > 0 ? children : [textNode(href)];
+  return [{ type: 'link', href, children: label }];
 }
 
 /**
@@ -83,7 +106,7 @@ function normalizeLink(token: Tokens.Link): InlineNode[] {
  * renderer follows (docs/specs/markdown-rendering.md §3): unsupported syntax
  * that vanished would read as a bug rather than a limit.
  */
-export function normalizeInlineTokens(tokens: Token[]): InlineNode[] {
+export function normalizeInlineTokens(tokens: InlineMarkdownToken[]): InlineNode[] {
   const nodes: InlineNode[] = [];
 
   for (const token of tokens) {
@@ -93,44 +116,47 @@ export function normalizeInlineTokens(tokens: Token[]): InlineNode[] {
         // An inline `text` token is usually a leaf, but marked nests one level
         // in places (notably inside a link label), and a leaf's own `.text` is
         // the unescaped source — escaping is the renderer's job, not this one's.
-        const nested = (token as Tokens.Text).tokens;
+        const nested = token.tokens;
         if (nested && nested.length > 0) {
           nodes.push(...normalizeInlineTokens(nested));
         } else {
-          nodes.push(textNode(token.text));
+          nodes.push(textNode(token.text ?? ''));
         }
         break;
       }
 
+      // Spelled out one per case: `token.type` is a plain string here, so a
+      // shared arm would not narrow to the InlineNode literal union.
       case 'strong':
+        nodes.push({ type: 'strong', children: normalizeInlineTokens(token.tokens ?? []) });
+        break;
+
       case 'em':
+        nodes.push({ type: 'em', children: normalizeInlineTokens(token.tokens ?? []) });
+        break;
+
       case 'del':
-        nodes.push({
-          type: token.type,
-          children: normalizeInlineTokens((token as Tokens.Strong).tokens ?? []),
-        });
+        nodes.push({ type: 'del', children: normalizeInlineTokens(token.tokens ?? []) });
         break;
 
       case 'codespan':
-        nodes.push({ type: 'code', value: (token as Tokens.Codespan).text });
+        nodes.push({ type: 'code', value: token.text ?? '' });
         break;
 
       case 'link':
-        nodes.push(...normalizeLink(token as Tokens.Link));
+        nodes.push(...normalizeLink(token));
         break;
 
-      case 'image': {
+      case 'image':
         // Images are a gallery feature, never embedded (docs/specs/file-attachments.md).
-        const image = token as Tokens.Image;
-        nodes.push(textNode(formatLiteralImage(image.text, image.href, image.title)));
+        nodes.push(textNode(formatLiteralImage(token.text ?? '', token.href ?? '', token.title)));
         break;
-      }
 
       case 'html':
         // Raw HTML shows its own source. Only the tags lex as `html`; the text
         // between them stays ordinary text, which is exactly what the webapp's
         // block renderer produces for inline HTML today.
-        nodes.push(textNode((token as Tokens.HTML).text));
+        nodes.push(textNode(token.text ?? ''));
         break;
 
       case 'br':
