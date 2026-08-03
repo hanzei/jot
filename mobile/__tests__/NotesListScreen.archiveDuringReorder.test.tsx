@@ -224,11 +224,7 @@ describe('NotesListScreen: archive during an in-flight manual reorder', () => {
     // Drag note-A from the front to the end (position 5 of 6).
     fireEvent.press(screen.getByTestId('reorder-trigger-notes'));
     expect(orderedCardIds()).toEqual(['note-B', 'note-C', 'note-D', 'note-E', 'note-F', 'note-A']);
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(notesApi.reorderNotes).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(notesApi.reorderNotes).toHaveBeenCalledTimes(1));
 
     // While that reorder is still in flight (network promise unresolved),
     // archive note-A — mirroring tapping Archive in the single-note editor

@@ -875,7 +875,11 @@ export function useReorderNotes() {
     onError: (_err, _noteIds, snapshot) => {
       if (snapshot) rollbackOptimisticReorder(queryClient, snapshot);
     },
-    onSuccess: () => {
+    // Reconcile with the real local DB after either outcome, not just success:
+    // a rollback restores the pre-drag snapshot captured at onMutate time, which
+    // can itself be stale if another mutation touched the same cache while this
+    // one was in flight. Invalidating here re-pulls the true order either way.
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
     },
   });
