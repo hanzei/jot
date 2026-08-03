@@ -2726,6 +2726,8 @@ export default function NoteEditorScreen() {
                   onHeading={toggleMobileHeading}
                   onBullet={toggleMobileBullet}
                   onCheckbox={toggleMobileCheckbox}
+                  backgroundColor={noteBackground}
+                  hasNoteColor={hasNoteColor}
                 />
               </InputAccessoryView>
             )}
@@ -2848,6 +2850,8 @@ export default function NoteEditorScreen() {
           onHeading={toggleMobileHeading}
           onBullet={toggleMobileBullet}
           onCheckbox={toggleMobileCheckbox}
+          backgroundColor={noteBackground}
+          hasNoteColor={hasNoteColor}
         />
       )}
 
