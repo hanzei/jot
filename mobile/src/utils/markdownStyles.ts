@@ -1,5 +1,10 @@
 // Styles for react-native-markdown-display. The library defaults are too large
 // for mobile note cards (H1=32px, H2=24px), so we override heading sizes.
+//
+// h4-h6 deliberately get no size of their own: below h3 the steps are
+// indistinguishable at note sizes, so they render as bold body text. The webapp
+// matches, via .markdown-content in index.css. See
+// docs/specs/markdown-rendering.md.
 
 export function compactMarkdownStyles(color: string) {
   return {
@@ -7,9 +12,9 @@ export function compactMarkdownStyles(color: string) {
     heading1: { fontSize: 15, fontWeight: '700' as const, lineHeight: 20 },
     heading2: { fontSize: 14, fontWeight: '700' as const, lineHeight: 20 },
     heading3: { fontSize: 14, fontWeight: '600' as const, lineHeight: 20 },
-    heading4: { fontSize: 13, fontWeight: '600' as const, lineHeight: 20 },
-    heading5: { fontSize: 13, fontWeight: '500' as const, lineHeight: 20 },
-    heading6: { fontSize: 13, fontWeight: '500' as const, lineHeight: 20 },
+    heading4: { fontSize: 14, fontWeight: '700' as const, lineHeight: 20 },
+    heading5: { fontSize: 14, fontWeight: '700' as const, lineHeight: 20 },
+    heading6: { fontSize: 14, fontWeight: '700' as const, lineHeight: 20 },
   };
 }
 
@@ -19,19 +24,12 @@ export function fullMarkdownStyles(color: string) {
     heading1: { fontSize: 22, fontWeight: '700' as const, lineHeight: 30 },
     heading2: { fontSize: 18, fontWeight: '600' as const, lineHeight: 26 },
     heading3: { fontSize: 16, fontWeight: '600' as const, lineHeight: 24 },
-    heading4: { fontSize: 15, fontWeight: '600' as const, lineHeight: 22 },
-    heading5: { fontSize: 14, fontWeight: '600' as const, lineHeight: 22 },
-    heading6: { fontSize: 14, fontWeight: '500' as const, lineHeight: 22 },
+    heading4: { fontSize: 14, fontWeight: '700' as const, lineHeight: 22 },
+    heading5: { fontSize: 14, fontWeight: '700' as const, lineHeight: 22 },
+    heading6: { fontSize: 14, fontWeight: '700' as const, lineHeight: 22 },
+    // The library default is a solid black bar, invisible on a dark background.
+    hr: { backgroundColor: color, opacity: 0.3, height: 1 },
   };
-}
-
-// react-native-markdown-display doesn't bundle a markdown-it task-list plugin,
-// so "- [x] text" renders as "• [x] text". Replace the markers with unicode
-// checkbox characters before passing content to <Markdown>.
-export function preprocessMarkdown(content: string): string {
-  return content
-    .replace(/^(\s*[-*+]\s+)\[x\]\s*/gim, '$1☑ ')
-    .replace(/^(\s*[-*+]\s+)\[ \]\s*/gim, '$1☐ ');
 }
 
 export function stripMarkdownForPreview(content: string): string {

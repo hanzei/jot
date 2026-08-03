@@ -42,6 +42,80 @@ test.describe('Markdown note editing', () => {
     await dialog.getByRole('button', { name: 'Close' }).click();
   });
 
+  // The full feature set is specified in docs/specs/markdown-rendering.md and
+  // pinned per-construct by the unit tests on both clients; these two cover it
+  // end to end, on real note content, in the browser.
+  test('renders the supported syntax in the preview', async ({ page, dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.clickNewNote();
+    await page.fill(
+      'textarea[placeholder="Take a note..."]',
+      [
+        '### Third heading',
+        '',
+        '#### Fourth heading',
+        '',
+        '**bold** and ~~struck~~',
+        '',
+        '- [x] done',
+        '- [ ] todo',
+        '',
+        '```',
+        'const a = 1;',
+        '```',
+        '',
+        '---',
+        '',
+        'visit https://example.com now',
+      ].join('\n'),
+    );
+    await page.keyboard.press('Escape');
+
+    const preview = page.getByRole('dialog').getByTestId('note-content-preview');
+    await expect(preview.locator('h3')).toHaveText('Third heading');
+    // h4 and below are headings, but sized as bold body text.
+    await expect(preview.locator('h4')).toHaveText('Fourth heading');
+    const bodySize = await preview.locator('p').first().evaluate((el) => getComputedStyle(el).fontSize);
+    await expect(preview.locator('h4')).toHaveCSS('font-size', bodySize);
+    await expect(preview.locator('h4')).toHaveCSS('font-weight', '700');
+    await expect(preview.locator('strong')).toHaveText('bold');
+    await expect(preview.locator('del')).toHaveText('struck');
+    await expect(preview.locator('li').nth(0)).toHaveText('☑ done');
+    await expect(preview.locator('li').nth(1)).toHaveText('☐ todo');
+    // Checkboxes are glyphs, not inputs — nothing to toggle.
+    await expect(preview.locator('input')).toHaveCount(0);
+    await expect(preview.locator('pre')).toContainText('const a = 1;');
+    await expect(preview.locator('hr')).toHaveCount(1);
+    await expect(preview.locator('a[href="https://example.com"]')).toBeVisible();
+  });
+
+  test('shows unsupported syntax as literal source and refuses unsupported link schemes', async ({ page, dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.clickNewNote();
+    await page.fill(
+      'textarea[placeholder="Take a note..."]',
+      [
+        '![alt](https://example.com/y.png)',
+        '',
+        'a | b',
+        '--- | ---',
+        '1 | 2',
+        '',
+        '[call](tel:+15550100)',
+      ].join('\n'),
+    );
+    await page.keyboard.press('Escape');
+
+    const preview = page.getByRole('dialog').getByTestId('note-content-preview');
+    await expect(preview).toContainText('![alt](https://example.com/y.png)');
+    await expect(preview.locator('img')).toHaveCount(0);
+    await expect(preview).toContainText('a | b');
+    await expect(preview.locator('table')).toHaveCount(0);
+    // tel: renders as its label, with nothing to follow.
+    await expect(preview).toContainText('call');
+    await expect(preview.locator('a')).toHaveCount(0);
+  });
+
   test('two-step Escape dismiss: first Escape collapses to preview, second Escape closes modal', async ({ page, dashboardPage }) => {
     await dashboardPage.goto();
     // Intentionally keep the modal open — see comment in previous test.

@@ -64,7 +64,8 @@ import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { getCompletedSectionDividerColor, isWhiteHexColor } from '../utils/colorContrast';
 import { formatEditorStateForShare } from '../utils/noteTextFormatter';
-import { fullMarkdownStyles, preprocessMarkdown } from '../utils/markdownStyles';
+import { fullMarkdownStyles } from '../utils/markdownStyles';
+import { allowLinkPress, markdownParser, markdownRules } from '../utils/markdown';
 import { getActiveServer, listServers, type ServerAccountEntry } from '../store/serverAccounts';
 import { isServerReachable } from '../api/serverReachability';
 import { setPendingShare, usePendingShare } from '../store/shareIntent';
@@ -2725,8 +2726,13 @@ export default function NoteEditorScreen() {
                 style={styles.contentPreview}
               >
                 {content ? (
-                  <Markdown style={fullMarkdownStyles(hasNoteColor ? '#1a1a1a' : colors.text)}>
-                    {preprocessMarkdown(content)}
+                  <Markdown
+                    style={fullMarkdownStyles(hasNoteColor ? '#1a1a1a' : colors.text)}
+                    markdownit={markdownParser}
+                    rules={markdownRules}
+                    onLinkPress={allowLinkPress}
+                  >
+                    {content}
                   </Markdown>
                 ) : (
                   <Text style={{ color: hasNoteColor ? '#999' : colors.placeholder, fontSize: 14 }}>
