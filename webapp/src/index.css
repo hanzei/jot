@@ -141,6 +141,11 @@ body {
   .markdown-content h3 {
     @apply font-semibold text-[1.1em] mb-1 mt-2 first:mt-0;
   }
+  /* h4-h6 get no size of their own — below h3 the steps are indistinguishable
+     at note sizes, so they render as bold body text. Mobile matches. */
+  .markdown-content :is(h4, h5, h6) {
+    @apply font-bold text-[1em] mb-1 mt-2 first:mt-0;
+  }
   .markdown-content p {
     @apply mb-2 last:mb-0;
   }
@@ -158,6 +163,17 @@ body {
   }
   .markdown-content code {
     @apply font-mono bg-black/5 dark:bg-white/10 rounded px-1 text-[0.9em];
+  }
+  .markdown-content pre {
+    @apply bg-black/5 dark:bg-white/10 rounded p-2 mb-2 last:mb-0 overflow-x-auto;
+  }
+  /* The block already carries the tint and padding; the inner <code> would
+     otherwise stack a second background on top of it. */
+  .markdown-content pre code {
+    @apply bg-transparent rounded-none p-0;
+  }
+  .markdown-content hr {
+    @apply border-t border-gray-300 dark:border-gray-600 my-3;
   }
   .markdown-content a {
     @apply text-blue-500 dark:text-blue-400 underline;

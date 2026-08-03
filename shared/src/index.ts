@@ -5,6 +5,8 @@ export * from './collaborators';
 export * from './colors';
 export * from './serverUrl';
 export * from './text';
+export * from './markdown';
+export * from './markdownCases';
 export * from './noteConversion';
 export * from './noteSort';
 export * from './usernameValidation';
