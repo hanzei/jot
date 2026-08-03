@@ -482,12 +482,13 @@ test.describe('Notes', () => {
     // which key off an <h3> that only list notes with a title render.
     const createResp = await request.post('/api/v1/notes', {
       headers: authHeaders,
-      data: { note_type: 'text', content: '# Groceries\n- [x] Milk\n- Eggs' },
+      data: { note_type: 'text', content: '# Groceries\n- [x] **Milk**\n- Eggs\n  - [ ] Free range' },
     });
     expect(createResp.ok()).toBeTruthy();
     const sourceNote = await createResp.json();
 
-    // --- text -> list: markdown formatting is stripped and lines become items ---
+    // --- text -> list: block markers are consumed, inline formatting and
+    // nesting survive (docs/specs/markdown-rendering.md §2.2) ---
     await page.reload();
     await dashboardPage.noteCardByText('Groceries').click();
     await expect(page.getByRole('dialog').getByRole('button', { name: 'Close' })).toBeVisible();
@@ -501,9 +502,14 @@ test.describe('Notes', () => {
       converted.items.map((item: { text: string; completed: boolean }) => ({ text: item.text, completed: item.completed })),
     ).toEqual([
       { text: 'Groceries', completed: false },
-      { text: 'Milk', completed: true },
+      { text: '**Milk**', completed: true },
       { text: 'Eggs', completed: false },
+      { text: 'Free range', completed: false },
     ]);
+    // The indented line became a child of the item above it; the server rebuilt
+    // parent_id from the indent_level the client sent.
+    expect(converted.items[2].parent_id).toBeNull();
+    expect(converted.items[3].parent_id).toBe(converted.items[2].id);
 
     // The modal stays open on the converted list note. Give it a title so it
     // round-trips back as an h1 line below and is findable via the title-based
@@ -535,6 +541,10 @@ test.describe('Notes', () => {
     const revertedToText = allNotes.find((n: { id: string }) => n.id === sourceNote.id);
     expect(revertedToText.note_type).toBe('text');
     expect(revertedToText.title).toBe('');
-    expect(revertedToText.content).toBe('# Groceries List\n\n- [ ] Groceries\n- [x] Milk\n- [ ] Eggs');
+    // Back to the source content, modulo the title the list gained: the inline
+    // formatting and the nesting both round-tripped.
+    expect(revertedToText.content).toBe(
+      '# Groceries List\n\n- [ ] Groceries\n- [x] **Milk**\n- [ ] Eggs\n  - [ ] Free range',
+    );
   });
 });

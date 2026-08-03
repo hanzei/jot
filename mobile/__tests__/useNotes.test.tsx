@@ -1338,6 +1338,30 @@ describe('useNotes hooks', () => {
       expect(enqueuedBody.base_version).toBeUndefined();
     });
 
+    it('rebuilds parent_id from indent_level locally, as the server does on replay', async () => {
+      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+      // An indented first line has no top-level item to hang off, so it stays
+      // top-level and does not adopt the item after it.
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce({
+        ...sourceTextNote,
+        content: '  - Orphan\n- Parent\n  - Child',
+      } as never);
+
+      const { result } = renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
+
+      const localConverted = await result.current.mutateAsync('123');
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      const items = (localConverted as { items: Array<{ id: string; text: string; parent_id: string | null }> }).items;
+      expect(items.map((item) => item.text)).toEqual(['Orphan', 'Parent', 'Child']);
+      expect(items[0].parent_id).toBeNull();
+      expect(items[1].parent_id).toBeNull();
+      expect(items[2].parent_id).toBe(items[1].id);
+
+      const enqueuedBody = mockSyncQueue.enqueueOperation.mock.calls[0][1].body;
+      expect(enqueuedBody.items.map((item: { indent_level: number }) => item.indent_level)).toEqual([1, 0, 1]);
+    });
+
     it('throws when the source note is missing from the local cache', async () => {
       mockUseNetworkStatus.mockReturnValue({ isConnected: false });
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(null);

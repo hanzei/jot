@@ -1086,6 +1086,9 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
               text: item.text,
               position: idx,
               completed: item.completed,
+              // The server rebuilds parent_id from this, attaching each indented
+              // item to the nearest preceding top-level one.
+              indent_level: item.indentLevel,
             })),
           }
         : {

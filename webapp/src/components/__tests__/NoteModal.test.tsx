@@ -2148,15 +2148,32 @@ describe('NoteModal', () => {
         note_type: 'list',
         base_version: 1,
         items: [
-          { text: 'Groceries', position: 0, completed: false },
-          { text: 'Milk', position: 1, completed: true },
-          { text: 'Eggs', position: 2, completed: false },
+          { text: 'Groceries', position: 0, completed: false, indent_level: 0 },
+          { text: 'Milk', position: 1, completed: true, indent_level: 0 },
+          { text: 'Eggs', position: 2, completed: false, indent_level: 0 },
         ],
       })
       // The modal stays open on the converted note (refreshed via onRefresh),
       // rather than closing.
       expect(onClose).not.toHaveBeenCalled()
       expect(onRefresh).toHaveBeenCalled()
+    })
+
+    it('sends indent_level so nesting survives the conversion', async () => {
+      const note = createMockNote({ note_type: 'text', content: '- Parent\n  - [x] Child' })
+      const onConvert = vi.fn().mockResolvedValue(undefined)
+
+      renderNoteModal({ ...defaultProps, note, onConvert })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Convert to list' }))
+      await vi.runAllTimersAsync()
+
+      expect(onConvert).toHaveBeenCalledWith('1', expect.objectContaining({
+        items: [
+          { text: 'Parent', position: 0, completed: false, indent_level: 0 },
+          { text: 'Child', position: 1, completed: true, indent_level: 1 },
+        ],
+      }))
     })
 
     it('confirms before converting a list to text and warns about dropped assignments', async () => {

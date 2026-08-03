@@ -90,6 +90,67 @@ Two consequences worth stating, because both look like bugs otherwise:
 - **Markdown counts against `ITEM_TEXT_MAX_LENGTH`** (500), which is measured on
   the source. An item full of `**` has less room for words than one without.
 
+### 2.2 Converting between note types
+
+Because §2.1 is a strict *subset* of §2, converting a note between the two types
+does not need a formatting policy of its own — it follows from which constructs
+the destination can display. `shared/src/noteConversion.ts` implements exactly
+that rule, and both clients call it.
+
+**Text → list.** One item per non-blank line. Only the block markdown an item
+*structurally replaces* is removed, because the item already expresses it:
+
+| Removed | Because the item has |
+|---|---|
+| A leading `-`, `*`, `+`, `1.` marker | its own bullet |
+| A `[ ]` / `[x]` checkbox after that marker | its own `completed` state |
+| A leading `#`–`######` heading prefix | no headings, and the title is separate |
+| Leading `>` blockquote markers | no block structure at all |
+
+Everything else survives as typed. Inline syntax is kept because the item
+renders it — stripping `**` out of `**Buy** milk` would delete formatting the
+destination displays. Block syntax that is *not* a line prefix — a fence, `---`,
+a table row, `![alt](url)` — is kept too, because §2.1 shows it as literal source,
+so the item displays what the user typed.
+
+**Nesting survives.** An indented line that also carries a list marker becomes a
+child of the nearest preceding top-level item, capped at the single level the
+model allows. Indentation alone is not enough: an indented line *without* a
+marker is far more often a wrapped continuation of the paragraph above it than a
+deliberate child, and silently re-parenting it is a worse failure than dropping
+nesting nobody asked for.
+
+The clients cannot send `parent_id` here — the item ids do not exist until the
+conversion is persisted — so they send `indent_level` (0 or 1) and the server
+rebuilds `parent_id` in `buildCreateNoteItems`, attaching each indented item to
+the nearest preceding top-level one. An indented item with no such predecessor
+stays top-level. Mobile mirrors that same walk locally in
+`applyConvertedNoteLocally` so an offline conversion matches what the replay
+will produce.
+
+**List → text.** The title becomes an `# h1` line; each item becomes `- [ ]` or
+`- [x]`, children indented two spaces. Item text is emitted **verbatim and
+deliberately unescaped**: the item and the converted text note lex the same
+source with the same inline rules, so escaping would *introduce* a rendering
+change rather than prevent one. Block syntax in item text needs no escaping
+either — every item is emitted behind a `- [ ] ` marker, so a leading `#` or a
+`---` stays inside a list item and stays literal, exactly as the item showed it.
+
+Together these make the round trip stable in both directions: a list converted
+to text and back returns the same items, including nesting and completed state,
+and text converted to a list and back returns the same content. What is *not*
+recovered is anything the line-per-item split discards — blank lines, and the
+distinction between a wrapped paragraph and separate lines.
+
+**Known gap:** conversion does not check `ITEM_MAX_COUNT` (500) or
+`ITEM_TEXT_MAX_LENGTH` before sending. A text note with more than 500 non-blank
+lines, or a single line longer than 500 characters, is rejected by the server
+(422 and 400 respectively) and surfaces on both clients as a generic "failed to
+convert" message with no indication of the cause. The webapp's *paste* path does
+guard this (`note.tooManyItems`); the convert path does not. Keeping inline
+markers rather than stripping them makes the text-length cap slightly easier to
+hit, since the cap is measured on the source.
+
 ---
 
 ## 3. How unsupported formatting is handled
@@ -167,6 +228,7 @@ spec exists to prevent.
 |---|---|
 | Shared link-scheme policy + literal-image format | `shared/src/markdown.ts` |
 | Shared inline-subset normalizer (§2.1) | `shared/src/inlineMarkdown.ts` |
+| Shared text ↔ list conversion (§2.2) | `shared/src/noteConversion.ts` |
 | Shared conformance corpora (both test suites) | `shared/src/markdownCases.ts` |
 | Webapp renderer + tag allowlist | `webapp/src/utils/markdown.ts` |
 | Webapp item renderer | `webapp/src/components/InlineMarkdown.tsx` |
