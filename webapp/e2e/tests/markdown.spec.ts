@@ -116,6 +116,53 @@ test.describe('Markdown note editing', () => {
     await expect(preview.locator('a')).toHaveCount(0);
   });
 
+  // List-item text renders the inline subset (docs/specs/markdown-rendering.md
+  // §2.1). The card is the display surface; the editor row deliberately still
+  // shows source, which is what the second test below pins.
+  test('renders the inline subset in list-note item text on the card', async ({ dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createListNote('Shopping', [
+      'buy **milk** and *bread*',
+      '~~cancelled~~ item',
+      'run `npm ci`',
+      'see https://example.com',
+      '[docs](https://example.com/docs)',
+    ]);
+
+    const card = dashboardPage.noteCardByText('Shopping');
+    await expect(card.locator('strong')).toHaveText('milk');
+    await expect(card.locator('em')).toHaveText('bread');
+    await expect(card.locator('del')).toHaveText('cancelled');
+    await expect(card.locator('code')).toHaveText('npm ci');
+    await expect(card.locator('a[href="https://example.com"]')).toBeVisible();
+    await expect(card.locator('a[href="https://example.com/docs"]')).toHaveText('docs');
+    // The source markers are gone, not merely restyled.
+    await expect(card).not.toContainText('**milk**');
+  });
+
+  test('leaves block syntax literal in list items and keeps the editor row showing source', async ({ dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createListNote('Literal', [
+      '# not a heading',
+      '- [ ] not a checkbox',
+      '[call](tel:+15550100)',
+    ]);
+
+    // An item is already a list item, so block syntax has nothing to describe.
+    const card = dashboardPage.noteCardByText('Literal');
+    await expect(card).toContainText('# not a heading');
+    await expect(card).toContainText('- [ ] not a checkbox');
+    await expect(card.locator('h1')).toHaveCount(0);
+    // tel: renders as its label, with nothing to follow.
+    await expect(card).toContainText('call');
+    await expect(card.locator('a')).toHaveCount(0);
+
+    // Reopening the note shows the raw source in the editable row — rendering
+    // there is #824, and this assertion is what will need updating when it lands.
+    await dashboardPage.openNote('Literal');
+    await dashboardPage.expectListItemValue(0, '# not a heading');
+  });
+
   test('two-step Escape dismiss: first Escape collapses to preview, second Escape closes modal', async ({ page, dashboardPage }) => {
     await dashboardPage.goto();
     // Intentionally keep the modal open — see comment in previous test.

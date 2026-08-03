@@ -82,6 +82,45 @@ describe('ListItem', () => {
     expect(queryByTestId('list-item-delete')).not.toBeNull();
   });
 
+  // A read-only row is a display surface, so it renders the inline Markdown
+  // subset; an editable row is an input and keeps showing its source. Rendering
+  // in the editable row is #824.
+  it('renders markdown in the read-only row', () => {
+    const { getByTestId, queryByTestId } = render(
+      <ListItem text="buy **milk**" completed={false} editable={false} />,
+    );
+
+    expect(queryByTestId('list-item-text')).toBeNull();
+    const rendered = getByTestId('list-item-text-readonly');
+    const visible = (function text(node: unknown): string {
+      if (typeof node === 'string') return node;
+      if (!node || typeof node !== 'object') return '';
+      const children = (node as { props?: { children?: unknown } }).props?.children;
+      if (Array.isArray(children)) return children.map(text).join('');
+      return text(children);
+    })(rendered);
+    expect(visible).toBe('buy milk');
+  });
+
+  it('keeps the editable row showing markdown source', () => {
+    const { getByTestId, queryByTestId } = render(
+      <ListItem text="buy **milk**" completed={false} />,
+    );
+
+    expect(getByTestId('list-item-text').props.value).toBe('buy **milk**');
+    expect(queryByTestId('list-item-text-readonly')).toBeNull();
+  });
+
+  it('names the checkbox with the item words, not its markdown source', () => {
+    const { getByTestId } = render(
+      <ListItem text="buy **milk**" completed={false} editable={false} />,
+    );
+
+    const label = getByTestId('list-item-checkbox').props.accessibilityLabel as string;
+    expect(label).toContain('buy milk');
+    expect(label).not.toContain('**');
+  });
+
   it('does not show delete button when not editable', () => {
     const { queryByTestId } = render(
       <ListItem text="Task" completed={false} editable={false} onDelete={jest.fn()} />,

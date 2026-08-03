@@ -4,11 +4,12 @@ import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuI
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListItems, listToText, exceedsCodePointLimit, truncateToCodePoints, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
-import { renderMarkdown } from '@/utils/markdown';
+import { renderMarkdown, inlineMarkdownToText } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
 import NoteImageGallery from '@/components/NoteImageGallery';
 import LetterAvatar from '@/components/LetterAvatar';
 import SortableItem from '@/components/SortableItem';
+import InlineMarkdown from '@/components/InlineMarkdown';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
 import { useNoteImages } from '@/hooks/useNoteImages';
@@ -1731,7 +1732,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                                     key={`ghost-${parent.id}`}
                                     className="flex items-start gap-2 min-w-0 text-sm opacity-60 select-none"
                                     style={{ marginLeft: indentOf(parent) * VALIDATION.INDENT_PX_PER_LEVEL }}
-                                    aria-label={t('note.completedItemGroup', { title: parent.text })}
+                                    // The label must match the rendered text below, not the
+                                    // source: aria-label replaces the element's content for
+                                    // assistive tech, so raw markers would be all it announced.
+                                    aria-label={t('note.completedItemGroup', {
+                                      title: inlineMarkdownToText(parent.text),
+                                    })}
                                   >
                                     <div className="w-6 h-4 flex-shrink-0"></div>
                                     <input
@@ -1742,9 +1748,10 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                                       aria-hidden="true"
                                       className="h-4 w-4 rounded mt-0.5 flex-shrink-0 cursor-default"
                                     />
-                                    <span className="min-w-0 whitespace-pre-wrap break-words font-semibold text-gray-500 dark:text-gray-400">
-                                      {parent.text}
-                                    </span>
+                                    <InlineMarkdown
+                                      text={parent.text}
+                                      className="min-w-0 whitespace-pre-wrap break-words font-semibold text-gray-500 dark:text-gray-400"
+                                    />
                                   </div>,
                                 );
                               }

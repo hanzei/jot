@@ -6,6 +6,7 @@ export * from './colors';
 export * from './serverUrl';
 export * from './text';
 export * from './markdown';
+export * from './inlineMarkdown';
 export * from './markdownCases';
 export * from './noteConversion';
 export * from './noteSort';

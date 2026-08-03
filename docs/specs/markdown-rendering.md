@@ -7,12 +7,15 @@ Owner: TBD · Target: Jot webapp + mobile
 
 ## 1. Scope
 
-Markdown applies to the **`content` of text notes**, and nothing else:
+Markdown applies to the **`content` of text notes** in full, and to **list-note
+item text** in an inline-only subset (§2.1):
 
-- **List-note item text is plain.** No Markdown is parsed in it; the one piece of
-  formatting it gets is bare-URL autolinking, via the `LinkText` component on
-  each client.
 - **Note titles are plain.** They are rendered as text everywhere.
+- **List-item Markdown renders on display surfaces only.** Note cards, mobile's
+  read-only editor and the collapsed-completed parent label render it; the
+  editable row still shows its source, because it is an always-live input with no
+  preview mode. Closing that gap is
+  [#824](https://github.com/hanzei/jot/issues/824).
 
 Both clients render the same feature set from the same source string, so a note
 written on a phone reads identically in a browser and the other way round. They
@@ -54,6 +57,38 @@ of a link can come from a collaborator, and following it is a navigation the
 reader did not choose.
 
 Syntax highlighting inside code blocks is deliberately absent (§6).
+
+### 2.1 The list-item subset
+
+List-item text renders **only inline constructs**:
+
+| Syntax | Behaviour |
+|---|---|
+| `**bold**`, `*italic*`, `~~strike~~` | Rendered |
+| `` `inline code` `` | Rendered |
+| `[text](url)` and bare `https://…` | Rendered as links, same scheme policy as above |
+| `![alt](url)`, raw HTML | Literal source, same as above |
+| Everything block-level | **Literal source** |
+
+"Everything block-level" is the whole point: `# x`, `- x`, `1. x`, `- [ ] x`,
+`---`, `> x` and table pipes all stay exactly as typed. An item **is** a list
+item — it carries its own checkbox, its own one-level nesting and its own
+position — so block syntax inside one has nothing left to describe, and `- [ ]`
+in particular would be a second checkbox next to the real one.
+
+This falls out of **lexing item text as inline content** rather than parsing it
+as a document, so there is nothing to suppress and nothing to keep in step with
+the block rules. It is why the item renderer is a fraction of the size of the
+full one, and why the two cannot drift on block syntax even in principle.
+
+Two consequences worth stating, because both look like bugs otherwise:
+
+- **`~~strike~~` collides with completed items**, which already render with a
+  line through them. It is supported anyway: dropping it would make the subset
+  something other than a subset, and a note converted from a list to text would
+  gain strikethrough it had not been rendering.
+- **Markdown counts against `ITEM_TEXT_MAX_LENGTH`** (500), which is measured on
+  the source. An item full of `**` has less room for words than one without.
 
 ---
 
@@ -131,10 +166,43 @@ spec exists to prevent.
 | Concern | File |
 |---|---|
 | Shared link-scheme policy + literal-image format | `shared/src/markdown.ts` |
-| Shared conformance corpus (both test suites) | `shared/src/markdownCases.ts` |
+| Shared inline-subset normalizer (§2.1) | `shared/src/inlineMarkdown.ts` |
+| Shared conformance corpora (both test suites) | `shared/src/markdownCases.ts` |
 | Webapp renderer + tag allowlist | `webapp/src/utils/markdown.ts` |
+| Webapp item renderer | `webapp/src/components/InlineMarkdown.tsx` |
 | Mobile parser, core rules, link render rule | `mobile/src/utils/markdown.tsx` |
+| Mobile item lexing + plain-text flattening | `mobile/src/utils/inlineMarkdown.ts` |
+| Mobile item renderer | `mobile/src/components/InlineMarkdown.tsx` |
 | Mobile styles | `mobile/src/utils/markdownStyles.ts` |
+
+**An accessibility label built from item text must be flattened first**
+(`flattenInlineNodes`). Once item text renders, a label built from the raw source
+announces markers the user never sees — and an `aria-label` *replaces* the
+element's content for assistive technology, so those markers become the only
+thing announced. Both the webapp's collapsed-completed group label and mobile's
+item checkbox label go through it.
+
+The item renderers share more than the block renderers can: both clients lex with
+`marked` and normalize through `shared/src/inlineMarkdown.ts`, so the policy
+decisions are made once and only the leaf rendering differs (an HTML string vs a
+`<Text>` tree).
+
+`shared/src/inlineMarkdown.ts` **declares the marked token fields it reads
+structurally and imports nothing from `marked`** — not even types. Both consumers
+compile `shared/src` with their own tsc and resolution runs from `shared/`
+(mobile's `@jot/shared` is a symlink and resolution follows the realpath), while
+CI installs dependencies in `webapp/` and `mobile/` only. So `shared/node_modules`
+does not exist during a consumer's typecheck and even a type-only import fails to
+resolve — the same trap as the `@babel/runtime` note in `CLAUDE.md`, and the same
+fix `mobile/src/utils/markdown.tsx` uses for markdown-it. `marked` stays a
+devDependency of `shared/` for its own test suite, which `shared-ci.yml` does
+install.
+
+Mobile therefore carries two Markdown libraries for now: `marked` for items and
+`react-native-markdown-display` for text-note content. That is temporary, and
+[#822](https://github.com/hanzei/jot/issues/822) is what ends it — the item
+renderer is also the cheap proof that `marked` resolves under Metro, which is the
+assumption that ticket rests on.
 
 The mobile note **card** preview does not use any of this — it flattens Markdown
 to a single line of plain text with `stripMarkdownForPreview` in
@@ -200,7 +268,11 @@ here so the next person does not have to rediscover them.
 
 - **Interactive checkboxes.** Toggling a rendered ☐ would mean writing back into
   `content` — a much larger feature than rendering.
-- **Markdown in list-note item text.** It stays plain (§1).
+- **Markdown in the *editable* list-item row.** The subset renders on display
+  surfaces (§1); giving the always-live input a view/edit swap is
+  [#824](https://github.com/hanzei/jot/issues/824).
+- **Block Markdown in list items.** Not a gap to be filled later — §2.1 explains
+  why an item cannot hold it.
 - **Syntax highlighting** in code blocks. The webapp allowlist drops the
   `class="language-js"` attribute `marked` emits, so the language tag is parsed
   and ignored on both clients.
@@ -209,11 +281,19 @@ here so the next person does not have to rediscover them.
 
 ## 7. Testing
 
-`shared/src/markdownCases.ts` is the single list of inputs. Both
-`webapp/src/utils/__tests__/markdown.test.ts` and
-`mobile/__tests__/markdown.test.tsx` assert one expectation per case id and fail
-if any id has none, so a case cannot be covered on one client and forgotten on the
-other. Adding a case breaks both suites until both are updated.
+`shared/src/markdownCases.ts` holds the two lists of inputs — `MARKDOWN_CASES`
+for text-note content and `MARKDOWN_ITEM_CASES` for the item subset. Each has a
+suite per client, and every suite asserts one expectation per case id and fails
+if any id has none, so a case cannot be covered on one client and forgotten on
+the other. Adding a case breaks both suites until both are updated.
+
+| Corpus | Webapp | Mobile |
+|---|---|---|
+| `MARKDOWN_CASES` | `webapp/src/utils/__tests__/markdown.test.ts` | `mobile/__tests__/markdown.test.tsx` |
+| `MARKDOWN_ITEM_CASES` | `webapp/src/utils/__tests__/inlineMarkdown.test.ts` | `mobile/__tests__/inlineMarkdown.test.tsx` |
+
+`shared/src/__tests__/inlineMarkdown.test.ts` covers the item corpus a third
+time, at the normalizer, where the policy actually lives.
 
 `webapp/e2e/tests/markdown.spec.ts` covers the same feature set through the
 browser, on real note content.
