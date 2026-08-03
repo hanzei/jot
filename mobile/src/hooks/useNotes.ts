@@ -797,6 +797,48 @@ export function usePermanentDeleteNote() {
   });
 }
 
+/**
+ * Snapshot of the notes-list cache entries an optimistic reorder touches, for
+ * rollback if the reorder ultimately fails.
+ */
+interface OptimisticReorderSnapshot {
+  key: QueryKey;
+  notes: Note[];
+}
+
+/**
+ * Optimistically re-sorts every cached notes-list to match `noteIds`,
+ * returning a snapshot for rollback. Without this, the cache keeps its
+ * pre-drag order until the reorder's network round-trip and refetch land —
+ * and any *other* mutation's cache write in that window (e.g. archiving a
+ * note right after dragging it) recreates the list's array reference from
+ * that stale order, which trips NotesListScreen's `localOrder`-clearing
+ * effect and reveals the pre-drag order for one render (#815).
+ *
+ * Only lists whose *entire* contents `noteIds` accounts for are reordered —
+ * a filtered/partial list (search, label, archived) may share ids with
+ * `noteIds` without this drag applying to its own ordering, so leave those
+ * alone rather than guess.
+ */
+function applyOptimisticReorder(queryClient: QueryClient, noteIds: string[]): OptimisticReorderSnapshot[] {
+  const orderIndex = new Map(noteIds.map((id, index) => [id, index]));
+  const previousListEntries: OptimisticReorderSnapshot[] = [];
+  for (const [key, list] of queryClient.getQueriesData<Note[]>({ queryKey: notesLocalQueryScopeKey() })) {
+    if (!list || list.length === 0 || !list.every((note) => orderIndex.has(note.id))) continue;
+    previousListEntries.push({ key, notes: list });
+    const reordered = [...list].sort((a, b) => orderIndex.get(a.id)! - orderIndex.get(b.id)!);
+    queryClient.setQueryData<Note[]>(key, reordered);
+  }
+  return previousListEntries;
+}
+
+/** Reverts the optimistic cache entries captured by an onMutate snapshot. */
+function rollbackOptimisticReorder(queryClient: QueryClient, snapshot: OptimisticReorderSnapshot[]): void {
+  for (const { key, notes } of snapshot) {
+    queryClient.setQueryData<Note[]>(key, notes);
+  }
+}
+
 export function useReorderNotes() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
@@ -828,6 +870,10 @@ export function useReorderNotes() {
         method: 'POST',
         body: { note_ids: noteIds } as Record<string, unknown>,
       });
+    },
+    onMutate: (noteIds: string[]) => applyOptimisticReorder(queryClient, noteIds),
+    onError: (_err, _noteIds, snapshot) => {
+      if (snapshot) rollbackOptimisticReorder(queryClient, snapshot);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });

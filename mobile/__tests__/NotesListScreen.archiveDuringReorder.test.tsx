@@ -176,12 +176,12 @@ function orderedCardIds(): string[] {
   return screen.getAllByTestId(/^note-card-/).map((el) => (el.props.testID as string).replace('note-card-', ''));
 }
 
-// Known bug (see docs/specs or the PR this test shipped with): archiving a
-// note while its own manual drag-reorder is still in flight makes the note
-// revert to its pre-drag position for one render before it's correctly
-// removed. Written with `it.failing` so it documents and reproduces the bug
-// without failing `task check` until the underlying fix lands — flip this
-// back to a plain `it` once NotesListScreen/useReorderNotes stop racing.
+// Regression test for #815: archiving a note while its own manual
+// drag-reorder was still in flight used to revert the note to its pre-drag
+// position for one render before it was correctly removed. Fixed by giving
+// useReorderNotes its own onMutate (applyOptimisticReorder in useNotes.ts) so
+// the notes-list cache reflects the new order immediately instead of only
+// after the reorder's async round-trip.
 describe('NotesListScreen: archive during an in-flight manual reorder', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -191,7 +191,7 @@ describe('NotesListScreen: archive during an in-flight manual reorder', () => {
     notesApi.getNotes.mockImplementation(() => new Promise(() => {}));
   });
 
-  it.failing('does not revert the dragged note to the front while its reorder is still in flight', async () => {
+  it('does not revert the dragged note to the front while its reorder is still in flight', async () => {
     const db = getDefaultTestDb();
     await saveNotes(db, [
       makeNote('note-A', 0),
@@ -241,11 +241,11 @@ describe('NotesListScreen: archive during an in-flight manual reorder', () => {
       await Promise.resolve();
     });
 
-    // Bug signature: note-A reverting to the front (its pre-drag position)
-    // instead of staying at the end where the still-unconfirmed drag put it.
-    // Both mutations' network calls are still pending here (deferred), so
-    // this snapshot is only the effect of useUpdateNote's onMutate — nothing
-    // else has had a chance to run yet.
+    // The regression signature would be note-A reverting to the front (its
+    // pre-drag position) instead of staying at the end where the
+    // still-unconfirmed drag put it. Both mutations' network calls are still
+    // pending here (deferred), so this snapshot is only the effect of the two
+    // onMutate handlers — nothing else has had a chance to run yet.
     const midRaceOrder = orderedCardIds();
 
     // Let everything settle: both mutations' network calls finally resolve,
