@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import * as QuickActions from 'expo-quick-actions';
 import type { NavigationContainerRef } from '@react-navigation/native';
+import { generateId } from '@jot/shared';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { buildQuickActionItems, noteTypeForQuickAction } from '../utils/quickActions';
 import { setPendingQuickAction, usePendingQuickAction } from '../store/quickAction';
@@ -57,6 +58,12 @@ export function useQuickActionRouting({
   // Replay a pending quick action: open the editor on a fresh note of the
   // requested type once authenticated and the nav tree is ready. Before login
   // it waits; the effect re-runs when isAuthenticated flips.
+  //
+  // openKey is a freshly generated id, not the quick action's own id: this
+  // effect can fire while some other note's editor is still the focused screen
+  // (the app was backgrounded mid-edit, then relaunched via the quick action),
+  // and without a unique id here React Navigation would navigate back into
+  // that stale instance instead of opening a new note (see getNoteScreenId).
   useEffect(() => {
     if (!pending || !isNavReady || !navigationRef.isReady()) {
       return;
@@ -65,7 +72,7 @@ export function useQuickActionRouting({
       // Wait for login; the action is replayed when isAuthenticated flips.
       return;
     }
-    navigationRef.navigate('NoteEditor', { noteId: null, initialNoteType: pending.noteType });
+    navigationRef.navigate('NoteEditor', { noteId: null, initialNoteType: pending.noteType, openKey: generateId() });
     setPendingQuickAction(null);
   }, [pending, isAuthenticated, isNavReady, navigationRef]);
 }

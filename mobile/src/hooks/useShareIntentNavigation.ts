@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useShareIntentContext } from 'expo-share-intent';
 import type { NavigationContainerRef } from '@react-navigation/native';
+import { generateId } from '@jot/shared';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { getActiveServerId, switchActiveServer } from '../api/client';
 import { extractSharedText } from '../utils/shareIntent';
@@ -76,7 +77,12 @@ export function useShareIntentNavigation({
           return;
         }
 
-        navigationRef.navigate('NoteEditor', { noteId: null, sharedText: pending.text });
+        // openKey is a fresh id, not derived from the share: this effect can
+        // fire while some other note's editor is still the focused screen (the
+        // app was backgrounded, then relaunched via the share), and without a
+        // unique id here React Navigation would navigate back into that stale
+        // instance instead of opening a new note (see getNoteScreenId).
+        navigationRef.navigate('NoteEditor', { noteId: null, sharedText: pending.text, openKey: generateId() });
         setPendingShare(null);
       } catch (error) {
         // switchActiveServer/revalidateSession are defensively coded and should

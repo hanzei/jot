@@ -35,7 +35,9 @@ export type RootStackParamList = {
   // open from (and closed back onto) that card. originColor is that card's
   // note color, used to seed the editor's background so the zoom-open shows
   // the right color immediately instead of flashing white until the note
-  // hydrates from cache.
+  // hydrates from cache. openKey is a fresh unique value set by callers that
+  // open a new note (noteId: null) from a global effect that can fire while
+  // some other screen is already focused — see getNoteScreenId below.
   NoteEditor: {
     noteId: string | null;
     sharedText?: string;
@@ -43,6 +45,7 @@ export type RootStackParamList = {
     readOnly?: boolean;
     originRect?: LayoutRect;
     originColor?: string;
+    openKey?: string;
   };
   Share: { noteId: string };
   Settings: undefined;
@@ -57,12 +60,22 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 // Identify a NoteEditor/Share screen by the note it targets. Without this,
 // React Navigation matches routes by name only, so a deep link to a different
 // note while an editor is already open navigates back to the existing instance
-// and merely merges the new params. NoteEditorScreen seeds its state from the
+// and replaces its params in place. NoteEditorScreen seeds its state from the
 // initial params and does not react to later param changes, so it would keep
 // showing the first note. Keying on noteId makes a deep link to a different
 // note push a fresh screen instead of reusing the stale one.
-export const getNoteScreenId = ({ params }: { params?: { noteId?: string | null } }): string | undefined =>
-  params?.noteId ?? undefined;
+//
+// A brand-new note (noteId: null) has no natural id, so it falls back to
+// openKey. That fallback matters: when getId resolves to undefined, React
+// Navigation's NAVIGATE handling reuses the *current* route if it has the same
+// screen name, rather than pushing a new one. A quick action or share intent
+// that arrives while some other note's editor is still the focused screen (the
+// app was backgrounded mid-edit, then relaunched via the OS) would otherwise
+// navigate back into that same stale instance instead of opening a fresh note.
+// Callers that open a new note from such a global, async-arriving effect must
+// pass a freshly generated openKey to guarantee a new screen instance.
+export const getNoteScreenId = ({ params }: { params?: { noteId?: string | null; openKey?: string } }): string | undefined =>
+  params?.noteId ?? params?.openKey;
 
 function AuthenticatedStack() {
   return (
