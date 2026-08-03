@@ -171,8 +171,16 @@ spec exists to prevent.
 | Webapp renderer + tag allowlist | `webapp/src/utils/markdown.ts` |
 | Webapp item renderer | `webapp/src/components/InlineMarkdown.tsx` |
 | Mobile parser, core rules, link render rule | `mobile/src/utils/markdown.tsx` |
+| Mobile item lexing + plain-text flattening | `mobile/src/utils/inlineMarkdown.ts` |
 | Mobile item renderer | `mobile/src/components/InlineMarkdown.tsx` |
 | Mobile styles | `mobile/src/utils/markdownStyles.ts` |
+
+**An accessibility label built from item text must be flattened first**
+(`flattenInlineNodes`). Once item text renders, a label built from the raw source
+announces markers the user never sees — and an `aria-label` *replaces* the
+element's content for assistive technology, so those markers become the only
+thing announced. Both the webapp's collapsed-completed group label and mobile's
+item checkbox label go through it.
 
 The item renderers share more than the block renderers can: both clients lex with
 `marked` and normalize through `shared/src/inlineMarkdown.ts`, so the policy

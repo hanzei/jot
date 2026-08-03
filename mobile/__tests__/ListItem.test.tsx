@@ -111,6 +111,16 @@ describe('ListItem', () => {
     expect(queryByTestId('list-item-text-readonly')).toBeNull();
   });
 
+  it('names the checkbox with the item words, not its markdown source', () => {
+    const { getByTestId } = render(
+      <ListItem text="buy **milk**" completed={false} editable={false} />,
+    );
+
+    const label = getByTestId('list-item-checkbox').props.accessibilityLabel as string;
+    expect(label).toContain('buy milk');
+    expect(label).not.toContain('**');
+  });
+
   it('does not show delete button when not editable', () => {
     const { queryByTestId } = render(
       <ListItem text="Task" completed={false} editable={false} onDelete={jest.fn()} />,

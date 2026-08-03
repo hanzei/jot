@@ -1,8 +1,8 @@
 import React, { memo, useMemo } from 'react';
 import { Text, StyleSheet, Platform, type StyleProp, type TextStyle } from 'react-native';
-import { Lexer } from 'marked';
-import { normalizeInlineTokens, INLINE_LEXER_OPTIONS, type InlineNode } from '@jot/shared';
+import { type InlineNode } from '@jot/shared';
 import { useTheme } from '../theme/ThemeContext';
+import { inlineMarkdownNodes } from '../utils/inlineMarkdown';
 import { openUrl } from '../utils/openUrl';
 
 interface InlineMarkdownProps {
@@ -71,10 +71,7 @@ function renderNodes(nodes: InlineNode[], linkColor: string, keyPrefix: string):
 
 function InlineMarkdown({ text, style, testID }: InlineMarkdownProps) {
   const { colors } = useTheme();
-  const nodes = useMemo(
-    () => normalizeInlineTokens(Lexer.lexInline(text, INLINE_LEXER_OPTIONS)),
-    [text],
-  );
+  const nodes = useMemo(() => inlineMarkdownNodes(text), [text]);
 
   return (
     <Text style={style} testID={testID}>

@@ -17,6 +17,7 @@ import InlineMarkdown from './InlineMarkdown';
 import { useTheme } from '../theme/ThemeContext';
 import { getEffectiveColors } from '../theme/colors';
 import { isReduceMotionEnabledSync } from '../utils/layoutAnimation';
+import { inlineMarkdownToText } from '../utils/inlineMarkdown';
 import { VALIDATION, type Collaborator } from '@jot/shared';
 
 interface ListItemProps {
@@ -213,7 +214,11 @@ function ListItem({
         testID="list-item-checkbox"
         accessibilityRole="checkbox"
         accessibilityState={{ checked: completed, disabled: !editable }}
-        accessibilityLabel={t('note.itemCheckbox', { item: text || t('note.listItemLabel') })}
+        // The item's words, not its Markdown source: a read-only row renders the
+        // text, so raw markers here would announce something the user never sees.
+        accessibilityLabel={t('note.itemCheckbox', {
+          item: inlineMarkdownToText(text) || t('note.listItemLabel'),
+        })}
       >
         <Animated.View style={{ transform: [{ scale: checkScale }] }}>
           {completed ? (
