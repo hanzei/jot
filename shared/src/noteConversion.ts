@@ -80,6 +80,15 @@ export function parseTextLineAsListItem(rawLine: string): ConvertedListItem | nu
   let completed = false;
   let indentLevel: 0 | 1 = 0;
 
+  // Blockquote markers are stripped on *both* sides of the list marker, because
+  // the two nest in either order and an item replaces both: `> - [x] a` is a
+  // quoted checklist, `- > a` a quote inside a list item. Stripping only before
+  // the marker would leave the `>` in the second; only after (as this did
+  // originally) leaves `- [x]` in the item text of the first — and that one also
+  // loses the completed state, then renders a literal `- [x]` next to the item's
+  // own real checkbox, which is the exact outcome §2.1 exists to prevent.
+  line = line.replace(BLOCKQUOTE_RE, '');
+
   const listMatch = line.match(LIST_MARKER_RE);
   if (listMatch) {
     line = line.slice(listMatch[0].length);

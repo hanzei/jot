@@ -541,8 +541,9 @@ test.describe('Notes', () => {
     const revertedToText = allNotes.find((n: { id: string }) => n.id === sourceNote.id);
     expect(revertedToText.note_type).toBe('text');
     expect(revertedToText.title).toBe('');
-    // Back to the source content, modulo the title the list gained: the inline
-    // formatting and the nesting both round-tripped.
+    // Inline formatting and nesting round-tripped. The content is not identical
+    // to the source: `# Groceries` comes back as a task line, because an item has
+    // only one representation (docs/specs/markdown-rendering.md §2.2).
     expect(revertedToText.content).toBe(
       '# Groceries List\n\n- [ ] Groceries\n- [x] **Milk**\n- [ ] Eggs\n  - [ ] Free range',
     );

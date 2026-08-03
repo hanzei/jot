@@ -136,11 +136,23 @@ change rather than prevent one. Block syntax in item text needs no escaping
 either — every item is emitted behind a `- [ ] ` marker, so a leading `#` or a
 `---` stays inside a list item and stays literal, exactly as the item showed it.
 
-Together these make the round trip stable in both directions: a list converted
-to text and back returns the same items, including nesting and completed state,
-and text converted to a list and back returns the same content. What is *not*
-recovered is anything the line-per-item split discards — blank lines, and the
-distinction between a wrapped paragraph and separate lines.
+The round trip is stable in one direction and *normalizing* in the other, which
+is worth stating precisely because it is easy to overclaim:
+
+- **List → text → list returns the same items** — text, completed state and
+  nesting all survive. The one exception is an item whose text *begins* with `#`
+  or `>`: that prefix is consumed on the way back, because the converter cannot
+  distinguish it from the block markup it exists to strip.
+- **Text → list → text normalizes rather than preserves.** Inline formatting and
+  nesting survive, but every line returns as `- [ ]` / `- [x]`, so content that
+  used any other structural prefix is not byte-identical: `# Groceries` comes
+  back as `- [ ] Groceries`, and `* Eggs`, `1. Eggs` and `> Eggs` all come back
+  as `- [ ] Eggs`. This is inherent to the destination — an item has one
+  representation, so every way of writing a line collapses onto it.
+
+Also not recovered, in either direction, is anything the line-per-item split
+discards: blank lines, and the distinction between a wrapped paragraph and
+separate lines.
 
 **Known gap:** conversion does not check `ITEM_MAX_COUNT` (500) or
 `ITEM_TEXT_MAX_LENGTH` before sending. A text note with more than 500 non-blank

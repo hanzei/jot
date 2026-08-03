@@ -54,6 +54,16 @@ describe('parseTextLineAsListItem', () => {
     expect(parseTextLineAsListItem('> Remember this')).toEqual({ text: 'Remember this', completed: false, indentLevel: 0 });
   });
 
+  // The two nest in either order and the item replaces both, so neither may
+  // survive into the item text — a leftover "- [x]" would render as a literal
+  // checkbox beside the item's own.
+  it('strips a blockquote and a list marker in either order', () => {
+    expect(parseTextLineAsListItem('> - Child')).toEqual({ text: 'Child', completed: false, indentLevel: 0 });
+    expect(parseTextLineAsListItem('> - [x] Child')).toEqual({ text: 'Child', completed: true, indentLevel: 0 });
+    expect(parseTextLineAsListItem('- > Quoted')).toEqual({ text: 'Quoted', completed: false, indentLevel: 0 });
+    expect(parseTextLineAsListItem('> - [ ] > Both')).toEqual({ text: 'Both', completed: false, indentLevel: 0 });
+  });
+
   it('strips a leading list marker without setting completed', () => {
     expect(parseTextLineAsListItem('- Buy milk')).toEqual({ text: 'Buy milk', completed: false, indentLevel: 0 });
     expect(parseTextLineAsListItem('* Buy milk')).toEqual({ text: 'Buy milk', completed: false, indentLevel: 0 });
@@ -218,6 +228,33 @@ describe('round trips', () => {
   it('text → list → text preserves inline formatting', () => {
     const content = '- [ ] **Buy** `milk`\n- [x] ~~Cancelled~~ [link](https://example.com)';
     expect(listToText('', attachParents(textToListItems(content)))).toBe(content);
+  });
+
+  // An item has one representation, so every way of writing a line collapses
+  // onto it. Byte-identical content only comes back for content already in that
+  // form, as the case above is.
+  it('text → list → text normalizes every structural prefix to a task marker', () => {
+    const content = '# Groceries\n* Eggs\n1. Milk\n> Bread';
+    expect(listToText('', attachParents(textToListItems(content)))).toBe(
+      '- [ ] Groceries\n- [ ] Eggs\n- [ ] Milk\n- [ ] Bread',
+    );
+  });
+
+  // The converter cannot tell a leading block marker in item text apart from the
+  // block markup it exists to strip, so this one case does not survive.
+  it('loses a leading block marker in item text on the way back', () => {
+    const items = [
+      makeItem({ id: '1', text: '# not a heading', position: 0 }),
+      makeItem({ id: '2', text: '> not a quote', position: 1 }),
+      makeItem({ id: '3', text: '- [x] not a checkbox', position: 2 }),
+    ];
+
+    expect(textToListItems(listToText('', items)).map((item) => item.text)).toEqual([
+      'not a heading',
+      'not a quote',
+      // A second marker survives: the first one consumed the item's own.
+      '- [x] not a checkbox',
+    ]);
   });
 
   it('leaves an indented first line top-level, matching the server', () => {
