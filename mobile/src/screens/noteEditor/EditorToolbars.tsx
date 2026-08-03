@@ -12,6 +12,8 @@ interface MarkdownToolbarProps {
   onHeading: () => void;
   onBullet: () => void;
   onCheckbox: () => void;
+  backgroundColor: string;
+  hasNoteColor: boolean;
 }
 
 const HIT_SLOP = { top: 8, right: 4, bottom: 8, left: 4 };
@@ -26,17 +28,25 @@ const ICON_SIZE = 20;
  * keeps the buttons free of text that would otherwise need translating in
  * eight locales. The accessibility labels carry the meaning.
  *
+ * backgroundColor/hasNoteColor mirror the action bar below it (noteBackground
+ * and the transparent-border-on-colored-notes rule) so the two bars read as
+ * one continuous surface instead of a mismatched seam.
+ *
  * Every button is focusable={false}: on Android a focusable view takes input
  * focus from the content input when tapped, which hides the keyboard, and the
  * editor treats a hidden keyboard as "done editing" — so a single press on
  * Bold would tear down the very input it was meant to edit. TalkBack is
  * unaffected; accessibility focus is separate from input focus.
  */
-export function MarkdownToolbarContent({ onBold, onItalic, onStrikethrough, onHeading, onBullet, onCheckbox }: MarkdownToolbarProps) {
+export function MarkdownToolbarContent({ onBold, onItalic, onStrikethrough, onHeading, onBullet, onCheckbox, backgroundColor, hasNoteColor }: MarkdownToolbarProps) {
   const { t } = useTranslation();
   const { colors } = useTheme();
+  // Matches the action bar's barIconColor: a colored note's background is a
+  // fixed light pastel regardless of theme, so dark-theme colors.text (near
+  // white) would fail contrast against it.
+  const iconColor = hasNoteColor ? '#444' : colors.text;
   return (
-    <View style={[styles.formattingToolbar, { backgroundColor: colors.surfaceVariant, borderTopColor: colors.border }]}>
+    <View style={[styles.formattingToolbar, { backgroundColor, borderTopColor: hasNoteColor ? 'transparent' : colors.border }]}>
       <TouchableOpacity
         onPress={onBold}
         style={styles.fmtBtn}
@@ -46,7 +56,7 @@ export function MarkdownToolbarContent({ onBold, onItalic, onStrikethrough, onHe
         accessibilityLabel={t('note.formatBold')}
         testID="format-bold-btn"
       >
-        <Bold size={ICON_SIZE} color={colors.text} />
+        <Bold size={ICON_SIZE} color={iconColor} />
       </TouchableOpacity>
       <TouchableOpacity
         onPress={onItalic}
@@ -57,7 +67,7 @@ export function MarkdownToolbarContent({ onBold, onItalic, onStrikethrough, onHe
         accessibilityLabel={t('note.formatItalic')}
         testID="format-italic-btn"
       >
-        <Italic size={ICON_SIZE} color={colors.text} />
+        <Italic size={ICON_SIZE} color={iconColor} />
       </TouchableOpacity>
       <TouchableOpacity
         onPress={onStrikethrough}
@@ -68,7 +78,7 @@ export function MarkdownToolbarContent({ onBold, onItalic, onStrikethrough, onHe
         accessibilityLabel={t('note.formatStrikethrough')}
         testID="format-strikethrough-btn"
       >
-        <Strikethrough size={ICON_SIZE} color={colors.text} />
+        <Strikethrough size={ICON_SIZE} color={iconColor} />
       </TouchableOpacity>
       <View style={[styles.fmtSep, { backgroundColor: colors.border }]} />
       {/* Cycles ## -> ### -> none, so the icon deliberately names no level. */}
@@ -81,7 +91,7 @@ export function MarkdownToolbarContent({ onBold, onItalic, onStrikethrough, onHe
         accessibilityLabel={t('note.formatHeading')}
         testID="format-heading-btn"
       >
-        <Heading size={ICON_SIZE} color={colors.text} />
+        <Heading size={ICON_SIZE} color={iconColor} />
       </TouchableOpacity>
       <TouchableOpacity
         onPress={onBullet}
@@ -92,7 +102,7 @@ export function MarkdownToolbarContent({ onBold, onItalic, onStrikethrough, onHe
         accessibilityLabel={t('note.formatBulletList')}
         testID="format-bullet-btn"
       >
-        <List size={ICON_SIZE} color={colors.text} />
+        <List size={ICON_SIZE} color={iconColor} />
       </TouchableOpacity>
       <TouchableOpacity
         onPress={onCheckbox}
@@ -103,7 +113,7 @@ export function MarkdownToolbarContent({ onBold, onItalic, onStrikethrough, onHe
         accessibilityLabel={t('note.formatChecklist')}
         testID="format-checkbox-btn"
       >
-        <ListTodo size={ICON_SIZE} color={colors.text} />
+        <ListTodo size={ICON_SIZE} color={iconColor} />
       </TouchableOpacity>
     </View>
   );
