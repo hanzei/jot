@@ -67,6 +67,7 @@ describe('useQuickActionRouting', () => {
       expect(navigationRef.navigate).toHaveBeenCalledWith('NoteEditor', {
         noteId: null,
         initialNoteType: 'list',
+        openKey: expect.any(String),
       }),
     );
   });
@@ -88,6 +89,7 @@ describe('useQuickActionRouting', () => {
       expect(navigationRef.navigate).toHaveBeenCalledWith('NoteEditor', {
         noteId: null,
         initialNoteType: 'text',
+        openKey: expect.any(String),
       }),
     );
   });
