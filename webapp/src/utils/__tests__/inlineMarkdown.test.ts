@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { MARKDOWN_ITEM_CASES } from '@jot/shared';
-import { renderInlineMarkdown } from '../markdown';
+import { renderInlineMarkdown, inlineMarkdownToText } from '../markdown';
 
 function render(id: string): string {
   const testCase = MARKDOWN_ITEM_CASES.find((c) => c.id === id);
@@ -174,6 +174,30 @@ describe('renderInlineMarkdown', () => {
     const html = renderInlineMarkdown('[broken](https://example.com/\uD800)');
     expect(html).toContain('broken');
     expect(html).not.toContain('<a');
+  });
+
+  // Used for the collapsed-completed group's aria-label, which replaces the
+  // element's content for assistive tech — so it has to say what the eye sees.
+  describe('inlineMarkdownToText', () => {
+    it('announces the rendered words, not the source markers', () => {
+      expect(inlineMarkdownToText('buy **milk**')).toBe('buy milk');
+      expect(inlineMarkdownToText('[docs](https://example.com)')).toBe('docs');
+      expect(inlineMarkdownToText('run `npm ci`')).toBe('run npm ci');
+    });
+
+    it('matches the text content of the rendered HTML', () => {
+      for (const testCase of MARKDOWN_ITEM_CASES) {
+        const el = document.createElement('div');
+        el.innerHTML = renderInlineMarkdown(testCase.markdown);
+        // <br> is a word gap in the label but empty textContent in the DOM.
+        expect(inlineMarkdownToText(testCase.markdown), testCase.id).toBe(el.textContent);
+      }
+    });
+
+    it('passes blank input through unchanged', () => {
+      expect(inlineMarkdownToText('')).toBe('');
+      expect(inlineMarkdownToText('   ')).toBe('   ');
+    });
   });
 
   it('produces no block elements for any corpus case', () => {

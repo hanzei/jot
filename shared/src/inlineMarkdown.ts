@@ -99,6 +99,38 @@ function normalizeLink(token: InlineMarkdownToken): InlineNode[] {
 }
 
 /**
+ * The visible text of a node tree, with all formatting dropped.
+ *
+ * For places that need the words without the markup — an `aria-label`, an
+ * accessibility label, a title attribute. Rendering Markdown made these diverge
+ * from what is on screen: a label built from the raw source announces
+ * "star star Milk star star" for text the eye reads as bold Milk, and an
+ * `aria-label` *replaces* the element's content for assistive technology, so the
+ * markers become the only thing announced.
+ */
+export function flattenInlineNodes(nodes: InlineNode[]): string {
+  let out = '';
+
+  for (const node of nodes) {
+    switch (node.type) {
+      case 'text':
+      case 'code':
+        out += node.value;
+        break;
+      // A label is a single line, so a break reads as a word gap.
+      case 'br':
+        out += ' ';
+        break;
+      default:
+        out += flattenInlineNodes(node.children);
+        break;
+    }
+  }
+
+  return out;
+}
+
+/**
  * Converts marked inline tokens into `InlineNode`s, degrading everything outside
  * the supported subset to literal text.
  *

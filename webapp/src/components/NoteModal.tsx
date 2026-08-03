@@ -4,7 +4,7 @@ import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuI
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListItems, listToText, exceedsCodePointLimit, truncateToCodePoints, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
-import { renderMarkdown } from '@/utils/markdown';
+import { renderMarkdown, inlineMarkdownToText } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
 import NoteImageGallery from '@/components/NoteImageGallery';
 import LetterAvatar from '@/components/LetterAvatar';
@@ -1732,7 +1732,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                                     key={`ghost-${parent.id}`}
                                     className="flex items-start gap-2 min-w-0 text-sm opacity-60 select-none"
                                     style={{ marginLeft: indentOf(parent) * VALIDATION.INDENT_PX_PER_LEVEL }}
-                                    aria-label={t('note.completedItemGroup', { title: parent.text })}
+                                    // The label must match the rendered text below, not the
+                                    // source: aria-label replaces the element's content for
+                                    // assistive tech, so raw markers would be all it announced.
+                                    aria-label={t('note.completedItemGroup', {
+                                      title: inlineMarkdownToText(parent.text),
+                                    })}
                                   >
                                     <div className="w-6 h-4 flex-shrink-0"></div>
                                     <input

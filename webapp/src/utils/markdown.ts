@@ -4,6 +4,7 @@ import {
   formatLiteralImage,
   isAllowedLinkHref,
   normalizeInlineTokens,
+  flattenInlineNodes,
   INLINE_LEXER_OPTIONS,
   type InlineNode,
 } from '@jot/shared';
@@ -167,4 +168,14 @@ export function renderInlineMarkdown(text: string): string {
     ALLOWED_TAGS: INLINE_ALLOWED_TAGS,
     ALLOWED_ATTR,
   });
+}
+
+/**
+ * The same item text as `renderInlineMarkdown` produces, with the formatting
+ * dropped — for an `aria-label`, which must say what the eye sees rather than
+ * spelling out the source markers.
+ */
+export function inlineMarkdownToText(text: string): string {
+  if (!text.trim()) return text;
+  return flattenInlineNodes(normalizeInlineTokens(Lexer.lexInline(text, INLINE_LEXER_OPTIONS)));
 }

@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { Lexer } from 'marked';
-import { normalizeInlineTokens, INLINE_LEXER_OPTIONS, type InlineNode } from '../inlineMarkdown';
+import {
+  normalizeInlineTokens,
+  flattenInlineNodes,
+  INLINE_LEXER_OPTIONS,
+  type InlineNode,
+} from '../inlineMarkdown';
 import { MARKDOWN_ITEM_CASES } from '../markdownCases';
 
 // `marked` is a devDependency here purely so this suite can lex — inlineMarkdown.ts
@@ -101,6 +106,37 @@ describe('normalizeInlineTokens', () => {
 
   it('returns nothing for empty input', () => {
     expect(lex('')).toEqual([]);
+  });
+
+  describe('flattenInlineNodes', () => {
+    it('drops formatting and keeps the words, for every corpus case', () => {
+      // The flattened form is what an aria-label announces, so no case may leak
+      // a syntax marker that the rendered output does not show.
+      for (const testCase of MARKDOWN_ITEM_CASES) {
+        expect(flattenInlineNodes(lex(testCase.markdown)), testCase.id).not.toMatch(
+          /\*\*|~~|(?<!\\)`/,
+        );
+      }
+    });
+
+    it('keeps a link label rather than its target', () => {
+      expect(flattenInlineNodes(lex('[docs](https://example.com)'))).toBe('docs');
+    });
+
+    it('keeps the words inside emphasis and code', () => {
+      expect(flattenInlineNodes(lex('buy **milk** and run `npm ci`'))).toBe('buy milk and run npm ci');
+    });
+
+    it('keeps literal source that the renderer also shows literally', () => {
+      expect(flattenInlineNodes(lex('# not a heading'))).toBe('# not a heading');
+      expect(flattenInlineNodes(lex('see ![alt](https://example.com/y.png)'))).toBe(
+        'see ![alt](https://example.com/y.png)',
+      );
+    });
+
+    it('reads a line break as a word gap', () => {
+      expect(flattenInlineNodes(lex('a\nb'))).toBe('a b');
+    });
   });
 
   it('turns a newline into a br node, not a text newline', () => {

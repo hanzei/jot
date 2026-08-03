@@ -1,19 +1,24 @@
 // The conformance corpora for Jot's Markdown support.
 //
-// These are the single lists of inputs both clients' renderer tests run against —
-// webapp/src/utils/__tests__/markdown.test.ts and
-// mobile/__tests__/markdown.test.ts. Each side keeps its own expectations
-// (marked emits HTML, markdown-it feeds a React Native AST) but both assert one
-// expectation per id and fail if an id here has none, so a case can never be
-// covered on one client and forgotten on the other.
+// There are two, because Jot renders two different feature sets, and each has
+// its own suite per client:
 //
-// There are two, because Jot renders two different feature sets:
-//
-// - MARKDOWN_CASES     — text-note content, the full set (docs/specs §2)
+// - MARKDOWN_CASES      — text-note content, the full set (docs/specs §2)
+//     webapp/src/utils/__tests__/markdown.test.ts
+//     mobile/__tests__/markdown.test.tsx
 // - MARKDOWN_ITEM_CASES — list-item text, the inline subset (docs/specs §2.1)
+//     webapp/src/utils/__tests__/inlineMarkdown.test.ts
+//     mobile/__tests__/inlineMarkdown.test.tsx
+//     shared/src/__tests__/inlineMarkdown.test.ts (at the normalizer)
 //
-// Adding a case to either deliberately breaks both suites until both are updated.
-// The behaviour each case pins is specified in docs/specs/markdown-rendering.md.
+// Each side keeps its own expectations — marked emits HTML, mobile builds a
+// React Native tree — but every suite asserts one expectation per id and fails
+// if an id here has none, so a case can never be covered on one client and
+// forgotten on the other.
+//
+// Adding a case to either corpus deliberately breaks that corpus's suites until
+// all of them are updated. The behaviour each case pins is specified in
+// docs/specs/markdown-rendering.md.
 
 export interface MarkdownCase {
   /** Stable identifier; both clients key their expectations off it. */
