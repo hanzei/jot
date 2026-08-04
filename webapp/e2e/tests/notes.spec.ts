@@ -78,6 +78,43 @@ test.describe('Notes', () => {
     await dashboardPage.expectNoteNotVisible('Delete Forever');
   });
 
+  test('opens a binned note read-only, with Restore / Delete forever in the overflow menu', async ({ dashboardPage, page }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Read Only In Bin');
+    await dashboardPage.deleteNote('Read Only In Bin');
+    await dashboardPage.switchToBin();
+
+    await dashboardPage.openNote('Read Only In Bin');
+
+    const dialog = page.getByRole('dialog').last();
+    await expect(dialog.getByPlaceholder('Note title...')).toHaveAttribute('readonly', '');
+    await expect(dialog.getByRole('button', { name: 'Pin note' })).toBeDisabled();
+    await expect(dialog.getByRole('button', { name: 'Archive note' })).toBeDisabled();
+    await expect(dialog.getByRole('button', { name: 'Select note color' })).toBeDisabled();
+    await expect(dialog.getByRole('button', { name: 'Add image' })).toBeDisabled();
+
+    await dashboardPage.openModalOverflowMenu();
+    await expect(page.getByRole('menuitem', { name: 'Restore' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Delete forever' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Share' })).toHaveCount(0);
+    await expect(page.getByRole('menuitem', { name: 'Duplicate' })).toHaveCount(0);
+  });
+
+  test('restores a binned note from within the read-only modal', async ({ dashboardPage, page }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Restore From Modal');
+    await dashboardPage.deleteNote('Restore From Modal');
+    await dashboardPage.switchToBin();
+
+    await dashboardPage.openNote('Restore From Modal');
+    await dashboardPage.openModalOverflowMenu();
+    await page.getByRole('menuitem', { name: 'Restore' }).click();
+
+    await dashboardPage.expectNoteNotVisible('Restore From Modal');
+    await dashboardPage.switchToNotes();
+    await dashboardPage.expectNoteVisible('Restore From Modal');
+  });
+
   test('empties trash in one action', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createNote('Trash One');

@@ -1,5 +1,5 @@
 import { useState, useEffect, useEffectEvent, useMemo, useRef, useCallback, type ReactElement, type ReactNode } from 'react';
-import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, Pin, EllipsisVertical, Square } from 'lucide-react';
+import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, Pin, EllipsisVertical, Square, Undo2 } from 'lucide-react';
 import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListItems, listToText, exceedsCodePointLimit, truncateToCodePoints, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
@@ -114,6 +114,11 @@ interface NoteModalProps {
   onDelete?: (noteId: string) => void;
   onDuplicate?: (noteId: string) => Promise<void> | void;
   onConvert?: (noteId: string, data: ConvertNoteTypeRequest) => Promise<void> | void;
+  // A note in the bin (note.deleted_at set) opens through these instead of
+  // the normal edit actions — the modal renders fully read-only, mirroring
+  // the mobile app's trashed-note editor.
+  onRestore?: (noteId: string) => void;
+  onPermanentlyDelete?: (noteId: string) => void;
   isOwner?: boolean;
   usersById?: Map<string, User>;
   currentUserId?: string;
@@ -127,7 +132,7 @@ interface NoteModalProps {
   initialContent?: string;
 }
 
-export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, onDelete, onDuplicate, onConvert, isOwner = true, usersById, currentUserId, uploadMaxBytes = UPLOAD_MAX_BYTES, initialType, initialContent }: NoteModalProps) {
+export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, onDelete, onDuplicate, onConvert, onRestore, onPermanentlyDelete, isOwner = true, usersById, currentUserId, uploadMaxBytes = UPLOAD_MAX_BYTES, initialType, initialContent }: NoteModalProps) {
   const { t, i18n } = useTranslation();
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -136,6 +141,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showConvertConfirm, setShowConvertConfirm] = useState(false);
+  const [showPermanentDeleteConfirm, setShowPermanentDeleteConfirm] = useState(false);
+  // A note in the bin opens view-only: every editing affordance is disabled
+  // and the overflow menu offers only Restore / Delete forever, matching the
+  // mobile app's trashed-note editor.
+  const isReadOnly = !!note?.deleted_at;
   // New notes start in edit mode; existing notes start in preview mode.
   const [isEditingContent, setIsEditingContent] = useState(!note);
   const pendingSelectionRef = useRef<{ start: number; end: number } | null>(null);
@@ -454,6 +464,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   // It refuses to nest an item that already has children (that would create a
   // grandchild, which the server rejects) and is a no-op when nothing changes.
   const indentListItem = async (itemId: string, delta: 1 | -1) => {
+    if (isReadOnly) return;
     cancelPendingSave();
     const currentItems = itemsRef.current;
     const target = currentItems.find(item => item.id === itemId);
@@ -479,6 +490,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
+    if (isReadOnly) return;
     const { active, over, delta } = event;
 
     // Horizontal drag → indent or unindent
@@ -512,6 +524,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   };
 
   const addListItem = () => {
+    if (isReadOnly) return '';
     const currentItems = itemsRef.current;
     const uncompletedItems = currentItems.filter(item => !item.completed);
     const lastUncompletedItem = uncompletedItems[uncompletedItems.length - 1];
@@ -539,6 +552,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     afterItemId: string,
     overrides: { text?: string; parentId?: string | null; assignedTo?: string } = {},
   ) => {
+    if (isReadOnly) return afterItemId;
     cancelPendingSave();
     const currentItems = itemsRef.current;
     const afterItemPos = currentItems.findIndex(item => item.id === afterItemId);
@@ -566,6 +580,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     beforeItemId: string,
     overrides: { parentId?: string | null; assignedTo?: string } = {},
   ) => {
+    if (isReadOnly) return beforeItemId;
     cancelPendingSave();
     const currentItems = itemsRef.current;
     const beforeItemPos = currentItems.findIndex(item => item.id === beforeItemId);
@@ -590,6 +605,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   // inserts a new item directly after it containing the text from splitPos
   // onward, inheriting the same group (parentId) and assignee.
   const splitListItem = (itemId: string, splitPos: number) => {
+    if (isReadOnly) return itemId;
     cancelPendingSave();
     const currentItems = itemsRef.current;
     const itemPos = currentItems.findIndex(item => item.id === itemId);
@@ -805,6 +821,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   };
 
   const removeListItem = (itemId: string) => {
+    if (isReadOnly) return;
     // Removing a parent leaves its children as orphans; normalizeItemOrder
     // promotes them to top-level, mirroring the server's ON DELETE SET NULL.
     const newItems = normalizeItemOrder(itemsRef.current.filter(item => item.id !== itemId));
@@ -821,6 +838,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   // unsaved edits and not-yet-created items are preserved. Items keep their slot
   // in the single ordered array, so unchecking returns an item to where it was.
   const handleItemCompletedToggle = async (itemId: string, completed: boolean) => {
+    if (isReadOnly) return;
     const before = itemsRef.current;
     const target = before.find(item => item.id === itemId);
     if (!target || target.completed === completed) return;
@@ -871,6 +889,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
   // Helper function to handle text updates with debouncing
   const handleTextUpdate = (itemId: string, newText: string) => {
+    if (isReadOnly) return;
     // Validate the text input
     const validationError = validateItemText(newText, t);
     if (validationError && newText.trim() !== '') {
@@ -927,6 +946,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   // Restores a completed item at the position of the current (placeholder) item,
   // keeping its assignment, and removes the placeholder.
   const acceptSuggestion = (currentItemId: string, suggestionText: string) => {
+    if (isReadOnly) return;
     const completedItem = completedItems.find(
       item => item.text.trim().toLowerCase() === suggestionText.toLowerCase()
     );
@@ -976,6 +996,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   }, [note, usersById]);
 
   const assignItem = async (itemId: string, userId: string) => {
+    if (isReadOnly) return;
     const updatedItems = itemsRef.current.map(item =>
       item.id === itemId ? { ...item, assignedTo: userId } : item,
     );
@@ -1042,7 +1063,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   // List -> text is lossy (assignments, real checkbox/nesting structure), so
   // it's confirmed first; text -> list just reflows lines and runs directly.
   const handleConvertClick = () => {
-    if (!note || !onConvert || loading || isSaving()) return;
+    if (!note || !onConvert || loading || isSaving() || isReadOnly) return;
     if (noteType === 'list') {
       setShowConvertConfirm(true);
     } else {
@@ -1119,7 +1140,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   };
 
   const handleDuplicate = async () => {
-    if (!note || !onDuplicate || loading || isSaving()) return;
+    if (!note || !onDuplicate || loading || isSaving() || isReadOnly) return;
 
     beginExclusiveSave();
     setLoading(true);
@@ -1146,7 +1167,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   };
 
   const handlePinToggle = async () => {
-    if (!note) return;
+    if (!note || isReadOnly) return;
 
     const newPinnedState = !pinned;
     setPinned(newPinnedState);
@@ -1182,8 +1203,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   };
 
   const handleArchiveToggle = async () => {
-    if (!note) return;
-    
+    if (!note || isReadOnly) return;
+
     const newArchivedState = !archived;
     setArchived(newArchivedState);
 
@@ -1221,7 +1242,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   };
 
   const handleDelete = () => {
-    if (!note || !onDelete) return;
+    if (!note || !onDelete || isReadOnly) return;
     setShowDeleteConfirm(true);
   };
 
@@ -1232,7 +1253,26 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     onClose();
   };
 
+  const handleRestore = () => {
+    if (!note || !onRestore) return;
+    onRestore(note.id);
+    onClose();
+  };
+
+  const handlePermanentlyDelete = () => {
+    if (!note || !onPermanentlyDelete) return;
+    setShowPermanentDeleteConfirm(true);
+  };
+
+  const confirmPermanentlyDelete = () => {
+    if (!note || !onPermanentlyDelete) return;
+    onPermanentlyDelete(note.id);
+    setShowPermanentDeleteConfirm(false);
+    onClose();
+  };
+
   const handleToggleCompleted = async () => {
+    if (isReadOnly) return;
     if (!note) {
       // If creating a new note, just toggle local state
       setCheckedItemsCollapsed(!checkedItemsCollapsed);
@@ -1306,7 +1346,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     if (showDeleteConfirm) return;
 
     if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
-    if (!note || isEditableElementFocused()) return;
+    if (!note || isReadOnly || isEditableElementFocused()) return;
 
     const key = e.key === 'Backspace' ? 'backspace' : e.key === 'Delete' ? 'delete' : e.key.toLowerCase();
 
@@ -1398,11 +1438,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
           className={`mx-auto w-full max-w-lg max-h-[90vh] overflow-hidden rounded-lg shadow-xl relative transition duration-200 ease-out data-[closed]:scale-95 data-[closed]:opacity-0 motion-reduce:transition-none ${
             colors.find(c => c.value === color)?.class || 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600'
           }`}
-          onDragEnter={handleImageDragEnter}
-          onDragOver={handleImageDragOver}
-          onDragLeave={handleImageDragLeave}
-          onDrop={handleImageDrop}
-          onPaste={handleModalPaste}
+          onDragEnter={isReadOnly ? undefined : handleImageDragEnter}
+          onDragOver={isReadOnly ? undefined : handleImageDragOver}
+          onDragLeave={isReadOnly ? undefined : handleImageDragLeave}
+          onDrop={isReadOnly ? undefined : handleImageDrop}
+          onPaste={isReadOnly ? undefined : handleModalPaste}
         >
           {isDraggingImage && (
             <div
@@ -1458,7 +1498,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
             {(displayedImages.length > 0 || imageUploads.length > 0) && (
               <NoteImageGallery
                 images={displayedImages}
-                editable={!!note}
+                editable={!!note && !isReadOnly}
                 uploads={imageUploads}
                 onRemove={removeNoteImage}
                 onRetryUpload={retryImageUpload}
@@ -1558,9 +1598,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                 type="text"
                 autoCapitalize="sentences"
                 placeholder={t('note.titlePlaceholder')}
+                readOnly={isReadOnly}
+                aria-readonly={isReadOnly}
                 className="w-full p-2 text-lg font-medium bg-transparent border-none outline-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white"
                 value={title}
                 onChange={(e) => {
+                  if (isReadOnly) return;
                   const newTitle = e.target.value;
                   const validationError = validateTitle(newTitle, t);
                   if (validationError) {
@@ -1573,7 +1616,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                     scheduleAutoSave();
                   }
                 }}
-                onKeyDown={(e) => {
+                onKeyDown={isReadOnly ? undefined : (e) => {
                   if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
                   if (e.repeat) return;
                   if (e.key === 'Enter') {
@@ -1596,7 +1639,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
             {/* Content based on type */}
             {noteType === 'text' ? (
               <>
-                {isEditingContent ? (
+                {isEditingContent && !isReadOnly ? (
                   <textarea
                     ref={contentRef}
                     autoCapitalize="sentences"
@@ -1631,15 +1674,17 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                     role="textbox"
                     aria-label={t('note.contentPlaceholder')}
                     aria-multiline="true"
+                    aria-readonly={isReadOnly}
                     tabIndex={0}
-                    onClick={() => setIsEditingContent(true)}
+                    onClick={() => !isReadOnly && setIsEditingContent(true)}
                     onKeyDown={(e) => {
+                      if (isReadOnly) return;
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
                         setIsEditingContent(true);
                       }
                     }}
-                    className="w-full p-2 min-h-[6rem] cursor-text text-gray-900 dark:text-white markdown-content"
+                    className={`w-full p-2 min-h-[6rem] text-gray-900 dark:text-white markdown-content ${isReadOnly ? '' : 'cursor-text'}`}
                     dangerouslySetInnerHTML={{
                       __html: renderedContent ||
                         `<span class="text-gray-400 dark:text-gray-500 pointer-events-none">${t('note.contentPlaceholder')}</span>`,
@@ -1669,6 +1714,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                           onUpdateListItem={updateListItem}
                           onRemoveListItem={removeListItem}
                           isCompleted={false}
+                          readOnly={isReadOnly}
                           onKeyDown={handleItemKeyDown}
                           onPaste={handleItemPaste}
                           onIndentChange={indentListItem}
@@ -1686,21 +1732,24 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                       ))}
                     </SortableContext>
                   </DndContext>
-                  <button
-                    onClick={addListItemAndFocus}
-                    className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white p-1"
-                  >
-                    <Plus className="h-4 w-4" />
-                    <span>{t('note.addItem')}</span>
-                  </button>
+                  {!isReadOnly && (
+                    <button
+                      onClick={addListItemAndFocus}
+                      className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white p-1"
+                    >
+                      <Plus className="h-4 w-4" />
+                      <span>{t('note.addItem')}</span>
+                    </button>
+                  )}
                 </div>
 
                 {/* Completed items section */}
                 {completedItems.length > 0 && (
                   <div className="border-t border-gray-200 dark:border-white/20 pt-3">
                     <button
-                      onClick={handleToggleCompleted}
-                      className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white mb-2"
+                      onClick={() => !isReadOnly && handleToggleCompleted()}
+                      disabled={isReadOnly}
+                      className={`flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300 mb-2 ${isReadOnly ? '' : 'hover:text-gray-800 dark:hover:text-white'}`}
                     >
                       <ChevronDown 
                         className={`h-4 w-4 transition-transform ${checkedItemsCollapsed ? '-rotate-90' : 'rotate-0'}`}
@@ -1771,6 +1820,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                                 onUpdateListItem={(idx, field, value) => updateListItem(idx, field, value)}
                                 onRemoveListItem={removeListItem}
                                 isCompleted={true}
+                                readOnly={isReadOnly}
                                 onKeyDown={handleItemKeyDown}
                                 inputRef={(el) => {
                                   if (el) itemInputRefs.current.set(item.id, el);
@@ -1802,18 +1852,26 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
               <div className="relative">
                 {note ? (
                   noteLabels.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setShowLabelPicker(v => !v)}
-                      onMouseDown={(event) => event.stopPropagation()}
-                      className="-mx-1 inline-flex flex-wrap items-center gap-2 rounded-md px-1 py-0.5 transition-colors hover:bg-black/5 dark:hover:bg-white/10"
-                      aria-label={t('labels.title')}
-                      aria-expanded={showLabelPicker}
-                    >
-                      {noteLabels.map(label => (
-                        <LabelChip key={label.id} name={label.name} />
-                      ))}
-                    </button>
+                    isReadOnly ? (
+                      <div className="-mx-1 inline-flex flex-wrap items-center gap-2 px-1 py-0.5">
+                        {noteLabels.map(label => (
+                          <LabelChip key={label.id} name={label.name} />
+                        ))}
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setShowLabelPicker(v => !v)}
+                        onMouseDown={(event) => event.stopPropagation()}
+                        className="-mx-1 inline-flex flex-wrap items-center gap-2 rounded-md px-1 py-0.5 transition-colors hover:bg-black/5 dark:hover:bg-white/10"
+                        aria-label={t('labels.title')}
+                        aria-expanded={showLabelPicker}
+                      >
+                        {noteLabels.map(label => (
+                          <LabelChip key={label.id} name={label.name} />
+                        ))}
+                      </button>
+                    )
                   )
                 ) : (
                   <div className="flex flex-wrap items-center gap-2">
@@ -1857,7 +1915,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                     />
                   </div>
                 ));
-                return isOwner && onShare ? (
+                return isOwner && onShare && !isReadOnly ? (
                   <button
                     type="button"
                     onClick={() => onShare(note)}
@@ -1937,8 +1995,9 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                 {/* Color picker toggle */}
                 <button
                   onMouseDown={(e) => e.stopPropagation()}
-                  onClick={() => toggleColorPicker()}
-                  className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                  onClick={() => !isReadOnly && toggleColorPicker()}
+                  disabled={isReadOnly}
+                  className={`p-1 rounded-full transition-colors ${isReadOnly ? 'cursor-not-allowed opacity-50' : 'hover:bg-gray-200 dark:hover:bg-slate-700'}`}
                   title={t('note.colorPickerLabel')}
                   aria-label={t('note.colorPickerLabel')}
                   aria-expanded={showColorPicker}
@@ -1959,8 +2018,9 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                     />
                     <button
                       type="button"
-                      onClick={() => imageFileInputRef.current?.click()}
-                      className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                      onClick={() => !isReadOnly && imageFileInputRef.current?.click()}
+                      disabled={isReadOnly}
+                      className={`p-1 rounded-full transition-colors ${isReadOnly ? 'cursor-not-allowed opacity-50' : 'hover:bg-gray-200 dark:hover:bg-slate-700'}`}
                       title={t('images.addImage')}
                       aria-label={t('images.addImage')}
                     >
@@ -1968,7 +2028,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                     </button>
                     <button
                       onClick={handlePinToggle}
-                      className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                      disabled={isReadOnly}
+                      className={`p-1 rounded-full transition-colors ${isReadOnly ? 'cursor-not-allowed opacity-50' : 'hover:bg-gray-200 dark:hover:bg-slate-700'}`}
                       title={pinned ? t('note.unpinNote') : t('note.pinNote')}
                       aria-label={pinned ? t('note.unpinNote') : t('note.pinNote')}
                     >
@@ -1979,7 +2040,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                     </button>
                     <button
                       onClick={handleArchiveToggle}
-                      className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                      disabled={isReadOnly}
+                      className={`p-1 rounded-full transition-colors ${isReadOnly ? 'cursor-not-allowed opacity-50' : 'hover:bg-gray-200 dark:hover:bg-slate-700'}`}
                       title={archived ? t('note.unarchiveNote') : t('note.archiveNote')}
                       aria-label={archived ? t('note.unarchiveNote') : t('note.archiveNote')}
                     >
@@ -2019,6 +2081,35 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                                 </a>
                               </MenuItem>
                             )}
+                            {isReadOnly ? (
+                              <>
+                                {onRestore && (
+                                  <MenuItem>
+                                    <button
+                                      onClick={handleRestore}
+                                      className={OVERFLOW_ITEM}
+                                      data-testid="note-restore"
+                                    >
+                                      <Undo2 className="h-4 w-4 mr-2" />
+                                      {t('note.restore')}
+                                    </button>
+                                  </MenuItem>
+                                )}
+                                {onPermanentlyDelete && (
+                                  <MenuItem>
+                                    <button
+                                      onClick={handlePermanentlyDelete}
+                                      className={OVERFLOW_ITEM_DANGER}
+                                      data-testid="note-delete-forever"
+                                    >
+                                      <Trash2 className="h-4 w-4 mr-2" />
+                                      {t('note.deleteForever')}
+                                    </button>
+                                  </MenuItem>
+                                )}
+                              </>
+                            ) : (
+                              <>
                             {onConvert && (
                               <MenuItem>
                                 <button
@@ -2108,6 +2199,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                                 </button>
                               </MenuItem>
                             )}
+                              </>
+                            )}
                           </div>
                         </MenuItems>
                       </Menu>
@@ -2150,6 +2243,15 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         confirmLabel={t('note.delete')}
         onConfirm={confirmDelete}
         onCancel={() => setShowDeleteConfirm(false)}
+      />
+
+      <ConfirmDialog
+        open={showPermanentDeleteConfirm}
+        title={t('note.deleteForeverTitle')}
+        message={t('note.deleteForeverConfirm')}
+        confirmLabel={t('note.deleteForever')}
+        onConfirm={confirmPermanentlyDelete}
+        onCancel={() => setShowPermanentDeleteConfirm(false)}
       />
 
       <ConfirmDialog

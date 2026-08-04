@@ -1373,6 +1373,8 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
             onDelete={handleDeleteNote}
             onDuplicate={handleDuplicateNote}
             onConvert={handleConvertNote}
+            onRestore={handleRestoreNote}
+            onPermanentlyDelete={handlePermanentlyDeleteNote}
             isOwner={!editingNote || editingNote.user_id === user?.id}
             usersById={usersById}
             currentUserId={user?.id}

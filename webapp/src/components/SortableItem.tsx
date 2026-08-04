@@ -22,6 +22,9 @@ export interface SortableItemProps {
   onUpdateListItem: (index: number, field: 'text' | 'completed', value: string | boolean) => Promise<void>;
   onRemoveListItem: (itemId: string) => void;
   isCompleted?: boolean;
+  // A note in the bin renders its items view-only: no drag handle, no
+  // checkbox/text/assignee edits, no per-row delete or suggestion dropdown.
+  readOnly?: boolean;
   onKeyDown?: (index: number, e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   onPaste?: (index: number, e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
   inputRef?: React.RefCallback<HTMLTextAreaElement>;
@@ -39,7 +42,7 @@ export interface SortableItemProps {
 // per-row delete control. Owns only its own transient UI state (which popovers
 // are open, which suggestion is highlighted); every mutation is delegated back
 // to NoteModal, which holds the item model.
-export default function SortableItem({ id, index, item, onUpdateListItem, onRemoveListItem, isCompleted = false, onKeyDown, onPaste, inputRef, onIndentChange, isShared, collaborators, usersById, onAssignItem, completedItemTexts = [], onAcceptSuggestion }: SortableItemProps) {
+export default function SortableItem({ id, index, item, onUpdateListItem, onRemoveListItem, isCompleted = false, readOnly = false, onKeyDown, onPaste, inputRef, onIndentChange, isShared, collaborators, usersById, onAssignItem, completedItemTexts = [], onAcceptSuggestion }: SortableItemProps) {
   const { t } = useTranslation();
   const [showAssigneePicker, setShowAssigneePicker] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -57,7 +60,7 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
     isDragging,
   } = useSortable({
     id,
-    disabled: isCompleted
+    disabled: isCompleted || readOnly
   });
 
   const style = {
@@ -119,7 +122,7 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
         isCompleted ? 'opacity-60' : ''
       }`}
     >
-      {!isCompleted && (
+      {!isCompleted && !readOnly && (
         // dnd-kit's `attributes` (role, tabIndex, drag instructions) belong on
         // the same element as its `listeners`: the KeyboardSensor activates on
         // keydown, so splitting them leaves a focusable element that does
@@ -143,14 +146,15 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
           <GripVertical className="w-4 h-4" aria-hidden="true" />
         </button>
       )}
-      {isCompleted && <div className="w-6 h-4"></div>}
+      {(isCompleted || readOnly) && <div className="w-6 h-4"></div>}
 
       <input
         type="checkbox"
         checked={item.completed}
+        disabled={readOnly}
         onChange={(e) => onUpdateListItem(index, 'completed', e.target.checked)}
         aria-label={t('note.itemCompleted')}
-        className="h-4 w-4 text-blue-600 rounded mt-0.5 flex-shrink-0"
+        className={`h-4 w-4 text-blue-600 rounded mt-0.5 flex-shrink-0 ${readOnly ? 'cursor-default' : ''}`}
       />
       <div className="flex flex-1 items-start min-w-0">
         <div className="relative min-w-0 flex-1">
@@ -159,17 +163,19 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
             placeholder={placeholder}
             rows={1}
             autoCapitalize="sentences"
+            readOnly={readOnly}
+            aria-readonly={readOnly}
             className={`w-full pt-0 pb-1 pl-1 pr-0 bg-transparent border-none outline-none min-w-0 resize-none overflow-hidden whitespace-pre-wrap break-words placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
               isCompleted ? 'line-through text-gray-500 dark:text-gray-400' : ''
             }`}
             value={item.text}
             onInput={(e) => autoResizeListItemText(e.currentTarget)}
-            onChange={(e) => {
+            onChange={readOnly ? undefined : (e) => {
               onUpdateListItem(index, 'text', e.target.value);
               if (e.target.value.trim()) setShowSuggestions(true);
               setSelectedSuggestionIndex(-1);
             }}
-            onFocus={() => {
+            onFocus={readOnly ? undefined : () => {
               if (suggestions.length > 0) setShowSuggestions(true);
             }}
             onBlur={(e) => {
@@ -194,7 +200,7 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
             aria-autocomplete="list"
             aria-controls={showSuggestions && suggestions.length > 0 ? `suggestions-${id}` : undefined}
             aria-activedescendant={selectedSuggestionIndex >= 0 ? `suggestion-${id}-${selectedSuggestionIndex}` : undefined}
-            onKeyDown={(e) => {
+            onKeyDown={readOnly ? undefined : (e) => {
               const suggestionsVisible = showSuggestions && suggestions.length > 0;
               if (suggestionsVisible && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229) {
                 if (e.key === 'ArrowDown') {
@@ -234,10 +240,10 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
               }
               if (onKeyDown) onKeyDown(index, e);
             }}
-            onPaste={(e) => onPaste?.(index, e)}
+            onPaste={readOnly ? undefined : (e) => onPaste?.(index, e)}
             ref={setListItemTextRef}
           />
-          {showSuggestions && suggestions.length > 0 && !isCompleted && (
+          {showSuggestions && suggestions.length > 0 && !isCompleted && !readOnly && (
             <div
               ref={suggestionsRef}
               id={`suggestions-${id}`}
@@ -274,24 +280,41 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
           return (
           <div className={`relative flex-shrink-0 ${item.assignedTo || !isCompleted ? 'ml-1' : ''}`}>
             {item.assignedTo ? (
-              <button
-                onClick={() => setShowAssigneePicker(true)}
-                title={t('note.assignedTo', { name: assigneeDisplayName })}
-                aria-label={t('note.assignedTo', { name: assigneeDisplayName })}
-                className={`rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800 ${isCompleted ? 'cursor-default' : 'cursor-pointer'}`}
-                disabled={isCompleted}
-              >
-                <LetterAvatar
-                  firstName={assignedUser?.first_name}
-                  username={assignedUser?.username || '?'}
-                  userId={item.assignedTo}
-                  hasProfileIcon={assignedUser?.has_profile_icon}
-                  iconVersion={assignedUser?.updated_at}
-                  className="w-5 h-5"
-                />
-              </button>
+              readOnly ? (
+                <div
+                  title={t('note.assignedTo', { name: assigneeDisplayName })}
+                  aria-label={t('note.assignedTo', { name: assigneeDisplayName })}
+                  className="rounded-full"
+                >
+                  <LetterAvatar
+                    firstName={assignedUser?.first_name}
+                    username={assignedUser?.username || '?'}
+                    userId={item.assignedTo}
+                    hasProfileIcon={assignedUser?.has_profile_icon}
+                    iconVersion={assignedUser?.updated_at}
+                    className="w-5 h-5"
+                  />
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowAssigneePicker(true)}
+                  title={t('note.assignedTo', { name: assigneeDisplayName })}
+                  aria-label={t('note.assignedTo', { name: assigneeDisplayName })}
+                  className={`rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800 ${isCompleted ? 'cursor-default' : 'cursor-pointer'}`}
+                  disabled={isCompleted}
+                >
+                  <LetterAvatar
+                    firstName={assignedUser?.first_name}
+                    username={assignedUser?.username || '?'}
+                    userId={item.assignedTo}
+                    hasProfileIcon={assignedUser?.has_profile_icon}
+                    iconVersion={assignedUser?.updated_at}
+                    className="w-5 h-5"
+                  />
+                </button>
+              )
             ) : (
-              !isCompleted && (
+              !isCompleted && !readOnly && (
                 <button
                   onClick={() => setShowAssigneePicker(true)}
                   className={`w-5 h-5 rounded-full border border-dashed border-gray-300 dark:border-gray-400 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-white/10 transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 ${ROW_REVEAL_CLASSES}`}
@@ -302,7 +325,7 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
                 </button>
               )
             )}
-            {showAssigneePicker && (
+            {showAssigneePicker && !readOnly && (
               <AssigneePicker
                 collaborators={collaborators}
                 currentAssigneeId={item.assignedTo}
@@ -315,6 +338,7 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
         })()}
       </div>
 
+      {!readOnly && (
       <button
         onClick={() => onRemoveListItem(item.id)}
         aria-label={t('note.removeItem')}
@@ -324,6 +348,7 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
       >
         <X className="h-4 w-4" />
       </button>
+      )}
     </div>
   );
 }

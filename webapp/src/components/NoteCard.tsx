@@ -203,12 +203,11 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
       data-note-card="true"
       tabIndex={0}
       aria-label={(note.note_type === 'list' ? note.title : note.content?.slice(0, 50)) || t('share.untitledNote')}
-      className={`note-card ${getColorClass(note.color)} p-4 relative group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 ${isUpdating ? 'opacity-50' : ''} ${!inBin ? 'cursor-pointer' : ''
-        }`}
-      onClick={() => !inBin && onEdit(note)}
+      className={`note-card ${getColorClass(note.color)} p-4 relative group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 ${isUpdating ? 'opacity-50' : ''}`}
+      onClick={() => onEdit(note)}
       onKeyDown={(e) => {
         if (e.target !== e.currentTarget) return;
-        if (!inBin && (e.key === 'Enter' || e.key === ' ')) {
+        if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           onEdit(note);
         }
