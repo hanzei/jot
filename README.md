@@ -114,16 +114,15 @@ compiled web app, while SQLite keeps the default deployment small and portable.
 - installs [Task](https://taskfile.dev/) if it is missing — every documented
   command below goes through it, so it cannot itself be installed with a task;
 - runs `npm ci` in `shared/` → `webapp/` → `mobile/`, in that order (`@jot/shared`
-  is a `file:../shared` dependency of the other two), skipping any package that
-  already has `node_modules`;
+  is a `file:../shared` dependency of the other two), skipping any package whose
+  `node_modules` is already up to date with its `package-lock.json`;
 - warns when Node or Go is older than this repo expects, without changing either.
 
-It is idempotent, so re-running it on a provisioned checkout is close to a no-op.
-That cuts both ways: because it skips any package that already has
-`node_modules`, it will **not** pick up dependency changes after a pull — when a
-lockfile moves, run `npm ci` in the affected package yourself. Two escape
-hatches: `JOT_BOOTSTRAP_SKIP=1` skips everything, `JOT_BOOTSTRAP_SKIP_NPM=1`
-skips just the npm installs.
+It is idempotent, so re-running it on a provisioned checkout is close to a no-op:
+each package's install is stamped with a hash of its `package-lock.json`, so a
+pull that doesn't touch a lockfile skips straight past it, and one that does
+triggers `npm ci` there automatically. Two escape hatches: `JOT_BOOTSTRAP_SKIP=1`
+skips everything, `JOT_BOOTSTRAP_SKIP_NPM=1` skips just the npm installs.
 
 It deliberately does **not** download Playwright browsers (the slowest step, and
 most work never touches e2e) and does **not** install or switch Node/Go versions.

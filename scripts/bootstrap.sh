@@ -9,8 +9,8 @@
 #
 # What it does:
 #   * installs `task` (the Taskfile runner) if it is missing
-#   * `npm ci` in shared/ -> webapp/ -> mobile/, skipping any that already have
-#     node_modules
+#   * `npm ci` in shared/ -> webapp/ -> mobile/, skipping any package whose
+#     node_modules is already stamped up to date with its package-lock.json
 #   * warns — loudly, without changing anything — when Node or Go is older than
 #     what the repo expects
 #
@@ -51,6 +51,17 @@ fail() {
 # version_lt A B -> true when version A sorts strictly before version B.
 version_lt() {
   [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -n1)" = "$1" ]
+}
+
+# sha256_file PATH -> hex digest on stdout. sha256sum is the common case
+# (Linux, and macOS with coreutils installed); shasum -a 256 is macOS's
+# built-in equivalent when it isn't.
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | cut -d' ' -f1
+  else
+    shasum -a 256 "$1" | cut -d' ' -f1
+  fi
 }
 
 if [ "${JOT_BOOTSTRAP_SKIP:-}" = "1" ]; then
@@ -170,17 +181,28 @@ install_npm_deps() {
     return
   fi
 
-  local pkg
+  if ! command -v sha256sum >/dev/null 2>&1 && ! command -v shasum >/dev/null 2>&1; then
+    fail "cannot verify package-lock.json freshness: neither sha256sum nor shasum is available"
+    return
+  fi
+
+  local pkg dir stamp lock_hash
   for pkg in shared webapp mobile; do
-    if [ -d "$REPO_ROOT/$pkg/node_modules" ]; then
-      log "$pkg/node_modules present — skipping"
+    dir="$REPO_ROOT/$pkg"
+    stamp="$dir/node_modules/.package-lock.sha256"
+    lock_hash="$(sha256_file "$dir/package-lock.json")"
+
+    if [ -d "$dir/node_modules" ] && [ "$(cat "$stamp" 2>/dev/null)" = "$lock_hash" ]; then
+      log "$pkg/node_modules up to date — skipping"
       continue
     fi
 
     log "installing $pkg dependencies (npm ci)"
-    if ! (cd "$REPO_ROOT/$pkg" && npm ci --no-audit --no-fund); then
+    if ! (cd "$dir" && npm ci --no-audit --no-fund); then
       fail "npm ci failed in $pkg/"
+      continue
     fi
+    echo "$lock_hash" >"$stamp"
   done
 }
 
