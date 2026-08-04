@@ -1,6 +1,6 @@
 import React, { useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { CircleAlert, Square } from 'lucide-react-native';
+import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
+import { CircleAlert, CloudOff, Square } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, type Note, type NoteItem, type User } from '@jot/shared';
 import { useTheme } from '../theme/ThemeContext';
@@ -8,6 +8,7 @@ import { useAuth } from '../store/AuthContext';
 import { useFailedNoteIds } from '../store/OfflineContext';
 import { useUsers } from '../store/UsersContext';
 import { useActiveServerBaseUrl } from '../hooks/useActiveServerBaseUrl';
+import { usePendingImageUploads } from '../hooks/usePendingImageUploads';
 import { noteImageThumbnailUrl } from '../api/images';
 import UserAvatar from './UserAvatar';
 import CachedNoteImage from './CachedNoteImage';
@@ -155,8 +156,13 @@ function NoteCard({ note, onPress, onLongPress, onLabelPress }: NoteCardProps) {
   const didNotSync = failedNoteIds.has(note.id);
   const hasColor = !!(note.color && !isWhiteHexColor(note.color));
   const baseUrl = useActiveServerBaseUrl();
+  // Images queued offline (or mid-retry) never reach note.images until the
+  // sync engine's drain uploads them (see imageUploadQueue.ts), so without
+  // this a note attached to only while offline shows no cover until reconnect.
+  const pendingUploads = usePendingImageUploads(note.id);
   const coverImage = note.images?.[0];
-  const extraImageCount = (note.images?.length ?? 0) - 1;
+  const coverUpload = coverImage ? undefined : pendingUploads[0];
+  const extraImageCount = (note.images?.length ?? 0) + pendingUploads.length - 1;
   const textPreview = note.note_type === 'text' ? note.content : null;
 
   const cardRef = useRef<React.ElementRef<typeof TouchableOpacity>>(null);
@@ -195,17 +201,36 @@ function NoteCard({ note, onPress, onLongPress, onLabelPress }: NoteCardProps) {
       activeOpacity={0.7}
       testID={`note-card-${note.id}`}
     >
-      {coverImage && (
+      {(coverImage || coverUpload) && (
         <View style={styles.cover} testID={`note-card-cover-${note.id}`}>
-          <CachedNoteImage
-            imageId={coverImage.id}
-            variant="thumbnail"
-            networkUrl={noteImageThumbnailUrl(baseUrl, coverImage.id)}
-            style={styles.coverImage}
-            resizeMode="cover"
-            accessibilityLabel={coverImage.filename}
-            accessibilityIgnoresInvertColors
-          />
+          {coverImage ? (
+            <CachedNoteImage
+              imageId={coverImage.id}
+              variant="thumbnail"
+              networkUrl={noteImageThumbnailUrl(baseUrl, coverImage.id)}
+              style={styles.coverImage}
+              resizeMode="cover"
+              accessibilityLabel={coverImage.filename}
+              accessibilityIgnoresInvertColors
+            />
+          ) : (
+            <Image
+              source={{ uri: coverUpload!.previewUri }}
+              style={[styles.coverImage, styles.coverImagePending]}
+              resizeMode="cover"
+              accessibilityLabel={coverUpload!.filename}
+              accessibilityIgnoresInvertColors
+            />
+          )}
+          {coverUpload && (
+            <View
+              style={styles.coverPendingBadge}
+              testID={`note-card-cover-pending-${note.id}`}
+              accessibilityLabel={t('images.queuedOffline')}
+            >
+              <CloudOff size={12} color="#fff" />
+            </View>
+          )}
           {extraImageCount > 0 && (
             <View style={styles.coverBadge} accessibilityLabel={t('images.moreImagesBadge', { count: extraImageCount })}>
               <Text style={styles.coverBadgeText}>+{extraImageCount}</Text>
@@ -306,6 +331,17 @@ const styles = StyleSheet.create({
   coverImage: {
     width: '100%',
     height: '100%',
+  },
+  coverImagePending: {
+    opacity: 0.5,
+  },
+  coverPendingBadge: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    borderRadius: 10,
+    padding: 4,
+    backgroundColor: 'rgba(0,0,0,0.6)',
   },
   coverBadge: {
     position: 'absolute',
