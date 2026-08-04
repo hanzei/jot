@@ -2,7 +2,7 @@ import { SQLiteDatabase } from 'expo-sqlite';
 import axios from 'axios';
 import type { NoteImage } from '@jot/shared';
 import { uploadNoteImage, type ImageUploadFile } from '../api/images';
-import { patchLocalNoteImages, getPendingCreateNoteIds } from './noteQueries';
+import { patchLocalNoteImages, getPendingCreateNoteIds, getFailedNoteIds } from './noteQueries';
 import { isTransientHttpStatus, isGlobalDrainFailure, MAX_ENTRY_DRAIN_ATTEMPTS, notifyEnqueueListeners } from './syncQueue';
 import { copyFile, deleteFileIfExists, documentPath, ensureDirExists } from '../utils/fs';
 
@@ -81,6 +81,22 @@ async function discardEntry(db: SQLiteDatabase, entry: Pick<PendingImageUploadEn
   deleteFileIfExists(entry.local_path);
 }
 
+/**
+ * Move queued/errored uploads from one note to another. Used when "Keep my
+ * version" forks a dead-lettered create's content into a brand-new note
+ * (`useSyncFailures.ts`): the original note is about to be deleted, and its
+ * `pending_image_uploads` rows would otherwise cascade-delete right along
+ * with it — silently dropping a photo the user just explicitly chose to
+ * keep. No-op if there are no matching rows.
+ */
+export async function reassignPendingImageUploads(
+  db: SQLiteDatabase,
+  fromNoteId: string,
+  toNoteId: string,
+): Promise<void> {
+  await db.runAsync('UPDATE pending_image_uploads SET note_id = ? WHERE note_id = ?', [toNoteId, fromNoteId]);
+}
+
 /** Re-queue a permanently-failed upload (e.g. after the user fixes something) so the next drain retries it. Resets the attempt counter so the manual retry gets a fresh budget (#714). */
 export async function retryImageUpload(db: SQLiteDatabase, id: string): Promise<void> {
   await db.runAsync(`UPDATE pending_image_uploads SET status = 'queued', error_message = NULL, attempts = 0 WHERE id = ?`, [id]);
@@ -109,15 +125,26 @@ export interface ImageUploadDrainResult {
  * transient/permanent split (see syncQueue.ts): a transient failure
  * (network/5xx/etc.) stops the drain so the rest retry on the next reconnect;
  * a permanent failure flags the row `error` (surfaced with retry/dismiss in the
- * gallery) rather than looping forever. A note whose own offline `create` is
- * still queued is skipped for this pass — uploading to it would 404 — and
- * retried once that create has drained. A note that is gone for good
- * (404/403 — e.g. deleted server-side while offline, per issue #618's
- * "reconcile … gracefully") is dropped silently: there is no note left to
- * attach the image (or an error badge) to.
+ * gallery) rather than looping forever. A note whose own server-side existence
+ * isn't confirmed — its offline `create` is still queued (`sync_state =
+ * 'pending'`), *or* that create was dead-lettered (`sync_state = 'failed'`) —
+ * is skipped for this pass rather than attempted: either way an upload would
+ * 404, and treating a dead-lettered create the same as a note gone for good
+ * would silently discard an image that was never sent anywhere (issue #834).
+ * It's retried once that note's state resolves (the create lands, or the user
+ * resolves the failure — see `useSyncFailures.ts`, which reassigns any
+ * still-queued uploads to a "Keep my version" fork before the abandoned
+ * original is deleted). A note that's *actually* gone for good (404/403 on a
+ * note this check didn't skip — i.e. one that was previously confirmed synced
+ * and has since been deleted/unshared server-side while offline, per issue
+ * #618's "reconcile … gracefully") is dropped silently: there is no note left
+ * to attach the image (or an error badge) to.
  */
 export async function drainImageUploadQueue(db: SQLiteDatabase): Promise<ImageUploadDrainResult> {
-  const pendingCreateNoteIds = await getPendingCreateNoteIds(db);
+  const [pendingCreateNoteIds, failedNoteIds] = await Promise.all([
+    getPendingCreateNoteIds(db),
+    getFailedNoteIds(db),
+  ]);
   const entries = await db.getAllAsync<PendingImageUploadEntry>(
     `SELECT * FROM pending_image_uploads WHERE status = 'queued' ORDER BY created_at ASC`,
   );
@@ -126,7 +153,7 @@ export async function drainImageUploadQueue(db: SQLiteDatabase): Promise<ImageUp
   let discardedCount = 0;
 
   for (const entry of entries) {
-    if (pendingCreateNoteIds.has(entry.note_id)) continue;
+    if (pendingCreateNoteIds.has(entry.note_id) || failedNoteIds.has(entry.note_id)) continue;
 
     let image: NoteImage;
     try {
