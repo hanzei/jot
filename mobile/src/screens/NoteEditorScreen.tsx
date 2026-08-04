@@ -67,7 +67,6 @@ import { formatEditorStateForShare } from '../utils/noteTextFormatter';
 import { getActiveServer, listServers, type ServerAccountEntry } from '../store/serverAccounts';
 import { isServerReachable } from '../api/serverReachability';
 import { setPendingShare, usePendingShare } from '../store/shareIntent';
-import { useBannerShown } from '../hooks/useBannerShown';
 import {
   type LocalItem,
   type ItemSnapshot,
@@ -230,7 +229,6 @@ export default function NoteEditorScreen() {
   // (insets.bottom) then bridges the navigation-inset region so its buttons sit
   // flush against the top of the keyboard instead of behind it.
   const androidKeyboardInset = Platform.OS === 'android' ? keyboardHeight : 0;
-  const bannerShown = useBannerShown();
   const { data: existingNote } = useOfflineNote(noteId);
   // A trashed note opens view-only. Driven by the route param set when the note
   // is opened from the trash list, and defensively by the note's own deleted_at
@@ -2551,7 +2549,7 @@ export default function NoteEditorScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? IOS_KEYBOARD_VERTICAL_OFFSET : 0}
     >
-      <View style={[styles.header, { backgroundColor: noteBackground, borderBottomColor: hasNoteColor ? 'transparent' : colors.borderLight, paddingTop: (bannerShown ? 0 : insets.top) + 12 }]}>
+      <View style={[styles.header, { backgroundColor: noteBackground, borderBottomColor: hasNoteColor ? 'transparent' : colors.borderLight, paddingTop: insets.top + 12 }]}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}

@@ -33,7 +33,6 @@ import { getLocalNotes, permanentDeleteLocalNote } from '../db/noteQueries';
 import { enqueueOperation, isQueueableError } from '../db/syncQueue';
 import { isOnlineWriteAllowed } from '../api/serverReachability';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
-import { useBannerShown } from '../hooks/useBannerShown';
 import { styles } from './notesList/styles';
 import { buildNoteSections, type LocalReorderState } from './notesList/noteListUtils';
 import NotesListHeader from './notesList/NotesListHeader';
@@ -67,7 +66,6 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const [isEmptyingTrash, setIsEmptyingTrash] = useState(false);
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const bannerShown = useBannerShown();
   const { colors } = useTheme();
   const { t } = useTranslation();
   const { confirm } = useConfirm();
@@ -546,7 +544,6 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const header = (
     <NotesListHeader
       variant={variant}
-      bannerShown={bannerShown}
       topInset={insets.top}
       searchText={searchText}
       onSearchChange={setSearchText}
