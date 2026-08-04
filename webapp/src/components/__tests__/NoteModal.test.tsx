@@ -2393,6 +2393,23 @@ describe('NoteModal', () => {
       }
     })
 
+    it('still shows completed items when the note was collapsed before it was binned', () => {
+      const note = createMockNote({
+        note_type: 'list',
+        title: 'Trashed list',
+        deleted_at: '2023-06-01T00:00:00Z',
+        checked_items_collapsed: true,
+        items: createMockListItems(),
+      })
+      renderNoteModal({ ...defaultProps, note })
+
+      // A collapsed completed section would otherwise have no way to reopen —
+      // the toggle button is disabled read-only — so read-only mode always
+      // shows completed items regardless of the persisted collapsed state.
+      // 'Second item' is createMockListItems()'s completed item.
+      expect(screen.getByDisplayValue('Second item')).toBeInTheDocument()
+    })
+
     it('shows Restore and Delete forever, and calls the handlers', () => {
       const note = createMockNote({ deleted_at: '2023-06-01T00:00:00Z' })
       const onRestore = vi.fn()

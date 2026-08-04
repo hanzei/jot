@@ -1751,13 +1751,13 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                       disabled={isReadOnly}
                       className={`flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300 mb-2 ${isReadOnly ? '' : 'hover:text-gray-800 dark:hover:text-white'}`}
                     >
-                      <ChevronDown 
-                        className={`h-4 w-4 transition-transform ${checkedItemsCollapsed ? '-rotate-90' : 'rotate-0'}`}
+                      <ChevronDown
+                        className={`h-4 w-4 transition-transform ${!isReadOnly && checkedItemsCollapsed ? '-rotate-90' : 'rotate-0'}`}
                       />
                       <span>{t('note.completedItems', { count: completedItems.length })}</span>
                     </button>
-                    
-                    {!checkedItemsCollapsed && (
+
+                    {(isReadOnly || !checkedItemsCollapsed) && (
                       <div className="space-y-2">
                         {(() => {
                           // Render completed items keeping groups intact. A completed

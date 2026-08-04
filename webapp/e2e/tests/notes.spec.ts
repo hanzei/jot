@@ -115,6 +115,23 @@ test.describe('Notes', () => {
     await dashboardPage.expectNoteVisible('Restore From Modal');
   });
 
+  test('permanently deletes a binned note from within the read-only modal', async ({ dashboardPage, page }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Delete Forever From Modal');
+    await dashboardPage.deleteNote('Delete Forever From Modal');
+    await dashboardPage.switchToBin();
+
+    await dashboardPage.openNote('Delete Forever From Modal');
+    await dashboardPage.openModalOverflowMenu();
+    await page.getByRole('menuitem', { name: 'Delete forever' }).click();
+    const confirmDialog = page.getByRole('dialog').last();
+    await confirmDialog.getByRole('button', { name: 'Delete forever' }).click();
+
+    await dashboardPage.expectNoteNotVisible('Delete Forever From Modal');
+    await dashboardPage.switchToNotes();
+    await dashboardPage.expectNoteNotVisible('Delete Forever From Modal');
+  });
+
   test('empties trash in one action', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createNote('Trash One');
