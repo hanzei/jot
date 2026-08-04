@@ -1,7 +1,8 @@
 import React, { memo, useMemo } from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
-import { blockMarkdownNodes, type BlockNode } from '../utils/markdown';
+import { type BlockNode } from '@jot/shared';
+import { blockMarkdownNodes } from '../utils/markdown';
 import {
   fullMarkdownStyles,
   headingStyle,

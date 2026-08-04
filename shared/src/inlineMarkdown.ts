@@ -61,10 +61,10 @@ export type InlineNode =
 /**
  * Lexer options both clients must pass when lexing item text.
  *
- * Pinned here rather than left to each client's own `marked.use()` defaults,
- * which differ and are global: the webapp registers a full block renderer at
- * import time, and inheriting that would make item rendering depend on a
- * configuration set for something else entirely.
+ * Pinned here, and passed per call, rather than registered with `marked.use()`,
+ * which is global: item text and text-note content lex from the same module
+ * instance with deliberately different entry points, and a global would apply
+ * to both. `BLOCK_LEXER_OPTIONS` in blockMarkdown.ts is the other half of that.
  *
  * `breaks: true` matches text-note content, where a single newline is a line
  * break (docs/specs/markdown-rendering.md §2). It also makes newline handling

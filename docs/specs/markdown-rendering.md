@@ -46,15 +46,27 @@ written on a phone reads identically in a browser and the other way round.
 
 | | Webapp | Mobile |
 |---|---|---|
-| Parser | `marked` (`gfm: true`, `breaks: true`) | `marked` (`gfm: true`, `breaks: true`) |
-| Renderer | HTML, filtered through a DOMPurify tag allowlist | React Native components, walked from the token stream |
+| Lexer | `marked` (`gfm: true`, `breaks: true`) | `marked` (`gfm: true`, `breaks: true`) |
+| Normalizer | `shared/src/blockMarkdown.ts` + `inlineMarkdown.ts` | the same two modules |
+| Renderer | HTML, filtered through a DOMPurify tag allowlist | React Native components |
 
-**The parser is shared; the renderers cannot be.** One emits an HTML string for
+**Everything except the last row is shared.** Both clients lex with the same
+library at the same version and then normalize the tokens through the same two
+modules, so what is a heading, what autolinks, where a table ends, and what an
+unsupported construct degrades to are decided **once**, in `shared/`, for both
+clients and both feature sets (§2.1).
+
+**The renderers themselves cannot be shared.** One emits an HTML string for
 `dangerouslySetInnerHTML`, the other a tree of React Native components, and there
-is no DOM on a phone. So the syntax half — what is a heading, what autolinks,
-where a table ends — is decided once by one library at one version, and what
-remains client-specific is layout. What keeps *that* half honest is the shared
-test corpus and this document.
+is no DOM on a phone. So what stays client-specific is layout — and *only*
+layout. A change to behaviour belongs in `shared/`; a change in a client is a
+change to how that client draws it.
+
+Both renderers consume the same node types (`BlockNode`, `InlineNode`), which are
+deliberately smaller than marked's token union: every unsupported construct has
+already been degraded to literal text before a renderer sees it, so neither
+client can accidentally give one a rendering of its own. That, plus the shared
+corpus (§7) and this document, is what keeps the two honest.
 
 Mobile renders text-note content on two surfaces, from the same tokens:
 
@@ -282,12 +294,13 @@ spec exists to prevent.
 | Concern | File |
 |---|---|
 | Shared link-scheme policy + literal-image format | `shared/src/markdown.ts` |
+| Shared block normalizer (§2) | `shared/src/blockMarkdown.ts` |
 | Shared inline-subset normalizer (§2.1) | `shared/src/inlineMarkdown.ts` |
 | Shared text ↔ list conversion (§2.2) | `shared/src/noteConversion.ts` |
 | Shared conformance corpora (both test suites) | `shared/src/markdownCases.ts` |
-| Webapp renderer + tag allowlist | `webapp/src/utils/markdown.ts` |
+| Webapp node-to-HTML renderer + tag allowlist | `webapp/src/utils/markdown.ts` |
 | Webapp item renderer | `webapp/src/components/InlineMarkdown.tsx` |
-| Mobile block lexing + token walk | `mobile/src/utils/markdown.ts` |
+| Mobile block lexing entry point | `mobile/src/utils/markdown.ts` |
 | Mobile block renderer (editor) | `mobile/src/components/Markdown.tsx` |
 | Mobile card preview renderer | `mobile/src/components/MarkdownPreview.tsx` |
 | Mobile item lexing + plain-text flattening | `mobile/src/utils/inlineMarkdown.ts` |
@@ -302,6 +315,14 @@ announces markers the user never sees — and an `aria-label` *replaces* the
 element's content for assistive technology, so those markers become the only
 thing announced. Both the webapp's collapsed-completed group label and mobile's
 item checkbox label go through it.
+
+**Both clients share the whole normalizer, not just the parser.** The block walk
+lives in `shared/src/blockMarkdown.ts` and hands every inline run to
+`normalizeInlineTokens`, so a client file contains no policy at all — no scheme
+check, no image reconstruction, no table collapse. The webapp's `marked.use()`
+renderer overrides are gone with it: `renderMarkdown` now walks `BlockNode`s into
+HTML, and DOMPurify stays behind it as the safety net rather than as the
+mechanism.
 
 **Mobile's three renderers share one inline level.** Item text, the editor and
 the card all end up in `renderInlineNodes` (`inlineNodes.tsx`), because the inline
