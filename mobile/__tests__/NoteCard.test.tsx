@@ -498,10 +498,18 @@ describe('NoteCard', () => {
         file: { uri: 'file:///cache/queued-photo.png', name: 'queued-photo.png', mimeType: 'image/png', sizeBytes: 1024 },
       });
 
-      const { findByTestId } = render(<NoteCard note={baseNote} onPress={jest.fn()} />);
+      const { findByTestId, findByLabelText } = render(<NoteCard note={baseNote} onPress={jest.fn()} />);
 
       expect(await findByTestId('note-card-cover-note-1')).toBeTruthy();
       expect(await findByTestId('note-card-cover-pending-note-1')).toBeTruthy();
+
+      // The rendered tile is the queued upload's own copied-to-durable-storage
+      // file (enqueueImageUpload copies it under pending-image-uploads/<id>),
+      // not the picker's original cache URI, and it's dimmed to read as "not
+      // synced yet" (NoteCard.tsx's coverImagePending style).
+      const image = await findByLabelText('queued-photo.png');
+      expect(image.props.source).toEqual({ uri: 'file:///docs/pending-image-uploads/upload-1' });
+      expect(StyleSheet.flatten(image.props.style)?.opacity).toBe(0.5);
     });
 
     it('prefers a persisted image over a queued upload for the cover, but still counts the upload toward the "+N" badge', async () => {
@@ -518,11 +526,17 @@ describe('NoteCard', () => {
         ...baseNote,
         images: [{ id: 'img-1', filename: 'a.png', content_type: 'image/png', width: 800, height: 600, created_at: '2024-01-01T00:00:00Z' }],
       };
-      const { findByTestId, queryByTestId, findByText } = render(<NoteCard note={noteWithImage} onPress={jest.fn()} />);
+      const { findByTestId, queryByTestId, findByText, findByLabelText, queryByLabelText } = render(<NoteCard note={noteWithImage} onPress={jest.fn()} />);
 
       expect(await findByTestId('note-card-cover-note-1')).toBeTruthy();
       expect(await findByText('+1')).toBeTruthy();
       expect(queryByTestId('note-card-cover-pending-note-1')).toBeNull();
+
+      // The persisted image (a.png) renders as the cover; the queued upload
+      // (queued-photo.png) only counts toward the "+1" badge above, it isn't
+      // itself rendered anywhere on the card.
+      expect(await findByLabelText('a.png')).toBeTruthy();
+      expect(queryByLabelText('queued-photo.png')).toBeNull();
     });
   });
 });
