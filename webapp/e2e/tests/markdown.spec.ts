@@ -134,10 +134,30 @@ test.describe('Markdown note editing', () => {
     await expect(card.locator('em')).toHaveText('bread');
     await expect(card.locator('del')).toHaveText('cancelled');
     await expect(card.locator('code')).toHaveText('npm ci');
-    await expect(card.locator('a[href="https://example.com"]')).toBeVisible();
-    await expect(card.locator('a[href="https://example.com/docs"]')).toHaveText('docs');
     // The source markers are gone, not merely restyled.
     await expect(card).not.toContainText('**milk**');
+
+    // Links are the one construct a card does not render as a link: the card is
+    // itself the control that opens the note, so an anchor here would follow the
+    // link *and* open the note. The label survives as text
+    // (docs/specs/markdown-rendering.md §1).
+    await expect(card.locator('a')).toHaveCount(0);
+    await expect(card).toContainText('https://example.com');
+    await expect(card).toContainText('docs');
+  });
+
+  test('renders links as text on a card and as links in the note body', async ({ page, dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createTextNote('read the [docs](https://example.com/docs) first');
+
+    // Same note, two surfaces: the card is a control, the open note is not.
+    const card = dashboardPage.noteCardByText('read the');
+    await expect(card.locator('a')).toHaveCount(0);
+    await expect(card).toContainText('read the docs first');
+
+    await card.click();
+    const preview = page.getByRole('dialog').getByTestId('note-content-preview');
+    await expect(preview.locator('a[href="https://example.com/docs"]')).toHaveText('docs');
   });
 
   test('leaves block syntax literal in list items and keeps the editor row showing source', async ({ dashboardPage }) => {

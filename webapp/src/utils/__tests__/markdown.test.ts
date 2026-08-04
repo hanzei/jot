@@ -2,6 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { MARKDOWN_CASES } from '@jot/shared';
 import { renderMarkdown } from '../markdown';
 
+/** The words a reader sees, with the markup removed. */
+function text(html: string): string {
+  const el = document.createElement('div');
+  el.innerHTML = html;
+  return el.textContent ?? '';
+}
+
 function render(id: string): string {
   const testCase = MARKDOWN_CASES.find((c) => c.id === id);
   if (!testCase) throw new Error(`unknown markdown case: ${id}`);
@@ -9,8 +16,9 @@ function render(id: string): string {
 }
 
 // One assertion per case in the shared conformance corpus (shared/src/
-// markdownCases.ts). The mobile suite runs the same corpus through markdown-it;
-// the coverage test below is what keeps the two from drifting apart.
+// markdownCases.ts). The mobile suite runs the same corpus through its own
+// React Native renderer over the same marked tokens; the coverage test below is
+// what keeps the two from drifting apart.
 const conformance: Record<string, () => void> = {
   bold: () => expect(render('bold')).toContain('<strong>hello</strong>'),
   italic: () => expect(render('italic')).toContain('<em>hello</em>'),
@@ -105,8 +113,8 @@ const conformance: Record<string, () => void> = {
     const html = render('image-empty-alt');
     expect(html).toContain('![](https://example.com/y.png)');
     expect(html).not.toContain('<img');
-    // markdown-it's .disable('image') leaves an invisible clickable link here;
-    // this is the webapp half of the same guarantee.
+    // An empty alt is where a renderer that half-degrades an image leaves an
+    // invisible clickable link. Both clients assert there is nothing to click.
     expect(html).not.toContain('<a');
   },
   'image-inline-in-paragraph': () =>
@@ -197,5 +205,35 @@ describe('renderMarkdown', () => {
 
   it('plain text passes through safely', () => {
     expect(renderMarkdown('hello world')).toContain('hello world');
+  });
+
+  // Note cards render links as text: the card is one control that opens the
+  // note, and an anchor inside it would follow the link *and* open the note,
+  // since both handlers fire. docs/specs/markdown-rendering.md §1.1.
+  describe('links: false', () => {
+    const cardCases = ['inline-link', 'bare-url', 'bare-url-www', 'mailto-link'];
+
+    it('keeps the label and drops the anchor for every kind of link', () => {
+      for (const id of cardCases) {
+        const source = MARKDOWN_CASES.find((c) => c.id === id)!.markdown;
+        const withLinks = renderMarkdown(source);
+        const asText = renderMarkdown(source, { links: false });
+
+        expect(withLinks, id).toContain('<a href=');
+        expect(asText, id).not.toContain('<a');
+        // The text survives the tag being stripped — this is "formatting
+        // dropped, text kept", not "removed entirely".
+        expect(text(asText), id).toBe(text(withLinks));
+      }
+    });
+
+    it('leaves every other construct alone', () => {
+      const html = renderMarkdown('# h\n\n**b** *i* `c`\n\n- one', { links: false });
+      expect(html).toContain('<h1>h</h1>');
+      expect(html).toContain('<strong>b</strong>');
+      expect(html).toContain('<em>i</em>');
+      expect(html).toContain('<code>c</code>');
+      expect(html).toContain('<li>one</li>');
+    });
   });
 });

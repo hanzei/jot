@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef } from 'react';
+import React, { useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { CircleAlert, Square } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
@@ -12,7 +12,7 @@ import { noteImageThumbnailUrl } from '../api/images';
 import UserAvatar from './UserAvatar';
 import CachedNoteImage from './CachedNoteImage';
 import { isWhiteHexColor } from '../utils/colorContrast';
-import { stripMarkdownForPreview } from '../utils/markdownStyles';
+import MarkdownPreview from './MarkdownPreview';
 import InlineMarkdown from './InlineMarkdown';
 import type { LayoutRect } from '../navigation/RootNavigator';
 
@@ -131,7 +131,11 @@ function ListPreview({ items, hasColor }: { items: NoteItem[]; hasColor?: boolea
             testID={`note-card-list-row-${item.id}`}
           >
             <Square size={14} color={hasColor ? '#555' : colors.textSecondary} />
-            <InlineMarkdown text={item.text} style={[styles.listText, { color: hasColor ? '#1a1a1a' : colors.text }]} />
+            <InlineMarkdown
+              text={item.text}
+              links={false}
+              style={[styles.listText, { color: hasColor ? '#1a1a1a' : colors.text }]}
+            />
           </View>
         );
       })}
@@ -153,10 +157,7 @@ function NoteCard({ note, onPress, onLongPress, onLabelPress }: NoteCardProps) {
   const baseUrl = useActiveServerBaseUrl();
   const coverImage = note.images?.[0];
   const extraImageCount = (note.images?.length ?? 0) - 1;
-  const textPreview = useMemo(
-    () => note.note_type === 'text' && note.content ? stripMarkdownForPreview(note.content) : null,
-    [note],
-  );
+  const textPreview = note.note_type === 'text' ? note.content : null;
 
   const cardRef = useRef<React.ElementRef<typeof TouchableOpacity>>(null);
   // Measure the card in window coordinates so the editor can zoom open from
@@ -234,12 +235,11 @@ function NoteCard({ note, onPress, onLongPress, onLabelPress }: NoteCardProps) {
             </Text>
           ) : null}
           {textPreview ? (
-            <Text
-              style={[styles.contentText, { color: hasColor ? '#1a1a1a' : colors.text }]}
-              numberOfLines={3}
-            >
-              {textPreview}
-            </Text>
+            <MarkdownPreview
+              content={textPreview}
+              onColoredNote={hasColor}
+              testID={`note-card-content-${note.id}`}
+            />
           ) : null}
         </View>
       </View>
@@ -346,10 +346,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     marginBottom: 4,
-  },
-  contentText: {
-    fontSize: 13,
-    lineHeight: 18,
   },
   listPreview: {
     marginTop: 4,

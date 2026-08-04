@@ -1,17 +1,26 @@
-import { marked, Lexer, Tokens } from 'marked';
+import { Lexer } from 'marked';
 import DOMPurify from 'dompurify';
 import {
-  formatLiteralImage,
   isAllowedLinkHref,
+  normalizeBlockTokens,
   normalizeInlineTokens,
   flattenInlineNodes,
+  BLOCK_LEXER_OPTIONS,
   INLINE_LEXER_OPTIONS,
+  type BlockNode,
   type InlineNode,
 } from '@jot/shared';
 
-// Jot's Markdown feature set is specified in docs/specs/markdown-rendering.md
-// and is shared with the mobile app, which reaches it through markdown-it.
-// Anything changed here needs a matching change in mobile/src/utils/markdown.ts.
+// Jot's Markdown feature set is specified in docs/specs/markdown-rendering.md.
+//
+// This file is only the HTML half. Both clients lex with `marked` and normalize
+// through shared/src/blockMarkdown.ts and shared/src/inlineMarkdown.ts, so what
+// is a heading, what autolinks, and what an unsupported construct degrades to
+// are decided there, once, for both. What is left here is turning the resulting
+// nodes into markup — mobile turns the same nodes into React Native components.
+//
+// So a change to *behaviour* belongs in shared/; a change here is a change to
+// how this client draws it.
 
 function escapeHtml(text: string): string {
   return text
@@ -42,54 +51,6 @@ function safeLinkHref(href: string): string | null {
   }
 }
 
-marked.use({
-  // Mobile matches this via react-native-markdown-display's softbreak rule,
-  // which emits a newline even though markdown-it runs with breaks: false.
-  // Same output, different mechanism — "fixing" the mobile side to breaks: true
-  // would look harmless and change nothing until that rule changes.
-  breaks: true,
-  gfm: true,
-  renderer: {
-    link({ href, tokens }: Tokens.Link): string {
-      const text = this.parser.parseInline(tokens);
-      const safeHref = safeLinkHref(href);
-      if (safeHref === null) return text;
-      return `<a href="${safeHref}" target="_blank" rel="noopener noreferrer">${text}</a>`;
-    },
-
-    // marked has no image *tokenizer* to disable — v18 handles images inside
-    // the link tokenizer, and use({ tokenizer: { image: () => false } }) both
-    // throws ("tokenizer 'image' does not exist") and, for tokenizers that do
-    // exist, means "fall through to the default". Renderer override it is.
-    image({ text, href, title }: Tokens.Image): string {
-      return escapeHtml(formatLiteralImage(text, href, title));
-    },
-
-    // Same reason as image(): disabling the table tokenizer falls through to
-    // the default and still renders a full <table>.
-    table(token: Tokens.Table): string {
-      return `<p>${escapeHtml(token.raw.trim()).replace(/\n/g, '<br>')}</p>\n`;
-    },
-
-    // marked v18 has a first-class checkbox token, so the rendered checkbox
-    // needs no <input> in the allowlist and is inert by construction.
-    checkbox({ checked }: Tokens.Checkbox): string {
-      return checked ? '☑ ' : '☐ ';
-    },
-
-    // Raw HTML is never rendered; it shows its own source, like images and
-    // tables. Escaping it here rather than leaving it to the DOMPurify
-    // allowlist (which would strip the tag and keep the words) is what matches
-    // mobile, where markdown-it runs with html: false and the tags survive as
-    // literal text. DOMPurify still runs afterwards as the safety net.
-    html(token: Tokens.HTML | Tokens.Tag): string {
-      const escaped = escapeHtml(token.raw);
-      if (!token.block) return escaped;
-      return `<p>${escaped.trim().replace(/\n/g, '<br>')}</p>\n`;
-    },
-  },
-});
-
 // The effective spec for raw HTML: anything parsed but not listed here has its
 // tag stripped and its text kept.
 const ALLOWED_TAGS = [
@@ -101,12 +62,93 @@ const ALLOWED_TAGS = [
   'blockquote', 'code', 'pre', 'hr',
   'a',
 ];
-const ALLOWED_ATTR = ['href', 'target', 'rel'];
+// `start` is only meaningful on <ol>, and without it an ordered list beginning
+// at 3 renders as 1 here while mobile numbers it correctly — a divergence this
+// allowlist was quietly causing.
+const ALLOWED_ATTR = ['href', 'target', 'rel', 'start'];
 
-export function renderMarkdown(content: string): string {
+/**
+ * Dropping `a` from the allowlist is the whole implementation of the
+ * links-as-text rule: DOMPurify strips a tag it does not allow and keeps the
+ * text inside it, which is exactly the outcome
+ * docs/specs/markdown-rendering.md §3 specifies — the label survives, the target
+ * does not, and nothing is left looking clickable.
+ */
+const NO_LINK_TAGS = ALLOWED_TAGS.filter((tag) => tag !== 'a');
+
+export interface MarkdownRenderOptions {
+  /**
+   * Whether links render as links. Note cards pass `false`: the whole card is
+   * one control that opens the note, so an anchor inside it competes with that —
+   * on the webapp a click would follow the link *and* open the note, since both
+   * handlers fire. See docs/specs/markdown-rendering.md §1.1.
+   */
+  links?: boolean;
+}
+
+/**
+ * Renders the blocks of one list item.
+ *
+ * A *tight* list — every item a single line, which is nearly all of them —
+ * renders its paragraphs bare, so `- item` gives `<li>item</li>` rather than
+ * `<li><p>item</p></li>` and picks up no paragraph margin. A loose list keeps
+ * the `<p>`, because there its items really do hold several blocks. That is
+ * CommonMark's distinction, carried on the list node so this does not have to
+ * guess it back from the shape of the item.
+ */
+function renderListItem(blocks: BlockNode[], loose: boolean): string {
+  return blocks
+    .map((block) =>
+      !loose && block.type === 'paragraph'
+        ? renderInlineNodes(block.children)
+        : renderBlockNode(block),
+    )
+    .join('');
+}
+
+function renderBlockNode(node: BlockNode): string {
+  switch (node.type) {
+    case 'paragraph':
+      return `<p>${renderInlineNodes(node.children)}</p>\n`;
+
+    case 'heading':
+      // h4-h6 stay real headings and are styled down in CSS, keeping the
+      // document outline for assistive technology.
+      return `<h${node.depth}>${renderInlineNodes(node.children)}</h${node.depth}>\n`;
+
+    case 'code':
+      // No <br> substitution and no language class: newlines are significant
+      // inside <pre>, and the language tag is dropped (docs/specs §6).
+      return `<pre><code>${escapeHtml(node.text)}</code></pre>\n`;
+
+    case 'blockquote':
+      return `<blockquote>\n${renderBlockNodes(node.children)}</blockquote>\n`;
+
+    case 'list': {
+      const tag = node.ordered ? 'ol' : 'ul';
+      const start = node.ordered && node.start !== 1 ? ` start="${node.start}"` : '';
+      const items = node.items
+        .map((item) => `<li>${renderListItem(item, node.loose)}</li>\n`)
+        .join('');
+      return `<${tag}${start}>\n${items}</${tag}>\n`;
+    }
+
+    case 'hr':
+      return '<hr>\n';
+  }
+}
+
+function renderBlockNodes(nodes: BlockNode[]): string {
+  return nodes.map(renderBlockNode).join('');
+}
+
+export function renderMarkdown(content: string, { links = true }: MarkdownRenderOptions = {}): string {
   if (!content.trim()) return '';
-  const raw = marked.parse(content, { async: false });
-  return DOMPurify.sanitize(raw, { ALLOWED_TAGS, ALLOWED_ATTR });
+  const nodes = normalizeBlockTokens(Lexer.lex(content, BLOCK_LEXER_OPTIONS));
+  return DOMPurify.sanitize(renderBlockNodes(nodes), {
+    ALLOWED_TAGS: links ? ALLOWED_TAGS : NO_LINK_TAGS,
+    ALLOWED_ATTR,
+  });
 }
 
 // List-item text renders an inline-only subset — see shared/src/inlineMarkdown.ts
@@ -114,6 +156,7 @@ export function renderMarkdown(content: string): string {
 // The allowlist is narrower than ALLOWED_TAGS by construction: no block element
 // can be produced, so none is permitted through.
 const INLINE_ALLOWED_TAGS = ['strong', 'em', 'del', 'code', 'a', 'br'];
+const INLINE_NO_LINK_TAGS = INLINE_ALLOWED_TAGS.filter((tag) => tag !== 'a');
 
 function renderInlineNodes(nodes: InlineNode[]): string {
   let html = '';
@@ -121,7 +164,11 @@ function renderInlineNodes(nodes: InlineNode[]): string {
   for (const node of nodes) {
     switch (node.type) {
       case 'text':
-        html += escapeHtml(node.value);
+        // A newline that survived into a text node is a line break the reader
+        // should see — HTML would collapse it to a space. Only literal source
+        // (a table, an HTML block) still carries one; everywhere else `breaks:
+        // true` has already turned newlines into `br` nodes.
+        html += escapeHtml(node.value).replace(/\n/g, '<br>');
         break;
       case 'code':
         html += `<code>${escapeHtml(node.value)}</code>`;
@@ -161,11 +208,14 @@ function renderInlineNodes(nodes: InlineNode[]): string {
  * `# x`, `- [ ] x` and `---` literal without any suppression: an item is already
  * a list item, so block syntax inside one has nothing to describe.
  */
-export function renderInlineMarkdown(text: string): string {
+export function renderInlineMarkdown(
+  text: string,
+  { links = true }: MarkdownRenderOptions = {},
+): string {
   if (!text.trim()) return '';
   const nodes = normalizeInlineTokens(Lexer.lexInline(text, INLINE_LEXER_OPTIONS));
   return DOMPurify.sanitize(renderInlineNodes(nodes), {
-    ALLOWED_TAGS: INLINE_ALLOWED_TAGS,
+    ALLOWED_TAGS: links ? INLINE_ALLOWED_TAGS : INLINE_NO_LINK_TAGS,
     ALLOWED_ATTR,
   });
 }
