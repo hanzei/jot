@@ -9,8 +9,8 @@
 #
 # What it does:
 #   * installs `task` (the Taskfile runner) if it is missing
-#   * `npm ci` in shared/ -> webapp/ -> mobile/, skipping any that already have
-#     node_modules
+#   * `npm ci` in shared/ -> webapp/ -> mobile/, skipping any package whose
+#     node_modules is already stamped up to date with its package-lock.json
 #   * warns — loudly, without changing anything — when Node or Go is older than
 #     what the repo expects
 #
@@ -170,17 +170,23 @@ install_npm_deps() {
     return
   fi
 
-  local pkg
+  local pkg dir stamp lock_hash
   for pkg in shared webapp mobile; do
-    if [ -d "$REPO_ROOT/$pkg/node_modules" ]; then
-      log "$pkg/node_modules present — skipping"
+    dir="$REPO_ROOT/$pkg"
+    stamp="$dir/node_modules/.package-lock.sha256"
+    lock_hash="$(sha256sum "$dir/package-lock.json" | cut -d' ' -f1)"
+
+    if [ -d "$dir/node_modules" ] && [ "$(cat "$stamp" 2>/dev/null)" = "$lock_hash" ]; then
+      log "$pkg/node_modules up to date — skipping"
       continue
     fi
 
     log "installing $pkg dependencies (npm ci)"
-    if ! (cd "$REPO_ROOT/$pkg" && npm ci --no-audit --no-fund); then
+    if ! (cd "$dir" && npm ci --no-audit --no-fund); then
       fail "npm ci failed in $pkg/"
+      continue
     fi
+    echo "$lock_hash" >"$stamp"
   done
 }
 
