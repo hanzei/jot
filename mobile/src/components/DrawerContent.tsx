@@ -204,9 +204,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
   }, []);
 
   const handleSettingsPress = useCallback(() => {
-    props.navigation.dispatch(
-      CommonActions.navigate({ name: 'Settings' }),
-    );
+    props.navigation.dispatch(CommonActions.navigate('Settings'));
     props.navigation.closeDrawer();
   }, [props.navigation]);
 
