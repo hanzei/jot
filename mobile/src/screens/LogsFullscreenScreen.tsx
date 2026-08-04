@@ -12,6 +12,20 @@ import type { RootStackParamList } from '../navigation/RootNavigator';
 const STATUS_ORANGE = '#f97316';
 const MONO = Platform.OS === 'ios' ? 'Menlo' : 'monospace';
 
+/**
+ * "YYYY-MM-DD HH:MM:SS" in the device's local time zone. Built field-by-field
+ * rather than via toLocaleString(), which varies in format and width across
+ * locales and would break the fixed-width column alignment here.
+ */
+function formatLocalTimestamp(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
+    `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  );
+}
+
 export default function LogsFullscreenScreen() {
   const { colors } = useTheme();
   const { t } = useTranslation();
@@ -69,13 +83,19 @@ function LogLine({ entry }: { entry: LogEntry }) {
         ? STATUS_ORANGE
         : colors.textSecondary;
 
-  const time = entry.ts.slice(11, 19); // HH:MM:SS from ISO string
+  const timestamp = formatLocalTimestamp(entry.ts);
 
   return (
     <View style={styles.logLine}>
-      <Text style={[styles.logLevel, { color: levelColor }]}>{entry.level.toUpperCase().padEnd(5)}</Text>
-      <Text style={[styles.logTime, { color: colors.textMuted }]}>{time} </Text>
-      <Text style={[styles.logMsg, { color: colors.text }]}>{entry.msg}</Text>
+      <Text selectable style={[styles.logLevel, { color: levelColor }]}>
+        {entry.level.toUpperCase().padEnd(5)}
+      </Text>
+      <Text selectable style={[styles.logTime, { color: colors.textMuted }]}>
+        {timestamp}{' '}
+      </Text>
+      <Text selectable style={[styles.logMsg, { color: colors.text }]}>
+        {entry.msg}
+      </Text>
     </View>
   );
 }
@@ -130,7 +150,7 @@ const styles = StyleSheet.create({
   logTime: {
     fontSize: 11,
     fontFamily: MONO,
-    width: 68,
+    width: 132,
   },
   logMsg: {
     fontSize: 11,
