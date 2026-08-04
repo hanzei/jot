@@ -174,6 +174,13 @@ already means *"the inset your content still has to apply"*, so a plain
 `paddingTop: insets.top` is correct with and without a banner — including in
 React Navigation's own headers, which read the same context.
 
+The flip is instant, not animated, and must stay that way: `Banner` animates its
+**height** between `topInset` (closed) and `topInset + row height` (open), so the
+strip it adds is exactly the inset the content drops, on the same commit. The two
+cancel and the content slides instead of stepping. Animating the inset — or
+letting a banner close to height 0 while it still owns the inset — reintroduces
+the jump.
+
 Screens that hand-rolled `bannerShown ? 0 : insets.top` are what this replaced;
 that pattern is now a bug, since it subtracts an inset the context has already
 zeroed. Do not reintroduce it, and do not consume `useBannerShown` outside

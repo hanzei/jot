@@ -30,6 +30,11 @@ const DeviceSafeAreaInsetsContext = createContext<EdgeInsets | null>(null);
  *
  * Must be rendered as a *sibling below* the banner stack, never around it —
  * the banners themselves need the real inset in order to pad it.
+ *
+ * The flip is deliberately instant rather than animated, and is what makes the
+ * banner's open/close animation seamless: the topmost banner's closed height is
+ * exactly the top inset dropped here, and both change on the same commit, so
+ * they cancel out and the content slides rather than steps. See `Banner`.
  */
 export function ContentSafeArea({ children }: PropsWithChildren) {
   const deviceInsets = useContext(SafeAreaInsetsContext) ?? ZERO_INSETS;
