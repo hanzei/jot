@@ -2348,4 +2348,95 @@ describe('NoteModal', () => {
       expect(onRefresh).toHaveBeenCalled()
     })
   })
+
+  describe('Read-only (bin) notes', () => {
+    it('renders a text note read-only, with no editing affordances', () => {
+      const note = createMockNote({ deleted_at: '2023-06-01T00:00:00Z', content: 'Trashed content' })
+      renderNoteModal({ ...defaultProps, note, onDelete: vi.fn(), onDuplicate: vi.fn(), onConvert: vi.fn(), onShare: vi.fn(), isOwner: true })
+
+      const preview = screen.getByTestId('note-content-preview')
+      expect(preview).toHaveTextContent('Trashed content')
+
+      // Clicking the preview must not switch to the editable textarea.
+      fireEvent.click(preview)
+      expect(screen.queryByPlaceholderText('Take a note...')).not.toBeInTheDocument()
+
+      // Mutating toolbar actions are gone/disabled; only Restore/Delete forever remain.
+      expect(screen.getByRole('button', { name: 'Pin note' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Archive note' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Select note color' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Add image' })).toBeDisabled()
+      expect(screen.queryByRole('button', { name: 'Share' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Duplicate' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Convert to list' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Labels' })).not.toBeInTheDocument()
+    })
+
+    it('renders a list note read-only, with no item edit affordances', () => {
+      const note = createMockNote({
+        note_type: 'list',
+        title: 'Trashed list',
+        deleted_at: '2023-06-01T00:00:00Z',
+        items: createMockListItems(),
+      })
+      renderNoteModal({ ...defaultProps, note })
+
+      expect(screen.getByDisplayValue('Trashed list')).toHaveAttribute('readonly')
+      expect(screen.queryByText('Add item')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('list-item-delete')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Reorder item')).not.toBeInTheDocument()
+
+      const checkboxes = screen.getAllByRole('checkbox') as HTMLInputElement[]
+      for (const checkbox of checkboxes) {
+        expect(checkbox).toBeDisabled()
+      }
+    })
+
+    it('still shows completed items when the note was collapsed before it was binned', () => {
+      const note = createMockNote({
+        note_type: 'list',
+        title: 'Trashed list',
+        deleted_at: '2023-06-01T00:00:00Z',
+        checked_items_collapsed: true,
+        items: createMockListItems(),
+      })
+      renderNoteModal({ ...defaultProps, note })
+
+      // A collapsed completed section would otherwise have no way to reopen —
+      // the toggle button is disabled read-only — so read-only mode always
+      // shows completed items regardless of the persisted collapsed state.
+      // 'Second item' is createMockListItems()'s completed item.
+      expect(screen.getByDisplayValue('Second item')).toBeInTheDocument()
+    })
+
+    it('shows Restore and Delete forever, and calls the handlers', () => {
+      const note = createMockNote({ deleted_at: '2023-06-01T00:00:00Z' })
+      const onRestore = vi.fn()
+      const onPermanentlyDelete = vi.fn()
+      const onClose = vi.fn()
+      renderNoteModal({ ...defaultProps, note, onRestore, onPermanentlyDelete, onClose })
+
+      fireEvent.click(screen.getByTestId('note-restore'))
+      expect(onRestore).toHaveBeenCalledWith('1')
+      expect(onClose).toHaveBeenCalled()
+
+      fireEvent.click(screen.getByTestId('note-delete-forever'))
+      // Confirmation required before the permanent-delete callback fires.
+      expect(onPermanentlyDelete).not.toHaveBeenCalled()
+      const deleteForeverButtons = screen.getAllByRole('button', { name: 'Delete forever' })
+      fireEvent.click(deleteForeverButtons[deleteForeverButtons.length - 1])
+      expect(onPermanentlyDelete).toHaveBeenCalledWith('1')
+    })
+
+    it('ignores keyboard shortcuts for a read-only note', () => {
+      const note = createMockNote({ deleted_at: '2023-06-01T00:00:00Z', pinned: false })
+      renderNoteModal({ ...defaultProps, note })
+
+      fireEvent.keyDown(window, { key: 'p' })
+      fireEvent.keyDown(window, { key: 'a' })
+
+      expect(mockNotesUpdate).not.toHaveBeenCalled()
+    })
+  })
 })

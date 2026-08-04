@@ -101,6 +101,19 @@ for (const theme of THEMES) {
       await expectNoViolations(page, { accept: [NOTE_CARD_NESTED_INTERACTIVE] });
     });
 
+    test('read-only bin note modal has no WCAG A/AA violations', async ({ page, authenticatedUser, dashboardPage }) => {
+      void authenticatedUser;
+      await dashboardPage.goto();
+      await dashboardPage.createListNote('A11y Bin Note', ['first item', 'second item']);
+      await dashboardPage.deleteNote('A11y Bin Note');
+      await dashboardPage.switchToBin();
+      await dashboardPage.openNote('A11y Bin Note');
+      await expect(page.locator('[role="dialog"][aria-modal="true"]').getByPlaceholder('Note title...')).toBeVisible();
+      await expectTheme(page, theme);
+
+      await expectNoViolations(page, { accept: [NOTE_CARD_NESTED_INTERACTIVE] });
+    });
+
     test('note modal has no WCAG A/AA violations in any note colour', async ({ page, authenticatedUser, dashboardPage }) => {
       void authenticatedUser;
       // Ten colours × two save states = twenty scans, plus a two-second settle

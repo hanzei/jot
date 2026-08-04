@@ -713,6 +713,31 @@ describe('NoteCard', () => {
     })
   })
 
+  describe('Bin', () => {
+    it('opens the note (read-only) when a binned card is clicked', async () => {
+      const user = userEvent.setup()
+      const onEdit = vi.fn()
+
+      renderNoteCard({ ...defaultProps, onEdit, inBin: true })
+
+      await user.click(screen.getByText('Test Note'))
+
+      expect(onEdit).toHaveBeenCalledWith(defaultProps.note)
+    })
+
+    it('opens the note when Enter is pressed on a binned card', async () => {
+      const user = userEvent.setup()
+      const onEdit = vi.fn()
+
+      renderNoteCard({ ...defaultProps, onEdit, inBin: true })
+
+      screen.getByTestId('note-card').focus()
+      await user.keyboard('{Enter}')
+
+      expect(onEdit).toHaveBeenCalledWith(defaultProps.note)
+    })
+  })
+
   describe('Markdown Rendering', () => {
     it('renders markdown in text note content', () => {
       const note = createMockNote({ note_type: 'text', content: '**bold text**' })
