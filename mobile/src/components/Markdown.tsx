@@ -42,8 +42,16 @@ function renderBlocks(nodes: BlockNode[], ctx: RenderContext, keyPrefix = ''): R
         );
 
       case 'heading':
+        // React Native's header role carries no level, so this says "a heading
+        // is here" and nothing about depth — less than the webapp's <h1>-<h6>,
+        // but the difference between a heading and a bold paragraph is the part
+        // assistive technology can actually navigate by.
         return (
-          <Text key={key} style={[headingStyle(ctx.textStyles, node.depth), { color: ctx.color }]}>
+          <Text
+            key={key}
+            accessibilityRole="header"
+            style={[headingStyle(ctx.textStyles, node.depth), { color: ctx.color }]}
+          >
             {renderInlineNodes(node.children, { linkColor: ctx.theme.link }, `${key}.`)}
           </Text>
         );

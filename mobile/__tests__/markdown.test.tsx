@@ -272,6 +272,32 @@ describe('markdown rendering', () => {
     });
   });
 
+  describe('heading semantics', () => {
+    /** Nodes carrying the native header role. */
+    function headers(node: RenderedNode): string[] {
+      if (node === null || typeof node === 'string') return [];
+      const own = node.props?.accessibilityRole === 'header' ? [visibleText(node)] : [];
+      return own.concat(
+        (node.children ?? []).flatMap((child) => headers(child as RenderedNode)),
+      );
+    }
+
+    it('marks every heading depth as a header for assistive technology', () => {
+      const tree = render(
+        <Markdown content={'# one\n\n### three\n\n###### six\n\nbody'} />,
+      ).toJSON() as RenderedNode;
+
+      expect(headers(tree)).toEqual(['one', 'three', 'six']);
+    });
+
+    // The card is one clamped Text inside a control that opens the note, so an
+    // outline inside it would be noise rather than structure.
+    it('sets no header role in the card preview', () => {
+      const tree = render(<MarkdownPreview content="# one" />).toJSON() as RenderedNode;
+      expect(headers(tree)).toEqual([]);
+    });
+  });
+
   describe('heading styles', () => {
     it('renders h4-h6 at body size in bold, not as their own heading sizes', () => {
       for (const styles of [fullMarkdownStyles, compactMarkdownStyles]) {

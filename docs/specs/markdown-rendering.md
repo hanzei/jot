@@ -337,7 +337,7 @@ dropped, so the card shows the same content as the editor:
 |---|---|---|
 | Code block | Monospace in a tinted box | Monospace, no tint |
 | Blockquote | A bar down the left | Muted text colour |
-| Bullet / ordered item | A marker column | A `• ` / `1. ` prefix, nested items indented by spaces |
+| Bullet / ordered item | A marker column | A `•` or `1.` prefix plus a space; nested items indented by spaces |
 | Horizontal rule | A hairline View | A short run of `─` |
 | Block spacing | An 8px gap | A newline |
 | Link | Underlined, tappable | Plain text (§1.1 — a rule, not a limitation) |
@@ -381,7 +381,7 @@ here so the next person does not have to rediscover them.
   task list puts it directly in the item's token list, next to a block `text`
   token; a *loose* one puts it inside the item's paragraph, at inline position.
   Mobile's walk buffers the tight run into one paragraph so the marker stays on
-  the same line as its text, and swaps the token for `☐ `/`☑ ` on the inline path
+  the same line as its text, and swaps the token for `☐` or `☑` plus a space on the inline path
   so both shapes render the same. Handling only one of the two is the easy bug.
 - **Narrowing a marked `Token` by `type` does not eliminate `Tokens.Generic`.**
   It carries an index signature, so every other member is assignable to it and
@@ -389,11 +389,17 @@ here so the next person does not have to rediscover them.
   that matter — `Exclude<Token, Tokens.Generic>` collapses to `never`, so that is
   not the way out either. `mobile/src/utils/markdown.ts` casts per case, guarded
   by the `type` check above it.
-- **h4–h6 are styled down, not rewritten.** Both clients emit real headings and
-  give them body size and bold weight, in CSS
-  (`.markdown-content :is(h4, h5, h6)`) and in the style map
-  (`markdownStyles.ts`). Keeping the depth keeps the document outline intact for
-  assistive technology; a parser-level rewrite would not.
+- **h4–h6 are styled down, not rewritten.** Both clients emit a real heading and
+  give it body size and bold weight, in CSS (`.markdown-content :is(h4, h5, h6)`)
+  and in the style map (`markdownStyles.ts`). Rewriting them to paragraphs at
+  parse time would look identical and lose the semantics.
+  **What "a real heading" buys differs by client**, and it is worth being precise
+  rather than claiming parity: the webapp emits `<h1>`–`<h6>`, so assistive
+  technology gets the full outline *with levels*. React Native's
+  `accessibilityRole="header"` has no level, so mobile's editor announces "this
+  is a heading" and no more. Mobile's **card** preview sets no role at all — it is
+  one clamped Text inside a control that opens the note, and an outline inside a
+  button is noise rather than structure.
 - **Link reference definitions render nothing.** `[a]: https://example.com` lexes
   to a `def` token that marked has already resolved into the links using it, so
   both clients skip it. It is the one token type that is neither rendered nor
