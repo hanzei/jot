@@ -1,20 +1,20 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { render } from '@testing-library/react-native';
-import Markdown from 'react-native-markdown-display';
 import { MARKDOWN_CASES } from '@jot/shared';
-import { allowLinkPress, markdownParser, markdownRules } from '../src/utils/markdown';
+import Markdown from '../src/components/Markdown';
+import MarkdownPreview, { PREVIEW_LINES } from '../src/components/MarkdownPreview';
 import { compactMarkdownStyles, fullMarkdownStyles } from '../src/utils/markdownStyles';
 
 // The mobile half of the shared conformance corpus (shared/src/markdownCases.ts);
-// webapp/src/utils/__tests__/markdown.test.ts runs the same list through marked.
-// The coverage test at the bottom is what keeps the two from drifting apart.
+// webapp/src/utils/__tests__/markdown.test.ts runs the same list through marked's
+// HTML renderer. The coverage test at the bottom is what keeps the two from
+// drifting apart.
 //
-// Two assertion surfaces, because mobile splits the work in two:
-//  - html(): markdown-it's own renderer over the exact token stream
-//    react-native-markdown-display consumes. Everything the parser decides —
-//    headings, images, tables, linkify, typography, checkboxes — is visible here.
-//  - the <Markdown> tree: what the render rules do with those tokens, which is
-//    where link schemes are enforced.
+// Everything is asserted against the rendered React Native tree — what the user
+// actually sees — rather than against the parser. Both clients lex with marked
+// now, so a token-level assertion would mostly re-test marked; the interesting
+// half is what this app does with the tokens.
 
 function markdownFor(id: string): string {
   const testCase = MARKDOWN_CASES.find((c) => c.id === id);
@@ -22,18 +22,17 @@ function markdownFor(id: string): string {
   return testCase.markdown;
 }
 
-function html(id: string): string {
-  return (markdownParser as unknown as { render(src: string): string }).render(markdownFor(id));
-}
-
-type RenderedNode = { props?: Record<string, unknown>; children?: unknown[] } | string | null;
+type RenderedNode =
+  | { type?: string; props?: Record<string, unknown>; children?: unknown[] }
+  | string
+  | null;
 
 function renderCase(id: string): RenderedNode {
-  return render(
-    <Markdown markdownit={markdownParser} rules={markdownRules} onLinkPress={allowLinkPress}>
-      {markdownFor(id)}
-    </Markdown>,
-  ).toJSON() as RenderedNode;
+  return render(<Markdown content={markdownFor(id)} />).toJSON() as RenderedNode;
+}
+
+function renderPreview(id: string): RenderedNode {
+  return render(<MarkdownPreview content={markdownFor(id)} />).toJSON() as RenderedNode;
 }
 
 /** Every string in the rendered tree, i.e. what the user actually reads. */
@@ -52,60 +51,123 @@ function tappableText(node: RenderedNode): string[] {
   );
 }
 
+/**
+ * The effective style of the innermost node whose whole visible text is `text`.
+ *
+ * Styles are merged down the path to it, because that is how nested <Text>
+ * behaves on React Native: a child inherits the font of every Text above it, so
+ * the merged style is what the glyphs are actually drawn with.
+ */
+function styleOf(
+  node: RenderedNode,
+  text: string,
+  inherited: Record<string, unknown> = {},
+): Record<string, unknown> | null {
+  if (node === null || typeof node === 'string') return null;
+  const own = (StyleSheet.flatten(node.props?.style as never) ?? {}) as Record<string, unknown>;
+  const merged = { ...inherited, ...own };
+
+  for (const child of node.children ?? []) {
+    const found = styleOf(child as RenderedNode, text, merged);
+    if (found) return found;
+  }
+
+  return visibleText(node) === text ? merged : null;
+}
+
+function styleFor(node: RenderedNode, text: string): Record<string, unknown> {
+  const style = styleOf(node, text);
+  if (!style) throw new Error(`no rendered node reads exactly ${JSON.stringify(text)}`);
+  return style;
+}
+
+/** Views matching a predicate on their style — the block boxes a Text cannot draw. */
+function boxes(
+  node: RenderedNode,
+  match: (style: Record<string, unknown>) => boolean,
+): Record<string, unknown>[] {
+  if (node === null || typeof node === 'string') return [];
+  const style = (StyleSheet.flatten(node.props?.style as never) ?? {}) as Record<string, unknown>;
+  const own = node.type === 'View' && match(style) ? [style] : [];
+  return own.concat(
+    (node.children ?? []).flatMap((child) => boxes(child as RenderedNode, match)),
+  );
+}
+
+const hasTint = (node: RenderedNode) => boxes(node, (s) => s.backgroundColor !== undefined).length;
+const hasBar = (node: RenderedNode) => boxes(node, (s) => Number(s.borderLeftWidth) > 0).length;
+const hasRule = (node: RenderedNode) => boxes(node, (s) => s.height === 1).length;
+
 const conformance: Record<string, () => void> = {
-  bold: () => expect(html('bold')).toContain('<strong>hello</strong>'),
-  italic: () => expect(html('italic')).toContain('<em>hello</em>'),
-  strikethrough: () => expect(html('strikethrough')).toContain('<s>hello</s>'),
+  bold: () => expect(styleFor(renderCase('bold'), 'hello').fontWeight).toBe('700'),
+  italic: () => expect(styleFor(renderCase('italic'), 'hello').fontStyle).toBe('italic'),
+  strikethrough: () =>
+    expect(styleFor(renderCase('strikethrough'), 'hello').textDecorationLine).toBe('line-through'),
 
-  'heading-1': () => expect(html('heading-1')).toContain('<h1>Top heading</h1>'),
-  'heading-3': () => expect(html('heading-3')).toContain('<h3>Third heading</h3>'),
-  // Rendered as heading4/heading6 nodes; markdownStyles.ts gives them body size
-  // and bold weight rather than a size of their own.
-  'heading-4-bold': () => expect(html('heading-4-bold')).toContain('<h4>Fourth heading</h4>'),
-  'heading-6-bold': () => expect(html('heading-6-bold')).toContain('<h6>Sixth heading</h6>'),
+  'heading-1': () =>
+    expect(styleFor(renderCase('heading-1'), 'Top heading').fontSize).toBe(
+      fullMarkdownStyles.heading1.fontSize,
+    ),
+  'heading-3': () =>
+    expect(styleFor(renderCase('heading-3'), 'Third heading').fontSize).toBe(
+      fullMarkdownStyles.heading3.fontSize,
+    ),
+  // h4-h6 keep their depth and are styled down, so they carry body size in bold
+  // rather than a size of their own.
+  'heading-4-bold': () => {
+    const style = styleFor(renderCase('heading-4-bold'), 'Fourth heading');
+    expect(style.fontSize).toBe(fullMarkdownStyles.body.fontSize);
+    expect(style.fontWeight).toBe('700');
+  },
+  'heading-6-bold': () => {
+    const style = styleFor(renderCase('heading-6-bold'), 'Sixth heading');
+    expect(style.fontSize).toBe(fullMarkdownStyles.body.fontSize);
+    expect(style.fontWeight).toBe('700');
+  },
 
-  'inline-code': () => expect(html('inline-code')).toContain('<code>code</code>'),
+  'inline-code': () => expect(styleFor(renderCase('inline-code'), 'code').fontFamily).toBeTruthy(),
   'fenced-code': () => {
-    expect(html('fenced-code')).toContain('<pre><code');
-    expect(html('fenced-code')).toContain('const a = 1;');
+    const tree = renderCase('fenced-code');
+    expect(styleFor(tree, 'const a = 1;').fontFamily).toBeTruthy();
+    // Block layout: the tinted box a fenced block sits in, which inline code has
+    // no equivalent of.
+    expect(hasTint(tree)).toBe(1);
   },
   'indented-code': () => {
-    expect(html('indented-code')).toContain('<pre><code');
-    expect(html('indented-code')).toContain('indented code');
+    const tree = renderCase('indented-code');
+    expect(styleFor(tree, 'indented code').fontFamily).toBeTruthy();
+    expect(hasTint(tree)).toBe(1);
   },
   'task-marker-in-code': () => {
-    expect(html('task-marker-in-code')).toContain('<pre><code');
-    expect(html('task-marker-in-code')).toContain('- [x] not a checkbox');
-    expect(html('task-marker-in-code')).not.toContain('☑');
+    const tree = renderCase('task-marker-in-code');
+    expect(visibleText(tree)).toBe('- [x] not a checkbox');
+    expect(hasTint(tree)).toBe(1);
   },
 
-  'bullet-list': () => expect(html('bullet-list')).toContain('<li>item</li>'),
-  'ordered-list': () => {
-    expect(html('ordered-list')).toContain('<ol>');
-    expect(html('ordered-list')).toContain('<li>item</li>');
-  },
-  'task-unchecked': () => expect(html('task-unchecked')).toContain('<li>☐ todo</li>'),
-  'task-checked': () => expect(html('task-checked')).toContain('<li>☑ done</li>'),
+  'bullet-list': () => expect(visibleText(renderCase('bullet-list'))).toBe('•item'),
+  'ordered-list': () => expect(visibleText(renderCase('ordered-list'))).toBe('1.item'),
+  'task-unchecked': () => expect(visibleText(renderCase('task-unchecked'))).toContain('☐ todo'),
+  'task-checked': () => expect(visibleText(renderCase('task-checked'))).toContain('☑ done'),
   'task-checked-uppercase': () =>
-    expect(html('task-checked-uppercase')).toContain('<li>☑ done</li>'),
+    expect(visibleText(renderCase('task-checked-uppercase'))).toContain('☑ done'),
   'task-marker-outside-list': () => {
-    expect(html('task-marker-outside-list')).toContain('[x] not a task');
-    expect(html('task-marker-outside-list')).not.toContain('☑');
+    const tree = renderCase('task-marker-outside-list');
+    expect(visibleText(tree)).toBe('[x] not a task');
+    expect(visibleText(tree)).not.toContain('☑');
   },
 
-  blockquote: () => expect(html('blockquote')).toContain('<blockquote>'),
-  'hr-dashes': () => expect(html('hr-dashes')).toContain('<hr>'),
-  'hr-stars': () => expect(html('hr-stars')).toContain('<hr>'),
+  blockquote: () => {
+    const tree = renderCase('blockquote');
+    expect(visibleText(tree)).toBe('quote');
+    expect(hasBar(tree)).toBe(1);
+  },
+  'hr-dashes': () => expect(hasRule(renderCase('hr-dashes'))).toBe(1),
+  'hr-stars': () => expect(hasRule(renderCase('hr-stars'))).toBe(1),
 
   'inline-link': () => expect(tappableText(renderCase('inline-link'))).toEqual(['text']),
-  'bare-url': () => {
-    expect(html('bare-url')).toContain('href="https://example.com"');
-    expect(tappableText(renderCase('bare-url'))).toEqual(['https://example.com']);
-  },
-  'bare-url-www': () => {
-    expect(html('bare-url-www')).toContain('href="http://www.example.com"');
-    expect(tappableText(renderCase('bare-url-www'))).toEqual(['www.example.com']);
-  },
+  'bare-url': () => expect(tappableText(renderCase('bare-url'))).toEqual(['https://example.com']),
+  'bare-url-www': () =>
+    expect(tappableText(renderCase('bare-url-www'))).toEqual(['www.example.com']),
   'bare-domain': () => {
     const tree = renderCase('bare-domain');
     expect(visibleText(tree)).toBe('visit example.com now');
@@ -114,43 +176,39 @@ const conformance: Record<string, () => void> = {
   'mailto-link': () => expect(tappableText(renderCase('mailto-link'))).toEqual(['mail']),
   'tel-link': () => {
     const tree = renderCase('tel-link');
-    expect(visibleText(tree)).toContain('call');
+    expect(visibleText(tree)).toBe('call');
     expect(tappableText(tree)).toEqual([]);
   },
   'javascript-link': () => expect(tappableText(renderCase('javascript-link'))).toEqual([]),
   'relative-link': () => {
     const tree = renderCase('relative-link');
-    expect(visibleText(tree)).toContain('rel');
+    expect(visibleText(tree)).toBe('rel');
     expect(tappableText(tree)).toEqual([]);
   },
 
   image: () => {
     const tree = renderCase('image');
-    expect(visibleText(tree)).toContain('![alt text](https://example.com/y.png)');
+    expect(visibleText(tree)).toBe('![alt text](https://example.com/y.png)');
     expect(tappableText(tree)).toEqual([]);
   },
   'image-with-title': () =>
-    expect(visibleText(renderCase('image-with-title'))).toContain(
+    expect(visibleText(renderCase('image-with-title'))).toBe(
       '![alt](https://example.com/y.png "the title")',
     ),
   'image-empty-alt': () => {
     const tree = renderCase('image-empty-alt');
-    expect(visibleText(tree)).toContain('![](https://example.com/y.png)');
-    // .disable('image') would leave an invisible clickable link here.
+    expect(visibleText(tree)).toBe('![](https://example.com/y.png)');
     expect(tappableText(tree)).toEqual([]);
   },
   'image-inline-in-paragraph': () =>
-    expect(visibleText(renderCase('image-inline-in-paragraph'))).toContain(
+    expect(visibleText(renderCase('image-inline-in-paragraph'))).toBe(
       'see ![a](https://example.com/y.png) here',
     ),
 
-  table: () => {
-    expect(html('table')).not.toContain('<table');
-    expect(visibleText(renderCase('table'))).toContain('a | b\n--- | ---\n1 | 2');
-  },
+  table: () => expect(visibleText(renderCase('table'))).toBe('a | b\n--- | ---\n1 | 2'),
   'table-cell-url': () => {
     const tree = renderCase('table-cell-url');
-    expect(visibleText(tree)).toContain('a | b\n--- | ---\nhttps://example.com | 2');
+    expect(visibleText(tree)).toBe('a | b\n--- | ---\nhttps://example.com | 2');
     expect(tappableText(tree)).toEqual([]);
   },
 
@@ -188,9 +246,35 @@ describe('markdown rendering', () => {
     });
   }
 
+  describe('block layout', () => {
+    /** Every ancestor chain that puts a View inside a Text. */
+    function viewsInsideText(node: RenderedNode, insideText = false, path: string[] = []): string[] {
+      if (node === null || typeof node === 'string') return [];
+      const here = [...path, node.type ?? '?'];
+      const own = insideText && node.type === 'View' ? [here.join(' > ')] : [];
+      return own.concat(
+        (node.children ?? []).flatMap((child) =>
+          viewsInsideText(child as RenderedNode, insideText || node.type === 'Text', here),
+        ),
+      );
+    }
+
+    // Nesting a View inside a Text breaks text wrapping on React Native. The
+    // structural rule that avoids it — blocks own Views, the inline level is all
+    // Text — is invisible in a diff, so it is asserted on the construct that
+    // breaks a naive recursive renderer first.
+    it('never nests a View inside a Text', () => {
+      const nested = '> quoted\n>\n> - one\n> - two\n>\n> ```\n> code\n> ```';
+      const tree = render(<Markdown content={nested} />).toJSON() as RenderedNode;
+
+      expect(viewsInsideText(tree)).toEqual([]);
+      expect(visibleText(tree)).toBe('quoted•one•twocode');
+    });
+  });
+
   describe('heading styles', () => {
     it('renders h4-h6 at body size in bold, not as their own heading sizes', () => {
-      for (const styles of [fullMarkdownStyles('#000'), compactMarkdownStyles('#000')]) {
+      for (const styles of [fullMarkdownStyles, compactMarkdownStyles]) {
         for (const level of ['heading4', 'heading5', 'heading6'] as const) {
           expect(styles[level].fontSize).toBe(styles.body.fontSize);
           expect(styles[level].fontWeight).toBe('700');
@@ -198,20 +282,65 @@ describe('markdown rendering', () => {
       }
     });
   });
+});
 
-  describe('allowLinkPress', () => {
-    it('allows the schemes Jot renders as links', () => {
-      expect(allowLinkPress('https://example.com')).toBe(true);
-      expect(allowLinkPress('http://example.com')).toBe(true);
-      expect(allowLinkPress('mailto:a@b.com')).toBe(true);
-    });
+// The note card renders the same blocks as one clamped <Text> (#819). It is a
+// different layout of the same content, never a different feature set, so the
+// parity test below is the real assertion and the cases after it only pin the
+// affordances a Text has to substitute for a box.
+describe('markdown card preview', () => {
+  /**
+   * Visible text with whitespace and the rule stand-in removed.
+   *
+   * The two renderers lay blocks out differently — a marker column versus a
+   * "• " prefix, a rule View versus a run of dashes — so their text differs by
+   * exactly that much and by nothing else.
+   */
+  function content(node: RenderedNode): string {
+    return visibleText(node).replace(/[─\s]/g, '');
+  }
 
-    it('blocks app deep links and everything else', () => {
-      expect(allowLinkPress('tel:+15550100')).toBe(false);
-      expect(allowLinkPress('sms:+15550100')).toBe(false);
-      expect(allowLinkPress('jot://notes/1')).toBe(false);
-      expect(allowLinkPress('javascript:alert(1)')).toBe(false);
-      expect(allowLinkPress('/dashboard')).toBe(false);
-    });
+  it('shows the same content as the editor for every conformance case', () => {
+    for (const testCase of MARKDOWN_CASES) {
+      expect(content(renderPreview(testCase.id))).toBe(content(renderCase(testCase.id)));
+    }
+  });
+
+  it('clamps to six lines however long the note is', () => {
+    const long = Array.from({ length: 40 }, (_, i) => `line ${i}`).join('\n\n');
+    const tree = render(<MarkdownPreview content={long} />).toJSON() as RenderedNode;
+    expect((tree as { props: Record<string, unknown> }).props.numberOfLines).toBe(PREVIEW_LINES);
+    expect(PREVIEW_LINES).toBe(6);
+  });
+
+  it('renders nothing for an empty note', () => {
+    expect(render(<MarkdownPreview content="   " />).toJSON()).toBeNull();
+  });
+
+  it('gives list items a marker and nested items an indent', () => {
+    const tree = render(<MarkdownPreview content={'- a\n  - b\n- [x] c'} />).toJSON() as RenderedNode;
+    expect(visibleText(tree)).toBe('• a\n  • b\n• ☑ c');
+  });
+
+  it('numbers ordered items from the list start', () => {
+    const tree = render(<MarkdownPreview content={'3. a\n4. b'} />).toJSON() as RenderedNode;
+    expect(visibleText(tree)).toBe('3. a\n4. b');
+  });
+
+  it('stands a horizontal rule in for the one it cannot draw', () => {
+    const tree = render(<MarkdownPreview content={'a\n\n---\n\nb'} />).toJSON() as RenderedNode;
+    expect(visibleText(tree)).toMatch(/^a\n─+\nb$/);
+  });
+
+  it('carries a blockquote with colour, having no bar to draw', () => {
+    const tree = render(<MarkdownPreview content={'> quoted\n\nplain'} />).toJSON() as RenderedNode;
+    expect(styleFor(tree, 'quoted').color).not.toBe(styleFor(tree, 'plain').color);
+  });
+
+  it('keeps links tappable, as the card list items and the webapp card both do', () => {
+    const tree = render(
+      <MarkdownPreview content="see https://example.com" />,
+    ).toJSON() as RenderedNode;
+    expect(tappableText(tree)).toEqual(['https://example.com']);
   });
 });

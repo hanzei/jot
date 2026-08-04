@@ -24,7 +24,6 @@ import {
   type TextInputSelectionChangeEventData,
   type TextInput as TextInputType,
 } from 'react-native';
-import Markdown from 'react-native-markdown-display';
 import {
   NestedReorderableList,
   ScrollViewContainer,
@@ -48,6 +47,7 @@ import { useSSESubscription } from '../store/SSEContext';
 import { useToast } from '../hooks/useToast';
 import { useConfirm } from '../hooks/useConfirm';
 import ConfirmDialog from '../components/ConfirmDialog';
+import Markdown from '../components/Markdown';
 import ColorPicker from '../components/ColorPicker';
 import LabelPicker from '../components/LabelPicker';
 import AssigneePicker from '../components/AssigneePicker';
@@ -64,8 +64,6 @@ import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { getCompletedSectionDividerColor, isWhiteHexColor } from '../utils/colorContrast';
 import { formatEditorStateForShare } from '../utils/noteTextFormatter';
-import { fullMarkdownStyles } from '../utils/markdownStyles';
-import { allowLinkPress, markdownParser, markdownRules } from '../utils/markdown';
 import { getActiveServer, listServers, type ServerAccountEntry } from '../store/serverAccounts';
 import { isServerReachable } from '../api/serverReachability';
 import { setPendingShare, usePendingShare } from '../store/shareIntent';
@@ -2726,14 +2724,7 @@ export default function NoteEditorScreen() {
                 style={styles.contentPreview}
               >
                 {content ? (
-                  <Markdown
-                    style={fullMarkdownStyles(hasNoteColor ? '#1a1a1a' : colors.text)}
-                    markdownit={markdownParser}
-                    rules={markdownRules}
-                    onLinkPress={allowLinkPress}
-                  >
-                    {content}
-                  </Markdown>
+                  <Markdown content={content} onColoredNote={hasNoteColor} />
                 ) : (
                   <Text style={{ color: hasNoteColor ? '#999' : colors.placeholder, fontSize: 14 }}>
                     {t('note.contentPlaceholder')}

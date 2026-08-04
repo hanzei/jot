@@ -43,10 +43,9 @@ function safeLinkHref(href: string): string | null {
 }
 
 marked.use({
-  // Mobile matches this via react-native-markdown-display's softbreak rule,
-  // which emits a newline even though markdown-it runs with breaks: false.
-  // Same output, different mechanism — "fixing" the mobile side to breaks: true
-  // would look harmless and change nothing until that rule changes.
+  // Mobile lexes with the same two options (BLOCK_LEXER_OPTIONS in
+  // mobile/src/utils/markdown.ts). Registered globally here because the webapp's
+  // renderer overrides below are global too; mobile passes them per call.
   breaks: true,
   gfm: true,
   renderer: {

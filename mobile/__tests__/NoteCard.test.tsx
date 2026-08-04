@@ -96,6 +96,24 @@ describe('NoteCard', () => {
     expect(getByText('Some content here')).toBeTruthy();
   });
 
+  it('renders text-note content as Markdown, clamped', () => {
+    const note = { ...baseNote, content: '# Groceries\n\n- **milk**\n- eggs' };
+    const { getByTestId } = render(<NoteCard note={note} onPress={jest.fn()} />);
+
+    const preview = getByTestId('note-card-content-note-1');
+    // The clamp is what keeps a long note from blowing out the card; the card
+    // itself sets no height, so this prop is the whole mechanism.
+    expect(preview.props.numberOfLines).toBe(6);
+
+    const read = (node: unknown): string => {
+      if (typeof node === 'string') return node;
+      if (Array.isArray(node)) return node.map(read).join('');
+      const children = (node as { props?: { children?: unknown } })?.props?.children;
+      return children === undefined ? '' : read(children);
+    };
+    expect(read(preview)).toBe('Groceries\n• milk\n• eggs');
+  });
+
   it('renders title for list notes', () => {
     const { getByText } = render(<NoteCard note={baseListNote} onPress={jest.fn()} />);
 
