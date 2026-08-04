@@ -436,6 +436,8 @@ Types are distributed across the `@jot/shared` package (`shared/src/`) and impor
 - **Expo SQLite** — local offline persistence
 - **Expo FileSystem** — blob/file storage, wrapped by `src/utils/fs.ts`
 - **react-native-sse** — SSE client for real-time updates
+- **marked** — Markdown parsing, the same library and version the webapp uses;
+  mobile walks its tokens into React Native components rather than HTML
 - **@jot/shared** — shared types and utilities (local file dependency)
 
 ### Mobile Tests

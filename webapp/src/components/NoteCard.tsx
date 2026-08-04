@@ -360,7 +360,10 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
         {note.note_type === 'text' ? (
           <div
             className="text-sm text-gray-700 dark:text-gray-200 line-clamp-6 markdown-content"
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(note.content) }}
+            // links={false} in effect: the card is one control that opens the
+            // note, so an anchor here would follow the link *and* open the note.
+            // docs/specs/markdown-rendering.md §1.1.
+            dangerouslySetInnerHTML={{ __html: renderMarkdown(note.content, { links: false }) }}
           />
         ) : (
           <div className="space-y-1">
@@ -391,6 +394,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
                         />
                         <InlineMarkdown
                           text={item.text}
+                          links={false}
                           className="min-w-0 whitespace-pre-wrap break-words text-gray-700 dark:text-gray-200"
                         />
                       </div>
