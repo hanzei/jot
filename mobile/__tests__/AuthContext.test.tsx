@@ -627,9 +627,11 @@ describe('AuthContext', () => {
     unmount();
   });
 
-  it('revalidateSession ignores network errors', async () => {
+  it('revalidateSession ignores network errors when there is no newer cached profile', async () => {
     mockGetStoredSession.mockResolvedValue('token');
     mockAuth.me.mockResolvedValueOnce({ user: mockUser, settings: mockSettings });
+    // No cached profile for the still-active server: nothing to fall back to.
+    mockGetCachedAuthProfile.mockResolvedValue(null);
 
     const { getByTestId, unmount } = render(
       <AuthProvider>
@@ -651,6 +653,41 @@ describe('AuthContext', () => {
     // User stays authenticated on network error
     expect(getByTestId('authenticated').props.children).toBe('true');
     expect(getByTestId('username').props.children).toBe('testuser');
+    unmount();
+  });
+
+  it('revalidateSession falls back to the (newly-active) server\'s cached profile on network error', async () => {
+    // Simulates switching to another server while offline: client.ts's
+    // activeServerId already points at the new server, so getCachedAuthProfile()
+    // resolves that server's own cached profile even though auth.me() can't
+    // reach it. Without this fallback the drawer would keep showing the
+    // previously-active server's name/avatar.
+    mockGetStoredSession.mockResolvedValue('token');
+    mockAuth.me.mockResolvedValueOnce({ user: mockUser, settings: mockSettings });
+
+    const { getByTestId, unmount } = render(
+      <AuthProvider>
+        <RevalidateConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('authenticated').props.children).toBe('true');
+    });
+
+    mockAuth.me.mockRejectedValueOnce(new Error('Network Error'));
+    mockGetCachedAuthProfile.mockResolvedValue({
+      user: { ...mockUser, username: 'other-server-user' },
+      settings: mockSettings,
+    });
+    expect(revalidateFn).not.toBeNull();
+
+    await act(async () => {
+      await revalidateFn!();
+    });
+
+    expect(getByTestId('authenticated').props.children).toBe('true');
+    expect(getByTestId('username').props.children).toBe('other-server-user');
     unmount();
   });
 
