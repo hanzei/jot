@@ -283,11 +283,14 @@ describe('markdown rendering', () => {
     }
 
     it('marks every heading depth as a header for assistive technology', () => {
-      const tree = render(
-        <Markdown content={'# one\n\n### three\n\n###### six\n\nbody'} />,
-      ).toJSON() as RenderedNode;
+      // All six, because the depths do not share a code path: h1-h3 carry their
+      // own size, h4-h6 fall through to body size, and the role has to survive
+      // both. `body` is the control — a paragraph is not a header.
+      const markdown = ['# one', '## two', '### three', '#### four', '##### five', '###### six', 'body']
+        .join('\n\n');
+      const tree = render(<Markdown content={markdown} />).toJSON() as RenderedNode;
 
-      expect(headers(tree)).toEqual(['one', 'three', 'six']);
+      expect(headers(tree)).toEqual(['one', 'two', 'three', 'four', 'five', 'six']);
     });
 
     // The card is one clamped Text inside a control that opens the note, so an
@@ -373,8 +376,15 @@ describe('markdown card preview', () => {
 
     expect(visibleText(tree)).toBe('see https://example.com and docs');
     expect(tappableText(tree)).toEqual([]);
+
+    // Not just "no underline": a label left in the link colour would still read
+    // as a link. It has to be drawn exactly like the text around it, so the
+    // surrounding run is the reference.
+    const bodyColor = styleFor(tree, 'see ').color;
+    expect(bodyColor).toBeDefined();
     for (const label of ['https://example.com', 'docs']) {
       expect(styleFor(tree, label).textDecorationLine).toBeUndefined();
+      expect(styleFor(tree, label).color).toBe(bodyColor);
     }
   });
 

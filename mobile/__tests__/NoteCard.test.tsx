@@ -70,6 +70,22 @@ const baseListNote: Note = {
   updated_at: '2024-01-01T00:00:00Z',
 };
 
+/**
+ * Every string a rendered node contains, i.e. what the card actually shows.
+ *
+ * Walks *rendered* children rather than `props.children`, so it can see through
+ * a component that builds its own output — InlineMarkdown passes nothing down,
+ * it renders from the item text.
+ */
+const read = (node: unknown): string => {
+  if (typeof node === 'string') return node;
+  if (Array.isArray(node)) return node.map(read).join('');
+  const rendered = (node as { children?: unknown[] })?.children;
+  if (Array.isArray(rendered)) return rendered.map(read).join('');
+  const children = (node as { props?: { children?: unknown } })?.props?.children;
+  return children === undefined ? '' : read(children);
+};
+
 describe('NoteCard', () => {
   beforeEach(async () => {
     await i18n.changeLanguage('en');
@@ -105,18 +121,20 @@ describe('NoteCard', () => {
     // itself sets no height, so this prop is the whole mechanism.
     expect(preview.props.numberOfLines).toBe(6);
 
-    const read = (node: unknown): string => {
-      if (typeof node === 'string') return node;
-      if (Array.isArray(node)) return node.map(read).join('');
-      const children = (node as { props?: { children?: unknown } })?.props?.children;
-      return children === undefined ? '' : read(children);
-    };
     expect(read(preview)).toBe('Groceries\n• milk\n• eggs');
   });
 
   // The card is one control that opens the note, so nothing inside it may take
   // the tap. Asserted on both card surfaces, since each has its own renderer.
+  //
+  // The fixture carries an autolinked URL *and* a `[label](url)` link, and the
+  // visible text is asserted alongside the absence of a handler: on its own,
+  // "nothing is tappable" would also pass if link parsing had broken entirely,
+  // which would show `[docs](…)` as literal source rather than `docs`.
   it('renders links in a card as plain text, on both note types', () => {
+    const linkText = 'see https://example.com and [docs](https://example.org)';
+    const asPlainText = 'see https://example.com and docs';
+
     const tappable = (node: unknown): number => {
       if (typeof node !== 'object' || node === null) return 0;
       const props = (node as { props?: { children?: unknown; onPress?: unknown } }).props;
@@ -126,9 +144,11 @@ describe('NoteCard', () => {
       return own + kids.reduce<number>((sum, kid) => sum + tappable(kid), 0);
     };
 
-    const textNote = { ...baseNote, content: 'see https://example.com' };
+    const textNote = { ...baseNote, content: linkText };
     const { getByTestId } = render(<NoteCard note={textNote} onPress={jest.fn()} />);
-    expect(tappable(getByTestId('note-card-content-note-1'))).toBe(0);
+    const preview = getByTestId('note-card-content-note-1');
+    expect(read(preview)).toBe(asPlainText);
+    expect(tappable(preview)).toBe(0);
 
     const listNote: Note = {
       ...baseListNote,
@@ -136,7 +156,7 @@ describe('NoteCard', () => {
         {
           id: 'item-1',
           note_id: 'note-1',
-          text: 'see https://example.com',
+          text: linkText,
           completed: false,
           position: 0,
           parent_id: null,
@@ -147,7 +167,9 @@ describe('NoteCard', () => {
       ],
     };
     const list = render(<NoteCard note={listNote} onPress={jest.fn()} />);
-    expect(tappable(list.getByTestId('note-card-list-row-item-1'))).toBe(0);
+    const row = list.getByTestId('note-card-list-row-item-1');
+    expect(read(row)).toContain(asPlainText);
+    expect(tappable(row)).toBe(0);
   });
 
   it('renders title for list notes', () => {

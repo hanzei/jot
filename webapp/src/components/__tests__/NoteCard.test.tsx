@@ -725,18 +725,26 @@ describe('NoteCard', () => {
     // The card is one control that opens the note. An anchor inside it would
     // follow the link *and* open the note, since both handlers fire, so links
     // render as their label — docs/specs/markdown-rendering.md §1.1.
+    // The fixture carries an autolinked URL *and* a `[label](url)` link, and the
+    // visible text is asserted alongside the missing anchor: on its own, "no
+    // anchor" would also pass if link parsing had broken entirely, which would
+    // show `[docs](…)` as literal source rather than `docs`.
     it('renders links as plain text, in both a text note and a list item', () => {
-      const textNote = createMockNote({ note_type: 'text', content: 'see https://example.com' })
+      const linkText = 'see https://example.com and [docs](https://example.org)'
+      const asPlainText = 'see https://example.com and docs'
+
+      const textNote = createMockNote({ note_type: 'text', content: linkText })
       const { unmount } = renderNoteCard({ ...defaultProps, note: textNote })
       expect(screen.getByTestId('note-card').querySelector('a')).toBeNull()
-      expect(screen.getByText(/see https:\/\/example\.com/)).toBeInTheDocument()
+      expect(screen.getByText(asPlainText)).toBeInTheDocument()
       unmount()
 
       const listNote = createMockListNote({
-        items: [{ ...createMockListItems()[0], text: 'see https://example.com' }],
+        items: [{ ...createMockListItems()[0], text: linkText }],
       })
       renderNoteCard({ ...defaultProps, note: listNote })
       expect(screen.getByTestId('note-card').querySelector('a')).toBeNull()
+      expect(screen.getByText(asPlainText)).toBeInTheDocument()
     })
   })
 
