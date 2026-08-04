@@ -114,6 +114,42 @@ describe('NoteCard', () => {
     expect(read(preview)).toBe('Groceries\n• milk\n• eggs');
   });
 
+  // The card is one control that opens the note, so nothing inside it may take
+  // the tap. Asserted on both card surfaces, since each has its own renderer.
+  it('renders links in a card as plain text, on both note types', () => {
+    const tappable = (node: unknown): number => {
+      if (typeof node !== 'object' || node === null) return 0;
+      const props = (node as { props?: { children?: unknown; onPress?: unknown } }).props;
+      const own = typeof props?.onPress === 'function' ? 1 : 0;
+      const children = props?.children;
+      const kids = Array.isArray(children) ? children : [children];
+      return own + kids.reduce<number>((sum, kid) => sum + tappable(kid), 0);
+    };
+
+    const textNote = { ...baseNote, content: 'see https://example.com' };
+    const { getByTestId } = render(<NoteCard note={textNote} onPress={jest.fn()} />);
+    expect(tappable(getByTestId('note-card-content-note-1'))).toBe(0);
+
+    const listNote: Note = {
+      ...baseListNote,
+      items: [
+        {
+          id: 'item-1',
+          note_id: 'note-1',
+          text: 'see https://example.com',
+          completed: false,
+          position: 0,
+          parent_id: null,
+          assigned_to: '',
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z',
+        },
+      ],
+    };
+    const list = render(<NoteCard note={listNote} onPress={jest.fn()} />);
+    expect(tappable(list.getByTestId('note-card-list-row-item-1'))).toBe(0);
+  });
+
   it('renders title for list notes', () => {
     const { getByText } = render(<NoteCard note={baseListNote} onPress={jest.fn()} />);
 

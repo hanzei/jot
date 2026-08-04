@@ -8,7 +8,7 @@ import {
   markdownTheme,
   type MarkdownTheme,
 } from '../utils/markdownStyles';
-import { renderInlineNodes } from './inlineNodes';
+import { renderInlineNodes, type InlineRenderOptions } from './inlineNodes';
 
 // Text-note content on a note card: the same blocks Markdown.tsx renders, laid
 // out as **one <Text>** so that `numberOfLines` clamps them.
@@ -40,6 +40,9 @@ export const PREVIEW_LINES = 6;
  */
 const RULE_RUN = '────────';
 
+/** Nothing on a card is a link — see `InlineRenderOptions` for why. */
+const CARD_LINKS: InlineRenderOptions = { links: false };
+
 interface PreviewContext {
   theme: MarkdownTheme;
   /** Body colour at this depth — a blockquote renders its contents muted. */
@@ -69,14 +72,14 @@ function renderBlocks(
       case 'paragraph':
         return (
           <Text key={key} style={{ color: ctx.color }}>
-            {renderInlineNodes(node.children, ctx.theme.link, `${key}.`)}
+            {renderInlineNodes(node.children, CARD_LINKS, `${key}.`)}
           </Text>
         );
 
       case 'heading':
         return (
           <Text key={key} style={[headingStyle(compactMarkdownStyles, node.depth), { color: ctx.color }]}>
-            {renderInlineNodes(node.children, ctx.theme.link, `${key}.`)}
+            {renderInlineNodes(node.children, CARD_LINKS, `${key}.`)}
           </Text>
         );
 

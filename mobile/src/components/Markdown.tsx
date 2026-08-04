@@ -37,14 +37,14 @@ function renderBlocks(nodes: BlockNode[], ctx: RenderContext, keyPrefix = ''): R
       case 'paragraph':
         return (
           <Text key={key} style={[ctx.textStyles.body, { color: ctx.color }]}>
-            {renderInlineNodes(node.children, ctx.theme.link, `${key}.`)}
+            {renderInlineNodes(node.children, { linkColor: ctx.theme.link }, `${key}.`)}
           </Text>
         );
 
       case 'heading':
         return (
           <Text key={key} style={[headingStyle(ctx.textStyles, node.depth), { color: ctx.color }]}>
-            {renderInlineNodes(node.children, ctx.theme.link, `${key}.`)}
+            {renderInlineNodes(node.children, { linkColor: ctx.theme.link }, `${key}.`)}
           </Text>
         );
 

@@ -131,7 +131,11 @@ function ListPreview({ items, hasColor }: { items: NoteItem[]; hasColor?: boolea
             testID={`note-card-list-row-${item.id}`}
           >
             <Square size={14} color={hasColor ? '#555' : colors.textSecondary} />
-            <InlineMarkdown text={item.text} style={[styles.listText, { color: hasColor ? '#1a1a1a' : colors.text }]} />
+            <InlineMarkdown
+              text={item.text}
+              links={false}
+              style={[styles.listText, { color: hasColor ? '#1a1a1a' : colors.text }]}
+            />
           </View>
         );
       })}

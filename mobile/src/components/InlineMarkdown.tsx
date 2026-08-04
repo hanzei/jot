@@ -9,6 +9,11 @@ interface InlineMarkdownProps {
   text: string;
   style?: StyleProp<TextStyle>;
   testID?: string;
+  /**
+   * Whether links render as links. Note cards pass `false` — see
+   * docs/specs/markdown-rendering.md §1.
+   */
+  links?: boolean;
 }
 
 /**
@@ -19,13 +24,13 @@ interface InlineMarkdownProps {
  * the whole renderer — the leaf rendering lives in inlineNodes.tsx, which the
  * text-note renderers share.
  */
-function InlineMarkdown({ text, style, testID }: InlineMarkdownProps) {
+function InlineMarkdown({ text, style, testID, links = true }: InlineMarkdownProps) {
   const { colors } = useTheme();
   const nodes = useMemo(() => inlineMarkdownNodes(text), [text]);
 
   return (
     <Text style={style} testID={testID}>
-      {renderInlineNodes(nodes, colors.primary)}
+      {renderInlineNodes(nodes, links ? { linkColor: colors.primary } : { links: false })}
     </Text>
   );
 }

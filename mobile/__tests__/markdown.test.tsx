@@ -337,10 +337,29 @@ describe('markdown card preview', () => {
     expect(styleFor(tree, 'quoted').color).not.toBe(styleFor(tree, 'plain').color);
   });
 
-  it('keeps links tappable, as the card list items and the webapp card both do', () => {
+  // A card is one control that opens the note. A link inside it would take the
+  // tap instead, so links render as their label — and must not *look* tappable
+  // either, since an underline on something inert is the worse failure.
+  it('renders links as plain text, with nothing to tap and no underline', () => {
     const tree = render(
-      <MarkdownPreview content="see https://example.com" />,
+      <MarkdownPreview content="see https://example.com and [docs](https://example.org)" />,
     ).toJSON() as RenderedNode;
-    expect(tappableText(tree)).toEqual(['https://example.com']);
+
+    expect(visibleText(tree)).toBe('see https://example.com and docs');
+    expect(tappableText(tree)).toEqual([]);
+    for (const label of ['https://example.com', 'docs']) {
+      expect(styleFor(tree, label).textDecorationLine).toBeUndefined();
+    }
+  });
+
+  it('still renders every other inline construct', () => {
+    const tree = render(
+      <MarkdownPreview content="**b** *i* ~~s~~ `c`" />,
+    ).toJSON() as RenderedNode;
+
+    expect(styleFor(tree, 'b').fontWeight).toBe('700');
+    expect(styleFor(tree, 'i').fontStyle).toBe('italic');
+    expect(styleFor(tree, 's').textDecorationLine).toBe('line-through');
+    expect(styleFor(tree, 'c').fontFamily).toBeTruthy();
   });
 });

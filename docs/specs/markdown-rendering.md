@@ -17,6 +17,30 @@ item text** in an inline-only subset (§2.1):
   preview mode. Closing that gap is
   [#824](https://github.com/hanzei/jot/issues/824).
 
+### 1.1 Note cards render links as text
+
+**A note card never renders a link**, on either client and for either note type.
+The label shows as ordinary text — no underline, no link colour, nothing to
+follow.
+
+A card is a single control whose job is to open the note, and a link inside it
+competes with that. Not hypothetically: on the webapp both handlers fire, so
+clicking a link in a card followed the link *and* opened the note; on mobile the
+link takes the tap and the card never opens. Item text used to paper over this
+with a container-level `stopPropagation`, which the text-note body never had.
+
+Given that a card's link cannot be followed, it must not *look* followable
+either — an underline on something inert is the worse failure of the two, and a
+colour that only signals "link" fails anyone who cannot use it. So the label
+renders exactly as the surrounding text.
+
+The open note is unaffected: the webapp's modal preview and mobile's editor both
+render live links, which is where a reader who wants the link already is. One
+consequence worth naming: because the *editable* list-item row shows source
+(above), a link typed into a list item now has no live surface on the webapp at
+all until [#824](https://github.com/hanzei/jot/issues/824) gives that row a view
+mode. Mobile still has one, in its read-only editor.
+
 Both clients render the same feature set from the same source string, so a note
 written on a phone reads identically in a browser and the other way round.
 
@@ -59,7 +83,7 @@ reach it differently.
 | Bullet and ordered lists | Rendered |
 | `- [ ]` / `- [x]` | Rendered as ☐ / ☑, **non-interactive** |
 | Blockquotes | Rendered |
-| `[text](url)` and bare `https://…` | Rendered as links |
+| `[text](url)` and bare `https://…` | Rendered as links — **except on note cards** (§1.1) |
 | `---`, `***` | Horizontal rule |
 | Single newline | Line break |
 
@@ -80,7 +104,7 @@ List-item text renders **only inline constructs**:
 |---|---|
 | `**bold**`, `*italic*`, `~~strike~~` | Rendered |
 | `` `inline code` `` | Rendered |
-| `[text](url)` and bare `https://…` | Rendered as links, same scheme policy as above |
+| `[text](url)` and bare `https://…` | Rendered as links, same scheme policy and same card rule as above |
 | `![alt](url)`, raw HTML | Literal source, same as above |
 | Everything block-level | **Literal source** |
 
@@ -201,11 +225,16 @@ on both clients.
 
 ### Formatting dropped, text kept
 
-**Empty.** Nothing is handled this way today. Every unsupported construct shows
-its source instead, so unsupported syntax never fails silently — markup that
-quietly disappeared read as a rendering bug rather than a limitation. (This is a
-change from the webapp's earlier behaviour, where raw HTML lost its markup and
-kept its words.)
+**One case: a link on a note card** (§1.1). The label survives as ordinary text
+and the target is dropped, because a card cannot follow a link and must not
+pretend otherwise.
+
+It is the only thing in this category, and it is *surface*-scoped rather than
+syntax-scoped — links are fully supported everywhere else. No **construct** is
+handled this way: every unsupported one shows its source instead, so unsupported
+syntax never fails silently, since markup that quietly disappeared read as a
+rendering bug rather than a limitation. (That is a change from the webapp's
+earlier behaviour, where raw HTML lost its markup and kept its words.)
 
 Note that `####`–`######` are *not* in this category: they are supported, and
 render as bold body text (§2). They are the one construct that renders without a
@@ -263,6 +292,7 @@ spec exists to prevent.
 | Mobile card preview renderer | `mobile/src/components/MarkdownPreview.tsx` |
 | Mobile item lexing + plain-text flattening | `mobile/src/utils/inlineMarkdown.ts` |
 | Mobile item renderer | `mobile/src/components/InlineMarkdown.tsx` |
+| Card links-as-text switch | `links` option on both clients' renderers |
 | Mobile inline leaf rendering (shared by all three) | `mobile/src/components/inlineNodes.tsx` |
 | Mobile text metrics + colours | `mobile/src/utils/markdownStyles.ts` |
 
@@ -310,6 +340,7 @@ dropped, so the card shows the same content as the editor:
 | Bullet / ordered item | A marker column | A `• ` / `1. ` prefix, nested items indented by spaces |
 | Horizontal rule | A hairline View | A short run of `─` |
 | Block spacing | An 8px gap | A newline |
+| Link | Underlined, tappable | Plain text (§1.1 — a rule, not a limitation) |
 
 `mobile/__tests__/markdown.test.tsx` pins this: the card's visible text must
 equal the editor's for **every** case in the corpus, once whitespace and the rule

@@ -13,6 +13,19 @@ import { openUrl } from '../utils/openUrl';
 // clamped <Text>.
 
 /**
+ * Whether this surface renders links, and in what colour.
+ *
+ * A union rather than an optional flag so that a surface which does not follow
+ * links cannot be asked for a link colour it would never use. Note cards are
+ * that surface: the whole card is one control that opens the note, so a tappable
+ * link inside it competes with that. A link there renders as its label — no
+ * underline, no link colour, nothing to tap — because something that looks
+ * tappable and is not is worse than plain text. See
+ * docs/specs/markdown-rendering.md §1.
+ */
+export type InlineRenderOptions = { links: false } | { links?: true; linkColor: string };
+
+/**
  * Renders nodes as the children of a <Text>.
  *
  * Returns an array rather than an element: the caller owns the enclosing <Text>,
@@ -20,7 +33,7 @@ import { openUrl } from '../utils/openUrl';
  */
 export function renderInlineNodes(
   nodes: InlineNode[],
-  linkColor: string,
+  options: InlineRenderOptions,
   keyPrefix = '',
 ): React.ReactNode[] {
   return nodes.map((node, index) => {
@@ -40,35 +53,41 @@ export function renderInlineNodes(
       case 'strong':
         return (
           <Text key={key} style={inlineStyles.strong}>
-            {renderInlineNodes(node.children, linkColor, `${key}.`)}
+            {renderInlineNodes(node.children, options, `${key}.`)}
           </Text>
         );
       case 'em':
         return (
           <Text key={key} style={inlineStyles.em}>
-            {renderInlineNodes(node.children, linkColor, `${key}.`)}
+            {renderInlineNodes(node.children, options, `${key}.`)}
           </Text>
         );
       case 'del':
         return (
           <Text key={key} style={inlineStyles.del}>
-            {renderInlineNodes(node.children, linkColor, `${key}.`)}
+            {renderInlineNodes(node.children, options, `${key}.`)}
           </Text>
         );
-      case 'link':
+      case 'link': {
+        const children = renderInlineNodes(node.children, options, `${key}.`);
+        // The bare label is what a link degrades to on a surface that does not
+        // follow links — the same shape `normalizeInlineTokens` already gives a
+        // link whose scheme Jot refuses.
+        if (options.links === false) return <Text key={key}>{children}</Text>;
         // No scheme check here: `normalizeInlineTokens` has already turned every
         // link Jot will not follow into its own label, so a link node's href is
         // allowed by construction (docs/specs/markdown-rendering.md §2).
         return (
           <Text
             key={key}
-            style={[inlineStyles.link, { color: linkColor }]}
+            style={[inlineStyles.link, { color: options.linkColor }]}
             onPress={() => void openUrl(node.href)}
             suppressHighlighting
           >
-            {renderInlineNodes(node.children, linkColor, `${key}.`)}
+            {children}
           </Text>
         );
+      }
     }
   });
 }

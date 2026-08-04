@@ -102,10 +102,32 @@ const ALLOWED_TAGS = [
 ];
 const ALLOWED_ATTR = ['href', 'target', 'rel'];
 
-export function renderMarkdown(content: string): string {
+/**
+ * Dropping `a` from the allowlist is the whole implementation of the
+ * links-as-text rule: DOMPurify strips a tag it does not allow and keeps the
+ * text inside it, which is exactly the outcome
+ * docs/specs/markdown-rendering.md §3 specifies — the label survives, the target
+ * does not, and nothing is left looking clickable.
+ */
+const NO_LINK_TAGS = ALLOWED_TAGS.filter((tag) => tag !== 'a');
+
+export interface MarkdownRenderOptions {
+  /**
+   * Whether links render as links. Note cards pass `false`: the whole card is
+   * one control that opens the note, so an anchor inside it competes with that —
+   * on the webapp a click would follow the link *and* open the note, since both
+   * handlers fire. See docs/specs/markdown-rendering.md §1.
+   */
+  links?: boolean;
+}
+
+export function renderMarkdown(content: string, { links = true }: MarkdownRenderOptions = {}): string {
   if (!content.trim()) return '';
   const raw = marked.parse(content, { async: false });
-  return DOMPurify.sanitize(raw, { ALLOWED_TAGS, ALLOWED_ATTR });
+  return DOMPurify.sanitize(raw, {
+    ALLOWED_TAGS: links ? ALLOWED_TAGS : NO_LINK_TAGS,
+    ALLOWED_ATTR,
+  });
 }
 
 // List-item text renders an inline-only subset — see shared/src/inlineMarkdown.ts
@@ -113,6 +135,7 @@ export function renderMarkdown(content: string): string {
 // The allowlist is narrower than ALLOWED_TAGS by construction: no block element
 // can be produced, so none is permitted through.
 const INLINE_ALLOWED_TAGS = ['strong', 'em', 'del', 'code', 'a', 'br'];
+const INLINE_NO_LINK_TAGS = INLINE_ALLOWED_TAGS.filter((tag) => tag !== 'a');
 
 function renderInlineNodes(nodes: InlineNode[]): string {
   let html = '';
@@ -160,11 +183,14 @@ function renderInlineNodes(nodes: InlineNode[]): string {
  * `# x`, `- [ ] x` and `---` literal without any suppression: an item is already
  * a list item, so block syntax inside one has nothing to describe.
  */
-export function renderInlineMarkdown(text: string): string {
+export function renderInlineMarkdown(
+  text: string,
+  { links = true }: MarkdownRenderOptions = {},
+): string {
   if (!text.trim()) return '';
   const nodes = normalizeInlineTokens(Lexer.lexInline(text, INLINE_LEXER_OPTIONS));
   return DOMPurify.sanitize(renderInlineNodes(nodes), {
-    ALLOWED_TAGS: INLINE_ALLOWED_TAGS,
+    ALLOWED_TAGS: links ? INLINE_ALLOWED_TAGS : INLINE_NO_LINK_TAGS,
     ALLOWED_ATTR,
   });
 }

@@ -721,6 +721,23 @@ describe('NoteCard', () => {
       expect(card.innerHTML).toContain('<strong>bold text</strong>')
       expect(card.innerHTML).not.toContain('**bold text**')
     })
+
+    // The card is one control that opens the note. An anchor inside it would
+    // follow the link *and* open the note, since both handlers fire, so links
+    // render as their label — docs/specs/markdown-rendering.md §1.
+    it('renders links as plain text, in both a text note and a list item', () => {
+      const textNote = createMockNote({ note_type: 'text', content: 'see https://example.com' })
+      const { unmount } = renderNoteCard({ ...defaultProps, note: textNote })
+      expect(screen.getByTestId('note-card').querySelector('a')).toBeNull()
+      expect(screen.getByText(/see https:\/\/example\.com/)).toBeInTheDocument()
+      unmount()
+
+      const listNote = createMockListNote({
+        items: [{ ...createMockListItems()[0], text: 'see https://example.com' }],
+      })
+      renderNoteCard({ ...defaultProps, note: listNote })
+      expect(screen.getByTestId('note-card').querySelector('a')).toBeNull()
+    })
   })
 
   describe('Data Integrity Edge Cases', () => {

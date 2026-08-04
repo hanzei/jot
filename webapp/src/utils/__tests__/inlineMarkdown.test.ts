@@ -200,6 +200,34 @@ describe('renderInlineMarkdown', () => {
     });
   });
 
+  // Item text on a note card renders links as text for the same reason the card's
+  // text-note body does — docs/specs/markdown-rendering.md §1.
+  describe('links: false', () => {
+    it('keeps the label and drops the anchor', () => {
+      for (const id of ['item-link', 'item-bare-url', 'item-mailto']) {
+        const source = MARKDOWN_ITEM_CASES.find((c) => c.id === id)!.markdown;
+        const el = document.createElement('div');
+
+        el.innerHTML = renderInlineMarkdown(source);
+        const withLinks = el.textContent;
+        expect(renderInlineMarkdown(source), id).toContain('<a href=');
+
+        const asText = renderInlineMarkdown(source, { links: false });
+        expect(asText, id).not.toContain('<a');
+        el.innerHTML = asText;
+        expect(el.textContent, id).toBe(withLinks);
+      }
+    });
+
+    it('leaves the rest of the subset alone', () => {
+      const html = renderInlineMarkdown('**b** *i* ~~s~~ `c`', { links: false });
+      expect(html).toContain('<strong>b</strong>');
+      expect(html).toContain('<em>i</em>');
+      expect(html).toContain('<del>s</del>');
+      expect(html).toContain('<code>c</code>');
+    });
+  });
+
   it('produces no block elements for any corpus case', () => {
     // The subset is inline-only by construction. This is the assertion that
     // fails first if items ever start being parsed as a document.
