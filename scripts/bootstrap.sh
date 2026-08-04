@@ -53,6 +53,17 @@ version_lt() {
   [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -n1)" = "$1" ]
 }
 
+# sha256_file PATH -> hex digest on stdout. sha256sum is the common case
+# (Linux, and macOS with coreutils installed); shasum -a 256 is macOS's
+# built-in equivalent when it isn't.
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | cut -d' ' -f1
+  else
+    shasum -a 256 "$1" | cut -d' ' -f1
+  fi
+}
+
 if [ "${JOT_BOOTSTRAP_SKIP:-}" = "1" ]; then
   log "JOT_BOOTSTRAP_SKIP=1 — skipping setup"
   exit 0
@@ -170,11 +181,16 @@ install_npm_deps() {
     return
   fi
 
+  if ! command -v sha256sum >/dev/null 2>&1 && ! command -v shasum >/dev/null 2>&1; then
+    fail "cannot verify package-lock.json freshness: neither sha256sum nor shasum is available"
+    return
+  fi
+
   local pkg dir stamp lock_hash
   for pkg in shared webapp mobile; do
     dir="$REPO_ROOT/$pkg"
     stamp="$dir/node_modules/.package-lock.sha256"
-    lock_hash="$(sha256sum "$dir/package-lock.json" | cut -d' ' -f1)"
+    lock_hash="$(sha256_file "$dir/package-lock.json")"
 
     if [ -d "$dir/node_modules" ] && [ "$(cat "$stamp" 2>/dev/null)" = "$lock_hash" ]; then
       log "$pkg/node_modules up to date — skipping"
