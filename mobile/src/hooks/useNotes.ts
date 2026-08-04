@@ -380,6 +380,9 @@ function buildConvertNoteTypeRequest(note: Note): ConvertNoteTypeRequest {
       text: item.text,
       position: index,
       completed: item.completed,
+      // The server rebuilds parent_id from this; applyConvertedNoteLocally
+      // mirrors that reconstruction so the offline result matches.
+      indent_level: item.indentLevel,
     })),
   };
 }
@@ -393,17 +396,29 @@ function applyConvertedNoteLocally(note: Note, data: ConvertNoteTypeRequest, now
   if (data.note_type === 'text') {
     return { ...note, note_type: 'text', content: data.content ?? '', updated_at: now };
   }
-  const items: NoteItem[] = (data.items ?? []).map((item) => ({
-    id: item.id ?? generateId(),
-    note_id: note.id,
-    text: item.text,
-    completed: item.completed ?? false,
-    position: item.position,
-    parent_id: item.parent_id ?? null,
-    assigned_to: '',
-    created_at: now,
-    updated_at: now,
-  }));
+  // Mirrors the server's buildCreateNoteItems: an item sent with indent_level 1
+  // hangs off the nearest preceding top-level item, and off nothing when there is
+  // no such item yet. buildConvertNoteTypeRequest emits items in position order,
+  // which is the order the server sorts into before doing the same walk.
+  let lastTopLevelId: string | null = null;
+  const items: NoteItem[] = (data.items ?? []).map((item) => {
+    const id = item.id ?? generateId();
+    const parentId = item.indent_level === 1 ? lastTopLevelId : null;
+    // Only a top-level item becomes the parent for what follows. An indented item
+    // that found no parent stays childless rather than adopting the next one.
+    if (item.indent_level !== 1) lastTopLevelId = id;
+    return {
+      id,
+      note_id: note.id,
+      text: item.text,
+      completed: item.completed ?? false,
+      position: item.position,
+      parent_id: parentId,
+      assigned_to: '',
+      created_at: now,
+      updated_at: now,
+    };
+  });
   return { ...note, note_type: 'list', title: '', checked_items_collapsed: false, items, updated_at: now };
 }
 

@@ -55,6 +55,57 @@ func TestConvertNoteTypeEndpoint(t *testing.T) {
 		assert.True(t, converted.Items[2].Completed)
 	})
 
+	t.Run("rebuilds parent_id from indent_level when converting to a list", func(t *testing.T) {
+		ts := setupTestServer(t)
+		user := ts.createTestUser(t, "convert-indent", "password123", false)
+		ctx := t.Context()
+
+		source, err := user.Client.CreateTextNote(ctx, &client.CreateTextNoteRequest{
+			Content: "- Parent\n  - Child\n- Second",
+		})
+		require.NoError(t, err)
+
+		// The clients send indent levels rather than parent ids, because the item
+		// ids do not exist yet at conversion time. The leading indented item has
+		// no top-level item to attach to and stays top-level.
+		converted, err := user.Client.ConvertNoteType(ctx, source.ID, &client.ConvertNoteTypeRequest{
+			NoteType: client.NoteTypeList,
+			Items: []client.CreateNoteItem{
+				{Text: "Orphan", Position: 0, IndentLevel: 1},
+				{Text: "Parent", Position: 1},
+				{Text: "Child", Position: 2, IndentLevel: 1},
+				{Text: "Second", Position: 3},
+			},
+		})
+		require.NoError(t, err)
+
+		require.Len(t, converted.Items, 4)
+		assert.Nil(t, converted.Items[0].ParentID, "an indented item with no preceding top-level item stays top-level")
+		assert.Nil(t, converted.Items[1].ParentID)
+		require.NotNil(t, converted.Items[2].ParentID)
+		assert.Equal(t, converted.Items[1].ID, *converted.Items[2].ParentID)
+		assert.Nil(t, converted.Items[3].ParentID)
+	})
+
+	t.Run("rejects an indent_level deeper than the single level the model allows", func(t *testing.T) {
+		ts := setupTestServer(t)
+		user := ts.createTestUser(t, "convert-indent-deep", "password123", false)
+		ctx := t.Context()
+
+		source, err := user.Client.CreateTextNote(ctx, &client.CreateTextNoteRequest{Content: "Parent\nChild"})
+		require.NoError(t, err)
+
+		_, err = user.Client.ConvertNoteType(ctx, source.ID, &client.ConvertNoteTypeRequest{
+			NoteType: client.NoteTypeList,
+			Items: []client.CreateNoteItem{
+				{Text: "Parent", Position: 0},
+				{Text: "Child", Position: 1, IndentLevel: 2},
+			},
+		})
+		require.Error(t, err)
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+	})
+
 	t.Run("converts a list note to text, rendering the title as an h1 line", func(t *testing.T) {
 		ts := setupTestServer(t)
 		user := ts.createTestUser(t, "convert-to-text", "password123", false)
