@@ -10,7 +10,7 @@ import { styles } from './styles';
 
 interface NotesListHeaderProps {
   variant: 'notes' | 'archived' | 'trash' | 'my-tasks';
-  bannerShown: boolean;
+  /** Top safe-area inset still to be applied by content (0 while a banner owns it). */
   topInset: number;
   searchText: string;
   onSearchChange: (text: string) => void;
@@ -28,7 +28,6 @@ interface NotesListHeaderProps {
 
 export default function NotesListHeader({
   variant,
-  bannerShown,
   topInset,
   searchText,
   onSearchChange,
@@ -54,7 +53,7 @@ export default function NotesListHeader({
       <View
         style={[
           styles.topControlsRow,
-          variant === 'notes' ? { paddingTop: bannerShown ? 0 : topInset } : undefined,
+          variant === 'notes' ? { paddingTop: topInset } : undefined,
         ]}
       >
         {variant === 'notes' && (

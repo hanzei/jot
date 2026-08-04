@@ -33,10 +33,11 @@ export interface TopBannerProps {
  * currently visible, in the fixed order they stack from the top.
  *
  * Both the renderer ({@link TopBanners}) and the safe-area inset logic
- * (`useBannerShown`) derive from this list, so the top inset is always applied
- * exactly once — by whichever banner is topmost — and screens reliably know
- * whether a banner has already claimed the inset. Add a new banner here, in
- * stack order, and the inset handling stays correct everywhere automatically.
+ * (`useBannerShown` → `ContentSafeArea`) derive from this list, so the top
+ * inset is always applied exactly once — by whichever banner is topmost — and
+ * content below the stack sees a top inset of 0 for exactly as long as a banner
+ * is claiming it. Add a new banner here, in stack order, and the inset handling
+ * stays correct everywhere automatically.
  *
  * This consolidates logic that previously lived in seven places (each banner's
  * `visible`, each banner's `applyTopInset`, and a separate `useBannerShown`),

@@ -10,8 +10,10 @@ import SyncFailuresBanner from './SyncFailuresBanner';
  * Renders the top-of-screen banner stack. All banners stay mounted so they can
  * animate in/out; {@link useVisibleTopBanners} is the single source of truth
  * for which are visible and which one owns the top safe-area inset (the topmost
- * visible banner). This is the only place stacking order is encoded — screens
- * derive their own inset handling from the same hook via `useBannerShown`.
+ * visible banner). This is the only place stacking order is encoded.
+ *
+ * Render this above `ContentSafeArea`, never inside it: the banners need the
+ * device's real top inset, and everything below them needs it zeroed.
  */
 export default function TopBanners() {
   const visible = useVisibleTopBanners();

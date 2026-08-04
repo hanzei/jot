@@ -1,12 +1,12 @@
-import React, { useCallback, useContext, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { Modal, View, Text, TouchableOpacity, FlatList, useWindowDimensions, StyleSheet, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
-import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import type { NoteImage } from '@jot/shared';
 import { useActiveServerBaseUrl } from '../hooks/useActiveServerBaseUrl';
 import { noteImageUrl } from '../api/images';
 import CachedNoteImage from './CachedNoteImage';
+import { useDeviceSafeAreaInsets } from './ContentSafeArea';
 
 interface ImageLightboxProps {
   images: NoteImage[];
@@ -31,7 +31,9 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose }:
   const baseUrl = useActiveServerBaseUrl();
   const listRef = useRef<FlatList<NoteImage>>(null);
   const { width: screenWidth } = useWindowDimensions();
-  const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
+  // A Modal renders above the top banner stack in its own native window, so
+  // the status bar is uncovered here and the device's real insets apply.
+  const insets = useDeviceSafeAreaInsets();
 
   const isOpen = index !== null;
   // Clamp against a live SSE removal shrinking `images` while open, rather
