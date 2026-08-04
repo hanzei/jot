@@ -113,8 +113,8 @@ const conformance: Record<string, () => void> = {
     const html = render('image-empty-alt');
     expect(html).toContain('![](https://example.com/y.png)');
     expect(html).not.toContain('<img');
-    // markdown-it's .disable('image') leaves an invisible clickable link here;
-    // this is the webapp half of the same guarantee.
+    // An empty alt is where a renderer that half-degrades an image leaves an
+    // invisible clickable link. Both clients assert there is nothing to click.
     expect(html).not.toContain('<a');
   },
   'image-inline-in-paragraph': () =>
@@ -209,7 +209,7 @@ describe('renderMarkdown', () => {
 
   // Note cards render links as text: the card is one control that opens the
   // note, and an anchor inside it would follow the link *and* open the note,
-  // since both handlers fire. docs/specs/markdown-rendering.md §1.
+  // since both handlers fire. docs/specs/markdown-rendering.md §1.1.
   describe('links: false', () => {
     const cardCases = ['inline-link', 'bare-url', 'bare-url-www', 'mailto-link'];
 

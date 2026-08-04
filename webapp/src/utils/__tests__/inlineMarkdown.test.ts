@@ -201,7 +201,7 @@ describe('renderInlineMarkdown', () => {
   });
 
   // Item text on a note card renders links as text for the same reason the card's
-  // text-note body does — docs/specs/markdown-rendering.md §1.
+  // text-note body does — docs/specs/markdown-rendering.md §1.1.
   describe('links: false', () => {
     it('keeps the label and drops the anchor', () => {
       for (const id of ['item-link', 'item-bare-url', 'item-mailto']) {

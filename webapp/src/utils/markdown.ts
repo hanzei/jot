@@ -10,8 +10,10 @@ import {
 } from '@jot/shared';
 
 // Jot's Markdown feature set is specified in docs/specs/markdown-rendering.md
-// and is shared with the mobile app, which reaches it through markdown-it.
-// Anything changed here needs a matching change in mobile/src/utils/markdown.ts.
+// and is shared with the mobile app. Both clients lex with `marked` at the same
+// version, so the two agree on syntax by construction; what differs is only the
+// output — an HTML string here, React Native components there. Anything changed
+// below still needs a matching change in mobile/src/utils/markdown.ts.
 
 function escapeHtml(text: string): string {
   return text
@@ -79,8 +81,8 @@ marked.use({
     // Raw HTML is never rendered; it shows its own source, like images and
     // tables. Escaping it here rather than leaving it to the DOMPurify
     // allowlist (which would strip the tag and keep the words) is what matches
-    // mobile, where markdown-it runs with html: false and the tags survive as
-    // literal text. DOMPurify still runs afterwards as the safety net.
+    // mobile, where the token walk emits the html token's own text. DOMPurify
+    // still runs afterwards as the safety net.
     html(token: Tokens.HTML | Tokens.Tag): string {
       const escaped = escapeHtml(token.raw);
       if (!token.block) return escaped;
@@ -116,7 +118,7 @@ export interface MarkdownRenderOptions {
    * Whether links render as links. Note cards pass `false`: the whole card is
    * one control that opens the note, so an anchor inside it competes with that —
    * on the webapp a click would follow the link *and* open the note, since both
-   * handlers fire. See docs/specs/markdown-rendering.md §1.
+   * handlers fire. See docs/specs/markdown-rendering.md §1.1.
    */
   links?: boolean;
 }

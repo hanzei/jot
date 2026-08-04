@@ -724,7 +724,7 @@ describe('NoteCard', () => {
 
     // The card is one control that opens the note. An anchor inside it would
     // follow the link *and* open the note, since both handlers fire, so links
-    // render as their label — docs/specs/markdown-rendering.md §1.
+    // render as their label — docs/specs/markdown-rendering.md §1.1.
     it('renders links as plain text, in both a text note and a list item', () => {
       const textNote = createMockNote({ note_type: 'text', content: 'see https://example.com' })
       const { unmount } = renderNoteCard({ ...defaultProps, note: textNote })

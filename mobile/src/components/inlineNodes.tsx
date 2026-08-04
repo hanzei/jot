@@ -21,7 +21,7 @@ import { openUrl } from '../utils/openUrl';
  * link inside it competes with that. A link there renders as its label — no
  * underline, no link colour, nothing to tap — because something that looks
  * tappable and is not is worse than plain text. See
- * docs/specs/markdown-rendering.md §1.
+ * docs/specs/markdown-rendering.md §1.1.
  */
 export type InlineRenderOptions = { links: false } | { links?: true; linkColor: string };
 

@@ -7,7 +7,7 @@ interface InlineMarkdownProps {
   className?: string;
   /**
    * Whether links render as links. Note cards pass `false` — see
-   * docs/specs/markdown-rendering.md §1.
+   * docs/specs/markdown-rendering.md §1.1.
    */
   links?: boolean;
 }
