@@ -298,6 +298,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!isTransientHttpStatus(getHttpStatus(error))) {
         setRevalidationFailed(true);
       }
+      // auth.me() failed without handing us a fresh profile. This matters most
+      // right after a server switch: client.ts's activeServerId already points
+      // at the newly-selected server at this point, but React's `user` state
+      // still holds whatever the previously-active server left behind, so the
+      // drawer would show the old server's name/avatar under the new server's
+      // context. Fall back to the newly-active server's own cached profile,
+      // mirroring restoreSession()'s stale-while-revalidate fallback, so state
+      // matches the server that's actually active even when offline.
+      const cached = await getCachedAuthProfile();
+      if (cached?.user && cached?.settings) {
+        setUser(cached.user);
+        setSettings(cached.settings);
+      }
       return true;
     }
   }, [clearAuth, isLocalMode]);
