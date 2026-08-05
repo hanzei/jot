@@ -52,7 +52,7 @@ var seedDataset = []seedUser{
 		language:    "en",
 		profileIcon: true,
 		notes: []seedNote{
-			// active text notes (4)
+			// active text notes (5)
 			{
 				noteType: client.NoteTypeText,
 				content: "# Project Notes\n\n**Important:** Check the _deadline_ before Thursday.\n\n" +
@@ -80,7 +80,29 @@ var seedDataset = []seedUser{
 				noteType: client.NoteTypeText,
 				content:  "Call dentist to reschedule appointment",
 			},
-			// active list notes (3)
+			// Exercises the full text-note Markdown feature set (docs/specs/markdown-rendering.md
+			// §2): every rendered construct plus every "shown as literal source" one, side by side.
+			{
+				noteType: client.NoteTypeText,
+				content: "# Markdown Showcase\n\n" +
+					"## Text formatting\n\n" +
+					"**Bold**, *italic*, ~~strikethrough~~, and `inline code` all render inline. " +
+					"Headings below h3, like this one, render as bold body text:\n\n#### Smaller heading\n\n" +
+					"## Code block\n\n```bash\nnpm install\nnpm start\n```\n\n" +
+					"## Lists\n\n- Bullet item\n- Another bullet\n\n1. Ordered item\n2. Another ordered item\n\n" +
+					"- [ ] Unchecked task\n- [x] Checked task\n\n" +
+					"## Quote and rule\n\n> A blockquote for context or a citation.\n\n---\n\n" +
+					"## Links\n\n[Jot on GitHub](https://github.com/hanzei/jot), a bare https://example.com URL, " +
+					"and a [mailto link](mailto:hello@example.com) all render live. " +
+					"An unsupported scheme like [call me](tel:+15550100) stays plain text instead.\n\n" +
+					"## Rendered as literal source\n\n" +
+					"Images: ![diagram](https://example.com/diagram.png \"architecture\")\n\n" +
+					"Tables:\n\na | b\n--- | ---\n1 | 2\n\n" +
+					"Raw HTML: <b>bold</b> stays inert.\n\n" +
+					"A single newline\nbecomes a line break.",
+				labels: []string{"markdown"},
+			},
+			// active list notes (4)
 			{
 				noteType:   client.NoteTypeList,
 				title:      "Sprint tasks",
@@ -125,6 +147,24 @@ var seedDataset = []seedUser{
 					{text: "Bathroom"},
 					{text: "Re-grout tiles", completed: true, indentLevel: 1},
 					{text: "Replace mirror", indentLevel: 1},
+				},
+			},
+			// Exercises the list-item Markdown subset (docs/specs/markdown-rendering.md §2.1):
+			// the same inline constructs as above, plus nesting, plus block syntax that stays
+			// literal because an item already carries its own checkbox and level.
+			{
+				noteType: client.NoteTypeList,
+				title:    "Markdown checklist",
+				labels:   []string{"markdown"},
+				items: []seedItem{
+					{text: "**Bold** step one"},
+					{text: "Nested reminder with **bold** and a `code` snippet", indentLevel: 1},
+					{text: "*Italic* step two"},
+					{text: "~~Skip this step~~", completed: true},
+					{text: "Run `npm test` before merging"},
+					{text: "See the [style guide](https://example.com)"},
+					{text: "# Not a heading — block markdown stays literal in items"},
+					{text: "- [ ] Not a checkbox — the item already has one"},
 				},
 			},
 			// archived notes (3)
