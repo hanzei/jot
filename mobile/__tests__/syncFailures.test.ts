@@ -262,6 +262,38 @@ describe('keepThenDiscard', () => {
     expect(runCalls(db, 'DELETE FROM dead_letter')).toEqual([[2]]);
   });
 
+  // Regression coverage for #834: a photo captured offline before the note's
+  // own create was dead-lettered is still sitting in pending_image_uploads
+  // against the orphan note id. "Keep my version" must move it to the fork
+  // before reconcileDiscard deletes the orphan (ON DELETE CASCADE would
+  // otherwise silently drop the still-queued image along with it).
+  it("reassigns the orphan's queued image uploads to the fork before discarding it", async () => {
+    const db = makeDb(makeTextNote('orphan', 'my words'));
+    const createNote = jest.fn().mockResolvedValue(makeTextNote('new-note-id'));
+
+    await keepThenDiscard(db as never, dl({ id: 2, operation: 'create', note_id: 'orphan' }), createNote);
+
+    const reassignCalls = runCalls(db, 'UPDATE pending_image_uploads SET note_id');
+    expect(reassignCalls).toEqual([['new-note-id', 'orphan']]);
+
+    // The reassignment must run before the orphan note (and its FK-cascaded
+    // pending_image_uploads rows) are deleted — otherwise there's nothing
+    // left to reassign.
+    const order = (sqlPrefix: string) =>
+      db.runAsync.mock.calls.findIndex((c) => String(c[0]).startsWith(sqlPrefix));
+    expect(order('UPDATE pending_image_uploads SET note_id')).toBeLessThan(order('DELETE FROM notes'));
+  });
+
+  it('does not reassign image uploads for a non-create failure (no orphan note to move them from)', async () => {
+    const db = makeDb(makeTextNote('n1', 'my words'));
+    const createNote = jest.fn().mockResolvedValue(makeTextNote('new-note-id'));
+    mockGetNote.mockResolvedValueOnce(makeTextNote('n1', 'server version'));
+
+    await keepThenDiscard(db as never, dl({ id: 5, operation: 'update', note_id: 'n1' }), createNote);
+
+    expect(runCalls(db, 'UPDATE pending_image_uploads SET note_id')).toHaveLength(0);
+  });
+
   it('does not discard the original if the fork fails (no lost bytes)', async () => {
     const db = makeDb(makeTextNote('n1'));
     const createNote = jest.fn().mockRejectedValue(new Error('create failed'));

@@ -1,10 +1,25 @@
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render as rtlRender, fireEvent } from '@testing-library/react-native';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StyleSheet } from 'react-native';
 import { VALIDATION } from '@jot/shared';
 import NoteCard from '../src/components/NoteCard';
+import { enqueueImageUpload } from '../src/db/imageUploadQueue';
+import { saveNote } from '../src/db/noteQueries';
+import { getDefaultTestDb } from './helpers/testDb';
 import i18n from '../src/i18n';
 import type { Note } from '@jot/shared';
+
+const fs = globalThis.mockFileSystem;
+
+// NoteCard reads queued-offline image uploads via usePendingImageUploads
+// (react-query), so every render needs a QueryClient in the tree — even
+// suites that never seed a pending_image_uploads row, since the hook still
+// mounts and queries an empty result.
+function render(ui: React.ReactElement) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return rtlRender(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+}
 
 jest.mock('../src/store/AuthContext', () => ({
   __esModule: true,
@@ -90,6 +105,7 @@ describe('NoteCard', () => {
   beforeEach(async () => {
     await i18n.changeLanguage('en');
     mockFailedNoteIds = new Set<string>();
+    fs.reset();
   });
 
   it('shows a "didn\'t sync" badge for a note in the failed sync state', () => {
@@ -463,5 +479,64 @@ describe('NoteCard', () => {
     const { queryByTestId } = render(<NoteCard note={baseNote} onPress={jest.fn()} />);
 
     expect(queryByTestId('note-card-cover-note-1')).toBeNull();
+  });
+
+  // Regression coverage for a reported bug: a note attached to only while
+  // offline showed no cover thumbnail on the dashboard until reconnect,
+  // because the card used to derive its cover solely from note.images
+  // (server-confirmed images) and never looked at the separate
+  // pending_image_uploads queue an offline attach actually lands in (see
+  // imageUploadQueue.ts).
+  describe('offline-queued image uploads', () => {
+    it("shows the queued upload's local preview as the cover before it has synced", async () => {
+      const db = getDefaultTestDb();
+      await saveNote(db, { ...baseNote, id: 'note-1' });
+      fs.files.set('file:///cache/queued-photo.png', 'png-bytes');
+      await enqueueImageUpload(db, {
+        id: 'upload-1',
+        noteId: 'note-1',
+        file: { uri: 'file:///cache/queued-photo.png', name: 'queued-photo.png', mimeType: 'image/png', sizeBytes: 1024 },
+      });
+
+      const { findByTestId, findByLabelText } = render(<NoteCard note={baseNote} onPress={jest.fn()} />);
+
+      expect(await findByTestId('note-card-cover-note-1')).toBeTruthy();
+      expect(await findByTestId('note-card-cover-pending-note-1')).toBeTruthy();
+
+      // The rendered tile is the queued upload's own copied-to-durable-storage
+      // file (enqueueImageUpload copies it under pending-image-uploads/<id>),
+      // not the picker's original cache URI, and it's dimmed to read as "not
+      // synced yet" (NoteCard.tsx's coverImagePending style).
+      const image = await findByLabelText('queued-photo.png');
+      expect(image.props.source).toEqual({ uri: 'file:///docs/pending-image-uploads/upload-1' });
+      expect(StyleSheet.flatten(image.props.style)?.opacity).toBe(0.5);
+    });
+
+    it('prefers a persisted image over a queued upload for the cover, but still counts the upload toward the "+N" badge', async () => {
+      const db = getDefaultTestDb();
+      await saveNote(db, { ...baseNote, id: 'note-1' });
+      fs.files.set('file:///cache/queued-photo.png', 'png-bytes');
+      await enqueueImageUpload(db, {
+        id: 'upload-1',
+        noteId: 'note-1',
+        file: { uri: 'file:///cache/queued-photo.png', name: 'queued-photo.png', mimeType: 'image/png', sizeBytes: 1024 },
+      });
+
+      const noteWithImage: Note = {
+        ...baseNote,
+        images: [{ id: 'img-1', filename: 'a.png', content_type: 'image/png', width: 800, height: 600, created_at: '2024-01-01T00:00:00Z' }],
+      };
+      const { findByTestId, queryByTestId, findByText, findByLabelText, queryByLabelText } = render(<NoteCard note={noteWithImage} onPress={jest.fn()} />);
+
+      expect(await findByTestId('note-card-cover-note-1')).toBeTruthy();
+      expect(await findByText('+1')).toBeTruthy();
+      expect(queryByTestId('note-card-cover-pending-note-1')).toBeNull();
+
+      // The persisted image (a.png) renders as the cover; the queued upload
+      // (queued-photo.png) only counts toward the "+1" badge above, it isn't
+      // itself rendered anywhere on the card.
+      expect(await findByLabelText('a.png')).toBeTruthy();
+      expect(queryByLabelText('queued-photo.png')).toBeNull();
+    });
   });
 });

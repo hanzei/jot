@@ -12,10 +12,11 @@ import {
   retryImageUpload,
   dismissImageUpload,
   drainImageUploadQueue,
+  reassignPendingImageUploads,
   type PendingImageUploadEntry,
 } from '../src/db/imageUploadQueue';
 import { uploadNoteImage } from '../src/api/images';
-import { markNotePendingCreate, patchLocalNoteImages, saveNote } from '../src/db/noteQueries';
+import { markNotePendingCreate, markNoteSyncFailed, patchLocalNoteImages, saveNote } from '../src/db/noteQueries';
 import { subscribeToEnqueue, MAX_ENTRY_DRAIN_ATTEMPTS } from '../src/db/syncQueue';
 import { makeTextNote } from './helpers/fixtures';
 import type { TestDatabase } from './helpers/testDb';
@@ -340,5 +341,47 @@ describe('drainImageUploadQueue', () => {
 
     expect(mockUploadNoteImage).not.toHaveBeenCalled();
     expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 0 });
+  });
+
+  // Regression coverage for a reported bug (#834): capturing a photo offline
+  // on a brand-new note, then reconnecting, could permanently lose the image
+  // if the note's own offline `create` was dead-lettered (a permanent
+  // rejection, not just still-pending). Before this fix, `sync_state =
+  // 'failed'` wasn't recognized as "note not confirmed on the server" here,
+  // so the drain attempted the upload anyway, got a 404 (the note was never
+  // actually created), and silently discarded the row and its file forever —
+  // indistinguishable from the legitimate "note deleted server-side" case.
+  it('skips (does not attempt or discard) a note whose create was dead-lettered', async () => {
+    const entry = await seedUpload();
+    await markNoteSyncFailed(db, 'note-1');
+
+    const result = await drainImageUploadQueue(db);
+
+    expect(mockUploadNoteImage).not.toHaveBeenCalled();
+    expect(await uploadRow(entry.id)).toMatchObject({ status: 'queued' });
+    expect(fs.files.has(entry.local_path)).toBe(true);
+    expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 0 });
+  });
+});
+
+describe('reassignPendingImageUploads', () => {
+  it('moves queued/errored rows from one note to another', async () => {
+    await saveNote(db, makeTextNote({ id: 'note-2' }));
+    const queued = await seedUpload({ id: 'upload-queued' });
+    const errored = await seedUpload({ id: 'upload-errored', status: 'error', error_message: 'boom' });
+
+    await reassignPendingImageUploads(db, 'note-1', 'note-2');
+
+    expect(await getPendingImageUploads(db, 'note-2')).toMatchObject([
+      { id: queued.id, note_id: 'note-2' },
+      { id: errored.id, note_id: 'note-2' },
+    ]);
+    expect(await getPendingImageUploads(db, 'note-1')).toEqual([]);
+  });
+
+  it('is a no-op when the source note has no queued uploads', async () => {
+    await saveNote(db, makeTextNote({ id: 'note-2' }));
+
+    await expect(reassignPendingImageUploads(db, 'note-1', 'note-2')).resolves.toBeUndefined();
   });
 });
