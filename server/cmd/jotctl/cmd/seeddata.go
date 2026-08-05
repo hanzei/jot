@@ -102,7 +102,7 @@ var seedDataset = []seedUser{
 					"A single newline\nbecomes a line break.",
 				labels: []string{"markdown"},
 			},
-			// active list notes (4)
+			// active list notes (5)
 			{
 				noteType:   client.NoteTypeList,
 				title:      "Sprint tasks",
