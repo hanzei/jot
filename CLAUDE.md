@@ -512,7 +512,7 @@ Types are distributed across the `@jot/shared` package (`shared/src/`) and impor
 - Browsers are not provisioned by bootstrap. `task test-e2e` runs `scripts/check-playwright-browser.sh` first, which fails with the exact `npx playwright install chromium` command when the pinned Chromium build is missing — that is a one-command fix, not a broken suite.
 - **Linted with the rest of webapp** (`task lint-webapp`), sharing the `tsRules` baseline in `eslint.config.js`. The e2e block drops the React plugins — react-hooks reads Playwright's `use` fixture parameter as React's `use()` hook — and allows `_`-prefixed unused parameters, which is how page objects keep a call signature steady after they stop using an argument.
 - A fixture destructured but never referenced is doing real work: Playwright only runs a fixture a test names, so `authenticatedUser` is what logs the test in. Mark it `void authenticatedUser;` rather than deleting it.
-- Not type-checked: `tsconfig.json` includes only `src`, so `lint:ts` does not cover `e2e/`. ESLint is the only static check these files get.
+- Not type-checked: `tsconfig.json` includes only `src`, so `lint:ts` does not cover `e2e/` ([#839](https://github.com/hanzei/jot/issues/839)). ESLint is the only static check these files get, which is why the e2e block turns `no-undef` back on — everywhere else it is off because `tsc` covers the same ground better. That block declares both Node and browser globals to match.
 
 ---
 
