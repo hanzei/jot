@@ -1766,7 +1766,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                       // Editor-scoped, so they live here rather than in the
                       // global shortcut registry — which stands down whenever a
                       // text field has focus (isEditableElementFocused).
-                      if ((e.metaKey || e.ctrlKey) && !e.altKey) {
+                      //
+                      // Shift and Alt must both be absent, not just Alt: the
+                      // combinations they form are the browser's, not ours
+                      // (Ctrl+Shift+B toggles the bookmarks bar in Chrome).
+                      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey) {
                         const key = e.key.toLowerCase();
                         if (key === 'b' || key === 'i') {
                           e.preventDefault();

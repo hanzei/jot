@@ -1,22 +1,22 @@
-import { render, screen, fireEvent } from '@testing-library/react'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import AssigneePicker from '../AssigneePicker'
-import type { Collaborator } from '@jot/shared'
+import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import AssigneePicker from '../AssigneePicker';
+import type { Collaborator } from '@jot/shared';
 
 const collaborators: Collaborator[] = [
   { userId: 'user1', username: 'alice', firstName: 'Alice', lastName: 'Williams' },
   { userId: 'user2', username: 'bob', firstName: 'Bob', lastName: 'Martinez' },
   { userId: 'user3', username: 'carol', firstName: 'Carol' },
-]
+];
 
 describe('AssigneePicker', () => {
-  let onAssign: (userId: string) => void
-  let onClose: () => void
+  let onAssign: (userId: string) => void;
+  let onClose: () => void;
 
   beforeEach(() => {
-    onAssign = vi.fn()
-    onClose = vi.fn()
-  })
+    onAssign = vi.fn();
+    onClose = vi.fn();
+  });
 
   it('renders header and all collaborators', () => {
     render(
@@ -26,13 +26,13 @@ describe('AssigneePicker', () => {
         onAssign={onAssign}
         onClose={onClose}
       />
-    )
+    );
 
-    expect(screen.getByText('Assign item')).toBeInTheDocument()
-    expect(screen.getByText('Alice Williams')).toBeInTheDocument()
-    expect(screen.getByText('Bob Martinez')).toBeInTheDocument()
-    expect(screen.getByText('Carol')).toBeInTheDocument()
-  })
+    expect(screen.getByText('Assign item')).toBeInTheDocument();
+    expect(screen.getByText('Alice Williams')).toBeInTheDocument();
+    expect(screen.getByText('Bob Martinez')).toBeInTheDocument();
+    expect(screen.getByText('Carol')).toBeInTheDocument();
+  });
 
   it('calls onAssign with user ID and closes when clicking a user', () => {
     render(
@@ -42,13 +42,13 @@ describe('AssigneePicker', () => {
         onAssign={onAssign}
         onClose={onClose}
       />
-    )
+    );
 
-    fireEvent.click(screen.getByText('Bob Martinez'))
+    fireEvent.click(screen.getByText('Bob Martinez'));
 
-    expect(onAssign).toHaveBeenCalledWith('user2')
-    expect(onClose).toHaveBeenCalled()
-  })
+    expect(onAssign).toHaveBeenCalledWith('user2');
+    expect(onClose).toHaveBeenCalled();
+  });
 
   it('highlights the currently assigned user', () => {
     render(
@@ -58,14 +58,14 @@ describe('AssigneePicker', () => {
         onAssign={onAssign}
         onClose={onClose}
       />
-    )
+    );
 
-    const bobOption = screen.getByText('Bob Martinez').closest('[role="option"]')!
-    expect(bobOption.className).toContain('bg-blue')
+    const bobOption = screen.getByText('Bob Martinez').closest('[role="option"]')!;
+    expect(bobOption.className).toContain('bg-blue');
 
-    const aliceOption = screen.getByText('Alice Williams').closest('[role="option"]')!
-    expect(aliceOption.className).not.toContain('bg-blue')
-  })
+    const aliceOption = screen.getByText('Alice Williams').closest('[role="option"]')!;
+    expect(aliceOption.className).not.toContain('bg-blue');
+  });
 
   it('shows checkmark on the currently assigned user', () => {
     render(
@@ -75,16 +75,16 @@ describe('AssigneePicker', () => {
         onAssign={onAssign}
         onClose={onClose}
       />
-    )
+    );
 
-    const aliceOption = screen.getByText('Alice Williams').closest('[role="option"]')!
-    const checkmark = aliceOption.querySelector('svg.lucide-check')
-    expect(checkmark).not.toBeNull()
+    const aliceOption = screen.getByText('Alice Williams').closest('[role="option"]')!;
+    const checkmark = aliceOption.querySelector('svg.lucide-check');
+    expect(checkmark).not.toBeNull();
 
-    const bobOption = screen.getByText('Bob Martinez').closest('[role="option"]')!
-    const bobCheckmark = bobOption.querySelector('svg.lucide-check')
-    expect(bobCheckmark).toBeNull()
-  })
+    const bobOption = screen.getByText('Bob Martinez').closest('[role="option"]')!;
+    const bobCheckmark = bobOption.querySelector('svg.lucide-check');
+    expect(bobCheckmark).toBeNull();
+  });
 
   it('clicking the assigned user toggles them off (unassigns)', () => {
     render(
@@ -94,13 +94,13 @@ describe('AssigneePicker', () => {
         onAssign={onAssign}
         onClose={onClose}
       />
-    )
+    );
 
-    fireEvent.click(screen.getByText('Alice Williams'))
+    fireEvent.click(screen.getByText('Alice Williams'));
 
-    expect(onAssign).toHaveBeenCalledWith('')
-    expect(onClose).toHaveBeenCalled()
-  })
+    expect(onAssign).toHaveBeenCalledWith('');
+    expect(onClose).toHaveBeenCalled();
+  });
 
   it('shows Unassign button when someone is assigned', () => {
     render(
@@ -110,10 +110,10 @@ describe('AssigneePicker', () => {
         onAssign={onAssign}
         onClose={onClose}
       />
-    )
+    );
 
-    expect(screen.getByText('Unassign')).toBeInTheDocument()
-  })
+    expect(screen.getByText('Unassign')).toBeInTheDocument();
+  });
 
   it('does not show Unassign button when nobody is assigned', () => {
     render(
@@ -123,10 +123,10 @@ describe('AssigneePicker', () => {
         onAssign={onAssign}
         onClose={onClose}
       />
-    )
+    );
 
-    expect(screen.queryByText('Unassign')).not.toBeInTheDocument()
-  })
+    expect(screen.queryByText('Unassign')).not.toBeInTheDocument();
+  });
 
   it('clicking Unassign calls onAssign with empty string', () => {
     render(
@@ -136,13 +136,13 @@ describe('AssigneePicker', () => {
         onAssign={onAssign}
         onClose={onClose}
       />
-    )
+    );
 
-    fireEvent.click(screen.getByText('Unassign'))
+    fireEvent.click(screen.getByText('Unassign'));
 
-    expect(onAssign).toHaveBeenCalledWith('')
-    expect(onClose).toHaveBeenCalled()
-  })
+    expect(onAssign).toHaveBeenCalledWith('');
+    expect(onClose).toHaveBeenCalled();
+  });
 
   it('close button calls onClose', () => {
     render(
@@ -152,13 +152,13 @@ describe('AssigneePicker', () => {
         onAssign={onAssign}
         onClose={onClose}
       />
-    )
+    );
 
-    const closeButton = screen.getByRole('button', { name: /close/i })
-    fireEvent.click(closeButton)
+    const closeButton = screen.getByRole('button', { name: /close/i });
+    fireEvent.click(closeButton);
 
-    expect(onClose).toHaveBeenCalled()
-  })
+    expect(onClose).toHaveBeenCalled();
+  });
 
   it('pressing Escape closes the picker', () => {
     render(
@@ -168,13 +168,13 @@ describe('AssigneePicker', () => {
         onAssign={onAssign}
         onClose={onClose}
       />
-    )
+    );
 
-    const listbox = screen.getByRole('listbox')
-    fireEvent.keyDown(listbox, { key: 'Escape' })
+    const listbox = screen.getByRole('listbox');
+    fireEvent.keyDown(listbox, { key: 'Escape' });
 
-    expect(onClose).toHaveBeenCalled()
-  })
+    expect(onClose).toHaveBeenCalled();
+  });
 
   it('clicking outside the picker closes it', () => {
     render(
@@ -187,12 +187,12 @@ describe('AssigneePicker', () => {
           onClose={onClose}
         />
       </div>
-    )
+    );
 
-    fireEvent.mouseDown(screen.getByTestId('outside'))
+    fireEvent.mouseDown(screen.getByTestId('outside'));
 
-    expect(onClose).toHaveBeenCalled()
-  })
+    expect(onClose).toHaveBeenCalled();
+  });
 
   it('clicking inside the picker does not close it', () => {
     render(
@@ -202,12 +202,12 @@ describe('AssigneePicker', () => {
         onAssign={onAssign}
         onClose={onClose}
       />
-    )
+    );
 
-    fireEvent.mouseDown(screen.getByText('Assign item'))
+    fireEvent.mouseDown(screen.getByText('Assign item'));
 
-    expect(onClose).not.toHaveBeenCalled()
-  })
+    expect(onClose).not.toHaveBeenCalled();
+  });
 
   it('renders with a single collaborator', () => {
     render(
@@ -217,16 +217,16 @@ describe('AssigneePicker', () => {
         onAssign={onAssign}
         onClose={onClose}
       />
-    )
+    );
 
-    expect(screen.getByText('Alice Williams')).toBeInTheDocument()
-    expect(screen.queryByText('Bob Martinez')).not.toBeInTheDocument()
-  })
+    expect(screen.getByText('Alice Williams')).toBeInTheDocument();
+    expect(screen.queryByText('Bob Martinez')).not.toBeInTheDocument();
+  });
 
   it('falls back to username when no first/last name', () => {
     const usernameOnly: Collaborator[] = [
       { userId: 'u1', username: 'johndoe' },
-    ]
+    ];
 
     render(
       <AssigneePicker
@@ -235,10 +235,10 @@ describe('AssigneePicker', () => {
         onAssign={onAssign}
         onClose={onClose}
       />
-    )
+    );
 
-    expect(screen.getByText('johndoe')).toBeInTheDocument()
-  })
+    expect(screen.getByText('johndoe')).toBeInTheDocument();
+  });
 
   it('renders with empty collaborators list', () => {
     render(
@@ -248,9 +248,9 @@ describe('AssigneePicker', () => {
         onAssign={onAssign}
         onClose={onClose}
       />
-    )
+    );
 
-    expect(screen.getByText('Assign item')).toBeInTheDocument()
-    expect(screen.queryByText('Unassign')).not.toBeInTheDocument()
-  })
-})
+    expect(screen.getByText('Assign item')).toBeInTheDocument();
+    expect(screen.queryByText('Unassign')).not.toBeInTheDocument();
+  });
+});

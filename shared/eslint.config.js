@@ -20,6 +20,11 @@ export default [
       ...js.configs.recommended.rules,
       ...tseslint.configs.recommended.rules,
       'no-undef': 'off',
+      // The only enforced formatting in the TypeScript workspaces, applied by
+      // `task fmt`. Nothing else is enforced — see the Formatting section of
+      // CLAUDE.md for what is deliberately left to the author.
+      semi: ['error', 'always'],
+      quotes: ['error', 'single', { avoidEscape: true, allowTemplateLiterals: true }],
     },
   },
 ]

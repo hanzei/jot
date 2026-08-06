@@ -128,7 +128,7 @@ in what happens after one fails:
 - `task run-webapp` - Start webapp dev server with HMR
 - `task build-webapp` - Build the webapp into `webapp/build`
 - `task build-jotctl` - Build the `jotctl` admin CLI binary (see below)
-- `task fmt` - Apply Go formatting (gofumpt, goimports, swaggo)
+- `task fmt` - Apply formatting to every workspace (Go and TypeScript); scope it with `fmt-server` / `fmt-shared` / `fmt-webapp` / `fmt-mobile`
 - `task gen-docs` - Regenerate Swagger API docs from handler annotations
 - `task clean` - Remove generated files and node packages
 
@@ -138,10 +138,13 @@ from the version CI uses.
 
 ### Formatting
 
-Go formatting is reported by `task lint-server` and applied by `task fmt`, both
-through golangci-lint's `formatters:` block in `.golangci.yml` — one source of
-truth. Three are enabled: **gofumpt** (a strict superset of `gofmt`, so `gofmt`
-itself is not listed separately), **goimports**, and **swaggo** for the
+`task fmt` applies formatting to every workspace; the matching `lint-*` task
+reports it. Each rule therefore has exactly one home, and neither language
+needs a separate formatter tool.
+
+**Go** goes through golangci-lint's `formatters:` block in `.golangci.yml`.
+Three are enabled: **gofumpt** (a strict superset of `gofmt`, so `gofmt` itself
+is not listed separately), **goimports**, and **swaggo** for the
 `@Param`/`@Success` annotation tables in `internal/handlers`. The comment above
 that block says why `gci` and `golines` are not.
 
@@ -149,9 +152,31 @@ goimports adds and drops imports to match what a file actually uses, so a stale
 import left behind by an edit is fixed by `task fmt` rather than reported as a
 `typecheck` failure.
 
-The TypeScript workspaces have **no** enforced format: no Prettier, no
-stylistic ESLint rules. Match the surrounding file and do not reformat code you
-did not otherwise need to touch.
+**TypeScript** enforces exactly two things, as ESLint rules in all three
+workspace configs:
+
+```js
+semi: ['error', 'always'],
+quotes: ['error', 'single', { avoidEscape: true, allowTemplateLiterals: true }],
+```
+
+Both are autofixable, and `task fmt` applies them with `--fix-type layout` so
+it stays a formatter and never rewrites logic. There is no Prettier and no
+Biome, deliberately: measured against this codebase, Prettier rewrote 189 of
+271 files and flattened hand-grouped literals like `ALLOWED_TAGS` in
+`webapp/src/utils/markdown.ts`, where the layout carries meaning the comment
+above it refers to. [#837](https://github.com/hanzei/jot/issues/837) has the
+full comparison.
+
+**Everything else is the author's call** — line width, wrapping, how a literal
+is laid out. There is deliberately no line-width or indentation rule. For
+anything not covered by the two rules above, match the surrounding file and do
+not reformat code you did not otherwise need to touch.
+
+A formatting-only commit goes in `.git-blame-ignore-revs` so `git blame` points
+at whoever wrote the line rather than at the reformat. GitHub applies that file
+on its own; locally it needs
+`git config blame.ignoreRevsFile .git-blame-ignore-revs`.
 
 ### Seeing it run
 
@@ -485,6 +510,9 @@ Types are distributed across the `@jot/shared` package (`shared/src/`) and impor
 - Run: `task test-e2e` (scope to one spec with `task test-e2e -- notes.spec.ts`)
 - No server needs to be running first: Playwright's `webServer` builds the webapp, starts the Go server on a throwaway DB, and tears it down. `task test-e2e` pre-compiles the server so that startup stays inside the Playwright timeout on a cold build cache.
 - Browsers are not provisioned by bootstrap. `task test-e2e` runs `scripts/check-playwright-browser.sh` first, which fails with the exact `npx playwright install chromium` command when the pinned Chromium build is missing — that is a one-command fix, not a broken suite.
+- **Linted with the rest of webapp** (`task lint-webapp`), sharing the `tsRules` baseline in `eslint.config.js`. The e2e block drops the React plugins — react-hooks reads Playwright's `use` fixture parameter as React's `use()` hook — and allows `_`-prefixed unused parameters, which is how page objects keep a call signature steady after they stop using an argument.
+- A fixture destructured but never referenced is doing real work: Playwright only runs a fixture a test names, so `authenticatedUser` is what logs the test in. Mark it `void authenticatedUser;` rather than deleting it.
+- Not type-checked: `tsconfig.json` includes only `src`, so `lint:ts` does not cover `e2e/` ([#839](https://github.com/hanzei/jot/issues/839)). ESLint is the only static check these files get, which is why the e2e block turns `no-undef` back on — everywhere else it is off because `tsc` covers the same ground better. That block declares both Node and browser globals to match.
 
 ---
 
@@ -551,7 +579,8 @@ If `task` isn't available, these are the underlying commands:
 | `task test-e2e` | `cd webapp && npm run test:e2e` |
 | `task test-mobile` | `cd mobile && npm test -- --ci` |
 | `task build-webapp` | `cd webapp && npm run build` |
-| `task fmt` | `cd server && go tool golangci-lint fmt` |
+| `task fmt-server` | `cd server && go tool golangci-lint fmt` |
+| `task fmt-webapp` | `cd webapp && npm run lint -- --fix --fix-type layout` (same in `shared/`, `mobile/`) |
 | `task gen-docs` | `cd server && go tool swag init --generalInfo main.go --output docs --parseDependency --parseInternal` |
 | `task check-migrations` | `./scripts/check-migrations.sh` |
 

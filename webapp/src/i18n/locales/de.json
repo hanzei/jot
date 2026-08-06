@@ -251,9 +251,9 @@
     "noteDeleteKey": "Entf / Rücktaste",
     "noteDeleteDescription": "Notiz löschen (mit Bestätigung)",
     "formatSection": "Formatierung (beim Bearbeiten einer Textnotiz)",
-    "formatBoldKey": "Ctrl + B",
+    "formatBoldKey": "Strg + B",
     "formatBoldDescription": "Ausgewählten Text fett formatieren",
-    "formatItalicKey": "Ctrl + I",
+    "formatItalicKey": "Strg + I",
     "formatItalicDescription": "Ausgewählten Text kursiv formatieren"
   },
   "admin": {

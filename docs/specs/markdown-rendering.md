@@ -447,7 +447,7 @@ The transforms are pure and shared, so both clients produce identical text for
 the same input and selection, and one suite
 (`shared/src/__tests__/markdownEdits.test.ts`) covers both. **Applying the
 result is deliberately per-client.** Mobile sets state and forces the caret
-through the `TextInput`'s controlled `selection` prop; the webapp replays the
+through the controlled `selection` prop on `TextInput`; the webapp replays the
 edit through the DOM with `execCommand('insertText')` over the changed span,
 because assigning `textarea.value` — which is what a plain `setContent` makes
 React do — empties the browser's native undo stack, so a toolbar press would

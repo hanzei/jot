@@ -1,69 +1,69 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { render, screen, act } from '@testing-library/react'
-import { SSEStatusIndicator } from '../SSEStatusIndicator'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { render, screen, act } from '@testing-library/react';
+import { SSEStatusIndicator } from '../SSEStatusIndicator';
 
 // The indicator waits SHOW_DELAY_MS (2000ms) before appearing.
-const SHOW_DELAY_MS = 2000
+const SHOW_DELAY_MS = 2000;
 
 function setOnline(value: boolean) {
-  Object.defineProperty(navigator, 'onLine', { value, configurable: true })
+  Object.defineProperty(navigator, 'onLine', { value, configurable: true });
 }
 
 describe('SSEStatusIndicator', () => {
   beforeEach(() => {
-    vi.useFakeTimers()
-    setOnline(true)
-  })
+    vi.useFakeTimers();
+    setOnline(true);
+  });
 
   afterEach(() => {
-    vi.runOnlyPendingTimers()
-    vi.useRealTimers()
-  })
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+  });
 
   it('renders nothing while connected', () => {
-    render(<SSEStatusIndicator status="connected" />)
-    act(() => vi.advanceTimersByTime(SHOW_DELAY_MS))
-    expect(screen.queryByTestId('sse-status-indicator')).not.toBeInTheDocument()
-  })
+    render(<SSEStatusIndicator status="connected" />);
+    act(() => vi.advanceTimersByTime(SHOW_DELAY_MS));
+    expect(screen.queryByTestId('sse-status-indicator')).not.toBeInTheDocument();
+  });
 
   it('does not show immediately on a brief interruption', () => {
-    render(<SSEStatusIndicator status="connecting" />)
-    expect(screen.queryByTestId('sse-status-indicator')).not.toBeInTheDocument()
-  })
+    render(<SSEStatusIndicator status="connecting" />);
+    expect(screen.queryByTestId('sse-status-indicator')).not.toBeInTheDocument();
+  });
 
   it('shows a connecting indicator after the delay on the first connect', () => {
-    render(<SSEStatusIndicator status="connecting" />)
-    act(() => vi.advanceTimersByTime(SHOW_DELAY_MS))
-    expect(screen.getByTestId('sse-status-indicator')).toBeInTheDocument()
-    expect(screen.getByText('Connecting…')).toBeInTheDocument()
-  })
+    render(<SSEStatusIndicator status="connecting" />);
+    act(() => vi.advanceTimersByTime(SHOW_DELAY_MS));
+    expect(screen.getByTestId('sse-status-indicator')).toBeInTheDocument();
+    expect(screen.getByText('Connecting…')).toBeInTheDocument();
+  });
 
   it('shows a reconnecting indicator after the delay when reconnecting', () => {
-    render(<SSEStatusIndicator status="reconnecting" />)
-    act(() => vi.advanceTimersByTime(SHOW_DELAY_MS))
-    expect(screen.getByTestId('sse-status-indicator')).toBeInTheDocument()
-    expect(screen.getByText('Reconnecting…')).toBeInTheDocument()
-  })
+    render(<SSEStatusIndicator status="reconnecting" />);
+    act(() => vi.advanceTimersByTime(SHOW_DELAY_MS));
+    expect(screen.getByTestId('sse-status-indicator')).toBeInTheDocument();
+    expect(screen.getByText('Reconnecting…')).toBeInTheDocument();
+  });
 
   it('shows a connection-lost indicator after the delay when disconnected', () => {
-    render(<SSEStatusIndicator status="disconnected" />)
-    act(() => vi.advanceTimersByTime(SHOW_DELAY_MS))
-    expect(screen.getByText('Connection lost')).toBeInTheDocument()
-  })
+    render(<SSEStatusIndicator status="disconnected" />);
+    act(() => vi.advanceTimersByTime(SHOW_DELAY_MS));
+    expect(screen.getByText('Connection lost')).toBeInTheDocument();
+  });
 
   it('hides again once the connection recovers', () => {
-    const { rerender } = render(<SSEStatusIndicator status="connecting" />)
-    act(() => vi.advanceTimersByTime(SHOW_DELAY_MS))
-    expect(screen.getByTestId('sse-status-indicator')).toBeInTheDocument()
+    const { rerender } = render(<SSEStatusIndicator status="connecting" />);
+    act(() => vi.advanceTimersByTime(SHOW_DELAY_MS));
+    expect(screen.getByTestId('sse-status-indicator')).toBeInTheDocument();
 
-    rerender(<SSEStatusIndicator status="connected" />)
-    expect(screen.queryByTestId('sse-status-indicator')).not.toBeInTheDocument()
-  })
+    rerender(<SSEStatusIndicator status="connected" />);
+    expect(screen.queryByTestId('sse-status-indicator')).not.toBeInTheDocument();
+  });
 
   it('stays hidden when the browser is offline (OfflineNotification covers it)', () => {
-    setOnline(false)
-    render(<SSEStatusIndicator status="connecting" />)
-    act(() => vi.advanceTimersByTime(SHOW_DELAY_MS))
-    expect(screen.queryByTestId('sse-status-indicator')).not.toBeInTheDocument()
-  })
-})
+    setOnline(false);
+    render(<SSEStatusIndicator status="connecting" />);
+    act(() => vi.advanceTimersByTime(SHOW_DELAY_MS));
+    expect(screen.queryByTestId('sse-status-indicator')).not.toBeInTheDocument();
+  });
+});

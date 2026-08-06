@@ -1,13 +1,13 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
-import type { NoteShare, User } from '@jot/shared'
-import { createMockNote } from '@/utils/__tests__/test-helpers'
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import type { NoteShare, User } from '@jot/shared';
+import { createMockNote } from '@/utils/__tests__/test-helpers';
 
-const mockGetShares = vi.hoisted(() => vi.fn())
-const mockShare = vi.hoisted(() => vi.fn())
-const mockUnshare = vi.hoisted(() => vi.fn())
-const mockUsersSearch = vi.hoisted(() => vi.fn())
+const mockGetShares = vi.hoisted(() => vi.fn());
+const mockShare = vi.hoisted(() => vi.fn());
+const mockUnshare = vi.hoisted(() => vi.fn());
+const mockUsersSearch = vi.hoisted(() => vi.fn());
 
 vi.mock('@/utils/api', () => ({
   notes: {
@@ -18,11 +18,11 @@ vi.mock('@/utils/api', () => ({
   users: {
     search: mockUsersSearch,
   },
-}))
+}));
 
-import ShareModal from '../ShareModal'
+import ShareModal from '../ShareModal';
 
-const mockNote = createMockNote({ id: 'note1', title: 'Test Note' })
+const mockNote = createMockNote({ id: 'note1', title: 'Test Note' });
 
 const mockShare1: NoteShare = {
   id: 'share1',
@@ -35,7 +35,7 @@ const mockShare1: NoteShare = {
   has_profile_icon: false,
   created_at: '2024-01-01T00:00:00Z',
   updated_at: '2024-01-01T00:00:00Z',
-}
+};
 
 const mockUser2: User = {
   id: 'user2',
@@ -46,7 +46,7 @@ const mockUser2: User = {
   created_at: '2024-01-01T00:00:00Z',
   updated_at: '2024-01-01T00:00:00Z',
   has_profile_icon: false,
-}
+};
 
 const mockUser3: User = {
   id: 'user3',
@@ -57,106 +57,106 @@ const mockUser3: User = {
   created_at: '2024-01-01T00:00:00Z',
   updated_at: '2024-01-01T00:00:00Z',
   has_profile_icon: false,
-}
+};
 
 const defaultProps = {
   note: mockNote,
   isOpen: true,
   onClose: vi.fn(),
-}
+};
 
 beforeEach(() => {
-  vi.clearAllMocks()
-  mockGetShares.mockResolvedValue([])
-  mockUsersSearch.mockResolvedValue([])
-})
+  vi.clearAllMocks();
+  mockGetShares.mockResolvedValue([]);
+  mockUsersSearch.mockResolvedValue([]);
+});
 
 describe('ShareModal', () => {
   describe('rendering', () => {
     it('renders the modal dialog when isOpen is true', async () => {
-      render(<ShareModal {...defaultProps} />)
-      await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
-    })
+      render(<ShareModal {...defaultProps} />);
+      await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
+    });
 
     it('does not render when note is null', () => {
-      render(<ShareModal {...defaultProps} note={null} />)
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    })
-  })
+      render(<ShareModal {...defaultProps} note={null} />);
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+  });
 
   describe('existing shares', () => {
     it('displays current shares on open', async () => {
-      mockGetShares.mockResolvedValue([mockShare1])
-      render(<ShareModal {...defaultProps} />)
+      mockGetShares.mockResolvedValue([mockShare1]);
+      render(<ShareModal {...defaultProps} />);
 
       await waitFor(() => {
-        expect(screen.getByText('Alice Smith')).toBeInTheDocument()
-      })
-    })
+        expect(screen.getByText('Alice Smith')).toBeInTheDocument();
+      });
+    });
 
     it('shows "not shared yet" when there are no shares', async () => {
-      mockGetShares.mockResolvedValue([])
-      render(<ShareModal {...defaultProps} />)
+      mockGetShares.mockResolvedValue([]);
+      render(<ShareModal {...defaultProps} />);
 
       await waitFor(() => {
-        expect(screen.getByText(/not shared with anyone yet/i)).toBeInTheDocument()
-      })
-    })
-  })
+        expect(screen.getByText(/not shared with anyone yet/i)).toBeInTheDocument();
+      });
+    });
+  });
 
   describe('user search and suggestions', () => {
     it('shows suggestions when typing a username that matches', async () => {
-      mockUsersSearch.mockResolvedValue([mockUser2, mockUser3])
-      const user = userEvent.setup()
-      render(<ShareModal {...defaultProps} />)
+      mockUsersSearch.mockResolvedValue([mockUser2, mockUser3]);
+      const user = userEvent.setup();
+      render(<ShareModal {...defaultProps} />);
 
-      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled())
+      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled());
 
-      const input = screen.getByRole('textbox')
-      await user.type(input, 'ali')
+      const input = screen.getByRole('textbox');
+      await user.type(input, 'ali');
 
       await waitFor(() => {
-        expect(screen.getByText('Alice Smith')).toBeInTheDocument()
-      })
-    })
+        expect(screen.getByText('Alice Smith')).toBeInTheDocument();
+      });
+    });
 
     it('falls back to the full directory when the input is cleared', async () => {
-      mockUsersSearch.mockResolvedValue([mockUser2, mockUser3])
-      const user = userEvent.setup()
-      render(<ShareModal {...defaultProps} />)
+      mockUsersSearch.mockResolvedValue([mockUser2, mockUser3]);
+      const user = userEvent.setup();
+      render(<ShareModal {...defaultProps} />);
 
-      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled())
+      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled());
 
-      const input = screen.getByRole('textbox')
-      await user.type(input, 'ali')
-      await waitFor(() => expect(screen.getByText('Alice Smith')).toBeInTheDocument())
-      expect(screen.queryByText('Bob Jones')).not.toBeInTheDocument()
+      const input = screen.getByRole('textbox');
+      await user.type(input, 'ali');
+      await waitFor(() => expect(screen.getByText('Alice Smith')).toBeInTheDocument());
+      expect(screen.queryByText('Bob Jones')).not.toBeInTheDocument();
 
-      await user.clear(input)
+      await user.clear(input);
 
-      await waitFor(() => expect(screen.getByText(/all users/i)).toBeInTheDocument())
-      expect(screen.getByText('Alice Smith')).toBeInTheDocument()
-      expect(screen.getByText('Bob Jones')).toBeInTheDocument()
-    })
+      await waitFor(() => expect(screen.getByText(/all users/i)).toBeInTheDocument());
+      expect(screen.getByText('Alice Smith')).toBeInTheDocument();
+      expect(screen.getByText('Bob Jones')).toBeInTheDocument();
+    });
 
     it('filters out users who are already shared', async () => {
-      mockGetShares.mockResolvedValue([mockShare1]) // alice already shared
-      mockUsersSearch.mockResolvedValue([mockUser2, mockUser3]) // alice + bob
-      const user = userEvent.setup()
-      render(<ShareModal {...defaultProps} />)
+      mockGetShares.mockResolvedValue([mockShare1]); // alice already shared
+      mockUsersSearch.mockResolvedValue([mockUser2, mockUser3]); // alice + bob
+      const user = userEvent.setup();
+      render(<ShareModal {...defaultProps} />);
 
-      await waitFor(() => expect(mockGetShares).toHaveBeenCalled())
+      await waitFor(() => expect(mockGetShares).toHaveBeenCalled());
 
-      const input = screen.getByRole('textbox')
-      await user.type(input, 'b')
+      const input = screen.getByRole('textbox');
+      await user.type(input, 'b');
 
       await waitFor(() => {
-        expect(screen.getByText('Bob Jones')).toBeInTheDocument()
-      })
+        expect(screen.getByText('Bob Jones')).toBeInTheDocument();
+      });
       // Alice is already shared, should not appear as suggestion
-      expect(screen.queryAllByText('Alice Smith')).toHaveLength(1) // only in shares list
-    })
-  })
+      expect(screen.queryAllByText('Alice Smith')).toHaveLength(1); // only in shares list
+    });
+  });
 
   describe('recent collaborators', () => {
     // Bob was shared with more recently than Alice, so he leads the recents.
@@ -173,256 +173,256 @@ describe('ShareModal', () => {
           { ...mockShare1, id: 'share2', note_id: 'note2', shared_with_user_id: 'user3', created_at: '2024-06-01T00:00:00Z' },
         ],
       }),
-    ]
-    const recentProps = { ...defaultProps, notesList, currentUserId: 'user1' }
+    ];
+    const recentProps = { ...defaultProps, notesList, currentUserId: 'user1' };
 
     it('offers recent collaborators on focus, before typing', async () => {
-      mockUsersSearch.mockResolvedValue([mockUser2, mockUser3])
-      const user = userEvent.setup()
-      render(<ShareModal {...recentProps} />)
+      mockUsersSearch.mockResolvedValue([mockUser2, mockUser3]);
+      const user = userEvent.setup();
+      render(<ShareModal {...recentProps} />);
 
-      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled())
-      await user.click(screen.getByRole('textbox'))
+      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled());
+      await user.click(screen.getByRole('textbox'));
 
-      await waitFor(() => expect(screen.getByText(/recently shared with/i)).toBeInTheDocument())
-      expect(screen.getByText('Bob Jones')).toBeInTheDocument()
-      expect(screen.getByText('Alice Smith')).toBeInTheDocument()
-    })
+      await waitFor(() => expect(screen.getByText(/recently shared with/i)).toBeInTheDocument());
+      expect(screen.getByText('Bob Jones')).toBeInTheDocument();
+      expect(screen.getByText('Alice Smith')).toBeInTheDocument();
+    });
 
     it('orders recent collaborators by most recent share, ahead of the rest', async () => {
-      const mockUser4: User = { ...mockUser2, id: 'user4', username: 'aaron', first_name: 'Aaron', last_name: 'Zeta' }
-      mockUsersSearch.mockResolvedValue([mockUser2, mockUser3, mockUser4])
-      const user = userEvent.setup()
-      render(<ShareModal {...recentProps} />)
+      const mockUser4: User = { ...mockUser2, id: 'user4', username: 'aaron', first_name: 'Aaron', last_name: 'Zeta' };
+      mockUsersSearch.mockResolvedValue([mockUser2, mockUser3, mockUser4]);
+      const user = userEvent.setup();
+      render(<ShareModal {...recentProps} />);
 
-      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled())
-      await user.click(screen.getByRole('textbox'))
+      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled());
+      await user.click(screen.getByRole('textbox'));
 
-      await waitFor(() => expect(screen.getByText(/recently shared with/i)).toBeInTheDocument())
+      await waitFor(() => expect(screen.getByText(/recently shared with/i)).toBeInTheDocument());
 
       // Aaron sorts first alphabetically but has no share history, so he lands
       // under "All users" behind both recents.
       const rendered = screen
         .getAllByText(/Bob Jones|Alice Smith|Aaron Zeta/)
-        .map(el => el.textContent)
-      expect(rendered).toEqual(['Bob Jones', 'Alice Smith', 'Aaron Zeta'])
-    })
+        .map(el => el.textContent);
+      expect(rendered).toEqual(['Bob Jones', 'Alice Smith', 'Aaron Zeta']);
+    });
 
     it('ranks recent collaborators first while searching, without group headings', async () => {
       // Both match "s" (Alice Smith, Bob's username is bob... use a shared match).
-      const mockUser4: User = { ...mockUser2, id: 'user4', username: 'sam', first_name: 'Sam', last_name: 'Adams' }
-      mockUsersSearch.mockResolvedValue([mockUser2, mockUser3, mockUser4])
-      const user = userEvent.setup()
-      render(<ShareModal {...recentProps} />)
+      const mockUser4: User = { ...mockUser2, id: 'user4', username: 'sam', first_name: 'Sam', last_name: 'Adams' };
+      mockUsersSearch.mockResolvedValue([mockUser2, mockUser3, mockUser4]);
+      const user = userEvent.setup();
+      render(<ShareModal {...recentProps} />);
 
-      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled())
-      await user.type(screen.getByRole('textbox'), 's')
+      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled());
+      await user.type(screen.getByRole('textbox'), 's');
 
-      await waitFor(() => expect(screen.getByText('Sam Adams')).toBeInTheDocument())
-      expect(screen.queryByText(/recently shared with/i)).not.toBeInTheDocument()
-      expect(screen.queryByText(/all users/i)).not.toBeInTheDocument()
+      await waitFor(() => expect(screen.getByText('Sam Adams')).toBeInTheDocument());
+      expect(screen.queryByText(/recently shared with/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/all users/i)).not.toBeInTheDocument();
 
       // Alice is a recent collaborator, Sam is not — recency wins over alphabet.
-      const rendered = screen.getAllByText(/Alice Smith|Sam Adams/).map(el => el.textContent)
-      expect(rendered).toEqual(['Alice Smith', 'Sam Adams'])
-    })
+      const rendered = screen.getAllByText(/Alice Smith|Sam Adams/).map(el => el.textContent);
+      expect(rendered).toEqual(['Alice Smith', 'Sam Adams']);
+    });
 
     it('explains an empty dropdown when everyone already has access', async () => {
-      mockGetShares.mockResolvedValue([mockShare1])
-      mockUsersSearch.mockResolvedValue([mockUser2])
-      const user = userEvent.setup()
-      render(<ShareModal {...recentProps} />)
+      mockGetShares.mockResolvedValue([mockShare1]);
+      mockUsersSearch.mockResolvedValue([mockUser2]);
+      const user = userEvent.setup();
+      render(<ShareModal {...recentProps} />);
 
-      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled())
-      await user.click(screen.getByRole('textbox'))
+      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled());
+      await user.click(screen.getByRole('textbox'));
 
       await waitFor(() => {
-        expect(screen.getByText(/everyone already has access/i)).toBeInTheDocument()
-      })
-    })
+        expect(screen.getByText(/everyone already has access/i)).toBeInTheDocument();
+      });
+    });
 
     it('explains an empty dropdown on a single-user instance', async () => {
-      mockUsersSearch.mockResolvedValue([])
-      const user = userEvent.setup()
-      render(<ShareModal {...recentProps} />)
+      mockUsersSearch.mockResolvedValue([]);
+      const user = userEvent.setup();
+      render(<ShareModal {...recentProps} />);
 
-      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled())
-      await user.click(screen.getByRole('textbox'))
+      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled());
+      await user.click(screen.getByRole('textbox'));
 
       await waitFor(() => {
-        expect(screen.getByText(/no other users to share with/i)).toBeInTheDocument()
-      })
-    })
-  })
+        expect(screen.getByText(/no other users to share with/i)).toBeInTheDocument();
+      });
+    });
+  });
 
   describe('sharing a note', () => {
     it('calls notes.share when a suggestion is clicked', async () => {
-      mockUsersSearch.mockResolvedValue([mockUser2])
-      mockShare.mockResolvedValue({ success: true, message: 'shared' })
-      mockGetShares.mockResolvedValue([])
-      const user = userEvent.setup()
-      render(<ShareModal {...defaultProps} />)
+      mockUsersSearch.mockResolvedValue([mockUser2]);
+      mockShare.mockResolvedValue({ success: true, message: 'shared' });
+      mockGetShares.mockResolvedValue([]);
+      const user = userEvent.setup();
+      render(<ShareModal {...defaultProps} />);
 
-      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled())
+      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled());
 
-      const input = screen.getByRole('textbox')
-      await user.type(input, 'ali')
+      const input = screen.getByRole('textbox');
+      await user.type(input, 'ali');
 
-      await waitFor(() => expect(screen.getByText('Alice Smith')).toBeInTheDocument())
-      await user.click(screen.getByText('Alice Smith'))
+      await waitFor(() => expect(screen.getByText('Alice Smith')).toBeInTheDocument());
+      await user.click(screen.getByText('Alice Smith'));
 
       await waitFor(() => {
-        expect(mockShare).toHaveBeenCalledWith('note1', { user_id: 'user2' })
-      })
-    })
+        expect(mockShare).toHaveBeenCalledWith('note1', { user_id: 'user2' });
+      });
+    });
 
     it('clears the input after a successful share', async () => {
-      mockUsersSearch.mockResolvedValue([mockUser2])
-      mockShare.mockResolvedValue({ success: true, message: 'shared' })
-      mockGetShares.mockResolvedValue([])
-      const user = userEvent.setup()
-      render(<ShareModal {...defaultProps} />)
+      mockUsersSearch.mockResolvedValue([mockUser2]);
+      mockShare.mockResolvedValue({ success: true, message: 'shared' });
+      mockGetShares.mockResolvedValue([]);
+      const user = userEvent.setup();
+      render(<ShareModal {...defaultProps} />);
 
-      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled())
+      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled());
 
-      const input = screen.getByRole('textbox') as HTMLInputElement
-      await user.type(input, 'ali')
-      await waitFor(() => expect(screen.getByText('Alice Smith')).toBeInTheDocument())
-      await user.click(screen.getByText('Alice Smith'))
+      const input = screen.getByRole('textbox') as HTMLInputElement;
+      await user.type(input, 'ali');
+      await waitFor(() => expect(screen.getByText('Alice Smith')).toBeInTheDocument());
+      await user.click(screen.getByText('Alice Smith'));
 
-      await waitFor(() => expect(input.value).toBe(''))
-    })
+      await waitFor(() => expect(input.value).toBe(''));
+    });
 
     it('shows error message on 404 (user not found)', async () => {
-      mockUsersSearch.mockResolvedValue([mockUser2])
-      mockShare.mockRejectedValue({ response: { status: 404 } })
-      const user = userEvent.setup()
-      render(<ShareModal {...defaultProps} />)
+      mockUsersSearch.mockResolvedValue([mockUser2]);
+      mockShare.mockRejectedValue({ response: { status: 404 } });
+      const user = userEvent.setup();
+      render(<ShareModal {...defaultProps} />);
 
-      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled())
+      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled());
 
-      const input = screen.getByRole('textbox')
-      await user.type(input, 'ali')
-      await waitFor(() => expect(screen.getByText('Alice Smith')).toBeInTheDocument())
-      await user.click(screen.getByText('Alice Smith'))
+      const input = screen.getByRole('textbox');
+      await user.type(input, 'ali');
+      await waitFor(() => expect(screen.getByText('Alice Smith')).toBeInTheDocument());
+      await user.click(screen.getByText('Alice Smith'));
 
       await waitFor(() => {
-        expect(screen.getByText(/user not found/i)).toBeInTheDocument()
-      })
-    })
+        expect(screen.getByText(/user not found/i)).toBeInTheDocument();
+      });
+    });
 
     it('shows error message on 409 (already shared)', async () => {
-      mockUsersSearch.mockResolvedValue([mockUser2])
-      mockShare.mockRejectedValue({ response: { status: 409 } })
-      const user = userEvent.setup()
-      render(<ShareModal {...defaultProps} />)
+      mockUsersSearch.mockResolvedValue([mockUser2]);
+      mockShare.mockRejectedValue({ response: { status: 409 } });
+      const user = userEvent.setup();
+      render(<ShareModal {...defaultProps} />);
 
-      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled())
+      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled());
 
-      const input = screen.getByRole('textbox')
-      await user.type(input, 'ali')
-      await waitFor(() => expect(screen.getByText('Alice Smith')).toBeInTheDocument())
-      await user.click(screen.getByText('Alice Smith'))
+      const input = screen.getByRole('textbox');
+      await user.type(input, 'ali');
+      await waitFor(() => expect(screen.getByText('Alice Smith')).toBeInTheDocument());
+      await user.click(screen.getByText('Alice Smith'));
 
       await waitFor(() => {
-        expect(screen.getByText(/already shared/i)).toBeInTheDocument()
-      })
-    })
+        expect(screen.getByText(/already shared/i)).toBeInTheDocument();
+      });
+    });
 
     it('shows error message on 400 (cannot share with yourself)', async () => {
-      mockUsersSearch.mockResolvedValue([mockUser2])
+      mockUsersSearch.mockResolvedValue([mockUser2]);
       // The source checks status === 400 && data?.includes('yourself')
-      mockShare.mockRejectedValue({ response: { status: 400, data: 'cannot share with self' } })
-      const user = userEvent.setup()
-      render(<ShareModal {...defaultProps} />)
+      mockShare.mockRejectedValue({ response: { status: 400, data: 'cannot share with self' } });
+      const user = userEvent.setup();
+      render(<ShareModal {...defaultProps} />);
 
-      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled())
+      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled());
 
-      const input = screen.getByRole('textbox')
-      await user.type(input, 'ali')
-      await waitFor(() => expect(screen.getByText('Alice Smith')).toBeInTheDocument())
-      await user.click(screen.getByText('Alice Smith'))
+      const input = screen.getByRole('textbox');
+      await user.type(input, 'ali');
+      await waitFor(() => expect(screen.getByText('Alice Smith')).toBeInTheDocument());
+      await user.click(screen.getByText('Alice Smith'));
 
       await waitFor(() => {
-        expect(screen.getByText(/cannot share.*yourself/i)).toBeInTheDocument()
-      })
-    })
-  })
+        expect(screen.getByText(/cannot share.*yourself/i)).toBeInTheDocument();
+      });
+    });
+  });
 
   describe('unsharing', () => {
     it('calls notes.unshare when the remove button is clicked', async () => {
-      mockGetShares.mockResolvedValue([mockShare1])
-      mockUnshare.mockResolvedValue({ success: true, message: 'unshared' })
-      const user = userEvent.setup()
-      render(<ShareModal {...defaultProps} />)
+      mockGetShares.mockResolvedValue([mockShare1]);
+      mockUnshare.mockResolvedValue({ success: true, message: 'unshared' });
+      const user = userEvent.setup();
+      render(<ShareModal {...defaultProps} />);
 
-      await waitFor(() => expect(screen.getByText('Alice Smith')).toBeInTheDocument())
+      await waitFor(() => expect(screen.getByText('Alice Smith')).toBeInTheDocument());
 
-      const removeBtn = screen.getByRole('button', { name: /remove access/i })
-      await user.click(removeBtn)
+      const removeBtn = screen.getByRole('button', { name: /remove access/i });
+      await user.click(removeBtn);
 
       await waitFor(() => {
-        expect(mockUnshare).toHaveBeenCalledWith('note1', 'user2')
-      })
-    })
-  })
+        expect(mockUnshare).toHaveBeenCalledWith('note1', 'user2');
+      });
+    });
+  });
 
   describe('keyboard navigation', () => {
     it('ArrowDown moves selection to first suggestion', async () => {
-      mockUsersSearch.mockResolvedValue([mockUser2, mockUser3])
-      const user = userEvent.setup()
-      render(<ShareModal {...defaultProps} />)
+      mockUsersSearch.mockResolvedValue([mockUser2, mockUser3]);
+      const user = userEvent.setup();
+      render(<ShareModal {...defaultProps} />);
 
-      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled())
+      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled());
 
-      const input = screen.getByRole('textbox')
-      await user.type(input, 'b') // matches bob
-      await waitFor(() => expect(screen.getByText('Bob Jones')).toBeInTheDocument())
+      const input = screen.getByRole('textbox');
+      await user.type(input, 'b'); // matches bob
+      await waitFor(() => expect(screen.getByText('Bob Jones')).toBeInTheDocument());
 
-      await user.keyboard('{ArrowDown}')
+      await user.keyboard('{ArrowDown}');
 
       // First suggestion should be highlighted (bg-blue class added via conditional).
       // We just assert that pressing Enter at this point calls share with bob.
-      mockShare.mockResolvedValue({ success: true, message: 'shared' })
-      await user.keyboard('{Enter}')
+      mockShare.mockResolvedValue({ success: true, message: 'shared' });
+      await user.keyboard('{Enter}');
 
       await waitFor(() => {
-        expect(mockShare).toHaveBeenCalledWith('note1', { user_id: 'user3' })
-      })
-    })
+        expect(mockShare).toHaveBeenCalledWith('note1', { user_id: 'user3' });
+      });
+    });
 
     it('Escape closes the suggestions dropdown', async () => {
-      mockUsersSearch.mockResolvedValue([mockUser2])
-      const user = userEvent.setup()
-      render(<ShareModal {...defaultProps} />)
+      mockUsersSearch.mockResolvedValue([mockUser2]);
+      const user = userEvent.setup();
+      render(<ShareModal {...defaultProps} />);
 
-      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled())
+      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled());
 
-      const input = screen.getByRole('textbox')
-      await user.type(input, 'ali')
-      await waitFor(() => expect(screen.getByText('Alice Smith')).toBeInTheDocument())
+      const input = screen.getByRole('textbox');
+      await user.type(input, 'ali');
+      await waitFor(() => expect(screen.getByText('Alice Smith')).toBeInTheDocument());
 
-      await user.keyboard('{Escape}')
+      await user.keyboard('{Escape}');
 
       await waitFor(() => {
-        expect(screen.queryByText('Alice Smith')).not.toBeInTheDocument()
-      })
-    })
-  })
+        expect(screen.queryByText('Alice Smith')).not.toBeInTheDocument();
+      });
+    });
+  });
 
   describe('close behaviour', () => {
     it('calls onClose when the X button is clicked', async () => {
-      const onClose = vi.fn()
-      const user = userEvent.setup()
-      render(<ShareModal {...defaultProps} onClose={onClose} />)
+      const onClose = vi.fn();
+      const user = userEvent.setup();
+      render(<ShareModal {...defaultProps} onClose={onClose} />);
 
-      await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
+      await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
 
-      const dialog = screen.getByRole('dialog')
-      const closeBtn = within(dialog).getByRole('button', { name: /close/i })
-      await user.click(closeBtn)
+      const dialog = screen.getByRole('dialog');
+      const closeBtn = within(dialog).getByRole('button', { name: /close/i });
+      await user.click(closeBtn);
 
-      expect(onClose).toHaveBeenCalledTimes(1)
-    })
-  })
-})
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+  });
+});

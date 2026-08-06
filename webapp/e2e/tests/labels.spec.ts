@@ -69,7 +69,7 @@ test.describe('Labels on Note Creation', () => {
 
     await dashboardPage.closeNoteModal();
     await dashboardPage.expectLabelInSidebar('design');
-  })
+  });
 
   test('multiple labels can be added during creation', async ({ dashboardPage }) => {
     await dashboardPage.goto();
