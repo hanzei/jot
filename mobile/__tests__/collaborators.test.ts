@@ -36,9 +36,9 @@ describe('collaborators', () => {
       usersById.set('owner-id', makeUser({ id: 'owner-id', username: 'owneruser', has_profile_icon: true }));
       const result = buildCollaborators('owner-id', [], usersById);
       expect(result).toHaveLength(1);
-      expect(result[0].userId).toBe('owner-id');
-      expect(result[0].username).toBe('owneruser');
-      expect(result[0].hasProfileIcon).toBe(true);
+      expect(result[0]!.userId).toBe('owner-id');
+      expect(result[0]!.username).toBe('owneruser');
+      expect(result[0]!.hasProfileIcon).toBe(true);
     });
 
     it('includes shared users with usersById data taking precedence', () => {
@@ -54,9 +54,9 @@ describe('collaborators', () => {
       usersById.set('user-2', makeUser({ id: 'user-2', username: 'alice', first_name: 'Alice', last_name: 'Smith' }));
       const result = buildCollaborators('owner-id', shares, usersById);
       expect(result).toHaveLength(2);
-      expect(result[1].username).toBe('alice');
-      expect(result[1].firstName).toBe('Alice');
-      expect(result[1].lastName).toBe('Smith');
+      expect(result[1]!.username).toBe('alice');
+      expect(result[1]!.firstName).toBe('Alice');
+      expect(result[1]!.lastName).toBe('Smith');
     });
 
     it('falls back to share data when user not in usersById', () => {
@@ -71,8 +71,8 @@ describe('collaborators', () => {
       usersById.set('owner-id', makeUser({ id: 'owner-id', username: 'owneruser' }));
       const result = buildCollaborators('owner-id', shares, usersById);
       expect(result).toHaveLength(2);
-      expect(result[1].username).toBe('alice');
-      expect(result[1].firstName).toBe('Alice');
+      expect(result[1]!.username).toBe('alice');
+      expect(result[1]!.firstName).toBe('Alice');
     });
 
     it('deduplicates owner from shared list', () => {
@@ -90,7 +90,7 @@ describe('collaborators', () => {
 
     it('returns ? username when owner not in usersById', () => {
       const result = buildCollaborators('owner-id', undefined, new Map());
-      expect(result[0].username).toBe('?');
+      expect(result[0]!.username).toBe('?');
     });
   });
 });

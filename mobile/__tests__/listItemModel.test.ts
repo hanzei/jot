@@ -46,11 +46,11 @@ describe('toLocalItems', () => {
       server({ id: 'a', position: 0 }),
     ]);
     expect(result.map((i) => i.id)).toEqual(['a', 'b']);
-    expect(result[1].parentId).toBe('a');
+    expect(result[1]!.parentId).toBe('a');
   });
 
   it('defaults missing assigned_to/parent_id', () => {
-    const [item] = toLocalItems([server({ id: 'a', parent_id: null })]);
+    const item = toLocalItems([server({ id: 'a', parent_id: null })])[0]!;
     expect(item.parentId).toBeNull();
     expect(item.assigned_to).toBe('');
   });
@@ -125,7 +125,7 @@ describe('normalizeItemOrder', () => {
 
   it('promotes orphaned children (missing parent) to top level', () => {
     const result = normalizeItemOrder([local({ id: 'c1', parentId: 'gone' })]);
-    expect(result[0].parentId).toBeNull();
+    expect(result[0]!.parentId).toBeNull();
   });
 });
 

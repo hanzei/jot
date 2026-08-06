@@ -218,9 +218,16 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
                   // (arrow keys or hover). With none highlighted, Enter keeps
                   // its normal add/split behavior below — the dropdown being
                   // merely visible must not hijack creating a new item.
-                  if (selectedSuggestionIndex >= 0) {
+                  //
+                  // Reading the entry rather than testing the index also covers
+                  // a highlight left pointing past the end: `suggestions`
+                  // recomputes from `completedItemTexts`, which a collaborator's
+                  // SSE update can shrink without the keystroke that would reset
+                  // the index.
+                  const highlighted = suggestions[selectedSuggestionIndex];
+                  if (highlighted !== undefined) {
                     e.preventDefault();
-                    selectSuggestion(suggestions[selectedSuggestionIndex]);
+                    selectSuggestion(highlighted);
                     return;
                   }
                   setShowSuggestions(false);

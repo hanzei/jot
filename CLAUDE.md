@@ -182,13 +182,29 @@ on its own; locally it needs
 
 All three TypeScript workspaces run `strict` plus `noUnusedLocals`,
 `noUnusedParameters`, `noFallthroughCasesInSwitch`, `noImplicitReturns`,
-`noImplicitOverride`, `allowUnreachableCode: false`, and
-`allowUnusedLabels: false`. Keep them in step: a flag one workspace has and
+`noImplicitOverride`, `noUncheckedIndexedAccess`, `allowUnreachableCode: false`,
+and `allowUnusedLabels: false`. Keep them in step: a flag one workspace has and
 another does not is drift, not a decision. Two known gaps, both tracked rather
 than intentional — mobile has no `noUnusedLocals` (93 files, 45 tests and 48
 under `src/`, still import `React` for the pre-automatic-runtime JSX
-transform), and nothing anywhere runs `noUncheckedIndexedAccess` or
-`exactOptionalPropertyTypes`.
+transform), and nothing anywhere runs `exactOptionalPropertyTypes`.
+
+`noUncheckedIndexedAccess` types every indexed read as `T | undefined`, so
+`arr[i]` and `record[key]` have to be handled rather than assumed
+([#843](https://github.com/hanzei/jot/issues/843)). Two ways to satisfy it, and
+the choice is not stylistic:
+
+- **A guard**, when the index can genuinely be out of range — a stale
+  highlighted-suggestion index, a lookup that may miss. This is the case the
+  flag exists to find, and `?? null` or an `if` is the fix.
+- **A `!` assertion**, when it provably cannot — a bounds check two lines up, a
+  regex group that is not optional, an array built with exactly that many
+  entries. Keep the reason visible from the assertion: adjacent, or in a
+  comment. `for...of`, `.entries()`, and `.map()` sidestep the question
+  entirely and are usually the better rewrite.
+
+Test code is the one place to reach for `!` freely: a test that indexes past
+the end should fail loudly, and asserting keeps it reading as a test.
 
 **Node types are not repo-wide, on purpose.** `@types/node` is installed in
 `webapp`, but the app project does not pull it in: app code referencing

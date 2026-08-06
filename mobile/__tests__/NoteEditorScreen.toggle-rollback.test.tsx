@@ -258,8 +258,8 @@ describe('NoteEditorScreen toggle rollback', () => {
     // child's optimistic state before a re-render — reproducing a rapid
     // double-tap. onPress wraps handleItemCompletedToggle(id, !completed).
     await act(async () => {
-      checkboxes[1].props.onPress(); // check Child (request succeeds)
-      checkboxes[0].props.onPress(); // check Parent (request fails)
+      checkboxes[1]!.props.onPress(); // check Child (request succeeds)
+      checkboxes[0]!.props.onPress(); // check Parent (request fails)
     });
 
     // Parent rolled back to unchecked; Child stays checked.

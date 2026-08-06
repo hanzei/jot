@@ -37,9 +37,12 @@ export function generateId(): string {
   let result = '';
   while (result.length < ID_LENGTH) {
     const bytes = randomBytes(ID_LENGTH - result.length);
-    for (let i = 0; i < bytes.length && result.length < ID_LENGTH; i++) {
-      if (bytes[i] < maxByte) {
-        result += ID_ALPHABET[bytes[i] % ID_ALPHABET.length];
+    for (const byte of bytes) {
+      if (result.length >= ID_LENGTH) {
+        break;
+      }
+      if (byte < maxByte) {
+        result += ID_ALPHABET[byte % ID_ALPHABET.length];
       }
     }
   }

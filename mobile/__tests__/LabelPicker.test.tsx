@@ -117,7 +117,7 @@ describe('LabelPicker', () => {
     mockRemoveLabelMutateAsync.mockReturnValue(promise);
 
     const { getByTestId, queryByTestId } = render(
-      <LabelPicker visible noteId="note-1" noteLabels={[labels[0]]} onClose={jest.fn()} />,
+      <LabelPicker visible noteId="note-1" noteLabels={[labels[0]!]} onClose={jest.fn()} />,
     );
 
     fireEvent.press(getByTestId('label-item-label-1'));

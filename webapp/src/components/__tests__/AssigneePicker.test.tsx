@@ -212,7 +212,7 @@ describe('AssigneePicker', () => {
   it('renders with a single collaborator', () => {
     render(
       <AssigneePicker
-        collaborators={[collaborators[0]]}
+        collaborators={[collaborators[0]!]}
         currentAssigneeId=""
         onAssign={onAssign}
         onClose={onClose}

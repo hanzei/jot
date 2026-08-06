@@ -131,13 +131,13 @@ const DRAG_CELL_ANIMATIONS = { opacity: 1, transform: [] };
 function reinsertIds(currentIds: string[], originalOrder: string[], idsToRestore: Set<string>): string[] {
   const present = new Set(currentIds);
   const result = [...currentIds];
-  for (let i = 0; i < originalOrder.length; i++) {
-    const id = originalOrder[i];
+  for (const [i, id] of originalOrder.entries()) {
     if (!idsToRestore.has(id)) continue;
     let anchor: string | null = null;
     for (let j = i - 1; j >= 0; j--) {
-      if (present.has(originalOrder[j])) {
-        anchor = originalOrder[j];
+      const candidate = originalOrder[j]!;
+      if (present.has(candidate)) {
+        anchor = candidate;
         break;
       }
     }
@@ -1643,13 +1643,13 @@ export default function NoteEditorScreen() {
       }
 
       const prepasteItems = [...itemsRef.current];
-      const [firstLine, ...remainingLines] = lines;
+      const [firstLine = '', ...remainingLines] = lines;
       const newIds = remainingLines.map(() => nextTempId());
 
       setItems((prev) => {
         const sourceParentId = prev[index]?.parentId ?? null;
         const newItems: LocalItem[] = remainingLines.map((line, i) => ({
-          id: newIds[i],
+          id: newIds[i]!,
           text: truncateToCodePoints(line, VALIDATION.ITEM_TEXT_MAX_LENGTH),
           completed: false,
           position: 0,
@@ -1672,7 +1672,8 @@ export default function NoteEditorScreen() {
         },
       });
 
-      const lastId = newIds[newIds.length - 1];
+      // lines.length > 1 above, so remainingLines and newIds are non-empty.
+      const lastId = newIds[newIds.length - 1]!;
       const lastItemRef = getItemRef(lastId);
       setTimeout(() => lastItemRef.current?.focus(), 50);
     },
@@ -1758,17 +1759,19 @@ export default function NoteEditorScreen() {
       const newId = nextTempId();
       const newItemRef = getItemRef(newId);
       setItems((prev) => {
+        const split = prev[index];
+        if (!split) return prev;
         const newItem: LocalItem = {
           id: newId,
           text: after,
-          completed: prev[index]?.completed ?? false,
+          completed: split.completed,
           position: index + 1,
-          parentId: prev[index]?.parentId ?? null,
-          assigned_to: prev[index]?.assigned_to ?? '',
+          parentId: split.parentId,
+          assigned_to: split.assigned_to,
         };
         const next = [
           ...prev.slice(0, index),
-          { ...prev[index], text: before },
+          { ...split, text: before },
           newItem,
           ...prev.slice(index + 1),
         ];
@@ -2257,7 +2260,7 @@ export default function NoteEditorScreen() {
       const moved = reorderedUnchecked[to];
       let changed = from !== to;
       if (moved) {
-        const above = to > 0 ? reorderedUnchecked[to - 1] : null;
+        const above = to > 0 ? reorderedUnchecked[to - 1] ?? null : null;
         const baseLevel = moved.parentId ? 1 : 0;
         const canIndent = !itemHasChildren(itemsRef.current, moved.id) && !!above;
         const canOutdent = baseLevel === 1;

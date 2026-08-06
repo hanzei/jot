@@ -93,7 +93,7 @@ describe('NoteImageGallery', () => {
 
     // A live SSE removal shrinks the gallery down to the first image only;
     // the lightbox should clamp to it instead of disappearing.
-    rerender(<NoteImageGallery images={[images[0]]} />);
+    rerender(<NoteImageGallery images={[images[0]!]} />);
 
     // photo1.png now renders both as the banner tile and inside the (still
     // open) lightbox — if the lightbox had instead unmounted, only one would remain.
@@ -111,7 +111,7 @@ describe('NoteImageGallery', () => {
 
     await user.click(screen.getByRole('button', { name: 'View photo.png' }));
 
-    const lightboxImage = screen.getAllByAltText('photo.png')[1];
+    const lightboxImage = screen.getAllByAltText('photo.png')[1]!;
     expect(lightboxImage.className).toMatch(/\bmin-w-64\b/);
     expect(lightboxImage.className).toMatch(/\bmin-h-64\b/);
   });

@@ -67,7 +67,7 @@ describe('API Module', () => {
   // Capture the response error handler before any vi.clearAllMocks() runs.
   let errorHandler: (error: unknown) => Promise<never>;
   beforeAll(() => {
-    errorHandler = mockResponseUse.mock.calls[0][1] as (error: unknown) => Promise<never>;
+    errorHandler = mockResponseUse.mock.calls[0]![1] as (error: unknown) => Promise<never>;
   });
 
   beforeEach(() => {

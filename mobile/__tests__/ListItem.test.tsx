@@ -307,7 +307,7 @@ describe('ListItem', () => {
       render(<ListItem text="Done" completed={true} popOnMount />);
 
       expect(springSpy).toHaveBeenCalledTimes(1);
-      expect(springSpy.mock.calls[0][1]).toMatchObject({ toValue: 1 });
+      expect(springSpy.mock.calls[0]![1]).toMatchObject({ toValue: 1 });
     });
 
     it('does not pop when popOnMount is not set', () => {

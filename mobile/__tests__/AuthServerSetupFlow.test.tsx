@@ -318,7 +318,7 @@ describe('Auth first-run server setup flow', () => {
     expect(mockEnableLocalMode).not.toHaveBeenCalled();
 
     // Invoke the confirm action from the alert's button list.
-    const buttons = alertSpy.mock.calls[0][2] as { text?: string; onPress?: () => void }[];
+    const buttons = alertSpy.mock.calls[0]![2] as { text?: string; onPress?: () => void }[];
     const confirmButton = buttons.find((b) => b.text === i18n.t('auth.localModeLink'));
     expect(confirmButton).toBeDefined();
     await act(async () => {

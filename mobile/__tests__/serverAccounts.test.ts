@@ -129,6 +129,6 @@ describe('serverAccounts registry', () => {
 
     await switchServer(a.serverId);
     const list = await listServers();
-    expect(list[0].serverId).toBe(a.serverId);
+    expect(list[0]!.serverId).toBe(a.serverId);
   });
 });

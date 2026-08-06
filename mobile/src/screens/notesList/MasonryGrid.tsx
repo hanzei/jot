@@ -36,7 +36,7 @@ interface MasonryGridProps {
 function splitIntoColumns(notes: Note[], columns: number): Note[][] {
   const result: Note[][] = Array.from({ length: columns }, () => []);
   notes.forEach((note, index) => {
-    result[index % columns].push(note);
+    result[index % columns]!.push(note);
   });
   return result;
 }

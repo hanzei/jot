@@ -33,8 +33,8 @@ describe('buildNoteSections', () => {
 
   it('includes a pinned section only when includePinned is true and pinned is non-empty', () => {
     const sections = buildNoteSections([note1], [note2], [], true, t);
-    expect(sections[0].key).toBe('pinned');
-    expect(sections[0].data).toEqual([note1]);
+    expect(sections[0]!.key).toBe('pinned');
+    expect(sections[0]!.data).toEqual([note1]);
   });
 
   it('omits the pinned section when includePinned is false', () => {
@@ -44,18 +44,18 @@ describe('buildNoteSections', () => {
 
   it('uses key "notes" for unpinned when includePinned is false', () => {
     const sections = buildNoteSections([], [note1], [], false, t);
-    expect(sections[0].key).toBe('notes');
-    expect(sections[0].title).toBeNull();
+    expect(sections[0]!.key).toBe('notes');
+    expect(sections[0]!.title).toBeNull();
   });
 
   it('uses key "other" for unpinned when includePinned is true but pinned is empty', () => {
     const sections = buildNoteSections([], [note1], [], true, t);
-    expect(sections[0].key).toBe('other');
+    expect(sections[0]!.key).toBe('other');
   });
 
   it('sets null title for unpinned section when there are no pinned notes', () => {
     const sections = buildNoteSections([], [note1], [], true, t);
-    expect(sections[0].title).toBeNull();
+    expect(sections[0]!.title).toBeNull();
   });
 
   it('sets otherNotes title for unpinned section when pinned notes exist', () => {

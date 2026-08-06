@@ -269,7 +269,7 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   const currentVersion = versionRow?.user_version ?? 0;
 
   for (let i = currentVersion; i < MIGRATIONS.length; i++) {
-    await MIGRATIONS[i](db);
+    await MIGRATIONS[i]!(db);
     await db.runAsync(`PRAGMA user_version = ${i + 1}`);
   }
 }

@@ -223,12 +223,14 @@ export default function ShareModal({ note, isOpen, onClose, notesList, currentUs
         e.preventDefault();
         setSelectedUserIndex(prev => prev > 0 ? prev - 1 : prev);
         break;
-      case 'Enter':
+      case 'Enter': {
         e.preventDefault();
-        if (selectedUserIndex >= 0 && selectedUserIndex < orderedSuggestions.length) {
-          handleUserSelect(orderedSuggestions[selectedUserIndex]);
+        const selected = orderedSuggestions[selectedUserIndex];
+        if (selected) {
+          handleUserSelect(selected);
         }
         break;
+      }
       case 'Escape':
         setShowSuggestions(false);
         setSelectedUserIndex(-1);

@@ -520,7 +520,7 @@ describe('seedReplayQueue', () => {
     // Only the settings op is enqueued when there are no notes.
     expect(result.totalEnqueued).toBe(1);
     expect(mockInsertQueueEntry).toHaveBeenCalledTimes(1);
-    const [, params] = mockInsertQueueEntry.mock.calls[0];
+    const [, params] = mockInsertQueueEntry.mock.calls[0]!;
     expect(params.operation).toBe('updateSettings');
   });
 
@@ -606,8 +606,8 @@ describe('seedReplayQueue', () => {
     const body = createCall?.body as Record<string, unknown>;
     const items = body.items as Array<Record<string, unknown>>;
     expect(items).toHaveLength(2);
-    expect(items[0].id).toBe('item1aaaaaaaaaaaaaaaaaaaa');
-    expect(items[1].id).toBe('item2aaaaaaaaaaaaaaaaaaaa');
+    expect(items[0]!.id).toBe('item1aaaaaaaaaaaaaaaaaaaa');
+    expect(items[1]!.id).toBe('item2aaaaaaaaaaaaaaaaaaaa');
   });
 
   it('sets indent_level=1 for nested items and indent_level=0 for top-level items', async () => {
@@ -625,8 +625,8 @@ describe('seedReplayQueue', () => {
       .map(([, p]) => p)
       .find((p) => p.operation === 'create');
     const items = (createCall?.body as Record<string, unknown>).items as Array<Record<string, unknown>>;
-    expect(items[0].indent_level).toBe(0);
-    expect(items[1].indent_level).toBe(1);
+    expect(items[0]!.indent_level).toBe(0);
+    expect(items[1]!.indent_level).toBe(1);
   });
 
   it('enqueues addLabelToNote for each note-label pair', async () => {
@@ -654,7 +654,7 @@ describe('seedReplayQueue', () => {
     const linkIdx = calls.findIndex((p) => p.operation === 'addLabelToNote');
     const updateIdx = calls.findIndex((p) => p.operation === 'update');
     expect(updateIdx).toBeGreaterThan(linkIdx);
-    expect((calls[updateIdx].body as Record<string, unknown>).archived).toBe(true);
+    expect((calls[updateIdx]!.body as Record<string, unknown>).archived).toBe(true);
   });
 
   it('enqueues a PATCH update for pinned notes', async () => {
@@ -691,8 +691,8 @@ describe('seedReplayQueue', () => {
     const linkIdx = calls.findIndex((p) => p.operation === 'addLabelToNote');
     const deleteIdx = calls.findIndex((p) => p.operation === 'delete');
     expect(deleteIdx).toBeGreaterThan(linkIdx);
-    expect(calls[deleteIdx].method).toBe('DELETE');
-    expect(calls[deleteIdx].endpoint).toBe(`/notes/${note.id}`);
+    expect(calls[deleteIdx]!.method).toBe('DELETE');
+    expect(calls[deleteIdx]!.endpoint).toBe(`/notes/${note.id}`);
   });
 
   it('includes settings and profile in the updateSettings body', async () => {
@@ -781,7 +781,7 @@ describe('configureMigrationApiClient', () => {
     // Storage must be written before the server switch so the session is available
     // when switchActiveServer triggers the auth handshake.
     expect(mockSetServerStorageValue.mock.invocationCallOrder[0])
-      .toBeLessThan(mockSwitchActiveServer.mock.invocationCallOrder[0]);
+      .toBeLessThan(mockSwitchActiveServer.mock.invocationCallOrder[0]!);
   });
 
   it('reuses the existing server ID when addServer returns DUPLICATE', async () => {

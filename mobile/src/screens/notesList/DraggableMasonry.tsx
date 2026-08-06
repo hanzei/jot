@@ -173,7 +173,7 @@ export default function DraggableMasonry({
       const next: Record<string, number> = {};
       Object.keys(prev).forEach((id) => {
         if (liveIds.has(id)) {
-          next[id] = prev[id];
+          next[id] = prev[id]!;
         } else {
           changed = true;
         }
@@ -200,15 +200,18 @@ export default function DraggableMasonry({
           changed = true;
           return;
         }
-        next[id] = heights[id] !== undefined && heights[id] !== prev[id] ? heights[id] : prev[id];
-        if (next[id] !== prev[id]) changed = true;
+        const measured = heights[id];
+        const committed = prev[id]!;
+        next[id] = measured !== undefined ? measured : committed;
+        if (next[id] !== committed) changed = true;
       });
       sections.forEach((s) => {
         const order = orders[s.key] ?? s.data.map((n) => n.id);
         const pending = order.filter((id) => next[id] === undefined);
         if (pending.length > 0 && pending.every((id) => heights[id] !== undefined)) {
           pending.forEach((id) => {
-            next[id] = heights[id];
+            // Every pending id has a measured height, per the check above.
+            next[id] = heights[id]!;
           });
           changed = true;
         }
@@ -325,8 +328,9 @@ export default function DraggableMasonry({
 
   const commitDrop = useCallback((sectionIndex: number) => {
     const key = sectionKeysRef.current[sectionIndex];
+    if (!key) return;
     const order = ordersRef.current[key];
-    if (!key || !order) return;
+    if (!order) return;
     const data = order.map((id) => notesById.get(id)).filter((n): n is Note => !!n);
     onSectionReorder(key, data);
   }, [notesById, onSectionReorder]);
@@ -370,6 +374,8 @@ export default function DraggableMasonry({
           // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
           sections.map((section, sectionIndex) => {
             const packed = packedBySection[section.key];
+            // Two section refs are always enough — see their declaration above.
+            const sectionRef = sectionRefs[sectionIndex]!;
             if (!packed) return null;
             return (
               <View key={section.key}>
@@ -377,7 +383,7 @@ export default function DraggableMasonry({
                   <Text style={[listStyles.sectionHeader, { color: colors.textMuted }]}>{section.title}</Text>
                 ) : null}
                 <Animated.View
-                  ref={sectionRefs[sectionIndex]}
+                  ref={sectionRef}
                   style={{ height: packed.containerHeight, position: 'relative' }}
                 >
                   {packed.placed.map((item) => {
@@ -392,7 +398,7 @@ export default function DraggableMasonry({
                         x={item.x}
                         y={item.y}
                         animateEntrance={hasPopulatedRef.current}
-                        sectionRef={sectionRefs[sectionIndex]}
+                        sectionRef={sectionRef}
                         shared={shared}
                         onMeasureHeight={handleMeasureHeight}
                         onBeginDrag={beginDrag}

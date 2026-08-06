@@ -47,7 +47,7 @@ describe('useKeyboardHeight', () => {
     it(`reports the keyboard height on ${showEvent}`, () => {
       const { result } = renderHook(() => useKeyboardHeight());
       act(() => {
-        listeners[showEvent]({ endCoordinates: { height: 320 } });
+        listeners[showEvent]!({ endCoordinates: { height: 320 } });
       });
       expect(result.current).toBe(320);
     });
@@ -55,10 +55,10 @@ describe('useKeyboardHeight', () => {
     it(`resets to 0 on ${hideEvent}`, () => {
       const { result } = renderHook(() => useKeyboardHeight());
       act(() => {
-        listeners[showEvent]({ endCoordinates: { height: 320 } });
+        listeners[showEvent]!({ endCoordinates: { height: 320 } });
       });
       act(() => {
-        listeners[hideEvent]({});
+        listeners[hideEvent]!({});
       });
       expect(result.current).toBe(0);
     });
@@ -66,7 +66,7 @@ describe('useKeyboardHeight', () => {
     it('falls back to 0 when the event has no coordinates', () => {
       const { result } = renderHook(() => useKeyboardHeight());
       act(() => {
-        listeners[showEvent]({});
+        listeners[showEvent]!({});
       });
       expect(result.current).toBe(0);
     });

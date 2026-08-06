@@ -71,7 +71,7 @@ describe('renameStoredLabel', () => {
 
     await renameStoredLabel(db, 'l1', 'Renamed');
 
-    const [stored] = await getStoredLabels(db);
+    const stored = (await getStoredLabels(db))[0]!;
     expect(stored.name).toBe('Renamed');
     expect(stored.updated_at).not.toBe('u');
   });
