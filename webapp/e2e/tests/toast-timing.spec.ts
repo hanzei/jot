@@ -36,9 +36,9 @@ test.describe('Toast timing', () => {
     await expect(undoToast).toBeVisible();
     await expect(undoToast.getByRole('button', { name: 'Undo' })).toBeVisible();
 
-    await page.clock.runFor(UNDO_TOAST_VISIBLE_MS - 1000);
+    await page.clock.runFor(UNDO_TOAST_VISIBLE_MS - 1);
     await expect(undoToast).toBeVisible();
-    await page.clock.runFor(1000 + TOAST_EXIT_ANIMATION_MS);
+    await page.clock.runFor(1 + TOAST_EXIT_ANIMATION_MS);
     await expect(page.getByTestId('toast')).toHaveCount(0);
 
     await dashboardPage.switchToBin();
@@ -47,7 +47,9 @@ test.describe('Toast timing', () => {
     const standardToast = page.getByTestId('toast').last();
     await expect(standardToast).toBeVisible();
     await expect(standardToast.getByRole('button', { name: 'Undo' })).toHaveCount(0);
-    await page.clock.runFor(STANDARD_TOAST_VISIBLE_MS + TOAST_EXIT_ANIMATION_MS);
+    await page.clock.runFor(STANDARD_TOAST_VISIBLE_MS - 1);
+    await expect(standardToast).toBeVisible();
+    await page.clock.runFor(1 + TOAST_EXIT_ANIMATION_MS);
     await expect(page.getByTestId('toast')).toHaveCount(0);
   });
 });
