@@ -249,7 +249,12 @@
     "noteColorKey": "C",
     "noteColorDescription": "Farbauswahl öffnen",
     "noteDeleteKey": "Entf / Rücktaste",
-    "noteDeleteDescription": "Notiz löschen (mit Bestätigung)"
+    "noteDeleteDescription": "Notiz löschen (mit Bestätigung)",
+    "formatSection": "Formatierung (beim Bearbeiten einer Textnotiz)",
+    "formatBoldKey": "Strg + B",
+    "formatBoldDescription": "Ausgewählten Text fett formatieren",
+    "formatItalicKey": "Strg + I",
+    "formatItalicDescription": "Ausgewählten Text kursiv formatieren"
   },
   "admin": {
     "pageHeading": "Admin",
@@ -359,6 +364,13 @@
     "typeList": "Liste",
     "titlePlaceholder": "Notiz-Titel...",
     "contentPlaceholder": "Eine Notiz aufschreiben...",
+    "formatToolbar": "Formatierung",
+    "formatBold": "Fett",
+    "formatItalic": "Kursiv",
+    "formatStrikethrough": "Durchgestrichen",
+    "formatHeading": "Überschrift",
+    "formatBulletList": "Aufzählung",
+    "formatChecklist": "Checkliste",
     "itemPlaceholder": "Listenelement...",
     "itemLabel": "Listeneintrag",
     "itemCompleted": "Eintrag erledigt",

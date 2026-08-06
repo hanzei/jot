@@ -118,6 +118,22 @@ export default function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardSho
     },
   ];
 
+  // Their own section rather than rows under "Note": these only fire while the
+  // content textarea has focus, whereas the note shortcuts above deliberately
+  // stand down when it does.
+  const formatShortcuts = [
+    {
+      id: 'format-bold',
+      key: t('keyboardShortcuts.formatBoldKey'),
+      description: t('keyboardShortcuts.formatBoldDescription'),
+    },
+    {
+      id: 'format-italic',
+      key: t('keyboardShortcuts.formatItalicKey'),
+      description: t('keyboardShortcuts.formatItalicDescription'),
+    },
+  ];
+
   return (
     <Dialog open={isOpen} onClose={onClose} className="relative z-50">
       <DialogBackdrop transition aria-hidden="true" className="fixed inset-0 bg-black/30 dark:bg-black/50 transition duration-200 ease-out data-[closed]:opacity-0 motion-reduce:transition-none" />
@@ -162,6 +178,13 @@ export default function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardSho
                 {t('keyboardShortcuts.noteSection')}
               </h3>
               <ShortcutGrid shortcuts={noteShortcuts} />
+            </div>
+
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3">
+                {t('keyboardShortcuts.formatSection')}
+              </h3>
+              <ShortcutGrid shortcuts={formatShortcuts} />
             </div>
           </div>
         </DialogPanel>

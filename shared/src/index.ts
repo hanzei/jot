@@ -9,6 +9,7 @@ export * from './markdown';
 export * from './inlineMarkdown';
 export * from './blockMarkdown';
 export * from './markdownCases';
+export * from './markdownEdits';
 export * from './noteConversion';
 export * from './noteSort';
 export * from './usernameValidation';

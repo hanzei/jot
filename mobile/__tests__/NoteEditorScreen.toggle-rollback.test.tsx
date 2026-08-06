@@ -1,4 +1,3 @@
-import React from 'react';
 import { render, act, waitFor } from '@testing-library/react-native';
 import NoteEditorScreen from '../src/screens/NoteEditorScreen';
 

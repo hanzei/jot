@@ -1,4 +1,3 @@
-import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import NoteImageGallery from '../src/components/NoteImageGallery';
 import type { NoteImage } from '@jot/shared';

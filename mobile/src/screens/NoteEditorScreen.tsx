@@ -89,7 +89,7 @@ import {
   toggleInlineMarker,
   type EditorText,
   type TextSelection,
-} from './noteEditor/markdownEdits';
+} from '@jot/shared';
 import CheckedItemsSection, { type ListItemHandlers } from './noteEditor/CheckedItemsSection';
 import NoteEditorMenu from '../components/NoteEditorMenu';
 import NoteImageGallery, { type PendingImageUpload } from '../components/NoteImageGallery';

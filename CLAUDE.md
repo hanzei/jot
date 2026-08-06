@@ -184,10 +184,8 @@ All three TypeScript workspaces run `strict` plus `noUnusedLocals`,
 `noUnusedParameters`, `noFallthroughCasesInSwitch`, `noImplicitReturns`,
 `noImplicitOverride`, `noUncheckedIndexedAccess`, `allowUnreachableCode: false`,
 and `allowUnusedLabels: false`. Keep them in step: a flag one workspace has and
-another does not is drift, not a decision. Two known gaps, both tracked rather
-than intentional — mobile has no `noUnusedLocals` (93 files, 45 tests and 48
-under `src/`, still import `React` for the pre-automatic-runtime JSX
-transform), and nothing anywhere runs `exactOptionalPropertyTypes`.
+another does not is drift, not a decision. One known gap, tracked rather than
+intentional — nothing anywhere runs `exactOptionalPropertyTypes`.
 
 `noUncheckedIndexedAccess` types every indexed read as `T | undefined`, so
 `arr[i]` and `record[key]` have to be handled rather than assumed

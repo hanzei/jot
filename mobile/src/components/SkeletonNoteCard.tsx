@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { Animated, Easing, StyleSheet, useAnimatedValue, View } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 

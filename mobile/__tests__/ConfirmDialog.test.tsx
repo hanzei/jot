@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { render, fireEvent, act } from '@testing-library/react-native';
 import { ConfirmProvider } from '../src/components/ConfirmDialog';
 import { useConfirm, type ConfirmContextType } from '../src/hooks/useConfirm';

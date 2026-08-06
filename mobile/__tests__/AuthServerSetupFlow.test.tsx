@@ -1,4 +1,3 @@
-import React from 'react';
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 import LoginScreen from '../src/screens/LoginScreen';

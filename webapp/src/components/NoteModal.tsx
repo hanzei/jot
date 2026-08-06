@@ -1,8 +1,8 @@
-import { useState, useEffect, useEffectEvent, useMemo, useRef, useCallback, type ReactElement, type ReactNode } from 'react';
+import { useState, useEffect, useEffectEvent, useMemo, useRef, useCallback, useId, type ReactElement, type ReactNode } from 'react';
 import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, Pin, EllipsisVertical, Square, Undo2 } from 'lucide-react';
 import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListItems, listToText, exceedsCodePointLimit, truncateToCodePoints, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListItems, listToText, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
 import { renderMarkdown, inlineMarkdownToText } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
@@ -10,12 +10,14 @@ import NoteImageGallery from '@/components/NoteImageGallery';
 import LetterAvatar from '@/components/LetterAvatar';
 import SortableItem from '@/components/SortableItem';
 import InlineMarkdown from '@/components/InlineMarkdown';
+import MarkdownToolbar, { type MarkdownToolbarAction } from '@/components/MarkdownToolbar';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
 import { useNoteImages } from '@/hooks/useNoteImages';
 import { useCompletedItems } from '@/hooks/useCompletedItems';
 import { useNoteDraft, type AutoSaveDraft } from '@/hooks/useNoteDraft';
 import { useSizeTransition } from '@/hooks/useSizeTransition';
+import { applyTextareaEdit } from '@/utils/textareaEdit';
 import { buildShareAvatars } from '@/utils/shareAvatars';
 import { buildMobileDeepLink } from '@/utils/deepLink';
 import { isEditableElementFocused } from '@/utils/keyboardShortcuts';
@@ -430,6 +432,111 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       pendingSelectionRef.current = null;
     }
   }, [content]);
+
+  // --- Markdown formatting -------------------------------------------------
+  //
+  // The transforms are shared with the mobile editor (@jot/shared/markdownEdits)
+  // so both clients produce identical text for the same input and selection.
+  // Only the way the result is written back differs, and that difference
+  // matters: see webapp/src/utils/textareaEdit.ts for why the edit is replayed
+  // through the DOM instead of straight into state.
+
+  const contentTextareaId = useId();
+
+  /** Commits an edit that textareaEdit could not replay (undo stack is lost). */
+  const commitContentDirectly = useCallback((next: EditorText) => {
+    setContent(next.text);
+    pendingSelectionRef.current = next.selection;
+    if (note) {
+      markDirty();
+      scheduleAutoSave();
+    }
+  }, [markDirty, note, scheduleAutoSave, setContent]);
+
+  /**
+   * Runs a formatting transform against the current text and selection, then
+   * writes the result back as an undoable edit.
+   *
+   * On the happy path this deliberately does not call setContent: the DOM edit
+   * fires an input event, so the textarea's own onChange handler picks the text
+   * up and runs validation, markDirty and the autosave schedule exactly as it
+   * would for a keystroke.
+   */
+  const applyMarkdownEdit = useCallback((transform: (state: EditorText) => EditorText) => {
+    const textarea = contentRef.current;
+    if (!textarea) return;
+
+    const previous = textarea.value;
+    const next = transform({
+      text: previous,
+      selection: { start: textarea.selectionStart, end: textarea.selectionEnd },
+    });
+
+    // A dropped keystroke at least shows up as a character that never appeared;
+    // a dropped button press just looks like a broken button, so say why.
+    const validationError = validateContent(next.text, t);
+    if (validationError) {
+      showError(validationError);
+      return;
+    }
+
+    const selection = clampSelection(next.selection, next.text);
+    if (!applyTextareaEdit(textarea, next.text, selection)) {
+      commitContentDirectly({ text: next.text, selection });
+    }
+  }, [commitContentDirectly, showError, t]);
+
+  const handleToolbarAction = useCallback((action: MarkdownToolbarAction) => {
+    switch (action) {
+      case 'bold':
+        applyMarkdownEdit((state) => toggleInlineMarker(state, '**'));
+        break;
+      case 'italic':
+        applyMarkdownEdit((state) => toggleInlineMarker(state, '*'));
+        break;
+      case 'strikethrough':
+        applyMarkdownEdit((state) => toggleInlineMarker(state, '~~'));
+        break;
+      case 'heading':
+        applyMarkdownEdit(cycleHeading);
+        break;
+      case 'bullet':
+        applyMarkdownEdit(toggleBullet);
+        break;
+      case 'checkbox':
+        applyMarkdownEdit(toggleCheckbox);
+        break;
+    }
+  }, [applyMarkdownEdit]);
+
+  // continueListOnNewline compares the text before the change with the text
+  // after it, so the pre-change selection has to be captured before the browser
+  // applies the keystroke — by the time onChange runs, the textarea reports the
+  // caret's new position. keydown fires first, which makes this exact.
+  const selectionBeforeKeyRef = useRef<{ start: number; end: number } | null>(null);
+
+  /**
+   * Carries a list marker onto the next line when Enter is pressed at the end of
+   * a list item (and clears it on an empty item). Returns true when it handled
+   * the change, meaning the caller must not also apply the raw text.
+   */
+  const handleListContinuation = useCallback((textarea: HTMLTextAreaElement, typed: string) => {
+    const before = selectionBeforeKeyRef.current;
+    selectionBeforeKeyRef.current = null;
+    if (!before) return false;
+
+    const continued = continueListOnNewline({ text: content, selection: before }, typed);
+    if (!continued) return false;
+    // The marker is characters the user did not type, so at the cap drop the
+    // continuation rather than the whole keystroke.
+    if (validateContent(continued.text, t)) return false;
+
+    const selection = clampSelection(continued.selection, continued.text);
+    if (!applyTextareaEdit(textarea, continued.text, selection)) {
+      commitContentDirectly({ text: continued.text, selection });
+    }
+    return true;
+  }, [commitContentDirectly, content, t]);
 
   // Focus the textarea whenever the content area transitions into edit mode
   // (but not on initial mount to avoid stealing focus from the title input).
@@ -1636,8 +1743,10 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
             {noteType === 'text' ? (
               <>
                 {isEditingContent && !isReadOnly ? (
+                  <>
                   <textarea
                     ref={contentRef}
+                    id={contentTextareaId}
                     autoCapitalize="sentences"
                     placeholder={t('note.contentPlaceholder')}
                     rows={4}
@@ -1648,15 +1757,41 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                       if (e.key === 'Escape') {
                         e.preventDefault();
                         setIsEditingContent(false);
+                        return;
                       }
+                      // Editor-scoped, so they live here rather than in the
+                      // global shortcut registry — which stands down whenever a
+                      // text field has focus (isEditableElementFocused).
+                      //
+                      // Shift and Alt must both be absent, not just Alt: the
+                      // combinations they form are the browser's, not ours
+                      // (Ctrl+Shift+B toggles the bookmarks bar in Chrome).
+                      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey) {
+                        const key = e.key.toLowerCase();
+                        if (key === 'b' || key === 'i') {
+                          e.preventDefault();
+                          applyMarkdownEdit((state) => toggleInlineMarker(state, key === 'b' ? '**' : '*'));
+                          return;
+                        }
+                      }
+                      // Snapshot the caret before the browser applies the key,
+                      // for continueListOnNewline.
+                      selectionBeforeKeyRef.current = e.key === 'Enter'
+                        ? { start: e.currentTarget.selectionStart, end: e.currentTarget.selectionEnd }
+                        : null;
                     }}
                     onChange={(e) => {
-                      const newContent = e.target.value;
+                      const textarea = e.currentTarget;
+                      const newContent = textarea.value;
                       const validationError = validateContent(newContent, t);
                       if (validationError) {
                         showError(validationError);
                         return;
                       }
+                      // Enter at the end of a list item carries the marker onto
+                      // the next line; when it does, it has already written the
+                      // text itself.
+                      if (handleListContinuation(textarea, newContent)) return;
                       setContent(newContent);
                       if (note) {
                         markDirty();
@@ -1664,6 +1799,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                       }
                     }}
                   />
+                  <MarkdownToolbar onAction={handleToolbarAction} controlsId={contentTextareaId} />
+                  </>
                 ) : (
                   <div
                     data-testid="note-content-preview"

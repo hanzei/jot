@@ -4,7 +4,6 @@
  * persistently failing server never produces a busy-loop). See issue #473.
  */
 
-import React from 'react';
 import { render, act } from '@testing-library/react-native';
 import { AppState, AppStateStatus, Text } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
