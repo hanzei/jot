@@ -178,6 +178,36 @@ at whoever wrote the line rather than at the reformat. GitHub applies that file
 on its own; locally it needs
 `git config blame.ignoreRevsFile .git-blame-ignore-revs`.
 
+### TypeScript strictness
+
+All three TypeScript workspaces run `strict` plus `noUnusedLocals`,
+`noUnusedParameters`, `noFallthroughCasesInSwitch`, `noImplicitReturns`,
+`noImplicitOverride`, `allowUnreachableCode: false`, and
+`allowUnusedLabels: false`. Keep them in step: a flag one workspace has and
+another does not is drift, not a decision. Two known gaps, both tracked rather
+than intentional — mobile has no `noUnusedLocals` (93 test files still import
+`React` for the pre-automatic-runtime JSX transform), and nothing anywhere runs
+`noUncheckedIndexedAccess` or `exactOptionalPropertyTypes`.
+
+**Node types are not repo-wide, on purpose.** `@types/node` is installed in
+`webapp`, but the app project does not pull it in: app code referencing
+`process`, `Buffer`, or `fs` would type-check clean and then break in the
+browser. The trees that *do* run in Node get their own project instead, so
+`webapp` has three, each one an invocation in `lint:ts`:
+
+| Project | Covers | Adds |
+|---|---|---|
+| `tsconfig.json` | `src` | the baseline above; browser `lib` only |
+| `tsconfig.node.json` | `vite.config.ts` | `types: ["node"]` |
+| `tsconfig.e2e.json` | `e2e/`, `playwright.config.ts` | `types: ["node"]` |
+
+`tsc --noEmit` does not follow project references, so a project not named in
+`lint:ts` is not checked — that is how `e2e/` went unchecked until
+[#839](https://github.com/hanzei/jot/issues/839) and `vite.config.ts` with it.
+The `references` array is still there, for editors: it is what lets tsserver
+resolve a file outside `src` to the project that actually governs it. A new
+tree outside `src` needs both, or it silently gets neither.
+
 ### Seeing it run
 
 Screenshots for UI changes (see [Pull request artifacts](#pull-request-artifacts))
@@ -512,7 +542,7 @@ Types are distributed across the `@jot/shared` package (`shared/src/`) and impor
 - Browsers are not provisioned by bootstrap. `task test-e2e` runs `scripts/check-playwright-browser.sh` first, which fails with the exact `npx playwright install chromium` command when the pinned Chromium build is missing — that is a one-command fix, not a broken suite.
 - **Linted with the rest of webapp** (`task lint-webapp`), sharing the `tsRules` baseline in `eslint.config.js`. The e2e block drops the React plugins — react-hooks reads Playwright's `use` fixture parameter as React's `use()` hook — and allows `_`-prefixed unused parameters, which is how page objects keep a call signature steady after they stop using an argument.
 - A fixture destructured but never referenced is doing real work: Playwright only runs a fixture a test names, so `authenticatedUser` is what logs the test in. Mark it `void authenticatedUser;` rather than deleting it.
-- Not type-checked: `tsconfig.json` includes only `src`, so `lint:ts` does not cover `e2e/` ([#839](https://github.com/hanzei/jot/issues/839)). ESLint is the only static check these files get, which is why the e2e block turns `no-undef` back on — everywhere else it is off because `tsc` covers the same ground better. That block declares both Node and browser globals to match.
+- **Type-checked as its own project**, `webapp/tsconfig.e2e.json` — see [TypeScript strictness](#typescript-strictness) below. The e2e ESLint block parses against that same project, which buys it three type-aware rules the app block does not have: `no-floating-promises`, `no-misused-promises`, and `await-thenable`. A dropped `await` on a Playwright call is the failure they exist for — the assertion then runs against the page as it was *before* the action and passes or fails for the wrong reason, which `tsc` cannot see.
 
 ---
 
