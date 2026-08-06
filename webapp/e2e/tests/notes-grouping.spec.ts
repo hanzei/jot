@@ -47,6 +47,7 @@ test.describe('Grouped to-do items', () => {
       .filter({ hasText: 'Socks' })
       .last()
       .locator('input[type="checkbox"]')
+      // eslint-disable-next-line playwright/no-force-option
       .uncheck({ force: true });
 
     await expect(page.getByLabel('Group: Packing')).toHaveCount(0);

@@ -1,5 +1,5 @@
 import { test, expect, uniqueUsername, E2E_ADMIN_CREDENTIALS } from '../fixtures';
-import type { Page } from '@playwright/test';
+import type { APIRequestContext, Page } from '@playwright/test';
 import { AdminPage } from '../pages/AdminPage';
 
 type MeResponse = {
@@ -34,6 +34,15 @@ async function ensureBootstrapAdmin(page: Page) {
       'login bootstrap admin',
     );
   }
+}
+
+// Register-only counterpart of ensureBootstrapAdmin: some tests just need the
+// bootstrap admin to exist, not to be logged in as it. Asserting the status is
+// one of the two acceptable outcomes (created or already-registered) keeps this
+// out of an `if`, unlike the branch above.
+async function ensureBootstrapAdminRegistered(request: APIRequestContext) {
+  const response = await request.post('/api/v1/register', { data: bootstrapAdmin });
+  expect([201, 409]).toContain(response.status());
 }
 
 test.describe('Admin', () => {
@@ -221,12 +230,7 @@ test.describe('Admin', () => {
     const standardUsername = uniqueUsername('member');
     const standardPassword = 'testpass123';
 
-    const bootstrapRegisterResponse = await request.post('/api/v1/register', {
-      data: bootstrapAdmin,
-    });
-    if (!bootstrapRegisterResponse.ok()) {
-      expect(bootstrapRegisterResponse.status()).toBe(409);
-    }
+    await ensureBootstrapAdminRegistered(request);
 
     const registerResponse = await request.post('/api/v1/register', {
       data: { username: standardUsername, password: standardPassword },

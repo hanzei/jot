@@ -5,6 +5,7 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 import react from 'eslint-plugin-react';
 import tseslint from '@typescript-eslint/eslint-plugin';
 import tsparser from '@typescript-eslint/parser';
+import playwright from 'eslint-plugin-playwright';
 
 // The TypeScript baseline, shared by the app and the e2e suite so the two
 // cannot drift apart. Everything React lives in the app block below; e2e adds
@@ -122,6 +123,7 @@ export default [
     },
     plugins: {
       '@typescript-eslint': tseslint,
+      playwright,
     },
     rules: {
       ...tsRules,
@@ -129,6 +131,17 @@ export default [
       '@typescript-eslint/no-floating-promises': 'error',
       '@typescript-eslint/no-misused-promises': 'error',
       '@typescript-eslint/await-thenable': 'error',
+      // Enabled individually rather than `flat/recommended`, which also pulls in
+      // stylistic rules (`prefer-web-first-assertions`, `no-nested-step`) that
+      // would want their own pass through the suite.
+      'playwright/no-wait-for-timeout': 'error',
+      'playwright/no-conditional-in-test': 'error',
+      'playwright/valid-expect': 'error',
+      'playwright/no-force-option': 'error',
+      // Page objects assert through `pageObject.expectFoo()` helpers rather than
+      // inline `expect()` calls; without this, every test using one would be a
+      // false positive for "no assertions".
+      'playwright/expect-expect': ['error', { assertFunctionPatterns: ['^expect'] }],
     },
   },
   // The only enforced formatting in the TypeScript workspaces, applied by

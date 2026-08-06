@@ -1,4 +1,16 @@
+import type { Page } from '@playwright/test';
 import { test, expect, uniqueUsername } from '../fixtures';
+
+// created_at/updated_at have 1-second resolution (SQLite/Postgres DATETIME), so
+// two writes in the same second sort ambiguously. Wait for the wall clock to
+// actually cross into a new second rather than guessing a fixed delay.
+async function waitForNextSecond(page: Page) {
+  const startSecond = await page.evaluate(() => Math.floor(Date.now() / 1000));
+  await page.waitForFunction(
+    (start) => Math.floor(Date.now() / 1000) > start,
+    startSecond,
+  );
+}
 
 test.describe('Notes', () => {
   test.beforeEach(async ({ authenticatedUser }) => {
@@ -264,12 +276,12 @@ test.describe('Notes', () => {
     await page.setViewportSize({ width: 600, height: 1000 });
     await dashboardPage.goto();
 
-    // These 1.1s waits keep created/updated timestamps in distinct seconds so
-    // the sort assertions stay deterministic across create/edit operations.
+    // These waits keep created/updated timestamps in distinct seconds so the
+    // sort assertions stay deterministic across create/edit operations.
     await dashboardPage.createNote('Zulu');
-    await page.waitForTimeout(1100);
+    await waitForNextSecond(page);
     await dashboardPage.createNote('alpha');
-    await page.waitForTimeout(1100);
+    await waitForNextSecond(page);
     await dashboardPage.createNote('Bravo');
     await dashboardPage.pinNote('Zulu');
 
@@ -277,7 +289,7 @@ test.describe('Notes', () => {
     await dashboardPage.expectManualReorderDisabledNotice();
     await dashboardPage.expectVisibleNoteTitles(['Zulu', 'Bravo', 'alpha']);
 
-    await page.waitForTimeout(1100);
+    await waitForNextSecond(page);
     // Patch the alpha note directly so updated_at changes deterministically without
     // relying on modal timing or extra UI interactions in this ordering test.
     // createNote() creates list notes (title only), so content is rejected. Use a

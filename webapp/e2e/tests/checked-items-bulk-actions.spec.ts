@@ -16,6 +16,7 @@ test.describe('Checked-item bulk actions', () => {
   // re-resolve nth(0) as the checked item reflows into the completed section and
   // end up clicking (and completing) every item in turn.
   const checkFirstItem = async (page: import('@playwright/test').Page) => {
+    // eslint-disable-next-line playwright/no-force-option
     await rowCheckbox(page, 0).click({ force: true });
     await expect(page.getByText(/Completed items/)).toBeVisible();
   };
@@ -49,6 +50,7 @@ test.describe('Checked-item bulk actions', () => {
     // Complete two items (the first reflows into the completed section, so the
     // second forced click lands on what is now the first active row).
     await checkFirstItem(page);
+    // eslint-disable-next-line playwright/no-force-option -- see checkFirstItem above
     await rowCheckbox(page, 0).click({ force: true });
     await expect(page.getByText('Completed items (2)')).toBeVisible();
 
