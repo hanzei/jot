@@ -185,9 +185,10 @@ All three TypeScript workspaces run `strict` plus `noUnusedLocals`,
 `noImplicitOverride`, `allowUnreachableCode: false`, and
 `allowUnusedLabels: false`. Keep them in step: a flag one workspace has and
 another does not is drift, not a decision. Two known gaps, both tracked rather
-than intentional — mobile has no `noUnusedLocals` (93 test files still import
-`React` for the pre-automatic-runtime JSX transform), and nothing anywhere runs
-`noUncheckedIndexedAccess` or `exactOptionalPropertyTypes`.
+than intentional — mobile has no `noUnusedLocals` (93 files, 45 tests and 48
+under `src/`, still import `React` for the pre-automatic-runtime JSX
+transform), and nothing anywhere runs `noUncheckedIndexedAccess` or
+`exactOptionalPropertyTypes`.
 
 **Node types are not repo-wide, on purpose.** `@types/node` is installed in
 `webapp`, but the app project does not pull it in: app code referencing

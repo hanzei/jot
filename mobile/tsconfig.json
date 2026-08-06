@@ -3,8 +3,9 @@
   "compilerOptions": {
     "strict": true,
     // `noUnusedLocals` is the one webapp and shared have that this config does
-    // not: 93 test files still carry an unused `import React`, left from before
-    // the automatic JSX runtime. Turning it on is a follow-up, not a blocker.
+    // not: 93 files — 45 tests and 48 under `src/` — still carry an unused
+    // `import React`, left from before the automatic JSX runtime. Turning it on
+    // is a follow-up, not a blocker.
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "noImplicitReturns": true,
