@@ -55,7 +55,7 @@ export default [
     },
   },
   {
-    files: ['vite.config.ts', 'playwright.config.ts', 'scripts/**/*.ts'],
+    files: ['vite.config.ts', 'scripts/**/*.ts'],
     languageOptions: {
       sourceType: 'module',
       parser: tsparser,
@@ -94,17 +94,19 @@ export default [
   //    they no longer use so their call signature stays steady (`createNote`
   //    still takes the content its list-note path rejects), and mark them with
   //    a `_` prefix. Same setting mobile's config already uses.
-  //  - `no-undef` back on, against `tsRules`. It is off everywhere else
-  //    because `tsc` does the same job better, but tsconfig.json includes only
-  //    `src`, so nothing type-checks e2e/ (#839). Off *and* untyped would
-  //    leave a misspelled global to surface as a browser-level assertion
-  //    failure in CI. Remove this line when #839 lands and tsc covers e2e.
+  //  - Type-aware promise rules, which the app block does not have. Almost
+  //    every Playwright call returns a promise, and a dropped `await` does not
+  //    fail — the assertion runs against the page as it was before the action
+  //    and passes or fails for the wrong reason. `tsc` cannot see that; these
+  //    three rules can, which is why they are worth the `project` parse here
+  //    and not (yet) across `src`.
   //
-  // Which makes the globals load-bearing rather than decorative: these files
-  // span both environments — Node for the test process, browser for the
+  // `project` points at tsconfig.e2e.json, the same project `lint:ts` checks,
+  // so the two cannot cover different files. The globals stay because these
+  // files span both environments — Node for the test process, browser for the
   // callbacks `page.evaluate` ships into the page.
   {
-    files: ['e2e/**/*.ts'],
+    files: ['e2e/**/*.ts', 'playwright.config.ts'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
@@ -113,6 +115,10 @@ export default [
         ...globals.browser,
       },
       parser: tsparser,
+      parserOptions: {
+        project: ['./tsconfig.e2e.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
     },
     plugins: {
       '@typescript-eslint': tseslint,
@@ -120,7 +126,9 @@ export default [
     rules: {
       ...tsRules,
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
-      'no-undef': 'error',
+      '@typescript-eslint/no-floating-promises': 'error',
+      '@typescript-eslint/no-misused-promises': 'error',
+      '@typescript-eslint/await-thenable': 'error',
     },
   },
   // The only enforced formatting in the TypeScript workspaces, applied by

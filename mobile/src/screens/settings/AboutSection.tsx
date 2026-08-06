@@ -101,6 +101,7 @@ export default function AboutSection() {
         cancelled = true;
       };
     }
+    return undefined;
   }, [aboutExpanded, aboutInfo, aboutError]);
 
   const currentLocale = getCurrentLocale();
