@@ -249,7 +249,12 @@
     "noteColorKey": "C",
     "noteColorDescription": "Kleurkiezer openen",
     "noteDeleteKey": "Del / Backspace",
-    "noteDeleteDescription": "Notitie verwijderen (met bevestiging)"
+    "noteDeleteDescription": "Notitie verwijderen (met bevestiging)",
+    "formatSection": "Opmaak (tijdens het bewerken van een tekstnotitie)",
+    "formatBoldKey": "Ctrl + B",
+    "formatBoldDescription": "Geselecteerde tekst vet maken",
+    "formatItalicKey": "Ctrl + I",
+    "formatItalicDescription": "Geselecteerde tekst cursief maken"
   },
   "admin": {
     "pageHeading": "Admin",
@@ -359,6 +364,13 @@
     "typeList": "Lijst",
     "titlePlaceholder": "Notitietitel...",
     "contentPlaceholder": "Een notitie maken...",
+    "formatToolbar": "Opmaak",
+    "formatBold": "Vet",
+    "formatItalic": "Cursief",
+    "formatStrikethrough": "Doorhalen",
+    "formatHeading": "Kop",
+    "formatBulletList": "Opsommingsteken",
+    "formatChecklist": "Checklist",
     "itemPlaceholder": "Lijstitem...",
     "itemLabel": "Lijstitem",
     "itemCompleted": "Item voltooid",

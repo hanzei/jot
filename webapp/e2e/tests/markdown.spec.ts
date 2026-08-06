@@ -207,4 +207,133 @@ test.describe('Markdown note editing', () => {
 
     await expect(page.getByRole('dialog')).toHaveCount(0);
   });
+  test.describe('formatting toolbar', () => {
+    test.beforeEach(async ({ dashboardPage, noteEditorPage }) => {
+      await dashboardPage.goto();
+      await noteEditorPage.openNewNote();
+    });
+
+    test('bolds the selection and leaves the caret inside the markers', async ({ noteEditorPage }) => {
+      await noteEditorPage.setContent('hello world');
+      await noteEditorPage.selectRange(6, 11);
+
+      await noteEditorPage.clickFormat('bold');
+      await noteEditorPage.expectContent('hello **world**');
+
+      // Still selected, so a second press toggles it back off.
+      await noteEditorPage.clickFormat('bold');
+      await noteEditorPage.expectContent('hello world');
+    });
+
+    test('applies every button, and the result renders in the preview', async ({ noteEditorPage }) => {
+      await noteEditorPage.setContent('note');
+      await noteEditorPage.selectRange(0, 4);
+      await noteEditorPage.clickFormat('strikethrough');
+      await noteEditorPage.expectContent('~~note~~');
+
+      await noteEditorPage.collapseToPreview();
+      await expect(noteEditorPage.preview().locator('del')).toHaveText('note');
+    });
+
+    test('cycles headings and toggles list markers', async ({ noteEditorPage }) => {
+      await noteEditorPage.setContent('title');
+      await noteEditorPage.selectRange(0, 0);
+
+      await noteEditorPage.clickFormat('heading');
+      await noteEditorPage.expectContent('## title');
+      await noteEditorPage.clickFormat('heading');
+      await noteEditorPage.expectContent('### title');
+      // Capped at h3 — a fourth level would render as body text (§2 of the spec).
+      await noteEditorPage.clickFormat('heading');
+      await noteEditorPage.expectContent('title');
+
+      await noteEditorPage.clickFormat('bullet');
+      await noteEditorPage.expectContent('- title');
+      await noteEditorPage.clickFormat('checkbox');
+      await noteEditorPage.expectContent('- [ ] title');
+    });
+
+    test('keeps focus in the textarea when a button is clicked', async ({ noteEditorPage }) => {
+      await noteEditorPage.setContent('hello');
+      await noteEditorPage.selectRange(0, 5);
+
+      await noteEditorPage.clickFormat('italic');
+
+      await expect(noteEditorPage.textarea()).toBeFocused();
+    });
+
+    test('Ctrl+B and Ctrl+I format the selection', async ({ page, noteEditorPage }) => {
+      await noteEditorPage.setContent('hello world');
+
+      await noteEditorPage.selectRange(6, 11);
+      await page.keyboard.press('Control+b');
+      await noteEditorPage.expectContent('hello **world**');
+
+      await noteEditorPage.selectRange(0, 5);
+      await page.keyboard.press('Control+i');
+      await noteEditorPage.expectContent('*hello* **world**');
+    });
+
+    test('leaves Ctrl+Shift+B to the browser', async ({ page, noteEditorPage }) => {
+      await noteEditorPage.setContent('hello world');
+      await noteEditorPage.selectRange(6, 11);
+
+      await page.keyboard.press('Control+Shift+b');
+
+      await noteEditorPage.expectContent('hello world');
+    });
+
+    // The reason applyTextareaEdit replays edits through the DOM instead of
+    // writing straight to React state. Setting the value directly empties the
+    // browser's undo stack, so a toolbar press would silently discard
+    // everything typed before it. Only a real browser can catch that.
+    test('a toolbar edit is undoable, and undo continues into earlier typing', async ({ page, noteEditorPage }) => {
+      await noteEditorPage.textarea().pressSequentially('hello world');
+
+      await noteEditorPage.selectRange(6, 11);
+      await noteEditorPage.clickFormat('bold');
+      await noteEditorPage.expectContent('hello **world**');
+
+      await noteEditorPage.textarea().focus();
+      await page.keyboard.press('Control+z');
+      await noteEditorPage.expectContent('hello world');
+
+      await page.keyboard.press('Control+y');
+      await noteEditorPage.expectContent('hello **world**');
+    });
+
+    test('Enter carries a list marker onto the next line and clears it on an empty item', async ({ page, noteEditorPage }) => {
+      await noteEditorPage.textarea().pressSequentially('- one');
+      await page.keyboard.press('Enter');
+      await noteEditorPage.expectContent('- one\n- ');
+
+      await noteEditorPage.textarea().pressSequentially('two');
+      await page.keyboard.press('Enter');
+      await noteEditorPage.expectContent('- one\n- two\n- ');
+
+      // Enter on the empty item ends the list instead of adding another marker.
+      await page.keyboard.press('Enter');
+      await noteEditorPage.expectContent('- one\n- two\n');
+    });
+  });
+
+  test('formatting toolbar is not shown for a read-only binned note', async ({ page, dashboardPage, noteEditorPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createTextNote('to be binned');
+
+    // The DashboardPage menu helpers locate cards by their h3 title, which text
+    // notes do not have, so drive the card menu by content text here.
+    const card = dashboardPage.noteCardByText('to be binned');
+    await card.getByRole('button', { name: 'Note options' }).focus();
+    await page.keyboard.press('Enter');
+    await page.getByRole('menuitem', { name: 'Delete' }).click();
+    await page.getByRole('dialog').last().getByRole('button', { name: 'Delete' }).click();
+
+    await dashboardPage.switchToBin();
+    await dashboardPage.noteCardByText('to be binned').click();
+
+    // Binned notes open read-only, so there is no textarea to format.
+    await expect(noteEditorPage.preview()).toBeVisible();
+    await expect(noteEditorPage.toolbar()).toHaveCount(0);
+  });
 });

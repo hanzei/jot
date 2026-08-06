@@ -2439,4 +2439,236 @@ describe('NoteModal', () => {
       expect(mockNotesUpdate).not.toHaveBeenCalled();
     });
   });
+  describe('Markdown formatting toolbar', () => {
+    // jsdom has no document.execCommand, so applyTextareaEdit reports failure
+    // and NoteModal takes its fallback path (setContent directly). That keeps
+    // these tests on the text-and-selection contract, which is the shared part;
+    // the undo behaviour that execCommand exists for is covered by e2e.
+    const openEditor = (content = '') => {
+      const note = createMockNote({ content, note_type: 'text' });
+      renderNoteModal({ ...defaultProps, note });
+      fireEvent.click(screen.getByTestId('note-content-preview'));
+      return screen.getByPlaceholderText('Take a note...') as HTMLTextAreaElement;
+    };
+
+    const select = (textarea: HTMLTextAreaElement, start: number, end: number) => {
+      textarea.setSelectionRange(start, end);
+    };
+
+    it('wraps the selection in bold markers and keeps it selected', () => {
+      const textarea = openEditor('hello world');
+      select(textarea, 6, 11);
+
+      fireEvent.click(screen.getByTestId('format-bold-btn'));
+
+      expect(textarea).toHaveValue('hello **world**');
+    });
+
+    it('unwraps bold when the selection is already bold', () => {
+      const textarea = openEditor('hello **world**');
+      select(textarea, 8, 13);
+
+      fireEvent.click(screen.getByTestId('format-bold-btn'));
+
+      expect(textarea).toHaveValue('hello world');
+    });
+
+    it('cycles the heading level of the current line', () => {
+      const textarea = openEditor('title');
+      select(textarea, 0, 0);
+
+      fireEvent.click(screen.getByTestId('format-heading-btn'));
+      expect(textarea).toHaveValue('## title');
+
+      fireEvent.click(screen.getByTestId('format-heading-btn'));
+      expect(textarea).toHaveValue('### title');
+
+      // Capped at h3, matching the rendered subset (docs/specs/markdown-rendering.md).
+      fireEvent.click(screen.getByTestId('format-heading-btn'));
+      expect(textarea).toHaveValue('title');
+    });
+
+    it('toggles a bullet, then steps a checklist item down to a plain bullet', () => {
+      const textarea = openEditor('one');
+      select(textarea, 0, 0);
+
+      fireEvent.click(screen.getByTestId('format-bullet-btn'));
+      expect(textarea).toHaveValue('- one');
+
+      fireEvent.click(screen.getByTestId('format-checkbox-btn'));
+      expect(textarea).toHaveValue('- [ ] one');
+
+      fireEvent.click(screen.getByTestId('format-bullet-btn'));
+      expect(textarea).toHaveValue('- one');
+    });
+
+    it('applies a block toggle uniformly across a mixed selection', () => {
+      const textarea = openEditor('- one\ntwo');
+      select(textarea, 0, 9);
+
+      fireEvent.click(screen.getByTestId('format-bullet-btn'));
+
+      // The already-bulleted line is left alone rather than double-bulleted:
+      // the toggle decides add-or-remove once for the whole selection, so a
+      // mixed selection ends up uniform.
+      expect(textarea).toHaveValue('- one\n- two');
+    });
+
+    it('does not steal focus from the textarea when a button is pressed', () => {
+      const textarea = openEditor('hello');
+      textarea.focus();
+
+      const bold = screen.getByTestId('format-bold-btn');
+      const mouseDown = fireEvent.mouseDown(bold);
+
+      // preventDefault on mousedown is what keeps the caret (and the selection
+      // the transform reads) alive — see MarkdownToolbar.
+      expect(mouseDown).toBe(false);
+      expect(document.activeElement).toBe(textarea);
+    });
+
+    it('refuses an edit that would exceed the content limit, and says so', () => {
+      const textarea = openEditor('x'.repeat(VALIDATION.CONTENT_MAX_LENGTH));
+      select(textarea, 0, 0);
+
+      fireEvent.click(screen.getByTestId('format-bold-btn'));
+
+      expect(textarea).toHaveValue('x'.repeat(VALIDATION.CONTENT_MAX_LENGTH));
+      expect(screen.getByText(/characters or less/i)).toBeInTheDocument();
+    });
+
+    it('is not rendered for a read-only note', () => {
+      const note = createMockNote({ content: 'binned', note_type: 'text', deleted_at: '2023-06-01T00:00:00Z' });
+      renderNoteModal({ ...defaultProps, note });
+
+      fireEvent.click(screen.getByTestId('note-content-preview'));
+
+      expect(screen.queryByTestId('markdown-toolbar')).not.toBeInTheDocument();
+    });
+
+    it('exposes one tab stop and moves between buttons with arrow keys', () => {
+      openEditor('hello');
+
+      const bold = screen.getByTestId('format-bold-btn');
+      const italic = screen.getByTestId('format-italic-btn');
+      const checklist = screen.getByTestId('format-checkbox-btn');
+
+      expect(bold).toHaveAttribute('tabindex', '0');
+      expect(italic).toHaveAttribute('tabindex', '-1');
+
+      bold.focus();
+      fireEvent.keyDown(bold, { key: 'ArrowRight' });
+      expect(document.activeElement).toBe(italic);
+      expect(italic).toHaveAttribute('tabindex', '0');
+      expect(bold).toHaveAttribute('tabindex', '-1');
+
+      // Wraps around, per the WAI-ARIA toolbar pattern.
+      fireEvent.keyDown(italic, { key: 'ArrowLeft' });
+      fireEvent.keyDown(bold, { key: 'ArrowLeft' });
+      expect(document.activeElement).toBe(checklist);
+
+      fireEvent.keyDown(checklist, { key: 'Home' });
+      expect(document.activeElement).toBe(bold);
+    });
+
+    it('gives every button an accessible name', () => {
+      openEditor('hello');
+
+      const toolbar = screen.getByTestId('markdown-toolbar');
+      expect(toolbar).toHaveAttribute('aria-label', 'Formatting');
+      for (const name of ['Bold', 'Italic', 'Strikethrough', 'Heading', 'Bullet list', 'Checklist']) {
+        expect(within(toolbar).getByRole('button', { name })).toBeInTheDocument();
+      }
+    });
+  });
+
+  describe('Markdown list continuation', () => {
+    const typeEnterAt = (textarea: HTMLTextAreaElement, caret: number) => {
+      textarea.setSelectionRange(caret, caret);
+      fireEvent.keyDown(textarea, { key: 'Enter' });
+      const next = `${textarea.value.slice(0, caret)}\n${textarea.value.slice(caret)}`;
+      fireEvent.change(textarea, { target: { value: next } });
+    };
+
+    it('carries the bullet marker onto the next line', () => {
+      const note = createMockNote({ content: '- one', note_type: 'text' });
+      renderNoteModal({ ...defaultProps, note });
+      fireEvent.click(screen.getByTestId('note-content-preview'));
+      const textarea = screen.getByPlaceholderText('Take a note...') as HTMLTextAreaElement;
+
+      typeEnterAt(textarea, 5);
+
+      expect(textarea).toHaveValue('- one\n- ');
+    });
+
+    it('carries an unchecked checkbox, never the checked state', () => {
+      const note = createMockNote({ content: '- [x] done', note_type: 'text' });
+      renderNoteModal({ ...defaultProps, note });
+      fireEvent.click(screen.getByTestId('note-content-preview'));
+      const textarea = screen.getByPlaceholderText('Take a note...') as HTMLTextAreaElement;
+
+      typeEnterAt(textarea, 10);
+
+      expect(textarea).toHaveValue('- [x] done\n- [ ] ');
+    });
+
+    it('ends the list when Enter is pressed on an empty item', () => {
+      const note = createMockNote({ content: '- one\n- ', note_type: 'text' });
+      renderNoteModal({ ...defaultProps, note });
+      fireEvent.click(screen.getByTestId('note-content-preview'));
+      const textarea = screen.getByPlaceholderText('Take a note...') as HTMLTextAreaElement;
+
+      typeEnterAt(textarea, 8);
+
+      expect(textarea).toHaveValue('- one\n');
+    });
+
+    it('leaves a plain paragraph alone', () => {
+      const note = createMockNote({ content: 'just text', note_type: 'text' });
+      renderNoteModal({ ...defaultProps, note });
+      fireEvent.click(screen.getByTestId('note-content-preview'));
+      const textarea = screen.getByPlaceholderText('Take a note...') as HTMLTextAreaElement;
+
+      typeEnterAt(textarea, 9);
+
+      expect(textarea).toHaveValue('just text\n');
+    });
+  });
+
+  describe('Markdown formatting shortcuts', () => {
+    it('applies bold with Ctrl+B and italic with Ctrl+I', () => {
+      const note = createMockNote({ content: 'hello world', note_type: 'text' });
+      renderNoteModal({ ...defaultProps, note });
+      fireEvent.click(screen.getByTestId('note-content-preview'));
+      const textarea = screen.getByPlaceholderText('Take a note...') as HTMLTextAreaElement;
+
+      textarea.setSelectionRange(6, 11);
+      fireEvent.keyDown(textarea, { key: 'b', ctrlKey: true });
+      expect(textarea).toHaveValue('hello **world**');
+
+      textarea.setSelectionRange(0, 5);
+      fireEvent.keyDown(textarea, { key: 'i', metaKey: true });
+      expect(textarea).toHaveValue('*hello* **world**');
+    });
+
+    // Anything with Alt or Shift added belongs to the browser — Ctrl+Shift+B
+    // toggles Chrome's bookmarks bar — so the editor must not consume it.
+    it.each([
+      { name: 'Ctrl+Alt+B', modifiers: { ctrlKey: true, altKey: true }, key: 'b' },
+      { name: 'Ctrl+Shift+B', modifiers: { ctrlKey: true, shiftKey: true }, key: 'b' },
+      { name: 'Cmd+Shift+B', modifiers: { metaKey: true, shiftKey: true }, key: 'b' },
+      { name: 'Ctrl+Shift+I', modifiers: { ctrlKey: true, shiftKey: true }, key: 'i' },
+      { name: 'Cmd+Shift+I', modifiers: { metaKey: true, shiftKey: true }, key: 'i' },
+    ])('leaves $name to the browser', ({ modifiers, key }) => {
+      const note = createMockNote({ content: 'hello', note_type: 'text' });
+      renderNoteModal({ ...defaultProps, note });
+      fireEvent.click(screen.getByTestId('note-content-preview'));
+      const textarea = screen.getByPlaceholderText('Take a note...') as HTMLTextAreaElement;
+
+      textarea.setSelectionRange(0, 5);
+      fireEvent.keyDown(textarea, { key, ...modifiers });
+
+      expect(textarea).toHaveValue('hello');
+    });
+  });
 });
