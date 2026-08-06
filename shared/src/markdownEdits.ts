@@ -1,10 +1,16 @@
 // Pure text transforms behind the markdown formatting bar in the note editor.
 //
-// They are deliberately free of React and react-native so the editing rules can
-// be unit tested without mounting NoteEditorScreen. Every function takes the
+// They are deliberately free of React, react-native and the DOM so both clients
+// share one set of editing rules and one test suite. Every function takes the
 // current text plus the caret/selection and returns the text and where the
 // caret/selection should end up afterwards — the caller is responsible for
-// pushing both back into the TextInput.
+// pushing both back into its own input.
+//
+// How that push happens is deliberately *not* shared, because the two platforms
+// have opposite constraints: mobile sets state and forces the caret through the
+// TextInput's controlled `selection` prop, while the webapp replays the change
+// through the DOM (webapp/src/utils/textareaEdit.ts) so the browser's native
+// undo stack survives. Keep platform specifics out of this module.
 
 export interface TextSelection {
   start: number;

@@ -96,6 +96,38 @@ test.describe('Modal focus management', () => {
     await expect(card).toBeFocused();
   });
 
+  test('markdown toolbar is a single tab stop with arrow-key navigation', async ({ authenticatedUser, page, dashboardPage }) => {
+    void authenticatedUser;
+    await dashboardPage.goto();
+    await dashboardPage.clickNewNote();
+
+    const dialog = page.locator('[role="dialog"][aria-modal="true"]').first();
+    const textarea = dialog.locator('textarea[placeholder="Take a note..."]');
+    await expect(textarea).toBeVisible();
+    await textarea.fill('formatting');
+
+    const toolbar = page.getByTestId('markdown-toolbar');
+    await expect(toolbar).toHaveAttribute('role', 'toolbar');
+
+    // One Tab out of the textarea reaches the toolbar and lands on the first
+    // button — the WAI-ARIA toolbar pattern, so the six buttons do not sit
+    // between the textarea and the rest of the modal.
+    await textarea.focus();
+    await page.keyboard.press('Tab');
+    await expect(page.getByTestId('format-bold-btn')).toBeFocused();
+
+    await page.keyboard.press('ArrowRight');
+    await expect(page.getByTestId('format-italic-btn')).toBeFocused();
+
+    // A second Tab leaves the toolbar entirely rather than stepping through it.
+    await page.keyboard.press('Tab');
+    await expect(page.getByTestId('format-italic-btn')).not.toBeFocused();
+    expect(await focusIsInside(toolbar)).toBe(false);
+    expect(await focusIsInside(dialog)).toBe(true);
+
+    await expectFocusTrapped(page, dialog);
+  });
+
   test('confirm dialog traps focus and restores it to the menu button on cancel', async ({ authenticatedUser, page, dashboardPage }) => {
     void authenticatedUser;
     await dashboardPage.goto();

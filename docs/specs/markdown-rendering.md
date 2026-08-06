@@ -429,6 +429,35 @@ here so the next person does not have to rediscover them.
 
 ---
 
+### 5.1 Authoring the syntax
+
+Both clients also *write* this syntax, from a six-button formatting bar over the
+text-note editor — bold, italic, strikethrough, a heading cycle, bullet and
+checklist — plus list continuation when Enter is pressed at the end of a list
+item.
+
+| Concern | File |
+|---|---|
+| Shared caret/selection transforms | `shared/src/markdownEdits.ts` |
+| Webapp toolbar | `webapp/src/components/MarkdownToolbar.tsx` |
+| Webapp undo-preserving write-back | `webapp/src/utils/textareaEdit.ts` |
+| Mobile formatting bar | `mobile/src/screens/noteEditor/EditorToolbars.tsx` |
+
+The transforms are pure and shared, so both clients produce identical text for
+the same input and selection, and one suite
+(`shared/src/__tests__/markdownEdits.test.ts`) covers both. **Applying the
+result is deliberately per-client.** Mobile sets state and forces the caret
+through the `TextInput`'s controlled `selection` prop; the webapp replays the
+edit through the DOM with `execCommand('insertText')` over the changed span,
+because assigning `textarea.value` — which is what a plain `setContent` makes
+React do — empties the browser's native undo stack, so a toolbar press would
+discard everything typed before it.
+
+The heading button stops at `###`, matching §2: a fourth press would produce an
+`####` that renders as body text.
+
+---
+
 ## 6. Deliberately not covered
 
 - **Interactive checkboxes.** Toggling a rendered ☐ would mean writing back into
