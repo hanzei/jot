@@ -249,7 +249,12 @@
     "noteColorKey": "C",
     "noteColorDescription": "Abrir o seletor de cores",
     "noteDeleteKey": "Del / Backspace",
-    "noteDeleteDescription": "Excluir a nota (com confirmação)"
+    "noteDeleteDescription": "Excluir a nota (com confirmação)",
+    "formatSection": "Formatação (ao editar uma nota de texto)",
+    "formatBoldKey": "Ctrl + B",
+    "formatBoldDescription": "Colocar o texto selecionado em negrito",
+    "formatItalicKey": "Ctrl + I",
+    "formatItalicDescription": "Colocar o texto selecionado em itálico"
   },
   "admin": {
     "pageHeading": "Admin",
@@ -359,6 +364,13 @@
     "typeList": "Lista",
     "titlePlaceholder": "Título da nota...",
     "contentPlaceholder": "Fazer uma anotação...",
+    "formatToolbar": "Formatação",
+    "formatBold": "Negrito",
+    "formatItalic": "Itálico",
+    "formatStrikethrough": "Tachado",
+    "formatHeading": "Título",
+    "formatBulletList": "Lista de marcadores",
+    "formatChecklist": "Lista de tarefas",
     "itemPlaceholder": "Item da lista...",
     "itemLabel": "Item da lista",
     "itemCompleted": "Item concluído",

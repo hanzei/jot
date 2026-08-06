@@ -2,6 +2,7 @@ import { test as base, expect } from '@playwright/test';
 import { LoginPage } from '../pages/LoginPage';
 import { RegisterPage } from '../pages/RegisterPage';
 import { DashboardPage } from '../pages/DashboardPage';
+import { NoteEditorPage } from '../pages/NoteEditorPage';
 import { SettingsPage } from '../pages/SettingsPage';
 import { ToastPage } from '../pages/ToastPage';
 
@@ -19,6 +20,7 @@ type Fixtures = {
   loginPage: LoginPage;
   registerPage: RegisterPage;
   dashboardPage: DashboardPage;
+  noteEditorPage: NoteEditorPage;
   settingsPage: SettingsPage;
   toastPage: ToastPage;
   /** Register a fresh user and log them in; resolves to { username, password } */
@@ -34,6 +36,9 @@ export const test = base.extend<Fixtures>({
   },
   dashboardPage: async ({ page }, use) => {
     await use(new DashboardPage(page));
+  },
+  noteEditorPage: async ({ page }, use) => {
+    await use(new NoteEditorPage(page));
   },
   settingsPage: async ({ page }, use) => {
     await use(new SettingsPage(page));

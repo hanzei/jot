@@ -249,7 +249,12 @@
     "noteColorKey": "C",
     "noteColorDescription": "Open the color picker",
     "noteDeleteKey": "Del / Backspace",
-    "noteDeleteDescription": "Delete the note (with confirmation)"
+    "noteDeleteDescription": "Delete the note (with confirmation)",
+    "formatSection": "Formatting (while editing a text note)",
+    "formatBoldKey": "Ctrl + B",
+    "formatBoldDescription": "Bold the selected text",
+    "formatItalicKey": "Ctrl + I",
+    "formatItalicDescription": "Italicize the selected text"
   },
   "admin": {
     "pageHeading": "Admin",
@@ -359,6 +364,13 @@
     "typeList": "List",
     "titlePlaceholder": "Note title...",
     "contentPlaceholder": "Take a note...",
+    "formatToolbar": "Formatting",
+    "formatBold": "Bold",
+    "formatItalic": "Italic",
+    "formatStrikethrough": "Strikethrough",
+    "formatHeading": "Heading",
+    "formatBulletList": "Bullet list",
+    "formatChecklist": "Checklist",
     "itemPlaceholder": "List item...",
     "itemLabel": "List item",
     "itemCompleted": "Item completed",

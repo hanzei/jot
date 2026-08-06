@@ -249,7 +249,12 @@
     "noteColorKey": "C",
     "noteColorDescription": "Otwórz selektor kolorów",
     "noteDeleteKey": "Del / Backspace",
-    "noteDeleteDescription": "Usuń notatkę (z potwierdzeniem)"
+    "noteDeleteDescription": "Usuń notatkę (z potwierdzeniem)",
+    "formatSection": "Formatowanie (podczas edycji notatki tekstowej)",
+    "formatBoldKey": "Ctrl + B",
+    "formatBoldDescription": "Pogrub zaznaczony tekst",
+    "formatItalicKey": "Ctrl + I",
+    "formatItalicDescription": "Pochyl zaznaczony tekst"
   },
   "admin": {
     "pageHeading": "Admin",
@@ -359,6 +364,13 @@
     "typeList": "Lista",
     "titlePlaceholder": "Tytuł notatki...",
     "contentPlaceholder": "Zapisz notatkę...",
+    "formatToolbar": "Formatowanie",
+    "formatBold": "Pogrubienie",
+    "formatItalic": "Kursywa",
+    "formatStrikethrough": "Przekreślenie",
+    "formatHeading": "Nagłówek",
+    "formatBulletList": "Lista punktowana",
+    "formatChecklist": "Lista kontrolna",
     "itemPlaceholder": "Element listy...",
     "itemLabel": "Element listy",
     "itemCompleted": "Element ukończony",
