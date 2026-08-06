@@ -52,6 +52,11 @@ export default [
       // on those. This mirrors @typescript-eslint's own eslint-recommended
       // preset, which disables the same rule for the same reason.
       'no-undef': 'off',
+      // The only enforced formatting in the TypeScript workspaces, applied by
+      // `task fmt`. Nothing else is enforced — see the Formatting section of
+      // CLAUDE.md for what is deliberately left to the author.
+      semi: ['error', 'always'],
+      quotes: ['error', 'single', { avoidEscape: true, allowTemplateLiterals: true }],
     },
     settings: {
       react: { version: 'detect' },

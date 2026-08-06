@@ -112,14 +112,40 @@ tasks:
     dir: server
     cmd: go tool golangci-lint run
 
-  # golangci-lint's formatters (see the `formatters:` block in .golangci.yml)
-  # are reported by `lint-server` and applied here. Go is the only workspace
-  # with an enforced format — the TypeScript packages have no Prettier or
-  # stylistic ESLint rules, by choice.
+  # Every workspace's formatting is reported by its `lint-*` task and applied
+  # here, so each rule has one home: golangci-lint's `formatters:` block (see
+  # .golangci.yml) for Go, the `semi`/`quotes` ESLint rules for TypeScript.
+  # Runs every workspace even after one fails, like `lint` and for the same
+  # reason — formatting the whole tree is one pass, not one per rerun.
   fmt:
+    desc: Apply formatting (Go and TypeScript)
+    cmd: ./scripts/run-tasks.sh fmt-server fmt-shared fmt-webapp fmt-mobile
+
+  fmt-server:
     desc: Apply Go formatting (gofumpt, goimports, swaggo)
     dir: server
     cmd: go tool golangci-lint fmt
+
+  # `--fix-type layout` is what keeps this a formatter: it restricts the fixer
+  # to layout rules — which `semi` and `quotes` are, and which none of the
+  # correctness rules are — so `task fmt` never rewrites logic on your behalf.
+  # Without it, any autofixable rule from the recommended presets would ride
+  # along. The run still fails on a lint error it cannot fix, which is
+  # `lint-*` telling you about something no formatter was going to solve.
+  fmt-shared:
+    desc: Apply shared package formatting (semicolons, quotes)
+    dir: shared
+    cmd: npm run lint -- --fix --fix-type layout
+
+  fmt-webapp:
+    desc: Apply webapp formatting (semicolons, quotes)
+    dir: webapp
+    cmd: npm run lint -- --fix --fix-type layout
+
+  fmt-mobile:
+    desc: Apply mobile app formatting (semicolons, quotes)
+    dir: mobile
+    cmd: npm run lint -- --fix --fix-type layout
 
   lint-webapp:
     desc: Run webapp linting

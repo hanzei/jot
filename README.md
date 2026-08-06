@@ -155,7 +155,7 @@ task check-webapp    # Lint + test the webapp, plus the translation check
 task check-mobile    # Lint + test the mobile app (check-shared likewise)
 task test            # All tests except e2e
 task lint            # All linters
-task fmt             # Apply Go formatting (gofumpt, goimports, swaggo)
+task fmt             # Apply formatting to every workspace (Go and TypeScript)
 task test-server     # Run server tests
 task test-webapp     # Run webapp tests
 task test-e2e        # Run Playwright end-to-end tests

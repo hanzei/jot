@@ -3,7 +3,7 @@
 # run-tasks.sh — run several tasks in sequence, reporting every failure instead
 # of stopping at the first.
 #
-# `task lint` uses this. The suites still run serially, so output stays
+# `task lint` and `task fmt` use this. The suites still run serially, so output stays
 # attributable to one suite rather than interleaving; what changes is that a
 # failure no longer hides the suites behind it. One pass tells you everything
 # that is broken, which matters most when a change spans shared/ + webapp/ +
