@@ -77,7 +77,7 @@ function App() {
           />
           <Route
             path="/register"
-            element={!isAuth && registrationEnabled ? <Register onRegister={() => setIsAuth(true)} passwordMinLength={passwordMinLength} /> : <Navigate to={isAuth ? "/" : "/login"} />}
+            element={!isAuth && registrationEnabled ? <Register onRegister={() => setIsAuth(true)} passwordMinLength={passwordMinLength} /> : <Navigate to={isAuth ? '/' : '/login'} />}
           />
           <Route
             element={
