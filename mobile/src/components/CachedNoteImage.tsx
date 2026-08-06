@@ -1,4 +1,3 @@
-import React from 'react';
 import { Image, type ImageProps } from 'react-native';
 import { useCachedNoteImageUri } from '../hooks/useNoteImageCache';
 import type { NoteImageVariant } from '../utils/noteImageCache';

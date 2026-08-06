@@ -1,4 +1,3 @@
-import React from 'react';
 import { render, act } from '@testing-library/react-native';
 import { Text } from 'react-native';
 import { SSEProvider, useSSEContext } from '../src/store/SSEContext';

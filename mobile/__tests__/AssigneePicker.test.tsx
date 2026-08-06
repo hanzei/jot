@@ -1,4 +1,3 @@
-import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import AssigneePicker from '../src/components/AssigneePicker';
 import type { Collaborator } from '@jot/shared';

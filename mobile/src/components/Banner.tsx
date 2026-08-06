@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity, useAnimatedValue, View, type LayoutChangeEvent } from 'react-native';
 import { X, type LucideIcon } from 'lucide-react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';

@@ -8,7 +8,6 @@
  * persisted share records and so must work on the same offline paths.
  */
 
-import React from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import ShareScreen from '../src/screens/ShareScreen';
 import { searchUsers } from '../src/api/users';

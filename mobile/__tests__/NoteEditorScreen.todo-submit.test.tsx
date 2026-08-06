@@ -1,4 +1,3 @@
-import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { VALIDATION } from '@jot/shared';
 import NoteEditorScreen from '../src/screens/NoteEditorScreen';

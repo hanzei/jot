@@ -1,4 +1,4 @@
-import React, { memo, useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { Text, type StyleProp, type TextStyle } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { inlineMarkdownNodes } from '../utils/inlineMarkdown';

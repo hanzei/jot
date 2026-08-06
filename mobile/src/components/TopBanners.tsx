@@ -1,4 +1,3 @@
-import React from 'react';
 import { useVisibleTopBanners, type TopBannerKey } from '../hooks/useTopBanners';
 import OfflineBanner from './OfflineBanner';
 import SSEReconnectBanner from './SSEReconnectBanner';

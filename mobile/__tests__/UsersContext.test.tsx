@@ -1,4 +1,3 @@
-import React from 'react';
 import { render, waitFor, act } from '@testing-library/react-native';
 import { Text } from 'react-native';
 import type { User } from '@jot/shared';

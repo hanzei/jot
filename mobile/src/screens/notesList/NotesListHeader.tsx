@@ -1,4 +1,3 @@
-import React from 'react';
 import { View, Text, TextInput, ScrollView, TouchableOpacity } from 'react-native';
 import { ArrowUpDown, LayoutGrid, List, Menu, Search, X } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';

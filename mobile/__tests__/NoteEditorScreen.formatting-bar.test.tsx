@@ -1,4 +1,3 @@
-import React from 'react';
 import { Alert, Keyboard, Platform } from 'react-native';
 import { render, fireEvent, act } from '@testing-library/react-native';
 import { VALIDATION } from '@jot/shared';
