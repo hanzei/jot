@@ -1,0 +1,28 @@
+// The e2e suite and the Playwright config, type-checked with the same
+// strictness as `src` but against Node's globals rather than the browser's
+// alone. `types` is the only override the tree itself needs: `lib` already
+// carries DOM from the base config, which the callbacks `page.evaluate` ships
+// into the page are written against.
+//
+// A separate project rather than adding "e2e" to tsconfig.json's `include`,
+// because `types: ["node"]` must not reach `src` — app code referencing
+// `process`, `Buffer`, or `fs` would type-check clean and then break in the
+// browser. Confining Node's types to the trees that run in Node is what keeps
+// the base config's strictness load-bearing.
+//
+// `composite` and `noEmit: false` are what a *referenced* project needs;
+// tsconfig.json cannot reference one that disables emit. Nothing is emitted in
+// practice — `lint:ts` passes `--noEmit` — and `outDir`/`tsBuildInfoFile` keep
+// both a manual `tsc -p` and the build log out of the working tree.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": false,
+    "outDir": "./node_modules/.tmp/tsc-e2e",
+    "tsBuildInfoFile": "./node_modules/.tmp/tsc-e2e.tsbuildinfo",
+    "types": ["node"]
+  },
+  "include": ["e2e", "playwright.config.ts"],
+  "references": []
+}

@@ -26,5 +26,10 @@
     }
   },
   "include": ["src"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  // Editors resolve a file outside `src` through these; `lint:ts` runs each
+  // project explicitly, because `tsc --noEmit` does not follow references.
+  "references": [
+    { "path": "./tsconfig.node.json" },
+    { "path": "./tsconfig.e2e.json" }
+  ]
 }
