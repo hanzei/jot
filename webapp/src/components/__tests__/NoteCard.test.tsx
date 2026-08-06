@@ -1,11 +1,11 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import NoteCard from '../NoteCard'
-import { ToastProvider } from '../Toast'
-import type { Note, NoteItem, User } from '@jot/shared'
-import { notes } from '@/utils/api'
-import { createMockNote, createMockListNote } from '@/utils/__tests__/test-helpers'
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import NoteCard from '../NoteCard';
+import { ToastProvider } from '../Toast';
+import type { Note, NoteItem, User } from '@jot/shared';
+import { notes } from '@/utils/api';
+import { createMockNote, createMockListNote } from '@/utils/__tests__/test-helpers';
 
 // Mock the API module
 vi.mock('@/utils/api', () => ({
@@ -15,11 +15,11 @@ vi.mock('@/utils/api', () => ({
   images: {
     thumbnailUrl: (id: string) => `/api/v1/images/${id}/thumbnail`,
   },
-}))
+}));
 
 // Mock console.error to silence error logs in tests
-const mockConsoleError = vi.fn()
-vi.spyOn(console, 'error').mockImplementation(mockConsoleError)
+const mockConsoleError = vi.fn();
+vi.spyOn(console, 'error').mockImplementation(mockConsoleError);
 
 const createMockListItems = (): NoteItem[] => [
   {
@@ -44,85 +44,85 @@ const createMockListItems = (): NoteItem[] => [
     created_at: '2023-01-01T00:00:00Z',
     updated_at: '2023-01-01T00:00:00Z',
   },
-]
+];
 
 const renderNoteCard = (props: React.ComponentProps<typeof NoteCard>) => {
-  return render(<ToastProvider><NoteCard {...props} /></ToastProvider>)
-}
+  return render(<ToastProvider><NoteCard {...props} /></ToastProvider>);
+};
 
 const defaultProps = {
   note: createMockListNote({ title: 'Test Note' }),
   onEdit: vi.fn(),
   onDelete: vi.fn(),
   currentUserId: 'user1',
-}
+};
 
 describe('NoteCard', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-  })
+    vi.clearAllMocks();
+  });
 
   afterEach(() => {
-    mockConsoleError.mockClear()
-  })
+    mockConsoleError.mockClear();
+  });
 
   describe('Basic Rendering', () => {
     it('renders list note title', () => {
-      renderNoteCard(defaultProps)
+      renderNoteCard(defaultProps);
 
-      expect(screen.getByText('Test Note')).toBeInTheDocument()
-    })
+      expect(screen.getByText('Test Note')).toBeInTheDocument();
+    });
 
     it('renders text note content', () => {
-      const textNote = createMockNote({ content: 'This is a test note content' })
-      renderNoteCard({ ...defaultProps, note: textNote })
+      const textNote = createMockNote({ content: 'This is a test note content' });
+      renderNoteCard({ ...defaultProps, note: textNote });
 
-      expect(screen.getByText('This is a test note content')).toBeInTheDocument()
-    })
+      expect(screen.getByText('This is a test note content')).toBeInTheDocument();
+    });
 
     it('renders list note without title', () => {
-      const noteWithoutTitle = createMockListNote({ title: '' })
-      renderNoteCard({ ...defaultProps, note: noteWithoutTitle })
+      const noteWithoutTitle = createMockListNote({ title: '' });
+      renderNoteCard({ ...defaultProps, note: noteWithoutTitle });
 
-      expect(screen.queryByRole('heading')).not.toBeInTheDocument()
-    })
+      expect(screen.queryByRole('heading')).not.toBeInTheDocument();
+    });
 
     it('renders list note with extremely long title', () => {
-      const longTitle = 'A'.repeat(500)
-      const noteWithLongTitle = createMockListNote({ title: longTitle })
-      renderNoteCard({ ...defaultProps, note: noteWithLongTitle })
+      const longTitle = 'A'.repeat(500);
+      const noteWithLongTitle = createMockListNote({ title: longTitle });
+      renderNoteCard({ ...defaultProps, note: noteWithLongTitle });
 
-      expect(screen.getByText(longTitle)).toBeInTheDocument()
-    })
+      expect(screen.getByText(longTitle)).toBeInTheDocument();
+    });
 
     it('renders text note with special characters in content', () => {
       const specialNote = createMockNote({
         content: 'Content with <script>alert("xss")</script> and emojis 🚀💡',
-      })
-      renderNoteCard({ ...defaultProps, note: specialNote })
+      });
+      renderNoteCard({ ...defaultProps, note: specialNote });
 
       // DOMPurify strips <script> tags; the XSS attempt is sanitized out
-      const card = screen.getByTestId('note-card')
-      expect(card.innerHTML).not.toContain('<script>')
-      expect(card.innerHTML).toContain('🚀💡')
-    })
+      const card = screen.getByTestId('note-card');
+      expect(card.innerHTML).not.toContain('<script>');
+      expect(card.innerHTML).toContain('🚀💡');
+    });
 
     it('renders list note with special characters in title', () => {
       const specialNote = createMockListNote({
         title: 'Special <>&"\'` Characters',
-      })
-      renderNoteCard({ ...defaultProps, note: specialNote })
+      });
+      renderNoteCard({ ...defaultProps, note: specialNote });
 
-      expect(screen.getByText('Special <>&"\'` Characters')).toBeInTheDocument()
-    })
-  })
+      expect(screen.getByText('Special <>&"\'` Characters')).toBeInTheDocument();
+    });
+  });
 
   describe('Cover Image', () => {
     it('renders no cover when the note has no images', () => {
-      renderNoteCard(defaultProps)
+      renderNoteCard(defaultProps);
 
-      expect(screen.queryByTestId('note-card-cover')).not.toBeInTheDocument()
-    })
+      expect(screen.queryByTestId('note-card-cover')).not.toBeInTheDocument();
+    });
 
     it('renders the first image as a cover thumbnail', () => {
       const note = createMockListNote({
@@ -130,14 +130,14 @@ describe('NoteCard', () => {
         images: [
           { id: 'img1', filename: 'photo1.png', content_type: 'image/png', width: 800, height: 600, created_at: '2023-01-01T00:00:00Z' },
         ],
-      })
-      renderNoteCard({ ...defaultProps, note })
+      });
+      renderNoteCard({ ...defaultProps, note });
 
-      const cover = screen.getByTestId('note-card-cover')
-      const img = within(cover).getByAltText('photo1.png')
-      expect(img).toHaveAttribute('src', '/api/v1/images/img1/thumbnail')
-      expect(screen.queryByText(/^\+\d+$/)).not.toBeInTheDocument()
-    })
+      const cover = screen.getByTestId('note-card-cover');
+      const img = within(cover).getByAltText('photo1.png');
+      expect(img).toHaveAttribute('src', '/api/v1/images/img1/thumbnail');
+      expect(screen.queryByText(/^\+\d+$/)).not.toBeInTheDocument();
+    });
 
     it('shows a +N badge when the note has more than one image', () => {
       const note = createMockListNote({
@@ -147,222 +147,222 @@ describe('NoteCard', () => {
           { id: 'img2', filename: 'photo2.png', content_type: 'image/png', width: 800, height: 600, created_at: '2023-01-01T00:00:00Z' },
           { id: 'img3', filename: 'photo3.png', content_type: 'image/png', width: 800, height: 600, created_at: '2023-01-01T00:00:00Z' },
         ],
-      })
-      renderNoteCard({ ...defaultProps, note })
+      });
+      renderNoteCard({ ...defaultProps, note });
 
-      const cover = screen.getByTestId('note-card-cover')
-      expect(within(cover).getByAltText('photo1.png')).toBeInTheDocument()
-      expect(screen.getByText('+2')).toBeInTheDocument()
-    })
-  })
+      const cover = screen.getByTestId('note-card-cover');
+      expect(within(cover).getByAltText('photo1.png')).toBeInTheDocument();
+      expect(screen.getByText('+2')).toBeInTheDocument();
+    });
+  });
 
   describe('Color Handling', () => {
     it('handles valid color values', () => {
-      const validColors = ['#ffffff', '#fbbc04', '#34a853', '#4285f4', '#ea4335', '#9aa0a6']
+      const validColors = ['#ffffff', '#fbbc04', '#34a853', '#4285f4', '#ea4335', '#9aa0a6'];
 
       validColors.forEach(color => {
-        const coloredNote = createMockNote({ color })
-        const { unmount } = renderNoteCard({ ...defaultProps, note: coloredNote })
+        const coloredNote = createMockNote({ color });
+        const { unmount } = renderNoteCard({ ...defaultProps, note: coloredNote });
 
-        expect(screen.getByTestId('note-card')).toBeInTheDocument()
+        expect(screen.getByTestId('note-card')).toBeInTheDocument();
 
-        unmount()
-      })
-    })
+        unmount();
+      });
+    });
 
     it('handles invalid color values gracefully', () => {
-      const invalidColorNote = createMockListNote({ color: 'invalid-color' })
-      renderNoteCard({ ...defaultProps, note: invalidColorNote })
+      const invalidColorNote = createMockListNote({ color: 'invalid-color' });
+      renderNoteCard({ ...defaultProps, note: invalidColorNote });
 
       // Should still render without throwing errors
-      expect(screen.getByTestId('note-card')).toBeInTheDocument()
-    })
+      expect(screen.getByTestId('note-card')).toBeInTheDocument();
+    });
 
     it('handles malformed hex colors', () => {
-      const malformedColors = ['#', '#xyz', 'rgb(255,255,255)', 'blue', '#12345g']
+      const malformedColors = ['#', '#xyz', 'rgb(255,255,255)', 'blue', '#12345g'];
 
       malformedColors.forEach((color, index) => {
-        const coloredNote = createMockListNote({ color, title: `Test Note ${index}` })
-        const { unmount } = renderNoteCard({ ...defaultProps, note: coloredNote })
+        const coloredNote = createMockListNote({ color, title: `Test Note ${index}` });
+        const { unmount } = renderNoteCard({ ...defaultProps, note: coloredNote });
 
-        expect(screen.getByText(`Test Note ${index}`)).toBeInTheDocument()
+        expect(screen.getByText(`Test Note ${index}`)).toBeInTheDocument();
 
-        unmount()
-      })
-    })
-  })
+        unmount();
+      });
+    });
+  });
 
   describe('Pin/Unpin Functionality', () => {
     it('handles pin toggle successfully', async () => {
-      const user = userEvent.setup()
-      const mockUpdate = vi.mocked(notes.update)
-      mockUpdate.mockResolvedValueOnce(createMockNote({ pinned: true }))
+      const user = userEvent.setup();
+      const mockUpdate = vi.mocked(notes.update);
+      mockUpdate.mockResolvedValueOnce(createMockNote({ pinned: true }));
 
-      renderNoteCard(defaultProps)
+      renderNoteCard(defaultProps);
 
       // Hover to show menu
-      await user.hover(screen.getByTestId('note-card'))
+      await user.hover(screen.getByTestId('note-card'));
 
       // Click the menu button
-      const menuButton = screen.getByRole('button', { name: 'Note options' })
-      await user.click(menuButton)
+      const menuButton = screen.getByRole('button', { name: 'Note options' });
+      await user.click(menuButton);
 
       // Click pin button
-      const pinButton = screen.getByText('Pin')
-      await user.click(pinButton)
+      const pinButton = screen.getByText('Pin');
+      await user.click(pinButton);
 
       await waitFor(() => {
         expect(mockUpdate).toHaveBeenCalledWith('1', expect.objectContaining({
           pinned: true,
-        }))
-      })
-    })
+        }));
+      });
+    });
 
     it('handles pin toggle network failure', async () => {
-      const user = userEvent.setup()
-      const mockUpdate = vi.mocked(notes.update)
-      mockUpdate.mockRejectedValueOnce(new Error('Network error'))
+      const user = userEvent.setup();
+      const mockUpdate = vi.mocked(notes.update);
+      mockUpdate.mockRejectedValueOnce(new Error('Network error'));
 
-      renderNoteCard(defaultProps)
+      renderNoteCard(defaultProps);
 
-      await user.hover(screen.getByTestId('note-card'))
+      await user.hover(screen.getByTestId('note-card'));
 
-      const menuButton = screen.getByRole('button', { name: 'Note options' })
-      await user.click(menuButton)
+      const menuButton = screen.getByRole('button', { name: 'Note options' });
+      await user.click(menuButton);
 
-      const pinButton = screen.getByText('Pin')
-      await user.click(pinButton)
+      const pinButton = screen.getByText('Pin');
+      await user.click(pinButton);
 
       await waitFor(() => {
-        expect(mockConsoleError).toHaveBeenCalledWith('Failed to toggle pin:', expect.any(Error))
-      })
-    })
+        expect(mockConsoleError).toHaveBeenCalledWith('Failed to toggle pin:', expect.any(Error));
+      });
+    });
 
     it('shows correct pin/unpin text based on state', async () => {
-      const user = userEvent.setup()
+      const user = userEvent.setup();
 
       // Test unpinned note
-      renderNoteCard(defaultProps)
+      renderNoteCard(defaultProps);
 
-      await user.hover(screen.getByTestId('note-card'))
+      await user.hover(screen.getByTestId('note-card'));
 
-      const menuButton = screen.getByRole('button', { name: 'Note options' })
-      await user.click(menuButton)
+      const menuButton = screen.getByRole('button', { name: 'Note options' });
+      await user.click(menuButton);
 
-      expect(screen.getByText('Pin')).toBeInTheDocument()
-    })
+      expect(screen.getByText('Pin')).toBeInTheDocument();
+    });
 
     it('handles concurrent pin operations', async () => {
-      const user = userEvent.setup()
-      const mockUpdate = vi.mocked(notes.update)
-      let resolveFirst: (value: Note | PromiseLike<Note>) => void = () => { }
-      let resolveSecond: (value: Note | PromiseLike<Note>) => void = () => { }
+      const user = userEvent.setup();
+      const mockUpdate = vi.mocked(notes.update);
+      let resolveFirst: (value: Note | PromiseLike<Note>) => void = () => { };
+      let resolveSecond: (value: Note | PromiseLike<Note>) => void = () => { };
 
       const firstPromise = new Promise<Note>(resolve => {
-        resolveFirst = resolve
-      })
+        resolveFirst = resolve;
+      });
       const secondPromise = new Promise<Note>(resolve => {
-        resolveSecond = resolve
-      })
+        resolveSecond = resolve;
+      });
 
       mockUpdate
         .mockReturnValueOnce(firstPromise)
-        .mockReturnValueOnce(secondPromise)
+        .mockReturnValueOnce(secondPromise);
 
-      renderNoteCard(defaultProps)
+      renderNoteCard(defaultProps);
 
-      await user.hover(screen.getByTestId('note-card'))
+      await user.hover(screen.getByTestId('note-card'));
 
-      const menuButton = screen.getByRole('button', { name: 'Note options' })
-      await user.click(menuButton)
+      const menuButton = screen.getByRole('button', { name: 'Note options' });
+      await user.click(menuButton);
 
-      const pinButton = screen.getByText('Pin')
+      const pinButton = screen.getByText('Pin');
 
       // Start two pin operations by clicking rapidly
-      await user.click(pinButton)
+      await user.click(pinButton);
 
       // Need to reopen the menu since it closes after first click
-      await user.hover(screen.getByTestId('note-card'))
-      await user.click(menuButton)
-      const pinButton2 = screen.getByText('Pin')
-      await user.click(pinButton2)
+      await user.hover(screen.getByTestId('note-card'));
+      await user.click(menuButton);
+      const pinButton2 = screen.getByText('Pin');
+      await user.click(pinButton2);
 
       // Resolve in reverse order
-      resolveSecond(createMockNote({ pinned: true }))
-      resolveFirst(createMockNote({ pinned: true }))
+      resolveSecond(createMockNote({ pinned: true }));
+      resolveFirst(createMockNote({ pinned: true }));
 
       await waitFor(() => {
-        expect(mockUpdate).toHaveBeenCalledTimes(2)
-      })
-    })
-  })
+        expect(mockUpdate).toHaveBeenCalledTimes(2);
+      });
+    });
+  });
 
   describe('Archive/Unarchive Functionality', () => {
     it('handles archive toggle successfully', async () => {
-      const user = userEvent.setup()
-      const mockUpdate = vi.mocked(notes.update)
-      mockUpdate.mockResolvedValueOnce(createMockNote({ archived: true }))
+      const user = userEvent.setup();
+      const mockUpdate = vi.mocked(notes.update);
+      mockUpdate.mockResolvedValueOnce(createMockNote({ archived: true }));
 
-      renderNoteCard(defaultProps)
+      renderNoteCard(defaultProps);
 
-      await user.hover(screen.getByTestId('note-card'))
+      await user.hover(screen.getByTestId('note-card'));
 
-      const menuButton = screen.getByRole('button', { name: 'Note options' })
-      await user.click(menuButton)
+      const menuButton = screen.getByRole('button', { name: 'Note options' });
+      await user.click(menuButton);
 
-      const archiveButton = screen.getByText('Archive')
-      await user.click(archiveButton)
+      const archiveButton = screen.getByText('Archive');
+      await user.click(archiveButton);
 
       await waitFor(() => {
         expect(mockUpdate).toHaveBeenCalledWith('1', expect.objectContaining({
           archived: true,
-        }))
-      })
-    })
+        }));
+      });
+    });
 
     it('shows correct archive/unarchive text based on state', async () => {
-      const user = userEvent.setup()
+      const user = userEvent.setup();
 
-      const archivedNote = createMockNote({ archived: true })
-      renderNoteCard({ ...defaultProps, note: archivedNote })
+      const archivedNote = createMockNote({ archived: true });
+      renderNoteCard({ ...defaultProps, note: archivedNote });
 
-      await user.hover(screen.getByTestId('note-card'))
+      await user.hover(screen.getByTestId('note-card'));
 
-      const menuButton = screen.getByRole('button', { name: 'Note options' })
-      await user.click(menuButton)
+      const menuButton = screen.getByRole('button', { name: 'Note options' });
+      await user.click(menuButton);
 
-      expect(screen.getByText('Unarchive')).toBeInTheDocument()
-    })
-  })
+      expect(screen.getByText('Unarchive')).toBeInTheDocument();
+    });
+  });
 
   describe('Duplicate Functionality', () => {
     it('shows duplicate action when a duplicate handler is provided', async () => {
-      const user = userEvent.setup()
-      const onDuplicate = vi.fn()
+      const user = userEvent.setup();
+      const onDuplicate = vi.fn();
 
-      renderNoteCard({ ...defaultProps, onDuplicate })
+      renderNoteCard({ ...defaultProps, onDuplicate });
 
-      await user.hover(screen.getByTestId('note-card'))
-      await user.click(screen.getByRole('button', { name: 'Note options' }))
+      await user.hover(screen.getByTestId('note-card'));
+      await user.click(screen.getByRole('button', { name: 'Note options' }));
 
-      expect(screen.getByText('Duplicate')).toBeInTheDocument()
-    })
+      expect(screen.getByText('Duplicate')).toBeInTheDocument();
+    });
 
     it('calls onDuplicate with the note id', async () => {
-      const user = userEvent.setup()
-      const onDuplicate = vi.fn().mockResolvedValue(undefined)
+      const user = userEvent.setup();
+      const onDuplicate = vi.fn().mockResolvedValue(undefined);
 
-      renderNoteCard({ ...defaultProps, onDuplicate })
+      renderNoteCard({ ...defaultProps, onDuplicate });
 
-      await user.hover(screen.getByTestId('note-card'))
-      await user.click(screen.getByRole('button', { name: 'Note options' }))
-      await user.click(screen.getByText('Duplicate'))
+      await user.hover(screen.getByTestId('note-card'));
+      await user.click(screen.getByRole('button', { name: 'Note options' }));
+      await user.click(screen.getByText('Duplicate'));
 
       await waitFor(() => {
-        expect(onDuplicate).toHaveBeenCalledWith('1')
-      })
-    })
-  })
+        expect(onDuplicate).toHaveBeenCalledWith('1');
+      });
+    });
+  });
 
   describe('Sharing Functionality', () => {
     it('shows shared user avatars when note is shared', () => {
@@ -378,11 +378,11 @@ describe('NoteCard', () => {
           created_at: '2023-01-01T00:00:00Z',
           updated_at: '2023-01-01T00:00:00Z',
         }],
-      })
-      renderNoteCard({ ...defaultProps, note: sharedNote })
+      });
+      renderNoteCard({ ...defaultProps, note: sharedNote });
 
-      expect(screen.getByRole('img', { name: 'alice' })).toBeInTheDocument()
-    })
+      expect(screen.getByRole('img', { name: 'alice' })).toBeInTheDocument();
+    });
 
     it('filters out current user from shared avatars', () => {
       const sharedNote = createMockNote({
@@ -398,14 +398,14 @@ describe('NoteCard', () => {
           created_at: '2023-01-01T00:00:00Z',
           updated_at: '2023-01-01T00:00:00Z',
         }],
-      })
-      renderNoteCard({ ...defaultProps, note: sharedNote })
+      });
+      renderNoteCard({ ...defaultProps, note: sharedNote });
 
-      expect(screen.queryByRole('img', { name: 'me' })).not.toBeInTheDocument()
-    })
+      expect(screen.queryByRole('img', { name: 'me' })).not.toBeInTheDocument();
+    });
 
     it('renders profile icon image when user has one', () => {
-      const usersMap = new Map<string, User>([['user2', { id: 'user2', username: 'alice', first_name: 'Alice', last_name: '', role: 'user', has_profile_icon: true, created_at: '', updated_at: '' }]])
+      const usersMap = new Map<string, User>([['user2', { id: 'user2', username: 'alice', first_name: 'Alice', last_name: '', role: 'user', has_profile_icon: true, created_at: '', updated_at: '' }]]);
       const sharedNote = createMockNote({
         is_shared: true,
         shared_with: [{
@@ -419,130 +419,130 @@ describe('NoteCard', () => {
           created_at: '2023-01-01T00:00:00Z',
           updated_at: '2023-01-01T00:00:00Z',
         }],
-      })
-      renderNoteCard({ ...defaultProps, note: sharedNote, usersById: usersMap })
+      });
+      renderNoteCard({ ...defaultProps, note: sharedNote, usersById: usersMap });
 
-      const img = screen.getByAltText('alice')
-      expect(img).toBeInTheDocument()
-      expect(img.tagName).toBe('IMG')
-      expect(img).toHaveAttribute('src', '/api/v1/users/user2/profile-icon')
-    })
+      const img = screen.getByAltText('alice');
+      expect(img).toBeInTheDocument();
+      expect(img.tagName).toBe('IMG');
+      expect(img).toHaveAttribute('src', '/api/v1/users/user2/profile-icon');
+    });
 
     it('shows share button only for note owners', async () => {
-      const user = userEvent.setup()
-      const onShare = vi.fn()
+      const user = userEvent.setup();
+      const onShare = vi.fn();
 
-      renderNoteCard({ ...defaultProps, onShare })
+      renderNoteCard({ ...defaultProps, onShare });
 
-      await user.hover(screen.getByTestId('note-card'))
+      await user.hover(screen.getByTestId('note-card'));
 
-      const menuButton = screen.getByRole('button', { name: 'Note options' })
-      await user.click(menuButton)
+      const menuButton = screen.getByRole('button', { name: 'Note options' });
+      await user.click(menuButton);
 
-      expect(screen.getByText('Share')).toBeInTheDocument()
-    })
+      expect(screen.getByText('Share')).toBeInTheDocument();
+    });
 
     it('does not show share button for non-owners', async () => {
-      const user = userEvent.setup()
-      const onShare = vi.fn()
-      const notOwnedNote = createMockNote({ user_id: 'other_user' })
+      const user = userEvent.setup();
+      const onShare = vi.fn();
+      const notOwnedNote = createMockNote({ user_id: 'other_user' });
 
-      renderNoteCard({ ...defaultProps, note: notOwnedNote, onShare, currentUserId: "user1" })
+      renderNoteCard({ ...defaultProps, note: notOwnedNote, onShare, currentUserId: 'user1' });
 
-      await user.hover(screen.getByTestId('note-card'))
+      await user.hover(screen.getByTestId('note-card'));
 
-      const menuButton = screen.getByRole('button', { name: 'Note options' })
-      await user.click(menuButton)
+      const menuButton = screen.getByRole('button', { name: 'Note options' });
+      await user.click(menuButton);
 
-      expect(screen.queryByText('Share')).not.toBeInTheDocument()
-    })
-  })
+      expect(screen.queryByText('Share')).not.toBeInTheDocument();
+    });
+  });
 
   describe('Delete Functionality', () => {
     it('shows delete confirmation dialog and calls onDelete when confirmed', async () => {
-      const user = userEvent.setup()
-      const onDelete = vi.fn()
+      const user = userEvent.setup();
+      const onDelete = vi.fn();
 
-      renderNoteCard({ ...defaultProps, onDelete })
+      renderNoteCard({ ...defaultProps, onDelete });
 
-      await user.hover(screen.getByTestId('note-card'))
+      await user.hover(screen.getByTestId('note-card'));
 
-      const menuButton = screen.getByRole('button', { name: 'Note options' })
-      await user.click(menuButton)
+      const menuButton = screen.getByRole('button', { name: 'Note options' });
+      await user.click(menuButton);
 
-      const deleteMenuItem = screen.getByText('Delete')
-      await user.click(deleteMenuItem)
+      const deleteMenuItem = screen.getByText('Delete');
+      await user.click(deleteMenuItem);
 
-      expect(screen.getByText('Delete note')).toBeInTheDocument()
-      expect(screen.getByText('Are you sure you want to delete this note?')).toBeInTheDocument()
+      expect(screen.getByText('Delete note')).toBeInTheDocument();
+      expect(screen.getByText('Are you sure you want to delete this note?')).toBeInTheDocument();
 
       const confirmButton = screen.getAllByText('Delete').find(
         el => el.closest('[class*="bg-red"]')
-      )!
-      await user.click(confirmButton)
+      )!;
+      await user.click(confirmButton);
 
-      expect(onDelete).toHaveBeenCalledWith('1')
-    })
+      expect(onDelete).toHaveBeenCalledWith('1');
+    });
 
     it('does not call onDelete when confirmation is cancelled', async () => {
-      const user = userEvent.setup()
-      const onDelete = vi.fn()
+      const user = userEvent.setup();
+      const onDelete = vi.fn();
 
-      renderNoteCard({ ...defaultProps, onDelete })
+      renderNoteCard({ ...defaultProps, onDelete });
 
-      await user.hover(screen.getByTestId('note-card'))
+      await user.hover(screen.getByTestId('note-card'));
 
-      const menuButton = screen.getByRole('button', { name: 'Note options' })
-      await user.click(menuButton)
+      const menuButton = screen.getByRole('button', { name: 'Note options' });
+      await user.click(menuButton);
 
-      const deleteMenuItem = screen.getByText('Delete')
-      await user.click(deleteMenuItem)
+      const deleteMenuItem = screen.getByText('Delete');
+      await user.click(deleteMenuItem);
 
-      const cancelButton = screen.getByText('Cancel')
-      await user.click(cancelButton)
+      const cancelButton = screen.getByText('Cancel');
+      await user.click(cancelButton);
 
-      expect(onDelete).not.toHaveBeenCalled()
-    })
+      expect(onDelete).not.toHaveBeenCalled();
+    });
 
     it('only shows delete button for note owners', async () => {
-      const user = userEvent.setup()
-      const notOwnedNote = createMockNote({ user_id: 'other_user' })
+      const user = userEvent.setup();
+      const notOwnedNote = createMockNote({ user_id: 'other_user' });
 
-      renderNoteCard({ ...defaultProps, note: notOwnedNote, currentUserId: "user1" })
+      renderNoteCard({ ...defaultProps, note: notOwnedNote, currentUserId: 'user1' });
 
-      await user.hover(screen.getByTestId('note-card'))
+      await user.hover(screen.getByTestId('note-card'));
 
-      const menuButton = screen.getByRole('button', { name: 'Note options' })
-      await user.click(menuButton)
+      const menuButton = screen.getByRole('button', { name: 'Note options' });
+      await user.click(menuButton);
 
-      expect(screen.queryByText('Delete')).not.toBeInTheDocument()
-    })
-  })
+      expect(screen.queryByText('Delete')).not.toBeInTheDocument();
+    });
+  });
 
   describe('List Rendering', () => {
     it('renders list items correctly', () => {
       const listNote = createMockNote({
         note_type: 'list',
         items: createMockListItems(),
-      })
+      });
 
-      renderNoteCard({ ...defaultProps, note: listNote })
+      renderNoteCard({ ...defaultProps, note: listNote });
 
-      expect(screen.getByText('Uncompleted item')).toBeInTheDocument()
-      expect(screen.getByText('+1 completed items')).toBeInTheDocument()
-    })
+      expect(screen.getByText('Uncompleted item')).toBeInTheDocument();
+      expect(screen.getByText('+1 completed items')).toBeInTheDocument();
+    });
 
     it('handles empty list', () => {
       const emptyListNote = createMockNote({
         note_type: 'list',
         items: [],
-      })
+      });
 
-      renderNoteCard({ ...defaultProps, note: emptyListNote })
+      renderNoteCard({ ...defaultProps, note: emptyListNote });
 
       // Should render without errors
-      expect(screen.getByText('Test Note')).toBeInTheDocument()
-    })
+      expect(screen.getByText('Test Note')).toBeInTheDocument();
+    });
 
     it('handles list with only completed items', () => {
       const completedOnlyNote = createMockNote({
@@ -558,15 +558,15 @@ describe('NoteCard', () => {
           created_at: '2023-01-01T00:00:00Z',
           updated_at: '2023-01-01T00:00:00Z',
         }],
-      })
+      });
 
-      renderNoteCard({ ...defaultProps, note: completedOnlyNote })
+      renderNoteCard({ ...defaultProps, note: completedOnlyNote });
 
-      expect(screen.getByText('+1 completed items')).toBeInTheDocument()
-    })
+      expect(screen.getByText('+1 completed items')).toBeInTheDocument();
+    });
 
     it('handles list items with extremely long text', () => {
-      const longText = 'A'.repeat(1000)
+      const longText = 'A'.repeat(1000);
       const longTextListNote = createMockNote({
         note_type: 'list',
         items: [{
@@ -580,12 +580,12 @@ describe('NoteCard', () => {
           created_at: '2023-01-01T00:00:00Z',
           updated_at: '2023-01-01T00:00:00Z',
         }],
-      })
+      });
 
-      renderNoteCard({ ...defaultProps, note: longTextListNote })
+      renderNoteCard({ ...defaultProps, note: longTextListNote });
 
-      expect(screen.getByText(longText)).toBeInTheDocument()
-    })
+      expect(screen.getByText(longText)).toBeInTheDocument();
+    });
 
     it('applies wrapping classes for long list preview text', () => {
       const listNote = createMockNote({
@@ -603,149 +603,149 @@ describe('NoteCard', () => {
             updated_at: '2023-01-01T00:00:00Z',
           },
         ],
-      })
+      });
 
-      const { container } = renderNoteCard({ ...defaultProps, note: listNote })
-      const textSpan = container.querySelector('span.text-gray-700')
-      expect(textSpan).toBeTruthy()
-      expect(textSpan).toHaveClass('whitespace-pre-wrap')
-      expect(textSpan).toHaveClass('break-words')
-    })
-  })
+      const { container } = renderNoteCard({ ...defaultProps, note: listNote });
+      const textSpan = container.querySelector('span.text-gray-700');
+      expect(textSpan).toBeTruthy();
+      expect(textSpan).toHaveClass('whitespace-pre-wrap');
+      expect(textSpan).toHaveClass('break-words');
+    });
+  });
 
   describe('Loading States and Error Handling', () => {
     it('shows loading state during operations', async () => {
-      const user = userEvent.setup()
-      const mockUpdate = vi.mocked(notes.update)
+      const user = userEvent.setup();
+      const mockUpdate = vi.mocked(notes.update);
 
-      let resolvePromise: (value: Note | PromiseLike<Note>) => void = () => { }
+      let resolvePromise: (value: Note | PromiseLike<Note>) => void = () => { };
       const promise = new Promise<Note>(resolve => {
-        resolvePromise = resolve
-      })
-      mockUpdate.mockReturnValueOnce(promise)
+        resolvePromise = resolve;
+      });
+      mockUpdate.mockReturnValueOnce(promise);
 
-      renderNoteCard(defaultProps)
+      renderNoteCard(defaultProps);
 
-      await user.hover(screen.getByTestId('note-card'))
+      await user.hover(screen.getByTestId('note-card'));
 
-      const menuButton = screen.getByRole('button', { name: 'Note options' })
-      await user.click(menuButton)
+      const menuButton = screen.getByRole('button', { name: 'Note options' });
+      await user.click(menuButton);
 
-      const pinButton = screen.getByText('Pin')
-      await user.click(pinButton)
+      const pinButton = screen.getByText('Pin');
+      await user.click(pinButton);
 
       // Check loading state - note-card should have opacity-50 class
       await waitFor(() => {
-        expect(screen.getByTestId('note-card')).toHaveClass('opacity-50')
-      })
+        expect(screen.getByTestId('note-card')).toHaveClass('opacity-50');
+      });
 
       // Resolve the promise
-      resolvePromise!(createMockNote({ pinned: true }))
+      resolvePromise!(createMockNote({ pinned: true }));
 
       await waitFor(() => {
-        expect(screen.getByTestId('note-card')).not.toHaveClass('opacity-50')
-      })
-    })
+        expect(screen.getByTestId('note-card')).not.toHaveClass('opacity-50');
+      });
+    });
 
     it('handles network errors gracefully', async () => {
-      const user = userEvent.setup()
-      const mockUpdate = vi.mocked(notes.update)
-      mockUpdate.mockRejectedValueOnce(new Error('Network error'))
+      const user = userEvent.setup();
+      const mockUpdate = vi.mocked(notes.update);
+      mockUpdate.mockRejectedValueOnce(new Error('Network error'));
 
-      renderNoteCard(defaultProps)
+      renderNoteCard(defaultProps);
 
-      await user.hover(screen.getByTestId('note-card'))
+      await user.hover(screen.getByTestId('note-card'));
 
-      const menuButton = screen.getByRole('button', { name: 'Note options' })
-      await user.click(menuButton)
+      const menuButton = screen.getByRole('button', { name: 'Note options' });
+      await user.click(menuButton);
 
-      const archiveButton = screen.getByText('Archive')
-      await user.click(archiveButton)
+      const archiveButton = screen.getByText('Archive');
+      await user.click(archiveButton);
 
       await waitFor(() => {
-        expect(mockConsoleError).toHaveBeenCalledWith('Failed to toggle archive:', expect.any(Error))
-      }, { timeout: 2000 })
-    })
-  })
+        expect(mockConsoleError).toHaveBeenCalledWith('Failed to toggle archive:', expect.any(Error));
+      }, { timeout: 2000 });
+    });
+  });
 
   describe('User Interaction Edge Cases', () => {
     it('handles rapid successive clicks', async () => {
-      const user = userEvent.setup()
-      const onEdit = vi.fn()
+      const user = userEvent.setup();
+      const onEdit = vi.fn();
 
-      renderNoteCard({ ...defaultProps, onEdit })
+      renderNoteCard({ ...defaultProps, onEdit });
 
-      const noteContent = screen.getByText('Test Note')
+      const noteContent = screen.getByText('Test Note');
 
       // Simulate rapid clicking
-      await user.click(noteContent)
-      await user.click(noteContent)
-      await user.click(noteContent)
+      await user.click(noteContent);
+      await user.click(noteContent);
+      await user.click(noteContent);
 
-      expect(onEdit).toHaveBeenCalledTimes(3)
-    })
+      expect(onEdit).toHaveBeenCalledTimes(3);
+    });
 
     it('handles keyboard navigation', async () => {
-      const user = userEvent.setup()
-      renderNoteCard(defaultProps)
+      const user = userEvent.setup();
+      renderNoteCard(defaultProps);
 
-      await user.hover(screen.getByTestId('note-card'))
+      await user.hover(screen.getByTestId('note-card'));
 
-      const menuButton = screen.getByRole('button', { name: 'Note options' })
-      menuButton.focus()
+      const menuButton = screen.getByRole('button', { name: 'Note options' });
+      menuButton.focus();
 
-      await user.keyboard('{Enter}')
+      await user.keyboard('{Enter}');
 
       // Menu should be opened
-      expect(screen.getByText('Pin')).toBeInTheDocument()
-    })
+      expect(screen.getByText('Pin')).toBeInTheDocument();
+    });
 
     it('handles missing optional props gracefully', () => {
       const minimalProps = {
         note: createMockListNote(),
         onEdit: vi.fn(),
         onDelete: vi.fn(),
-      }
+      };
 
-      renderNoteCard(minimalProps)
+      renderNoteCard(minimalProps);
 
-      expect(screen.getByText('Test Note')).toBeInTheDocument()
-    })
-  })
+      expect(screen.getByText('Test Note')).toBeInTheDocument();
+    });
+  });
 
   describe('Bin', () => {
     it('opens the note (read-only) when a binned card is clicked', async () => {
-      const user = userEvent.setup()
-      const onEdit = vi.fn()
+      const user = userEvent.setup();
+      const onEdit = vi.fn();
 
-      renderNoteCard({ ...defaultProps, onEdit, inBin: true })
+      renderNoteCard({ ...defaultProps, onEdit, inBin: true });
 
-      await user.click(screen.getByText('Test Note'))
+      await user.click(screen.getByText('Test Note'));
 
-      expect(onEdit).toHaveBeenCalledWith(defaultProps.note)
-    })
+      expect(onEdit).toHaveBeenCalledWith(defaultProps.note);
+    });
 
     it('opens the note when Enter is pressed on a binned card', async () => {
-      const user = userEvent.setup()
-      const onEdit = vi.fn()
+      const user = userEvent.setup();
+      const onEdit = vi.fn();
 
-      renderNoteCard({ ...defaultProps, onEdit, inBin: true })
+      renderNoteCard({ ...defaultProps, onEdit, inBin: true });
 
-      screen.getByTestId('note-card').focus()
-      await user.keyboard('{Enter}')
+      screen.getByTestId('note-card').focus();
+      await user.keyboard('{Enter}');
 
-      expect(onEdit).toHaveBeenCalledWith(defaultProps.note)
-    })
-  })
+      expect(onEdit).toHaveBeenCalledWith(defaultProps.note);
+    });
+  });
 
   describe('Markdown Rendering', () => {
     it('renders markdown in text note content', () => {
-      const note = createMockNote({ note_type: 'text', content: '**bold text**' })
-      renderNoteCard({ ...defaultProps, note })
-      const card = screen.getByTestId('note-card')
-      expect(card.innerHTML).toContain('<strong>bold text</strong>')
-      expect(card.innerHTML).not.toContain('**bold text**')
-    })
+      const note = createMockNote({ note_type: 'text', content: '**bold text**' });
+      renderNoteCard({ ...defaultProps, note });
+      const card = screen.getByTestId('note-card');
+      expect(card.innerHTML).toContain('<strong>bold text</strong>');
+      expect(card.innerHTML).not.toContain('**bold text**');
+    });
 
     // The card is one control that opens the note. An anchor inside it would
     // follow the link *and* open the note, since both handlers fire, so links
@@ -755,23 +755,23 @@ describe('NoteCard', () => {
     // anchor" would also pass if link parsing had broken entirely, which would
     // show `[docs](…)` as literal source rather than `docs`.
     it('renders links as plain text, in both a text note and a list item', () => {
-      const linkText = 'see https://example.com and [docs](https://example.org)'
-      const asPlainText = 'see https://example.com and docs'
+      const linkText = 'see https://example.com and [docs](https://example.org)';
+      const asPlainText = 'see https://example.com and docs';
 
-      const textNote = createMockNote({ note_type: 'text', content: linkText })
-      const { unmount } = renderNoteCard({ ...defaultProps, note: textNote })
-      expect(screen.getByTestId('note-card').querySelector('a')).toBeNull()
-      expect(screen.getByText(asPlainText)).toBeInTheDocument()
-      unmount()
+      const textNote = createMockNote({ note_type: 'text', content: linkText });
+      const { unmount } = renderNoteCard({ ...defaultProps, note: textNote });
+      expect(screen.getByTestId('note-card').querySelector('a')).toBeNull();
+      expect(screen.getByText(asPlainText)).toBeInTheDocument();
+      unmount();
 
       const listNote = createMockListNote({
         items: [{ ...createMockListItems()[0], text: linkText }],
-      })
-      renderNoteCard({ ...defaultProps, note: listNote })
-      expect(screen.getByTestId('note-card').querySelector('a')).toBeNull()
-      expect(screen.getByText(asPlainText)).toBeInTheDocument()
-    })
-  })
+      });
+      renderNoteCard({ ...defaultProps, note: listNote });
+      expect(screen.getByTestId('note-card').querySelector('a')).toBeNull();
+      expect(screen.getByText(asPlainText)).toBeInTheDocument();
+    });
+  });
 
   describe('Data Integrity Edge Cases', () => {
     it('handles malformed note data', () => {
@@ -780,23 +780,23 @@ describe('NoteCard', () => {
         created_at: 'invalid-date',
         updated_at: null as unknown as string,
         items: null as unknown as NoteItem[],
-      }
+      };
 
-      renderNoteCard({ ...defaultProps, note: malformedNote })
+      renderNoteCard({ ...defaultProps, note: malformedNote });
 
-      expect(screen.getByText('Test Note')).toBeInTheDocument()
-    })
+      expect(screen.getByText('Test Note')).toBeInTheDocument();
+    });
 
     it('handles missing note properties', () => {
       const incompleteNote = {
         id: '1',
         note_type: 'list' as const,
         title: 'Test',
-      } as Note
+      } as Note;
 
-      renderNoteCard({ ...defaultProps, note: incompleteNote })
+      renderNoteCard({ ...defaultProps, note: incompleteNote });
 
-      expect(screen.getByText('Test')).toBeInTheDocument()
-    })
-  })
-})
+      expect(screen.getByText('Test')).toBeInTheDocument();
+    });
+  });
+});
