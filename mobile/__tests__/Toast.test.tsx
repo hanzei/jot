@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { render, fireEvent, act } from '@testing-library/react-native';
 import { ToastProvider } from '../src/components/Toast';
 import { useToast, type ToastContextType } from '../src/hooks/useToast';

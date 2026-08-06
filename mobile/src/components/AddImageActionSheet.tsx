@@ -1,4 +1,4 @@
-import React, { useCallback, useContext } from 'react';
+import { useCallback, useContext } from 'react';
 import { Modal, View, Text, TouchableOpacity, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { Camera, Folder, Images } from 'lucide-react-native';

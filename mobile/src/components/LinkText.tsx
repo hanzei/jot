@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import { memo } from 'react';
 import { Text, StyleSheet, type TextStyle, type StyleProp } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { openUrl } from '../utils/openUrl';

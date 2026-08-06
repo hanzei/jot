@@ -1,4 +1,3 @@
-import React from 'react';
 import { TouchableOpacity, StyleSheet } from 'react-native';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { useRoute, RouteProp } from '@react-navigation/native';

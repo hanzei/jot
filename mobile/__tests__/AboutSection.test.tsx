@@ -1,4 +1,3 @@
-import React from 'react';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import AboutSection from '../src/screens/settings/AboutSection';
 import { useAuth } from '../src/store/AuthContext';

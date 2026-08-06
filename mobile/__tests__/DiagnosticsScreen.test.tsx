@@ -5,7 +5,6 @@
  * dead-letter count — all mirrored into the "Share diagnostics" report.
  */
 
-import React from 'react';
 import { render, fireEvent, act } from '@testing-library/react-native';
 import { Share } from 'react-native';
 import DiagnosticsScreen from '../src/screens/DiagnosticsScreen';
