@@ -103,6 +103,26 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
     return results;
   }, [item.text, completedItemTexts]);
 
+  // A highlight must not outlive the list it points into. `suggestions` is
+  // derived from `completedItemTexts`, which changes whenever an item is
+  // completed or un-completed — including by a collaborator over SSE, with no
+  // keystroke in this field to reset the index. The same index can then mean a
+  // different suggestion (a same-length replacement) or none at all (a shrink),
+  // and a shrink that later re-expands makes a stale index valid again.
+  //
+  // Keyed on the suggestion *text* rather than the array identity: `items` gets
+  // a fresh identity on every edit and autosave pass, so an identity check
+  // would drop the user's highlight mid-interaction for a list that did not
+  // actually change.
+  const suggestionsKey = suggestions.join(' ');
+  const [highlightedFor, setHighlightedFor] = useState(suggestionsKey);
+  if (highlightedFor !== suggestionsKey) {
+    setHighlightedFor(suggestionsKey);
+    setSelectedSuggestionIndex(-1);
+  }
+
+  const suggestionsVisible = showSuggestions && suggestions.length > 0;
+
   const selectSuggestion = (text: string) => {
     if (onAcceptSuggestion) {
       onAcceptSuggestion(item.id, text);
@@ -198,10 +218,16 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
             // aria-controls, which does not exist while the list is collapsed.
             aria-label={t('note.itemLabel')}
             aria-autocomplete="list"
-            aria-controls={showSuggestions && suggestions.length > 0 ? `suggestions-${id}` : undefined}
-            aria-activedescendant={selectedSuggestionIndex >= 0 ? `suggestion-${id}-${selectedSuggestionIndex}` : undefined}
+            aria-controls={suggestionsVisible ? `suggestions-${id}` : undefined}
+            // Tied to the entry existing, not just to a non-negative index: an
+            // id pointing at an option that is not rendered is a dangling
+            // reference for a screen reader.
+            aria-activedescendant={
+              suggestionsVisible && suggestions[selectedSuggestionIndex] !== undefined
+                ? `suggestion-${id}-${selectedSuggestionIndex}`
+                : undefined
+            }
             onKeyDown={readOnly ? undefined : (e) => {
-              const suggestionsVisible = showSuggestions && suggestions.length > 0;
               if (suggestionsVisible && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229) {
                 if (e.key === 'ArrowDown') {
                   e.preventDefault();
@@ -250,7 +276,7 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
             onPaste={readOnly ? undefined : (e) => onPaste?.(index, e)}
             ref={setListItemTextRef}
           />
-          {showSuggestions && suggestions.length > 0 && !isCompleted && !readOnly && (
+          {suggestionsVisible && !isCompleted && !readOnly && (
             <div
               ref={suggestionsRef}
               id={`suggestions-${id}`}
