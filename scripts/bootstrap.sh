@@ -11,6 +11,8 @@
 #   * installs `task` (the Taskfile runner) if it is missing
 #   * `npm ci` in shared/ -> webapp/ -> mobile/, skipping any package whose
 #     node_modules is already stamped up to date with its package-lock.json
+#   * warms the Go build cache so the first `task lint-server` is seconds
+#     rather than minutes
 #   * warns — loudly, without changing anything — when Node or Go is older than
 #     what the repo expects
 #
@@ -22,9 +24,10 @@
 #     shell environment is too invasive to do silently.
 #
 # Environment variables:
-#   JOT_BOOTSTRAP_SKIP=1      skip everything (doc-only sessions)
-#   JOT_BOOTSTRAP_SKIP_NPM=1  skip the npm installs, still install task
-#   JOT_TASK_VERSION=vX.Y.Z   override the pinned Task version
+#   JOT_BOOTSTRAP_SKIP=1           skip everything (doc-only sessions)
+#   JOT_BOOTSTRAP_SKIP_NPM=1       skip the npm installs, still install task
+#   JOT_BOOTSTRAP_SKIP_GO_CACHE=1  skip the Go build cache warm-up
+#   JOT_TASK_VERSION=vX.Y.Z        override the pinned Task version
 
 set -uo pipefail
 
@@ -206,10 +209,36 @@ install_npm_deps() {
   done
 }
 
+# ---------------------------------------------------------------------------
+# Go build cache — golangci-lint type-checks every package, so on a cold cache
+# the first `task lint-server` spends ~2.5 minutes compiling before it reports
+# anything (it is ~1s warm). That cost lands wherever the first lint happens,
+# which is usually at the end of a change and always a surprise. Pay it here
+# instead, where the wait is expected and already budgeted for.
+#
+# Best-effort by design: a compile error in the checkout is the caller's
+# problem to see from `task`, not a reason for setup to fail.
+# ---------------------------------------------------------------------------
+
+warm_go_cache() {
+  if [ "${JOT_BOOTSTRAP_SKIP_GO_CACHE:-}" = "1" ]; then
+    log "JOT_BOOTSTRAP_SKIP_GO_CACHE=1 — skipping Go build cache warm-up"
+    return
+  fi
+
+  command -v go >/dev/null 2>&1 || return
+
+  log "warming the Go build cache (slow only the first time)"
+  if ! (cd "$REPO_ROOT/server" && go build ./... >/dev/null 2>&1); then
+    log "Go build cache warm-up did not complete — 'task lint-server' will report why"
+  fi
+}
+
 check_node
 check_go
 install_task
 install_npm_deps
+warm_go_cache
 
 if [ "$failures" -gt 0 ]; then
   log "finished with $failures error(s) — see above"

@@ -12,6 +12,7 @@ on:
       - ".github/workflows/**"
       - "Taskfile.yml"
       - ".golangci.yml"
+      - "scripts/**"
 
 jobs:
   test:
@@ -87,55 +88,18 @@ jobs:
         with:
           version: 3.x
 
-      - name: Regenerate docs
-        run: task gen-docs
-
+      # Same task the pre-PR gate runs, so a green `task check` means this job
+      # is green too.
       - name: Check docs are up to date
-        run: git diff --exit-code server/docs/
+        run: task check-docs
 
   migrations:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Check migration numbers are unique
-        run: |
-          set -euo pipefail
-          for dialect in sqlite postgres; do
-            dupes=$(ls server/internal/database/migrations/${dialect}/*.sql \
-              | xargs -I{} basename {} \
-              | grep -oP '^\d+' \
-              | sort | uniq -d)
-            if [ -n "$dupes" ]; then
-              echo "Duplicate migration numbers found in ${dialect}: $dupes"
-              exit 1
-            fi
-          done
-          echo "All migration numbers are unique."
-
-      - name: Check sqlite and postgres migrations are in sync
-        run: |
-          set -euo pipefail
-          # Every schema change must ship as two files — one per dialect —
-          # because each dialect has its own embedded migration tree. A
-          # dialect-only migration still passes `task test-server` locally
-          # (the Postgres tests skip without TEST_POSTGRES_DSN), so catch it
-          # here with an error that names the actual problem.
-          # Only top-level *.sql, matching the //go:embed scope in
-          # database.go — anything else is not embedded, so a difference
-          # there is not a migration mismatch.
-          for dialect in sqlite postgres; do
-            find server/internal/database/migrations/${dialect}/ \
-              -maxdepth 1 -type f -name '*.sql' -exec basename {} \; \
-              | sort > "/tmp/migrations-${dialect}.txt"
-          done
-          if ! diff -u /tmp/migrations-sqlite.txt /tmp/migrations-postgres.txt \
-              --label sqlite --label postgres; then
-            echo
-            echo "sqlite and postgres migration sets differ (see diff above)."
-            echo "Every migration needs a matching file with the same name in"
-            echo "both server/internal/database/migrations/sqlite/ and"
-            echo "server/internal/database/migrations/postgres/."
-            exit 1
-          fi
-          echo "sqlite and postgres migration sets match."
+      # The check lives in a script rather than inline here so it can also run
+      # locally as `task check-migrations` — this used to be CI-only, which
+      # meant the mistake it catches was undetectable before pushing.
+      - name: Check migrations
+        run: ./scripts/check-migrations.sh

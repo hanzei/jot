@@ -1,5 +1,11 @@
 # Server Project Instructions
 
+## Formatting
+
+`gofmt`, enforced — it is one of golangci-lint's `formatters:` in
+`.golangci.yml`, so `task lint-server` reports it and `task fmt` applies it.
+`goimports` is listed there but disabled; the comment above it says why.
+
 ## Naming Conventions (Go)
 
 - Packages: `internal/{auth,blobstore,config,database,handlers,logutil,mcphandler,models,server,sse,telemetry}`

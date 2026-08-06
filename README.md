@@ -116,13 +116,17 @@ compiled web app, while SQLite keeps the default deployment small and portable.
 - runs `npm ci` in `shared/` → `webapp/` → `mobile/`, in that order (`@jot/shared`
   is a `file:../shared` dependency of the other two), skipping any package whose
   `node_modules` is already up to date with its `package-lock.json`;
+- warms the Go build cache, so the first `task lint-server` takes seconds rather
+  than the couple of minutes `golangci-lint` needs to type-check every package
+  cold;
 - warns when Node or Go is older than this repo expects, without changing either.
 
 It is idempotent, so re-running it on a provisioned checkout is close to a no-op:
 each package's install is stamped with a hash of its `package-lock.json`, so a
 pull that doesn't touch a lockfile skips straight past it, and one that does
-triggers `npm ci` there automatically. Two escape hatches: `JOT_BOOTSTRAP_SKIP=1`
-skips everything, `JOT_BOOTSTRAP_SKIP_NPM=1` skips just the npm installs.
+triggers `npm ci` there automatically. Three escape hatches:
+`JOT_BOOTSTRAP_SKIP=1` skips everything, `JOT_BOOTSTRAP_SKIP_NPM=1` skips just
+the npm installs, and `JOT_BOOTSTRAP_SKIP_GO_CACHE=1` skips the Go warm-up.
 
 It deliberately does **not** download Playwright browsers (the slowest step, and
 most work never touches e2e) and does **not** install or switch Node/Go versions.
@@ -145,10 +149,11 @@ go install github.com/go-task/task/v3/cmd/task@<TASK_VERSION>
 task bootstrap       # Install task + npm dependencies (same as scripts/bootstrap.sh)
 task run-server      # Start the Jot server
 task run-webapp      # Start webapp dev server with HMR
-task check           # Pre-PR gate: lint + all tests except e2e
+task check           # Pre-PR gate: everything CI runs except e2e
 task check-server    # Lint + test one area (also check-webapp/-mobile/-shared)
 task test            # All tests except e2e
 task lint            # All linters
+task fmt             # Apply Go formatting (gofmt)
 task test-server     # Run server tests
 task test-webapp     # Run webapp tests
 task test-e2e        # Run Playwright end-to-end tests
@@ -159,12 +164,20 @@ task lint-server     # Run server linting with golangci-lint
 task lint-webapp     # Run webapp linting
 task lint-mobile     # Run mobile app linting
 task lint-shared     # Run shared package linting
+task check-docs      # Check server/docs/ matches the handler annotations
+task check-migrations   # Check the sqlite and postgres migration trees match
 task check-translations # Check locale files for missing/extra keys
 task gen-docs        # Regenerate Swagger API docs
 task build-webapp    # Build the webapp into webapp/build
 task build-jotctl    # Build the jotctl admin CLI binary
 task clean           # Remove generated files and node packages
 ```
+
+`task check` is the single command to run before opening a PR — it covers every
+CI job except e2e, so there is nothing else to remember. `task lint` reports
+every linter that failed rather than stopping at the first, while `task test`
+stops at the first failing suite (a broken `shared/` or `server/` would make
+everything downstream fail for reasons that are not its own).
 
 Every `test-*` task forwards extra arguments after `--`, so you can scope a run
 instead of waiting for the whole suite:
@@ -588,10 +601,8 @@ sqlite3 jot.db "SELECT * FROM users;"
 
 ### PR checklist
 
-- `task test`
-- `task lint`
-- `task test-e2e`
-- `task check-translations` when i18n keys change
+- `task check` — lint, all tests, and the docs/migration/translation gates
+- `task test-e2e` — not part of `task check`, since it needs a browser install
 
 ### CI/CD Pipeline
 

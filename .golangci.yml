@@ -96,3 +96,24 @@ linters:
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
+
+# Formatters are reported by `task lint-server` and applied by `task fmt`.
+#
+# gofmt only, on purpose. It is the language's own format, so it decides
+# nothing a Go author has not already agreed to, and the tree was six files
+# away from clean when it was enabled.
+#
+# The ones left out and why:
+#   * goimports — would be a good addition, but golangci-lint v2 defaults its
+#     local-prefixes to the go.mod module path, so enabling it regroups
+#     `github.com/hanzei/jot/...` imports into a trailing block in 72 files.
+#     That is a mechanical, zero-risk sweep, but it conflicts with every
+#     in-flight branch, so it wants its own commit rather than riding along
+#     with an unrelated change. Enable the line below and run `task fmt` when
+#     there is a quiet moment.
+#   * gofumpt, gci, golines — these rewrite code gofmt already considers
+#     correct, which turns edits into diffs the author did not make.
+formatters:
+  enable:
+    - gofmt
+    # - goimports

@@ -5,6 +5,33 @@
     "playwright@claude-plugins-official": true,
     "frontend-design@claude-plugins-official": true
   },
+  "permissions": {
+    "allow": [
+      "Bash(task:*)",
+      "Bash(./scripts/bootstrap.sh)",
+      "Bash(./scripts/check-migrations.sh)",
+      "Bash(./scripts/check-playwright-browser.sh)",
+      "Bash(./scripts/run-tasks.sh:*)",
+      "Bash(go build:*)",
+      "Bash(go test:*)",
+      "Bash(go tool:*)",
+      "Bash(go vet:*)",
+      "Bash(go doc:*)",
+      "Bash(go env:*)",
+      "Bash(gofmt:*)",
+      "Bash(npm run:*)",
+      "Bash(npm ci)",
+      "Bash(npx playwright:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git stash list:*)",
+      "mcp__claude-code-remote__send_later",
+      "mcp__Claude_Code_Remote__send_later"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {
@@ -13,6 +40,18 @@
             "type": "command",
             "command": "bash \"$CLAUDE_PROJECT_DIR/scripts/bootstrap.sh\"",
             "timeout": 600
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/scripts/lint-file.sh\"",
+            "timeout": 60
           }
         ]
       }

@@ -19,12 +19,12 @@ func NewSessionsHandler(sessionStore *models.SessionStore) *SessionsHandler {
 }
 
 type SessionResponse struct {
-	ID        string          `json:"id"`
-	Browser   string          `json:"browser"`
-	OS        string          `json:"os"`
-	IsCurrent bool            `json:"is_current"`
-	CreatedAt time.Time       `json:"created_at"`
-	ExpiresAt time.Time       `json:"expires_at"`
+	ID        string    `json:"id"`
+	Browser   string    `json:"browser"`
+	OS        string    `json:"os"`
+	IsCurrent bool      `json:"is_current"`
+	CreatedAt time.Time `json:"created_at"`
+	ExpiresAt time.Time `json:"expires_at"`
 }
 
 // sessionID derives the public session identifier from the stored token

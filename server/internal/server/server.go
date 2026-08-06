@@ -14,13 +14,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	"database/sql"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/blobstore"
 	"github.com/hanzei/jot/server/internal/config"
-	"database/sql"
 
 	"github.com/hanzei/jot/server/internal/database"
 	"github.com/hanzei/jot/server/internal/database/dialect"

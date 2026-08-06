@@ -53,16 +53,33 @@ When a PR does qualify:
 
 `scripts/bootstrap.sh` provisions a checkout: it installs `task`, runs `npm ci`
 in `shared/` → `webapp/` → `mobile/` (skipping packages that already have
-`node_modules`), and warns about Node/Go version skew. It is the single source
-of truth for setup — `.claude/settings.json` runs it from a `SessionStart` hook
-and `shell.nix` runs it on shell entry, so **a session should already be
-provisioned and `task ...` should work as the first command**. Do not add setup
-steps to those entry points; add them to the script.
+`node_modules`), warms the Go build cache, and warns about Node/Go version
+skew. It is the single source of truth for setup — `.claude/settings.json` runs
+it from a `SessionStart` hook and `shell.nix` runs it on shell entry, so **a
+session should already be provisioned and `task ...` should work as the first
+command**. Do not add setup steps to those entry points; add them to the
+script.
+
+The Go warm-up is there because `golangci-lint` type-checks every package:
+`task lint-server` is ~1s warm and ~2.5 minutes cold, and that cost otherwise
+lands on whoever lints first, usually at the end of a change.
 
 If `task` is somehow missing, run `./scripts/bootstrap.sh` (directly — `task`
 cannot install itself) rather than working around it with raw `go test`/`npm run`.
-`JOT_BOOTSTRAP_SKIP=1` and `JOT_BOOTSTRAP_SKIP_NPM=1` opt out. The README
-documents the script for humans; do not restate its steps elsewhere.
+`JOT_BOOTSTRAP_SKIP=1`, `JOT_BOOTSTRAP_SKIP_NPM=1`, and
+`JOT_BOOTSTRAP_SKIP_GO_CACHE=1` opt out. The README documents the script for
+humans; do not restate its steps elsewhere.
+
+### Editing feedback
+
+`.claude/settings.json` registers a `PostToolUse` hook that runs
+`scripts/lint-file.sh` on every file written or edited, linting just that file
+(`golangci-lint` for Go, ESLint for TypeScript) and reporting failures against
+the edit that caused them rather than at the end of the task. It is a fast
+subset — single-file ESLint means nothing needing whole-project type
+information (`tsc --noEmit`, `task check-translations`) is covered — so it
+narrows the `task check` loop without replacing it. Anything it cannot lint is
+a silent pass.
 
 Playwright browsers are deliberately not part of bootstrap. `task test-e2e`
 checks for them first and stops with the install command if they are missing or
@@ -75,12 +92,14 @@ Use the following Task commands for development:
 **Verification** — prefer the narrowest one that covers what you touched:
 
 - `task check-server` / `check-webapp` / `check-mobile` / `check-shared` - Lint + test one area
-- `task check` - Pre-PR gate: `task lint` then `task test` (everything except e2e)
+- `task check` - Pre-PR gate: everything CI runs except e2e (see the CI Checklist below)
 - `task test` - All tests except e2e (shared + server + webapp + mobile)
 - `task lint` - All linters (shared + server + webapp + mobile)
 - `task test-server` / `test-webapp` / `test-mobile` / `test-shared` - One test suite
 - `task lint-server` / `lint-webapp` / `lint-mobile` / `lint-shared` - One linter
 - `task test-e2e` - Playwright end-to-end tests (`webapp/e2e/`)
+- `task check-docs` - Verify `server/docs/` matches the handler annotations
+- `task check-migrations` - Verify the sqlite and postgres migration trees match
 - `task check-translations` - Verify locale files stay in sync with `en.json`
 - `task coverage` - Run server tests with coverage report
 
@@ -92,22 +111,60 @@ task test-webapp -- NoteModal               # one Vitest file pattern
 task test-e2e -- notes.spec.ts              # one Playwright spec
 ```
 
-`task test` and `task lint` run their suites **serially** (not in parallel) so
-a failure is attributable to one suite rather than buried in interleaved
-output. They stop at the first failing suite.
+Both run their suites **serially** (not in parallel) so a failure is
+attributable to one suite rather than buried in interleaved output. They differ
+in what happens after one fails:
+
+- **`task lint` keeps going** and ends with a summary of every suite that
+  failed. A change spanning `shared/` + `webapp/` + `mobile/` reports all of it
+  in one pass instead of one suite per rerun.
+- **`task test` stops at the first failure**, on purpose: a broken `shared/` or
+  `server/` makes the suites downstream of it fail for reasons that are not
+  their own, and reporting those is noise, not information.
 
 **Running and building:**
 
 - `task run-server` - Start the Jot server
 - `task run-webapp` - Start webapp dev server with HMR
 - `task build-webapp` - Build the webapp into `webapp/build`
-- `task build-jotctl` - Build the `jotctl` admin CLI binary
+- `task build-jotctl` - Build the `jotctl` admin CLI binary (see below)
+- `task fmt` - Apply Go formatting (`gofmt`)
 - `task gen-docs` - Regenerate Swagger API docs from handler annotations
 - `task clean` - Remove generated files and node packages
 
 `golangci-lint` and `swag` are pinned as `tool` directives in `server/go.mod`
 and run via `go tool` — do not `go install` a separate copy, it will drift
 from the version CI uses.
+
+### Formatting
+
+Go is formatted with `gofmt`, reported by `task lint-server` and applied by
+`task fmt` (both go through golangci-lint's `formatters:` block in
+`.golangci.yml`, so there is one source of truth). `goimports` is listed there
+but disabled; the comment above it explains what enabling it would cost.
+
+The TypeScript workspaces have **no** enforced format: no Prettier, no
+stylistic ESLint rules. Match the surrounding file and do not reformat code you
+did not otherwise need to touch.
+
+### Seeing it run
+
+Screenshots for UI changes (see [Pull request artifacts](#pull-request-artifacts))
+need a server with data in it. `jotctl` is how you get one:
+
+```bash
+task run-server                      # terminal 1
+task build-jotctl                    # terminal 2
+./server/jotctl login --server http://localhost:8080 --username <admin>
+./server/jotctl dev seed             # notes, labels, lists, images, shares
+```
+
+`dev seed` covers the full feature surface — including every Markdown
+construct the renderer supports — so it is usually faster than clicking a
+scenario together by hand. `dev reset` deletes all non-admin users and every
+note. Both are development-only; never point them at a real server. The README
+documents the rest of `jotctl` (user management, `JOTCTL_*` environment
+variables).
 
 ## Dependency Updates
 
@@ -488,7 +545,9 @@ If `task` isn't available, these are the underlying commands:
 | `task test-e2e` | `cd webapp && npm run test:e2e` |
 | `task test-mobile` | `cd mobile && npm test -- --ci` |
 | `task build-webapp` | `cd webapp && npm run build` |
+| `task fmt` | `cd server && go tool golangci-lint fmt` |
 | `task gen-docs` | `cd server && go tool swag init --generalInfo main.go --output docs --parseDependency --parseInternal` |
+| `task check-migrations` | `./scripts/check-migrations.sh` |
 
 `JOT_COOKIE_SECURE=false` is required for non-HTTPS local development — session
 cookies are `Secure` by default and the browser will drop them over
@@ -529,9 +588,27 @@ in base-image security patches.
 
 ### CI Checklist (before opening a PR)
 
-1. `task check` — lint + all tests (server, webapp, mobile, shared). Equivalent to `task lint` followed by `task test`.
-2. `task test-e2e` — Playwright e2e tests (**not** part of `task check`; add new e2e tests for any new user-facing feature)
-3. `task check-translations` — locale files in sync with `en.json` (already covered by `task check-webapp`; run separately if you only touched i18n)
-4. `task gen-docs` — if handler annotations or request/response types changed. CI fails if `server/docs/` is stale.
+1. `task check` — everything CI enforces except e2e: lint, all tests, the
+   Swagger-docs freshness check, the migration-parity check, and the
+   translation check.
+2. `task test-e2e` — Playwright e2e tests (**not** part of `task check`; add
+   new e2e tests for any new user-facing feature).
+
+That is the whole list, and neither step is conditional. `task check` used to
+be lint + tests only, with the other three gates written up here as "run this
+one if you touched that" — which is exactly the kind of judgment call that gets
+skipped, and each miss cost a full CI round trip to discover. They are now part
+of the gate and add about eight seconds to it.
+
+If `task check` fails on a gate you did not expect to touch:
+
+- **`check-docs`** — `server/docs/` is generated from the handler annotations
+  by `task gen-docs`, which the check already ran for you. Commit the result.
+- **`check-migrations`** — a migration exists in one dialect tree and not the
+  other, or two share a version number. See
+  [Database Migrations](#database-migrations); the error names the files.
+- **`check-translations`** — a locale file has keys `en.json` does not.
+  A *missing* key is caught earlier, by `tsc` in `lint-webapp`; this gate is
+  what catches stale extra keys and drift in the mobile locales.
 
 While iterating, use the scoped tasks (`task check-server`, `task test-server -- -run TestX`) and save the full gate for just before pushing.
