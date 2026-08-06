@@ -510,6 +510,9 @@ Types are distributed across the `@jot/shared` package (`shared/src/`) and impor
 - Run: `task test-e2e` (scope to one spec with `task test-e2e -- notes.spec.ts`)
 - No server needs to be running first: Playwright's `webServer` builds the webapp, starts the Go server on a throwaway DB, and tears it down. `task test-e2e` pre-compiles the server so that startup stays inside the Playwright timeout on a cold build cache.
 - Browsers are not provisioned by bootstrap. `task test-e2e` runs `scripts/check-playwright-browser.sh` first, which fails with the exact `npx playwright install chromium` command when the pinned Chromium build is missing — that is a one-command fix, not a broken suite.
+- **Linted with the rest of webapp** (`task lint-webapp`), sharing the `tsRules` baseline in `eslint.config.js`. The e2e block drops the React plugins — react-hooks reads Playwright's `use` fixture parameter as React's `use()` hook — and allows `_`-prefixed unused parameters, which is how page objects keep a call signature steady after they stop using an argument.
+- A fixture destructured but never referenced is doing real work: Playwright only runs a fixture a test names, so `authenticatedUser` is what logs the test in. Mark it `void authenticatedUser;` rather than deleting it.
+- Not type-checked: `tsconfig.json` includes only `src`, so `lint:ts` does not cover `e2e/`. ESLint is the only static check these files get.
 
 ---
 
