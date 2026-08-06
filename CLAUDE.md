@@ -180,11 +180,13 @@ on its own; locally it needs
 
 ### TypeScript strictness
 
-All three TypeScript workspaces run `strict` plus `noUnusedLocals`,
-`noUnusedParameters`, `noFallthroughCasesInSwitch`, `noImplicitReturns`,
-`noImplicitOverride`, `noUncheckedIndexedAccess`, `allowUnreachableCode: false`,
-and `allowUnusedLabels: false`. Keep them in step: a flag one workspace has and
-another does not is drift, not a decision. One known gap, tracked rather than
+`shared/tsconfig.json`, `webapp/tsconfig.json`, and `mobile/tsconfig.json`
+carry the same strictness set on top of `strict`, and the two `webapp`
+sub-projects inherit theirs. **Read them for what is on** — enumerating the
+flags here only produced a list that went stale every time one moved. What the
+configs cannot say: keep them in step. A flag one workspace has and another
+does not is drift, not a decision, and the fix is to turn it on everywhere
+rather than to record the exception. One known gap, tracked rather than
 intentional — nothing anywhere runs `exactOptionalPropertyTypes`.
 
 `noUncheckedIndexedAccess` types every indexed read as `T | undefined`, so
@@ -204,15 +206,15 @@ the choice is not stylistic:
 Test code is the one place to reach for `!` freely: a test that indexes past
 the end should fail loudly, and asserting keeps it reading as a test.
 
-**Node types are not repo-wide, on purpose.** `@types/node` is installed in
-`webapp`, but the app project does not pull it in: app code referencing
-`process`, `Buffer`, or `fs` would type-check clean and then break in the
-browser. The trees that *do* run in Node get their own project instead, so
-`webapp` has three, each one an invocation in `lint:ts`:
+**Node types are not repo-wide, on purpose** — `types: ["node"]` must not reach
+`src`, or app code touching `process`/`Buffer`/`fs` type-checks clean and breaks
+in the browser. The header comment in `webapp/tsconfig.e2e.json` has the full
+reasoning. The consequence worth knowing before you add a file outside `src`:
+`webapp` has three projects, each one an invocation in `lint:ts`.
 
 | Project | Covers | Adds |
 |---|---|---|
-| `tsconfig.json` | `src` | the baseline above; browser `lib` only |
+| `tsconfig.json` | `src` | the shared strictness set; browser `lib` only |
 | `tsconfig.node.json` | `vite.config.ts` | `types: ["node"]` |
 | `tsconfig.e2e.json` | `e2e/`, `playwright.config.ts` | `types: ["node"]` |
 
