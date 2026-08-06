@@ -378,14 +378,14 @@ func validateJotImportItems(noteIdx int, items []jotImportNoteItem) ([]models.Jo
 //	@Security	CookieAuth
 //	@Accept		multipart/form-data
 //	@Produce	json
-//	@Param		import_type		formData	string	true	"Import format: jot_json or google_keep (requires file); usememos (requires url and token)"
-//	@Param		file			formData	file	false	"Export file (required when import_type is jot_json or google_keep)"
-//	@Param		url				formData	string	false	"Memos instance URL (required when import_type is usememos)"
-//	@Param		token			formData	string	false	"Memos API token (required when import_type is usememos)"
-//	@Success	200				{object}	ImportResponse
-//	@Failure	400				{string}	string	"bad request"
-//	@Failure	401				{string}	string	"unauthorized"
-//	@Failure	500				{string}	string	"internal server error"
+//	@Param		import_type	formData	string	true	"Import format: jot_json or google_keep (requires file); usememos (requires url and token)"
+//	@Param		file		formData	file	false	"Export file (required when import_type is jot_json or google_keep)"
+//	@Param		url			formData	string	false	"Memos instance URL (required when import_type is usememos)"
+//	@Param		token		formData	string	false	"Memos API token (required when import_type is usememos)"
+//	@Success	200			{object}	ImportResponse
+//	@Failure	400			{string}	string	"bad request"
+//	@Failure	401			{string}	string	"unauthorized"
+//	@Failure	500			{string}	string	"internal server error"
 //	@Router		/notes/import [post]
 func (h *NotesHandler) ImportNotes(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())

@@ -142,10 +142,10 @@ func (h *LabelsHandler) GetLabelCounts(w http.ResponseWriter, r *http.Request) (
 //	@Param		body	body		AddLabelRequest	true	"Label name and optional client-supplied ID"
 //	@Success	200		{object}	models.Label	"an existing label with that name was returned unchanged"
 //	@Success	201		{object}	models.Label	"a new label was created"
-//	@Failure	400		{string}	string	"bad request"
-//	@Failure	401		{string}	string	"unauthorized"
-//	@Failure	409		{string}	string	"label already exists"
-//	@Failure	500		{string}	string	"internal server error"
+//	@Failure	400		{string}	string			"bad request"
+//	@Failure	401		{string}	string			"unauthorized"
+//	@Failure	409		{string}	string			"label already exists"
+//	@Failure	500		{string}	string			"internal server error"
 //	@Router		/labels [post]
 func (h *LabelsHandler) CreateLabel(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())

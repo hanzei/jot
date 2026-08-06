@@ -70,10 +70,10 @@ func (h *PATsHandler) ListPATs(w http.ResponseWriter, r *http.Request) (int, any
 //	@Accept		json
 //	@Produce	json
 //	@Param		body	body		createPATRequest	true	"Token name"
-//	@Success	201	{object}	patResponse
-//	@Failure	400	{string}	string	"bad request"
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	422	{string}	string	"personal access token cap exceeded"
+//	@Success	201		{object}	patResponse
+//	@Failure	400		{string}	string	"bad request"
+//	@Failure	401		{string}	string	"unauthorized"
+//	@Failure	422		{string}	string	"personal access token cap exceeded"
 //	@Router		/pats [post]
 func (h *PATsHandler) CreatePAT(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())

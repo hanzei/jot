@@ -128,7 +128,7 @@ in what happens after one fails:
 - `task run-webapp` - Start webapp dev server with HMR
 - `task build-webapp` - Build the webapp into `webapp/build`
 - `task build-jotctl` - Build the `jotctl` admin CLI binary (see below)
-- `task fmt` - Apply Go formatting (`gofmt`)
+- `task fmt` - Apply Go formatting (gofumpt, goimports, swaggo)
 - `task gen-docs` - Regenerate Swagger API docs from handler annotations
 - `task clean` - Remove generated files and node packages
 
@@ -138,10 +138,16 @@ from the version CI uses.
 
 ### Formatting
 
-Go is formatted with `gofmt`, reported by `task lint-server` and applied by
-`task fmt` (both go through golangci-lint's `formatters:` block in
-`.golangci.yml`, so there is one source of truth). `goimports` is listed there
-but disabled; the comment above it explains what enabling it would cost.
+Go formatting is reported by `task lint-server` and applied by `task fmt`, both
+through golangci-lint's `formatters:` block in `.golangci.yml` — one source of
+truth. Three are enabled: **gofumpt** (a strict superset of `gofmt`, so `gofmt`
+itself is not listed separately), **goimports**, and **swaggo** for the
+`@Param`/`@Success` annotation tables in `internal/handlers`. The comment above
+that block says why `gci` and `golines` are not.
+
+goimports adds and drops imports to match what a file actually uses, so a stale
+import left behind by an edit is fixed by `task fmt` rather than reported as a
+`typecheck` failure.
 
 The TypeScript workspaces have **no** enforced format: no Prettier, no
 stylistic ESLint rules. Match the surrounding file and do not reformat code you

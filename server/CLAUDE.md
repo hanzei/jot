@@ -2,9 +2,10 @@
 
 ## Formatting
 
-`gofmt`, enforced — it is one of golangci-lint's `formatters:` in
-`.golangci.yml`, so `task lint-server` reports it and `task fmt` applies it.
-`goimports` is listed there but disabled; the comment above it says why.
+Enforced, via golangci-lint's `formatters:` in `.golangci.yml`: `task
+lint-server` reports and `task fmt` applies. Three formatters — **gofumpt**
+(supersedes `gofmt`), **goimports**, and **swaggo** for the handler annotation
+tables. Do not hand-align a `//	@Param` block; `task fmt` owns those columns.
 
 ## Naming Conventions (Go)
 

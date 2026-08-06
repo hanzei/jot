@@ -198,7 +198,7 @@ func (h *AdminHandler) UpdateUserRole(w http.ResponseWriter, r *http.Request) (i
 //	@Summary	Delete a user (admin only)
 //	@Tags		admin
 //	@Security	CookieAuth
-//	@Param		id	path		string	true	"User ID"
+//	@Param		id	path	string	true	"User ID"
 //	@Success	204	"no content"
 //	@Failure	401	{string}	string	"unauthorized"
 //	@Failure	403	{string}	string	"forbidden"

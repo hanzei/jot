@@ -153,7 +153,7 @@ task check           # Pre-PR gate: everything CI runs except e2e
 task check-server    # Lint + test one area (also check-webapp/-mobile/-shared)
 task test            # All tests except e2e
 task lint            # All linters
-task fmt             # Apply Go formatting (gofmt)
+task fmt             # Apply Go formatting (gofumpt, goimports, swaggo)
 task test-server     # Run server tests
 task test-webapp     # Run webapp tests
 task test-e2e        # Run Playwright end-to-end tests

@@ -98,22 +98,32 @@ issues:
   max-same-issues: 0
 
 # Formatters are reported by `task lint-server` and applied by `task fmt`.
+# Together these three cost 11 files to adopt and are idempotent — a second
+# `task fmt` is a no-op.
 #
-# gofmt only, on purpose. It is the language's own format, so it decides
-# nothing a Go author has not already agreed to, and the tree was six files
-# away from clean when it was enabled.
+#   * gofumpt supersedes gofmt: it is a strict superset, so plain gofmt
+#     violations are still caught and there is no need to list gofmt as well.
+#     What it adds on top is small and mechanical — mostly collapsing runs of
+#     consecutive `var` declarations into one aligned block.
+#   * goimports keeps the import block ordered, and adds or drops imports to
+#     match what the file actually uses. The second half is why it is here:
+#     a stale import otherwise surfaces as a `typecheck` failure instead of
+#     being fixed in place.
+#   * swaggo aligns the columns of the //	@Param / @Success annotation tables
+#     in internal/handlers. Comment whitespace only — verified not to change a
+#     byte of the generated server/docs/, which `task check-docs` gates on.
 #
-# The ones left out and why:
-#   * goimports — would be a good addition, but golangci-lint v2 defaults its
-#     local-prefixes to the go.mod module path, so enabling it regroups
-#     `github.com/hanzei/jot/...` imports into a trailing block in 72 files.
-#     That is a mechanical, zero-risk sweep, but it conflicts with every
-#     in-flight branch, so it wants its own commit rather than riding along
-#     with an unrelated change. Enable the line below and run `task fmt` when
-#     there is a quiet moment.
-#   * gofumpt, gci, golines — these rewrite code gofmt already considers
-#     correct, which turns edits into diffs the author did not make.
+# Deliberately not enabled:
+#   * gci — overlaps goimports and would fight it over import order. Its extra
+#     configurability buys nothing here.
+#   * golines — reflows long lines: 105 files and ~8700 lines on this tree, to
+#     enforce a line length Go itself declines to have an opinion about.
+#
+# NOTE: goimports has a `local-prefixes` setting that puts module-local imports
+# in their own trailing group. It is off, and turning it on is not a small
+# change — it regroups imports in 72 files.
 formatters:
   enable:
-    - gofmt
-    # - goimports
+    - gofumpt
+    - goimports
+    - swaggo

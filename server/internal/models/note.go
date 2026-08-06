@@ -32,22 +32,24 @@ func (t NoteType) Valid() bool {
 	return t == NoteTypeText || t == NoteTypeList
 }
 
-var ErrNoteNoAccess = errors.New("no access to note")
-var ErrNoteNotFound = errors.New("note not found")
-var ErrNoteNotOwnedByUser = errors.New("note not found or not owned by user")
-var ErrNoteNotInTrash = errors.New("note not found in trash or not owned by user")
-var ErrNoteShareNotFound = errors.New("note share not found")
-var ErrNoteAlreadyShared = errors.New("note already shared with user")
-var ErrNoteExists = errors.New("note already exists")
-var ErrNoteVersionConflict = errors.New("note was modified by another write")
-var ErrNoteItemNotFound = errors.New("note item not found")
-var ErrNoteItemExists = errors.New("note item already exists")
-var ErrNoteItemCapExceeded = errors.New("note item limit reached")
-var ErrInvalidParentRef = errors.New("invalid parent reference")
-var ErrNoteImageNotFound = errors.New("note image not found")
-var ErrNoteImageCapExceeded = errors.New("note image limit reached")
-var ErrNoteTypeUnchanged = errors.New("note is already of the requested type")
-var ErrInvalidNoteType = errors.New("invalid note type")
+var (
+	ErrNoteNoAccess         = errors.New("no access to note")
+	ErrNoteNotFound         = errors.New("note not found")
+	ErrNoteNotOwnedByUser   = errors.New("note not found or not owned by user")
+	ErrNoteNotInTrash       = errors.New("note not found in trash or not owned by user")
+	ErrNoteShareNotFound    = errors.New("note share not found")
+	ErrNoteAlreadyShared    = errors.New("note already shared with user")
+	ErrNoteExists           = errors.New("note already exists")
+	ErrNoteVersionConflict  = errors.New("note was modified by another write")
+	ErrNoteItemNotFound     = errors.New("note item not found")
+	ErrNoteItemExists       = errors.New("note item already exists")
+	ErrNoteItemCapExceeded  = errors.New("note item limit reached")
+	ErrInvalidParentRef     = errors.New("invalid parent reference")
+	ErrNoteImageNotFound    = errors.New("note image not found")
+	ErrNoteImageCapExceeded = errors.New("note image limit reached")
+	ErrNoteTypeUnchanged    = errors.New("note is already of the requested type")
+	ErrInvalidNoteType      = errors.New("invalid note type")
+)
 
 // NoteItemPatch carries the fields that may be changed by a partial single-item
 // update. Nil fields are left untouched (resolved against the item's current

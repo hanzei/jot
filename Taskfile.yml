@@ -117,7 +117,7 @@ tasks:
   # with an enforced format — the TypeScript packages have no Prettier or
   # stylistic ESLint rules, by choice.
   fmt:
-    desc: Apply Go formatting (gofmt)
+    desc: Apply Go formatting (gofumpt, goimports, swaggo)
     dir: server
     cmd: go tool golangci-lint fmt
 
