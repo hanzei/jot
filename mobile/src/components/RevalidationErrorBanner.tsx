@@ -1,4 +1,3 @@
-import React from 'react';
 import { TriangleAlert } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';

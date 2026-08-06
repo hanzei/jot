@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo, type PropsWithChildren } from 'react';
+import { createContext, useContext, useMemo, type PropsWithChildren } from 'react';
 import { SafeAreaInsetsContext, type EdgeInsets } from 'react-native-safe-area-context';
 import { useBannerShown } from '../hooks/useBannerShown';
 

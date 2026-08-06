@@ -1,4 +1,3 @@
-import React from 'react';
 import { Alert, Text } from 'react-native';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { useTranslation } from 'react-i18next';
