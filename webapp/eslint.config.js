@@ -83,7 +83,7 @@ export default [
       ...js.configs.recommended.rules,
     },
   },
-  // The e2e suite gets the same `tsRules` as the app above. The two deltas:
+  // The e2e suite gets the same `tsRules` as the app above. The three deltas:
   //
   //  - No React plugins. Playwright's fixture signature is
   //    `async ({ page }, use) => { await use(value) }`, and react-hooks reads
@@ -94,12 +94,15 @@ export default [
   //    they no longer use so their call signature stays steady (`createNote`
   //    still takes the content its list-note path rejects), and mark them with
   //    a `_` prefix. Same setting mobile's config already uses.
+  //  - `no-undef` back on, against `tsRules`. It is off everywhere else
+  //    because `tsc` does the same job better, but tsconfig.json includes only
+  //    `src`, so nothing type-checks e2e/ (#839). Off *and* untyped would
+  //    leave a misspelled global to surface as a browser-level assertion
+  //    failure in CI. Remove this line when #839 lands and tsc covers e2e.
   //
-  // Globals cover both environments because these files span both: Node for
-  // the test process, browser for the callbacks `page.evaluate` ships into the
-  // page. `no-undef` is off via `tsRules`, so this documents the two contexts
-  // rather than enforcing them — worth keeping accurate, as tsconfig.json
-  // includes only `src` and nothing type-checks e2e/ today either.
+  // Which makes the globals load-bearing rather than decorative: these files
+  // span both environments — Node for the test process, browser for the
+  // callbacks `page.evaluate` ships into the page.
   {
     files: ['e2e/**/*.ts'],
     languageOptions: {
@@ -117,6 +120,7 @@ export default [
     rules: {
       ...tsRules,
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      'no-undef': 'error',
     },
   },
   // The only enforced formatting in the TypeScript workspaces, applied by

@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, waitFor, createEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Label } from '@jot/shared';
+import { createMockTextNote } from '@/utils/__tests__/test-helpers';
 import LabelPicker from '../LabelPicker';
 
 const { mockGetAll, mockAddLabel, mockRemoveLabel } = vi.hoisted(() => ({
@@ -95,11 +96,7 @@ describe('LabelPicker', () => {
   });
 
   it('creates a label via the API for an existing note', async () => {
-    const note = {
-      id: 'note1', user_id: 'user1', note_type: 'text' as const, content: '', pinned: false,
-      version: 1, archived: false, color: '#fff', is_shared: false, deleted_at: null,
-      created_at: '2023-01-01T00:00:00Z', updated_at: '2023-01-01T00:00:00Z', labels: [], position: 0,
-    };
+    const note = createMockTextNote({ id: 'note1' });
     mockAddLabel.mockResolvedValue({ ...note, labels: [makeLabel('Fresh')] });
     const onNoteUpdate = vi.fn();
     render(<LabelPicker note={note} onNoteUpdate={onNoteUpdate} onClose={vi.fn()} />);
@@ -115,11 +112,7 @@ describe('LabelPicker', () => {
   });
 
   it('does not fire duplicate API requests while a create is in flight', async () => {
-    const note = {
-      id: 'note1', user_id: 'user1', note_type: 'text' as const, content: '', pinned: false,
-      version: 1, archived: false, color: '#fff', is_shared: false, deleted_at: null,
-      created_at: '2023-01-01T00:00:00Z', updated_at: '2023-01-01T00:00:00Z', labels: [], position: 0,
-    };
+    const note = createMockTextNote({ id: 'note1' });
     // Never-resolving promise keeps the request "in flight".
     mockAddLabel.mockReturnValue(new Promise(() => {}));
     render(<LabelPicker note={note} onClose={vi.fn()} />);

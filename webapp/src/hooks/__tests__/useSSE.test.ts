@@ -59,16 +59,16 @@ class MockEventSource {
 const originalEventSource = (globalThis as any).EventSource;
 
 beforeEach(() => {
-  MockEventSource.instances = []
+  MockEventSource.instances = [];
   // setup.ts defined EventSource as writable so we can assign directly.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  ;(globalThis as any).EventSource = MockEventSource;
+  (globalThis as any).EventSource = MockEventSource;
 });
 
 afterEach(() => {
-  vi.clearAllMocks()
+  vi.clearAllMocks();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  ;(globalThis as any).EventSource = originalEventSource;
+  (globalThis as any).EventSource = originalEventSource;
 });
 
 describe('useSSE', () => {
