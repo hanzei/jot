@@ -249,7 +249,12 @@
     "noteColorKey": "C",
     "noteColorDescription": "Ouvrir le sélecteur de couleur",
     "noteDeleteKey": "Suppr / Retour arrière",
-    "noteDeleteDescription": "Supprimer la note (avec confirmation)"
+    "noteDeleteDescription": "Supprimer la note (avec confirmation)",
+    "formatSection": "Mise en forme (lors de la modification d'une note texte)",
+    "formatBoldKey": "Ctrl + B",
+    "formatBoldDescription": "Mettre le texte sélectionné en gras",
+    "formatItalicKey": "Ctrl + I",
+    "formatItalicDescription": "Mettre le texte sélectionné en italique"
   },
   "admin": {
     "pageHeading": "Admin",
@@ -359,6 +364,13 @@
     "typeList": "Liste",
     "titlePlaceholder": "Titre de la note...",
     "contentPlaceholder": "Prendre une note...",
+    "formatToolbar": "Mise en forme",
+    "formatBold": "Gras",
+    "formatItalic": "Italique",
+    "formatStrikethrough": "Barré",
+    "formatHeading": "Titre",
+    "formatBulletList": "Liste à puces",
+    "formatChecklist": "Liste de tâches",
     "itemPlaceholder": "Élément de liste...",
     "itemLabel": "Élément de liste",
     "itemCompleted": "Élément terminé",

@@ -1,4 +1,3 @@
-import React from 'react';
 import { Platform } from 'react-native';
 import { render } from '@testing-library/react-native';
 import { MARKDOWN_ITEM_CASES } from '@jot/shared';

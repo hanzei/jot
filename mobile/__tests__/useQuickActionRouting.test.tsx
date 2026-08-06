@@ -1,4 +1,3 @@
-import React from 'react';
 import { Text } from 'react-native';
 import { render, act, waitFor } from '@testing-library/react-native';
 import * as QuickActions from 'expo-quick-actions';

@@ -1,4 +1,3 @@
-import React from 'react';
 import { Alert } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';

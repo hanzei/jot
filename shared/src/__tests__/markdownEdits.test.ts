@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import {
   clampSelection,
   continueListOnNewline,
@@ -7,7 +8,7 @@ import {
   toggleCheckbox,
   toggleInlineMarker,
   type EditorText,
-} from '../src/screens/noteEditor/markdownEdits';
+} from '../markdownEdits';
 
 /**
  * Builds an editor state from a string with the caret marked by `|`, or a

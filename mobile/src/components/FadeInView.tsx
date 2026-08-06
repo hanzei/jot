@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Animated, useAnimatedValue, type ViewProps } from 'react-native';
 import { isReduceMotionEnabledSync } from '../utils/layoutAnimation';
 

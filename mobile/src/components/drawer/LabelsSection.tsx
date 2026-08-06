@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from 'react';
+import { useCallback, useRef } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { EllipsisVertical, Plus, Tag } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';

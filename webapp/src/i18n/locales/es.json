@@ -249,7 +249,12 @@
     "noteColorKey": "C",
     "noteColorDescription": "Abrir el selector de color",
     "noteDeleteKey": "Supr / Retroceso",
-    "noteDeleteDescription": "Eliminar la nota (con confirmación)"
+    "noteDeleteDescription": "Eliminar la nota (con confirmación)",
+    "formatSection": "Formato (al editar una nota de texto)",
+    "formatBoldKey": "Ctrl + B",
+    "formatBoldDescription": "Poner en negrita el texto seleccionado",
+    "formatItalicKey": "Ctrl + I",
+    "formatItalicDescription": "Poner en cursiva el texto seleccionado"
   },
   "admin": {
     "pageHeading": "Admin",
@@ -359,6 +364,13 @@
     "typeList": "Lista",
     "titlePlaceholder": "Título de la nota...",
     "contentPlaceholder": "Tomar una nota...",
+    "formatToolbar": "Formato",
+    "formatBold": "Negrita",
+    "formatItalic": "Cursiva",
+    "formatStrikethrough": "Tachado",
+    "formatHeading": "Encabezado",
+    "formatBulletList": "Lista de viñetas",
+    "formatChecklist": "Lista de tareas",
     "itemPlaceholder": "Elemento de lista...",
     "itemLabel": "Elemento de lista",
     "itemCompleted": "Elemento completado",
