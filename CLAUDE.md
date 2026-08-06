@@ -173,6 +173,11 @@ is laid out. There is deliberately no line-width or indentation rule. For
 anything not covered by the two rules above, match the surrounding file and do
 not reformat code you did not otherwise need to touch.
 
+A formatting-only commit goes in `.git-blame-ignore-revs` so `git blame` points
+at whoever wrote the line rather than at the reformat. GitHub applies that file
+on its own; locally it needs
+`git config blame.ignoreRevsFile .git-blame-ignore-revs`.
+
 ### Seeing it run
 
 Screenshots for UI changes (see [Pull request artifacts](#pull-request-artifacts))
