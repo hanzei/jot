@@ -150,7 +150,9 @@ task bootstrap       # Install task + npm dependencies (same as scripts/bootstra
 task run-server      # Start the Jot server
 task run-webapp      # Start webapp dev server with HMR
 task check           # Pre-PR gate: everything CI runs except e2e
-task check-server    # Lint + test one area (also check-webapp/-mobile/-shared)
+task check-server    # Lint + test the server, plus the docs and migration checks
+task check-webapp    # Lint + test the webapp, plus the translation check
+task check-mobile    # Lint + test the mobile app (check-shared likewise)
 task test            # All tests except e2e
 task lint            # All linters
 task fmt             # Apply Go formatting (gofumpt, goimports, swaggo)

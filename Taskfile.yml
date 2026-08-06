@@ -43,7 +43,7 @@ tasks:
       - task: check-translations
 
   check-server:
-    desc: Lint and test the server only
+    desc: Lint, test, and docs/migration-check the server only
     cmds:
       - task: lint-server
       - task: test-server

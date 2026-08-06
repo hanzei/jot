@@ -91,7 +91,7 @@ Use the following Task commands for development:
 
 **Verification** — prefer the narrowest one that covers what you touched:
 
-- `task check-server` / `check-webapp` / `check-mobile` / `check-shared` - Lint + test one area
+- `task check-server` / `check-webapp` / `check-mobile` / `check-shared` - Lint + test one area, plus that area's own gates: `check-server` also runs `check-docs` and `check-migrations`, `check-webapp` also runs `check-translations`
 - `task check` - Pre-PR gate: everything CI runs except e2e (see the CI Checklist below)
 - `task test` - All tests except e2e (shared + server + webapp + mobile)
 - `task lint` - All linters (shared + server + webapp + mobile)
