@@ -1,0 +1,12 @@
+# Commits that only reformat — `git blame` should look straight through them
+# to the change that actually wrote the line.
+#
+# GitHub reads this file automatically. Git does not: enable it locally with
+#
+#     git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# Only add a commit here if it changed formatting and nothing else. Use the
+# full 40-character SHA — git rejects abbreviated ones.
+
+# Normalize webapp to semicolons and single quotes (#837)
+39d603c7a7f32c77852884b7ebb047ce65a1fadd
