@@ -1,10 +1,10 @@
-import js from '@eslint/js'
-import globals from 'globals'
-import reactHooks from 'eslint-plugin-react-hooks'
-import reactRefresh from 'eslint-plugin-react-refresh'
-import react from 'eslint-plugin-react'
-import tseslint from '@typescript-eslint/eslint-plugin'
-import tsparser from '@typescript-eslint/parser'
+import js from '@eslint/js';
+import globals from 'globals';
+import reactHooks from 'eslint-plugin-react-hooks';
+import reactRefresh from 'eslint-plugin-react-refresh';
+import react from 'eslint-plugin-react';
+import tseslint from '@typescript-eslint/eslint-plugin';
+import tsparser from '@typescript-eslint/parser';
 
 export default [
   {
@@ -76,4 +76,19 @@ export default [
       ...js.configs.recommended.rules,
     },
   },
-]
+  // The only enforced formatting in the TypeScript workspaces, applied by
+  // `task fmt`. Nothing else is enforced — see the Formatting section of
+  // CLAUDE.md for what is deliberately left to the author.
+  //
+  // A trailing block rather than an entry in each `rules` above: webapp is the
+  // one workspace whose config is split into several blocks, and formatting
+  // applies to all of them. The pattern is the union of what those blocks
+  // already match, so it widens no file's coverage — only its rules.
+  {
+    files: ['**/*.{ts,tsx,js}'],
+    rules: {
+      semi: ['error', 'always'],
+      quotes: ['error', 'single', { avoidEscape: true, allowTemplateLiterals: true }],
+    },
+  },
+];
