@@ -408,7 +408,7 @@ func (h *NotesHandler) loadNoteImageForAccess(ctx context.Context, imageID, user
 //	@Summary	Delete a note image
 //	@Tags		notes
 //	@Security	CookieAuth
-//	@Param		id	path		string	true	"Image ID"
+//	@Param		id	path	string	true	"Image ID"
 //	@Success	204	"no content"
 //	@Failure	400	{string}	string	"bad request"
 //	@Failure	401	{string}	string	"unauthorized"

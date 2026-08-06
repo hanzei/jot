@@ -1,5 +1,12 @@
 # Server Project Instructions
 
+## Formatting
+
+Enforced, via golangci-lint's `formatters:` in `.golangci.yml`: `task
+lint-server` reports and `task fmt` applies. Three formatters — **gofumpt**
+(supersedes `gofmt`), **goimports**, and **swaggo** for the handler annotation
+tables. Do not hand-align a `//	@Param` block; `task fmt` owns those columns.
+
 ## Naming Conventions (Go)
 
 - Packages: `internal/{auth,blobstore,config,database,handlers,logutil,mcphandler,models,server,sse,telemetry}`

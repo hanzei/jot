@@ -533,7 +533,7 @@ func validateDuplicateItemIDs(itemIDs map[string]string) error {
 //	@Security	CookieAuth
 //	@Accept		json
 //	@Produce	json
-//	@Param		id		path		string				true	"Note ID"
+//	@Param		id		path		string					true	"Note ID"
 //	@Param		body	body		DuplicateNoteRequest	false	"Optional client-supplied ID for idempotent replay"
 //	@Success	201		{object}	models.Note
 //	@Failure	400		{string}	string	"bad request"
@@ -877,8 +877,8 @@ func (h *NotesHandler) publishUpdateEvent(ctx context.Context, noteID string, no
 //	@Summary	Delete a note (move to trash, or permanently delete)
 //	@Tags		notes
 //	@Security	CookieAuth
-//	@Param		id			path		string	true	"Note ID"
-//	@Param		permanent	query		boolean	false	"Permanently delete from trash instead of soft-deleting"
+//	@Param		id			path	string	true	"Note ID"
+//	@Param		permanent	query	boolean	false	"Permanently delete from trash instead of soft-deleting"
 //	@Success	204			"no content"
 //	@Failure	400			{string}	string	"bad request"
 //	@Failure	401			{string}	string	"unauthorized"
@@ -1021,7 +1021,7 @@ type ReorderNotesRequest struct {
 //	@Tags		notes
 //	@Security	CookieAuth
 //	@Accept		json
-//	@Param		body	body		ReorderNotesRequest	true	"Ordered note IDs"
+//	@Param		body	body	ReorderNotesRequest	true	"Ordered note IDs"
 //	@Success	204		"no content"
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"

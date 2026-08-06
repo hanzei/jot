@@ -1,6 +1,11 @@
 # Claude Code brainstorm/scratch files
 .superpowers/
 
+# Playwright MCP session output (console logs, page snapshots) — written into
+# the working directory by the browser tooling an agent drives, not by the
+# repo's own Playwright suite. Runtime scratch, never worth committing.
+.playwright-mcp/
+
 # Binaries for programs and plugins
 *.exe
 *.exe~

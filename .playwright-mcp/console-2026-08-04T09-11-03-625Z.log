@@ -1,4 +1,0 @@
-[     322ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:8080/api/v1/me:0
-[     327ms] [WARNING] Manifest: Enctype should be set to either application/x-www-form-urlencoded or multipart/form-data. It currently defaults to application/x-www-form-urlencoded @ http://localhost:8080/manifest.webmanifest:0
-[     871ms] [WARNING] Manifest: Enctype should be set to either application/x-www-form-urlencoded or multipart/form-data. It currently defaults to application/x-www-form-urlencoded @ http://localhost:8080/manifest.webmanifest:0
-[     885ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:8080/api/v1/me:0

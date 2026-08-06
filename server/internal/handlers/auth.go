@@ -210,8 +210,10 @@ var validLanguages = map[string]bool{
 // yet and a valid theme value meaning "follow the OS preference".
 const defaultTheme = "system"
 
-var validThemes = map[string]bool{defaultTheme: true, "light": true, "dark": true}
-var validNoteSorts = map[string]bool{"manual": true, "updated_at": true, "created_at": true}
+var (
+	validThemes    = map[string]bool{defaultTheme: true, "light": true, "dark": true}
+	validNoteSorts = map[string]bool{"manual": true, "updated_at": true, "created_at": true}
+)
 
 // validateSettingsFields validates language, theme, and note sort.
 // Returns (lang, theme, noteSort, needUpdate). If all are nil, needUpdate is false.
@@ -573,7 +575,7 @@ func resizeToJPEG(img image.Image, cfg image.Config, maxDim int) ([]byte, error)
 //	@Security	CookieAuth
 //	@Accept		multipart/form-data
 //	@Produce	json
-//	@Param		file	formData	file			true	"Profile icon image (JPEG, PNG or WebP, max 5 MB)"
+//	@Param		file	formData	file	true	"Profile icon image (JPEG, PNG or WebP, max 5 MB)"
 //	@Success	200		{object}	models.User
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"

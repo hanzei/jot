@@ -85,9 +85,10 @@ func parseEnumEnv(name, defaultVal string, allowed ...string) (string, error) {
 // Load reads configuration from environment variables, applying defaults
 // for any values not set.
 //
-//nolint:gocognit,gocyclo // A flat sequence of independent "parse env var,
 // assign field, bail on error" steps; splitting it up would trade this
 // straight-line readability for indirection without reducing actual complexity.
+//
+//nolint:gocognit,gocyclo // A flat sequence of independent "parse env var,
 func Load() (*Config, error) {
 	cfg := &Config{
 		MetricsHost:         "127.0.0.1",

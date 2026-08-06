@@ -287,7 +287,7 @@ func TestHub_ConcurrentAccess(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				ch, unsub := h.Subscribe(t.Context(), "user1")
-			h.Publish(t.Context(), []string{"user1"}, Event{Type: EventNoteUpdated, SourceUserID: "u1", Data: NoteEventData{NoteID: "n1"}})
+				h.Publish(t.Context(), []string{"user1"}, Event{Type: EventNoteUpdated, SourceUserID: "u1", Data: NoteEventData{NoteID: "n1"}})
 				// Drain any delivered event so the channel doesn't block unsubscribe.
 				select {
 				case <-ch:
@@ -302,7 +302,7 @@ func TestHub_ConcurrentAccess(t *testing.T) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-			h.Publish(t.Context(), []string{"user1", "user2"}, Event{Type: EventNoteDeleted, SourceUserID: "u2", Data: NoteEventData{NoteID: "n2"}})
+				h.Publish(t.Context(), []string{"user1", "user2"}, Event{Type: EventNoteDeleted, SourceUserID: "u2", Data: NoteEventData{NoteID: "n2"}})
 			}()
 		}
 
