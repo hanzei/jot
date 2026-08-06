@@ -1,7 +1,7 @@
-import { test, expect, uniqueUsername } from '../fixtures';
+import { test, expect } from '../fixtures';
 
 test.describe('Active Sessions', () => {
-  test('shows current session in settings', async ({ authenticatedUser, settingsPage, page }) => {
+  test('shows current session in settings', async ({ authenticatedUser, settingsPage }) => {
     await settingsPage.goto();
 
     const section = settingsPage.sessionsSection();
@@ -18,7 +18,6 @@ test.describe('Active Sessions', () => {
   test('shows multiple sessions after logging in from another context', async ({
     authenticatedUser,
     settingsPage,
-    page,
     browser,
   }) => {
     // Create a second session by logging in from a new browser context

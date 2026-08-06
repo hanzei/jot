@@ -3,6 +3,11 @@ import { LoginPage } from '../pages/LoginPage';
 
 test.describe('Sharing from NoteModal', () => {
   test('note modal share avatars update after sharing via share modal', async ({ page, authenticatedUser, dashboardPage, request }) => {
+    // Destructured for its side effect: the fixture registers and logs in the
+    // user who owns the note. Playwright only runs a fixture a test asks for,
+    // so dropping the name here would leave the test unauthenticated.
+    void authenticatedUser;
+
     const user2Name = uniqueUsername('share');
     const user2Pass = 'testpass123';
 
@@ -38,6 +43,8 @@ test.describe('Sharing from NoteModal', () => {
   });
 
   test('note modal share avatars update after unsharing via share modal', async ({ page, authenticatedUser, dashboardPage, request }) => {
+    void authenticatedUser;
+
     const user2Name = uniqueUsername('share');
     const user2Pass = 'testpass123';
 
@@ -103,6 +110,8 @@ test.describe('Sharing from NoteModal', () => {
 
 test.describe('Sharing Avatars', () => {
   test('shared note shows recipient avatar on dashboard', async ({ page, authenticatedUser, dashboardPage, request }) => {
+    void authenticatedUser;
+
     const user2Name = uniqueUsername('share');
     const user2Pass = 'testpass123';
 
