@@ -1,4 +1,4 @@
-import { SQLiteDatabase } from 'expo-sqlite';
+import type { SQLiteDatabase } from 'expo-sqlite';
 
 // Per-db chain so each connection serializes its own writes independently.
 const writeChains = new WeakMap<SQLiteDatabase, Promise<void>>();

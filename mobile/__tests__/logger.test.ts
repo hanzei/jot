@@ -1,4 +1,5 @@
-import { initLogger, getLogs, getPersistedLogs, clearLogs, flushLogs, LogEntry } from '../src/utils/logger';
+import type { LogEntry } from '../src/utils/logger';
+import { initLogger, getLogs, getPersistedLogs, clearLogs, flushLogs } from '../src/utils/logger';
 
 const fs = globalThis.mockFileSystem;
 

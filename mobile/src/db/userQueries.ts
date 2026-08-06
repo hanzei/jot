@@ -1,4 +1,4 @@
-import { SQLiteDatabase } from 'expo-sqlite';
+import type { SQLiteDatabase } from 'expo-sqlite';
 import type { User } from '@jot/shared';
 import { withSerializedTransaction } from './transaction';
 

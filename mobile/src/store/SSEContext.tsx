@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useRef, useCallback, useMemo, useState, useEffect } from 'react';
-import { useSSE, SSENotificationCallback } from '../hooks/useSSE';
+import type { SSENotificationCallback } from '../hooks/useSSE';
+import { useSSE } from '../hooks/useSSE';
 import type { SSEStatus } from '../api/events';
 import type { SSEEvent } from '@jot/shared';
 

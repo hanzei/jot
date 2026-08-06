@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useMemo } from 'react';
-import { useColorScheme, StatusBar, ColorSchemeName } from 'react-native';
-import { ThemeColors, lightColors, darkColors } from './colors';
+import type { ColorSchemeName } from 'react-native';
+import { useColorScheme, StatusBar } from 'react-native';
+import type { ThemeColors} from './colors';
+import { lightColors, darkColors } from './colors';
 import type { ThemePreference } from '@jot/shared';
 import { useAuth } from '../store/AuthContext';
 

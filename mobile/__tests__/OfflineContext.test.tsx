@@ -5,7 +5,8 @@
  */
 
 import { render, act } from '@testing-library/react-native';
-import { AppState, AppStateStatus, Text } from 'react-native';
+import type { AppStateStatus} from 'react-native';
+import { AppState, Text } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import NetInfo from '@react-native-community/netinfo';
 import { OfflineProvider, useOfflineContext } from '../src/store/OfflineContext';

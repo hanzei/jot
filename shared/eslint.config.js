@@ -20,6 +20,11 @@ export default [
       ...js.configs.recommended.rules,
       ...tseslint.configs.recommended.rules,
       'no-undef': 'off',
+      // Edit-time mirror of the `verbatimModuleSyntax` compiler flag: reports a
+      // type-only binding pulled in through a plain `import` before `tsc` would.
+      // `disallowTypeAnnotations: false` leaves inline `import('x')` type
+      // annotations alone — `verbatimModuleSyntax` doesn't require touching those.
+      '@typescript-eslint/consistent-type-imports': ['error', { disallowTypeAnnotations: false }],
       // The only enforced formatting in the TypeScript workspaces, applied by
       // `task fmt`. Nothing else is enforced — see the Formatting section of
       // CLAUDE.md for what is deliberately left to the author.

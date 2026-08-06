@@ -1,4 +1,5 @@
-import { backupDatabaseAsync, defaultDatabaseDirectory, openDatabaseAsync, SQLiteDatabase } from 'expo-sqlite';
+import type { SQLiteDatabase } from 'expo-sqlite';
+import { backupDatabaseAsync, defaultDatabaseDirectory, openDatabaseAsync } from 'expo-sqlite';
 import * as SecureStore from 'expo-secure-store';
 import { fileExists, moveFile } from '../utils/fs';
 import { migrateDatabase } from './schema';

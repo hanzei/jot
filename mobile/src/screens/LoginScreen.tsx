@@ -11,12 +11,12 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../store/AuthContext';
 import { getStoredServerUrl } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
-import { AuthStackParamList } from '../navigation/AuthStack';
+import type { AuthStackParamList } from '../navigation/AuthStack';
 import ServerSetupGate from '../components/ServerSetupGate';
 import FadeInView from '../components/FadeInView';
 import { displayMessage } from '../i18n/utils';

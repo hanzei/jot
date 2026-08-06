@@ -8,7 +8,8 @@ import pt from './locales/pt.json';
 import it from './locales/it.json';
 import nl from './locales/nl.json';
 import pl from './locales/pl.json';
-import { SUPPORTED_LANGUAGES, getLanguagePreference, resolveLanguage, SupportedLanguage } from '@/utils/language';
+import type { SupportedLanguage } from '@/utils/language';
+import { SUPPORTED_LANGUAGES, getLanguagePreference, resolveLanguage } from '@/utils/language';
 
 const localeBundles: Record<SupportedLanguage, typeof en> = {
   en,

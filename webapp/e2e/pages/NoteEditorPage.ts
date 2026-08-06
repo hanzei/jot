@@ -1,4 +1,5 @@
-import { Page, expect, Locator } from '@playwright/test';
+import type { Page, Locator } from '@playwright/test';
+import { expect } from '@playwright/test';
 
 /** The six actions on the Markdown formatting toolbar, by testid suffix. */
 export type FormatAction =

@@ -6,6 +6,7 @@
     "strict": true,
     "skipLibCheck": true,
     "isolatedModules": true,
+    "verbatimModuleSyntax": true,
     "noEmit": true,
     "jsx": "react-jsx",
     "noUnusedLocals": true,

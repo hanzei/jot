@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useSSE, SSEEvent } from '../useSSE';
+import type { SSEEvent } from '../useSSE';
+import { useSSE } from '../useSSE';
 import { CLIENT_ID } from '@/utils/api';
 
 // Controllable mock for EventSource that exposes lifecycle handlers.

@@ -1,3 +1,4 @@
+import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures';
 
 /**
@@ -8,14 +9,14 @@ import { test, expect } from '../fixtures';
  * lands.
  */
 test.describe('Checked-item bulk actions', () => {
-  const rowCheckbox = (page: import('@playwright/test').Page, index: number) =>
+  const rowCheckbox = (page: Page, index: number) =>
     page.locator('[data-testid="list-item-row"] input[type="checkbox"]').nth(index);
 
   // Checks the first active item and waits for the completed section to appear.
   // A single forced click checks exactly one item: a plain .check() would
   // re-resolve nth(0) as the checked item reflows into the completed section and
   // end up clicking (and completing) every item in turn.
-  const checkFirstItem = async (page: import('@playwright/test').Page) => {
+  const checkFirstItem = async (page: Page) => {
     await rowCheckbox(page, 0).click({ force: true });
     await expect(page.getByText(/Completed items/)).toBeVisible();
   };
