@@ -242,6 +242,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const response = await auth.login({ username, password });
     setUser(response.user);
     setSettings(response.settings);
+    setSessionEndedReason(null);
     await cacheAuthProfile(response);
   }, []);
 
@@ -249,6 +250,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const response = await auth.register({ username, password });
     setUser(response.user);
     setSettings(response.settings);
+    setSessionEndedReason(null);
     await cacheAuthProfile(response);
   }, []);
 
