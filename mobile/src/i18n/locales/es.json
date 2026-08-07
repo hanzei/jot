@@ -88,7 +88,9 @@
     "localModeHint": "Tus notas permanecen solo en este dispositivo.",
     "localModeFailed": "No se pudo iniciar el modo local. Inténtalo de nuevo.",
     "localModeConfirmTitle": "¿Usar sin servidor?",
-    "localModeConfirmMessage": "Has iniciado sesión en un servidor. Si continúas, se abrirá un cuaderno independiente en este dispositivo: tus notas del servidor permanecerán en el servidor y podrás volver a ellas iniciando sesión de nuevo."
+    "localModeConfirmMessage": "Has iniciado sesión en un servidor. Si continúas, se abrirá un cuaderno independiente en este dispositivo: tus notas del servidor permanecerán en el servidor y podrás volver a ellas iniciando sesión de nuevo.",
+    "sessionEndedMessage": "Se cerró tu sesión. Esto ocurre tras un cambio de contraseña o cuando se revoca la sesión.",
+    "sessionEndedDismiss": "Descartar"
   },
   "dashboard": {
     "newNote": "Nueva nota",

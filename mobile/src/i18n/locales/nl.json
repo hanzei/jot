@@ -88,7 +88,9 @@
     "localModeHint": "Je notities blijven alleen op dit apparaat.",
     "localModeFailed": "Kan lokale modus niet starten. Probeer het opnieuw.",
     "localModeConfirmTitle": "Zonder server gebruiken?",
-    "localModeConfirmMessage": "Je bent aangemeld bij een server. Als je doorgaat, wordt er een apart notitieboek op dit apparaat geopend — je servernotities blijven op de server en je kunt er weer bij door opnieuw in te loggen."
+    "localModeConfirmMessage": "Je bent aangemeld bij een server. Als je doorgaat, wordt er een apart notitieboek op dit apparaat geopend — je servernotities blijven op de server en je kunt er weer bij door opnieuw in te loggen.",
+    "sessionEndedMessage": "Je bent afgemeld. Dit gebeurt na een wachtwoordwijziging of wanneer de sessie wordt ingetrokken.",
+    "sessionEndedDismiss": "Negeren"
   },
   "dashboard": {
     "newNote": "Nieuwe notitie",
