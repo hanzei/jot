@@ -118,6 +118,21 @@ async function getItemsForNote(db: SQLiteDatabase, noteId: string): Promise<Note
 
 // Writes a single note (and its items if provided) without wrapping in a transaction.
 // Must only be called from within an existing transaction context.
+//
+// This is a real upsert (`ON CONFLICT DO UPDATE`), *not* `INSERT OR REPLACE`.
+// SQLite implements REPLACE as DELETE + INSERT, so with `PRAGMA foreign_keys = ON`
+// re-saving an existing note fired `ON DELETE CASCADE` on every child table —
+// silently wiping the note's `pending_image_uploads` rows. Every routine
+// server-sourced write goes through here (the reconnect background fetch, the
+// SSE catch-up, the drain's own create response, the refetch after a server
+// switch), so an image queued while offline was deleted by the very refresh
+// that reconnecting triggers, before the drain could ever upload it.
+//
+// The upsert also leaves `sync_state` alone, which REPLACE reset to its
+// 'synced' default on every write. Nothing depended on that: the pending/failed
+// markers are always set and cleared by their own explicit UPDATEs
+// (markNotePendingCreate / clearNotePendingCreate / markNoteSyncFailed /
+// clearNoteSyncFailed).
 async function saveNoteInTx(db: SQLiteDatabase, note: Note): Promise<void> {
   const title = note.note_type === 'list' ? note.title : '';
   const content = note.note_type === 'text' ? note.content : '';
@@ -125,11 +140,29 @@ async function saveNoteInTx(db: SQLiteDatabase, note: Note): Promise<void> {
   const items = note.note_type === 'list' ? note.items : undefined;
 
   await db.runAsync(
-    `INSERT OR REPLACE INTO notes
+    `INSERT INTO notes
        (id, user_id, title, content, note_type, version, color, pinned, archived, position,
         checked_items_collapsed, is_shared, deleted_at, created_at, updated_at,
         labels_json, shared_with_json, images_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       user_id = excluded.user_id,
+       title = excluded.title,
+       content = excluded.content,
+       note_type = excluded.note_type,
+       version = excluded.version,
+       color = excluded.color,
+       pinned = excluded.pinned,
+       archived = excluded.archived,
+       position = excluded.position,
+       checked_items_collapsed = excluded.checked_items_collapsed,
+       is_shared = excluded.is_shared,
+       deleted_at = excluded.deleted_at,
+       created_at = excluded.created_at,
+       updated_at = excluded.updated_at,
+       labels_json = excluded.labels_json,
+       shared_with_json = excluded.shared_with_json,
+       images_json = excluded.images_json`,
     [
       note.id,
       note.user_id,
@@ -161,6 +194,12 @@ async function saveNoteInTx(db: SQLiteDatabase, note: Note): Promise<void> {
         [item.id, note.id, item.text, item.completed ? 1 : 0, item.position, item.parent_id ?? null, item.assigned_to ?? '', item.created_at ?? '', item.updated_at ?? ''],
       );
     }
+  } else if (note.note_type !== 'list') {
+    // A text note owns no items, so any left behind belong to a list→text
+    // conversion and have to go. REPLACE used to do this implicitly (via the
+    // same cascade this function no longer triggers); the upsert above does
+    // not, so it is explicit now.
+    await db.runAsync('DELETE FROM note_items WHERE note_id = ?', [note.id]);
   }
 }
 
