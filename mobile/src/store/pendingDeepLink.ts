@@ -57,24 +57,59 @@ function parseStored(raw: string): StoredPendingDeepLink | null {
   }
 }
 
-export async function setPendingDeepLink(url: string): Promise<void> {
-  cached = { url, stashedAt: Date.now() };
+// Storage mutations run one at a time, in the order they were requested. The
+// in-memory mirror updates synchronously, so without this a slow write could
+// land *after* the delete that was meant to supersede it and resurrect a link
+// the user had just logged out of.
+let storageQueue: Promise<void> = Promise.resolve();
+
+function enqueue(operation: () => Promise<void>): Promise<void> {
+  // Operations swallow their own storage errors, so the chain never rejects
+  // and one failure cannot stall the ones behind it.
+  storageQueue = storageQueue.then(operation);
+  return storageQueue;
+}
+
+async function writeStored(entry: StoredPendingDeepLink): Promise<void> {
   try {
-    await SecureStore.setItemAsync(PENDING_DEEP_LINK_KEY, JSON.stringify(cached));
+    await SecureStore.setItemAsync(PENDING_DEEP_LINK_KEY, JSON.stringify(entry));
   } catch {
     // Storage failure — the in-memory mirror still carries the link for this
     // process, which is all the pre-persistence implementation ever did.
   }
 }
 
-export async function clearPendingDeepLink(): Promise<void> {
-  cached = null;
+async function deleteStored(): Promise<void> {
   try {
     await SecureStore.deleteItemAsync(PENDING_DEEP_LINK_KEY);
   } catch {
     // Storage failure — the TTL still bounds how long the orphaned value can
     // be replayed.
   }
+}
+
+export function setPendingDeepLink(url: string): Promise<void> {
+  // Capture the entry rather than reading `cached` inside the queued write:
+  // a later set/clear may have replaced it by the time the write runs.
+  const entry: StoredPendingDeepLink = { url, stashedAt: Date.now() };
+  cached = entry;
+  return enqueue(() => writeStored(entry));
+}
+
+export function clearPendingDeepLink(): Promise<void> {
+  cached = null;
+  return enqueue(deleteStored);
+}
+
+// Drops the stash after a link has been replayed, unless a newer one arrived
+// while that replay was in flight — a deep link for another server is stashed
+// mid-replay (see useDeepLinkRouting), and clearing unconditionally would
+// discard it before the remount got a chance to replay it.
+export function consumePendingDeepLink(url: string): Promise<void> {
+  if (cached && cached.url !== url) {
+    return Promise.resolve();
+  }
+  return clearPendingDeepLink();
 }
 
 // Returns the stashed URL, or null when there is none, it has expired, or it is
@@ -95,7 +130,11 @@ export async function getPendingDeepLink(): Promise<string | null> {
     return null;
   }
 
-  if (Date.now() - entry.stashedAt > PENDING_DEEP_LINK_TTL_MS || !isReplayable(entry)) {
+  // A negative age means the entry was stashed under a clock that has since
+  // been corrected backwards. Treat it as expired: left alone it would outlive
+  // the TTL by however far the clock had drifted.
+  const age = Date.now() - entry.stashedAt;
+  if (age < 0 || age > PENDING_DEEP_LINK_TTL_MS || !isReplayable(entry)) {
     await clearPendingDeepLink();
     return null;
   }

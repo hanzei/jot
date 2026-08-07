@@ -7,6 +7,9 @@ const STORAGE_KEY = 'jot_pending_deep_link';
 // the app being killed and relaunched.
 const mockStorage = new Map<string, string>();
 const mockFailures = { read: false, write: false };
+// When set, writes block on this promise — used to hold a write open across a
+// concurrent clear.
+const mockGates: { write: Promise<void> | null } = { write: null };
 
 jest.mock('expo-secure-store', () => ({
   getItemAsync: jest.fn((key: string) =>
@@ -14,12 +17,14 @@ jest.mock('expo-secure-store', () => ({
       ? Promise.reject(new Error('read failed'))
       : Promise.resolve(mockStorage.get(key) ?? null),
   ),
-  setItemAsync: jest.fn((key: string, value: string) => {
+  setItemAsync: jest.fn(async (key: string, value: string) => {
+    if (mockGates.write) {
+      await mockGates.write;
+    }
     if (mockFailures.write) {
-      return Promise.reject(new Error('write failed'));
+      throw new Error('write failed');
     }
     mockStorage.set(key, value);
-    return Promise.resolve();
   }),
   deleteItemAsync: jest.fn((key: string) => {
     mockStorage.delete(key);
@@ -47,6 +52,7 @@ describe('pendingDeepLink', () => {
     mockStorage.clear();
     mockFailures.read = false;
     mockFailures.write = false;
+    mockGates.write = null;
     store = loadStore();
   });
 
@@ -81,6 +87,17 @@ describe('pendingDeepLink', () => {
     expect(mockStorage.has(STORAGE_KEY)).toBe(false);
   });
 
+  it('discards a link stamped in the future', async () => {
+    // A clock corrected backwards after the stash: the age goes negative, and
+    // a bare "age > TTL" check would keep the link alive for the whole drift.
+    seedStorage({ url: 'jot://notes/abc123', stashedAt: Date.now() + 60 * 60 * 1000 });
+
+    const relaunched = loadStore();
+
+    await expect(relaunched.getPendingDeepLink()).resolves.toBeNull();
+    expect(mockStorage.has(STORAGE_KEY)).toBe(false);
+  });
+
   it('keeps a link that is still inside the TTL', async () => {
     seedStorage({
       url: 'jot://notes/abc123',
@@ -99,6 +116,46 @@ describe('pendingDeepLink', () => {
     await expect(store.getPendingDeepLink()).resolves.toBeNull();
     expect(mockStorage.has(STORAGE_KEY)).toBe(false);
     await expect(loadStore().getPendingDeepLink()).resolves.toBeNull();
+  });
+
+  it('does not let a slow write resurrect a link cleared on logout', async () => {
+    let releaseWrite!: () => void;
+    mockGates.write = new Promise<void>((resolve) => {
+      releaseWrite = resolve;
+    });
+
+    // The link is stashed and its write stalls on the native bridge; the user
+    // logs out before it lands.
+    const stashed = store.setPendingDeepLink('jot://notes/abc123');
+    const clearedOnLogout = store.clearPendingDeepLink();
+
+    releaseWrite();
+    await Promise.all([stashed, clearedOnLogout]);
+
+    expect(mockStorage.has(STORAGE_KEY)).toBe(false);
+    await expect(store.getPendingDeepLink()).resolves.toBeNull();
+    await expect(loadStore().getPendingDeepLink()).resolves.toBeNull();
+  });
+
+  it('consumes the replayed link', async () => {
+    await store.setPendingDeepLink('jot://notes/abc123');
+
+    await store.consumePendingDeepLink('jot://notes/abc123');
+
+    expect(mockStorage.has(STORAGE_KEY)).toBe(false);
+    await expect(store.getPendingDeepLink()).resolves.toBeNull();
+  });
+
+  it('leaves a newer link stashed when consuming an older one', async () => {
+    // A second deep link arrives (and is stashed by the server-switch path)
+    // while the first is still being replayed.
+    await store.setPendingDeepLink('jot://notes/first');
+    await store.setPendingDeepLink('jot://notes/second');
+
+    await store.consumePendingDeepLink('jot://notes/first');
+
+    await expect(store.getPendingDeepLink()).resolves.toBe('jot://notes/second');
+    await expect(loadStore().getPendingDeepLink()).resolves.toBe('jot://notes/second');
   });
 
   it('does not replay a persisted non-protected path', async () => {

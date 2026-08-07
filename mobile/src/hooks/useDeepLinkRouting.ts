@@ -17,6 +17,7 @@ import {
 import { addServer, listServers } from '../store/serverAccounts';
 import {
   clearPendingDeepLink,
+  consumePendingDeepLink,
   getPendingDeepLink,
   setPendingDeepLink,
 } from '../store/pendingDeepLink';
@@ -260,14 +261,17 @@ export function useDeepLinkRouting({
         return;
       }
       if (decision !== 'allow') {
-        await clearPendingDeepLink();
+        await consumePendingDeepLink(pendingUrl);
         return;
       }
 
       const pendingPath = getDeepLinkPath(pendingUrl);
       const pendingState = getStateFromPath(pendingPath, linking.config);
-      await clearPendingDeepLink();
-      if (!pendingState) {
+      await consumePendingDeepLink(pendingUrl);
+      // Re-check after the await: a logout or a server switch during it makes
+      // this navigation both stale and, for a logout, a jump into a protected
+      // screen the user is no longer entitled to.
+      if (!pendingState || cancelled) {
         return;
       }
 
