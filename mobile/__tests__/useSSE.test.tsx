@@ -1,7 +1,8 @@
 import React from 'react';
 import { renderHook, act, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { AppState, AppStateStatus } from 'react-native';
+import type { AppStateStatus } from 'react-native';
+import { AppState } from 'react-native';
 import { useSSE } from '../src/hooks/useSSE';
 import { SSEConnectionManager } from '../src/api/events';
 import type { SSEEvent, User } from '@jot/shared';

@@ -1,4 +1,4 @@
-import { SQLiteDatabase } from 'expo-sqlite';
+import type { SQLiteDatabase } from 'expo-sqlite';
 import { deleteFileIfExists } from '../utils/fs';
 import type { Note, NoteItem, GetNotesParams, Label, NoteShare, NoteImage, ShareHistorySource } from '@jot/shared';
 import { getStrongRandomBytes } from '../utils/random';

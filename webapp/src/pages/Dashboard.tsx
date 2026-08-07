@@ -28,6 +28,8 @@ import { useAuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { isAnyModalDialogOpen, isEditableElementFocused, isOverlayControlFocused } from '@/utils/keyboardShortcuts';
 import { isSortWarningDismissed, dismissSortWarning } from '@/utils/sortWarningDismissed';
 import { buildSharedContent } from '@/utils/sharedContent';
+import type {
+  DragEndEvent} from '@dnd-kit/core';
 import {
   DndContext,
   closestCenter,
@@ -35,8 +37,7 @@ import {
   MouseSensor,
   TouchSensor,
   useSensor,
-  useSensors,
-  DragEndEvent,
+  useSensors
 } from '@dnd-kit/core';
 import {
   arrayMove,

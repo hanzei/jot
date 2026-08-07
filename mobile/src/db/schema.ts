@@ -1,4 +1,4 @@
-import { SQLiteDatabase } from 'expo-sqlite';
+import type { SQLiteDatabase } from 'expo-sqlite';
 
 // Migration 1: creates initial schema; idempotent via IF NOT EXISTS and column probing.
 const migration1 = async (db: SQLiteDatabase): Promise<void> => {

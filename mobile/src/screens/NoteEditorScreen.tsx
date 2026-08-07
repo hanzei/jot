@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, useContext } from 'react';
 import axios from 'axios';
+import type {
+  ScrollView} from 'react-native';
 import {
   Animated,
   Easing,
   View,
   Text,
   TextInput,
-  ScrollView,
   TouchableOpacity,
   Alert,
   ActivityIndicator,
@@ -36,7 +37,8 @@ import { Gesture } from 'react-native-gesture-handler';
 import { LinearTransition, useSharedValue, runOnJS } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { Archive, ArrowLeft, Check, ChevronRight, CircleAlert, EllipsisVertical, FileText, Image, List, Palette, Pin, Plus } from 'lucide-react-native';
-import { useNavigation, useRoute, RouteProp, type NavigationAction } from '@react-navigation/native';
+import type { RouteProp} from '@react-navigation/native';
+import { useNavigation, useRoute, type NavigationAction } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useDuplicateNote, useConvertNoteType, useCreateNoteItem, useUpdateNoteItem, useDeleteNoteItem, useReorderNoteItems, useToggleNoteItemCompleted, useUncheckAllItems, useDeleteCompletedItems } from '../hooks/useNotes';

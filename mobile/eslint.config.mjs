@@ -46,6 +46,13 @@ export default [
       ...react.configs.recommended.rules,
       'react/react-in-jsx-scope': 'off',
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      // Edit-time mirror of the `verbatimModuleSyntax` compiler flag: reports a
+      // type-only binding pulled in through a plain `import` before `tsc`
+      // would. `disallowTypeAnnotations: false` leaves inline `import('x')`
+      // type annotations alone — `verbatimModuleSyntax` doesn't require
+      // touching those, and mobile's tests lean on the pattern heavily
+      // (`jest.requireActual<typeof import('react')>(...)`).
+      '@typescript-eslint/consistent-type-imports': ['error', { disallowTypeAnnotations: false }],
       // TypeScript's own type-checking covers undefined-variable detection
       // (including ambient RN/DOM globals like requestAnimationFrame);
       // no-undef only sees ESLint's configured globals and false-positives
