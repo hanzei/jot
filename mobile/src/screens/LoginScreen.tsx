@@ -13,6 +13,7 @@ import {
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
+import { X } from 'lucide-react-native';
 import { useAuth } from '../store/AuthContext';
 import { getStoredServerUrl } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
@@ -26,7 +27,7 @@ type LoginScreenProps = {
 };
 
 export default function LoginScreen({ navigation }: LoginScreenProps) {
-  const { login, enableLocalMode } = useAuth();
+  const { login, enableLocalMode, sessionEndedReason, clearSessionEndedReason } = useAuth();
   const { colors } = useTheme();
   const { t } = useTranslation();
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
@@ -126,6 +127,29 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
       <View style={[styles.inner, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         <Text style={[styles.title, { color: colors.text }]}>Jot</Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{t('auth.signInSubtitle')}</Text>
+
+        {sessionEndedReason ? (
+          <FadeInView>
+            <View
+              style={[styles.sessionEndedBanner, { backgroundColor: colors.warning, borderColor: colors.warningBorder }]}
+              testID="session-ended-banner"
+            >
+              <Text style={[styles.sessionEndedText, { color: colors.warningText }]}>
+                {t('auth.sessionEndedMessage')}
+              </Text>
+              <TouchableOpacity
+                onPress={clearSessionEndedReason}
+                style={styles.sessionEndedDismiss}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel={t('auth.sessionEndedDismiss')}
+                testID="session-ended-dismiss"
+              >
+                <X size={16} color={colors.warningText} />
+              </TouchableOpacity>
+            </View>
+          </FadeInView>
+        ) : null}
 
         <ServerSetupGate testPrefix="login">
           {error ? (
@@ -267,6 +291,24 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 16,
     fontSize: 14,
+  },
+  sessionEndedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 16,
+    gap: 8,
+  },
+  sessionEndedText: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 19,
+  },
+  sessionEndedDismiss: {
+    padding: 2,
   },
   link: {
     marginTop: 16,

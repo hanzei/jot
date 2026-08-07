@@ -59,7 +59,9 @@
     "localModeHint": "Vos notes restent uniquement sur cet appareil.",
     "localModeFailed": "Impossible de démarrer le mode local. Veuillez réessayer.",
     "localModeConfirmTitle": "Utiliser sans serveur ?",
-    "localModeConfirmMessage": "Vous êtes connecté à un serveur. Si vous continuez, un carnet distinct s’ouvrira sur cet appareil : vos notes du serveur y restent, et vous pourrez les retrouver en vous reconnectant."
+    "localModeConfirmMessage": "Vous êtes connecté à un serveur. Si vous continuez, un carnet distinct s’ouvrira sur cet appareil : vos notes du serveur y restent, et vous pourrez les retrouver en vous reconnectant.",
+    "sessionEndedMessage": "Vous avez été déconnecté. Cela se produit après un changement de mot de passe ou lorsque la session est révoquée.",
+    "sessionEndedDismiss": "Ignorer"
   },
   "dashboard": {
     "newNote": "Nouvelle note",
