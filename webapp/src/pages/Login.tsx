@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { Eye, EyeOff, TriangleAlert } from 'lucide-react';
 import { auth } from '@/utils/api';
 import { setUser, setSettings } from '@/utils/auth';
+import { REDIRECT_PARAM, authPathWithRedirect } from '@/utils/authRedirect';
 
 interface LoginProps {
   onLogin: () => void;
@@ -13,6 +14,11 @@ interface LoginProps {
 export default function Login({ onLogin, registrationEnabled }: LoginProps) {
   const { t } = useTranslation();
   useEffect(() => { document.title = t('pageTitle.login'); }, [t]);
+  const [searchParams] = useSearchParams();
+  // Where the user was headed before being bounced here, if anywhere. Carried
+  // over to the registration link; the redirect itself is the router's job
+  // (see PostAuthRedirect), which is what runs once onLogin flips this route.
+  const continueTo = searchParams.get(REDIRECT_PARAM);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -51,7 +57,7 @@ export default function Login({ onLogin, registrationEnabled }: LoginProps) {
             <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-300">
               {t('auth.or')}{' '}
               <Link
-                to="/register"
+                to={authPathWithRedirect('/register', continueTo)}
                 className="font-medium text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300"
               >
                 {t('auth.createNewAccount')}

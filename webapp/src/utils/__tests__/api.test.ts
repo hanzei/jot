@@ -56,6 +56,9 @@ Object.defineProperty(window, 'localStorage', {
 // Mock location
 const mockLocation = {
   href: '',
+  pathname: '/',
+  search: '',
+  hash: '',
 };
 Object.defineProperty(window, 'location', {
   value: mockLocation,
@@ -76,6 +79,9 @@ describe('API Module', () => {
 
   afterEach(() => {
     mockLocation.href = '';
+    mockLocation.pathname = '/';
+    mockLocation.search = '';
+    mockLocation.hash = '';
   });
 
   describe('API Instance Configuration', () => {
@@ -106,6 +112,16 @@ describe('API Module', () => {
 
       expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('user');
       expect(mockLocation.href).toBe('/login');
+    });
+
+    it('remembers the current page when a 401 kicks the user out', async () => {
+      mockLocation.pathname = '/notes/abc123';
+      mockLocation.search = '?label=work';
+
+      const error401 = { response: { status: 401 } };
+      await expect(errorHandler(error401)).rejects.toEqual(error401);
+
+      expect(mockLocation.href).toBe('/login?continue=%2Fnotes%2Fabc123%3Flabel%3Dwork');
     });
 
     it('does not redirect on 401 from /me endpoint', async () => {

@@ -112,6 +112,64 @@ test.describe('Authentication', () => {
     await expect(page).toHaveURL('/login');
   });
 
+  test('returns the user to the page they asked for after logging in', async ({ page, loginPage, registerPage, dashboardPage }) => {
+    const username = uniqueUsername('redirect');
+    const password = 'password123';
+
+    await registerPage.goto();
+    await registerPage.register(username, password);
+    await expect(page).toHaveURL('/');
+    await dashboardPage.logout();
+
+    await page.goto('/settings');
+    await expect(page).toHaveURL(`/login?continue=${encodeURIComponent('/settings')}`);
+
+    await loginPage.login(username, password);
+    await expect(page).toHaveURL('/settings');
+  });
+
+  test('opens the note a shared link points at once the recipient signs in', async ({ page, loginPage, registerPage, dashboardPage }) => {
+    const username = uniqueUsername('notelink');
+    const password = 'password123';
+    const title = `Deep link target ${Date.now()}`;
+
+    await registerPage.goto();
+    await registerPage.register(username, password);
+    await expect(page).toHaveURL('/');
+    await dashboardPage.createNote(title);
+
+    const notesResponse = await page.request.get('/api/v1/notes');
+    const notesList: Array<{ id: string; title?: string }> = await notesResponse.json();
+    const note = notesList.find((n) => n.title === title);
+    expect(note).toBeTruthy();
+    const noteLink = `/notes/${note!.id}`;
+
+    await dashboardPage.logout();
+
+    // Following the link cold: bounced to login, then straight into the note,
+    // with the modal open rather than just the dashboard behind it.
+    await page.goto(noteLink);
+    await expect(page).toHaveURL(`/login?continue=${encodeURIComponent(noteLink)}`);
+
+    await loginPage.login(username, password);
+    await expect(page).toHaveURL(noteLink);
+    await expect(page.locator('input[placeholder="Note title..."]')).toHaveValue(title);
+  });
+
+  test('ignores an off-site redirect target', async ({ page, loginPage, registerPage, dashboardPage }) => {
+    const username = uniqueUsername('offsite');
+    const password = 'password123';
+
+    await registerPage.goto();
+    await registerPage.register(username, password);
+    await expect(page).toHaveURL('/');
+    await dashboardPage.logout();
+
+    await page.goto(`/login?continue=${encodeURIComponent('https://example.com/')}`);
+    await loginPage.login(username, password);
+    await expect(page).toHaveURL('/');
+  });
+
   test('redirects authenticated users away from login page', async ({ page, authenticatedUser }) => {
     void authenticatedUser;
     await page.goto('/login');
