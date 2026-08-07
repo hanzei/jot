@@ -61,13 +61,15 @@ const mockUpdateLocalSettings = updateLocalSettings as jest.Mock;
 const mockUpdateLocalUser = updateLocalUser as jest.Mock;
 
 function TestConsumer() {
-  const { user, isAuthenticated, isLoading, revalidationFailed, logout } = useAuth();
+  const { user, isAuthenticated, isLoading, revalidationFailed, sessionEndedReason, login, logout } = useAuth();
   return (
     <>
       <Text testID="loading">{String(isLoading)}</Text>
       <Text testID="authenticated">{String(isAuthenticated)}</Text>
       <Text testID="revalidation-failed">{String(revalidationFailed)}</Text>
+      <Text testID="session-ended-reason">{sessionEndedReason ?? 'none'}</Text>
       <Text testID="username">{user?.username || 'none'}</Text>
+      <TouchableOpacity testID="login-button" onPress={() => login('testuser', 'password').catch(() => {})} />
       <TouchableOpacity testID="logout-button" onPress={() => logout().catch(() => {})} />
     </>
   );
@@ -306,6 +308,72 @@ describe('AuthContext', () => {
 
     expect(getByTestId('authenticated').props.children).toBe('false');
     expect(getByTestId('username').props.children).toBe('none');
+    unmount();
+  });
+
+  it('sets a session-ended reason on a 401-driven logout and clears it once the user signs back in', async () => {
+    let unauthorizedCb: (() => void) | null = null;
+    mockSetOnUnauthorized.mockImplementation((cb: (() => void) | null) => {
+      unauthorizedCb = cb;
+    });
+
+    mockGetStoredSession.mockResolvedValue('token');
+    mockAuth.me.mockResolvedValue({ user: mockUser, settings: mockSettings });
+
+    const { getByTestId, unmount } = render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('authenticated').props.children).toBe('true');
+    });
+    expect(getByTestId('session-ended-reason').props.children).toBe('none');
+
+    await act(async () => {
+      unauthorizedCb?.();
+    });
+
+    expect(getByTestId('authenticated').props.children).toBe('false');
+    expect(getByTestId('session-ended-reason').props.children).toBe('unauthorized');
+
+    mockAuth.login.mockResolvedValue({ user: mockUser, settings: mockSettings });
+
+    await act(async () => {
+      fireEvent.press(getByTestId('login-button'));
+    });
+
+    await waitFor(() => {
+      expect(getByTestId('authenticated').props.children).toBe('true');
+    });
+    expect(getByTestId('session-ended-reason').props.children).toBe('none');
+    unmount();
+  });
+
+  it('does not set a session-ended reason on an ordinary logout', async () => {
+    mockGetStoredSession.mockResolvedValue('token');
+    mockAuth.me.mockResolvedValue({ user: mockUser, settings: mockSettings });
+    mockAuth.logout.mockResolvedValue(undefined);
+
+    const { getByTestId, unmount } = render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('authenticated').props.children).toBe('true');
+    });
+
+    await act(async () => {
+      fireEvent.press(getByTestId('logout-button'));
+    });
+
+    await waitFor(() => {
+      expect(getByTestId('authenticated').props.children).toBe('false');
+    });
+    expect(getByTestId('session-ended-reason').props.children).toBe('none');
     unmount();
   });
 

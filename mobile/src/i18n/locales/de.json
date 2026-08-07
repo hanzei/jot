@@ -59,7 +59,9 @@
     "localModeHint": "Deine Notizen bleiben nur auf diesem Gerät.",
     "localModeFailed": "Lokaler Modus konnte nicht gestartet werden. Bitte versuche es erneut.",
     "localModeConfirmTitle": "Ohne Server verwenden?",
-    "localModeConfirmMessage": "Du bist bei einem Server angemeldet. Wenn du fortfährst, wird ein separates Notizbuch auf diesem Gerät geöffnet – deine Server-Notizen bleiben auf dem Server und du kannst wieder darauf zugreifen, indem du dich erneut anmeldest."
+    "localModeConfirmMessage": "Du bist bei einem Server angemeldet. Wenn du fortfährst, wird ein separates Notizbuch auf diesem Gerät geöffnet – deine Server-Notizen bleiben auf dem Server und du kannst wieder darauf zugreifen, indem du dich erneut anmeldest.",
+    "sessionEndedMessage": "Du wurdest abgemeldet. Das passiert nach einer Passwortänderung oder wenn die Sitzung widerrufen wurde.",
+    "sessionEndedDismiss": "Verwerfen"
   },
   "dashboard": {
     "newNote": "Neue Notiz",

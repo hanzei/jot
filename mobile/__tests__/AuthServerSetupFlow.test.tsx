@@ -39,6 +39,8 @@ describe('Auth first-run server setup flow', () => {
       isLoading: false,
       isLocalMode: false,
       revalidationFailed: false,
+      sessionEndedReason: null,
+      clearSessionEndedReason: jest.fn(),
       login: mockLogin,
       register: mockRegister,
       enableLocalMode: mockEnableLocalMode,
@@ -327,5 +329,71 @@ describe('Auth first-run server setup flow', () => {
     await waitFor(() => {
       expect(mockEnableLocalMode).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it('does not show a session-ended message by default', async () => {
+    mockGetStoredServerUrl.mockResolvedValue('https://notes.example.com');
+    const { findByTestId, queryByTestId } = renderLoginScreen();
+
+    await findByTestId('username-input');
+    expect(queryByTestId('session-ended-banner')).toBeNull();
+  });
+
+  it('shows a session-ended message after a 401-driven logout and clears it on dismiss (#853)', async () => {
+    const mockClearSessionEndedReason = jest.fn();
+    mockUseAuth.mockReturnValue({
+      user: null,
+      settings: null,
+      isAuthenticated: false,
+      isLoading: false,
+      isLocalMode: false,
+      revalidationFailed: false,
+      sessionEndedReason: 'unauthorized',
+      clearSessionEndedReason: mockClearSessionEndedReason,
+      login: mockLogin,
+      register: mockRegister,
+      enableLocalMode: mockEnableLocalMode,
+      logout: jest.fn(),
+      clearAuth: jest.fn(),
+      revalidateSession: jest.fn(),
+      setUser: jest.fn(),
+      setSettings: jest.fn(),
+      completeServerUpgrade: jest.fn(),
+    });
+
+    const { getByTestId, queryByTestId, rerender } = renderLoginScreen();
+
+    await waitFor(() => {
+      expect(getByTestId('session-ended-banner')).toBeTruthy();
+    });
+    expect(getByTestId('session-ended-banner')).toHaveTextContent(i18n.t('auth.sessionEndedMessage'), { exact: false });
+
+    fireEvent.press(getByTestId('session-ended-dismiss'));
+    expect(mockClearSessionEndedReason).toHaveBeenCalledTimes(1);
+
+    // The mock is stateless (dismiss doesn't flip sessionEndedReason back to
+    // null on its own), so rerender with the reason cleared, the way
+    // AuthContext would after a real dismiss.
+    mockUseAuth.mockReturnValue({
+      user: null,
+      settings: null,
+      isAuthenticated: false,
+      isLoading: false,
+      isLocalMode: false,
+      revalidationFailed: false,
+      sessionEndedReason: null,
+      clearSessionEndedReason: mockClearSessionEndedReason,
+      login: mockLogin,
+      register: mockRegister,
+      enableLocalMode: mockEnableLocalMode,
+      logout: jest.fn(),
+      clearAuth: jest.fn(),
+      revalidateSession: jest.fn(),
+      setUser: jest.fn(),
+      setSettings: jest.fn(),
+      completeServerUpgrade: jest.fn(),
+    });
+    rerender(<LoginScreen navigation={{ navigate: jest.fn() } as never} />);
+    expect(queryByTestId('session-ended-banner')).toBeNull();
   });
 });

@@ -59,7 +59,9 @@
     "localModeHint": "Twoje notatki pozostają tylko na tym urządzeniu.",
     "localModeFailed": "Nie udało się uruchomić trybu lokalnego. Spróbuj ponownie.",
     "localModeConfirmTitle": "Użyć bez serwera?",
-    "localModeConfirmMessage": "Masz zalogowaną sesję na serwerze. Kontynuacja otworzy oddzielny notatnik na tym urządzeniu — Twoje notatki pozostaną na serwerze i możesz do nich wrócić, logując się ponownie."
+    "localModeConfirmMessage": "Masz zalogowaną sesję na serwerze. Kontynuacja otworzy oddzielny notatnik na tym urządzeniu — Twoje notatki pozostaną na serwerze i możesz do nich wrócić, logując się ponownie.",
+    "sessionEndedMessage": "Nastąpiło wylogowanie. Dzieje się tak po zmianie hasła lub gdy sesja zostanie unieważniona.",
+    "sessionEndedDismiss": "Odrzuć"
   },
   "dashboard": {
     "newNote": "Nowa notatka",
