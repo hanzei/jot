@@ -19,8 +19,12 @@ vi.mock('@/utils/auth', () => ({
   setSettings: vi.fn(),
 }));
 
-const renderRegister = (onRegister = vi.fn(), passwordMinLength: number = VALIDATION.PASSWORD_MIN_LENGTH) => render(
-  <MemoryRouter>
+const renderRegister = (
+  onRegister = vi.fn(),
+  passwordMinLength: number = VALIDATION.PASSWORD_MIN_LENGTH,
+  initialEntry = '/register',
+) => render(
+  <MemoryRouter initialEntries={[initialEntry]}>
     <Register onRegister={onRegister} passwordMinLength={passwordMinLength} />
   </MemoryRouter>
 );
@@ -150,5 +154,12 @@ describe('Register', () => {
       expect(setSettings).toHaveBeenCalledWith(expectedSettings);
       expect(onRegister).toHaveBeenCalled();
     });
+  });
+
+  it('carries the redirect target over to the sign-in link', () => {
+    renderRegister(vi.fn(), VALIDATION.PASSWORD_MIN_LENGTH, `/register?continue=${encodeURIComponent('/notes/abc123')}`);
+
+    expect(screen.getByRole('link', { name: t('auth.signInExistingAccount') }))
+      .toHaveAttribute('href', '/login?continue=%2Fnotes%2Fabc123');
   });
 });

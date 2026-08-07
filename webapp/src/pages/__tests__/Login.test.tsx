@@ -18,14 +18,18 @@ vi.mock('@/utils/auth', () => ({
   setSettings: vi.fn(),
 }));
 
-const renderLogin = (props?: { registrationEnabled?: boolean; onLogin?: () => void }) => {
+const renderLogin = (props?: {
+  registrationEnabled?: boolean;
+  onLogin?: () => void;
+  initialEntry?: string;
+}) => {
   const onLogin = props?.onLogin ?? vi.fn();
   const registrationEnabled = props?.registrationEnabled ?? true;
 
   return {
     onLogin,
     ...render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[props?.initialEntry ?? '/login']}>
         <Login onLogin={onLogin} registrationEnabled={registrationEnabled} />
       </MemoryRouter>
     ),
@@ -104,6 +108,13 @@ describe('Login', () => {
       expect(setSettings).toHaveBeenCalledWith(expectedSettings);
       expect(onLogin).toHaveBeenCalled();
     });
+  });
+
+  it('carries the redirect target over to the registration link', () => {
+    renderLogin({ initialEntry: `/login?continue=${encodeURIComponent('/notes/abc123')}` });
+
+    expect(screen.getByRole('link', { name: i18n.t('auth.createNewAccount') }))
+      .toHaveAttribute('href', '/register?continue=%2Fnotes%2Fabc123');
   });
 
   it('shows styled alert when login fails', async () => {

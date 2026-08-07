@@ -112,6 +112,36 @@ test.describe('Authentication', () => {
     await expect(page).toHaveURL('/login');
   });
 
+  test('returns the user to the page they asked for after logging in', async ({ page, loginPage, registerPage, dashboardPage }) => {
+    const username = uniqueUsername('redirect');
+    const password = 'password123';
+
+    await registerPage.goto();
+    await registerPage.register(username, password);
+    await expect(page).toHaveURL('/');
+    await dashboardPage.logout();
+
+    await page.goto('/settings');
+    await expect(page).toHaveURL(`/login?continue=${encodeURIComponent('/settings')}`);
+
+    await loginPage.login(username, password);
+    await expect(page).toHaveURL('/settings');
+  });
+
+  test('ignores an off-site redirect target', async ({ page, loginPage, registerPage, dashboardPage }) => {
+    const username = uniqueUsername('offsite');
+    const password = 'password123';
+
+    await registerPage.goto();
+    await registerPage.register(username, password);
+    await expect(page).toHaveURL('/');
+    await dashboardPage.logout();
+
+    await page.goto(`/login?continue=${encodeURIComponent('https://example.com/')}`);
+    await loginPage.login(username, password);
+    await expect(page).toHaveURL('/');
+  });
+
   test('redirects authenticated users away from login page', async ({ page, authenticatedUser }) => {
     void authenticatedUser;
     await page.goto('/login');
