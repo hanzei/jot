@@ -439,7 +439,7 @@ describe('OfflineProvider queue draining', () => {
     });
     await flush();
     expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(warnSpy.mock.calls[0][0]).toMatch(/stalled \(attempt 1\/6\)/);
+    expect(warnSpy.mock.calls[0]![0]).toMatch(/stalled \(attempt 1\/6\)/);
 
     // Recovering from that failure streak logs a recovery line.
     mockGetPendingCount.mockResolvedValue(0);
@@ -448,7 +448,7 @@ describe('OfflineProvider queue draining', () => {
     });
     await flush();
     expect(infoSpy).toHaveBeenCalledTimes(1);
-    expect(infoSpy.mock.calls[0][0]).toMatch(/succeeded after 1 failed attempt/);
+    expect(infoSpy.mock.calls[0]![0]).toMatch(/succeeded after 1 failed attempt/);
 
     warnSpy.mockRestore();
     infoSpy.mockRestore();

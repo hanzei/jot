@@ -187,8 +187,7 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
     }
     const items = itemsRef.current;
     if (items.length !== savedOrderRef.current.length) return true;
-    for (let i = 0; i < items.length; i++) {
-      const it = items[i];
+    for (const [i, it] of items.entries()) {
       if (savedOrderRef.current[i] !== it.id) return true;
       const snap = savedItemsRef.current.get(it.id);
       if (!snap || snap.text !== it.text || snap.completed !== it.completed

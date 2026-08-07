@@ -23,7 +23,7 @@ export function parseDeepLink(url: string): { path: string; hasServerParam: bool
       serverOrigin: serverParam ? normalizeServerOrigin(serverParam) : null,
     };
   } catch {
-    const [withoutScheme, rawQuery = ''] = url.replace(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//, '').split('?');
+    const [withoutScheme = '', rawQuery = ''] = url.replace(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//, '').split('?');
     const serverParam = new URLSearchParams(rawQuery).get('server');
     return {
       path: withoutScheme.replace(/^\/+|\/+$/g, ''),

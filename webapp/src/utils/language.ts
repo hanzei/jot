@@ -18,7 +18,8 @@ export const resolveLanguage = (pref: LanguagePreference): SupportedLanguage => 
   if (pref !== 'system') {
     return pref;
   }
-  const browserLang = navigator.language.split('-')[0].toLowerCase();
+  // split always yields at least one element, even for an empty string.
+  const browserLang = navigator.language.split('-')[0]!.toLowerCase();
   if ((SUPPORTED_LANGUAGES as readonly string[]).includes(browserLang)) {
     return browserLang as SupportedLanguage;
   }

@@ -718,7 +718,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     const currentItems = itemsRef.current;
     const itemPos = currentItems.findIndex(item => item.id === itemId);
     if (itemPos === -1) return itemId;
-    const currentItem = currentItems[itemPos];
+    const currentItem = currentItems[itemPos]!;
     const before = currentItem.text.slice(0, splitPos);
     const after = currentItem.text.slice(splitPos);
     const newItem: ListItem = {
@@ -763,7 +763,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       if (targetIndex < 0 || targetIndex >= uncompletedItems.length) return;
 
       e.preventDefault();
-      const targetItem = uncompletedItems[targetIndex];
+      const targetItem = uncompletedItems[targetIndex]!;
       const el = itemInputRefs.current.get(targetItem.id);
       if (el) {
         const cursorPos = Math.min(
@@ -917,7 +917,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     cancelPendingSave();
     autoSaveNote();
 
-    const lastNewItem = newItems[newItems.length - 1];
+    // lines.length > 1 was checked above, so newItems has at least one entry.
+    const lastNewItem = newItems[newItems.length - 1]!;
     setTimeout(() => {
       const el = itemInputRefs.current.get(lastNewItem.id);
       if (el) {
@@ -1029,14 +1030,9 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   // Helper function to find target item by index (for backward compatibility)
   const findTargetItem = (index: number): ListItem | null => {
     if (index < uncompletedItems.length) {
-      return uncompletedItems[index];
-    } else {
-      const completedIndex = index - uncompletedItems.length;
-      if (completedIndex < completedItems.length) {
-        return completedItems[completedIndex];
-      }
+      return uncompletedItems[index] ?? null;
     }
-    return null;
+    return completedItems[index - uncompletedItems.length] ?? null;
   };
 
   // Main updateListItem function - now much simpler and more reliable
@@ -2092,7 +2088,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                       ? Math.max(0, currentIndex - 1)
                       : Math.min(colors.length - 1, currentIndex + 1);
                   if (nextIndex === currentIndex) return;
-                  const nextColor = colors[nextIndex].value;
+                  const nextColor = colors[nextIndex]!.value;
                   setColor(nextColor);
                   if (note) {
                     markDirty();

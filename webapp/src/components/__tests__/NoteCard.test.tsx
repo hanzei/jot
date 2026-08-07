@@ -765,7 +765,7 @@ describe('NoteCard', () => {
       unmount();
 
       const listNote = createMockListNote({
-        items: [{ ...createMockListItems()[0], text: linkText }],
+        items: [{ ...createMockListItems()[0]!, text: linkText }],
       });
       renderNoteCard({ ...defaultProps, note: listNote });
       expect(screen.getByTestId('note-card').querySelector('a')).toBeNull();

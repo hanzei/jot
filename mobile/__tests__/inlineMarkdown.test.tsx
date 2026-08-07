@@ -173,7 +173,7 @@ describe('InlineMarkdown', () => {
 
   for (const testCase of MARKDOWN_ITEM_CASES) {
     it(`${testCase.id}: ${testCase.expected}`, () => {
-      conformance[testCase.id]();
+      conformance[testCase.id]!();
     });
   }
 

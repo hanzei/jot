@@ -433,7 +433,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
     const handlePopState = () => {
       const notePathMatch = window.location.pathname.match(/^\/notes\/(.+)$/);
       if (notePathMatch && !openNoteIdRef.current) {
-        openNoteFromUrl(notePathMatch[1]);
+        openNoteFromUrl(notePathMatch[1]!);
       } else if (!notePathMatch && openNoteIdRef.current) {
         openNoteIdRef.current = null;
         setIsModalOpen(false);

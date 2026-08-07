@@ -30,7 +30,8 @@ export const ALLOWED_LINK_SCHEMES = ['http', 'https', 'mailto'] as const;
 export function isAllowedLinkHref(href: string): boolean {
   const scheme = /^\s*([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(href);
   if (!scheme) return false;
-  return (ALLOWED_LINK_SCHEMES as readonly string[]).includes(scheme[1].toLowerCase());
+  // The group is not optional, so a match always captured it.
+  return (ALLOWED_LINK_SCHEMES as readonly string[]).includes(scheme[1]!.toLowerCase());
 }
 
 /**

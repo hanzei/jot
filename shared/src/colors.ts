@@ -26,7 +26,8 @@ export const AVATAR_COLORS = [
 ];
 
 export function getAvatarColor(username: string): string {
-  return AVATAR_COLORS[hashUsername(username) % AVATAR_COLORS.length];
+  // hashUsername returns a non-negative number, so the modulo is in range.
+  return AVATAR_COLORS[hashUsername(username) % AVATAR_COLORS.length]!;
 }
 
 /** Colors light enough to need a visible border on white backgrounds. */

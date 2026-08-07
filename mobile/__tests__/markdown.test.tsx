@@ -241,7 +241,7 @@ describe('markdown rendering', () => {
 
   for (const testCase of MARKDOWN_CASES) {
     it(`${testCase.id}: ${testCase.expected}`, () => {
-      conformance[testCase.id]();
+      conformance[testCase.id]!();
     });
   }
 

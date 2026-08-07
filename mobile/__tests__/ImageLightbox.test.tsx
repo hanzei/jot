@@ -65,7 +65,7 @@ describe('ImageLightbox', () => {
 
   it('hides navigation controls and the counter for a single image', () => {
     const { queryByTestId } = render(
-      <ImageLightbox images={[images[0]]} index={0} onIndexChange={jest.fn()} onClose={jest.fn()} />,
+      <ImageLightbox images={[images[0]!]} index={0} onIndexChange={jest.fn()} onClose={jest.fn()} />,
     );
 
     expect(queryByTestId('lightbox-next')).toBeNull();

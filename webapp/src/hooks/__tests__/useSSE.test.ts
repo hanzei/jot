@@ -78,7 +78,7 @@ describe('useSSE', () => {
       renderHook(() => useSSE({ onEvent: vi.fn() }));
 
       expect(MockEventSource.instances).toHaveLength(1);
-      const es = MockEventSource.instances[0];
+      const es = MockEventSource.instances[0]!;
       expect(es.url).toBe('/api/v1/events');
       expect(es.withCredentials).toBe(true);
     });
@@ -99,7 +99,7 @@ describe('useSSE', () => {
       const { result } = renderHook(() => useSSE({ onEvent: vi.fn() }));
 
       act(() => {
-        MockEventSource.instances[0].simulateOpen();
+        MockEventSource.instances[0]!.simulateOpen();
       });
 
       expect(result.current).toBe('connected');
@@ -109,7 +109,7 @@ describe('useSSE', () => {
       const { result } = renderHook(() => useSSE({ onEvent: vi.fn() }));
 
       act(() => {
-        MockEventSource.instances[0].simulateError(MockEventSource.CONNECTING);
+        MockEventSource.instances[0]!.simulateError(MockEventSource.CONNECTING);
       });
 
       expect(result.current).toBe('connecting');
@@ -119,10 +119,10 @@ describe('useSSE', () => {
       const { result } = renderHook(() => useSSE({ onEvent: vi.fn() }));
 
       act(() => {
-        MockEventSource.instances[0].simulateOpen();
+        MockEventSource.instances[0]!.simulateOpen();
       });
       act(() => {
-        MockEventSource.instances[0].simulateError(MockEventSource.CONNECTING);
+        MockEventSource.instances[0]!.simulateError(MockEventSource.CONNECTING);
       });
 
       expect(result.current).toBe('reconnecting');
@@ -132,7 +132,7 @@ describe('useSSE', () => {
       const { result } = renderHook(() => useSSE({ onEvent: vi.fn() }));
 
       act(() => {
-        MockEventSource.instances[0].simulateError(MockEventSource.CLOSED);
+        MockEventSource.instances[0]!.simulateError(MockEventSource.CLOSED);
       });
 
       expect(result.current).toBe('disconnected');
@@ -142,10 +142,10 @@ describe('useSSE', () => {
       const { result } = renderHook(() => useSSE({ onEvent: vi.fn() }));
 
       act(() => {
-        MockEventSource.instances[0].simulateOpen();
+        MockEventSource.instances[0]!.simulateOpen();
       });
       act(() => {
-        MockEventSource.instances[0].simulateError(MockEventSource.CLOSED);
+        MockEventSource.instances[0]!.simulateError(MockEventSource.CLOSED);
       });
 
       expect(result.current).toBe('reconnecting');
@@ -164,24 +164,24 @@ describe('useSSE', () => {
       renderHook(() => useSSE({ onEvent: vi.fn() }));
 
       act(() => {
-        MockEventSource.instances[0].simulateError(MockEventSource.CLOSED);
+        MockEventSource.instances[0]!.simulateError(MockEventSource.CLOSED);
       });
       // The dead EventSource is closed and no new one exists yet.
-      expect(MockEventSource.instances[0].closeCalled).toBe(true);
+      expect(MockEventSource.instances[0]!.closeCalled).toBe(true);
       expect(MockEventSource.instances).toHaveLength(1);
 
       act(() => {
         vi.advanceTimersByTime(1000);
       });
       expect(MockEventSource.instances).toHaveLength(2);
-      expect(MockEventSource.instances[1].url).toBe('/api/v1/events');
+      expect(MockEventSource.instances[1]!.url).toBe('/api/v1/events');
     });
 
     it('returns to connected once the reconnect opens (banner clears)', () => {
       const { result } = renderHook(() => useSSE({ onEvent: vi.fn() }));
 
       act(() => {
-        MockEventSource.instances[0].simulateError(MockEventSource.CLOSED);
+        MockEventSource.instances[0]!.simulateError(MockEventSource.CLOSED);
       });
       expect(result.current).toBe('disconnected');
 
@@ -189,7 +189,7 @@ describe('useSSE', () => {
         vi.advanceTimersByTime(1000);
       });
       act(() => {
-        MockEventSource.instances[1].simulateOpen();
+        MockEventSource.instances[1]!.simulateOpen();
       });
 
       expect(result.current).toBe('connected');
@@ -200,7 +200,7 @@ describe('useSSE', () => {
 
       // First failure → retry after 1s.
       act(() => {
-        MockEventSource.instances[0].simulateError(MockEventSource.CLOSED);
+        MockEventSource.instances[0]!.simulateError(MockEventSource.CLOSED);
       });
       act(() => {
         vi.advanceTimersByTime(1000);
@@ -209,7 +209,7 @@ describe('useSSE', () => {
 
       // Second failure → retry after 2s (not yet at 1s).
       act(() => {
-        MockEventSource.instances[1].simulateError(MockEventSource.CLOSED);
+        MockEventSource.instances[1]!.simulateError(MockEventSource.CLOSED);
       });
       act(() => {
         vi.advanceTimersByTime(1000);
@@ -222,10 +222,10 @@ describe('useSSE', () => {
 
       // A successful open resets the backoff back to 1s.
       act(() => {
-        MockEventSource.instances[2].simulateOpen();
+        MockEventSource.instances[2]!.simulateOpen();
       });
       act(() => {
-        MockEventSource.instances[2].simulateError(MockEventSource.CLOSED);
+        MockEventSource.instances[2]!.simulateError(MockEventSource.CLOSED);
       });
       act(() => {
         vi.advanceTimersByTime(1000);
@@ -237,7 +237,7 @@ describe('useSSE', () => {
       const { unmount } = renderHook(() => useSSE({ onEvent: vi.fn() }));
 
       act(() => {
-        MockEventSource.instances[0].simulateError(MockEventSource.CLOSED);
+        MockEventSource.instances[0]!.simulateError(MockEventSource.CLOSED);
       });
       unmount();
       act(() => {
@@ -254,7 +254,7 @@ describe('useSSE', () => {
       renderHook(() => useSSE({ onEvent: vi.fn(), onConnected }));
 
       act(() => {
-        MockEventSource.instances[0].simulateOpen();
+        MockEventSource.instances[0]!.simulateOpen();
       });
 
       expect(onConnected).toHaveBeenCalledTimes(1);
@@ -264,7 +264,7 @@ describe('useSSE', () => {
       renderHook(() => useSSE({ onEvent: vi.fn() }));
 
       expect(() => {
-        act(() => MockEventSource.instances[0].simulateOpen());
+        act(() => MockEventSource.instances[0]!.simulateOpen());
       }).not.toThrow();
     });
   });
@@ -281,7 +281,7 @@ describe('useSSE', () => {
       };
 
       act(() => {
-        MockEventSource.instances[0].simulateMessage(event);
+        MockEventSource.instances[0]!.simulateMessage(event);
       });
 
       expect(onEvent).toHaveBeenCalledTimes(1);
@@ -300,7 +300,7 @@ describe('useSSE', () => {
       };
 
       act(() => {
-        MockEventSource.instances[0].simulateMessage(event);
+        MockEventSource.instances[0]!.simulateMessage(event);
       });
 
       expect(onEvent).not.toHaveBeenCalled();
@@ -318,7 +318,7 @@ describe('useSSE', () => {
       };
 
       act(() => {
-        MockEventSource.instances[0].simulateMessage(event);
+        MockEventSource.instances[0]!.simulateMessage(event);
       });
 
       expect(onEvent).toHaveBeenCalledWith(event);
@@ -335,7 +335,7 @@ describe('useSSE', () => {
       };
 
       act(() => {
-        MockEventSource.instances[0].simulateMessage(event);
+        MockEventSource.instances[0]!.simulateMessage(event);
       });
 
       expect(onEvent).toHaveBeenCalledWith(event);
@@ -347,7 +347,7 @@ describe('useSSE', () => {
 
       expect(() => {
         act(() => {
-          MockEventSource.instances[0].simulateRawMessage('not valid json {{{');
+          MockEventSource.instances[0]!.simulateRawMessage('not valid json {{{');
         });
       }).not.toThrow();
 
@@ -360,7 +360,7 @@ describe('useSSE', () => {
 
       expect(() => {
         act(() => {
-          MockEventSource.instances[0].simulateRawMessage('');
+          MockEventSource.instances[0]!.simulateRawMessage('');
         });
       }).not.toThrow();
 
@@ -374,12 +374,12 @@ describe('useSSE', () => {
 
       unmount();
 
-      expect(MockEventSource.instances[0].closeCalled).toBe(true);
+      expect(MockEventSource.instances[0]!.closeCalled).toBe(true);
     });
 
     it('calls close exactly once on unmount', () => {
       const { unmount } = renderHook(() => useSSE({ onEvent: vi.fn() }));
-      const closeSpy = vi.spyOn(MockEventSource.instances[0], 'close');
+      const closeSpy = vi.spyOn(MockEventSource.instances[0]!, 'close');
 
       unmount();
 
@@ -418,7 +418,7 @@ describe('useSSE', () => {
         data: { note_id: 'n1', note: null },
       };
       act(() => {
-        MockEventSource.instances[0].simulateMessage(event);
+        MockEventSource.instances[0]!.simulateMessage(event);
       });
 
       expect(firstHandler).not.toHaveBeenCalled();

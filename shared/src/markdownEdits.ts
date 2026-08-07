@@ -22,7 +22,11 @@ export interface EditorText {
   selection: TextSelection;
 }
 
-/** A list line: indent, bullet marker, and an optional task checkbox. */
+/**
+ * A list line: indent, bullet marker, and an optional task checkbox. Only the
+ * checkbox group is optional in either pattern, so groups 1 and 2 are always
+ * captured on a match — hence the assertions on them below.
+ */
 const LIST_LINE = /^(\s*)([-*+] )(\[[ xX]\] )?/;
 const HEADING_LINE = /^(\s*)(#{1,6}) /;
 const INDENT = /^\s*/;
@@ -167,9 +171,9 @@ export function toggleInlineMarker(state: EditorText, marker: string): EditorTex
 export function cycleHeading(state: EditorText): EditorText {
   return mapSelectedLines(state, (line) => {
     const heading = HEADING_LINE.exec(line);
-    const indent = heading ? heading[1] : indentOf(line);
+    const indent = heading ? heading[1]! : indentOf(line);
     const body = line.slice(heading ? heading[0].length : indent.length);
-    const level = heading ? heading[2].length : 0;
+    const level = heading ? heading[2]!.length : 0;
     const nextLevel = level === 0 ? 2 : level >= MAX_HEADING_LEVEL ? 0 : level + 1;
     return nextLevel === 0 ? indent + body : `${indent}${'#'.repeat(nextLevel)} ${body}`;
   });
@@ -214,7 +218,7 @@ export function toggleBullet(state: EditorText): EditorText {
       const list = LIST_LINE.exec(line);
       if (!list) return line;
       // Checklist -> plain bullet; plain bullet -> no marker at all.
-      const keep = list[3] ? list[1].length + list[2].length : list[1].length;
+      const keep = list[3] ? list[1]!.length + list[2]!.length : list[1]!.length;
       return line.slice(0, keep) + line.slice(list[0].length);
     },
   );
@@ -232,7 +236,7 @@ export function toggleCheckbox(state: EditorText): EditorText {
       const list = LIST_LINE.exec(line);
       if (list?.[3]) return line;
       if (list) {
-        const marker = list[1].length + list[2].length;
+        const marker = list[1]!.length + list[2]!.length;
         return `${line.slice(0, marker)}[ ] ${line.slice(marker)}`;
       }
       const indent = indentOf(line);
@@ -241,7 +245,7 @@ export function toggleCheckbox(state: EditorText): EditorText {
     (line) => {
       const list = LIST_LINE.exec(line);
       if (!list) return line;
-      return list[1] + line.slice(list[0].length);
+      return list[1]! + line.slice(list[0].length);
     },
   );
 }
@@ -306,7 +310,7 @@ export function continueListOnNewline(previous: EditorText, next: string): Edito
     };
   }
 
-  const marker = list[1] + list[2] + (list[3] ? '[ ] ' : '');
+  const marker = list[1]! + list[2]! + (list[3] ? '[ ] ' : '');
   const caret = insertedAt + 1 + marker.length;
   return {
     text: next.slice(0, insertedAt + 1) + marker + next.slice(insertedAt + 1),

@@ -260,7 +260,7 @@ describe('round trips', () => {
   it('leaves an indented first line top-level, matching the server', () => {
     // indent_level 1 with no preceding top-level item resolves to no parent.
     const items = attachParents(textToListItems('  - Orphan\n- Parent'));
-    expect(items[0].parent_id).toBeNull();
+    expect(items[0]!.parent_id).toBeNull();
     expect(listToText('', items)).toBe('- [ ] Orphan\n- [ ] Parent');
   });
 });

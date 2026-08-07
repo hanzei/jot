@@ -225,7 +225,7 @@ describe('NoteEditorScreen list submit behavior', () => {
     fireEvent.press(getByTestId('add-list-item'));
 
     const baselineCount = getAllByTestId('list-item-text').length;
-    const firstInput = getAllByTestId('list-item-text')[0];
+    const firstInput = getAllByTestId('list-item-text')[0]!;
     fireEvent.changeText(firstInput, 'Buy milk');
     fireEvent(firstInput, 'submitEditing');
 
@@ -240,7 +240,7 @@ describe('NoteEditorScreen list submit behavior', () => {
     fireEvent.press(getByTestId('toggle-note-type'));
     fireEvent.press(getByTestId('add-list-item'));
 
-    const input = getAllByTestId('list-item-text')[0];
+    const input = getAllByTestId('list-item-text')[0]!;
     fireEvent.changeText(input, 'hello');
     fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 0, end: 0 } } });
     fireEvent(input, 'submitEditing');
@@ -248,8 +248,8 @@ describe('NoteEditorScreen list submit behavior', () => {
     await waitFor(() => {
       const inputsAfter = getAllByTestId('list-item-text');
       expect(inputsAfter).toHaveLength(2);
-      expect(inputsAfter[0].props.value).toBe('');
-      expect(inputsAfter[1].props.value).toBe('hello');
+      expect(inputsAfter[0]!.props.value).toBe('');
+      expect(inputsAfter[1]!.props.value).toBe('hello');
     });
   });
 
@@ -259,7 +259,7 @@ describe('NoteEditorScreen list submit behavior', () => {
     fireEvent.press(getByTestId('toggle-note-type'));
     fireEvent.press(getByTestId('add-list-item'));
 
-    const input = getAllByTestId('list-item-text')[0];
+    const input = getAllByTestId('list-item-text')[0]!;
     fireEvent.changeText(input, 'helloworld');
     fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 5, end: 5 } } });
     fireEvent(input, 'submitEditing');
@@ -267,8 +267,8 @@ describe('NoteEditorScreen list submit behavior', () => {
     await waitFor(() => {
       const inputsAfter = getAllByTestId('list-item-text');
       expect(inputsAfter).toHaveLength(2);
-      expect(inputsAfter[0].props.value).toBe('hello');
-      expect(inputsAfter[1].props.value).toBe('world');
+      expect(inputsAfter[0]!.props.value).toBe('hello');
+      expect(inputsAfter[1]!.props.value).toBe('world');
     });
   });
 
@@ -322,7 +322,7 @@ describe('NoteEditorScreen list submit behavior', () => {
 
     const { getAllByTestId } = render(<NoteEditorScreen />);
 
-    const input = getAllByTestId('list-item-text')[1];
+    const input = getAllByTestId('list-item-text')[1]!;
     fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 5, end: 5 } } });
     fireEvent(input, 'submitEditing');
 
@@ -380,7 +380,7 @@ describe('NoteEditorScreen list submit behavior', () => {
 
     expect(getByTestId('checked-items-section')).toBeTruthy();
 
-    const input = getAllByTestId('list-item-text')[0];
+    const input = getAllByTestId('list-item-text')[0]!;
     fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 0, end: 0 } } });
     fireEvent(input, 'submitEditing');
 
@@ -390,10 +390,10 @@ describe('NoteEditorScreen list submit behavior', () => {
       expect(inputsAfter).toHaveLength(2);
       // New blank item is inserted before the original, inheriting its
       // completed state; the original item's own text is untouched.
-      expect(inputsAfter[0].props.value).toBe('');
-      expect(inputsAfter[1].props.value).toBe('hello');
-      expect(checkboxesAfter[0].props.accessibilityState.checked).toBe(true);
-      expect(checkboxesAfter[1].props.accessibilityState.checked).toBe(true);
+      expect(inputsAfter[0]!.props.value).toBe('');
+      expect(inputsAfter[1]!.props.value).toBe('hello');
+      expect(checkboxesAfter[0]!.props.accessibilityState.checked).toBe(true);
+      expect(checkboxesAfter[1]!.props.accessibilityState.checked).toBe(true);
     });
   });
 
@@ -437,7 +437,7 @@ describe('NoteEditorScreen list submit behavior', () => {
 
     expect(getByTestId('checked-items-section')).toBeTruthy();
 
-    const input = getAllByTestId('list-item-text')[0];
+    const input = getAllByTestId('list-item-text')[0]!;
     fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 5, end: 5 } } });
     fireEvent(input, 'submitEditing');
 
@@ -448,10 +448,10 @@ describe('NoteEditorScreen list submit behavior', () => {
       // The original keeps the text before the cursor; the split-off
       // remainder inherits its completed state and stays in the completed
       // section, right after it.
-      expect(inputsAfter[0].props.value).toBe('hello');
-      expect(inputsAfter[1].props.value).toBe('world');
-      expect(checkboxesAfter[0].props.accessibilityState.checked).toBe(true);
-      expect(checkboxesAfter[1].props.accessibilityState.checked).toBe(true);
+      expect(inputsAfter[0]!.props.value).toBe('hello');
+      expect(inputsAfter[1]!.props.value).toBe('world');
+      expect(checkboxesAfter[0]!.props.accessibilityState.checked).toBe(true);
+      expect(checkboxesAfter[1]!.props.accessibilityState.checked).toBe(true);
     });
   });
 
@@ -527,7 +527,7 @@ describe('NoteEditorScreen list submit behavior', () => {
 
     const { getAllByTestId, unmount } = render(<NoteEditorScreen />);
 
-    fireEvent.changeText(getAllByTestId('list-item-text')[0], 'Oat milk');
+    fireEvent.changeText(getAllByTestId('list-item-text')[0]!, 'Oat milk');
     unmount();
 
     await waitFor(() => {

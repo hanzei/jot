@@ -866,8 +866,8 @@ export function useReorderNotes() {
         try {
           await reorderNotes(noteIds);
           // Update positions in local DB to match the new order
-          for (let i = 0; i < noteIds.length; i++) {
-            await updateLocalNote(db, noteIds[i], { position: i });
+          for (const [i, noteId] of noteIds.entries()) {
+            await updateLocalNote(db, noteId, { position: i });
           }
           return;
         } catch (err) {
@@ -876,8 +876,8 @@ export function useReorderNotes() {
       }
       // Offline (or a transient online failure): update local positions to
       // reflect the new order immediately, then enqueue.
-      for (let i = 0; i < noteIds.length; i++) {
-        await updateLocalNote(db, noteIds[i], { position: i });
+      for (const [i, noteId] of noteIds.entries()) {
+        await updateLocalNote(db, noteId, { position: i });
       }
       await enqueueOperation(db, {
         operation: 'reorder',

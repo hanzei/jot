@@ -151,7 +151,7 @@ describe('AnimatedNoteGrid', () => {
       expect(leavingCard).toHaveAttribute('data-disabled', 'true');
 
       // Completing the exit animation drops the card from the grid.
-      const leaveAnimation = animations[animations.length - 1];
+      const leaveAnimation = animations[animations.length - 1]!;
       act(() => leaveAnimation.onfinish?.());
 
       await waitFor(() => expect(screen.queryByTestId('card-b')).not.toBeInTheDocument());
@@ -162,7 +162,7 @@ describe('AnimatedNoteGrid', () => {
       const { rerender } = renderGrid([note('a'), note('b')]);
 
       rerenderGrid(rerender, [note('a')]);
-      const leaveAnimation = animations[animations.length - 1];
+      const leaveAnimation = animations[animations.length - 1]!;
       expect(screen.getByTestId('card-b')).toHaveAttribute('data-disabled', 'true');
 
       // Re-add the card before its exit animation finishes.

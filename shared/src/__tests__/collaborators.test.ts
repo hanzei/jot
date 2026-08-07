@@ -77,9 +77,9 @@ describe('buildCollaborators', () => {
     const result = buildCollaborators('owner-id', shares, usersById);
 
     expect(result).toHaveLength(2);
-    expect(result[1].username).toBe('bob');
-    expect(result[1].firstName).toBe('Bob');
-    expect(result[1].lastName).toBe('Smith');
+    expect(result[1]!.username).toBe('bob');
+    expect(result[1]!.firstName).toBe('Bob');
+    expect(result[1]!.lastName).toBe('Smith');
   });
 
   it('prefers usersById data over share data', () => {
@@ -92,8 +92,8 @@ describe('buildCollaborators', () => {
 
     const result = buildCollaborators('owner-id', shares, usersById);
 
-    expect(result[1].username).toBe('bob');
-    expect(result[1].firstName).toBe('Bob');
+    expect(result[1]!.username).toBe('bob');
+    expect(result[1]!.firstName).toBe('Bob');
   });
 
   it('falls back to share data when user not in usersById', () => {
@@ -105,8 +105,8 @@ describe('buildCollaborators', () => {
 
     const result = buildCollaborators('owner-id', shares, usersById);
 
-    expect(result[1].username).toBe('bob');
-    expect(result[1].firstName).toBe('Bob');
+    expect(result[1]!.username).toBe('bob');
+    expect(result[1]!.firstName).toBe('Bob');
   });
 
   it('deduplicates when owner appears in shared list', () => {
@@ -123,7 +123,7 @@ describe('buildCollaborators', () => {
 
   it('returns "?" when owner is not in usersById', () => {
     const result = buildCollaborators('unknown-id', undefined, new Map());
-    expect(result[0].username).toBe('?');
+    expect(result[0]!.username).toBe('?');
   });
 
   it('handles undefined usersById', () => {
@@ -134,8 +134,8 @@ describe('buildCollaborators', () => {
     const result = buildCollaborators('owner-id', shares, undefined);
 
     expect(result).toHaveLength(2);
-    expect(result[0].username).toBe('?');
-    expect(result[1].username).toBe('bob');
+    expect(result[0]!.username).toBe('?');
+    expect(result[1]!.username).toBe('bob');
   });
 
   it('handles undefined sharedWith', () => {
@@ -178,7 +178,7 @@ describe('buildCollaborators', () => {
 
     const result = buildCollaborators('owner-id', shares, usersById);
 
-    expect(result[1].hasProfileIcon).toBe(true);
+    expect(result[1]!.hasProfileIcon).toBe(true);
   });
 });
 

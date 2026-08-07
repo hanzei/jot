@@ -201,7 +201,7 @@ describe('migrateDatabase', () => {
       async (startVersion) => {
         const db = createTestDb();
         for (let i = 0; i < startVersion; i++) {
-          await MIGRATIONS[i](db);
+          await MIGRATIONS[i]!(db);
           await db.runAsync(`PRAGMA user_version = ${i + 1}`);
         }
         expect(await userVersion(db)).toBe(startVersion);
@@ -215,7 +215,7 @@ describe('migrateDatabase', () => {
 
     it('preserves rows written before the remaining migrations run', async () => {
       const db = createTestDb();
-      await MIGRATIONS[0](db);
+      await MIGRATIONS[0]!(db);
       await db.runAsync('PRAGMA user_version = 1');
       await insertLegacyNote(db, { id: 'n1' });
       await db.runAsync(
@@ -246,7 +246,7 @@ describe('migrateDatabase', () => {
       for (const table of Object.keys(fresh)) {
         // note_items keeps its now-unused indent_level column; everything the
         // current schema defines has to be present with the same definition.
-        expect(upgraded[table]).toEqual(expect.arrayContaining(fresh[table]));
+        expect(upgraded[table]).toEqual(expect.arrayContaining(fresh[table]!));
       }
     });
 
