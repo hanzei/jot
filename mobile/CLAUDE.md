@@ -69,6 +69,11 @@ The mobile app uses SSE, React Query, and an offline SQLite sync layer — all s
 - Detect and break re-entrant sync: if a sync is already in progress, skip rather than queue a second one.
 - Cap the number of consecutive sync attempts before surfacing an error to the user.
 - Prefer idempotent writes (upsert, not insert-then-update) so a replayed sync event is harmless.
+- Write that upsert as `INSERT … ON CONFLICT(id) DO UPDATE`, **never `INSERT OR REPLACE`**.
+  SQLite implements REPLACE as DELETE + INSERT, and `PRAGMA foreign_keys = ON` is set, so
+  re-saving a parent row fires `ON DELETE CASCADE` and silently deletes its children —
+  which is how a routine note refresh used to wipe the note's queued offline image uploads.
+  REPLACE also resets columns left out of the statement to their defaults (`notes.sync_state`).
 
 ## Filesystem Access
 

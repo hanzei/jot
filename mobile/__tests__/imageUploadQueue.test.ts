@@ -16,9 +16,9 @@ import {
   type PendingImageUploadEntry,
 } from '../src/db/imageUploadQueue';
 import { uploadNoteImage } from '../src/api/images';
-import { markNotePendingCreate, markNoteSyncFailed, patchLocalNoteImages, saveNote } from '../src/db/noteQueries';
+import { getLocalNote, getPendingCreateNoteIds, markNotePendingCreate, markNoteSyncFailed, patchLocalNoteImages, saveNote } from '../src/db/noteQueries';
 import { subscribeToEnqueue, MAX_ENTRY_DRAIN_ATTEMPTS } from '../src/db/syncQueue';
-import { makeTextNote } from './helpers/fixtures';
+import { makeListNote, makeNoteItem, makeTextNote } from './helpers/fixtures';
 import type { TestDatabase } from './helpers/testDb';
 
 jest.mock('../src/api/images', () => ({
@@ -383,5 +383,91 @@ describe('reassignPendingImageUploads', () => {
     await saveNote(db, makeTextNote({ id: 'note-2' }));
 
     await expect(reassignPendingImageUploads(db, 'note-1', 'note-2')).resolves.toBeUndefined();
+  });
+});
+
+// A queued upload only survives long enough to be drained if re-saving its
+// parent note leaves it alone. `saveNoteInTx` used `INSERT OR REPLACE`, which
+// SQLite implements as DELETE + INSERT — firing `pending_image_uploads`'
+// `ON DELETE CASCADE` on every routine note write. Two user-visible symptoms
+// came out of that one statement:
+//
+//   1. Reconnecting after queueing an image offline never uploaded it. The
+//      reconnect triggers a background note fetch (useOfflineNote) at the same
+//      time as the drain, and the fetch's `saveServerNote` deleted the queue
+//      row first.
+//   2. Switching to another server and back lost the image entirely — landing
+//      back on the original server refetches its notes, deleting the row on the
+//      way in.
+//
+// The offline-created-note case is the same statement a third time: the drain's
+// own `create` response is persisted with `saveNote`, which would have wiped the
+// uploads that were waiting for exactly that create to land.
+describe('pending uploads survive a re-save of their note', () => {
+  it('keeps queued uploads when the note is re-saved from the server', async () => {
+    const entry = await seedUpload();
+
+    await saveNote(db, makeTextNote({ id: 'note-1', content: 'edited on another device' }));
+
+    expect(await getPendingImageUploads(db, 'note-1')).toMatchObject([{ id: entry.id, status: 'queued' }]);
+    expect(await getLocalNote(db, 'note-1')).toMatchObject({ content: 'edited on another device' });
+  });
+
+  it('keeps queued uploads when a list note is re-saved with its items', async () => {
+    await saveNote(db, makeListNote({ id: 'note-2', items: [] }));
+    const entry = await seedUpload({ id: 'upload-list', note_id: 'note-2' });
+
+    await saveNote(db, makeListNote({
+      id: 'note-2',
+      title: 'groceries',
+      items: [makeNoteItem({ id: 'item-1', note_id: 'note-2', text: 'milk' })],
+    }));
+
+    expect(await getPendingImageUploads(db, 'note-2')).toMatchObject([{ id: entry.id }]);
+    expect(await getLocalNote(db, 'note-2')).toMatchObject({
+      title: 'groceries',
+      items: [{ id: 'item-1', text: 'milk' }],
+    });
+  });
+
+  it('still drains normally after the note has been re-saved', async () => {
+    const entry = await seedUpload();
+    mockUploadNoteImage.mockResolvedValue({ id: 'img-1', note_id: 'note-1' });
+
+    // The reconnect's background note fetch lands first, then the drain runs.
+    await saveNote(db, makeTextNote({ id: 'note-1' }));
+    const result = await drainImageUploadQueue(db);
+
+    expect(mockUploadNoteImage).toHaveBeenCalledWith('note-1', expect.objectContaining({ uri: entry.local_path }));
+    expect(result).toEqual({ uploadedNoteIds: ['note-1'], discardedCount: 0 });
+    expect(await getPendingImageUploads(db, 'note-1')).toEqual([]);
+  });
+
+  it('preserves the pending-create marker so uploads are not attempted early', async () => {
+    const entry = await seedUpload();
+    await markNotePendingCreate(db, 'note-1');
+
+    // A local save of the note (an edit while its create is still queued) must
+    // not silently promote it to 'synced' — REPLACE reset sync_state to its
+    // column default, which would have let the drain upload against a note the
+    // server has never seen.
+    await saveNote(db, makeTextNote({ id: 'note-1', content: 'still offline' }));
+
+    expect(await getPendingCreateNoteIds(db)).toEqual(new Set(['note-1']));
+    const result = await drainImageUploadQueue(db);
+    expect(mockUploadNoteImage).not.toHaveBeenCalled();
+    expect(await uploadRow(entry.id)).toMatchObject({ status: 'queued' });
+    expect(result).toEqual({ uploadedNoteIds: [], discardedCount: 0 });
+  });
+
+  it('drops leftover items when a list note is re-saved as a text note', async () => {
+    await saveNote(db, makeListNote({
+      id: 'note-3',
+      items: [makeNoteItem({ id: 'item-1', note_id: 'note-3', text: 'milk' })],
+    }));
+
+    await saveNote(db, makeTextNote({ id: 'note-3', content: 'converted' }));
+
+    expect(await db.getAllAsync('SELECT id FROM note_items WHERE note_id = ?', ['note-3'])).toEqual([]);
   });
 });

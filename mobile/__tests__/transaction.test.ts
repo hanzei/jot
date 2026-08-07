@@ -148,15 +148,17 @@ describe('batch writes roll back as a unit', () => {
     expect(await noteIds()).toEqual([]);
   });
 
-  it('substitutes the column default when a NOT NULL column that has one is written NULL', async () => {
-    // saveNote writes with INSERT OR REPLACE, and SQLite's REPLACE conflict
-    // resolution fills a NOT NULL violation with the column's DEFAULT instead of
-    // aborting. So a null note_type lands as 'text' rather than raising — worth
-    // pinning, because it is the difference between a silent coercion and an error.
-    await saveNotes(db, [{ ...makeTextNote({ id: 'coerced' }), note_type: null } as never]);
+  it('aborts on a NULL NOT NULL column even when that column has a default', async () => {
+    // note_type is NOT NULL *with* a default, which used to make this case
+    // differ from the one above: saveNote wrote with INSERT OR REPLACE, and
+    // SQLite's REPLACE conflict resolution silently fills a NOT NULL violation
+    // with the column's DEFAULT. saveNote is a plain upsert now (REPLACE
+    // cascade-deleted the note's pending_image_uploads rows), so every NOT NULL
+    // violation aborts the batch alike — no silent coercion to 'text'.
+    await expect(
+      saveNotes(db, [makeTextNote({ id: 'first' }), { ...makeTextNote({ id: 'coerced' }), note_type: null } as never]),
+    ).rejects.toThrow(/NOT NULL constraint/i);
 
-    expect(await db.getFirstAsync('SELECT note_type FROM notes WHERE id = ?', ['coerced'])).toEqual({
-      note_type: 'text',
-    });
+    expect(await noteIds()).toEqual([]);
   });
 });
