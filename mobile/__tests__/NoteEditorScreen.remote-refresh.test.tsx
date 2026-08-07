@@ -318,12 +318,23 @@ describe('NoteEditorScreen remote refresh', () => {
     expect(itemTexts(getAllByTestId)).toEqual(['Kraxxe']);
 
     // Drop the item (from === to: a purely sideways/indent drag with no
-    // vertical move) — this is the event that ends the drag.
+    // vertical move) — this is the event that ends the gesture.
     await act(async () => {
       latestListProps().onDragEnd({ from: 0, to: 0 });
     });
 
-    // A further remote update now applies normally.
+    // Still suppressed: the list re-reads `data` at the drag-start indices when
+    // its drop animation finishes, so onDragEnd alone must not let the refresh
+    // through — that window is where the drop used to crash.
+    expect(itemTexts(getAllByTestId)).toEqual(['Kraxxe']);
+
+    // Once the drop settles, the refresh that was held back applies on its own,
+    // without waiting for a further change to the note.
+    await waitFor(() => {
+      expect(itemTexts(getAllByTestId)).toEqual(['Kraxxe', 'Kultur']);
+    });
+
+    // And subsequent remote updates apply normally again.
     const updatedAgain = listNote({
       items: [
         makeItem('aaaaaaaaaaaaaaaaaaaaaa', 'Kraxxe', 0),
@@ -340,5 +351,19 @@ describe('NoteEditorScreen remote refresh', () => {
     await waitFor(() => {
       expect(itemTexts(getAllByTestId)).toEqual(['Kraxxe', 'Kultur', 'Zelt']);
     });
+  });
+
+  // The list keeps calling keyExtractor with drag-start indices while the drop
+  // animation runs, so an index that no longer has a row must yield a key
+  // rather than throw — this is what surfaced as a hard crash
+  // ("Cannot read property 'id' of undefined") on release.
+  it('yields a key instead of crashing when the list reads a dropped index', () => {
+    mockUseOfflineNote.mockReturnValue({ data: listNote() });
+    render(<NoteEditorScreen />);
+
+    const { keyExtractor, data } = latestListProps();
+    expect(keyExtractor(data[0], 0)).toBe('aaaaaaaaaaaaaaaaaaaaaa');
+    expect(() => keyExtractor(data[3], 3)).not.toThrow();
+    expect(keyExtractor(data[3], 3)).toBe('3');
   });
 });
