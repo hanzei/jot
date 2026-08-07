@@ -122,6 +122,14 @@ const ZOOM_MS = 280;
 // after a drop and leave the row greyed out or enlarged. Module-scoped so the
 // reference stays stable across renders.
 const DRAG_CELL_ANIMATIONS = { opacity: 1, transform: [] };
+// The reorderable list's drop animation, passed to it explicitly rather than
+// left at the library default so LIST_DRAG_SETTLE_MS below can be tied to it.
+const LIST_DROP_ANIM_MS = 200;
+// How long after onDragEnd the list still holds drag-start indices into `data`:
+// it calls keyExtractor(data[i], i) for the moved range from the drop
+// animation's completion callback, so `data` must not shrink until that has
+// run. The margin covers the UI→JS hop that schedules the callback.
+const LIST_DRAG_SETTLE_MS = LIST_DROP_ANIM_MS + 50;
 
 // Re-inserts each id in `idsToRestore` back into `currentIds`, anchored right
 // after its nearest still-present predecessor in `originalOrder` (or at the
@@ -328,7 +336,18 @@ export default function NoteEditorScreen() {
   // replacing `items` (and so the reorder list's `data` length) out from under
   // the drag library's own index tracking crashes it on release (keyExtractor
   // called with an out-of-range, now-undefined item).
+  //
+  // The guard outlives the gesture by LIST_DRAG_SETTLE_MS: onDragEnd fires when
+  // the finger lifts, but the library re-reads `data` at the drag-start indices
+  // once the drop animation finishes, so clearing it at onDragEnd left a ~200ms
+  // window in which the same refresh still crashed the drop.
   const isDraggingItemsRef = useRef(false);
+  const dragSettleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Bumped when the guard clears, to re-run the refresh effect below: a refresh
+  // it skipped mid-drag would otherwise stay unapplied until the *next* change
+  // to the note, leaving the editor stale.
+  const [dragSettleSeq, setDragSettleSeq] = useState(0);
+  useEffect(() => () => { if (dragSettleTimerRef.current) clearTimeout(dragSettleTimerRef.current); }, []);
   const requiresHydrationRef = useRef(initialNoteId !== null);
 
   // Warn when another user updates this note *while we have unsaved edits*.
@@ -757,7 +776,9 @@ export default function NoteEditorScreen() {
     ) {
       applyNoteToState(existingNote);
     }
-  }, [existingNote, applyNoteToState]);
+    // dragSettleSeq is a dependency so a refresh suppressed mid-drag is applied
+    // once the drop settles, rather than waiting for the next note change.
+  }, [existingNote, applyNoteToState, dragSettleSeq]);
 
   // Keep labels in sync when note data refreshes after label mutations, even
   // while the body has unsaved edits (labels are edited via their own picker
@@ -2304,7 +2325,21 @@ export default function NoteEditorScreen() {
   );
 
   const setIsDraggingItems = useCallback((dragging: boolean) => {
-    isDraggingItemsRef.current = dragging;
+    if (dragSettleTimerRef.current) {
+      clearTimeout(dragSettleTimerRef.current);
+      dragSettleTimerRef.current = null;
+    }
+    if (dragging) {
+      isDraggingItemsRef.current = true;
+      return;
+    }
+    // The finger is up but the list keeps using drag-start indices until its
+    // drop animation completes — see LIST_DRAG_SETTLE_MS.
+    dragSettleTimerRef.current = setTimeout(() => {
+      dragSettleTimerRef.current = null;
+      isDraggingItemsRef.current = false;
+      setDragSettleSeq((seq) => seq + 1);
+    }, LIST_DRAG_SETTLE_MS);
   }, []);
 
   // Marks the drag as active for the whole gesture, so the note-refresh effect
@@ -2756,9 +2791,15 @@ export default function NoteEditorScreen() {
           </>
         ) : (
           <View style={styles.listContainer}>
-            <NestedReorderableList
+            <NestedReorderableList<LocalItem>
               data={uncheckedItems}
-              keyExtractor={(item) => item.id}
+              // `item` is typed non-optional but is read at drag-start indices
+              // during the drop, which can outlive the row it pointed at. The
+              // settle guard above is what keeps that from happening; falling
+              // back to the index here keeps a residual race from turning into
+              // a crash rather than a stray key. Same fallback the library uses.
+              keyExtractor={(item, index) => item?.id ?? String(index)}
+              animationDuration={LIST_DROP_ANIM_MS}
               scrollable={false}
               shouldUpdateActiveItem
               panGesture={listDragGesture}
