@@ -15,6 +15,11 @@ import {
   switchActiveServer,
 } from '../api/client';
 import { addServer, listServers } from '../store/serverAccounts';
+import {
+  clearPendingDeepLink,
+  getPendingDeepLink,
+  setPendingDeepLink,
+} from '../store/pendingDeepLink';
 import { setPendingShare } from '../store/shareIntent';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import {
@@ -45,7 +50,6 @@ export function useDeepLinkRouting({
 }: UseDeepLinkRoutingParams): UseDeepLinkRoutingResult {
   const { t } = useTranslation();
   const { confirm } = useConfirm();
-  const pendingDeepLinkUrlRef = React.useRef<string | null>(null);
   const warnedDeepLinkUrlsRef = React.useRef<Set<string>>(new Set());
   const deepLinkServerPromptInFlightRef = React.useRef<Promise<boolean> | null>(null);
   const wasAuthenticatedRef = React.useRef(isAuthenticated);
@@ -154,7 +158,7 @@ export function useDeepLinkRouting({
         // listener. Stash the URL so the pending-URL effect replays it once
         // the new container is ready (and after login if needed).
         if (allowStash && isProtectedDeepLinkPath(path)) {
-          pendingDeepLinkUrlRef.current = url;
+          await setPendingDeepLink(url);
           return 'stash';
         }
         return 'ignore';
@@ -163,7 +167,7 @@ export function useDeepLinkRouting({
     }
 
     if (allowStash && !isAuthenticated && isProtectedDeepLinkPath(path)) {
-      pendingDeepLinkUrlRef.current = url;
+      await setPendingDeepLink(url);
       return 'stash';
     }
 
@@ -230,7 +234,7 @@ export function useDeepLinkRouting({
   // links or shares from a previous session.
   React.useEffect(() => {
     if (wasAuthenticatedRef.current && !isAuthenticated) {
-      pendingDeepLinkUrlRef.current = null;
+      void clearPendingDeepLink();
       warnedDeepLinkUrlsRef.current.clear();
       setPendingShare(null);
     }
@@ -246,8 +250,8 @@ export function useDeepLinkRouting({
 
     let cancelled = false;
     void (async () => {
-      const pendingUrl = pendingDeepLinkUrlRef.current;
-      if (!pendingUrl) {
+      const pendingUrl = await getPendingDeepLink();
+      if (!pendingUrl || cancelled) {
         return;
       }
 
@@ -256,13 +260,13 @@ export function useDeepLinkRouting({
         return;
       }
       if (decision !== 'allow') {
-        pendingDeepLinkUrlRef.current = null;
+        await clearPendingDeepLink();
         return;
       }
 
       const pendingPath = getDeepLinkPath(pendingUrl);
       const pendingState = getStateFromPath(pendingPath, linking.config);
-      pendingDeepLinkUrlRef.current = null;
+      await clearPendingDeepLink();
       if (!pendingState) {
         return;
       }
