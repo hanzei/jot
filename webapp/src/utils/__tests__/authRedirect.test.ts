@@ -28,6 +28,22 @@ describe('safeRedirectTarget', () => {
     expect(safeRedirectTarget(`/login?${REDIRECT_PARAM}=%2Flogin`)).toBe('/');
     expect(safeRedirectTarget('/register')).toBe('/');
   });
+
+  // The router matches these case-insensitively and ignores trailing slashes,
+  // so they reach an auth page just as "/login" does.
+  it('rejects auth pages spelled the other ways the router accepts', () => {
+    expect(safeRedirectTarget('/login/')).toBe('/');
+    expect(safeRedirectTarget('/login//')).toBe('/');
+    expect(safeRedirectTarget('/LOGIN')).toBe('/');
+    expect(safeRedirectTarget('/Login/')).toBe('/');
+    expect(safeRedirectTarget('/Register')).toBe('/');
+    expect(safeRedirectTarget('/register/')).toBe('/');
+  });
+
+  it('keeps a path that merely starts with an auth page name', () => {
+    expect(safeRedirectTarget('/logins')).toBe('/logins');
+    expect(safeRedirectTarget('/notes/login')).toBe('/notes/login');
+  });
 });
 
 describe('authPathWithRedirect', () => {

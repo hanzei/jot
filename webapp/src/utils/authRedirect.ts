@@ -15,7 +15,12 @@ export const REDIRECT_PARAM = 'continue';
 
 const DEFAULT_TARGET = '/';
 
-/** Redirecting back to an auth page would just bounce the user around. */
+/**
+ * Redirecting back to an auth page would just bounce the user around. Compared
+ * against `routerPathname`, not the raw path: the router matches these
+ * case-insensitively and ignores trailing slashes, so "/LOGIN" and "/login/"
+ * reach the same page and have to be recognized as the same target.
+ */
 const AUTH_PATHS = ['/login', '/register'];
 
 /**
@@ -23,6 +28,12 @@ const AUTH_PATHS = ['/login', '/register'];
  * reaches the browser — it is compared against and then discarded.
  */
 const PROBE_ORIGIN = 'https://jot.invalid';
+
+/** A pathname reduced to the form the router matches on. */
+function routerPathname(pathname: string): string {
+  const trimmed = pathname.replace(/\/+$/, '');
+  return (trimmed || '/').toLowerCase();
+}
 
 /** Sanitize a redirect target, falling back to the dashboard. */
 export function safeRedirectTarget(target: string | null | undefined): string {
@@ -39,7 +50,7 @@ export function safeRedirectTarget(target: string | null | undefined): string {
 
   // A leading slash alone does not make a target same-origin: both
   // "//evil.com" and "/\evil.com" parse as protocol-relative URLs.
-  if (url.origin !== PROBE_ORIGIN || AUTH_PATHS.includes(url.pathname)) {
+  if (url.origin !== PROBE_ORIGIN || AUTH_PATHS.includes(routerPathname(url.pathname))) {
     return DEFAULT_TARGET;
   }
 
