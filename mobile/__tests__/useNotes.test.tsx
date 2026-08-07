@@ -289,7 +289,7 @@ describe('useNotes hooks', () => {
         expect(item.id).toMatch(ID_RE);
       }
       // The indented item is parented to the preceding top-level item by its new ID.
-      expect(localItems[1].parent_id).toBe(localItems[0].id);
+      expect(localItems[1]!.parent_id).toBe(localItems[0]!.id);
 
       // The queued create carries the *same* IDs so the server keeps them (no
       // `local_* → server ID` reconciliation on drain).
@@ -325,8 +325,8 @@ describe('useNotes hooks', () => {
         expect(item.id).toMatch(ID_RE);
       }
       // New IDs, not the source's, and parent_id is remapped to the new top-level ID.
-      expect(dupItems[0].id).not.toBe('srcItem1');
-      expect(dupItems[1].parent_id).toBe(dupItems[0].id);
+      expect(dupItems[0]!.id).not.toBe('srcItem1');
+      expect(dupItems[1]!.parent_id).toBe(dupItems[0]!.id);
     });
   });
 
@@ -804,7 +804,7 @@ describe('useNotes hooks', () => {
         expect((queryClient.getQueryData(noteLocalQueryKey('123')) as { content: string }).content).toBe('New body');
       });
       expect(mockNotesApi.updateNote).toHaveBeenCalledWith('123', { content: 'New body' });
-      expect((queryClient.getQueryData(notesLocalQueryKey(undefined)) as Array<{ content: string }>)[0].content).toBe('New body');
+      expect((queryClient.getQueryData(notesLocalQueryKey(undefined)) as Array<{ content: string }>)[0]!.content).toBe('New body');
 
       // Let the request finish so the hook settles cleanly.
       pending.resolve({ ...existingTextNote, content: 'New body' } as never);
@@ -824,7 +824,7 @@ describe('useNotes hooks', () => {
 
       // The phantom edit is reverted and nothing was queued.
       expect((queryClient.getQueryData(noteLocalQueryKey('123')) as { content: string }).content).toBe('Old body');
-      expect((queryClient.getQueryData(notesLocalQueryKey(undefined)) as Array<{ content: string }>)[0].content).toBe('Old body');
+      expect((queryClient.getQueryData(notesLocalQueryKey(undefined)) as Array<{ content: string }>)[0]!.content).toBe('Old body');
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
     });
 
@@ -1135,14 +1135,14 @@ describe('useNotes hooks', () => {
       expect(dupList.items).toHaveLength(2);
       // Item ids are regenerated (permanent server-format, #513); note_id points to
       // the client-id duplicate.
-      expect(dupList.items[0].note_id).toBe('ClientNoteId000000000A');
-      expect(dupList.items[0].text).toBe('Item A');
-      expect(dupList.items[0].parent_id).toBeNull();
-      expect(dupList.items[1].text).toBe('Item B');
+      expect(dupList.items[0]!.note_id).toBe('ClientNoteId000000000A');
+      expect(dupList.items[0]!.text).toBe('Item A');
+      expect(dupList.items[0]!.parent_id).toBeNull();
+      expect(dupList.items[1]!.text).toBe('Item B');
       // parent_id must point to the new id of Item A (the regenerated id), not the
       // source note's item id 'i1'.
-      expect(dupList.items[1].parent_id).toBe(dupList.items[0].id);
-      expect(dupList.items[1].parent_id).not.toBe('i1');
+      expect(dupList.items[1]!.parent_id).toBe(dupList.items[0]!.id);
+      expect(dupList.items[1]!.parent_id).not.toBe('i1');
 
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
@@ -1354,9 +1354,9 @@ describe('useNotes hooks', () => {
 
       const items = (localConverted as { items: Array<{ id: string; text: string; parent_id: string | null }> }).items;
       expect(items.map((item) => item.text)).toEqual(['Orphan', 'Parent', 'Child']);
-      expect(items[0].parent_id).toBeNull();
-      expect(items[1].parent_id).toBeNull();
-      expect(items[2].parent_id).toBe(items[1].id);
+      expect(items[0]!.parent_id).toBeNull();
+      expect(items[1]!.parent_id).toBeNull();
+      expect(items[2]!.parent_id).toBe(items[1]!.id);
 
       const enqueuedBody = mockSyncQueue.enqueueOperation.mock.calls[0][1].body;
       expect(enqueuedBody.items.map((item: { indent_level: number }) => item.indent_level)).toEqual([1, 0, 1]);

@@ -1,3 +1,4 @@
+import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures';
 
 /**
@@ -6,7 +7,7 @@ import { test, expect } from '../fixtures';
  * group, and promoting orphaned children when a parent is deleted.
  */
 test.describe('Grouped to-do items', () => {
-  const rowCheckbox = (page: import('@playwright/test').Page, index: number) =>
+  const rowCheckbox = (page: Page, index: number) =>
     page.locator('[data-testid="list-item-row"] input[type="checkbox"]').nth(index);
 
   test('checking a parent cascades completion to its indented children', async ({ page, dashboardPage, authenticatedUser }) => {

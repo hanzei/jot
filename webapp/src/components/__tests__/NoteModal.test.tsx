@@ -954,7 +954,7 @@ describe('NoteModal', () => {
       expect(inputs).toHaveLength(1);
 
       // Press Enter on the only (last) item
-      fireEvent.keyDown(inputs[0], { key: 'Enter', code: 'Enter' });
+      fireEvent.keyDown(inputs[0]!, { key: 'Enter', code: 'Enter' });
 
       // A new item should have been added
       const inputsAfter = screen.getAllByTestId('list-item-input');
@@ -973,11 +973,11 @@ describe('NoteModal', () => {
       expect(inputs).toHaveLength(2);
 
       // Give the first item a value so we can identify it after insertion
-      fireEvent.change(inputs[0], { target: { value: 'first' } });
-      fireEvent.change(inputs[1], { target: { value: 'second' } });
+      fireEvent.change(inputs[0]!, { target: { value: 'first' } });
+      fireEvent.change(inputs[1]!, { target: { value: 'second' } });
 
       // Press Enter on the first (non-last) item
-      fireEvent.keyDown(inputs[0], { key: 'Enter', code: 'Enter' });
+      fireEvent.keyDown(inputs[0]!, { key: 'Enter', code: 'Enter' });
       await vi.runAllTimersAsync();
 
       // Three items total
@@ -1006,27 +1006,27 @@ describe('NoteModal', () => {
       // Indenting needs a preceding top-level item to nest under, so create a
       // parent first, then a second item, then indent the second under it.
       let inputs = screen.getAllByTestId('list-item-input');
-      fireEvent.change(inputs[0], { target: { value: 'parent' } });
-      fireEvent.keyDown(inputs[0], { key: 'Enter', code: 'Enter' });
+      fireEvent.change(inputs[0]!, { target: { value: 'parent' } });
+      fireEvent.keyDown(inputs[0]!, { key: 'Enter', code: 'Enter' });
       await vi.runAllTimersAsync();
 
       inputs = screen.getAllByTestId('list-item-input');
       expect(inputs).toHaveLength(2);
-      fireEvent.change(inputs[1], { target: { value: 'child' } });
-      fireEvent.keyDown(inputs[1], { key: 'Tab', code: 'Tab' });
+      fireEvent.change(inputs[1]!, { target: { value: 'child' } });
+      fireEvent.keyDown(inputs[1]!, { key: 'Tab', code: 'Tab' });
 
       let rows = screen.getAllByTestId('list-item-row');
-      expect(rows[1].style.marginLeft).toBe(`${VALIDATION.INDENT_PX_PER_LEVEL}px`);
+      expect(rows[1]!.style.marginLeft).toBe(`${VALIDATION.INDENT_PX_PER_LEVEL}px`);
 
       // Press Enter on the indented child → the new item inherits its group.
       inputs = screen.getAllByTestId('list-item-input');
-      fireEvent.keyDown(inputs[1], { key: 'Enter', code: 'Enter' });
+      fireEvent.keyDown(inputs[1]!, { key: 'Enter', code: 'Enter' });
       await vi.runAllTimersAsync();
 
       const inputsAfter = screen.getAllByTestId('list-item-input');
       rows = screen.getAllByTestId('list-item-row');
       expect(inputsAfter).toHaveLength(3);
-      expect(rows[2].style.marginLeft).toBe(`${VALIDATION.INDENT_PX_PER_LEVEL}px`);
+      expect(rows[2]!.style.marginLeft).toBe(`${VALIDATION.INDENT_PX_PER_LEVEL}px`);
       expect(inputsAfter[2]).toHaveFocus();
     });
 
@@ -1038,23 +1038,23 @@ describe('NoteModal', () => {
 
       // Create a parent and a second item to indent under it.
       let inputs = screen.getAllByTestId('list-item-input');
-      fireEvent.change(inputs[0], { target: { value: 'parent' } });
-      fireEvent.keyDown(inputs[0], { key: 'Enter', code: 'Enter' });
+      fireEvent.change(inputs[0]!, { target: { value: 'parent' } });
+      fireEvent.keyDown(inputs[0]!, { key: 'Enter', code: 'Enter' });
       await vi.runAllTimersAsync();
 
       inputs = screen.getAllByTestId('list-item-input');
-      fireEvent.change(inputs[1], { target: { value: 'child' } });
+      fireEvent.change(inputs[1]!, { target: { value: 'child' } });
 
       // Simulate quick sequential key presses on the child.
-      fireEvent.keyDown(inputs[1], { key: 'Tab', code: 'Tab' });
-      fireEvent.keyDown(inputs[1], { key: 'Enter', code: 'Enter' });
+      fireEvent.keyDown(inputs[1]!, { key: 'Tab', code: 'Tab' });
+      fireEvent.keyDown(inputs[1]!, { key: 'Enter', code: 'Enter' });
       await vi.runAllTimersAsync();
 
       const rowsAfter = screen.getAllByTestId('list-item-row');
       expect(rowsAfter).toHaveLength(3);
       // The indented child and the new item below it are both one level in.
-      expect(rowsAfter[1].style.marginLeft).toBe(`${VALIDATION.INDENT_PX_PER_LEVEL}px`);
-      expect(rowsAfter[2].style.marginLeft).toBe(`${VALIDATION.INDENT_PX_PER_LEVEL}px`);
+      expect(rowsAfter[1]!.style.marginLeft).toBe(`${VALIDATION.INDENT_PX_PER_LEVEL}px`);
+      expect(rowsAfter[2]!.style.marginLeft).toBe(`${VALIDATION.INDENT_PX_PER_LEVEL}px`);
     });
 
     it('persisted update keeps inherited indent after quick Tab then Enter on existing note', async () => {
@@ -1091,8 +1091,8 @@ describe('NoteModal', () => {
 
       // Tab nests the second item under the first; Enter inserts a new item that
       // inherits that parent.
-      fireEvent.keyDown(inputs[1], { key: 'Tab', code: 'Tab' });
-      fireEvent.keyDown(inputs[1], { key: 'Enter', code: 'Enter' });
+      fireEvent.keyDown(inputs[1]!, { key: 'Tab', code: 'Tab' });
+      fireEvent.keyDown(inputs[1]!, { key: 'Enter', code: 'Enter' });
       await vi.runAllTimersAsync();
 
       expect(mockUpdateItem).toHaveBeenCalledWith('1', 'item2', expect.objectContaining({ parent_id: 'item1' }));
@@ -1132,11 +1132,11 @@ describe('NoteModal', () => {
       const inputs = screen.getAllByTestId('list-item-input');
 
       // Arms debounced text autosave on the second item.
-      fireEvent.change(inputs[1], { target: { value: 'child' } });
+      fireEvent.change(inputs[1]!, { target: { value: 'child' } });
 
       // Quickly apply indent and insertion before debounce flush.
-      fireEvent.keyDown(inputs[1], { key: 'Tab', code: 'Tab' });
-      fireEvent.keyDown(inputs[1], { key: 'Enter', code: 'Enter' });
+      fireEvent.keyDown(inputs[1]!, { key: 'Tab', code: 'Tab' });
+      fireEvent.keyDown(inputs[1]!, { key: 'Enter', code: 'Enter' });
 
       // Flush pending timers and async work.
       await vi.runAllTimersAsync();
@@ -1215,7 +1215,7 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByText('Add item'));
 
       const inputs = screen.getAllByTestId('list-item-input');
-      fireEvent.change(inputs[0], { target: { value: 'hello' } });
+      fireEvent.change(inputs[0]!, { target: { value: 'hello' } });
 
       const target = screen.getByDisplayValue('hello') as HTMLTextAreaElement;
       target.setSelectionRange(0, 0);
@@ -1254,7 +1254,7 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByText('Add item'));
 
       const inputs = screen.getAllByTestId('list-item-input');
-      fireEvent.change(inputs[0], { target: { value: 'helloworld' } });
+      fireEvent.change(inputs[0]!, { target: { value: 'helloworld' } });
 
       const target = screen.getByDisplayValue('helloworld') as HTMLTextAreaElement;
       target.setSelectionRange(5, 5);
@@ -1337,7 +1337,7 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByText('Add item'));
 
       const inputs = screen.getAllByTestId('list-item-input');
-      fireEvent.keyDown(inputs[0], { key: 'Escape', code: 'Escape' });
+      fireEvent.keyDown(inputs[0]!, { key: 'Escape', code: 'Escape' });
 
       expect(screen.getAllByTestId('list-item-input')).toHaveLength(1);
     });
@@ -1352,10 +1352,10 @@ describe('NoteModal', () => {
       const inputs = screen.getAllByTestId('list-item-input');
       expect(inputs).toHaveLength(2);
 
-      fireEvent.change(inputs[0], { target: { value: 'keep me' } });
+      fireEvent.change(inputs[0]!, { target: { value: 'keep me' } });
 
       // Press Backspace on the second (empty) item
-      fireEvent.keyDown(inputs[1], { key: 'Backspace', code: 'Backspace' });
+      fireEvent.keyDown(inputs[1]!, { key: 'Backspace', code: 'Backspace' });
 
       const inputsAfter = screen.getAllByTestId('list-item-input');
       expect(inputsAfter).toHaveLength(1);
@@ -1372,10 +1372,10 @@ describe('NoteModal', () => {
       const inputs = screen.getAllByTestId('list-item-input');
       expect(inputs).toHaveLength(2);
 
-      fireEvent.change(inputs[1], { target: { value: 'keep me' } });
+      fireEvent.change(inputs[1]!, { target: { value: 'keep me' } });
 
       // Press Delete on the first (empty) item
-      fireEvent.keyDown(inputs[0], { key: 'Delete', code: 'Delete' });
+      fireEvent.keyDown(inputs[0]!, { key: 'Delete', code: 'Delete' });
 
       const inputsAfter = screen.getAllByTestId('list-item-input');
       expect(inputsAfter).toHaveLength(1);
@@ -1389,9 +1389,9 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByText('Add item'));
 
       const inputs = screen.getAllByTestId('list-item-input');
-      fireEvent.change(inputs[0], { target: { value: 'has text' } });
+      fireEvent.change(inputs[0]!, { target: { value: 'has text' } });
 
-      fireEvent.keyDown(inputs[0], { key: 'Backspace', code: 'Backspace' });
+      fireEvent.keyDown(inputs[0]!, { key: 'Backspace', code: 'Backspace' });
 
       expect(screen.getAllByTestId('list-item-input')).toHaveLength(1);
       expect(screen.getByDisplayValue('has text')).toBeInTheDocument();
@@ -1404,9 +1404,9 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByText('Add item'));
 
       const inputs = screen.getAllByTestId('list-item-input');
-      fireEvent.change(inputs[0], { target: { value: 'has text' } });
+      fireEvent.change(inputs[0]!, { target: { value: 'has text' } });
 
-      fireEvent.keyDown(inputs[0], { key: 'Delete', code: 'Delete' });
+      fireEvent.keyDown(inputs[0]!, { key: 'Delete', code: 'Delete' });
 
       expect(screen.getAllByTestId('list-item-input')).toHaveLength(1);
       expect(screen.getByDisplayValue('has text')).toBeInTheDocument();
@@ -1421,7 +1421,7 @@ describe('NoteModal', () => {
       const inputs = screen.getAllByTestId('list-item-input');
       expect(inputs).toHaveLength(1);
 
-      fireEvent.keyDown(inputs[0], { key: 'Backspace', code: 'Backspace' });
+      fireEvent.keyDown(inputs[0]!, { key: 'Backspace', code: 'Backspace' });
 
       expect(screen.queryAllByTestId('list-item-input')).toHaveLength(0);
     });
@@ -1433,9 +1433,9 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByText('Add item'));
 
       const inputs = screen.getAllByTestId('list-item-input');
-      fireEvent.change(inputs[0], { target: { value: '   ' } });
+      fireEvent.change(inputs[0]!, { target: { value: '   ' } });
 
-      fireEvent.keyDown(inputs[0], { key: 'Backspace', code: 'Backspace' });
+      fireEvent.keyDown(inputs[0]!, { key: 'Backspace', code: 'Backspace' });
 
       expect(screen.queryAllByTestId('list-item-input')).toHaveLength(0);
     });
@@ -1448,10 +1448,10 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByText('Add item'));
 
       const inputs = screen.getAllByTestId('list-item-input');
-      fireEvent.change(inputs[0], { target: { value: 'first' } });
+      fireEvent.change(inputs[0]!, { target: { value: 'first' } });
 
       // Press Backspace on the second (empty) item
-      fireEvent.keyDown(inputs[1], { key: 'Backspace', code: 'Backspace' });
+      fireEvent.keyDown(inputs[1]!, { key: 'Backspace', code: 'Backspace' });
       await vi.runAllTimersAsync();
 
       const inputsAfter = screen.getAllByTestId('list-item-input');
@@ -1467,10 +1467,10 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByText('Add item'));
 
       const inputs = screen.getAllByTestId('list-item-input');
-      fireEvent.change(inputs[1], { target: { value: 'second' } });
+      fireEvent.change(inputs[1]!, { target: { value: 'second' } });
 
       // Press Delete on the first (empty) item
-      fireEvent.keyDown(inputs[0], { key: 'Delete', code: 'Delete' });
+      fireEvent.keyDown(inputs[0]!, { key: 'Delete', code: 'Delete' });
       await vi.runAllTimersAsync();
 
       const inputsAfter = screen.getAllByTestId('list-item-input');
@@ -1486,11 +1486,11 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByText('Add item'));
 
       const inputs = screen.getAllByTestId('list-item-input');
-      fireEvent.change(inputs[0], { target: { value: 'first' } });
-      fireEvent.change(inputs[1], { target: { value: 'second' } });
+      fireEvent.change(inputs[0]!, { target: { value: 'first' } });
+      fireEvent.change(inputs[1]!, { target: { value: 'second' } });
 
-      inputs[0].focus();
-      fireEvent.keyDown(inputs[0], { key: 'ArrowDown', code: 'ArrowDown' });
+      inputs[0]!.focus();
+      fireEvent.keyDown(inputs[0]!, { key: 'ArrowDown', code: 'ArrowDown' });
 
       expect(inputs[1]).toHaveFocus();
     });
@@ -1503,11 +1503,11 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByText('Add item'));
 
       const inputs = screen.getAllByTestId('list-item-input');
-      fireEvent.change(inputs[0], { target: { value: 'first' } });
-      fireEvent.change(inputs[1], { target: { value: 'second' } });
+      fireEvent.change(inputs[0]!, { target: { value: 'first' } });
+      fireEvent.change(inputs[1]!, { target: { value: 'second' } });
 
-      inputs[1].focus();
-      fireEvent.keyDown(inputs[1], { key: 'ArrowUp', code: 'ArrowUp' });
+      inputs[1]!.focus();
+      fireEvent.keyDown(inputs[1]!, { key: 'ArrowUp', code: 'ArrowUp' });
 
       expect(inputs[0]).toHaveFocus();
     });
@@ -1520,8 +1520,8 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByText('Add item'));
 
       const inputs = screen.getAllByTestId('list-item-input');
-      inputs[0].focus();
-      fireEvent.keyDown(inputs[0], { key: 'ArrowUp', code: 'ArrowUp' });
+      inputs[0]!.focus();
+      fireEvent.keyDown(inputs[0]!, { key: 'ArrowUp', code: 'ArrowUp' });
 
       expect(inputs).toHaveLength(2);
       expect(inputs[0]).toHaveFocus();
@@ -1535,8 +1535,8 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByText('Add item'));
 
       const inputs = screen.getAllByTestId('list-item-input');
-      inputs[1].focus();
-      fireEvent.keyDown(inputs[1], { key: 'ArrowDown', code: 'ArrowDown' });
+      inputs[1]!.focus();
+      fireEvent.keyDown(inputs[1]!, { key: 'ArrowDown', code: 'ArrowDown' });
 
       expect(inputs).toHaveLength(2);
       expect(inputs[1]).toHaveFocus();
@@ -1557,7 +1557,7 @@ describe('NoteModal', () => {
       expect(inputs).toHaveLength(2);
 
       // Press Backspace on the empty second item
-      fireEvent.keyDown(inputs[1], { key: 'Backspace', code: 'Backspace' });
+      fireEvent.keyDown(inputs[1]!, { key: 'Backspace', code: 'Backspace' });
       await vi.runAllTimersAsync();
 
       expect(screen.getAllByTestId('list-item-input')).toHaveLength(1);
@@ -1578,7 +1578,7 @@ describe('NoteModal', () => {
       expect(inputs).toHaveLength(1);
 
       // Press Backspace on the only empty item
-      fireEvent.keyDown(inputs[0], { key: 'Backspace', code: 'Backspace' });
+      fireEvent.keyDown(inputs[0]!, { key: 'Backspace', code: 'Backspace' });
       await vi.runAllTimersAsync();
 
       expect(screen.queryAllByTestId('list-item-input')).toHaveLength(0);
@@ -1593,11 +1593,11 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByText('Add item'));
 
       const inputs = screen.getAllByTestId('list-item-input');
-      fireEvent.change(inputs[0], { target: { value: 'First item' } });
-      fireEvent.change(inputs[1], { target: { value: 'Second item' } });
+      fireEvent.change(inputs[0]!, { target: { value: 'First item' } });
+      fireEvent.change(inputs[1]!, { target: { value: 'Second item' } });
 
       const checkboxes = screen.getAllByRole('checkbox');
-      fireEvent.click(checkboxes[1]);
+      fireEvent.click(checkboxes[1]!);
 
       fireEvent.click(screen.getByRole('button', { name: 'Close' }));
       await vi.runAllTimersAsync();
@@ -1662,7 +1662,7 @@ describe('NoteModal', () => {
       });
       renderNoteModal({ ...defaultProps, note: listNote });
 
-      const checkbox = screen.getAllByRole('checkbox')[0];
+      const checkbox = screen.getAllByRole('checkbox')[0]!;
       fireEvent.click(checkbox);
       await vi.runAllTimersAsync();
 
@@ -1689,7 +1689,7 @@ describe('NoteModal', () => {
       renderNoteModal({ ...defaultProps, note: listNote });
 
       // The parent is the first checkbox in the active list.
-      fireEvent.click(screen.getAllByRole('checkbox')[0]);
+      fireEvent.click(screen.getAllByRole('checkbox')[0]!);
       await vi.runAllTimersAsync();
 
       expect(mockToggleItemCompleted).toHaveBeenCalledWith('1', 'parent', true);
@@ -1719,7 +1719,7 @@ describe('NoteModal', () => {
       renderNoteModal({ ...defaultProps, note: listNote });
 
       // All three start completed: parent, then Child A, then Child B.
-      fireEvent.click(screen.getAllByRole('checkbox')[1]);
+      fireEvent.click(screen.getAllByRole('checkbox')[1]!);
       await vi.runAllTimersAsync();
 
       expect(mockToggleItemCompleted).toHaveBeenCalledWith('1', 'childA', false);
@@ -1757,11 +1757,11 @@ describe('NoteModal', () => {
       });
       renderNoteModal({ ...defaultProps, note: listNote });
 
-      const input = screen.getAllByTestId('list-item-input')[0];
+      const input = screen.getAllByTestId('list-item-input')[0]!;
       fireEvent.keyDown(input, { key: 'Tab', code: 'Tab' });
       await vi.runAllTimersAsync();
 
-      const row = screen.getAllByTestId('list-item-row')[0];
+      const row = screen.getAllByTestId('list-item-row')[0]!;
       expect(row.style.marginLeft).toBe('0px');
       expect(mockUpdateItem).not.toHaveBeenCalled();
     });
@@ -1781,10 +1781,10 @@ describe('NoteModal', () => {
       // Hidden by default; only the hovered row (desktop) or the row with a
       // focused field (works on touch too) reveals its delete button, so users
       // are less likely to delete an item they didn't intend to.
-      expect(deleteButtons[0].className).toContain(ROW_REVEAL_CLASSES);
+      expect(deleteButtons[0]!.className).toContain(ROW_REVEAL_CLASSES);
       expect(deleteButtons[0]).toHaveAttribute('aria-label', 'Remove item');
 
-      fireEvent.click(deleteButtons[0]);
+      fireEvent.click(deleteButtons[0]!);
       await vi.runAllTimersAsync();
 
       expect(screen.getAllByTestId('list-item-row')).toHaveLength(1);
@@ -1802,7 +1802,7 @@ describe('NoteModal', () => {
       renderNoteModal({ ...defaultProps, note: listNote });
 
       // Second input is the child; Shift-Tab/left gesture maps to delta -1.
-      const childInput = screen.getAllByTestId('list-item-input')[1];
+      const childInput = screen.getAllByTestId('list-item-input')[1]!;
       fireEvent.keyDown(childInput, { key: 'Tab', code: 'Tab', shiftKey: true });
       await vi.runAllTimersAsync();
 
@@ -1827,12 +1827,12 @@ describe('NoteModal', () => {
 
       const removeFirstRow = () => {
         const rows = screen.getAllByTestId('list-item-row');
-        const buttons = within(rows[0]).getAllByRole('button');
-        fireEvent.click(buttons[buttons.length - 1]); // trash is the last button in the row
+        const buttons = within(rows[0]!).getAllByRole('button');
+        fireEvent.click(buttons[buttons.length - 1]!); // trash is the last button in the row
       };
 
       // Check TARGET (4th active checkbox) → it moves to the completed section.
-      fireEvent.click(screen.getAllByRole('checkbox')[3]);
+      fireEvent.click(screen.getAllByRole('checkbox')[3]!);
       await vi.runAllTimersAsync();
       expect(mockToggleItemCompleted).toHaveBeenCalledWith('1', 'target', true);
 
@@ -1843,7 +1843,7 @@ describe('NoteModal', () => {
 
       // Uncheck TARGET (now the only completed item → last checkbox).
       const checkboxes = screen.getAllByRole('checkbox');
-      fireEvent.click(checkboxes[checkboxes.length - 1]);
+      fireEvent.click(checkboxes[checkboxes.length - 1]!);
       await vi.runAllTimersAsync();
       expect(mockToggleItemCompleted).toHaveBeenCalledWith('1', 'target', false);
 
@@ -2178,7 +2178,7 @@ describe('NoteModal', () => {
 
     it('confirms before converting a list to text and warns about dropped assignments', async () => {
       const items = createMockListItems();
-      items[0] = { ...items[0], assigned_to: 'user-1' };
+      items[0] = { ...items[0]!, assigned_to: 'user-1' };
       const note = createMockNote({ note_type: 'list', title: 'Groceries', items });
       const onConvert = vi.fn().mockResolvedValue(undefined);
       const onClose = vi.fn();
@@ -2190,7 +2190,7 @@ describe('NoteModal', () => {
       expect(screen.getByText(/lose the assignment of 1 item/)).toBeInTheDocument();
       expect(onConvert).not.toHaveBeenCalled();
 
-      fireEvent.click(screen.getAllByRole('button', { name: 'Convert to text' })[1]);
+      fireEvent.click(screen.getAllByRole('button', { name: 'Convert to text' })[1]!);
       await vi.runAllTimersAsync();
 
       expect(onConvert).toHaveBeenCalledWith('1', {
@@ -2225,7 +2225,7 @@ describe('NoteModal', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Convert to text' }));
       const confirmButtons = screen.getAllByRole('button', { name: 'Convert to text' });
-      fireEvent.click(confirmButtons[1]);
+      fireEvent.click(confirmButtons[1]!);
       // onConvert (and the version refetch before it) reject/resolve via a plain
       // promise chain with no timer of their own; flush the microtask queue
       // instead of vi.runAllTimersAsync(), which would also fire (and clear)
@@ -2425,7 +2425,7 @@ describe('NoteModal', () => {
       // Confirmation required before the permanent-delete callback fires.
       expect(onPermanentlyDelete).not.toHaveBeenCalled();
       const deleteForeverButtons = screen.getAllByRole('button', { name: 'Delete forever' });
-      fireEvent.click(deleteForeverButtons[deleteForeverButtons.length - 1]);
+      fireEvent.click(deleteForeverButtons[deleteForeverButtons.length - 1]!);
       expect(onPermanentlyDelete).toHaveBeenCalledWith('1');
     });
 

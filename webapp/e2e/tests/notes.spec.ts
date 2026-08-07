@@ -401,14 +401,14 @@ test.describe('Notes', () => {
     // item to the collaborator and mark the second completed + nested under the
     // first. Duplication should copy text/position/completed/grouping but clear
     // assignments (and shares).
-    const assignResp = await request.patch(`/api/v1/notes/${sourceList.id}/items/${sourceList.items[0].id}`, {
+    const assignResp = await request.patch(`/api/v1/notes/${sourceList.id}/items/${sourceList.items[0]!.id}`, {
       headers: authHeaders,
       data: { assigned_to: collaboratorId },
     });
     expect(assignResp.ok()).toBeTruthy();
-    const secondItemResp = await request.patch(`/api/v1/notes/${sourceList.id}/items/${sourceList.items[1].id}`, {
+    const secondItemResp = await request.patch(`/api/v1/notes/${sourceList.id}/items/${sourceList.items[1]!.id}`, {
       headers: authHeaders,
-      data: { completed: true, parent_id: sourceList.items[0].id },
+      data: { completed: true, parent_id: sourceList.items[0]!.id },
     });
     expect(secondItemResp.ok()).toBeTruthy();
 
@@ -438,7 +438,7 @@ test.describe('Notes', () => {
         text: 'Send follow-up',
         position: 1,
         completed: true,
-        parent_id: duplicatedItems[0].id,
+        parent_id: duplicatedItems[0]!.id,
         assigned_to: '',
       }),
     );

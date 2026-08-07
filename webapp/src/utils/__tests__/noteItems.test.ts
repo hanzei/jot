@@ -87,8 +87,8 @@ describe('normalizeItemOrder', () => {
   it('returns new objects rather than mutating the input', () => {
     const input = [item('a', { position: 99 })];
     const result = normalizeItemOrder(input);
-    expect(input[0].position).toBe(99);
-    expect(result[0].position).toBe(0);
+    expect(input[0]!.position).toBe(99);
+    expect(result[0]!.position).toBe(0);
   });
 
   it('handles an empty list', () => {

@@ -1,4 +1,4 @@
-import { SQLiteDatabase } from 'expo-sqlite';
+import type { SQLiteDatabase } from 'expo-sqlite';
 import axios from 'axios';
 import type { NoteImage } from '@jot/shared';
 import { uploadNoteImage, type ImageUploadFile } from '../api/images';

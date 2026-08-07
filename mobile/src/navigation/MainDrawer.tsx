@@ -1,6 +1,7 @@
 import { TouchableOpacity, StyleSheet } from 'react-native';
 import { createDrawerNavigator } from '@react-navigation/drawer';
-import { useRoute, RouteProp } from '@react-navigation/native';
+import type { RouteProp } from '@react-navigation/native';
+import { useRoute } from '@react-navigation/native';
 import { Menu } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import NotesListScreen from '../screens/NotesListScreen';

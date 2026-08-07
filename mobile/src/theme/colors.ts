@@ -1,4 +1,4 @@
-import { ColorSchemeName } from 'react-native';
+import type { ColorSchemeName } from 'react-native';
 
 export interface ThemeColors {
   background: string;

@@ -47,8 +47,8 @@ it('deletes stable files for any queued offline uploads before deleting the note
 
   await permanentDeleteLocalNote(db, 'note-1');
 
-  expect(fs.files.has(paths[0])).toBe(false);
-  expect(fs.files.has(paths[1])).toBe(false);
+  expect(fs.files.has(paths[0]!)).toBe(false);
+  expect(fs.files.has(paths[1]!)).toBe(false);
   // A file belonging to a different note is left alone.
   expect(fs.files.has(unrelated)).toBe(true);
   expect(await db.getAllAsync('SELECT id FROM notes ORDER BY id')).toEqual([{ id: 'note-2' }]);

@@ -11,7 +11,8 @@ import {
   ScrollView,
 } from 'react-native';
 import { ArrowLeft, Plus, Search, X } from 'lucide-react-native';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import type { RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { useSQLiteContext } from 'expo-sqlite';

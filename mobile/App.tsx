@@ -3,11 +3,12 @@ initLogger();
 
 import React from 'react';
 import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native';
+import type {
+  Theme} from '@react-navigation/native';
 import {
   NavigationContainer,
   DefaultTheme,
   DarkTheme,
-  Theme,
   createNavigationContainerRef,
 } from '@react-navigation/native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';

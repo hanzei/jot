@@ -5,7 +5,8 @@
  */
 
 import { render, act } from '@testing-library/react-native';
-import { AppState, AppStateStatus, Text } from 'react-native';
+import type { AppStateStatus} from 'react-native';
+import { AppState, Text } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import NetInfo from '@react-native-community/netinfo';
 import { OfflineProvider, useOfflineContext } from '../src/store/OfflineContext';
@@ -438,7 +439,7 @@ describe('OfflineProvider queue draining', () => {
     });
     await flush();
     expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(warnSpy.mock.calls[0][0]).toMatch(/stalled \(attempt 1\/6\)/);
+    expect(warnSpy.mock.calls[0]![0]).toMatch(/stalled \(attempt 1\/6\)/);
 
     // Recovering from that failure streak logs a recovery line.
     mockGetPendingCount.mockResolvedValue(0);
@@ -447,7 +448,7 @@ describe('OfflineProvider queue draining', () => {
     });
     await flush();
     expect(infoSpy).toHaveBeenCalledTimes(1);
-    expect(infoSpy.mock.calls[0][0]).toMatch(/succeeded after 1 failed attempt/);
+    expect(infoSpy.mock.calls[0]![0]).toMatch(/succeeded after 1 failed attempt/);
 
     warnSpy.mockRestore();
     infoSpy.mockRestore();

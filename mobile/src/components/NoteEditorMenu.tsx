@@ -188,7 +188,7 @@ export default function NoteEditorMenu({
             {actions.map((action, index) => {
               const isLast = index === actions.length - 1;
               const isDestructive = action.destructive;
-              const prevNonDestructive = index > 0 && !actions[index - 1].destructive;
+              const prevNonDestructive = index > 0 && !actions[index - 1]!.destructive;
               const nextIsDestructive = actions[index + 1]?.destructive;
               return (
                 <React.Fragment key={action.testId}>

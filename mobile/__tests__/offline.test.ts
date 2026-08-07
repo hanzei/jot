@@ -355,7 +355,7 @@ describe('drainQueue', () => {
 
     await drainQueue(db);
 
-    const [row] = await deadLetterRows();
+    const row = (await deadLetterRows())[0]!;
     expect(row).toMatchObject({
       operation: 'update',
       endpoint: '/notes/x',

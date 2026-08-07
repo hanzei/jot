@@ -570,7 +570,7 @@ describe('DrawerContent', () => {
       'label-1': deferred<void>(),
       'label-2': deferred<void>(),
     };
-    mockDeleteLabelMutateAsync.mockImplementation(({ labelId }: { labelId: string }) => deferredByLabel[labelId].promise);
+    mockDeleteLabelMutateAsync.mockImplementation(({ labelId }: { labelId: string }) => deferredByLabel[labelId]!.promise);
     const props = makeProps();
 
     const { getByTestId, queryByTestId } = render(
@@ -600,7 +600,7 @@ describe('DrawerContent', () => {
 
     // Resolving label-1's delete must not clear label-2's still-in-flight spinner.
     await act(async () => {
-      deferredByLabel['label-1'].resolve();
+      deferredByLabel['label-1']!.resolve();
     });
 
     await waitFor(() => {
@@ -609,7 +609,7 @@ describe('DrawerContent', () => {
     expect(getByTestId('drawer-label-deleting-label-2')).toBeTruthy();
 
     await act(async () => {
-      deferredByLabel['label-2'].resolve();
+      deferredByLabel['label-2']!.resolve();
     });
 
     await waitFor(() => {

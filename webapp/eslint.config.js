@@ -14,6 +14,11 @@ const tsRules = {
   ...js.configs.recommended.rules,
   ...tseslint.configs.recommended.rules,
   'no-undef': 'off', // TypeScript handles this
+  // Edit-time mirror of the `verbatimModuleSyntax` compiler flag: reports a
+  // type-only binding pulled in through a plain `import` before `tsc` would.
+  // `disallowTypeAnnotations: false` leaves inline `import('x')` type
+  // annotations alone — `verbatimModuleSyntax` doesn't require touching those.
+  '@typescript-eslint/consistent-type-imports': ['error', { disallowTypeAnnotations: false }],
 };
 
 export default [
@@ -70,6 +75,7 @@ export default [
     rules: {
       ...js.configs.recommended.rules,
       ...tseslint.configs.recommended.rules,
+      '@typescript-eslint/consistent-type-imports': ['error', { disallowTypeAnnotations: false }],
     },
   },
   {

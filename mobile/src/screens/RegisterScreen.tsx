@@ -10,11 +10,11 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
-import { AuthStackParamList } from '../navigation/AuthStack';
+import type { AuthStackParamList } from '../navigation/AuthStack';
 import { VALIDATION, getUsernameValidationError } from '@jot/shared';
 import { displayMessage } from '../i18n/utils';
 import ServerSetupGate from '../components/ServerSetupGate';

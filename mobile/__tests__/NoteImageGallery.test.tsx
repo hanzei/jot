@@ -44,7 +44,7 @@ describe('NoteImageGallery', () => {
 
     // The tile View (the container's only child) carries the sizing style;
     // the inner TouchableOpacity just fills whatever box that resolves to.
-    const tileView = container.children[0];
+    const tileView = container.children[0]!;
     if (typeof tileView === 'string') throw new Error('expected a host element, got a text node');
     const style = Object.assign({}, ...[tileView.props.style].flat(Infinity).filter(Boolean));
     expect(style.width).toBe('100%');

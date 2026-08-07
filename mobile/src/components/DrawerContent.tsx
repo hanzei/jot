@@ -9,7 +9,8 @@ import {
   TextInput,
   ActivityIndicator,
 } from 'react-native';
-import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-navigation/drawer';
+import type { DrawerContentComponentProps } from '@react-navigation/drawer';
+import { DrawerContentScrollView } from '@react-navigation/drawer';
 import { CommonActions } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Archive, CircleCheck, ChevronRight, Clipboard, FileText, LogOut, Pencil, Settings, Trash2, type LucideIcon } from 'lucide-react-native';

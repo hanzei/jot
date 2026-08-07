@@ -203,7 +203,7 @@ describe('useNoteImages hooks', () => {
       expect(await imagesOf('note-1')).toEqual([image]);
 
       // The patcher appends the new image without duplicating an existing one.
-      const updater = mockNoteQueries.patchLocalNoteImages.mock.calls[0][2];
+      const updater = mockNoteQueries.patchLocalNoteImages.mock.calls[0]![2];
       expect(updater([])).toEqual([image]);
       expect(updater([image])).toEqual([image]);
     });
@@ -355,7 +355,7 @@ describe('useNoteImages hooks', () => {
       );
       expect(mockEnqueueOperation).not.toHaveBeenCalled();
 
-      const updater = mockNoteQueries.patchLocalNoteImages.mock.calls[0][2];
+      const updater = mockNoteQueries.patchLocalNoteImages.mock.calls[0]![2];
       const images = [makeImage({ id: 'img-1' }), makeImage({ id: 'img-2' })];
       expect(updater(images)).toEqual([makeImage({ id: 'img-2' })]);
     });
@@ -439,7 +439,7 @@ describe('useNoteImages hooks', () => {
         'note-1',
         expect.any(Function),
       );
-      const updater = mockNoteQueries.patchLocalNoteImages.mock.calls[0][2];
+      const updater = mockNoteQueries.patchLocalNoteImages.mock.calls[0]![2];
       const images = [makeImage({ id: 'img-1' }), makeImage({ id: 'img-2' })];
       expect(updater(images)).toEqual([makeImage({ id: 'img-2' })]);
 

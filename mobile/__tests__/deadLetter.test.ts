@@ -409,7 +409,7 @@ describe('getDeadLetteredOperations', () => {
     // A row written before migration 6 takes the defaults those ALTERs supplied.
     await insertDeadLetter('/notes/n1');
 
-    const [dl] = await getDeadLetteredOperations(db);
+    const dl = (await getDeadLetteredOperations(db))[0]!;
 
     expect(dl.attempts).toBe(0);
     expect(dl.error_message).toBeNull();

@@ -48,10 +48,11 @@ export function packColumns(
     // Place into the currently-shortest column (ties go to the leftmost).
     let col = 0;
     for (let c = 1; c < columns; c++) {
-      if (colHeights[c] < colHeights[col]) col = c;
+      if (colHeights[c]! < colHeights[col]!) col = c;
     }
     const x = col * (options.columnWidth + options.columnGap);
-    const y = colHeights[col];
+    // colHeights has one entry per column and col is always one of them.
+    const y = colHeights[col]!;
     placed.push({ id, column: col, x, y, width: options.columnWidth, height });
     colHeights[col] = y + height + options.rowGap;
   }

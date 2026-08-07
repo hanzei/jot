@@ -1,4 +1,4 @@
-import { SQLiteDatabase } from 'expo-sqlite';
+import type { SQLiteDatabase } from 'expo-sqlite';
 import { deleteFileIfExists } from '../utils/fs';
 import type { Note, NoteItem, GetNotesParams, Label, NoteShare, NoteImage, ShareHistorySource } from '@jot/shared';
 import { getStrongRandomBytes } from '../utils/random';
@@ -895,8 +895,8 @@ export async function deleteLocalItem(db: SQLiteDatabase, noteId: string, itemId
 export async function reorderLocalItems(db: SQLiteDatabase, noteId: string, itemIds: string[]): Promise<void> {
   const now = new Date().toISOString();
   await withSerializedTransaction(db, async () => {
-    for (let i = 0; i < itemIds.length; i++) {
-      await db.runAsync('UPDATE note_items SET position = ?, updated_at = ? WHERE id = ? AND note_id = ?', [i, now, itemIds[i], noteId]);
+    for (const [i, itemId] of itemIds.entries()) {
+      await db.runAsync('UPDATE note_items SET position = ?, updated_at = ? WHERE id = ? AND note_id = ?', [i, now, itemId, noteId]);
     }
     await touchLocalNote(db, noteId);
   });
@@ -987,8 +987,8 @@ function generateClientId(): string {
   const bytes = new Uint8Array(SERVER_ID_LENGTH);
   getStrongRandomBytes(bytes);
   let id = '';
-  for (let i = 0; i < SERVER_ID_LENGTH; i++) {
-    id += SERVER_ID_CHARS[bytes[i] % SERVER_ID_CHARS.length];
+  for (const byte of bytes) {
+    id += SERVER_ID_CHARS[byte % SERVER_ID_CHARS.length];
   }
   return id;
 }

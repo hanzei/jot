@@ -93,7 +93,7 @@ function normalizeRegistry(raw: unknown): ServerRegistryState {
 
   let activeServerId = typeof obj.activeServerId === 'string' ? obj.activeServerId : null;
   if (activeServerId && !deduped.some((entry) => entry.serverId === activeServerId)) {
-    activeServerId = deduped.length > 0 ? sortByRecentUse(deduped)[0].serverId : null;
+    activeServerId = deduped.length > 0 ? sortByRecentUse(deduped)[0]!.serverId : null;
   }
 
   return {
@@ -281,7 +281,7 @@ export async function removeServer(serverId: string): Promise<boolean> {
   const nextServers = state.servers.filter((entry) => entry.serverId !== serverId);
   let nextActiveServerId = state.activeServerId;
   if (state.activeServerId === serverId) {
-    nextActiveServerId = nextServers.length > 0 ? sortByRecentUse(nextServers)[0].serverId : null;
+    nextActiveServerId = nextServers.length > 0 ? sortByRecentUse(nextServers)[0]!.serverId : null;
   }
   const nextState = {
     activeServerId: nextActiveServerId,

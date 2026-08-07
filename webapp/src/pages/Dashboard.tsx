@@ -28,6 +28,8 @@ import { useAuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { isAnyModalDialogOpen, isEditableElementFocused, isOverlayControlFocused } from '@/utils/keyboardShortcuts';
 import { isSortWarningDismissed, dismissSortWarning } from '@/utils/sortWarningDismissed';
 import { buildSharedContent } from '@/utils/sharedContent';
+import type {
+  DragEndEvent} from '@dnd-kit/core';
 import {
   DndContext,
   closestCenter,
@@ -35,8 +37,7 @@ import {
   MouseSensor,
   TouchSensor,
   useSensor,
-  useSensors,
-  DragEndEvent,
+  useSensors
 } from '@dnd-kit/core';
 import {
   arrayMove,
@@ -432,7 +433,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
     const handlePopState = () => {
       const notePathMatch = window.location.pathname.match(/^\/notes\/(.+)$/);
       if (notePathMatch && !openNoteIdRef.current) {
-        openNoteFromUrl(notePathMatch[1]);
+        openNoteFromUrl(notePathMatch[1]!);
       } else if (!notePathMatch && openNoteIdRef.current) {
         openNoteIdRef.current = null;
         setIsModalOpen(false);

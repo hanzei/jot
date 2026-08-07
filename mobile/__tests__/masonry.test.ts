@@ -23,7 +23,7 @@ describe('packColumns', () => {
 
   it('uses the estimated height for unmeasured cards', () => {
     const { placed } = packColumns(['a'], {}, { ...opts, estimatedHeight: 200 });
-    expect(placed[0].height).toBe(200);
+    expect(placed[0]!.height).toBe(200);
   });
 
   it('reports the tallest column height without the trailing row gap', () => {

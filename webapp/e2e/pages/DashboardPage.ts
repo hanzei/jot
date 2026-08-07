@@ -1,4 +1,5 @@
-import { Page, expect, Locator } from '@playwright/test';
+import type { Page, Locator } from '@playwright/test';
+import { expect } from '@playwright/test';
 
 const escapeForRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 

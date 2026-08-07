@@ -35,7 +35,7 @@ jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },
 }));
 
-const mockAxiosInstance = (axios as unknown as { __mockInstance: Record<string, jest.Mock> })
+const mockAxiosInstance = (axios as unknown as { __mockInstance: Record<'get' | 'post' | 'put' | 'patch' | 'delete', jest.Mock> })
   .__mockInstance;
 
 describe('Notes API', () => {
