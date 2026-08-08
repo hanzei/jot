@@ -16,6 +16,14 @@
     "dismissMobileAppBanner": "Dismiss",
     "skipToMainContent": "Skip to main content"
   },
+  "mobileApp": {
+    "handoffTitle": "Open in the Jot app?",
+    "handoffMessage": "This link points to {{server}}. You can open it in the Jot app instead of the browser.",
+    "openInApp": "Open in app",
+    "continueInBrowser": "Continue in browser",
+    "opening": "Opening in the Jot app…",
+    "notInstalled": "The Jot app did not respond. It may not be installed on this device."
+  },
   "auth": {
     "signInTitle": "Sign in to Jot",
     "or": "Or",

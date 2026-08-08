@@ -6,6 +6,7 @@ import Dashboard from '@/pages/Dashboard';
 import Admin from '@/pages/Admin';
 import Settings from '@/pages/Settings';
 import AuthenticatedLayout from '@/components/AuthenticatedLayout';
+import MobileAppHandoff from '@/components/MobileAppHandoff';
 import { OfflineNotification } from '@/components/OfflineNotification';
 import { ToastProvider } from '@/components/Toast';
 import { isAdmin, setUser, setSettings, removeUser } from '@/utils/auth';
@@ -64,15 +65,22 @@ function App() {
     return () => mediaQuery.removeEventListener('change', handleSystemThemeChange);
   }, []);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-slate-900">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500"></div>
-      </div>
-    );
-  }
-
   return (
+    <>
+      {/*
+        Above the session gate, and at a position that does not move when
+        `loading` flips, so a shared link reaches the mobile app without first
+        waiting on auth.me() — and so the handoff is not restarted mid-attempt
+        by the remount that changing branches would otherwise cause. It reads
+        the entry URL rather than the router, so it needs neither the session
+        nor the routes.
+      */}
+      <MobileAppHandoff />
+      {loading ? (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-slate-900">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500"></div>
+        </div>
+      ) : (
     <Router>
       <ToastProvider>
       <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
@@ -111,6 +119,8 @@ function App() {
       </div>
       </ToastProvider>
     </Router>
+      )}
+    </>
   );
 }
 

@@ -16,6 +16,14 @@
     "dismissMobileAppBanner": "Ukryj",
     "skipToMainContent": "Przejdź do głównej treści"
   },
+  "mobileApp": {
+    "handoffTitle": "Otworzyć w aplikacji Jot?",
+    "handoffMessage": "Ten link prowadzi do {{server}}. Możesz otworzyć go w aplikacji Jot zamiast w przeglądarce.",
+    "openInApp": "Otwórz w aplikacji",
+    "continueInBrowser": "Kontynuuj w przeglądarce",
+    "opening": "Otwieranie w aplikacji Jot…",
+    "notInstalled": "Aplikacja Jot nie odpowiedziała. Może nie być zainstalowana na tym urządzeniu."
+  },
   "auth": {
     "signInTitle": "Zaloguj się do Jot",
     "or": "Lub",

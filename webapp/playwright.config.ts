@@ -34,7 +34,12 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
-      testIgnore: '**/00-admin.spec.ts',
+      testIgnore: [
+        '**/00-admin.spec.ts',
+        // The handoff is gated on a coarse pointer, so it has nothing to assert
+        // against a desktop mouse — it correctly never appears.
+        '**/mobile-app-handoff.spec.ts',
+      ],
       dependencies: ['admin'],
     },
     {
