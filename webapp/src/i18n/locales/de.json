@@ -335,8 +335,6 @@
     "convertLoseAssignments_one": "Außerdem geht die Zuweisung von {{count}} Element verloren.",
     "convertLoseAssignments_other": "Außerdem gehen die Zuweisungen von {{count}} Elementen verloren.",
     "delete": "Löschen",
-    "deleteConfirm": "Möchtest du diese Notiz wirklich löschen?",
-    "deleteConfirmTitle": "Notiz löschen",
     "deleteForever": "Endgültig löschen",
     "deleteForeverConfirm": "Notiz endgültig löschen? Dies kann nicht rückgängig gemacht werden.",
     "deleteForeverTitle": "Endgültig löschen",

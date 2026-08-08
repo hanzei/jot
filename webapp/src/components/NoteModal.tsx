@@ -142,7 +142,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showLabelPicker, setShowLabelPicker] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showConvertConfirm, setShowConvertConfirm] = useState(false);
   const [showPermanentDeleteConfirm, setShowPermanentDeleteConfirm] = useState(false);
   // A note in the bin opens view-only: every editing affordance is disabled
@@ -1347,13 +1346,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
   const handleDelete = () => {
     if (!note || !onDelete || isReadOnly) return;
-    setShowDeleteConfirm(true);
-  };
-
-  const confirmDelete = () => {
-    if (!note || !onDelete) return;
     onDelete(note.id);
-    setShowDeleteConfirm(false);
     onClose();
   };
 
@@ -1447,7 +1440,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   // still see the latest props/state on every keypress.
   const handleModalShortcut = useEffectEvent((e: KeyboardEvent) => {
     if (e.defaultPrevented) return;
-    if (showDeleteConfirm) return;
 
     if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
     if (!note || isReadOnly || isEditableElementFocused()) return;
@@ -2369,15 +2361,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         </DialogPanel>
       </div>
       </Dialog>
-
-      <ConfirmDialog
-        open={showDeleteConfirm}
-        title={t('note.deleteConfirmTitle')}
-        message={t('note.deleteConfirm')}
-        confirmLabel={t('note.delete')}
-        onConfirm={confirmDelete}
-        onCancel={() => setShowDeleteConfirm(false)}
-      />
 
       <ConfirmDialog
         open={showPermanentDeleteConfirm}
