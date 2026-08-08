@@ -129,14 +129,16 @@ test.describe('Modal focus management', () => {
     void authenticatedUser;
     await dashboardPage.goto();
     await dashboardPage.createNote('Confirm Focus Note');
+    await dashboardPage.deleteNote('Confirm Focus Note');
+    await dashboardPage.switchToBin();
 
     const menuButton = dashboardPage.noteCard('Confirm Focus Note').getByRole('button', { name: 'Note options' });
     await menuButton.focus();
     await page.keyboard.press('Enter');
-    await page.getByRole('menuitem', { name: 'Delete' }).click();
+    await page.getByRole('menuitem', { name: 'Delete forever' }).click();
 
     const dialog = page.getByRole('dialog').last();
-    await expect(dialog.getByRole('button', { name: 'Delete', exact: true })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Delete forever', exact: true })).toBeVisible();
     await expectFocusTrapped(page, dialog);
 
     // Escape must dismiss the confirmation, and the note must survive it —
