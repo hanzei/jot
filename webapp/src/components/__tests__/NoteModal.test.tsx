@@ -860,6 +860,39 @@ describe('NoteModal', () => {
       expect(checkboxes.map(cb => cb.checked)).toEqual([false, true]);
     });
 
+    it('strips a markdown checkbox marker from a single-line paste', async () => {
+      renderNoteModal(defaultProps);
+
+      fireEvent.click(screen.getByText('List'));
+      fireEvent.click(screen.getByText('Add item'));
+
+      // dispatchEvent (which fireEvent wraps) returns false when the event was
+      // canceled — confirming the handler intercepted this single-line paste
+      // rather than falling back to the browser's native insertion.
+      const notPrevented = fireEvent.paste(screen.getByTestId('list-item-input'), {
+        clipboardData: { getData: () => '- [x] Buy milk' },
+      });
+      expect(notPrevented).toBe(false);
+
+      expect(screen.getByTestId('list-item-input')).toHaveValue('Buy milk');
+      expect(screen.getByText('Completed items (1)')).toBeInTheDocument();
+      expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(true);
+    });
+
+    it('leaves a plain single-line paste to the browser (no markdown to strip)', async () => {
+      renderNoteModal(defaultProps);
+
+      fireEvent.click(screen.getByText('List'));
+      fireEvent.click(screen.getByText('Add item'));
+
+      // Not canceled: the handler bails out early and lets native paste happen,
+      // so plain single-line pastes keep the browser's own undo/IME behavior.
+      const notPrevented = fireEvent.paste(screen.getByTestId('list-item-input'), {
+        clipboardData: { getData: () => 'Buy milk' },
+      });
+      expect(notPrevented).toBe(true);
+    });
+
     it('measures title length in code points, not UTF-16 units', async () => {
       renderNoteModal(defaultProps);
 

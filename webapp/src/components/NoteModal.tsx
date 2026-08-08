@@ -851,19 +851,10 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const handleItemPaste = (index: number, e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const text = e.clipboardData.getData('text');
     const rawLines = text.split(/\r\n|\r|\n/);
-    // Stripping each line's markdown list/checkbox marker (`- `, `1. `,
-    // `[ ]`/`[x]`) and reading its completed state reuses the same line
-    // parser the text-note-to-list-note conversion uses, so pasting a
-    // markdown checklist behaves the same as converting one.
-    const lines = rawLines
-      .map(parseTextLineAsListItem)
-      .filter((line): line is ConvertedListItem => line !== null);
+    const nonBlankRawLines = rawLines.filter(l => l.trim().length > 0);
 
-    if (lines.length <= 1) {
-      return;
-    }
-
-    e.preventDefault();
+    const currentItem = uncompletedItems[index];
+    if (!currentItem) return;
 
     const input = e.currentTarget;
     const selStart = input.selectionStart ?? input.value.length;
@@ -871,16 +862,66 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     const before = input.value.slice(0, selStart);
     const after = input.value.slice(selEnd);
 
-    const currentItem = uncompletedItems[index];
-    if (!currentItem) return;
+    // Stripping each line's markdown list/checkbox marker (`- `, `1. `,
+    // `[ ]`/`[x]`) and reading its completed state reuses the same line
+    // parser the text-note-to-list-note conversion uses, so pasting a
+    // markdown checklist behaves the same as converting one.
+    const parsedLines = rawLines
+      .map(parseTextLineAsListItem)
+      .filter((line): line is ConvertedListItem => line !== null);
+
+    if (nonBlankRawLines.length <= 1) {
+      // A true single-line paste. Only intercept it when it actually carried
+      // markdown syntax worth stripping — a plain single-line paste (by far
+      // the common case) is left to the browser's native paste so undo, IME
+      // composition, etc. keep working exactly as they did before.
+      const singleLine = parsedLines[0];
+      const rawLine = nonBlankRawLines[0];
+      if (!singleLine || !rawLine || (singleLine.text === rawLine.trim() && !singleLine.completed)) {
+        return;
+      }
+
+      e.preventDefault();
+      const newText = truncateToCodePoints(before + singleLine.text + after, VALIDATION.ITEM_TEXT_MAX_LENGTH);
+      const validationError = validateItemText(newText, t);
+      if (validationError) {
+        showError(validationError);
+        return;
+      }
+
+      commitItems(itemsRef.current.map(item =>
+        item.id === currentItem.id ? { ...item, text: newText, completed: singleLine.completed } : item
+      ));
+      cancelPendingSave();
+      autoSaveNote();
+
+      const cursorPos = before.length + singleLine.text.length;
+      setTimeout(() => {
+        const el = itemInputRefs.current.get(currentItem.id);
+        if (el) {
+          el.focus();
+          el.setSelectionRange(cursorPos, cursorPos);
+        }
+      }, 0);
+      return;
+    }
+
+    // A genuine multi-line paste: always intercept, even if stripping
+    // collapses it down to one (or zero) usable lines — e.g. a bare "#"
+    // heading line contributes nothing — since letting the browser's native
+    // paste run here would embed a raw newline in the item's text instead.
+    e.preventDefault();
+    if (parsedLines.length === 0) {
+      return;
+    }
 
     const currentItems = itemsRef.current;
     const insertAfterPos = currentItems.findIndex(item => item.id === currentItem.id);
 
-    const firstLine = lines[0]!;
+    const firstLine = parsedLines[0]!;
     const firstLineText = truncateToCodePoints(before + firstLine.text, VALIDATION.ITEM_TEXT_MAX_LENGTH);
 
-    const remainingLines = lines.slice(1);
+    const remainingLines = parsedLines.slice(1);
 
     // Pasting many lines is the one path that can add items in bulk, so it is
     // where the server-side cap is realistically hit. Reject up front instead
@@ -924,7 +965,20 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     cancelPendingSave();
     autoSaveNote();
 
-    // lines.length > 1 was checked above, so newItems has at least one entry.
+    if (newItems.length === 0) {
+      // Every remaining line stripped to nothing — only the current item's
+      // own text changed, so there is nothing new to focus.
+      const cursorPos = Math.max(0, firstLineText.length - after.length);
+      setTimeout(() => {
+        const el = itemInputRefs.current.get(currentItem.id);
+        if (el) {
+          el.focus();
+          el.setSelectionRange(cursorPos, cursorPos);
+        }
+      }, 0);
+      return;
+    }
+
     const lastNewItem = newItems[newItems.length - 1]!;
     setTimeout(() => {
       const el = itemInputRefs.current.get(lastNewItem.id);
