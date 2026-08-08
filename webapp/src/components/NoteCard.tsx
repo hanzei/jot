@@ -160,13 +160,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
   };
 
   const handleDelete = () => {
-    setConfirmState({
-      open: true,
-      title: t('note.deleteConfirmTitle'),
-      message: t('note.deleteConfirm'),
-      confirmLabel: t('note.delete'),
-      onConfirm: () => onDelete(note.id),
-    });
+    onDelete(note.id);
   };
 
   const handleRestore = () => {
