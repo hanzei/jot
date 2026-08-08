@@ -83,26 +83,28 @@ test.describe('Arrow key card navigation', () => {
 });
 
 test.describe('ConfirmDialog keyboard confirm', () => {
-  test('pressing Enter in the delete confirmation dialog deletes the note', async ({ authenticatedUser, dashboardPage, page }) => {
+  test('pressing Enter in the permanent-delete confirmation dialog deletes the note forever', async ({ authenticatedUser, dashboardPage, page }) => {
     void authenticatedUser;
     await dashboardPage.goto();
-    await dashboardPage.createNote('Note to Delete via Enter');
-    await dashboardPage.expectNoteVisible('Note to Delete via Enter');
+    await dashboardPage.createNote('Note to Delete Forever via Enter');
+    await dashboardPage.deleteNote('Note to Delete Forever via Enter');
+    await dashboardPage.switchToBin();
+    await dashboardPage.expectNoteVisible('Note to Delete Forever via Enter');
 
     const card = page.locator('[data-testid="note-card"]').filter({
-      has: page.locator('h3').getByText('Note to Delete via Enter', { exact: true }),
+      has: page.locator('h3').getByText('Note to Delete Forever via Enter', { exact: true }),
     });
     await card.getByRole('button', { name: 'Note options' }).focus();
     await page.keyboard.press('Enter');
-    await page.getByRole('menuitem', { name: 'Delete' }).click();
+    await page.getByRole('menuitem', { name: 'Delete forever' }).click();
 
     const confirmDialog = page.getByRole('dialog').last();
-    await expect(confirmDialog.getByRole('button', { name: 'Delete', exact: true })).toBeFocused();
+    await expect(confirmDialog.getByRole('button', { name: 'Delete forever', exact: true })).toBeFocused();
 
     await page.keyboard.press('Enter');
 
     await expect(confirmDialog).not.toBeVisible();
-    await dashboardPage.expectNoteNotVisible('Note to Delete via Enter');
+    await dashboardPage.expectNoteNotVisible('Note to Delete Forever via Enter');
   });
 });
 

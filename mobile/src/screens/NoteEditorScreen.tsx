@@ -57,7 +57,7 @@ import AddImageActionSheet from '../components/AddImageActionSheet';
 import { useUploadNoteImage, useDeleteNoteImage } from '../hooks/useNoteImages';
 import { usePendingImageUploads, useRetryPendingImageUpload, useDismissPendingImageUpload } from '../hooks/usePendingImageUploads';
 import type { ImageUploadFile } from '../api/images';
-import { buildCollaborators, generateId, VALIDATION, IMAGE_MAX_PER_NOTE, exceedsCodePointLimit, truncateToCodePoints, type Collaborator, type NoteType, type NoteImage, type CreateNoteRequest, type UpdateNoteRequest, type UpdateListNoteRequest, type UpdateTextNoteRequest, type PatchNoteItemRequest, type Label } from '@jot/shared';
+import { buildCollaborators, generateId, VALIDATION, IMAGE_MAX_PER_NOTE, exceedsCodePointLimit, truncateToCodePoints, parseTextLineAsListItem, type Collaborator, type NoteType, type NoteImage, type CreateNoteRequest, type UpdateNoteRequest, type UpdateListNoteRequest, type UpdateTextNoteRequest, type PatchNoteItemRequest, type Label, type ConvertedListItem } from '@jot/shared';
 import { validateImageFile as validateImageFileRaw, IMAGE_MAX_MB } from '../utils/imageValidation';
 import { useAuth } from '../store/AuthContext';
 import { useUsers } from '../store/UsersContext';
@@ -1653,12 +1653,36 @@ export default function NoteEditorScreen() {
         return;
       }
 
+      // Stripping each line's markdown list/checkbox marker (`- `, `1. `,
+      // `[ ]`/`[x]`) and reading its completed state reuses the same line
+      // parser the text-note-to-list-note conversion uses, so pasting a
+      // markdown checklist behaves the same as converting one.
+      const parsedLines = lines
+        .map(parseTextLineAsListItem)
+        .filter((line): line is ConvertedListItem => line !== null);
+
       const isCompleted = itemsRef.current[index]?.completed ?? false;
 
       if (isCompleted) {
+        const joinedText = parsedLines.map((line) => line.text).join(' ');
         setItems((prev) =>
           prev.map((item, i) =>
-            i === index ? { ...item, text: truncateToCodePoints(lines.join(' '), VALIDATION.ITEM_TEXT_MAX_LENGTH) } : item,
+            i === index ? { ...item, text: truncateToCodePoints(joinedText, VALIDATION.ITEM_TEXT_MAX_LENGTH) } : item,
+          ),
+        );
+        markDirtyAndScheduleUpdate();
+        return;
+      }
+
+      // A multi-line paste can still collapse to one usable item once block
+      // markers strip to nothing (e.g. a bare "#" line) — fall back to the
+      // single-item update rather than splitting into an empty remainder.
+      if (parsedLines.length <= 1) {
+        const singleLine = parsedLines[0];
+        const singleText = truncateToCodePoints(singleLine?.text ?? '', VALIDATION.ITEM_TEXT_MAX_LENGTH);
+        setItems((prev) =>
+          prev.map((item, i) =>
+            i === index ? { ...item, text: singleText, completed: singleLine?.completed ?? item.completed } : item,
           ),
         );
         markDirtyAndScheduleUpdate();
@@ -1666,21 +1690,28 @@ export default function NoteEditorScreen() {
       }
 
       const prepasteItems = [...itemsRef.current];
-      const [firstLine = '', ...remainingLines] = lines;
+      const firstLine = parsedLines[0]!;
+      const remainingLines = parsedLines.slice(1);
       const newIds = remainingLines.map(() => nextTempId());
 
       setItems((prev) => {
         const sourceParentId = prev[index]?.parentId ?? null;
         const newItems: LocalItem[] = remainingLines.map((line, i) => ({
           id: newIds[i]!,
-          text: truncateToCodePoints(line, VALIDATION.ITEM_TEXT_MAX_LENGTH),
-          completed: false,
+          text: truncateToCodePoints(line.text, VALIDATION.ITEM_TEXT_MAX_LENGTH),
+          completed: line.completed,
           position: 0,
           parentId: sourceParentId,
           assigned_to: '',
         }));
         const updated = prev.map((item, i) =>
-          i === index ? { ...item, text: truncateToCodePoints(firstLine, VALIDATION.ITEM_TEXT_MAX_LENGTH) } : item,
+          i === index
+            ? {
+                ...item,
+                text: truncateToCodePoints(firstLine.text, VALIDATION.ITEM_TEXT_MAX_LENGTH),
+                completed: firstLine.completed,
+              }
+            : item,
         );
         updated.splice(index + 1, 0, ...newItems);
         return updated.map((item, i) => ({ ...item, position: i }));
