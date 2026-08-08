@@ -840,6 +840,26 @@ describe('NoteModal', () => {
       }
     });
 
+    it('strips markdown list/checkbox markers when pasting a markdown list into a list item', async () => {
+      renderNoteModal(defaultProps);
+
+      fireEvent.click(screen.getByText('List'));
+      fireEvent.click(screen.getByText('Add item'));
+
+      fireEvent.paste(screen.getByTestId('list-item-input'), {
+        clipboardData: { getData: () => '- [ ] too\n- [x] bar' },
+      });
+
+      const values = screen.getAllByTestId('list-item-input').map(el => (el as HTMLTextAreaElement).value);
+      expect(values).toEqual(['too', 'bar']);
+
+      // The second item's checkbox marker carries its completed state, so it
+      // moves into the completed section rather than staying in the active list.
+      expect(screen.getByText('Completed items (1)')).toBeInTheDocument();
+      const checkboxes = screen.getAllByRole('checkbox') as HTMLInputElement[];
+      expect(checkboxes.map(cb => cb.checked)).toEqual([false, true]);
+    });
+
     it('measures title length in code points, not UTF-16 units', async () => {
       renderNoteModal(defaultProps);
 

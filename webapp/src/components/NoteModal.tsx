@@ -2,7 +2,7 @@ import { useState, useEffect, useEffectEvent, useMemo, useRef, useCallback, useI
 import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, Pin, EllipsisVertical, Square, Undo2 } from 'lucide-react';
 import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListItems, listToText, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListItems, listToText, parseTextLineAsListItem, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type ConvertedListItem, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
 import { renderMarkdown, inlineMarkdownToText } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
@@ -851,7 +851,13 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const handleItemPaste = (index: number, e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const text = e.clipboardData.getData('text');
     const rawLines = text.split(/\r\n|\r|\n/);
-    const lines = rawLines.filter(l => l.trim().length > 0);
+    // Stripping each line's markdown list/checkbox marker (`- `, `1. `,
+    // `[ ]`/`[x]`) and reading its completed state reuses the same line
+    // parser the text-note-to-list-note conversion uses, so pasting a
+    // markdown checklist behaves the same as converting one.
+    const lines = rawLines
+      .map(parseTextLineAsListItem)
+      .filter((line): line is ConvertedListItem => line !== null);
 
     if (lines.length <= 1) {
       return;
@@ -871,7 +877,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     const currentItems = itemsRef.current;
     const insertAfterPos = currentItems.findIndex(item => item.id === currentItem.id);
 
-    const firstLineText = truncateToCodePoints(before + lines[0], VALIDATION.ITEM_TEXT_MAX_LENGTH);
+    const firstLine = lines[0]!;
+    const firstLineText = truncateToCodePoints(before + firstLine.text, VALIDATION.ITEM_TEXT_MAX_LENGTH);
 
     const remainingLines = lines.slice(1);
 
@@ -887,11 +894,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
     const newItems: ListItem[] = remainingLines.map((line, i) => {
       const isLast = i === remainingLines.length - 1;
-      const lineText = isLast ? line + after : line;
+      const lineText = isLast ? line.text + after : line.text;
       return {
         id: generateItemId(),
         text: truncateToCodePoints(lineText, VALIDATION.ITEM_TEXT_MAX_LENGTH),
-        completed: false,
+        completed: line.completed,
         position: 0,
         // Pasted lines join the same group as the item they split from.
         parentId: currentItem.parentId,
@@ -909,7 +916,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
 
     const updatedItems = currentItems.map(item =>
-      item.id === currentItem.id ? { ...item, text: firstLineText } : item
+      item.id === currentItem.id ? { ...item, text: firstLineText, completed: firstLine.completed } : item
     );
     updatedItems.splice(insertAfterPos + 1, 0, ...newItems);
 
