@@ -54,13 +54,24 @@ export function setMobileAppKnownInstalled(installed: boolean): void {
   writeFlag(MOBILE_APP_INSTALLED_KEY, installed);
 }
 
-/** Whether the visitor chose to stay in the browser on this device. */
+/** Whether the visitor chose to stay in the browser in this browser profile. */
 export function isMobileAppHandoffDismissed(): boolean {
   return readFlag(MOBILE_APP_HANDOFF_DISMISSED_KEY);
 }
 
+/**
+ * Turn the arrival handoff off, or back on.
+ *
+ * Reversible on purpose. "Continue in browser" is one tap on a prompt someone
+ * did not ask for, and without a way back it would be a one-way door out of the
+ * feature — the settings toggle in `MobileAppPreference` is that way back.
+ */
+export function setMobileAppHandoffDismissed(dismissed: boolean): void {
+  writeFlag(MOBILE_APP_HANDOFF_DISMISSED_KEY, dismissed);
+}
+
 export function dismissMobileAppHandoff(): void {
-  writeFlag(MOBILE_APP_HANDOFF_DISMISSED_KEY, true);
+  setMobileAppHandoffDismissed(true);
 }
 
 /**

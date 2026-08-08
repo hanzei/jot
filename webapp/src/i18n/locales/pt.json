@@ -22,7 +22,10 @@
     "openInApp": "Abrir no aplicativo",
     "continueInBrowser": "Continuar no navegador",
     "opening": "Abrindo no aplicativo Jot…",
-    "notInstalled": "O aplicativo Jot não respondeu. Ele pode não estar instalado neste dispositivo."
+    "notInstalled": "O aplicativo Jot não respondeu. Ele pode não estar instalado neste dispositivo.",
+    "preferenceSection": "Aplicativo móvel",
+    "preferenceLabel": "Oferecer abrir os links de notas no aplicativo Jot",
+    "preferenceDescription": "Quando você abrir um link de nota neste dispositivo, o Jot pergunta se deseja continuar no aplicativo. Esta configuração vale apenas para este navegador."
   },
   "auth": {
     "signInTitle": "Entrar no Jot",

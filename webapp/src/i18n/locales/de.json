@@ -22,7 +22,10 @@
     "openInApp": "In der App öffnen",
     "continueInBrowser": "Im Browser fortfahren",
     "opening": "Wird in der Jot-App geöffnet…",
-    "notInstalled": "Die Jot-App hat nicht reagiert. Möglicherweise ist sie auf diesem Gerät nicht installiert."
+    "notInstalled": "Die Jot-App hat nicht reagiert. Möglicherweise ist sie auf diesem Gerät nicht installiert.",
+    "preferenceSection": "Mobile App",
+    "preferenceLabel": "Anbieten, Notiz-Links in der Jot-App zu öffnen",
+    "preferenceDescription": "Wenn du auf diesem Gerät einen Notiz-Link öffnest, fragt Jot, ob in der App fortgefahren werden soll. Diese Einstellung gilt nur für diesen Browser."
   },
   "auth": {
     "signInTitle": "Bei Jot anmelden",

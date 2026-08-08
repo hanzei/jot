@@ -22,7 +22,10 @@
     "openInApp": "Openen in app",
     "continueInBrowser": "Doorgaan in de browser",
     "opening": "Openen in de Jot-app…",
-    "notInstalled": "De Jot-app reageerde niet. Mogelijk is deze niet op dit apparaat geïnstalleerd."
+    "notInstalled": "De Jot-app reageerde niet. Mogelijk is deze niet op dit apparaat geïnstalleerd.",
+    "preferenceSection": "Mobiele app",
+    "preferenceLabel": "Aanbieden om notitielinks in de Jot-app te openen",
+    "preferenceDescription": "Wanneer je op dit apparaat een notitielink opent, vraagt Jot of je in de app verder wilt gaan. Deze instelling geldt alleen voor deze browser."
   },
   "auth": {
     "signInTitle": "Inloggen bij Jot",

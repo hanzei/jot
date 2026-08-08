@@ -100,6 +100,16 @@ The dismissal is separate from `jot_mobile_app_banner_dismissed`: dismissing the
 arrival handoff must not also remove the header banner, which is then the only
 remaining way to reach the app by hand.
 
+The dismissal is also **reversible**, via a settings row
+(`webapp/src/components/MobileAppPreference.tsx`). "Continue in browser" is one
+tap on a prompt nobody asked for, so leaving it as the only writer would make it
+a one-way door out of the feature — and note that the dismissal is checked
+before `jot_mobile_app_installed`, so someone who dismissed and later installed
+the app would otherwise never get the handoff back. The row hides itself on a
+fine pointer, and it is reachable precisely because the handoff is scoped to
+note URLs: a handoff that also fired on `/settings` would be covering its own
+escape hatch.
+
 ## Building an app for one instance
 
 Someone building the app for their own instance *can* have true Universal Links,

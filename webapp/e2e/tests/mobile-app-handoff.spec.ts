@@ -61,6 +61,22 @@ test.describe('mobile app handoff', () => {
     await expect(page.getByTestId('mobile-app-handoff-prompt')).toBeHidden();
   });
 
+  test('the settings toggle brings the handoff back after a dismissal', async ({ page }) => {
+    await page.goto(notePath);
+    await page.getByTestId('mobile-app-handoff-stay').click();
+    await expect(page.getByTestId('mobile-app-handoff-prompt')).toBeHidden();
+
+    // Reachable because the handoff is scoped to note URLs — were /settings
+    // deep-linkable too, the prompt would be covering its own escape hatch.
+    await page.goto('/settings');
+    const toggle = page.getByTestId('mobile-app-handoff-preference').getByRole('checkbox');
+    await expect(toggle).not.toBeChecked();
+    await toggle.check();
+
+    await page.goto(notePath);
+    await expect(page.getByTestId('mobile-app-handoff-prompt')).toBeVisible();
+  });
+
   test('falls back to the prompt when no app answers the deep link', async ({ page }) => {
     // Pretend a previous handoff from this browser succeeded, which is what
     // turns the prompt into an automatic attempt.
