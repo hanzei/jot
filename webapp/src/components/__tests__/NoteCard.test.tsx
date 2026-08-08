@@ -459,7 +459,7 @@ describe('NoteCard', () => {
   });
 
   describe('Delete Functionality', () => {
-    it('shows delete confirmation dialog and calls onDelete when confirmed', async () => {
+    it('calls onDelete immediately, without a confirmation dialog', async () => {
       const user = userEvent.setup();
       const onDelete = vi.fn();
 
@@ -472,36 +472,9 @@ describe('NoteCard', () => {
 
       const deleteMenuItem = screen.getByText('Delete');
       await user.click(deleteMenuItem);
-
-      expect(screen.getByText('Delete note')).toBeInTheDocument();
-      expect(screen.getByText('Are you sure you want to delete this note?')).toBeInTheDocument();
-
-      const confirmButton = screen.getAllByText('Delete').find(
-        el => el.closest('[class*="bg-red"]')
-      )!;
-      await user.click(confirmButton);
 
       expect(onDelete).toHaveBeenCalledWith('1');
-    });
-
-    it('does not call onDelete when confirmation is cancelled', async () => {
-      const user = userEvent.setup();
-      const onDelete = vi.fn();
-
-      renderNoteCard({ ...defaultProps, onDelete });
-
-      await user.hover(screen.getByTestId('note-card'));
-
-      const menuButton = screen.getByRole('button', { name: 'Note options' });
-      await user.click(menuButton);
-
-      const deleteMenuItem = screen.getByText('Delete');
-      await user.click(deleteMenuItem);
-
-      const cancelButton = screen.getByText('Cancel');
-      await user.click(cancelButton);
-
-      expect(onDelete).not.toHaveBeenCalled();
+      expect(screen.queryByText('Delete note')).not.toBeInTheDocument();
     });
 
     it('only shows delete button for note owners', async () => {

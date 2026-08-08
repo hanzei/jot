@@ -346,8 +346,6 @@
     "convertLoseAssignments_one": "Stracisz również przypisanie {{count}} elementu.",
     "convertLoseAssignments_other": "Stracisz również przypisania {{count}} elementów.",
     "delete": "Usuń",
-    "deleteConfirm": "Czy na pewno chcesz usunąć tę notatkę?",
-    "deleteConfirmTitle": "Usuń notatkę",
     "deleteForever": "Usuń na zawsze",
     "deleteForeverConfirm": "Trwale usunąć tę notatkę? Tej operacji nie można cofnąć.",
     "deleteForeverTitle": "Usuń na zawsze",
