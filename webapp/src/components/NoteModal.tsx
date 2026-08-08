@@ -870,11 +870,15 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       .map(parseTextLineAsListItem)
       .filter((line): line is ConvertedListItem => line !== null);
 
-    if (nonBlankRawLines.length <= 1) {
-      // A true single-line paste. Only intercept it when it actually carried
-      // markdown syntax worth stripping — a plain single-line paste (by far
-      // the common case) is left to the browser's native paste so undo, IME
-      // composition, etc. keep working exactly as they did before.
+    if (rawLines.length === 1) {
+      // A true single-line paste — the clipboard text contains no newline at
+      // all. (A payload with only a *trailing* newline, e.g. "Buy milk\n",
+      // still counts as multi-line below: letting native paste run there
+      // would insert that raw "\n" into the item's text.) Only intercept it
+      // when it actually carried markdown syntax worth stripping — a plain
+      // single-line paste (by far the common case) is left to the browser's
+      // native paste so undo, IME composition, etc. keep working exactly as
+      // they did before.
       const singleLine = parsedLines[0];
       const rawLine = nonBlankRawLines[0];
       if (!singleLine || !rawLine || (singleLine.text === rawLine.trim() && !singleLine.completed)) {

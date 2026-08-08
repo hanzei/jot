@@ -879,6 +879,23 @@ describe('NoteModal', () => {
       expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(true);
     });
 
+    it('treats plain text with a trailing newline as multi-line, not a native single-line paste', async () => {
+      renderNoteModal(defaultProps);
+
+      fireEvent.click(screen.getByText('List'));
+      fireEvent.click(screen.getByText('Add item'));
+
+      // Only one non-blank line, but the payload does contain a newline — if the
+      // handler classified this as a single-line paste and let the browser's
+      // native insertion run, that trailing "\n" would land in the item's text.
+      const notPrevented = fireEvent.paste(screen.getByTestId('list-item-input'), {
+        clipboardData: { getData: () => 'Buy milk\n' },
+      });
+      expect(notPrevented).toBe(false);
+
+      expect(screen.getByTestId('list-item-input')).toHaveValue('Buy milk');
+    });
+
     it('leaves a plain single-line paste to the browser (no markdown to strip)', async () => {
       renderNoteModal(defaultProps);
 
