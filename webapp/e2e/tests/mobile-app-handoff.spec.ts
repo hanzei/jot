@@ -49,7 +49,7 @@ test.describe('mobile app handoff', () => {
     await expect(page.getByTestId('mobile-app-handoff-prompt')).toBeHidden();
   });
 
-  test('stays in the browser for good once dismissed', async ({ page }) => {
+  test('stays in the browser across arrivals once dismissed', async ({ page }) => {
     await page.goto(notePath);
     await page.getByTestId('mobile-app-handoff-stay').click();
 
