@@ -196,7 +196,7 @@ Markdown, same as anywhere else on GitHub).
 
 - `update-github-actions` and `update-docker-deps` own the workflow/Dockerfile plumbing this
   skill depends on (`release.yml`, `docker.yml`, the base images) — if the release pipeline
-  itself needs changing, that's those skills' job, not this one.
+  itself needs changing, that's those commands' job, not this one.
 - Root `CLAUDE.md`'s Development Status Notice is what requires every breaking-change PR to
   carry impact/upgrade text in the first place — this skill only harvests it, it doesn't
   invent it. If a merged PR is missing that section, note it in the release rewrite as best
