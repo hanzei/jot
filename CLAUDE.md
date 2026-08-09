@@ -57,11 +57,21 @@ real, whether the proposed solution is over- or under-engineered for this codeba
 whether it fits the architecture — and stops to discuss only when something is materially
 wrong. Everything after that point is the normal workflow documented here.
 
+## Wrapping up a session
+
+`/session-wrap-up` (`.claude/commands/session-wrap-up.md`) is the other end of the same
+loop: run it once the work is done and it proposes follow-ups — what the feature
+deliberately didn't do, whether the bug just fixed has siblings elsewhere, whether a
+structural change would retire the class outright, and what is now untested — then files
+the ones you pick as issues. It proposes and you select; it never files on its own. The
+issues it writes are the ones `/work-issue` picks up later.
+
 ## Commands and skills
 
-`.claude/commands/` holds the workflows you start by name — `/work-issue` and the six
-dependency-update commands. They are deliberate, scheduled operations: you decide when a
-sweep happens or which ticket gets picked up, so nothing should start one on your behalf.
+`.claude/commands/` holds the workflows you start by name — `/work-issue`,
+`/session-wrap-up`, and the six dependency-update commands. They are deliberate
+operations: you decide when a sweep happens, which ticket gets picked up, and when a
+session is finished, so nothing should start one on your behalf.
 
 `.claude/skills/` holds the ones the model should reach for on its own, matched against
 the situation rather than typed. Only `cut-release` qualifies today, because getting a
