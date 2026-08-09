@@ -25,7 +25,9 @@
     "notInstalled": "Die Jot-App hat nicht reagiert. Möglicherweise ist sie auf diesem Gerät nicht installiert.",
     "preferenceSection": "Mobile App",
     "preferenceLabel": "Anbieten, Notiz-Links in der Jot-App zu öffnen",
-    "preferenceDescription": "Wenn du auf diesem Gerät einen Notiz-Link öffnest, fragt Jot, ob in der App fortgefahren werden soll. Diese Einstellung gilt nur für diesen Browser."
+    "preferenceDescription": "Wenn du auf diesem Gerät einen Notiz-Link öffnest, fragt Jot, ob in der App fortgefahren werden soll. Diese Einstellung gilt nur für diesen Browser.",
+    "handedOffTitle": "In der Jot-App geöffnet",
+    "handedOffMessage": "Du kannst diesen Tab schließen."
   },
   "auth": {
     "signInTitle": "Bei Jot anmelden",

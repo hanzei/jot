@@ -25,7 +25,9 @@
     "notInstalled": "The Jot app did not respond. It may not be installed on this device.",
     "preferenceSection": "Mobile app",
     "preferenceLabel": "Offer to open note links in the Jot app",
-    "preferenceDescription": "When you open a note link on this device, Jot asks whether to continue in the app. This setting applies to this browser only."
+    "preferenceDescription": "When you open a note link on this device, Jot asks whether to continue in the app. This setting applies to this browser only.",
+    "handedOffTitle": "Opened in the Jot app",
+    "handedOffMessage": "You can close this tab."
   },
   "auth": {
     "signInTitle": "Sign in to Jot",

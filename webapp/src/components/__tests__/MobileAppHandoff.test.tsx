@@ -241,14 +241,32 @@ describe('MobileAppHandoff', () => {
       expect(screen.queryByTestId('mobile-app-handoff-prompt')).not.toBeInTheDocument();
     });
 
-    it('clears the overlay when the browser is backgrounded', () => {
+    it('stops at a terminal screen when the browser is backgrounded', () => {
       stubLocation('/notes/note-1');
-      render(<MobileAppHandoff />);
+      render(<MobileAppHandoff><p>the note</p></MobileAppHandoff>);
 
       act(() => setVisibility('hidden'));
 
       expect(screen.queryByTestId('mobile-app-handoff-attempting')).not.toBeInTheDocument();
+      expect(screen.getByTestId('mobile-app-handoff-done')).toBeInTheDocument();
       expect(isMobileAppKnownInstalled()).toBe(true);
+      // The whole point: the abandoned tab must not go on to fetch and render
+      // the note for nobody.
+      expect(screen.queryByText('the note')).not.toBeInTheDocument();
+    });
+
+    it('can still fall through to the browser from the terminal screen', async () => {
+      const user = userEvent.setup();
+      stubLocation('/notes/note-1');
+      render(<MobileAppHandoff><p>the note</p></MobileAppHandoff>);
+      act(() => setVisibility('hidden'));
+
+      await user.click(screen.getByTestId('mobile-app-handoff-continue'));
+
+      expect(screen.getByText('the note')).toBeInTheDocument();
+      // Unlike the prompt's button of the same name: the handoff just worked,
+      // so this is "show me this note here", not "stop offering the app".
+      expect(isMobileAppHandoffDismissed()).toBe(false);
     });
 
     it('falls back to the prompt and forgets the app when nothing answers', () => {
@@ -278,6 +296,7 @@ describe('MobileAppHandoff', () => {
       });
 
       expect(screen.queryByTestId('mobile-app-handoff-prompt')).not.toBeInTheDocument();
+      expect(screen.getByTestId('mobile-app-handoff-done')).toBeInTheDocument();
       expect(isMobileAppKnownInstalled()).toBe(true);
     });
   });

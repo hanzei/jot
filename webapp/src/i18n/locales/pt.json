@@ -25,7 +25,9 @@
     "notInstalled": "O aplicativo Jot não respondeu. Ele pode não estar instalado neste dispositivo.",
     "preferenceSection": "Aplicativo móvel",
     "preferenceLabel": "Oferecer abrir os links de notas no aplicativo Jot",
-    "preferenceDescription": "Quando você abrir um link de nota neste dispositivo, o Jot pergunta se deseja continuar no aplicativo. Esta configuração vale apenas para este navegador."
+    "preferenceDescription": "Quando você abrir um link de nota neste dispositivo, o Jot pergunta se deseja continuar no aplicativo. Esta configuração vale apenas para este navegador.",
+    "handedOffTitle": "Aberto no aplicativo Jot",
+    "handedOffMessage": "Você pode fechar esta aba."
   },
   "auth": {
     "signInTitle": "Entrar no Jot",

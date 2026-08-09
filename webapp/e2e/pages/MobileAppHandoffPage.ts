@@ -28,6 +28,11 @@ export class MobileAppHandoffPage {
     return this.page.getByTestId('mobile-app-handoff-failed');
   }
 
+  /** The terminal screen left behind in the browser after a successful handoff. */
+  get handedOffScreen(): Locator {
+    return this.page.getByTestId('mobile-app-handoff-done');
+  }
+
   get openInAppButton(): Locator {
     return this.page.getByTestId('mobile-app-handoff-open');
   }

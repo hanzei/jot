@@ -11,7 +11,7 @@ import {
   setMobileAppKnownInstalled,
 } from '@/utils/mobileAppHandoff';
 
-type HandoffPhase = 'idle' | 'prompt' | 'attempting';
+type HandoffPhase = 'idle' | 'prompt' | 'attempting' | 'handedOff';
 
 // The prompt only ever holds buttons today; links are covered so that stays
 // true if one is added.
@@ -107,9 +107,12 @@ const MobileAppHandoff = ({ children }: MobileAppHandoffProps) => {
       if (settled) return;
       settled = true;
       setMobileAppKnownInstalled(true);
-      // Drop the overlay rather than leaving it up: coming back to the browser
-      // should show the page, not a stuck spinner.
-      setPhase('idle');
+      // Stop here rather than falling through to 'idle', which would mount the
+      // whole webapp and fetch the note into a tab nobody is looking at. The
+      // browser cannot close its own tab — window.close() only works on
+      // script-opened windows — so a terminal screen is the whole of the
+      // cleanup available.
+      setPhase('handedOff');
     };
 
     const fail = () => {
@@ -199,6 +202,34 @@ const MobileAppHandoff = ({ children }: MobileAppHandoffProps) => {
 
   if (phase === 'idle' || !deepLink) {
     return <>{children}</>;
+  }
+
+  if (phase === 'handedOff') {
+    return (
+      <div
+        data-testid="mobile-app-handoff-done"
+        className="fixed inset-0 z-[120] flex flex-col items-center justify-center gap-4 bg-gray-50 p-4 text-center dark:bg-slate-900"
+      >
+        <div className="rounded-full bg-blue-100 p-3 dark:bg-blue-900/30">
+          <Smartphone className="h-6 w-6 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+        </div>
+        <h1 className="text-base font-semibold text-gray-900 dark:text-white">{t('mobileApp.handedOffTitle')}</h1>
+        <p className="max-w-xs text-sm text-gray-600 dark:text-gray-300">{t('mobileApp.handedOffMessage')}</p>
+        <button
+          type="button"
+          data-testid="mobile-app-handoff-continue"
+          // Deliberately does not persist a dismissal, unlike the same label on
+          // the prompt: the handoff just worked, so the visitor is asking to see
+          // this one note here, not to turn the feature off. It also covers the
+          // rare false positive, where visibility was lost to something other
+          // than the Jot app.
+          onClick={() => setPhase('idle')}
+          className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:border-slate-600 dark:bg-slate-700 dark:text-gray-300 dark:hover:bg-slate-600 dark:focus:ring-offset-slate-900"
+        >
+          {t('mobileApp.continueInBrowser')}
+        </button>
+      </div>
+    );
   }
 
   if (phase === 'attempting') {

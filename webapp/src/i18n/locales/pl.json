@@ -25,7 +25,9 @@
     "notInstalled": "Aplikacja Jot nie odpowiedziała. Może nie być zainstalowana na tym urządzeniu.",
     "preferenceSection": "Aplikacja mobilna",
     "preferenceLabel": "Proponuj otwieranie linków do notatek w aplikacji Jot",
-    "preferenceDescription": "Gdy otworzysz link do notatki na tym urządzeniu, Jot zapyta, czy kontynuować w aplikacji. To ustawienie dotyczy tylko tej przeglądarki."
+    "preferenceDescription": "Gdy otworzysz link do notatki na tym urządzeniu, Jot zapyta, czy kontynuować w aplikacji. To ustawienie dotyczy tylko tej przeglądarki.",
+    "handedOffTitle": "Otwarto w aplikacji Jot",
+    "handedOffMessage": "Możesz zamknąć tę kartę."
   },
   "auth": {
     "signInTitle": "Zaloguj się do Jot",

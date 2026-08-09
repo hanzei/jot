@@ -108,7 +108,22 @@ test.describe('mobile app handoff', () => {
 
     await expect(mobileAppHandoffPage.attempting).toBeHidden();
     await expect.poll(() => mobileAppHandoffPage.installedFlag()).toBe('1');
+
+    // The tab stops here rather than loading the note for nobody. It cannot
+    // close itself, so this screen is the whole of the cleanup available.
+    await expect(mobileAppHandoffPage.handedOffScreen).toBeVisible();
+    await expect(page.getByText('Shared note for handoff')).toBeHidden();
   });
+
+  // There is deliberately no e2e for leaving the terminal screen. Once the
+  // component has assigned `window.location.href = 'jot://…'`, Chromium keeps
+  // that navigation pending — it has no handler for the scheme and, headless,
+  // no external-protocol prompt to resolve it — and stops delivering input to
+  // the page. A synthetic in-page `.click()` still drives the button fine, so
+  // the handler is alive and this is an environment artifact rather than a
+  // bug; using one here would just assert that React works while quietly
+  // giving up on proving the button is clickable. The unit test covers that
+  // path with real user-event instead.
 });
 
 /**
