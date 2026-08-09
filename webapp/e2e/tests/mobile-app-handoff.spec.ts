@@ -1,8 +1,6 @@
 import { test, expect } from '../fixtures';
 import { expectNoViolations } from '../fixtures/axe';
-
-// Keys owned by webapp/src/utils/mobileAppHandoff.ts.
-const INSTALLED_KEY = 'jot_mobile_app_installed';
+import { MobileAppHandoffPage } from '../pages/MobileAppHandoffPage';
 
 /**
  * The handoff only exists on touch devices, so this spec runs in the
@@ -25,94 +23,91 @@ test.describe('mobile app handoff', () => {
     await dashboardPage.closeNoteModal();
   });
 
-  test('prompts on arrival at a shared note link', async ({ page }) => {
+  test('prompts on arrival at a shared note link, without opening the note behind it', async ({ page, mobileAppHandoffPage }) => {
     await page.goto(notePath);
 
-    const prompt = page.getByTestId('mobile-app-handoff-prompt');
-    await expect(prompt).toBeVisible();
-    // The prompt names the instance, which is what tells a multi-server user
-    // which server the link belongs to.
-    await expect(prompt).toContainText('localhost:8080');
+    await mobileAppHandoffPage.expectPromptVisible();
+    // The note is withheld until the visitor picks the browser, so the prompt
+    // never sits on top of a half-drawn note editor.
+    await expect(page.getByText('Shared note for handoff')).toBeHidden();
   });
 
-  test('moves focus to the primary action', async ({ page }) => {
+  test('moves focus to the primary action', async ({ page, mobileAppHandoffPage }) => {
     await page.goto(notePath);
 
     // This overlay is not a Headless UI dialog, so nothing else would put focus
     // on it — see the comment on the render in MobileAppHandoff.tsx.
-    await expect(page.getByTestId('mobile-app-handoff-open')).toBeFocused();
+    await expect(mobileAppHandoffPage.openInAppButton).toBeFocused();
   });
 
-  test('does not prompt on the dashboard, which the app has no deep link for', async ({ page }) => {
+  test('traps Tab inside the prompt', async ({ page, mobileAppHandoffPage }) => {
+    await page.goto(notePath);
+    await expect(mobileAppHandoffPage.openInAppButton).toBeFocused();
+
+    await page.keyboard.press('Tab');
+    await expect(mobileAppHandoffPage.stayInBrowserButton).toBeFocused();
+
+    // Wraps rather than escaping into the note modal behind the scrim, which is
+    // what aria-modal="true" promises.
+    await page.keyboard.press('Tab');
+    await expect(mobileAppHandoffPage.openInAppButton).toBeFocused();
+
+    await page.keyboard.press('Shift+Tab');
+    await expect(mobileAppHandoffPage.stayInBrowserButton).toBeFocused();
+  });
+
+  test('does not prompt on the dashboard, which the app has no deep link for', async ({ page, mobileAppHandoffPage }) => {
     await page.goto('/');
 
-    await expect(page.getByTestId('mobile-app-handoff-prompt')).toBeHidden();
+    await mobileAppHandoffPage.expectPromptHidden();
   });
 
-  test('stays in the browser across arrivals once dismissed', async ({ page }) => {
+  test('stays in the browser across arrivals once dismissed', async ({ page, mobileAppHandoffPage }) => {
     await page.goto(notePath);
-    await page.getByTestId('mobile-app-handoff-stay').click();
+    await mobileAppHandoffPage.stayInBrowser();
 
-    await expect(page.getByTestId('mobile-app-handoff-prompt')).toBeHidden();
     // The note itself is usable straight away, not left behind a scrim.
     await expect(page.getByText('Shared note for handoff').first()).toBeVisible();
 
     await page.goto(notePath);
-    await expect(page.getByTestId('mobile-app-handoff-prompt')).toBeHidden();
+    await mobileAppHandoffPage.expectPromptHidden();
   });
 
-  test('the settings toggle brings the handoff back after a dismissal', async ({ page }) => {
+  test('the settings toggle brings the handoff back after a dismissal', async ({ page, mobileAppHandoffPage }) => {
     await page.goto(notePath);
-    await page.getByTestId('mobile-app-handoff-stay').click();
-    await expect(page.getByTestId('mobile-app-handoff-prompt')).toBeHidden();
+    await mobileAppHandoffPage.stayInBrowser();
 
     // Reachable because the handoff is scoped to note URLs — were /settings
     // deep-linkable too, the prompt would be covering its own escape hatch.
-    await page.goto('/settings');
-    const toggle = page.getByTestId('mobile-app-handoff-preference').getByRole('checkbox');
-    await expect(toggle).not.toBeChecked();
-    await toggle.check();
+    await mobileAppHandoffPage.enableFromSettings();
 
     await page.goto(notePath);
-    await expect(page.getByTestId('mobile-app-handoff-prompt')).toBeVisible();
+    await mobileAppHandoffPage.expectPromptVisible();
   });
 
-  test('falls back to the prompt when no app answers the deep link', async ({ page }) => {
-    // Pretend a previous handoff from this browser succeeded, which is what
-    // turns the prompt into an automatic attempt.
-    await page.addInitScript((key) => {
-      window.localStorage.setItem(key, '1');
-    }, INSTALLED_KEY);
+  test('falls back to the prompt when no app answers the deep link', async ({ page, mobileAppHandoffPage }) => {
+    await mobileAppHandoffPage.seedAppInstalled();
 
     await page.goto(notePath);
 
-    await expect(page.getByTestId('mobile-app-handoff-prompt')).toBeVisible();
-    await expect(page.getByTestId('mobile-app-handoff-failed')).toBeVisible();
+    await mobileAppHandoffPage.expectPromptVisible();
+    await expect(mobileAppHandoffPage.failureNotice).toBeVisible();
 
     // The stale flag is cleared, so the next arrival prompts instead of
     // stalling on the overlay again.
-    await expect
-      .poll(() => page.evaluate((key) => window.localStorage.getItem(key), INSTALLED_KEY))
-      .toBeNull();
+    await expect.poll(() => mobileAppHandoffPage.installedFlag()).toBeNull();
   });
 
-  test('records the app as installed when the handoff backgrounds the browser', async ({ page }) => {
+  test('records the app as installed when the handoff backgrounds the browser', async ({ page, mobileAppHandoffPage }) => {
     await page.goto(notePath);
 
-    // Chromium never leaves the page for `jot://`, so drive the same signal the
-    // component listens for: the browser losing visibility to another app.
-    await page.getByTestId('mobile-app-handoff-open').click();
-    await expect(page.getByTestId('mobile-app-handoff-attempting')).toBeVisible();
+    await mobileAppHandoffPage.openInApp();
+    await expect(mobileAppHandoffPage.attempting).toBeVisible();
 
-    await page.evaluate(() => {
-      Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
-      document.dispatchEvent(new Event('visibilitychange'));
-    });
+    await mobileAppHandoffPage.simulateAppTookOver();
 
-    await expect(page.getByTestId('mobile-app-handoff-attempting')).toBeHidden();
-    await expect
-      .poll(() => page.evaluate((key) => window.localStorage.getItem(key), INSTALLED_KEY))
-      .toBe('1');
+    await expect(mobileAppHandoffPage.attempting).toBeHidden();
+    await expect.poll(() => mobileAppHandoffPage.installedFlag()).toBe('1');
   });
 });
 
@@ -125,7 +120,7 @@ for (const theme of ['light', 'dark'] as const) {
   test.describe(`mobile app handoff accessibility (${theme} theme)`, () => {
     test.use({ colorScheme: theme });
 
-    test('prompt has no WCAG A/AA violations', async ({ page, authenticatedUser, dashboardPage }) => {
+    test('prompt has no WCAG A/AA violations', async ({ page, authenticatedUser, dashboardPage, mobileAppHandoffPage }) => {
       void authenticatedUser;
 
       await dashboardPage.createNote('Scanned note');
@@ -133,11 +128,11 @@ for (const theme of ['light', 'dark'] as const) {
       await expect(page).toHaveURL(/\/notes\/[^/]+$/);
 
       await page.goto(new URL(page.url()).pathname);
-      await expect(page.getByTestId('mobile-app-handoff-prompt')).toBeVisible();
+      await mobileAppHandoffPage.expectPromptVisible();
 
       // Scoped to the overlay: the page behind it is already covered by the
       // desktop scans, and re-checking it here only duplicates their findings.
-      await expectNoViolations(page, { include: ['[data-testid="mobile-app-handoff-prompt"]'] });
+      await expectNoViolations(page, { include: [MobileAppHandoffPage.PROMPT_SELECTOR] });
     });
   });
 }

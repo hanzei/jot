@@ -127,12 +127,24 @@ describe('MobileAppHandoff', () => {
       expect(assigned).toEqual([]);
     });
 
-    it('names the server so a multi-server user knows where the link points', () => {
+    it('withholds the app until the visitor picks the browser', async () => {
+      const user = userEvent.setup();
       stubLocation('/notes/note-1');
 
-      render(<MobileAppHandoff />);
+      render(<MobileAppHandoff><p>the note</p></MobileAppHandoff>);
+      expect(screen.queryByText('the note')).not.toBeInTheDocument();
 
-      expect(screen.getByText(/jot\.example\.com/)).toBeInTheDocument();
+      await user.click(screen.getByTestId('mobile-app-handoff-stay'));
+
+      expect(screen.getByText('the note')).toBeInTheDocument();
+    });
+
+    it('renders the app untouched when no handoff applies', () => {
+      stubLocation('/');
+
+      render(<MobileAppHandoff><p>the note</p></MobileAppHandoff>);
+
+      expect(screen.getByText('the note')).toBeInTheDocument();
     });
 
     it('hands off when the visitor opts in', async () => {
@@ -144,6 +156,62 @@ describe('MobileAppHandoff', () => {
 
       expect(assigned).toEqual([NOTE_DEEP_LINK]);
       expect(screen.getByTestId('mobile-app-handoff-attempting')).toBeInTheDocument();
+    });
+
+    // aria-modal="true" tells assistive tech the rest of the page is inert, so
+    // Tab must not walk out of the prompt into the note modal behind it.
+    // The button outside the overlay stands in for the note modal behind the
+    // scrim, and is what makes these tests mean anything: with only the two
+    // prompt buttons in the document, Tab would wrap back into the prompt on
+    // its own and pass whether or not a trap exists.
+    const renderWithOutsideFocusable = () => {
+      stubLocation('/notes/note-1');
+      render(
+        <>
+          <button data-testid="outside">outside</button>
+          <MobileAppHandoff />
+        </>,
+      );
+      return {
+        open: screen.getByTestId('mobile-app-handoff-open'),
+        stay: screen.getByTestId('mobile-app-handoff-stay'),
+        outside: screen.getByTestId('outside'),
+      };
+    };
+
+    it('cycles focus forward at the end of the prompt', async () => {
+      const user = userEvent.setup();
+      const { open, stay, outside } = renderWithOutsideFocusable();
+
+      expect(open).toHaveFocus();
+      await user.tab();
+      expect(stay).toHaveFocus();
+
+      await user.tab();
+      expect(open).toHaveFocus();
+      expect(outside).not.toHaveFocus();
+    });
+
+    it('cycles focus backward at the start of the prompt', async () => {
+      const user = userEvent.setup();
+      const { open, stay, outside } = renderWithOutsideFocusable();
+
+      expect(open).toHaveFocus();
+      await user.tab({ shift: true });
+
+      expect(stay).toHaveFocus();
+      expect(outside).not.toHaveFocus();
+    });
+
+    it('closes on Escape without persisting a dismissal', async () => {
+      const user = userEvent.setup();
+      stubLocation('/notes/note-1');
+      render(<MobileAppHandoff />);
+
+      await user.keyboard('{Escape}');
+
+      expect(screen.queryByTestId('mobile-app-handoff-prompt')).not.toBeInTheDocument();
+      expect(isMobileAppHandoffDismissed()).toBe(false);
     });
 
     it('records a dismissal so it never asks again', async () => {

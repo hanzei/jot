@@ -18,7 +18,7 @@
   },
   "mobileApp": {
     "handoffTitle": "Ouvrir dans l'application Jot ?",
-    "handoffMessage": "Ce lien pointe vers {{server}}. Vous pouvez l'ouvrir dans l'application Jot plutôt que dans le navigateur.",
+    "handoffMessage": "Vous pouvez ouvrir cette note dans l'application Jot plutôt que dans le navigateur.",
     "openInApp": "Ouvrir dans l'application",
     "continueInBrowser": "Continuer dans le navigateur",
     "opening": "Ouverture dans l'application Jot…",

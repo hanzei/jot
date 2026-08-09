@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Smartphone } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { buildMobileDeepLink, mapWebPathToMobilePath } from '@/utils/deepLink';
@@ -12,6 +12,10 @@ import {
 } from '@/utils/mobileAppHandoff';
 
 type HandoffPhase = 'idle' | 'prompt' | 'attempting';
+
+// The prompt only ever holds buttons today; links are covered so that stays
+// true if one is added.
+const FOCUSABLE_SELECTOR = 'button:not([disabled]), a[href]';
 
 interface HandoffStart {
   deepLink: string | null;
@@ -51,13 +55,26 @@ function resolveHandoffStart(): HandoffStart {
   return { deepLink, phase: isMobileAppKnownInstalled() ? 'attempting' : 'prompt' };
 }
 
+interface MobileAppHandoffProps {
+  /**
+   * The app itself, rendered only once the handoff is out of the way.
+   *
+   * Gating it is what keeps the prompt from sitting on top of a half-drawn note
+   * behind a scrim: until the visitor picks the browser, the note is not opened
+   * at all. Withholding beats hiding here — the app under `display: none`
+   * measures itself at zero and animates oddly on reveal, whereas mounting it
+   * on dismissal is just an ordinary page load.
+   */
+  children?: ReactNode;
+}
+
 /**
  * Forwards an arrival at a deep-linkable URL to the Jot mobile app.
  *
  * See `utils/mobileAppHandoff.ts` for why a self-hosted instance has to do this
  * from the browser, and why the automatic path is learned rather than assumed.
  */
-const MobileAppHandoff = () => {
+const MobileAppHandoff = ({ children }: MobileAppHandoffProps) => {
   const { t } = useTranslation();
   const [start] = useState(resolveHandoffStart);
   const [phase, setPhase] = useState<HandoffPhase>(start.phase);
@@ -65,6 +82,7 @@ const MobileAppHandoff = () => {
   const titleId = useId();
   const descriptionId = useId();
   const openButtonRef = useRef<HTMLButtonElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
 
   const deepLink = start.deepLink;
 
@@ -134,8 +152,53 @@ const MobileAppHandoff = () => {
     };
   }, [phase, deepLink]);
 
+  /**
+   * Escape closes; Tab cycles within the prompt.
+   *
+   * The trap is hand-rolled because this overlay is not a Headless UI dialog
+   * (see the render below). Without it `aria-modal="true"` would be a lie —
+   * assistive tech is told the rest of the page is inert while Tab walks
+   * straight out into the note modal behind the scrim.
+   */
+  const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    // Escape hides the prompt for this arrival only. Persisting "stop asking"
+    // is reserved for the explicit button below, so a stray key does not
+    // silently turn the handoff off for good.
+    if (e.key === 'Escape') {
+      setPhase('idle');
+      return;
+    }
+    if (e.key !== 'Tab' || !overlayRef.current) {
+      return;
+    }
+
+    const focusable = overlayRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
+    if (focusable.length === 0) {
+      return;
+    }
+    // Both indexes are in range: length is non-zero, checked directly above.
+    const first = focusable[0]!;
+    const last = focusable[focusable.length - 1]!;
+
+    const active = document.activeElement;
+    // Focus already outside — a backdrop tap can leave it on <body>, and from
+    // there Tab would escape rather than wrap.
+    if (!active || !overlayRef.current.contains(active)) {
+      e.preventDefault();
+      first.focus();
+      return;
+    }
+    if (e.shiftKey && active === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && active === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
+
   if (phase === 'idle' || !deepLink) {
-    return null;
+    return <>{children}</>;
   }
 
   if (phase === 'attempting') {
@@ -161,20 +224,16 @@ const MobileAppHandoff = () => {
     // A plain overlay above the app's layers (Toast is the highest at z-100)
     // sidesteps that; focus is moved by the effect above instead.
     <div
+      ref={overlayRef}
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
       aria-describedby={descriptionId}
       data-testid="mobile-app-handoff-prompt"
-      // Escape hides the prompt for this arrival only. Persisting "stop asking"
-      // is reserved for the explicit button below, so a stray key does not
-      // silently turn the handoff off for good.
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') {
-          setPhase('idle');
-        }
-      }}
-      className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4 dark:bg-black/60"
+      onKeyDown={handleKeyDown}
+      // A plain page background rather than a scrim: there is nothing behind it
+      // to dim, since the app is not rendered until the handoff is resolved.
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-gray-50 p-4 dark:bg-slate-900"
     >
       <div className="mx-auto w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 shadow-xl dark:border-slate-700 dark:bg-slate-800">
         <div className="flex items-start gap-3">
@@ -186,7 +245,7 @@ const MobileAppHandoff = () => {
               {t('mobileApp.handoffTitle')}
             </h2>
             <p id={descriptionId} className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-              {t('mobileApp.handoffMessage', { server: window.location.host })}
+              {t('mobileApp.handoffMessage')}
             </p>
             {attemptFailed && (
               <p className="mt-2 text-sm text-amber-700 dark:text-amber-400" data-testid="mobile-app-handoff-failed">

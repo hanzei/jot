@@ -18,7 +18,7 @@
   },
   "mobileApp": {
     "handoffTitle": "Open in the Jot app?",
-    "handoffMessage": "This link points to {{server}}. You can open it in the Jot app instead of the browser.",
+    "handoffMessage": "You can open this note in the Jot app instead of the browser.",
     "openInApp": "Open in app",
     "continueInBrowser": "Continue in browser",
     "opening": "Opening in the Jot app…",

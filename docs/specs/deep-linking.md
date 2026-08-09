@@ -84,21 +84,31 @@ which at that moment means another app took the URL, recorded as success — or 
 1.5s timeout with the page still visible, which falls back to the prompt and
 clears the flag, so an uninstalled app self-corrects.
 
+`MobileAppHandoff` **wraps** the app rather than sitting beside it, and renders
+its children only once the handoff resolves. Until the visitor picks the
+browser, the note is not opened at all — otherwise the prompt sits on top of a
+half-drawn note editor behind a scrim. Withholding beats hiding: the app under
+`display: none` measures itself at zero and animates oddly on reveal, whereas
+mounting it on dismissal is an ordinary page load.
+
 The overlay is deliberately **not** a `@headlessui` `Dialog`, unlike every other
 modal in the webapp. It can be on screen while the note modal opens underneath
 it, and two Headless UI dialogs fight over the modal stack: the one opened last
 marks the other inert regardless of z-index. It is a plain overlay above the
-app's layers instead, and moves focus itself.
+app's layers instead, and it moves focus and traps Tab itself — without the
+trap, `aria-modal="true"` would claim an inertness that Tab walks straight out
+of.
 
 Storage keys, both in `localStorage` and owned by
 `webapp/src/utils/mobileAppHandoff.ts`:
 
 - `jot_mobile_app_installed` — a handoff from this browser reached the app.
-- `jot_mobile_app_handoff_dismissed` — the visitor chose the browser, for good.
+- `jot_mobile_app_handoff_dismissed` — the visitor chose the browser.
 
 The dismissal is separate from `jot_mobile_app_banner_dismissed`: dismissing the
-arrival handoff must not also remove the header banner, which is then the only
-remaining way to reach the app by hand.
+arrival handoff must not also remove the header banner. Both manual routes above
+stay available afterwards — the banner in `NavigationHeader` and the deep-link
+action in `NoteModal`.
 
 The dismissal is also **reversible**, via a settings row
 (`webapp/src/components/MobileAppPreference.tsx`). "Continue in browser" is one
