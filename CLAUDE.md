@@ -49,6 +49,12 @@ When a PR does qualify:
 2. Address every piece of valid feedback the review returns (fix bugs, improve clarity, align with conventions).
 3. Only proceed to commit/push after the review pass finishes — do not repeat the loop.
 
+`/tech-debt` (`.claude/commands/tech-debt.md`) is the separate, read-only counterpart: it
+audits what has accumulated across the repo rather than what a diff introduced, and it
+reports without changing anything. It takes an optional path (`/tech-debt server/internal/handlers`)
+but is written to check cross-workspace drift either way. Run it when asked, not as part of
+a PR.
+
 ## Environment Setup
 
 `scripts/bootstrap.sh` provisions a checkout: it installs `task`, runs `npm ci`
