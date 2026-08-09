@@ -404,20 +404,34 @@ test.describe('Markdown in list-item rows', () => {
 
   test('keeps the row the same height across the swap', async ({ dashboardPage }) => {
     await dashboardPage.goto();
-    await dashboardPage.createListNote('Height Note', ['buy **milk**', 'second item']);
+    // The code row is here because it is the one that regressed: `<code>` sets
+    // its own font, and an inline box in a different font sits at a different
+    // offset around the shared baseline, so it grew the rendered line box past
+    // the strut while the all-one-font source stayed put. Sub-pixel on some
+    // fonts, visible on others — a row that only jumps for some readers is
+    // exactly what a test has to hold down.
+    await dashboardPage.createListNote('Height Note', [
+      'buy **milk**',
+      'run `npm test` first',
+      'second item',
+    ]);
     await dashboardPage.openNote('Height Note');
 
-    const row = dashboardPage.listItemRow(0);
-    const renderedHeight = (await row.boundingBox())!.height;
+    for (const index of [0, 1]) {
+      const row = dashboardPage.listItemRow(index);
+      const renderedHeight = (await row.boundingBox())!.height;
 
-    await dashboardPage.listItemRendered(0).click();
-    await expect(dashboardPage.listItemInput(0)).toBeFocused();
-    const sourceHeight = (await row.boundingBox())!.height;
+      await dashboardPage.listItemRendered(index).click();
+      await expect(dashboardPage.listItemInput(index)).toBeFocused();
+      const sourceHeight = (await row.boundingBox())!.height;
 
-    // Both forms are one line here, and they carry the same padding and
-    // wrapping, so the row must not resize at all. A regression in
-    // TEXT_LAYOUT_CLASSES shows up here as a few pixels either way.
-    expect(Math.abs(sourceHeight - renderedHeight)).toBeLessThan(1);
+      // Both forms are one line here, and they carry the same padding and
+      // wrapping, so the row must not resize at all. A regression in
+      // TEXT_LAYOUT_CLASSES, or in the inline styling of a rendered child,
+      // shows up here as a fraction of a pixel either way.
+      expect(Math.abs(sourceHeight - renderedHeight), `row ${index}`).toBeLessThan(0.5);
+      await dashboardPage.listItemInput(index).blur();
+    }
   });
 
   test('leaves an item with no Markdown as a live field', async ({ dashboardPage }) => {

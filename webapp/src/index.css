@@ -184,8 +184,18 @@ body {
      Links are blue-600 rather than the blue-500 above: item text renders on note
      cards, which carry the note's colour, and blue-500 does not hold 4.5:1
      against the lighter swatches. This is the shade LinkText used here before. */
+  /* `leading-none` is load-bearing, and not for looks. An inline box is as tall
+     as its line-height, positioned around the shared baseline — so a child in a
+     different font sits at a different offset than the line's strut and can push
+     the line box taller than the strut alone. Here that made an item row with
+     `code` in it taller *rendered* than the same row showing its source, since
+     the source is one font throughout: a visible jump on click, and one whose
+     size depends on which mono font the reader has (docs/specs/markdown-rendering.md
+     §1.2). A line-height under the strut's cannot grow the line box on any font.
+     It does not change the chip: an inline element's background paints its
+     content area, which is derived from the font, not from line-height. */
   .markdown-inline code {
-    @apply font-mono bg-black/5 dark:bg-white/10 rounded px-1 text-[0.9em];
+    @apply font-mono bg-black/5 dark:bg-white/10 rounded px-1 text-[0.9em] leading-none;
   }
   .markdown-inline a {
     @apply text-blue-600 dark:text-blue-400 underline hover:text-blue-800 dark:hover:text-blue-300;
