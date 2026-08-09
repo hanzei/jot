@@ -1,6 +1,5 @@
 ---
-name: update-github-actions
-description: Update GitHub Actions workflows — re-pin every external action to a current commit SHA, bump action majors, and keep runner labels, permissions, and path filters correct. Use this whenever the user asks to update, upgrade, refresh, or re-pin GitHub Actions, workflow files, `.github/workflows/**`, action versions, `uses:` refs, or CI runner images. Prefer this over editing a `uses:` line by hand — this repo pins every action to a full SHA with a `# vN` comment, the same action appears across eight workflows and must land on one SHA everywhere, and several actions are coupled in pairs that break silently when only one moves.
+description: Re-pin GitHub Actions to current commit SHAs, bump action majors, and keep runner labels, permissions, and path filters correct.
 ---
 
 # Update GitHub Actions
@@ -9,7 +8,7 @@ Eight workflows live in `.github/workflows/`: `server-ci`, `webapp-ci`, `shared-
 `mobile-ci`, `mobile-apk`, `docker`, `docker-cleanup`, and `release`.
 
 Dependabot (`.github/dependabot.yml`) opens one grouped PR a month that re-pins these
-actions to current SHAs, so routine drift is already handled — this skill is for the work
+actions to current SHAs, so routine drift is already handled — this command is for the work
 Dependabot cannot do: bumping majors, reconciling the same action pinned to two different
 SHAs across workflows, and reviewing runner labels, permissions, and path filters. Expect
 the inventory in step 1 to be closer to current than it would be otherwise; that is
