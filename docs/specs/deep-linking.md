@@ -87,9 +87,15 @@ clears the flag, so an uninstalled app self-corrects.
 A success stops at a terminal "Opened in the Jot app" screen rather than falling
 through to the app. Otherwise the abandoned tab goes on to fetch and render the
 note for nobody — wasted requests, and a note left sitting in a background tab.
-The browser cannot close its own tab (`window.close()` only works on
-script-opened windows), so that screen is the whole of the cleanup available. It
-carries a "Continue in browser" action, which is needed because the success
+Closing the tab outright is not on the table. `window.close()` is reliable only
+for a window a script opened; the spec also allows it for a top-level context
+whose session history holds a single `Document`, but that clause is honoured
+unevenly — Firefox refuses anything not script-opened, and Safari is similarly
+restrictive. Auto-closing would be the wrong behaviour even where it worked,
+since the success signal is inferential and a false positive would destroy the
+tab and lose the visitor's place. So the screen is the cleanup.
+
+It carries a "Continue in browser" action, which is needed because the success
 signal is inferential: losing visibility almost always means the app took the
 URL, but it also fires if the visitor switched apps for an unrelated reason
 inside the 1.5s window, and without a way out that would strand them. That

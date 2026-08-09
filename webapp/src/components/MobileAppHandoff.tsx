@@ -108,10 +108,13 @@ const MobileAppHandoff = ({ children }: MobileAppHandoffProps) => {
       settled = true;
       setMobileAppKnownInstalled(true);
       // Stop here rather than falling through to 'idle', which would mount the
-      // whole webapp and fetch the note into a tab nobody is looking at. The
-      // browser cannot close its own tab — window.close() only works on
-      // script-opened windows — so a terminal screen is the whole of the
-      // cleanup available.
+      // whole webapp and fetch the note into a tab nobody is looking at.
+      // Closing the tab outright is not an option: window.close() is reliable
+      // only for script-opened windows, and the spec's other allowance (a
+      // top-level context with a single history entry) is honoured unevenly
+      // across engines. Auto-closing would be wrong here anyway — the success
+      // signal is inferential, so a false positive would destroy the tab and
+      // lose the visitor's place.
       setPhase('handedOff');
     };
 
