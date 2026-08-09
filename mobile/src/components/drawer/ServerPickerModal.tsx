@@ -266,10 +266,8 @@ export default function ServerPickerModal({
 
   const handleServerAdded = useCallback(async () => {
     setIsPending(true);
-    let initialRefreshOk = false;
     try {
       const ok = await refresh();
-      initialRefreshOk = ok;
       if (!ok) {
         return;
       }
@@ -278,12 +276,9 @@ export default function ServerPickerModal({
       onClose();
       onSwitched?.(authenticated);
     } catch {
-      Alert.alert(t('common.error'), t('serverPicker.switchFailed'));
+      Alert.alert(t('common.error'), t('serverPicker.addFailed'));
     } finally {
       setIsPending(false);
-      if (initialRefreshOk) {
-        await refresh();
-      }
     }
   }, [onClose, onSwitched, refresh, revalidateSession, t]);
 

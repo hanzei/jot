@@ -95,12 +95,13 @@ describe('ServerPickerModal', () => {
   });
 
   it('lists every registered server once opened', async () => {
-    const { getByTestId } = renderPicker();
+    const { getByTestId, getByText } = renderPicker();
 
     await waitFor(() => expect(getByTestId('server-picker-row-server-one')).toBeTruthy());
     expect(getByTestId('server-picker-row-server-two')).toBeTruthy();
-    // Falls back to the URL when the server has no display name.
-    expect(getByTestId('server-picker-modal')).toBeTruthy();
+    expect(getByText('Work')).toBeTruthy();
+    // A server with no display name falls back to its URL.
+    expect(getByText('https://two.example.com')).toBeTruthy();
   });
 
   it('does not read the registry while hidden', () => {
