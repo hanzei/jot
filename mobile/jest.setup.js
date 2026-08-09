@@ -319,10 +319,7 @@ jest.mock('react-native-gesture-handler', () => {
 jest.mock('react-native-reorderable-list', () => {
   const React = require('react');
   const { View, ScrollView } = require('react-native');
-  // jest.fn() wrapper so tests can reach into `.mock.calls` to grab the
-  // onDragStart/onDragEnd callbacks a screen wired up, the same way the SSE
-  // subscription mock is inspected in NoteEditorScreen.remote-refresh.test.tsx.
-  const ReorderableList = jest.fn(function ReorderableList(props) {
+  function ReorderableList(props) {
     const data = props.data || [];
     return React.createElement(
       View,
@@ -331,7 +328,7 @@ jest.mock('react-native-reorderable-list', () => {
         React.createElement(React.Fragment, { key: item.id }, props.renderItem({ item, index })),
       ),
     );
-  });
+  }
   ReorderableList.displayName = 'ReorderableList';
   const ScrollViewContainer = React.forwardRef(function ScrollViewContainer(props, ref) {
     return React.createElement(ScrollView, { ...props, ref });
