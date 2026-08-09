@@ -62,12 +62,23 @@ or unexplained. Most skips here are neither: the Postgres store tests skip by de
 
 ## Size and coupling
 
-Measure at audit time — `find … | xargs wc -l | sort -rn` over the scope you were given.
-Do not carry numbers in from anywhere, including this file: the leaders as of writing were
-`mobile/src/screens/NoteEditorScreen.tsx`, `webapp/src/components/NoteModal.tsx`, and
-`server/internal/handlers/notes.go`, and the first of those moved by 20 lines within two
-days of that being written. Stay inside the requested scope; a path-scoped audit has no
-business reporting the biggest file in some other workspace.
+Measure at audit time, over the scope you were given:
+
+```bash
+git ls-files -z -- $ARGUMENTS | grep -zE '\.(go|ts|tsx)$' | grep -zv '^server/docs/' |
+  xargs -0 wc -l | sort -rn
+```
+
+`git ls-files` is what holds the audit to tracked source; `find` would walk `node_modules`
+and `webapp/build`. Empty `$ARGUMENTS` means every tracked file, and a path keeps the
+listing inside it — a path-scoped audit has no business reporting the biggest file in some
+other workspace. Do not use a `:(exclude)` pathspec for `server/docs`: combined with a
+directory-scoped positive pathspec it silently returns nothing, which reads as a clean
+workspace.
+
+Do not carry line counts in from anywhere, including this file. The largest file in the
+repo moved by 20 lines within two days of being written down here, which is the whole
+argument for measuring rather than remembering.
 
 Name what should split out, not just the line count. Also: handler logic that belongs in a
 `*Store`, and SQL outside `internal/models`.
