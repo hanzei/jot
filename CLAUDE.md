@@ -59,9 +59,9 @@ wrong. Everything after that point is the normal workflow documented here.
 
 ## Commands and skills
 
-`.claude/commands/` holds the workflows you start by name — `/work-issue` and the six
-dependency-update commands. They are deliberate, scheduled operations: you decide when a
-sweep happens or which ticket gets picked up, so nothing should start one on your behalf.
+`.claude/commands/` holds the workflows you start by name. They are deliberate, scheduled
+operations: you decide when a sweep happens or which ticket gets picked up, so nothing
+should start one on your behalf.
 
 `.claude/skills/` holds the ones the model should reach for on its own, matched against
 the situation rather than typed. Only `cut-release` qualifies today, because getting a
