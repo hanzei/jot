@@ -1,6 +1,5 @@
 ---
-name: update-server-deps
-description: Update Go dependencies in server/ — module upgrades, go.mod tool bumps (golangci-lint, swag), and the Go toolchain version. Use this whenever the user asks to update, upgrade, or refresh Go modules, go.mod/go.sum, backend dependencies, the OpenTelemetry stack, golangci-lint, swag, or the Go version, and also when they say something broad like "update the server deps" or "bump dependencies" while working in server/. Prefer this over running `go get -u ./...` ad hoc — this repo has tool directives, a coupled OTel version set, and generated Swagger docs that all break in non-obvious ways.
+description: Update Go dependencies in server/ — module upgrades, go.mod tool directives (golangci-lint, swag), and the Go toolchain version.
 ---
 
 # Update server (Go) dependencies

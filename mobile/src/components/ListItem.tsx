@@ -55,6 +55,7 @@ interface ListItemProps {
   onBackspaceOnEmpty?: () => void;
   onAssignPress?: () => void;
   onFocus?: TextInputProps['onFocus'];
+  onBlur?: () => void;
   onAcceptSuggestion?: (text: string) => void;
 }
 
@@ -113,6 +114,7 @@ function ListItem({
   onBackspaceOnEmpty,
   onAssignPress,
   onFocus,
+  onBlur,
   onAcceptSuggestion,
 }: ListItemProps) {
   const { colors } = useTheme();
@@ -262,6 +264,7 @@ function ListItem({
                 if (!completed) setShowSuggestions(true);
               }}
               onBlur={() => {
+                onBlur?.();
                 // Delay hiding so a tap on the delete button (which blurs the input
                 // first) still lands before the button unmounts.
                 blurTimeoutRef.current = setTimeout(() => {
