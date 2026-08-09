@@ -122,14 +122,6 @@ const ZOOM_MS = 280;
 // after a drop and leave the row greyed out or enlarged. Module-scoped so the
 // reference stays stable across renders.
 const DRAG_CELL_ANIMATIONS = { opacity: 1, transform: [] };
-// The reorderable list's drop animation, passed to it explicitly rather than
-// left at the library default so LIST_DRAG_SETTLE_MS below can be tied to it.
-const LIST_DROP_ANIM_MS = 200;
-// How long after onDragEnd the list still holds drag-start indices into `data`:
-// it calls keyExtractor(data[i], i) for the moved range from the drop
-// animation's completion callback, so `data` must not shrink until that has
-// run. The margin covers the UI→JS hop that schedules the callback.
-const LIST_DRAG_SETTLE_MS = LIST_DROP_ANIM_MS + 50;
 
 // Re-inserts each id in `idsToRestore` back into `currentIds`, anchored right
 // after its nearest still-present predecessor in `originalOrder` (or at the
@@ -330,24 +322,6 @@ export default function NoteEditorScreen() {
   // While one is in flight the refresh effect must not re-apply a (possibly
   // stale) refetch and revert the optimistic pin/archive/color.
   const metadataUpdateInFlightRef = useRef(false);
-  // Guards the same refresh effect while a list-item drag is in progress.
-  // A background note refresh (SSE-triggered refetch, catch-up resync on
-  // reconnect) can land mid-gesture, before the drop sets hasPendingChangesRef —
-  // replacing `items` (and so the reorder list's `data` length) out from under
-  // the drag library's own index tracking crashes it on release (keyExtractor
-  // called with an out-of-range, now-undefined item).
-  //
-  // The guard outlives the gesture by LIST_DRAG_SETTLE_MS: onDragEnd fires when
-  // the finger lifts, but the library re-reads `data` at the drag-start indices
-  // once the drop animation finishes, so clearing it at onDragEnd left a ~200ms
-  // window in which the same refresh still crashed the drop.
-  const isDraggingItemsRef = useRef(false);
-  const dragSettleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Bumped when the guard clears, to re-run the refresh effect below: a refresh
-  // it skipped mid-drag would otherwise stay unapplied until the *next* change
-  // to the note, leaving the editor stale.
-  const [dragSettleSeq, setDragSettleSeq] = useState(0);
-  useEffect(() => () => { if (dragSettleTimerRef.current) clearTimeout(dragSettleTimerRef.current); }, []);
   const requiresHydrationRef = useRef(initialNoteId !== null);
 
   // Warn when another user updates this note *while we have unsaved edits*.
@@ -772,13 +746,10 @@ export default function NoteEditorScreen() {
       && !hasPendingChangesRef.current
       && saveInFlightRef.current === null
       && !metadataUpdateInFlightRef.current
-      && !isDraggingItemsRef.current
     ) {
       applyNoteToState(existingNote);
     }
-    // dragSettleSeq is a dependency so a refresh suppressed mid-drag is applied
-    // once the drop settles, rather than waiting for the next note change.
-  }, [existingNote, applyNoteToState, dragSettleSeq]);
+  }, [existingNote, applyNoteToState]);
 
   // Keep labels in sync when note data refreshes after label mutations, even
   // while the body has unsaved edits (labels are edited via their own picker
@@ -2355,46 +2326,18 @@ export default function NoteEditorScreen() {
     [commitDrag],
   );
 
-  const setIsDraggingItems = useCallback((dragging: boolean) => {
-    if (dragSettleTimerRef.current) {
-      clearTimeout(dragSettleTimerRef.current);
-      dragSettleTimerRef.current = null;
-    }
-    if (dragging) {
-      isDraggingItemsRef.current = true;
-      return;
-    }
-    // The finger is up but the list keeps using drag-start indices until its
-    // drop animation completes — see LIST_DRAG_SETTLE_MS.
-    dragSettleTimerRef.current = setTimeout(() => {
-      dragSettleTimerRef.current = null;
-      isDraggingItemsRef.current = false;
-      setDragSettleSeq((seq) => seq + 1);
-    }, LIST_DRAG_SETTLE_MS);
-  }, []);
-
-  // Marks the drag as active for the whole gesture, so the note-refresh effect
-  // above holds off applying a background note update (see isDraggingItemsRef)
-  // until the drop settles the list back to a stable length.
-  const handleListDragStart = useCallback(() => {
-    'worklet';
-    runOnJS(setIsDraggingItems)(true);
-  }, [setIsDraggingItems]);
-
   // onReorder never fires for a purely sideways drag (the library only calls it
   // when from !== to). onDragEnd fires on every drop — inside a UI-thread
   // worklet — so we hop back to JS to commit the indent for that case. The
-  // from !== to drops are already handled by onReorder above. It also fires on
-  // every drop regardless of from/to, so it's where the drag is marked over.
+  // from !== to drops are already handled by onReorder above.
   const handleListDragEnd = useCallback(
     ({ from, to }: ReorderableListDragEndEvent) => {
       'worklet';
-      runOnJS(setIsDraggingItems)(false);
       if (from === to) {
         runOnJS(commitDrag)(from, to);
       }
     },
-    [commitDrag, setIsDraggingItems],
+    [commitDrag],
   );
 
   // The reorder drag activates on movement along either axis: vertical to
@@ -2822,19 +2765,12 @@ export default function NoteEditorScreen() {
           </>
         ) : (
           <View style={styles.listContainer}>
-            <NestedReorderableList<LocalItem>
+            <NestedReorderableList
               data={uncheckedItems}
-              // `item` is typed non-optional but is read at drag-start indices
-              // during the drop, which can outlive the row it pointed at. The
-              // settle guard above is what keeps that from happening; falling
-              // back to the index here keeps a residual race from turning into
-              // a crash rather than a stray key. Same fallback the library uses.
-              keyExtractor={(item, index) => item?.id ?? String(index)}
-              animationDuration={LIST_DROP_ANIM_MS}
+              keyExtractor={(item) => item.id}
               scrollable={false}
               shouldUpdateActiveItem
               panGesture={listDragGesture}
-              onDragStart={handleListDragStart}
               onReorder={handleListReorder}
               onDragEnd={handleListDragEnd}
               cellAnimations={DRAG_CELL_ANIMATIONS}
