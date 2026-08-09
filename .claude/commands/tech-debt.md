@@ -14,6 +14,12 @@ Read root `CLAUDE.md` and the per-area `CLAUDE.md` in any directory you audit be
 classifying anything. A lot of what looks wrong here is recorded and deliberate, and the
 difference between a finding and noise is usually one paragraph in one of those files.
 
+That read cuts both ways. Those files also carry rules no linter can enforce — 422 rather
+than 400 for a resource cap, which verb means what, the Go and i18n conventions in the
+per-area files — and code that predates or ignores one of them is debt by this repo's own
+definition. Report the violation; where it is arguably not one, say what makes it
+ambiguous instead of deciding.
+
 Do not sweep for `TODO`/`FIXME`: there is one such marker in the entire tree. The debt here
 is structural, and it collects in the places below.
 
@@ -36,7 +42,12 @@ these even when the argument scopes you to one directory.
 - `migrations/sqlite/` and `migrations/postgres/` enforcing different invariants —
   nullability, defaults, indexes, unique and foreign-key constraints, cascade behaviour.
   `task check-migrations` compares filenames only; equivalent *behaviour* is on you.
-- Hardcoded user-facing strings that never reached i18n.
+- i18n in both directions: hardcoded user-facing strings that never reached a locale file,
+  and keys in `en.json` that nothing references — `task check-translations` only catches
+  locale keys `en.json` lacks, so dead keys are unguarded, and each one is maintained in
+  eight languages. Resolve keys assembled at runtime (``t(`settings.language_${lang}`)``)
+  and i18next plural suffixes before calling one dead. The same question is worth asking of
+  exported functions and components nothing renders.
 
 ## Suppressions
 
@@ -65,6 +76,12 @@ Name what should split out, not just the line count. Also: handler logic that be
 
 Handlers, stores, and hooks with no test at all; behaviour covered only by e2e that a unit
 test could pin down faster. `task coverage` gives the server picture.
+
+A green suite is not the same as a covered one. Tests that pass without proving much are
+debt too: ones that wait on `setTimeout` or `waitForTimeout` rather than on a condition,
+ones that assert against their own mocks, and suites that only pass because teardown leaks
+(`task test-mobile` currently force-exits Jest over a worker that will not exit). Read the
+warnings a suite prints even when it reports success.
 
 ## Output
 
