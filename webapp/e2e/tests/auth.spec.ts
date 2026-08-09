@@ -146,6 +146,14 @@ test.describe('Authentication', () => {
 
     await dashboardPage.logout();
 
+    // On a touch device, arriving cold at a note URL is exactly what raises the
+    // "open in the Jot app" handoff, which would cover the login form. This test
+    // is about the redirect, so opt out of the handoff the way a visitor who
+    // picked the browser already has; mobile-app-handoff.spec.ts covers it.
+    await page.addInitScript(() => {
+      window.localStorage.setItem('jot_mobile_app_handoff_dismissed', '1');
+    });
+
     // Following the link cold: bounced to login, then straight into the note,
     // with the modal open rather than just the dashboard behind it.
     await page.goto(noteLink);
