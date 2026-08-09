@@ -8,6 +8,40 @@
     <link rel="icon" type="image/png" sizes="16x16" href="/icon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Jot - Your Notes</title>
+
+    <!--
+      Link-preview metadata for chat clients (Slack, Signal, WhatsApp, ...).
+
+      These are deliberately *note-agnostic*: the server serves this same file
+      for every unmatched path (the SPA fallback in internal/server/server.go),
+      so a /notes/<id> link previews identically to /login. That is the point,
+      not a shortcut — a preview generator is unauthenticated, so anything
+      note-specific here would hand a note's title to anyone holding the URL.
+      Do not add per-note titles or thumbnails by templating this file.
+
+      og:image is relative because a self-hosted install has no origin known at
+      build time. Slack and Signal resolve that; clients that require an
+      absolute URL drop the thumbnail and still render title + description.
+      Serving an absolute URL would mean either trusting the Host header or
+      adding a JOT_PUBLIC_URL setting — see the discussion in the PR.
+
+      The description says what Jot is and nothing about signing in: one card is
+      served to every reader, so it cannot reflect whether this one has a
+      session, and a "sign in to view" would be simply wrong for the recipient
+      who is already logged in. It would also mis-explain the card — there is no
+      note content here because we keep it out, not because the reader is signed
+      out, and signing in would not add any.
+
+      Not translated: crawlers do not run JS, so i18next has not loaded when
+      these are read. Same reason <title> above is static English.
+    -->
+    <meta name="description" content="Jot is a self-hosted app for notes, lists and tasks." />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Jot" />
+    <meta property="og:title" content="Jot - Your Notes" />
+    <meta property="og:description" content="Jot is a self-hosted app for notes, lists and tasks." />
+    <meta property="og:image" content="/pwa-512x512.png" />
+    <meta name="twitter:card" content="summary" />
   </head>
   <body>
     <div id="root"></div>
