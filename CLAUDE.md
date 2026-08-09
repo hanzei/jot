@@ -49,6 +49,17 @@ When a PR does qualify:
 2. Address every piece of valid feedback the review returns (fix bugs, improve clarity, align with conventions).
 3. Only proceed to commit/push after the review pass finishes — do not repeat the loop.
 
+## Working from a GitHub issue
+
+`/work-issue <url|#123|123>` (`.claude/commands/work-issue.md`) takes an issue and drives
+it to a draft PR. It verifies the ticket before writing any code — whether the problem is
+real, whether the proposed solution is over- or under-engineered for this codebase, and
+whether it fits the architecture — and stops to discuss only when something is materially
+wrong. Everything after that point is the normal workflow documented here.
+
+`.claude/commands/` is for workflows you invoke by name with an argument;
+`.claude/skills/` is for the ones the model should reach for on its own.
+
 ## Environment Setup
 
 `scripts/bootstrap.sh` provisions a checkout: it installs `task`, runs `npm ci`
