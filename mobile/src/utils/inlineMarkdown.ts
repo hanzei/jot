@@ -22,7 +22,7 @@ export function inlineMarkdownNodes(text: string): InlineNode[] {
  *
  * A control's accessible name should identify the item the way the user knows it;
  * spelling out `**` and backticks is never useful there. This also keeps the
- * checkbox's name correct once #824 renders the editable row too.
+ * checkbox's name correct once #867 renders the editable row too.
  */
 export function inlineMarkdownToText(text: string): string {
   if (!text.trim()) return text;

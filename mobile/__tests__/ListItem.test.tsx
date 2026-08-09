@@ -83,7 +83,7 @@ describe('ListItem', () => {
 
   // A read-only row is a display surface, so it renders the inline Markdown
   // subset; an editable row is an input and keeps showing its source. Rendering
-  // in the editable row is #824.
+  // in the editable row is #867.
   it('renders markdown in the read-only row', () => {
     const { getByTestId, queryByTestId } = render(
       <ListItem text="buy **milk**" completed={false} editable={false} />,

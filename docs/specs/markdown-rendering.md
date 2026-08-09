@@ -11,11 +11,12 @@ Markdown applies to the **`content` of text notes** in full, and to **list-note
 item text** in an inline-only subset (§2.1):
 
 - **Note titles are plain.** They are rendered as text everywhere.
-- **List-item Markdown renders on display surfaces only.** Note cards, mobile's
-  read-only editor and the collapsed-completed parent label render it; the
-  editable row still shows its source, because it is an always-live input with no
-  preview mode. Closing that gap is
-  [#824](https://github.com/hanzei/jot/issues/824).
+- **List-item Markdown renders everywhere on the webapp, and on display surfaces
+  on mobile.** Note cards, mobile's read-only editor and the collapsed-completed
+  parent label render it on both clients. The webapp's *editable* row renders it
+  too, swapping to source while it holds the caret (§1.2). Mobile's editable row
+  still shows source; closing that gap is
+  [#867](https://github.com/hanzei/jot/issues/867).
 
 ### 1.1 Note cards render links as text
 
@@ -35,14 +36,95 @@ colour that only signals "link" fails anyone who cannot use it. So the label
 renders exactly as the surrounding text.
 
 The open note is unaffected: the webapp's modal preview and mobile's editor both
-render live links, which is where a reader who wants the link already is. One
-consequence worth naming: because the *editable* list-item row shows source
-(above), a link typed into a list item now has no live surface on the webapp at
-all until [#824](https://github.com/hanzei/jot/issues/824) gives that row a view
-mode. Mobile still has one, in its read-only editor.
+render live links, which is where a reader who wants the link already is. An
+*editable* list-item row is the one other place a link stays inert, for a
+different reason — §1.2.
 
 Both clients render the same feature set from the same source string, so a note
 written on a phone reads identically in a browser and the other way round.
+
+### 1.2 The webapp's editable row swaps between rendered and source
+
+A list-item row on the webapp shows its Markdown rendered until it holds the
+caret, and its source for exactly as long as it does. Type `**Milk**`, move
+away, and the row reads **Milk**; click back into it and it reads `**Milk**`
+again, with the caret where you clicked.
+
+**Focused and editing are the same state.** That is the decision the rest
+follows from. Every keystroke a row handles — Tab to indent, Enter to split,
+arrows to move between rows and through the completed-item suggestions — stays
+on a real `<textarea>`, because a row that has the caret *is* a textarea. There
+is no render-mode duplicate of any of it, and no focusable non-interactive
+element in the markup for a screen reader to find or axe to flag.
+
+Four consequences, each of which is a trap avoided rather than a preference:
+
+- **The textarea is never unmounted**, only moved out of flow and faded to
+  `opacity-0`. Everything that reaches for a row imperatively — NoteModal's
+  Enter-to-split, its arrow navigation, its "add item" focus, all through the
+  `itemInputRefs` map — keeps working on a row that happens to be rendered, and
+  the height the field comes back at was measured while it was on screen rather
+  than at the moment of focus. `visibility: hidden` and `display: none` both
+  remove an element from the focus order, so neither can be used here.
+- **A row only swaps when rendering changes something.** `buy milk` renders to
+  `buy milk`, so that row keeps the always-live input it has always had. So do
+  `# not a heading` and `![alt](url)`, which §2.1 shows as literal source. Only
+  a row whose author typed markup that actually renders pays for any of this,
+  which is what keeps a plain list exactly as it was.
+- **An editable row's links are inert; a read-only row's are live.** One click
+  in an editable row already means "put the caret here", and a second meaning on
+  the same pixel has no way to resolve itself — so the label renders as ordinary
+  text and nothing looks followable, the same outcome as a card (§1.1) reached
+  by a different route. A read-only row has no caret to place, so its links work
+  and it drops the hidden textarea entirely rather than leaving a focusable copy
+  of the text behind the rendered one.
+- **Completed rows render like any other**, `~~strike~~` and all, which §2.1
+  already accepted for display surfaces. A struck word inside an already-struck
+  row is indistinguishable; that is the cost of the subset staying a subset.
+
+**A click has to place the caret itself.** The user points at character 4 of
+`buy milk` and the field holds `buy **milk**`, where that character is at 6.
+The browser maps the point to a position in the rendered DOM; `inlineSourceOffset`
+maps that back through the source spans `normalizeInlineTokens` records. Without
+it the caret lands at 0 on every click — which is what the *text-note* editor
+does today, and is tolerable there only because it happens once per note instead
+of once per row, and because the next click lands in a real textarea and
+corrects it.
+
+**Both forms must be the same height**, or every click shifts the rows below it.
+They share one class list for width, padding and wrapping, and one property that
+matters more than it looks: **both are `block`**.
+
+That is there to remove the line box from the question rather than to match it.
+A textarea is an `inline-block` by default, so it sits on a baseline and the line
+box around it reserves descender space underneath — and how much is a property of
+the platform's font and UA stylesheet. Reproducing that on a span is possible
+(`overflow` moves a baseline to the bottom margin edge, CSS 2.1 §10.8.1) and was
+the first attempt, but it only held on the font it was measured against: on
+Windows the textarea did not reserve the space and the span did, so every row
+grew about 7px the moment it lost focus. Blocks have no baseline to disagree
+about, and each box is then `lines × line-height + padding` from the same
+inherited metrics — equal on any platform.
+
+The same trap has a second entrance, inside the rendered form. An inline box is
+as tall as its `line-height` and sits around the shared baseline, so a child in a
+*different font* is offset differently from the line's strut and can push the
+line box past it. `.markdown-inline code` sets `font-mono`, which made a row
+containing `` `code` `` taller rendered than in source — by 0.6px on one font and
+who knows what on another. `leading-none` on it keeps its inline box under the
+strut on any font, and does not change the chip, since an inline element's
+background paints its content area rather than its line box.
+
+Where the two forms genuinely differ — markers moving a wrap point, so the source
+occupies more lines — the change is animated over 120ms, behind
+`prefersReducedMotion`.
+
+**A mouse drag does not collapse the row it starts on.** The grip prevents the
+default mousedown, so grabbing it never moves focus off the field. Otherwise the
+row would change height in the same tick the `PointerSensor` activates and
+dnd-kit measures, and the drag would run against a rect for a size the row no
+longer has. A keyboard drag needs no such guard: it arrives by Tab, so the row
+has already collapsed and settled before Space starts it.
 
 | | Webapp | Mobile |
 |---|---|---|
@@ -300,6 +382,9 @@ spec exists to prevent.
 | Shared conformance corpora (both test suites) | `shared/src/markdownCases.ts` |
 | Webapp node-to-HTML renderer + tag allowlist | `webapp/src/utils/markdown.ts` |
 | Webapp item renderer | `webapp/src/components/InlineMarkdown.tsx` |
+| Webapp editable-row swap (§1.2) | `webapp/src/components/SortableItem.tsx` |
+| Shared rendered-offset → source-offset map | `inlineSourceOffset` in `shared/src/inlineMarkdown.ts` |
+| Webapp click point → rendered offset | `webapp/src/utils/inlineCaret.ts` |
 | Mobile block lexing entry point | `mobile/src/utils/markdown.ts` |
 | Mobile block renderer (editor) | `mobile/src/components/Markdown.tsx` |
 | Mobile card preview renderer | `mobile/src/components/MarkdownPreview.tsx` |
@@ -462,9 +547,12 @@ The heading button stops at `###`, matching §2: a fourth press would produce an
 
 - **Interactive checkboxes.** Toggling a rendered ☐ would mean writing back into
   `content` — a much larger feature than rendering.
-- **Markdown in the *editable* list-item row.** The subset renders on display
-  surfaces (§1); giving the always-live input a view/edit swap is
-  [#824](https://github.com/hanzei/jot/issues/824).
+- **Markdown in mobile's *editable* list-item row.** The webapp's row swaps
+  between rendered and source (§1.2); mobile's still shows source, because the
+  same swap there unmounts a focused `TextInput` on every row change and the
+  software keyboard goes with it. Tracked as
+  [#867](https://github.com/hanzei/jot/issues/867), which records the decisions
+  the webapp already made so mobile only has to solve the keyboard problem.
 - **Block Markdown in list items.** Not a gap to be filled later — §2.1 explains
   why an item cannot hold it.
 - **Syntax highlighting** in code blocks. The webapp allowlist drops the
