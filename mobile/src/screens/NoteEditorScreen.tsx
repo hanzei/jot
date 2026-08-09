@@ -670,6 +670,12 @@ export default function NoteEditorScreen() {
   const itemInputRefsMap = useRef(new Map<string, React.RefObject<TextInputType | null>>());
   const autoFocusItemIdRef = useRef<string | null>(null);
   const autoFocusClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Id of the list item whose input currently has focus, if any. Tracked so a
+  // drag-triggered reorder can restore focus to it (see commitDrag) — the
+  // reorderable list forces a remount of any row whose slot changes, which
+  // otherwise drops the focused TextInput and lets it fall back to whatever
+  // the OS picks next (observed: the title input).
+  const focusedItemIdRef = useRef<string | null>(null);
 
   const getItemRef = useCallback((id: string): React.RefObject<TextInputType | null> => {
     if (!itemInputRefsMap.current.has(id)) {
@@ -2310,6 +2316,16 @@ export default function NoteEditorScreen() {
       // and reintroduce the snap-back flash. The drag start resets it instead.
       if (!changed) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      // A row whose slot changed gets force-remounted by the reorderable list
+      // (new key, to fix a layout glitch), which drops a focused TextInput.
+      // Re-arm the same autoFocus-on-mount mechanism handleAddItem uses so the
+      // remounted row re-opens the keyboard on itself instead of leaving focus
+      // to fall back elsewhere (observed: the title input).
+      if (focusedItemIdRef.current) {
+        autoFocusItemIdRef.current = focusedItemIdRef.current;
+        if (autoFocusClearTimerRef.current !== null) clearTimeout(autoFocusClearTimerRef.current);
+        autoFocusClearTimerRef.current = setTimeout(() => { autoFocusItemIdRef.current = null; }, 500);
+      }
       // Merge with existing checked items and normalize so each parent's
       // children stay contiguous.
       setItems(normalizeItemOrder([...reorderedUnchecked, ...checkedItemsRef.current]));
@@ -2379,11 +2395,16 @@ export default function NoteEditorScreen() {
   }, []);
 
   const handleFocusListItem = useCallback(
-    (_itemId: string, event: Parameters<NonNullable<TextInputProps['onFocus']>>[0]) => {
+    (itemId: string, event: Parameters<NonNullable<TextInputProps['onFocus']>>[0]) => {
+      focusedItemIdRef.current = itemId;
       handleListItemFocus(event);
     },
     [handleListItemFocus],
   );
+
+  const handleBlurListItem = useCallback((itemId: string) => {
+    if (focusedItemIdRef.current === itemId) focusedItemIdRef.current = null;
+  }, []);
 
   const hasNoteColor = !!color && !isWhiteHexColor(color);
 
@@ -2428,8 +2449,9 @@ export default function NoteEditorScreen() {
       onBackspaceOnEmpty: handleBackspaceOnEmpty,
       onAssignPress: openAssigneePicker,
       onFocus: handleFocusListItem,
+      onBlur: handleBlurListItem,
     }),
-    [handleItemCompletedToggle, handleItemTextChange, handleDeleteItem, handleItemEnterAtCursor, handleBackspaceOnEmpty, openAssigneePicker, handleFocusListItem],
+    [handleItemCompletedToggle, handleItemTextChange, handleDeleteItem, handleItemEnterAtCursor, handleBackspaceOnEmpty, openAssigneePicker, handleFocusListItem, handleBlurListItem],
   );
 
   const renderActiveRow = useCallback(
@@ -2467,6 +2489,7 @@ export default function NoteEditorScreen() {
             onBackspaceOnEmpty: () => listItemHandlers.onBackspaceOnEmpty(originalIndex),
             onAssignPress: () => listItemHandlers.onAssignPress(item.id),
             onFocus: (event) => listItemHandlers.onFocus(item.id, event),
+            onBlur: () => listItemHandlers.onBlur(item.id),
             onAcceptSuggestion: (text) => handleAcceptSuggestion(item.id, text),
           }}
         />
