@@ -22,6 +22,7 @@
   },
   "serverPicker": {
     "open": "Cambiar servidor",
+    "activeServerLabel": "Iniciando sesión en",
     "title": "Servidores",
     "noServers": "Aún no hay servidores guardados.",
     "addPlaceholder": "Añadir URL de servidor",
@@ -327,7 +328,7 @@
   "images": {
     "openLightbox": "Ver {{filename}}",
     "moreImages": "Ver {{count}} imágenes más",
-"moreImagesBadge": "{{count}} imágenes más",
+    "moreImagesBadge": "{{count}} imágenes más",
     "lightboxPrevious": "Imagen anterior",
     "lightboxNext": "Imagen siguiente",
     "lightboxCounter": "{{current}} / {{total}}",
