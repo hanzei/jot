@@ -298,7 +298,7 @@
   "images": {
     "openLightbox": "{{filename}} anzeigen",
     "moreImages": "{{count}} weitere Bilder anzeigen",
-"moreImagesBadge": "{{count}} weitere Bilder",
+    "moreImagesBadge": "{{count}} weitere Bilder",
     "lightboxPrevious": "Vorheriges Bild",
     "lightboxNext": "Nächstes Bild",
     "lightboxCounter": "{{current}} / {{total}}",
@@ -378,6 +378,7 @@
   },
   "serverPicker": {
     "open": "Server wechseln",
+    "activeServerLabel": "Anmelden bei",
     "title": "Server auswählen",
     "noServers": "Noch keine Server hinzugefügt.",
     "addPlaceholder": "Server-URL hinzufügen (https://...)",
