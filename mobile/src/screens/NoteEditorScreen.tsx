@@ -160,9 +160,6 @@ export default function NoteEditorScreen() {
   // A new note opened from a share intent arrives with sharedText to pre-fill
   // the body.
   const openedFromShare = initialNoteId === null && !!sharedText;
-  // A new list opened from the "New list" app-icon quick action: start in list
-  // mode and focus the title so the keyboard comes up ready to type.
-  const openedAsNewList = initialNoteId === null && initialNoteType === 'list';
 
   const [noteId, setNoteId] = useState<string | null>(initialNoteId);
   const [title, setTitle] = useState('');
@@ -2719,7 +2716,7 @@ export default function NoteEditorScreen() {
             style={[styles.titleInput, { color: hasNoteColor ? '#1a1a1a' : colors.text }]}
             value={title}
             onChangeText={handleTitleChange}
-            autoFocus={openedAsNewList}
+            autoFocus={!hasCreated}
             placeholder={t('note.titlePlaceholder')}
             placeholderTextColor={hasNoteColor ? '#999' : colors.placeholder}
             returnKeyType="next"
