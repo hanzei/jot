@@ -1,0 +1,175 @@
+---
+name: session-wrap-up
+description: Close out a working session by proposing follow-up work — extensions to a feature just built, related bugs elsewhere in the codebase, a structural change that would retire the whole bug class, and gaps in test coverage — then agreeing which ones are worth filing and opening them as GitHub issues. Use when the user says they are wrapping up, asks what the next steps are, asks for follow-ups or loose ends from the work just done, or invokes /session-wrap-up. Not a code review (use /code-review) and not a cleanup pass (use /simplify) — this looks past the change that just landed, not at it.
+---
+
+# Session wrap-up
+
+Run at the end of a session, once the actual work is done (usually pushed, often with
+a PR open). Three phases, strictly ordered:
+
+1. **Investigate** — figure out what the session was really about and probe for follow-ups.
+2. **Propose and decide** — put every candidate in front of the user, get one decision.
+3. **File** — draft the selected issues in the repo's house style, confirm, create them.
+
+Never skip to phase 3. The point of this skill is that the user picks; a skill that files
+issues on its own is just noise generation with a GitHub API attached.
+
+## Phase 1 — Investigate
+
+### What the session was about
+
+The session transcript is the primary source — you were there. Corroborate it with the
+diff, because what got *discussed* and what got *changed* are often different, and
+follow-ups hide in the gap:
+
+```bash
+git log --oneline master..HEAD
+git diff master...HEAD --stat
+```
+
+If a PR is open for the branch, read its description and any review comments — a reviewer
+saying "fine for now, but…" is the single richest source of follow-ups there is.
+
+Then classify. The classification decides which themes below are worth probing, and a
+session is often more than one:
+
+- **Feature** — new user-facing capability.
+- **Bug fix** — something was broken and now isn't.
+- **Refactor / tech debt** — behaviour unchanged.
+- **Infra / tooling / deps** — CI, Docker, build, dependencies.
+- **Investigation only** — no code changed. Still valid; the conclusions are the follow-ups.
+
+### Probe the four themes
+
+Bounded investigation — minutes, not a full sweep. Read the files you touched and their
+neighbours; grep for the pattern; check what tests exist. Do not spawn subagents.
+
+**Feature extensions.** What did the change deliberately not do? Look for the seams: a
+flag only wired on one client, a webapp feature with no mobile counterpart (or vice versa
+— this repo has three clients and features routinely land on one first), an API returning
+a field nothing renders yet, a `docs/specs/` entry whose "not covered" section the change
+just made more conspicuous. The strongest candidates are things you consciously decided
+against mid-session; those are in the transcript, not the diff.
+
+**Related bugs elsewhere.** This is the theme that cannot be answered from memory of the
+session, so actually go and look. Take the *shape* of the bug — not its text — and grep
+for it. A missing `t.Parallel()`, a naive `time.Now()` where `models.Now()` was needed, an
+unguarded indexed read, a handler returning 400 where the API conventions say 422, a
+migration written for one dialect tree only. If the fix touched `server/`, check whether
+`webapp/` or `mobile/` makes the same mistake against the same endpoint.
+
+**A structural fix that retires the class.** Ask whether the bug was possible because of a
+type, an API shape, or a missing invariant — and whether changing that would make the
+whole family unrepresentable. A lint rule or a TypeScript strictness flag counts and is
+often the cheapest version (#843, #842 and #845 are all exactly this). So does moving a
+check into a constructor, or making a store method the only path to a mutation. Say
+plainly when the structural fix is disproportionate; "the one-line fix is correct and a
+refactor is not warranted" is a legitimate finding and better than inventing architecture.
+
+**Test coverage.** Compare what changed against what the repo's own conventions require:
+
+- New user-facing feature → an e2e spec in `webapp/e2e/tests/` is expected, not optional.
+- A bug fix → is there a regression test that fails without the fix? If the session
+  didn't add one, that is the highest-value item on the whole list.
+- Server changes → integration test in `server/http_<area>_test.go`, and store-level tests
+  run against Postgres too when `TEST_POSTGRES_DSN` is set.
+- Schema changes → both dialect trees, and a migration test.
+- `shared/src` changes → `task test-mobile`, not just `task test-shared`.
+
+### Filter before you present
+
+Two checks, in this order.
+
+**Is it already tracked?** Search the issues for each candidate before it reaches the list
+(`mcp__github__search_issues`, scoped `owner: hanzei`, `repo: jot`), and search closed ones
+as well as open. An open match means drop it. A closed match needs reading: closed as
+completed means the work exists and you missed it, while closed as not-planned means it was
+weighed and declined — worth mentioning once, but don't quietly re-propose it.
+
+**Does it cross a line the repo has already drawn?** Apply these boundaries from
+`CLAUDE.md` and drop anything that fails them:
+
+- **The threat model.** Logged-in users are trusted collaborators. Do not propose
+  hardening against malicious authenticated insiders. Internal-overload protection (rate
+  limits, retry/backoff, loop detection, caps) *is* in scope, and baseline authn/authz
+  always is.
+- **The development-status notice.** The API is unstable on purpose. "Add a compatibility
+  shim" is usually not a follow-up here; a clean breaking change with migration notes is.
+
+Finally, cut your own list. Four well-argued candidates beat eleven padded ones, and a
+wrap-up that proposes nothing because nothing is genuinely outstanding is a good outcome —
+say so and stop.
+
+## Phase 2 — Propose and decide
+
+Write the proposal into the conversation as prose, grouped under the themes that actually
+produced something. Omit empty themes rather than printing "none". For each candidate:
+
+- A **title** in the form it would take as an issue.
+- **Two to four sentences** of rationale: what's outstanding, why it matters, and the
+  concrete evidence — `webapp/src/components/NoteModal.tsx:139`, a grep hit, an absent
+  test file. A candidate with no evidence behind it should have been cut in phase 1.
+- A **size**: small (an afternoon) / medium / large-or-needs-design.
+- Your **recommendation** — file it, or leave it. Take a position on every one. The user
+  is choosing from a list you already have an opinion about; withholding it wastes the
+  round trip.
+
+Then a single `AskUserQuestion` with `multiSelect: true`, one option per candidate, the
+label being a short form of the title and the description carrying the size plus your
+recommendation. The user can deselect everything, and that is a valid answer.
+
+If a candidate is genuinely a fork in the road rather than a yes/no — two incompatible
+designs, as in #824's "per-row swap or whole-list toggle" — do not flatten it into a
+checkbox. Give it its own question, or file it as an issue that poses the question. This
+repo's issues are comfortable being decision documents.
+
+## Phase 3 — File
+
+Draft every selected issue in full and show them all before creating anything. One
+confirmation covers the batch.
+
+### House style
+
+Match the existing issues (#824, #799, #796 are the reference set) — they are unusually
+detailed and a terse three-liner will look out of place:
+
+- **Titles** are sentence case, specific, and name the area when it isn't obvious:
+  `Mobile: a pending deep link is lost if the app restarts before sign-in completes`.
+  Prefix exploratory work with `Investigate`. No conventional-commit prefixes, no `[BUG]`.
+- **Bodies** are Markdown with `##` sections. There is no issue template; the sections
+  that recur are `## Background`, `## Why it happens`, `## Options`, `## The shape of the
+  change`, `## Scope`, `## Acceptance`, `## Out of scope`, `## Related`. Pick the ones that
+  fit — a bug report earns `Why it happens`, a design question earns `Options`.
+- **Cite code as `path/file.ext:line`.** Nearly every paragraph in the existing issues
+  anchors to one. This is the strongest signal that the issue came from someone who
+  actually read the code.
+- **Reference related issues and PRs as `#NNN`**, and link the PR the session produced.
+  If the follow-up exists because of a decision made in that PR, say which decision.
+- **State the trade-offs.** Where there are competing approaches, list them with their
+  costs and recommend one. Where something is deliberately excluded, put it under
+  `## Out of scope` so the next person doesn't relitigate it.
+- **`## Acceptance` is concrete** — what is true when this is done, including artifacts
+  (screenshots for UI, a screen recording for motion) per `CLAUDE.md`.
+- **No labels.** GitHub's defaults exist on the repo but none of the 129 issues uses one.
+  Don't start.
+
+### Creating them
+
+Use `mcp__github__issue_write` with `method: "create"`, `owner: hanzei`, `repo: jot`. No
+`labels`, no `assignees`, no `type` unless the user asks. Create them one at a time so a
+failure doesn't leave the batch half-filed.
+
+Report back with the issue numbers and titles as a short list. If the session produced a
+PR, offer to add a "Follow-ups" line to its description linking the new issues — this is
+the one edit worth making to an already-open PR, because it is how the issues get found
+again.
+
+## Don't
+
+- Don't file anything the user didn't select.
+- Don't propose work you invented to fill out a theme. An empty theme is information.
+- Don't re-review the diff for defects — `/code-review` and `/simplify` own that, and
+  anything wrong with the change that just landed should be fixed, not filed.
+- Don't create issues for work small enough to have been done in the session. If it's a
+  two-line fix and the branch is still open, say so and offer to do it instead.
