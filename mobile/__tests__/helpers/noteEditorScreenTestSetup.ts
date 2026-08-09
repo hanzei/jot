@@ -8,6 +8,15 @@ import type React from 'react';
  *
  * Each export is the underlying `jest.fn()`; a test configures return values
  * in its own `beforeEach` exactly as if the mock were declared inline.
+ *
+ * A consuming test file cannot override one of these `jest.mock()` calls by
+ * declaring its own `jest.mock()` for the same module: babel hoists jest.mock
+ * calls above imports *within a file*, so the test file's own call always runs
+ * before this module is even required — and this module's own hoisted call
+ * then runs afterward (as a side effect of that `require`), overwriting it.
+ * If a future mock needs to be file-overridable, expose it as an additional
+ * `jest.fn()` export here (as most of the below already are) rather than
+ * hardcoding its behavior in the `jest.mock()` factory.
  */
 
 export const mockUseRoute = jest.fn();
