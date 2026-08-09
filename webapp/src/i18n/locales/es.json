@@ -16,6 +16,19 @@
     "dismissMobileAppBanner": "Ocultar",
     "skipToMainContent": "Saltar al contenido principal"
   },
+  "mobileApp": {
+    "handoffTitle": "¿Abrir en la aplicación Jot?",
+    "handoffMessage": "Puedes abrir esta nota en la aplicación Jot en lugar del navegador.",
+    "openInApp": "Abrir en la aplicación",
+    "continueInBrowser": "Continuar en el navegador",
+    "opening": "Abriendo en la aplicación Jot…",
+    "notInstalled": "La aplicación Jot no respondió. Es posible que no esté instalada en este dispositivo.",
+    "preferenceSection": "Aplicación móvil",
+    "preferenceLabel": "Ofrecer abrir los enlaces de notas en la aplicación Jot",
+    "preferenceDescription": "Cuando abras un enlace de nota en este dispositivo, Jot preguntará si quieres continuar en la aplicación. Este ajuste solo se aplica a este navegador.",
+    "handedOffTitle": "Abierto en la aplicación Jot",
+    "handedOffMessage": "Puedes cerrar esta pestaña."
+  },
   "auth": {
     "signInTitle": "Iniciar sesión en Jot",
     "or": "O",
