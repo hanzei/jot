@@ -1,10 +1,13 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import { X, UserPlus, GripVertical } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, type User, type Collaborator } from '@jot/shared';
 import LetterAvatar from '@/components/LetterAvatar';
 import AssigneePicker from '@/components/AssigneePicker';
 import { indentOf, type ListItem } from '@/utils/noteItems';
+import { renderInlineItem } from '@/utils/markdown';
+import { sourceOffsetAtPoint } from '@/utils/inlineCaret';
+import { canAnimate } from '@/utils/motion';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
@@ -14,6 +17,27 @@ import { CSS } from '@dnd-kit/utilities';
 // accident — important on touch devices, where there's no hover to reveal it.
 export const ROW_REVEAL_CLASSES =
   'opacity-0 pointer-events-none group-hover/item:opacity-100 group-hover/item:pointer-events-auto group-focus-within/item:opacity-100 group-focus-within/item:pointer-events-auto';
+
+// Everything that decides how much vertical space a line of item text takes:
+// width, padding, how it wraps, and how its box sits in the line. The rendered
+// view and the textarea it stands in for must carry all of it, or the row
+// changes height on the swap for no reason other than the two forms being laid
+// out differently.
+//
+// `inline-block` and `overflow-hidden` are the two that are not obvious, and
+// they only matter together. A textarea is an inline-block that baselines on its
+// bottom margin edge, so the line box around it reserves a further 7px of
+// descender space underneath — space that is part of every list row's height
+// today. A span reproduces the display easily but not the baseline: an
+// inline-block full of text baselines on *its own last line*, which puts it 7px
+// short. `overflow-hidden` is what moves a baseline back to the bottom margin
+// edge (CSS 2.1 §10.8.1), and it is why the two forms end up the same height.
+//
+// Font metrics are absent because both inherit them: Tailwind's preflight sets
+// `font: inherit` on form controls, which is the only reason a textarea agrees
+// with a span about line height at all.
+const TEXT_LAYOUT_CLASSES =
+  'inline-block overflow-hidden w-full pt-0 pb-1 pl-1 pr-0 whitespace-pre-wrap break-words align-baseline';
 
 export interface SortableItemProps {
   id: string;
@@ -47,8 +71,17 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
   const [showAssigneePicker, setShowAssigneePicker] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
+  // Focused and editing are the same state, deliberately: the row shows its
+  // Markdown rendered until you put the caret in it, and shows source for
+  // exactly as long as the caret is there. That is what keeps every keystroke
+  // handler below on a real textarea, with no render-mode duplicate of Tab,
+  // Enter or the suggestion arrows — and no focusable non-interactive element
+  // for a screen reader or axe to trip over.
+  const [isEditing, setIsEditing] = useState(false);
   const suggestionsRef = useRef<HTMLDivElement>(null);
   const listItemTextRef = useRef<HTMLTextAreaElement | null>(null);
+  const renderedRef = useRef<HTMLSpanElement>(null);
+  const textColumnRef = useRef<HTMLDivElement>(null);
   const closeAssigneePicker = useCallback(() => setShowAssigneePicker(false), []);
   const {
     attributes,
@@ -72,6 +105,12 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
   const assignedUser = item.assignedTo ? usersById?.get(item.assignedTo) : undefined;
   const showAssignUI = isShared && collaborators && collaborators.length > 0 && onAssignItem;
   const placeholder = item.text ? '' : t('note.itemPlaceholder');
+  // Kept as one string shared by both forms of the row rather than reasoned
+  // about twice: whatever a completed row looks like today, the rendered view
+  // and the textarea have to look the same as each other.
+  const textToneClasses = `text-gray-900 dark:text-white ${
+    isCompleted ? 'line-through text-gray-500 dark:text-gray-400' : ''
+  }`;
   const autoResizeListItemText = useCallback((textarea: HTMLTextAreaElement | null) => {
     if (!textarea) return;
     textarea.style.height = 'auto';
@@ -87,6 +126,69 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
   useEffect(() => {
     autoResizeListItemText(listItemTextRef.current);
   }, [item.text, autoResizeListItemText]);
+
+  // Links are live exactly where there is no caret to place. A read-only row is
+  // a display surface like the note card, so its links work; an editable row's
+  // do not, because one click there already means "put the caret here" and a
+  // second meaning on the same pixel has no way to resolve itself. See
+  // docs/specs/markdown-rendering.md §1.2.
+  const rendered = useMemo(
+    () => renderInlineItem(item.text, { links: readOnly }),
+    [item.text, readOnly],
+  );
+
+  // A row only swaps when rendering actually changes what is on screen. `buy
+  // milk` renders to `buy milk`, so a list with no Markdown in it keeps the
+  // always-live textarea it has always had, and pays for none of this.
+  const showRendered = rendered.formatted && (readOnly || !isEditing);
+  // Nothing to place a caret with, and no editing to return to: the bin's rows
+  // drop the textarea entirely rather than hiding a focusable copy of the text
+  // behind the rendered one, which would be both an extra tab stop and a second
+  // announcement of the same item.
+  const showTextarea = !(readOnly && showRendered);
+
+  // Height is measured before the swap and animated to afterwards. The two
+  // forms of a row wrap at different points once markers are involved, so a row
+  // can genuinely change height — and an unannounced change moves every row
+  // below it out from under the pointer.
+  const heightBeforeSwapRef = useRef<number | null>(null);
+  const captureSwapHeight = useCallback(() => {
+    heightBeforeSwapRef.current = textColumnRef.current?.getBoundingClientRect().height ?? null;
+  }, []);
+
+  const wasShowingRendered = useRef(showRendered);
+  useLayoutEffect(() => {
+    if (wasShowingRendered.current === showRendered) return;
+    wasShowingRendered.current = showRendered;
+
+    const from = heightBeforeSwapRef.current;
+    heightBeforeSwapRef.current = null;
+    const column = textColumnRef.current;
+    if (from === null || !canAnimate(column)) return;
+
+    const to = column.getBoundingClientRect().height;
+    // Sub-pixel differences are the common case — same content, same wrap — and
+    // animating those is a frame of work to move nothing.
+    if (Math.abs(to - from) < 1) return;
+    column.animate([{ height: `${from}px` }, { height: `${to}px` }], {
+      duration: 120,
+      easing: 'ease-out',
+    });
+  }, [showRendered]);
+
+  // Entering edit mode from a click has to place the caret itself: the browser
+  // would put it where the point falls in the *source*, and the user pointed at
+  // the rendered text.
+  const editFromPoint = useCallback((e: React.MouseEvent<HTMLSpanElement>) => {
+    const textarea = listItemTextRef.current;
+    const container = renderedRef.current;
+    if (!textarea || !container) return;
+    e.preventDefault();
+    captureSwapHeight();
+    const offset = sourceOffsetAtPoint(container, rendered.nodes, item.text, e.clientX, e.clientY);
+    textarea.focus();
+    textarea.setSelectionRange(offset, offset);
+  }, [captureSwapHeight, item.text, rendered.nodes]);
 
   const suggestions = useMemo(() => {
     const trimmed = item.text.trim();
@@ -157,6 +259,16 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
           title={t('note.reorderItem')}
           {...attributes}
           {...listeners}
+          // Grabbing the grip must not move focus off the row's textarea. If it
+          // did, the row would collapse to its rendered form on mousedown —
+          // changing its height in the same tick the PointerSensor activates and
+          // dnd-kit measures, so the drag would run against a rect for a height
+          // the row no longer has. Preventing the default keeps the caret where
+          // it was and the row the size dnd-kit measured.
+          //
+          // Only the mouse path needs this. A keyboard drag arrives by Tab, so
+          // the row has already collapsed and settled before Space starts it.
+          onMouseDown={(e) => e.preventDefault()}
           // gray-500, not gray-400: the note's colour is applied to the whole
           // modal panel, and the grip is a graphical control, so it needs 3:1
           // against the worst swatch (WCAG 1.4.11). gray-400 manages 1.8 there.
@@ -177,7 +289,8 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
         className={`h-4 w-4 text-blue-600 rounded mt-0.5 flex-shrink-0 ${readOnly ? 'cursor-default' : ''}`}
       />
       <div className="flex flex-1 items-start min-w-0">
-        <div className="relative min-w-0 flex-1">
+        <div ref={textColumnRef} className="relative min-w-0 flex-1">
+          {showTextarea && (
           <textarea
             data-testid="list-item-input"
             placeholder={placeholder}
@@ -185,8 +298,19 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
             autoCapitalize="sentences"
             readOnly={readOnly}
             aria-readonly={readOnly}
-            className={`w-full pt-0 pb-1 pl-1 pr-0 bg-transparent border-none outline-none min-w-0 resize-none overflow-hidden whitespace-pre-wrap break-words placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
-              isCompleted ? 'line-through text-gray-500 dark:text-gray-400' : ''
+            // Never unmounted while the row is editable, only moved out of flow
+            // and faded out. Everything that reaches for a row imperatively —
+            // NoteModal's Enter-to-split, arrow navigation and "add item" focus,
+            // all of which go through `inputRef` — keeps working on a row that
+            // happens to be showing its rendered form, and the height the
+            // textarea comes up at was measured while it was on screen rather
+            // than at the moment of focus.
+            //
+            // `opacity-0` rather than `invisible` or `hidden`: both of those
+            // take an element out of the focus order, and `.focus()` on one
+            // silently does nothing.
+            className={`${TEXT_LAYOUT_CLASSES} bg-transparent border-none outline-none min-w-0 resize-none placeholder-gray-500 dark:placeholder-gray-400 ${textToneClasses} ${
+              showRendered ? 'absolute top-0 left-0 opacity-0 pointer-events-none' : ''
             }`}
             value={item.text}
             onInput={(e) => autoResizeListItemText(e.currentTarget)}
@@ -196,11 +320,17 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
               setSelectedSuggestionIndex(-1);
             }}
             onFocus={readOnly ? undefined : () => {
+              captureSwapHeight();
+              setIsEditing(true);
               if (suggestions.length > 0) setShowSuggestions(true);
             }}
             onBlur={(e) => {
               const related = e.relatedTarget as Node | null;
+              // Focus moving into the dropdown is still editing this row, so the
+              // row must not collapse out from under the option being clicked.
               if (suggestionsRef.current?.contains(related)) return;
+              captureSwapHeight();
+              setIsEditing(false);
               // Delay to allow touch tap on suggestion to fire click first
               setTimeout(() => {
                 setShowSuggestions(false);
@@ -276,6 +406,23 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
             onPaste={readOnly ? undefined : (e) => onPaste?.(index, e)}
             ref={setListItemTextRef}
           />
+          )}
+          {showRendered && (
+            <span
+              ref={renderedRef}
+              data-testid="list-item-rendered"
+              // The textarea behind it is the row's real control and carries the
+              // accessible name and the value, so this is decoration for anyone
+              // not looking at it — except on a read-only row, where there is no
+              // textarea and these links are the only way to reach the targets.
+              aria-hidden={showTextarea ? true : undefined}
+              onMouseDown={showTextarea ? editFromPoint : undefined}
+              className={`markdown-inline ${TEXT_LAYOUT_CLASSES} ${textToneClasses} ${
+                showTextarea ? 'cursor-text' : ''
+              }`}
+              dangerouslySetInnerHTML={{ __html: rendered.html }}
+            />
+          )}
           {suggestionsVisible && !isCompleted && !readOnly && (
             <div
               ref={suggestionsRef}

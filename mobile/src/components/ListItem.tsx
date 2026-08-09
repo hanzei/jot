@@ -233,7 +233,9 @@ function ListItem({
           {/* A read-only row is a display surface, so it renders the inline
               Markdown subset — the same thing the note card shows for this
               item. An editable row stays a plain TextInput showing source;
-              giving it a rendered mode is #824, not this. */}
+              giving it a rendered mode is #867, not this — the webapp already
+              swaps (docs/specs/markdown-rendering.md §1.2), and that ticket
+              records why the same swap here is a keyboard problem first. */}
           {editable ? (
             <TextInput
               ref={inputRef}

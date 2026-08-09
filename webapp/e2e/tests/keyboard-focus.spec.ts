@@ -246,6 +246,71 @@ test.describe('Keyboard drag and drop', () => {
     await dashboardPage.expectListItemValue(0, 'beta');
     await dashboardPage.expectListItemValue(1, 'alpha');
   });
+
+  test('reorders a row that is showing rendered Markdown', async ({ authenticatedUser, page, dashboardPage }) => {
+    void authenticatedUser;
+    await dashboardPage.goto();
+    await dashboardPage.createListNote('DnD Rendered Note', ['**alpha**', 'beta']);
+    await dashboardPage.openNote('DnD Rendered Note');
+
+    // An unfocused row shows its rendered form, so the row dnd-kit measures is
+    // the rendered one. Reordering has to work from there, not just from the
+    // source form a freshly typed row happens to be in.
+    await expect(page.locator('[data-testid="list-item-rendered"]').first()).toBeVisible();
+    await keyboardReorder(page, page.getByRole('button', { name: 'Reorder item' }).first(), 'ArrowDown');
+
+    await dashboardPage.expectListItemValue(0, 'beta');
+    await dashboardPage.expectListItemValue(1, '**alpha**');
+  });
+});
+
+/**
+ * The row-level view/edit swap (docs/specs/markdown-rendering.md §1.2) makes
+ * "focused" and "editing" the same state, which is what keeps every keystroke
+ * handler on a real textarea. These pin that: the keys that move between rows
+ * have to keep working when the rows they move to and from are rendered.
+ */
+test.describe('List rows with rendered Markdown', () => {
+  test('splits and navigates between rendered rows with the keyboard', async ({ authenticatedUser, page, dashboardPage }) => {
+    void authenticatedUser;
+    await dashboardPage.goto();
+    await dashboardPage.createListNote('Rendered Keys Note', ['**alpha**', '**beta**']);
+    await dashboardPage.openNote('Rendered Keys Note');
+
+    // Both rows start rendered, and focusing one is what turns it back into a
+    // field — there is no separate "enter edit mode" step to forget.
+    await expect(page.locator('[data-testid="list-item-rendered"]')).toHaveCount(2);
+    await dashboardPage.focusListItem(0);
+    await expect(page.locator('[data-testid="list-item-rendered"]')).toHaveCount(1);
+
+    // Arrow down moves to the next row, which becomes a field in turn.
+    await page.keyboard.press('ArrowDown');
+    await dashboardPage.expectListItemFocused(1);
+    await expect(page.locator('[data-testid="list-item-rendered"]')).toHaveCount(1);
+
+    // Enter at the end appends a row and focuses it; the row left behind
+    // renders again because it is no longer the focused one.
+    await page.keyboard.press('End');
+    await page.keyboard.press('Enter');
+    await dashboardPage.expectListItemCount(3);
+    await dashboardPage.expectListItemFocused(2);
+    await expect(page.locator('[data-testid="list-item-rendered"]')).toHaveCount(2);
+  });
+
+  test('indents a rendered row with Tab', async ({ authenticatedUser, page, dashboardPage }) => {
+    void authenticatedUser;
+    await dashboardPage.goto();
+    await dashboardPage.createListNote('Rendered Indent Note', ['**parent**', '**child**']);
+    await dashboardPage.openNote('Rendered Indent Note');
+
+    const childRow = page.locator('[data-testid="list-item-row"]').nth(1);
+    const before = (await childRow.boundingBox())!.x;
+
+    await dashboardPage.focusListItem(1);
+    await page.keyboard.press('Tab');
+
+    await expect.poll(async () => (await childRow.boundingBox())!.x).toBeGreaterThan(before);
+  });
 });
 
 test.describe('Toast announcements', () => {
