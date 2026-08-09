@@ -1,6 +1,5 @@
 ---
-name: update-webapp-deps
-description: Update npm dependencies in webapp/ — React, Vite, Tailwind, ESLint, Vitest, Playwright, Workbox/PWA, and the security `overrides` block. Use this whenever the user asks to update, upgrade, or refresh webapp dependencies, frontend/npm packages, package.json or package-lock.json in webapp/, or to fix `npm audit` findings there. Prefer this over a bare `npm update` — this package has pinned transitive `overrides`, a `file:../shared` link, a Playwright browser pin, and a build/e2e surface that unit tests alone won't catch.
+description: Update npm dependencies in webapp/ — React, Vite, Tailwind, ESLint, Vitest, Playwright, Workbox/PWA, and the security `overrides` block.
 ---
 
 # Update webapp dependencies

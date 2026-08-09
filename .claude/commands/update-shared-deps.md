@@ -1,6 +1,5 @@
 ---
-name: update-shared-deps
-description: Update npm dependencies in shared/ (the @jot/shared package) — eslint, typescript, vitest and friends. Use this whenever the user asks to update, upgrade, or refresh dependencies in shared/, the @jot/shared package, or the shared types package, and as the FIRST step of any repo-wide dependency sweep, since webapp/ and mobile/ consume shared via `file:../shared` and type-check its source with their own compilers. Prefer this over a plain `npm update` in shared/ — a TypeScript or ESLint bump here silently breaks the two consumers, which is only visible if you run their checks too.
+description: Update npm dependencies in shared/ (@jot/shared). Run this first in any repo-wide sweep — webapp/ and mobile/ compile its source with their own compilers.
 ---
 
 # Update shared (@jot/shared) dependencies
