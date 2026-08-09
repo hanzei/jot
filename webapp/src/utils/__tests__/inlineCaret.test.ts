@@ -41,10 +41,23 @@ describe('renderedOffsetOf', () => {
     expect(renderedOffsetOf(container, textNodeAt(container, 1), 0)).toBe(2);
   });
 
-  it('reads an element position as the text that precedes it', () => {
-    // What the browser returns for a click past the end of the line.
+  it('resolves an element position against its children, not as a total', () => {
+    // The browser returns an element position when the point falls between
+    // children. `buy <strong>milk</strong>` has two, so offset 1 is the gap
+    // before the <strong> — 4 characters in, not the 8 of the whole container.
     const container = renderedContainer('buy **milk**');
+    expect(renderedOffsetOf(container, container, 0)).toBe(0);
+    expect(renderedOffsetOf(container, container, 1)).toBe(4);
+    // Past the last child: everything precedes it. This is the common one, a
+    // click past the end of the line.
     expect(renderedOffsetOf(container, container, 2)).toBe(8);
+  });
+
+  it('resolves an element position inside a nested element', () => {
+    const container = renderedContainer('buy **milk** today');
+    const strong = container.querySelector('strong')!;
+    expect(renderedOffsetOf(container, strong, 0)).toBe(4);
+    expect(renderedOffsetOf(container, strong, 1)).toBe(8);
   });
 
   it('rejects a node from outside the container', () => {

@@ -82,6 +82,20 @@ export class DashboardPage {
     return this.page.locator('[data-testid="list-item-input"]').nth(index);
   }
 
+  listItemRow(index: number): Locator {
+    return this.page.locator('[data-testid="list-item-row"]').nth(index);
+  }
+
+  /**
+   * The rendered form of the row at `index`, present only while that row is
+   * showing Markdown rather than source (docs/specs/markdown-rendering.md §1.2).
+   * Resolves to nothing for a row whose text renders as itself, so assert
+   * `toHaveCount(0)` rather than expecting it to be absent from the page.
+   */
+  listItemRendered(index: number): Locator {
+    return this.page.locator('[data-testid="list-item-rendered"]').nth(index);
+  }
+
   async focusListItem(index: number) {
     await this.listItemInput(index).focus();
   }

@@ -27,16 +27,44 @@ interface CaretPositionSource {
 }
 
 /**
+ * The first node in document order that a DOM position has *not* consumed, or
+ * null when the position is past everything inside `root`.
+ *
+ * A position is (node, offset), and offset means two different things depending
+ * on the node: a character index in a text node, a *child index* in an element.
+ * Resolving both to "the next unconsumed node" is what lets one traversal below
+ * measure either kind.
+ */
+function boundaryNodeOf(root: Node, node: Node, offset: number): Node | null {
+  if (node.nodeType === Node.TEXT_NODE) return node;
+  if (offset < node.childNodes.length) return node.childNodes[offset] ?? null;
+
+  // Past the last child: everything inside `node` is consumed, so the boundary
+  // is whatever follows its subtree.
+  for (let current: Node | null = node; current && current !== root; current = current.parentNode) {
+    if (current.nextSibling) return current.nextSibling;
+  }
+  return null;
+}
+
+/**
  * How many characters of visible text precede (`node`, `offset`) within
  * `container`, or null if that position is not inside it.
  *
  * Counts a `<br>` as one character so the total lines up with what
  * `inlineSourceOffset` counts for a `br` node — the two walks have to agree on
  * what a line break costs or every offset after the first newline is wrong.
+ *
+ * The browser hands back an *element* position whenever the point falls between
+ * children rather than inside text — past the end of a line, most often, but
+ * also in the gap before a `<strong>`. Its offset is a child index, so it has
+ * to be resolved against the children rather than added to a character count or
+ * ignored: (container, 1) on `buy <strong>milk</strong>` means 4, not 8.
  */
 export function renderedOffsetOf(container: HTMLElement, node: Node, offset: number): number | null {
   if (!container.contains(node)) return null;
 
+  const boundary = boundaryNodeOf(container, node, offset);
   const walker = container.ownerDocument.createTreeWalker(
     container,
     NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT,
@@ -44,11 +72,8 @@ export function renderedOffsetOf(container: HTMLElement, node: Node, offset: num
 
   let consumed = 0;
   for (let current = walker.nextNode(); current !== null; current = walker.nextNode()) {
-    if (current === node) {
-      // An element target means the browser pointed at a gap between children
-      // rather than into text — past the end of a line, most often. Its offset
-      // is a child index, not a character index, so there is nothing to add.
-      return current.nodeType === Node.TEXT_NODE ? consumed + offset : consumed;
+    if (current === boundary) {
+      return node.nodeType === Node.TEXT_NODE ? consumed + offset : consumed;
     }
     if (current.nodeType === Node.TEXT_NODE) {
       consumed += (current as Text).length;
@@ -57,9 +82,10 @@ export function renderedOffsetOf(container: HTMLElement, node: Node, offset: num
     }
   }
 
-  // The position is inside `container` but the walk never reached it, which
-  // means `node` is the container itself with a child index for an offset.
-  return node === container ? consumed : null;
+  // Either the position is past everything (`boundary` is null, which is how a
+  // click below the last line arrives) or the boundary is a node the walker's
+  // filter skips. Both mean the whole container precedes it.
+  return consumed;
 }
 
 /**

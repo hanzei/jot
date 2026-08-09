@@ -258,7 +258,7 @@ test.describe('Keyboard drag and drop', () => {
     // An unfocused row shows its rendered form, so the row dnd-kit measures is
     // the rendered one. Reordering has to work from there, not just from the
     // source form a freshly typed row happens to be in.
-    await expect(page.locator('[data-testid="list-item-rendered"]').first()).toBeVisible();
+    await expect(dashboardPage.listItemRendered(0)).toBeVisible();
     await keyboardReorder(page, page.getByRole('button', { name: 'Reorder item' }).first(), 'ArrowDown');
 
     await dashboardPage.expectListItemValue(0, 'beta');
@@ -281,14 +281,14 @@ test.describe('List rows with rendered Markdown', () => {
 
     // Both rows start rendered, and focusing one is what turns it back into a
     // field — there is no separate "enter edit mode" step to forget.
-    await expect(page.locator('[data-testid="list-item-rendered"]')).toHaveCount(2);
+    await expect(page.getByTestId('list-item-rendered')).toHaveCount(2);
     await dashboardPage.focusListItem(0);
-    await expect(page.locator('[data-testid="list-item-rendered"]')).toHaveCount(1);
+    await expect(page.getByTestId('list-item-rendered')).toHaveCount(1);
 
     // Arrow down moves to the next row, which becomes a field in turn.
     await page.keyboard.press('ArrowDown');
     await dashboardPage.expectListItemFocused(1);
-    await expect(page.locator('[data-testid="list-item-rendered"]')).toHaveCount(1);
+    await expect(page.getByTestId('list-item-rendered')).toHaveCount(1);
 
     // Enter at the end appends a row and focuses it; the row left behind
     // renders again because it is no longer the focused one.
@@ -296,7 +296,7 @@ test.describe('List rows with rendered Markdown', () => {
     await page.keyboard.press('Enter');
     await dashboardPage.expectListItemCount(3);
     await dashboardPage.expectListItemFocused(2);
-    await expect(page.locator('[data-testid="list-item-rendered"]')).toHaveCount(2);
+    await expect(page.getByTestId('list-item-rendered')).toHaveCount(2);
   });
 
   test('indents a rendered row with Tab', async ({ authenticatedUser, page, dashboardPage }) => {
@@ -305,7 +305,7 @@ test.describe('List rows with rendered Markdown', () => {
     await dashboardPage.createListNote('Rendered Indent Note', ['**parent**', '**child**']);
     await dashboardPage.openNote('Rendered Indent Note');
 
-    const childRow = page.locator('[data-testid="list-item-row"]').nth(1);
+    const childRow = dashboardPage.listItemRow(1);
     const before = (await childRow.boundingBox())!.x;
 
     await dashboardPage.focusListItem(1);

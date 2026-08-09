@@ -1,4 +1,3 @@
-import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures';
 
 test.describe('Markdown note editing', () => {
@@ -161,7 +160,7 @@ test.describe('Markdown note editing', () => {
     await expect(preview.locator('a[href="https://example.com/docs"]')).toHaveText('docs');
   });
 
-  test('leaves block syntax literal in list items and keeps the editor row showing source', async ({ page, dashboardPage }) => {
+  test('leaves block syntax literal in list items and keeps the editor row showing source', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createListNote('Literal', [
       '# not a heading',
@@ -183,15 +182,14 @@ test.describe('Markdown note editing', () => {
     // never swap at all and the field is what is on screen.
     await dashboardPage.openNote('Literal');
     await dashboardPage.expectListItemValue(0, '# not a heading');
-    const row = (i: number) => page.locator('[data-testid="list-item-row"]').nth(i);
-    await expect(row(0).getByTestId('list-item-rendered')).toHaveCount(0);
-    await expect(row(1).getByTestId('list-item-rendered')).toHaveCount(0);
+    await expect(dashboardPage.listItemRow(0).getByTestId('list-item-rendered')).toHaveCount(0);
+    await expect(dashboardPage.listItemRow(1).getByTestId('list-item-rendered')).toHaveCount(0);
 
     // A link Jot will not follow does not: it keeps its label and loses its
     // target (§3), so the rendered form differs from the source and the row
     // swaps like any other. The `tel:` URL is in the field, one click away.
-    await expect(row(2).getByTestId('list-item-rendered')).toHaveText('call');
-    await expect(row(2).locator('a')).toHaveCount(0);
+    await expect(dashboardPage.listItemRow(2).getByTestId('list-item-rendered')).toHaveText('call');
+    await expect(dashboardPage.listItemRow(2).locator('a')).toHaveCount(0);
     await dashboardPage.expectListItemValue(2, '[call](tel:+15550100)');
   });
 
@@ -361,32 +359,28 @@ test.describe('Markdown in list-item rows', () => {
     void authenticatedUser;
   });
 
-  /** The rendered form of the row at `index`, if it is showing one. */
-  const rendered = (page: Page, index: number) =>
-    page.locator('[data-testid="list-item-rendered"]').nth(index);
-
-  test('renders an item when it loses focus and shows source when clicked', async ({ page, dashboardPage }) => {
+  test('renders an item when it loses focus and shows source when clicked', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createListNote('Render Row Note', ['buy **milk**']);
     await dashboardPage.openNote('Render Row Note');
 
     // Unfocused: the markers are gone and the word is really bold.
-    await expect(rendered(page, 0)).toBeVisible();
-    await expect(rendered(page, 0).locator('strong')).toHaveText('milk');
-    await expect(rendered(page, 0)).toHaveText('buy milk');
+    await expect(dashboardPage.listItemRendered(0)).toBeVisible();
+    await expect(dashboardPage.listItemRendered(0).locator('strong')).toHaveText('milk');
+    await expect(dashboardPage.listItemRendered(0)).toHaveText('buy milk');
 
     // Clicking it hands over to the field, which holds the source.
-    await rendered(page, 0).click();
+    await dashboardPage.listItemRendered(0).click();
     await expect(dashboardPage.listItemInput(0)).toBeFocused();
-    await expect(rendered(page, 0)).toHaveCount(0);
+    await expect(dashboardPage.listItemRendered(0)).toHaveCount(0);
     await dashboardPage.expectListItemValue(0, 'buy **milk**');
 
     // And moving away renders it again — the acceptance criterion on #824.
     await dashboardPage.listItemInput(0).blur();
-    await expect(rendered(page, 0)).toBeVisible();
+    await expect(dashboardPage.listItemRendered(0)).toBeVisible();
   });
 
-  test('puts the caret where the rendered text was clicked', async ({ page, dashboardPage }) => {
+  test('puts the caret where the rendered text was clicked', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createListNote('Caret Note', ['buy **milk** today']);
     await dashboardPage.openNote('Caret Note');
@@ -398,25 +392,25 @@ test.describe('Markdown in list-item rows', () => {
     // Clicking the middle of the bold word must land inside `milk` in the
     // source — offsets 6..10 of `buy **milk** today`. Without the mapping this
     // is 0 (a bare focus()) or 18 (the end), so the assertion has real teeth.
-    await rendered(page, 0).locator('strong').click();
+    await dashboardPage.listItemRendered(0).locator('strong').click();
     expect(await caret()).toBeGreaterThanOrEqual(6);
     expect(await caret()).toBeLessThanOrEqual(10);
 
     // And a click before the markers stays before them.
     await dashboardPage.listItemInput(0).blur();
-    await rendered(page, 0).click({ position: { x: 2, y: 8 } });
+    await dashboardPage.listItemRendered(0).click({ position: { x: 2, y: 8 } });
     expect(await caret()).toBeLessThan(4);
   });
 
-  test('keeps the row the same height across the swap', async ({ page, dashboardPage }) => {
+  test('keeps the row the same height across the swap', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createListNote('Height Note', ['buy **milk**', 'second item']);
     await dashboardPage.openNote('Height Note');
 
-    const row = page.locator('[data-testid="list-item-row"]').first();
+    const row = dashboardPage.listItemRow(0);
     const renderedHeight = (await row.boundingBox())!.height;
 
-    await rendered(page, 0).click();
+    await dashboardPage.listItemRendered(0).click();
     await expect(dashboardPage.listItemInput(0)).toBeFocused();
     const sourceHeight = (await row.boundingBox())!.height;
 
@@ -426,36 +420,36 @@ test.describe('Markdown in list-item rows', () => {
     expect(Math.abs(sourceHeight - renderedHeight)).toBeLessThan(1);
   });
 
-  test('leaves an item with no Markdown as a live field', async ({ page, dashboardPage }) => {
+  test('leaves an item with no Markdown as a live field', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createListNote('Plain Note', ['buy milk']);
     await dashboardPage.openNote('Plain Note');
 
     // Nothing to render that the field is not already showing, so the row never
     // swaps and typing into it is exactly what it was before #824.
-    await expect(rendered(page, 0)).toHaveCount(0);
+    await expect(dashboardPage.listItemRendered(0)).toHaveCount(0);
     await expect(dashboardPage.listItemInput(0)).toBeVisible();
   });
 
-  test('renders a completed item, line-through and all', async ({ page, dashboardPage }) => {
+  test('renders a completed item, line-through and all', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createListNote('Completed Note', ['buy **milk**']);
     await dashboardPage.openNote('Completed Note');
 
-    await page.locator('[data-testid="list-item-row"]').first()
+    await dashboardPage.listItemRow(0)
       .getByRole('checkbox', { name: 'Item completed' }).check();
 
-    await expect(rendered(page, 0).locator('strong')).toHaveText('milk');
+    await expect(dashboardPage.listItemRendered(0).locator('strong')).toHaveText('milk');
   });
 
-  test('does not make a link out of an editable row', async ({ page, dashboardPage }) => {
+  test('does not make a link out of an editable row', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createListNote('Link Row Note', ['see [docs](https://example.com)']);
     await dashboardPage.openNote('Link Row Note');
 
     // One click on the row already means "put the caret here" — see §1.2. The
     // label survives, the target does not, and nothing looks followable.
-    await expect(rendered(page, 0)).toHaveText('see docs');
-    await expect(rendered(page, 0).locator('a')).toHaveCount(0);
+    await expect(dashboardPage.listItemRendered(0)).toHaveText('see docs');
+    await expect(dashboardPage.listItemRendered(0).locator('a')).toHaveCount(0);
   });
 });
