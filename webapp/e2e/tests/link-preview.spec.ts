@@ -33,6 +33,29 @@ test.describe('link preview metadata', () => {
     // Presence, not wording: a card with no description renders as a bare
     // title, but the copy itself is free to change without failing this.
     expect(metaContent(html, 'property', 'og:description')).toBeTruthy();
+
+    // Declared dimensions let a client lay the card out before it has the
+    // bytes, so they have to match the asset rather than merely exist.
+    expect(metaContent(html, 'property', 'og:image:type')).toBe('image/png');
+    expect(metaContent(html, 'property', 'og:image:width')).toBe('512');
+    expect(metaContent(html, 'property', 'og:image:height')).toBe('512');
+    expect(metaContent(html, 'property', 'og:image:alt')).toBeTruthy();
+  });
+
+  test('asks search engines not to index the instance', async ({ request }) => {
+    const html = await request.get(NOTE_PATH).then((r) => r.text());
+    expect(metaContent(html, 'name', 'robots')).toContain('noindex');
+  });
+
+  test('robots.txt does not disallow the paths preview bots fetch', async ({ request }) => {
+    const response = await request.get('/robots.txt');
+    expect(response.status()).toBe(200);
+
+    // The trap this guards: Slackbot and Discordbot honour robots.txt, so a
+    // blanket `Disallow: /` would silently switch off every preview above.
+    // De-indexing is the noindex meta's job precisely so this can stay open.
+    const body = await response.text();
+    expect(body).not.toMatch(/^\s*Disallow:\s*\/\s*$/m);
   });
 
   test('reveals nothing about the note behind the URL', async ({ request }) => {

@@ -41,7 +41,29 @@
     <meta property="og:title" content="Jot - Your Notes" />
     <meta property="og:description" content="Jot is a self-hosted app for notes, lists and tasks." />
     <meta property="og:image" content="/pwa-512x512.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="512" />
+    <meta property="og:image:height" content="512" />
+    <meta property="og:image:alt" content="The Jot app icon" />
     <meta name="twitter:card" content="summary" />
+
+    <!--
+      Keep this instance out of search results.
+
+      Deliberately *not* `Disallow: /` in robots.txt, for two reasons. It would
+      not work: a URL that cannot be crawled can still be indexed from an
+      external link, and the crawler never reads the noindex below because it
+      never fetches the page. And it would break the tags above — Slackbot and
+      Discordbot honour robots.txt, so a blanket disallow switches off the very
+      previews this file exists to produce. Crawlable + noindex is what actually
+      de-indexes, and robots.txt is left permissive to keep it that way.
+
+      Link-preview bots do not act on noindex; it is a search-indexing
+      directive. The exception is Twitterbot, which has been reported to skip
+      noindex pages — an accepted trade here, since Slack, Discord, WhatsApp and
+      Signal are the clients that matter for a self-hosted notes app.
+    -->
+    <meta name="robots" content="noindex, nofollow" />
   </head>
   <body>
     <div id="root"></div>

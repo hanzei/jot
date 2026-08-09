@@ -1,0 +1,24 @@
+# A Jot instance has nothing for a search engine to index: every path returns
+# the same SPA shell, and note content sits behind authentication.
+#
+# What keeps this instance out of search results is the <meta name="robots"
+# content="noindex"> in index.html, NOT this file. That split is deliberate and
+# the two are easy to get backwards:
+#
+#   - `Disallow: /` here would not de-index anything. A crawler that is blocked
+#     from fetching a page never reads its noindex, and search engines may still
+#     index a URL they cannot crawl when something links to it.
+#   - `Disallow: /` here WOULD break link previews. Slackbot and Discordbot
+#     honour robots.txt, so it would switch off the Open Graph card that
+#     index.html exists to serve when someone shares a note link in chat.
+#
+# So pages stay crawlable on purpose, and the noindex does the actual work.
+#
+# The `/api/` prefix is disallowed because none of it is content to index. It
+# covers both things mounted there: `/api/v1`, which answers 401 to anything
+# unauthenticated, and `/api/docs`, the Swagger UI, which does serve a real page
+# but describes the API rather than this instance.
+
+User-agent: *
+Disallow: /api/
+Allow: /
