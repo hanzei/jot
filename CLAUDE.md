@@ -57,8 +57,21 @@ real, whether the proposed solution is over- or under-engineered for this codeba
 whether it fits the architecture — and stops to discuss only when something is materially
 wrong. Everything after that point is the normal workflow documented here.
 
-`.claude/commands/` is for workflows you invoke by name with an argument;
-`.claude/skills/` is for the ones the model should reach for on its own.
+## Commands and skills
+
+`.claude/commands/` holds the workflows you start by name — `/work-issue` and the six
+dependency-update commands. They are deliberate, scheduled operations: you decide when a
+sweep happens or which ticket gets picked up, so nothing should start one on your behalf.
+
+`.claude/skills/` holds the ones the model should reach for on its own, matched against
+the situation rather than typed. Only `cut-release` qualifies today, because getting a
+release wrong is unrecoverable — pushing a tag out of order bricks it permanently — so it
+needs to fire on "ship v0.9.0" whether or not anyone remembers it exists.
+
+The tradeoff of a command is that nothing surfaces it automatically. Where that matters,
+`CLAUDE.md` carries the pointer instead — see [Dependency Updates](#dependency-updates),
+which is what keeps an offhand "bump the OTel packages" from turning into a bare
+`go get -u`.
 
 ## Environment Setup
 
@@ -262,14 +275,14 @@ Three separate things update dependencies here, and they are easy to confuse:
 - **Dependabot version updates** (`.github/dependabot.yml`) cover **GitHub Actions only** —
   one grouped PR a month, re-pinning action SHAs as they drift. That is a strict subset of
   what `update-github-actions` does: Dependabot keeps existing pins current between sweeps,
-  the skill handles major bumps, one-SHA-everywhere divergence, runner labels, permissions,
-  and path filters. They are complements, not alternatives — do not remove either on the
-  assumption the other covers it.
+  the command handles major bumps, one-SHA-everywhere divergence, runner labels,
+  permissions, and path filters. They are complements, not alternatives — do not remove
+  either on the assumption the other covers it.
 - **Dependabot security updates** are enabled at the repository level, not by that file, and
   open advisory-driven PRs for **every** ecosystem including the ones the config omits.
   Adding or removing `dependabot.yml` does not affect them.
-- **Everything else** is updated deliberately, one workspace at a time, via the skills in
-  `.claude/skills/`:
+- **Everything else** is updated deliberately, one workspace at a time, via the commands in
+  `.claude/commands/`:
 
   - `update-server-deps` — Go modules, `go.mod` tool directives (golangci-lint, swag), Go toolchain version
   - `update-shared-deps` — `@jot/shared` devDependencies
@@ -278,11 +291,17 @@ Three separate things update dependencies here, and they are easy to confuse:
   - `update-docker-deps` — Dockerfile base images, CI container images, `docker-compose.yml`, `.dockerignore`
   - `update-github-actions` — pinned action SHAs in `.github/workflows/`, runner labels, permissions
 
+**Run the command; do not update these by hand.** Each one exists because the obvious
+approach — `go get -u ./...`, `npm update`, editing a `FROM` or `uses:` line — silently
+breaks a coupling that only shows up in CI or on a device. Since these are commands rather
+than skills, nothing will surface them automatically: this list is the pointer, so consult
+it whenever a dependency update comes up, whoever asked and however it was phrased.
+
 For a full sweep, update in the order **shared → webapp → mobile** (both consumers compile
 `shared/src` directly through the `file:../shared` link); `server/` is independent. The
-Docker and Actions skills are independent of all four and of each other, but the base
-images they touch mirror versions owned by the language skills. When Docker and a
-language update are both in scope, run the owning language skill first
+Docker and Actions commands are independent of all four and of each other, but the base
+images they touch mirror versions owned by the language commands. When Docker and a
+language update are both in scope, run the owning language command first
 (`update-server-deps` for Go, `update-webapp-deps` for Node) and `update-docker-deps`
 after it, so the Dockerfile lands aligned with `server/go.mod` and `.nvmrc` rather than
 drifting until the next image build.
@@ -662,7 +681,7 @@ docker compose up -d
 Persistent data is mounted at `/data` (default `docker-compose.yml` maps host `./data` to `/data`).
 
 **Workflow pinning policy:** In GitHub Actions workflows, pin every external action `uses:` reference (`owner/repo@...`) to a full commit SHA and add an inline comment with the intended major version tag (for example, `# v6`). Do not use floating action refs such as `@v4`, `@v6`, `@main`, or `@latest`. The
-`update-github-actions` skill covers re-pinning them; `update-docker-deps` covers the
+`update-github-actions` command covers re-pinning them; `update-docker-deps` covers the
 image side of the build.
 
 **Base image pinning policy:** Pin every image Jot *builds on* to a digest, keeping the
@@ -676,7 +695,7 @@ meant to float, since pinning it would freeze users on one release.
 Pin the digest of the **manifest index**, not of a single-platform manifest — images are
 built for `linux/amd64` and `linux/arm64`, and a platform-specific digest resolves on one
 leg of the matrix while failing on the other. Digests do not update themselves; the
-`update-docker-deps` skill owns re-resolving them, and that is the only thing that pulls
+`update-docker-deps` command owns re-resolving them, and that is the only thing that pulls
 in base-image security patches.
 
 ### CI Checklist (before opening a PR)

@@ -1,7 +1,7 @@
 # Dependabot version updates.
 #
 # Deliberately narrow: GitHub Actions only. Every other ecosystem is updated by
-# hand via the skills in `.claude/skills/`, which encode ordering and coupling
+# hand via the commands in `.claude/commands/`, which encode ordering and coupling
 # constraints Dependabot cannot express — see "Dependency Updates" in CLAUDE.md
 # for why each ecosystem is absent:
 #
@@ -18,9 +18,9 @@
 #             versions as `.nvmrc` and `server/go.mod`; bumping the image alone
 #             would silently desync them. Owned by `update-docker-deps`.
 #
-# The one ecosystem that is here also has a skill: `update-github-actions`. The
-# two do not overlap so much as nest. Dependabot re-pins existing actions to
-# current SHAs, which is the part that rots on its own; the skill bumps majors,
+# The one ecosystem that is here also has a command: `update-github-actions`.
+# The two do not overlap so much as nest. Dependabot re-pins existing actions to
+# current SHAs, which is the part that rots on its own; the command bumps majors,
 # reconciles an action pinned to two different SHAs across workflows, and
 # reviews runner labels, permissions, and path filters — none of which
 # Dependabot touches. Keep both.
