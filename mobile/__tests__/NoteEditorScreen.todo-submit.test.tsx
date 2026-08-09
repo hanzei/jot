@@ -1,205 +1,26 @@
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { VALIDATION } from '@jot/shared';
+import {
+  mockUseRoute,
+  mockNavigationAddListener,
+  mockCreateMutateAsync,
+  mockUpdateMutateAsync,
+  mockDeleteMutateAsync,
+  mockDuplicateMutateAsync,
+  mockCreateItemMutateAsync,
+  mockUpdateItemMutateAsync,
+  mockUseOfflineNote,
+  mockUseTranslation,
+} from './helpers/noteEditorScreenTestSetup';
 import NoteEditorScreen from '../src/screens/NoteEditorScreen';
 
-const mockUseRoute = jest.fn();
-const mockGoBack = jest.fn();
-const mockReplace = jest.fn();
-const mockNavigate = jest.fn();
-const mockDispatch = jest.fn();
-const mockSetParams = jest.fn();
-const mockNavigationAddListener = jest.fn().mockReturnValue(jest.fn());
-const mockCreateMutateAsync = jest.fn();
-const mockUpdateMutateAsync = jest.fn();
-const mockDeleteMutateAsync = jest.fn();
-const mockDuplicateMutateAsync = jest.fn();
-const mockCreateItemMutateAsync = jest.fn();
-const mockUpdateItemMutateAsync = jest.fn();
-const mockDeleteItemMutateAsync = jest.fn();
-const mockReorderItemsMutateAsync = jest.fn();
-const mockUseOfflineNote = jest.fn();
-
-jest.mock('@react-navigation/native', () => ({
-  __esModule: true,
-  useRoute: () => mockUseRoute(),
-  useNavigation: () => ({
-    goBack: mockGoBack,
-    replace: mockReplace,
-    navigate: mockNavigate,
-    dispatch: mockDispatch,
-    setParams: mockSetParams,
-    addListener: mockNavigationAddListener,
-  }),
-  useFocusEffect: jest.fn(),
-}));
-
-jest.mock('@react-navigation/elements', () => ({
-  __esModule: true,
-  useHeaderHeight: () => 56,
-}));
-
-jest.mock('react-native-safe-area-context', () => {
-  const { createContext } = jest.requireActual<typeof import('react')>('react');
-  const insets = { top: 0, right: 0, bottom: 0, left: 0 };
-  return {
-    __esModule: true,
-    useSafeAreaInsets: () => insets,
-    SafeAreaInsetsContext: createContext(insets),
-  };
-});
-
-jest.mock('expo-haptics', () => ({
-  __esModule: true,
-  impactAsync: jest.fn(() => Promise.resolve()),
-  notificationAsync: jest.fn(() => Promise.resolve()),
-  ImpactFeedbackStyle: { Light: 'light', Medium: 'medium' },
-  NotificationFeedbackType: { Error: 'error' },
-}));
-
-// react-native-reorderable-list is mocked once globally in jest.setup.js.
-
-jest.mock('../src/hooks/useNotes', () => ({
-  __esModule: true,
-  useCreateNote: () => ({
-    mutateAsync: mockCreateMutateAsync,
-  }),
-  useUpdateNote: () => ({
-    mutateAsync: mockUpdateMutateAsync,
-  }),
-  useDeleteNote: () => ({
-    mutateAsync: mockDeleteMutateAsync,
-  }),
-  useRestoreNote: () => ({
-    mutateAsync: jest.fn(),
-  }),
-  usePermanentDeleteNote: () => ({
-    mutateAsync: jest.fn(),
-  }),
-  useDuplicateNote: () => ({
-    mutateAsync: mockDuplicateMutateAsync,
-  }),
-  useConvertNoteType: () => ({
-    mutateAsync: jest.fn(),
-  }),
-  useCreateNoteItem: () => ({
-    mutateAsync: mockCreateItemMutateAsync,
-  }),
-  useUpdateNoteItem: () => ({
-    mutateAsync: mockUpdateItemMutateAsync,
-  }),
-  useDeleteNoteItem: () => ({
-    mutateAsync: mockDeleteItemMutateAsync,
-  }),
-  useReorderNoteItems: () => ({
-    mutateAsync: mockReorderItemsMutateAsync,
-  }),
-  useToggleNoteItemCompleted: () => ({
-    mutateAsync: jest.fn().mockResolvedValue([]),
-  }),
-  useUncheckAllItems: () => ({
-    mutateAsync: jest.fn().mockResolvedValue([]),
-  }),
-  useDeleteCompletedItems: () => ({
-    mutateAsync: jest.fn().mockResolvedValue([]),
-  }),
-}));
-
-jest.mock('../src/hooks/useNoteImages', () => ({
-  __esModule: true,
-  useUploadNoteImage: () => ({
-    mutateAsync: jest.fn(),
-  }),
-  useDeleteNoteImage: () => ({
-    mutateAsync: jest.fn(),
-  }),
-}));
-
-jest.mock('../src/hooks/usePendingImageUploads', () => ({
-  __esModule: true,
-  usePendingImageUploads: () => [],
-  useRetryPendingImageUpload: () => ({ mutate: jest.fn() }),
-  useDismissPendingImageUpload: () => ({ mutate: jest.fn() }),
-}));
-
-jest.mock('../src/hooks/useOfflineNotes', () => ({
-  __esModule: true,
-  useOfflineNote: () => mockUseOfflineNote(),
-}));
-
-jest.mock('../src/store/SSEContext', () => ({
-  __esModule: true,
-  useSSESubscription: jest.fn(),
-  useSSEContext: jest.fn(() => ({ sseReconnecting: false })),
-}));
-
-jest.mock('../src/components/LabelPicker', () => ({
-  __esModule: true,
-  default: () => null,
-}));
-
-jest.mock('react-i18next', () => ({
-  __esModule: true,
-  useTranslation: () => ({
-    t: (key: string, options?: { count?: number }) => {
-      if (key === 'note.completedItems') {
-        return `${options?.count ?? 0} completed items`;
-      }
-      return key;
-    },
-    i18n: { language: 'en' },
-  }),
-}));
-
-jest.mock('../src/theme/ThemeContext', () => ({
-  __esModule: true,
-  useTheme: () => ({
-    isDark: false,
-    colors: {
-      background: '#fff',
-      surface: '#fff',
-      border: '#ddd',
-      borderLight: '#eee',
-      text: '#111',
-      textSecondary: '#444',
-      textMuted: '#777',
-      placeholder: '#aaa',
-      icon: '#555',
-      iconMuted: '#888',
-      primary: '#2563eb',
-      primaryLight: '#dbeafe',
-      error: '#dc2626',
-      errorLight: '#fee2e2',
-      cardBackground: '#fff',
-      cardBorder: '#ddd',
-    },
-  }),
-}));
-
-jest.mock('../src/store/AuthContext', () => ({
-  __esModule: true,
-  useAuth: () => ({
-    user: { id: 'u1', username: 'alice' },
-    isAuthenticated: true,
-  }),
-}));
-
-jest.mock('../src/store/UsersContext', () => ({
-  __esModule: true,
-  useUsers: () => ({
-    usersById: new Map(),
-  }),
-}));
-
-jest.mock('../src/hooks/useToast', () => ({
-  __esModule: true,
-  useToast: () => ({
-    showToast: jest.fn(),
-  }),
-}));
-
-jest.mock('../src/i18n', () => ({
-  __esModule: true,
-  default: {},
+// A fresh `t`/`i18n` on every call (unlike the shared helper's stable default):
+// some of the flushes below rely on the resulting callback churn to re-fire
+// and coalesce a pending edit with a same-tick metadata change.
+mockUseTranslation.mockImplementation(() => ({
+  t: (key: string, options?: { count?: number }) =>
+    (key === 'note.completedItems' ? `${options?.count ?? 0} completed items` : key),
+  i18n: { language: 'en' },
 }));
 
 describe('NoteEditorScreen list submit behavior', () => {
