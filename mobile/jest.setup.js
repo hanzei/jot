@@ -316,10 +316,18 @@ jest.mock('react-native-gesture-handler', () => {
 // Single source of truth for the react-native-reorderable-list mock, used by
 // every test that renders the note editor. Renders each row synchronously so
 // tests can query list items without FlatList virtualization timing.
+//
+// `__getLatestProps` exposes the props NestedReorderableList was last
+// rendered with (data, onReorder, onDragEnd, ...) so a test can invoke
+// `onReorder`/`onDragEnd` directly — the same way the real library does once
+// a drag drops on a new slot — without driving an actual gesture. It's inert
+// for every test that doesn't call it.
 jest.mock('react-native-reorderable-list', () => {
   const React = require('react');
   const { View, ScrollView } = require('react-native');
+  let latestProps = null;
   function ReorderableList(props) {
+    latestProps = props;
     const data = props.data || [];
     return React.createElement(
       View,
@@ -349,6 +357,7 @@ jest.mock('react-native-reorderable-list', () => {
       copy.splice(to, 0, moved);
       return copy;
     },
+    __getLatestProps: () => latestProps,
   };
 });
 

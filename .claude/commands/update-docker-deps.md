@@ -1,6 +1,5 @@
 ---
-name: update-docker-deps
-description: Update the Docker build tooling — base images in the Dockerfile (node, golang, alpine), the BuildKit syntax directive, container images used by CI services, docker-compose.yml, and .dockerignore. Use this whenever the user asks to update, upgrade, or refresh the Docker build, the Dockerfile, base images, the Alpine or Node or Go builder stage, the Postgres service image, or docker-compose. Prefer this over editing a `FROM` line directly — the Node and Go base images are mirrored in `.nvmrc`, `server/go.mod`, CI workflows, and the README, and a lone bump produces a failure that only appears during the image build.
+description: Update the Docker build tooling — Dockerfile base images, the BuildKit syntax directive, CI service images, docker-compose.yml, and .dockerignore.
 ---
 
 # Update Docker build tooling
@@ -58,7 +57,7 @@ its own.
 `server/go.mod` and `go-version:` in `server-ci.yml`, `webapp-ci.yml`, and
 `release.yml`. When `go.mod` is ahead of the builder image the error is a confusing
 `go.mod requires go >= 1.27` that appears only in the image build, long after CI is
-green. The toolchain bump itself belongs to `update-server-deps` — this skill's job is
+green. The toolchain bump itself belongs to `update-server-deps` — this command's job is
 to notice the drift and close it in the same commit.
 
 ## 3. The runtime base — `alpine:3.22`
@@ -115,7 +114,7 @@ curl -sS -H "Authorization: Bearer $tok" \
 
 Expect an index media type and both `amd64` and `arm64` in the architecture list.
 
-Digests do not update themselves. This skill is the only thing that pulls base-image
+Digests do not update themselves. This command is the only thing that pulls base-image
 security patches into the build, so re-resolve all three whenever you run it, even if no
 tag changed — a tag that still reads `3.22` may point at a newer patch image than the
 pinned digest.
@@ -228,4 +227,4 @@ data paths under `/data` — needs the explicit impact-and-migration note that r
 
 `update-github-actions` covers the workflows that *build* this image (action pins,
 runner labels, permissions). The version numbers themselves live with the language
-skills: `update-server-deps` (Go), `update-webapp-deps` (Node).
+commands: `update-server-deps` (Go), `update-webapp-deps` (Node).
