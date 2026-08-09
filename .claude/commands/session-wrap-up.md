@@ -35,10 +35,18 @@ every command below:
 
 ```bash
 base=$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD || echo origin/master)
+git fetch origin "${base#origin/}"      # do not skip: a stale ref inflates the diff
 git log --oneline "$base"..HEAD
 git diff "$base"...HEAD --stat          # which files moved
 git diff "$base"...HEAD -- <paths>      # what actually changed in them
 ```
+
+**Fetch before you compare.** A remote-tracking ref is only as fresh as the last fetch,
+and if the base has moved while the session ran, everything merged into it since shows up
+as though the session did it. The first run of this command hit exactly that: `origin/master`
+was five commits stale, and the diff attributed another PR's seven files — a mobile fix, a
+Dependabot bump — to the session. A wrap-up built on that proposes follow-ups for work
+that isn't yours.
 
 `--stat` names files and counts lines; it cannot tell you what a change *did*. Read the
 real hunks for the files the transcript flagged and for anything whose name you can't map
