@@ -346,8 +346,6 @@
     "convertLoseAssignments_one": "Vous perdrez également l'attribution de {{count}} élément.",
     "convertLoseAssignments_other": "Vous perdrez également les attributions de {{count}} éléments.",
     "delete": "Supprimer",
-    "deleteConfirm": "Êtes-vous sûr de vouloir supprimer cette note ?",
-    "deleteConfirmTitle": "Supprimer la note",
     "deleteForever": "Supprimer définitivement",
     "deleteForeverConfirm": "Supprimer définitivement cette note ? Cette action est irréversible.",
     "deleteForeverTitle": "Supprimer définitivement",

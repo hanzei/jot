@@ -840,6 +840,76 @@ describe('NoteModal', () => {
       }
     });
 
+    it('strips markdown list/checkbox markers when pasting a markdown list into a list item', async () => {
+      renderNoteModal(defaultProps);
+
+      fireEvent.click(screen.getByText('List'));
+      fireEvent.click(screen.getByText('Add item'));
+
+      fireEvent.paste(screen.getByTestId('list-item-input'), {
+        clipboardData: { getData: () => '- [ ] too\n- [x] bar' },
+      });
+
+      const values = screen.getAllByTestId('list-item-input').map(el => (el as HTMLTextAreaElement).value);
+      expect(values).toEqual(['too', 'bar']);
+
+      // The second item's checkbox marker carries its completed state, so it
+      // moves into the completed section rather than staying in the active list.
+      expect(screen.getByText('Completed items (1)')).toBeInTheDocument();
+      const checkboxes = screen.getAllByRole('checkbox') as HTMLInputElement[];
+      expect(checkboxes.map(cb => cb.checked)).toEqual([false, true]);
+    });
+
+    it('strips a markdown checkbox marker from a single-line paste', async () => {
+      renderNoteModal(defaultProps);
+
+      fireEvent.click(screen.getByText('List'));
+      fireEvent.click(screen.getByText('Add item'));
+
+      // dispatchEvent (which fireEvent wraps) returns false when the event was
+      // canceled — confirming the handler intercepted this single-line paste
+      // rather than falling back to the browser's native insertion.
+      const notPrevented = fireEvent.paste(screen.getByTestId('list-item-input'), {
+        clipboardData: { getData: () => '- [x] Buy milk' },
+      });
+      expect(notPrevented).toBe(false);
+
+      expect(screen.getByTestId('list-item-input')).toHaveValue('Buy milk');
+      expect(screen.getByText('Completed items (1)')).toBeInTheDocument();
+      expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(true);
+    });
+
+    it('treats plain text with a trailing newline as multi-line, not a native single-line paste', async () => {
+      renderNoteModal(defaultProps);
+
+      fireEvent.click(screen.getByText('List'));
+      fireEvent.click(screen.getByText('Add item'));
+
+      // Only one non-blank line, but the payload does contain a newline — if the
+      // handler classified this as a single-line paste and let the browser's
+      // native insertion run, that trailing "\n" would land in the item's text.
+      const notPrevented = fireEvent.paste(screen.getByTestId('list-item-input'), {
+        clipboardData: { getData: () => 'Buy milk\n' },
+      });
+      expect(notPrevented).toBe(false);
+
+      expect(screen.getByTestId('list-item-input')).toHaveValue('Buy milk');
+    });
+
+    it('leaves a plain single-line paste to the browser (no markdown to strip)', async () => {
+      renderNoteModal(defaultProps);
+
+      fireEvent.click(screen.getByText('List'));
+      fireEvent.click(screen.getByText('Add item'));
+
+      // Not canceled: the handler bails out early and lets native paste happen,
+      // so plain single-line pastes keep the browser's own undo/IME behavior.
+      const notPrevented = fireEvent.paste(screen.getByTestId('list-item-input'), {
+        clipboardData: { getData: () => 'Buy milk' },
+      });
+      expect(notPrevented).toBe(true);
+    });
+
     it('measures title length in code points, not UTF-16 units', async () => {
       renderNoteModal(defaultProps);
 

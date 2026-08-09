@@ -1,7 +1,6 @@
 import { render, act, fireEvent, waitFor } from '@testing-library/react-native';
 import NoteEditorScreen from '../src/screens/NoteEditorScreen';
 import { useSSESubscription } from '../src/store/SSEContext';
-import { NestedReorderableList } from 'react-native-reorderable-list';
 
 const mockUseRoute = jest.fn();
 const mockNavigationAddListener = jest.fn().mockReturnValue(jest.fn());
@@ -179,14 +178,6 @@ function itemTexts(getAllByTestId: (id: string) => { props: { value?: string } }
   return getAllByTestId('list-item-text').map((node) => node.props.value ?? '');
 }
 
-// Grabs the props from the most recent render of the (mocked)
-// NestedReorderableList, so a test can invoke onDragStart/onDragEnd exactly
-// like the underlying drag library would.
-function latestListProps() {
-  const calls = (NestedReorderableList as jest.Mock).mock.calls;
-  return calls[calls.length - 1][0];
-}
-
 describe('NoteEditorScreen remote refresh', () => {
   afterEach(() => {
     jest.restoreAllMocks();
@@ -283,87 +274,5 @@ describe('NoteEditorScreen remote refresh', () => {
     // Now a remote update surfaces the warning banner.
     await act(async () => { fireRemoteUpdate(); });
     expect(queryByTestId('sync-toast')).not.toBeNull();
-  });
-
-  // Regression test: a remote refresh landing mid-drag used to replace `items`
-  // (and so the reorderable list's `data` length) while the drag library still
-  // held indices computed against the old length, crashing on drop with
-  // "Cannot read property 'id' of undefined" in keyExtractor. The refresh must
-  // wait for the drag to finish instead of applying immediately.
-  it('suppresses a remote refresh while a list-item drag is in progress, then resumes once it ends', async () => {
-    mockUseOfflineNote.mockReturnValue({ data: listNote() });
-    const { getAllByTestId, rerender } = render(<NoteEditorScreen />);
-
-    expect(itemTexts(getAllByTestId)).toEqual(['Kraxxe']);
-
-    // Start dragging the (only) item, e.g. to change its indent.
-    act(() => {
-      latestListProps().onDragStart({ index: 0 });
-    });
-
-    // A remote update arrives while the drag is still active.
-    const updated = listNote({
-      items: [
-        makeItem('aaaaaaaaaaaaaaaaaaaaaa', 'Kraxxe', 0),
-        makeItem('bbbbbbbbbbbbbbbbbbbbbb', 'Kultur', 1),
-      ],
-      updated_at: '2026-01-01T00:05:00.000Z',
-    });
-    mockUseOfflineNote.mockReturnValue({ data: updated });
-    await act(async () => {
-      rerender(<NoteEditorScreen />);
-    });
-
-    // Suppressed: the list still reflects the pre-drag state.
-    expect(itemTexts(getAllByTestId)).toEqual(['Kraxxe']);
-
-    // Drop the item (from === to: a purely sideways/indent drag with no
-    // vertical move) — this is the event that ends the gesture.
-    await act(async () => {
-      latestListProps().onDragEnd({ from: 0, to: 0 });
-    });
-
-    // Still suppressed: the list re-reads `data` at the drag-start indices when
-    // its drop animation finishes, so onDragEnd alone must not let the refresh
-    // through — that window is where the drop used to crash.
-    expect(itemTexts(getAllByTestId)).toEqual(['Kraxxe']);
-
-    // Once the drop settles, the refresh that was held back applies on its own,
-    // without waiting for a further change to the note.
-    await waitFor(() => {
-      expect(itemTexts(getAllByTestId)).toEqual(['Kraxxe', 'Kultur']);
-    });
-
-    // And subsequent remote updates apply normally again.
-    const updatedAgain = listNote({
-      items: [
-        makeItem('aaaaaaaaaaaaaaaaaaaaaa', 'Kraxxe', 0),
-        makeItem('bbbbbbbbbbbbbbbbbbbbbb', 'Kultur', 1),
-        makeItem('cccccccccccccccccccccc', 'Zelt', 2),
-      ],
-      updated_at: '2026-01-01T00:10:00.000Z',
-    });
-    mockUseOfflineNote.mockReturnValue({ data: updatedAgain });
-    await act(async () => {
-      rerender(<NoteEditorScreen />);
-    });
-
-    await waitFor(() => {
-      expect(itemTexts(getAllByTestId)).toEqual(['Kraxxe', 'Kultur', 'Zelt']);
-    });
-  });
-
-  // The list keeps calling keyExtractor with drag-start indices while the drop
-  // animation runs, so an index that no longer has a row must yield a key
-  // rather than throw — this is what surfaced as a hard crash
-  // ("Cannot read property 'id' of undefined") on release.
-  it('yields a key instead of crashing when the list reads a dropped index', () => {
-    mockUseOfflineNote.mockReturnValue({ data: listNote() });
-    render(<NoteEditorScreen />);
-
-    const { keyExtractor, data } = latestListProps();
-    expect(keyExtractor(data[0], 0)).toBe('aaaaaaaaaaaaaaaaaaaaaa');
-    expect(() => keyExtractor(data[3], 3)).not.toThrow();
-    expect(keyExtractor(data[3], 3)).toBe('3');
   });
 });

@@ -143,8 +143,6 @@ export class DashboardPage {
   async deleteNote(title: string) {
     await this.openNoteMenu(title);
     await this.page.getByRole('menuitem', { name: 'Delete' }).click();
-    const confirmDialog = this.page.getByRole('dialog').last();
-    await confirmDialog.getByRole('button', { name: 'Delete' }).click();
   }
 
   async restoreNoteFromBin(title: string) {

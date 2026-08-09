@@ -346,8 +346,6 @@
     "convertLoseAssignments_one": "Você também perderá a atribuição de {{count}} item.",
     "convertLoseAssignments_other": "Você também perderá as atribuições de {{count}} itens.",
     "delete": "Excluir",
-    "deleteConfirm": "Tem certeza de que deseja excluir esta nota?",
-    "deleteConfirmTitle": "Excluir nota",
     "deleteForever": "Excluir para sempre",
     "deleteForeverConfirm": "Excluir permanentemente esta nota? Esta ação não pode ser desfeita.",
     "deleteForeverTitle": "Excluir para sempre",

@@ -59,9 +59,6 @@ test.describe('Note modal overflow menu', () => {
     await dashboardPage.openModalOverflowMenu();
     await page.getByRole('menuitem', { name: 'Delete' }).click();
 
-    const confirmDialog = page.getByRole('dialog').last();
-    await confirmDialog.getByRole('button', { name: 'Delete' }).click();
-
     await dashboardPage.expectNoteNotVisible('Delete From Menu');
   });
 
