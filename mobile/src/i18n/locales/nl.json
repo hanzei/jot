@@ -22,6 +22,7 @@
   },
   "serverPicker": {
     "open": "Server kiezen",
+    "activeServerLabel": "Aanmelden bij",
     "title": "Servers",
     "noServers": "Nog geen servers toegevoegd.",
     "addPlaceholder": "Voeg server-URL toe",
@@ -88,7 +89,9 @@
     "localModeHint": "Je notities blijven alleen op dit apparaat.",
     "localModeFailed": "Kan lokale modus niet starten. Probeer het opnieuw.",
     "localModeConfirmTitle": "Zonder server gebruiken?",
-    "localModeConfirmMessage": "Je bent aangemeld bij een server. Als je doorgaat, wordt er een apart notitieboek op dit apparaat geopend — je servernotities blijven op de server en je kunt er weer bij door opnieuw in te loggen."
+    "localModeConfirmMessage": "Je bent aangemeld bij een server. Als je doorgaat, wordt er een apart notitieboek op dit apparaat geopend — je servernotities blijven op de server en je kunt er weer bij door opnieuw in te loggen.",
+    "sessionEndedMessage": "Je bent afgemeld. Dit gebeurt na een wachtwoordwijziging of wanneer de sessie wordt ingetrokken.",
+    "sessionEndedDismiss": "Negeren"
   },
   "dashboard": {
     "newNote": "Nieuwe notitie",
@@ -325,7 +328,7 @@
   "images": {
     "openLightbox": "{{filename}} bekijken",
     "moreImages": "{{count}} meer afbeeldingen bekijken",
-"moreImagesBadge": "{{count}} meer afbeeldingen",
+    "moreImagesBadge": "{{count}} meer afbeeldingen",
     "lightboxPrevious": "Vorige afbeelding",
     "lightboxNext": "Volgende afbeelding",
     "lightboxCounter": "{{current}} / {{total}}",

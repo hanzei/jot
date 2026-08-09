@@ -22,6 +22,7 @@
   },
   "serverPicker": {
     "open": "Switch server",
+    "activeServerLabel": "Signing in to",
     "title": "Servers",
     "noServers": "No servers configured yet.",
     "addPlaceholder": "Add server URL (https://...)",
@@ -88,7 +89,9 @@
     "localModeHint": "Your notes stay on this device only.",
     "localModeFailed": "Couldn’t start local mode. Please try again.",
     "localModeConfirmTitle": "Use without a server?",
-    "localModeConfirmMessage": "You’re signed in to a server. Continuing opens a separate notebook on this device — your server notes stay on the server, and you can get back to them by signing in again."
+    "localModeConfirmMessage": "You’re signed in to a server. Continuing opens a separate notebook on this device — your server notes stay on the server, and you can get back to them by signing in again.",
+    "sessionEndedMessage": "You were signed out. This happens after a password change or when the session is revoked.",
+    "sessionEndedDismiss": "Dismiss"
   },
   "dashboard": {
     "newNote": "New Note",
@@ -325,7 +328,7 @@
   "images": {
     "openLightbox": "View {{filename}}",
     "moreImages": "View {{count}} more images",
-"moreImagesBadge": "{{count}} more images",
+    "moreImagesBadge": "{{count}} more images",
     "lightboxPrevious": "Previous image",
     "lightboxNext": "Next image",
     "lightboxCounter": "{{current}} / {{total}}",

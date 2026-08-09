@@ -16,6 +16,19 @@
     "dismissMobileAppBanner": "Ocultar",
     "skipToMainContent": "Ir para o conteúdo principal"
   },
+  "mobileApp": {
+    "handoffTitle": "Abrir no aplicativo Jot?",
+    "handoffMessage": "Você pode abrir esta nota no aplicativo Jot em vez do navegador.",
+    "openInApp": "Abrir no aplicativo",
+    "continueInBrowser": "Continuar no navegador",
+    "opening": "Abrindo no aplicativo Jot…",
+    "notInstalled": "O aplicativo Jot não respondeu. Ele pode não estar instalado neste dispositivo.",
+    "preferenceSection": "Aplicativo móvel",
+    "preferenceLabel": "Oferecer abrir os links de notas no aplicativo Jot",
+    "preferenceDescription": "Quando você abrir um link de nota neste dispositivo, o Jot pergunta se deseja continuar no aplicativo. Esta configuração vale apenas para este navegador.",
+    "handedOffTitle": "Aberto no aplicativo Jot",
+    "handedOffMessage": "Você pode fechar esta aba."
+  },
   "auth": {
     "signInTitle": "Entrar no Jot",
     "or": "Ou",
@@ -335,8 +348,6 @@
     "convertLoseAssignments_one": "Você também perderá a atribuição de {{count}} item.",
     "convertLoseAssignments_other": "Você também perderá as atribuições de {{count}} itens.",
     "delete": "Excluir",
-    "deleteConfirm": "Tem certeza de que deseja excluir esta nota?",
-    "deleteConfirmTitle": "Excluir nota",
     "deleteForever": "Excluir para sempre",
     "deleteForeverConfirm": "Excluir permanentemente esta nota? Esta ação não pode ser desfeita.",
     "deleteForeverTitle": "Excluir para sempre",

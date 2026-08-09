@@ -339,7 +339,6 @@ test.describe('Markdown note editing', () => {
     await card.getByRole('button', { name: 'Note options' }).focus();
     await page.keyboard.press('Enter');
     await page.getByRole('menuitem', { name: 'Delete' }).click();
-    await page.getByRole('dialog').last().getByRole('button', { name: 'Delete' }).click();
 
     await dashboardPage.switchToBin();
     await dashboardPage.noteCardByText('to be binned').click();

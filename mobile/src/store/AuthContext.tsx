@@ -16,6 +16,14 @@ import {
 import { isTransientHttpStatus } from '../db/syncQueue';
 import { getLocalIdentity, enableLocalMode as persistEnableLocalMode, disableLocalMode, setLocalModeActive, updateLocalSettings, updateLocalUser } from './localMode';
 
+/**
+ * Why the session ended, for the login screen to explain (issue #853). The
+ * server does not distinguish causes on a 401 (password change vs. revoked
+ * session), so there is only one reason today; the type stays a union rather
+ * than a boolean so a future distinguishable cause has somewhere to go.
+ */
+export type SessionEndedReason = 'unauthorized';
+
 interface AuthState {
   user: User | null;
   settings: UserSettings | null;
@@ -34,6 +42,14 @@ interface AuthState {
    * on logout/clearAuth.
    */
   revalidationFailed: boolean;
+  /**
+   * Set when `clearAuth` runs as a result of a 401 (a revoked session or a
+   * password change elsewhere) rather than a user-initiated logout or leaving
+   * local mode. `LoginScreen` surfaces it as a dismissible line; it never
+   * persists to storage, so it cannot reappear on a later launch.
+   */
+  sessionEndedReason: SessionEndedReason | null;
+  clearSessionEndedReason: () => void;
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, password: string) => Promise<void>;
   /** Enter serverless local mode, provisioning a persistent on-device identity. */
@@ -47,7 +63,7 @@ interface AuthState {
    */
   completeServerUpgrade: () => Promise<void>;
   logout: () => Promise<void>;
-  clearAuth: () => void;
+  clearAuth: (reason?: SessionEndedReason) => void;
   revalidateSession: () => Promise<boolean>;
   setUser: React.Dispatch<React.SetStateAction<User | null>>;
   setSettings: (settings: UserSettings) => void;
@@ -73,18 +89,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [revalidationFailed, setRevalidationFailed] = useState(false);
   const [isLocalMode, setIsLocalMode] = useState(false);
+  const [sessionEndedReason, setSessionEndedReason] = useState<SessionEndedReason | null>(null);
   const queryClient = useQueryClient();
 
-  const clearAuth = useCallback(() => {
+  const clearAuth = useCallback((reason?: SessionEndedReason) => {
     setUser(null);
     setSettings(null);
     setRevalidationFailed(false);
     setIsLocalMode(false);
+    setSessionEndedReason(reason ?? null);
     queryClient.clear();
   }, [queryClient]);
 
+  const clearSessionEndedReason = useCallback(() => {
+    setSessionEndedReason(null);
+  }, []);
+
   useEffect(() => {
-    setOnUnauthorized(clearAuth);
+    // The 401 funnel (API responses + SSE) always means the server rejected an
+    // existing session, so this is the one clearAuth call site that always
+    // carries a reason — ordinary logout and leaving local mode call clearAuth()
+    // directly, with none.
+    setOnUnauthorized(() => clearAuth('unauthorized'));
     return () => {
       setOnUnauthorized(null);
     };
@@ -168,7 +194,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (isUnauthorizedError(error)) {
           await clearStoredSession();
           await clearCachedProfile();
-          clearAuth();
+          clearAuth('unauthorized');
         } else {
           // Any non-401 failure: transient (network, timeout, 5xx, 429) or a
           // permanent-but-reachable error (e.g. 403, 422). Mirror
@@ -216,6 +242,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const response = await auth.login({ username, password });
     setUser(response.user);
     setSettings(response.settings);
+    setSessionEndedReason(null);
     await cacheAuthProfile(response);
   }, []);
 
@@ -223,6 +250,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const response = await auth.register({ username, password });
     setUser(response.user);
     setSettings(response.settings);
+    setSessionEndedReason(null);
     await cacheAuthProfile(response);
   }, []);
 
@@ -242,7 +270,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (err) {
       if (isUnauthorizedError(err)) {
         // Invalid session — clear auth state so the user lands on the login screen.
-        clearAuth();
+        clearAuth('unauthorized');
         throw err;
       }
       // Transient error — keep existing user/settings as a temporary
@@ -287,7 +315,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (isUnauthorizedError(error)) {
         await clearStoredSession();
         await clearCachedProfile();
-        clearAuth();
+        clearAuth('unauthorized');
         return false;
       }
       // Permanent non-401 error (e.g. 403, 422): the server is reachable but
@@ -323,6 +351,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isLoading,
       isLocalMode,
       revalidationFailed,
+      sessionEndedReason,
+      clearSessionEndedReason,
       login,
       register,
       enableLocalMode,
@@ -333,7 +363,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser,
       setSettings,
     }),
-    [user, settings, isLoading, isLocalMode, revalidationFailed, login, register, enableLocalMode, completeServerUpgrade, logout, clearAuth, revalidateSession],
+    [
+      user,
+      settings,
+      isLoading,
+      isLocalMode,
+      revalidationFailed,
+      sessionEndedReason,
+      clearSessionEndedReason,
+      login,
+      register,
+      enableLocalMode,
+      completeServerUpgrade,
+      logout,
+      clearAuth,
+      revalidateSession,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -16,6 +16,19 @@
     "dismissMobileAppBanner": "Ausblenden",
     "skipToMainContent": "Zum Hauptinhalt springen"
   },
+  "mobileApp": {
+    "handoffTitle": "In der Jot-App öffnen?",
+    "handoffMessage": "Du kannst diese Notiz statt im Browser in der Jot-App öffnen.",
+    "openInApp": "In der App öffnen",
+    "continueInBrowser": "Im Browser fortfahren",
+    "opening": "Wird in der Jot-App geöffnet…",
+    "notInstalled": "Die Jot-App hat nicht reagiert. Möglicherweise ist sie auf diesem Gerät nicht installiert.",
+    "preferenceSection": "Mobile App",
+    "preferenceLabel": "Anbieten, Notiz-Links in der Jot-App zu öffnen",
+    "preferenceDescription": "Wenn du auf diesem Gerät einen Notiz-Link öffnest, fragt Jot, ob in der App fortgefahren werden soll. Diese Einstellung gilt nur für diesen Browser.",
+    "handedOffTitle": "In der Jot-App geöffnet",
+    "handedOffMessage": "Du kannst diesen Tab schließen."
+  },
   "auth": {
     "signInTitle": "Bei Jot anmelden",
     "or": "Oder",
@@ -335,8 +348,6 @@
     "convertLoseAssignments_one": "Außerdem geht die Zuweisung von {{count}} Element verloren.",
     "convertLoseAssignments_other": "Außerdem gehen die Zuweisungen von {{count}} Elementen verloren.",
     "delete": "Löschen",
-    "deleteConfirm": "Möchtest du diese Notiz wirklich löschen?",
-    "deleteConfirmTitle": "Notiz löschen",
     "deleteForever": "Endgültig löschen",
     "deleteForeverConfirm": "Notiz endgültig löschen? Dies kann nicht rückgängig gemacht werden.",
     "deleteForeverTitle": "Endgültig löschen",

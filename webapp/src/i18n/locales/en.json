@@ -16,6 +16,19 @@
     "dismissMobileAppBanner": "Dismiss",
     "skipToMainContent": "Skip to main content"
   },
+  "mobileApp": {
+    "handoffTitle": "Open in the Jot app?",
+    "handoffMessage": "You can open this note in the Jot app instead of the browser.",
+    "openInApp": "Open in app",
+    "continueInBrowser": "Continue in browser",
+    "opening": "Opening in the Jot app…",
+    "notInstalled": "The Jot app did not respond. It may not be installed on this device.",
+    "preferenceSection": "Mobile app",
+    "preferenceLabel": "Offer to open note links in the Jot app",
+    "preferenceDescription": "When you open a note link on this device, Jot asks whether to continue in the app. This setting applies to this browser only.",
+    "handedOffTitle": "Opened in the Jot app",
+    "handedOffMessage": "You can close this tab."
+  },
   "auth": {
     "signInTitle": "Sign in to Jot",
     "or": "Or",
@@ -335,8 +348,6 @@
     "convertLoseAssignments_one": "You will also lose the assignment of {{count}} item.",
     "convertLoseAssignments_other": "You will also lose the assignments of {{count}} items.",
     "delete": "Delete",
-    "deleteConfirm": "Are you sure you want to delete this note?",
-    "deleteConfirmTitle": "Delete note",
     "deleteForever": "Delete forever",
     "deleteForeverConfirm": "Permanently delete this note? This cannot be undone.",
     "deleteForeverTitle": "Delete forever",

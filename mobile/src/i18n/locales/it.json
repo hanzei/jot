@@ -22,6 +22,7 @@
   },
   "serverPicker": {
     "open": "Cambia server",
+    "activeServerLabel": "Accesso a",
     "title": "Server",
     "noServers": "Nessun server aggiunto",
     "addPlaceholder": "Aggiungi URL server",
@@ -88,7 +89,9 @@
     "localModeHint": "Le tue note restano solo su questo dispositivo.",
     "localModeFailed": "Impossibile avviare la modalità locale. Riprova.",
     "localModeConfirmTitle": "Usare senza server?",
-    "localModeConfirmMessage": "Hai effettuato l’accesso a un server. Continuando si aprirà un blocco note separato su questo dispositivo: le tue note sul server restano sul server e potrai ritrovarle accedendo di nuovo."
+    "localModeConfirmMessage": "Hai effettuato l’accesso a un server. Continuando si aprirà un blocco note separato su questo dispositivo: le tue note sul server restano sul server e potrai ritrovarle accedendo di nuovo.",
+    "sessionEndedMessage": "Sei stato disconnesso. Questo accade dopo una modifica della password o quando la sessione viene revocata.",
+    "sessionEndedDismiss": "Ignora"
   },
   "dashboard": {
     "newNote": "Nuova nota",
@@ -325,7 +328,7 @@
   "images": {
     "openLightbox": "Visualizza {{filename}}",
     "moreImages": "Visualizza altre {{count}} immagini",
-"moreImagesBadge": "{{count}} immagini in più",
+    "moreImagesBadge": "{{count}} immagini in più",
     "lightboxPrevious": "Immagine precedente",
     "lightboxNext": "Immagine successiva",
     "lightboxCounter": "{{current}} / {{total}}",

@@ -59,7 +59,9 @@
     "localModeHint": "Vos notes restent uniquement sur cet appareil.",
     "localModeFailed": "Impossible de démarrer le mode local. Veuillez réessayer.",
     "localModeConfirmTitle": "Utiliser sans serveur ?",
-    "localModeConfirmMessage": "Vous êtes connecté à un serveur. Si vous continuez, un carnet distinct s’ouvrira sur cet appareil : vos notes du serveur y restent, et vous pourrez les retrouver en vous reconnectant."
+    "localModeConfirmMessage": "Vous êtes connecté à un serveur. Si vous continuez, un carnet distinct s’ouvrira sur cet appareil : vos notes du serveur y restent, et vous pourrez les retrouver en vous reconnectant.",
+    "sessionEndedMessage": "Vous avez été déconnecté. Cela se produit après un changement de mot de passe ou lorsque la session est révoquée.",
+    "sessionEndedDismiss": "Ignorer"
   },
   "dashboard": {
     "newNote": "Nouvelle note",
@@ -296,7 +298,7 @@
   "images": {
     "openLightbox": "Voir {{filename}}",
     "moreImages": "Voir {{count}} images supplémentaires",
-"moreImagesBadge": "{{count}} images supplémentaires",
+    "moreImagesBadge": "{{count}} images supplémentaires",
     "lightboxPrevious": "Image précédente",
     "lightboxNext": "Image suivante",
     "lightboxCounter": "{{current}} / {{total}}",
@@ -376,6 +378,7 @@
   },
   "serverPicker": {
     "open": "Changer de serveur",
+    "activeServerLabel": "Connexion à",
     "title": "Sélectionner un serveur",
     "noServers": "Aucun serveur configuré",
     "addPlaceholder": "https://votre-serveur.exemple.com",

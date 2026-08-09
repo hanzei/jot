@@ -16,6 +16,19 @@
     "dismissMobileAppBanner": "Verbergen",
     "skipToMainContent": "Ga naar hoofdinhoud"
   },
+  "mobileApp": {
+    "handoffTitle": "Openen in de Jot-app?",
+    "handoffMessage": "Je kunt deze notitie in de Jot-app openen in plaats van in de browser.",
+    "openInApp": "Openen in app",
+    "continueInBrowser": "Doorgaan in de browser",
+    "opening": "Openen in de Jot-app…",
+    "notInstalled": "De Jot-app reageerde niet. Mogelijk is deze niet op dit apparaat geïnstalleerd.",
+    "preferenceSection": "Mobiele app",
+    "preferenceLabel": "Aanbieden om notitielinks in de Jot-app te openen",
+    "preferenceDescription": "Wanneer je op dit apparaat een notitielink opent, vraagt Jot of je in de app verder wilt gaan. Deze instelling geldt alleen voor deze browser.",
+    "handedOffTitle": "Geopend in de Jot-app",
+    "handedOffMessage": "Je kunt dit tabblad sluiten."
+  },
   "auth": {
     "signInTitle": "Inloggen bij Jot",
     "or": "Of",
@@ -335,8 +348,6 @@
     "convertLoseAssignments_one": "Je verliest ook de toewijzing van {{count}} item.",
     "convertLoseAssignments_other": "Je verliest ook de toewijzingen van {{count}} items.",
     "delete": "Verwijderen",
-    "deleteConfirm": "Weet je zeker dat je deze notitie wilt verwijderen?",
-    "deleteConfirmTitle": "Notitie verwijderen",
     "deleteForever": "Voor altijd verwijderen",
     "deleteForeverConfirm": "Deze notitie permanent verwijderen? Dit kan niet ongedaan worden gemaakt.",
     "deleteForeverTitle": "Voor altijd verwijderen",
