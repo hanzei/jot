@@ -1,3 +1,5 @@
+import type React from 'react';
+
 /**
  * Shared `jest.mock()` wiring for tests that render `NoteEditorScreen`.
  * Import this module (before importing `NoteEditorScreen`) for its side
@@ -19,11 +21,30 @@ export const mockCreateMutateAsync = jest.fn();
 export const mockUpdateMutateAsync = jest.fn();
 export const mockDeleteMutateAsync = jest.fn();
 export const mockDuplicateMutateAsync = jest.fn();
+export const mockConvertMutateAsync = jest.fn();
+export const mockRestoreMutateAsync = jest.fn();
+export const mockPermanentDeleteMutateAsync = jest.fn();
 export const mockCreateItemMutateAsync = jest.fn();
 export const mockUpdateItemMutateAsync = jest.fn();
 export const mockDeleteItemMutateAsync = jest.fn();
 export const mockReorderItemsMutateAsync = jest.fn();
+export const mockToggleItemCompletedMutateAsync = jest.fn().mockResolvedValue([]);
+export const mockUncheckAllItemsMutateAsync = jest.fn().mockResolvedValue([]);
+export const mockDeleteCompletedItemsMutateAsync = jest.fn().mockResolvedValue([]);
 export const mockUseOfflineNote = jest.fn();
+export const mockShowToast = jest.fn();
+export const mockLabelPicker = jest.fn((_props: { visible: boolean }): React.ReactNode => null);
+export const mockUseUsers = jest.fn().mockReturnValue({ usersById: new Map() });
+
+// Stable `t`/`i18n` identity across renders by default, mirroring production:
+// an unstable `t` recreates callbacks (e.g. flushSave) on every render and can
+// distort what's under test. A `mockReturnValue` (not `mockImplementation`)
+// is what makes it stable — every call returns the same object/function.
+const stableT = (key: string, options?: { count?: number; server?: string }) => {
+  if (key === 'note.completedItems') return `${options?.count ?? 0} completed items`;
+  return key;
+};
+export const mockUseTranslation = jest.fn().mockReturnValue({ t: stableT, i18n: { language: 'en' } });
 
 jest.mock('@react-navigation/native', () => ({
   __esModule: true,
@@ -67,17 +88,17 @@ jest.mock('../../src/hooks/useNotes', () => ({
   useCreateNote: () => ({ mutateAsync: mockCreateMutateAsync }),
   useUpdateNote: () => ({ mutateAsync: mockUpdateMutateAsync }),
   useDeleteNote: () => ({ mutateAsync: mockDeleteMutateAsync }),
-  useRestoreNote: () => ({ mutateAsync: jest.fn() }),
-  usePermanentDeleteNote: () => ({ mutateAsync: jest.fn() }),
+  useRestoreNote: () => ({ mutateAsync: mockRestoreMutateAsync }),
+  usePermanentDeleteNote: () => ({ mutateAsync: mockPermanentDeleteMutateAsync }),
   useDuplicateNote: () => ({ mutateAsync: mockDuplicateMutateAsync }),
-  useConvertNoteType: () => ({ mutateAsync: jest.fn() }),
+  useConvertNoteType: () => ({ mutateAsync: mockConvertMutateAsync }),
   useCreateNoteItem: () => ({ mutateAsync: mockCreateItemMutateAsync }),
   useUpdateNoteItem: () => ({ mutateAsync: mockUpdateItemMutateAsync }),
   useDeleteNoteItem: () => ({ mutateAsync: mockDeleteItemMutateAsync }),
   useReorderNoteItems: () => ({ mutateAsync: mockReorderItemsMutateAsync }),
-  useToggleNoteItemCompleted: () => ({ mutateAsync: jest.fn().mockResolvedValue([]) }),
-  useUncheckAllItems: () => ({ mutateAsync: jest.fn().mockResolvedValue([]) }),
-  useDeleteCompletedItems: () => ({ mutateAsync: jest.fn().mockResolvedValue([]) }),
+  useToggleNoteItemCompleted: () => ({ mutateAsync: mockToggleItemCompletedMutateAsync }),
+  useUncheckAllItems: () => ({ mutateAsync: mockUncheckAllItemsMutateAsync }),
+  useDeleteCompletedItems: () => ({ mutateAsync: mockDeleteCompletedItemsMutateAsync }),
 }));
 
 jest.mock('../../src/hooks/useNoteImages', () => ({
@@ -106,44 +127,37 @@ jest.mock('../../src/store/SSEContext', () => ({
 
 jest.mock('../../src/components/LabelPicker', () => ({
   __esModule: true,
-  default: () => null,
+  default: (props: { visible: boolean }) => mockLabelPicker(props),
 }));
 
 jest.mock('react-i18next', () => ({
   __esModule: true,
-  useTranslation: () => ({
-    t: (key: string, options?: { count?: number }) =>
-      key === 'note.completedItems' ? `${options?.count ?? 0} completed items` : key,
-    i18n: { language: 'en' },
-  }),
+  useTranslation: () => mockUseTranslation(),
 }));
 
-jest.mock('../../src/theme/ThemeContext', () => ({
-  __esModule: true,
-  useTheme: () => ({
-    isDark: false,
-    colors: {
-      background: '#fff', surface: '#fff', border: '#ddd', borderLight: '#eee',
-      text: '#111', textSecondary: '#444', textMuted: '#777', placeholder: '#aaa',
-      icon: '#555', iconMuted: '#888', primary: '#2563eb', primaryLight: '#dbeafe',
-      error: '#dc2626', errorLight: '#fee2e2', cardBackground: '#fff', cardBorder: '#ddd',
-    },
-  }),
-}));
+jest.mock('../../src/theme/ThemeContext', () => {
+  const { lightColors } = jest.requireActual<typeof import('../../src/theme/colors')>(
+    '../../src/theme/colors',
+  );
+  return {
+    __esModule: true,
+    useTheme: () => ({ isDark: false, colors: lightColors }),
+  };
+});
 
 jest.mock('../../src/store/AuthContext', () => ({
   __esModule: true,
-  useAuth: () => ({ user: { id: 'u1', username: 'alice' }, isAuthenticated: true }),
+  useAuth: () => ({ user: { id: 'u1', username: 'alice' }, isAuthenticated: true, isLocalMode: false }),
 }));
 
 jest.mock('../../src/store/UsersContext', () => ({
   __esModule: true,
-  useUsers: () => ({ usersById: new Map() }),
+  useUsers: () => mockUseUsers(),
 }));
 
 jest.mock('../../src/hooks/useToast', () => ({
   __esModule: true,
-  useToast: () => ({ showToast: jest.fn() }),
+  useToast: () => ({ showToast: mockShowToast }),
 }));
 
 jest.mock('../../src/i18n', () => ({ __esModule: true, default: {} }));
