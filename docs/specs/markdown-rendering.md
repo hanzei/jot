@@ -92,13 +92,32 @@ of once per row, and because the next click lands in a real textarea and
 corrects it.
 
 **Both forms must be the same height**, or every click shifts the rows below it.
-They share one class list for width, padding and wrapping, and two less obvious
-properties: a textarea is an `inline-block` that baselines on its bottom margin
-edge, which reserves descender space in the line box around it, and a span only
-does the same with a non-`visible` `overflow` (CSS 2.1 §10.8.1). Get that wrong
-and every row silently loses 7px when it is not focused. Where the two genuinely
-differ — markers moving a wrap point on a long row — the change is animated over
-120ms, behind `prefersReducedMotion`.
+They share one class list for width, padding and wrapping, and one property that
+matters more than it looks: **both are `block`**.
+
+That is there to remove the line box from the question rather than to match it.
+A textarea is an `inline-block` by default, so it sits on a baseline and the line
+box around it reserves descender space underneath — and how much is a property of
+the platform's font and UA stylesheet. Reproducing that on a span is possible
+(`overflow` moves a baseline to the bottom margin edge, CSS 2.1 §10.8.1) and was
+the first attempt, but it only held on the font it was measured against: on
+Windows the textarea did not reserve the space and the span did, so every row
+grew about 7px the moment it lost focus. Blocks have no baseline to disagree
+about, and each box is then `lines × line-height + padding` from the same
+inherited metrics — equal on any platform.
+
+The same trap has a second entrance, inside the rendered form. An inline box is
+as tall as its `line-height` and sits around the shared baseline, so a child in a
+*different font* is offset differently from the line's strut and can push the
+line box past it. `.markdown-inline code` sets `font-mono`, which made a row
+containing `` `code` `` taller rendered than in source — by 0.6px on one font and
+who knows what on another. `leading-none` on it keeps its inline box under the
+strut on any font, and does not change the chip, since an inline element's
+background paints its content area rather than its line box.
+
+Where the two forms genuinely differ — markers moving a wrap point, so the source
+occupies more lines — the change is animated over 120ms, behind
+`prefersReducedMotion`.
 
 **A mouse drag does not collapse the row it starts on.** The grip prevents the
 default mousedown, so grabbing it never moves focus off the field. Otherwise the

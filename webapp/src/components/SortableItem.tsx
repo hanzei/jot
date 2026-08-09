@@ -19,25 +19,26 @@ export const ROW_REVEAL_CLASSES =
   'opacity-0 pointer-events-none group-hover/item:opacity-100 group-hover/item:pointer-events-auto group-focus-within/item:opacity-100 group-focus-within/item:pointer-events-auto';
 
 // Everything that decides how much vertical space a line of item text takes:
-// width, padding, how it wraps, and how its box sits in the line. The rendered
-// view and the textarea it stands in for must carry all of it, or the row
-// changes height on the swap for no reason other than the two forms being laid
-// out differently.
+// width, padding, and how it wraps. The rendered view and the textarea it stands
+// in for must carry all of it, or the row changes height on the swap for no
+// reason other than the two forms being laid out differently.
 //
-// `inline-block` and `overflow-hidden` are the two that are not obvious, and
-// they only matter together. A textarea is an inline-block that baselines on its
-// bottom margin edge, so the line box around it reserves a further 7px of
-// descender space underneath — space that is part of every list row's height
-// today. A span reproduces the display easily but not the baseline: an
-// inline-block full of text baselines on *its own last line*, which puts it 7px
-// short. `overflow-hidden` is what moves a baseline back to the bottom margin
-// edge (CSS 2.1 §10.8.1), and it is why the two forms end up the same height.
+// `block` is the one that is not obvious, and it is here to take the line box
+// out of the question rather than to match it. A textarea is an `inline-block`
+// by default, so it sits on a baseline and the line box around it reserves
+// descender space underneath — and *how much* is a property of the platform's
+// font and its UA stylesheet, not of anything in this file. Reproducing that on
+// a span is possible (`overflow` moves a baseline to the bottom margin edge,
+// CSS 2.1 §10.8.1) and was the first fix here, but it only held on the font it
+// was measured against: on Windows the textarea did not reserve the space and
+// the span did, so every row grew ~7px the moment it lost focus.
 //
-// Font metrics are absent because both inherit them: Tailwind's preflight sets
-// `font: inherit` on form controls, which is the only reason a textarea agrees
-// with a span about line height at all.
-const TEXT_LAYOUT_CLASSES =
-  'inline-block overflow-hidden w-full pt-0 pb-1 pl-1 pr-0 whitespace-pre-wrap break-words align-baseline';
+// Blocks have no baseline to disagree about. Both boxes are then `lines ×
+// line-height + padding` from the same inherited metrics, which is equal by
+// construction on any platform. It also costs each row the descender space it
+// used to carry, so list rows are that much tighter than before — accidental
+// spacing, not designed, and now gone in both states rather than one.
+const TEXT_LAYOUT_CLASSES = 'block w-full pt-0 pb-1 pl-1 pr-0 whitespace-pre-wrap break-words';
 
 export interface SortableItemProps {
   id: string;
@@ -309,7 +310,7 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
             // `opacity-0` rather than `invisible` or `hidden`: both of those
             // take an element out of the focus order, and `.focus()` on one
             // silently does nothing.
-            className={`${TEXT_LAYOUT_CLASSES} bg-transparent border-none outline-none min-w-0 resize-none placeholder-gray-500 dark:placeholder-gray-400 ${textToneClasses} ${
+            className={`${TEXT_LAYOUT_CLASSES} bg-transparent border-none outline-none min-w-0 resize-none overflow-hidden placeholder-gray-500 dark:placeholder-gray-400 ${textToneClasses} ${
               showRendered ? 'absolute top-0 left-0 opacity-0 pointer-events-none' : ''
             }`}
             value={item.text}
