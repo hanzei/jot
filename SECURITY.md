@@ -12,10 +12,14 @@ Report it through GitHub's private vulnerability reporting:
 
 **<https://github.com/hanzei/jot/security/advisories/new>**
 
-That creates a draft advisory visible only to you and the maintainers. If you
-cannot use it for any reason, open a public issue containing only "I would like
-to report a security issue, please enable a private channel" — with no details —
-and you will be invited to a private advisory.
+That submits a private report visible only to you and the maintainers. It starts
+in **Triage** — it is not yet a published or draft advisory. A maintainer
+reviews it and, if the issue is confirmed, accepts the report, which is what
+creates the draft security advisory the fix is then coordinated through.
+
+If you cannot use that channel for any reason, open a public issue containing
+only "I would like to report a security issue, please enable a private channel"
+— with no details — and you will be invited to a private advisory.
 
 A useful report includes:
 
