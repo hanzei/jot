@@ -11,11 +11,10 @@ Markdown applies to the **`content` of text notes** in full, and to **list-note
 item text** in an inline-only subset (§2.1):
 
 - **Note titles are plain.** They are rendered as text everywhere.
-- **List-item Markdown renders on display surfaces only.** Note cards, mobile's
-  read-only editor and the collapsed-completed parent label render it; the
-  editable row still shows its source, because it is an always-live input with no
-  preview mode. Closing that gap is
-  [#824](https://github.com/hanzei/jot/issues/824).
+- **List-item Markdown renders everywhere, on both clients.** Note cards,
+  mobile's read-only editor and the collapsed-completed parent label render it,
+  and so does the *editable* row, which swaps to source while it holds the caret
+  (§1.2).
 
 ### 1.1 Note cards render links as text
 
@@ -35,14 +34,147 @@ colour that only signals "link" fails anyone who cannot use it. So the label
 renders exactly as the surrounding text.
 
 The open note is unaffected: the webapp's modal preview and mobile's editor both
-render live links, which is where a reader who wants the link already is. One
-consequence worth naming: because the *editable* list-item row shows source
-(above), a link typed into a list item now has no live surface on the webapp at
-all until [#824](https://github.com/hanzei/jot/issues/824) gives that row a view
-mode. Mobile still has one, in its read-only editor.
+render live links, which is where a reader who wants the link already is. An
+*editable* list-item row is the one other place a link stays inert, for a
+different reason — §1.2.
 
 Both clients render the same feature set from the same source string, so a note
 written on a phone reads identically in a browser and the other way round.
+
+### 1.2 The editable row swaps between rendered and source
+
+A list-item row shows its Markdown rendered until it holds the caret, and its
+source for exactly as long as it does. Type `**Milk**`, move away, and the row
+reads **Milk**; come back to it and it reads `**Milk**` again, with the caret
+where you pointed.
+
+The decisions below were made on the webapp and then carried to mobile, which is
+why they are written once. Where the platforms genuinely differ — how a point
+becomes a caret, and what keeps the field alive across the swap — the difference
+is called out inline rather than given its own section.
+
+**Focused and editing are the same state.** That is the decision the rest
+follows from. Every keystroke a row handles — Tab to indent, Enter to split,
+arrows to move between rows and through the completed-item suggestions — stays
+on a real text field, because a row that has the caret *is* one. There is no
+render-mode duplicate of any of it, and no focusable non-interactive element in
+the markup for a screen reader to find or axe to flag.
+
+Four consequences, each of which is a trap avoided rather than a preference:
+
+- **The field is never unmounted**, only moved out of flow and faded to zero
+  opacity. Everything that reaches for a row imperatively — Enter-to-split,
+  arrow navigation, "add item" focus, all through the client's map of row refs —
+  keeps working on a row that happens to be rendered, and on the webapp the
+  height the field comes back at was measured while it was on screen rather than
+  at the moment of focus. `visibility: hidden` and `display: none` both remove
+  an element from the focus order, so neither can be used there; RN's
+  `display: 'none'` detaches the native view, which is the same problem.
+
+  **On mobile this is the whole feature, not a detail of it.** React Native
+  keeps the software keyboard up when focus moves directly between two mounted
+  `TextInput`s, and generally does not when it moves across an unmount — so a
+  row swap that unmounted the field would dismiss and reopen the keyboard, and
+  jump the scroll position with it, on the most common interaction a list note
+  has. Two other approaches were considered and rejected: keeping the outgoing
+  field mounted for one frame (a timing guess, and one that fails under load),
+  and a whole-list preview toggle (which would mean leaving preview mode to tick
+  a checkbox — the primary interaction on a list note, and the reason the swap is
+  per row in the first place). Never unmounting has no such failure mode, and is
+  what the webapp already does.
+- **A row only swaps when rendering changes something.** `buy milk` renders to
+  `buy milk`, so that row keeps the always-live input it has always had. So do
+  `# not a heading` and `![alt](url)`, which §2.1 shows as literal source. Only
+  a row whose author typed markup that actually renders pays for any of this,
+  which is what keeps a plain list exactly as it was.
+- **An editable row's links are inert; a read-only row's are live.** One click
+  in an editable row already means "put the caret here", and a second meaning on
+  the same pixel has no way to resolve itself — so the label renders as ordinary
+  text and nothing looks followable, the same outcome as a card (§1.1) reached
+  by a different route. A read-only row has no caret to place, so its links work
+  and it drops the hidden field entirely rather than leaving a focusable copy
+  of the text behind the rendered one.
+- **Completed rows render like any other**, `~~strike~~` and all, which §2.1
+  already accepted for display surfaces. A struck word inside an already-struck
+  row is indistinguishable; that is the cost of the subset staying a subset.
+
+**A click or tap has to place the caret itself.** The user points at character 4
+of `buy milk` and the field holds `buy **milk**`, where that character is at 6.
+`inlineSourceOffset` maps a *rendered* offset back through the source spans
+`normalizeInlineTokens` records — that half is shared. Without it the caret lands
+at 0 on every click, which is what the *text-note* editor does today, and is
+tolerable there only because it happens once per note instead of once per row.
+
+**Getting to that rendered offset is per client**, because only the webapp is
+handed one:
+
+- The browser has `caretPositionFromPoint`, which resolves a point to a DOM
+  position; `webapp/src/utils/inlineCaret.ts` then counts the visible characters
+  before it, `<br>` included.
+- React Native has no equivalent, so `mobile/src/utils/inlineCaret.ts`
+  reconstructs the mapping from the line boxes `onTextLayout` reports: which line
+  the tap fell in, then a linear interpolation across it. That is exact only in a
+  monospaced face — in a proportional one a tap inside a long line can land a
+  character or two off, the same order of error the source mapping already
+  tolerates elsewhere, and correctable the moment the caret is visible. The
+  alternative is laying out every substring separately, on every row of every
+  list note.
+
+Both clients then hand the offset to the field: the webapp with
+`setSelectionRange`, mobile through the controlled `selection` prop, released
+once the input reports the caret landed (the same force-and-release the
+formatting bar uses, §5.1).
+
+**Both forms must be the same height**, or every click shifts the rows below it.
+They carry the same width, padding and wrapping — one class list on the webapp,
+one style object on mobile — and each client has one property that matters more
+than it looks.
+
+On the webapp that property is that **both are `block`**.
+
+That is there to remove the line box from the question rather than to match it.
+A textarea is an `inline-block` by default, so it sits on a baseline and the line
+box around it reserves descender space underneath — and how much is a property of
+the platform's font and UA stylesheet. Reproducing that on a span is possible
+(`overflow` moves a baseline to the bottom margin edge, CSS 2.1 §10.8.1) and was
+the first attempt, but it only held on the font it was measured against: on
+Windows the textarea did not reserve the space and the span did, so every row
+grew about 7px the moment it lost focus. Blocks have no baseline to disagree
+about, and each box is then `lines × line-height + padding` from the same
+inherited metrics — equal on any platform.
+
+The same trap has a second entrance, inside the rendered form. An inline box is
+as tall as its `line-height` and sits around the shared baseline, so a child in a
+*different font* is offset differently from the line's strut and can push the
+line box past it. `.markdown-inline code` sets `font-mono`, which made a row
+containing `` `code` `` taller rendered than in source — by 0.6px on one font and
+who knows what on another. `leading-none` on it keeps its inline box under the
+strut on any font, and does not change the chip, since an inline element's
+background paints its content area rather than its line box.
+
+Where the two forms genuinely differ — markers moving a wrap point, so the source
+occupies more lines — the change is animated over 120ms, behind
+`prefersReducedMotion`.
+
+On mobile the equivalent property is an explicit **`lineHeight`**, plus an
+explicit `paddingLeft`. Left unset, a `Text` and a `TextInput` each derive their
+line height from the font and disagree on Android, where the input adds the
+font's own ascent/descent padding on top; an Android `TextInput` likewise
+inherits the theme's `EditText` padding on any side a style does not set, while a
+`Text` inherits nothing. Pinning both makes each box `lines × lineHeight +
+padding` from the same numbers on either platform. Nothing is animated: the
+rendered form is never wider than its source, so the wrap point moves the other
+way, and a row that does change height changes it by shrinking.
+
+**A drag does not change the height of the row it starts on.** The webapp's grip
+prevents the default mousedown, so grabbing it never moves focus off the field;
+otherwise the row would change height in the same tick the `PointerSensor`
+activates and dnd-kit measures, and the drag would run against a rect for a size
+the row no longer has. A keyboard drag needs no such guard: it arrives by Tab, so
+the row has already collapsed and settled before Space starts it. Mobile reaches
+the same guarantee from the other end — the row's form is *frozen* for as long as
+`react-native-reorderable-list` reports it active, so whatever takes focus off
+the field mid-gesture, the lifted cell keeps the size the list measured.
 
 | | Webapp | Mobile |
 |---|---|---|
@@ -157,6 +289,29 @@ that rule, and both clients call it.
 | A leading `#`–`######` heading prefix | no headings, and the title is separate |
 | Leading `>` blockquote markers | no block structure at all |
 
+**The first non-blank line, when it is a heading, becomes the list's title**
+rather than its first item — the inverse of the `# h1` line the other direction
+writes, and what makes a list note keep its title across a round trip through
+text. Any level is promoted, since `## Groceries` is a title the user typed as a
+heading and accepting only `#` would look like the feature was broken; the level
+itself is not preserved, because a list has one title and converting back writes
+it as `#`. Three cases deliberately do *not* promote, and each falls back to the
+line becoming an item exactly as it did before:
+
+- A heading behind another construct (`> # Groceries`, `- # Groceries`) — the
+  `#` is nested inside a quote or a list item there, not standing as the note's
+  title.
+- A setext heading (`Groceries` over `=====`) — the converter is line-by-line
+  by design, and recognizing setext means lookahead plus a rule for the leftover
+  underline.
+- A heading longer than `TITLE_MAX_LENGTH` (200) — the server would reject the
+  title outright, and truncating would drop text the note still holds.
+
+The clients send the promoted title as `title` on the convert request, alongside
+the precomputed items; the server persists it rather than clearing the title as
+it used to. Omitting the field leaves the note untitled, which is what every
+client did before it existed.
+
 Everything else survives as typed. Inline syntax is kept because the item
 renders it — stripping `**` out of `**Buy** milk` would delete formatting the
 destination displays. Block syntax that is *not* a line prefix — a fence, `---`,
@@ -189,16 +344,19 @@ either — every item is emitted behind a `- [ ] ` marker, so a leading `#` or a
 The round trip is stable in one direction and *normalizing* in the other, which
 is worth stating precisely because it is easy to overclaim:
 
-- **List → text → list returns the same items** — text, completed state and
-  nesting all survive. The one exception is an item whose text *begins* with `#`
-  or `>`: that prefix is consumed on the way back, because the converter cannot
-  distinguish it from the block markup it exists to strip.
-- **Text → list → text normalizes rather than preserves.** Inline formatting and
-  nesting survive, but every line returns as `- [ ]` / `- [x]`, so content that
-  used any other structural prefix is not byte-identical: `# Groceries` comes
-  back as `- [ ] Groceries`, and `* Eggs`, `1. Eggs` and `> Eggs` all come back
-  as `- [ ] Eggs`. This is inherent to the destination — an item has one
-  representation, so every way of writing a line collapses onto it.
+- **List → text → list returns the same items *and* the title** — text,
+  completed state and nesting all survive, and the `# h1` line is promoted back
+  into the title it came from. The one exception is an item whose text *begins*
+  with `#` or `>`: that prefix is consumed on the way back, because the
+  converter cannot distinguish it from the block markup it exists to strip.
+- **Text → list → text normalizes rather than preserves.** Inline formatting,
+  nesting and a leading heading survive, but every other line returns as
+  `- [ ]` / `- [x]`, so content that used any other structural prefix is not
+  byte-identical: `* Eggs`, `1. Eggs` and `> Eggs` all come back as
+  `- [ ] Eggs`. This is inherent to the destination — an item has one
+  representation, so every way of writing a line collapses onto it. A leading
+  `## Groceries` comes back as `# Groceries` (title level is not preserved); a
+  heading anywhere later comes back as `- [ ] Groceries` like any other line.
 
 Also not recovered, in either direction, is anything the line-per-item split
 discards: blank lines, and the distinction between a wrapped paragraph and
@@ -300,11 +458,16 @@ spec exists to prevent.
 | Shared conformance corpora (both test suites) | `shared/src/markdownCases.ts` |
 | Webapp node-to-HTML renderer + tag allowlist | `webapp/src/utils/markdown.ts` |
 | Webapp item renderer | `webapp/src/components/InlineMarkdown.tsx` |
+| Webapp editable-row swap (§1.2) | `webapp/src/components/SortableItem.tsx` |
+| Shared rendered-offset → source-offset map | `inlineSourceOffset` in `shared/src/inlineMarkdown.ts` |
+| Webapp click point → rendered offset | `webapp/src/utils/inlineCaret.ts` |
 | Mobile block lexing entry point | `mobile/src/utils/markdown.ts` |
 | Mobile block renderer (editor) | `mobile/src/components/Markdown.tsx` |
 | Mobile card preview renderer | `mobile/src/components/MarkdownPreview.tsx` |
 | Mobile item lexing + plain-text flattening | `mobile/src/utils/inlineMarkdown.ts` |
 | Mobile item renderer | `mobile/src/components/InlineMarkdown.tsx` |
+| Mobile editable-row swap (§1.2) | `mobile/src/components/ListItem.tsx` |
+| Mobile tap point → rendered offset | `mobile/src/utils/inlineCaret.ts` |
 | Card links-as-text switch | `links` option on both clients' renderers |
 | Mobile inline leaf rendering (shared by all three) | `mobile/src/components/inlineNodes.tsx` |
 | Mobile text metrics + colours | `mobile/src/utils/markdownStyles.ts` |
@@ -462,9 +625,6 @@ The heading button stops at `###`, matching §2: a fourth press would produce an
 
 - **Interactive checkboxes.** Toggling a rendered ☐ would mean writing back into
   `content` — a much larger feature than rendering.
-- **Markdown in the *editable* list-item row.** The subset renders on display
-  surfaces (§1); giving the always-live input a view/edit swap is
-  [#824](https://github.com/hanzei/jot/issues/824).
 - **Block Markdown in list items.** Not a gap to be filled later — §2.1 explains
   why an item cannot hold it.
 - **Syntax highlighting** in code blocks. The webapp allowlist drops the
@@ -488,6 +648,14 @@ the other. Adding a case breaks both suites until both are updated.
 
 `shared/src/__tests__/inlineMarkdown.test.ts` covers the item corpus a third
 time, at the normalizer, where the policy actually lives.
+
+The editable row's swap (§1.2) is covered per client rather than by the corpus,
+since it is a state machine rather than a rendering:
+`webapp/src/components/__tests__/SortableItem.test.tsx` and
+`mobile/__tests__/ListItem.test.tsx` for which form is showing and that the
+field survives it, `webapp/src/utils/__tests__/inlineCaret.test.ts` and
+`mobile/__tests__/inlineCaret.test.ts` for the point-to-caret mapping — the
+half of it that exists without a layout engine.
 
 `webapp/e2e/tests/markdown.spec.ts` covers the same feature set through the
 browser, on real note content.

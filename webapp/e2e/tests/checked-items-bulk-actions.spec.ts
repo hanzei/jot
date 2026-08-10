@@ -118,9 +118,12 @@ test.describe('Checked-item bulk actions', () => {
       { timeout: 10_000 },
     );
     await page.getByRole('dialog').last().getByRole('button', { name: 'Add item' }).click();
-    await page.keyboard.type('Keep me');
     // Active items render before the completed section, so the new unchecked
-    // item is the first input.
+    // item is the first input. Wait for it to take focus before typing: the row
+    // is focused a tick after the click, and keystrokes sent before that land
+    // nowhere and are simply lost.
+    await dashboardPage.expectListItemFocused(0);
+    await page.keyboard.type('Keep me');
     await dashboardPage.expectListItemValue(0, 'Keep me');
     await keepCreated;
 

@@ -5,6 +5,19 @@ import NoteModal, { ROW_REVEAL_CLASSES } from '../NoteModal';
 import { ToastProvider } from '../Toast';
 import { VALIDATION, type Note, type NoteItem, type NoteImage } from '@jot/shared';
 import { createMockNote } from '@/utils/__tests__/test-helpers';
+import { getCaretLine, getOffsetAtLine } from '@/utils/textareaCaret';
+
+// Caret geometry needs a layout engine, and jsdom has none — see the header of
+// textareaCaret.ts. Mocked here so the row-navigation decisions that read it can
+// be tested on their own; the measuring itself has its own tests.
+vi.mock('@/utils/textareaCaret', () => ({
+  getCaretLine: vi.fn(),
+  getOffsetAtLine: vi.fn(),
+}));
+
+// What a row holding one line of text measures as: the caret is on the first
+// line and the last line at once, so either arrow may leave the row.
+const SINGLE_LINE_CARET = { isFirstLine: true, isLastLine: true, x: 0 };
 
 // Mock the API module
 const {
@@ -205,6 +218,10 @@ const mockMobileMatchMedia = () => {
 describe('NoteModal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Every row is one line unless a test says otherwise, which is what the
+    // unmocked module reports under jsdom too.
+    vi.mocked(getCaretLine).mockReturnValue(SINGLE_LINE_CARET);
+    vi.mocked(getOffsetAtLine).mockReturnValue(null);
     vi.spyOn(console, 'error').mockImplementation(mockConsoleError);
     vi.useFakeTimers();
     localStorage.clear();
@@ -1612,6 +1629,169 @@ describe('NoteModal', () => {
       expect(inputs[1]).toHaveFocus();
     });
 
+    it('pressing ArrowDown above the last line of a wrapped item keeps focus', async () => {
+      renderNoteModal(defaultProps);
+
+      fireEvent.click(screen.getByText('List'));
+      fireEvent.click(screen.getByText('Add item'));
+      fireEvent.click(screen.getByText('Add item'));
+
+      const inputs = screen.getAllByTestId('list-item-input');
+      // A row long enough to wrap: the caret has a line below it to reach, so
+      // the keystroke is the textarea's rather than the list's.
+      vi.mocked(getCaretLine).mockReturnValue({ isFirstLine: true, isLastLine: false, x: 40 });
+
+      inputs[0]!.focus();
+      fireEvent.keyDown(inputs[0]!, { key: 'ArrowDown', code: 'ArrowDown' });
+
+      expect(inputs[0]).toHaveFocus();
+    });
+
+    it('pressing ArrowUp below the first line of a wrapped item keeps focus', async () => {
+      renderNoteModal(defaultProps);
+
+      fireEvent.click(screen.getByText('List'));
+      fireEvent.click(screen.getByText('Add item'));
+      fireEvent.click(screen.getByText('Add item'));
+
+      const inputs = screen.getAllByTestId('list-item-input');
+      vi.mocked(getCaretLine).mockReturnValue({ isFirstLine: false, isLastLine: true, x: 40 });
+
+      inputs[1]!.focus();
+      fireEvent.keyDown(inputs[1]!, { key: 'ArrowUp', code: 'ArrowUp' });
+
+      expect(inputs[1]).toHaveFocus();
+    });
+
+    it('pressing ArrowDown on the last line of a wrapped item moves to the next item', async () => {
+      renderNoteModal(defaultProps);
+
+      fireEvent.click(screen.getByText('List'));
+      fireEvent.click(screen.getByText('Add item'));
+      fireEvent.click(screen.getByText('Add item'));
+
+      const inputs = screen.getAllByTestId('list-item-input');
+      // The caret has walked to the bottom line of the row; from there the row
+      // is out of lines and the next row is where Down goes.
+      vi.mocked(getCaretLine).mockReturnValue({ isFirstLine: false, isLastLine: true, x: 40 });
+
+      inputs[0]!.focus();
+      fireEvent.keyDown(inputs[0]!, { key: 'ArrowDown', code: 'ArrowDown' });
+
+      expect(inputs[1]).toHaveFocus();
+    });
+
+    it('enters the next item on the line the caret arrives at, keeping its column', async () => {
+      const listNote = createMockNote({
+        note_type: 'list',
+        items: [
+          { id: 'item1', note_id: '1', text: 'first', completed: false, position: 0, parent_id: null, assigned_to: '', created_at: '', updated_at: '' },
+          { id: 'item2', note_id: '1', text: 'a much longer second item', completed: false, position: 1, parent_id: null, assigned_to: '', created_at: '', updated_at: '' },
+        ],
+      });
+      renderNoteModal({ ...defaultProps, note: listNote });
+
+      const inputs = screen.getAllByTestId('list-item-input');
+      vi.mocked(getCaretLine).mockReturnValue({ ...SINGLE_LINE_CARET, x: 40 });
+      vi.mocked(getOffsetAtLine).mockReturnValue(7);
+
+      inputs[0]!.focus();
+      fireEvent.keyDown(inputs[0]!, { key: 'ArrowDown', code: 'ArrowDown' });
+
+      expect(inputs[1]).toHaveFocus();
+      expect(inputs[1]).toHaveProperty('selectionStart', 7);
+      // Going down enters the target's first line, at the column left behind.
+      expect(getOffsetAtLine).toHaveBeenCalledWith(inputs[1], 'first', 40);
+    });
+
+    it('enters the previous item on its last line', async () => {
+      renderNoteModal(defaultProps);
+
+      fireEvent.click(screen.getByText('List'));
+      fireEvent.click(screen.getByText('Add item'));
+      fireEvent.click(screen.getByText('Add item'));
+
+      const inputs = screen.getAllByTestId('list-item-input');
+      vi.mocked(getCaretLine).mockReturnValue({ ...SINGLE_LINE_CARET, x: 40 });
+
+      inputs[1]!.focus();
+      fireEvent.keyDown(inputs[1]!, { key: 'ArrowUp', code: 'ArrowUp' });
+
+      expect(inputs[0]).toHaveFocus();
+      expect(getOffsetAtLine).toHaveBeenCalledWith(inputs[0], 'last', 40);
+    });
+
+    it('falls back to the character offset when the target cannot be measured', async () => {
+      const listNote = createMockNote({
+        note_type: 'list',
+        items: [
+          { id: 'item1', note_id: '1', text: 'first item', completed: false, position: 0, parent_id: null, assigned_to: '', created_at: '', updated_at: '' },
+          { id: 'item2', note_id: '1', text: 'xyz', completed: false, position: 1, parent_id: null, assigned_to: '', created_at: '', updated_at: '' },
+        ],
+      });
+      renderNoteModal({ ...defaultProps, note: listNote });
+
+      const inputs = screen.getAllByTestId('list-item-input');
+      const source = inputs[0] as HTMLTextAreaElement;
+      source.focus();
+      source.setSelectionRange(8, 8);
+      fireEvent.keyDown(source, { key: 'ArrowDown', code: 'ArrowDown' });
+
+      expect(inputs[1]).toHaveFocus();
+      // Clamped to the shorter target, which is what the offset alone can offer
+      // without knowing where either row's characters actually sit.
+      expect(inputs[1]).toHaveProperty('selectionStart', 3);
+    });
+
+    it('leaves a modified arrow key to the browser', async () => {
+      renderNoteModal(defaultProps);
+
+      fireEvent.click(screen.getByText('List'));
+      fireEvent.click(screen.getByText('Add item'));
+      fireEvent.click(screen.getByText('Add item'));
+
+      const inputs = screen.getAllByTestId('list-item-input');
+      inputs[0]!.focus();
+      // Shift+Down extends a selection; on macOS Alt and Cmd move by paragraph
+      // and to the end of the field. None of them mean "next row".
+      fireEvent.keyDown(inputs[0]!, { key: 'ArrowDown', code: 'ArrowDown', shiftKey: true });
+
+      expect(inputs[0]).toHaveFocus();
+    });
+
+    it('arrows across the boundary into the completed section', async () => {
+      const listNote = createMockNote({ note_type: 'list', items: createMockListItems() });
+      renderNoteModal({ ...defaultProps, note: listNote });
+
+      const inputs = screen.getAllByTestId('list-item-input');
+      // createMockListItems' second item is the completed one, rendered below
+      // the divider — one list to the keyboard even so.
+      expect(inputs[1]).toHaveDisplayValue('Second item');
+
+      inputs[0]!.focus();
+      fireEvent.keyDown(inputs[0]!, { key: 'ArrowDown', code: 'ArrowDown' });
+      expect(inputs[1]).toHaveFocus();
+
+      fireEvent.keyDown(inputs[1]!, { key: 'ArrowUp', code: 'ArrowUp' });
+      expect(inputs[0]).toHaveFocus();
+    });
+
+    it('skips the completed section while it is collapsed', async () => {
+      const listNote = createMockNote({ note_type: 'list', items: createMockListItems() });
+      renderNoteModal({ ...defaultProps, note: listNote });
+
+      fireEvent.click(screen.getByText('Completed items (1)'));
+      await act(async () => { await vi.runAllTimersAsync(); });
+
+      const inputs = screen.getAllByTestId('list-item-input');
+      expect(inputs).toHaveLength(1);
+
+      inputs[0]!.focus();
+      fireEvent.keyDown(inputs[0]!, { key: 'ArrowDown', code: 'ArrowDown' });
+
+      expect(inputs[0]).toHaveFocus();
+    });
+
     it('removing a list item from an existing note triggers auto-save', async () => {
       const listNote = createMockNote({
         note_type: 'list',
@@ -2217,16 +2397,35 @@ describe('NoteModal', () => {
       expect(onConvert).toHaveBeenCalledWith('1', {
         note_type: 'list',
         base_version: 1,
+        // The leading heading becomes the title rather than the first item.
+        title: 'Groceries',
         items: [
-          { text: 'Groceries', position: 0, completed: false, indent_level: 0 },
-          { text: 'Milk', position: 1, completed: true, indent_level: 0 },
-          { text: 'Eggs', position: 2, completed: false, indent_level: 0 },
+          { text: 'Milk', position: 0, completed: true, indent_level: 0 },
+          { text: 'Eggs', position: 1, completed: false, indent_level: 0 },
         ],
       });
       // The modal stays open on the converted note (refreshed via onRefresh),
       // rather than closing.
       expect(onClose).not.toHaveBeenCalled();
       expect(onRefresh).toHaveBeenCalled();
+    });
+
+    it('sends an empty title when the content does not open with a heading', async () => {
+      const note = createMockNote({ note_type: 'text', content: '- [x] Milk\n- Eggs' });
+      const onConvert = vi.fn().mockResolvedValue(undefined);
+
+      renderNoteModal({ ...defaultProps, note, onConvert });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Convert to list' }));
+      await vi.runAllTimersAsync();
+
+      expect(onConvert).toHaveBeenCalledWith('1', expect.objectContaining({
+        title: '',
+        items: [
+          { text: 'Milk', position: 0, completed: true, indent_level: 0 },
+          { text: 'Eggs', position: 1, completed: false, indent_level: 0 },
+        ],
+      }));
     });
 
     it('sends indent_level so nesting survives the conversion', async () => {

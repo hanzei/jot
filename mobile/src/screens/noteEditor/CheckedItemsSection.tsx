@@ -22,6 +22,7 @@ export interface ListItemHandlers {
   onBackspaceOnEmpty: (index: number) => void;
   onAssignPress: (itemId: string) => void;
   onFocus: (itemId: string, event: Parameters<NonNullable<TextInputProps['onFocus']>>[0]) => void;
+  onBlur: (itemId: string) => void;
 }
 
 interface CheckedItemsSectionProps {
@@ -126,6 +127,7 @@ export default function CheckedItemsSection({
           onBackspaceOnEmpty={() => handlers.onBackspaceOnEmpty(originalIndex)}
           onAssignPress={() => handlers.onAssignPress(item.id)}
           onFocus={(event) => handlers.onFocus(item.id, event)}
+          onBlur={() => handlers.onBlur(item.id)}
         />,
       );
     });

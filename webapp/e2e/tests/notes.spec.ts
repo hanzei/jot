@@ -506,6 +506,51 @@ test.describe('Notes', () => {
     await dashboardPage.expectListItemFocused(0);
   });
 
+  test('arrow keys cross the lines of a wrapped list item before leaving it', async ({ dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.clickNewNote();
+    await dashboardPage.selectListType();
+
+    // Whether a row wraps is invisible to its value, so only a real browser can
+    // answer where its lines are — the unit tests mock that measurement out.
+    // Long enough to take several lines; how many is measured below rather than
+    // assumed, since the wrap point moves with the viewport.
+    const wrapped = `Beta ${'beta '.repeat(40)}end`;
+    await dashboardPage.addListItem('Alpha');
+    await dashboardPage.addListItem(wrapped);
+    await dashboardPage.addListItem('Gamma');
+
+    // However many lines that comes to at this viewport, which is the number of
+    // presses the row should absorb before it gives the key up.
+    const lines = await dashboardPage.listItemLineCount(1);
+    expect(lines).toBeGreaterThan(2);
+
+    await dashboardPage.focusListItem(0);
+    await dashboardPage.pressKey('ArrowDown');
+    await dashboardPage.expectListItemFocused(1);
+
+    // Entering from above lands on the row's first line, so there is exactly one
+    // press per remaining line before the row runs out — which is what says the
+    // caret arrived at the top of it rather than anywhere else.
+    for (let i = 1; i < lines; i++) {
+      await dashboardPage.pressKey('ArrowDown');
+      await dashboardPage.expectListItemFocused(1);
+    }
+    await dashboardPage.pressKey('ArrowDown');
+    await dashboardPage.expectListItemFocused(2);
+
+    // Coming back up enters on the row's last line — the one the caret visually
+    // arrives at — so the same count applies in reverse.
+    await dashboardPage.pressKey('ArrowUp');
+    await dashboardPage.expectListItemFocused(1);
+    for (let i = 1; i < lines; i++) {
+      await dashboardPage.pressKey('ArrowUp');
+      await dashboardPage.expectListItemFocused(1);
+    }
+    await dashboardPage.pressKey('ArrowUp');
+    await dashboardPage.expectListItemFocused(0);
+  });
+
   test('pressing Enter on the last list item creates a new item', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.clickNewNote();
@@ -520,7 +565,7 @@ test.describe('Notes', () => {
     await dashboardPage.expectListItemFocused(1);
   });
 
-  test('converts a text note to a list and back, restoring the title as an h1 line and warning about dropped assignments', async ({ page, dashboardPage, request }) => {
+  test('converts a text note to a list and back, promoting a leading heading to the title and warning about dropped assignments', async ({ page, dashboardPage, request }) => {
     const collaboratorName = uniqueUsername('convert');
     const collaboratorPassword = 'testpass123';
 
@@ -553,8 +598,9 @@ test.describe('Notes', () => {
     expect(createResp.ok()).toBeTruthy();
     const sourceNote = await createResp.json();
 
-    // --- text -> list: block markers are consumed, inline formatting and
-    // nesting survive (docs/specs/markdown-rendering.md §2.2) ---
+    // --- text -> list: the leading heading becomes the title, block markers are
+    // consumed, inline formatting and nesting survive
+    // (docs/specs/markdown-rendering.md §2.2) ---
     await page.reload();
     await dashboardPage.noteCardByText('Groceries').click();
     await expect(page.getByRole('dialog').getByRole('button', { name: 'Close' })).toBeVisible();
@@ -564,23 +610,22 @@ test.describe('Notes', () => {
     let allNotes = await listNotesApi();
     let converted = allNotes.find((n: { id: string }) => n.id === sourceNote.id);
     expect(converted.note_type).toBe('list');
+    expect(converted.title).toBe('Groceries');
     expect(
       converted.items.map((item: { text: string; completed: boolean }) => ({ text: item.text, completed: item.completed })),
     ).toEqual([
-      { text: 'Groceries', completed: false },
       { text: '**Milk**', completed: true },
       { text: 'Eggs', completed: false },
       { text: 'Free range', completed: false },
     ]);
     // The indented line became a child of the item above it; the server rebuilt
     // parent_id from the indent_level the client sent.
-    expect(converted.items[2].parent_id).toBeNull();
-    expect(converted.items[3].parent_id).toBe(converted.items[2].id);
+    expect(converted.items[1].parent_id).toBeNull();
+    expect(converted.items[2].parent_id).toBe(converted.items[1].id);
 
-    // The modal stays open on the converted list note. Give it a title so it
-    // round-trips back as an h1 line below and is findable via the title-based
-    // note-lookup helpers.
-    await page.fill('input[placeholder="Note title..."]', 'Groceries List');
+    // The modal stays open on the converted list note, showing the promoted
+    // heading in the title field it now owns.
+    await expect(page.locator('input[placeholder="Note title..."]')).toHaveValue('Groceries');
     await dashboardPage.closeNoteModal();
 
     // --- list -> text: assigning an item requires sharing the note first ---
@@ -589,14 +634,14 @@ test.describe('Notes', () => {
       data: { user_id: collaboratorId },
     });
     expect(shareResp.ok()).toBeTruthy();
-    const assignResp = await request.patch(`/api/v1/notes/${converted.id}/items/${converted.items[1].id}`, {
+    const assignResp = await request.patch(`/api/v1/notes/${converted.id}/items/${converted.items[0].id}`, {
       headers: authHeaders,
       data: { assigned_to: collaboratorId },
     });
     expect(assignResp.ok()).toBeTruthy();
 
     await page.reload();
-    await dashboardPage.openNote('Groceries List');
+    await dashboardPage.openNote('Groceries');
     await dashboardPage.openModalOverflowMenu();
     await page.getByRole('menuitem', { name: 'Convert to text' }).click();
     await expect(page.getByText(/lose the assignment of 1 item/)).toBeVisible();
@@ -607,11 +652,11 @@ test.describe('Notes', () => {
     const revertedToText = allNotes.find((n: { id: string }) => n.id === sourceNote.id);
     expect(revertedToText.note_type).toBe('text');
     expect(revertedToText.title).toBe('');
-    // Inline formatting and nesting round-tripped. The content is not identical
-    // to the source: `# Groceries` comes back as a task line, because an item has
-    // only one representation (docs/specs/markdown-rendering.md §2.2).
+    // The title, inline formatting and nesting all round-tripped: the heading
+    // that became the title comes back as the same h1 line it started as
+    // (docs/specs/markdown-rendering.md §2.2).
     expect(revertedToText.content).toBe(
-      '# Groceries List\n\n- [ ] Groceries\n- [x] **Milk**\n- [ ] Eggs\n  - [ ] Free range',
+      '# Groceries\n\n- [x] **Milk**\n- [ ] Eggs\n  - [ ] Free range',
     );
   });
 });
