@@ -440,6 +440,8 @@ spec exists to prevent.
 | Mobile card preview renderer | `mobile/src/components/MarkdownPreview.tsx` |
 | Mobile item lexing + plain-text flattening | `mobile/src/utils/inlineMarkdown.ts` |
 | Mobile item renderer | `mobile/src/components/InlineMarkdown.tsx` |
+| Mobile editable-row swap (§1.2) | `mobile/src/components/ListItem.tsx` |
+| Mobile tap point → rendered offset | `mobile/src/utils/inlineCaret.ts` |
 | Card links-as-text switch | `links` option on both clients' renderers |
 | Mobile inline leaf rendering (shared by all three) | `mobile/src/components/inlineNodes.tsx` |
 | Mobile text metrics + colours | `mobile/src/utils/markdownStyles.ts` |

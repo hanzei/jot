@@ -402,6 +402,10 @@ function ListItem({
                   suppressHighlighting
                   // The input behind it is the row's real control and carries the
                   // value, so this is decoration for anyone not looking at it.
+                  // The input is not relabelled with the rendered words to match:
+                  // its value is the source, which is what a screen reader user
+                  // is about to edit, and the row's checkbox already announces
+                  // the words (`inlineMarkdownToText`).
                   accessibilityElementsHidden
                   importantForAccessibility="no-hide-descendants"
                   testID="list-item-text-rendered"
