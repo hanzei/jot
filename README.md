@@ -506,9 +506,15 @@ docker run -p 8080:8080 -e JOT_COOKIE_SECURE=false -v ./data:/data jot
 
 ### Available Tags
 
-- `hanzei/jot:latest` - Latest stable release (master branch)
+- `hanzei/jot:latest` / `hanzei/jot:stable` - Most recent tagged release
+- `hanzei/jot:<major>.<minor>.<patch>` - A specific release, also published as
+  `<major>.<minor>` and `<major>`
+- `hanzei/jot:unstable` - Latest master build (unreleased)
 - `hanzei/jot:pr-<number>` - Pull request builds
 - `hanzei/jot:<branch>-<sha>` - Specific commit builds
+
+Only the most recent release receives security fixes, and they ship forward
+rather than being backported — see [SECURITY.md](SECURITY.md#supported-versions).
 
 ### Custom Configuration
 
@@ -586,6 +592,18 @@ task run-webapp
 # Check database contents
 sqlite3 jot.db "SELECT * FROM users;"
 ```
+
+## Security
+
+Found a vulnerability? Please report it privately through
+[GitHub's private vulnerability reporting](https://github.com/hanzei/jot/security/advisories/new)
+rather than opening a public issue.
+
+[SECURITY.md](SECURITY.md) covers what to expect, which versions are supported,
+and Jot's threat model — including what is deliberately out of scope. Worth a
+look before reporting: Jot treats logged-in users as trustworthy collaborators,
+so the in-scope boundary is authentication and authorization, not hardening
+against a malicious insider.
 
 ## Contributing
 
