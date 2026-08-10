@@ -3,11 +3,13 @@
 # check-playwright-browser.sh — verify the Chromium build that the pinned
 # @playwright/test expects is actually present before running e2e tests.
 #
-# bootstrap.sh deliberately does not download browsers: it is the slowest setup
-# step and most sessions never run e2e. The cost of skipping it is that a
-# missing or version-mismatched browser otherwise surfaces as every spec failing
-# with "Executable doesn't exist at ...", which reads like a broken test suite
-# rather than a one-command fix. This turns it into that one command.
+# bootstrap.sh installs this browser too, so this check is normally a no-op —
+# but it stays as the safety net for JOT_BOOTSTRAP_SKIP_PLAYWRIGHT=1,
+# JOT_BOOTSTRAP_SKIP=1, or anyone who reaches test-e2e without ever running
+# bootstrap. Without it, a missing or version-mismatched browser surfaces as
+# every spec failing with "Executable doesn't exist at ...", which reads like
+# a broken test suite rather than a one-command fix. This turns it into that
+# one command.
 #
 # `task test-e2e` runs this first. Run it directly with:
 #   ./scripts/check-playwright-browser.sh

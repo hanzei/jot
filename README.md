@@ -116,6 +116,8 @@ compiled web app, while SQLite keeps the default deployment small and portable.
 - runs `npm ci` in `shared/` → `webapp/` → `mobile/`, in that order (`@jot/shared`
   is a `file:../shared` dependency of the other two), skipping any package whose
   `node_modules` is already up to date with its `package-lock.json`;
+- installs the Chromium build the pinned `@playwright/test` expects, so
+  `task test-e2e` works without a separate manual step;
 - warms the Go build cache, so the first `task lint-server` takes seconds rather
   than the couple of minutes `golangci-lint` needs to type-check every package
   cold;
@@ -124,12 +126,14 @@ compiled web app, while SQLite keeps the default deployment small and portable.
 It is idempotent, so re-running it on a provisioned checkout is close to a no-op:
 each package's install is stamped with a hash of its `package-lock.json`, so a
 pull that doesn't touch a lockfile skips straight past it, and one that does
-triggers `npm ci` there automatically. Three escape hatches:
+triggers `npm ci` there automatically; the Playwright install is a no-op
+whenever the expected Chromium build is already present. Four escape hatches:
 `JOT_BOOTSTRAP_SKIP=1` skips everything, `JOT_BOOTSTRAP_SKIP_NPM=1` skips just
-the npm installs, and `JOT_BOOTSTRAP_SKIP_GO_CACHE=1` skips the Go warm-up.
+the npm installs, `JOT_BOOTSTRAP_SKIP_PLAYWRIGHT=1` skips just the browser
+install, and `JOT_BOOTSTRAP_SKIP_GO_CACHE=1` skips the Go warm-up.
 
-It deliberately does **not** download Playwright browsers (the slowest step, and
-most work never touches e2e) and does **not** install or switch Node/Go versions.
+It deliberately does **not** install or switch Node/Go versions — pulling in
+nvm/mise and reshaping the shell environment is too invasive to do silently.
 `nix-shell` and Claude Code's `SessionStart` hook both run this script rather than
 carrying their own copy of the setup steps.
 
@@ -191,10 +195,11 @@ task test-e2e -- notes.spec.ts            # one Playwright spec
 ```
 
 `task test-e2e` needs the Chromium build that the pinned `@playwright/test`
-expects. Bootstrap does not download it, so the first run on a new machine stops
-with the install command (`cd webapp && npx playwright install chromium`) instead
-of failing every spec. Check it on its own with
-`./scripts/check-playwright-browser.sh`.
+expects; bootstrap already installs it. If that step was skipped
+(`JOT_BOOTSTRAP_SKIP_PLAYWRIGHT=1`, `JOT_BOOTSTRAP_SKIP=1`, or bootstrap never
+ran), `task test-e2e` stops with the install command
+(`cd webapp && npx playwright install chromium`) instead of failing every
+spec. Check it on its own with `./scripts/check-playwright-browser.sh`.
 
 4. **Access the application**:
    - Open `http://localhost:8080` in your browser
