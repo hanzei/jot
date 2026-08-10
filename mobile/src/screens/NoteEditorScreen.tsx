@@ -2789,6 +2789,16 @@ export default function NoteEditorScreen() {
               data={uncheckedItems}
               keyExtractor={(item) => item.id}
               scrollable={false}
+              // Inherited from the ScrollViewContainer above rather than
+              // defaulted: this list is a FlatList, so it has a ScrollView of its
+              // own, and a ScrollView left at the default ('never') captures the
+              // responder for any tap that lands on something which is not a
+              // TextInput while one is focused — blurring it, dismissing the
+              // keyboard, and swallowing the tap. Harmless while every row's tap
+              // target *was* its TextInput; not once a rendered row's target is a
+              // Text (docs/specs/markdown-rendering.md §1.2), where it cost a
+              // first tap on every row-to-row move.
+              keyboardShouldPersistTaps="handled"
               shouldUpdateActiveItem
               panGesture={listDragGesture}
               onReorder={handleListReorder}
