@@ -308,6 +308,11 @@ function ListItem({
   return (
     <View
       style={[styles.container, { marginLeft: normalizedIndentLevel * VALIDATION.INDENT_PX_PER_LEVEL }]}
+      // TEMP DEBUG #867 — remove before merge. The row's height across the swap:
+      // if it changes, the list's itemLayoutAnimation runs on this cell.
+      onLayout={(e) =>
+        console.info('[867] row layout', JSON.stringify({ len: text.length, h: Math.round(e.nativeEvent.layout.height), showRendered }))
+      }
       testID="list-item-row"
     >
       {showDragHandle && onDrag ? (
