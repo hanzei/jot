@@ -11,12 +11,10 @@ Markdown applies to the **`content` of text notes** in full, and to **list-note
 item text** in an inline-only subset (§2.1):
 
 - **Note titles are plain.** They are rendered as text everywhere.
-- **List-item Markdown renders everywhere on the webapp, and on display surfaces
-  on mobile.** Note cards, mobile's read-only editor and the collapsed-completed
-  parent label render it on both clients. The webapp's *editable* row renders it
-  too, swapping to source while it holds the caret (§1.2). Mobile's editable row
-  still shows source; closing that gap is
-  [#867](https://github.com/hanzei/jot/issues/867).
+- **List-item Markdown renders everywhere, on both clients.** Note cards,
+  mobile's read-only editor and the collapsed-completed parent label render it,
+  and so does the *editable* row, which swaps to source while it holds the caret
+  (§1.2).
 
 ### 1.1 Note cards render links as text
 
@@ -43,29 +41,47 @@ different reason — §1.2.
 Both clients render the same feature set from the same source string, so a note
 written on a phone reads identically in a browser and the other way round.
 
-### 1.2 The webapp's editable row swaps between rendered and source
+### 1.2 The editable row swaps between rendered and source
 
-A list-item row on the webapp shows its Markdown rendered until it holds the
-caret, and its source for exactly as long as it does. Type `**Milk**`, move
-away, and the row reads **Milk**; click back into it and it reads `**Milk**`
-again, with the caret where you clicked.
+A list-item row shows its Markdown rendered until it holds the caret, and its
+source for exactly as long as it does. Type `**Milk**`, move away, and the row
+reads **Milk**; come back to it and it reads `**Milk**` again, with the caret
+where you pointed.
+
+The decisions below were made on the webapp and then carried to mobile, which is
+why they are written once. Where the platforms genuinely differ — how a point
+becomes a caret, and what keeps the field alive across the swap — the difference
+is called out inline rather than given its own section.
 
 **Focused and editing are the same state.** That is the decision the rest
 follows from. Every keystroke a row handles — Tab to indent, Enter to split,
 arrows to move between rows and through the completed-item suggestions — stays
-on a real `<textarea>`, because a row that has the caret *is* a textarea. There
-is no render-mode duplicate of any of it, and no focusable non-interactive
-element in the markup for a screen reader to find or axe to flag.
+on a real text field, because a row that has the caret *is* one. There is no
+render-mode duplicate of any of it, and no focusable non-interactive element in
+the markup for a screen reader to find or axe to flag.
 
 Four consequences, each of which is a trap avoided rather than a preference:
 
-- **The textarea is never unmounted**, only moved out of flow and faded to
-  `opacity-0`. Everything that reaches for a row imperatively — NoteModal's
-  Enter-to-split, its arrow navigation, its "add item" focus, all through the
-  `itemInputRefs` map — keeps working on a row that happens to be rendered, and
-  the height the field comes back at was measured while it was on screen rather
-  than at the moment of focus. `visibility: hidden` and `display: none` both
-  remove an element from the focus order, so neither can be used here.
+- **The field is never unmounted**, only moved out of flow and faded to zero
+  opacity. Everything that reaches for a row imperatively — Enter-to-split,
+  arrow navigation, "add item" focus, all through the client's map of row refs —
+  keeps working on a row that happens to be rendered, and on the webapp the
+  height the field comes back at was measured while it was on screen rather than
+  at the moment of focus. `visibility: hidden` and `display: none` both remove
+  an element from the focus order, so neither can be used there; RN's
+  `display: 'none'` detaches the native view, which is the same problem.
+
+  **On mobile this is the whole feature, not a detail of it.** React Native
+  keeps the software keyboard up when focus moves directly between two mounted
+  `TextInput`s, and generally does not when it moves across an unmount — so a
+  row swap that unmounted the field would dismiss and reopen the keyboard, and
+  jump the scroll position with it, on the most common interaction a list note
+  has. Two other approaches were considered and rejected: keeping the outgoing
+  field mounted for one frame (a timing guess, and one that fails under load),
+  and a whole-list preview toggle (which would mean leaving preview mode to tick
+  a checkbox — the primary interaction on a list note, and the reason the swap is
+  per row in the first place). Never unmounting has no such failure mode, and is
+  what the webapp already does.
 - **A row only swaps when rendering changes something.** `buy milk` renders to
   `buy milk`, so that row keeps the always-live input it has always had. So do
   `# not a heading` and `![alt](url)`, which §2.1 shows as literal source. Only
@@ -76,24 +92,45 @@ Four consequences, each of which is a trap avoided rather than a preference:
   the same pixel has no way to resolve itself — so the label renders as ordinary
   text and nothing looks followable, the same outcome as a card (§1.1) reached
   by a different route. A read-only row has no caret to place, so its links work
-  and it drops the hidden textarea entirely rather than leaving a focusable copy
+  and it drops the hidden field entirely rather than leaving a focusable copy
   of the text behind the rendered one.
 - **Completed rows render like any other**, `~~strike~~` and all, which §2.1
   already accepted for display surfaces. A struck word inside an already-struck
   row is indistinguishable; that is the cost of the subset staying a subset.
 
-**A click has to place the caret itself.** The user points at character 4 of
-`buy milk` and the field holds `buy **milk**`, where that character is at 6.
-The browser maps the point to a position in the rendered DOM; `inlineSourceOffset`
-maps that back through the source spans `normalizeInlineTokens` records. Without
-it the caret lands at 0 on every click — which is what the *text-note* editor
-does today, and is tolerable there only because it happens once per note instead
-of once per row, and because the next click lands in a real textarea and
-corrects it.
+**A click or tap has to place the caret itself.** The user points at character 4
+of `buy milk` and the field holds `buy **milk**`, where that character is at 6.
+`inlineSourceOffset` maps a *rendered* offset back through the source spans
+`normalizeInlineTokens` records — that half is shared. Without it the caret lands
+at 0 on every click, which is what the *text-note* editor does today, and is
+tolerable there only because it happens once per note instead of once per row.
+
+**Getting to that rendered offset is per client**, because only the webapp is
+handed one:
+
+- The browser has `caretPositionFromPoint`, which resolves a point to a DOM
+  position; `webapp/src/utils/inlineCaret.ts` then counts the visible characters
+  before it, `<br>` included.
+- React Native has no equivalent, so `mobile/src/utils/inlineCaret.ts`
+  reconstructs the mapping from the line boxes `onTextLayout` reports: which line
+  the tap fell in, then a linear interpolation across it. That is exact only in a
+  monospaced face — in a proportional one a tap inside a long line can land a
+  character or two off, the same order of error the source mapping already
+  tolerates elsewhere, and correctable the moment the caret is visible. The
+  alternative is laying out every substring separately, on every row of every
+  list note.
+
+Both clients then hand the offset to the field: the webapp with
+`setSelectionRange`, mobile through the controlled `selection` prop, released
+once the input reports the caret landed (the same force-and-release the
+formatting bar uses, §5.1).
 
 **Both forms must be the same height**, or every click shifts the rows below it.
-They share one class list for width, padding and wrapping, and one property that
-matters more than it looks: **both are `block`**.
+They carry the same width, padding and wrapping — one class list on the webapp,
+one style object on mobile — and each client has one property that matters more
+than it looks.
+
+On the webapp that property is that **both are `block`**.
 
 That is there to remove the line box from the question rather than to match it.
 A textarea is an `inline-block` by default, so it sits on a baseline and the line
@@ -119,12 +156,25 @@ Where the two forms genuinely differ — markers moving a wrap point, so the sou
 occupies more lines — the change is animated over 120ms, behind
 `prefersReducedMotion`.
 
-**A mouse drag does not collapse the row it starts on.** The grip prevents the
-default mousedown, so grabbing it never moves focus off the field. Otherwise the
-row would change height in the same tick the `PointerSensor` activates and
-dnd-kit measures, and the drag would run against a rect for a size the row no
-longer has. A keyboard drag needs no such guard: it arrives by Tab, so the row
-has already collapsed and settled before Space starts it.
+On mobile the equivalent property is an explicit **`lineHeight`**, plus an
+explicit `paddingLeft`. Left unset, a `Text` and a `TextInput` each derive their
+line height from the font and disagree on Android, where the input adds the
+font's own ascent/descent padding on top; an Android `TextInput` likewise
+inherits the theme's `EditText` padding on any side a style does not set, while a
+`Text` inherits nothing. Pinning both makes each box `lines × lineHeight +
+padding` from the same numbers on either platform. Nothing is animated: the
+rendered form is never wider than its source, so the wrap point moves the other
+way, and a row that does change height changes it by shrinking.
+
+**A drag does not change the height of the row it starts on.** The webapp's grip
+prevents the default mousedown, so grabbing it never moves focus off the field;
+otherwise the row would change height in the same tick the `PointerSensor`
+activates and dnd-kit measures, and the drag would run against a rect for a size
+the row no longer has. A keyboard drag needs no such guard: it arrives by Tab, so
+the row has already collapsed and settled before Space starts it. Mobile reaches
+the same guarantee from the other end — the row's form is *frozen* for as long as
+`react-native-reorderable-list` reports it active, so whatever takes focus off
+the field mid-gesture, the lifted cell keeps the size the list measured.
 
 | | Webapp | Mobile |
 |---|---|---|
@@ -416,6 +466,8 @@ spec exists to prevent.
 | Mobile card preview renderer | `mobile/src/components/MarkdownPreview.tsx` |
 | Mobile item lexing + plain-text flattening | `mobile/src/utils/inlineMarkdown.ts` |
 | Mobile item renderer | `mobile/src/components/InlineMarkdown.tsx` |
+| Mobile editable-row swap (§1.2) | `mobile/src/components/ListItem.tsx` |
+| Mobile tap point → rendered offset | `mobile/src/utils/inlineCaret.ts` |
 | Card links-as-text switch | `links` option on both clients' renderers |
 | Mobile inline leaf rendering (shared by all three) | `mobile/src/components/inlineNodes.tsx` |
 | Mobile text metrics + colours | `mobile/src/utils/markdownStyles.ts` |
@@ -573,12 +625,6 @@ The heading button stops at `###`, matching §2: a fourth press would produce an
 
 - **Interactive checkboxes.** Toggling a rendered ☐ would mean writing back into
   `content` — a much larger feature than rendering.
-- **Markdown in mobile's *editable* list-item row.** The webapp's row swaps
-  between rendered and source (§1.2); mobile's still shows source, because the
-  same swap there unmounts a focused `TextInput` on every row change and the
-  software keyboard goes with it. Tracked as
-  [#867](https://github.com/hanzei/jot/issues/867), which records the decisions
-  the webapp already made so mobile only has to solve the keyboard problem.
 - **Block Markdown in list items.** Not a gap to be filled later — §2.1 explains
   why an item cannot hold it.
 - **Syntax highlighting** in code blocks. The webapp allowlist drops the
@@ -602,6 +648,14 @@ the other. Adding a case breaks both suites until both are updated.
 
 `shared/src/__tests__/inlineMarkdown.test.ts` covers the item corpus a third
 time, at the normalizer, where the policy actually lives.
+
+The editable row's swap (§1.2) is covered per client rather than by the corpus,
+since it is a state machine rather than a rendering:
+`webapp/src/components/__tests__/SortableItem.test.tsx` and
+`mobile/__tests__/ListItem.test.tsx` for which form is showing and that the
+field survives it, `webapp/src/utils/__tests__/inlineCaret.test.ts` and
+`mobile/__tests__/inlineCaret.test.ts` for the point-to-caret mapping — the
+half of it that exists without a layout engine.
 
 `webapp/e2e/tests/markdown.spec.ts` covers the same feature set through the
 browser, on real note content.
