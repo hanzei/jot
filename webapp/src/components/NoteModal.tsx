@@ -584,7 +584,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     ));
   }, [content]);
 
-  const INDENT_DRAG_THRESHOLD = 50;
+  // Mobile snaps indent level to the nearest INDENT_PX_PER_LEVEL step (rounding),
+  // so it takes half a step — 12px — to commit to nesting. The desktop drag has no
+  // live snap preview, only a threshold checked once on drop, so it needs a full
+  // step's worth of travel to read as a deliberate horizontal drag rather than
+  // jitter alongside a vertical reorder.
+  const INDENT_DRAG_THRESHOLD = VALIDATION.INDENT_PX_PER_LEVEL;
 
   // indentListItem nests (delta 1) or un-nests (delta -1) an item by changing its
   // parentId, the source of truth for grouping. Indenting attaches the item to
