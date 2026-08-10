@@ -784,6 +784,46 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     return null;
   };
 
+  /**
+   * Runs a formatting transform against an item row's text and selection, then
+   * writes the result back through applyTextareaEdit — same undo-preserving
+   * write-back as applyMarkdownEdit above, just addressed at a row's own
+   * textarea instead of the single shared contentRef.
+   *
+   * The inserted markers are characters the user did not type, so a transform
+   * that would push the item over VALIDATION.ITEM_TEXT_MAX_LENGTH is dropped
+   * rather than truncated — the same choice handleListContinuation makes at
+   * the content cap.
+   */
+  const applyItemMarkdownEdit = (
+    itemId: string,
+    textarea: HTMLTextAreaElement,
+    transform: (state: EditorText) => EditorText,
+  ) => {
+    const next = transform({
+      text: textarea.value,
+      selection: { start: textarea.selectionStart, end: textarea.selectionEnd },
+    });
+    if (validateItemText(next.text, t)) return;
+
+    const selection = clampSelection(next.selection, next.text);
+    if (!applyTextareaEdit(textarea, next.text, selection)) {
+      handleTextUpdate(itemId, next.text);
+      // handleTextUpdate is a controlled update: the row's textarea only
+      // picks up the new value on the next render, and assigning .value then
+      // resets the caret to the end. Same deferred-restore idiom as the
+      // insert-before-item/split-item focus handling above, addressed at
+      // this row via itemInputRefs instead of a fresh item's id.
+      setTimeout(() => {
+        const el = itemInputRefs.current.get(itemId);
+        if (el) {
+          el.focus();
+          el.setSelectionRange(selection.start, selection.end);
+        }
+      }, 0);
+    }
+  };
+
   const handleItemKeyDown = (index: number, e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
@@ -823,8 +863,24 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       return;
     }
 
-    if (e.repeat) return;
     if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
+
+    // Same modifier guard as the content textarea's Ctrl/Cmd+B/I (see the
+    // comment there): Shift and Alt must both be absent, since the
+    // combinations they form — Ctrl+Shift+B toggles Chrome's bookmarks bar —
+    // belong to the browser, not the editor.
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey) {
+      const key = e.key.toLowerCase();
+      if (key === 'b' || key === 'i') {
+        e.preventDefault();
+        const currentItem = findTargetItem(index);
+        if (!currentItem) return;
+        applyItemMarkdownEdit(currentItem.id, e.currentTarget, (state) => toggleInlineMarker(state, key === 'b' ? '**' : '*'));
+        return;
+      }
+    }
+
+    if (e.repeat) return;
 
     if (e.key === 'Enter' && e.shiftKey) {
       return;

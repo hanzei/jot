@@ -263,7 +263,7 @@
     "noteColorDescription": "Otwórz selektor kolorów",
     "noteDeleteKey": "Del / Backspace",
     "noteDeleteDescription": "Usuń notatkę (z potwierdzeniem)",
-    "formatSection": "Formatowanie (podczas edycji notatki tekstowej)",
+    "formatSection": "Formatowanie (podczas edycji treści notatki)",
     "formatBoldKey": "Ctrl + B",
     "formatBoldDescription": "Pogrub zaznaczony tekst",
     "formatItalicKey": "Ctrl + I",

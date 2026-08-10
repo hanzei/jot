@@ -263,7 +263,7 @@
     "noteColorDescription": "Farbauswahl öffnen",
     "noteDeleteKey": "Entf / Rücktaste",
     "noteDeleteDescription": "Notiz löschen (mit Bestätigung)",
-    "formatSection": "Formatierung (beim Bearbeiten einer Textnotiz)",
+    "formatSection": "Formatierung (beim Bearbeiten von Notizinhalten)",
     "formatBoldKey": "Strg + B",
     "formatBoldDescription": "Ausgewählten Text fett formatieren",
     "formatItalicKey": "Strg + I",

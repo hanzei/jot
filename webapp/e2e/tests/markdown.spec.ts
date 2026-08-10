@@ -466,4 +466,25 @@ test.describe('Markdown in list-item rows', () => {
     await expect(dashboardPage.listItemRendered(0)).toHaveText('see docs');
     await expect(dashboardPage.listItemRendered(0).locator('a')).toHaveCount(0);
   });
+
+  test('Ctrl+B and Ctrl+I format a list item, and Ctrl+Shift+B is left to the browser', async ({ page, dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createListNote('Shortcut Note', ['buy milk today']);
+    await dashboardPage.openNote('Shortcut Note');
+
+    const input = dashboardPage.listItemInput(0);
+    await input.click();
+    await input.evaluate((el: HTMLTextAreaElement) => el.setSelectionRange(4, 8));
+    await page.keyboard.press('Control+b');
+    await dashboardPage.expectListItemValue(0, 'buy **milk** today');
+
+    // "buy **milk** today" — "today" now sits at [13, 18) after the bold markers shifted it.
+    await input.evaluate((el: HTMLTextAreaElement) => el.setSelectionRange(13, 18));
+    await page.keyboard.press('Control+i');
+    await dashboardPage.expectListItemValue(0, 'buy **milk** *today*');
+
+    await input.evaluate((el: HTMLTextAreaElement) => el.setSelectionRange(0, 3));
+    await page.keyboard.press('Control+Shift+b');
+    await dashboardPage.expectListItemValue(0, 'buy **milk** *today*');
+  });
 });

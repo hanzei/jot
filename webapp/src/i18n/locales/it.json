@@ -263,7 +263,7 @@
     "noteColorDescription": "Apri il selettore di colori",
     "noteDeleteKey": "Canc / Backspace",
     "noteDeleteDescription": "Elimina la nota (con conferma)",
-    "formatSection": "Formattazione (durante la modifica di una nota di testo)",
+    "formatSection": "Formattazione (durante la modifica del contenuto di una nota)",
     "formatBoldKey": "Ctrl + B",
     "formatBoldDescription": "Rendere in grassetto il testo selezionato",
     "formatItalicKey": "Ctrl + I",

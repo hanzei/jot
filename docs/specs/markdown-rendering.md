@@ -619,6 +619,14 @@ discard everything typed before it.
 The heading button stops at `###`, matching §2: a fourth press would produce an
 `####` that renders as body text.
 
+`Ctrl`/`Cmd`+`B` and `+I` reuse `toggleInlineMarker` from a keydown handler
+rather than a toolbar button, and — unlike the six-button bar above — are not
+confined to the text-note content field: a list item's row wires the same two
+shortcuts (`webapp/src/components/NoteModal.tsx`, `handleItemKeyDown`), since
+an item renders the same inline subset as content (§2.1). Heading, bullet,
+checkbox and strikethrough stay toolbar-only; the last has no keyboard
+shortcut on either surface.
+
 ---
 
 ## 6. Deliberately not covered
