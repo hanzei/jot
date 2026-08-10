@@ -675,7 +675,7 @@ export class DashboardPage {
     await this.page.keyboard.press('Escape');
 
     const card = this.page.locator('[data-testid="note-card"]').filter({ hasText: noteTitle });
-    await expect(card.locator('svg[role="img"], img[alt]').first()).toBeVisible();
+    await expect(card.getByRole('img', { name: username, exact: true })).toBeVisible();
   }
 
   /** Creates a note and shares it, leaving a share-history record behind. */
