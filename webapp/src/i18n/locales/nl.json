@@ -263,7 +263,7 @@
     "noteColorDescription": "Kleurkiezer openen",
     "noteDeleteKey": "Del / Backspace",
     "noteDeleteDescription": "Notitie verwijderen (met bevestiging)",
-    "formatSection": "Opmaak (tijdens het bewerken van een tekstnotitie)",
+    "formatSection": "Opmaak (tijdens het bewerken van notitie-inhoud)",
     "formatBoldKey": "Ctrl + B",
     "formatBoldDescription": "Geselecteerde tekst vet maken",
     "formatItalicKey": "Ctrl + I",

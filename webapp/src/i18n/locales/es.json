@@ -263,7 +263,7 @@
     "noteColorDescription": "Abrir el selector de color",
     "noteDeleteKey": "Supr / Retroceso",
     "noteDeleteDescription": "Eliminar la nota (con confirmación)",
-    "formatSection": "Formato (al editar una nota de texto)",
+    "formatSection": "Formato (al editar el contenido de una nota)",
     "formatBoldKey": "Ctrl + B",
     "formatBoldDescription": "Poner en negrita el texto seleccionado",
     "formatItalicKey": "Ctrl + I",

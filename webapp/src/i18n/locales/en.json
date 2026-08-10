@@ -263,7 +263,7 @@
     "noteColorDescription": "Open the color picker",
     "noteDeleteKey": "Del / Backspace",
     "noteDeleteDescription": "Delete the note (with confirmation)",
-    "formatSection": "Formatting (while editing a text note)",
+    "formatSection": "Formatting (while editing note content)",
     "formatBoldKey": "Ctrl + B",
     "formatBoldDescription": "Bold the selected text",
     "formatItalicKey": "Ctrl + I",
