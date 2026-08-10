@@ -659,27 +659,28 @@ export class DashboardPage {
     await dialog.getByRole('button', { name: colorName, exact: true }).click();
   }
 
-  /** Shares a note with a user via the card context menu and share modal. */
+  /**
+   * Shares a note with a user via the card context menu and share modal.
+   *
+   * Waits for the collaborator avatar to appear on the card before returning:
+   * the share is only useful to a caller once it is reflected in the notes
+   * list, since UI gated on the note's collaborators (e.g. the list-item
+   * assign button) reads that list, not the share request's response.
+   */
   async shareNoteWithUser(noteTitle: string, username: string) {
     await this.openNoteMenu(noteTitle);
     await this.page.getByRole('menuitem', { name: /share/i }).click();
     await this.page.getByPlaceholder(/search users/i).fill(username);
     await this.page.getByText(username).click();
     await this.page.keyboard.press('Escape');
+
+    const card = this.page.locator('[data-testid="note-card"]').filter({ hasText: noteTitle });
+    await expect(card.locator('svg[role="img"], img[alt]').first()).toBeVisible();
   }
 
-  /**
-   * Creates a note and shares it, leaving a share-history record behind.
-   *
-   * Waits for the collaborator avatar to appear on the card before returning:
-   * the share is only useful to a caller once it is reflected in the notes
-   * list, and `shareNoteWithUser` closes the modal without waiting for the
-   * request to land.
-   */
+  /** Creates a note and shares it, leaving a share-history record behind. */
   async createAndShareNote(noteTitle: string, username: string) {
     await this.createNote(noteTitle);
     await this.shareNoteWithUser(noteTitle, username);
-    const card = this.page.locator('[data-testid="note-card"]').filter({ hasText: noteTitle });
-    await expect(card.locator('svg[role="img"], img[alt]').first()).toBeVisible();
   }
 }
