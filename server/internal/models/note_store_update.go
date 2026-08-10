@@ -134,12 +134,12 @@ func (s *noteStore) updateNoteContentTx(ctx context.Context, tx *sql.Tx, id, tit
 // ConvertType changes a note's type in place, replacing its content
 // representation (text content <-> title+items) while preserving its ID,
 // labels, shares, and per-user state (pin/archive/color/position). The
-// caller (handler) supplies the precomputed content/items — this method only
-// validates access and persists them atomically. targetItems is inserted
-// only when targetType is NoteTypeList; any existing items are deleted
-// regardless of direction (a text note has none, so the delete is a no-op in
-// that direction).
-func (s *noteStore) ConvertType(ctx context.Context, id, userID string, targetType NoteType, content string, targetItems []NewNoteItem, baseVersion *int) (*Note, error) {
+// caller (handler) supplies the precomputed title/content/items — this method
+// only validates access and persists them atomically. title and targetItems
+// apply only when targetType is NoteTypeList (a text note has neither, so the
+// title is cleared and the item delete is a no-op in that direction); existing
+// items are deleted regardless of direction.
+func (s *noteStore) ConvertType(ctx context.Context, id, userID string, targetType NoteType, title, content string, targetItems []NewNoteItem, baseVersion *int) (*Note, error) {
 	if !targetType.Valid() {
 		return nil, ErrInvalidNoteType
 	}
@@ -158,7 +158,7 @@ func (s *noteStore) ConvertType(ctx context.Context, id, userID string, targetTy
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	alreadyApplied, err := s.convertNoteRowTx(ctx, tx, id, targetType, content, targetItems, baseVersion)
+	alreadyApplied, err := s.convertNoteRowTx(ctx, tx, id, targetType, title, content, targetItems, baseVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -192,11 +192,11 @@ func (s *noteStore) ConvertType(ctx context.Context, id, userID string, targetTy
 // already committed this exact conversion (detected via the idempotent-replay
 // check below); the caller should then skip re-touching note_items and just
 // commit, since the winning write already did that atomically.
-func (s *noteStore) convertNoteRowTx(ctx context.Context, tx *sql.Tx, id string, targetType NoteType, content string, targetItems []NewNoteItem, baseVersion *int) (alreadyApplied bool, err error) {
+func (s *noteStore) convertNoteRowTx(ctx context.Context, tx *sql.Tx, id string, targetType NoteType, title, content string, targetItems []NewNoteItem, baseVersion *int) (alreadyApplied bool, err error) {
 	// deleted_at IS NULL guards against a concurrent trash landing between the
 	// HasAccess check in ConvertType and this UPDATE.
-	query := `UPDATE notes SET title = '', content = ?, note_type = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL`
-	args := []any{content, targetType, id}
+	query := `UPDATE notes SET title = ?, content = ?, note_type = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL`
+	args := []any{title, content, targetType, id}
 	if baseVersion != nil {
 		query += ` AND version = ?`
 		args = append(args, *baseVersion)
@@ -218,11 +218,11 @@ func (s *noteStore) convertNoteRowTx(ctx context.Context, tx *sql.Tx, id string,
 
 	// Zero rows means the version guard did not match. Re-read to check whether a
 	// concurrent write already applied this *exact* conversion (matching type
-	// and content/items, not just type — a differently-timed concurrent
+	// and title/content/items, not just type — a differently-timed concurrent
 	// conversion could otherwise be mistaken for this caller's own result); if
 	// so, treat it as a no-op success rather than a conflict (mirrors
 	// updateNoteContentTx's idempotent-replay handling).
-	matches, err := s.conversionAlreadyAppliedTx(ctx, tx, id, targetType, content, targetItems)
+	matches, err := s.conversionAlreadyAppliedTx(ctx, tx, id, targetType, title, content, targetItems)
 	if err != nil {
 		return false, err
 	}
@@ -234,14 +234,14 @@ func (s *noteStore) convertNoteRowTx(ctx context.Context, tx *sql.Tx, id string,
 
 // conversionAlreadyAppliedTx reports whether the note currently stored at id
 // already matches the exact conversion result described by targetType/content
-// (for a text target) or targetItems (for a list target).
-func (s *noteStore) conversionAlreadyAppliedTx(ctx context.Context, tx *sql.Tx, id string, targetType NoteType, content string, targetItems []NewNoteItem) (bool, error) {
+// (for a text target) or targetType/title/targetItems (for a list target).
+func (s *noteStore) conversionAlreadyAppliedTx(ctx context.Context, tx *sql.Tx, id string, targetType NoteType, title, content string, targetItems []NewNoteItem) (bool, error) {
 	var currentType NoteType
-	var currentContent string
+	var currentTitle, currentContent string
 	err := tx.QueryRowContext(ctx,
-		s.d.RewritePlaceholders(`SELECT note_type, content FROM notes WHERE id = ? AND deleted_at IS NULL`),
+		s.d.RewritePlaceholders(`SELECT note_type, title, content FROM notes WHERE id = ? AND deleted_at IS NULL`),
 		id,
-	).Scan(&currentType, &currentContent)
+	).Scan(&currentType, &currentTitle, &currentContent)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return false, ErrNoteNotFound
@@ -253,6 +253,11 @@ func (s *noteStore) conversionAlreadyAppliedTx(ctx context.Context, tx *sql.Tx, 
 	}
 	if targetType == NoteTypeText {
 		return currentContent == content, nil
+	}
+	// A list target carries a title, so two conversions that produce the same
+	// items from differently titled content are not the same conversion.
+	if currentTitle != title {
+		return false, nil
 	}
 
 	rows, err := tx.QueryContext(ctx,

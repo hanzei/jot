@@ -1,3 +1,5 @@
+import { VALIDATION } from './constants';
+import { exceedsCodePointLimit } from './text';
 import type { NoteItem } from './types';
 
 // Text ↔ list conversion.
@@ -31,6 +33,12 @@ import type { NoteItem } from './types';
 const LIST_MARKER_RE = /^(?:[-*+]|\d+\.)\s+(?:\[([ xX])\]\s*)?/;
 const BLOCKQUOTE_RE = /^(?:>\s*)+/;
 const HEADING_RE = /^#{1,6}\s+/;
+/**
+ * A heading standing on its own line, with its text captured. Leading
+ * whitespace is tolerated (it is meaningless in this line-based model), but
+ * nothing else may precede the `#` — see promotableHeadingTitle.
+ */
+const HEADING_PROMOTION_RE = /^[ \t]*#{1,6}[ \t]+(.*)$/;
 const LEADING_WHITESPACE_RE = /^[ \t]*/;
 
 /** A tab advances to the next 4-column stop, as in CommonMark. */
@@ -106,15 +114,66 @@ export function parseTextLineAsListItem(rawLine: string): ConvertedListItem | nu
   return line ? { text: line, completed, indentLevel } : null;
 }
 
+export interface ConvertedListNote {
+  /**
+   * The promoted heading, or '' when the content did not open with one. A list
+   * note with no title is the normal case, not an error.
+   */
+  title: string;
+  items: ConvertedListItem[];
+}
+
 /**
- * Converts text-note content into list items, one per non-blank line, each
- * carrying the indent level the caller should send as `indent_level`.
+ * Returns the title a line should be promoted to, or null when it is not a
+ * promotable heading.
+ *
+ * Only a *plain* ATX heading qualifies — `> # Groceries` and `- # Groceries`
+ * do not, because there the `#` sits inside a quote or a list item and
+ * promoting it would take a title out of something the user wrote as a nested
+ * construct. A setext heading (`Groceries` over `=====`) does not qualify
+ * either: this converter is line-by-line by design, and recognizing setext
+ * would mean lookahead plus a rule for the leftover underline.
  */
-export function textToListItems(content: string): ConvertedListItem[] {
-  return content
-    .split('\n')
-    .map(parseTextLineAsListItem)
-    .filter((item): item is ConvertedListItem => item !== null);
+function promotableHeadingTitle(rawLine: string): string | null {
+  const match = HEADING_PROMOTION_RE.exec(rawLine);
+  if (!match) return null;
+  const title = match[1]!.trim();
+  // An empty heading (`#` with nothing after it) is not a title; leaving it
+  // unpromoted lets parseTextLineAsListItem drop the line as it always has.
+  if (!title) return null;
+  // Over the limit, the line stays an item rather than being truncated: the
+  // server would reject the title outright, and silently cutting a heading in
+  // half loses text the note still contains everywhere else.
+  if (exceedsCodePointLimit(title, VALIDATION.TITLE_MAX_LENGTH)) return null;
+  return title;
+}
+
+/**
+ * Converts text-note content into a list note: one item per non-blank line,
+ * each carrying the indent level the caller should send as `indent_level`.
+ *
+ * When the first non-blank line is a heading it becomes the list's title
+ * instead of its first item — the inverse of `listToText`, which writes the
+ * title out as an `# h1` line. Without this, a list note that made a round
+ * trip through text came back with its title demoted to an item and the note
+ * itself untitled. Any heading level is promoted, not just `#`: `## Groceries`
+ * is a title a user typed as a heading, and only accepting `#` would make the
+ * feature look broken for it. The level itself is not preserved — a list note
+ * has one title, and converting back writes it as `#`.
+ */
+export function textToListNote(content: string): ConvertedListNote {
+  const lines = content.split('\n');
+  const headingIndex = lines.findIndex((line) => line.trim() !== '');
+  const title = headingIndex === -1 ? null : promotableHeadingTitle(lines[headingIndex]!);
+
+  const itemLines = title === null ? lines : lines.filter((_, index) => index !== headingIndex);
+
+  return {
+    title: title ?? '',
+    items: itemLines
+      .map(parseTextLineAsListItem)
+      .filter((item): item is ConvertedListItem => item !== null),
+  };
 }
 
 /**

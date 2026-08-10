@@ -1,6 +1,18 @@
 import { describe, it, expect } from 'vitest';
-import { parseTextLineAsListItem, textToListItems, listToText } from '../noteConversion';
+import { parseTextLineAsListItem, textToListNote, listToText } from '../noteConversion';
+import { VALIDATION } from '../constants';
 import type { NoteItem } from '../types';
+
+/** Items only, for the many assertions that do not care about the title. */
+function textToListItems(content: string) {
+  return textToListNote(content).items;
+}
+
+/** text → list → text, as the two clients perform it end to end. */
+function roundTripText(content: string): string {
+  const note = textToListNote(content);
+  return listToText(note.title, attachParents(note.items));
+}
 
 function makeItem(overrides: Partial<NoteItem> & { id: string; text: string }): NoteItem {
   return {
@@ -134,15 +146,18 @@ describe('parseTextLineAsListItem', () => {
   });
 });
 
-describe('textToListItems', () => {
+describe('textToListNote', () => {
   it('converts each non-blank line to an item, dropping blank lines', () => {
-    const content = '# Groceries\n\n- [x] Milk\n- Eggs\n\n**Bread**';
-    expect(textToListItems(content)).toEqual([
-      { text: 'Groceries', completed: false, indentLevel: 0 },
-      { text: 'Milk', completed: true, indentLevel: 0 },
-      { text: 'Eggs', completed: false, indentLevel: 0 },
-      { text: '**Bread**', completed: false, indentLevel: 0 },
-    ]);
+    const content = 'Groceries\n\n- [x] Milk\n- Eggs\n\n**Bread**';
+    expect(textToListNote(content)).toEqual({
+      title: '',
+      items: [
+        { text: 'Groceries', completed: false, indentLevel: 0 },
+        { text: 'Milk', completed: true, indentLevel: 0 },
+        { text: 'Eggs', completed: false, indentLevel: 0 },
+        { text: '**Bread**', completed: false, indentLevel: 0 },
+      ],
+    });
   });
 
   it('carries nesting across', () => {
@@ -153,8 +168,98 @@ describe('textToListItems', () => {
     ]);
   });
 
-  it('returns an empty array for blank content', () => {
-    expect(textToListItems('   \n\n  ')).toEqual([]);
+  it('returns an empty note for blank content', () => {
+    expect(textToListNote('   \n\n  ')).toEqual({ title: '', items: [] });
+  });
+
+  it('promotes a leading heading to the title instead of an item', () => {
+    expect(textToListNote('# Groceries\n\n- Milk')).toEqual({
+      title: 'Groceries',
+      items: [{ text: 'Milk', completed: false, indentLevel: 0 }],
+    });
+  });
+
+  it('promotes any heading level, dropping the level itself', () => {
+    for (const hashes of ['#', '##', '###', '####', '#####', '######']) {
+      expect(textToListNote(`${hashes} Groceries\n- Milk`).title).toBe('Groceries');
+    }
+  });
+
+  it('skips blank lines when looking for the heading', () => {
+    expect(textToListNote('\n   \n## Groceries\n- Milk').title).toBe('Groceries');
+  });
+
+  it('promotes a heading that is the only line, leaving no items', () => {
+    expect(textToListNote('# Groceries')).toEqual({ title: 'Groceries', items: [] });
+  });
+
+  it('only promotes the first heading; later ones stay items', () => {
+    expect(textToListNote('# Groceries\n## Dairy\n- Milk')).toEqual({
+      title: 'Groceries',
+      items: [
+        { text: 'Dairy', completed: false, indentLevel: 0 },
+        { text: 'Milk', completed: false, indentLevel: 0 },
+      ],
+    });
+  });
+
+  it('does not promote a heading that is not the first non-blank line', () => {
+    expect(textToListNote('- Milk\n# Groceries').title).toBe('');
+  });
+
+  // The `#` is nested inside another construct there, so it is not a heading
+  // the user wrote as the note's title.
+  it('does not promote a heading behind a blockquote or list marker', () => {
+    expect(textToListNote('> # Groceries\n- Milk').title).toBe('');
+    expect(textToListNote('- # Groceries\n- Milk').title).toBe('');
+  });
+
+  it('does not promote a setext heading', () => {
+    const note = textToListNote('Groceries\n=====\n- Milk');
+    expect(note.title).toBe('');
+    expect(note.items[0]).toEqual({ text: 'Groceries', completed: false, indentLevel: 0 });
+  });
+
+  it('does not promote an empty heading, and drops the line as before', () => {
+    expect(textToListNote('#\n- Milk')).toEqual({
+      title: '',
+      items: [
+        { text: '#', completed: false, indentLevel: 0 },
+        { text: 'Milk', completed: false, indentLevel: 0 },
+      ],
+    });
+    expect(textToListNote('# \n- Milk')).toEqual({
+      title: '',
+      items: [{ text: 'Milk', completed: false, indentLevel: 0 }],
+    });
+  });
+
+  // Truncating would drop text the note still holds; leaving the line alone
+  // keeps every character and matches what conversion did before.
+  it('leaves an over-long heading as an item rather than truncating it', () => {
+    const long = 'x'.repeat(VALIDATION.TITLE_MAX_LENGTH + 1);
+    expect(textToListNote(`# ${long}\n- Milk`)).toEqual({
+      title: '',
+      items: [
+        { text: long, completed: false, indentLevel: 0 },
+        { text: 'Milk', completed: false, indentLevel: 0 },
+      ],
+    });
+  });
+
+  it('promotes a heading of exactly the maximum title length', () => {
+    const atLimit = 'x'.repeat(VALIDATION.TITLE_MAX_LENGTH);
+    expect(textToListNote(`# ${atLimit}`).title).toBe(atLimit);
+  });
+
+  // The limit is the server's, and the server measures it in code points.
+  it('measures the title limit in code points, not UTF-16 units', () => {
+    const astral = '😀'.repeat(VALIDATION.TITLE_MAX_LENGTH);
+    expect(textToListNote(`# ${astral}`).title).toBe(astral);
+  });
+
+  it('keeps inline formatting in a promoted title', () => {
+    expect(textToListNote('# **Big** shop').title).toBe('**Big** shop');
   });
 });
 
@@ -225,19 +330,35 @@ describe('round trips', () => {
     expect(second).toBe(first);
   });
 
+  // The title is what makes this round trip lossless: it comes back as the
+  // same `# h1` line it was written as, instead of arriving as an item and
+  // leaving the note untitled.
+  it('list → text → list preserves the title', () => {
+    const items = [makeItem({ id: '1', text: 'Milk', position: 0 })];
+    const text = listToText('Groceries', items);
+
+    const note = textToListNote(text);
+    expect(note.title).toBe('Groceries');
+    expect(note.items).toEqual([{ text: 'Milk', completed: false, indentLevel: 0 }]);
+    expect(listToText(note.title, attachParents(note.items))).toBe(text);
+  });
+
   it('text → list → text preserves inline formatting', () => {
     const content = '- [ ] **Buy** `milk`\n- [x] ~~Cancelled~~ [link](https://example.com)';
-    expect(listToText('', attachParents(textToListItems(content)))).toBe(content);
+    expect(roundTripText(content)).toBe(content);
   });
 
   // An item has one representation, so every way of writing a line collapses
   // onto it. Byte-identical content only comes back for content already in that
   // form, as the case above is.
   it('text → list → text normalizes every structural prefix to a task marker', () => {
-    const content = '# Groceries\n* Eggs\n1. Milk\n> Bread';
-    expect(listToText('', attachParents(textToListItems(content)))).toBe(
-      '- [ ] Groceries\n- [ ] Eggs\n- [ ] Milk\n- [ ] Bread',
-    );
+    expect(roundTripText('* Eggs\n1. Milk\n> Bread')).toBe('- [ ] Eggs\n- [ ] Milk\n- [ ] Bread');
+  });
+
+  // The heading round-trips as a heading rather than collapsing onto an item,
+  // and picks up the blank line listToText writes after a title.
+  it('text → list → text returns a leading heading as an h1 title', () => {
+    expect(roundTripText('## Groceries\n* Eggs')).toBe('# Groceries\n\n- [ ] Eggs');
   });
 
   // The converter cannot tell a leading block marker in item text apart from the
