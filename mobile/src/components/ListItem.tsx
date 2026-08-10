@@ -371,6 +371,16 @@ function ListItem({
                 // While the rendered form is on top, the input must not take the
                 // tap that is meant to place a caret in it.
                 pointerEvents={showRendered ? 'none' : 'auto'}
+                // Android flattens a View with no rendering-relevant props out of
+                // the native hierarchy. While the rendered form shows, this
+                // wrapper has a style and `pointerEvents: 'none'`, so it survives
+                // as a real view; the moment it goes back in flow it has neither
+                // and becomes a flattening candidate — which re-parents the
+                // EditText inside it, and an EditText that is removed and re-added
+                // loses focus. That happens on the very commit the tap-to-edit
+                // focus follows, so the two race, and focus lands on Android's
+                // fallback (the note title) whenever the flatten wins.
+                collapsable={false}
               >
                 <TextInput
                   ref={setInputRef}
