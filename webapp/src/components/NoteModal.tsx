@@ -804,6 +804,18 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     const selection = clampSelection(next.selection, next.text);
     if (!applyTextareaEdit(textarea, next.text, selection)) {
       handleTextUpdate(itemId, next.text);
+      // handleTextUpdate is a controlled update: the row's textarea only
+      // picks up the new value on the next render, and assigning .value then
+      // resets the caret to the end. Same deferred-restore idiom as the
+      // insert-before-item/split-item focus handling above, addressed at
+      // this row via itemInputRefs instead of a fresh item's id.
+      setTimeout(() => {
+        const el = itemInputRefs.current.get(itemId);
+        if (el) {
+          el.focus();
+          el.setSelectionRange(selection.start, selection.end);
+        }
+      }, 0);
     }
   };
 
@@ -846,6 +858,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       return;
     }
 
+    if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
+
     // Same modifier guard as the content textarea's Ctrl/Cmd+B/I (see the
     // comment there): Shift and Alt must both be absent, since the
     // combinations they form — Ctrl+Shift+B toggles Chrome's bookmarks bar —
@@ -862,7 +876,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
 
     if (e.repeat) return;
-    if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
 
     if (e.key === 'Enter' && e.shiftKey) {
       return;

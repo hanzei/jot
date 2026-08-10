@@ -2963,22 +2963,30 @@ describe('NoteModal', () => {
       return screen.getAllByTestId('list-item-input')[0]! as HTMLTextAreaElement;
     };
 
-    it('wraps the selection in bold markers with Ctrl+B', () => {
+    it('wraps the selection in bold markers with Ctrl+B, and restores the selection', async () => {
       const input = openListItem('hello world');
 
       input.setSelectionRange(6, 11);
       fireEvent.keyDown(input, { key: 'b', ctrlKey: true });
+      await vi.runAllTimersAsync();
 
       expect(input).toHaveValue('hello **world**');
+      // jsdom has no document.execCommand, so this exercises the fallback
+      // path — same caveat as the content-textarea tests above.
+      expect(input.selectionStart).toBe(8);
+      expect(input.selectionEnd).toBe(13);
     });
 
-    it('inserts italic markers at the caret with Cmd+I when nothing is selected', () => {
+    it('inserts italic markers at the caret with Cmd+I when nothing is selected, and parks the caret between them', async () => {
       const input = openListItem('hello');
 
       input.setSelectionRange(5, 5);
       fireEvent.keyDown(input, { key: 'i', metaKey: true });
+      await vi.runAllTimersAsync();
 
       expect(input).toHaveValue('hello**');
+      expect(input.selectionStart).toBe(6);
+      expect(input.selectionEnd).toBe(6);
     });
 
     // The markers are characters the user did not type, so at the cap the
