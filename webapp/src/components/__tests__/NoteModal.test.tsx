@@ -2397,16 +2397,35 @@ describe('NoteModal', () => {
       expect(onConvert).toHaveBeenCalledWith('1', {
         note_type: 'list',
         base_version: 1,
+        // The leading heading becomes the title rather than the first item.
+        title: 'Groceries',
         items: [
-          { text: 'Groceries', position: 0, completed: false, indent_level: 0 },
-          { text: 'Milk', position: 1, completed: true, indent_level: 0 },
-          { text: 'Eggs', position: 2, completed: false, indent_level: 0 },
+          { text: 'Milk', position: 0, completed: true, indent_level: 0 },
+          { text: 'Eggs', position: 1, completed: false, indent_level: 0 },
         ],
       });
       // The modal stays open on the converted note (refreshed via onRefresh),
       // rather than closing.
       expect(onClose).not.toHaveBeenCalled();
       expect(onRefresh).toHaveBeenCalled();
+    });
+
+    it('sends an empty title when the content does not open with a heading', async () => {
+      const note = createMockNote({ note_type: 'text', content: '- [x] Milk\n- Eggs' });
+      const onConvert = vi.fn().mockResolvedValue(undefined);
+
+      renderNoteModal({ ...defaultProps, note, onConvert });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Convert to list' }));
+      await vi.runAllTimersAsync();
+
+      expect(onConvert).toHaveBeenCalledWith('1', expect.objectContaining({
+        title: '',
+        items: [
+          { text: 'Milk', position: 0, completed: true, indent_level: 0 },
+          { text: 'Eggs', position: 1, completed: false, indent_level: 0 },
+        ],
+      }));
     });
 
     it('sends indent_level so nesting survives the conversion', async () => {

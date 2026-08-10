@@ -2,7 +2,7 @@ import { useState, useEffect, useEffectEvent, useMemo, useRef, useCallback, useI
 import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, Pin, EllipsisVertical, Square, Undo2 } from 'lucide-react';
 import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListItems, listToText, parseTextLineAsListItem, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type ConvertedListItem, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListNote, listToText, parseTextLineAsListItem, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type ConvertedListItem, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
 import { renderMarkdown, inlineMarkdownToText } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
@@ -108,6 +108,26 @@ const generateItemId = () => generateId();
 
 const TEXT_NOTE_MIN_HEIGHT_PX = 96;
 const TEXT_NOTE_RESIZE_DEBOUNCE_MS = 120;
+
+// Text -> list. A leading heading becomes the list's title rather than its
+// first item (`title` is '' when the content did not open with one), which is
+// what makes a note that came from a list keep its title on the way back.
+const buildConvertToListRequest = (content: string, baseVersion: number): ConvertNoteTypeRequest => {
+  const converted = textToListNote(content);
+  return {
+    note_type: 'list',
+    base_version: baseVersion,
+    title: converted.title,
+    items: converted.items.map((item, idx) => ({
+      text: item.text,
+      position: idx,
+      completed: item.completed,
+      // The server rebuilds parent_id from this, attaching each indented item
+      // to the nearest preceding top-level one.
+      indent_level: item.indentLevel,
+    })),
+  };
+};
 
 interface NoteModalProps {
   note?: Note | null;
@@ -1291,18 +1311,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
     try {
       const data: ConvertNoteTypeRequest = targetType === 'list'
-        ? {
-            note_type: 'list',
-            base_version: baseVersion,
-            items: textToListItems(content).map((item, idx) => ({
-              text: item.text,
-              position: idx,
-              completed: item.completed,
-              // The server rebuilds parent_id from this, attaching each indented
-              // item to the nearest preceding top-level one.
-              indent_level: item.indentLevel,
-            })),
-          }
+        ? buildConvertToListRequest(content, baseVersion)
         : {
             note_type: 'text',
             base_version: baseVersion,

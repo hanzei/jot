@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/hanzei/jot/server/client"
@@ -53,6 +54,84 @@ func TestConvertNoteTypeEndpoint(t *testing.T) {
 		assert.Equal(t, "Milk", converted.Items[1].Text)
 		assert.Equal(t, "Eggs", converted.Items[2].Text)
 		assert.True(t, converted.Items[2].Completed)
+	})
+
+	t.Run("persists the title supplied when converting to a list", func(t *testing.T) {
+		ts := setupTestServer(t)
+		user := ts.createTestUser(t, "convert-with-title", "password123", false)
+		ctx := t.Context()
+
+		source, err := user.Client.CreateTextNote(ctx, &client.CreateTextNoteRequest{Content: "# Groceries\nMilk"})
+		require.NoError(t, err)
+
+		converted, err := user.Client.ConvertNoteType(ctx, source.ID, &client.ConvertNoteTypeRequest{
+			NoteType: client.NoteTypeList,
+			Title:    client.Ptr("Groceries"),
+			Items:    []client.CreateNoteItem{{Text: "Milk", Position: 0}},
+		})
+		require.NoError(t, err)
+
+		assert.Equal(t, "Groceries", converted.Title)
+		require.Len(t, converted.Items, 1)
+		assert.Equal(t, "Milk", converted.Items[0].Text)
+
+		// The title is persisted, not just echoed.
+		fetched, err := user.Client.GetNote(ctx, source.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "Groceries", fetched.Title)
+	})
+
+	t.Run("leaves the note untitled when no title is supplied", func(t *testing.T) {
+		ts := setupTestServer(t)
+		user := ts.createTestUser(t, "convert-without-title", "password123", false)
+		ctx := t.Context()
+
+		source, err := user.Client.CreateTextNote(ctx, &client.CreateTextNoteRequest{Content: "Milk"})
+		require.NoError(t, err)
+
+		converted, err := user.Client.ConvertNoteType(ctx, source.ID, &client.ConvertNoteTypeRequest{
+			NoteType: client.NoteTypeList,
+			Items:    []client.CreateNoteItem{{Text: "Milk", Position: 0}},
+		})
+		require.NoError(t, err)
+		assert.Empty(t, converted.Title)
+	})
+
+	t.Run("rejects a title over the max length when converting to a list", func(t *testing.T) {
+		ts := setupTestServer(t)
+		user := ts.createTestUser(t, "convert-long-title", "password123", false)
+		ctx := t.Context()
+
+		source, err := user.Client.CreateTextNote(ctx, &client.CreateTextNoteRequest{Content: "hi"})
+		require.NoError(t, err)
+
+		_, err = user.Client.ConvertNoteType(ctx, source.ID, &client.ConvertNoteTypeRequest{
+			NoteType: client.NoteTypeList,
+			Title:    client.Ptr(strings.Repeat("a", 201)),
+			Items:    []client.CreateNoteItem{{Text: "hi", Position: 0}},
+		})
+		require.Error(t, err)
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+	})
+
+	t.Run("rejects a title when converting to text", func(t *testing.T) {
+		ts := setupTestServer(t)
+		user := ts.createTestUser(t, "convert-title-to-text", "password123", false)
+		ctx := t.Context()
+
+		source, err := user.Client.CreateListNote(ctx, &client.CreateListNoteRequest{
+			Title: "List",
+			Items: []client.CreateNoteItem{{Text: "Item", Position: 0}},
+		})
+		require.NoError(t, err)
+
+		_, err = user.Client.ConvertNoteType(ctx, source.ID, &client.ConvertNoteTypeRequest{
+			NoteType: client.NoteTypeText,
+			Content:  client.Ptr("# List\n\n- [ ] Item"),
+			Title:    client.Ptr("List"),
+		})
+		require.Error(t, err)
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("rebuilds parent_id from indent_level when converting to a list", func(t *testing.T) {
