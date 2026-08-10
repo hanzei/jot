@@ -4,7 +4,7 @@ tasks:
   # Convenience alias only — on a fresh checkout `task` itself does not exist
   # yet, so the script has to be runnable directly: ./scripts/bootstrap.sh
   bootstrap:
-    desc: Install task and npm dependencies for a checkout (idempotent)
+    desc: Provision a checkout - task, npm deps, Playwright's Chromium, Go cache warm-up (idempotent)
     cmd: ./scripts/bootstrap.sh
 
   run-server:
@@ -183,10 +183,11 @@ tasks:
     desc: Run end-to-end tests
     dir: webapp
     cmds:
-      # Browsers are not part of bootstrap (too slow for the many sessions that
-      # never run e2e), so check here first: a missing or version-mismatched
-      # Chromium otherwise surfaces as every spec failing with "Executable
-      # doesn't exist at ...".
+      # bootstrap.sh installs the browser too, so this is normally a no-op —
+      # it's the safety net for JOT_BOOTSTRAP_SKIP_PLAYWRIGHT=1 and for
+      # reaching test-e2e without ever running bootstrap. Without it, a
+      # missing or version-mismatched Chromium surfaces as every spec failing
+      # with "Executable doesn't exist at ...".
       - ../scripts/check-playwright-browser.sh
       - task: warm-server-build
       - npm run test:e2e -- {{.CLI_ARGS}}
