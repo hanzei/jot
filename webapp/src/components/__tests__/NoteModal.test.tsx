@@ -2940,4 +2940,75 @@ describe('NoteModal', () => {
       expect(textarea).toHaveValue('hello');
     });
   });
+
+  describe('Markdown formatting shortcuts in list items', () => {
+    const openListItem = (text: string) => {
+      const note = createMockNote({
+        note_type: 'list',
+        items: [
+          {
+            id: 'item1',
+            note_id: '1',
+            text,
+            completed: false,
+            position: 0,
+            parent_id: null,
+            assigned_to: '',
+            created_at: '2023-01-01T00:00:00Z',
+            updated_at: '2023-01-01T00:00:00Z',
+          },
+        ],
+      });
+      renderNoteModal({ ...defaultProps, note });
+      return screen.getAllByTestId('list-item-input')[0]! as HTMLTextAreaElement;
+    };
+
+    it('wraps the selection in bold markers with Ctrl+B, and restores the selection', async () => {
+      const input = openListItem('hello world');
+
+      input.setSelectionRange(6, 11);
+      fireEvent.keyDown(input, { key: 'b', ctrlKey: true });
+      await vi.runAllTimersAsync();
+
+      expect(input).toHaveValue('hello **world**');
+      // jsdom has no document.execCommand, so this exercises the fallback
+      // path — same caveat as the content-textarea tests above.
+      expect(input.selectionStart).toBe(8);
+      expect(input.selectionEnd).toBe(13);
+    });
+
+    it('inserts italic markers at the caret with Cmd+I when nothing is selected, and parks the caret between them', async () => {
+      const input = openListItem('hello');
+
+      input.setSelectionRange(5, 5);
+      fireEvent.keyDown(input, { key: 'i', metaKey: true });
+      await vi.runAllTimersAsync();
+
+      expect(input).toHaveValue('hello**');
+      expect(input.selectionStart).toBe(6);
+      expect(input.selectionEnd).toBe(6);
+    });
+
+    // The markers are characters the user did not type, so at the cap the
+    // transform is dropped rather than truncated — same choice
+    // handleListContinuation makes at the content cap.
+    it('leaves the text unchanged when the markers would exceed the item cap', () => {
+      const maxText = 'x'.repeat(VALIDATION.ITEM_TEXT_MAX_LENGTH);
+      const input = openListItem(maxText);
+
+      input.setSelectionRange(0, maxText.length);
+      fireEvent.keyDown(input, { key: 'b', ctrlKey: true });
+
+      expect(input).toHaveValue(maxText);
+    });
+
+    it('leaves Ctrl+Shift+B to the browser', () => {
+      const input = openListItem('hello world');
+
+      input.setSelectionRange(6, 11);
+      fireEvent.keyDown(input, { key: 'b', ctrlKey: true, shiftKey: true });
+
+      expect(input).toHaveValue('hello world');
+    });
+  });
 });
