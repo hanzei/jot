@@ -150,7 +150,7 @@ go install github.com/go-task/task/v3/cmd/task@<TASK_VERSION>
 
 ```bash
 # Available commands (task --list for the full set)
-task bootstrap       # Install task + npm dependencies (same as scripts/bootstrap.sh)
+task bootstrap       # Run scripts/bootstrap.sh: task, npm deps, Playwright's Chromium, Go cache warm-up
 task run-server      # Start the Jot server
 task run-webapp      # Start webapp dev server with HMR
 task check           # Pre-PR gate: everything CI runs except e2e

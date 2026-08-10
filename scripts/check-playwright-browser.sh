@@ -19,10 +19,13 @@ set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly REPO_ROOT
 
-if [ ! -d "$REPO_ROOT/webapp/node_modules" ]; then
+# Checked explicitly rather than just webapp/node_modules: without the local
+# CLI, `npx playwright` below would fall back to fetching an unpinned copy
+# from the npm registry instead of running the pinned @playwright/test.
+if [ ! -x "$REPO_ROOT/webapp/node_modules/.bin/playwright" ]; then
   cat >&2 <<EOF
 
-webapp/node_modules is missing, so Playwright is not installed.
+webapp/node_modules/.bin/playwright is missing, so Playwright is not installed.
 Run ./scripts/bootstrap.sh first.
 EOF
   exit 1

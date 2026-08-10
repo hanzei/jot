@@ -227,8 +227,11 @@ install_playwright_browser() {
     return
   fi
 
-  if [ ! -d "$REPO_ROOT/webapp/node_modules" ]; then
-    log "webapp/node_modules missing — skipping Playwright browser install"
+  # Checked explicitly rather than just webapp/node_modules: without the local
+  # CLI, `npx playwright` falls back to fetching an unpinned copy from the npm
+  # registry instead of running the pinned @playwright/test.
+  if [ ! -x "$REPO_ROOT/webapp/node_modules/.bin/playwright" ]; then
+    log "webapp/node_modules/.bin/playwright missing — skipping Playwright browser install"
     return
   fi
 

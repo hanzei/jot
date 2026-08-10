@@ -4,7 +4,7 @@ tasks:
   # Convenience alias only — on a fresh checkout `task` itself does not exist
   # yet, so the script has to be runnable directly: ./scripts/bootstrap.sh
   bootstrap:
-    desc: Install task and npm dependencies for a checkout (idempotent)
+    desc: Provision a checkout - task, npm deps, Playwright's Chromium, Go cache warm-up (idempotent)
     cmd: ./scripts/bootstrap.sh
 
   run-server:
