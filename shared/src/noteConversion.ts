@@ -33,12 +33,6 @@ import type { NoteItem } from './types';
 const LIST_MARKER_RE = /^(?:[-*+]|\d+\.)\s+(?:\[([ xX])\]\s*)?/;
 const BLOCKQUOTE_RE = /^(?:>\s*)+/;
 const HEADING_RE = /^#{1,6}\s+/;
-/**
- * A heading standing on its own line, with its text captured. Leading
- * whitespace is tolerated (it is meaningless in this line-based model), but
- * nothing else may precede the `#` — see promotableHeadingTitle.
- */
-const HEADING_PROMOTION_RE = /^[ \t]*#{1,6}[ \t]+(.*)$/;
 const LEADING_WHITESPACE_RE = /^[ \t]*/;
 
 /** A tab advances to the next 4-column stop, as in CommonMark. */
@@ -133,11 +127,24 @@ export interface ConvertedListNote {
  * construct. A setext heading (`Groceries` over `=====`) does not qualify
  * either: this converter is line-by-line by design, and recognizing setext
  * would mean lookahead plus a rule for the leftover underline.
+ *
+ * The indent comes off with the same two anchored prefix matches
+ * parseTextLineAsListItem uses, rather than one `^[ \t]*#{1,6}[ \t]+(.*)$`
+ * that does the whole job: a single pattern pairing two whitespace
+ * repetitions is the shape CodeQL reports as polynomial backtracking, and
+ * note content is attacker-supplied. The `^` anchor keeps even that form
+ * linear here, but the pattern above costs nothing and has no such argument
+ * to make — see the ReDoS note at the top of this file.
  */
 function promotableHeadingTitle(rawLine: string): string | null {
-  const match = HEADING_PROMOTION_RE.exec(rawLine);
-  if (!match) return null;
-  const title = match[1]!.trim();
+  const leading = LEADING_WHITESPACE_RE.exec(rawLine)?.[0] ?? '';
+  const line = rawLine.slice(leading.length);
+
+  const withoutHeading = line.replace(HEADING_RE, '');
+  // Nothing consumed: the line does not open with a heading marker at all.
+  if (withoutHeading === line) return null;
+
+  const title = withoutHeading.trim();
   // An empty heading (`#` with nothing after it) is not a title; leaving it
   // unpromoted lets parseTextLineAsListItem drop the line as it always has.
   if (!title) return null;

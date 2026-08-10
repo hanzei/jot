@@ -185,6 +185,11 @@ describe('textToListNote', () => {
     }
   });
 
+  it('tolerates leading whitespace before the heading marker', () => {
+    expect(textToListNote('   # Groceries\n- Milk').title).toBe('Groceries');
+    expect(textToListNote('\t## Groceries\n- Milk').title).toBe('Groceries');
+  });
+
   it('skips blank lines when looking for the heading', () => {
     expect(textToListNote('\n   \n## Groceries\n- Milk').title).toBe('Groceries');
   });
