@@ -254,9 +254,6 @@ function ListItem({
       const measured = renderedLinesRef.current;
       const lines = measured?.text === text ? measured.lines : null;
       const offset = sourceOffsetAtPoint(nodes, text, lines, locationX, locationY);
-      // TEMP DEBUG #867 — remove before merge. Lengths and offsets only, never
-      // item text (mobile/CLAUDE.md: logs ride along in diagnostics reports).
-      console.info('[867] press', JSON.stringify({ len: text.length, lines: lines?.length ?? 0, offset, showRendered, isActive }));
       setIsEditing(true);
       focusAfterSwapRef.current = true;
       // Nothing to force when the caret is already there: the input would report
@@ -265,8 +262,7 @@ function ListItem({
         setForcedSelection({ start: offset, end: offset });
       }
     },
-    // showRendered/isActive are read by the TEMP DEBUG log above only.
-    [nodes, text, showRendered, isActive],
+    [nodes, text],
   );
 
   // The other half of the tap: focus the field on the commit that put it back in
@@ -276,13 +272,8 @@ function ListItem({
   useEffect(() => {
     if (showRendered || !focusAfterSwapRef.current) return;
     focusAfterSwapRef.current = false;
-    // TEMP DEBUG #867 — remove before merge.
-    const input = ownInputRef.current;
-    console.info('[867] focusing', JSON.stringify({ len: text.length, hasRef: !!input }));
-    input?.focus();
-    console.info('[867] after focus()', JSON.stringify({ focused: input?.isFocused() ?? null }));
-    setTimeout(() => console.info('[867] +300ms', JSON.stringify({ focused: input?.isFocused() ?? null })), 300);
-  }, [showRendered, text.length]);
+    ownInputRef.current?.focus();
+  }, [showRendered]);
 
   const {
     text: effectiveText,
@@ -308,11 +299,6 @@ function ListItem({
   return (
     <View
       style={[styles.container, { marginLeft: normalizedIndentLevel * VALIDATION.INDENT_PX_PER_LEVEL }]}
-      // TEMP DEBUG #867 — remove before merge. The row's height across the swap:
-      // if it changes, the list's itemLayoutAnimation runs on this cell.
-      onLayout={(e) =>
-        console.info('[867] row layout', JSON.stringify({ len: text.length, h: Math.round(e.nativeEvent.layout.height), showRendered }))
-      }
       testID="list-item-row"
     >
       {showDragHandle && onDrag ? (
@@ -412,14 +398,12 @@ function ListItem({
                   blurOnSubmit={false}
                   onFocus={(event) => {
                     if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
-                    console.info('[867] row onFocus', JSON.stringify({ len: text.length }));
                     setIsFocused(true);
                     setIsEditing(true);
                     onFocus?.(event);
                     if (!completed) setShowSuggestions(true);
                   }}
                   onBlur={() => {
-                    console.info('[867] row onBlur', JSON.stringify({ len: text.length }));
                     onBlur?.();
                     setIsEditing(false);
                     // Delay hiding so a tap on the delete button (which blurs the input
