@@ -52,7 +52,7 @@ const SAME_LINE_PX = 1;
 interface Mirror {
   host: HTMLDivElement;
   /** Everything before the caret. */
-  text: Text;
+  before: HTMLSpanElement;
   /** Everything after it, and therefore positioned exactly where it sits. */
   marker: HTMLSpanElement;
 }
@@ -77,13 +77,19 @@ function ensureMirror(doc: Document): Mirror {
   host.style.padding = '0';
   host.style.border = '0';
 
-  const text = doc.createTextNode('');
+  // Two spans rather than a bare text node and a span. Both halves then go in
+  // through `textContent`, which is the assignment static analysis recognises as
+  // text — a `CharacterData.data` write carrying a note's contents reads as an
+  // HTML sink to CodeQL even though it parses no markup. An unstyled inline span
+  // is not a break opportunity and adds no box of its own, so the mirror wraps
+  // exactly as it did.
+  const before = doc.createElement('span');
   const marker = doc.createElement('span');
-  host.appendChild(text);
+  host.appendChild(before);
   host.appendChild(marker);
   doc.body.appendChild(host);
 
-  cached = { host, text, marker };
+  cached = { host, before, marker };
   return cached;
 }
 
@@ -120,7 +126,7 @@ function syncMirror(textarea: HTMLTextAreaElement): Mirror | null {
  * the caret can reach and nothing else would give a box to.
  */
 function measure(mirror: Mirror, value: string, index: number): { top: number; left: number } {
-  mirror.text.data = value.slice(0, index);
+  mirror.before.textContent = value.slice(0, index);
   mirror.marker.textContent = value.slice(index) || '.';
   return { top: mirror.marker.offsetTop, left: mirror.marker.offsetLeft };
 }
