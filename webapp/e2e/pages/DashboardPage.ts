@@ -104,6 +104,11 @@ export class DashboardPage {
     await expect(this.listItemInput(index)).toBeFocused();
   }
 
+  /** The caret offset in the row at `index`, for tests about where it lands. */
+  async listItemCaret(index: number): Promise<number> {
+    return this.listItemInput(index).evaluate(el => (el as HTMLTextAreaElement).selectionStart ?? 0);
+  }
+
   async expectListItemCount(count: number) {
     await expect(this.page.locator('[data-testid="list-item-input"]')).toHaveCount(count);
   }

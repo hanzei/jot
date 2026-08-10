@@ -18,6 +18,7 @@ import { useCompletedItems } from '@/hooks/useCompletedItems';
 import { useNoteDraft, type AutoSaveDraft } from '@/hooks/useNoteDraft';
 import { useSizeTransition } from '@/hooks/useSizeTransition';
 import { applyTextareaEdit } from '@/utils/textareaEdit';
+import { getCaretLine, getOffsetAtLine } from '@/utils/textareaCaret';
 import { buildShareAvatars } from '@/utils/shareAvatars';
 import { buildMobileDeepLink } from '@/utils/deepLink';
 import { isEditableElementFocused } from '@/utils/keyboardShortcuts';
@@ -736,42 +737,64 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     return newItem.id;
   };
 
+  /**
+   * The textarea of the nearest row before or after `index` that has one.
+   *
+   * Indexes run across the whole list — uncompleted rows first, then completed
+   * ones — the same combined index `findTargetItem` resolves. A row can be
+   * absent from the DOM (the completed section collapsed, a read-only row
+   * showing only its rendered form); those are skipped rather than read as the
+   * end of the list, and a run of them that reaches the end means there is
+   * nowhere to go and the keystroke stays with the caret.
+   */
+  const adjacentItemInput = (index: number, down: boolean): HTMLTextAreaElement | null => {
+    const total = uncompletedItems.length + completedItems.length;
+    const step = down ? 1 : -1;
+    for (let i = index + step; i >= 0 && i < total; i += step) {
+      const item = findTargetItem(i);
+      if (!item) continue;
+      const el = itemInputRefs.current.get(item.id);
+      if (el) return el;
+    }
+    return null;
+  };
+
   const handleItemKeyDown = (index: number, e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-      // Cross-item arrow navigation is only wired up within the uncompleted
-      // section; completed items keep default textarea arrow behavior.
-      if (index >= uncompletedItems.length) return;
       if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
+      // Modified arrows belong to the platform: Shift extends a selection, and
+      // on macOS Alt and Cmd mean "by paragraph" and "to the end of the field".
+      // None of them are a request to leave this row.
+      if (e.shiftKey || e.altKey || e.metaKey || e.ctrlKey) return;
+
       const textarea = e.currentTarget;
-      if (textarea.value.includes('\n')) return;
+      const down = e.key === 'ArrowDown';
+      // Down collapses a selection to its end and Up to its start, so measure
+      // from the end the caret is about to move from.
+      const caretIndex = (down ? textarea.selectionEnd : textarea.selectionStart) ?? 0;
 
-      // Treat visually wrapped content as multiline so Arrow keys move caret
-      // within the current textarea instead of jumping focus to another row.
-      const styles = window.getComputedStyle(textarea);
-      const parsedLineHeight = Number.parseFloat(styles.lineHeight);
-      const lineHeight = Number.isFinite(parsedLineHeight) && parsedLineHeight > 0
-        ? parsedLineHeight
-        : 19.2;
-      const verticalPadding =
-        (Number.parseFloat(styles.paddingTop) || 0) +
-        (Number.parseFloat(styles.paddingBottom) || 0);
-      const singleLineHeight = lineHeight + verticalPadding;
-      if (textarea.scrollHeight > singleLineHeight + 2) return;
+      // A row's arrows are its caret's until the caret runs out of lines: only
+      // the first line gives ArrowUp away, and only the last gives ArrowDown.
+      // This used to ask whether the *row* was one line rather than where the
+      // caret was in it, which meant a wrapped or multi-line row could be
+      // entered but never left — Down walked the caret to the last line and
+      // then to the end of the text, and stopped there for good.
+      const caret = getCaretLine(textarea, caretIndex);
+      if (down ? !caret.isLastLine : !caret.isFirstLine) return;
 
-      const targetIndex = e.key === 'ArrowUp' ? index - 1 : index + 1;
-      if (targetIndex < 0 || targetIndex >= uncompletedItems.length) return;
+      const target = adjacentItemInput(index, down);
+      if (!target) return;
 
       e.preventDefault();
-      const targetItem = uncompletedItems[targetIndex]!;
-      const el = itemInputRefs.current.get(targetItem.id);
-      if (el) {
-        const cursorPos = Math.min(
-          (e.target as HTMLTextAreaElement).selectionStart ?? 0,
-          el.value.length
-        );
-        el.focus();
-        el.setSelectionRange(cursorPos, cursorPos);
-      }
+      // Land on the line the caret visually arrives at — the target's first
+      // going down, its last going up — keeping the column it left, the way a
+      // native multi-line field behaves. The character offset is the fallback
+      // when there is no layout to measure; for the one-line rows that are the
+      // common case the two agree anyway.
+      const offset = getOffsetAtLine(target, down ? 'first' : 'last', caret.x)
+        ?? Math.min(caretIndex, target.value.length);
+      target.focus();
+      target.setSelectionRange(offset, offset);
       return;
     }
 
