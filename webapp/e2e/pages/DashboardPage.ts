@@ -100,6 +100,23 @@ export class DashboardPage {
     await this.listItemInput(index).focus();
   }
 
+  /**
+   * Selects a character range inside the row at `index`.
+   *
+   * Playwright has no selection API and the formatting toolbar reads the live
+   * selection, so the range has to be set in the page — same reason as
+   * NoteEditorPage.selectRange.
+   */
+  async selectListItemRange(index: number, start: number, end: number) {
+    await this.listItemInput(index).evaluate(
+      (node: HTMLTextAreaElement, range: { start: number; end: number }) => {
+        node.focus();
+        node.setSelectionRange(range.start, range.end);
+      },
+      { start, end },
+    );
+  }
+
   async expectListItemFocused(index: number) {
     await expect(this.listItemInput(index)).toBeFocused();
   }

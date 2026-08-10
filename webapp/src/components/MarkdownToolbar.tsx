@@ -10,26 +10,50 @@ export type MarkdownToolbarAction =
   | 'bullet'
   | 'checkbox';
 
+/**
+ * Which editing surface the toolbar sits over. It selects the button set, and
+ * the two sets are not a preference — they are the two feature sets of
+ * docs/specs/markdown-rendering.md.
+ *
+ * - `content` — a text note's body, the full §2 set.
+ * - `item` — a list-item row, the inline subset of §2.1. The three block
+ *   actions are absent because an item cannot hold their output: item text is
+ *   lexed as inline content, so `## `, `- ` and `- [ ] ` stay literal source. A
+ *   heading button there would write characters guaranteed never to render, and
+ *   a checkbox button would write a second checkbox next to the row's real one.
+ */
+export type MarkdownToolbarVariant = 'content' | 'item';
+
 interface MarkdownToolbarProps {
   onAction: (action: MarkdownToolbarAction) => void;
-  /** id of the textarea the toolbar edits, for aria-controls. */
-  controlsId: string;
+  /**
+   * id of the textarea the toolbar edits, for aria-controls. Omitted when there
+   * is none — the list toolbar sitting in its reserved slot with no row focused
+   * — since pointing aria-controls at an id that is not in the document is
+   * worse than saying nothing.
+   */
+  controlsId?: string;
+  /** Defaults to the full text-note set. */
+  variant?: MarkdownToolbarVariant;
 }
 
-// Same six actions, same icons and same order as the mobile formatting bar
+// Same actions, same icons and same order as the mobile formatting bar
 // (mobile/src/screens/noteEditor/EditorToolbars.tsx), so the two clients read as
-// one feature. Icons rather than letter glyphs: they need no translating, and
-// the accessible name carries the meaning.
+// one feature — including which three an item row drops. Icons rather than
+// letter glyphs: they need no translating, and the accessible name carries the
+// meaning.
 const ACTIONS: {
   id: MarkdownToolbarAction;
   Icon: typeof Bold;
   labelKey: string;
-  /** Renders a divider before this button. */
+  /** Renders a divider before this button, unless it ends up first. */
   separatorBefore?: boolean;
+  /** Absent from the item variant — see MarkdownToolbarVariant. */
+  inlineOnly?: boolean;
 }[] = [
-  { id: 'bold', Icon: Bold, labelKey: 'note.formatBold' },
-  { id: 'italic', Icon: Italic, labelKey: 'note.formatItalic' },
-  { id: 'strikethrough', Icon: Strikethrough, labelKey: 'note.formatStrikethrough' },
+  { id: 'bold', Icon: Bold, labelKey: 'note.formatBold', inlineOnly: true },
+  { id: 'italic', Icon: Italic, labelKey: 'note.formatItalic', inlineOnly: true },
+  { id: 'strikethrough', Icon: Strikethrough, labelKey: 'note.formatStrikethrough', inlineOnly: true },
   // Cycles ## -> ### -> none, so the icon deliberately names no level.
   { id: 'heading', Icon: Heading, labelKey: 'note.formatHeading', separatorBefore: true },
   { id: 'bullet', Icon: List, labelKey: 'note.formatBulletList' },
@@ -37,26 +61,35 @@ const ACTIONS: {
 ];
 
 /**
- * Markdown formatting buttons for the text-note editor.
+ * Markdown formatting buttons, over a text note's content or a list note's rows.
+ * `variant` picks which buttons appear.
  *
  * Focus behaviour is the load-bearing part:
  *
  * - onMouseDown is prevented on every button, so clicking one never moves focus
  *   out of the textarea. This is not polish — a blur would drop the selection
  *   the transform is about to act on, and NoteModal reads focus loss as intent
- *   to leave edit mode. (It is the web counterpart of the mobile bar's
- *   focusable={false}.)
+ *   to leave edit mode. On the `item` variant it does more than that: a row
+ *   shows source for exactly as long as it holds the caret, so a blur would swap
+ *   the row back to its rendered form mid-press. (It is the web counterpart of
+ *   the mobile bar's focusable={false}.)
  * - The toolbar is one tab stop with arrow-key navigation between buttons
- *   (the WAI-ARIA toolbar pattern), rather than six stops between the textarea
- *   and the Done button.
+ *   (the WAI-ARIA toolbar pattern), rather than one stop per button between the
+ *   textarea and the Done button.
  */
-export default function MarkdownToolbar({ onAction, controlsId }: MarkdownToolbarProps) {
+export default function MarkdownToolbar({
+  onAction,
+  controlsId,
+  variant = 'content',
+}: MarkdownToolbarProps) {
   const { t } = useTranslation();
   const [focusedIndex, setFocusedIndex] = useState(0);
   const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
+  const shown = variant === 'item' ? ACTIONS.filter((action) => action.inlineOnly) : ACTIONS;
+
   const moveFocus = (nextIndex: number) => {
-    const index = (nextIndex + ACTIONS.length) % ACTIONS.length;
+    const index = (nextIndex + shown.length) % shown.length;
     setFocusedIndex(index);
     buttonRefs.current[index]?.focus();
   };
@@ -77,7 +110,7 @@ export default function MarkdownToolbar({ onAction, controlsId }: MarkdownToolba
         break;
       case 'End':
         event.preventDefault();
-        moveFocus(ACTIONS.length - 1);
+        moveFocus(shown.length - 1);
         break;
       default:
         break;
@@ -99,9 +132,9 @@ export default function MarkdownToolbar({ onAction, controlsId }: MarkdownToolba
       data-testid="markdown-toolbar"
       className="flex items-center gap-0.5 px-1 py-1 border-t border-gray-200 dark:border-slate-600"
     >
-      {ACTIONS.map((action, index) => (
+      {shown.map((action, index) => (
         <div key={action.id} className="contents">
-          {action.separatorBefore && (
+          {action.separatorBefore && index > 0 && (
             <div aria-hidden="true" className="mx-1 h-5 w-px bg-gray-300 dark:bg-slate-600" />
           )}
           <button

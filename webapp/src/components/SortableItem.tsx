@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { VALIDATION, type User, type Collaborator } from '@jot/shared';
 import LetterAvatar from '@/components/LetterAvatar';
 import AssigneePicker from '@/components/AssigneePicker';
-import { indentOf, type ListItem } from '@/utils/noteItems';
+import { indentOf, itemTextareaId, type ListItem } from '@/utils/noteItems';
 import { renderInlineItem } from '@/utils/markdown';
 import { sourceOffsetAtPoint } from '@/utils/inlineCaret';
 import { canAnimate } from '@/utils/motion';
@@ -60,6 +60,12 @@ export interface SortableItemProps {
   onAssignItem?: (itemId: string, userId: string) => void;
   completedItemTexts?: string[];
   onAcceptSuggestion?: (currentItemId: string, suggestionText: string) => void;
+  /**
+   * Fires as the row gains and loses the caret — the same transition that swaps
+   * it between rendered and source. NoteModal uses it to aim the list's
+   * formatting toolbar, which acts on whichever row is editing.
+   */
+  onEditingChange?: (itemId: string, editing: boolean) => void;
 }
 
 // A single draggable row in a list note: its checkbox, auto-resizing text
@@ -67,7 +73,7 @@ export interface SortableItemProps {
 // per-row delete control. Owns only its own transient UI state (which popovers
 // are open, which suggestion is highlighted); every mutation is delegated back
 // to NoteModal, which holds the item model.
-export default function SortableItem({ id, index, item, onUpdateListItem, onRemoveListItem, isCompleted = false, readOnly = false, onKeyDown, onPaste, inputRef, onIndentChange, isShared, collaborators, usersById, onAssignItem, completedItemTexts = [], onAcceptSuggestion }: SortableItemProps) {
+export default function SortableItem({ id, index, item, onUpdateListItem, onRemoveListItem, isCompleted = false, readOnly = false, onKeyDown, onPaste, inputRef, onIndentChange, isShared, collaborators, usersById, onAssignItem, completedItemTexts = [], onAcceptSuggestion, onEditingChange }: SortableItemProps) {
   const { t } = useTranslation();
   const [showAssigneePicker, setShowAssigneePicker] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -294,6 +300,9 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
           {showTextarea && (
           <textarea
             data-testid="list-item-input"
+            // Stable per row, so the list's formatting toolbar can point
+            // aria-controls at whichever row currently holds the caret.
+            id={itemTextareaId(item.id)}
             placeholder={placeholder}
             rows={1}
             autoCapitalize="sentences"
@@ -323,6 +332,7 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
             onFocus={readOnly ? undefined : () => {
               captureSwapHeight();
               setIsEditing(true);
+              onEditingChange?.(item.id, true);
               if (suggestions.length > 0) setShowSuggestions(true);
             }}
             onBlur={(e) => {
@@ -332,6 +342,7 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
               if (suggestionsRef.current?.contains(related)) return;
               captureSwapHeight();
               setIsEditing(false);
+              onEditingChange?.(item.id, false);
               // Delay to allow touch tap on suggestion to fire click first
               setTimeout(() => {
                 setShowSuggestions(false);

@@ -17,6 +17,12 @@ export interface ListItem {
   assignedTo: string;
 }
 
+// The DOM id of a row's textarea. Derived from the item id (22 random
+// alphanumerics, so always a valid id) rather than useId, because NoteModal has
+// to name the focused row's field from outside the row — that is what the
+// list-note formatting toolbar points aria-controls at.
+export const itemTextareaId = (itemId: string): string => `list-item-text-${itemId}`;
+
 // indentOf derives the render indent (0 = top-level, 1 = nested) from parentId.
 // Nesting is capped at one level, so a child is always exactly one level in.
 export const indentOf = (item: { parentId: string | null }): number => (item.parentId ? 1 : 0);

@@ -96,6 +96,7 @@ import CheckedItemsSection, { type ListItemHandlers } from './noteEditor/Checked
 import NoteEditorMenu from '../components/NoteEditorMenu';
 import NoteImageGallery, { type PendingImageUpload } from '../components/NoteImageGallery';
 import UserAvatar from '../components/UserAvatar';
+import type { ListItemSelectionHandle } from '../components/ListItem';
 import { styles } from './noteEditor/styles';
 import { animateListReflow, isReduceMotionEnabledSync } from '../utils/layoutAnimation';
 import ActiveListRow from './noteEditor/ActiveListRow';
@@ -106,6 +107,12 @@ type EditorNavProp = NativeStackNavigationProp<RootStackParamList, 'NoteEditor'>
 const IOS_KEYBOARD_VERTICAL_OFFSET = 88;
 const FOCUSED_INPUT_KEYBOARD_MARGIN = 120;
 const MARKDOWN_TOOLBAR_ID = 'markdown-formatting-toolbar';
+// A separate accessory id from the content bar's: the two carry different
+// buttons, and an InputAccessoryView is matched to an input by nativeID.
+const ITEM_MARKDOWN_TOOLBAR_ID = 'item-markdown-formatting-toolbar';
+// How long the Android bar outlives a row's blur before hiding, so tapping from
+// one row to the next does not flash it away and back.
+const ITEM_BLUR_SETTLE_MS = 150;
 // Duration (ms) of the row slide when the active list reflows after a toggle/delete.
 const LIST_REFLOW_ANIM_MS = 150;
 const MAX_EXIT_SAVE_RETRIES = 3;
@@ -677,12 +684,39 @@ export default function NoteEditorScreen() {
   // the OS picks next (observed: the title input).
   const focusedItemIdRef = useRef<string | null>(null);
 
+  // Whether any row currently holds the caret. A ref drives the formatting
+  // bar's *target* (above); this drives whether Android draws the bar at all,
+  // which has to be state.
+  const [isEditingItem, setIsEditingItem] = useState(false);
+  const clearEditingItemRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (clearEditingItemRef.current) clearTimeout(clearEditingItemRef.current);
+    },
+    [],
+  );
+
   const getItemRef = useCallback((id: string): React.RefObject<TextInputType | null> => {
     if (!itemInputRefsMap.current.has(id)) {
       itemInputRefsMap.current.set(id, React.createRef<TextInputType>());
     }
     return itemInputRefsMap.current.get(id)!;
   }, []);
+
+  // The caret counterpart of itemInputRefsMap: the formatting bar reads and
+  // writes the selection of the row it is editing through these.
+  const itemSelectionRefsMap = useRef(new Map<string, React.RefObject<ListItemSelectionHandle | null>>());
+
+  const getItemSelectionRef = useCallback(
+    (id: string): React.RefObject<ListItemSelectionHandle | null> => {
+      if (!itemSelectionRefsMap.current.has(id)) {
+        itemSelectionRefsMap.current.set(id, React.createRef<ListItemSelectionHandle>());
+      }
+      return itemSelectionRefsMap.current.get(id)!;
+    },
+    [],
+  );
 
   // New list items get a server-format ID up front so they keep a stable
   // identity across granular per-item updates and offline replay.
@@ -1178,6 +1212,11 @@ export default function NoteEditorScreen() {
     for (const id of itemInputRefsMap.current.keys()) {
       if (!activeItemIds.has(id)) {
         itemInputRefsMap.current.delete(id);
+      }
+    }
+    for (const id of itemSelectionRefsMap.current.keys()) {
+      if (!activeItemIds.has(id)) {
+        itemSelectionRefsMap.current.delete(id);
       }
     }
   }, [items]);
@@ -2397,6 +2436,11 @@ export default function NoteEditorScreen() {
   const handleFocusListItem = useCallback(
     (itemId: string, event: Parameters<NonNullable<TextInputProps['onFocus']>>[0]) => {
       focusedItemIdRef.current = itemId;
+      if (clearEditingItemRef.current) {
+        clearTimeout(clearEditingItemRef.current);
+        clearEditingItemRef.current = null;
+      }
+      setIsEditingItem(true);
       handleListItemFocus(event);
     },
     [handleListItemFocus],
@@ -2404,6 +2448,14 @@ export default function NoteEditorScreen() {
 
   const handleBlurListItem = useCallback((itemId: string) => {
     if (focusedItemIdRef.current === itemId) focusedItemIdRef.current = null;
+    // Deferred, and cancelled by the focus above: moving between two rows is a
+    // blur followed by a focus, and clearing straight from the blur would tear
+    // the Android bar down and rebuild it on every row change.
+    if (clearEditingItemRef.current) clearTimeout(clearEditingItemRef.current);
+    clearEditingItemRef.current = setTimeout(() => {
+      clearEditingItemRef.current = null;
+      setIsEditingItem(false);
+    }, ITEM_BLUR_SETTLE_MS);
   }, []);
 
   const hasNoteColor = !!color && !isWhiteHexColor(color);
@@ -2471,6 +2523,8 @@ export default function NoteEditorScreen() {
           canOutdent={baseLevel === 1}
           listItemProps={{
             inputRef: getItemRef(item.id),
+            selectionHandleRef: getItemSelectionRef(item.id),
+            inputAccessoryViewID: Platform.OS === 'ios' ? ITEM_MARKDOWN_TOOLBAR_ID : undefined,
             autoFocus: item.id === autoFocusItemIdRef.current,
             text: item.text,
             completed: item.completed,
@@ -2495,7 +2549,7 @@ export default function NoteEditorScreen() {
         />
       );
     },
-    [getItemRef, listItemHandlers, isNoteShared, collaborators, hasNoteColor, completedItemTexts, handleAcceptSuggestion, dragTranslateX, isReadOnly],
+    [getItemRef, getItemSelectionRef, listItemHandlers, isNoteShared, collaborators, hasNoteColor, completedItemTexts, handleAcceptSuggestion, dragTranslateX, isReadOnly],
   );
 
   /**
@@ -2570,6 +2624,50 @@ export default function NoteEditorScreen() {
   const toggleMobileCheckbox = useCallback(() => {
     applyToolbarEdit(toggleCheckbox);
   }, [applyToolbarEdit]);
+
+  /**
+   * The same thing for a list-item row: run the transform against the row that
+   * holds the caret, then put the caret back.
+   *
+   * Only the inline markers get here — the bar an item row is given carries no
+   * block buttons, because an item is lexed as inline content and would show
+   * their output as literal source (docs/specs/markdown-rendering.md §2.1).
+   */
+  const applyItemToolbarEdit = useCallback(
+    (edit: (state: EditorText) => EditorText) => {
+      const itemId = focusedItemIdRef.current;
+      if (!itemId) return;
+      const handle = itemSelectionRefsMap.current.get(itemId)?.current;
+      const index = itemsRef.current.findIndex((item) => item.id === itemId);
+      if (!handle || index === -1) return;
+
+      const previous = itemsRef.current[index]!.text;
+      const next = edit({ text: previous, selection: handle.getSelection() });
+      // The markers are characters the user did not type, so a row already at
+      // the cap drops the press rather than losing the tail of its text —
+      // handleItemTextChange would otherwise truncate it away silently.
+      if (exceedsCodePointLimit(next.text, VALIDATION.ITEM_TEXT_MAX_LENGTH)) {
+        showToast(t('note.itemLimitReached'), 'error');
+        return;
+      }
+
+      if (next.text !== previous) handleItemTextChange(index, next.text);
+      handle.setSelection(clampSelection(next.selection, next.text));
+    },
+    [handleItemTextChange, showToast, t],
+  );
+
+  const toggleItemBold = useCallback(() => {
+    applyItemToolbarEdit((state) => toggleInlineMarker(state, '**'));
+  }, [applyItemToolbarEdit]);
+
+  const toggleItemItalic = useCallback(() => {
+    applyItemToolbarEdit((state) => toggleInlineMarker(state, '*'));
+  }, [applyItemToolbarEdit]);
+
+  const toggleItemStrikethrough = useCallback(() => {
+    applyItemToolbarEdit((state) => toggleInlineMarker(state, '~~'));
+  }, [applyItemToolbarEdit]);
 
   const noteBackground = hasNoteColor ? color : colors.surface;
   const completedSectionDividerColor = hasNoteColor
@@ -2825,6 +2923,8 @@ export default function NoteEditorScreen() {
               collapsed={checkedItemsCollapsed}
               onToggleCollapsed={handleToggleCollapsed}
               getItemRef={getItemRef}
+              getItemSelectionRef={getItemSelectionRef}
+              itemAccessoryViewID={Platform.OS === 'ios' ? ITEM_MARKDOWN_TOOLBAR_ID : undefined}
               isNoteShared={!!isNoteShared}
               collaborators={collaborators}
               hasNoteColor={hasNoteColor}
@@ -2833,6 +2933,22 @@ export default function NoteEditorScreen() {
               popItemId={popItemId}
               editable={!isReadOnly}
             />
+
+            {/* iOS: the rows' accessory view. Every row carries this nativeID,
+                so the bar docks above the keyboard for whichever one is focused
+                and no state here has to track which. Inline-only buttons — see
+                applyItemToolbarEdit. */}
+            {Platform.OS === 'ios' && !isReadOnly && (
+              <InputAccessoryView nativeID={ITEM_MARKDOWN_TOOLBAR_ID}>
+                <MarkdownToolbarContent
+                  onBold={toggleItemBold}
+                  onItalic={toggleItemItalic}
+                  onStrikethrough={toggleItemStrikethrough}
+                  backgroundColor={noteBackground}
+                  hasNoteColor={hasNoteColor}
+                />
+              </InputAccessoryView>
+            )}
           </View>
         )}
 
@@ -2911,6 +3027,20 @@ export default function NoteEditorScreen() {
           onHeading={toggleMobileHeading}
           onBullet={toggleMobileBullet}
           onCheckbox={toggleMobileCheckbox}
+          backgroundColor={noteBackground}
+          hasNoteColor={hasNoteColor}
+        />
+      )}
+
+      {/* Android: the list's bar, in the same slot as the content one above and
+          on the same terms — shown while a row holds the caret, since that is
+          the only time there is text for it to act on. iOS gets this from the
+          accessory view instead. */}
+      {Platform.OS === 'android' && noteType === 'list' && isEditingItem && !isReadOnly && (
+        <MarkdownToolbarContent
+          onBold={toggleItemBold}
+          onItalic={toggleItemItalic}
+          onStrikethrough={toggleItemStrikethrough}
           backgroundColor={noteBackground}
           hasNoteColor={hasNoteColor}
         />

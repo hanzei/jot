@@ -311,6 +311,7 @@
     "formatBulletList": "Lista de viñetas",
     "formatChecklist": "Lista de tareas",
     "contentLimitReached": "La nota ha alcanzado su longitud máxima",
+    "itemLimitReached": "El elemento ha alcanzado su longitud máxima",
     "completedSuggestions": "Sugerencias de elementos completados",
     "indentItem": "Sangría",
     "outdentItem": "Quitar sangría",

@@ -27,6 +27,7 @@ import {
   dropTargetParentId,
   indentOf,
   itemHasChildren,
+  itemTextareaId,
   normalizeItemOrder,
   precedingTopLevelId,
   type ListItem,
@@ -1154,6 +1155,93 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
   };
 
+  // --- Markdown formatting, list items ------------------------------------
+  //
+  // The same shared transforms and the same undo-preserving write-back the
+  // content editor uses above, aimed at whichever row holds the caret. Only the
+  // inline markers are reachable from here: an item is lexed as inline content,
+  // so the block actions would write source that never renders
+  // (docs/specs/markdown-rendering.md §2.1). The toolbar enforces that by
+  // rendering only three buttons; this handler covers the same three.
+
+  /**
+   * The row currently holding the caret, or null. Cleared on a timeout rather
+   * than straight from blur, so moving between two rows — blur then focus, not
+   * necessarily in one batch — does not unmount the toolbar for a frame.
+   */
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const clearEditingItemRef = useRef<number | null>(null);
+
+  const handleItemEditingChange = useCallback((itemId: string, editing: boolean) => {
+    if (clearEditingItemRef.current !== null) {
+      clearTimeout(clearEditingItemRef.current);
+      clearEditingItemRef.current = null;
+    }
+    if (editing) {
+      setEditingItemId(itemId);
+      return;
+    }
+    clearEditingItemRef.current = window.setTimeout(() => {
+      clearEditingItemRef.current = null;
+      setEditingItemId(null);
+    }, 0);
+  }, []);
+
+  useEffect(() => () => {
+    if (clearEditingItemRef.current !== null) clearTimeout(clearEditingItemRef.current);
+  }, []);
+
+  /**
+   * Caret to restore after an item edit that could not be replayed through the
+   * DOM. The text goes through state, so the field's value only catches up on
+   * the next render — setting the selection before that would put it on the old
+   * text and the browser would drop it.
+   */
+  const pendingItemSelectionRef = useRef<{ itemId: string; selection: { start: number; end: number } } | null>(null);
+
+  useEffect(() => {
+    const pending = pendingItemSelectionRef.current;
+    if (!pending) return;
+    pendingItemSelectionRef.current = null;
+    const textarea = itemInputRefs.current.get(pending.itemId);
+    if (!textarea) return;
+    textarea.focus();
+    textarea.setSelectionRange(pending.selection.start, pending.selection.end);
+  }, [items]);
+
+  const applyItemMarkdownEdit = (itemId: string, transform: (state: EditorText) => EditorText) => {
+    const textarea = itemInputRefs.current.get(itemId);
+    if (!textarea) return;
+
+    const previous = textarea.value;
+    const next = transform({
+      text: previous,
+      selection: { start: textarea.selectionStart, end: textarea.selectionEnd },
+    });
+
+    // The markers are characters the user did not type, so an item already at
+    // the cap drops the press rather than losing the tail of its text. A
+    // dropped button press looks like a broken button, so say why.
+    const validationError = validateItemText(next.text, t);
+    if (validationError) {
+      showError(validationError);
+      return;
+    }
+
+    const selection = clampSelection(next.selection, next.text);
+    if (!applyTextareaEdit(textarea, next.text, selection)) {
+      handleTextUpdate(itemId, next.text);
+      pendingItemSelectionRef.current = { itemId, selection };
+    }
+  };
+
+  const handleItemToolbarAction = (action: MarkdownToolbarAction) => {
+    if (!editingItemId) return;
+    const marker = action === 'bold' ? '**' : action === 'italic' ? '*' : action === 'strikethrough' ? '~~' : null;
+    if (!marker) return;
+    applyItemMarkdownEdit(editingItemId, (state) => toggleInlineMarker(state, marker));
+  };
+
   // Restores a completed item at the position of the current (placeholder) item,
   // keeping its assignment, and removes the placeholder.
   const acceptSuggestion = (currentItemId: string, suggestionText: string) => {
@@ -1951,6 +2039,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                           onAssignItem={assignItem}
                           completedItemTexts={completedItemTexts}
                           onAcceptSuggestion={acceptSuggestion}
+                          onEditingChange={handleItemEditingChange}
                         />
                       ))}
                     </SortableContext>
@@ -1965,6 +2054,37 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                     </button>
                   )}
                 </div>
+
+                {/* One bar for the whole list, aimed at the row holding the
+                    caret — a bar per row would be one per item. It sits below
+                    the active items rather than at the very bottom of the
+                    modal, which is where it stays next to what it edits once
+                    the completed section is expanded.
+
+                    It is hidden rather than unmounted while no row is editing,
+                    and the slot it leaves behind is the point: the modal is
+                    centred in the viewport, so a bar that came and went would
+                    grow the panel and shift every row under the pointer each
+                    time focus entered the list. `invisible` (visibility:hidden)
+                    also takes the buttons out of the focus order and out of the
+                    accessibility tree, so an inert bar is inert to everyone and
+                    not just to the mouse.
+
+                    Its buttons never take focus when it is showing (see
+                    MarkdownToolbar), so a press keeps the row's caret, its
+                    selection, and the source form it shows while editing. */}
+                {!isReadOnly && (
+                  <div
+                    data-testid="markdown-toolbar-slot"
+                    className={editingItemId ? undefined : 'invisible'}
+                  >
+                    <MarkdownToolbar
+                      variant="item"
+                      onAction={handleItemToolbarAction}
+                      controlsId={editingItemId ? itemTextareaId(editingItemId) : undefined}
+                    />
+                  </div>
+                )}
 
                 {/* Completed items section */}
                 {completedItems.length > 0 && (
@@ -2053,6 +2173,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                                 collaborators={collaborators}
                                 usersById={usersById}
                                 onAssignItem={assignItem}
+                                onEditingChange={handleItemEditingChange}
                               />,
                             );
                           });
