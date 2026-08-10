@@ -511,40 +511,44 @@ test.describe('Notes', () => {
     await dashboardPage.clickNewNote();
     await dashboardPage.selectListType();
 
-    // Long enough to wrap over several lines at any width this suite runs at.
     // Whether a row wraps is invisible to its value, so only a real browser can
     // answer where its lines are — the unit tests mock that measurement out.
+    // Long enough to take several lines; how many is measured below rather than
+    // assumed, since the wrap point moves with the viewport.
     const wrapped = `Beta ${'beta '.repeat(40)}end`;
     await dashboardPage.addListItem('Alpha');
     await dashboardPage.addListItem(wrapped);
     await dashboardPage.addListItem('Gamma');
 
+    // However many lines that comes to at this viewport, which is the number of
+    // presses the row should absorb before it gives the key up.
+    const lines = await dashboardPage.listItemLineCount(1);
+    expect(lines).toBeGreaterThan(2);
+
     await dashboardPage.focusListItem(0);
     await dashboardPage.pressKey('ArrowDown');
     await dashboardPage.expectListItemFocused(1);
-    // Entering from above lands on the wrapped row's first line.
-    expect(await dashboardPage.listItemCaret(1)).toBeLessThan(wrapped.length / 2);
 
-    // The row keeps the key while its caret still has lines to cross.
-    await dashboardPage.pressKey('ArrowDown');
-    await dashboardPage.expectListItemFocused(1);
-
-    // And hands it over once the caret runs out of them. More presses than the
-    // row can have lines, which is safe because the row below is the last one
-    // and absorbs the remainder — a row that traps the caret never gets there.
-    for (let i = 0; i < 15; i++) {
+    // Entering from above lands on the row's first line, so there is exactly one
+    // press per remaining line before the row runs out — which is what says the
+    // caret arrived at the top of it rather than anywhere else.
+    for (let i = 1; i < lines; i++) {
       await dashboardPage.pressKey('ArrowDown');
+      await dashboardPage.expectListItemFocused(1);
     }
+    await dashboardPage.pressKey('ArrowDown');
     await dashboardPage.expectListItemFocused(2);
 
-    // Coming back up enters the wrapped row on its last line, which is the one
-    // the caret visually arrives at — and leaves lines above still to cross.
+    // Coming back up enters on the row's last line — the one the caret visually
+    // arrives at — so the same count applies in reverse.
     await dashboardPage.pressKey('ArrowUp');
     await dashboardPage.expectListItemFocused(1);
-    expect(await dashboardPage.listItemCaret(1)).toBeGreaterThan(wrapped.length / 2);
-
+    for (let i = 1; i < lines; i++) {
+      await dashboardPage.pressKey('ArrowUp');
+      await dashboardPage.expectListItemFocused(1);
+    }
     await dashboardPage.pressKey('ArrowUp');
-    await dashboardPage.expectListItemFocused(1);
+    await dashboardPage.expectListItemFocused(0);
   });
 
   test('pressing Enter on the last list item creates a new item', async ({ dashboardPage }) => {

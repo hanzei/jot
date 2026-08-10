@@ -205,6 +205,13 @@ export function getOffsetAtLine(
  * decreases as its offset grows, and within one line neither does its `left`.
  * That makes each of them a bisection over offsets — a dozen measurements for a
  * row of any length, instead of one per character.
+ *
+ * The `left` half holds for a left-to-right paragraph, which is the only kind
+ * this app lays out: no locale it ships is RTL and nothing sets `dir`. Note
+ * *content* is what to revisit if that changes, and a direction flag read from
+ * the computed style would not cover it — an RTL run inside an LTR line already
+ * reverses visually, while the paragraph's own direction stays `ltr`. The cost
+ * of being wrong is a caret landing a few columns off, never a wrong row.
  */
 
 function firstOffsetOnLine(mirror: Mirror, value: string, top: number): number {

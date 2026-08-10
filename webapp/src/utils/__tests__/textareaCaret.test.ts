@@ -83,7 +83,7 @@ function textareaWith(value: string): HTMLTextAreaElement {
   return textarea;
 }
 
-// Ten characters to a line: three full lines and a five-character remainder.
+// Ten characters to a line: two full lines and a five-character remainder.
 const WRAPPED = 'abcdefghijklmnopqrstuvwxy';
 
 describe('textareaCaret', () => {
