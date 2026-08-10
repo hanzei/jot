@@ -104,6 +104,24 @@ export class DashboardPage {
     await expect(this.listItemInput(index)).toBeFocused();
   }
 
+  /**
+   * How many visual lines the row at `index` currently wraps to.
+   *
+   * The row auto-grows to fit its text, so its scroll height is one line-height
+   * per line plus the padding. Derived at runtime because the wrap point moves
+   * with the viewport, and a test that hardcodes it is asserting about the
+   * browser window rather than about the behaviour.
+   */
+  async listItemLineCount(index: number): Promise<number> {
+    return this.listItemInput(index).evaluate(el => {
+      const styles = getComputedStyle(el);
+      const lineHeight = Number.parseFloat(styles.lineHeight);
+      const padding = (Number.parseFloat(styles.paddingTop) || 0)
+        + (Number.parseFloat(styles.paddingBottom) || 0);
+      return Math.round((el.scrollHeight - padding) / lineHeight);
+    });
+  }
+
   async expectListItemCount(count: number) {
     await expect(this.page.locator('[data-testid="list-item-input"]')).toHaveCount(count);
   }
