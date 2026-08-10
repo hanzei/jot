@@ -227,7 +227,7 @@ func TestNoteSearchIndexConsistency(t *testing.T) {
 			assert.ElementsMatch(t, []string{n.ID}, searchIDs(t, store, ctx, userID, "kayak"))
 
 			// Convert to a text note whose content no longer has the item text.
-			_, err = store.ConvertType(ctx, n.ID, userID, NoteTypeText, "sailing", nil, nil)
+			_, err = store.ConvertType(ctx, n.ID, userID, NoteTypeText, "", "sailing", nil, nil)
 			require.NoError(t, err)
 			assert.Empty(t, searchIDs(t, store, ctx, userID, "kayak"))
 			assert.ElementsMatch(t, []string{n.ID}, searchIDs(t, store, ctx, userID, "sailing"))

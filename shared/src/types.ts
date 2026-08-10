@@ -258,14 +258,20 @@ export type UpdateNoteRequest = UpdateTextNoteRequest | UpdateListNoteRequest;
 /**
  * Request body for `POST /notes/{id}/convert`, which changes a note's type in
  * place. The transform (splitting text into list items, or rendering a list
- * back into text) is computed client-side via `textToListItems`/`listToText`
+ * back into text) is computed client-side via `textToListNote`/`listToText`
  * (see `noteConversion.ts`) and sent precomputed; the server only validates
- * and persists it. `content` is used when converting to `text`; `items` when
- * converting to `list`.
+ * and persists it. `content` is used when converting to `text`; `title` and
+ * `items` when converting to `list`.
  */
 export interface ConvertNoteTypeRequest extends BaseUpdateNoteRequest {
   note_type: NoteType;
   content?: string;
+  /**
+   * The converted list's title, promoted from a leading heading in the text
+   * content. Omitted (or '') leaves the note untitled, which is what the
+   * server stored unconditionally before this field existed.
+   */
+  title?: string;
   items?: CreateNoteItemRequest[];
 }
 

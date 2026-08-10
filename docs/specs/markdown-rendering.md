@@ -239,6 +239,29 @@ that rule, and both clients call it.
 | A leading `#`–`######` heading prefix | no headings, and the title is separate |
 | Leading `>` blockquote markers | no block structure at all |
 
+**The first non-blank line, when it is a heading, becomes the list's title**
+rather than its first item — the inverse of the `# h1` line the other direction
+writes, and what makes a list note keep its title across a round trip through
+text. Any level is promoted, since `## Groceries` is a title the user typed as a
+heading and accepting only `#` would look like the feature was broken; the level
+itself is not preserved, because a list has one title and converting back writes
+it as `#`. Three cases deliberately do *not* promote, and each falls back to the
+line becoming an item exactly as it did before:
+
+- A heading behind another construct (`> # Groceries`, `- # Groceries`) — the
+  `#` is nested inside a quote or a list item there, not standing as the note's
+  title.
+- A setext heading (`Groceries` over `=====`) — the converter is line-by-line
+  by design, and recognizing setext means lookahead plus a rule for the leftover
+  underline.
+- A heading longer than `TITLE_MAX_LENGTH` (200) — the server would reject the
+  title outright, and truncating would drop text the note still holds.
+
+The clients send the promoted title as `title` on the convert request, alongside
+the precomputed items; the server persists it rather than clearing the title as
+it used to. Omitting the field leaves the note untitled, which is what every
+client did before it existed.
+
 Everything else survives as typed. Inline syntax is kept because the item
 renders it — stripping `**` out of `**Buy** milk` would delete formatting the
 destination displays. Block syntax that is *not* a line prefix — a fence, `---`,
@@ -271,16 +294,19 @@ either — every item is emitted behind a `- [ ] ` marker, so a leading `#` or a
 The round trip is stable in one direction and *normalizing* in the other, which
 is worth stating precisely because it is easy to overclaim:
 
-- **List → text → list returns the same items** — text, completed state and
-  nesting all survive. The one exception is an item whose text *begins* with `#`
-  or `>`: that prefix is consumed on the way back, because the converter cannot
-  distinguish it from the block markup it exists to strip.
-- **Text → list → text normalizes rather than preserves.** Inline formatting and
-  nesting survive, but every line returns as `- [ ]` / `- [x]`, so content that
-  used any other structural prefix is not byte-identical: `# Groceries` comes
-  back as `- [ ] Groceries`, and `* Eggs`, `1. Eggs` and `> Eggs` all come back
-  as `- [ ] Eggs`. This is inherent to the destination — an item has one
-  representation, so every way of writing a line collapses onto it.
+- **List → text → list returns the same items *and* the title** — text,
+  completed state and nesting all survive, and the `# h1` line is promoted back
+  into the title it came from. The one exception is an item whose text *begins*
+  with `#` or `>`: that prefix is consumed on the way back, because the
+  converter cannot distinguish it from the block markup it exists to strip.
+- **Text → list → text normalizes rather than preserves.** Inline formatting,
+  nesting and a leading heading survive, but every other line returns as
+  `- [ ]` / `- [x]`, so content that used any other structural prefix is not
+  byte-identical: `* Eggs`, `1. Eggs` and `> Eggs` all come back as
+  `- [ ] Eggs`. This is inherent to the destination — an item has one
+  representation, so every way of writing a line collapses onto it. A leading
+  `## Groceries` comes back as `# Groceries` (title level is not preserved); a
+  heading anywhere later comes back as `- [ ] Groceries` like any other line.
 
 Also not recovered, in either direction, is anything the line-per-item split
 discards: blank lines, and the distinction between a wrapped paragraph and
