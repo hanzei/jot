@@ -77,8 +77,9 @@ which is what keeps an offhand "bump the OTel packages" from turning into a bare
 
 `scripts/bootstrap.sh` provisions a checkout: it installs `task`, runs `npm ci`
 in `shared/` → `webapp/` → `mobile/` (skipping packages that already have
-`node_modules`), warms the Go build cache, and warns about Node/Go version
-skew. It is the single source of truth for setup — `.claude/settings.json` runs
+`node_modules`), installs the Chromium build Playwright needs, warms the Go
+build cache, and warns about Node/Go version skew. It is the single source of
+truth for setup — `.claude/settings.json` runs
 it from a `SessionStart` hook and `shell.nix` runs it on shell entry, so **a
 session should already be provisioned and `task ...` should work as the first
 command**. Do not add setup steps to those entry points; add them to the
@@ -90,9 +91,10 @@ lands on whoever lints first, usually at the end of a change.
 
 If `task` is somehow missing, run `./scripts/bootstrap.sh` (directly — `task`
 cannot install itself) rather than working around it with raw `go test`/`npm run`.
-`JOT_BOOTSTRAP_SKIP=1`, `JOT_BOOTSTRAP_SKIP_NPM=1`, and
-`JOT_BOOTSTRAP_SKIP_GO_CACHE=1` opt out. The README documents the script for
-humans; do not restate its steps elsewhere.
+`JOT_BOOTSTRAP_SKIP=1`, `JOT_BOOTSTRAP_SKIP_NPM=1`,
+`JOT_BOOTSTRAP_SKIP_PLAYWRIGHT=1`, and `JOT_BOOTSTRAP_SKIP_GO_CACHE=1` opt out.
+The README documents the script for humans; do not restate its steps
+elsewhere.
 
 ### Editing feedback
 
@@ -105,9 +107,11 @@ information (`tsc --noEmit`, `task check-translations`) is covered — so it
 narrows the `task check` loop without replacing it. Anything it cannot lint is
 a silent pass.
 
-Playwright browsers are deliberately not part of bootstrap. `task test-e2e`
-checks for them first and stops with the install command if they are missing or
-version-mismatched.
+`scripts/bootstrap.sh` installs the Chromium build Playwright needs, so
+`task test-e2e` normally just works. `scripts/check-playwright-browser.sh`
+still runs first as a safety net (`JOT_BOOTSTRAP_SKIP_PLAYWRIGHT=1`, or
+reaching `test-e2e` without ever running bootstrap) and stops with the install
+command if the browser is missing or version-mismatched.
 
 ## Development Tasks
 
@@ -586,7 +590,7 @@ Types are distributed across the `@jot/shared` package (`shared/src/`) and impor
 - **Add e2e tests for every new user-facing feature** (new pages, workflows, admin actions)
 - Run: `task test-e2e` (scope to one spec with `task test-e2e -- notes.spec.ts`)
 - No server needs to be running first: Playwright's `webServer` builds the webapp, starts the Go server on a throwaway DB, and tears it down. `task test-e2e` pre-compiles the server so that startup stays inside the Playwright timeout on a cold build cache.
-- Browsers are not provisioned by bootstrap. `task test-e2e` runs `scripts/check-playwright-browser.sh` first, which fails with the exact `npx playwright install chromium` command when the pinned Chromium build is missing — that is a one-command fix, not a broken suite.
+- `scripts/bootstrap.sh` provisions the browser, so this is usually a non-issue. `task test-e2e` runs `scripts/check-playwright-browser.sh` first as a safety net, which fails with the exact `npx playwright install chromium` command when the pinned Chromium build is missing — that is a one-command fix, not a broken suite.
 - **Linted with the rest of webapp** (`task lint-webapp`), sharing the `tsRules` baseline in `eslint.config.js`. The e2e block drops the React plugins — react-hooks reads Playwright's `use` fixture parameter as React's `use()` hook — and allows `_`-prefixed unused parameters, which is how page objects keep a call signature steady after they stop using an argument.
 - A fixture destructured but never referenced is doing real work: Playwright only runs a fixture a test names, so `authenticatedUser` is what logs the test in. Mark it `void authenticatedUser;` rather than deleting it.
 - **Type-checked as its own project**, `webapp/tsconfig.e2e.json` — see [TypeScript strictness](#typescript-strictness) below. The e2e ESLint block parses against that same project, which buys it three type-aware rules the app block does not have: `no-floating-promises`, `no-misused-promises`, and `await-thenable`. A dropped `await` on a Playwright call is the failure they exist for — the assertion then runs against the page as it was *before* the action and passes or fails for the wrong reason, which `tsc` cannot see.
