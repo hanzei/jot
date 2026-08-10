@@ -154,6 +154,10 @@ function ListItem({
   // which uses it to move focus between rows, and is optional — but tap-to-edit
   // has to focus the field whether or not anyone passed one.
   const ownInputRef = useRef<TextInputType | null>(null);
+  // Set by a tap on the rendered text, cleared by the effect below once the
+  // input is back in flow. See there for why the focus cannot happen in the tap
+  // handler itself.
+  const focusAfterSwapRef = useRef(false);
 
   useEffect(() => {
     return () => {
@@ -236,13 +240,22 @@ function ListItem({
 
   // Entering edit mode from a tap has to place the caret itself: the user
   // pointed at the rendered text and the field behind it holds the source.
+  //
+  // It cannot focus the input here, though. While the rendered form is showing,
+  // the input is out of flow, transparent and inside a `pointerEvents: 'none'`
+  // wrapper — and neither platform will focus a field in that state. iOS refuses
+  // `becomeFirstResponder` for a view with user interaction disabled; Android's
+  // `requestFocus` falls through to the next focusable field in the window,
+  // which is the note title at the top of the editor. So the tap ends the
+  // rendered form and the effect below focuses once that has been committed.
   const handleRenderedPress = useCallback(
     (event: GestureResponderEvent) => {
       const { locationX, locationY } = event.nativeEvent;
       const measured = renderedLinesRef.current;
       const lines = measured?.text === text ? measured.lines : null;
       const offset = sourceOffsetAtPoint(nodes, text, lines, locationX, locationY);
-      ownInputRef.current?.focus();
+      setIsEditing(true);
+      focusAfterSwapRef.current = true;
       // Nothing to force when the caret is already there: the input would report
       // no selection change, so the controlled value would never be released.
       if (offset !== selectionRef.current.start || offset !== selectionRef.current.end) {
@@ -251,6 +264,16 @@ function ListItem({
     },
     [nodes, text],
   );
+
+  // The other half of the tap: focus the field on the commit that put it back in
+  // flow. Keyed on `showRendered` rather than run unconditionally so a row
+  // frozen mid-drag waits for the drop instead of focusing a field that is still
+  // hidden.
+  useEffect(() => {
+    if (showRendered || !focusAfterSwapRef.current) return;
+    focusAfterSwapRef.current = false;
+    ownInputRef.current?.focus();
+  }, [showRendered]);
 
   const {
     text: effectiveText,

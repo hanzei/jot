@@ -1,6 +1,7 @@
+import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
-import { Animated, StyleSheet } from 'react-native';
+import { Animated, StyleSheet, type TextInput } from 'react-native';
 import { VALIDATION } from '@jot/shared';
 import ListItem from '../src/components/ListItem';
 import * as layoutAnimation from '../src/utils/layoutAnimation';
@@ -202,6 +203,23 @@ describe('ListItem', () => {
       fireEvent.press(rendered, { nativeEvent: { locationX: x, locationY: 10 } });
       return view;
     }
+
+    it('ends the rendered form before focusing the field', () => {
+      // Neither platform will focus a field that is still out of flow and inside
+      // a `pointerEvents: 'none'` wrapper: iOS refuses it outright, and Android
+      // hands focus to the next focusable field in the window — the note title.
+      // So the swap has to be committed before `focus()` is called.
+      const ref = React.createRef<TextInput>();
+      const view = render(<ListItem text="buy **milk**" completed={false} inputRef={ref} />);
+      const focus = jest.spyOn(ref.current!, 'focus');
+
+      const rendered = view.getByTestId('list-item-text-rendered', HIDDEN);
+      fireEvent(rendered, 'textLayout', { nativeEvent: { lines } });
+      fireEvent.press(rendered, { nativeEvent: { locationX: 40, locationY: 10 } });
+
+      expect(view.queryByTestId('list-item-text-rendered', HIDDEN)).toBeNull();
+      expect(focus).toHaveBeenCalledTimes(1);
+    });
 
     it('puts the caret where the tap pointed', () => {
       // Character 4 of `buy milk` is the `m`, which sits at 6 in the source.
