@@ -467,6 +467,27 @@ test.describe('Markdown in list-item rows', () => {
     await expect(dashboardPage.listItemRendered(0).locator('a')).toHaveCount(0);
   });
 
+  test('Ctrl+B and Ctrl+I format a list item, and Ctrl+Shift+B is left to the browser', async ({ page, dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createListNote('Shortcut Note', ['buy milk today']);
+    await dashboardPage.openNote('Shortcut Note');
+
+    const input = dashboardPage.listItemInput(0);
+    await input.click();
+    await input.evaluate((el: HTMLTextAreaElement) => el.setSelectionRange(4, 8));
+    await page.keyboard.press('Control+b');
+    await dashboardPage.expectListItemValue(0, 'buy **milk** today');
+
+    // "buy **milk** today" — "today" now sits at [13, 18) after the bold markers shifted it.
+    await input.evaluate((el: HTMLTextAreaElement) => el.setSelectionRange(13, 18));
+    await page.keyboard.press('Control+i');
+    await dashboardPage.expectListItemValue(0, 'buy **milk** *today*');
+
+    await input.evaluate((el: HTMLTextAreaElement) => el.setSelectionRange(0, 3));
+    await page.keyboard.press('Control+Shift+b');
+    await dashboardPage.expectListItemValue(0, 'buy **milk** *today*');
+  });
+
   test.describe('formatting toolbar', () => {
     test('appears with the row that has the caret and carries only the inline actions', async ({ page, dashboardPage, noteEditorPage }) => {
       await dashboardPage.goto();
@@ -496,6 +517,42 @@ test.describe('Markdown in list-item rows', () => {
       await expect(noteEditorPage.toolbar()).toHaveAttribute('aria-controls', rowId!);
 
       // Focus somewhere outside the list and the bar hides again.
+      await page.getByPlaceholder('Title').click();
+      await expect(noteEditorPage.toolbar()).not.toBeVisible();
+    });
+
+    test('survives Tab from a row into it, and formats from the keyboard', async ({ page, dashboardPage, noteEditorPage }) => {
+      await dashboardPage.goto();
+      await dashboardPage.createListNote('Tab Note', ['buy milk']);
+      await dashboardPage.openNote('Tab Note');
+
+      // A completed row is the one that gives Tab away — an active row keeps it
+      // for indent. Check the item, then edit it in the completed section.
+      await dashboardPage.listItemRow(0).locator('input[type="checkbox"]').click();
+      await expect(page.getByText(/Completed items/)).toBeVisible();
+
+      const row = dashboardPage.listItemInput(0);
+      await row.click();
+      await row.evaluate((el: HTMLTextAreaElement) => el.setSelectionRange(4, 8));
+      await expect(noteEditorPage.toolbar()).toBeVisible();
+
+      // Tab leaves the field for the row's own delete control first, and only
+      // then the toolbar. Hiding the bar on the field's blur made that second
+      // Tab skip past it to the footer, putting it out of keyboard reach.
+      await page.keyboard.press('Tab');
+      await expect(dashboardPage.listItemRow(0).getByTestId('list-item-delete')).toBeFocused();
+      await expect(noteEditorPage.toolbar()).toBeVisible();
+
+      await page.keyboard.press('Tab');
+      await expect(noteEditorPage.formatButton('bold')).toBeFocused();
+      await expect(noteEditorPage.toolbar()).toBeVisible();
+
+      // The whole point of getting here: the button works from the keyboard,
+      // on the selection the row still holds.
+      await page.keyboard.press('Enter');
+      await dashboardPage.expectListItemValue(0, 'buy **milk**');
+
+      // And leaving for good does hide it.
       await page.getByPlaceholder('Title').click();
       await expect(noteEditorPage.toolbar()).not.toBeVisible();
     });

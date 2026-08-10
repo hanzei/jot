@@ -35,6 +35,13 @@ interface MarkdownToolbarProps {
   controlsId?: string;
   /** Defaults to the full text-note set. */
   variant?: MarkdownToolbarVariant;
+  /**
+   * Fires when focus leaves the toolbar as a whole (not when it moves between
+   * its own buttons). A caller that shows the toolbar conditionally needs this:
+   * the toolbar reports no editing state of its own, so nothing else tells it
+   * that focus has moved on.
+   */
+  onBlurOut?: () => void;
 }
 
 // Same actions, same icons and same order as the mobile formatting bar
@@ -81,6 +88,7 @@ export default function MarkdownToolbar({
   onAction,
   controlsId,
   variant = 'content',
+  onBlurOut,
 }: MarkdownToolbarProps) {
   const { t } = useTranslation();
   const [focusedIndex, setFocusedIndex] = useState(0);
@@ -131,6 +139,13 @@ export default function MarkdownToolbar({
       aria-orientation="horizontal"
       data-testid="markdown-toolbar"
       className="flex items-center gap-0.5 px-1 py-1 border-t border-gray-200 dark:border-slate-600"
+      // React's onBlur is focusout, so it bubbles and one handler here covers
+      // every button. Movement between two buttons of this same toolbar is not
+      // leaving it, and must not be reported as such.
+      onBlur={(event) => {
+        if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+        onBlurOut?.();
+      }}
     >
       {shown.map((action, index) => (
         <div key={action.id} className="contents">

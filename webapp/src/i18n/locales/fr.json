@@ -263,7 +263,7 @@
     "noteColorDescription": "Ouvrir le sélecteur de couleur",
     "noteDeleteKey": "Suppr / Retour arrière",
     "noteDeleteDescription": "Supprimer la note (avec confirmation)",
-    "formatSection": "Mise en forme (lors de la modification d'une note texte)",
+    "formatSection": "Mise en forme (lors de la modification du contenu d'une note)",
     "formatBoldKey": "Ctrl + B",
     "formatBoldDescription": "Mettre le texte sélectionné en gras",
     "formatItalicKey": "Ctrl + I",

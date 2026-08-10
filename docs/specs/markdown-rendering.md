@@ -601,7 +601,7 @@ continuation when Enter is pressed at the end of a list item.
 **The bar has two forms, and the split is §2 versus §2.1 rather than a
 preference.** Over a text note's content it carries all six buttons. Over a
 list-item row it carries the inline three only: an item is lexed as inline
-content, so `## `, `- ` and `- [ ] ` stay literal source there (§2.1) and a
+content, so `## x`, `- x` and `- [ ] x` stay literal source there (§2.1) and a
 button for them would write characters guaranteed never to render — the checkbox
 one twice over, since the row already has a real checkbox. Both clients drop the
 same three, so the two still read as one feature.
@@ -656,6 +656,16 @@ Beyond that they diverge, because a phone has a keyboard in the way:
   each time focus entered the list. It also takes the buttons out of the focus
   order while inert, so the hidden bar is hidden from everyone rather than only
   from the mouse.
+
+  **"Is a row still being edited?" is answered once focus has settled, not when
+  a field blurs.** Tab out of a row's field and focus goes to that row's own
+  delete control, then its assignee control, and only then the toolbar — so a
+  bar that hid on the bare blur was gone before Tab could reach it, and the next
+  Tab went straight past it to the action bar. Keyboard users could not reach it
+  at all. The clear is therefore deferred and then asks where focus actually
+  landed; anything inside a row or inside the toolbar keeps the bar, and the row
+  keeps showing source so the selection the next press acts on stays visible.
+  The same deferral is what stops row-to-row movement flickering the bar.
 - **Mobile puts it where the keyboard is.** On iOS every row carries the bar's
   `nativeID`, so an `InputAccessoryView` docks above the keyboard for whichever
   row is focused and nothing has to track which. On Android it renders inline
@@ -672,6 +682,14 @@ off the focused `<textarea>`, while mobile's rows own their selection state
 handle rather than lifting it. An item at `ITEM_TEXT_MAX_LENGTH` drops the press
 on both clients with a toast — the markers are characters the user did not type,
 and truncating would eat the tail of the text instead.
+
+`Ctrl`/`Cmd`+`B` and `+I` reuse `toggleInlineMarker` from a keydown handler
+rather than a toolbar button, on both surfaces: the content field and a list
+item's row (`webapp/src/components/NoteModal.tsx`, `handleItemKeyDown`), since
+an item renders the same inline subset as content (§2.1). They are the same two
+transforms the bar's first two buttons run, so the two routes cannot disagree.
+Heading, bullet and checkbox stay toolbar-only and text-note-only; strikethrough
+is on both bars but has no keyboard shortcut on either surface.
 
 ---
 

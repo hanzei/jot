@@ -780,6 +780,52 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     return null;
   };
 
+  /**
+   * Runs a formatting transform against an item row's text and selection, then
+   * writes the result back through applyTextareaEdit — same undo-preserving
+   * write-back as applyMarkdownEdit above, just addressed at a row's own
+   * textarea instead of the single shared contentRef.
+   *
+   * The inserted markers are characters the user did not type, so a transform
+   * that would push the item over VALIDATION.ITEM_TEXT_MAX_LENGTH is dropped
+   * rather than truncated — the same choice handleListContinuation makes at
+   * the content cap. Unlike that one it says so: this runs behind a toolbar
+   * button as well as a shortcut, and a button that silently does nothing
+   * reads as broken. Mobile's bar shows the same toast for the same case.
+   */
+  const applyItemMarkdownEdit = (
+    itemId: string,
+    textarea: HTMLTextAreaElement,
+    transform: (state: EditorText) => EditorText,
+  ) => {
+    const next = transform({
+      text: textarea.value,
+      selection: { start: textarea.selectionStart, end: textarea.selectionEnd },
+    });
+    const validationError = validateItemText(next.text, t);
+    if (validationError) {
+      showError(validationError);
+      return;
+    }
+
+    const selection = clampSelection(next.selection, next.text);
+    if (!applyTextareaEdit(textarea, next.text, selection)) {
+      handleTextUpdate(itemId, next.text);
+      // handleTextUpdate is a controlled update: the row's textarea only
+      // picks up the new value on the next render, and assigning .value then
+      // resets the caret to the end. Same deferred-restore idiom as the
+      // insert-before-item/split-item focus handling above, addressed at
+      // this row via itemInputRefs instead of a fresh item's id.
+      setTimeout(() => {
+        const el = itemInputRefs.current.get(itemId);
+        if (el) {
+          el.focus();
+          el.setSelectionRange(selection.start, selection.end);
+        }
+      }, 0);
+    }
+  };
+
   const handleItemKeyDown = (index: number, e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
@@ -819,8 +865,24 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       return;
     }
 
-    if (e.repeat) return;
     if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
+
+    // Same modifier guard as the content textarea's Ctrl/Cmd+B/I (see the
+    // comment there): Shift and Alt must both be absent, since the
+    // combinations they form — Ctrl+Shift+B toggles Chrome's bookmarks bar —
+    // belong to the browser, not the editor.
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey) {
+      const key = e.key.toLowerCase();
+      if (key === 'b' || key === 'i') {
+        e.preventDefault();
+        const currentItem = findTargetItem(index);
+        if (!currentItem) return;
+        applyItemMarkdownEdit(currentItem.id, e.currentTarget, (state) => toggleInlineMarker(state, key === 'b' ? '**' : '*'));
+        return;
+      }
+    }
+
+    if (e.repeat) return;
 
     if (e.key === 'Enter' && e.shiftKey) {
       return;
@@ -1165,81 +1227,77 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   // rendering only three buttons; this handler covers the same three.
 
   /**
-   * The row currently holding the caret, or null. Cleared on a timeout rather
-   * than straight from blur, so moving between two rows — blur then focus, not
-   * necessarily in one batch — does not unmount the toolbar for a frame.
+   * The row currently holding the caret, or null — which is also what decides
+   * whether the toolbar is showing.
+   *
+   * Cleared on a timeout rather than straight from a blur, because every way of
+   * *staying* in the list is a blur immediately followed by a focus, and the two
+   * do not always land in one batch: row to row, and row to toolbar. The pending
+   * clear is cancelled by whichever focus arrives next, so only focus that
+   * settles outside both actually hides the bar.
    */
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const clearEditingItemRef = useRef<number | null>(null);
 
-  const handleItemEditingChange = useCallback((itemId: string, editing: boolean) => {
+  const cancelClearEditingItem = useCallback(() => {
     if (clearEditingItemRef.current !== null) {
       clearTimeout(clearEditingItemRef.current);
       clearEditingItemRef.current = null;
     }
-    if (editing) {
-      setEditingItemId(itemId);
-      return;
-    }
+  }, []);
+
+  const scheduleClearEditingItem = useCallback(() => {
+    cancelClearEditingItem();
     clearEditingItemRef.current = window.setTimeout(() => {
       clearEditingItemRef.current = null;
+      // Asked once focus has settled, because "did the user leave the list?"
+      // has no answer at the moment a field blurs. Everything between the field
+      // and the next tab stop outside belongs to the editing surface — the
+      // row's own delete and assignee controls, the suggestion dropdown, and
+      // the toolbar itself — and Tab visits them in that order. Clearing on the
+      // bare blur hid the toolbar while focus was still inside the row, which
+      // put it out of reach of the keyboard entirely.
+      const active = document.activeElement;
+      if (active instanceof Element && active.closest('[data-testid="list-item-row"], [role="toolbar"]')) return;
       setEditingItemId(null);
     }, 0);
-  }, []);
+  }, [cancelClearEditingItem]);
+
+  const handleItemEditingChange = useCallback((itemId: string, editing: boolean) => {
+    if (!editing) {
+      scheduleClearEditingItem();
+      return;
+    }
+    cancelClearEditingItem();
+    setEditingItemId(itemId);
+  }, [cancelClearEditingItem, scheduleClearEditingItem]);
+
+  /**
+   * The toolbar is not a field and so never reports editing state of its own;
+   * what keeps it alive while it holds focus is the settle-time check above.
+   * It still has to *re-ask* when focus leaves it, since nothing else will.
+   */
+  const handleItemToolbarBlur = useCallback(() => {
+    scheduleClearEditingItem();
+  }, [scheduleClearEditingItem]);
 
   useEffect(() => () => {
     if (clearEditingItemRef.current !== null) clearTimeout(clearEditingItemRef.current);
   }, []);
 
   /**
-   * Caret to restore after an item edit that could not be replayed through the
-   * DOM. The text goes through state, so the field's value only catches up on
-   * the next render — setting the selection before that would put it on the old
-   * text and the browser would drop it.
+   * The toolbar's route into applyItemMarkdownEdit (defined with the row
+   * keydown handler above, which is the other caller). There is no event to
+   * take the field from here, so the row holding the caret is resolved through
+   * itemInputRefs instead.
    */
-  const pendingItemSelectionRef = useRef<{ itemId: string; selection: { start: number; end: number } } | null>(null);
-
-  useEffect(() => {
-    const pending = pendingItemSelectionRef.current;
-    if (!pending) return;
-    pendingItemSelectionRef.current = null;
-    const textarea = itemInputRefs.current.get(pending.itemId);
-    if (!textarea) return;
-    textarea.focus();
-    textarea.setSelectionRange(pending.selection.start, pending.selection.end);
-  }, [items]);
-
-  const applyItemMarkdownEdit = (itemId: string, transform: (state: EditorText) => EditorText) => {
-    const textarea = itemInputRefs.current.get(itemId);
-    if (!textarea) return;
-
-    const previous = textarea.value;
-    const next = transform({
-      text: previous,
-      selection: { start: textarea.selectionStart, end: textarea.selectionEnd },
-    });
-
-    // The markers are characters the user did not type, so an item already at
-    // the cap drops the press rather than losing the tail of its text. A
-    // dropped button press looks like a broken button, so say why.
-    const validationError = validateItemText(next.text, t);
-    if (validationError) {
-      showError(validationError);
-      return;
-    }
-
-    const selection = clampSelection(next.selection, next.text);
-    if (!applyTextareaEdit(textarea, next.text, selection)) {
-      handleTextUpdate(itemId, next.text);
-      pendingItemSelectionRef.current = { itemId, selection };
-    }
-  };
-
   const handleItemToolbarAction = (action: MarkdownToolbarAction) => {
     if (!editingItemId) return;
+    const textarea = itemInputRefs.current.get(editingItemId);
+    if (!textarea) return;
     const marker = action === 'bold' ? '**' : action === 'italic' ? '*' : action === 'strikethrough' ? '~~' : null;
     if (!marker) return;
-    applyItemMarkdownEdit(editingItemId, (state) => toggleInlineMarker(state, marker));
+    applyItemMarkdownEdit(editingItemId, textarea, (state) => toggleInlineMarker(state, marker));
   };
 
   // Restores a completed item at the position of the current (placeholder) item,
@@ -2040,6 +2098,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                           completedItemTexts={completedItemTexts}
                           onAcceptSuggestion={acceptSuggestion}
                           onEditingChange={handleItemEditingChange}
+                          keepSourceVisible={editingItemId === item.id}
                         />
                       ))}
                     </SortableContext>
@@ -2144,6 +2203,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                                 usersById={usersById}
                                 onAssignItem={assignItem}
                                 onEditingChange={handleItemEditingChange}
+                                keepSourceVisible={editingItemId === item.id}
                               />,
                             );
                           });
@@ -2277,6 +2337,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
               <MarkdownToolbar
                 variant="item"
                 onAction={handleItemToolbarAction}
+                onBlurOut={handleItemToolbarBlur}
                 controlsId={editingItemId ? itemTextareaId(editingItemId) : undefined}
               />
             </div>

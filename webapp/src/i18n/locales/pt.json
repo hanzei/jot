@@ -263,7 +263,7 @@
     "noteColorDescription": "Abrir o seletor de cores",
     "noteDeleteKey": "Del / Backspace",
     "noteDeleteDescription": "Excluir a nota (com confirmação)",
-    "formatSection": "Formatação (ao editar uma nota de texto)",
+    "formatSection": "Formatação (ao editar o conteúdo de uma nota)",
     "formatBoldKey": "Ctrl + B",
     "formatBoldDescription": "Colocar o texto selecionado em negrito",
     "formatItalicKey": "Ctrl + I",

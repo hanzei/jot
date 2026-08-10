@@ -2901,6 +2901,57 @@ describe('NoteModal', () => {
       expect(screen.getByTestId('markdown-toolbar')).not.toHaveAttribute('aria-controls');
     });
 
+    // Real focus moves, not synthetic focus events: what keeps the toolbar
+    // alive is a document.activeElement check once focus has settled, and
+    // fireEvent.focus dispatches the event without moving activeElement.
+    it('survives focus moving to the row\'s own controls, which Tab reaches first', async () => {
+      const textarea = openListNote('buy **milk**');
+      const slot = () => screen.getByTestId('markdown-toolbar-slot');
+
+      act(() => { textarea.focus(); });
+      expect(slot()).not.toHaveClass('invisible');
+
+      // Tab out of the field lands on the row's delete button before it ever
+      // reaches the toolbar. Hiding the toolbar here put it out of reach of the
+      // keyboard entirely — the next Tab went straight past it to the footer.
+      const del = within(screen.getByTestId('list-item-row')).getByTestId('list-item-delete');
+      act(() => { del.focus(); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+
+      expect(slot()).not.toHaveClass('invisible');
+    });
+
+    it('stays put once focus reaches it, and the row keeps showing source', async () => {
+      const textarea = openListNote('buy **milk**');
+      const slot = () => screen.getByTestId('markdown-toolbar-slot');
+
+      act(() => { textarea.focus(); });
+      act(() => { screen.getByTestId('format-bold-btn').focus(); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+
+      expect(slot()).not.toHaveClass('invisible');
+      // The row still shows source, so the selection the next press acts on is
+      // still on screen rather than collapsed behind the rendered form.
+      expect(screen.getByTestId('list-item-input')).toBeInTheDocument();
+      expect(screen.queryByTestId('list-item-rendered')).not.toBeInTheDocument();
+    });
+
+    it('hides once focus leaves both the row and the toolbar', async () => {
+      const textarea = openListNote('buy **milk**');
+
+      act(() => { textarea.focus(); });
+      act(() => { screen.getByTestId('format-bold-btn').focus(); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+
+      // Out of the toolbar to somewhere else entirely.
+      act(() => { screen.getByTestId('format-bold-btn').blur(); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+
+      expect(screen.getByTestId('markdown-toolbar-slot')).toHaveClass('invisible');
+      // The row goes back to its rendered form now that nothing holds it.
+      expect(screen.getByTestId('list-item-rendered')).toBeInTheDocument();
+    });
+
     it('offers only the inline actions — an item cannot hold block markdown', () => {
       const textarea = openListNote('milk');
       fireEvent.focus(textarea);
@@ -2940,6 +2991,9 @@ describe('NoteModal', () => {
 
       const row = screen.getByTestId('list-item-input') as HTMLTextAreaElement;
       expect(row).toHaveValue('**');
+      // On the fallback path the text goes through state, so the caret is
+      // restored a tick later — the row's value only catches up on re-render.
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
       expect(row.selectionStart).toBe(1);
       expect(row.selectionEnd).toBe(1);
     });
@@ -3068,6 +3122,77 @@ describe('NoteModal', () => {
       fireEvent.keyDown(textarea, { key, ...modifiers });
 
       expect(textarea).toHaveValue('hello');
+    });
+  });
+
+  describe('Markdown formatting shortcuts in list items', () => {
+    const openListItem = (text: string) => {
+      const note = createMockNote({
+        note_type: 'list',
+        items: [
+          {
+            id: 'item1',
+            note_id: '1',
+            text,
+            completed: false,
+            position: 0,
+            parent_id: null,
+            assigned_to: '',
+            created_at: '2023-01-01T00:00:00Z',
+            updated_at: '2023-01-01T00:00:00Z',
+          },
+        ],
+      });
+      renderNoteModal({ ...defaultProps, note });
+      return screen.getAllByTestId('list-item-input')[0]! as HTMLTextAreaElement;
+    };
+
+    it('wraps the selection in bold markers with Ctrl+B, and restores the selection', async () => {
+      const input = openListItem('hello world');
+
+      input.setSelectionRange(6, 11);
+      fireEvent.keyDown(input, { key: 'b', ctrlKey: true });
+      await vi.runAllTimersAsync();
+
+      expect(input).toHaveValue('hello **world**');
+      // jsdom has no document.execCommand, so this exercises the fallback
+      // path — same caveat as the content-textarea tests above.
+      expect(input.selectionStart).toBe(8);
+      expect(input.selectionEnd).toBe(13);
+    });
+
+    it('inserts italic markers at the caret with Cmd+I when nothing is selected, and parks the caret between them', async () => {
+      const input = openListItem('hello');
+
+      input.setSelectionRange(5, 5);
+      fireEvent.keyDown(input, { key: 'i', metaKey: true });
+      await vi.runAllTimersAsync();
+
+      expect(input).toHaveValue('hello**');
+      expect(input.selectionStart).toBe(6);
+      expect(input.selectionEnd).toBe(6);
+    });
+
+    // The markers are characters the user did not type, so at the cap the
+    // transform is dropped rather than truncated — same choice
+    // handleListContinuation makes at the content cap.
+    it('leaves the text unchanged when the markers would exceed the item cap', () => {
+      const maxText = 'x'.repeat(VALIDATION.ITEM_TEXT_MAX_LENGTH);
+      const input = openListItem(maxText);
+
+      input.setSelectionRange(0, maxText.length);
+      fireEvent.keyDown(input, { key: 'b', ctrlKey: true });
+
+      expect(input).toHaveValue(maxText);
+    });
+
+    it('leaves Ctrl+Shift+B to the browser', () => {
+      const input = openListItem('hello world');
+
+      input.setSelectionRange(6, 11);
+      fireEvent.keyDown(input, { key: 'b', ctrlKey: true, shiftKey: true });
+
+      expect(input).toHaveValue('hello world');
     });
   });
 });
