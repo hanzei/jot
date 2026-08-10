@@ -506,6 +506,51 @@ test.describe('Notes', () => {
     await dashboardPage.expectListItemFocused(0);
   });
 
+  test('arrow keys cross the lines of a wrapped list item before leaving it', async ({ dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.clickNewNote();
+    await dashboardPage.selectListType();
+
+    // Whether a row wraps is invisible to its value, so only a real browser can
+    // answer where its lines are — the unit tests mock that measurement out.
+    // Long enough to take several lines; how many is measured below rather than
+    // assumed, since the wrap point moves with the viewport.
+    const wrapped = `Beta ${'beta '.repeat(40)}end`;
+    await dashboardPage.addListItem('Alpha');
+    await dashboardPage.addListItem(wrapped);
+    await dashboardPage.addListItem('Gamma');
+
+    // However many lines that comes to at this viewport, which is the number of
+    // presses the row should absorb before it gives the key up.
+    const lines = await dashboardPage.listItemLineCount(1);
+    expect(lines).toBeGreaterThan(2);
+
+    await dashboardPage.focusListItem(0);
+    await dashboardPage.pressKey('ArrowDown');
+    await dashboardPage.expectListItemFocused(1);
+
+    // Entering from above lands on the row's first line, so there is exactly one
+    // press per remaining line before the row runs out — which is what says the
+    // caret arrived at the top of it rather than anywhere else.
+    for (let i = 1; i < lines; i++) {
+      await dashboardPage.pressKey('ArrowDown');
+      await dashboardPage.expectListItemFocused(1);
+    }
+    await dashboardPage.pressKey('ArrowDown');
+    await dashboardPage.expectListItemFocused(2);
+
+    // Coming back up enters on the row's last line — the one the caret visually
+    // arrives at — so the same count applies in reverse.
+    await dashboardPage.pressKey('ArrowUp');
+    await dashboardPage.expectListItemFocused(1);
+    for (let i = 1; i < lines; i++) {
+      await dashboardPage.pressKey('ArrowUp');
+      await dashboardPage.expectListItemFocused(1);
+    }
+    await dashboardPage.pressKey('ArrowUp');
+    await dashboardPage.expectListItemFocused(0);
+  });
+
   test('pressing Enter on the last list item creates a new item', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.clickNewNote();
