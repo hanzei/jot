@@ -254,6 +254,9 @@ function ListItem({
       const measured = renderedLinesRef.current;
       const lines = measured?.text === text ? measured.lines : null;
       const offset = sourceOffsetAtPoint(nodes, text, lines, locationX, locationY);
+      // TEMP DEBUG #867 — remove before merge. Lengths and offsets only, never
+      // item text (mobile/CLAUDE.md: logs ride along in diagnostics reports).
+      console.info('[867] press', JSON.stringify({ len: text.length, lines: lines?.length ?? 0, offset, showRendered, isActive }));
       setIsEditing(true);
       focusAfterSwapRef.current = true;
       // Nothing to force when the caret is already there: the input would report
@@ -262,7 +265,8 @@ function ListItem({
         setForcedSelection({ start: offset, end: offset });
       }
     },
-    [nodes, text],
+    // showRendered/isActive are read by the TEMP DEBUG log above only.
+    [nodes, text, showRendered, isActive],
   );
 
   // The other half of the tap: focus the field on the commit that put it back in
@@ -272,8 +276,13 @@ function ListItem({
   useEffect(() => {
     if (showRendered || !focusAfterSwapRef.current) return;
     focusAfterSwapRef.current = false;
-    ownInputRef.current?.focus();
-  }, [showRendered]);
+    // TEMP DEBUG #867 — remove before merge.
+    const input = ownInputRef.current;
+    console.info('[867] focusing', JSON.stringify({ len: text.length, hasRef: !!input }));
+    input?.focus();
+    console.info('[867] after focus()', JSON.stringify({ focused: input?.isFocused() ?? null }));
+    setTimeout(() => console.info('[867] +300ms', JSON.stringify({ focused: input?.isFocused() ?? null })), 300);
+  }, [showRendered, text.length]);
 
   const {
     text: effectiveText,
@@ -388,12 +397,14 @@ function ListItem({
                   blurOnSubmit={false}
                   onFocus={(event) => {
                     if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
+                    console.info('[867] row onFocus', JSON.stringify({ len: text.length }));
                     setIsFocused(true);
                     setIsEditing(true);
                     onFocus?.(event);
                     if (!completed) setShowSuggestions(true);
                   }}
                   onBlur={() => {
+                    console.info('[867] row onBlur', JSON.stringify({ len: text.length }));
                     onBlur?.();
                     setIsEditing(false);
                     // Delay hiding so a tap on the delete button (which blurs the input

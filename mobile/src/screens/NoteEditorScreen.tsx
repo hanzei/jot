@@ -2717,6 +2717,8 @@ export default function NoteEditorScreen() {
             value={title}
             onChangeText={handleTitleChange}
             autoFocus={!hasCreated}
+            // TEMP DEBUG #867 — remove before merge.
+            onFocus={() => console.info('[867] TITLE onFocus', JSON.stringify({ hasCreated }))}
             placeholder={t('note.titlePlaceholder')}
             placeholderTextColor={hasNoteColor ? '#999' : colors.placeholder}
             returnKeyType="next"
