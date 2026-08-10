@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,9 @@ import {
   ScrollView,
   StyleSheet,
   Animated,
+  type GestureResponderEvent,
+  type NativeSyntheticEvent,
+  type TextLayoutEventData,
   type TextInputProps,
   type TextInput as TextInputType,
 } from 'react-native';
@@ -14,11 +17,13 @@ import { GripVertical, Square, SquareCheck, UserPlus, X } from 'lucide-react-nat
 import { useTranslation } from 'react-i18next';
 import UserAvatar from './UserAvatar';
 import InlineMarkdown from './InlineMarkdown';
+import { renderInlineNodes } from './inlineNodes';
 import { useTheme } from '../theme/ThemeContext';
 import { getEffectiveColors } from '../theme/colors';
 import { isReduceMotionEnabledSync } from '../utils/layoutAnimation';
-import { inlineMarkdownToText } from '../utils/inlineMarkdown';
-import { VALIDATION, type Collaborator } from '@jot/shared';
+import { inlineMarkdownNodes, inlineMarkdownToText } from '../utils/inlineMarkdown';
+import { sourceOffsetAtPoint, type RenderedTextLine } from '../utils/inlineCaret';
+import { inlineRendersAsSource, VALIDATION, type Collaborator, type TextSelection } from '@jot/shared';
 
 interface ListItemProps {
   text: string;
@@ -123,18 +128,46 @@ function ListItem({
   // The delete (x) button is only shown while this row is focused (the "selected"
   // row), so users are less likely to delete an item they didn't mean to.
   const [isFocused, setIsFocused] = useState(false);
+  // Focused and editing are the same state (docs/specs/markdown-rendering.md §1.2),
+  // so this is `isFocused` without its blur delay: the controls linger for 200ms
+  // so a tap on one still lands, but the row must show source the instant it has
+  // the caret and stop the instant it doesn't.
+  const [isEditing, setIsEditing] = useState(false);
   const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Tracks the native cursor position so Enter/submit can decide whether to
   // split the item at the cursor, insert before it, or append after it.
   // Seeded to the end of the current text and refined by onSelectionChange,
   // since onSubmitEditing's native event carries no selection info.
   const selectionRef = useRef({ start: text.length, end: text.length });
+  // A caret position asked for by a tap on the rendered text, held as a
+  // controlled `selection` until the input reports it landed — the same
+  // force-and-release the note editor's formatting bar uses, for the same
+  // reason: focus alone puts the caret wherever the platform likes.
+  const [forcedSelection, setForcedSelection] = useState<TextSelection | null>(null);
+  // Where the rendered form's lines landed, for mapping a tap back to a source
+  // offset. A ref, not state: it is read inside a tap handler and never changes
+  // what is on screen, so re-rendering the row for it would be pure churn.
+  // Tagged with the text it measured, since a layout pass trails the text that
+  // caused it and a tap in between would otherwise map through the old lines.
+  const renderedLinesRef = useRef<{ text: string; lines: RenderedTextLine[] } | null>(null);
+  // The row's own handle on its input. `inputRef` belongs to the note editor,
+  // which uses it to move focus between rows, and is optional — but tap-to-edit
+  // has to focus the field whether or not anyone passed one.
+  const ownInputRef = useRef<TextInputType | null>(null);
 
   useEffect(() => {
     return () => {
       if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
     };
   }, []);
+
+  const setInputRef = useCallback(
+    (node: TextInputType | null) => {
+      ownInputRef.current = node;
+      if (inputRef) inputRef.current = node;
+    },
+    [inputRef],
+  );
 
   // Pop the checkbox in on mount when this row is the one the user just checked
   // off. Runs once (mount-only) so re-renders don't re-trigger it; respects the
@@ -170,6 +203,55 @@ function ListItem({
     return results;
   }, [text, completedItemTexts]);
 
+  // Links are inert in an editable row and live in a read-only one, so only the
+  // editable row's nodes are built here — `InlineMarkdown` owns the read-only
+  // one and its live links (docs/specs/markdown-rendering.md §1.2).
+  const nodes = useMemo(() => (editable ? inlineMarkdownNodes(text) : []), [editable, text]);
+
+  // A row only swaps when rendering actually changes what is on screen. `buy
+  // milk` renders to `buy milk`, so a list with no Markdown in it keeps the
+  // always-live input it has always had and pays for none of this.
+  const formatted = useMemo(() => nodes.length > 0 && !inlineRendersAsSource(nodes, text), [nodes, text]);
+  const wantsRendered = formatted && !isEditing;
+
+  // A drag must not change the row's height, so the form is frozen while one is
+  // in flight: whatever the row was showing when the finger went down is what it
+  // shows until the drop lands. Without it, anything that takes focus off the
+  // field mid-gesture — the keyboard being dismissed, most likely — would collapse
+  // the row to its other form while the reorderable list is dragging a cell it
+  // has already measured.
+  //
+  // Adjusted during render rather than in an effect: an effect would apply it a
+  // frame late, and that frame is the one the list measures in.
+  const [frozenForm, setFrozenForm] = useState<boolean | null>(null);
+  if (isActive !== (frozenForm !== null)) setFrozenForm(isActive ? wantsRendered : null);
+  const showRendered = frozenForm ?? wantsRendered;
+
+  const handleRenderedTextLayout = useCallback(
+    (event: NativeSyntheticEvent<TextLayoutEventData>) => {
+      renderedLinesRef.current = { text, lines: event.nativeEvent.lines };
+    },
+    [text],
+  );
+
+  // Entering edit mode from a tap has to place the caret itself: the user
+  // pointed at the rendered text and the field behind it holds the source.
+  const handleRenderedPress = useCallback(
+    (event: GestureResponderEvent) => {
+      const { locationX, locationY } = event.nativeEvent;
+      const measured = renderedLinesRef.current;
+      const lines = measured?.text === text ? measured.lines : null;
+      const offset = sourceOffsetAtPoint(nodes, text, lines, locationX, locationY);
+      ownInputRef.current?.focus();
+      // Nothing to force when the caret is already there: the input would report
+      // no selection change, so the controlled value would never be released.
+      if (offset !== selectionRef.current.start || offset !== selectionRef.current.end) {
+        setForcedSelection({ start: offset, end: offset });
+      }
+    },
+    [nodes, text],
+  );
+
   const {
     text: effectiveText,
     textSecondary: effectiveTextSecondary,
@@ -177,6 +259,13 @@ function ListItem({
     iconMuted: effectiveIconMuted,
     border: effectiveBorder,
   } = getEffectiveColors(hasNoteColor, colors);
+  // One tone for both forms of the row rather than reasoned about twice:
+  // whatever a completed row looks like, the rendered text and the input it
+  // stands in for have to look like each other.
+  const textTone = [
+    { color: completed ? effectiveTextSecondary : effectiveText },
+    completed && styles.completedText,
+  ];
   const showAssignUI = isShared && collaborators && collaborators.length > 0 && onAssignPress;
   const assignedUser = assignedTo ? collaborators?.find((c) => c.userId === assignedTo) : undefined;
   const normalizedIndentLevel = Math.max(0, indentLevel);
@@ -216,8 +305,8 @@ function ListItem({
         testID="list-item-checkbox"
         accessibilityRole="checkbox"
         accessibilityState={{ checked: completed, disabled: !editable }}
-        // The item's words, not its Markdown source: a read-only row renders the
-        // text, so raw markers here would announce something the user never sees.
+        // The item's words, not its Markdown source: every row renders the text,
+        // so raw markers here would announce something the user never sees.
         accessibilityLabel={t('note.itemCheckbox', {
           item: inlineMarkdownToText(text) || t('note.listItemLabel'),
         })}
@@ -232,67 +321,100 @@ function ListItem({
       </TouchableOpacity>
       <View style={styles.inputColumn}>
         <View style={styles.inputRow}>
-          {/* A read-only row is a display surface, so it renders the inline
-              Markdown subset — the same thing the note card shows for this
-              item. An editable row stays a plain TextInput showing source;
-              giving it a rendered mode is #867, not this — the webapp already
-              swaps (docs/specs/markdown-rendering.md §1.2), and that ticket
-              records why the same swap here is a keyboard problem first. */}
+          {/* Every row renders the inline Markdown subset; an editable one shows
+              source for exactly as long as it holds the caret
+              (docs/specs/markdown-rendering.md §1.2). The input is never
+              unmounted, only taken out of flow — moving focus between two
+              mounted TextInputs keeps the software keyboard up, and moving it
+              across an unmount does not. */}
           {editable ? (
-            <TextInput
-              ref={inputRef}
-              autoFocus={autoFocus}
-              style={[styles.textInput, { color: completed ? effectiveTextSecondary : effectiveText }, completed && styles.completedText]}
-              value={text}
-              onChangeText={(newText) => {
-                onChangeText?.(newText);
-                // Approximate the cursor moving to the end of freshly typed text;
-                // onSelectionChange refines this once the native event arrives.
-                selectionRef.current = { start: newText.length, end: newText.length };
-                if (!completed) setShowSuggestions(newText.trim().length > 0);
-              }}
-              onSelectionChange={(event) => {
-                selectionRef.current = event.nativeEvent.selection;
-              }}
-              returnKeyType="next"
-              onSubmitEditing={() => onSubmitEditing?.(selectionRef.current.start)}
-              blurOnSubmit={false}
-              onFocus={(event) => {
-                if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
-                setIsFocused(true);
-                onFocus?.(event);
-                if (!completed) setShowSuggestions(true);
-              }}
-              onBlur={() => {
-                onBlur?.();
-                // Delay hiding so a tap on the delete button (which blurs the input
-                // first) still lands before the button unmounts.
-                blurTimeoutRef.current = setTimeout(() => {
-                  setShowSuggestions(false);
-                  setIsFocused(false);
-                }, BLUR_HIDE_DELAY_MS);
-              }}
-              multiline
-              submitBehavior="submit"
-              textAlignVertical="top"
-              inputAccessoryViewID={inputAccessoryViewID}
-              onKeyPress={({ nativeEvent }) => {
-                if (nativeEvent.key === 'Backspace' && text === '') {
-                  onBackspaceOnEmpty?.();
-                }
-              }}
-              testID="list-item-text"
-            />
+            <View style={styles.textStack}>
+              <View
+                style={showRendered ? styles.offscreenInput : undefined}
+                // While the rendered form is on top, the input must not take the
+                // tap that is meant to place a caret in it.
+                pointerEvents={showRendered ? 'none' : 'auto'}
+              >
+                <TextInput
+                  ref={setInputRef}
+                  autoFocus={autoFocus}
+                  style={[styles.itemText, textTone]}
+                  value={text}
+                  selection={forcedSelection ?? undefined}
+                  onChangeText={(newText) => {
+                    onChangeText?.(newText);
+                    // Approximate the cursor moving to the end of freshly typed text;
+                    // onSelectionChange refines this once the native event arrives.
+                    selectionRef.current = { start: newText.length, end: newText.length };
+                    if (!completed) setShowSuggestions(newText.trim().length > 0);
+                  }}
+                  onSelectionChange={(event) => {
+                    const selection = event.nativeEvent.selection;
+                    selectionRef.current = selection;
+                    // Release a tapped-for caret only once the input confirms it
+                    // landed, so an event that arrives before the move is applied
+                    // cannot cancel it.
+                    setForcedSelection((forced) =>
+                      forced && forced.start === selection.start && forced.end === selection.end
+                        ? null
+                        : forced,
+                    );
+                  }}
+                  returnKeyType="next"
+                  onSubmitEditing={() => onSubmitEditing?.(selectionRef.current.start)}
+                  blurOnSubmit={false}
+                  onFocus={(event) => {
+                    if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
+                    setIsFocused(true);
+                    setIsEditing(true);
+                    onFocus?.(event);
+                    if (!completed) setShowSuggestions(true);
+                  }}
+                  onBlur={() => {
+                    onBlur?.();
+                    setIsEditing(false);
+                    // Delay hiding so a tap on the delete button (which blurs the input
+                    // first) still lands before the button unmounts.
+                    blurTimeoutRef.current = setTimeout(() => {
+                      setShowSuggestions(false);
+                      setIsFocused(false);
+                    }, BLUR_HIDE_DELAY_MS);
+                  }}
+                  multiline
+                  submitBehavior="submit"
+                  textAlignVertical="top"
+                  inputAccessoryViewID={inputAccessoryViewID}
+                  onKeyPress={({ nativeEvent }) => {
+                    if (nativeEvent.key === 'Backspace' && text === '') {
+                      onBackspaceOnEmpty?.();
+                    }
+                  }}
+                  testID="list-item-text"
+                />
+              </View>
+              {showRendered && (
+                <Text
+                  style={[styles.itemText, textTone]}
+                  onPress={handleRenderedPress}
+                  onTextLayout={handleRenderedTextLayout}
+                  // The tap places a caret; a press highlight would announce a
+                  // button that isn't there.
+                  suppressHighlighting
+                  // The input behind it is the row's real control and carries the
+                  // value, so this is decoration for anyone not looking at it.
+                  accessibilityElementsHidden
+                  importantForAccessibility="no-hide-descendants"
+                  testID="list-item-text-rendered"
+                >
+                  {/* Inert links: one tap in an editable row already means "put
+                      the caret here", and a second meaning on the same pixel has
+                      no way to resolve itself. */}
+                  {renderInlineNodes(nodes, { links: false })}
+                </Text>
+              )}
+            </View>
           ) : (
-            <InlineMarkdown
-              text={text}
-              testID="list-item-text-readonly"
-              style={[
-                styles.textInput,
-                { color: completed ? effectiveTextSecondary : effectiveText },
-                completed && styles.completedText,
-              ]}
-            />
+            <InlineMarkdown text={text} testID="list-item-text-readonly" style={[styles.itemText, textTone]} />
           )}
           {showAssignUI && assignedTo ? (
             <TouchableOpacity
@@ -401,12 +523,49 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
   },
-  textInput: {
+  // Holds the two forms of the row's text. Whichever is showing is the one in
+  // flow, so this column — and therefore the row — is as tall as it.
+  textStack: {
     flex: 1,
     minWidth: 0,
+  },
+  // Everything that decides how much vertical space a line of item text takes:
+  // width, font metrics and padding. Both forms carry all of it, or the row
+  // changes height on the swap for no reason other than the two being laid out
+  // differently.
+  //
+  // Two of these are not obvious, and both are here to take the *platform* out
+  // of the question rather than to match it:
+  //
+  // - `lineHeight`. Left unset, a Text and a TextInput each derive their line
+  //   height from the font, and on Android the two do not agree — the input adds
+  //   the font's own ascent/descent padding on top. Pinning it makes each box
+  //   `lines × lineHeight + padding` from the same numbers on either platform.
+  //   22 is what 16pt resolved to on the fonts this was measured against, so
+  //   nothing moves today; the cost is that item text no longer follows an
+  //   unusually tall face.
+  // - `paddingLeft`. An Android TextInput inherits the theme's EditText padding
+  //   on any side a style does not set (ReactTextInputManager.setPadding), and a
+  //   Text inherits nothing — so leaving it unset indents the source form a few
+  //   dp further than the rendered one, and wraps it that much earlier. Setting
+  //   it costs Android those few dp it was never asked for, in both forms rather
+  //   than one.
+  itemText: {
     fontSize: 16,
+    lineHeight: 22,
     paddingVertical: 4,
+    paddingLeft: 0,
     paddingRight: 4,
+  },
+  // The input while the rendered form has the row: still mounted, still
+  // focusable, just out of flow and invisible. `display: 'none'` would unmount
+  // it natively and take the keyboard with it.
+  offscreenInput: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    opacity: 0,
   },
   completedText: {
     textDecorationLine: 'line-through' as const,
