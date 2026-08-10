@@ -599,12 +599,16 @@ func (h *NotesHandler) DuplicateNote(w http.ResponseWriter, r *http.Request) (in
 // into text) is computed client-side (see shared/src/noteConversion.ts) and
 // sent precomputed; the server only validates it against the same size
 // limits enforced on directly-authored note content and persists it
-// atomically. Content is used when converting to 'text'; Items when
+// atomically. Content is used when converting to 'text'; Title and Items when
 // converting to 'list'.
 type ConvertNoteTypeRequest struct {
-	NoteType models.NoteType  `json:"note_type"`
-	Content  *string          `json:"content,omitempty"`
-	Items    []CreateNoteItem `json:"items,omitempty" validate:"max=500"`
+	NoteType models.NoteType `json:"note_type"`
+	Content  *string         `json:"content,omitempty"`
+	// Title is the converted list's title, which the client promotes from a
+	// leading heading in the text content. Omitting it leaves the note
+	// untitled — the behavior every client had before the field existed.
+	Title *string          `json:"title,omitempty"`
+	Items []CreateNoteItem `json:"items,omitempty" validate:"max=500"`
 	// BaseVersion enables optimistic concurrency, matching UpdateNoteRequest:
 	// when set, the conversion is rejected with 409 unless the note's current
 	// version still matches it.
@@ -615,35 +619,45 @@ type ConvertNoteTypeRequest struct {
 // content/items to persist. Exactly one of content/items is meaningful,
 // depending on the target type; supplying the other is rejected so a client
 // can't accidentally send a stale value for the direction it isn't using.
-func normalizeConvertNoteTypeRequest(req *ConvertNoteTypeRequest) (content string, items []models.NewNoteItem, status int, err error) {
+func normalizeConvertNoteTypeRequest(req *ConvertNoteTypeRequest) (title, content string, items []models.NewNoteItem, status int, err error) {
 	if !req.NoteType.Valid() {
-		return "", nil, http.StatusBadRequest, errors.New("note_type must be 'text' or 'list'")
+		return "", "", nil, http.StatusBadRequest, errors.New("note_type must be 'text' or 'list'")
 	}
 
 	if req.NoteType == models.NoteTypeList {
 		if req.Content != nil {
-			return "", nil, http.StatusBadRequest, errors.New("content must not be set when converting to a list")
+			return "", "", nil, http.StatusBadRequest, errors.New("content must not be set when converting to a list")
+		}
+		if req.Title != nil {
+			title = *req.Title
+		}
+		if utf8.RuneCountInString(title) > noteTitleMaxLength {
+			return "", "", nil, http.StatusBadRequest, fmt.Errorf("title must be %d characters or fewer", noteTitleMaxLength)
 		}
 		if len(req.Items) > noteItemsMaxCount {
-			return "", nil, http.StatusUnprocessableEntity, fmt.Errorf("note cannot have more than %d items", noteItemsMaxCount)
+			return "", "", nil, http.StatusUnprocessableEntity, fmt.Errorf("note cannot have more than %d items", noteItemsMaxCount)
 		}
 		built, status, err := buildCreateNoteItems(req.Items)
 		if err != nil {
-			return "", nil, status, err
+			return "", "", nil, status, err
 		}
-		return "", built, http.StatusOK, nil
+		return title, "", built, http.StatusOK, nil
 	}
 
 	if len(req.Items) > 0 {
-		return "", nil, http.StatusBadRequest, errors.New("items must not be set when converting to text")
+		return "", "", nil, http.StatusBadRequest, errors.New("items must not be set when converting to text")
+	}
+	// A text note has no title, so accepting one here would silently discard it.
+	if req.Title != nil {
+		return "", "", nil, http.StatusBadRequest, errors.New("title must not be set when converting to text")
 	}
 	if req.Content != nil {
 		content = *req.Content
 	}
 	if utf8.RuneCountInString(content) > noteContentMaxLength {
-		return "", nil, http.StatusBadRequest, fmt.Errorf("content must be %d characters or fewer", noteContentMaxLength)
+		return "", "", nil, http.StatusBadRequest, fmt.Errorf("content must be %d characters or fewer", noteContentMaxLength)
 	}
-	return content, nil, http.StatusOK, nil
+	return "", content, nil, http.StatusOK, nil
 }
 
 // ConvertNoteType godoc
@@ -682,7 +696,7 @@ func (h *NotesHandler) ConvertNoteType(w http.ResponseWriter, r *http.Request) (
 		return http.StatusBadRequest, nil, err
 	}
 
-	content, items, status, err := normalizeConvertNoteTypeRequest(&req)
+	title, content, items, status, err := normalizeConvertNoteTypeRequest(&req)
 	if err != nil {
 		return status, nil, err
 	}
@@ -706,7 +720,7 @@ func (h *NotesHandler) ConvertNoteType(w http.ResponseWriter, r *http.Request) (
 		return http.StatusBadRequest, nil, models.ErrNoteTypeUnchanged
 	}
 
-	converted, err := h.noteStore.ConvertType(r.Context(), id, user.ID, req.NoteType, content, items, req.BaseVersion)
+	converted, err := h.noteStore.ConvertType(r.Context(), id, user.ID, req.NoteType, title, content, items, req.BaseVersion)
 	if err != nil {
 		switch {
 		case errors.Is(err, models.ErrNoteNotFound), errors.Is(err, models.ErrNoteNoAccess):

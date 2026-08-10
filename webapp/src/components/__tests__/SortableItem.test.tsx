@@ -1,7 +1,7 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { type ReactNode } from 'react';
-import SortableItem from '../SortableItem';
+import SortableItem, { type SortableItemProps } from '../SortableItem';
 import type { ListItem } from '@/utils/noteItems';
 
 vi.mock('@dnd-kit/sortable', () => ({
@@ -133,5 +133,113 @@ describe('SortableItem suggestion highlight', () => {
 
     rerenderWith(['buy milk']);
     expect(input()).not.toHaveAttribute('aria-activedescendant');
+  });
+});
+
+/**
+ * The view/edit swap (docs/specs/markdown-rendering.md §1.2).
+ *
+ * These assert the *state machine* — which of the two forms is on screen, and
+ * that the textarea survives the swap. What they cannot assert is the part that
+ * needs a layout engine: the caret offset a click maps to, and the height the
+ * row settles at. Both are covered in webapp/e2e/tests/markdown.spec.ts.
+ */
+describe('SortableItem rendered/source swap', () => {
+  function renderRow(text: string, props: Partial<SortableItemProps> = {}) {
+    return render(
+      <SortableItem
+        id="item-1"
+        index={0}
+        item={{ ...item, text }}
+        onUpdateListItem={vi.fn().mockResolvedValue(undefined)}
+        onRemoveListItem={vi.fn()}
+        {...props}
+      />
+    );
+  }
+
+  const renderedView = () => screen.queryByTestId('list-item-rendered');
+  const textarea = () => screen.queryByTestId('list-item-input');
+
+  it('shows the rendered form of an unfocused row', () => {
+    renderRow('buy **milk**');
+
+    expect(renderedView()).toBeInTheDocument();
+    expect(renderedView()!.innerHTML).toBe('buy <strong>milk</strong>');
+    // The source is still in the field behind it, which is what every
+    // imperative focus path in NoteModal reaches for.
+    expect(textarea()).toHaveValue('buy **milk**');
+  });
+
+  it('shows source while the row is focused and renders again on blur', () => {
+    renderRow('buy **milk**');
+
+    fireEvent.focus(textarea()!);
+    expect(renderedView()).not.toBeInTheDocument();
+
+    fireEvent.blur(textarea()!);
+    expect(renderedView()).toBeInTheDocument();
+  });
+
+  it('leaves a row with no Markdown in it alone', () => {
+    // Nothing to show that the textarea is not already showing, so the row
+    // keeps the always-live input it had before any of this.
+    renderRow('buy milk');
+    expect(renderedView()).not.toBeInTheDocument();
+  });
+
+  it('leaves block syntax and literal source alone too', () => {
+    // Both render as themselves (§2.1), so neither is worth a swap.
+    renderRow('# not a heading');
+    expect(renderedView()).not.toBeInTheDocument();
+
+    cleanup();
+    renderRow('see ![alt](https://example.com/y.png)');
+    expect(renderedView()).not.toBeInTheDocument();
+  });
+
+  it('renders an empty row as its placeholder, not as an empty span', () => {
+    renderRow('');
+    expect(renderedView()).not.toBeInTheDocument();
+    expect(textarea()).toHaveAttribute('placeholder', 'List item...');
+  });
+
+  it('moves focus into the field when the rendered form is clicked', () => {
+    renderRow('buy **milk**');
+
+    fireEvent.mouseDown(renderedView()!);
+
+    expect(textarea()).toHaveFocus();
+    expect(renderedView()).not.toBeInTheDocument();
+  });
+
+  it('keeps rendering a completed row', () => {
+    // Decision on #824 question 7: completed rows render, and the collision
+    // between the row's line-through and ~~strike~~ is accepted (§2.1).
+    renderRow('~~buy~~ milk', { isCompleted: true });
+    expect(renderedView()!.innerHTML).toBe('<del>buy</del> milk');
+  });
+
+  it('drops the hidden field entirely on a read-only row', () => {
+    // No caret to place, so a focusable copy of the text behind the rendered
+    // one would be an extra tab stop announcing the same item twice.
+    renderRow('buy **milk**', { readOnly: true });
+
+    expect(renderedView()).toBeInTheDocument();
+    expect(textarea()).not.toBeInTheDocument();
+    expect(renderedView()).not.toHaveAttribute('aria-hidden');
+  });
+
+  it('links only on the row that has no caret to place', () => {
+    renderRow('[docs](https://example.com)', { readOnly: true });
+    expect(renderedView()!.querySelector('a')).not.toBeNull();
+
+    cleanup();
+    renderRow('[docs](https://example.com)');
+    // Editable: one click already means "put the caret here", so the label
+    // renders as text and nothing on the row looks followable.
+    expect(renderedView()!.querySelector('a')).toBeNull();
+    expect(renderedView()!.textContent).toBe('docs');
+    expect(renderedView()).toHaveAttribute('aria-hidden', 'true');
   });
 });

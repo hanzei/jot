@@ -5,6 +5,7 @@ import {
   normalizeBlockTokens,
   normalizeInlineTokens,
   flattenInlineNodes,
+  inlineRendersAsSource,
   BLOCK_LEXER_OPTIONS,
   INLINE_LEXER_OPTIONS,
   type BlockNode,
@@ -214,10 +215,52 @@ export function renderInlineMarkdown(
 ): string {
   if (!text.trim()) return '';
   const nodes = normalizeInlineTokens(Lexer.lexInline(text, INLINE_LEXER_OPTIONS));
-  return DOMPurify.sanitize(renderInlineNodes(nodes), {
+  return sanitizeInline(renderInlineNodes(nodes), links);
+}
+
+function sanitizeInline(html: string, links: boolean): string {
+  return DOMPurify.sanitize(html, {
     ALLOWED_TAGS: links ? INLINE_ALLOWED_TAGS : INLINE_NO_LINK_TAGS,
     ALLOWED_ATTR,
   });
+}
+
+export interface InlineItemRender {
+  /** Sanitized HTML, identical to what `renderInlineMarkdown` produces. */
+  html: string;
+  /**
+   * The nodes the HTML was built from, carrying source spans — the editable row
+   * needs them to map a click on the rendered text back to a caret position.
+   */
+  nodes: InlineNode[];
+  /**
+   * Whether rendering changed anything. False for `buy milk`, true for
+   * `buy **milk**`. The editable row only swaps in a rendered view when this is
+   * true, so a list with no Markdown in it behaves exactly as it did before.
+   */
+  formatted: boolean;
+}
+
+/**
+ * Renders one item's text *and* reports what the editable row needs to know
+ * about it: whether a rendered view is worth showing, and where each rendered
+ * character came from.
+ *
+ * Separate from `renderInlineMarkdown` because the display-only surfaces — note
+ * cards, the collapsed-completed label — want the string and nothing else, and
+ * lexing with source tracking on for them would be work with no reader.
+ */
+export function renderInlineItem(
+  text: string,
+  { links = true }: MarkdownRenderOptions = {},
+): InlineItemRender {
+  if (!text.trim()) return { html: '', nodes: [], formatted: false };
+  const nodes = normalizeInlineTokens(Lexer.lexInline(text, INLINE_LEXER_OPTIONS), 0);
+  return {
+    html: sanitizeInline(renderInlineNodes(nodes), links),
+    nodes,
+    formatted: !inlineRendersAsSource(nodes, text),
+  };
 }
 
 /**

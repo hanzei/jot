@@ -1,6 +1,5 @@
 ---
-name: update-mobile-deps
-description: Update npm dependencies in mobile/ — the Expo/React Native app. Use this whenever the user asks to update, upgrade, or refresh mobile dependencies, Expo packages, React Native, expo-* modules, React Navigation, or package.json/package-lock.json in mobile/. Prefer this over `npm update` or `npm-check-updates` there — in an Expo-managed app the Expo SDK dictates the versions of `expo`, `expo-*`, `react`, `react-native`, and most `react-native-*` packages, so bumping them to "latest" produces an app that installs cleanly and then crashes on device.
+description: Update npm dependencies in mobile/ — Expo, React Native, and the expo-* modules whose versions the Expo SDK dictates.
 ---
 
 # Update mobile (Expo / React Native) dependencies

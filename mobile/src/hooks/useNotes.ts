@@ -20,7 +20,7 @@ import {
 } from '../api/notes';
 import { shareNote, unshareNote } from '../api/users';
 import { useOfflineNote } from './useOfflineNotes';
-import { generateId, textToListItems, listToText } from '@jot/shared';
+import { generateId, textToListNote, listToText } from '@jot/shared';
 import type {
   Note,
   NoteItem,
@@ -355,10 +355,13 @@ export function useUpdateNote() {
 }
 
 /**
- * Computes the precomputed `content`/`items` for converting `note` to the
- * opposite type, via the same shared transform (`textToListItems`/`listToText`)
- * the webapp uses — the server only validates and persists whatever is sent
- * (issue #676). Item ids are generated here (rather than left for the server)
+ * Computes the precomputed `content`/`title`/`items` for converting `note` to
+ * the opposite type, via the same shared transform
+ * (`textToListNote`/`listToText`) the webapp uses — the server only validates
+ * and persists whatever is sent (issue #676). Converting to a list promotes a
+ * leading heading in the content into the list's title, the inverse of the
+ * `# Title` line `listToText` writes in the other direction. Item ids are
+ * generated here (rather than left for the server)
  * so they stay stable across a chain of offline edits: a per-item mutation
  * queued right after an offline convert, but before it drains, can then target
  * the same id the eventual server row will have (mirrors useDuplicateNote's
@@ -373,9 +376,11 @@ function buildConvertNoteTypeRequest(note: Note): ConvertNoteTypeRequest {
       content: listToText(note.title, note.items ?? []),
     };
   }
+  const converted = textToListNote(note.content);
   return {
     note_type: 'list',
-    items: textToListItems(note.content).map((item, index) => ({
+    title: converted.title,
+    items: converted.items.map((item, index) => ({
       id: generateId(),
       text: item.text,
       position: index,
@@ -389,7 +394,8 @@ function buildConvertNoteTypeRequest(note: Note): ConvertNoteTypeRequest {
 
 /**
  * Applies a precomputed convert request to `note` locally, mirroring what the
- * server persists (`convertNoteRowTx`): title is always cleared, and items are
+ * server persists (`convertNoteRowTx`): the title is taken from the request
+ * (cleared when converting to text, since a text note has none), and items are
  * fully replaced (not merged) in the target-list direction.
  */
 function applyConvertedNoteLocally(note: Note, data: ConvertNoteTypeRequest, now: string): Note {
@@ -419,7 +425,7 @@ function applyConvertedNoteLocally(note: Note, data: ConvertNoteTypeRequest, now
       updated_at: now,
     };
   });
-  return { ...note, note_type: 'list', title: '', checked_items_collapsed: false, items, updated_at: now };
+  return { ...note, note_type: 'list', title: data.title ?? '', checked_items_collapsed: false, items, updated_at: now };
 }
 
 export function useConvertNoteType() {

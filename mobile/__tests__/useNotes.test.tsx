@@ -1248,12 +1248,34 @@ describe('useNotes hooks', () => {
       expect(mockNotesApi.convertNoteType).toHaveBeenCalledWith('123', {
         note_type: 'list',
         base_version: 3,
+        title: '',
         items: [
           expect.objectContaining({ text: 'Buy milk', position: 0, completed: false }),
           expect.objectContaining({ text: 'Buy eggs', position: 1, completed: false }),
         ],
       });
       expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), converted);
+    });
+
+    it('promotes a leading heading to the list title instead of an item', async () => {
+      const converted = { ...sourceTextNote, note_type: 'list', title: 'Groceries', version: 4, items: [] };
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce({
+        ...sourceTextNote,
+        content: '## Groceries\nBuy milk',
+      } as never);
+      mockNotesApi.convertNoteType.mockResolvedValueOnce(converted as never);
+
+      const { result } = renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync('123');
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(mockNotesApi.convertNoteType).toHaveBeenCalledWith('123', {
+        note_type: 'list',
+        base_version: 3,
+        title: 'Groceries',
+        items: [expect.objectContaining({ text: 'Buy milk', position: 0 })],
+      });
     });
 
     it('converts a list note to text via the API (precomputed content)', async () => {
@@ -1336,6 +1358,28 @@ describe('useNotes hooks', () => {
       );
       const enqueuedBody = mockSyncQueue.enqueueOperation.mock.calls[0][1].body;
       expect(enqueuedBody.base_version).toBeUndefined();
+    });
+
+    // The offline result has to match what the queued request will produce on
+    // replay, title included.
+    it('applies a promoted heading to the local note as the server will', async () => {
+      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce({
+        ...sourceTextNote,
+        content: '# Groceries\nBuy milk',
+      } as never);
+
+      const { result } = renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
+
+      const localConverted = await result.current.mutateAsync('123');
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      const listNote = localConverted as { title: string; items: Array<{ text: string }> };
+      expect(listNote.title).toBe('Groceries');
+      expect(listNote.items.map((item) => item.text)).toEqual(['Buy milk']);
+
+      const enqueuedBody = mockSyncQueue.enqueueOperation.mock.calls[0][1].body;
+      expect(enqueuedBody.title).toBe('Groceries');
     });
 
     it('rebuilds parent_id from indent_level locally, as the server does on replay', async () => {

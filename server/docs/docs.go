@@ -3182,6 +3182,10 @@ const docTemplate = `{
                 },
                 "note_type": {
                     "$ref": "#/definitions/models.NoteType"
+                },
+                "title": {
+                    "description": "Title is the converted list's title, which the client promotes from a\nleading heading in the text content. Omitting it leaves the note\nuntitled — the behavior every client had before the field existed.",
+                    "type": "string"
                 }
             }
         },
