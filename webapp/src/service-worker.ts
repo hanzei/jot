@@ -1,37 +1,43 @@
 /// <reference lib="webworker" />
 declare const self: ServiceWorkerGlobalScope;
 
-import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
+import { precacheAndRoute, cleanupOutdatedCaches, createHandlerBoundToURL } from 'workbox-precaching';
 import { registerRoute, NavigationRoute } from 'workbox-routing';
-import { StaleWhileRevalidate, NetworkFirst, CacheFirst } from 'workbox-strategies';
+import { NetworkFirst, CacheFirst } from 'workbox-strategies';
 import { Queue } from 'workbox-background-sync';
 
-// Precache all static assets
+// Precache the whole build — index.html and every hashed asset it references.
+// This is the only thing that serves build output: the precache swaps all of it
+// at once on activate, so the shell and the assets it points at are always from
+// the same build. A runtime route for scripts/styles would defeat that by
+// answering for asset URLs the current precache has never heard of.
 precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
 
-// Cache strategy for static assets (CSS, JS, images)
-registerRoute(
-  ({ request }) => request.destination === 'script' || 
-                   request.destination === 'style' ||
-                   request.destination === 'image',
-  new CacheFirst({
-    cacheName: 'static-assets',
-    plugins: [
-      {
-        cacheKeyWillBeUsed: async ({ request }) => {
-          return `${request.url}`;
-        },
-      },
-    ],
-  })
-);
+// Caches written by earlier revisions of this file. 'navigations' held a
+// stale-while-revalidate copy of the app shell and 'static-assets' a
+// cache-first copy of the hashed build assets, so after a deployment the two
+// could disagree about which build was current. cleanupOutdatedCaches() only
+// removes outdated *precaches*, so these have to be dropped by name to get
+// existing installations off them.
+const LEGACY_CACHES = ['navigations', 'static-assets'];
 
 // The SSE endpoint is a long-lived event stream. It must never be handled by
 // the service worker: NetworkFirst would try to buffer the never-ending
 // response to cache it and, after networkTimeoutSeconds, abort the request
 // (NS_BINDING_ABORTED), breaking EventSource. Let it go straight to the network.
 const SSE_PATH = '/api/v1/events';
+
+// Note images are immutable for a given ID — the ID is minted per upload and
+// the bytes behind it never change — so cache-first is safe here in a way it is
+// not for build assets. Registered ahead of the API route below, which would
+// otherwise claim these URLs and re-fetch every image on every load.
+registerRoute(
+  ({ url }) => /^\/api\/v1\/images\/[^/]+(\/thumbnail)?$/.test(url.pathname),
+  new CacheFirst({
+    cacheName: 'note-images',
+  })
+);
 
 // API caching strategy - Network First with offline fallback
 registerRoute(
@@ -89,13 +95,19 @@ const bgSyncQueue = new Queue('api-queue', {
   },
 });
 
-// Handle navigation requests with cached app shell
-const navigationRoute = new NavigationRoute(
-  new StaleWhileRevalidate({
-    cacheName: 'navigations',
+// Serve every in-app route from the precached shell. Binding the handler to the
+// precache (rather than caching navigation responses separately) is what keeps
+// the HTML and the hashed assets it references on the same build: a deployment
+// replaces both together, so a reload can never load a shell that asks for
+// assets the server no longer has.
+//
+// Anything under /api/ is denied: /api/docs/index.html (Swagger UI) is a
+// navigation the server owns, and handing it the SPA shell would replace it.
+registerRoute(
+  new NavigationRoute(createHandlerBoundToURL('/index.html'), {
+    denylist: [/^\/api\//],
   })
 );
-registerRoute(navigationRoute);
 
 // Only POST endpoints that are idempotent or have uniqueness constraints are
 // safe to retry via background sync. All other POSTs (e.g., note creation,
@@ -164,5 +176,10 @@ self.addEventListener('install', () => {
 
 // Handle activate event
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    (async () => {
+      await Promise.all(LEGACY_CACHES.map((name) => caches.delete(name)));
+      await self.clients.claim();
+    })()
+  );
 });
