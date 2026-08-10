@@ -11,23 +11,23 @@
 #   * installs `task` (the Taskfile runner) if it is missing
 #   * `npm ci` in shared/ -> webapp/ -> mobile/, skipping any package whose
 #     node_modules is already stamped up to date with its package-lock.json
+#   * installs the Chromium build the pinned `@playwright/test` expects, so
+#     `task test-e2e` works without a separate manual step
 #   * warms the Go build cache so the first `task lint-server` is seconds
 #     rather than minutes
 #   * warns — loudly, without changing anything — when Node or Go is older than
 #     what the repo expects
 #
 # What it deliberately does NOT do:
-#   * install Playwright browsers. That is the slowest step by far and most
-#     sessions never touch e2e, so `task test-e2e` checks for the browser and
-#     prints the install command instead (see check-playwright-browser.sh).
 #   * install or switch Node/Go versions. Pulling in nvm/mise and reshaping the
 #     shell environment is too invasive to do silently.
 #
 # Environment variables:
-#   JOT_BOOTSTRAP_SKIP=1           skip everything (doc-only sessions)
-#   JOT_BOOTSTRAP_SKIP_NPM=1       skip the npm installs, still install task
-#   JOT_BOOTSTRAP_SKIP_GO_CACHE=1  skip the Go build cache warm-up
-#   JOT_TASK_VERSION=vX.Y.Z        override the pinned Task version
+#   JOT_BOOTSTRAP_SKIP=1             skip everything (doc-only sessions)
+#   JOT_BOOTSTRAP_SKIP_NPM=1         skip the npm installs, still install task
+#   JOT_BOOTSTRAP_SKIP_PLAYWRIGHT=1  skip the Playwright browser install
+#   JOT_BOOTSTRAP_SKIP_GO_CACHE=1    skip the Go build cache warm-up
+#   JOT_TASK_VERSION=vX.Y.Z          override the pinned Task version
 
 set -uo pipefail
 
@@ -210,6 +210,38 @@ install_npm_deps() {
 }
 
 # ---------------------------------------------------------------------------
+# Playwright's Chromium build — `npx playwright install chromium` already
+# no-ops when the build the installed `@playwright/test` expects is present,
+# so this is safe to run on every bootstrap rather than needing its own
+# up-to-date stamp. check-playwright-browser.sh still runs before
+# `task test-e2e` itself, as a safety net for JOT_BOOTSTRAP_SKIP_PLAYWRIGHT=1
+# and for anyone who reaches test-e2e without ever running this script.
+#
+# Best-effort by design: a network hiccup here is `task test-e2e`'s problem
+# to report, not a reason for the rest of setup to fail.
+# ---------------------------------------------------------------------------
+
+install_playwright_browser() {
+  if [ "${JOT_BOOTSTRAP_SKIP_PLAYWRIGHT:-}" = "1" ]; then
+    log "JOT_BOOTSTRAP_SKIP_PLAYWRIGHT=1 — skipping Playwright browser install"
+    return
+  fi
+
+  # Checked explicitly rather than just webapp/node_modules: without the local
+  # CLI, `npx playwright` falls back to fetching an unpinned copy from the npm
+  # registry instead of running the pinned @playwright/test.
+  if [ ! -x "$REPO_ROOT/webapp/node_modules/.bin/playwright" ]; then
+    log "webapp/node_modules/.bin/playwright missing — skipping Playwright browser install"
+    return
+  fi
+
+  log "installing the Playwright Chromium build (no-ops if already up to date)"
+  if ! (cd "$REPO_ROOT/webapp" && npx playwright install chromium); then
+    log "Playwright browser install did not complete — 'task test-e2e' will report why"
+  fi
+}
+
+# ---------------------------------------------------------------------------
 # Go build cache — golangci-lint type-checks every package, so on a cold cache
 # the first `task lint-server` spends ~2.5 minutes compiling before it reports
 # anything (it is ~1s warm). That cost lands wherever the first lint happens,
@@ -238,6 +270,7 @@ check_node
 check_go
 install_task
 install_npm_deps
+install_playwright_browser
 warm_go_cache
 
 if [ "$failures" -gt 0 ]; then
