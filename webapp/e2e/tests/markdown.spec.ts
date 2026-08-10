@@ -500,6 +500,21 @@ test.describe('Markdown in list-item rows', () => {
       await expect(noteEditorPage.toolbar()).not.toBeVisible();
     });
 
+    test('stays on screen on a list taller than the modal', async ({ dashboardPage, noteEditorPage }) => {
+      await dashboardPage.goto();
+      await dashboardPage.createListNote(
+        'Long List Note',
+        Array.from({ length: 25 }, (_, i) => `Item ${i + 1}`),
+      );
+      await dashboardPage.openNote('Long List Note');
+      await dashboardPage.focusListItem(0);
+
+      // The bar is docked to the modal chrome, not laid out in the scrolling
+      // body: editing the top row of a long list must not leave the buttons
+      // hundreds of pixels below the viewport, which is what an in-flow bar did.
+      await expect(noteEditorPage.toolbar()).toBeInViewport();
+    });
+
     test('bolds the selection, keeps focus on the row, and renders once it blurs', async ({ dashboardPage, noteEditorPage }) => {
       await dashboardPage.goto();
       await dashboardPage.createListNote('Item Bold Note', ['buy milk']);

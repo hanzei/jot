@@ -2055,36 +2055,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                   )}
                 </div>
 
-                {/* One bar for the whole list, aimed at the row holding the
-                    caret — a bar per row would be one per item. It sits below
-                    the active items rather than at the very bottom of the
-                    modal, which is where it stays next to what it edits once
-                    the completed section is expanded.
-
-                    It is hidden rather than unmounted while no row is editing,
-                    and the slot it leaves behind is the point: the modal is
-                    centred in the viewport, so a bar that came and went would
-                    grow the panel and shift every row under the pointer each
-                    time focus entered the list. `invisible` (visibility:hidden)
-                    also takes the buttons out of the focus order and out of the
-                    accessibility tree, so an inert bar is inert to everyone and
-                    not just to the mouse.
-
-                    Its buttons never take focus when it is showing (see
-                    MarkdownToolbar), so a press keeps the row's caret, its
-                    selection, and the source form it shows while editing. */}
-                {!isReadOnly && (
-                  <div
-                    data-testid="markdown-toolbar-slot"
-                    className={editingItemId ? undefined : 'invisible'}
-                  >
-                    <MarkdownToolbar
-                      variant="item"
-                      onAction={handleItemToolbarAction}
-                      controlsId={editingItemId ? itemTextareaId(editingItemId) : undefined}
-                    />
-                  </div>
-                )}
 
                 {/* Completed items section */}
                 {completedItems.length > 0 && (
@@ -2277,6 +2247,40 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
             </div>
 
           </div>
+
+          {/* One formatting bar for the whole list, aimed at the row holding
+              the caret — a bar per row would be one per item.
+
+              Deliberately *outside* the scrolling body above, docked to the
+              modal's chrome directly over the action bar. In the body it
+              scrolled with the content, so on any list taller than the modal
+              it sat hundreds of pixels below the viewport while you edited the
+              row at the top. Mobile's Android bar is pinned for exactly this
+              reason (NoteEditorScreen), and this is the same rule.
+
+              It is hidden rather than unmounted while no row is editing, and
+              the slot it leaves behind is the point: the modal is centred in
+              the viewport, so a bar that came and went would grow the panel and
+              shift the rows under the pointer each time focus entered the list.
+              `invisible` (visibility:hidden) also takes the buttons out of the
+              focus order and out of the accessibility tree, so an inert bar is
+              inert to everyone and not just to the mouse.
+
+              Its buttons never take focus when it is showing (see
+              MarkdownToolbar), so a press keeps the row's caret, its selection,
+              and the source form it shows while editing. */}
+          {noteType === 'list' && !isReadOnly && (
+            <div
+              data-testid="markdown-toolbar-slot"
+              className={editingItemId ? undefined : 'invisible'}
+            >
+              <MarkdownToolbar
+                variant="item"
+                onAction={handleItemToolbarAction}
+                controlsId={editingItemId ? itemTextareaId(editingItemId) : undefined}
+              />
+            </div>
+          )}
 
           {/* Footer toolbar */}
           <div className="border-t border-gray-200 dark:border-white/20">
