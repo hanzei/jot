@@ -3,17 +3,38 @@ name: Mobile — APK Build
 permissions:
   contents: read
 
+# Tag builds are driven by release.yml, which calls this workflow rather than
+# letting it fire on its own `push: tags:` trigger — GoReleaser needs the APK
+# in hand (as a build artifact) before it creates the release, so the two runs
+# have to share one workflow run rather than race independently.
 on:
   push:
     branches: [master]
-    tags: ["v*"]
   pull_request:
     paths: ["mobile/**", "shared/**", ".github/workflows/**"]
+  workflow_call:
+    secrets:
+      GOOGLE_SERVICES_JSON:
+        required: true
+      ANDROID_KEYSTORE_BASE64:
+        required: true
+      ANDROID_KEY_ALIAS:
+        required: true
+      ANDROID_STORE_PASSWORD:
+        required: true
+      ANDROID_KEY_PASSWORD:
+        required: true
+    outputs:
+      apk-name:
+        description: Name of the uploaded APK build artifact, without the .apk extension.
+        value: ${{ jobs.build-apk.outputs.apk-name }}
 
 jobs:
   build-apk:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    outputs:
+      apk-name: ${{ steps.apk.outputs.name }}
     # On a v* tag build, expose the tag as APP_VERSION so app.config.js stamps
     # it as the app's version (native versionName + the About screen). Empty on
     # branch/PR builds, where app.json's static version is used instead. Set at

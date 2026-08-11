@@ -27,6 +27,13 @@ jobs:
   # the other, so a GoReleaser failure can leave images pushed for a release
   # still sitting in draft; that draft still accepts uploads, so re-running the
   # workflow completes it.
+  #
+  # The Android APK is the one asset that *does* need to reach GoReleaser
+  # before it runs: it has to be uploaded as a release asset in the same
+  # draft-then-undraft sequence, via .goreleaser.yml's release.extra_files, or
+  # it hits the same immutable-release 422 as everything else attached after
+  # the fact. That is why `goreleaser` (but not `docker`) needs `apk` below —
+  # unlike the Docker images, the APK has nowhere else to go.
   check-tag:
     runs-on: ubuntu-latest
     permissions:
@@ -48,9 +55,26 @@ jobs:
             exit 1
           fi
 
+  # Reusable-workflow call rather than a copy of mobile-apk.yml's job: keeps the
+  # build steps (NDK/keystore setup, gradle) defined in exactly one place.
+  # Secrets are passed explicitly, one at a time, rather than `secrets:
+  # inherit` — this job has no business handing the APK build DOCKER_HUB_* or
+  # anything else this workflow can see beyond what it declares needing.
+  apk:
+    needs: [check-tag]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/mobile-apk.yml
+    secrets:
+      GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
   goreleaser:
     runs-on: ubuntu-latest
-    needs: [check-tag]
+    needs: [check-tag, apk]
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -62,6 +86,16 @@ jobs:
         with:
           go-version: "1.26"
           cache-dependency-path: server/go.sum
+
+      # Downloaded into the path .goreleaser.yml's release.extra_files (and
+      # checksum.extra_files) glob against, so GoReleaser attaches it to the
+      # release — and includes it in checksums.txt — in the same draft-then-
+      # undraft sequence as the jot/jotctl archives.
+      - name: Download APK artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: ${{ needs.apk.outputs.apk-name }}
+          path: mobile-apk
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
