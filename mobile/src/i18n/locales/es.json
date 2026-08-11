@@ -265,6 +265,8 @@
     "converted": "Nota convertida",
     "convertToTextConfirmTitle": "¿Convertir en texto?",
     "failedConvert": "Error al convertir la nota. Inténtalo de nuevo.",
+    "itemTooLong": "El texto del elemento no puede superar los {{max}} caracteres",
+    "tooManyItems": "Una nota no puede tener más de {{max}} elementos",
     "completedItems": "Elementos completados ({{count}})",
     "completedItemGroup": "Grupo: {{title}}",
     "moreCompletedItems": "+{{count}} elementos completados",

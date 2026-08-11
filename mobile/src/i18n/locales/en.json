@@ -265,6 +265,8 @@
     "converted": "Note converted",
     "convertToTextConfirmTitle": "Convert to text?",
     "failedConvert": "Failed to convert note. Please try again.",
+    "itemTooLong": "Item text must be {{max}} characters or less",
+    "tooManyItems": "A note cannot have more than {{max}} items",
     "completedItems": "Completed items ({{count}})",
     "completedItemGroup": "Group: {{title}}",
     "moreCompletedItems": "+{{count}} completed items",

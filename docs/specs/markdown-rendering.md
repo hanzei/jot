@@ -362,14 +362,27 @@ Also not recovered, in either direction, is anything the line-per-item split
 discards: blank lines, and the distinction between a wrapped paragraph and
 separate lines.
 
-**Known gap:** conversion does not check `ITEM_MAX_COUNT` (500) or
-`ITEM_TEXT_MAX_LENGTH` before sending. A text note with more than 500 non-blank
-lines, or a single line longer than 500 characters, is rejected by the server
-(422 and 400 respectively) and surfaces on both clients as a generic "failed to
-convert" message with no indication of the cause. The webapp's *paste* path does
-guard this (`note.tooManyItems`); the convert path does not. Keeping inline
-markers rather than stripping them makes the text-length cap slightly easier to
-hit, since the cap is measured on the source.
+**The item caps are checked before sending.** `checkConvertToListCaps`
+(`shared/src/noteConversion.ts`) takes the `ConvertedListNote` `textToListNote`
+already produced and checks it against `ITEM_MAX_COUNT` (500) and
+`ITEM_TEXT_MAX_LENGTH` (500) — the same caps the server enforces — returning
+which one was hit and its limit, or `null` when the conversion is within both.
+Item count is checked first, matching the order the webapp's paste guard
+(`note.tooManyItems`) already used. Keeping inline markers rather than
+stripping them makes the text-length cap slightly easier to hit, since the cap
+is measured on the source: `**Buy** milk` is 12 code points against the limit
+and 8 on screen.
+
+Both clients call it before a text→list conversion is sent, and both refuse
+rather than truncate — the item text and count reaching the server unchanged
+is what the server's own validation is checked against. The webapp checks in
+`NoteModal`'s convert handler and shows the violation via the same
+`note.tooManyItems` / `note.itemTooLong` messages the paste path uses. Mobile
+checks inside `buildConvertNoteTypeRequest` (`mobile/src/hooks/useNotes.ts`),
+throwing `NoteConversionCapError` before either the online request or the
+offline apply/enqueue — so an oversized conversion is never written to local
+SQLite or queued for replay, and `NoteEditorScreen` maps the thrown error to
+the same two messages via `Alert.alert`.
 
 ---
 

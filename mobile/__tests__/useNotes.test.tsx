@@ -1,7 +1,8 @@
 import React from 'react';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useCreateNote, useUpdateNote, useDeleteNote, useDuplicateNote, useConvertNoteType, useCreateNoteItem, useToggleNoteItemCompleted, useUncheckAllItems, useDeleteCompletedItems, useShareNote, useUnshareNote } from '../src/hooks/useNotes';
+import { useCreateNote, useUpdateNote, useDeleteNote, useDuplicateNote, useConvertNoteType, useCreateNoteItem, useToggleNoteItemCompleted, useUncheckAllItems, useDeleteCompletedItems, useShareNote, useUnshareNote, NoteConversionCapError } from '../src/hooks/useNotes';
+import { VALIDATION } from '@jot/shared';
 import { noteLocalQueryKey, notesLocalQueryKey, notesLocalQueryScopeKey } from '../src/hooks/queryKeys';
 import * as notesApi from '../src/api/notes';
 import * as usersApi from '../src/api/users';
@@ -1320,6 +1321,40 @@ describe('useNotes hooks', () => {
       await waitFor(() => expect(result.current.isError).toBe(true));
       expect((result.current.error as Error).message).toMatch(/not found/i);
       expect(mockNotesApi.convertNoteType).not.toHaveBeenCalled();
+    });
+
+    it('throws NoteConversionCapError and calls neither the API nor the offline queue when the item cap is exceeded', async () => {
+      const content = Array.from({ length: VALIDATION.ITEM_MAX_COUNT + 1 }, (_, i) => `Item ${i}`).join('\n');
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce({ ...sourceTextNote, content } as never);
+
+      const { result } = renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync('123').catch(() => {});
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+      const error = result.current.error as InstanceType<typeof NoteConversionCapError>;
+      expect(error).toBeInstanceOf(NoteConversionCapError);
+      expect(error.kind).toBe('tooManyItems');
+      expect(error.max).toBe(VALIDATION.ITEM_MAX_COUNT);
+      expect(mockNotesApi.convertNoteType).not.toHaveBeenCalled();
+      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
+    });
+
+    it('throws NoteConversionCapError when an item line exceeds the text length cap', async () => {
+      const long = 'x'.repeat(VALIDATION.ITEM_TEXT_MAX_LENGTH + 1);
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce({ ...sourceTextNote, content: long } as never);
+
+      const { result } = renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync('123').catch(() => {});
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+      const error = result.current.error as InstanceType<typeof NoteConversionCapError>;
+      expect(error).toBeInstanceOf(NoteConversionCapError);
+      expect(error.kind).toBe('itemTextTooLong');
+      expect(error.max).toBe(VALIDATION.ITEM_TEXT_MAX_LENGTH);
+      expect(mockNotesApi.convertNoteType).not.toHaveBeenCalled();
+      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
     });
   });
 

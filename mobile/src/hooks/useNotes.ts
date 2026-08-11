@@ -20,7 +20,7 @@ import {
 } from '../api/notes';
 import { shareNote, unshareNote } from '../api/users';
 import { useOfflineNote } from './useOfflineNotes';
-import { generateId, textToListNote, listToText } from '@jot/shared';
+import { generateId, textToListNote, listToText, checkConvertToListCaps } from '@jot/shared';
 import type {
   Note,
   NoteItem,
@@ -32,6 +32,7 @@ import type {
   ConvertNoteTypeRequest,
   CreateNoteItemRequest,
   PatchNoteItemRequest,
+  ConvertToListCapViolation,
 } from '@jot/shared';
 import {
   saveNote,
@@ -369,6 +370,25 @@ export function useUpdateNote() {
  * path stamps the version current at call time, while the offline/replay path
  * resolves it fresh at drain time (see the `update` operation's handling, #489).
  */
+/**
+ * Thrown by `buildConvertNoteTypeRequest` when a text→list conversion would
+ * exceed an item cap the server enforces. Thrown before either the online
+ * request or the offline apply/enqueue below it, so a note that would be
+ * rejected never reaches the sync queue in the first place — the offline
+ * replay would otherwise reject it later with no way to explain why.
+ */
+export class NoteConversionCapError extends Error {
+  readonly kind: ConvertToListCapViolation['kind'];
+  readonly max: number;
+
+  constructor(violation: ConvertToListCapViolation) {
+    super(`Conversion exceeds cap: ${violation.kind} (max ${violation.max})`);
+    this.name = 'NoteConversionCapError';
+    this.kind = violation.kind;
+    this.max = violation.max;
+  }
+}
+
 function buildConvertNoteTypeRequest(note: Note): ConvertNoteTypeRequest {
   if (note.note_type === 'list') {
     return {
@@ -377,6 +397,10 @@ function buildConvertNoteTypeRequest(note: Note): ConvertNoteTypeRequest {
     };
   }
   const converted = textToListNote(note.content);
+  const violation = checkConvertToListCaps(converted);
+  if (violation) {
+    throw new NoteConversionCapError(violation);
+  }
   return {
     note_type: 'list',
     title: converted.title,

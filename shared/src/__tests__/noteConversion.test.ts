@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseTextLineAsListItem, textToListNote, listToText } from '../noteConversion';
+import { parseTextLineAsListItem, textToListNote, listToText, checkConvertToListCaps } from '../noteConversion';
 import { VALIDATION } from '../constants';
 import type { NoteItem } from '../types';
 
@@ -265,6 +265,58 @@ describe('textToListNote', () => {
 
   it('keeps inline formatting in a promoted title', () => {
     expect(textToListNote('# **Big** shop').title).toBe('**Big** shop');
+  });
+});
+
+describe('checkConvertToListCaps', () => {
+  it('passes a conversion within both caps', () => {
+    expect(checkConvertToListCaps(textToListNote('Milk\nEggs'))).toBeNull();
+  });
+
+  it('flags an item count over the limit', () => {
+    const content = Array.from({ length: VALIDATION.ITEM_MAX_COUNT + 1 }, (_, i) => `Item ${i}`).join('\n');
+    expect(checkConvertToListCaps(textToListNote(content))).toEqual({
+      kind: 'tooManyItems',
+      max: VALIDATION.ITEM_MAX_COUNT,
+    });
+  });
+
+  it('passes an item count exactly at the limit', () => {
+    const content = Array.from({ length: VALIDATION.ITEM_MAX_COUNT }, (_, i) => `Item ${i}`).join('\n');
+    expect(checkConvertToListCaps(textToListNote(content))).toBeNull();
+  });
+
+  it('flags a line over the item text length limit', () => {
+    const long = 'x'.repeat(VALIDATION.ITEM_TEXT_MAX_LENGTH + 1);
+    expect(checkConvertToListCaps(textToListNote(`Milk\n${long}`))).toEqual({
+      kind: 'itemTextTooLong',
+      max: VALIDATION.ITEM_TEXT_MAX_LENGTH,
+    });
+  });
+
+  it('passes a line of exactly the item text length limit', () => {
+    const atLimit = 'x'.repeat(VALIDATION.ITEM_TEXT_MAX_LENGTH);
+    expect(checkConvertToListCaps(textToListNote(atLimit))).toBeNull();
+  });
+
+  // Inline markers count toward the cap because they are kept, not stripped
+  // (§2.2) — the cap is measured on the source the item stores.
+  it('counts inline markdown markers toward the item text length limit', () => {
+    const padding = 'x'.repeat(VALIDATION.ITEM_TEXT_MAX_LENGTH - 3);
+    expect(checkConvertToListCaps(textToListNote(`**${padding}**`))).toEqual({
+      kind: 'itemTextTooLong',
+      max: VALIDATION.ITEM_TEXT_MAX_LENGTH,
+    });
+  });
+
+  it('reports the item count violation even when a line is also too long', () => {
+    const long = 'x'.repeat(VALIDATION.ITEM_TEXT_MAX_LENGTH + 1);
+    const lines = Array.from({ length: VALIDATION.ITEM_MAX_COUNT }, (_, i) => `Item ${i}`);
+    lines.push(long);
+    expect(checkConvertToListCaps(textToListNote(lines.join('\n')))).toEqual({
+      kind: 'tooManyItems',
+      max: VALIDATION.ITEM_MAX_COUNT,
+    });
   });
 });
 

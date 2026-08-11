@@ -42,7 +42,7 @@ import type { RouteProp} from '@react-navigation/native';
 import { useNavigation, useRoute, type NavigationAction } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
-import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useDuplicateNote, useConvertNoteType, useCreateNoteItem, useUpdateNoteItem, useDeleteNoteItem, useReorderNoteItems, useToggleNoteItemCompleted, useUncheckAllItems, useDeleteCompletedItems } from '../hooks/useNotes';
+import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useDuplicateNote, useConvertNoteType, useCreateNoteItem, useUpdateNoteItem, useDeleteNoteItem, useReorderNoteItems, useToggleNoteItemCompleted, useUncheckAllItems, useDeleteCompletedItems, NoteConversionCapError } from '../hooks/useNotes';
 import { useOfflineNote } from '../hooks/useOfflineNotes';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { useFailedNoteIds } from '../store/OfflineContext';
@@ -2275,8 +2275,14 @@ export default function NoteEditorScreen() {
         navigation.replace('NoteEditor', { noteId: currentNoteId });
         showToast(t('note.converted'));
       });
-    } catch {
-      Alert.alert(t('common.error'), t('note.failedConvert'));
+    } catch (err) {
+      if (err instanceof NoteConversionCapError) {
+        Alert.alert(t('common.error'), err.kind === 'tooManyItems'
+          ? t('note.tooManyItems', { max: err.max })
+          : t('note.itemTooLong', { max: err.max }));
+      } else {
+        Alert.alert(t('common.error'), t('note.failedConvert'));
+      }
     }
   }, [confirm, convertMutation, flushSave, navigation, showToast, t, withPendingIndicator]);
 

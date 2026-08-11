@@ -265,6 +265,8 @@
     "converted": "Notitie geconverteerd",
     "convertToTextConfirmTitle": "Naar tekst converteren?",
     "failedConvert": "Notitie converteren mislukt. Probeer het opnieuw.",
+    "itemTooLong": "Itemtekst mag niet meer dan {{max}} tekens bevatten",
+    "tooManyItems": "Een notitie kan niet meer dan {{max}} items bevatten",
     "completedItems": "Voltooide items ({{count}})",
     "completedItemGroup": "Groep: {{title}}",
     "moreCompletedItems": "+{{count}} voltooide items",

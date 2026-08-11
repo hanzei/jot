@@ -2445,6 +2445,34 @@ describe('NoteModal', () => {
       }));
     });
 
+    it('rejects converting to a list when the item count exceeds the cap, without calling onConvert', () => {
+      const content = Array.from({ length: VALIDATION.ITEM_MAX_COUNT + 1 }, (_, i) => `Item ${i}`).join('\n');
+      const note = createMockNote({ note_type: 'text', content });
+      const onConvert = vi.fn().mockResolvedValue(undefined);
+
+      renderNoteModal({ ...defaultProps, note, onConvert });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Convert to list' }));
+
+      expect(screen.getByText(`A note cannot have more than ${VALIDATION.ITEM_MAX_COUNT} items`)).toBeInTheDocument();
+      expect(onConvert).not.toHaveBeenCalled();
+      expect(mockNotesGetById).not.toHaveBeenCalled();
+    });
+
+    it('rejects converting to a list when a line exceeds the item text length cap, without calling onConvert', () => {
+      const long = 'x'.repeat(VALIDATION.ITEM_TEXT_MAX_LENGTH + 1);
+      const note = createMockNote({ note_type: 'text', content: `Milk\n${long}` });
+      const onConvert = vi.fn().mockResolvedValue(undefined);
+
+      renderNoteModal({ ...defaultProps, note, onConvert });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Convert to list' }));
+
+      expect(screen.getByText(`Item text must be ${VALIDATION.ITEM_TEXT_MAX_LENGTH} characters or less`)).toBeInTheDocument();
+      expect(onConvert).not.toHaveBeenCalled();
+      expect(mockNotesGetById).not.toHaveBeenCalled();
+    });
+
     it('confirms before converting a list to text and warns about dropped assignments', async () => {
       const items = createMockListItems();
       items[0] = { ...items[0]!, assigned_to: 'user-1' };

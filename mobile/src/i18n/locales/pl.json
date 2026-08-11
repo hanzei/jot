@@ -235,6 +235,8 @@
     "converted": "Notatka przekonwertowana",
     "convertToTextConfirmTitle": "Przekonwertować na tekst?",
     "failedConvert": "Nie udało się przekonwertować notatki. Spróbuj ponownie.",
+    "itemTooLong": "Tekst elementu nie może przekraczać {{max}} znaków",
+    "tooManyItems": "Notatka nie może zawierać więcej niż {{max}} elementów",
     "completedItems": "Ukończone elementy ({{count}})",
     "completedItemGroup": "Grupa: {{title}}",
     "moreCompletedItems": "+{{count}} ukończonych elementów",
