@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import type { Collaborator } from '@jot/shared';
 import { useTheme } from '../../theme/ThemeContext';
 import { getEffectiveColors } from '../../theme/colors';
-import ListItem, { DRAG_HANDLE_WIDTH } from '../../components/ListItem';
+import ListItem, { DRAG_HANDLE_WIDTH, type ListItemSelectionHandle } from '../../components/ListItem';
 import { styles } from './styles';
 import type { LocalItem } from './listItemModel';
 
@@ -32,6 +32,9 @@ interface CheckedItemsSectionProps {
   collapsed: boolean;
   onToggleCollapsed: () => void;
   getItemRef: (id: string) => React.RefObject<TextInputType | null>;
+  getItemSelectionRef: (id: string) => React.RefObject<ListItemSelectionHandle | null>;
+  /** iOS accessory id for the formatting bar; undefined on Android. */
+  itemAccessoryViewID?: string;
   isNoteShared: boolean;
   collaborators: Collaborator[];
   hasNoteColor: boolean;
@@ -55,6 +58,8 @@ export default function CheckedItemsSection({
   collapsed,
   onToggleCollapsed,
   getItemRef,
+  getItemSelectionRef,
+  itemAccessoryViewID,
   isNoteShared,
   collaborators,
   hasNoteColor,
@@ -107,6 +112,8 @@ export default function CheckedItemsSection({
         <ListItem
           key={item.id}
           inputRef={getItemRef(item.id)}
+          selectionHandleRef={getItemSelectionRef(item.id)}
+          inputAccessoryViewID={itemAccessoryViewID}
           text={item.text}
           completed={item.completed}
           editable={editable}

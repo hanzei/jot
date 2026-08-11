@@ -8,9 +8,17 @@ interface MarkdownToolbarProps {
   onBold: () => void;
   onItalic: () => void;
   onStrikethrough: () => void;
-  onHeading: () => void;
-  onBullet: () => void;
-  onCheckbox: () => void;
+  /**
+   * The three block actions, supplied together or not at all. Omitting them
+   * gives the inline-only bar a list-item row gets — an item is lexed as inline
+   * content, so `## `, `- ` and `- [ ] ` stay literal source there
+   * (docs/specs/markdown-rendering.md §2.1) and a button for them would write
+   * characters guaranteed never to render. Same split as the webapp toolbar's
+   * `variant` prop (webapp/src/components/MarkdownToolbar.tsx).
+   */
+  onHeading?: () => void;
+  onBullet?: () => void;
+  onCheckbox?: () => void;
   backgroundColor: string;
   hasNoteColor: boolean;
 }
@@ -19,9 +27,9 @@ const HIT_SLOP = { top: 8, right: 4, bottom: 8, left: 4 };
 const ICON_SIZE = 20;
 
 /**
- * Markdown formatting buttons. Rendered inline on Android and inside an
- * InputAccessoryView on iOS — both wrap this same content, so the buttons stay
- * identical across platforms.
+ * Markdown formatting buttons, over a text note's content or a list note's
+ * rows. Rendered inline on Android and inside an InputAccessoryView on iOS —
+ * both wrap this same content, so the buttons stay identical across platforms.
  *
  * Icons rather than letter glyphs: it matches the action bar below, and it
  * keeps the buttons free of text that would otherwise need translating in
@@ -79,41 +87,45 @@ export function MarkdownToolbarContent({ onBold, onItalic, onStrikethrough, onHe
       >
         <Strikethrough size={ICON_SIZE} color={iconColor} />
       </TouchableOpacity>
-      <View style={[styles.fmtSep, { backgroundColor: colors.border }]} />
-      {/* Cycles ## -> ### -> none, so the icon deliberately names no level. */}
-      <TouchableOpacity
-        onPress={onHeading}
-        style={styles.fmtBtn}
-        hitSlop={HIT_SLOP}
-        focusable={false}
-        accessibilityRole="button"
-        accessibilityLabel={t('note.formatHeading')}
-        testID="format-heading-btn"
-      >
-        <Heading size={ICON_SIZE} color={iconColor} />
-      </TouchableOpacity>
-      <TouchableOpacity
-        onPress={onBullet}
-        style={styles.fmtBtn}
-        hitSlop={HIT_SLOP}
-        focusable={false}
-        accessibilityRole="button"
-        accessibilityLabel={t('note.formatBulletList')}
-        testID="format-bullet-btn"
-      >
-        <List size={ICON_SIZE} color={iconColor} />
-      </TouchableOpacity>
-      <TouchableOpacity
-        onPress={onCheckbox}
-        style={styles.fmtBtn}
-        hitSlop={HIT_SLOP}
-        focusable={false}
-        accessibilityRole="button"
-        accessibilityLabel={t('note.formatChecklist')}
-        testID="format-checkbox-btn"
-      >
-        <ListTodo size={ICON_SIZE} color={iconColor} />
-      </TouchableOpacity>
+      {onHeading && onBullet && onCheckbox && (
+        <>
+          <View style={[styles.fmtSep, { backgroundColor: colors.border }]} />
+          {/* Cycles ## -> ### -> none, so the icon deliberately names no level. */}
+          <TouchableOpacity
+            onPress={onHeading}
+            style={styles.fmtBtn}
+            hitSlop={HIT_SLOP}
+            focusable={false}
+            accessibilityRole="button"
+            accessibilityLabel={t('note.formatHeading')}
+            testID="format-heading-btn"
+          >
+            <Heading size={ICON_SIZE} color={iconColor} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={onBullet}
+            style={styles.fmtBtn}
+            hitSlop={HIT_SLOP}
+            focusable={false}
+            accessibilityRole="button"
+            accessibilityLabel={t('note.formatBulletList')}
+            testID="format-bullet-btn"
+          >
+            <List size={ICON_SIZE} color={iconColor} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={onCheckbox}
+            style={styles.fmtBtn}
+            hitSlop={HIT_SLOP}
+            focusable={false}
+            accessibilityRole="button"
+            accessibilityLabel={t('note.formatChecklist')}
+            testID="format-checkbox-btn"
+          >
+            <ListTodo size={ICON_SIZE} color={iconColor} />
+          </TouchableOpacity>
+        </>
+      )}
     </View>
   );
 }

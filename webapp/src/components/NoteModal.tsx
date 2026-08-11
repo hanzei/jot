@@ -27,6 +27,7 @@ import {
   dropTargetParentId,
   indentOf,
   itemHasChildren,
+  itemTextareaId,
   normalizeItemOrder,
   precedingTopLevelId,
   type ListItem,
@@ -793,7 +794,9 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
    * The inserted markers are characters the user did not type, so a transform
    * that would push the item over VALIDATION.ITEM_TEXT_MAX_LENGTH is dropped
    * rather than truncated — the same choice handleListContinuation makes at
-   * the content cap.
+   * the content cap. Unlike that one it says so: this runs behind a toolbar
+   * button as well as a shortcut, and a button that silently does nothing
+   * reads as broken. Mobile's bar shows the same toast for the same case.
    */
   const applyItemMarkdownEdit = (
     itemId: string,
@@ -804,7 +807,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       text: textarea.value,
       selection: { start: textarea.selectionStart, end: textarea.selectionEnd },
     });
-    if (validateItemText(next.text, t)) return;
+    const validationError = validateItemText(next.text, t);
+    if (validationError) {
+      showError(validationError);
+      return;
+    }
 
     const selection = clampSelection(next.selection, next.text);
     if (!applyTextareaEdit(textarea, next.text, selection)) {
@@ -1213,6 +1220,89 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     } else if (field === 'text') {
       handleTextUpdate(targetItem.id, value as string);
     }
+  };
+
+  // --- Markdown formatting, list items ------------------------------------
+  //
+  // The same shared transforms and the same undo-preserving write-back the
+  // content editor uses above, aimed at whichever row holds the caret. Only the
+  // inline markers are reachable from here: an item is lexed as inline content,
+  // so the block actions would write source that never renders
+  // (docs/specs/markdown-rendering.md §2.1). The toolbar enforces that by
+  // rendering only three buttons; this handler covers the same three.
+
+  /**
+   * The row currently holding the caret, or null — which is also what decides
+   * whether the toolbar is showing.
+   *
+   * Cleared on a timeout rather than straight from a blur, because every way of
+   * *staying* in the list is a blur immediately followed by a focus, and the two
+   * do not always land in one batch: row to row, and row to toolbar. The pending
+   * clear is cancelled by whichever focus arrives next, so only focus that
+   * settles outside both actually hides the bar.
+   */
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const clearEditingItemRef = useRef<number | null>(null);
+
+  const cancelClearEditingItem = useCallback(() => {
+    if (clearEditingItemRef.current !== null) {
+      clearTimeout(clearEditingItemRef.current);
+      clearEditingItemRef.current = null;
+    }
+  }, []);
+
+  const scheduleClearEditingItem = useCallback(() => {
+    cancelClearEditingItem();
+    clearEditingItemRef.current = window.setTimeout(() => {
+      clearEditingItemRef.current = null;
+      // Asked once focus has settled, because "did the user leave the list?"
+      // has no answer at the moment a field blurs. Everything between the field
+      // and the next tab stop outside belongs to the editing surface — the
+      // row's own delete and assignee controls, the suggestion dropdown, and
+      // the toolbar itself — and Tab visits them in that order. Clearing on the
+      // bare blur hid the toolbar while focus was still inside the row, which
+      // put it out of reach of the keyboard entirely.
+      const active = document.activeElement;
+      if (active instanceof Element && active.closest('[data-testid="list-item-row"], [role="toolbar"]')) return;
+      setEditingItemId(null);
+    }, 0);
+  }, [cancelClearEditingItem]);
+
+  const handleItemEditingChange = useCallback((itemId: string, editing: boolean) => {
+    if (!editing) {
+      scheduleClearEditingItem();
+      return;
+    }
+    cancelClearEditingItem();
+    setEditingItemId(itemId);
+  }, [cancelClearEditingItem, scheduleClearEditingItem]);
+
+  /**
+   * The toolbar is not a field and so never reports editing state of its own;
+   * what keeps it alive while it holds focus is the settle-time check above.
+   * It still has to *re-ask* when focus leaves it, since nothing else will.
+   */
+  const handleItemToolbarBlur = useCallback(() => {
+    scheduleClearEditingItem();
+  }, [scheduleClearEditingItem]);
+
+  useEffect(() => () => {
+    if (clearEditingItemRef.current !== null) clearTimeout(clearEditingItemRef.current);
+  }, []);
+
+  /**
+   * The toolbar's route into applyItemMarkdownEdit (defined with the row
+   * keydown handler above, which is the other caller). There is no event to
+   * take the field from here, so the row holding the caret is resolved through
+   * itemInputRefs instead.
+   */
+  const handleItemToolbarAction = (action: MarkdownToolbarAction) => {
+    if (!editingItemId) return;
+    const textarea = itemInputRefs.current.get(editingItemId);
+    if (!textarea) return;
+    const marker = action === 'bold' ? '**' : action === 'italic' ? '*' : action === 'strikethrough' ? '~~' : null;
+    if (!marker) return;
+    applyItemMarkdownEdit(editingItemId, textarea, (state) => toggleInlineMarker(state, marker));
   };
 
   // Restores a completed item at the position of the current (placeholder) item,
@@ -2012,6 +2102,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                           onAssignItem={assignItem}
                           completedItemTexts={completedItemTexts}
                           onAcceptSuggestion={acceptSuggestion}
+                          onEditingChange={handleItemEditingChange}
+                          keepSourceVisible={editingItemId === item.id}
                         />
                       ))}
                     </SortableContext>
@@ -2026,6 +2118,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                     </button>
                   )}
                 </div>
+
 
                 {/* Completed items section */}
                 {completedItems.length > 0 && (
@@ -2114,6 +2207,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                                 collaborators={collaborators}
                                 usersById={usersById}
                                 onAssignItem={assignItem}
+                                onEditingChange={handleItemEditingChange}
+                                keepSourceVisible={editingItemId === item.id}
                               />,
                             );
                           });
@@ -2217,6 +2312,41 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
             </div>
 
           </div>
+
+          {/* One formatting bar for the whole list, aimed at the row holding
+              the caret — a bar per row would be one per item.
+
+              Deliberately *outside* the scrolling body above, docked to the
+              modal's chrome directly over the action bar. In the body it
+              scrolled with the content, so on any list taller than the modal
+              it sat hundreds of pixels below the viewport while you edited the
+              row at the top. Mobile's Android bar is pinned for exactly this
+              reason (NoteEditorScreen), and this is the same rule.
+
+              It is hidden rather than unmounted while no row is editing, and
+              the slot it leaves behind is the point: the modal is centred in
+              the viewport, so a bar that came and went would grow the panel and
+              shift the rows under the pointer each time focus entered the list.
+              `invisible` (visibility:hidden) also takes the buttons out of the
+              focus order and out of the accessibility tree, so an inert bar is
+              inert to everyone and not just to the mouse.
+
+              Its buttons never take focus when it is showing (see
+              MarkdownToolbar), so a press keeps the row's caret, its selection,
+              and the source form it shows while editing. */}
+          {noteType === 'list' && !isReadOnly && (
+            <div
+              data-testid="markdown-toolbar-slot"
+              className={editingItemId ? undefined : 'invisible'}
+            >
+              <MarkdownToolbar
+                variant="item"
+                onAction={handleItemToolbarAction}
+                onBlurOut={handleItemToolbarBlur}
+                controlsId={editingItemId ? itemTextareaId(editingItemId) : undefined}
+              />
+            </div>
+          )}
 
           {/* Footer toolbar */}
           <div className="border-t border-gray-200 dark:border-white/20">

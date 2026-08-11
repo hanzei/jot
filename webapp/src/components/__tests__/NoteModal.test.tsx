@@ -2851,6 +2851,190 @@ describe('NoteModal', () => {
     });
   });
 
+  describe('Markdown formatting toolbar, list items', () => {
+    // Same jsdom caveat as the text-note block above: no execCommand, so these
+    // exercise the fallback write-back and assert on text and caret.
+    const openListNote = (text: string) => {
+      const note = createMockNote({
+        note_type: 'list',
+        items: [{
+          id: 'item1',
+          note_id: '1',
+          text,
+          completed: false,
+          position: 0,
+          parent_id: null,
+          assigned_to: '',
+          created_at: '2023-01-01T00:00:00Z',
+          updated_at: '2023-01-01T00:00:00Z',
+        }],
+      });
+      renderNoteModal({ ...defaultProps, note });
+      return screen.getByTestId('list-item-input') as HTMLTextAreaElement;
+    };
+
+    const focusWithSelection = (textarea: HTMLTextAreaElement, start: number, end: number) => {
+      fireEvent.focus(textarea);
+      textarea.setSelectionRange(start, end);
+    };
+
+    it('shows only while a row holds the caret, keeping its slot either way', async () => {
+      const textarea = openListNote('milk');
+      const slot = () => screen.getByTestId('markdown-toolbar-slot');
+
+      // Hidden rather than unmounted: the modal is centred, so a bar that came
+      // and went would shift every row each time focus entered the list.
+      expect(slot()).toHaveClass('invisible');
+
+      fireEvent.focus(textarea);
+      expect(slot()).not.toHaveClass('invisible');
+
+      fireEvent.blur(textarea);
+      // Cleared on a timeout, so moving between rows does not flash the bar.
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(slot()).toHaveClass('invisible');
+    });
+
+    it('names no row while it is hidden', () => {
+      openListNote('milk');
+
+      expect(screen.getByTestId('markdown-toolbar')).not.toHaveAttribute('aria-controls');
+    });
+
+    // Real focus moves, not synthetic focus events: what keeps the toolbar
+    // alive is a document.activeElement check once focus has settled, and
+    // fireEvent.focus dispatches the event without moving activeElement.
+    it('survives focus moving to the row\'s own controls, which Tab reaches first', async () => {
+      const textarea = openListNote('buy **milk**');
+      const slot = () => screen.getByTestId('markdown-toolbar-slot');
+
+      act(() => { textarea.focus(); });
+      expect(slot()).not.toHaveClass('invisible');
+
+      // Tab out of the field lands on the row's delete button before it ever
+      // reaches the toolbar. Hiding the toolbar here put it out of reach of the
+      // keyboard entirely — the next Tab went straight past it to the footer.
+      const del = within(screen.getByTestId('list-item-row')).getByTestId('list-item-delete');
+      act(() => { del.focus(); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+
+      expect(slot()).not.toHaveClass('invisible');
+    });
+
+    it('stays put once focus reaches it, and the row keeps showing source', async () => {
+      const textarea = openListNote('buy **milk**');
+      const slot = () => screen.getByTestId('markdown-toolbar-slot');
+
+      act(() => { textarea.focus(); });
+      act(() => { screen.getByTestId('format-bold-btn').focus(); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+
+      expect(slot()).not.toHaveClass('invisible');
+      // The row still shows source, so the selection the next press acts on is
+      // still on screen rather than collapsed behind the rendered form.
+      expect(screen.getByTestId('list-item-input')).toBeInTheDocument();
+      expect(screen.queryByTestId('list-item-rendered')).not.toBeInTheDocument();
+    });
+
+    it('hides once focus leaves both the row and the toolbar', async () => {
+      const textarea = openListNote('buy **milk**');
+
+      act(() => { textarea.focus(); });
+      act(() => { screen.getByTestId('format-bold-btn').focus(); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+
+      // Out of the toolbar to somewhere else entirely.
+      act(() => { screen.getByTestId('format-bold-btn').blur(); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+
+      expect(screen.getByTestId('markdown-toolbar-slot')).toHaveClass('invisible');
+      // The row goes back to its rendered form now that nothing holds it.
+      expect(screen.getByTestId('list-item-rendered')).toBeInTheDocument();
+    });
+
+    it('offers only the inline actions — an item cannot hold block markdown', () => {
+      const textarea = openListNote('milk');
+      fireEvent.focus(textarea);
+
+      const toolbar = screen.getByTestId('markdown-toolbar');
+      for (const name of ['Bold', 'Italic', 'Strikethrough']) {
+        expect(within(toolbar).getByRole('button', { name })).toBeInTheDocument();
+      }
+      for (const id of ['format-heading-btn', 'format-bullet-btn', 'format-checkbox-btn']) {
+        expect(within(toolbar).queryByTestId(id)).not.toBeInTheDocument();
+      }
+    });
+
+    it('wraps the row selection in bold markers', () => {
+      const textarea = openListNote('buy milk');
+      focusWithSelection(textarea, 4, 8);
+
+      fireEvent.click(screen.getByTestId('format-bold-btn'));
+
+      expect(screen.getByTestId('list-item-input')).toHaveValue('buy **milk**');
+    });
+
+    it('unwraps a marker the selection already carries', () => {
+      const textarea = openListNote('buy ~~milk~~');
+      focusWithSelection(textarea, 6, 10);
+
+      fireEvent.click(screen.getByTestId('format-strikethrough-btn'));
+
+      expect(screen.getByTestId('list-item-input')).toHaveValue('buy milk');
+    });
+
+    it('parks the caret between the markers when nothing is selected', async () => {
+      const textarea = openListNote('');
+      focusWithSelection(textarea, 0, 0);
+
+      fireEvent.click(screen.getByTestId('format-italic-btn'));
+
+      const row = screen.getByTestId('list-item-input') as HTMLTextAreaElement;
+      expect(row).toHaveValue('**');
+      // On the fallback path the text goes through state, so the caret is
+      // restored a tick later — the row's value only catches up on re-render.
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(row.selectionStart).toBe(1);
+      expect(row.selectionEnd).toBe(1);
+    });
+
+    it('drops the press at the item length cap rather than truncating', () => {
+      const atCap = 'x'.repeat(VALIDATION.ITEM_TEXT_MAX_LENGTH);
+      const textarea = openListNote(atCap);
+      focusWithSelection(textarea, 0, VALIDATION.ITEM_TEXT_MAX_LENGTH);
+
+      fireEvent.click(screen.getByTestId('format-bold-btn'));
+
+      expect(screen.getByTestId('list-item-input')).toHaveValue(atCap);
+      expect(screen.getByText(/characters or less/i)).toBeInTheDocument();
+    });
+
+    it('points aria-controls at the row it is editing', () => {
+      const textarea = openListNote('milk');
+      fireEvent.focus(textarea);
+
+      expect(screen.getByTestId('markdown-toolbar'))
+        .toHaveAttribute('aria-controls', textarea.id);
+      expect(textarea.id).toBeTruthy();
+    });
+
+    it('is not rendered for a read-only note', () => {
+      const note = createMockNote({
+        note_type: 'list',
+        items: createMockListItems(),
+        deleted_at: '2023-06-01T00:00:00Z',
+      });
+      renderNoteModal({ ...defaultProps, note });
+
+      const rows = screen.queryAllByTestId('list-item-input');
+      if (rows[0]) fireEvent.focus(rows[0]);
+
+      // Not even the slot: a binned row has no caret to place.
+      expect(screen.queryByTestId('markdown-toolbar-slot')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('markdown-toolbar')).not.toBeInTheDocument();
+    });
+  });
+
   describe('Markdown list continuation', () => {
     const typeEnterAt = (textarea: HTMLTextAreaElement, caret: number) => {
       textarea.setSelectionRange(caret, caret);

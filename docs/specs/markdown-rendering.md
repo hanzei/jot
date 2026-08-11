@@ -594,17 +594,31 @@ here so the next person does not have to rediscover them.
 
 ### 5.1 Authoring the syntax
 
-Both clients also *write* this syntax, from a six-button formatting bar over the
-text-note editor — bold, italic, strikethrough, a heading cycle, bullet and
-checklist — plus list continuation when Enter is pressed at the end of a list
-item.
+Both clients also *write* this syntax, from a formatting bar over the editor —
+bold, italic, strikethrough, a heading cycle, bullet and checklist — plus list
+continuation when Enter is pressed at the end of a list item.
+
+**The bar has two forms, and the split is §2 versus §2.1 rather than a
+preference.** Over a text note's content it carries all six buttons. Over a
+list-item row it carries the inline three only: an item is lexed as inline
+content, so `## x`, `- x` and `- [ ] x` stay literal source there (§2.1) and a
+button for them would write characters guaranteed never to render — the checkbox
+one twice over, since the row already has a real checkbox. Both clients drop the
+same three, so the two still read as one feature.
+
+Inline code and links have no button on either form. That is the pre-existing
+line for content and item alike: the bar covers what a selection can be wrapped
+in, and a link needs a target the bar cannot ask for.
+
+**Note titles have no bar at all** — they are plain text everywhere (§1).
 
 | Concern | File |
 |---|---|
 | Shared caret/selection transforms | `shared/src/markdownEdits.ts` |
-| Webapp toolbar | `webapp/src/components/MarkdownToolbar.tsx` |
+| Webapp toolbar (both variants) | `webapp/src/components/MarkdownToolbar.tsx` |
 | Webapp undo-preserving write-back | `webapp/src/utils/textareaEdit.ts` |
-| Mobile formatting bar | `mobile/src/screens/noteEditor/EditorToolbars.tsx` |
+| Mobile formatting bar (both variants) | `mobile/src/screens/noteEditor/EditorToolbars.tsx` |
+| Mobile row caret handle | `mobile/src/components/ListItem.tsx` (`ListItemSelectionHandle`) |
 
 The transforms are pure and shared, so both clients produce identical text for
 the same input and selection, and one suite
@@ -619,13 +633,63 @@ discard everything typed before it.
 The heading button stops at `###`, matching §2: a fourth press would produce an
 `####` that renders as body text.
 
+**Where the item bar lives is per client, and both answers follow from §1.2 —
+the bar must not take focus, because a row that loses the caret stops showing
+its source.** The webapp prevents `mousedown` on every button (the same guard
+the content bar has); mobile marks them `focusable={false}` (the same guard, for
+the same reason it already needed one).
+
+**Both clients dock the item bar to the editor's chrome rather than laying it
+out with the rows**, and that is not cosmetic: a list is as long as the user
+makes it, so a bar in the scrolling content sits wherever the list ends. Placed
+in the webapp modal's scrollable body, a 25-item list put it ~490px below the
+viewport while the caret was in the top row — present, correct, and unreachable.
+It now sits between that body and the action bar. Mobile's Android bar was
+already pinned above the action bar for the same reason.
+
+Beyond that they diverge, because a phone has a keyboard in the way:
+
+- **The webapp** aims one bar at whichever row holds the caret and hides it —
+  `visibility: hidden`, keeping its slot — while none does. The reserved slot is
+  load-bearing: the modal is centred in the viewport, so a bar that mounted and
+  unmounted would grow the panel and shift every row out from under the pointer
+  each time focus entered the list. It also takes the buttons out of the focus
+  order while inert, so the hidden bar is hidden from everyone rather than only
+  from the mouse.
+
+  **"Is a row still being edited?" is answered once focus has settled, not when
+  a field blurs.** Tab out of a row's field and focus goes to that row's own
+  delete control, then its assignee control, and only then the toolbar — so a
+  bar that hid on the bare blur was gone before Tab could reach it, and the next
+  Tab went straight past it to the action bar. Keyboard users could not reach it
+  at all. The clear is therefore deferred and then asks where focus actually
+  landed; anything inside a row or inside the toolbar keeps the bar, and the row
+  keeps showing source so the selection the next press acts on stays visible.
+  The same deferral is what stops row-to-row movement flickering the bar.
+- **Mobile puts it where the keyboard is.** On iOS every row carries the bar's
+  `nativeID`, so an `InputAccessoryView` docks above the keyboard for whichever
+  row is focused and nothing has to track which. On Android it renders inline
+  above the action bar while a row holds the caret, with the clear deferred
+  ~150ms so tapping from one row to the next does not flash it away and back.
+
+The *content* bar keeps its old place, in flow under the textarea: a text note
+has exactly one editing surface and the bar is attached to it. Only a list has
+N rows for one bar to serve.
+
+One more difference, invisible in the UI: the webapp reads the caret straight
+off the focused `<textarea>`, while mobile's rows own their selection state
+(§1.2's force-and-release), so the editor reaches it through a per-row imperative
+handle rather than lifting it. An item at `ITEM_TEXT_MAX_LENGTH` drops the press
+on both clients with a toast — the markers are characters the user did not type,
+and truncating would eat the tail of the text instead.
+
 `Ctrl`/`Cmd`+`B` and `+I` reuse `toggleInlineMarker` from a keydown handler
-rather than a toolbar button, and — unlike the six-button bar above — are not
-confined to the text-note content field: a list item's row wires the same two
-shortcuts (`webapp/src/components/NoteModal.tsx`, `handleItemKeyDown`), since
-an item renders the same inline subset as content (§2.1). Heading, bullet,
-checkbox and strikethrough stay toolbar-only; the last has no keyboard
-shortcut on either surface.
+rather than a toolbar button, on both surfaces: the content field and a list
+item's row (`webapp/src/components/NoteModal.tsx`, `handleItemKeyDown`), since
+an item renders the same inline subset as content (§2.1). They are the same two
+transforms the bar's first two buttons run, so the two routes cannot disagree.
+Heading, bullet and checkbox stay toolbar-only and text-note-only; strikethrough
+is on both bars but has no keyboard shortcut on either surface.
 
 ---
 
@@ -665,5 +729,17 @@ field survives it, `webapp/src/utils/__tests__/inlineCaret.test.ts` and
 `mobile/__tests__/inlineCaret.test.ts` for the point-to-caret mapping — the
 half of it that exists without a layout engine.
 
+The formatting bars (§5.1) are covered per client too, since what they write is
+already tested at the shared transforms and what is left is per-surface wiring:
+`webapp/src/components/__tests__/NoteModal.test.tsx` and
+`mobile/__tests__/NoteEditorScreen.formatting-bar.test.tsx` for the content bar,
+the same NoteModal suite and
+`mobile/__tests__/NoteEditorScreen.item-formatting-bar.test.tsx` for the item
+one. Each asserts that the block buttons are *absent* from the item variant, so
+adding one back breaks a test on both clients rather than shipping a button that
+writes source nothing renders.
+
 `webapp/e2e/tests/markdown.spec.ts` covers the same feature set through the
-browser, on real note content.
+browser, on real note content — including the two things only a browser shows:
+that a bar press leaves the row focused (so it keeps its source form), and that
+the edit is still undoable afterwards.

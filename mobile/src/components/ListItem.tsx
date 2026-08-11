@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -25,6 +25,18 @@ import { inlineMarkdownNodes, inlineMarkdownToText } from '../utils/inlineMarkdo
 import { sourceOffsetAtPoint, type RenderedTextLine } from '../utils/inlineCaret';
 import { inlineRendersAsSource, VALIDATION, type Collaborator, type TextSelection } from '@jot/shared';
 
+/**
+ * The row's caret, reachable from the note editor. The editor's formatting bar
+ * sits outside the row but edits the row's text, so it needs to read where the
+ * caret is and put it back afterwards — and the put-back has to go through the
+ * row's own force-and-release (see `forcedSelection` below), which is the only
+ * thing that makes a controlled `selection` land and then let go again.
+ */
+export interface ListItemSelectionHandle {
+  getSelection: () => TextSelection;
+  setSelection: (selection: TextSelection) => void;
+}
+
 interface ListItemProps {
   text: string;
   completed: boolean;
@@ -42,6 +54,8 @@ interface ListItemProps {
   isShared?: boolean;
   collaborators?: Collaborator[];
   inputRef?: React.RefObject<TextInputType | null>;
+  /** Filled in with this row's caret handle while it is mounted. */
+  selectionHandleRef?: React.RefObject<ListItemSelectionHandle | null>;
   autoFocus?: boolean;
   inputAccessoryViewID?: string;
   hasNoteColor?: boolean;
@@ -106,6 +120,7 @@ function ListItem({
   isShared,
   collaborators,
   inputRef,
+  selectionHandleRef,
   autoFocus = false,
   inputAccessoryViewID,
   hasNoteColor = false,
@@ -171,6 +186,26 @@ function ListItem({
       if (inputRef) inputRef.current = node;
     },
     [inputRef],
+  );
+
+  // The caret half of the same arrangement: `inputRef` lets the editor move
+  // focus between rows, this lets its formatting bar edit the row that has it.
+  useImperativeHandle(
+    selectionHandleRef,
+    () => ({
+      getSelection: () => selectionRef.current,
+      setSelection: (selection: TextSelection) => {
+        const caret = selectionRef.current;
+        // Nothing to force when the caret is already where the edit wants it —
+        // the input would report no selection change, so the controlled value
+        // would never be released and would go stale on the next tap. Same
+        // guard the content editor's bar uses.
+        const alreadyThere = selection.start === caret.start && selection.end === caret.end;
+        selectionRef.current = selection;
+        setForcedSelection(alreadyThere ? null : selection);
+      },
+    }),
+    [],
   );
 
   // Pop the checkbox in on mount when this row is the one the user just checked

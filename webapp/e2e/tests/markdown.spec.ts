@@ -487,4 +487,133 @@ test.describe('Markdown in list-item rows', () => {
     await page.keyboard.press('Control+Shift+b');
     await dashboardPage.expectListItemValue(0, 'buy **milk** *today*');
   });
+
+  test.describe('formatting toolbar', () => {
+    test('appears with the row that has the caret and carries only the inline actions', async ({ page, dashboardPage, noteEditorPage }) => {
+      await dashboardPage.goto();
+      await dashboardPage.createListNote('Item Toolbar Note', ['buy milk']);
+      await dashboardPage.openNote('Item Toolbar Note');
+
+      // Nothing focused yet, so there is no row for a button to act on. The bar
+      // keeps its slot (the modal is centred, and a bar that came and went
+      // would shift the rows), but it is hidden and unreachable.
+      await expect(noteEditorPage.toolbar()).not.toBeVisible();
+
+      await dashboardPage.focusListItem(0);
+      await expect(noteEditorPage.toolbar()).toBeVisible();
+
+      // The inline three, and only those: an item is lexed as inline content,
+      // so a heading/bullet/checkbox button would write literal source (§2.1).
+      for (const action of ['bold', 'italic', 'strikethrough'] as const) {
+        await expect(noteEditorPage.formatButton(action)).toBeVisible();
+      }
+      for (const action of ['heading', 'bullet', 'checkbox'] as const) {
+        await expect(noteEditorPage.formatButton(action)).toHaveCount(0);
+      }
+
+      // aria-controls names the row it is editing.
+      const rowId = await dashboardPage.listItemInput(0).getAttribute('id');
+      expect(rowId).toBeTruthy();
+      await expect(noteEditorPage.toolbar()).toHaveAttribute('aria-controls', rowId!);
+
+      // Focus somewhere outside the list and the bar hides again.
+      await page.getByPlaceholder('Title').click();
+      await expect(noteEditorPage.toolbar()).not.toBeVisible();
+    });
+
+    test('survives Tab from a row into it, and formats from the keyboard', async ({ page, dashboardPage, noteEditorPage }) => {
+      await dashboardPage.goto();
+      await dashboardPage.createListNote('Tab Note', ['buy milk']);
+      await dashboardPage.openNote('Tab Note');
+
+      // A completed row is the one that gives Tab away — an active row keeps it
+      // for indent. Check the item, then edit it in the completed section.
+      await dashboardPage.listItemRow(0).locator('input[type="checkbox"]').click();
+      await expect(page.getByText(/Completed items/)).toBeVisible();
+
+      const row = dashboardPage.listItemInput(0);
+      await row.click();
+      await row.evaluate((el: HTMLTextAreaElement) => el.setSelectionRange(4, 8));
+      await expect(noteEditorPage.toolbar()).toBeVisible();
+
+      // Tab leaves the field for the row's own delete control first, and only
+      // then the toolbar. Hiding the bar on the field's blur made that second
+      // Tab skip past it to the footer, putting it out of keyboard reach.
+      await page.keyboard.press('Tab');
+      await expect(dashboardPage.listItemRow(0).getByTestId('list-item-delete')).toBeFocused();
+      await expect(noteEditorPage.toolbar()).toBeVisible();
+
+      await page.keyboard.press('Tab');
+      await expect(noteEditorPage.formatButton('bold')).toBeFocused();
+      await expect(noteEditorPage.toolbar()).toBeVisible();
+
+      // The whole point of getting here: the button works from the keyboard,
+      // on the selection the row still holds.
+      await page.keyboard.press('Enter');
+      await dashboardPage.expectListItemValue(0, 'buy **milk**');
+
+      // And leaving for good does hide it.
+      await page.getByPlaceholder('Title').click();
+      await expect(noteEditorPage.toolbar()).not.toBeVisible();
+    });
+
+    test('stays on screen on a list taller than the modal', async ({ dashboardPage, noteEditorPage }) => {
+      await dashboardPage.goto();
+      await dashboardPage.createListNote(
+        'Long List Note',
+        Array.from({ length: 25 }, (_, i) => `Item ${i + 1}`),
+      );
+      await dashboardPage.openNote('Long List Note');
+      await dashboardPage.focusListItem(0);
+
+      // The bar is docked to the modal chrome, not laid out in the scrolling
+      // body: editing the top row of a long list must not leave the buttons
+      // hundreds of pixels below the viewport, which is what an in-flow bar did.
+      await expect(noteEditorPage.toolbar()).toBeInViewport();
+    });
+
+    test('bolds the selection, keeps focus on the row, and renders once it blurs', async ({ dashboardPage, noteEditorPage }) => {
+      await dashboardPage.goto();
+      await dashboardPage.createListNote('Item Bold Note', ['buy milk']);
+      await dashboardPage.openNote('Item Bold Note');
+
+      await dashboardPage.selectListItemRange(0, 4, 8); // "milk"
+      await noteEditorPage.clickFormat('bold');
+
+      await dashboardPage.expectListItemValue(0, 'buy **milk**');
+      // The press must not have moved focus: a blur would have swapped the row
+      // back to its rendered form mid-edit, and dropped the selection with it.
+      await expect(dashboardPage.listItemInput(0)).toBeFocused();
+
+      await dashboardPage.listItemInput(0).blur();
+      await expect(dashboardPage.listItemRendered(0).locator('strong')).toHaveText('milk');
+    });
+
+    test('a toolbar edit on a row is undoable', async ({ page, dashboardPage, noteEditorPage }) => {
+      await dashboardPage.goto();
+      await dashboardPage.createListNote('Item Undo Note', ['buy milk']);
+      await dashboardPage.openNote('Item Undo Note');
+
+      await dashboardPage.selectListItemRange(0, 4, 8);
+      await noteEditorPage.clickFormat('bold');
+      await dashboardPage.expectListItemValue(0, 'buy **milk**');
+
+      // Replayed through the DOM rather than assigned, so the browser's own
+      // undo stack survives it — see webapp/src/utils/textareaEdit.ts.
+      await page.keyboard.press('ControlOrMeta+z');
+      await dashboardPage.expectListItemValue(0, 'buy milk');
+    });
+
+    test('is not shown on a read-only binned note', async ({ dashboardPage, noteEditorPage }) => {
+      await dashboardPage.goto();
+      await dashboardPage.createListNote('Binned List Note', ['buy milk']);
+      await dashboardPage.deleteNote('Binned List Note');
+
+      await dashboardPage.switchToBin();
+      await dashboardPage.openNote('Binned List Note');
+
+      // A binned row has no caret to place, so there is nothing to format.
+      await expect(noteEditorPage.toolbar()).toHaveCount(0);
+    });
+  });
 });

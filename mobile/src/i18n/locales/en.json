@@ -311,6 +311,7 @@
     "formatBulletList": "Bullet list",
     "formatChecklist": "Checklist",
     "contentLimitReached": "Note has reached its maximum length",
+    "itemLimitReached": "Item has reached its maximum length",
     "completedSuggestions": "Suggestions from completed items",
     "indentItem": "Indent",
     "outdentItem": "Outdent",

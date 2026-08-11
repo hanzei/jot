@@ -281,6 +281,7 @@
     "formatBulletList": "Lista punktowana",
     "formatChecklist": "Lista kontrolna",
     "contentLimitReached": "Notatka osiągnęła maksymalną długość",
+    "itemLimitReached": "Element osiągnął maksymalną długość",
     "completedSuggestions": "Sugestie z ukończonych elementów",
     "indentItem": "Wcięcie",
     "outdentItem": "Usuń wcięcie",
