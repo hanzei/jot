@@ -106,10 +106,17 @@ test.describe('Modal focus management', () => {
     const toolbar = noteEditorPage.toolbar();
     await expect(toolbar).toHaveAttribute('role', 'toolbar');
 
-    // One Tab out of the textarea reaches the toolbar and lands on the first
-    // button — the WAI-ARIA toolbar pattern, so the six buttons do not sit
-    // between the textarea and the rest of the modal.
+    // The toolbar is docked to the modal chrome, below the scrolling body, so
+    // Tab reaches the body's remaining controls first and only then the bar.
+    // That is the correct order for where it sits, and it costs nothing here
+    // because a text note's edit mode does not end on a blur.
     await noteEditorPage.textarea().focus();
+    await page.keyboard.press('Tab');
+    await expect(dialog.getByRole('button', { name: 'Add labels' })).toBeFocused();
+
+    // Then one Tab onto the first button, and one tab stop for the whole bar —
+    // the WAI-ARIA toolbar pattern, so the six buttons do not sit between the
+    // body and the rest of the modal.
     await page.keyboard.press('Tab');
     await expect(noteEditorPage.formatButton('bold')).toBeFocused();
 

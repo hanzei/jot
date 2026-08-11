@@ -312,6 +312,30 @@ test.describe('Markdown note editing', () => {
       await noteEditorPage.expectContent('hello **world**');
     });
 
+    test('stays on screen on a note taller than the modal', async ({ noteEditorPage }) => {
+      await noteEditorPage.setContent(
+        Array.from({ length: 60 }, (_, i) => `Line ${i + 1}`).join('\n'),
+      );
+      // The caret at the very top, where an in-flow bar under the textarea is
+      // furthest away: the textarea grows to its content, so the bar went with
+      // it and left the viewport. It is docked to the modal chrome instead.
+      await noteEditorPage.selectRange(0, 0);
+
+      await expect(noteEditorPage.toolbar()).toBeInViewport();
+    });
+
+    test('keeps its slot while the note is collapsed to its preview', async ({ noteEditorPage }) => {
+      await noteEditorPage.setContent('hello');
+
+      await noteEditorPage.collapseToPreview();
+      // Present but hidden, so the panel keeps its height — the same reserved
+      // slot a list note's bar holds while no row is focused.
+      await expect(noteEditorPage.toolbar()).not.toBeVisible();
+
+      await noteEditorPage.preview().click();
+      await expect(noteEditorPage.toolbar()).toBeVisible();
+    });
+
     test('Enter carries a list marker onto the next line and clears it on an empty item', async ({ page, noteEditorPage }) => {
       await noteEditorPage.textarea().pressSequentially('- one');
       await page.keyboard.press('Enter');

@@ -28,9 +28,10 @@ interface MarkdownToolbarProps {
   onAction: (action: MarkdownToolbarAction) => void;
   /**
    * id of the textarea the toolbar edits, for aria-controls. Omitted when there
-   * is none — the list toolbar sitting in its reserved slot with no row focused
-   * — since pointing aria-controls at an id that is not in the document is
-   * worse than saying nothing.
+   * is none — the toolbar sitting in its reserved slot with nothing focused,
+   * whether that is a list with no row editing or a text note showing its
+   * preview — since pointing aria-controls at an id that is not in the document
+   * is worse than saying nothing.
    */
   controlsId?: string;
   /** Defaults to the full text-note set. */
@@ -69,20 +70,22 @@ const ACTIONS: {
 
 /**
  * Markdown formatting buttons, over a text note's content or a list note's rows.
- * `variant` picks which buttons appear.
+ * `variant` picks which buttons appear; where the bar sits is the caller's
+ * business, and NoteModal docks one instance above the modal's action bar for
+ * both variants.
  *
  * Focus behaviour is the load-bearing part:
  *
  * - onMouseDown is prevented on every button, so clicking one never moves focus
  *   out of the textarea. This is not polish — a blur would drop the selection
- *   the transform is about to act on, and NoteModal reads focus loss as intent
- *   to leave edit mode. On the `item` variant it does more than that: a row
- *   shows source for exactly as long as it holds the caret, so a blur would swap
- *   the row back to its rendered form mid-press. (It is the web counterpart of
- *   the mobile bar's focusable={false}.)
+ *   the transform is about to act on. On the `item` variant it does more than
+ *   that: a row shows source for exactly as long as it holds the caret, so a
+ *   blur would swap the row back to its rendered form mid-press, and NoteModal
+ *   would read the focus loss as the row no longer being edited. (It is the web
+ *   counterpart of the mobile bar's focusable={false}.)
  * - The toolbar is one tab stop with arrow-key navigation between buttons
  *   (the WAI-ARIA toolbar pattern), rather than one stop per button between the
- *   textarea and the Done button.
+ *   editor and the rest of the modal.
  */
 export default function MarkdownToolbar({
   onAction,
@@ -95,6 +98,13 @@ export default function MarkdownToolbar({
   const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const shown = variant === 'item' ? ACTIONS.filter((action) => action.inlineOnly) : ACTIONS;
+
+  // One instance serves both variants, and converting a note between text and
+  // list swaps them under a live focusedIndex. Clamping here is what keeps the
+  // roving tabindex on a button that exists: an index left pointing past the
+  // shorter item set would give *no* button `tabIndex=0`, dropping the toolbar
+  // out of the tab order entirely.
+  const activeIndex = Math.min(focusedIndex, shown.length - 1);
 
   const moveFocus = (nextIndex: number) => {
     const index = (nextIndex + shown.length) % shown.length;
@@ -160,7 +170,7 @@ export default function MarkdownToolbar({
             aria-label={t(action.labelKey)}
             title={t(action.labelKey)}
             data-testid={`format-${action.id}-btn`}
-            tabIndex={index === focusedIndex ? 0 : -1}
+            tabIndex={index === activeIndex ? 0 : -1}
             onKeyDown={(event) => handleKeyDown(event, index)}
             onFocus={() => setFocusedIndex(index)}
             // Keep the textarea focused and its selection intact — see above.
