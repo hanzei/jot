@@ -639,23 +639,28 @@ its source.** The webapp prevents `mousedown` on every button (the same guard
 the content bar has); mobile marks them `focusable={false}` (the same guard, for
 the same reason it already needed one).
 
-**Both clients dock the item bar to the editor's chrome rather than laying it
-out with the rows**, and that is not cosmetic: a list is as long as the user
-makes it, so a bar in the scrolling content sits wherever the list ends. Placed
-in the webapp modal's scrollable body, a 25-item list put it ~490px below the
-viewport while the caret was in the top row — present, correct, and unreachable.
-It now sits between that body and the action bar. Mobile's Android bar was
-already pinned above the action bar for the same reason.
+**Both clients dock the bar — content and item alike — to the editor's chrome
+rather than laying it out with the text it edits**, and that is not cosmetic:
+a note is as long as the user makes it, so a bar in the scrolling content sits
+wherever the content ends. Placed in the webapp modal's scrollable body, a
+25-item list put it ~490px below the viewport while the caret was in the top row
+— present, correct, and unreachable, and a long text note's grown-to-fit
+textarea did the same to the content bar. Both now sit between that body and the
+action bar, in one shared slot that swaps only its button set. Mobile's Android
+bars were already pinned above the action bar for the same reason.
 
 Beyond that they diverge, because a phone has a keyboard in the way:
 
-- **The webapp** aims one bar at whichever row holds the caret and hides it —
-  `visibility: hidden`, keeping its slot — while none does. The reserved slot is
-  load-bearing: the modal is centred in the viewport, so a bar that mounted and
-  unmounted would grow the panel and shift every row out from under the pointer
-  each time focus entered the list. It also takes the buttons out of the focus
-  order while inert, so the hidden bar is hidden from everyone rather than only
-  from the mouse.
+- **The webapp** keeps one bar per note, aimed at the content textarea or at
+  whichever row holds the caret, and hides it — `visibility: hidden`, keeping
+  its slot — while there is no such field. The reserved slot is load-bearing:
+  the modal is centred in the viewport, so a bar that mounted and unmounted
+  would grow the panel and shift the content out from under the pointer each
+  time editing started. It also takes the buttons out of the focus order while
+  inert, so the hidden bar is hidden from everyone rather than only from the
+  mouse. `aria-controls` names the field it is aimed at and is absent while it
+  is hidden, which is the same question as "is it live?" and so is answered
+  once.
 
   **"Is a row still being edited?" is answered once focus has settled, not when
   a field blurs.** Tab out of a row's field and focus goes to that row's own
@@ -666,15 +671,27 @@ Beyond that they diverge, because a phone has a keyboard in the way:
   landed; anything inside a row or inside the toolbar keeps the bar, and the row
   keeps showing source so the selection the next press acts on stays visible.
   The same deferral is what stops row-to-row movement flickering the bar.
-- **Mobile puts it where the keyboard is.** On iOS every row carries the bar's
-  `nativeID`, so an `InputAccessoryView` docks above the keyboard for whichever
-  row is focused and nothing has to track which. On Android it renders inline
-  above the action bar while a row holds the caret, with the clear deferred
-  ~150ms so tapping from one row to the next does not flash it away and back.
 
-The *content* bar keeps its old place, in flow under the textarea: a text note
-has exactly one editing surface and the bar is attached to it. Only a list has
-N rows for one bar to serve.
+  **The content bar needs none of that**, and that is the one place the two
+  variants part company. A text note's edit mode is explicit — it ends on
+  Escape, on Done, or on a click outside the panel, never on a blur — so the bar
+  is live exactly while the textarea is on screen and has nothing to report back.
+  Tab out of the textarea now passes the rest of the scrolling body (labels,
+  share avatars) before reaching the bar, which is the right order for where the
+  bar sits, and costs nothing precisely because leaving the field does not end
+  the edit.
+- **Mobile puts it where the keyboard is.** On iOS the content field and every
+  row carry a bar's `nativeID`, so an `InputAccessoryView` docks above the
+  keyboard for whichever is focused and nothing has to track which. On Android
+  both render inline above the action bar while their field holds the caret,
+  the item one with the clear deferred ~150ms so tapping from one row to the
+  next does not flash it away and back.
+
+A text note has exactly one editing surface where a list has N rows for one bar
+to serve, so only the item variant has to work out *which* field it is aimed at.
+That is a difference in bookkeeping, not in placement: both land in the same
+slot, above the action bar, and a user switching between a text note and a list
+finds the same buttons in the same place.
 
 One more difference, invisible in the UI: the webapp reads the caret straight
 off the focused `<textarea>`, while mobile's rows own their selection state
@@ -740,6 +757,9 @@ adding one back breaks a test on both clients rather than shipping a button that
 writes source nothing renders.
 
 `webapp/e2e/tests/markdown.spec.ts` covers the same feature set through the
-browser, on real note content — including the two things only a browser shows:
-that a bar press leaves the row focused (so it keeps its source form), and that
-the edit is still undoable afterwards.
+browser, on real note content — including the three things only a browser shows:
+that a bar press leaves the row focused (so it keeps its source form), that the
+edit is still undoable afterwards, and that the docked bar is in the viewport
+while the caret sits at the top of content taller than the modal. The last one
+is asserted for a long list *and* a long text note, since the in-flow layout it
+replaced put each of them out of reach on its own terms.

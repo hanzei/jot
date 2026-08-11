@@ -1727,6 +1727,18 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
+  /**
+   * The field the formatting bar is currently aimed at, or undefined when there
+   * is none — a list with no row editing, or a text note collapsed to its
+   * preview. It is both the bar's `aria-controls` target and the test for
+   * whether the bar is live at all, because those are the same question: a bar
+   * with nothing to act on must not be reachable, and one that is reachable
+   * must name what it acts on.
+   */
+  const markdownToolbarControlsId = noteType === 'list'
+    ? (editingItemId ? itemTextareaId(editingItemId) : undefined)
+    : (isEditingContent ? contentTextareaId : undefined);
+
   const assignedItemCount = items.filter(item => item.assignedTo).length;
   const convertToTextConfirmMessage = assignedItemCount > 0
     ? `${t('note.convertToTextConfirmMessage')} ${t('note.convertLoseAssignments', { count: assignedItemCount })}`
@@ -1984,7 +1996,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
             {noteType === 'text' ? (
               <>
                 {isEditingContent && !isReadOnly ? (
-                  <>
                   <textarea
                     ref={contentRef}
                     id={contentTextareaId}
@@ -2040,8 +2051,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                       }
                     }}
                   />
-                  <MarkdownToolbar onAction={handleToolbarAction} controlsId={contentTextareaId} />
-                  </>
                 ) : (
                   <div
                     data-testid="note-content-preview"
@@ -2313,37 +2322,44 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
           </div>
 
-          {/* One formatting bar for the whole list, aimed at the row holding
-              the caret — a bar per row would be one per item.
+          {/* One formatting bar per note, whatever its type: a text note's
+              content, or the list row holding the caret (a bar per row would be
+              one per item). `variant` swaps the button set; the slot, the
+              placement and the show/hide rule are shared, so the bar sits in
+              the same place and looks the same either way.
 
               Deliberately *outside* the scrolling body above, docked to the
               modal's chrome directly over the action bar. In the body it
-              scrolled with the content, so on any list taller than the modal
-              it sat hundreds of pixels below the viewport while you edited the
-              row at the top. Mobile's Android bar is pinned for exactly this
-              reason (NoteEditorScreen), and this is the same rule.
+              scrolled with the content, so on anything taller than the modal it
+              sat hundreds of pixels below the viewport while you edited the top
+              of it. Mobile pins both of its bars there for exactly this reason
+              (NoteEditorScreen), and this is the same rule.
 
-              It is hidden rather than unmounted while no row is editing, and
-              the slot it leaves behind is the point: the modal is centred in
+              It is hidden rather than unmounted while nothing is being edited,
+              and the slot it leaves behind is the point: the modal is centred in
               the viewport, so a bar that came and went would grow the panel and
-              shift the rows under the pointer each time focus entered the list.
+              shift the content under the pointer each time focus entered it.
               `invisible` (visibility:hidden) also takes the buttons out of the
               focus order and out of the accessibility tree, so an inert bar is
               inert to everyone and not just to the mouse.
 
               Its buttons never take focus when it is showing (see
-              MarkdownToolbar), so a press keeps the row's caret, its selection,
-              and the source form it shows while editing. */}
-          {noteType === 'list' && !isReadOnly && (
+              MarkdownToolbar), so a press keeps the caret, the selection, and —
+              on a list row — the source form it shows while editing. */}
+          {!isReadOnly && (
             <div
               data-testid="markdown-toolbar-slot"
-              className={editingItemId ? undefined : 'invisible'}
+              className={markdownToolbarControlsId ? undefined : 'invisible'}
             >
               <MarkdownToolbar
-                variant="item"
-                onAction={handleItemToolbarAction}
-                onBlurOut={handleItemToolbarBlur}
-                controlsId={editingItemId ? itemTextareaId(editingItemId) : undefined}
+                variant={noteType === 'list' ? 'item' : 'content'}
+                onAction={noteType === 'list' ? handleItemToolbarAction : handleToolbarAction}
+                // A list row's bar has to re-ask where focus went when it loses
+                // it; a text note's edit mode is not focus-driven (only Escape,
+                // Done and a backdrop click leave it), so there is nothing for
+                // the content bar to report.
+                onBlurOut={noteType === 'list' ? handleItemToolbarBlur : undefined}
+                controlsId={markdownToolbarControlsId}
               />
             </div>
           )}

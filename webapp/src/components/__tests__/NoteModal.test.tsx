@@ -2806,12 +2806,58 @@ describe('NoteModal', () => {
       expect(screen.getByText(/characters or less/i)).toBeInTheDocument();
     });
 
+    it('shows only while the content is being edited, keeping its slot either way', () => {
+      const note = createMockNote({ content: 'hello', note_type: 'text' });
+      renderNoteModal({ ...defaultProps, note });
+      const slot = () => screen.getByTestId('markdown-toolbar-slot');
+
+      // Collapsed to the preview there is no textarea for a button to act on.
+      // Hidden rather than unmounted, on the same terms as the list bar: the
+      // modal is centred, so a bar that came and went would grow the panel and
+      // shift the content under the pointer.
+      expect(slot()).toHaveClass('invisible');
+      expect(screen.getByTestId('markdown-toolbar')).not.toHaveAttribute('aria-controls');
+
+      fireEvent.click(screen.getByTestId('note-content-preview'));
+      const textarea = screen.getByPlaceholderText('Take a note...');
+      expect(slot()).not.toHaveClass('invisible');
+      expect(screen.getByTestId('markdown-toolbar')).toHaveAttribute('aria-controls', textarea.id);
+      expect(textarea.id).toBeTruthy();
+
+      // Escape collapses the editor again, and the bar goes back to inert.
+      fireEvent.keyDown(textarea, { key: 'Escape' });
+      expect(slot()).toHaveClass('invisible');
+    });
+
+    it('keeps a tab stop when the type selector swaps the button set under it', () => {
+      // One toolbar instance serves both variants, so switching a new note from
+      // text to list shortens the button set under a live roving tabindex. An
+      // index left pointing past the end would leave no button with tabIndex 0.
+      renderNoteModal({ ...defaultProps, note: null });
+
+      act(() => { screen.getByTestId('format-checkbox-btn').focus(); });
+      expect(screen.getByTestId('format-checkbox-btn')).toHaveAttribute('tabindex', '0');
+
+      fireEvent.click(screen.getByRole('button', { name: 'List' }));
+
+      expect(screen.queryByTestId('format-checkbox-btn')).not.toBeInTheDocument();
+      const stops = within(screen.getByTestId('markdown-toolbar'))
+        .getAllByRole('button')
+        .filter((button) => button.getAttribute('tabindex') === '0');
+      expect(stops).toHaveLength(1);
+      // The nearest button that survived: the item set is the content set's
+      // first three, so the index is clamped to the end rather than reset.
+      expect(stops[0]).toBe(screen.getByTestId('format-strikethrough-btn'));
+    });
+
     it('is not rendered for a read-only note', () => {
       const note = createMockNote({ content: 'binned', note_type: 'text', deleted_at: '2023-06-01T00:00:00Z' });
       renderNoteModal({ ...defaultProps, note });
 
       fireEvent.click(screen.getByTestId('note-content-preview'));
 
+      // Not even the slot: a binned note has no caret to place.
+      expect(screen.queryByTestId('markdown-toolbar-slot')).not.toBeInTheDocument();
       expect(screen.queryByTestId('markdown-toolbar')).not.toBeInTheDocument();
     });
 
