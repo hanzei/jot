@@ -30,6 +30,7 @@ import {
   ScrollViewContainer,
   reorderItems,
   type ReorderableListReorderEvent,
+  type ReorderableListDragStartEvent,
   type ReorderableListDragEndEvent,
   type ReorderableListRenderItemInfo,
 } from 'react-native-reorderable-list';
@@ -2315,15 +2316,50 @@ export default function NoteEditorScreen() {
   // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   uncheckedItemsRef.current = uncheckedItems;
 
+  // Id of the row a drag picked up, recorded at onDragStart. commitDrag uses it
+  // to tell a drop that still describes the list it was measured against from
+  // one whose indices have gone stale — see the guard there. null means "no
+  // drag start was observed", in which case only the range check applies.
+  const dragOriginIdRef = useRef<string | null>(null);
+
+  const rememberDragOrigin = useCallback((index: number) => {
+    dragOriginIdRef.current = uncheckedItemsRef.current[index]?.id ?? null;
+  }, []);
+
+  const handleListDragStart = useCallback(
+    ({ index }: ReorderableListDragStartEvent) => {
+      'worklet';
+      runOnJS(rememberDragOrigin)(index);
+    },
+    [rememberDragOrigin],
+  );
+
   // Commits a finished drag: applies the vertical move (if any) and the indent
   // implied by the horizontal drag distance, then persists. Called from both
   // onReorder (fires only when the row changed slots) and onDragEnd (fires on
   // every drop, which is how a purely sideways indent gets committed at all).
   const commitDrag = useCallback(
     (from: number, to: number) => {
+      const current = uncheckedItemsRef.current;
+      const originId = dragOriginIdRef.current;
+      dragOriginIdRef.current = null;
+      // `from`/`to` were measured when the drag began, and the library hands
+      // them back only once its drop animation finishes — ~200ms after the
+      // finger lifts. A background note refresh (SSE refetch, catch-up resync
+      // on reconnect) landing in that window replaces `items`, so the indices
+      // can point past the end of the list, or at a different row than the one
+      // that was picked up. Committing either would splice `undefined` into the
+      // list or move the wrong row, so drop the gesture instead: the list the
+      // user was dragging no longer exists on screen.
+      //
+      // #821 and #850 tried to hold `data` still for that window and both had
+      // to be reverted (#859), so this validates the indices rather than the
+      // clock — nothing here depends on a refresh being suppressed or timed.
+      if (from < 0 || from >= current.length || to < 0 || to >= current.length) return;
+      if (originId !== null && current[from]?.id !== originId) return;
       // Apply the move to the unchecked list (a no-op when from === to, e.g. a
       // purely sideways drag that only changed the indent).
-      const reorderedUnchecked = reorderItems(uncheckedItemsRef.current, from, to);
+      const reorderedUnchecked = reorderItems(current, from, to);
       const moved = reorderedUnchecked[to];
       let changed = from !== to;
       if (moved) {
@@ -2883,9 +2919,14 @@ export default function NoteEditorScreen() {
           </>
         ) : (
           <View style={styles.listContainer}>
-            <NestedReorderableList
+            <NestedReorderableList<LocalItem>
               data={uncheckedItems}
-              keyExtractor={(item) => item.id}
+              // `item` is typed non-optional, but the library reads
+              // `data[i]` at drag-start indices while finishing a drop, and
+              // those can outlive the row they pointed at (see commitDrag).
+              // Falling back to the index — the same fallback the library
+              // applies to a missing key — keeps that read from throwing.
+              keyExtractor={(item, index) => item?.id ?? String(index)}
               scrollable={false}
               // Inherited from the ScrollViewContainer above rather than
               // defaulted: this list is a FlatList, so it has a ScrollView of its
@@ -2899,6 +2940,7 @@ export default function NoteEditorScreen() {
               keyboardShouldPersistTaps="handled"
               shouldUpdateActiveItem
               panGesture={listDragGesture}
+              onDragStart={handleListDragStart}
               onReorder={handleListReorder}
               onDragEnd={handleListDragEnd}
               cellAnimations={DRAG_CELL_ANIMATIONS}
