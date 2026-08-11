@@ -112,9 +112,34 @@ jobs:
           EXPO_PUBLIC_COMMIT_SHA: ${{ github.sha }}
           EXPO_PUBLIC_BUILD_DATE: ${{ steps.build-date.outputs.value }}
 
+      # `app-release.apk` is Gradle's default (module name + variant) and says
+      # nothing about what is inside it. Rename to jot-<version>-<abi>.apk, with
+      # a short SHA in front of the ABI on untagged builds — a tag's version is
+      # unique, app.json's static version is not, so without the SHA every
+      # master/PR build produces an indistinguishable file. The ABI is in the
+      # name because this workflow ships arm64-v8a only (see the gradle flags
+      # above): an x86 emulator install fails with no other clue why.
+      #
+      # The version comes from `expo config` rather than app.json so it is the
+      # same value app.config.js resolves — including the APP_VERSION override
+      # on tag builds — and cannot drift from the versionName in the APK.
+      - name: Name the APK
+        id: apk
+        run: |
+          version=$(npx expo config --json | jq -r .version)
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            name="jot-${version}-arm64-v8a"
+          else
+            name="jot-${version}-$(git rev-parse --short HEAD)-arm64-v8a"
+          fi
+          mv android/app/build/outputs/apk/release/app-release.apk \
+             "android/app/build/outputs/apk/release/${name}.apk"
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+        working-directory: ./mobile
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: jot-release-apk
-          path: mobile/android/app/build/outputs/apk/release/app-release.apk
+          name: ${{ steps.apk.outputs.name }}
+          path: mobile/android/app/build/outputs/apk/release/${{ steps.apk.outputs.name }}.apk
           retention-days: 7

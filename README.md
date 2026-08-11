@@ -253,9 +253,12 @@ npm run android   # Android device or emulator
 npm run ios       # iOS simulator, macOS only
 ```
 
-The Android APK workflow lives in `.github/workflows/mobile-apk.yml`. Android
-share-to-note is supported through the mobile share sheet: share selected text
-to Jot, choose the target server if needed, and save it as a new note.
+The Android APK workflow lives in `.github/workflows/mobile-apk.yml`. It builds
+a signed, arm64-v8a-only release APK and uploads it as a run artifact named
+`jot-<version>-arm64-v8a` (untagged builds add a short commit SHA:
+`jot-0.1.0-a1b2c3d-arm64-v8a`). Android share-to-note is supported through the
+mobile share sheet: share selected text to Jot, choose the target server if
+needed, and save it as a new note.
 
 ## Environment Variables
 
