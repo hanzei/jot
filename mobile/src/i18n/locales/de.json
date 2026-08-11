@@ -235,6 +235,8 @@
     "converted": "Notiz konvertiert",
     "convertToTextConfirmTitle": "In Text umwandeln?",
     "failedConvert": "Notiz konnte nicht konvertiert werden. Bitte erneut versuchen.",
+    "itemTooLong": "Elementtext darf höchstens {{max}} Zeichen lang sein",
+    "tooManyItems": "Eine Notiz darf höchstens {{max}} Elemente enthalten",
     "completedItems": "Erledigte Elemente ({{count}})",
     "completedItemGroup": "Gruppe: {{title}}",
     "moreCompletedItems": "+{{count}} erledigte Elemente",

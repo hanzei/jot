@@ -2,7 +2,7 @@ import { useState, useEffect, useEffectEvent, useMemo, useRef, useCallback, useI
 import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, Pin, EllipsisVertical, Square, Undo2 } from 'lucide-react';
 import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListNote, listToText, parseTextLineAsListItem, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type ConvertedListItem, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type ConvertedListItem, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
 import { renderMarkdown, inlineMarkdownToText } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
@@ -1428,9 +1428,22 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     if (!note || !onConvert || loading || isSaving() || isReadOnly) return;
     if (noteType === 'list') {
       setShowConvertConfirm(true);
-    } else {
-      void performConvert();
+      return;
     }
+
+    // Pre-check against the item caps the server enforces, same as the paste
+    // path: textToListNote already produces the item list, so both counts are
+    // known before anything is sent, and this names the cap that was hit
+    // instead of surfacing the server's 422/400 as a generic failure.
+    const violation = checkConvertToListCaps(textToListNote(content));
+    if (violation) {
+      showError(violation.kind === 'tooManyItems'
+        ? t('note.tooManyItems', { max: violation.max })
+        : t('note.itemTooLong', { max: violation.max }));
+      return;
+    }
+
+    void performConvert();
   };
 
   const performConvert = async () => {

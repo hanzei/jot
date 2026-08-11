@@ -183,6 +183,30 @@ export function textToListNote(content: string): ConvertedListNote {
   };
 }
 
+export type ConvertToListCapViolation =
+  | { kind: 'tooManyItems'; max: number }
+  | { kind: 'itemTextTooLong'; max: number };
+
+/**
+ * Checks a text→list conversion against the item caps the server enforces
+ * (`ITEM_MAX_COUNT`, `ITEM_TEXT_MAX_LENGTH`) before either client sends it.
+ * `textToListNote` never truncates or drops content to stay under a cap — see
+ * its module comment — so without this check an oversized note reaches the
+ * server, which rejects it (422 for the count, 400 for a line's length) with
+ * nothing a client can turn into a specific message. Item count is checked
+ * first, same order the webapp's paste path already uses, since it is the
+ * more common way to hit a cap converting a long note.
+ */
+export function checkConvertToListCaps(converted: ConvertedListNote): ConvertToListCapViolation | null {
+  if (converted.items.length > VALIDATION.ITEM_MAX_COUNT) {
+    return { kind: 'tooManyItems', max: VALIDATION.ITEM_MAX_COUNT };
+  }
+  if (converted.items.some((item) => exceedsCodePointLimit(item.text, VALIDATION.ITEM_TEXT_MAX_LENGTH))) {
+    return { kind: 'itemTextTooLong', max: VALIDATION.ITEM_TEXT_MAX_LENGTH };
+  }
+  return null;
+}
+
 /**
  * Renders a list note's title and items back into text-note content. The
  * title (if any) becomes an h1 line; items become a markdown task list, with
