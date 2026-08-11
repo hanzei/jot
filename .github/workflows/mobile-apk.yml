@@ -113,25 +113,44 @@ jobs:
           EXPO_PUBLIC_BUILD_DATE: ${{ steps.build-date.outputs.value }}
 
       # `app-release.apk` is Gradle's default (module name + variant) and says
-      # nothing about what is inside it. Rename to jot-<version>-<abi>.apk, with
-      # a short SHA in front of the ABI on untagged builds — a tag's version is
-      # unique, app.json's static version is not, so without the SHA every
-      # master/PR build produces an indistinguishable file. The ABI is in the
-      # name because this workflow ships arm64-v8a only (see the gradle flags
-      # above): an x86 emulator install fails with no other clue why.
+      # nothing about what is inside it. Rename so the file identifies its own
+      # build:
       #
-      # The version comes from `expo config` rather than app.json so it is the
-      # same value app.config.js resolves — including the APP_VERSION override
-      # on tag builds — and cannot drift from the versionName in the APK.
+      #   tag       jot-1.2.3-arm64-v8a.apk
+      #   otherwise jot-20260811-e60993f-arm64-v8a.apk
+      #
+      # A tag build gets the version, which is real and unique, read back
+      # through `expo config` rather than app.json so it is the value
+      # app.config.js resolved — including the APP_VERSION override — and cannot
+      # drift from the versionName baked into the APK.
+      #
+      # Every other build gets the build date and commit instead. app.json's
+      # static version is deliberately *not* used here: it has read 0.1.0 since
+      # before v0.8.5 and is still 0.1.0 today, so it looks like a version while
+      # tracking nothing. Date-first sorts chronologically, and answers "is this
+      # bundle recent?" from the filename alone — the artifact's upload
+      # timestamp is visible in the Actions UI but lost the moment the file is
+      # downloaded or passed to a tester.
+      #
+      # The date reuses the instant already stamped into the JS bundle as
+      # EXPO_PUBLIC_BUILD_DATE rather than calling `date` a second time, so the
+      # name cannot disagree with the About screen across a midnight boundary.
+      #
+      # The ABI is in the name because this workflow ships arm64-v8a only (see
+      # the gradle flags above): an install on any other ABI fails with no other
+      # clue why, and the file has to answer that away from this workflow.
       - name: Name the APK
         id: apk
+        env:
+          BUILD_DATE: ${{ steps.build-date.outputs.value }}
         run: |
-          version=$(npx expo config --json | jq -r .version)
           if [ "${{ github.ref_type }}" = "tag" ]; then
-            name="jot-${version}-arm64-v8a"
+            stamp=$(npx expo config --json | jq -r .version)
           else
-            name="jot-${version}-$(git rev-parse --short HEAD)-arm64-v8a"
+            day=${BUILD_DATE%%T*}
+            stamp="${day//-/}-$(git rev-parse --short HEAD)"
           fi
+          name="jot-${stamp}-arm64-v8a"
           mv android/app/build/outputs/apk/release/app-release.apk \
              "android/app/build/outputs/apk/release/${name}.apk"
           echo "name=${name}" >> "$GITHUB_OUTPUT"
