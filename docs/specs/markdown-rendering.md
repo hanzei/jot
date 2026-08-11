@@ -370,8 +370,8 @@ which one was hit and its limit, or `null` when the conversion is within both.
 Item count is checked first, matching the order the webapp's paste guard
 (`note.tooManyItems`) already used. Keeping inline markers rather than
 stripping them makes the text-length cap slightly easier to hit, since the cap
-is measured on the source: `**Buy** milk` is 13 characters against the limit
-and 9 on screen.
+is measured on the source: `**Buy** milk` is 12 code points against the limit
+and 8 on screen.
 
 Both clients call it before a text→list conversion is sent, and both refuse
 rather than truncate — the item text and count reaching the server unchanged
