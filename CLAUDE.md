@@ -556,7 +556,7 @@ There is one directory per dialect (`migrations/sqlite/`, `migrations/postgres/`
 - **lucide-react** — icon set (the mobile app uses `lucide-react-native`)
 - **marked** + **dompurify** — Markdown rendering and sanitization; the feature
   set and the shared normalizer behind it are specified in
-  `docs/specs/markdown-rendering.md`
+  [the Markdown rendering spec](docs/specs/markdown-rendering.md)
 - **i18next** / **react-i18next** — translations
 - **vite-plugin-pwa** — service worker and offline support
 
@@ -612,7 +612,7 @@ Types are distributed across the `@jot/shared` package (`shared/src/`) and impor
 - **react-native-sse** — SSE client for real-time updates
 - **marked** — Markdown parsing, the same library and version the webapp uses;
   mobile walks its tokens into React Native components rather than HTML
-  (`docs/specs/markdown-rendering.md`)
+  ([the Markdown rendering spec](docs/specs/markdown-rendering.md))
 - **@jot/shared** — shared types and utilities (local file dependency)
 
 ### Mobile Tests
