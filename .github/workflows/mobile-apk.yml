@@ -13,6 +13,17 @@ on:
   pull_request:
     paths: ["mobile/**", "shared/**", ".github/workflows/**"]
   workflow_call:
+    secrets:
+      GOOGLE_SERVICES_JSON:
+        required: true
+      ANDROID_KEYSTORE_BASE64:
+        required: true
+      ANDROID_KEY_ALIAS:
+        required: true
+      ANDROID_STORE_PASSWORD:
+        required: true
+      ANDROID_KEY_PASSWORD:
+        required: true
     outputs:
       apk-name:
         description: Name of the uploaded APK build artifact, without the .apk extension.

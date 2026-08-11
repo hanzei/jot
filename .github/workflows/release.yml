@@ -57,15 +57,20 @@ jobs:
 
   # Reusable-workflow call rather than a copy of mobile-apk.yml's job: keeps the
   # build steps (NDK/keystore setup, gradle) defined in exactly one place.
-  # `secrets: inherit` passes this workflow's secrets through without needing
-  # to enumerate them here, same as the called workflow does for its own
-  # push/pull_request triggers.
+  # Secrets are passed explicitly, one at a time, rather than `secrets:
+  # inherit` — this job has no business handing the APK build DOCKER_HUB_* or
+  # anything else this workflow can see beyond what it declares needing.
   apk:
     needs: [check-tag]
     permissions:
       contents: read
     uses: ./.github/workflows/mobile-apk.yml
-    secrets: inherit
+    secrets:
+      GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
   goreleaser:
     runs-on: ubuntu-latest
