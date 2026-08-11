@@ -9,8 +9,48 @@ permissions:
   contents: write
 
 jobs:
+  # GoReleaser creates the release itself: draft first, archives uploaded, then
+  # undrafted. That is the only order immutable releases accept, and it breaks
+  # if the tag already has a *published* release — GoReleaser reuses it and
+  # every upload comes back as "422 Cannot upload assets to an immutable
+  # release" (this is what happened to v0.8.7). Stop before anything is built or
+  # pushed rather than discover it after cross-compiling artifacts that cannot
+  # be attached.
+  #
+  # This is a job of its own so that both publishing jobs gate on the
+  # precondition instead of on each other. The Docker images are built from
+  # source (see Dockerfile) and consume nothing GoReleaser produces, so the
+  # `needs: goreleaser` this replaced bought only the ordering — at the cost of
+  # leaving the image build idle for the length of the GoReleaser job, and of
+  # putting anything later added ahead of GoReleaser on the images' critical
+  # path too. Running them concurrently means a failure in one no longer skips
+  # the other, so a GoReleaser failure can leave images pushed for a release
+  # still sitting in draft; that draft still accepts uploads, so re-running the
+  # workflow completes it.
+  check-tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check the tag has no published release yet
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        # --repo is explicit because this job has no checkout for `gh` to infer
+        # the repository from.
+        run: |
+          draft=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null || echo absent)
+          if [ "$draft" = "false" ]; then
+            echo "::error::Release $TAG is already published, so GoReleaser cannot attach its archives to it." \
+                 "Releases must be cut by pushing a tag, not from the GitHub Releases page." \
+                 "An immutable release's tag cannot be deleted or reused — ship the next patch version instead."
+            exit 1
+          fi
+
   goreleaser:
     runs-on: ubuntu-latest
+    needs: [check-tag]
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -22,25 +62,6 @@ jobs:
         with:
           go-version: "1.26"
           cache-dependency-path: server/go.sum
-
-      # GoReleaser creates the release itself: draft first, archives uploaded,
-      # then undrafted. That is the only order immutable releases accept, and it
-      # breaks if the tag already has a *published* release — GoReleaser reuses
-      # it and every upload comes back as "422 Cannot upload assets to an
-      # immutable release" (this is what happened to v0.8.7). Stop here rather
-      # than spend two minutes cross-compiling artifacts that cannot be attached.
-      - name: Check the tag has no published release yet
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
-        run: |
-          draft=$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null || echo absent)
-          if [ "$draft" = "false" ]; then
-            echo "::error::Release $TAG is already published, so GoReleaser cannot attach its archives to it." \
-                 "Releases must be cut by pushing a tag, not from the GitHub Releases page." \
-                 "An immutable release's tag cannot be deleted or reused — ship the next patch version instead."
-            exit 1
-          fi
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
@@ -60,7 +81,7 @@ jobs:
           - platform: linux/arm64
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
-    needs: goreleaser
+    needs: [check-tag]
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
