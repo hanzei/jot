@@ -651,11 +651,15 @@ git tag v0.8.8
 git push origin v0.8.8
 ```
 
-The `Release` workflow takes it from there: GoReleaser creates the GitHub
-release as a draft, uploads the `jot` and `jotctl` archives for `linux/amd64`
-and `linux/arm64` plus `checksums.txt`, fills in the release notes using
-GitHub's own generator, and publishes it. The Docker jobs then build and push
-`hanzei/jot` for both architectures.
+The `Release` workflow takes it from there. It first checks the tag has no
+published release yet (see below), then runs two independent halves in
+parallel: GoReleaser creates the GitHub release as a draft, uploads the `jot`
+and `jotctl` archives for `linux/amd64` and `linux/arm64` plus `checksums.txt`,
+fills in the release notes using GitHub's own generator, and publishes it;
+meanwhile the Docker jobs build and push `hanzei/jot` for both architectures
+from source. Because they are independent, a GoReleaser failure no longer stops
+the images from being pushed — re-running the workflow finishes the release,
+which is still a draft and so still accepts uploads.
 
 Immutable releases are enabled on this repository, which is why the order
 matters: once a release is published its assets are frozen, and its tag can
