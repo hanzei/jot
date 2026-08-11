@@ -63,8 +63,18 @@ archives:
     name_template: "jotctl_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats: [tar.gz]
 
+release:
+  # release.yml's `apk` job downloads the Android build into this path before
+  # invoking GoReleaser, so the APK rides along in the same draft-then-undraft
+  # sequence as the jot/jotctl archives instead of needing a separate upload
+  # after the release is already published (which immutable releases reject).
+  extra_files:
+    - glob: ./mobile-apk/*.apk
+
 checksum:
   name_template: checksums.txt
+  extra_files:
+    - glob: ./mobile-apk/*.apk
 
 changelog:
   # Keep the notes identical to GitHub's own "Generate release notes" output,
