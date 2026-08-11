@@ -1,9 +1,10 @@
 // Cross-client Markdown helpers.
 //
-// The webapp renders Markdown with marked + a DOMPurify allowlist and mobile
-// renders it with markdown-it + react-native-markdown-display, so the two reach
-// the same feature set by completely different routes. The pieces that have to
-// agree *exactly* — and would otherwise drift apart unnoticed — live here.
+// Both clients lex with marked and normalize through blockMarkdown.ts and
+// inlineMarkdown.ts, so only the renderers differ — the webapp emits HTML behind
+// a DOMPurify allowlist, mobile a tree of React Native components. The pieces
+// those two renderers have to agree on *exactly* — and would otherwise drift
+// apart unnoticed — live here.
 //
 // The feature set itself is specified in docs/specs/markdown-rendering.md.
 

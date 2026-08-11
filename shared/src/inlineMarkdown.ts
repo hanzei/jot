@@ -28,8 +28,7 @@ import { formatLiteralImage, isAllowedLinkHref } from './markdown';
  * consumer's `node_modules`. CI installs dependencies in `webapp/` and `mobile/`
  * only, so `shared/node_modules` does not exist there and even a *type-only*
  * `import from 'marked'` fails to resolve for both consumers. It is the same trap
- * the `@babel/runtime` note in CLAUDE.md describes, and the same fix mobile's own
- * markdown.tsx uses for markdown-it.
+ * the `@babel/runtime` note in CLAUDE.md describes.
  *
  * marked's `Token` union is structurally assignable to this, so callers pass
  * `Lexer.lexInline(...)` output directly with no cast.
@@ -130,8 +129,7 @@ function normalizeLink(token: InlineMarkdownToken, span: InlineSourceSpan | unde
 
   // `[](https://example.com)` lexes to a link with no children at all. Rendered
   // faithfully that is an invisible tappable region, so the target becomes its
-  // own label — the same instinct behind mobile refusing markdown-it's
-  // empty-alt image links (docs/specs/markdown-rendering.md §5).
+  // own label.
   const label = children.length > 0 ? children : [textNode(href, span)];
   return [span ? { type: 'link', href, children: label, src: span } : { type: 'link', href, children: label }];
 }

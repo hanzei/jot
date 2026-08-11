@@ -419,10 +419,11 @@ named here so that adding something to it is a deliberate act.
 ### Smart typography
 
 Not an unsupported construct so much as a transformation that does not happen:
-`--` stays `--` and `"hi"` keeps its straight quotes. `markdown-it`'s
-`typographer` is on by default and is switched off explicitly, since `marked` has
-no equivalent and enabling it on one client only is exactly the kind of drift this
-spec exists to prevent.
+`--` stays `--` and `"hi"` keeps its straight quotes. `marked` has no
+equivalent of markdown-it's `typographer`, and both clients lex with `marked`,
+so nothing has to be switched off — it is recorded here because mobile *did*
+have it, from a renderer whose parser enabled it by default, and enabling it on
+one client only is exactly the kind of drift this spec exists to prevent.
 
 ---
 
@@ -503,10 +504,9 @@ compile `shared/src` with their own tsc and resolution runs from `shared/`
 (mobile's `@jot/shared` is a symlink and resolution follows the realpath), while
 CI installs dependencies in `webapp/` and `mobile/` only. So `shared/node_modules`
 does not exist during a consumer's typecheck and even a type-only import fails to
-resolve — the same trap as the `@babel/runtime` note in `CLAUDE.md`, and the same
-fix `mobile/src/utils/markdown.tsx` uses for markdown-it. `marked` stays a
-devDependency of `shared/` for its own test suite, which `shared-ci.yml` does
-install.
+resolve — the same trap as the `@babel/runtime` note in `CLAUDE.md`. `marked`
+stays a devDependency of `shared/` for its own test suite, which `shared-ci.yml`
+does install, and is a real dependency of both consumers, which do the lexing.
 
 ### What the card preview substitutes
 
