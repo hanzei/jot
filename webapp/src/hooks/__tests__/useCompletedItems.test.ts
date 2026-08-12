@@ -25,7 +25,7 @@ const listItem = (id: string, overrides: Partial<ListItem> = {}): ListItem => ({
   completed: false,
   position: 0,
   parentId: null,
-  assignedTo: '',
+  assigned_to: '',
   ...overrides,
 });
 
