@@ -2,13 +2,14 @@ import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MemoryRouter, useLocation, useNavigate, Routes, Route } from 'react-router';
-import { type ReactNode, useCallback, useState, useEffect } from 'react';
+import { type ReactNode, useCallback, useEffect, useRef } from 'react';
 import React from 'react';
 import Dashboard from '../Dashboard';
 import type { AuthResponse, Note, Label, NoteSort, UserSettings } from '@jot/shared';
 import { notes, labels, users } from '@/utils/api';
 import * as auth from '@/utils/auth';
 import { useAuthenticatedLayout, type AuthenticatedLayoutContext } from '@/components/AuthenticatedLayout';
+import { useSidebarLabelsController } from '@/hooks/useSidebarLabelsController';
 import { createMockNote, createMockListNote } from '@/utils/__tests__/test-helpers';
 import { ToastProvider } from '@/components/Toast';
 
@@ -224,47 +225,55 @@ describe('Dashboard', () => {
       updated_at: '2023-01-01T00:00:00Z',
     });
     vi.mocked(notes.getAll).mockResolvedValue([]);
+    // Drives the mocked useAuthenticatedLayout through the real
+    // useSidebarLabelsController hook (rather than a hand-rolled
+    // reimplementation) so these tests exercise its actual load/create/
+    // rename/delete behaviour instead of a parallel copy of it. Only the
+    // parts of AuthenticatedLayoutContext that are specific to the layout
+    // itself (SSE/search-bar registration) stay stubbed.
     vi.mocked(useAuthenticatedLayout).mockImplementation(() => {
-      const [labelsList, setLabelsList] = useState<Label[]>([]);
+      const labelCallbacksRef = useRef<{
+        onRenameSuccess?: (label: Label, newName: string) => void | Promise<void>;
+        onDeleteSuccess?: (label: Label) => void | Promise<void>;
+      }>({});
 
-      const loadLabels = useCallback(async ({ preserveOnError = false }: { preserveOnError?: boolean } = {}) => {
-        try {
-          const nextLabels = await labels.getAll();
-          setLabelsList(nextLabels);
-          return nextLabels;
-        } catch {
-          if (!preserveOnError) {
-            setLabelsList([]);
-          }
-          return null;
-        }
+      const handleLabelRenameSuccess = useCallback(async (label: Label, newName: string) => {
+        await labelCallbacksRef.current.onRenameSuccess?.(label, newName);
+      }, []);
+      const handleLabelDeleteSuccess = useCallback(async (label: Label) => {
+        await labelCallbacksRef.current.onDeleteSuccess?.(label);
       }, []);
 
-      const loadLabelCounts = useCallback(async ({ preserveOnError = false }: { preserveOnError?: boolean } = {}) => {
-        try {
-          const counts = await labels.getCounts();
-          return counts;
-        } catch {
-          if (!preserveOnError) {
-            return null;
-          }
-          return null;
-        }
-      }, []);
+      const {
+        labels: labelsList,
+        labelCounts,
+        loadLabels,
+        loadLabelCounts,
+        handleCreateLabel,
+        handleRenameLabel,
+        handleDeleteLabel,
+      } = useSidebarLabelsController({
+        onRenameSuccess: handleLabelRenameSuccess,
+        onDeleteSuccess: handleLabelDeleteSuccess,
+      });
 
       useEffect(() => {
         void Promise.all([loadLabels(), loadLabelCounts()]);
       }, [loadLabels, loadLabelCounts]);
 
+      const registerLabelCallbacks = useCallback((callbacks: Parameters<AuthenticatedLayoutContext['registerLabelCallbacks']>[0]) => {
+        labelCallbacksRef.current = callbacks;
+      }, []);
+
       return {
         labels: labelsList,
-        labelCounts: null,
+        labelCounts,
         loadLabels,
         loadLabelCounts,
-        handleCreateLabel: vi.fn().mockResolvedValue(true),
-        handleRenameLabel: vi.fn().mockResolvedValue(true),
-        handleDeleteLabel: vi.fn().mockResolvedValue(true),
-        registerLabelCallbacks: vi.fn(),
+        handleCreateLabel,
+        handleRenameLabel,
+        handleDeleteLabel,
+        registerLabelCallbacks,
         registerSSECallbacks: mockRegisterSSECallbacks as unknown as AuthenticatedLayoutContext['registerSSECallbacks'],
         setSearchBar: (content: ReactNode) => captureSearchBarRef.current(content),
       };

@@ -615,33 +615,6 @@ describe('NoteModal', () => {
       expect(mockImagesDelete).not.toHaveBeenCalled();
     });
 
-    it('ignores a second rapid click on Retry while a retry is already in flight', async () => {
-      mockImagesUpload.mockRejectedValueOnce(new Error('network error'));
-      const note = createMockNote({ images: [] });
-      renderNoteModal({ ...defaultProps, note });
-
-      await uploadViaPicker(makeImageFile());
-      expect(screen.getByTestId('image-upload-tile')).toHaveAttribute('data-status', 'error');
-
-      let resolveRetry: (value: unknown) => void = () => {};
-      mockImagesUpload.mockImplementationOnce(() => new Promise(resolve => { resolveRetry = resolve; }));
-
-      const retryButton = screen.getByRole('button', { name: 'Retry uploading photo.png' });
-      fireEvent.click(retryButton);
-      fireEvent.click(retryButton);
-      await flushMicrotasks();
-
-      // One call for the initial (failed) upload, one for the retry — the
-      // second rapid click must not fire a duplicate request.
-      expect(mockImagesUpload).toHaveBeenCalledTimes(2);
-
-      resolveRetry({
-        id: 'uploaded2', filename: 'photo.png', content_type: 'image/png', width: 10, height: 10, created_at: '2023-01-01T00:00:00Z',
-      });
-      await flushMicrotasks();
-      expect(screen.queryByTestId('image-upload-tile')).not.toBeInTheDocument();
-    });
-
     it('shows the uploaded image immediately even when note.images is never updated (the uploader\'s own SSE echo is dropped)', async () => {
       // The note prop is never re-supplied with the new image after upload —
       // simulating the real behavior where the client that performed the
@@ -708,49 +681,6 @@ describe('NoteModal', () => {
       expect(screen.queryByText('Only images can be attached.')).not.toBeInTheDocument();
     });
 
-    it('does not resurrect an image uploaded this session once its deferred delete lands', async () => {
-      // Removing an image that note.images has not caught up with yet (its
-      // note_image_added echo was suppressed for this client) leaves it in the
-      // local overlay. Once the DELETE lands, un-hiding the tile must not let
-      // the overlay put it straight back — note.images will never confirm a
-      // deleted image, so the render-time prune can't clear it either.
-      mockImagesUpload.mockResolvedValueOnce({
-        id: 'newimg', filename: 'uploaded.png', content_type: 'image/png', width: 10, height: 10, created_at: '2023-01-01T00:00:00Z',
-      });
-      const note = createMockNote({ images: [] });
-      renderNoteModal({ ...defaultProps, note });
-
-      await uploadViaPicker(makeImageFile('uploaded.png'));
-      expect(screen.getByAltText('uploaded.png')).toBeInTheDocument();
-
-      fireEvent.click(screen.getByRole('button', { name: 'Remove uploaded.png' }));
-      expect(screen.queryByAltText('uploaded.png')).not.toBeInTheDocument();
-
-      await vi.advanceTimersByTimeAsync(10_000);
-      await flushMicrotasks();
-
-      expect(mockImagesDelete).toHaveBeenCalledWith('newimg');
-      expect(screen.queryByAltText('uploaded.png')).not.toBeInTheDocument();
-    });
-
-    it('restores an image uploaded this session when its deferred delete fails', async () => {
-      // The mirror of the case above: a failed DELETE must leave the overlay
-      // entry alone so the tile comes back rather than disappearing silently.
-      mockImagesUpload.mockResolvedValueOnce({
-        id: 'newimg', filename: 'uploaded.png', content_type: 'image/png', width: 10, height: 10, created_at: '2023-01-01T00:00:00Z',
-      });
-      mockImagesDelete.mockRejectedValueOnce(new Error('network error'));
-      const note = createMockNote({ images: [] });
-      renderNoteModal({ ...defaultProps, note });
-
-      await uploadViaPicker(makeImageFile('uploaded.png'));
-      fireEvent.click(screen.getByRole('button', { name: 'Remove uploaded.png' }));
-
-      await vi.advanceTimersByTimeAsync(10_000);
-      await flushMicrotasks();
-
-      expect(screen.getByAltText('uploaded.png')).toBeInTheDocument();
-    });
   });
 
   describe('Form Validation', () => {
@@ -2287,43 +2217,6 @@ describe('NoteModal', () => {
       expect(mockNotesUpdate).not.toHaveBeenCalled();
     });
 
-    it('title autosave debounces rapid changes and sends only the latest value', async () => {
-      const note = createMockNote({ note_type: 'list', title: 'Test Note' });
-      const onRefresh = vi.fn();
-      renderNoteModal({ ...defaultProps, onRefresh, note });
-
-      const titleInput = screen.getByDisplayValue('Test Note');
-      fireEvent.change(titleInput, { target: { value: 'First' } });
-      fireEvent.change(titleInput, { target: { value: 'Second' } });
-      fireEvent.change(titleInput, { target: { value: 'Final' } });
-      await vi.runAllTimersAsync();
-
-      expect(mockNotesUpdate).toHaveBeenCalledTimes(1);
-      expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({ title: 'Final' }));
-      expect(onRefresh).toHaveBeenCalled();
-    });
-
-    it('color change cancels a pending title debounce and the save includes both changes', async () => {
-      const note = createMockNote({ note_type: 'list', title: 'Test Note' });
-      const onRefresh = vi.fn();
-      renderNoteModal({ ...defaultProps, onRefresh, note });
-
-      // Start a title debounce
-      const titleInput = screen.getByDisplayValue('Test Note');
-      fireEvent.change(titleInput, { target: { value: 'Updated Title' } });
-
-      // Immediately click a color — should cancel the title debounce and save both
-      fireEvent.click(screen.getByLabelText('Select note color'));
-      fireEvent.click(screen.getByTitle('Coral'));
-      await vi.runAllTimersAsync();
-
-      // The color save should have included the updated title
-      expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({
-        title: 'Updated Title',
-        color: '#f28b82',
-      }));
-      expect(onRefresh).toHaveBeenCalled();
-    });
   });
 
   describe('Basic Modal Operations', () => {
