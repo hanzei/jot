@@ -88,7 +88,6 @@
     "myTasksInfo": "Exibindo notas que incluem seus itens de lista atribuídos.",
     "tabArchive": "Arquivo",
     "tabBin": "Lixeira",
-    "tabAdmin": "Admin",
     "noMyTasksNotesTitle": "Nenhum item de lista atribuído",
     "noMyTasksNotes": "Nenhum item de lista foi atribuído a você ainda. Quando alguém atribuir um item de lista a você em uma nota compartilhada, ele aparecerá aqui.",
     "noNotesForThisLabel": "Nenhuma nota para este rótulo",
@@ -133,9 +132,7 @@
     "lastNameLabel": "Sobrenome",
     "namePlaceholder": "Opcional",
     "profileUpdated": "Perfil atualizado com sucesso.",
-    "usernameUpdated": "Nome de usuário atualizado com sucesso.",
     "failedUpdateUsername": "Falha ao atualizar o nome de usuário.",
-    "logoutFailed": "Falha ao sair. Tente novamente.",
     "changePasswordSection": "Alterar senha",
     "currentPasswordLabel": "Senha atual",
     "newPasswordLabel": "Nova senha",
@@ -274,7 +271,6 @@
   "admin": {
     "pageHeading": "Admin",
     "title": "Gerenciamento de usuários",
-    "tabAdmin": "Admin",
     "createUser": "Criar usuário",
     "cancel": "Cancelar",
     "createNewUser": "Criar novo usuário",
@@ -295,7 +291,6 @@
     "failedLoadUsers": "Falha ao carregar usuários",
     "failedLoadStats": "Falha ao carregar estatísticas",
     "failedCreateUser": "Falha ao criar usuário",
-    "userIdCreated": "ID: {{id}} • Criado: {{date}}",
     "userCreated": "Criado: {{date}}",
     "adminBadge": "Admin",
     "activeBadge": "Ativo",
@@ -367,8 +362,6 @@
     "itemsUnchecked_many": "{{count}} itens desmarcados",
     "itemsUnchecked_other": "{{count}} itens desmarcados",
     "moreCompletedItems": "+{{count}} itens concluídos",
-    "editNote": "Editar nota",
-    "newNote": "Nova nota",
     "unpinNote": "Desafixar nota",
     "pinNote": "Fixar nota",
     "unarchiveNote": "Desarquivar nota",
@@ -425,10 +418,8 @@
     "addLabels": "Adicionar etiquetas",
     "searchPlaceholder": "Pesquisar ou criar etiqueta...",
     "createLabel": "Criar \"{{name}}\"",
-    "removeLabel": "Remover etiqueta {{name}}",
     "noLabels": "Nenhuma etiqueta ainda",
     "newLabelPlaceholder": "Nome da etiqueta...",
-    "createNew": "Criar nova...",
     "newSidebar": "Nova etiqueta",
     "createInputLabel": "Nome da nova etiqueta",
     "createSave": "Criar etiqueta",
@@ -487,9 +478,6 @@
     "errorWrongType": "Só é possível anexar imagens.",
     "errorTooLarge": "A imagem excede o limite de {{maxMB}} MB.",
     "errorTooMany": "As notas podem ter até {{max}} imagens."
-  },
-  "serviceWorker": {
-    "updatePrompt": "Nova atualização do aplicativo disponível! Clique em OK para atualizar"
   },
   "import": {
     "title": "Importar notas",
