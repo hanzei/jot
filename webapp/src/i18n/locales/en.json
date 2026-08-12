@@ -88,7 +88,6 @@
     "myTasksInfo": "Showing notes that include your assigned list items.",
     "tabArchive": "Archive",
     "tabBin": "Bin",
-    "tabAdmin": "Admin",
     "noMyTasksNotesTitle": "No assigned list items",
     "noMyTasksNotes": "No list items assigned to you yet. When someone assigns a list item to you in a shared note, it will appear here.",
     "noNotesForThisLabel": "No notes for this label",
@@ -133,9 +132,7 @@
     "lastNameLabel": "Last Name",
     "namePlaceholder": "Optional",
     "profileUpdated": "Profile updated successfully.",
-    "usernameUpdated": "Username updated successfully.",
     "failedUpdateUsername": "Failed to update username.",
-    "logoutFailed": "Logout failed. Please try again.",
     "changePasswordSection": "Change Password",
     "currentPasswordLabel": "Current Password",
     "newPasswordLabel": "New Password",
@@ -274,7 +271,6 @@
   "admin": {
     "pageHeading": "Admin",
     "title": "User Management",
-    "tabAdmin": "Admin",
     "createUser": "Create User",
     "cancel": "Cancel",
     "createNewUser": "Create New User",
@@ -295,7 +291,6 @@
     "failedLoadUsers": "Failed to load users",
     "failedLoadStats": "Failed to load statistics",
     "failedCreateUser": "Failed to create user",
-    "userIdCreated": "ID: {{id}} • Created: {{date}}",
     "userCreated": "Created: {{date}}",
     "adminBadge": "Admin",
     "activeBadge": "Active",
@@ -367,8 +362,6 @@
     "itemsUnchecked_many": "{{count}} items unchecked",
     "itemsUnchecked_other": "{{count}} items unchecked",
     "moreCompletedItems": "+{{count}} completed items",
-    "editNote": "Edit Note",
-    "newNote": "New Note",
     "unpinNote": "Unpin note",
     "pinNote": "Pin note",
     "unarchiveNote": "Unarchive note",
@@ -425,10 +418,8 @@
     "addLabels": "Add labels",
     "searchPlaceholder": "Search or create label...",
     "createLabel": "Create \"{{name}}\"",
-    "removeLabel": "Remove label {{name}}",
     "noLabels": "No labels yet",
     "newLabelPlaceholder": "Label name...",
-    "createNew": "Create new...",
     "newSidebar": "New Label",
     "createInputLabel": "New label name",
     "createSave": "Create label",
@@ -487,9 +478,6 @@
     "errorWrongType": "Only images can be attached.",
     "errorTooLarge": "Image exceeds the {{maxMB}} MB limit.",
     "errorTooMany": "Notes can have up to {{max}} images."
-  },
-  "serviceWorker": {
-    "updatePrompt": "New app update is available! Click OK to refresh"
   },
   "import": {
     "title": "Import Notes",

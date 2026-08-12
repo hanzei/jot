@@ -88,7 +88,6 @@
     "myTasksInfo": "Zeigt Notizen mit deinen zugewiesenen Listeneinträgen.",
     "tabArchive": "Archiv",
     "tabBin": "Papierkorb",
-    "tabAdmin": "Admin",
     "noMyTasksNotesTitle": "Keine zugewiesenen Listeneinträge",
     "noMyTasksNotes": "Dir wurden noch keine Listeneinträge zugewiesen. Wenn jemand einen Listeneintrag in einer geteilten Notiz zuweist, erscheint er hier.",
     "noNotesForThisLabel": "Keine Notizen für dieses Label",
@@ -133,9 +132,7 @@
     "lastNameLabel": "Nachname",
     "namePlaceholder": "Optional",
     "profileUpdated": "Profil erfolgreich aktualisiert.",
-    "usernameUpdated": "Benutzername erfolgreich aktualisiert.",
     "failedUpdateUsername": "Benutzername konnte nicht aktualisiert werden.",
-    "logoutFailed": "Abmeldung fehlgeschlagen. Bitte erneut versuchen.",
     "changePasswordSection": "Passwort ändern",
     "currentPasswordLabel": "Aktuelles Passwort",
     "newPasswordLabel": "Neues Passwort",
@@ -274,7 +271,6 @@
   "admin": {
     "pageHeading": "Admin",
     "title": "Benutzerverwaltung",
-    "tabAdmin": "Admin",
     "createUser": "Benutzer erstellen",
     "cancel": "Abbrechen",
     "createNewUser": "Neuen Benutzer erstellen",
@@ -295,7 +291,6 @@
     "failedLoadUsers": "Benutzer konnten nicht geladen werden",
     "failedLoadStats": "Statistiken konnten nicht geladen werden",
     "failedCreateUser": "Benutzer konnte nicht erstellt werden",
-    "userIdCreated": "ID: {{id}} • Erstellt: {{date}}",
     "userCreated": "Erstellt: {{date}}",
     "adminBadge": "Admin",
     "activeBadge": "Aktiv",
@@ -367,8 +362,6 @@
     "itemsUnchecked_many": "{{count}} Einträge als offen markiert",
     "itemsUnchecked_other": "{{count}} Einträge als offen markiert",
     "moreCompletedItems": "+{{count}} erledigte Elemente",
-    "editNote": "Notiz bearbeiten",
-    "newNote": "Neue Notiz",
     "unpinNote": "Notiz lösen",
     "pinNote": "Notiz anheften",
     "unarchiveNote": "Notiz aus Archiv holen",
@@ -425,10 +418,8 @@
     "addLabels": "Labels hinzufügen",
     "searchPlaceholder": "Label suchen oder erstellen...",
     "createLabel": "\"{{name}}\" erstellen",
-    "removeLabel": "Label {{name}} entfernen",
     "noLabels": "Noch keine Labels",
     "newLabelPlaceholder": "Label-Name...",
-    "createNew": "Neu erstellen...",
     "newSidebar": "Neues Label",
     "createInputLabel": "Neuer Labelname",
     "createSave": "Label erstellen",
@@ -487,9 +478,6 @@
     "errorWrongType": "Es können nur Bilder angehängt werden.",
     "errorTooLarge": "Das Bild überschreitet das Limit von {{maxMB}} MB.",
     "errorTooMany": "Notizen können bis zu {{max}} Bilder enthalten."
-  },
-  "serviceWorker": {
-    "updatePrompt": "Es ist ein neues App-Update verfügbar! Klicke OK zum Aktualisieren"
   },
   "import": {
     "title": "Notizen importieren",
