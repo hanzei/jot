@@ -383,7 +383,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
           completed: item.completed,
           position: item.position,
           parentId: item.parent_id ?? null,
-          assignedTo: item.assigned_to ?? '',
+          assigned_to: item.assigned_to ?? '',
         })));
         commitItems(listItems);
         draft = { title: note.title, content: '', pinned: note.pinned, archived: note.archived, color: note.color, checked_items_collapsed: note.checked_items_collapsed };
@@ -648,7 +648,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
       const moved = arrayMove(currentItems, fromIndex, toIndex);
       const droppedIndex = moved.findIndex(item => item.id === active.id);
-      const newParentId = dropTargetParentId(moved, droppedIndex, active.id as string);
+      const above = droppedIndex > 0 ? moved[droppedIndex - 1] ?? null : null;
+      const newParentId = dropTargetParentId(moved, above, active.id as string);
       const reparented = moved.map(item =>
         item.id === active.id ? { ...item, parentId: newParentId } : item,
       );
@@ -670,7 +671,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       completed: false,
       position: 0,
       parentId,
-      assignedTo: '',
+      assigned_to: '',
     };
     commitItems(normalizeItemOrder([...currentItems, newItem]));
     autoSaveNote();
@@ -684,7 +685,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
   const insertListItemAfter = (
     afterItemId: string,
-    overrides: { text?: string; parentId?: string | null; assignedTo?: string } = {},
+    overrides: { text?: string; parentId?: string | null; assigned_to?: string } = {},
   ) => {
     if (isReadOnly) return afterItemId;
     cancelPendingSave();
@@ -697,7 +698,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       completed: afterItem ? afterItem.completed : false,
       position: 0,
       parentId: overrides.parentId !== undefined ? overrides.parentId : (afterItem ? afterItem.parentId : null),
-      assignedTo: overrides.assignedTo ?? '',
+      assigned_to: overrides.assigned_to ?? '',
     };
     const insertPos = afterItemPos >= 0 ? afterItemPos + 1 : currentItems.length;
     const newItems = [...currentItems];
@@ -712,7 +713,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   // very start of a non-empty item).
   const insertListItemBefore = (
     beforeItemId: string,
-    overrides: { parentId?: string | null; assignedTo?: string } = {},
+    overrides: { parentId?: string | null; assigned_to?: string } = {},
   ) => {
     if (isReadOnly) return beforeItemId;
     cancelPendingSave();
@@ -725,7 +726,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       completed: beforeItem ? beforeItem.completed : false,
       position: 0,
       parentId: overrides.parentId !== undefined ? overrides.parentId : (beforeItem ? beforeItem.parentId : null),
-      assignedTo: overrides.assignedTo ?? '',
+      assigned_to: overrides.assigned_to ?? '',
     };
     const insertPos = beforeItemPos >= 0 ? beforeItemPos : currentItems.length;
     const newItems = [...currentItems];
@@ -753,7 +754,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       completed: currentItem.completed,
       position: 0,
       parentId: currentItem.parentId,
-      assignedTo: currentItem.assignedTo,
+      assigned_to: currentItem.assigned_to,
     };
     const newItems = [...currentItems];
     newItems[itemPos] = { ...currentItem, text: before };
@@ -907,7 +908,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       if (cursorPos === 0 && text.length > 0) {
         const newId = insertListItemBefore(currentItem.id, {
           parentId: currentItem.parentId,
-          assignedTo: currentItem.assignedTo,
+          assigned_to: currentItem.assigned_to,
         });
         setTimeout(() => itemInputRefs.current.get(newId)?.focus(), 0);
         return;
@@ -1057,7 +1058,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         position: 0,
         // Pasted lines join the same group as the item they split from.
         parentId: currentItem.parentId,
-        assignedTo: '',
+        assigned_to: '',
       };
     });
 
@@ -1360,7 +1361,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const assignItem = async (itemId: string, userId: string) => {
     if (isReadOnly) return;
     const updatedItems = itemsRef.current.map(item =>
-      item.id === itemId ? { ...item, assignedTo: userId } : item,
+      item.id === itemId ? { ...item, assigned_to: userId } : item,
     );
     commitItems(updatedItems);
     await autoSaveNote();
@@ -1752,7 +1753,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     ? (editingItemId ? itemTextareaId(editingItemId) : undefined)
     : (isEditingContent ? contentTextareaId : undefined);
 
-  const assignedItemCount = items.filter(item => item.assignedTo).length;
+  const assignedItemCount = items.filter(item => item.assigned_to).length;
   const convertToTextConfirmMessage = assignedItemCount > 0
     ? `${t('note.convertToTextConfirmMessage')} ${t('note.convertLoseAssignments', { count: assignedItemCount })}`
     : t('note.convertToTextConfirmMessage');

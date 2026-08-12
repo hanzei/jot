@@ -20,7 +20,7 @@ import {
 } from '../api/notes';
 import { shareNote, unshareNote } from '../api/users';
 import { useOfflineNote } from './useOfflineNotes';
-import { generateId, textToListNote, listToText, checkConvertToListCaps } from '@jot/shared';
+import { generateId, textToListNote, listToText, checkConvertToListCaps, applyCompletedCascade, type ListItem } from '@jot/shared';
 import type {
   Note,
   NoteItem,
@@ -64,30 +64,25 @@ import {
 } from './queryKeys';
 
 /**
- * Collects the item ids a completed-toggle should cascade to, mirroring the
- * server: a top-level item's completed state cascades to all of its direct
- * children (in either direction), and unchecking a child also un-completes
- * its parent — a parent can never stay "done" with an incomplete child.
- * Completing every child does not auto-complete the parent. Only ids whose
- * `completed` actually changes are returned. Shared by the optimistic cache
- * update and the offline local-DB write so the two stay in agreement.
- *
- * (NoteEditorScreen keeps a parallel `applyCompletedCascade` over its own
- * `LocalItem[]` editor state; keep the cascade rule here in sync with it.)
+ * Collects the item ids a completed-toggle should cascade to, via the shared
+ * `applyCompletedCascade` (the same rule NoteEditorScreen applies to its own
+ * editor state). This is a shape adapter, not a fourth implementation: it maps
+ * the server-shaped `NoteItem[]` (`parent_id`) to `@jot/shared`'s `ListItem[]`
+ * (`parentId`) and back to a list of changed ids, for the optimistic cache
+ * update and the offline local-DB write.
  */
 function collectToggleCascade(items: NoteItem[], itemId: string, completed: boolean): string[] {
-  const target = items.find((i) => i.id === itemId);
-  if (!target) return [];
-  const cascadeToChildren = target.parent_id === null;
-  const uncompleteParent = target.parent_id !== null && !completed;
-  return items
-    .filter(
-      (i) =>
-        (i.id === itemId ||
-          (cascadeToChildren && i.parent_id === itemId) ||
-          (uncompleteParent && i.id === target.parent_id)) &&
-        i.completed !== completed,
-    )
+  const asListItems: ListItem[] = items.map((i) => ({
+    id: i.id,
+    text: i.text,
+    completed: i.completed,
+    position: i.position,
+    parentId: i.parent_id,
+    assigned_to: i.assigned_to,
+  }));
+  const completedById = new Map(items.map((i) => [i.id, i.completed]));
+  return applyCompletedCascade(asListItems, itemId, completed)
+    .filter((i) => completedById.get(i.id) !== i.completed)
     .map((i) => i.id);
 }
 

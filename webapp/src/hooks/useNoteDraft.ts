@@ -19,13 +19,13 @@ export interface AutoSaveDraft {
 
 // Mergeable fields of a list item, used as the per-item baseline for diffing
 // local edits against the last-known server state.
-type ItemSnapshot = Pick<ListItem, 'text' | 'completed' | 'parentId' | 'assignedTo'>;
+type ItemSnapshot = Pick<ListItem, 'text' | 'completed' | 'parentId' | 'assigned_to'>;
 
 const itemSnapshot = (item: ListItem): ItemSnapshot => ({
   text: item.text,
   completed: item.completed,
   parentId: item.parentId,
-  assignedTo: item.assignedTo,
+  assigned_to: item.assigned_to,
 });
 
 const emptyDraft = (): AutoSaveDraft => ({
@@ -191,7 +191,7 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
       if (savedOrderRef.current[i] !== it.id) return true;
       const snap = savedItemsRef.current.get(it.id);
       if (!snap || snap.text !== it.text || snap.completed !== it.completed
-        || snap.parentId !== it.parentId || snap.assignedTo !== it.assignedTo) {
+        || snap.parentId !== it.parentId || snap.assigned_to !== it.assigned_to) {
         return true;
       }
     }
@@ -243,7 +243,7 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
             position: it.position,
             completed: it.completed,
             parent_id: it.parentId ?? '',
-            ...(it.assignedTo ? { assigned_to: it.assignedTo } : {}),
+            ...(it.assigned_to ? { assigned_to: it.assigned_to } : {}),
           });
         } catch (err) {
           // 409 means a prior attempt already created this item; treat as done.
@@ -257,7 +257,7 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
       if (it.text !== snap.text) data.text = it.text;
       if (it.completed !== snap.completed) data.completed = it.completed;
       if (it.parentId !== snap.parentId) data.parent_id = it.parentId ?? '';
-      if (it.assignedTo !== snap.assignedTo) data.assigned_to = it.assignedTo;
+      if (it.assigned_to !== snap.assigned_to) data.assigned_to = it.assigned_to;
       if (Object.keys(data).length > 0) {
         await notes.updateItem(noteId, it.id, data);
         base.set(it.id, itemSnapshot(it));
