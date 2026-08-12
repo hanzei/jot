@@ -45,3 +45,17 @@ export const NOTE_COLORS = [
   '#e6c9a8',
   '#e8eaed',
 ] as const;
+
+/** Maps each NOTE_COLORS hex value to its i18n key (webapp/mobile locale `note.*` keys). */
+export const NOTE_COLOR_NAME_KEYS: Record<string, string> = {
+  '#ffffff': 'note.colorWhite',
+  '#f28b82': 'note.colorCoral',
+  '#fbbc04': 'note.colorYellow',
+  '#ccff90': 'note.colorLime',
+  '#a7ffeb': 'note.colorTeal',
+  '#aecbfa': 'note.colorPeriwinkle',
+  '#d7aefb': 'note.colorLavender',
+  '#fdcfe8': 'note.colorPink',
+  '#e6c9a8': 'note.colorSand',
+  '#e8eaed': 'note.colorGray',
+};
