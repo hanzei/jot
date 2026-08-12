@@ -5,8 +5,7 @@ import { Eye, EyeOff, TriangleAlert } from 'lucide-react';
 import { auth } from '@/utils/api';
 import { setUser, setSettings } from '@/utils/auth';
 import { REDIRECT_PARAM, authPathWithRedirect } from '@/utils/authRedirect';
-import { isPasswordTooShort } from '@/utils/userValidation';
-import { VALIDATION, getUsernameValidationError } from '@jot/shared';
+import { VALIDATION, getUsernameValidationError, isPasswordTooShort } from '@jot/shared';
 
 interface RegisterProps {
   onRegister: () => void;

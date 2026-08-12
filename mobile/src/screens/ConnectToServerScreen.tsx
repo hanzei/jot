@@ -19,8 +19,9 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '../theme/ThemeContext';
 import { probeServerReachability } from '../api/client';
+import { DEFAULT_SERVER_CONFIG, probeServerConfig } from '../api/config';
 import type { RootStackParamList } from '../navigation/RootNavigator';
-import { VALIDATION, getUsernameValidationError } from '@jot/shared';
+import { getUsernameValidationError, isPasswordTooShort, type ServerConfig } from '@jot/shared';
 import { displayMessage } from '../i18n/utils';
 import {
   registerOnServer,
@@ -76,6 +77,10 @@ export default function ConnectToServerScreen() {
   const [fieldError, setFieldError] = useState('');
   const [busy, setBusy] = useState(false);
   const [reconcileState, setReconcileState] = useState<ReconcileState>('pending');
+  // The target server isn't the active one yet at this point in the flow, so
+  // this can't go through useServerConfig (which reads the active server) —
+  // fetched directly against serverUrl once the reachability probe succeeds.
+  const [registerServerConfig, setRegisterServerConfig] = useState<ServerConfig>(DEFAULT_SERVER_CONFIG);
 
   const isMountedRef = useRef(true);
   useEffect(() => {
@@ -235,6 +240,14 @@ export default function ConnectToServerScreen() {
       }
       setServerUrlInput(probe.canonicalUrl);
       setStep({ name: 'register', serverUrl: probe.canonicalUrl });
+      setRegisterServerConfig(DEFAULT_SERVER_CONFIG);
+      // Non-blocking: the register step renders immediately with the default
+      // minimum, and picks up the server's real one whenever this resolves.
+      void probeServerConfig(probe.canonicalUrl).then((cfg) => {
+        if (cfg && isMountedRef.current) {
+          setRegisterServerConfig(cfg);
+        }
+      });
     } catch {
       setFieldError(t('auth.serverSetupConnectionFailed'));
     } finally {
@@ -256,8 +269,8 @@ export default function ConnectToServerScreen() {
       return usernameErrorTranslations[usernameError];
     }
     if (!password.trim()) return t('auth.passwordRequired');
-    if ([...password].length < VALIDATION.PASSWORD_MIN_LENGTH) {
-      return t('auth.passwordMin', { min: VALIDATION.PASSWORD_MIN_LENGTH });
+    if (isPasswordTooShort(password, registerServerConfig.password_min_length)) {
+      return t('auth.passwordMin', { min: registerServerConfig.password_min_length });
     }
     return null;
   };

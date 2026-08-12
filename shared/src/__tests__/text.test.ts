@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { codePointLength, exceedsCodePointLimit, truncateToCodePoints } from '../text';
+import { codePointLength, exceedsCodePointLimit, isPasswordTooShort, truncateToCodePoints } from '../text';
+import { VALIDATION } from '../constants';
 
 // Matches a high surrogate not followed by a low one, or a low surrogate not
 // preceded by a high one. Either means the string is ill-formed UTF-16, which
@@ -79,5 +80,29 @@ describe('truncateToCodePoints', () => {
 
   it('returns an empty string for a zero limit', () => {
     expect(truncateToCodePoints(`${EMOJI}abc`, 0)).toBe('');
+  });
+});
+
+describe('isPasswordTooShort', () => {
+  it('flags a password shorter than the minimum', () => {
+    expect(isPasswordTooShort('abc', 10)).toBe(true);
+  });
+
+  it('accepts a password at or above the minimum', () => {
+    expect(isPasswordTooShort('abcdefghij', 10)).toBe(false);
+    expect(isPasswordTooShort('abcdefghijk', 10)).toBe(false);
+  });
+
+  it('counts by code point, matching the server, not by UTF-16 length', () => {
+    // 5 emoji is 10 UTF-16 units but only 5 code points — too short against a
+    // minimum of 10, even though `.length` would call it exactly long enough.
+    const fiveEmoji = EMOJI.repeat(5);
+    expect(fiveEmoji.length).toBe(10);
+    expect(isPasswordTooShort(fiveEmoji, 10)).toBe(true);
+  });
+
+  it('defaults to the shared VALIDATION.PASSWORD_MIN_LENGTH when no minimum is given', () => {
+    expect(isPasswordTooShort('a'.repeat(VALIDATION.PASSWORD_MIN_LENGTH - 1))).toBe(true);
+    expect(isPasswordTooShort('a'.repeat(VALIDATION.PASSWORD_MIN_LENGTH))).toBe(false);
   });
 });

@@ -27,7 +27,7 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, v any) error {
 // its input before the lookup (models.userStore.GetByUsername), so a user who
 // types "Ben" at the login form still signs in.
 //
-// Keep in sync with webapp/src/utils/userValidation.ts and the mobile screens.
+// Keep in sync with shared/src/usernameValidation.ts, used by both webapp and mobile.
 var usernameRegex = regexp.MustCompile(`^[a-z0-9_-]+$`)
 
 var hexColorRegex = regexp.MustCompile(`^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
