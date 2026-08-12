@@ -3034,6 +3034,12 @@ const docTemplate = `{
                             "type": "string"
                         }
                     },
+                    "413": {
+                        "description": "file too large",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "internal server error",
                         "schema": {

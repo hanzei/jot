@@ -62,6 +62,20 @@ func TestGetProfileIconOtherUserCanFetch(t *testing.T) {
 	assert.Equal(t, "image/jpeg", contentType)
 }
 
+func TestUploadProfileIconOversizeReturns413(t *testing.T) {
+	t.Parallel()
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "iconoversize", "password123", false)
+
+	// profileIconMaxBytes (5 MB) is not configurable, so the payload has to
+	// actually clear it plus the multipart-overhead allowance to trip the 413
+	// path; content doesn't need to be a valid image since the size check runs
+	// before any content-type sniffing.
+	oversized := bytes.Repeat([]byte{0xFF}, 6_000_000)
+	_, err := user.Client.UploadProfileIcon(t.Context(), "big.png", bytes.NewReader(oversized))
+	assert.Equal(t, http.StatusRequestEntityTooLarge, client.StatusCode(err))
+}
+
 func TestDeleteProfileIconReturns204(t *testing.T) {
 	t.Parallel()
 	ts := setupTestServer(t)
