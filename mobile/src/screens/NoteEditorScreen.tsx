@@ -79,7 +79,7 @@ import {
   normalizeItemOrder,
   itemHasChildren,
   applyCompletedCascade,
-  droppedParentId,
+  dropTargetParentId,
   indentLevelFromDrag,
 } from './noteEditor/listItemModel';
 import { MarkdownToolbarContent } from './noteEditor/EditorToolbars';
@@ -2381,7 +2381,7 @@ export default function NoteEditorScreen() {
         } else if (from !== to) {
           // No sideways intent but the row moved: fall back to the position-based
           // reparent so dropping into a group still nests as before.
-          newParentId = droppedParentId(itemsRef.current, moved, above);
+          newParentId = dropTargetParentId(itemsRef.current, above, moved.id);
         } else {
           // Released in place with no sideways intent: leave the parent untouched.
           newParentId = moved.parentId;

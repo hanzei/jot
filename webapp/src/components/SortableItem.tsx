@@ -117,7 +117,7 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
     marginLeft: indentOf(item) * VALIDATION.INDENT_PX_PER_LEVEL,
   };
 
-  const assignedUser = item.assignedTo ? usersById?.get(item.assignedTo) : undefined;
+  const assignedUser = item.assigned_to ? usersById?.get(item.assigned_to) : undefined;
   const showAssignUI = isShared && collaborators && collaborators.length > 0 && onAssignItem;
   const placeholder = item.text ? '' : t('note.itemPlaceholder');
   // Kept as one string shared by both forms of the row rather than reasoned
@@ -478,8 +478,8 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
             ? [assignedUser.first_name, assignedUser.last_name].filter(Boolean).join(' ') || assignedUser.username
             : '?';
           return (
-          <div className={`relative flex-shrink-0 ${item.assignedTo || !isCompleted ? 'ml-1' : ''}`}>
-            {item.assignedTo ? (
+          <div className={`relative flex-shrink-0 ${item.assigned_to || !isCompleted ? 'ml-1' : ''}`}>
+            {item.assigned_to ? (
               readOnly ? (
                 <div
                   title={t('note.assignedTo', { name: assigneeDisplayName })}
@@ -489,7 +489,7 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
                   <LetterAvatar
                     firstName={assignedUser?.first_name}
                     username={assignedUser?.username || '?'}
-                    userId={item.assignedTo}
+                    userId={item.assigned_to}
                     hasProfileIcon={assignedUser?.has_profile_icon}
                     iconVersion={assignedUser?.updated_at}
                     className="w-5 h-5"
@@ -506,7 +506,7 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
                   <LetterAvatar
                     firstName={assignedUser?.first_name}
                     username={assignedUser?.username || '?'}
-                    userId={item.assignedTo}
+                    userId={item.assigned_to}
                     hasProfileIcon={assignedUser?.has_profile_icon}
                     iconVersion={assignedUser?.updated_at}
                     className="w-5 h-5"
@@ -528,7 +528,7 @@ export default function SortableItem({ id, index, item, onUpdateListItem, onRemo
             {showAssigneePicker && !readOnly && (
               <AssigneePicker
                 collaborators={collaborators}
-                currentAssigneeId={item.assignedTo}
+                currentAssigneeId={item.assigned_to}
                 onAssign={(userId) => onAssignItem(item.id, userId)}
                 onClose={closeAssigneePicker}
               />

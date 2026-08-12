@@ -28,7 +28,7 @@ const item: ListItem = {
   completed: false,
   position: 0,
   parentId: null,
-  assignedTo: '',
+  assigned_to: '',
 };
 
 // The suggestion dropdown is driven entirely by `completedItemTexts`, which
