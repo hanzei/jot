@@ -1,4 +1,12 @@
-import { VALIDATION, type ListItem, type NoteItem } from '@jot/shared';
+import {
+  VALIDATION,
+  applyCompletedCascade,
+  dropTargetParentId,
+  itemHasChildren,
+  normalizeItemOrder,
+  type ListItem,
+  type NoteItem,
+} from '@jot/shared';
 
 // Captured as a module-level number so the worklet form of indentLevelFromDrag
 // can reference it on the UI thread without a property access on an import.
@@ -13,12 +21,7 @@ const INDENT_PX = VALIDATION.INDENT_PX_PER_LEVEL;
 // that have no webapp equivalent.
 export type LocalItem = ListItem;
 
-export {
-  applyCompletedCascade,
-  dropTargetParentId,
-  itemHasChildren,
-  normalizeItemOrder,
-} from '@jot/shared';
+export { applyCompletedCascade, dropTargetParentId, itemHasChildren, normalizeItemOrder };
 
 export function toLocalItems(serverItems: NoteItem[]): LocalItem[] {
   return [...serverItems]

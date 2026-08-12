@@ -5,12 +5,12 @@
 // that have no mobile equivalent.
 //
 // Everything here takes plain data and returns plain data, with no React and no
-// API access, so the indent/reorder/cascade rules can be unit-tested without
-// rendering a modal. NoteModal is the only consumer today; it holds the state
-// these operate on and persists whatever they return.
+// API access, so these helpers can be unit-tested without rendering a modal.
+// NoteModal is the only consumer today; it holds the state these operate on
+// and persists whatever they return.
 
-export { applyCompletedCascade, dropTargetParentId, itemHasChildren, normalizeItemOrder, type ListItem } from '@jot/shared';
-import type { ListItem } from '@jot/shared';
+import { applyCompletedCascade, dropTargetParentId, itemHasChildren, normalizeItemOrder, type ListItem } from '@jot/shared';
+export { applyCompletedCascade, dropTargetParentId, itemHasChildren, normalizeItemOrder, type ListItem };
 
 // The DOM id of a row's textarea. Derived from the item id (22 random
 // alphanumerics, so always a valid id) rather than useId, because NoteModal has
