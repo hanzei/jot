@@ -14,7 +14,9 @@
     "openMobileApp": "Open in mobile app",
     "openMobileAppDescription": "Prefer the native mobile experience?",
     "dismissMobileAppBanner": "Dismiss",
-    "skipToMainContent": "Skip to main content"
+    "skipToMainContent": "Skip to main content",
+    "main": "Main navigation",
+    "secondary": "Secondary navigation"
   },
   "mobileApp": {
     "handoffTitle": "Open in the Jot app?",

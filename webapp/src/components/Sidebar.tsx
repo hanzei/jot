@@ -1,5 +1,6 @@
 import type { ReactNode} from 'react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { SidebarContext } from '@/components/SidebarContext';
 
@@ -37,6 +38,7 @@ const labelClass = (isExpanded: boolean) =>
 const isMobile = () => window.matchMedia('(max-width: 639px)').matches;
 
 const Sidebar = ({ tabs, bottomTabs, children, collapsed, onCollapse }: SidebarProps) => {
+  const { t } = useTranslation();
   const [hovered, setHovered] = useState(false);
   const isExpanded = !collapsed || hovered;
 
@@ -86,7 +88,7 @@ const Sidebar = ({ tabs, bottomTabs, children, collapsed, onCollapse }: SidebarP
 
   return (
     <aside
-      aria-label="Main navigation"
+      aria-label={t('nav.main')}
       className={`flex-col bg-white dark:bg-slate-800 border-r border-gray-200 dark:border-slate-700 overflow-hidden
         transition-[width] duration-200
         absolute inset-y-0 left-0 z-30 shadow-lg sm:relative sm:inset-auto sm:shadow-none sm:z-auto 2xl:absolute 2xl:inset-y-0 2xl:left-0 2xl:shadow-lg 2xl:z-30
@@ -105,7 +107,7 @@ const Sidebar = ({ tabs, bottomTabs, children, collapsed, onCollapse }: SidebarP
         >
           {children}
           {bottomTabs && bottomTabs.length > 0 && (
-            <nav aria-label="Secondary navigation" className="flex flex-col space-y-1.5 pt-2 px-2 pb-2">
+            <nav aria-label={t('nav.secondary')} className="flex flex-col space-y-1.5 pt-2 px-2 pb-2">
               {bottomTabs.map(renderTab)}
             </nav>
           )}
