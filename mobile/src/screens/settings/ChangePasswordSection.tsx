@@ -3,13 +3,15 @@ import { View, Text, TouchableOpacity, TextInput } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../theme/ThemeContext';
 import { changePassword } from '../../api/settings';
-import { VALIDATION } from '@jot/shared';
+import { isPasswordTooShort } from '@jot/shared';
 import { displayMessage, extractApiError } from '../../i18n/utils';
 import { styles } from './styles';
+import { useServerConfig } from '../../hooks/useServerConfig';
 
 export default function ChangePasswordSection() {
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const { password_min_length: passwordMinLength } = useServerConfig();
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -32,8 +34,8 @@ export default function ChangePasswordSection() {
       setPasswordError(t('settings.passwordsNoMatch'));
       return;
     }
-    if ([...newPassword].length < VALIDATION.PASSWORD_MIN_LENGTH) {
-      setPasswordError(t('auth.passwordMin', { min: VALIDATION.PASSWORD_MIN_LENGTH }));
+    if (isPasswordTooShort(newPassword, passwordMinLength)) {
+      setPasswordError(t('auth.passwordMin', { min: passwordMinLength }));
       return;
     }
 
@@ -49,7 +51,7 @@ export default function ChangePasswordSection() {
     } finally {
       setPasswordSaving(false);
     }
-  }, [confirmPassword, currentPassword, newPassword, t]);
+  }, [confirmPassword, currentPassword, newPassword, passwordMinLength, t]);
 
   return (
     <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -70,7 +72,7 @@ export default function ChangePasswordSection() {
         style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBackground }]}
         value={newPassword}
         onChangeText={setNewPassword}
-        placeholder={t('settings.newPasswordPlaceholder', { min: VALIDATION.PASSWORD_MIN_LENGTH })}
+        placeholder={t('settings.newPasswordPlaceholder', { min: passwordMinLength })}
         placeholderTextColor={colors.placeholder}
         secureTextEntry
         autoCapitalize="none"

@@ -63,6 +63,10 @@ jest.mock('../src/store/serverAccounts', () => ({
   getActiveServer: jest.fn(async () => ({ serverUrl: 'https://active.example.com' })),
 }));
 
+jest.mock('../src/hooks/useServerConfig', () => ({
+  useServerConfig: jest.fn(() => ({ registration_enabled: true, password_min_length: 10, upload_max_bytes: 26214400 })),
+}));
+
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ goBack: jest.fn() }),
 }));

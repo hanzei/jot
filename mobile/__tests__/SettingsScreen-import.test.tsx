@@ -75,6 +75,10 @@ jest.mock('../src/api/client', () => ({
   cacheAuthProfile: jest.fn().mockResolvedValue(undefined),
 }));
 
+jest.mock('../src/hooks/useServerConfig', () => ({
+  useServerConfig: jest.fn(() => ({ registration_enabled: true, password_min_length: 10, upload_max_bytes: 26214400 })),
+}));
+
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 const mockListSessions = listSessions as jest.MockedFunction<typeof listSessions>;
 const mockImportKeepFile = importKeepFile as jest.MockedFunction<typeof importKeepFile>;
