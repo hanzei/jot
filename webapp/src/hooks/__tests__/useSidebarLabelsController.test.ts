@@ -9,6 +9,7 @@ vi.mock('@/utils/api', async () => {
   return {
     ...actual,
     labels: {
+      ...actual.labels,
       getAll: vi.fn(),
       getCounts: vi.fn(),
       create: vi.fn(),

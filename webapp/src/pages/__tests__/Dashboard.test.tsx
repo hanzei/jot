@@ -288,11 +288,20 @@ describe('Dashboard', () => {
   describe('Basic Rendering', () => {
     it('renders dashboard with loading state initially', async () => {
       vi.mocked(notes.getAll).mockImplementation(() => new Promise(() => {})); // Never resolves
-      
+
       renderDashboard();
-      
+
       // Look for the loading spinner by test id
       expect(screen.getByTestId('loading-spinner')).toBeInTheDocument();
+
+      // Flush the sidebar labels controller's initial load — labels.getAll/
+      // getCounts resolve immediately, and notes.getAll never does — so its
+      // state updates settle inside act() instead of firing after the test
+      // has already returned.
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
     });
 
     it('renders dashboard after loading completes', async () => {

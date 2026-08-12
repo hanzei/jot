@@ -27,8 +27,13 @@ const makeImage = (overrides: Partial<NoteImage> = {}): NoteImage => ({
   ...overrides,
 });
 
-const makeFile = (name = 'photo.png', type = 'image/png', size = 1024) =>
-  new File([new Uint8Array(size)], name, { type });
+// Only file.size is ever inspected (validateImageFile), so a small buffer
+// with size overridden avoids allocating a real 15-26 MB Uint8Array per call.
+const makeFile = (name = 'photo.png', type = 'image/png', size = 1024) => {
+  const file = new File([new Uint8Array(8)], name, { type });
+  Object.defineProperty(file, 'size', { value: size, configurable: true });
+  return file;
+};
 
 const UPLOAD_MAX_BYTES = 25 * 1024 * 1024;
 

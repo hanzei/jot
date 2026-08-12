@@ -335,13 +335,14 @@ describe('useCompletedItems', () => {
       expect(result.current.hiddenCompletedItemIds).toEqual(new Set(['c1', 'c2']));
     });
 
-    it('clears the uncheck-undo bar, which is note-specific', () => {
+    it('clears the uncheck-undo bar, which is note-specific', async () => {
       const note = noteWithCheckedItems();
       const { result } = renderHook(() => useHarness({ note, initialItems: activeAndDoneItems() }));
 
-      act(() => {
-        void result.current.handleUncheckAllItems();
+      await act(async () => {
+        await result.current.handleUncheckAllItems();
       });
+      expect(result.current.recentlyUnchecked).not.toBeNull();
 
       act(() => {
         result.current.resetForNoteSwitch();

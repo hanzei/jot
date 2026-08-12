@@ -269,17 +269,23 @@ describe('useNoteDraft', () => {
       expect(notes.createItem).toHaveBeenCalledWith('1', expect.objectContaining({ id: 'new1', text: 'new item' }));
     });
 
-    it('treats a 409 on create as already-created rather than throwing', async () => {
+    it('treats a 409 on create as already-created rather than surfacing an error', async () => {
       vi.mocked(notes.createItem).mockRejectedValueOnce({ response: { status: 409 } });
       const note = createMockNote({ id: '1', note_type: 'list', title: 'List' });
-      const { result } = renderDraft({ note });
+      const { result, showError } = renderDraft({ note });
       adopt(result.current, note, []);
 
       act(() => result.current.commitItems([listItem('new1')]));
-
-      await expect(act(async () => {
+      await act(async () => {
         await result.current.autoSaveNote();
-      })).resolves.not.toThrow();
+      });
+
+      // autoSaveNote's own catch swallows every error and calls showError
+      // instead of rethrowing, so merely resolving without throwing would
+      // pass even if the 409 special-casing regressed — assert the flow
+      // actually reached the create call and never fell into the error path.
+      expect(notes.createItem).toHaveBeenCalledWith('1', expect.objectContaining({ id: 'new1' }));
+      expect(showError).not.toHaveBeenCalled();
     });
 
     it('patches only the fields that changed on an existing item', async () => {
