@@ -50,7 +50,9 @@ export function useServerConfig(): ServerConfig {
         const fresh = await fetchServerConfig();
         if (!cancelled) {
           setConfig(fresh);
-          void setServerStorageValue(serverId, 'server_config', JSON.stringify(fresh));
+          setServerStorageValue(serverId, 'server_config', JSON.stringify(fresh)).catch(() => {
+            // Best-effort cache write — a SecureStore failure shouldn't surface here.
+          });
         }
       } catch {
         // Server unreachable or the request failed — keep the cached/default value.

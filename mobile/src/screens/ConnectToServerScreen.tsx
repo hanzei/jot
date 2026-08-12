@@ -81,6 +81,10 @@ export default function ConnectToServerScreen() {
   // this can't go through useServerConfig (which reads the active server) —
   // fetched directly against serverUrl once the reachability probe succeeds.
   const [registerServerConfig, setRegisterServerConfig] = useState<ServerConfig>(DEFAULT_SERVER_CONFIG);
+  // The URL the in-flight probeServerConfig call is for — guards against a
+  // slow probe for a server the user has since navigated away from (via
+  // "change server") landing after a newer one, overwriting its config.
+  const registerConfigTargetRef = useRef<string | null>(null);
 
   const isMountedRef = useRef(true);
   useEffect(() => {
@@ -241,10 +245,12 @@ export default function ConnectToServerScreen() {
       setServerUrlInput(probe.canonicalUrl);
       setStep({ name: 'register', serverUrl: probe.canonicalUrl });
       setRegisterServerConfig(DEFAULT_SERVER_CONFIG);
+      registerConfigTargetRef.current = probe.canonicalUrl;
       // Non-blocking: the register step renders immediately with the default
-      // minimum, and picks up the server's real one whenever this resolves.
+      // minimum, and picks up the server's real one whenever this resolves —
+      // unless the user has since gone back and probed a different server.
       void probeServerConfig(probe.canonicalUrl).then((cfg) => {
-        if (cfg && isMountedRef.current) {
+        if (cfg && isMountedRef.current && registerConfigTargetRef.current === probe.canonicalUrl) {
           setRegisterServerConfig(cfg);
         }
       });
