@@ -20,7 +20,7 @@ import {
 } from '../api/notes';
 import { shareNote, unshareNote } from '../api/users';
 import { useOfflineNote } from './useOfflineNotes';
-import { generateId, textToListNote, listToText, checkConvertToListCaps, applyCompletedCascade, type ListItem } from '@jot/shared';
+import { DEFAULT_NOTE_COLOR, generateId, textToListNote, listToText, checkConvertToListCaps, applyCompletedCascade, type ListItem } from '@jot/shared';
 import type {
   Note,
   NoteItem,
@@ -202,7 +202,7 @@ export function useCreateNote() {
         // A brand-new note starts at version 1, matching the server's default;
         // the first successful sync replaces it with the canonical server note.
         version: 1,
-        color: data.color ?? '#ffffff',
+        color: data.color ?? DEFAULT_NOTE_COLOR,
         pinned: false,
         archived: false,
         position: 0,

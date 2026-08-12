@@ -58,7 +58,7 @@ import AddImageActionSheet from '../components/AddImageActionSheet';
 import { useUploadNoteImage, useDeleteNoteImage } from '../hooks/useNoteImages';
 import { usePendingImageUploads, useRetryPendingImageUpload, useDismissPendingImageUpload } from '../hooks/usePendingImageUploads';
 import type { ImageUploadFile } from '../api/images';
-import { buildCollaborators, generateId, VALIDATION, IMAGE_MAX_PER_NOTE, exceedsCodePointLimit, truncateToCodePoints, parseTextLineAsListItem, type Collaborator, type NoteType, type NoteImage, type CreateNoteRequest, type UpdateNoteRequest, type UpdateListNoteRequest, type UpdateTextNoteRequest, type PatchNoteItemRequest, type Label, type ConvertedListItem } from '@jot/shared';
+import { buildCollaborators, generateId, DEFAULT_NOTE_COLOR, VALIDATION, IMAGE_MAX_PER_NOTE, exceedsCodePointLimit, truncateToCodePoints, parseTextLineAsListItem, type Collaborator, type NoteType, type NoteImage, type CreateNoteRequest, type UpdateNoteRequest, type UpdateListNoteRequest, type UpdateTextNoteRequest, type PatchNoteItemRequest, type Label, type ConvertedListItem } from '@jot/shared';
 import { validateImageFile as validateImageFileRaw, imageMaxMB } from '../utils/imageValidation';
 import { useServerConfig } from '../hooks/useServerConfig';
 import { useAuth } from '../store/AuthContext';
@@ -188,7 +188,7 @@ export default function NoteEditorScreen() {
   // Seed from the tapped card's color (passed as a nav param) so a zoom-open
   // shows the note's background immediately; hydration below sets the
   // authoritative value. Falls back to white for new notes / direct opens.
-  const [color, setColor] = useState(originColor || '#ffffff');
+  const [color, setColor] = useState(originColor || DEFAULT_NOTE_COLOR);
   const [labels, setLabels] = useState<Label[]>([]);
   const [hasCreated, setHasCreated] = useState(initialNoteId !== null);
   // saveError and syncToast below hold a translation key, not a translated
@@ -666,7 +666,7 @@ export default function NoteEditorScreen() {
   // the whole note — so a save here can't overwrite another device's edits.
   const savedItemsRef = useRef<Map<string, ItemSnapshot>>(new Map());
   const savedOrderRef = useRef<string[]>([]);
-  const savedScalarsRef = useRef({ title: '', content: '', pinned: false, archived: false, color: '#ffffff', checked_items_collapsed: false });
+  const savedScalarsRef = useRef({ title: '', content: '', pinned: false, archived: false, color: DEFAULT_NOTE_COLOR, checked_items_collapsed: false });
   const isHydratingRef = useRef(initialNoteId !== null && !existingNote);
   // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isHydratingRef.current = initialNoteId !== null && !existingNote;

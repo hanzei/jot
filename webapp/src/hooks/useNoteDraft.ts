@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, type Label, type Note, type NoteType, type PatchNoteItemRequest, type UpdateNoteRequest } from '@jot/shared';
+import { DEFAULT_NOTE_COLOR, VALIDATION, type Label, type Note, type NoteType, type PatchNoteItemRequest, type UpdateNoteRequest } from '@jot/shared';
 import { notes } from '@/utils/api';
 import type { ListItem } from '@/utils/noteItems';
 import type { CompletedItemsBaseline } from '@/hooks/useCompletedItems';
@@ -33,7 +33,7 @@ const emptyDraft = (): AutoSaveDraft => ({
   content: '',
   pinned: false,
   archived: false,
-  color: '#ffffff',
+  color: DEFAULT_NOTE_COLOR,
   checked_items_collapsed: false,
 });
 
@@ -63,7 +63,7 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [noteType, setNoteType] = useState<NoteType>('text');
-  const [color, setColor] = useState('#ffffff');
+  const [color, setColor] = useState(DEFAULT_NOTE_COLOR);
   const [pinned, setPinned] = useState(false);
   const [archived, setArchived] = useState(false);
   const [checkedItemsCollapsed, setCheckedItemsCollapsed] = useState(false);

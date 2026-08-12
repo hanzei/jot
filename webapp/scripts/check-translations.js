@@ -26,6 +26,11 @@ const PLURAL_SUFFIX = /_(zero|one|two|few|many|other)$/;
 // Source root each locale directory's keys are referenced from, for the unused-key scan.
 const sourceRootFor = (localesDir) => join(localesDir, '../../..');
 
+// @jot/shared is compiled directly by both webapp and mobile (not a build artifact), so a
+// key referenced only from shared source (e.g. a hex-color -> i18n-key map used by both
+// clients) would otherwise look unused from either app's own tree.
+const sharedSrcDir = join(__dirname, '../../shared/src');
+
 function collectSourceFiles(dir, out = []) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (entry.name === 'node_modules') continue;
@@ -40,7 +45,7 @@ function collectSourceFiles(dir, out = []) {
 }
 
 function findUnusedKeys(keys, sourceRoot) {
-  const corpus = collectSourceFiles(sourceRoot)
+  const corpus = [...collectSourceFiles(sourceRoot), ...collectSourceFiles(sharedSrcDir)]
     .map((f) => readFileSync(f, 'utf8'))
     .join('\n');
 
