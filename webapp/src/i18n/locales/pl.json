@@ -14,7 +14,9 @@
     "openMobileApp": "Otwórz w aplikacji mobilnej",
     "openMobileAppDescription": "Wolisz natywne doświadczenie mobilne?",
     "dismissMobileAppBanner": "Ukryj",
-    "skipToMainContent": "Przejdź do głównej treści"
+    "skipToMainContent": "Przejdź do głównej treści",
+    "main": "Nawigacja główna",
+    "secondary": "Nawigacja dodatkowa"
   },
   "mobileApp": {
     "handoffTitle": "Otworzyć w aplikacji Jot?",

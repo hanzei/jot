@@ -14,7 +14,9 @@
     "openMobileApp": "Openen in mobiele app",
     "openMobileAppDescription": "Liever de native mobiele ervaring?",
     "dismissMobileAppBanner": "Verbergen",
-    "skipToMainContent": "Ga naar hoofdinhoud"
+    "skipToMainContent": "Ga naar hoofdinhoud",
+    "main": "Hoofdnavigatie",
+    "secondary": "Secundaire navigatie"
   },
   "mobileApp": {
     "handoffTitle": "Openen in de Jot-app?",
