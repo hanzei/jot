@@ -431,7 +431,7 @@ func (s *userStore) UpdateRole(ctx context.Context, id, role string) (*User, err
 		var currentRole string
 		err = tx.QueryRowContext(ctx, s.d.RewritePlaceholders(`SELECT role FROM users WHERE id = ?`), id).Scan(&currentRole)
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("%w", ErrUserNotFound)
+			return nil, ErrUserNotFound
 		}
 		if err != nil {
 			return nil, fmt.Errorf("failed to query current role: %w", err)
@@ -442,7 +442,7 @@ func (s *userStore) UpdateRole(ctx context.Context, id, role string) (*User, err
 				return nil, fmt.Errorf("failed to count admins: %w", err)
 			}
 			if adminCount <= 1 {
-				return nil, fmt.Errorf("%w", ErrLastAdmin)
+				return nil, ErrLastAdmin
 			}
 		}
 	}
@@ -456,7 +456,7 @@ func (s *userStore) UpdateRole(ctx context.Context, id, role string) (*User, err
 		role, id,
 	).Scan(&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("%w", ErrUserNotFound)
+		return nil, ErrUserNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to update role: %w", err)
@@ -483,7 +483,7 @@ func (s *userStore) Delete(ctx context.Context, id, requestingUserID string) err
 // with the delete.
 func (s *userStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID string, preDelete, postDelete func(ctx context.Context, tx *sql.Tx) error) error {
 	if id == requestingUserID {
-		return fmt.Errorf("%w", ErrCannotDeleteSelf)
+		return ErrCannotDeleteSelf
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -495,7 +495,7 @@ func (s *userStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID 
 	var role string
 	err = tx.QueryRowContext(ctx, s.d.RewritePlaceholders(`SELECT role FROM users WHERE id = ?`), id).Scan(&role)
 	if errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("%w", ErrUserNotFound)
+		return ErrUserNotFound
 	}
 	if err != nil {
 		return fmt.Errorf("failed to query user role: %w", err)
@@ -507,7 +507,7 @@ func (s *userStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID 
 			return fmt.Errorf("failed to count admins: %w", err)
 		}
 		if adminCount <= 1 {
-			return fmt.Errorf("%w", ErrLastAdmin)
+			return ErrLastAdmin
 		}
 	}
 
@@ -526,7 +526,7 @@ func (s *userStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID 
 		return fmt.Errorf("failed to check rows affected: %w", err)
 	}
 	if rows == 0 {
-		return fmt.Errorf("%w", ErrUserNotFound)
+		return ErrUserNotFound
 	}
 
 	if postDelete != nil {
