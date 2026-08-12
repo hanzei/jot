@@ -69,6 +69,10 @@ jest.mock('../src/store/serverAccounts', () => ({
   getActiveServer: jest.fn(async () => ({ serverUrl: 'https://active.example.com' })),
 }));
 
+jest.mock('../src/hooks/useServerConfig', () => ({
+  useServerConfig: jest.fn(() => ({ registration_enabled: true, password_min_length: 10, upload_max_bytes: 26214400 })),
+}));
+
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 const mockUpdateMe = updateMe as jest.MockedFunction<typeof updateMe>;
 const mockListSessions = listSessions as jest.MockedFunction<typeof listSessions>;

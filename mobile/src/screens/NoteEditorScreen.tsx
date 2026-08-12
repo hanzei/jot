@@ -59,7 +59,8 @@ import { useUploadNoteImage, useDeleteNoteImage } from '../hooks/useNoteImages';
 import { usePendingImageUploads, useRetryPendingImageUpload, useDismissPendingImageUpload } from '../hooks/usePendingImageUploads';
 import type { ImageUploadFile } from '../api/images';
 import { buildCollaborators, generateId, DEFAULT_NOTE_COLOR, VALIDATION, IMAGE_MAX_PER_NOTE, exceedsCodePointLimit, truncateToCodePoints, parseTextLineAsListItem, type Collaborator, type NoteType, type NoteImage, type CreateNoteRequest, type UpdateNoteRequest, type UpdateListNoteRequest, type UpdateTextNoteRequest, type PatchNoteItemRequest, type Label, type ConvertedListItem } from '@jot/shared';
-import { validateImageFile as validateImageFileRaw, IMAGE_MAX_MB } from '../utils/imageValidation';
+import { validateImageFile as validateImageFileRaw, imageMaxMB } from '../utils/imageValidation';
+import { useServerConfig } from '../hooks/useServerConfig';
 import { useAuth } from '../store/AuthContext';
 import { useUsers } from '../store/UsersContext';
 import { useTheme } from '../theme/ThemeContext';
@@ -164,6 +165,8 @@ export default function NoteEditorScreen() {
   const { noteId: initialNoteId, sharedText, initialNoteType, readOnly, originRect, originColor } = route.params;
   const { t } = useTranslation();
   const failedNoteIds = useFailedNoteIds();
+  const { upload_max_bytes: uploadMaxBytes } = useServerConfig();
+  const uploadMaxMB = imageMaxMB(uploadMaxBytes);
 
   // A new note opened from a share intent arrives with sharedText to pre-fill
   // the body.
@@ -502,11 +505,11 @@ export default function NoteEditorScreen() {
   );
 
   const validateImageFile = useCallback((file: ImageUploadFile): string | null => {
-    const error = validateImageFileRaw(file);
+    const error = validateImageFileRaw(file, uploadMaxBytes);
     if (error === 'wrongType') return t('images.errorWrongType');
-    if (error === 'tooLarge') return t('images.errorTooLarge', { maxMB: IMAGE_MAX_MB });
+    if (error === 'tooLarge') return t('images.errorTooLarge', { maxMB: uploadMaxMB });
     return null;
-  }, [t]);
+  }, [t, uploadMaxBytes, uploadMaxMB]);
 
   const removeUploadTile = useCallback((uploadId: string) => {
     // Abort a request actually in flight for this tile (the 'uploading'
@@ -569,10 +572,10 @@ export default function NoteEditorScreen() {
       if (axios.isCancel(error)) return;
       console.error('Failed to upload note image:', error);
       const status = (error as { response?: { status?: number } })?.response?.status;
-      const message = status === 413 ? t('images.errorTooLarge', { maxMB: IMAGE_MAX_MB }) : t('images.uploadFailed');
+      const message = status === 413 ? t('images.errorTooLarge', { maxMB: uploadMaxMB }) : t('images.uploadFailed');
       setImageUploads((prev) => prev.map((u) => (u.id === uploadId ? { ...u, status: 'error', errorMessage: message } : u)));
     });
-  }, [showToast, t, uploadImageMutation]);
+  }, [showToast, t, uploadImageMutation, uploadMaxMB]);
 
   const startImageUpload = useCallback((file: ImageUploadFile) => {
     const id = generateId();
