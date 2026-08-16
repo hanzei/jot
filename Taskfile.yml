@@ -30,17 +30,18 @@ tasks:
     dir: webapp
     cmd: npx vite
 
-  # Everything CI enforces except e2e. Each of the three checks below is
+  # Everything CI enforces except e2e. Each of the four checks below is
   # seconds long and catches a class of failure the lint/test suites cannot
   # see, so they are unconditional rather than something to remember.
   check:
-    desc: Pre-PR gate — lint + all tests except e2e, plus the docs/migration/translation gates
+    desc: Pre-PR gate — lint + all tests except e2e, plus the docs/migration/translation/expo gates
     cmds:
       - task: lint
       - task: test
       - task: check-docs
       - task: check-migrations
       - task: check-translations
+      - task: check-mobile-expo
 
   check-server:
     desc: Lint, test, and docs/migration-check the server only
@@ -58,10 +59,11 @@ tasks:
       - task: check-translations
 
   check-mobile:
-    desc: Lint and test the mobile app only
+    desc: Lint, test, and Expo-version-check the mobile app only
     cmds:
       - task: lint-mobile
       - task: test-mobile
+      - task: check-mobile-expo
 
   check-shared:
     desc: Lint and test the shared package only
@@ -178,6 +180,15 @@ tasks:
   check-migrations:
     desc: Check migration numbers are unique and the sqlite/postgres trees match
     cmd: ./scripts/check-migrations.sh
+
+  # Catches Expo-governed packages (expo, expo-*, react-native, ...) drifting
+  # off the versions SDK 57 expects — npm install and the test/typecheck
+  # suites all pass on a mismatch, so nothing else here would catch it. See
+  # .claude/commands/update-mobile-deps.md for the full Expo-governed list.
+  check-mobile-expo:
+    desc: Check mobile's Expo-governed dependencies match SDK 57's expected versions
+    dir: mobile
+    cmd: npx expo install --check
 
   test-e2e:
     desc: Run end-to-end tests
