@@ -56,13 +56,15 @@ describe('NoteEditorScreen metadata refresh guard', () => {
   // effect relies on the dedicated metadataUpdateInFlightRef guard here.
   it('keeps an optimistic pin while the metadata PATCH is in flight', async () => {
     mockUseOfflineNote.mockReturnValue({ data: textNote() });
-    const { getByTestId, rerender } = render(<NoteEditorScreen />);
+    const { getByTestId, rerender } = await render(<NoteEditorScreen />);
 
     expect(getByTestId('toolbar-pin-btn').props.accessibilityLabel).toBe('note.pin');
 
-    // Tap pin: sets the optimistic state and starts the (deferred) PATCH.
-    await act(async () => {
-      fireEvent.press(getByTestId('toolbar-pin-btn'));
+    // Tap pin: sets the optimistic state and starts the (deferred) PATCH. Not
+    // awaited: the PATCH is deliberately left pending, and awaiting fireEvent
+    // would wait for that whole chain to settle.
+    await act(() => {
+      void fireEvent.press(getByTestId('toolbar-pin-btn'));
     });
     expect(getByTestId('toolbar-pin-btn').props.accessibilityLabel).toBe('note.unpin');
     expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1);
@@ -72,7 +74,7 @@ describe('NoteEditorScreen metadata refresh guard', () => {
       data: textNote({ pinned: false, updated_at: '2026-01-01T00:05:00.000Z' }),
     });
     await act(async () => {
-      rerender(<NoteEditorScreen />);
+      await rerender(<NoteEditorScreen />);
     });
 
     // The optimistic pin is preserved (guard blocked the refresh).

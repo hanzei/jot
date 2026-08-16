@@ -42,10 +42,10 @@ describe('NoteEditorScreen archive navigation', () => {
   it('navigates back to the dashboard after archiving an existing note', async () => {
     mockUseOfflineNote.mockReturnValue({ data: makeNote({ archived: false }) });
 
-    const { getByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId } = await render(<NoteEditorScreen />);
 
     await act(async () => {
-      fireEvent.press(getByTestId('toolbar-archive-btn'));
+      await fireEvent.press(getByTestId('toolbar-archive-btn'));
     });
 
     await waitFor(() => {
@@ -61,10 +61,10 @@ describe('NoteEditorScreen archive navigation', () => {
   it('does not navigate back when unarchiving an existing note', async () => {
     mockUseOfflineNote.mockReturnValue({ data: makeNote({ archived: true }) });
 
-    const { getByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId } = await render(<NoteEditorScreen />);
 
     await act(async () => {
-      fireEvent.press(getByTestId('toolbar-archive-btn'));
+      await fireEvent.press(getByTestId('toolbar-archive-btn'));
     });
 
     await waitFor(() => {

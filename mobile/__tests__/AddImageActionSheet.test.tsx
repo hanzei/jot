@@ -50,10 +50,10 @@ describe('AddImageActionSheet', () => {
     } as never);
     const onPick = jest.fn();
 
-    const { getByTestId } = render(
+    const { getByTestId } = await render(
       <AddImageActionSheet visible onClose={jest.fn()} onPick={onPick} onPermissionDenied={jest.fn()} remainingSlots={10} />,
     );
-    fireEvent.press(getByTestId('add-image-camera'));
+    await fireEvent.press(getByTestId('add-image-camera'));
 
     await waitFor(() => expect(onPick).toHaveBeenCalledWith([
       { uri: 'file:///photo.jpg', name: 'photo.jpg', mimeType: 'image/jpeg', sizeBytes: 1234 },
@@ -64,10 +64,10 @@ describe('AddImageActionSheet', () => {
     mockImagePicker.requestCameraPermissionsAsync.mockResolvedValueOnce({ granted: false } as never);
     const onPermissionDenied = jest.fn();
 
-    const { getByTestId } = render(
+    const { getByTestId } = await render(
       <AddImageActionSheet visible onClose={jest.fn()} onPick={jest.fn()} onPermissionDenied={onPermissionDenied} remainingSlots={10} />,
     );
-    fireEvent.press(getByTestId('add-image-camera'));
+    await fireEvent.press(getByTestId('add-image-camera'));
 
     await waitFor(() => expect(onPermissionDenied).toHaveBeenCalledWith('camera'));
     expect(mockImagePicker.launchCameraAsync).not.toHaveBeenCalled();
@@ -77,10 +77,10 @@ describe('AddImageActionSheet', () => {
     mockImagePicker.requestMediaLibraryPermissionsAsync.mockResolvedValueOnce({ granted: true } as never);
     mockImagePicker.launchImageLibraryAsync.mockResolvedValueOnce({ canceled: true } as never);
 
-    const { getByTestId } = render(
+    const { getByTestId } = await render(
       <AddImageActionSheet visible onClose={jest.fn()} onPick={jest.fn()} onPermissionDenied={jest.fn()} remainingSlots={3} />,
     );
-    fireEvent.press(getByTestId('add-image-library'));
+    await fireEvent.press(getByTestId('add-image-library'));
 
     await waitFor(() => expect(mockImagePicker.launchImageLibraryAsync).toHaveBeenCalledWith(
       expect.objectContaining({ selectionLimit: 3, allowsMultipleSelection: true }),
@@ -91,10 +91,10 @@ describe('AddImageActionSheet', () => {
     mockImagePicker.requestMediaLibraryPermissionsAsync.mockResolvedValueOnce({ granted: true } as never);
     mockImagePicker.launchImageLibraryAsync.mockResolvedValueOnce({ canceled: true } as never);
 
-    const { getByTestId } = render(
+    const { getByTestId } = await render(
       <AddImageActionSheet visible onClose={jest.fn()} onPick={jest.fn()} onPermissionDenied={jest.fn()} remainingSlots={0} />,
     );
-    fireEvent.press(getByTestId('add-image-library'));
+    await fireEvent.press(getByTestId('add-image-library'));
 
     await waitFor(() => expect(mockImagePicker.launchImageLibraryAsync).toHaveBeenCalledWith(
       expect.objectContaining({ selectionLimit: 1 }),
@@ -111,10 +111,10 @@ describe('AddImageActionSheet', () => {
     } as never);
     const onPick = jest.fn();
 
-    const { getByTestId } = render(
+    const { getByTestId } = await render(
       <AddImageActionSheet visible onClose={jest.fn()} onPick={onPick} onPermissionDenied={jest.fn()} remainingSlots={10} />,
     );
-    fireEvent.press(getByTestId('add-image-files'));
+    await fireEvent.press(getByTestId('add-image-files'));
 
     await waitFor(() => expect(onPick).toHaveBeenCalledWith([
       { uri: 'file:///a.png', name: 'a.png', mimeType: 'image/png', sizeBytes: 10 },
@@ -126,10 +126,10 @@ describe('AddImageActionSheet', () => {
     mockDocumentPicker.getDocumentAsync.mockResolvedValueOnce({ canceled: true } as never);
     const onPick = jest.fn();
 
-    const { getByTestId } = render(
+    const { getByTestId } = await render(
       <AddImageActionSheet visible onClose={jest.fn()} onPick={onPick} onPermissionDenied={jest.fn()} remainingSlots={10} />,
     );
-    fireEvent.press(getByTestId('add-image-files'));
+    await fireEvent.press(getByTestId('add-image-files'));
 
     await waitFor(() => expect(mockDocumentPicker.getDocumentAsync).toHaveBeenCalled());
     expect(onPick).not.toHaveBeenCalled();

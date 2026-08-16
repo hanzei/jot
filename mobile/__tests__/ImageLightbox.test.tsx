@@ -20,8 +20,8 @@ function makeImage(id: string): NoteImage {
 const images = [makeImage('img-1'), makeImage('img-2'), makeImage('img-3')];
 
 describe('ImageLightbox', () => {
-  it('renders nothing when index is null (closed)', () => {
-    const { toJSON, queryByTestId } = render(
+  it('renders nothing when index is null (closed)', async () => {
+    const { toJSON, queryByTestId } = await render(
       <ImageLightbox images={images} index={null} onIndexChange={jest.fn()} onClose={jest.fn()} />,
     );
 
@@ -29,8 +29,8 @@ describe('ImageLightbox', () => {
     expect(queryByTestId('image-lightbox')).toBeNull();
   });
 
-  it('renders the image at the given index when open', () => {
-    const { getByTestId } = render(
+  it('renders the image at the given index when open', async () => {
+    const { getByTestId } = await render(
       <ImageLightbox images={images} index={1} onIndexChange={jest.fn()} onClose={jest.fn()} />,
     );
 
@@ -39,32 +39,32 @@ describe('ImageLightbox', () => {
     expect(getByTestId('lightbox-counter').props.children).toBe('2 / 3');
   });
 
-  it('calls onClose when the close button is pressed', () => {
+  it('calls onClose when the close button is pressed', async () => {
     const onClose = jest.fn();
-    const { getByTestId } = render(
+    const { getByTestId } = await render(
       <ImageLightbox images={images} index={0} onIndexChange={jest.fn()} onClose={onClose} />,
     );
 
-    fireEvent.press(getByTestId('lightbox-close'));
+    await fireEvent.press(getByTestId('lightbox-close'));
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('navigates forward and backward (wrapping) via the chevron buttons', () => {
+  it('navigates forward and backward (wrapping) via the chevron buttons', async () => {
     const onIndexChange = jest.fn();
-    const { getByTestId } = render(
+    const { getByTestId } = await render(
       <ImageLightbox images={images} index={0} onIndexChange={onIndexChange} onClose={jest.fn()} />,
     );
 
-    fireEvent.press(getByTestId('lightbox-next'));
+    await fireEvent.press(getByTestId('lightbox-next'));
     expect(onIndexChange).toHaveBeenCalledWith(1);
 
-    fireEvent.press(getByTestId('lightbox-previous'));
+    await fireEvent.press(getByTestId('lightbox-previous'));
     expect(onIndexChange).toHaveBeenCalledWith(images.length - 1);
   });
 
-  it('hides navigation controls and the counter for a single image', () => {
-    const { queryByTestId } = render(
+  it('hides navigation controls and the counter for a single image', async () => {
+    const { queryByTestId } = await render(
       <ImageLightbox images={[images[0]!]} index={0} onIndexChange={jest.fn()} onClose={jest.fn()} />,
     );
 
@@ -73,8 +73,8 @@ describe('ImageLightbox', () => {
     expect(queryByTestId('lightbox-counter')).toBeNull();
   });
 
-  it('clamps to the last image when the index falls out of range (e.g. after a live removal)', () => {
-    const { getByTestId } = render(
+  it('clamps to the last image when the index falls out of range (e.g. after a live removal)', async () => {
+    const { getByTestId } = await render(
       <ImageLightbox images={images} index={99} onIndexChange={jest.fn()} onClose={jest.fn()} />,
     );
 

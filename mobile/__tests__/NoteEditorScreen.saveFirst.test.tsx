@@ -37,25 +37,25 @@ describe('NoteEditorScreen save-first server actions on a brand-new note', () =>
       visible ? <Text testID="label-picker-open" /> : null);
   });
 
-  it('enables Add image and offers Share + Labels before the first save', () => {
-    const { getByTestId } = render(<NoteEditorScreen />);
+  it('enables Add image and offers Share + Labels before the first save', async () => {
+    const { getByTestId } = await render(<NoteEditorScreen />);
 
     // Add-image is enabled on an unsaved note (save-first will create it on tap).
     expect(getByTestId('toolbar-add-image-btn').props.accessibilityState).toMatchObject({ disabled: false });
 
-    fireEvent.press(getByTestId('toolbar-menu-btn'));
+    await fireEvent.press(getByTestId('toolbar-menu-btn'));
     expect(getByTestId('editor-menu-share')).toBeTruthy();
     expect(getByTestId('editor-menu-label')).toBeTruthy();
   });
 
   it('flushes a create then opens the image sheet when Add image is tapped', async () => {
-    const { getByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId } = await render(<NoteEditorScreen />);
 
     // Give the note content so the create isn't a no-op empty flush.
-    fireEvent.changeText(getByTestId('note-content-input'), 'Hello');
+    await fireEvent.changeText(getByTestId('note-content-input'), 'Hello');
 
     await act(async () => {
-      fireEvent.press(getByTestId('toolbar-add-image-btn'));
+      await fireEvent.press(getByTestId('toolbar-add-image-btn'));
     });
 
     await waitFor(() => {
@@ -65,13 +65,13 @@ describe('NoteEditorScreen save-first server actions on a brand-new note', () =>
   });
 
   it('flushes a create then navigates to Share when Share is tapped', async () => {
-    const { getByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId } = await render(<NoteEditorScreen />);
 
-    fireEvent.changeText(getByTestId('note-content-input'), 'Hello');
+    await fireEvent.changeText(getByTestId('note-content-input'), 'Hello');
 
-    fireEvent.press(getByTestId('toolbar-menu-btn'));
+    await fireEvent.press(getByTestId('toolbar-menu-btn'));
     await act(async () => {
-      fireEvent.press(getByTestId('editor-menu-share'));
+      await fireEvent.press(getByTestId('editor-menu-share'));
     });
 
     await waitFor(() => {
