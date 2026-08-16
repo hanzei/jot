@@ -71,9 +71,9 @@ const unnamedServer = {
   lastUsedAt: '2026-08-07T10:00:00.000Z',
 };
 
-function renderLogin() {
+async function renderLogin() {
   const navigation = { navigate: jest.fn() } as unknown as NativeStackNavigationProp<AuthStackParamList, 'Login'>;
-  return render(<LoginScreen navigation={navigation} />);
+  return await render(<LoginScreen navigation={navigation} />);
 }
 
 describe('LoginScreen server switcher', () => {
@@ -93,7 +93,7 @@ describe('LoginScreen server switcher', () => {
     mockListServers.mockResolvedValue([workServer, unnamedServer]);
     mockGetActiveServer.mockResolvedValue(workServer);
 
-    const { getByTestId } = renderLogin();
+    const { getByTestId } = await renderLogin();
 
     await waitFor(() => expect(getByTestId('login-server-switcher-name')).toBeTruthy());
     expect(getByTestId('login-server-switcher-name')).toHaveTextContent('Work');
@@ -103,7 +103,7 @@ describe('LoginScreen server switcher', () => {
     mockListServers.mockResolvedValue([unnamedServer]);
     mockGetActiveServer.mockResolvedValue(unnamedServer);
 
-    const { getByTestId } = renderLogin();
+    const { getByTestId } = await renderLogin();
 
     await waitFor(() => expect(getByTestId('login-server-switcher-name')).toHaveTextContent('https://two.example.com'));
   });
@@ -112,7 +112,7 @@ describe('LoginScreen server switcher', () => {
     mockListServers.mockResolvedValue([]);
     mockGetActiveServer.mockResolvedValue(null);
 
-    const { queryByTestId, getByTestId } = renderLogin();
+    const { queryByTestId, getByTestId } = await renderLogin();
 
     await waitFor(() => expect(getByTestId('login-button')).toBeTruthy());
     expect(queryByTestId('login-server-switcher')).toBeNull();
@@ -122,11 +122,11 @@ describe('LoginScreen server switcher', () => {
     mockListServers.mockResolvedValue([workServer, unnamedServer]);
     mockGetActiveServer.mockResolvedValue(workServer);
 
-    const { getByTestId, queryByTestId } = renderLogin();
+    const { getByTestId, queryByTestId } = await renderLogin();
     await waitFor(() => expect(getByTestId('login-server-switcher')).toBeTruthy());
     expect(queryByTestId('server-picker-modal')).toBeNull();
 
-    fireEvent.press(getByTestId('login-server-switcher'));
+    await fireEvent.press(getByTestId('login-server-switcher'));
 
     await waitFor(() => expect(getByTestId('server-picker-modal')).toBeTruthy());
     expect(getByTestId('server-picker-row-server-two')).toBeTruthy();

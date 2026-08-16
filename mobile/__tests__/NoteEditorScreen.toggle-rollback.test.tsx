@@ -1,4 +1,4 @@
-import { render, act, waitFor } from '@testing-library/react-native';
+import { render, act, fireEvent, waitFor } from '@testing-library/react-native';
 import {
   mockUseRoute,
   mockNavigationAddListener,
@@ -84,31 +84,23 @@ describe('NoteEditorScreen toggle rollback', () => {
       },
     );
 
-    const { getAllByTestId, getByText, UNSAFE_getAllByProps } = render(<NoteEditorScreen />);
+    const { getAllByTestId, getByText } = await render(<NoteEditorScreen />);
 
     // Both items start unchecked, so both render in the active list:
-    // [0] = Parent, [1] = Child. The checkbox composites carry onPress (= the
-    // row's toggle handler); the testID host node does not.
-    // Each checkbox surfaces as multiple nodes sharing one onPress reference;
-    // dedupe by handler identity to get one entry per row (Parent, then Child).
-    const seenToggles = new Set<unknown>();
-    const checkboxes = UNSAFE_getAllByProps({ accessibilityRole: 'checkbox' })
-      .filter((node) => typeof node.props.onPress === 'function')
-      .filter((node) => {
-        if (seenToggles.has(node.props.onPress)) return false;
-        seenToggles.add(node.props.onPress);
-        return true;
-      });
+    // [0] = Parent, [1] = Child.
+    const checkboxes = getAllByTestId('list-item-checkbox');
     expect(checkboxes).toHaveLength(2);
 
     jest.spyOn(console, 'error').mockImplementation(() => {});
 
     // Invoke both toggles in one act() so the parent toggle runs against the
     // child's optimistic state before a re-render — reproducing a rapid
-    // double-tap. onPress wraps handleItemCompletedToggle(id, !completed).
+    // double-tap. Dispatched together (not awaited individually) so neither
+    // press settles before the other fires.
     await act(async () => {
-      checkboxes[1]!.props.onPress(); // check Child (request succeeds)
-      checkboxes[0]!.props.onPress(); // check Parent (request fails)
+      const childPress = fireEvent.press(checkboxes[1]!); // check Child (request succeeds)
+      const parentPress = fireEvent.press(checkboxes[0]!); // check Parent (request fails)
+      await Promise.all([childPress, parentPress]);
     });
 
     // Parent rolled back to unchecked; Child stays checked.

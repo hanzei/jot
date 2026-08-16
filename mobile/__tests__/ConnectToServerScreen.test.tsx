@@ -84,23 +84,23 @@ describe('ConnectToServerScreen out-of-order config probes', () => {
       return Promise.resolve(serverBConfig);
     });
 
-    const { getByTestId, findByTestId, getByText } = render(<ConnectToServerScreen />);
+    const { getByTestId, findByTestId, getByText } = await render(<ConnectToServerScreen />);
 
     // Probe server A — its config fetch is left pending.
-    fireEvent.changeText(getByTestId('upgrade-server-url-input'), SERVER_A);
-    fireEvent.press(getByTestId('upgrade-server-url-submit'));
+    await fireEvent.changeText(getByTestId('upgrade-server-url-input'), SERVER_A);
+    await fireEvent.press(getByTestId('upgrade-server-url-submit'));
     await findByTestId('upgrade-username-input');
 
     // Change target to server B before A's config probe has resolved.
-    fireEvent.press(getByTestId('upgrade-back-to-server-url'));
-    fireEvent.changeText(getByTestId('upgrade-server-url-input'), SERVER_B);
-    fireEvent.press(getByTestId('upgrade-server-url-submit'));
+    await fireEvent.press(getByTestId('upgrade-back-to-server-url'));
+    await fireEvent.changeText(getByTestId('upgrade-server-url-input'), SERVER_B);
+    await fireEvent.press(getByTestId('upgrade-server-url-submit'));
     await findByTestId('upgrade-username-input');
 
     // B's own (immediately-resolving) probe should already be reflected.
-    fireEvent.changeText(getByTestId('upgrade-username-input'), 'newuser');
-    fireEvent.changeText(getByTestId('upgrade-password-input'), 'p'.repeat(10));
-    fireEvent.press(getByTestId('upgrade-register-button'));
+    await fireEvent.changeText(getByTestId('upgrade-username-input'), 'newuser');
+    await fireEvent.changeText(getByTestId('upgrade-password-input'), 'p'.repeat(10));
+    await fireEvent.press(getByTestId('upgrade-register-button'));
     await waitFor(() => {
       expect(getByText(i18n.t('auth.passwordMin', { min: 14 }))).toBeTruthy();
     });
@@ -115,7 +115,7 @@ describe('ConnectToServerScreen out-of-order config probes', () => {
       await Promise.resolve();
     });
 
-    fireEvent.press(getByTestId('upgrade-register-button'));
+    await fireEvent.press(getByTestId('upgrade-register-button'));
     await waitFor(() => {
       expect(getByText(i18n.t('auth.passwordMin', { min: 14 }))).toBeTruthy();
     });

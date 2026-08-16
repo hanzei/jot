@@ -83,12 +83,12 @@ describe('NoteEditorScreen menu-action pending indicator (#697)', () => {
   describe('move to trash', () => {
     it('shows the pending indicator once the delay elapses while the delete is in flight', async () => {
       jest.useFakeTimers();
-      const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
+      const { getByTestId, queryByTestId } = await render(<NoteEditorScreen />);
       const { promise, resolve } = deferred<void>();
       mockDeleteMutateAsync.mockReturnValue(promise);
 
-      fireEvent.press(getByTestId('toolbar-menu-btn'));
-      await act(async () => { fireEvent.press(getByTestId('editor-menu-trash')); });
+      await fireEvent.press(getByTestId('toolbar-menu-btn'));
+      await act(async () => { await fireEvent.press(getByTestId('editor-menu-trash')); });
 
       // Not shown until the delay threshold is crossed.
       expect(queryByTestId('menu-action-pending')).toBeNull();
@@ -104,12 +104,12 @@ describe('NoteEditorScreen menu-action pending indicator (#697)', () => {
 
     it('does not show the pending indicator when the server is already known unreachable', async () => {
       markServerUnreachable();
-      const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
+      const { getByTestId, queryByTestId } = await render(<NoteEditorScreen />);
       const { promise, resolve } = deferred<void>();
       mockDeleteMutateAsync.mockReturnValue(promise);
 
-      fireEvent.press(getByTestId('toolbar-menu-btn'));
-      fireEvent.press(getByTestId('editor-menu-trash'));
+      await fireEvent.press(getByTestId('toolbar-menu-btn'));
+      await fireEvent.press(getByTestId('editor-menu-trash'));
 
       // The mutation hasn't resolved yet, but since the server is known-down
       // there is nothing worth showing progress for.
@@ -124,12 +124,12 @@ describe('NoteEditorScreen menu-action pending indicator (#697)', () => {
   describe('convert note type', () => {
     it('shows the pending indicator once the delay elapses while converting', async () => {
       jest.useFakeTimers();
-      const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
+      const { getByTestId, queryByTestId } = await render(<NoteEditorScreen />);
       const { promise, resolve } = deferred<void>();
       mockConvertMutateAsync.mockReturnValue(promise);
 
-      fireEvent.press(getByTestId('toolbar-menu-btn'));
-      await act(async () => { fireEvent.press(getByTestId('editor-menu-convert')); });
+      await fireEvent.press(getByTestId('toolbar-menu-btn'));
+      await act(async () => { await fireEvent.press(getByTestId('editor-menu-convert')); });
 
       expect(queryByTestId('menu-action-pending')).toBeNull();
       await act(async () => { jest.advanceTimersByTime(600); });
@@ -143,12 +143,12 @@ describe('NoteEditorScreen menu-action pending indicator (#697)', () => {
 
     it('does not show the pending indicator when known unreachable', async () => {
       markServerUnreachable();
-      const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
+      const { getByTestId, queryByTestId } = await render(<NoteEditorScreen />);
       const { promise, resolve } = deferred<void>();
       mockConvertMutateAsync.mockReturnValue(promise);
 
-      fireEvent.press(getByTestId('toolbar-menu-btn'));
-      fireEvent.press(getByTestId('editor-menu-convert'));
+      await fireEvent.press(getByTestId('toolbar-menu-btn'));
+      await fireEvent.press(getByTestId('editor-menu-convert'));
 
       expect(queryByTestId('menu-action-pending')).toBeNull();
 
@@ -160,17 +160,17 @@ describe('NoteEditorScreen menu-action pending indicator (#697)', () => {
   describe('share (withSavedNote)', () => {
     it('shows the pending indicator once the delay elapses while a pending edit is flushed before navigating to Share', async () => {
       jest.useFakeTimers();
-      const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
+      const { getByTestId, queryByTestId } = await render(<NoteEditorScreen />);
       const { promise, resolve } = deferred<Record<string, unknown>>();
       mockUpdateMutateAsync.mockReturnValue(promise);
 
       // An existing note opens read-only-preview first; enter edit mode, then
       // dirty it so withSavedNote's flush actually hits the network.
-      fireEvent.press(getByTestId('content-preview'));
-      fireEvent.changeText(getByTestId('note-content-input'), 'Existing content, edited');
+      await fireEvent.press(getByTestId('content-preview'));
+      await fireEvent.changeText(getByTestId('note-content-input'), 'Existing content, edited');
 
-      fireEvent.press(getByTestId('toolbar-menu-btn'));
-      await act(async () => { fireEvent.press(getByTestId('editor-menu-share')); });
+      await fireEvent.press(getByTestId('toolbar-menu-btn'));
+      await act(async () => { await fireEvent.press(getByTestId('editor-menu-share')); });
 
       expect(queryByTestId('menu-action-pending')).toBeNull();
       await act(async () => { jest.advanceTimersByTime(600); });
@@ -184,15 +184,15 @@ describe('NoteEditorScreen menu-action pending indicator (#697)', () => {
 
     it('does not show the pending indicator when known unreachable', async () => {
       markServerUnreachable();
-      const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
+      const { getByTestId, queryByTestId } = await render(<NoteEditorScreen />);
       const { promise, resolve } = deferred<Record<string, unknown>>();
       mockUpdateMutateAsync.mockReturnValue(promise);
 
-      fireEvent.press(getByTestId('content-preview'));
-      fireEvent.changeText(getByTestId('note-content-input'), 'Existing content, edited');
+      await fireEvent.press(getByTestId('content-preview'));
+      await fireEvent.changeText(getByTestId('note-content-input'), 'Existing content, edited');
 
-      fireEvent.press(getByTestId('toolbar-menu-btn'));
-      fireEvent.press(getByTestId('editor-menu-share'));
+      await fireEvent.press(getByTestId('toolbar-menu-btn'));
+      await fireEvent.press(getByTestId('editor-menu-share'));
 
       expect(queryByTestId('menu-action-pending')).toBeNull();
 
@@ -204,15 +204,15 @@ describe('NoteEditorScreen menu-action pending indicator (#697)', () => {
   describe('manage labels (withSavedNote)', () => {
     it('shows the pending indicator once the delay elapses while a pending edit is flushed before opening the label picker', async () => {
       jest.useFakeTimers();
-      const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
+      const { getByTestId, queryByTestId } = await render(<NoteEditorScreen />);
       const { promise, resolve } = deferred<Record<string, unknown>>();
       mockUpdateMutateAsync.mockReturnValue(promise);
 
-      fireEvent.press(getByTestId('content-preview'));
-      fireEvent.changeText(getByTestId('note-content-input'), 'Existing content, edited');
+      await fireEvent.press(getByTestId('content-preview'));
+      await fireEvent.changeText(getByTestId('note-content-input'), 'Existing content, edited');
 
-      fireEvent.press(getByTestId('toolbar-menu-btn'));
-      await act(async () => { fireEvent.press(getByTestId('editor-menu-label')); });
+      await fireEvent.press(getByTestId('toolbar-menu-btn'));
+      await act(async () => { await fireEvent.press(getByTestId('editor-menu-label')); });
 
       // Not shown immediately — only after the delay, and not until then.
       expect(queryByTestId('menu-action-pending')).toBeNull();
@@ -229,15 +229,15 @@ describe('NoteEditorScreen menu-action pending indicator (#697)', () => {
 
     it('does not show the pending indicator when known unreachable', async () => {
       markServerUnreachable();
-      const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
+      const { getByTestId, queryByTestId } = await render(<NoteEditorScreen />);
       const { promise, resolve } = deferred<Record<string, unknown>>();
       mockUpdateMutateAsync.mockReturnValue(promise);
 
-      fireEvent.press(getByTestId('content-preview'));
-      fireEvent.changeText(getByTestId('note-content-input'), 'Existing content, edited');
+      await fireEvent.press(getByTestId('content-preview'));
+      await fireEvent.changeText(getByTestId('note-content-input'), 'Existing content, edited');
 
-      fireEvent.press(getByTestId('toolbar-menu-btn'));
-      fireEvent.press(getByTestId('editor-menu-label'));
+      await fireEvent.press(getByTestId('toolbar-menu-btn'));
+      await fireEvent.press(getByTestId('editor-menu-label'));
 
       expect(queryByTestId('menu-action-pending')).toBeNull();
 
@@ -259,19 +259,19 @@ describe('NoteEditorScreen menu-action pending indicator (#697)', () => {
 
     it('shows the pending indicator while reachable and deleting the draft created on the current server', async () => {
       jest.useFakeTimers();
-      const { getByTestId, findByTestId, queryByTestId } = render(<NoteEditorScreen />);
+      const { getByTestId, findByTestId, queryByTestId } = await render(<NoteEditorScreen />);
 
       // Let the auto-save fire so a draft note exists on the current server.
       await act(async () => { jest.advanceTimersByTime(1500); });
       await waitFor(() => { expect(mockCreateMutateAsync).toHaveBeenCalled(); });
 
       await findByTestId('share-change-server-btn');
-      fireEvent.press(getByTestId('share-change-server-btn'));
+      await fireEvent.press(getByTestId('share-change-server-btn'));
 
       const { promise, resolve } = deferred<void>();
       mockDeleteMutateAsync.mockReturnValue(promise);
 
-      await act(async () => { fireEvent.press(getByTestId('share-server-option-server-b')); });
+      await act(async () => { await fireEvent.press(getByTestId('share-server-option-server-b')); });
 
       expect(queryByTestId('menu-action-pending')).toBeNull();
       await act(async () => { jest.advanceTimersByTime(600); });
@@ -286,17 +286,17 @@ describe('NoteEditorScreen menu-action pending indicator (#697)', () => {
     it('does not show the pending indicator when known unreachable', async () => {
       jest.useFakeTimers();
       markServerUnreachable();
-      const { getByTestId, findByTestId, queryByTestId } = render(<NoteEditorScreen />);
+      const { getByTestId, findByTestId, queryByTestId } = await render(<NoteEditorScreen />);
 
       await act(async () => { jest.advanceTimersByTime(1500); });
 
       await findByTestId('share-change-server-btn');
-      fireEvent.press(getByTestId('share-change-server-btn'));
+      await fireEvent.press(getByTestId('share-change-server-btn'));
 
       const { promise, resolve } = deferred<void>();
       mockDeleteMutateAsync.mockReturnValue(promise);
 
-      fireEvent.press(getByTestId('share-server-option-server-b'));
+      await fireEvent.press(getByTestId('share-server-option-server-b'));
 
       expect(queryByTestId('menu-action-pending')).toBeNull();
 

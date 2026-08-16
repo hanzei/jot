@@ -54,11 +54,11 @@ describe('NoteEditorScreen list item focus across a drag reorder', () => {
     mockReorderItemsMutateAsync.mockResolvedValue([]);
   });
 
-  it('re-arms autoFocus on the item that was focused before the drag committed', () => {
-    const { getByDisplayValue } = render(<NoteEditorScreen />);
+  it('re-arms autoFocus on the item that was focused before the drag committed', async () => {
+    const { getByDisplayValue } = await render(<NoteEditorScreen />);
 
-    fireEvent(getByDisplayValue('Item A'), 'focus', { nativeEvent: { target: 1 } });
-    act(() => {
+    await fireEvent(getByDisplayValue('Item A'), 'focus', { nativeEvent: { target: 1 } });
+    await act(() => {
       latestOnReorder()({ from: 0, to: 1 });
     });
 
@@ -66,10 +66,10 @@ describe('NoteEditorScreen list item focus across a drag reorder', () => {
     expect(getByDisplayValue('Item B').props.autoFocus).not.toBe(true);
   });
 
-  it('does not mark an item for autoFocus when nothing was focused before the drag', () => {
-    const { getByDisplayValue } = render(<NoteEditorScreen />);
+  it('does not mark an item for autoFocus when nothing was focused before the drag', async () => {
+    const { getByDisplayValue } = await render(<NoteEditorScreen />);
 
-    act(() => {
+    await act(() => {
       latestOnReorder()({ from: 0, to: 1 });
     });
 

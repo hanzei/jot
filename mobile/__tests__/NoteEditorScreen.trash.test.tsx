@@ -45,8 +45,8 @@ describe('NoteEditorScreen read-only trashed note', () => {
     jest.restoreAllMocks();
   });
 
-  it('renders the content preview (not the editable input) and disables bar actions', () => {
-    const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
+  it('renders the content preview (not the editable input) and disables bar actions', async () => {
+    const { getByTestId, queryByTestId } = await render(<NoteEditorScreen />);
 
     // Read-only: preview shown, no editable content input.
     expect(getByTestId('content-preview')).toBeTruthy();
@@ -60,9 +60,9 @@ describe('NoteEditorScreen read-only trashed note', () => {
   });
 
   it('offers Restore and Delete-forever in the overflow menu and restores the note', async () => {
-    const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId, queryByTestId } = await render(<NoteEditorScreen />);
 
-    fireEvent.press(getByTestId('toolbar-menu-btn'));
+    await fireEvent.press(getByTestId('toolbar-menu-btn'));
 
     // Trashed menu: only restore + delete-forever, no move-to-trash/send.
     expect(getByTestId('editor-menu-restore')).toBeTruthy();
@@ -70,7 +70,7 @@ describe('NoteEditorScreen read-only trashed note', () => {
     expect(queryByTestId('editor-menu-trash')).toBeNull();
 
     await act(async () => {
-      fireEvent.press(getByTestId('editor-menu-restore'));
+      await fireEvent.press(getByTestId('editor-menu-restore'));
     });
 
     await waitFor(() => {
@@ -80,21 +80,21 @@ describe('NoteEditorScreen read-only trashed note', () => {
   });
 
   it('permanently deletes the note after confirming the destructive dialog', async () => {
-    const { getByTestId, findByTestId } = render(
+    const { getByTestId, findByTestId } = await render(
       <ConfirmProvider>
         <NoteEditorScreen />
       </ConfirmProvider>,
     );
 
-    fireEvent.press(getByTestId('toolbar-menu-btn'));
-    fireEvent.press(getByTestId('editor-menu-delete-permanently'));
+    await fireEvent.press(getByTestId('toolbar-menu-btn'));
+    await fireEvent.press(getByTestId('editor-menu-delete-permanently'));
 
     await findByTestId('confirm-dialog-confirm');
     expect(getByTestId('confirm-dialog-title').props.children).toBe('note.deleteForeverTitle');
     expect(getByTestId('confirm-dialog-message').props.children).toBe('note.deleteForeverConfirm');
 
     await act(async () => {
-      fireEvent.press(getByTestId('confirm-dialog-confirm'));
+      await fireEvent.press(getByTestId('confirm-dialog-confirm'));
     });
 
     expect(mockPermanentDeleteMutateAsync).toHaveBeenCalledWith('note-1');
@@ -117,9 +117,9 @@ describe('NoteEditorScreen read-only trashed note', () => {
       let resolveRestore!: () => void;
       mockRestoreMutateAsync.mockReturnValue(new Promise<void>((resolve) => { resolveRestore = resolve; }));
 
-      const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
-      fireEvent.press(getByTestId('toolbar-menu-btn'));
-      await act(async () => { fireEvent.press(getByTestId('editor-menu-restore')); });
+      const { getByTestId, queryByTestId } = await render(<NoteEditorScreen />);
+      await fireEvent.press(getByTestId('toolbar-menu-btn'));
+      await act(async () => { await fireEvent.press(getByTestId('editor-menu-restore')); });
 
       expect(queryByTestId('menu-action-pending')).toBeNull();
       await act(async () => { jest.advanceTimersByTime(600); });
@@ -136,9 +136,9 @@ describe('NoteEditorScreen read-only trashed note', () => {
       let resolveRestore!: () => void;
       mockRestoreMutateAsync.mockReturnValue(new Promise<void>((resolve) => { resolveRestore = resolve; }));
 
-      const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
-      fireEvent.press(getByTestId('toolbar-menu-btn'));
-      fireEvent.press(getByTestId('editor-menu-restore'));
+      const { getByTestId, queryByTestId } = await render(<NoteEditorScreen />);
+      await fireEvent.press(getByTestId('toolbar-menu-btn'));
+      await fireEvent.press(getByTestId('editor-menu-restore'));
 
       expect(queryByTestId('menu-action-pending')).toBeNull();
 
@@ -152,15 +152,15 @@ describe('NoteEditorScreen read-only trashed note', () => {
       let resolveDelete!: () => void;
       mockPermanentDeleteMutateAsync.mockReturnValue(new Promise<void>((resolve) => { resolveDelete = resolve; }));
 
-      const { getByTestId, queryByTestId } = render(
+      const { getByTestId, queryByTestId } = await render(
         <ConfirmProvider>
           <NoteEditorScreen />
         </ConfirmProvider>,
       );
 
-      fireEvent.press(getByTestId('toolbar-menu-btn'));
-      await act(async () => { fireEvent.press(getByTestId('editor-menu-delete-permanently')); });
-      await act(async () => { fireEvent.press(getByTestId('confirm-dialog-confirm')); });
+      await fireEvent.press(getByTestId('toolbar-menu-btn'));
+      await act(async () => { await fireEvent.press(getByTestId('editor-menu-delete-permanently')); });
+      await act(async () => { await fireEvent.press(getByTestId('confirm-dialog-confirm')); });
 
       expect(queryByTestId('menu-action-pending')).toBeNull();
       await act(async () => { jest.advanceTimersByTime(600); });
@@ -177,16 +177,16 @@ describe('NoteEditorScreen read-only trashed note', () => {
       let resolveDelete!: () => void;
       mockPermanentDeleteMutateAsync.mockReturnValue(new Promise<void>((resolve) => { resolveDelete = resolve; }));
 
-      const { getByTestId, findByTestId, queryByTestId } = render(
+      const { getByTestId, findByTestId, queryByTestId } = await render(
         <ConfirmProvider>
           <NoteEditorScreen />
         </ConfirmProvider>,
       );
 
-      fireEvent.press(getByTestId('toolbar-menu-btn'));
-      fireEvent.press(getByTestId('editor-menu-delete-permanently'));
+      await fireEvent.press(getByTestId('toolbar-menu-btn'));
+      await fireEvent.press(getByTestId('editor-menu-delete-permanently'));
       await findByTestId('confirm-dialog-confirm');
-      fireEvent.press(getByTestId('confirm-dialog-confirm'));
+      await fireEvent.press(getByTestId('confirm-dialog-confirm'));
 
       expect(queryByTestId('menu-action-pending')).toBeNull();
 
@@ -196,24 +196,24 @@ describe('NoteEditorScreen read-only trashed note', () => {
   });
 
   it('does not delete the note when the destructive dialog is cancelled', async () => {
-    const { getByTestId, findByTestId, queryByTestId } = render(
+    const { getByTestId, findByTestId, queryByTestId } = await render(
       <ConfirmProvider>
         <NoteEditorScreen />
       </ConfirmProvider>,
     );
 
-    fireEvent.press(getByTestId('toolbar-menu-btn'));
-    fireEvent.press(getByTestId('editor-menu-delete-permanently'));
+    await fireEvent.press(getByTestId('toolbar-menu-btn'));
+    await fireEvent.press(getByTestId('editor-menu-delete-permanently'));
 
     await findByTestId('confirm-dialog-cancel');
-    fireEvent.press(getByTestId('confirm-dialog-cancel'));
+    await fireEvent.press(getByTestId('confirm-dialog-cancel'));
 
     await waitFor(() => { expect(queryByTestId('confirm-dialog-cancel')).toBeNull(); });
     expect(mockPermanentDeleteMutateAsync).not.toHaveBeenCalled();
     expect(mockGoBack).not.toHaveBeenCalled();
   });
 
-  it('renders a trashed list note with non-interactive item controls', () => {
+  it('renders a trashed list note with non-interactive item controls', async () => {
     mockUseOfflineNote.mockReturnValue({
       data: makeTrashedNote({
         note_type: 'list',
@@ -226,7 +226,7 @@ describe('NoteEditorScreen read-only trashed note', () => {
       }),
     });
 
-    const { getAllByTestId, getByTestId, queryByTestId } = render(<NoteEditorScreen />);
+    const { getAllByTestId, getByTestId, queryByTestId } = await render(<NoteEditorScreen />);
 
     // No "add item" affordance in read-only mode.
     expect(queryByTestId('add-list-item')).toBeNull();

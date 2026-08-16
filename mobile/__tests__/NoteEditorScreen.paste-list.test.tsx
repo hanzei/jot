@@ -19,12 +19,12 @@ describe('NoteEditorScreen markdown list paste', () => {
   });
 
   it('strips markdown list/checkbox markers and carries completed state when pasting a list', async () => {
-    const { getByTestId, getAllByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId, getAllByTestId } = await render(<NoteEditorScreen />);
 
-    fireEvent.press(getByTestId('add-list-item'));
+    await fireEvent.press(getByTestId('add-list-item'));
 
     const input = getAllByTestId('list-item-text')[0]!;
-    fireEvent.changeText(input, '- [ ] too\n- [x] bar');
+    await fireEvent.changeText(input, '- [ ] too\n- [x] bar');
 
     await waitFor(() => {
       const inputs = getAllByTestId('list-item-text');
@@ -71,12 +71,12 @@ describe('NoteEditorScreen markdown list paste', () => {
     mockUseRoute.mockReturnValue({ params: { noteId: 'note-paste-completed' } });
     mockUseOfflineNote.mockReturnValue({ data: existingNote });
 
-    const { getByTestId, getAllByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId, getAllByTestId } = await render(<NoteEditorScreen />);
 
     expect(getByTestId('checked-items-section')).toBeTruthy();
 
     const input = getAllByTestId('list-item-text')[0]!;
-    fireEvent.changeText(input, '- [ ] too\n- [x] bar');
+    await fireEvent.changeText(input, '- [ ] too\n- [x] bar');
 
     // A completed item merges pasted lines into its single line rather than
     // splitting into new items, so both markers should be stripped and the
