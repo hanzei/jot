@@ -150,9 +150,13 @@ export interface ListItemEditing {
  * Item writes take two different routes to the server, which is why this hook
  * needs both halves of the save engine: ordinary text edits are folded into the
  * debounced diff (`markDirtyAndScheduleUpdate`), while toggles and bulk
- * operations have their own endpoints and go out immediately — those cancel the
- * debounced save so it can't race them, and advance the save baseline
- * themselves so the diff engine doesn't re-send what they already applied.
+ * operations have their own endpoints and go out immediately, advancing the
+ * save baseline themselves so the diff engine doesn't re-send what they already
+ * applied.
+ *
+ * Of those, only the toggle cancels a pending debounced save
+ * (`cancelScheduledSave`), so that save can't race its API call. The bulk
+ * operations leave a scheduled save armed.
  */
 export function useListItemEditing({
   doc,

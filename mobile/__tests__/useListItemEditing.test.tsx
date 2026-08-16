@@ -159,6 +159,140 @@ describe('useListItemEditing — accepting a completed-item suggestion', () => {
   });
 });
 
+describe('useListItemEditing — toggling a row completed', () => {
+  // A parent and its child, plus an unrelated row that must never be touched by
+  // the cascade or by the baseline bookkeeping around it.
+  const cascadeItems = () => [
+    item('parent'),
+    item('child', { parentId: 'parent' }),
+    item('other'),
+  ];
+
+  it('reconciles from the server response and advances the baseline for the rows it returned', async () => {
+    const { result } = await mountWith(cascadeItems());
+    mockToggleItemCompleted.mockResolvedValue([
+      { id: 'parent', completed: true },
+      { id: 'child', completed: true },
+    ]);
+
+    await act(async () => { result.current.editing.listItemHandlers.onToggle('parent', true); });
+
+    const byId = new Map(result.current.doc.items.map((it) => [it.id, it]));
+    expect(byId.get('parent')!.completed).toBe(true);
+    expect(byId.get('child')!.completed).toBe(true);
+    expect(byId.get('other')!.completed).toBe(false);
+
+    // Baseline advanced only for the rows the server reported, so the diff
+    // engine does not re-patch `completed` on the next save.
+    const baseline = result.current.savedItemsRef.current;
+    expect(baseline.get('parent')!.completed).toBe(true);
+    expect(baseline.get('child')!.completed).toBe(true);
+    expect(baseline.get('other')!.completed).toBe(false);
+  });
+
+  it('advances the baseline for the cascade itself when the write went offline', async () => {
+    const { result } = await mountWith(cascadeItems());
+    // An empty response is the offline path: the cascade was applied to the
+    // local DB, so there is nothing to reconcile but the baseline still moves.
+    mockToggleItemCompleted.mockResolvedValue([]);
+
+    await act(async () => { result.current.editing.listItemHandlers.onToggle('parent', true); });
+
+    const baseline = result.current.savedItemsRef.current;
+    expect(baseline.get('parent')!.completed).toBe(true);
+    expect(baseline.get('child')!.completed).toBe(true);
+    expect(baseline.get('other')!.completed).toBe(false);
+  });
+
+  it('reverts only the cascade, and leaves the baseline untouched, when the write is rejected', async () => {
+    // `other` starts completed: a revert that blanket-clears every row rather
+    // than restoring the prior state of just the cascade would lose it.
+    const { result } = await mountWith([
+      item('parent'),
+      item('child', { parentId: 'parent' }),
+      item('other', { completed: true }),
+    ]);
+    mockToggleItemCompleted.mockRejectedValue(new Error('rejected'));
+
+    await act(async () => { result.current.editing.listItemHandlers.onToggle('parent', true); });
+
+    const byId = new Map(result.current.doc.items.map((it) => [it.id, it]));
+    expect(byId.get('parent')!.completed).toBe(false);
+    expect(byId.get('child')!.completed).toBe(false);
+    expect(byId.get('other')!.completed).toBe(true);
+
+    // Nothing was recorded as saved — the next save must still carry the real state.
+    const baseline = result.current.savedItemsRef.current;
+    expect(baseline.get('parent')!.completed).toBe(false);
+    expect(baseline.get('child')!.completed).toBe(false);
+    expect(setSaveError).toHaveBeenCalledWith('note.failedSaveChanges');
+  });
+
+  it('ignores a toggle that would not change the row', async () => {
+    const { result } = await mountWith([item('a', { completed: true })]);
+
+    await act(async () => { result.current.editing.listItemHandlers.onToggle('a', true); });
+
+    expect(mockToggleItemCompleted).not.toHaveBeenCalled();
+  });
+});
+
+describe('useListItemEditing — unchecking every completed row', () => {
+  const mixedItems = () => [
+    item('a', { completed: true }),
+    item('b'),
+    item('c', { completed: true }),
+  ];
+
+  it('clears them optimistically and advances the baseline from the server response', async () => {
+    const { result } = await mountWith(mixedItems());
+    mockUncheckAllItems.mockResolvedValue([
+      { id: 'a', completed: false },
+      { id: 'c', completed: false },
+    ]);
+
+    await act(async () => { await result.current.editing.handleUncheckAllItems(); });
+
+    expect(mockUncheckAllItems).toHaveBeenCalledWith({ noteId: 'note-1', itemIds: ['a', 'c'] });
+    expect(result.current.doc.items.every((it) => !it.completed)).toBe(true);
+    const baseline = result.current.savedItemsRef.current;
+    expect(baseline.get('a')!.completed).toBe(false);
+    expect(baseline.get('c')!.completed).toBe(false);
+  });
+
+  it('advances the baseline for the unchecked rows when the write went offline', async () => {
+    const { result } = await mountWith(mixedItems());
+    mockUncheckAllItems.mockResolvedValue([]);
+
+    await act(async () => { await result.current.editing.handleUncheckAllItems(); });
+
+    const baseline = result.current.savedItemsRef.current;
+    expect(baseline.get('a')!.completed).toBe(false);
+    expect(baseline.get('c')!.completed).toBe(false);
+  });
+
+  it('puts the rows back when the write is rejected', async () => {
+    const { result } = await mountWith(mixedItems());
+    mockUncheckAllItems.mockRejectedValue(new Error('rejected'));
+
+    await act(async () => { await result.current.editing.handleUncheckAllItems(); });
+
+    const byId = new Map(result.current.doc.items.map((it) => [it.id, it]));
+    expect(byId.get('a')!.completed).toBe(true);
+    expect(byId.get('c')!.completed).toBe(true);
+    expect(byId.get('b')!.completed).toBe(false);
+    expect(setSaveError).toHaveBeenCalledWith('note.failedSaveChanges');
+  });
+
+  it('does nothing when no row is completed', async () => {
+    const { result } = await mountWith([item('a'), item('b')]);
+
+    await act(async () => { await result.current.editing.handleUncheckAllItems(); });
+
+    expect(mockUncheckAllItems).not.toHaveBeenCalled();
+  });
+});
+
 describe('useListItemEditing — deleting the completed rows', () => {
   it('drops them from the list and prunes the save baseline', async () => {
     const { result } = await mountWith([
