@@ -40,15 +40,15 @@ describe('NoteEditorScreen list submit behavior', () => {
   });
 
   it('creates a new list item when submitting existing list item text input', async () => {
-    const { getByTestId, getAllByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId, getAllByTestId } = await render(<NoteEditorScreen />);
 
-    fireEvent.press(getByTestId('toggle-note-type'));
-    fireEvent.press(getByTestId('add-list-item'));
+    await fireEvent.press(getByTestId('toggle-note-type'));
+    await fireEvent.press(getByTestId('add-list-item'));
 
     const baselineCount = getAllByTestId('list-item-text').length;
     const firstInput = getAllByTestId('list-item-text')[0]!;
-    fireEvent.changeText(firstInput, 'Buy milk');
-    fireEvent(firstInput, 'submitEditing');
+    await fireEvent.changeText(firstInput, 'Buy milk');
+    await fireEvent(firstInput, 'submitEditing');
 
     await waitFor(() => {
       expect(getAllByTestId('list-item-text').length).toBe(baselineCount + 1);
@@ -56,15 +56,15 @@ describe('NoteEditorScreen list submit behavior', () => {
   });
 
   it('pressing Enter at the start of a non-empty item inserts an empty item before it', async () => {
-    const { getByTestId, getAllByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId, getAllByTestId } = await render(<NoteEditorScreen />);
 
-    fireEvent.press(getByTestId('toggle-note-type'));
-    fireEvent.press(getByTestId('add-list-item'));
+    await fireEvent.press(getByTestId('toggle-note-type'));
+    await fireEvent.press(getByTestId('add-list-item'));
 
     const input = getAllByTestId('list-item-text')[0]!;
-    fireEvent.changeText(input, 'hello');
-    fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 0, end: 0 } } });
-    fireEvent(input, 'submitEditing');
+    await fireEvent.changeText(input, 'hello');
+    await fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 0, end: 0 } } });
+    await fireEvent(input, 'submitEditing');
 
     await waitFor(() => {
       const inputsAfter = getAllByTestId('list-item-text');
@@ -75,15 +75,15 @@ describe('NoteEditorScreen list submit behavior', () => {
   });
 
   it('pressing Enter in the middle of an item splits it into two items at the cursor', async () => {
-    const { getByTestId, getAllByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId, getAllByTestId } = await render(<NoteEditorScreen />);
 
-    fireEvent.press(getByTestId('toggle-note-type'));
-    fireEvent.press(getByTestId('add-list-item'));
+    await fireEvent.press(getByTestId('toggle-note-type'));
+    await fireEvent.press(getByTestId('add-list-item'));
 
     const input = getAllByTestId('list-item-text')[0]!;
-    fireEvent.changeText(input, 'helloworld');
-    fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 5, end: 5 } } });
-    fireEvent(input, 'submitEditing');
+    await fireEvent.changeText(input, 'helloworld');
+    await fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 5, end: 5 } } });
+    await fireEvent(input, 'submitEditing');
 
     await waitFor(() => {
       const inputsAfter = getAllByTestId('list-item-text');
@@ -141,11 +141,11 @@ describe('NoteEditorScreen list submit behavior', () => {
     mockUseOfflineNote.mockReturnValue({ data: existingNote });
     mockCreateItemMutateAsync.mockClear();
 
-    const { getAllByTestId } = render(<NoteEditorScreen />);
+    const { getAllByTestId } = await render(<NoteEditorScreen />);
 
     const input = getAllByTestId('list-item-text')[1]!;
-    fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 5, end: 5 } } });
-    fireEvent(input, 'submitEditing');
+    await fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 5, end: 5 } } });
+    await fireEvent(input, 'submitEditing');
 
     await waitFor(() => {
       expect(mockCreateItemMutateAsync).toHaveBeenCalledWith(
@@ -197,13 +197,13 @@ describe('NoteEditorScreen list submit behavior', () => {
     mockUseRoute.mockReturnValue({ params: { noteId: 'note-split-completed-start' } });
     mockUseOfflineNote.mockReturnValue({ data: existingNote });
 
-    const { getByTestId, getAllByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId, getAllByTestId } = await render(<NoteEditorScreen />);
 
     expect(getByTestId('checked-items-section')).toBeTruthy();
 
     const input = getAllByTestId('list-item-text')[0]!;
-    fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 0, end: 0 } } });
-    fireEvent(input, 'submitEditing');
+    await fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 0, end: 0 } } });
+    await fireEvent(input, 'submitEditing');
 
     await waitFor(() => {
       const inputsAfter = getAllByTestId('list-item-text');
@@ -254,13 +254,13 @@ describe('NoteEditorScreen list submit behavior', () => {
     mockUseRoute.mockReturnValue({ params: { noteId: 'note-split-completed-mid' } });
     mockUseOfflineNote.mockReturnValue({ data: existingNote });
 
-    const { getByTestId, getAllByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId, getAllByTestId } = await render(<NoteEditorScreen />);
 
     expect(getByTestId('checked-items-section')).toBeTruthy();
 
     const input = getAllByTestId('list-item-text')[0]!;
-    fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 5, end: 5 } } });
-    fireEvent(input, 'submitEditing');
+    await fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 5, end: 5 } } });
+    await fireEvent(input, 'submitEditing');
 
     await waitFor(() => {
       const inputsAfter = getAllByTestId('list-item-text');
@@ -300,8 +300,8 @@ describe('NoteEditorScreen list submit behavior', () => {
     mockUseRoute.mockReturnValue({ params: { noteId: 'note-123' } });
     mockUseOfflineNote.mockReturnValue({ data: existingNote });
 
-    const { unmount } = render(<NoteEditorScreen />);
-    unmount();
+    const { unmount } = await render(<NoteEditorScreen />);
+    await unmount();
 
     await waitFor(() => {
       expect(mockUpdateMutateAsync).not.toHaveBeenCalled();
@@ -346,10 +346,10 @@ describe('NoteEditorScreen list submit behavior', () => {
     mockUpdateMutateAsync.mockClear();
     mockUpdateItemMutateAsync.mockClear();
 
-    const { getAllByTestId, unmount } = render(<NoteEditorScreen />);
+    const { getAllByTestId, unmount } = await render(<NoteEditorScreen />);
 
-    fireEvent.changeText(getAllByTestId('list-item-text')[0]!, 'Oat milk');
-    unmount();
+    await fireEvent.changeText(getAllByTestId('list-item-text')[0]!, 'Oat milk');
+    await unmount();
 
     await waitFor(() => {
       // The item is patched individually; the whole note is not re-sent.
@@ -368,8 +368,8 @@ describe('NoteEditorScreen list submit behavior', () => {
     mockUseRoute.mockReturnValue({ params: { noteId: 'note-456' } });
     mockUseOfflineNote.mockReturnValue({ data: null });
 
-    const { unmount } = render(<NoteEditorScreen />);
-    unmount();
+    const { unmount } = await render(<NoteEditorScreen />);
+    await unmount();
 
     await waitFor(() => {
       expect(mockUpdateMutateAsync).not.toHaveBeenCalled();
@@ -377,14 +377,14 @@ describe('NoteEditorScreen list submit behavior', () => {
   });
 
   it('keeps dirty state for color change when note id is not yet available', async () => {
-    const { getByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId } = await render(<NoteEditorScreen />);
 
-    fireEvent.changeText(getByTestId('note-content-input'), 'Draft note');
+    await fireEvent.changeText(getByTestId('note-content-input'), 'Draft note');
 
     const colorButton = getByTestId('toolbar-color-btn');
-    fireEvent.press(colorButton);
+    await fireEvent.press(colorButton);
     const swatch = await waitFor(() => getByTestId('color-swatch-f28b82'));
-    fireEvent.press(swatch);
+    await fireEvent.press(swatch);
 
     await waitFor(
       () => {

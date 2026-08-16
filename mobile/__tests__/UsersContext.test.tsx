@@ -74,7 +74,7 @@ beforeEach(() => {
 describe('UsersContext profile_icon_updated subscription', () => {
   it('applies a bus update to usersById and persists it', async () => {
     await seedExistingUser();
-    const { getByTestId } = render(
+    const { getByTestId } = await render(
       <UsersProvider>
         <Probe />
       </UsersProvider>,
@@ -84,7 +84,7 @@ describe('UsersContext profile_icon_updated subscription', () => {
     await waitFor(() => expect(getByTestId('icon-version').props.children).toBe('2024-01-01T00:00:00Z'));
 
     const updated: User = { ...existingUser, updated_at: '2024-06-06T00:00:00Z' };
-    act(() => {
+    await act(() => {
       publishProfileIconUpdate(updated);
     });
 
@@ -103,14 +103,14 @@ describe('UsersContext profile_icon_updated subscription', () => {
   it('inserts a collaborator the local store has never seen', async () => {
     // upsertUser writes a single row without reconciling the whole table, so a
     // brand-new collaborator arriving over the bus must INSERT rather than no-op.
-    render(
+    await render(
       <UsersProvider>
         <Probe />
       </UsersProvider>,
     );
     await waitFor(() => expect(mockGetLocalUsers).toHaveBeenCalled());
 
-    act(() => {
+    await act(() => {
       publishProfileIconUpdate(existingUser);
     });
 
@@ -133,7 +133,7 @@ describe('UsersContext catch-up on SSE reconnect', () => {
   });
 
   it('re-pulls the user list when a reconnect resync is published', async () => {
-    render(
+    await render(
       <UsersProvider>
         <Probe />
       </UsersProvider>,
@@ -156,7 +156,7 @@ describe('UsersContext catch-up on SSE reconnect', () => {
     mockGetUsers.mockImplementation(
       () => new Promise<User[]>((resolve) => { resolveGet = resolve; }),
     );
-    render(
+    await render(
       <UsersProvider>
         <Probe />
       </UsersProvider>,
@@ -203,7 +203,7 @@ describe('UsersContext sign-out', () => {
 
     // Account A signed in, collaborators loaded.
     mockAuthState = { user: { id: 'user-a' } as User, isAuthenticated: true };
-    const { getByTestId, rerender } = render(
+    const { getByTestId, rerender } = await render(
       <UsersProvider>
         <Probe />
       </UsersProvider>,
@@ -218,14 +218,14 @@ describe('UsersContext sign-out', () => {
     mockGetLocalUsers.mockImplementation(() => new Promise<User[]>(() => {}));
 
     mockAuthState = { user: null, isAuthenticated: false };
-    rerender(
+    await rerender(
       <UsersProvider>
         <Probe />
       </UsersProvider>,
     );
 
     mockAuthState = { user: { id: 'user-b' } as User, isAuthenticated: true };
-    rerender(
+    await rerender(
       <UsersProvider>
         <Probe />
       </UsersProvider>,
@@ -237,7 +237,7 @@ describe('UsersContext sign-out', () => {
   it('serves an empty map on the first render after sign-out', async () => {
     await seedExistingUser();
 
-    const { getByTestId, rerender } = render(
+    const { getByTestId, rerender } = await render(
       <UsersProvider>
         <Probe />
       </UsersProvider>,
@@ -249,7 +249,7 @@ describe('UsersContext sign-out', () => {
     });
 
     mockAuthState = { user: null, isAuthenticated: false };
-    rerender(
+    await rerender(
       <UsersProvider>
         <Probe />
       </UsersProvider>,
@@ -269,7 +269,7 @@ describe('UsersContext sign-out', () => {
       () => new Promise<User[]>((resolve) => { resolveLocal = resolve; }),
     );
 
-    const { getByTestId, rerender } = render(
+    const { getByTestId, rerender } = await render(
       <UsersProvider>
         <Probe />
       </UsersProvider>,
@@ -282,7 +282,7 @@ describe('UsersContext sign-out', () => {
     // empty map while signed out. The provider stays mounted, so isMountedRef
     // alone wouldn't catch it.
     mockAuthState = { user: null, isAuthenticated: false };
-    rerender(
+    await rerender(
       <UsersProvider>
         <Probe />
       </UsersProvider>,

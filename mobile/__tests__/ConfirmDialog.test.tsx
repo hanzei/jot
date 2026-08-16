@@ -12,9 +12,9 @@ function TestHarness({ onReady }: { onReady: (confirm: ConfirmContextType['confi
   return null;
 }
 
-function renderConfirm() {
+async function renderConfirm() {
   let confirm!: ConfirmContextType['confirm'];
-  const utils = render(
+  const utils = await render(
     <ConfirmProvider>
       <TestHarness onReady={(fn) => { confirm = fn; }} />
     </ConfirmProvider>,
@@ -23,16 +23,16 @@ function renderConfirm() {
 }
 
 describe('ConfirmDialog / useConfirm', () => {
-  it('does not render the dialog until confirm() is called', () => {
-    const { queryByTestId } = renderConfirm();
+  it('does not render the dialog until confirm() is called', async () => {
+    const { queryByTestId } = await renderConfirm();
     expect(queryByTestId('confirm-dialog-confirm')).toBeNull();
   });
 
   it('resolves true and hides the dialog when confirm is pressed', async () => {
-    const { getByTestId, queryByTestId, confirm } = renderConfirm();
+    const { getByTestId, queryByTestId, confirm } = await renderConfirm();
     let result: boolean | undefined;
 
-    act(() => {
+    await act(() => {
       confirm()({ title: 'Delete note', message: 'This cannot be undone.', confirmLabel: 'Delete', destructive: true })
         .then((value) => { result = value; });
     });
@@ -41,7 +41,7 @@ describe('ConfirmDialog / useConfirm', () => {
     expect(getByTestId('confirm-dialog-message').props.children).toBe('This cannot be undone.');
 
     await act(async () => {
-      fireEvent.press(getByTestId('confirm-dialog-confirm'));
+      await fireEvent.press(getByTestId('confirm-dialog-confirm'));
     });
 
     expect(result).toBe(true);
@@ -49,16 +49,16 @@ describe('ConfirmDialog / useConfirm', () => {
   });
 
   it('resolves false and hides the dialog when cancel is pressed', async () => {
-    const { getByTestId, queryByTestId, confirm } = renderConfirm();
+    const { getByTestId, queryByTestId, confirm } = await renderConfirm();
     let result: boolean | undefined;
 
-    act(() => {
+    await act(() => {
       confirm()({ title: 'Log out', message: 'Are you sure?', confirmLabel: 'Log out' })
         .then((value) => { result = value; });
     });
 
     await act(async () => {
-      fireEvent.press(getByTestId('confirm-dialog-cancel'));
+      await fireEvent.press(getByTestId('confirm-dialog-cancel'));
     });
 
     expect(result).toBe(false);
@@ -66,26 +66,26 @@ describe('ConfirmDialog / useConfirm', () => {
   });
 
   it('resolves false and hides the dialog when the backdrop is pressed', async () => {
-    const { getByTestId, queryByTestId, confirm } = renderConfirm();
+    const { getByTestId, queryByTestId, confirm } = await renderConfirm();
     let result: boolean | undefined;
 
-    act(() => {
+    await act(() => {
       confirm()({ title: 'Log out', message: 'Are you sure?', confirmLabel: 'Log out' })
         .then((value) => { result = value; });
     });
 
     await act(async () => {
-      fireEvent.press(getByTestId('confirm-dialog-overlay'));
+      await fireEvent.press(getByTestId('confirm-dialog-overlay'));
     });
 
     expect(result).toBe(false);
     expect(queryByTestId('confirm-dialog-confirm')).toBeNull();
   });
 
-  it('defaults the cancel label to the translated common.cancel string', () => {
-    const { getByTestId, confirm } = renderConfirm();
+  it('defaults the cancel label to the translated common.cancel string', async () => {
+    const { getByTestId, confirm } = await renderConfirm();
 
-    act(() => {
+    await act(() => {
       void confirm()({ title: 'Empty trash', message: 'Delete 3 notes?', confirmLabel: 'Empty trash' });
     });
 
@@ -93,11 +93,11 @@ describe('ConfirmDialog / useConfirm', () => {
   });
 
   it('resolves an unresolved prior confirm() as cancelled when a second one replaces it', async () => {
-    const { getByTestId, confirm } = renderConfirm();
+    const { getByTestId, confirm } = await renderConfirm();
     let firstResult: boolean | undefined;
     let secondResult: boolean | undefined;
 
-    act(() => {
+    await act(() => {
       confirm()({ title: 'First', message: 'first', confirmLabel: 'Go' })
         .then((value) => { firstResult = value; });
     });
@@ -114,7 +114,7 @@ describe('ConfirmDialog / useConfirm', () => {
     expect(getByTestId('confirm-dialog-title').props.children).toBe('Second');
 
     await act(async () => {
-      fireEvent.press(getByTestId('confirm-dialog-confirm'));
+      await fireEvent.press(getByTestId('confirm-dialog-confirm'));
     });
     expect(secondResult).toBe(true);
   });
@@ -130,7 +130,7 @@ describe('useConfirm default (no provider)', () => {
       }, [confirm]);
       return null;
     }
-    render(<Harness />);
+    await render(<Harness />);
     await act(async () => {});
     expect(result).toBe(false);
   });

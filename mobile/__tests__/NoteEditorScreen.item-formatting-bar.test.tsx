@@ -34,34 +34,34 @@ describe('NoteEditorScreen list-item formatting bar', () => {
 
   /** A new list note with one row, focused, and helpers bound to that row. */
   async function renderListEditor() {
-    const utils = render(<NoteEditorScreen />);
+    const utils = await render(<NoteEditorScreen />);
 
-    fireEvent.press(utils.getByTestId('toggle-note-type'));
-    fireEvent.press(utils.getByTestId('add-list-item'));
+    await fireEvent.press(utils.getByTestId('toggle-note-type'));
+    await fireEvent.press(utils.getByTestId('add-list-item'));
 
     const row = () => utils.getAllByTestId('list-item-text')[0]!;
 
     const focus = async () => {
       await act(async () => {
-        fireEvent(row(), 'focus', { nativeEvent: {} });
+        await fireEvent(row(), 'focus', { nativeEvent: {} });
       });
     };
 
     const type = async (text: string) => {
       await act(async () => {
-        fireEvent.changeText(row(), text);
+        await fireEvent.changeText(row(), text);
       });
     };
 
     const placeCaret = async (start: number, end = start) => {
       await act(async () => {
-        fireEvent(row(), 'selectionChange', { nativeEvent: { selection: { start, end } } });
+        await fireEvent(row(), 'selectionChange', { nativeEvent: { selection: { start, end } } });
       });
     };
 
     const press = async (testID: string) => {
       await act(async () => {
-        fireEvent.press(utils.getByTestId(testID));
+        await fireEvent.press(utils.getByTestId(testID));
       });
     };
 
@@ -145,7 +145,7 @@ describe('NoteEditorScreen list-item formatting bar', () => {
     expect(getByTestId('format-bold-btn')).toBeTruthy();
 
     await act(async () => {
-      fireEvent(row(), 'blur');
+      await fireEvent(row(), 'blur');
     });
     // The clear is deferred (ITEM_BLUR_SETTLE_MS) so a tap from one row to the
     // next does not flash the bar away and back. Real timers here, so wait it out.
@@ -157,10 +157,10 @@ describe('NoteEditorScreen list-item formatting bar', () => {
   });
 
   it('leaves the text note bar with its full button set', async () => {
-    const utils = render(<NoteEditorScreen />);
+    const utils = await render(<NoteEditorScreen />);
 
     await act(async () => {
-      fireEvent.changeText(utils.getByTestId('note-content-input'), 'body');
+      await fireEvent.changeText(utils.getByTestId('note-content-input'), 'body');
     });
 
     expect(utils.getByTestId('format-heading-btn')).toBeTruthy();

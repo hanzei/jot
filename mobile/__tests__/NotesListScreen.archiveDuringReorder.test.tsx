@@ -211,7 +211,7 @@ describe('NotesListScreen: archive during an in-flight manual reorder', () => {
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
     });
 
-    render(
+    await render(
       <QueryClientProvider client={queryClient}>
         <NotesListScreen variant="notes" />
         <ArchiveTrigger noteId="note-A" />
@@ -222,7 +222,7 @@ describe('NotesListScreen: archive during an in-flight manual reorder', () => {
     expect(orderedCardIds()).toEqual(['note-A', 'note-B', 'note-C', 'note-D', 'note-E', 'note-F']);
 
     // Drag note-A from the front to the end (position 5 of 6).
-    fireEvent.press(screen.getByTestId('reorder-trigger-notes'));
+    await fireEvent.press(screen.getByTestId('reorder-trigger-notes'));
     expect(orderedCardIds()).toEqual(['note-B', 'note-C', 'note-D', 'note-E', 'note-F', 'note-A']);
     await waitFor(() => expect(notesApi.reorderNotes).toHaveBeenCalledTimes(1));
 
@@ -230,7 +230,7 @@ describe('NotesListScreen: archive during an in-flight manual reorder', () => {
     // archive note-A — mirroring tapping Archive in the single-note editor
     // right after the drag.
     await act(async () => {
-      fireEvent.press(screen.getByTestId('archive-trigger'));
+      await fireEvent.press(screen.getByTestId('archive-trigger'));
       // Flush microtasks so useMutation's onMutate (the synchronous optimistic
       // cache patch) has a chance to run and propagate to subscribers.
       await Promise.resolve();

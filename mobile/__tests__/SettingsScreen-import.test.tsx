@@ -137,17 +137,17 @@ describe('SettingsScreen import section', () => {
     } as DocumentPicker.DocumentPickerResult);
     mockImportKeepFile.mockResolvedValue({ imported: 2, skipped: 1 });
 
-    const { getByTestId, getByText } = render(<SettingsScreen />);
+    const { getByTestId, getByText } = await render(<SettingsScreen />);
 
     await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
 
-    fireEvent.press(getByTestId('settings-import-select-file'));
+    await fireEvent.press(getByTestId('settings-import-select-file'));
 
     await waitFor(() => {
       expect(getByText('export.zip')).toBeTruthy();
     });
 
-    fireEvent.press(getByTestId('settings-import-submit'));
+    await fireEvent.press(getByTestId('settings-import-submit'));
 
     await waitFor(() => {
       expect(mockImportKeepFile).toHaveBeenCalledWith({
@@ -173,11 +173,11 @@ describe('SettingsScreen import section', () => {
       assets: [{ uri: 'file:///tmp/notes.txt', name: 'notes.txt', mimeType: 'text/plain' }],
     } as DocumentPicker.DocumentPickerResult);
 
-    const { getByTestId, getByText, queryByText } = render(<SettingsScreen />);
+    const { getByTestId, getByText, queryByText } = await render(<SettingsScreen />);
 
     await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
 
-    fireEvent.press(getByTestId('settings-import-select-file'));
+    await fireEvent.press(getByTestId('settings-import-select-file'));
 
     await waitFor(() => {
       expect(getByText(/Invalid file type/i)).toBeTruthy();
@@ -193,16 +193,16 @@ describe('SettingsScreen import section', () => {
     } as DocumentPicker.DocumentPickerResult);
     mockImportKeepFile.mockRejectedValue({ response: { data: 'invalid JSON file' } });
 
-    const { getByTestId, getByText } = render(<SettingsScreen />);
+    const { getByTestId, getByText } = await render(<SettingsScreen />);
 
     await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
-    fireEvent.press(getByTestId('settings-import-select-file'));
+    await fireEvent.press(getByTestId('settings-import-select-file'));
 
     await waitFor(() => {
       expect(getByText('export.json')).toBeTruthy();
     });
 
-    fireEvent.press(getByTestId('settings-import-submit'));
+    await fireEvent.press(getByTestId('settings-import-submit'));
 
     await waitFor(() => {
       expect(getByText(/invalid JSON file/i)).toBeTruthy();
@@ -216,15 +216,15 @@ describe('SettingsScreen import section', () => {
     } as DocumentPicker.DocumentPickerResult);
     mockImportKeepFile.mockRejectedValue(new Error('network error'));
 
-    const { getByTestId, getByText } = render(<SettingsScreen />);
+    const { getByTestId, getByText } = await render(<SettingsScreen />);
 
     await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
-    fireEvent.press(getByTestId('settings-import-select-file'));
+    await fireEvent.press(getByTestId('settings-import-select-file'));
     await waitFor(() => {
       expect(getByText('export.json')).toBeTruthy();
     });
 
-    fireEvent.press(getByTestId('settings-import-submit'));
+    await fireEvent.press(getByTestId('settings-import-submit'));
 
     await waitFor(() => {
       expect(getByText(/Import failed/i)).toBeTruthy();
@@ -242,14 +242,14 @@ describe('SettingsScreen import section', () => {
       errors: ['failed to import "bad note": invalid json'],
     });
 
-    const { getByTestId, getByText } = render(<SettingsScreen />);
+    const { getByTestId, getByText } = await render(<SettingsScreen />);
 
     await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
-    fireEvent.press(getByTestId('settings-import-select-file'));
+    await fireEvent.press(getByTestId('settings-import-select-file'));
     await waitFor(() => {
       expect(getByText('export.json')).toBeTruthy();
     });
-    fireEvent.press(getByTestId('settings-import-submit'));
+    await fireEvent.press(getByTestId('settings-import-submit'));
 
     await waitFor(() => {
       expect(getByText(/1 failed/i)).toBeTruthy();

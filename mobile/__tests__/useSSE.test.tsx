@@ -162,27 +162,27 @@ describe('useSSE', () => {
     mockManagerIsConnected.mockReturnValue(false);
   });
 
-  it('starts SSE connection when authenticated', () => {
+  it('starts SSE connection when authenticated', async () => {
     const { Wrapper } = createWrapper();
-    renderHook(() => useSSE(), { wrapper: Wrapper });
+    await renderHook(() => useSSE(), { wrapper: Wrapper });
 
     expect(SSEConnectionManager).toHaveBeenCalled();
     expect(mockConnect).toHaveBeenCalled();
   });
 
-  it('does not start connection when not authenticated', () => {
+  it('does not start connection when not authenticated', async () => {
     mockIsAuthenticated = false;
     const { Wrapper } = createWrapper();
-    renderHook(() => useSSE(), { wrapper: Wrapper });
+    await renderHook(() => useSSE(), { wrapper: Wrapper });
 
     expect(mockConnect).not.toHaveBeenCalled();
   });
 
-  it('disconnects on unmount', () => {
+  it('disconnects on unmount', async () => {
     const { Wrapper } = createWrapper();
-    const { unmount } = renderHook(() => useSSE(), { wrapper: Wrapper });
+    const { unmount } = await renderHook(() => useSSE(), { wrapper: Wrapper });
 
-    unmount();
+    await unmount();
 
     expect(mockDisconnect).toHaveBeenCalled();
   });
@@ -191,7 +191,7 @@ describe('useSSE', () => {
     const { queryClient, Wrapper } = createWrapper();
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
-    renderHook(() => useSSE(), { wrapper: Wrapper });
+    await renderHook(() => useSSE(), { wrapper: Wrapper });
     invalidateSpy.mockClear();
 
     const note = makeTextNote({ id: 'new-note', content: 'hi' });
@@ -221,7 +221,7 @@ describe('useSSE', () => {
     mockGetNote.mockResolvedValueOnce(fetched);
 
     const { Wrapper } = createWrapper();
-    renderHook(() => useSSE(), { wrapper: Wrapper });
+    await renderHook(() => useSSE(), { wrapper: Wrapper });
 
     await act(async () => {
       capturedCallback?.({
@@ -236,14 +236,14 @@ describe('useSSE', () => {
     await waitFor(() => expect(mockSaveServerNote).toHaveBeenCalledWith(expect.anything(), fetched));
   });
 
-  it('invalidates notes list and specific note on note_updated event', () => {
+  it('invalidates notes list and specific note on note_updated event', async () => {
     const { queryClient, Wrapper } = createWrapper();
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
-    renderHook(() => useSSE(), { wrapper: Wrapper });
+    await renderHook(() => useSSE(), { wrapper: Wrapper });
     invalidateSpy.mockClear();
 
-    act(() => {
+    await act(() => {
       capturedCallback?.({
         type: 'note_updated',
         source_user_id: 'other-user',
@@ -269,7 +269,7 @@ describe('useSSE', () => {
     const { queryClient, Wrapper } = createWrapper();
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
-    renderHook(() => useSSE(), { wrapper: Wrapper });
+    await renderHook(() => useSSE(), { wrapper: Wrapper });
     invalidateSpy.mockClear();
 
     await act(async () => {
@@ -284,7 +284,7 @@ describe('useSSE', () => {
     const { queryClient, Wrapper } = createWrapper();
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
-    renderHook(() => useSSE(), { wrapper: Wrapper });
+    await renderHook(() => useSSE(), { wrapper: Wrapper });
     invalidateSpy.mockClear();
 
     const label = makeLabel({ id: 'label-1', user_id: 'other-user', name: 'Urgent' });
@@ -307,12 +307,12 @@ describe('useSSE', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: labelCountsQueryKey() });
   });
 
-  it('publishes to the profile-icon bus on profile_icon_updated event', () => {
+  it('publishes to the profile-icon bus on profile_icon_updated event', async () => {
     const { Wrapper } = createWrapper();
-    renderHook(() => useSSE(), { wrapper: Wrapper });
+    await renderHook(() => useSSE(), { wrapper: Wrapper });
 
     const updatedUser = { id: 'collaborator-1', username: 'bob', updated_at: '2024-02-02T00:00:00Z' } as unknown as User;
-    act(() => {
+    await act(() => {
       capturedCallback?.({
         type: 'profile_icon_updated',
         source_user_id: 'collaborator-1',
@@ -327,31 +327,31 @@ describe('useSSE', () => {
   // down (notably while the app was backgrounded) must be caught up on reconnect.
   // The first connect is already covered by the read hooks' mount-time sync, so it
   // must NOT publish; every subsequent connect must.
-  it('publishes a reconnect resync on every connect after the first', () => {
+  it('publishes a reconnect resync on every connect after the first', async () => {
     const { Wrapper } = createWrapper();
-    renderHook(() => useSSE(), { wrapper: Wrapper });
+    await renderHook(() => useSSE(), { wrapper: Wrapper });
 
     // Initial connect: no catch-up (mount-time sync already ran).
-    act(() => capturedStatusCallback?.('connecting'));
-    act(() => capturedStatusCallback?.('connected'));
+    await act(() => capturedStatusCallback?.('connecting'));
+    await act(() => capturedStatusCallback?.('connected'));
     expect(mockPublishReconnectResync).not.toHaveBeenCalled();
 
     // A drop + reconnect (e.g. foreground after backgrounding): catch up now.
-    act(() => capturedStatusCallback?.('reconnecting'));
-    act(() => capturedStatusCallback?.('connected'));
+    await act(() => capturedStatusCallback?.('reconnecting'));
+    await act(() => capturedStatusCallback?.('connected'));
     expect(mockPublishReconnectResync).toHaveBeenCalledTimes(1);
 
     // Every further reconnect publishes again.
-    act(() => capturedStatusCallback?.('connected'));
+    await act(() => capturedStatusCallback?.('connected'));
     expect(mockPublishReconnectResync).toHaveBeenCalledTimes(2);
   });
 
-  it('forwards status changes to the onStatusChange callback', () => {
+  it('forwards status changes to the onStatusChange callback', async () => {
     const onStatusChange = jest.fn();
     const { Wrapper } = createWrapper();
-    renderHook(() => useSSE(undefined, onStatusChange), { wrapper: Wrapper });
+    await renderHook(() => useSSE(undefined, onStatusChange), { wrapper: Wrapper });
 
-    act(() => capturedStatusCallback?.('connected'));
+    await act(() => capturedStatusCallback?.('connected'));
     expect(onStatusChange).toHaveBeenCalledWith('connected');
   });
 
@@ -362,7 +362,7 @@ describe('useSSE', () => {
     const { queryClient, Wrapper } = createWrapper();
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
-    renderHook(() => useSSE(), { wrapper: Wrapper });
+    await renderHook(() => useSSE(), { wrapper: Wrapper });
     invalidateSpy.mockClear();
 
     const image = { id: 'img-1', filename: 'a.png', content_type: 'image/png', width: 10, height: 10, created_at: '2024-01-01T00:00:00Z' };
@@ -390,7 +390,7 @@ describe('useSSE', () => {
     const { queryClient, Wrapper } = createWrapper();
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
-    renderHook(() => useSSE(), { wrapper: Wrapper });
+    await renderHook(() => useSSE(), { wrapper: Wrapper });
     invalidateSpy.mockClear();
 
     await act(async () => {
@@ -412,7 +412,7 @@ describe('useSSE', () => {
 
   it('persists the note payload through the queue-aware saveServerNote (#487)', async () => {
     const { Wrapper } = createWrapper();
-    renderHook(() => useSSE(), { wrapper: Wrapper });
+    await renderHook(() => useSSE(), { wrapper: Wrapper });
 
     const note = makeTextNote({ id: 'note-123', content: 'fresh' });
     await act(async () => {
@@ -442,11 +442,11 @@ describe('useSSE', () => {
     const { queryClient, Wrapper } = createWrapper();
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
-    renderHook(() => useSSE(), { wrapper: Wrapper });
+    await renderHook(() => useSSE(), { wrapper: Wrapper });
     invalidateSpy.mockClear();
 
     const note = makeListNote({ id: 'note-123', title: 'Groceries' });
-    act(() => {
+    await act(() => {
       capturedCallback?.({
         type: 'note_updated',
         source_user_id: 'other-user',
@@ -473,7 +473,7 @@ describe('useSSE', () => {
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
     const removeSpy = jest.spyOn(queryClient, 'removeQueries');
 
-    renderHook(() => useSSE(), { wrapper: Wrapper });
+    await renderHook(() => useSSE(), { wrapper: Wrapper });
     invalidateSpy.mockClear();
 
     await act(async () => {
@@ -499,7 +499,7 @@ describe('useSSE', () => {
     const { queryClient, Wrapper } = createWrapper();
     const removeSpy = jest.spyOn(queryClient, 'removeQueries');
 
-    renderHook(() => useSSE(), { wrapper: Wrapper });
+    await renderHook(() => useSSE(), { wrapper: Wrapper });
 
     await act(async () => {
       capturedCallback?.({
@@ -515,16 +515,16 @@ describe('useSSE', () => {
     expect(removeSpy).not.toHaveBeenCalled();
   });
 
-  it('invalidates queries for same-user events from a different device', () => {
+  it('invalidates queries for same-user events from a different device', async () => {
     const { queryClient, Wrapper } = createWrapper();
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
-    renderHook(() => useSSE(), { wrapper: Wrapper });
+    await renderHook(() => useSSE(), { wrapper: Wrapper });
 
     // Clear the initial invalidation call from the connect effect
     invalidateSpy.mockClear();
 
-    act(() => {
+    await act(() => {
       capturedCallback?.({
         type: 'note_updated',
         source_user_id: 'current-user', // Same user, different device
@@ -538,15 +538,15 @@ describe('useSSE', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: noteLocalQueryKey('note-123') });
   });
 
-  it('filters out events from the same device (matching client_id)', () => {
+  it('filters out events from the same device (matching client_id)', async () => {
     const { queryClient, Wrapper } = createWrapper();
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
     const onNotify = jest.fn();
 
-    renderHook(() => useSSE(onNotify), { wrapper: Wrapper });
+    await renderHook(() => useSSE(onNotify), { wrapper: Wrapper });
     invalidateSpy.mockClear();
 
-    act(() => {
+    await act(() => {
       capturedCallback?.({
         type: 'note_updated',
         source_user_id: 'current-user',
@@ -559,13 +559,13 @@ describe('useSSE', () => {
     expect(onNotify).not.toHaveBeenCalled();
   });
 
-  it('does not call notification callback for same-user events', () => {
+  it('does not call notification callback for same-user events', async () => {
     const { Wrapper } = createWrapper();
     const onNotify = jest.fn();
 
-    renderHook(() => useSSE(onNotify), { wrapper: Wrapper });
+    await renderHook(() => useSSE(onNotify), { wrapper: Wrapper });
 
-    act(() => {
+    await act(() => {
       capturedCallback?.({
         type: 'note_updated',
         source_user_id: 'current-user', // Same user — should not show "updated by another user" toast
@@ -576,11 +576,11 @@ describe('useSSE', () => {
     expect(onNotify).not.toHaveBeenCalled();
   });
 
-  it('calls notification callback on note_updated from another user', () => {
+  it('calls notification callback on note_updated from another user', async () => {
     const { Wrapper } = createWrapper();
     const onNotify = jest.fn();
 
-    renderHook(() => useSSE(onNotify), { wrapper: Wrapper });
+    await renderHook(() => useSSE(onNotify), { wrapper: Wrapper });
 
     const event: SSEEvent = {
       type: 'note_updated',
@@ -588,7 +588,7 @@ describe('useSSE', () => {
       data: { note_id: 'note-123', note: null },
     };
 
-    act(() => {
+    await act(() => {
       capturedCallback?.(event);
     });
 
@@ -603,7 +603,7 @@ describe('useSSE', () => {
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
     const removeSpy = jest.spyOn(queryClient, 'removeQueries');
 
-    renderHook(() => useSSE(), { wrapper: Wrapper });
+    await renderHook(() => useSSE(), { wrapper: Wrapper });
     invalidateSpy.mockClear();
 
     await act(async () => {
@@ -632,7 +632,7 @@ describe('useSSE', () => {
     const { queryClient, Wrapper } = createWrapper();
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
-    renderHook(() => useSSE(), { wrapper: Wrapper });
+    await renderHook(() => useSSE(), { wrapper: Wrapper });
     invalidateSpy.mockClear();
 
     await act(async () => {
@@ -656,7 +656,7 @@ describe('useSSE', () => {
     const { queryClient, Wrapper } = createWrapper();
     const removeSpy = jest.spyOn(queryClient, 'removeQueries');
 
-    renderHook(() => useSSE(), { wrapper: Wrapper });
+    await renderHook(() => useSSE(), { wrapper: Wrapper });
 
     await act(async () => {
       capturedCallback?.({
@@ -672,45 +672,45 @@ describe('useSSE', () => {
     expect(removeSpy).not.toHaveBeenCalled();
   });
 
-  it('does not start connection when offline', () => {
+  it('does not start connection when offline', async () => {
     mockIsConnected = false;
     const { Wrapper } = createWrapper();
-    renderHook(() => useSSE(), { wrapper: Wrapper });
+    await renderHook(() => useSSE(), { wrapper: Wrapper });
 
     expect(mockConnect).not.toHaveBeenCalled();
   });
 
-  it('stops connection when going offline and reconnects when coming back online', () => {
+  it('stops connection when going offline and reconnects when coming back online', async () => {
     const { Wrapper } = createWrapper();
 
     // Start online
     mockIsConnected = true;
-    const { rerender } = renderHook(() => useSSE(), { wrapper: Wrapper });
+    const { rerender } = await renderHook(() => useSSE(), { wrapper: Wrapper });
     expect(mockConnect).toHaveBeenCalledTimes(1);
 
     // Go offline — re-render with updated mock value
     mockIsConnected = false;
     mockDisconnect.mockClear();
-    rerender({});
+    await rerender({});
     expect(mockDisconnect).toHaveBeenCalled();
 
     // Come back online — should reconnect
     mockIsConnected = true;
     mockConnect.mockClear();
-    rerender({});
+    await rerender({});
     expect(mockConnect).toHaveBeenCalled();
   });
 
-  it('registers AppState listener for foreground/background management', () => {
+  it('registers AppState listener for foreground/background management', async () => {
     const { Wrapper } = createWrapper();
-    renderHook(() => useSSE(), { wrapper: Wrapper });
+    await renderHook(() => useSSE(), { wrapper: Wrapper });
 
     expect(AppState.addEventListener).toHaveBeenCalledWith('change', expect.any(Function));
   });
 
-  it('disconnects on background and reconnects on foreground', () => {
+  it('disconnects on background and reconnects on foreground', async () => {
     const { Wrapper } = createWrapper();
-    renderHook(() => useSSE(), { wrapper: Wrapper });
+    await renderHook(() => useSSE(), { wrapper: Wrapper });
 
     // Get the AppState change handler
     const appStateHandler = (AppState.addEventListener as jest.Mock).mock.calls[0][1] as (
@@ -718,26 +718,26 @@ describe('useSSE', () => {
     ) => void;
 
     // Going to background should disconnect
-    act(() => {
+    await act(() => {
       appStateHandler('background');
     });
     expect(mockDisconnect).toHaveBeenCalled();
 
     // Returning to foreground should reconnect
     mockConnect.mockClear();
-    act(() => {
+    await act(() => {
       appStateHandler('active');
     });
     expect(mockConnect).toHaveBeenCalled();
   });
 
-  it('does not tear down a healthy connection on a brief inactive→active foreground blip', () => {
+  it('does not tear down a healthy connection on a brief inactive→active foreground blip', async () => {
     // A control-center / notification-shade peek sends active→inactive→active
     // without a 'background', so the manager is still connected. Rebuilding would
     // throw away a working stream and pay a fresh TLS handshake on a weak link.
     mockManagerIsConnected.mockReturnValue(true);
     const { Wrapper } = createWrapper();
-    renderHook(() => useSSE(), { wrapper: Wrapper });
+    await renderHook(() => useSSE(), { wrapper: Wrapper });
 
     const appStateHandler = (AppState.addEventListener as jest.Mock).mock.calls[0][1] as (
       state: AppStateStatus,
@@ -745,7 +745,7 @@ describe('useSSE', () => {
 
     mockConnect.mockClear();
     mockDisconnect.mockClear();
-    act(() => {
+    await act(() => {
       appStateHandler('active');
     });
 
@@ -753,17 +753,17 @@ describe('useSSE', () => {
     expect(mockDisconnect).not.toHaveBeenCalled();
   });
 
-  it('rebuilds on foreground when the existing connection is not healthy', () => {
+  it('rebuilds on foreground when the existing connection is not healthy', async () => {
     mockManagerIsConnected.mockReturnValue(false);
     const { Wrapper } = createWrapper();
-    renderHook(() => useSSE(), { wrapper: Wrapper });
+    await renderHook(() => useSSE(), { wrapper: Wrapper });
 
     const appStateHandler = (AppState.addEventListener as jest.Mock).mock.calls[0][1] as (
       state: AppStateStatus,
     ) => void;
 
     mockConnect.mockClear();
-    act(() => {
+    await act(() => {
       appStateHandler('active');
     });
 
@@ -786,7 +786,7 @@ describe('useSSE', () => {
     it('on note_updated when saveServerNote throws', async () => {
       mockSaveServerNote.mockRejectedValueOnce(new Error('constraint violation'));
       const { Wrapper } = createWrapper();
-      renderHook(() => useSSE(), { wrapper: Wrapper });
+      await renderHook(() => useSSE(), { wrapper: Wrapper });
 
       const note = makeTextNote({ id: 'note-123' });
       await act(async () => {
@@ -806,7 +806,7 @@ describe('useSSE', () => {
     it('on note_created when saveServerNote throws', async () => {
       mockSaveServerNote.mockRejectedValueOnce(new Error('NOT NULL constraint failed'));
       const { Wrapper } = createWrapper();
-      renderHook(() => useSSE(), { wrapper: Wrapper });
+      await renderHook(() => useSSE(), { wrapper: Wrapper });
 
       const note = makeTextNote({ id: 'new-note' });
       await act(async () => {
@@ -826,7 +826,7 @@ describe('useSSE', () => {
     it('on note_deleted when markLocalNoteDeleted throws', async () => {
       mockMarkLocalNoteDeleted.mockRejectedValueOnce(new Error('db locked'));
       const { Wrapper } = createWrapper();
-      renderHook(() => useSSE(), { wrapper: Wrapper });
+      await renderHook(() => useSSE(), { wrapper: Wrapper });
 
       await act(async () => {
         capturedCallback?.({
@@ -845,7 +845,7 @@ describe('useSSE', () => {
     it('on note_unshared (recipient) when permanentDeleteLocalNote throws', async () => {
       mockPermanentDeleteLocalNote.mockRejectedValueOnce(new Error('db locked'));
       const { Wrapper } = createWrapper();
-      renderHook(() => useSSE(), { wrapper: Wrapper });
+      await renderHook(() => useSSE(), { wrapper: Wrapper });
 
       await act(async () => {
         capturedCallback?.({
@@ -866,7 +866,7 @@ describe('useSSE', () => {
       mockGetNote.mockResolvedValueOnce(makeTextNote({ id: 'note-123' }));
       mockSaveServerNote.mockRejectedValueOnce(new Error('network error'));
       const { Wrapper } = createWrapper();
-      renderHook(() => useSSE(), { wrapper: Wrapper });
+      await renderHook(() => useSSE(), { wrapper: Wrapper });
 
       await act(async () => {
         capturedCallback?.({
@@ -886,7 +886,7 @@ describe('useSSE', () => {
     it('on note_image_added when patchLocalNoteImages throws', async () => {
       mockPatchLocalNoteImages.mockRejectedValueOnce(new Error('note not found'));
       const { Wrapper } = createWrapper();
-      renderHook(() => useSSE(), { wrapper: Wrapper });
+      await renderHook(() => useSSE(), { wrapper: Wrapper });
 
       const image = { id: 'img-1', filename: 'a.png', content_type: 'image/png', width: 10, height: 10, created_at: '2024-01-01T00:00:00Z' };
       await act(async () => {
@@ -906,7 +906,7 @@ describe('useSSE', () => {
     it('on labels_changed when upsertLabel throws', async () => {
       mockUpsertLabel.mockRejectedValueOnce(new Error('constraint violation'));
       const { Wrapper } = createWrapper();
-      renderHook(() => useSSE(), { wrapper: Wrapper });
+      await renderHook(() => useSSE(), { wrapper: Wrapper });
 
       const label = makeLabel({ id: 'label-1', user_id: 'other-user', name: 'Urgent' });
       await act(async () => {
