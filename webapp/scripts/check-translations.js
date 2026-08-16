@@ -44,6 +44,23 @@ function collectSourceFiles(dir, out = []) {
   return out;
 }
 
+function escapeRegExp(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// A plain corpus.includes(key) treats a key as "used" whenever it appears as a
+// substring anywhere in source — including as a prefix of an unrelated, longer
+// identifier. `note.delete` is a substring of the live field access
+// `note.deleted_at`, and `share.removeAccess` is a substring of the live key
+// `share.removeAccessFor`; both hid a truly dead key from this check. Requiring
+// non-key characters (or start/end of file) on both sides of the match rules
+// that out, since a key never appears as a strict prefix of another dotted
+// identifier in valid source.
+function isKeyReferenced(key, corpus) {
+  const pattern = new RegExp(`(?<![\\w.])${escapeRegExp(key)}(?![\\w.])`);
+  return pattern.test(corpus);
+}
+
 function findUnusedKeys(keys, sourceRoot) {
   const corpus = [...collectSourceFiles(sourceRoot), ...collectSourceFiles(sharedSrcDir)]
     .map((f) => readFileSync(f, 'utf8'))
@@ -52,7 +69,7 @@ function findUnusedKeys(keys, sourceRoot) {
   return keys.filter((key) => {
     if (DYNAMIC_KEY_PREFIXES.some((prefix) => key.startsWith(prefix))) return false;
     const baseKey = key.replace(PLURAL_SUFFIX, '');
-    return !corpus.includes(key) && !corpus.includes(baseKey);
+    return !isKeyReferenced(key, corpus) && !isKeyReferenced(baseKey, corpus);
   });
 }
 

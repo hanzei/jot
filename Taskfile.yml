@@ -64,6 +64,7 @@ tasks:
       - task: lint-mobile
       - task: test-mobile
       - task: check-mobile-expo
+      - task: check-translations
 
   check-shared:
     desc: Lint and test the shared package only
