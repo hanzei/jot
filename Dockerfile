@@ -5,16 +5,19 @@ FROM node:24-alpine@sha256:f70403e87646dc51b45295f4b8b70cdad0b63d2297c4c9899119b
 
 WORKDIR /app/webapp
 
-# Copy shared package (dependency of webapp)
-COPY shared/ ../shared/
-
-# Copy frontend package files
+# Manifests first, sources after: `npm ci` then re-runs only when a lockfile
+# changes, not on every edit to webapp/src or shared/src. shared's manifest is
+# part of this step because webapp depends on it through `file:../shared`, so
+# npm needs it present to resolve the link.
+COPY shared/package*.json ../shared/
 COPY webapp/package*.json ./
 
 # Install frontend dependencies (including dev dependencies for build)
 RUN npm ci
 
-# Copy frontend source code
+# Copy shared package source (compiled directly by the webapp build) and the
+# frontend source
+COPY shared/ ../shared/
 COPY webapp/ ./
 
 # Build the frontend
