@@ -1,4 +1,4 @@
-import { render, act, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, act, waitFor } from '@testing-library/react-native';
 import {
   mockUseRoute,
   mockNavigationAddListener,
@@ -91,16 +91,21 @@ describe('NoteEditorScreen toggle rollback', () => {
     const checkboxes = getAllByTestId('list-item-checkbox');
     expect(checkboxes).toHaveLength(2);
 
-    jest.spyOn(console, 'error').mockImplementation(() => {});
-
-    // Invoke both toggles in one act() so the parent toggle runs against the
-    // child's optimistic state before a re-render — reproducing a rapid
-    // double-tap. Dispatched together (not awaited individually) so neither
-    // press settles before the other fires.
-    await act(async () => {
-      const childPress = fireEvent.press(checkboxes[1]!); // check Child (request succeeds)
-      const parentPress = fireEvent.press(checkboxes[0]!); // check Parent (request fails)
-      await Promise.all([childPress, parentPress]);
+    // Invoke both toggles synchronously inside one act() so the parent toggle
+    // runs against the child's optimistic state before a re-render —
+    // reproducing a rapid double-tap. `fireEvent.press` won't do here: it's
+    // async and wraps its own act() internally, so two calls without an
+    // await between them are overlapping act() calls (React warns and it's
+    // unsupported) rather than the same-tick dispatch this test needs.
+    // `onClick` is the Pressability-config handler these checkboxes render
+    // with (react-native/Libraries/Pressability/Pressability.js) — calling it
+    // directly re-creates the pre-v14 test's direct-handler-invocation
+    // approach without going through fireEvent's async wrapping.
+    const press = (checkbox: (typeof checkboxes)[number]) =>
+      (checkbox.props as { onClick?: () => void }).onClick?.();
+    await act(() => {
+      press(checkboxes[1]!); // check Child (request succeeds)
+      press(checkboxes[0]!); // check Parent (request fails)
     });
 
     // Parent rolled back to unchecked; Child stays checked.
