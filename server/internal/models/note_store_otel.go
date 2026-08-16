@@ -139,15 +139,6 @@ func (s *NoteStore) CreateItemWithCompleted(ctx context.Context, noteID string, 
 	return s.inner.CreateItemWithCompleted(ctx, noteID, text, position, completed, parentID, assignedTo)
 }
 
-func (s *NoteStore) GetItemForNote(ctx context.Context, noteID, itemID string) (_ *NoteItem, err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.GetItemForNote", &err,
-		attribute.String("note.id", noteID),
-		attribute.String("item.id", itemID),
-	)
-	defer end()
-	return s.inner.GetItemForNote(ctx, noteID, itemID)
-}
-
 func (s *NoteStore) CreateItemWithID(ctx context.Context, noteID, itemID, text string, position int, completed bool, parentID string, assignedTo string, maxItems int) (_ *NoteItem, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.CreateItemWithID", &err,
 		attribute.String("note.id", noteID),
