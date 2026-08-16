@@ -186,13 +186,13 @@ async function saveNoteInTx(db: SQLiteDatabase, note: Note): Promise<void> {
   );
 
   if (items !== undefined) {
-    await db.runAsync('DELETE FROM note_items WHERE note_id = ?', [note.id]);
+    // Upsert every incoming item first, then delete only the note_items rows
+    // that are no longer present — not a blanket DELETE-then-reinsert of the
+    // whole set. An item unchanged between calls keeps its row (and thus its
+    // identity) rather than being torn down and recreated on every sync, the
+    // same reasoning that motivated the upsert itself over `INSERT OR
+    // REPLACE` above.
     for (const item of items) {
-      // A real upsert, not `INSERT OR REPLACE` — see the reasoning above this
-      // function. The preceding DELETE already clears stale items for this
-      // note, so ON CONFLICT here only matters for callers re-running this
-      // insert loop mid-transaction; it's an upsert for the same reason the
-      // note row above is, not because a real conflict is expected.
       await db.runAsync(
         `INSERT INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -207,6 +207,15 @@ async function saveNoteInTx(db: SQLiteDatabase, note: Note): Promise<void> {
            updated_at = excluded.updated_at`,
         [item.id, note.id, item.text, item.completed ? 1 : 0, item.position, item.parent_id ?? null, item.assigned_to ?? '', item.created_at ?? '', item.updated_at ?? ''],
       );
+    }
+    if (items.length > 0) {
+      const placeholders = items.map(() => '?').join(', ');
+      await db.runAsync(
+        `DELETE FROM note_items WHERE note_id = ? AND id NOT IN (${placeholders})`,
+        [note.id, ...items.map((item) => item.id)],
+      );
+    } else {
+      await db.runAsync('DELETE FROM note_items WHERE note_id = ?', [note.id]);
     }
   } else if (note.note_type !== 'list') {
     // A text note owns no items, so any left behind belong to a list→text
