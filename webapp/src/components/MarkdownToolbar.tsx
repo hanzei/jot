@@ -33,7 +33,7 @@ interface MarkdownToolbarProps {
    * preview — since pointing aria-controls at an id that is not in the document
    * is worse than saying nothing.
    */
-  controlsId?: string;
+  controlsId?: string | undefined;
   /** Defaults to the full text-note set. */
   variant?: MarkdownToolbarVariant;
   /**
@@ -42,7 +42,7 @@ interface MarkdownToolbarProps {
    * the toolbar reports no editing state of its own, so nothing else tells it
    * that focus has moved on.
    */
-  onBlurOut?: () => void;
+  onBlurOut?: (() => void) | undefined;
 }
 
 // Same actions, same icons and same order as the mobile formatting bar

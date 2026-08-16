@@ -213,7 +213,7 @@ export interface CreateTextNoteRequest {
   content: string;
   note_type: 'text';
   color?: string;
-  labels?: string[];
+  labels?: string[] | undefined;
 }
 
 export interface CreateListNoteRequest {
@@ -223,7 +223,7 @@ export interface CreateListNoteRequest {
   note_type: 'list';
   color?: string;
   items?: CreateNoteItemRequest[];
-  labels?: string[];
+  labels?: string[] | undefined;
 }
 
 export type CreateNoteRequest = CreateTextNoteRequest | CreateListNoteRequest;

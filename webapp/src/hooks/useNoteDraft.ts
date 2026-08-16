@@ -39,7 +39,7 @@ const emptyDraft = (): AutoSaveDraft => ({
 
 interface UseNoteDraftOptions {
   note?: Note | null;
-  onRefresh?: () => void;
+  onRefresh?: (() => void) | undefined;
   showError: (message: string) => void;
 }
 

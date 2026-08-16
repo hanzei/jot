@@ -46,7 +46,7 @@ interface RenderOpts {
 
 const renderNoteImages = ({ note = createMockNote({ images: [] }), uploadMaxBytes = UPLOAD_MAX_BYTES, onRefresh = vi.fn(), showError = vi.fn() }: RenderOpts = {}) => {
   const hook = renderHook(
-    (props: { note?: Note | null }) => useNoteImages({ note: props.note, uploadMaxBytes, onRefresh, showError }),
+    ({ note = null }: { note?: Note | null }) => useNoteImages({ note, uploadMaxBytes, onRefresh, showError }),
     { initialProps: { note } },
   );
   return { ...hook, onRefresh, showError };

@@ -35,7 +35,7 @@ interface UseCompletedItemsOptions {
   markDirty: () => void;
   flashSaved: () => void;
   showError: (message: string) => void;
-  onRefresh?: () => void;
+  onRefresh?: (() => void) | undefined;
 }
 
 // useCompletedItems owns the bulk actions on a list note's checked items:
