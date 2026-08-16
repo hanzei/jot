@@ -188,9 +188,23 @@ async function saveNoteInTx(db: SQLiteDatabase, note: Note): Promise<void> {
   if (items !== undefined) {
     await db.runAsync('DELETE FROM note_items WHERE note_id = ?', [note.id]);
     for (const item of items) {
+      // A real upsert, not `INSERT OR REPLACE` — see the reasoning above this
+      // function. The preceding DELETE already clears stale items for this
+      // note, so ON CONFLICT here only matters for callers re-running this
+      // insert loop mid-transaction; it's an upsert for the same reason the
+      // note row above is, not because a real conflict is expected.
       await db.runAsync(
-        `INSERT OR REPLACE INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           note_id = excluded.note_id,
+           text = excluded.text,
+           completed = excluded.completed,
+           position = excluded.position,
+           parent_id = excluded.parent_id,
+           assigned_to = excluded.assigned_to,
+           created_at = excluded.created_at,
+           updated_at = excluded.updated_at`,
         [item.id, note.id, item.text, item.completed ? 1 : 0, item.position, item.parent_id ?? null, item.assigned_to ?? '', item.created_at ?? '', item.updated_at ?? ''],
       );
     }
@@ -889,9 +903,22 @@ export interface LocalItemInput {
 export async function createLocalItem(db: SQLiteDatabase, noteId: string, item: LocalItemInput): Promise<void> {
   const now = new Date().toISOString();
   await withSerializedTransaction(db, async () => {
+    // A real upsert, not `INSERT OR REPLACE` — see saveNoteInTx above for why:
+    // REPLACE is DELETE+INSERT under the hood and would cascade-delete any
+    // future table that references note_items(id) on a replayed/offline-queued
+    // create for an item that already exists locally.
     await db.runAsync(
-      `INSERT OR REPLACE INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         note_id = excluded.note_id,
+         text = excluded.text,
+         completed = excluded.completed,
+         position = excluded.position,
+         parent_id = excluded.parent_id,
+         assigned_to = excluded.assigned_to,
+         created_at = excluded.created_at,
+         updated_at = excluded.updated_at`,
       [item.id, noteId, item.text, item.completed ? 1 : 0, item.position, item.parent_id ?? null, item.assigned_to ?? '', now, now],
     );
     await touchLocalNote(db, noteId);
