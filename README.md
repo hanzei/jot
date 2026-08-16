@@ -156,7 +156,7 @@ task run-webapp      # Start webapp dev server with HMR
 task check           # Pre-PR gate: everything CI runs except e2e
 task check-server    # Lint + test the server, plus the docs and migration checks
 task check-webapp    # Lint + test the webapp, plus the translation check
-task check-mobile    # Lint + test the mobile app (check-shared likewise)
+task check-mobile    # Lint + test the mobile app, plus expo-doctor (check-shared likewise)
 task test            # All tests except e2e
 task lint            # All linters
 task fmt             # Apply formatting to every workspace (Go and TypeScript)
@@ -173,6 +173,7 @@ task lint-shared     # Run shared package linting
 task check-docs      # Check server/docs/ matches the handler annotations
 task check-migrations   # Check the sqlite and postgres migration trees match
 task check-translations # Check locale files for missing/extra keys
+task check-mobile-expo  # Run expo-doctor to check mobile's Expo SDK/native alignment
 task gen-docs        # Regenerate Swagger API docs
 task build-webapp    # Build the webapp into webapp/build
 task build-jotctl    # Build the jotctl admin CLI binary
