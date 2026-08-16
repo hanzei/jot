@@ -186,13 +186,36 @@ async function saveNoteInTx(db: SQLiteDatabase, note: Note): Promise<void> {
   );
 
   if (items !== undefined) {
-    await db.runAsync('DELETE FROM note_items WHERE note_id = ?', [note.id]);
+    // Upsert every incoming item first, then delete only the note_items rows
+    // that are no longer present — not a blanket DELETE-then-reinsert of the
+    // whole set. An item unchanged between calls keeps its row (and thus its
+    // identity) rather than being torn down and recreated on every sync, the
+    // same reasoning that motivated the upsert itself over `INSERT OR
+    // REPLACE` above.
     for (const item of items) {
       await db.runAsync(
-        `INSERT OR REPLACE INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           note_id = excluded.note_id,
+           text = excluded.text,
+           completed = excluded.completed,
+           position = excluded.position,
+           parent_id = excluded.parent_id,
+           assigned_to = excluded.assigned_to,
+           created_at = excluded.created_at,
+           updated_at = excluded.updated_at`,
         [item.id, note.id, item.text, item.completed ? 1 : 0, item.position, item.parent_id ?? null, item.assigned_to ?? '', item.created_at ?? '', item.updated_at ?? ''],
       );
+    }
+    if (items.length > 0) {
+      const placeholders = items.map(() => '?').join(', ');
+      await db.runAsync(
+        `DELETE FROM note_items WHERE note_id = ? AND id NOT IN (${placeholders})`,
+        [note.id, ...items.map((item) => item.id)],
+      );
+    } else {
+      await db.runAsync('DELETE FROM note_items WHERE note_id = ?', [note.id]);
     }
   } else if (note.note_type !== 'list') {
     // A text note owns no items, so any left behind belong to a list→text
@@ -889,9 +912,22 @@ export interface LocalItemInput {
 export async function createLocalItem(db: SQLiteDatabase, noteId: string, item: LocalItemInput): Promise<void> {
   const now = new Date().toISOString();
   await withSerializedTransaction(db, async () => {
+    // A real upsert, not `INSERT OR REPLACE` — see saveNoteInTx above for why:
+    // REPLACE is DELETE+INSERT under the hood and would cascade-delete any
+    // future table that references note_items(id) on a replayed/offline-queued
+    // create for an item that already exists locally.
     await db.runAsync(
-      `INSERT OR REPLACE INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         note_id = excluded.note_id,
+         text = excluded.text,
+         completed = excluded.completed,
+         position = excluded.position,
+         parent_id = excluded.parent_id,
+         assigned_to = excluded.assigned_to,
+         created_at = excluded.created_at,
+         updated_at = excluded.updated_at`,
       [item.id, noteId, item.text, item.completed ? 1 : 0, item.position, item.parent_id ?? null, item.assigned_to ?? '', now, now],
     );
     await touchLocalNote(db, noteId);

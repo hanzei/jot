@@ -38,11 +38,7 @@ export async function saveUsers(db: SQLiteDatabase, users: User[]): Promise<void
       );
     }
     for (const user of users) {
-      await db.runAsync(
-        `INSERT OR REPLACE INTO users (id, username, first_name, last_name, role, has_profile_icon, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [user.id, user.username, user.first_name, user.last_name, user.role, user.has_profile_icon ? 1 : 0, user.created_at, user.updated_at],
-      );
+      await db.runAsync(UPSERT_USER_SQL, userUpsertParams(user));
     }
   });
 }
@@ -51,11 +47,28 @@ export async function saveUsers(db: SQLiteDatabase, users: User[]): Promise<void
 // saveUsers which reconciles the whole list (and deletes anyone absent from it).
 // Used to apply a live profile_icon_updated SSE event for one collaborator.
 export async function upsertUser(db: SQLiteDatabase, user: User): Promise<void> {
-  await db.runAsync(
-    `INSERT OR REPLACE INTO users (id, username, first_name, last_name, role, has_profile_icon, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [user.id, user.username, user.first_name, user.last_name, user.role, user.has_profile_icon ? 1 : 0, user.created_at, user.updated_at],
-  );
+  await db.runAsync(UPSERT_USER_SQL, userUpsertParams(user));
+}
+
+// A real upsert (`ON CONFLICT DO UPDATE`), not `INSERT OR REPLACE` — SQLite
+// implements REPLACE as DELETE + INSERT, which with `PRAGMA foreign_keys = ON`
+// would fire `ON DELETE CASCADE` on any future table that references users(id)
+// (see the identical reasoning, and the incident it caused, in noteQueries.ts
+// around saveNoteInTx).
+const UPSERT_USER_SQL = `
+  INSERT INTO users (id, username, first_name, last_name, role, has_profile_icon, created_at, updated_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  ON CONFLICT(id) DO UPDATE SET
+    username = excluded.username,
+    first_name = excluded.first_name,
+    last_name = excluded.last_name,
+    role = excluded.role,
+    has_profile_icon = excluded.has_profile_icon,
+    created_at = excluded.created_at,
+    updated_at = excluded.updated_at`;
+
+function userUpsertParams(user: User): (string | number)[] {
+  return [user.id, user.username, user.first_name, user.last_name, user.role, user.has_profile_icon ? 1 : 0, user.created_at, user.updated_at];
 }
 
 export async function getLocalUsers(db: SQLiteDatabase): Promise<User[]> {

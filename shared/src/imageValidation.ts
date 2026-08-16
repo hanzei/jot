@@ -1,4 +1,4 @@
-import { IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES } from '@jot/shared';
+import { IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES } from './constants';
 
 export interface ImageValidationInput {
   mimeType: string;

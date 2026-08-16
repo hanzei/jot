@@ -1,5 +1,6 @@
-import { validateImageFile, imageMaxMB, IMAGE_MAX_MB } from '../src/utils/imageValidation';
-import { UPLOAD_MAX_BYTES } from '@jot/shared';
+import { describe, expect, it } from 'vitest';
+import { validateImageFile, imageMaxMB, IMAGE_MAX_MB } from '../imageValidation';
+import { UPLOAD_MAX_BYTES } from '../constants';
 
 describe('validateImageFile', () => {
   it('accepts an allowed image type under the size limit', () => {
