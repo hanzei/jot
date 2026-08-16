@@ -46,8 +46,8 @@ describe('NoteEditorScreen keyboard persistence across list rows', () => {
     });
   });
 
-  it('lets the item list persist the keyboard for taps its rows handle', () => {
-    render(<NoteEditorScreen />);
+  it('lets the item list persist the keyboard for taps its rows handle', async () => {
+    await render(<NoteEditorScreen />);
 
     expect(latestListProps().keyboardShouldPersistTaps).toBe('handled');
   });

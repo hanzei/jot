@@ -109,7 +109,7 @@ describe('background read-sync retry', () => {
       .mockRejectedValueOnce(makeAxiosError(503))
       .mockResolvedValueOnce([sampleNote] as never);
 
-    renderHook(() => useOfflineNotes(), { wrapper: createWrapper() });
+    await renderHook(() => useOfflineNotes(), { wrapper: createWrapper() });
 
     await act(async () => { await jest.advanceTimersByTimeAsync(0); });
     expect(mockNotesApi.getNotes).toHaveBeenCalledTimes(1);
@@ -124,7 +124,7 @@ describe('background read-sync retry', () => {
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     mockNotesApi.getNotes.mockRejectedValue(makeAxiosError(503));
 
-    renderHook(() => useOfflineNotes(), { wrapper: createWrapper() });
+    await renderHook(() => useOfflineNotes(), { wrapper: createWrapper() });
 
     await act(async () => { await jest.advanceTimersByTimeAsync(60000 * 2); });
     // 2 attempts (initial + 1 retry), then give up without writing.
@@ -137,7 +137,7 @@ describe('background read-sync retry', () => {
   it('does not retry while offline', async () => {
     mockUseNetworkStatus.mockReturnValue({ isConnected: false });
 
-    renderHook(() => useOfflineNotes(), { wrapper: createWrapper() });
+    await renderHook(() => useOfflineNotes(), { wrapper: createWrapper() });
 
     await act(async () => { await jest.advanceTimersByTimeAsync(60000); });
     expect(mockNotesApi.getNotes).not.toHaveBeenCalled();
@@ -150,7 +150,7 @@ describe('background read-sync retry', () => {
       .mockRejectedValueOnce(makeAxiosError(500))
       .mockResolvedValueOnce(sampleNote as never);
 
-    renderHook(() => useOfflineNote('n1'), { wrapper: createWrapper() });
+    await renderHook(() => useOfflineNote('n1'), { wrapper: createWrapper() });
 
     await act(async () => { await jest.advanceTimersByTimeAsync(0); });
     expect(mockNotesApi.getNote).toHaveBeenCalledTimes(1);
@@ -163,7 +163,7 @@ describe('background read-sync retry', () => {
   it('tombstones a single note on a permanent 404 without retrying', async () => {
     mockNotesApi.getNote.mockRejectedValue(makeAxiosError(404));
 
-    renderHook(() => useOfflineNote('n1'), { wrapper: createWrapper() });
+    await renderHook(() => useOfflineNote('n1'), { wrapper: createWrapper() });
 
     await act(async () => { await jest.advanceTimersByTimeAsync(60000); });
     expect(mockNotesApi.getNote).toHaveBeenCalledTimes(1);
@@ -178,7 +178,7 @@ describe('background read-sync retry', () => {
       .mockRejectedValueOnce(makeAxiosError(503))
       .mockResolvedValueOnce(serverLabels as never);
 
-    const { result } = renderHook(() => useLabels(), { wrapper: createWrapper() });
+    const { result } = await renderHook(() => useLabels(), { wrapper: createWrapper() });
 
     await act(async () => { await jest.advanceTimersByTimeAsync(0); });
     expect(mockLabelsApi.getLabels).toHaveBeenCalledTimes(1);
@@ -201,7 +201,7 @@ describe('background read-sync retry', () => {
       return <Text>{usersById.has('u2') ? 'has-other' : 'no-other'}</Text>;
     }
 
-    render(
+    await render(
       <QueryClientProvider client={new QueryClient()}>
         <UsersProvider>
           <Consumer />

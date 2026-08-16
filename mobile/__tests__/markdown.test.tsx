@@ -26,12 +26,12 @@ type RenderedNode =
   | string
   | null;
 
-function renderCase(id: string): RenderedNode {
-  return render(<Markdown content={markdownFor(id)} />).toJSON() as RenderedNode;
+async function renderCase(id: string): Promise<RenderedNode> {
+  return (await render(<Markdown content={markdownFor(id)} />)).toJSON() as RenderedNode;
 }
 
-function renderPreview(id: string): RenderedNode {
-  return render(<MarkdownPreview content={markdownFor(id)} />).toJSON() as RenderedNode;
+async function renderPreview(id: string): Promise<RenderedNode> {
+  return (await render(<MarkdownPreview content={markdownFor(id)} />)).toJSON() as RenderedNode;
 }
 
 /** Every string in the rendered tree, i.e. what the user actually reads. */
@@ -97,136 +97,136 @@ const hasTint = (node: RenderedNode) => boxes(node, (s) => s.backgroundColor !==
 const hasBar = (node: RenderedNode) => boxes(node, (s) => Number(s.borderLeftWidth) > 0).length;
 const hasRule = (node: RenderedNode) => boxes(node, (s) => s.height === 1).length;
 
-const conformance: Record<string, () => void> = {
-  bold: () => expect(styleFor(renderCase('bold'), 'hello').fontWeight).toBe('700'),
-  italic: () => expect(styleFor(renderCase('italic'), 'hello').fontStyle).toBe('italic'),
-  strikethrough: () =>
-    expect(styleFor(renderCase('strikethrough'), 'hello').textDecorationLine).toBe('line-through'),
+const conformance: Record<string, () => Promise<void>> = {
+  bold: async () => expect(styleFor(await renderCase('bold'), 'hello').fontWeight).toBe('700'),
+  italic: async () => expect(styleFor(await renderCase('italic'), 'hello').fontStyle).toBe('italic'),
+  strikethrough: async () =>
+    expect(styleFor(await renderCase('strikethrough'), 'hello').textDecorationLine).toBe('line-through'),
 
-  'heading-1': () =>
-    expect(styleFor(renderCase('heading-1'), 'Top heading').fontSize).toBe(
+  'heading-1': async () =>
+    expect(styleFor(await renderCase('heading-1'), 'Top heading').fontSize).toBe(
       fullMarkdownStyles.heading1.fontSize,
     ),
-  'heading-3': () =>
-    expect(styleFor(renderCase('heading-3'), 'Third heading').fontSize).toBe(
+  'heading-3': async () =>
+    expect(styleFor(await renderCase('heading-3'), 'Third heading').fontSize).toBe(
       fullMarkdownStyles.heading3.fontSize,
     ),
   // h4-h6 keep their depth and are styled down, so they carry body size in bold
   // rather than a size of their own.
-  'heading-4-bold': () => {
-    const style = styleFor(renderCase('heading-4-bold'), 'Fourth heading');
+  'heading-4-bold': async () => {
+    const style = styleFor(await renderCase('heading-4-bold'), 'Fourth heading');
     expect(style.fontSize).toBe(fullMarkdownStyles.body.fontSize);
     expect(style.fontWeight).toBe('700');
   },
-  'heading-6-bold': () => {
-    const style = styleFor(renderCase('heading-6-bold'), 'Sixth heading');
+  'heading-6-bold': async () => {
+    const style = styleFor(await renderCase('heading-6-bold'), 'Sixth heading');
     expect(style.fontSize).toBe(fullMarkdownStyles.body.fontSize);
     expect(style.fontWeight).toBe('700');
   },
 
-  'inline-code': () => expect(styleFor(renderCase('inline-code'), 'code').fontFamily).toBeTruthy(),
-  'fenced-code': () => {
-    const tree = renderCase('fenced-code');
+  'inline-code': async () => expect(styleFor(await renderCase('inline-code'), 'code').fontFamily).toBeTruthy(),
+  'fenced-code': async () => {
+    const tree = await renderCase('fenced-code');
     expect(styleFor(tree, 'const a = 1;').fontFamily).toBeTruthy();
     // Block layout: the tinted box a fenced block sits in, which inline code has
     // no equivalent of.
     expect(hasTint(tree)).toBe(1);
   },
-  'indented-code': () => {
-    const tree = renderCase('indented-code');
+  'indented-code': async () => {
+    const tree = await renderCase('indented-code');
     expect(styleFor(tree, 'indented code').fontFamily).toBeTruthy();
     expect(hasTint(tree)).toBe(1);
   },
-  'task-marker-in-code': () => {
-    const tree = renderCase('task-marker-in-code');
+  'task-marker-in-code': async () => {
+    const tree = await renderCase('task-marker-in-code');
     expect(visibleText(tree)).toBe('- [x] not a checkbox');
     expect(hasTint(tree)).toBe(1);
   },
 
-  'bullet-list': () => expect(visibleText(renderCase('bullet-list'))).toBe('•item'),
-  'ordered-list': () => expect(visibleText(renderCase('ordered-list'))).toBe('1.item'),
-  'task-unchecked': () => expect(visibleText(renderCase('task-unchecked'))).toContain('☐ todo'),
-  'task-checked': () => expect(visibleText(renderCase('task-checked'))).toContain('☑ done'),
-  'task-checked-uppercase': () =>
-    expect(visibleText(renderCase('task-checked-uppercase'))).toContain('☑ done'),
-  'task-marker-outside-list': () => {
-    const tree = renderCase('task-marker-outside-list');
+  'bullet-list': async () => expect(visibleText(await renderCase('bullet-list'))).toBe('•item'),
+  'ordered-list': async () => expect(visibleText(await renderCase('ordered-list'))).toBe('1.item'),
+  'task-unchecked': async () => expect(visibleText(await renderCase('task-unchecked'))).toContain('☐ todo'),
+  'task-checked': async () => expect(visibleText(await renderCase('task-checked'))).toContain('☑ done'),
+  'task-checked-uppercase': async () =>
+    expect(visibleText(await renderCase('task-checked-uppercase'))).toContain('☑ done'),
+  'task-marker-outside-list': async () => {
+    const tree = await renderCase('task-marker-outside-list');
     expect(visibleText(tree)).toBe('[x] not a task');
     expect(visibleText(tree)).not.toContain('☑');
   },
 
-  blockquote: () => {
-    const tree = renderCase('blockquote');
+  blockquote: async () => {
+    const tree = await renderCase('blockquote');
     expect(visibleText(tree)).toBe('quote');
     expect(hasBar(tree)).toBe(1);
   },
-  'hr-dashes': () => expect(hasRule(renderCase('hr-dashes'))).toBe(1),
-  'hr-stars': () => expect(hasRule(renderCase('hr-stars'))).toBe(1),
+  'hr-dashes': async () => expect(hasRule(await renderCase('hr-dashes'))).toBe(1),
+  'hr-stars': async () => expect(hasRule(await renderCase('hr-stars'))).toBe(1),
 
-  'inline-link': () => expect(tappableText(renderCase('inline-link'))).toEqual(['text']),
-  'bare-url': () => expect(tappableText(renderCase('bare-url'))).toEqual(['https://example.com']),
-  'bare-url-www': () =>
-    expect(tappableText(renderCase('bare-url-www'))).toEqual(['www.example.com']),
-  'bare-domain': () => {
-    const tree = renderCase('bare-domain');
+  'inline-link': async () => expect(tappableText(await renderCase('inline-link'))).toEqual(['text']),
+  'bare-url': async () => expect(tappableText(await renderCase('bare-url'))).toEqual(['https://example.com']),
+  'bare-url-www': async () =>
+    expect(tappableText(await renderCase('bare-url-www'))).toEqual(['www.example.com']),
+  'bare-domain': async () => {
+    const tree = await renderCase('bare-domain');
     expect(visibleText(tree)).toBe('visit example.com now');
     expect(tappableText(tree)).toEqual([]);
   },
-  'mailto-link': () => expect(tappableText(renderCase('mailto-link'))).toEqual(['mail']),
-  'tel-link': () => {
-    const tree = renderCase('tel-link');
+  'mailto-link': async () => expect(tappableText(await renderCase('mailto-link'))).toEqual(['mail']),
+  'tel-link': async () => {
+    const tree = await renderCase('tel-link');
     expect(visibleText(tree)).toBe('call');
     expect(tappableText(tree)).toEqual([]);
   },
-  'javascript-link': () => expect(tappableText(renderCase('javascript-link'))).toEqual([]),
-  'relative-link': () => {
-    const tree = renderCase('relative-link');
+  'javascript-link': async () => expect(tappableText(await renderCase('javascript-link'))).toEqual([]),
+  'relative-link': async () => {
+    const tree = await renderCase('relative-link');
     expect(visibleText(tree)).toBe('rel');
     expect(tappableText(tree)).toEqual([]);
   },
 
-  image: () => {
-    const tree = renderCase('image');
+  image: async () => {
+    const tree = await renderCase('image');
     expect(visibleText(tree)).toBe('![alt text](https://example.com/y.png)');
     expect(tappableText(tree)).toEqual([]);
   },
-  'image-with-title': () =>
-    expect(visibleText(renderCase('image-with-title'))).toBe(
+  'image-with-title': async () =>
+    expect(visibleText(await renderCase('image-with-title'))).toBe(
       '![alt](https://example.com/y.png "the title")',
     ),
-  'image-empty-alt': () => {
-    const tree = renderCase('image-empty-alt');
+  'image-empty-alt': async () => {
+    const tree = await renderCase('image-empty-alt');
     expect(visibleText(tree)).toBe('![](https://example.com/y.png)');
     expect(tappableText(tree)).toEqual([]);
   },
-  'image-inline-in-paragraph': () =>
-    expect(visibleText(renderCase('image-inline-in-paragraph'))).toBe(
+  'image-inline-in-paragraph': async () =>
+    expect(visibleText(await renderCase('image-inline-in-paragraph'))).toBe(
       'see ![a](https://example.com/y.png) here',
     ),
 
-  table: () => expect(visibleText(renderCase('table'))).toBe('a | b\n--- | ---\n1 | 2'),
-  'table-cell-url': () => {
-    const tree = renderCase('table-cell-url');
+  table: async () => expect(visibleText(await renderCase('table'))).toBe('a | b\n--- | ---\n1 | 2'),
+  'table-cell-url': async () => {
+    const tree = await renderCase('table-cell-url');
     expect(visibleText(tree)).toBe('a | b\n--- | ---\nhttps://example.com | 2');
     expect(tappableText(tree)).toEqual([]);
   },
 
-  'typography-dashes': () => expect(visibleText(renderCase('typography-dashes'))).toBe('a -- b'),
-  'typography-quotes': () => expect(visibleText(renderCase('typography-quotes'))).toBe('say "hi"'),
+  'typography-dashes': async () => expect(visibleText(await renderCase('typography-dashes'))).toBe('a -- b'),
+  'typography-quotes': async () => expect(visibleText(await renderCase('typography-quotes'))).toBe('say "hi"'),
 
-  'soft-break': () => expect(visibleText(renderCase('soft-break'))).toBe('first\nsecond'),
-  'raw-html': () => expect(visibleText(renderCase('raw-html'))).toBe('<b>bold</b> text'),
-  'raw-html-attribute-url': () => {
-    const tree = renderCase('raw-html-attribute-url');
+  'soft-break': async () => expect(visibleText(await renderCase('soft-break'))).toBe('first\nsecond'),
+  'raw-html': async () => expect(visibleText(await renderCase('raw-html'))).toBe('<b>bold</b> text'),
+  'raw-html-attribute-url': async () => {
+    const tree = await renderCase('raw-html-attribute-url');
     expect(visibleText(tree)).toBe('<a href="https://example.com">x</a>');
     expect(tappableText(tree)).toEqual([]);
   },
-  'raw-html-block-swallows-markdown': () =>
-    expect(visibleText(renderCase('raw-html-block-swallows-markdown'))).toBe(
+  'raw-html-block-swallows-markdown': async () =>
+    expect(visibleText(await renderCase('raw-html-block-swallows-markdown'))).toBe(
       '<div>\n**bold**\n</div>',
     ),
-  'raw-html-script': () =>
-    expect(visibleText(renderCase('raw-html-script'))).toBe('<script>alert(1)</script>'),
+  'raw-html-script': async () =>
+    expect(visibleText(await renderCase('raw-html-script'))).toBe('<script>alert(1)</script>'),
 };
 
 describe('markdown rendering', () => {
@@ -240,8 +240,8 @@ describe('markdown rendering', () => {
   });
 
   for (const testCase of MARKDOWN_CASES) {
-    it(`${testCase.id}: ${testCase.expected}`, () => {
-      conformance[testCase.id]!();
+    it(`${testCase.id}: ${testCase.expected}`, async () => {
+      await conformance[testCase.id]!();
     });
   }
 
@@ -262,9 +262,9 @@ describe('markdown rendering', () => {
     // structural rule that avoids it — blocks own Views, the inline level is all
     // Text — is invisible in a diff, so it is asserted on the construct that
     // breaks a naive recursive renderer first.
-    it('never nests a View inside a Text', () => {
+    it('never nests a View inside a Text', async () => {
       const nested = '> quoted\n>\n> - one\n> - two\n>\n> ```\n> code\n> ```';
-      const tree = render(<Markdown content={nested} />).toJSON() as RenderedNode;
+      const tree = (await render(<Markdown content={nested} />)).toJSON() as RenderedNode;
 
       expect(viewsInsideText(tree)).toEqual([]);
       expect(visibleText(tree)).toBe('quoted•one•twocode');
@@ -281,21 +281,21 @@ describe('markdown rendering', () => {
       );
     }
 
-    it('marks every heading depth as a header for assistive technology', () => {
+    it('marks every heading depth as a header for assistive technology', async () => {
       // All six, because the depths do not share a code path: h1-h3 carry their
       // own size, h4-h6 fall through to body size, and the role has to survive
       // both. `body` is the control — a paragraph is not a header.
       const markdown = ['# one', '## two', '### three', '#### four', '##### five', '###### six', 'body']
         .join('\n\n');
-      const tree = render(<Markdown content={markdown} />).toJSON() as RenderedNode;
+      const tree = (await render(<Markdown content={markdown} />)).toJSON() as RenderedNode;
 
       expect(headers(tree)).toEqual(['one', 'two', 'three', 'four', 'five', 'six']);
     });
 
     // The card is one clamped Text inside a control that opens the note, so an
     // outline inside it would be noise rather than structure.
-    it('sets no header role in the card preview', () => {
-      const tree = render(<MarkdownPreview content="# one" />).toJSON() as RenderedNode;
+    it('sets no header role in the card preview', async () => {
+      const tree = (await render(<MarkdownPreview content="# one" />)).toJSON() as RenderedNode;
       expect(headers(tree)).toEqual([]);
     });
   });
@@ -328,50 +328,50 @@ describe('markdown card preview', () => {
     return visibleText(node).replace(/[─\s]/g, '');
   }
 
-  it('shows the same content as the editor for every conformance case', () => {
+  it('shows the same content as the editor for every conformance case', async () => {
     for (const testCase of MARKDOWN_CASES) {
-      expect(content(renderPreview(testCase.id))).toBe(content(renderCase(testCase.id)));
+      expect(content(await renderPreview(testCase.id))).toBe(content(await renderCase(testCase.id)));
     }
   });
 
-  it('clamps to six lines however long the note is', () => {
+  it('clamps to six lines however long the note is', async () => {
     const long = Array.from({ length: 40 }, (_, i) => `line ${i}`).join('\n\n');
-    const tree = render(<MarkdownPreview content={long} />).toJSON() as RenderedNode;
+    const tree = (await render(<MarkdownPreview content={long} />)).toJSON() as RenderedNode;
     expect((tree as { props: Record<string, unknown> }).props.numberOfLines).toBe(PREVIEW_LINES);
     expect(PREVIEW_LINES).toBe(6);
   });
 
-  it('renders nothing for an empty note', () => {
-    expect(render(<MarkdownPreview content="   " />).toJSON()).toBeNull();
+  it('renders nothing for an empty note', async () => {
+    expect((await render(<MarkdownPreview content="   " />)).toJSON()).toBeNull();
   });
 
-  it('gives list items a marker and nested items an indent', () => {
-    const tree = render(<MarkdownPreview content={'- a\n  - b\n- [x] c'} />).toJSON() as RenderedNode;
+  it('gives list items a marker and nested items an indent', async () => {
+    const tree = (await render(<MarkdownPreview content={'- a\n  - b\n- [x] c'} />)).toJSON() as RenderedNode;
     expect(visibleText(tree)).toBe('• a\n  • b\n• ☑ c');
   });
 
-  it('numbers ordered items from the list start', () => {
-    const tree = render(<MarkdownPreview content={'3. a\n4. b'} />).toJSON() as RenderedNode;
+  it('numbers ordered items from the list start', async () => {
+    const tree = (await render(<MarkdownPreview content={'3. a\n4. b'} />)).toJSON() as RenderedNode;
     expect(visibleText(tree)).toBe('3. a\n4. b');
   });
 
-  it('stands a horizontal rule in for the one it cannot draw', () => {
-    const tree = render(<MarkdownPreview content={'a\n\n---\n\nb'} />).toJSON() as RenderedNode;
+  it('stands a horizontal rule in for the one it cannot draw', async () => {
+    const tree = (await render(<MarkdownPreview content={'a\n\n---\n\nb'} />)).toJSON() as RenderedNode;
     expect(visibleText(tree)).toMatch(/^a\n─+\nb$/);
   });
 
-  it('carries a blockquote with colour, having no bar to draw', () => {
-    const tree = render(<MarkdownPreview content={'> quoted\n\nplain'} />).toJSON() as RenderedNode;
+  it('carries a blockquote with colour, having no bar to draw', async () => {
+    const tree = (await render(<MarkdownPreview content={'> quoted\n\nplain'} />)).toJSON() as RenderedNode;
     expect(styleFor(tree, 'quoted').color).not.toBe(styleFor(tree, 'plain').color);
   });
 
   // A card is one control that opens the note. A link inside it would take the
   // tap instead, so links render as their label — and must not *look* tappable
   // either, since an underline on something inert is the worse failure.
-  it('renders links as plain text, with nothing to tap and no underline', () => {
-    const tree = render(
+  it('renders links as plain text, with nothing to tap and no underline', async () => {
+    const tree = (await render(
       <MarkdownPreview content="see https://example.com and [docs](https://example.org)" />,
-    ).toJSON() as RenderedNode;
+    )).toJSON() as RenderedNode;
 
     expect(visibleText(tree)).toBe('see https://example.com and docs');
     expect(tappableText(tree)).toEqual([]);
@@ -387,10 +387,10 @@ describe('markdown card preview', () => {
     }
   });
 
-  it('still renders every other inline construct', () => {
-    const tree = render(
+  it('still renders every other inline construct', async () => {
+    const tree = (await render(
       <MarkdownPreview content="**b** *i* ~~s~~ `c`" />,
-    ).toJSON() as RenderedNode;
+    )).toJSON() as RenderedNode;
 
     expect(styleFor(tree, 'b').fontWeight).toBe('700');
     expect(styleFor(tree, 'i').fontStyle).toBe('italic');

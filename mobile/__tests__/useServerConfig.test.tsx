@@ -37,7 +37,7 @@ describe('useServerConfig', () => {
     mockGetServerStorageValue.mockResolvedValue(JSON.stringify(cached));
     mockFetchServerConfig.mockReturnValue(new Promise(() => {})); // never resolves in this test
 
-    const { result } = renderHook(() => useServerConfig());
+    const { result } = await renderHook(() => useServerConfig());
 
     await waitFor(() => expect(result.current).toEqual(cached));
   });
@@ -46,7 +46,7 @@ describe('useServerConfig', () => {
     const fresh = { registration_enabled: false, password_min_length: 12, upload_max_bytes: 2048 };
     mockFetchServerConfig.mockResolvedValue(fresh);
 
-    const { result } = renderHook(() => useServerConfig());
+    const { result } = await renderHook(() => useServerConfig());
 
     await waitFor(() => expect(result.current).toEqual(fresh));
     expect(mockSetServerStorageValue).toHaveBeenCalledWith('server-1', 'server_config', JSON.stringify(fresh));
@@ -55,7 +55,7 @@ describe('useServerConfig', () => {
   it('does not fetch when there is no active server yet', async () => {
     mockGetActiveServerId.mockReturnValue(null);
 
-    renderHook(() => useServerConfig());
+    await renderHook(() => useServerConfig());
 
     await waitFor(() => expect(mockGetStoredServerUrl).toHaveBeenCalled());
     expect(mockFetchServerConfig).not.toHaveBeenCalled();
@@ -64,7 +64,7 @@ describe('useServerConfig', () => {
   it('keeps the cached/default value when the fetch fails (offline auth screen)', async () => {
     mockFetchServerConfig.mockRejectedValue(new Error('network error'));
 
-    const { result } = renderHook(() => useServerConfig());
+    const { result } = await renderHook(() => useServerConfig());
 
     await waitFor(() => expect(mockFetchServerConfig).toHaveBeenCalled());
     expect(result.current).toEqual(DEFAULT_SERVER_CONFIG);
@@ -74,7 +74,7 @@ describe('useServerConfig', () => {
     mockGetServerStorageValue.mockResolvedValue('not-json');
     mockFetchServerConfig.mockReturnValue(new Promise(() => {}));
 
-    const { result } = renderHook(() => useServerConfig());
+    const { result } = await renderHook(() => useServerConfig());
 
     await waitFor(() => expect(mockGetServerStorageValue).toHaveBeenCalled());
     expect(result.current).toEqual(DEFAULT_SERVER_CONFIG);

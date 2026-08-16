@@ -84,31 +84,28 @@ describe('NoteEditorScreen toggle rollback', () => {
       },
     );
 
-    const { getAllByTestId, getByText, UNSAFE_getAllByProps } = render(<NoteEditorScreen />);
+    const { getAllByTestId, getByText } = await render(<NoteEditorScreen />);
 
     // Both items start unchecked, so both render in the active list:
-    // [0] = Parent, [1] = Child. The checkbox composites carry onPress (= the
-    // row's toggle handler); the testID host node does not.
-    // Each checkbox surfaces as multiple nodes sharing one onPress reference;
-    // dedupe by handler identity to get one entry per row (Parent, then Child).
-    const seenToggles = new Set<unknown>();
-    const checkboxes = UNSAFE_getAllByProps({ accessibilityRole: 'checkbox' })
-      .filter((node) => typeof node.props.onPress === 'function')
-      .filter((node) => {
-        if (seenToggles.has(node.props.onPress)) return false;
-        seenToggles.add(node.props.onPress);
-        return true;
-      });
+    // [0] = Parent, [1] = Child.
+    const checkboxes = getAllByTestId('list-item-checkbox');
     expect(checkboxes).toHaveLength(2);
 
-    jest.spyOn(console, 'error').mockImplementation(() => {});
-
-    // Invoke both toggles in one act() so the parent toggle runs against the
-    // child's optimistic state before a re-render — reproducing a rapid
-    // double-tap. onPress wraps handleItemCompletedToggle(id, !completed).
-    await act(async () => {
-      checkboxes[1]!.props.onPress(); // check Child (request succeeds)
-      checkboxes[0]!.props.onPress(); // check Parent (request fails)
+    // Invoke both toggles synchronously inside one act() so the parent toggle
+    // runs against the child's optimistic state before a re-render —
+    // reproducing a rapid double-tap. `fireEvent.press` won't do here: it's
+    // async and wraps its own act() internally, so two calls without an
+    // await between them are overlapping act() calls (React warns and it's
+    // unsupported) rather than the same-tick dispatch this test needs.
+    // `onClick` is the Pressability-config handler these checkboxes render
+    // with (react-native/Libraries/Pressability/Pressability.js) — calling it
+    // directly re-creates the pre-v14 test's direct-handler-invocation
+    // approach without going through fireEvent's async wrapping.
+    const press = (checkbox: (typeof checkboxes)[number]) =>
+      (checkbox.props as { onClick?: () => void }).onClick?.();
+    await act(() => {
+      press(checkboxes[1]!); // check Child (request succeeds)
+      press(checkboxes[0]!); // check Parent (request fails)
     });
 
     // Parent rolled back to unchecked; Child stays checked.

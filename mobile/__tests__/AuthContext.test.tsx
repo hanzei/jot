@@ -169,7 +169,14 @@ describe('AuthContext', () => {
   });
 
   it('starts with isLoading true and no user', async () => {
-    const { getByTestId, unmount } = render(
+    // Holds the initial session check pending, so the transient loading:true
+    // state is observable after render — render() now flushes microtasks as
+    // part of settling, so a mock resolving immediately would already have
+    // moved past it.
+    let resolveSession!: (value: string | null) => void;
+    mockGetStoredSession.mockReturnValue(new Promise((resolve) => { resolveSession = resolve; }));
+
+    const { getByTestId, unmount } = await render(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>,
@@ -177,13 +184,17 @@ describe('AuthContext', () => {
 
     expect(getByTestId('loading').props.children).toBe('true');
 
+    await act(async () => {
+      resolveSession(null);
+    });
+
     await waitFor(() => {
       expect(getByTestId('loading').props.children).toBe('false');
     });
     expect(getByTestId('loading').props.children).toBe('false');
     expect(getByTestId('authenticated').props.children).toBe('false');
     expect(getByTestId('username').props.children).toBe('none');
-    unmount();
+    await unmount();
   }, 15000);
 
   it('restores session on mount when token exists', async () => {
@@ -191,7 +202,7 @@ describe('AuthContext', () => {
     mockGetStoredSession.mockResolvedValue('existing-token');
     mockAuth.me.mockResolvedValue({ user: { ...mockUser, username: 'restored' }, settings: mockSettings });
 
-    const { getByTestId, unmount } = render(
+    const { getByTestId, unmount } = await render(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>,
@@ -205,13 +216,13 @@ describe('AuthContext', () => {
     expect(getByTestId('username').props.children).toBe('restored');
     expect(mockClientModule.initializeServerContext).toHaveBeenCalled();
     expect(mockClientModule.restoreServerUrl).toHaveBeenCalledWith('https://a.example.com');
-    unmount();
+    await unmount();
   });
 
   it('login sets user on success', async () => {
     mockAuth.login.mockResolvedValue({ user: mockUser, settings: mockSettings });
 
-    const { getByTestId, unmount } = render(
+    const { getByTestId, unmount } = await render(
       <AuthProvider>
         <LoginTrigger />
       </AuthProvider>,
@@ -226,7 +237,7 @@ describe('AuthContext', () => {
     });
 
     expect(mockAuth.login).toHaveBeenCalledWith({ username: 'testuser', password: 'password' });
-    unmount();
+    await unmount();
   });
 
   it('logout clears user state', async () => {
@@ -234,7 +245,7 @@ describe('AuthContext', () => {
     mockAuth.me.mockResolvedValue({ user: mockUser, settings: mockSettings });
     mockAuth.logout.mockResolvedValue(undefined);
 
-    const { getByTestId, unmount } = render(
+    const { getByTestId, unmount } = await render(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>,
@@ -245,7 +256,7 @@ describe('AuthContext', () => {
     });
 
     await act(async () => {
-      fireEvent.press(getByTestId('logout-button'));
+      await fireEvent.press(getByTestId('logout-button'));
     });
 
     expect(mockAuth.logout).toHaveBeenCalled();
@@ -253,7 +264,7 @@ describe('AuthContext', () => {
       expect(getByTestId('authenticated').props.children).toBe('false');
     });
     expect(getByTestId('username').props.children).toBe('none');
-    unmount();
+    await unmount();
   });
 
   it('logout clears state even when auth.logout rejects', async () => {
@@ -261,7 +272,7 @@ describe('AuthContext', () => {
     mockAuth.me.mockResolvedValue({ user: mockUser, settings: mockSettings });
     mockAuth.logout.mockRejectedValue(new Error('network error'));
 
-    const { getByTestId, unmount } = render(
+    const { getByTestId, unmount } = await render(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>,
@@ -272,7 +283,7 @@ describe('AuthContext', () => {
     });
 
     await act(async () => {
-      fireEvent.press(getByTestId('logout-button'));
+      await fireEvent.press(getByTestId('logout-button'));
     });
 
     expect(mockAuth.logout).toHaveBeenCalled();
@@ -280,7 +291,7 @@ describe('AuthContext', () => {
       expect(getByTestId('authenticated').props.children).toBe('false');
     });
     expect(getByTestId('username').props.children).toBe('none');
-    unmount();
+    await unmount();
   });
 
   it('unauthorized callback clears auth state', async () => {
@@ -292,7 +303,7 @@ describe('AuthContext', () => {
     mockGetStoredSession.mockResolvedValue('token');
     mockAuth.me.mockResolvedValue({ user: mockUser, settings: mockSettings });
 
-    const { getByTestId, unmount } = render(
+    const { getByTestId, unmount } = await render(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>,
@@ -308,7 +319,7 @@ describe('AuthContext', () => {
 
     expect(getByTestId('authenticated').props.children).toBe('false');
     expect(getByTestId('username').props.children).toBe('none');
-    unmount();
+    await unmount();
   });
 
   it('sets a session-ended reason on a 401-driven logout and clears it once the user signs back in', async () => {
@@ -320,7 +331,7 @@ describe('AuthContext', () => {
     mockGetStoredSession.mockResolvedValue('token');
     mockAuth.me.mockResolvedValue({ user: mockUser, settings: mockSettings });
 
-    const { getByTestId, unmount } = render(
+    const { getByTestId, unmount } = await render(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>,
@@ -341,14 +352,14 @@ describe('AuthContext', () => {
     mockAuth.login.mockResolvedValue({ user: mockUser, settings: mockSettings });
 
     await act(async () => {
-      fireEvent.press(getByTestId('login-button'));
+      await fireEvent.press(getByTestId('login-button'));
     });
 
     await waitFor(() => {
       expect(getByTestId('authenticated').props.children).toBe('true');
     });
     expect(getByTestId('session-ended-reason').props.children).toBe('none');
-    unmount();
+    await unmount();
   });
 
   it('does not set a session-ended reason on an ordinary logout', async () => {
@@ -356,7 +367,7 @@ describe('AuthContext', () => {
     mockAuth.me.mockResolvedValue({ user: mockUser, settings: mockSettings });
     mockAuth.logout.mockResolvedValue(undefined);
 
-    const { getByTestId, unmount } = render(
+    const { getByTestId, unmount } = await render(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>,
@@ -367,14 +378,14 @@ describe('AuthContext', () => {
     });
 
     await act(async () => {
-      fireEvent.press(getByTestId('logout-button'));
+      await fireEvent.press(getByTestId('logout-button'));
     });
 
     await waitFor(() => {
       expect(getByTestId('authenticated').props.children).toBe('false');
     });
     expect(getByTestId('session-ended-reason').props.children).toBe('none');
-    unmount();
+    await unmount();
   });
 
   it('caches profile on successful session restore', async () => {
@@ -382,7 +393,7 @@ describe('AuthContext', () => {
     mockGetStoredSession.mockResolvedValue('existing-token');
     mockAuth.me.mockResolvedValue(response);
 
-    const { getByTestId, unmount } = render(
+    const { getByTestId, unmount } = await render(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>,
@@ -393,7 +404,7 @@ describe('AuthContext', () => {
     });
 
     expect(mockCacheAuthProfile).toHaveBeenCalledWith(response);
-    unmount();
+    await unmount();
   });
 
   it('restores from cached profile on network error during session restore', async () => {
@@ -401,7 +412,7 @@ describe('AuthContext', () => {
     mockAuth.me.mockRejectedValue(new Error('Network Error'));
     mockGetCachedAuthProfile.mockResolvedValue({ user: { ...mockUser, username: 'cached' }, settings: mockSettings });
 
-    const { getByTestId, unmount } = render(
+    const { getByTestId, unmount } = await render(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>,
@@ -414,7 +425,7 @@ describe('AuthContext', () => {
     expect(getByTestId('authenticated').props.children).toBe('true');
     expect(getByTestId('username').props.children).toBe('cached');
     expect(mockClearStoredSession).not.toHaveBeenCalled();
-    unmount();
+    await unmount();
   });
 
   it('does not restore when cached profile has no settings', async () => {
@@ -422,7 +433,7 @@ describe('AuthContext', () => {
     mockAuth.me.mockRejectedValue(new Error('Network Error'));
     mockGetCachedAuthProfile.mockResolvedValue({ user: mockUser, settings: null });
 
-    const { getByTestId, unmount } = render(
+    const { getByTestId, unmount } = await render(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>,
@@ -433,7 +444,7 @@ describe('AuthContext', () => {
     });
 
     expect(getByTestId('authenticated').props.children).toBe('false');
-    unmount();
+    await unmount();
   });
 
   it('does not restore when cached profile has no user', async () => {
@@ -441,7 +452,7 @@ describe('AuthContext', () => {
     mockAuth.me.mockRejectedValue(new Error('Network Error'));
     mockGetCachedAuthProfile.mockResolvedValue({ user: null, settings: mockSettings });
 
-    const { getByTestId, unmount } = render(
+    const { getByTestId, unmount } = await render(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>,
@@ -452,7 +463,7 @@ describe('AuthContext', () => {
     });
 
     expect(getByTestId('authenticated').props.children).toBe('false');
-    unmount();
+    await unmount();
   });
 
   it('shows login when network error and no cached profile', async () => {
@@ -460,7 +471,7 @@ describe('AuthContext', () => {
     mockAuth.me.mockRejectedValue(new Error('Network Error'));
     mockGetCachedAuthProfile.mockResolvedValue(null);
 
-    const { getByTestId, unmount } = render(
+    const { getByTestId, unmount } = await render(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>,
@@ -471,14 +482,14 @@ describe('AuthContext', () => {
     });
 
     expect(getByTestId('authenticated').props.children).toBe('false');
-    unmount();
+    await unmount();
   });
 
   it('clears cached profile on 401 during session restore', async () => {
     mockGetStoredSession.mockResolvedValue('expired-token');
     mockAuth.me.mockRejectedValue({ response: { status: 401 } });
 
-    const { getByTestId, unmount } = render(
+    const { getByTestId, unmount } = await render(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>,
@@ -491,7 +502,7 @@ describe('AuthContext', () => {
     expect(mockClearStoredSession).toHaveBeenCalled();
     expect(mockClearCachedProfile).toHaveBeenCalled();
     expect(getByTestId('authenticated').props.children).toBe('false');
-    unmount();
+    await unmount();
   });
 
   it('keeps the cached profile and flags revalidation failure on 403 during session restore', async () => {
@@ -502,7 +513,7 @@ describe('AuthContext', () => {
     mockAuth.me.mockRejectedValue({ response: { status: 403 } });
     mockGetCachedAuthProfile.mockResolvedValue({ user: { ...mockUser, username: 'cached' }, settings: mockSettings });
 
-    const { getByTestId, unmount } = render(
+    const { getByTestId, unmount } = await render(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>,
@@ -516,7 +527,7 @@ describe('AuthContext', () => {
     expect(getByTestId('username').props.children).toBe('cached');
     expect(getByTestId('revalidation-failed').props.children).toBe('true');
     expect(mockClearStoredSession).not.toHaveBeenCalled();
-    unmount();
+    await unmount();
   });
 
   it('stays authenticated on a transient 5xx during session restore without flagging revalidation', async () => {
@@ -526,7 +537,7 @@ describe('AuthContext', () => {
     mockAuth.me.mockRejectedValue({ response: { status: 503 } });
     mockGetCachedAuthProfile.mockResolvedValue({ user: { ...mockUser, username: 'cached' }, settings: mockSettings });
 
-    const { getByTestId, unmount } = render(
+    const { getByTestId, unmount } = await render(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>,
@@ -540,7 +551,7 @@ describe('AuthContext', () => {
     expect(getByTestId('username').props.children).toBe('cached');
     expect(getByTestId('revalidation-failed').props.children).toBe('false');
     expect(mockClearStoredSession).not.toHaveBeenCalled();
-    unmount();
+    await unmount();
   });
 
   it('shows login on a non-401 http error when there is no cached profile', async () => {
@@ -548,7 +559,7 @@ describe('AuthContext', () => {
     mockAuth.me.mockRejectedValue({ response: { status: 500 } });
     mockGetCachedAuthProfile.mockResolvedValue(null);
 
-    const { getByTestId, unmount } = render(
+    const { getByTestId, unmount } = await render(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>,
@@ -561,7 +572,7 @@ describe('AuthContext', () => {
     expect(getByTestId('authenticated').props.children).toBe('false');
     // The stored session is preserved so a later launch can retry (only 401 clears it).
     expect(mockClearStoredSession).not.toHaveBeenCalled();
-    unmount();
+    await unmount();
   });
 
   it('shows login on a transient network error with no cached profile without flagging revalidation', async () => {
@@ -572,7 +583,7 @@ describe('AuthContext', () => {
     mockAuth.me.mockRejectedValue(new Error('Network Error'));
     mockGetCachedAuthProfile.mockResolvedValue(null);
 
-    const { getByTestId, unmount } = render(
+    const { getByTestId, unmount } = await render(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>,
@@ -585,7 +596,7 @@ describe('AuthContext', () => {
     expect(getByTestId('authenticated').props.children).toBe('false');
     expect(getByTestId('revalidation-failed').props.children).toBe('false');
     expect(mockClearStoredSession).not.toHaveBeenCalled();
-    unmount();
+    await unmount();
   });
 
   it('renders the cached profile immediately while auth.me() revalidates in the background', async () => {
@@ -598,7 +609,7 @@ describe('AuthContext', () => {
       }),
     );
 
-    const { getByTestId, unmount } = render(
+    const { getByTestId, unmount } = await render(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>,
@@ -619,14 +630,14 @@ describe('AuthContext', () => {
       expect(getByTestId('username').props.children).toBe('revalidated');
     });
     expect(mockCacheAuthProfile).toHaveBeenCalledWith({ user: { ...mockUser, username: 'revalidated' }, settings: mockSettings });
-    unmount();
+    await unmount();
   });
 
   it('caches profile on successful login', async () => {
     const response = { user: mockUser, settings: mockSettings };
     mockAuth.login.mockResolvedValue(response);
 
-    const { getByTestId, unmount } = render(
+    const { getByTestId, unmount } = await render(
       <AuthProvider>
         <LoginTrigger />
       </AuthProvider>,
@@ -637,13 +648,13 @@ describe('AuthContext', () => {
     });
 
     expect(mockCacheAuthProfile).toHaveBeenCalledWith(response);
-    unmount();
+    await unmount();
   });
 
   it('revalidateSession updates user and caches profile on success', async () => {
     mockGetStoredSession.mockResolvedValue(null);
 
-    const { getByTestId, unmount } = render(
+    const { getByTestId, unmount } = await render(
       <AuthProvider>
         <RevalidateConsumer />
       </AuthProvider>,
@@ -665,14 +676,14 @@ describe('AuthContext', () => {
     expect(getByTestId('authenticated').props.children).toBe('true');
     expect(getByTestId('username').props.children).toBe('revalidated');
     expect(mockCacheAuthProfile).toHaveBeenCalledWith(updatedResponse);
-    unmount();
+    await unmount();
   });
 
   it('revalidateSession clears auth on 401', async () => {
     mockGetStoredSession.mockResolvedValue('token');
     mockAuth.me.mockResolvedValueOnce({ user: mockUser, settings: mockSettings });
 
-    const { getByTestId, unmount } = render(
+    const { getByTestId, unmount } = await render(
       <AuthProvider>
         <RevalidateConsumer />
       </AuthProvider>,
@@ -692,7 +703,7 @@ describe('AuthContext', () => {
     expect(getByTestId('authenticated').props.children).toBe('false');
     expect(mockClearStoredSession).toHaveBeenCalled();
     expect(mockClearCachedProfile).toHaveBeenCalled();
-    unmount();
+    await unmount();
   });
 
   it('revalidateSession ignores network errors when there is no newer cached profile', async () => {
@@ -701,7 +712,7 @@ describe('AuthContext', () => {
     // No cached profile for the still-active server: nothing to fall back to.
     mockGetCachedAuthProfile.mockResolvedValue(null);
 
-    const { getByTestId, unmount } = render(
+    const { getByTestId, unmount } = await render(
       <AuthProvider>
         <RevalidateConsumer />
       </AuthProvider>,
@@ -721,7 +732,7 @@ describe('AuthContext', () => {
     // User stays authenticated on network error
     expect(getByTestId('authenticated').props.children).toBe('true');
     expect(getByTestId('username').props.children).toBe('testuser');
-    unmount();
+    await unmount();
   });
 
   it('revalidateSession falls back to the (newly-active) server\'s cached profile on network error', async () => {
@@ -733,7 +744,7 @@ describe('AuthContext', () => {
     mockGetStoredSession.mockResolvedValue('token');
     mockAuth.me.mockResolvedValueOnce({ user: mockUser, settings: mockSettings });
 
-    const { getByTestId, unmount } = render(
+    const { getByTestId, unmount } = await render(
       <AuthProvider>
         <RevalidateConsumer />
       </AuthProvider>,
@@ -756,13 +767,13 @@ describe('AuthContext', () => {
 
     expect(getByTestId('authenticated').props.children).toBe('true');
     expect(getByTestId('username').props.children).toBe('other-server-user');
-    unmount();
+    await unmount();
   });
 
   it('restores local mode on mount without calling /me', async () => {
     mockGetLocalIdentity.mockResolvedValue(localIdentity);
 
-    const { getByTestId, unmount } = render(
+    const { getByTestId, unmount } = await render(
       <AuthProvider>
         <LocalModeConsumer />
       </AuthProvider>,
@@ -777,13 +788,13 @@ describe('AuthContext', () => {
     expect(getByTestId('username').props.children).toBe('local');
     expect(mockAuth.me).not.toHaveBeenCalled();
     expect(mockClientModule.initializeServerContext).not.toHaveBeenCalled();
-    unmount();
+    await unmount();
   });
 
   it('enableLocalMode signs in with the on-device identity', async () => {
     mockPersistEnableLocalMode.mockResolvedValue(localIdentity);
 
-    const { getByTestId, unmount } = render(
+    const { getByTestId, unmount } = await render(
       <AuthProvider>
         <LocalModeConsumer />
       </AuthProvider>,
@@ -795,7 +806,7 @@ describe('AuthContext', () => {
     expect(getByTestId('authenticated').props.children).toBe('false');
 
     await act(async () => {
-      fireEvent.press(getByTestId('enable-local-button'));
+      await fireEvent.press(getByTestId('enable-local-button'));
     });
 
     await waitFor(() => {
@@ -804,13 +815,13 @@ describe('AuthContext', () => {
     expect(getByTestId('authenticated').props.children).toBe('true');
     expect(getByTestId('username').props.children).toBe('local');
     expect(mockPersistEnableLocalMode).toHaveBeenCalled();
-    unmount();
+    await unmount();
   });
 
   it('calls updateLocalSettings when settings change in local mode', async () => {
     mockGetLocalIdentity.mockResolvedValue(localIdentity);
 
-    const { getByTestId, unmount } = render(
+    const { getByTestId, unmount } = await render(
       <AuthProvider>
         <SettingsConsumer />
       </AuthProvider>,
@@ -823,7 +834,7 @@ describe('AuthContext', () => {
     mockUpdateLocalSettings.mockClear();
 
     await act(async () => {
-      fireEvent.press(getByTestId('change-settings'));
+      await fireEvent.press(getByTestId('change-settings'));
     });
 
     await waitFor(() => {
@@ -831,14 +842,14 @@ describe('AuthContext', () => {
         expect.objectContaining({ language: 'de' }),
       );
     });
-    unmount();
+    await unmount();
   });
 
   it('does not call updateLocalSettings when settings change in server mode', async () => {
     mockGetStoredSession.mockResolvedValue('token');
     mockAuth.me.mockResolvedValue({ user: mockUser, settings: mockSettings });
 
-    const { getByTestId, unmount } = render(
+    const { getByTestId, unmount } = await render(
       <AuthProvider>
         <SettingsConsumer />
       </AuthProvider>,
@@ -851,17 +862,17 @@ describe('AuthContext', () => {
     mockUpdateLocalSettings.mockClear();
 
     await act(async () => {
-      fireEvent.press(getByTestId('change-settings'));
+      await fireEvent.press(getByTestId('change-settings'));
     });
 
     expect(mockUpdateLocalSettings).not.toHaveBeenCalled();
-    unmount();
+    await unmount();
   });
 
   it('calls updateLocalUser when the profile changes in local mode', async () => {
     mockGetLocalIdentity.mockResolvedValue(localIdentity);
 
-    const { getByTestId, unmount } = render(
+    const { getByTestId, unmount } = await render(
       <AuthProvider>
         <SettingsConsumer />
       </AuthProvider>,
@@ -874,7 +885,7 @@ describe('AuthContext', () => {
     mockUpdateLocalUser.mockClear();
 
     await act(async () => {
-      fireEvent.press(getByTestId('change-user'));
+      await fireEvent.press(getByTestId('change-user'));
     });
 
     await waitFor(() => {
@@ -882,14 +893,14 @@ describe('AuthContext', () => {
         expect.objectContaining({ first_name: 'Renamed' }),
       );
     });
-    unmount();
+    await unmount();
   });
 
   it('does not call updateLocalUser when the profile changes in server mode', async () => {
     mockGetStoredSession.mockResolvedValue('token');
     mockAuth.me.mockResolvedValue({ user: mockUser, settings: mockSettings });
 
-    const { getByTestId, unmount } = render(
+    const { getByTestId, unmount } = await render(
       <AuthProvider>
         <SettingsConsumer />
       </AuthProvider>,
@@ -902,17 +913,17 @@ describe('AuthContext', () => {
     mockUpdateLocalUser.mockClear();
 
     await act(async () => {
-      fireEvent.press(getByTestId('change-user'));
+      await fireEvent.press(getByTestId('change-user'));
     });
 
     expect(mockUpdateLocalUser).not.toHaveBeenCalled();
-    unmount();
+    await unmount();
   });
 
   it('logout from local mode disables local mode and does not call server logout', async () => {
     mockGetLocalIdentity.mockResolvedValue(localIdentity);
 
-    const { getByTestId, unmount } = render(
+    const { getByTestId, unmount } = await render(
       <AuthProvider>
         <LocalModeConsumer />
       </AuthProvider>,
@@ -923,7 +934,7 @@ describe('AuthContext', () => {
     });
 
     await act(async () => {
-      fireEvent.press(getByTestId('logout-button'));
+      await fireEvent.press(getByTestId('logout-button'));
     });
 
     await waitFor(() => {
@@ -932,6 +943,6 @@ describe('AuthContext', () => {
     expect(getByTestId('local-mode').props.children).toBe('false');
     expect(mockDisableLocalMode).toHaveBeenCalled();
     expect(mockAuth.logout).not.toHaveBeenCalled();
-    unmount();
+    await unmount();
   });
 });

@@ -78,9 +78,9 @@ describe('AccountSection', () => {
     mockAuth(false);
     mockUpdateMe.mockResolvedValue({ user, settings });
 
-    const { getByTestId } = render(<AccountSection />);
-    fireEvent.changeText(getByTestId('settings-first-name'), 'Renamed');
-    fireEvent.press(getByTestId('settings-save-profile'));
+    const { getByTestId } = await render(<AccountSection />);
+    await fireEvent.changeText(getByTestId('settings-first-name'), 'Renamed');
+    await fireEvent.press(getByTestId('settings-save-profile'));
 
     await waitFor(() => {
       expect(mockUpdateMe).toHaveBeenCalledWith(
@@ -94,9 +94,9 @@ describe('AccountSection', () => {
   it('does not touch the server or sync queue in local mode', async () => {
     mockAuth(true);
 
-    const { getByTestId, getByText } = render(<AccountSection />);
-    fireEvent.changeText(getByTestId('settings-first-name'), 'Renamed');
-    fireEvent.press(getByTestId('settings-save-profile'));
+    const { getByTestId, getByText } = await render(<AccountSection />);
+    await fireEvent.changeText(getByTestId('settings-first-name'), 'Renamed');
+    await fireEvent.press(getByTestId('settings-save-profile'));
 
     // Optimistic update is applied and surfaced as a success...
     await waitFor(() => {
@@ -116,9 +116,9 @@ describe('AccountSection', () => {
     mockAuth(false);
     markServerUnreachable();
 
-    const { getByTestId, getByText } = render(<AccountSection />);
-    fireEvent.changeText(getByTestId('settings-first-name'), 'Renamed');
-    fireEvent.press(getByTestId('settings-save-profile'));
+    const { getByTestId, getByText } = await render(<AccountSection />);
+    await fireEvent.changeText(getByTestId('settings-first-name'), 'Renamed');
+    await fireEvent.press(getByTestId('settings-save-profile'));
 
     await waitFor(() => {
       expect(getByText(i18n.t('settings.profileUpdated'))).toBeTruthy();
@@ -142,9 +142,9 @@ describe('AccountSection', () => {
     markServerUnreachable();
     mockEnqueueOperation.mockRejectedValueOnce(new Error('sqlite write failed'));
 
-    const { getByTestId, getByText } = render(<AccountSection />);
-    fireEvent.changeText(getByTestId('settings-first-name'), 'Renamed');
-    fireEvent.press(getByTestId('settings-save-profile'));
+    const { getByTestId, getByText } = await render(<AccountSection />);
+    await fireEvent.changeText(getByTestId('settings-first-name'), 'Renamed');
+    await fireEvent.press(getByTestId('settings-save-profile'));
 
     // The button must not stay stuck on "Saving…" forever: the same finally
     // that guards the network path also runs for a failed enqueue.
@@ -159,9 +159,9 @@ describe('AccountSection', () => {
   it('re-translates the success message when the language changes', async () => {
     mockAuth(true);
 
-    const { getByTestId, getByText } = render(<AccountSection />);
-    fireEvent.changeText(getByTestId('settings-first-name'), 'Renamed');
-    fireEvent.press(getByTestId('settings-save-profile'));
+    const { getByTestId, getByText } = await render(<AccountSection />);
+    await fireEvent.changeText(getByTestId('settings-first-name'), 'Renamed');
+    await fireEvent.press(getByTestId('settings-save-profile'));
 
     await waitFor(() => {
       expect(getByText(i18n.t('settings.profileUpdated'))).toBeTruthy();

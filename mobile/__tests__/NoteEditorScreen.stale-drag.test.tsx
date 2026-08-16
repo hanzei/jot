@@ -66,9 +66,9 @@ describe('NoteEditorScreen drag against a list that changed underneath', () => {
     mockReorderItemsMutateAsync.mockResolvedValue([]);
   });
 
-  it('yields a key for an index the list no longer has instead of throwing', () => {
+  it('yields a key for an index the list no longer has instead of throwing', async () => {
     mockUseOfflineNote.mockReturnValue({ data: listNote([ITEM_A_ID]) });
-    render(<NoteEditorScreen />);
+    await render(<NoteEditorScreen />);
 
     const { keyExtractor, data } = latestListProps();
     // The library calls keyExtractor(data[i], i) for the whole moved range, so
@@ -76,11 +76,11 @@ describe('NoteEditorScreen drag against a list that changed underneath', () => {
     expect(keyExtractor(data[1] as LocalItem, 1)).toBe('1');
   });
 
-  it('discards a drop whose indices no longer fit the list', () => {
+  it('discards a drop whose indices no longer fit the list', async () => {
     mockUseOfflineNote.mockReturnValue({ data: listNote([ITEM_A_ID, ITEM_B_ID, ITEM_C_ID]) });
-    const { getAllByTestId, rerender } = render(<NoteEditorScreen />);
+    const { getAllByTestId, rerender } = await render(<NoteEditorScreen />);
 
-    act(() => {
+    await act(() => {
       latestListProps().onDragStart({ index: 2 });
     });
 
@@ -89,13 +89,13 @@ describe('NoteEditorScreen drag against a list that changed underneath', () => {
     mockUseOfflineNote.mockReturnValue({
       data: listNote([ITEM_A_ID], '2026-01-01T00:05:00Z'),
     });
-    act(() => {
-      rerender(<NoteEditorScreen />);
+    await act(async () => {
+      await rerender(<NoteEditorScreen />);
     });
     expect(itemTexts(getAllByTestId)).toEqual(['Item 0']);
 
     // The drop lands with the pre-refresh indices.
-    act(() => {
+    await act(() => {
       latestListProps().onReorder({ from: 2, to: 0 });
     });
 
@@ -103,11 +103,11 @@ describe('NoteEditorScreen drag against a list that changed underneath', () => {
     expect(mockUpdateMutateAsync).not.toHaveBeenCalled();
   });
 
-  it('discards a drop whose indices now point at a different row', () => {
+  it('discards a drop whose indices now point at a different row', async () => {
     mockUseOfflineNote.mockReturnValue({ data: listNote([ITEM_A_ID, ITEM_B_ID]) });
-    const { getAllByTestId, rerender } = render(<NoteEditorScreen />);
+    const { getAllByTestId, rerender } = await render(<NoteEditorScreen />);
 
-    act(() => {
+    await act(() => {
       latestListProps().onDragStart({ index: 1 });
     });
 
@@ -116,11 +116,11 @@ describe('NoteEditorScreen drag against a list that changed underneath', () => {
     mockUseOfflineNote.mockReturnValue({
       data: listNote([ITEM_C_ID, ITEM_A_ID], '2026-01-01T00:05:00Z'),
     });
-    act(() => {
-      rerender(<NoteEditorScreen />);
+    await act(async () => {
+      await rerender(<NoteEditorScreen />);
     });
 
-    act(() => {
+    await act(() => {
       latestListProps().onReorder({ from: 1, to: 0 });
     });
 
@@ -128,14 +128,14 @@ describe('NoteEditorScreen drag against a list that changed underneath', () => {
     expect(mockUpdateMutateAsync).not.toHaveBeenCalled();
   });
 
-  it('still commits a drop when the list is unchanged', () => {
+  it('still commits a drop when the list is unchanged', async () => {
     mockUseOfflineNote.mockReturnValue({ data: listNote([ITEM_A_ID, ITEM_B_ID]) });
-    const { getAllByTestId } = render(<NoteEditorScreen />);
+    const { getAllByTestId } = await render(<NoteEditorScreen />);
 
-    act(() => {
+    await act(() => {
       latestListProps().onDragStart({ index: 0 });
     });
-    act(() => {
+    await act(() => {
       latestListProps().onReorder({ from: 0, to: 1 });
     });
 

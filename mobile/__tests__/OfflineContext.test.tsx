@@ -114,7 +114,7 @@ describe('OfflineProvider queue draining', () => {
 
   it('never drains the queue in local mode (mount, foreground, or enqueue)', async () => {
     setLocalModeActive(true);
-    renderProvider();
+    await renderProvider();
     await flush();
     // Mount must not drain.
     expect(mockDrainQueue).not.toHaveBeenCalled();
@@ -127,7 +127,7 @@ describe('OfflineProvider queue draining', () => {
     await flush();
 
     // Nor an enqueue signal after its debounce window elapses.
-    act(() => {
+    await act(() => {
       enqueueListener?.();
     });
     await act(async () => {
@@ -139,17 +139,17 @@ describe('OfflineProvider queue draining', () => {
   });
 
   it('drains once on mount when starting online', async () => {
-    renderProvider();
+    await renderProvider();
     await flush();
     expect(mockDrainQueue).toHaveBeenCalledTimes(1);
   });
 
   it('drains shortly after a write is enqueued while online (debounced)', async () => {
-    renderProvider();
+    await renderProvider();
     await flush();
     mockDrainQueue.mockClear();
 
-    act(() => {
+    await act(() => {
       enqueueListener?.();
     });
     // The debounce window has not elapsed yet, so no drain has run.
@@ -170,11 +170,11 @@ describe('OfflineProvider queue draining', () => {
     mockDrainQueue.mockResolvedValue({ idMappings: [], discardedOperations: [], syncedSettings: true });
     mockGetPendingCount.mockResolvedValue(0);
     mockGetQueuedImageUploadCount.mockResolvedValue(2);
-    renderProvider();
+    await renderProvider();
     await flush();
     mockRevalidate.mockClear();
 
-    act(() => {
+    await act(() => {
       enqueueListener?.();
     });
     await act(async () => {
@@ -189,11 +189,11 @@ describe('OfflineProvider queue draining', () => {
     mockDrainQueue.mockResolvedValue({ idMappings: [], discardedOperations: [], syncedSettings: true });
     mockGetPendingCount.mockResolvedValue(1);
     mockGetQueuedImageUploadCount.mockResolvedValue(0);
-    renderProvider();
+    await renderProvider();
     await flush();
     mockRevalidate.mockClear();
 
-    act(() => {
+    await act(() => {
       enqueueListener?.();
     });
     await act(async () => {
@@ -205,7 +205,7 @@ describe('OfflineProvider queue draining', () => {
   });
 
   it('drains when the app returns to the foreground', async () => {
-    renderProvider();
+    await renderProvider();
     await flush();
     mockDrainQueue.mockClear();
 
@@ -228,13 +228,13 @@ describe('OfflineProvider queue draining', () => {
         }),
     );
 
-    renderProvider();
+    await renderProvider();
     await flush();
     // The mount drain is now in flight (pending on resolveFirst).
     expect(mockDrainQueue).toHaveBeenCalledTimes(1);
 
     // Fire an enqueue while the drain is running — it must not start a 2nd drain.
-    act(() => {
+    await act(() => {
       enqueueListener?.();
     });
     await act(async () => {
@@ -259,7 +259,7 @@ describe('OfflineProvider queue draining', () => {
     // Every drain leaves entries behind → each attempt counts as a stalled drain.
     mockGetPendingCount.mockResolvedValue(1);
 
-    renderProvider();
+    await renderProvider();
     await flush();
 
     // Drive the backoff retries well past the cap; advancing the max backoff each
@@ -278,7 +278,7 @@ describe('OfflineProvider queue draining', () => {
 
   it('clears the sync error and resumes draining on reconnect after the cap is hit', async () => {
     mockGetPendingCount.mockResolvedValue(1);
-    renderProvider();
+    await renderProvider();
     await flush();
     for (let i = 0; i < 12; i++) {
       await act(async () => {
@@ -304,7 +304,7 @@ describe('OfflineProvider queue draining', () => {
   it('cancels the scheduled retry and stops draining when connectivity drops to offline', async () => {
     // Every drain stalls, so the mount drain schedules a backoff retry.
     mockGetPendingCount.mockResolvedValue(1);
-    renderProvider();
+    await renderProvider();
     await flush();
     expect(mockDrainQueue).toHaveBeenCalledTimes(1);
 
@@ -327,7 +327,7 @@ describe('OfflineProvider queue draining', () => {
   it('skips the network drain while the server is known-unreachable (#718)', async () => {
     const reachableSpy = jest.spyOn(serverReachability, 'isServerReachable').mockReturnValue(false);
 
-    renderProvider();
+    await renderProvider();
     await flush();
     // Mount drain must not fire the network — the server is known-down.
     expect(mockDrainQueue).not.toHaveBeenCalled();
@@ -346,7 +346,7 @@ describe('OfflineProvider queue draining', () => {
   it('resumes draining once reachability is re-armed (#718)', async () => {
     const reachableSpy = jest.spyOn(serverReachability, 'isServerReachable').mockReturnValue(false);
 
-    renderProvider();
+    await renderProvider();
     await flush();
     expect(mockDrainQueue).not.toHaveBeenCalled();
 
@@ -366,7 +366,7 @@ describe('OfflineProvider queue draining', () => {
 
   it('resets the retry budget and resumes draining when a new write is enqueued after the cap', async () => {
     mockGetPendingCount.mockResolvedValue(1);
-    renderProvider();
+    await renderProvider();
     await flush();
     for (let i = 0; i < 12; i++) {
       await act(async () => {
@@ -379,7 +379,7 @@ describe('OfflineProvider queue draining', () => {
 
     // The server recovers and the user makes another edit while still online.
     mockGetPendingCount.mockResolvedValue(0);
-    act(() => {
+    await act(() => {
       enqueueListener?.();
     });
     await act(async () => {
@@ -394,7 +394,7 @@ describe('OfflineProvider queue draining', () => {
   it('records lastSyncedAt after a successful drain and tracks the consecutive-failure count', async () => {
     // Every drain leaves entries behind → stalls, bumping the failure counter.
     mockGetPendingCount.mockResolvedValue(1);
-    renderProvider();
+    await renderProvider();
     await flush();
 
     expect(lastSyncedAt).toBeNull();
@@ -424,14 +424,14 @@ describe('OfflineProvider queue draining', () => {
 
     // A routine successful drain (no prior failures) must not log a recovery —
     // it fires on nearly every enqueue and would drown out everything else.
-    renderProvider();
+    await renderProvider();
     await flush();
     expect(infoSpy).not.toHaveBeenCalled();
     warnSpy.mockClear();
 
     // Every subsequent drain leaves entries behind, so it stalls and logs.
     mockGetPendingCount.mockResolvedValue(1);
-    act(() => {
+    await act(() => {
       enqueueListener?.();
     });
     await act(async () => {

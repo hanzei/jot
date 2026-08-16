@@ -27,52 +27,52 @@ beforeEach(() => {
 });
 
 describe('UserAvatar', () => {
-  it('renders the network URL until the local cache resolves', () => {
-    const { getByLabelText } = render(<UserAvatar {...props} />);
+  it('renders the network URL until the local cache resolves', async () => {
+    const { getByLabelText } = await render(<UserAvatar {...props} />);
     expect(getByLabelText('bob profile picture').props.source).toEqual({ uri: NETWORK_URL });
   });
 
-  it('falls back to initials when the image fails to load', () => {
-    const { getByLabelText, queryByText } = render(<UserAvatar {...props} />);
+  it('falls back to initials when the image fails to load', async () => {
+    const { getByLabelText, queryByText } = await render(<UserAvatar {...props} />);
 
-    fireEvent(getByLabelText('bob profile picture'), 'error');
+    await fireEvent(getByLabelText('bob profile picture'), 'error');
 
     expect(queryByText('B')).toBeTruthy();
   });
 
-  it('renders the cached file that arrives after the network URL failed', () => {
-    const { getByLabelText, queryByText, rerender } = render(<UserAvatar {...props} />);
+  it('renders the cached file that arrives after the network URL failed', async () => {
+    const { getByLabelText, queryByText, rerender } = await render(<UserAvatar {...props} />);
 
     // The network URL fails — offline, or the server 500s — so initials show.
-    fireEvent(getByLabelText('bob profile picture'), 'error');
+    await fireEvent(getByLabelText('bob profile picture'), 'error');
     expect(queryByText('B')).toBeTruthy();
 
     // useProfileIcon then resolves a cached file for the *same* avatar identity.
     // The failure was recorded against the URI that failed, not the identity, so
     // this one is not suppressed by it.
     mockUseProfileIcon.mockReturnValue('file:///cache/u1-v1.png');
-    rerender(<UserAvatar {...props} />);
+    await rerender(<UserAvatar {...props} />);
 
     expect(getByLabelText('bob profile picture').props.source).toEqual({ uri: 'file:///cache/u1-v1.png' });
   });
 
-  it('keeps showing initials while the failed URI is still the one being rendered', () => {
-    const { getByLabelText, queryByText, rerender } = render(<UserAvatar {...props} />);
+  it('keeps showing initials while the failed URI is still the one being rendered', async () => {
+    const { getByLabelText, queryByText, rerender } = await render(<UserAvatar {...props} />);
 
-    fireEvent(getByLabelText('bob profile picture'), 'error');
-    rerender(<UserAvatar {...props} />);
+    await fireEvent(getByLabelText('bob profile picture'), 'error');
+    await rerender(<UserAvatar {...props} />);
 
     expect(queryByText('B')).toBeTruthy();
   });
 
-  it('retries on a new avatar identity', () => {
-    const { getByLabelText, queryByText, rerender } = render(<UserAvatar {...props} />);
+  it('retries on a new avatar identity', async () => {
+    const { getByLabelText, queryByText, rerender } = await render(<UserAvatar {...props} />);
 
-    fireEvent(getByLabelText('bob profile picture'), 'error');
+    await fireEvent(getByLabelText('bob profile picture'), 'error');
     expect(queryByText('B')).toBeTruthy();
 
     // A new icon version is a new identity; the recorded failure no longer applies.
-    rerender(<UserAvatar {...props} iconVersion="v2" />);
+    await rerender(<UserAvatar {...props} iconVersion="v2" />);
 
     expect(getByLabelText('bob profile picture').props.source).toEqual({ uri: NETWORK_URL });
   });
