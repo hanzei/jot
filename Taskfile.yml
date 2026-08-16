@@ -59,7 +59,7 @@ tasks:
       - task: check-translations
 
   check-mobile:
-    desc: Lint, test, and Expo-version-check the mobile app only
+    desc: Lint, test, and expo-doctor-check the mobile app only
     cmds:
       - task: lint-mobile
       - task: test-mobile
@@ -182,13 +182,16 @@ tasks:
     cmd: ./scripts/check-migrations.sh
 
   # Catches Expo-governed packages (expo, expo-*, react-native, ...) drifting
-  # off the versions SDK 57 expects — npm install and the test/typecheck
-  # suites all pass on a mismatch, so nothing else here would catch it. See
-  # .claude/commands/update-mobile-deps.md for the full Expo-governed list.
+  # off the versions SDK 57 expects, plus other native/SDK mismatches (e.g.
+  # known Hermes regressions, app-config schema errors) — npm install and the
+  # test/typecheck suites all pass on any of these, so nothing else here would
+  # catch them. See .claude/commands/update-mobile-deps.md for the full
+  # Expo-governed package list; that command already treats expo-doctor as
+  # its highest-value check for the same reason.
   check-mobile-expo:
-    desc: Check mobile's Expo-governed dependencies match SDK 57's expected versions
+    desc: Run expo-doctor to check mobile's Expo SDK/native alignment
     dir: mobile
-    cmd: npx expo install --check
+    cmd: npx expo-doctor
 
   test-e2e:
     desc: Run end-to-end tests

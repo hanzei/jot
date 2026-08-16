@@ -33,8 +33,8 @@ jobs:
         run: npm run typecheck
         working-directory: ./mobile
 
-      - name: Check Expo SDK version alignment
-        run: npx expo install --check
+      - name: Run expo-doctor
+        run: npx expo-doctor
         working-directory: ./mobile
 
   translations:
