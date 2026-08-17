@@ -43,7 +43,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   const showToast = useCallback((message: string, type: ToastType = 'success', action?: ToastAction) => {
     const id = nextIdRef.current++;
-    setToasts((prev) => [...prev, { id, message, type, action }]);
+    setToasts((prev) => [...prev, { id, message, type, ...(action !== undefined && { action }) }]);
   }, []);
 
   const dismissToast = useCallback((id: number) => {

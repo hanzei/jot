@@ -57,7 +57,7 @@ interface ListItemProps {
   /** Filled in with this row's caret handle while it is mounted. */
   selectionHandleRef?: React.RefObject<ListItemSelectionHandle | null>;
   autoFocus?: boolean;
-  inputAccessoryViewID?: string;
+  inputAccessoryViewID?: string | undefined;
   hasNoteColor?: boolean;
   completedItemTexts?: string[];
   /**
@@ -358,7 +358,7 @@ function ListItem({
         <View style={styles.dragHandleSpacer} testID="list-item-drag-handle-spacer" />
       ) : null}
       <TouchableOpacity
-        onPress={editable ? onToggle : undefined}
+        {...(editable && onToggle && { onPress: onToggle })}
         style={styles.checkbox}
         testID="list-item-checkbox"
         accessibilityRole="checkbox"
@@ -490,7 +490,7 @@ function ListItem({
           )}
           {showAssignUI && assignedTo ? (
             <TouchableOpacity
-              onPress={!completed ? onAssignPress : undefined}
+              {...(!completed && onAssignPress && { onPress: onAssignPress })}
               style={styles.assignBtn}
               testID="list-item-assignee"
               accessibilityLabel={t('note.assignedTo', {

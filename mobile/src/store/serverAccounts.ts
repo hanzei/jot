@@ -16,7 +16,7 @@ export type AddServerResult =
 export interface ServerAccountEntry {
   serverId: string;
   serverUrl: string;
-  displayName?: string;
+  displayName?: string | undefined;
   lastUsedAt: string;
 }
 

@@ -22,19 +22,19 @@ interface NoteEditorMenuProps {
    */
   trashed?: boolean;
   /** Optional note title, shown as a header (list notes only, like the card menu). */
-  title?: string;
+  title?: string | undefined;
   /** The note's current type, used only to label the convert action below. */
   noteType?: NoteType;
   // Editable-note actions. Callbacks left undefined are hidden based on the
   // editor's current ownership/state.
   onSend?: () => void;
-  onShare?: () => void;
+  onShare?: (() => void) | undefined;
   onDuplicate?: () => void;
   onConvert?: () => void;
   onManageLabels?: () => void;
   /** Shown only when the list has completed items (list notes only). */
-  onUncheckAllItems?: () => void;
-  onDeleteCheckedItems?: () => void;
+  onUncheckAllItems?: (() => void | Promise<void>) | undefined;
+  onDeleteCheckedItems?: (() => void | Promise<void>) | undefined;
   onMoveToTrash?: () => void;
   // Trashed-note actions.
   onRestore?: () => void;

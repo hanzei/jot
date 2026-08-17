@@ -214,8 +214,7 @@ sub-projects inherit theirs. **Read them for what is on** — enumerating the
 flags here only produced a list that went stale every time one moved. What the
 configs cannot say: keep them in step. A flag one workspace has and another
 does not is drift, not a decision, and the fix is to turn it on everywhere
-rather than to record the exception. One known gap, tracked rather than
-intentional — nothing anywhere runs `exactOptionalPropertyTypes`.
+rather than to record the exception.
 
 `noUncheckedIndexedAccess` types every indexed read as `T | undefined`, so
 `arr[i]` and `record[key]` have to be handled rather than assumed
@@ -233,6 +232,24 @@ the choice is not stylistic:
 
 Test code is the one place to reach for `!` freely: a test that indexes past
 the end should fail loudly, and asserting keeps it reading as a test.
+
+`exactOptionalPropertyTypes` distinguishes "key absent" from "key present with
+value `undefined`": `foo?: string` now means the former only, and rolled out
+shared → webapp → mobile ([#927](https://github.com/hanzei/jot/issues/927),
+[#930](https://github.com/hanzei/jot/pull/930)). Each site the flag flags
+resolves one of two ways, and — as with the guard/assertion split above — the
+choice is not stylistic:
+
+- **Widen the declaration** to `foo?: T | undefined`, for pass-through
+  props/options and for anything that becomes a JSON request body or query
+  param (`JSON.stringify` and axios's param serializer both drop an
+  `undefined`-valued key before it reaches the server, so the absent-vs-
+  explicitly-undefined distinction is already erased by the time it matters).
+  This is mechanical and changes no behavior.
+- **Conditionally spread** (`...(x !== undefined && { key: x })`) at a
+  construction or merge site where the key's presence is meaningful — the
+  case the flag exists to catch is `{ ...existing, ...patch }` silently
+  wiping a field by overwriting it with `undefined`.
 
 **Node types are not repo-wide, on purpose** — `types: ["node"]` must not reach
 `src`, or app code touching `process`/`Buffer`/`fs` type-checks clean and breaks
