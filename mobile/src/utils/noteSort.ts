@@ -1,3 +1,4 @@
+import type { TFunction } from 'i18next';
 import type { NoteSort } from '@jot/shared';
 
 const getEnglishSortLabel = (sortMode: NoteSort): string => {
@@ -14,7 +15,7 @@ const getEnglishSortLabel = (sortMode: NoteSort): string => {
 
 export const getNoteSortLabel = (
   sortMode: NoteSort,
-  translate?: (key: string, options?: Record<string, unknown>) => string,
+  translate?: TFunction,
 ): string => {
   if (translate) {
     return translate(`dashboard.sortOption.${sortMode}`);

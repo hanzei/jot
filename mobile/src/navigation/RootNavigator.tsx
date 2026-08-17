@@ -43,8 +43,8 @@ export type RootStackParamList = {
     sharedText?: string;
     initialNoteType?: NoteType;
     readOnly?: boolean;
-    originRect?: LayoutRect;
-    originColor?: string;
+    originRect?: LayoutRect | undefined;
+    originColor?: string | undefined;
     openKey?: string;
   };
   Share: { noteId: string };

@@ -26,7 +26,7 @@ interface NoteCardProps {
   // failed.
   onPress: (rect?: LayoutRect) => void;
   onLongPress?: () => void;
-  onLabelPress?: (labelId: string, labelName: string) => void;
+  onLabelPress?: ((labelId: string, labelName: string) => void) | undefined;
 }
 
 const MAX_PREVIEW_ITEMS = 10;
@@ -36,8 +36,8 @@ interface AvatarData {
   key: string;
   userId: string;
   username: string;
-  hasProfileIcon?: boolean;
-  iconVersion?: string;
+  hasProfileIcon?: boolean | undefined;
+  iconVersion?: string | undefined;
 }
 
 function buildNoteAvatars(

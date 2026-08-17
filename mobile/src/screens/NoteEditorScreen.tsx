@@ -441,7 +441,9 @@ export default function NoteEditorScreen() {
   const retryImageUpload = useCallback((uploadId: string) => {
     const file = imageUploadFilesRef.current.get(uploadId);
     if (file) {
-      setImageUploads((prev) => prev.map((u) => (u.id === uploadId ? { ...u, status: 'uploading', progress: 0, errorMessage: undefined } : u)));
+      setImageUploads((prev) => prev.map((u) => (u.id === uploadId
+        ? { id: u.id, filename: u.filename, previewUri: u.previewUri, status: 'uploading', progress: 0 }
+        : u)));
       runImageUpload(uploadId, file);
       return;
     }
@@ -1446,7 +1448,9 @@ export default function NoteEditorScreen() {
               // Slide remaining rows into place when an item is checked off (and
               // moves to the completed section) or deleted. Skipped under the OS
               // Reduce Motion setting, like the editor's other animations.
-              itemLayoutAnimation={isReduceMotionEnabledSync() ? undefined : LinearTransition.duration(LIST_REFLOW_ANIM_MS)}
+              {...(!isReduceMotionEnabledSync() && {
+                itemLayoutAnimation: LinearTransition.duration(LIST_REFLOW_ANIM_MS),
+              })}
             />
 
             {!isReadOnly && (

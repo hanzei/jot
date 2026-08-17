@@ -49,7 +49,7 @@ import {
 
 interface NotesListScreenProps {
   variant?: 'notes' | 'archived' | 'trash' | 'my-tasks';
-  labelId?: string;
+  labelId?: string | undefined;
 }
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'MainDrawer'>;

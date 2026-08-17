@@ -149,13 +149,13 @@ export interface ListNote extends BaseNote {
 export type Note = TextNote | ListNote;
 
 export interface GetNotesParams {
-  archived?: boolean;
-  search?: string;
-  trashed?: boolean;
-  label?: string;
-  my_tasks?: boolean;
+  archived?: boolean | undefined;
+  search?: string | undefined;
+  trashed?: boolean | undefined;
+  label?: string | undefined;
+  my_tasks?: boolean | undefined;
   /** Used locally to filter my-tasks notes by assigned_to; not sent to the server. */
-  user_id?: string;
+  user_id?: string | undefined;
 }
 
 export interface CreateNoteItemRequest {
@@ -179,7 +179,7 @@ export interface CreateNoteItemRequest {
   indent_level?: number;
   /** Nests the new item under a top-level item (granular create only). */
   parent_id?: string | null;
-  assigned_to?: string;
+  assigned_to?: string | undefined;
 }
 
 /**
@@ -212,7 +212,7 @@ export interface CreateTextNoteRequest {
   id?: string;
   content: string;
   note_type: 'text';
-  color?: string;
+  color?: string | undefined;
   labels?: string[] | undefined;
 }
 
@@ -221,7 +221,7 @@ export interface CreateListNoteRequest {
   id?: string;
   title: string;
   note_type: 'list';
-  color?: string;
+  color?: string | undefined;
   items?: CreateNoteItemRequest[];
   labels?: string[] | undefined;
 }

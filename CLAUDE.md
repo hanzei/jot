@@ -214,8 +214,7 @@ sub-projects inherit theirs. **Read them for what is on** — enumerating the
 flags here only produced a list that went stale every time one moved. What the
 configs cannot say: keep them in step. A flag one workspace has and another
 does not is drift, not a decision, and the fix is to turn it on everywhere
-rather than to record the exception. One known gap, tracked rather than
-intentional — nothing anywhere runs `exactOptionalPropertyTypes`.
+rather than to record the exception.
 
 `noUncheckedIndexedAccess` types every indexed read as `T | undefined`, so
 `arr[i]` and `record[key]` have to be handled rather than assumed

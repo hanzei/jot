@@ -28,7 +28,7 @@ export interface ImageUploadFile {
   name: string;
   mimeType: string;
   /** Bytes, when known from the picker/camera result — used for client-side size validation before upload. */
-  sizeBytes?: number;
+  sizeBytes?: number | undefined;
 }
 
 // Generous but finite: uploads can be slow on cellular, but a half-open /
@@ -55,7 +55,7 @@ export async function uploadNoteImage(
   const res = await api.post(`/notes/${noteId}/images`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: NOTE_IMAGE_UPLOAD_TIMEOUT_MS,
-    signal,
+    ...(signal && { signal }),
     ...(onUploadProgress && {
       onUploadProgress: (progressEvent) => {
         const percent = progressEvent.total

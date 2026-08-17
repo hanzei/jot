@@ -112,7 +112,7 @@ export async function reorderNotes(noteIds: string[]): Promise<void> {
 export interface ImportFile {
   uri: string;
   name: string;
-  mimeType?: string | null;
+  mimeType?: string | null | undefined;
 }
 
 function inferMimeType(filename: string): string {

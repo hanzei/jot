@@ -27,6 +27,12 @@ interface NavItem {
   icon: LucideIcon;
 }
 
+// CommonActions.navigate()'s return type is widened to the full
+// react-navigation Action union, which includes ResetAction — whose payload
+// isn't exactOptionalPropertyTypes-clean — so a dispatch() call needs the
+// result pinned back down to what dispatch actually accepts.
+type DrawerDispatchAction = Parameters<DrawerContentComponentProps['navigation']['dispatch']>[0];
+
 export default function DrawerContent(props: DrawerContentComponentProps) {
   const { user, logout, isLocalMode } = useAuth();
   const { data: labels } = useLabels();
@@ -187,7 +193,10 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
   }, []);
 
   const handleSettingsPress = useCallback(() => {
-    props.navigation.dispatch(CommonActions.navigate('Settings'));
+    // 'Settings' lives outside the drawer's own param list (it's a
+    // RootStackParamList screen), so this goes through dispatch rather than
+    // navigation.navigate.
+    props.navigation.dispatch(CommonActions.navigate('Settings') as DrawerDispatchAction);
     props.navigation.closeDrawer();
   }, [props.navigation]);
 

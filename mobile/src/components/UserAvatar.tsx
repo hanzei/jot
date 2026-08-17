@@ -11,12 +11,12 @@ const SIZE_MAP = {
 };
 
 interface UserAvatarProps {
-  userId?: string;
+  userId?: string | undefined;
   username: string;
-  hasProfileIcon?: boolean;
+  hasProfileIcon?: boolean | undefined;
   // Cache-invalidation key (typically user.updated_at). When provided, the
   // locally-cached file is tied to this version so stale icons are replaced.
-  iconVersion?: string;
+  iconVersion?: string | undefined;
   size?: 'small' | 'medium' | 'large';
 }
 
