@@ -13,7 +13,7 @@ interface UseNoteImagesOptions {
   note?: Note | null;
   // Server-configured image upload cap, fetched via GET /config.
   uploadMaxBytes: number;
-  onRefresh?: () => void;
+  onRefresh?: (() => void) | undefined;
   // Surfaces a validation/upload error in the modal's own error banner.
   showError: (message: string) => void;
 }
@@ -179,7 +179,9 @@ export function useNoteImages({ note, uploadMaxBytes, onRefresh, showError }: Us
   const retryImageUpload = useCallback((uploadId: string) => {
     const file = imageUploadFilesRef.current.get(uploadId);
     if (!file) return;
-    setImageUploads(prev => prev.map(u => (u.id === uploadId ? { ...u, status: 'uploading', progress: 0, errorMessage: undefined } : u)));
+    setImageUploads(prev => prev.map(u => (u.id === uploadId
+      ? { id: u.id, filename: u.filename, previewUrl: u.previewUrl, status: 'uploading', progress: 0 }
+      : u)));
     runImageUpload(uploadId, file);
   }, [runImageUpload]);
 

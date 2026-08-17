@@ -30,10 +30,10 @@ export function buildShareAvatars(
       key: 'owner',
       userId: note.user_id,
       username: owner?.username || '?',
-      firstName: owner?.first_name,
       displayName: formatDisplayName(owner?.username || '?', owner?.first_name, owner?.last_name),
-      hasProfileIcon: owner?.has_profile_icon,
-      iconVersion: owner?.updated_at,
+      ...(owner?.first_name !== undefined && { firstName: owner.first_name }),
+      ...(owner?.has_profile_icon !== undefined && { hasProfileIcon: owner.has_profile_icon }),
+      ...(owner?.updated_at !== undefined && { iconVersion: owner.updated_at }),
     });
   }
 
@@ -42,14 +42,15 @@ export function buildShareAvatars(
     ?.filter(s => s.shared_with_user_id !== currentUserId)
     .forEach(s => {
       const u = usersById?.get(s.shared_with_user_id);
+      const hasProfileIcon = u?.has_profile_icon ?? s.has_profile_icon;
       avatars.push({
         key: s.id,
         userId: s.shared_with_user_id,
         username: s.username || '?',
-        firstName: s.first_name,
         displayName: formatDisplayName(s.username || '?', s.first_name, s.last_name),
-        hasProfileIcon: u?.has_profile_icon ?? s.has_profile_icon,
-        iconVersion: u?.updated_at,
+        ...(s.first_name !== undefined && { firstName: s.first_name }),
+        ...(hasProfileIcon !== undefined && { hasProfileIcon }),
+        ...(u?.updated_at !== undefined && { iconVersion: u.updated_at }),
       });
     });
 

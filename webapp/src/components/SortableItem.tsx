@@ -54,9 +54,9 @@ export interface SortableItemProps {
   onPaste?: (index: number, e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
   inputRef?: React.RefCallback<HTMLTextAreaElement>;
   onIndentChange?: (itemId: string, delta: 1 | -1) => void;
-  isShared?: boolean;
+  isShared?: boolean | undefined;
   collaborators?: Collaborator[];
-  usersById?: Map<string, User>;
+  usersById?: Map<string, User> | undefined;
   onAssignItem?: (itemId: string, userId: string) => void;
   completedItemTexts?: string[];
   onAcceptSuggestion?: (currentItemId: string, suggestionText: string) => void;

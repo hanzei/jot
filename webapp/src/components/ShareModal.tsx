@@ -24,7 +24,7 @@ interface ShareModalProps {
    * the caller happens to hold (the current view).
    */
   notesList?: Note[];
-  currentUserId?: string;
+  currentUserId?: string | undefined;
 }
 
 export default function ShareModal({ note, isOpen, onClose, notesList, currentUserId }: ShareModalProps) {

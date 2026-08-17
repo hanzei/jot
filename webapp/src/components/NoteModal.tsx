@@ -2,6 +2,7 @@ import { useState, useEffect, useEffectEvent, useMemo, useRef, useCallback, useI
 import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, Pin, EllipsisVertical, Square, Undo2 } from 'lucide-react';
 import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type ConvertedListItem, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
 import { renderMarkdown, inlineMarkdownToText } from '@/utils/markdown';
@@ -80,8 +81,6 @@ const OVERFLOW_ITEM_SPLIT = `${OVERFLOW_ITEM_BASE} justify-between text-gray-700
 const OVERFLOW_ITEM_DANGER = `${OVERFLOW_ITEM_BASE} justify-between text-red-600 dark:text-red-400`;
 
 // Validation functions
-type TFunction = (key: string, opts?: Record<string, unknown>) => string;
-
 const validateItemText = (text: string, t: TFunction): string | null => {
   const trimmed = text.trim();
   if (trimmed.length === 0) return null; // Allow empty items (will be removed on save)
@@ -137,7 +136,7 @@ interface NoteModalProps {
   onRefresh?: () => void;
   onShare?: (note: Note) => void;
   onDelete?: (noteId: string) => void;
-  onDuplicate?: (noteId: string) => Promise<void> | void;
+  onDuplicate?: ((noteId: string) => Promise<void> | void) | undefined;
   onConvert?: (noteId: string, data: ConvertNoteTypeRequest) => Promise<void> | void;
   // A note in the bin (note.deleted_at set) opens through these instead of
   // the normal edit actions — the modal renders fully read-only, mirroring
@@ -146,18 +145,18 @@ interface NoteModalProps {
   onPermanentlyDelete?: (noteId: string) => void;
   isOwner?: boolean;
   usersById?: Map<string, User>;
-  currentUserId?: string;
+  currentUserId?: string | undefined;
   // Server-configured image upload cap, fetched via GET /config. Falls back
   // to the shared default so this component still works if a caller (e.g. a
   // test) doesn't pass it.
   uploadMaxBytes?: number;
   // Prefill for a brand-new note (note === null), e.g. from the /new deep
   // link (PWA shortcut or share target). Ignored once a note is being edited.
-  initialType?: NoteType;
-  initialContent?: string;
+  initialType?: NoteType | undefined;
+  initialContent?: string | undefined;
 }
 
-export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, onDelete, onDuplicate, onConvert, onRestore, onPermanentlyDelete, isOwner = true, usersById, currentUserId, uploadMaxBytes = UPLOAD_MAX_BYTES, initialType, initialContent }: NoteModalProps) {
+export default function NoteModal({ note = null, onClose, onSave, onRefresh, onShare, onDelete, onDuplicate, onConvert, onRestore, onPermanentlyDelete, isOwner = true, usersById, currentUserId, uploadMaxBytes = UPLOAD_MAX_BYTES, initialType, initialContent }: NoteModalProps) {
   const { t, i18n } = useTranslation();
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);

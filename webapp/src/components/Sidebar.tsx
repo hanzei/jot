@@ -15,7 +15,7 @@ export interface SidebarTab {
 
 interface SidebarProps {
   tabs: SidebarTab[];
-  bottomTabs?: SidebarTab[];
+  bottomTabs?: SidebarTab[] | undefined;
   children?: ReactNode;
   collapsed: boolean;
   onCollapse?: () => void;

@@ -59,9 +59,10 @@ const adopt = (draft: Draft, note: Note, listItems: ListItem[] = []) => {
 };
 
 const renderDraft = (opts: { note?: Note | null; onRefresh?: () => void; showError?: (message: string) => void } = {}) => {
+  const note = opts.note ?? null;
   const onRefresh = opts.onRefresh ?? vi.fn();
   const showError = opts.showError ?? vi.fn();
-  const hook = renderHook(() => useNoteDraft({ note: opts.note, onRefresh, showError }));
+  const hook = renderHook(() => useNoteDraft({ note, onRefresh, showError }));
   return { ...hook, onRefresh, showError };
 };
 

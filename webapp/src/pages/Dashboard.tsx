@@ -492,8 +492,16 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
         return imgs.filter(img => img.id !== imageId);
       };
 
-      setEditingNote(prev => (prev && prev.id === imageNoteId ? { ...prev, images: patchImages(prev.images) } : prev));
-      setNotesList(prev => prev.map(n => (n.id === imageNoteId ? { ...n, images: patchImages(n.images) } : n)));
+      setEditingNote(prev => {
+        if (!prev || prev.id !== imageNoteId) return prev;
+        const patched = patchImages(prev.images);
+        return patched !== undefined ? { ...prev, images: patched } : prev;
+      });
+      setNotesList(prev => prev.map(n => {
+        if (n.id !== imageNoteId) return n;
+        const patched = patchImages(n.images);
+        return patched !== undefined ? { ...n, images: patched } : n;
+      }));
       // Also reconcile via a full reload, same as every other event type below —
       // this is the fallback for a note whose note_created hasn't loaded yet, so
       // an image added just after creation isn't silently dropped from the list.

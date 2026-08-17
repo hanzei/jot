@@ -40,7 +40,7 @@ interface HarnessOptions {
 // depends on — a live item model plus the two baseline mutations the bulk
 // actions advance. Exercises useCompletedItems in isolation from the rest of
 // the autosave engine.
-const useHarness = ({ note, initialItems, onRefresh, showError = vi.fn() }: HarnessOptions) => {
+const useHarness = ({ note = null, initialItems, onRefresh, showError = vi.fn() }: HarnessOptions) => {
   const [items, setItems] = useState<ListItem[]>(initialItems);
   const itemsRef = useRef<ListItem[]>(initialItems);
   const commitItems = useCallback((next: ListItem[]) => {
