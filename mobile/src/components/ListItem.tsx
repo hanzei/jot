@@ -147,7 +147,17 @@ function ListItem({
   // so this is `isFocused` without its blur delay: the controls linger for 200ms
   // so a tap on one still lands, but the row must show source the instant it has
   // the caret and stop the instant it doesn't.
-  const [isEditing, setIsEditing] = useState(false);
+  //
+  // Seeded from `autoFocus`, because a row that mounts asking for the caret has
+  // to mount in source form to get it: while the rendered form shows, the input
+  // is out of flow, transparent and inside a `pointerEvents: 'none'` wrapper,
+  // and neither platform focuses a field in that state (see handleRenderedPress
+  // below for what each one does instead — on Android focus lands on the note
+  // title). The editor arms `autoFocus` for a new item and for the row it is
+  // restoring focus to after a drag reorder remounts it, and both of those
+  // would otherwise leave the caret in the title on any row with Markdown in
+  // it. The real focus event follows and sets this again, redundantly.
+  const [isEditing, setIsEditing] = useState(autoFocus);
   const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Tracks the native cursor position so Enter/submit can decide whether to
   // split the item at the cursor, insert before it, or append after it.
