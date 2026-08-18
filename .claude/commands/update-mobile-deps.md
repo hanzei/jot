@@ -133,11 +133,18 @@ advisory in the PR description.
 npm run lint
 npm run typecheck        # tsc --noEmit; also type-checks shared/src via the file: link
 npm test -- --ci         # jest
-npx expo-doctor          # catches SDK/native-version mismatches nothing else will
+task check-mobile-expo   # expo-doctor; catches SDK/native mismatches nothing else will
 ```
 
 `expo-doctor` is the highest-value check in this list — it's the one that knows about the
 native side that Jest and tsc are blind to.
+
+**This command is the only place it runs** — it is deliberately out of CI and `task check`,
+since its expectations come from Expo's SDK manifest over the network and move without any
+commit (the Taskfile comment above `check-mobile-expo` has the why). So nothing else will
+catch SDK drift: run it even when the sweep looked like a no-op, and don't treat a clean
+`expo install --check` in step 1 as a substitute — expo-doctor also covers native config,
+Hermes regressions, and app-config schema errors.
 
 The mobile test suite mocks the filesystem via `globalThis.mockFileSystem` in
 `jest.setup.js` (see `mobile/CLAUDE.md`). If `expo-file-system` moved, confirm that mock
