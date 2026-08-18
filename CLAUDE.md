@@ -294,6 +294,12 @@ Three separate things update dependencies here, and they are easy to confuse:
   - `update-docker-deps` — Dockerfile base images, CI container images, `docker-compose.yml`, `.dockerignore`
   - `update-github-actions` — pinned action SHAs in `.github/workflows/`, runner labels, permissions
 
+  `update-mobile-deps` also **owns `expo-doctor`** (`task check-mobile-expo`), which is
+  deliberately out of CI, `task check`, and `task check-mobile` and must not be added back:
+  it resolves its expected versions from Expo's SDK manifest at run time, so an upstream
+  patch release turns a green commit red on its own. Drift is a work item for the next
+  sweep, not a build failure — which means skipping the sweep is what lets it accumulate.
+
 **Run the command; do not update these by hand.** Each one exists because the obvious
 approach — `go get -u ./...`, `npm update`, editing a `FROM` or `uses:` line — silently
 breaks a coupling that only shows up in CI or on a device. Since these are commands rather
