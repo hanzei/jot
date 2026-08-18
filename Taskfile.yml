@@ -30,18 +30,17 @@ tasks:
     dir: webapp
     cmd: npx vite
 
-  # Everything CI enforces except e2e. Each of the four checks below is
+  # Everything CI enforces except e2e. Each of the three checks below is
   # seconds long and catches a class of failure the lint/test suites cannot
   # see, so they are unconditional rather than something to remember.
   check:
-    desc: Pre-PR gate — lint + all tests except e2e, plus the docs/migration/translation/expo gates
+    desc: Pre-PR gate — lint + all tests except e2e, plus the docs/migration/translation gates
     cmds:
       - task: lint
       - task: test
       - task: check-docs
       - task: check-migrations
       - task: check-translations
-      - task: check-mobile-expo
 
   check-server:
     desc: Lint, test, and docs/migration-check the server only
@@ -59,11 +58,10 @@ tasks:
       - task: check-translations
 
   check-mobile:
-    desc: Lint, test, and expo-doctor-check the mobile app only
+    desc: Lint and test the mobile app only
     cmds:
       - task: lint-mobile
       - task: test-mobile
-      - task: check-mobile-expo
       - task: check-translations
 
   check-shared:
@@ -185,12 +183,15 @@ tasks:
   # Catches Expo-governed packages (expo, expo-*, react-native, ...) drifting
   # off the versions SDK 57 expects, plus other native/SDK mismatches (e.g.
   # known Hermes regressions, app-config schema errors) — npm install and the
-  # test/typecheck suites all pass on any of these, so nothing else here would
-  # catch them. See .claude/commands/update-mobile-deps.md for the full
-  # Expo-governed package list; that command already treats expo-doctor as
-  # its highest-value check for the same reason.
+  # test/typecheck suites all pass on any of these, so nothing else would catch
+  # them.
+  #
+  # Not a gate, and must not be added back to `check`, `check-mobile`, or CI:
+  # it resolves what it expects from Expo's SDK manifest at run time, so an
+  # upstream patch release turns a green commit red on its own. Owned by
+  # .claude/commands/update-mobile-deps.md; run it here on demand.
   check-mobile-expo:
-    desc: Run expo-doctor to check mobile's Expo SDK/native alignment
+    desc: Run expo-doctor to check mobile's Expo SDK/native alignment (run by update-mobile-deps; not a gate)
     dir: mobile
     cmd: npx expo-doctor
 

@@ -40,10 +40,6 @@ jobs:
         run: npm run typecheck
         working-directory: ./mobile
 
-      - name: Run expo-doctor
-        run: npx expo-doctor
-        working-directory: ./mobile
-
   translations:
     runs-on: ubuntu-latest
     steps:
