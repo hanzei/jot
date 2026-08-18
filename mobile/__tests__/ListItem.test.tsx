@@ -174,6 +174,20 @@ describe('ListItem', () => {
       expect(tappableTexts(readOnly.getByTestId('list-item-text-readonly'))).toEqual(['docs']);
     });
 
+    it('mounts in source form when it mounts asking for the caret', async () => {
+      // The editor arms `autoFocus` on a freshly added item and on the row it is
+      // restoring focus to after a drag reorder remounts it. Mounting rendered
+      // would point that focus at an input that is out of flow, transparent and
+      // inside `pointerEvents: 'none'` — which neither platform focuses, so the
+      // caret ends up in the note title instead of the row the user was editing.
+      const { getByTestId, queryByTestId } = await render(
+        <ListItem text="buy **milk**" completed={false} autoFocus />,
+      );
+
+      expect(queryByTestId('list-item-text-rendered', HIDDEN)).toBeNull();
+      expect(getByTestId('list-item-text').props.autoFocus).toBe(true);
+    });
+
     it('holds the row in its current form for the length of a drag', async () => {
       // Starting a drag must not change the row's height, whatever takes focus
       // off the field mid-gesture.
