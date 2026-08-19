@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	httppprof "net/http/pprof"
 	"os"
 	"runtime"
+	"runtime/pprof"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -53,7 +55,7 @@ type Server struct {
 	router          chi.Router
 	db              *sql.DB
 	httpServer      *http.Server
-	metricsServer   *http.Server
+	debugServer     *http.Server
 	staticRoot      *os.Root
 	imageStore      *blobstore.ImageStore
 	startErr        error
@@ -180,10 +182,10 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (*Server, error) {
 		rateLimiter:     rl,
 	}
 
-	s.startPeriodicTask(ctx, time.Hour, false, func() error {
+	s.startPeriodicTask(ctx, "session-cleanup", time.Hour, false, func() error {
 		return sessionStore.DeleteExpired(ctx)
 	}, "delete expired sessions")
-	s.startPeriodicTask(ctx, time.Hour, true, func() error {
+	s.startPeriodicTask(ctx, "trash-purge", time.Hour, true, func() error {
 		shas, err := noteStore.PurgeOldTrashedNotes(ctx, 7*24*time.Hour)
 		if err != nil {
 			return err
@@ -630,50 +632,104 @@ func (s *Server) requestLoggerMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func (s *Server) Start(addr string) error {
-	if s.cfg.MetricsEnabled {
-		// Start the metrics server on its own port before the main server so it
-		// is ready by the time we signal readiness. A failure here is fatal — if
-		// the operator enabled metrics the port must be reachable.
-		metricsAddr := fmt.Sprintf("%s:%d", s.cfg.MetricsHost, s.cfg.MetricsPort)
-		metricsListener, err := (&net.ListenConfig{}).Listen(s.ctx, "tcp", metricsAddr)
-		if err != nil {
-			startErr := fmt.Errorf("listen on metrics port: %w", err)
-			s.setStartResult(startErr)
-			return startErr
-		}
-		mux := http.NewServeMux()
+// newDebugMux builds the handler for the debug listener.
+func newDebugMux(metricsEnabled, pprofEnabled bool) *http.ServeMux {
+	mux := http.NewServeMux()
+	if metricsEnabled {
 		mux.Handle("GET /metrics", promhttp.Handler())
-		metricsServer := &http.Server{
-			Handler:      mux,
-			ReadTimeout:  10 * time.Second,
-			WriteTimeout: 10 * time.Second,
-			IdleTimeout:  30 * time.Second,
+	}
+	if pprofEnabled {
+		registerPprof(mux)
+	}
+	return mux
+}
+
+// registerPprof mounts net/http/pprof's handlers on mux. Importing that package
+// also registers them on http.DefaultServeMux via its init(), which Jot never
+// serves, so these are the only reachable ones.
+//
+// Index covers the named profiles below it (heap, goroutine, allocs, block,
+// mutex, threadcreate); the four below have paths of their own.
+func registerPprof(mux *http.ServeMux) {
+	mux.HandleFunc("GET /debug/pprof/", httppprof.Index)
+	mux.HandleFunc("GET /debug/pprof/cmdline", httppprof.Cmdline)
+	mux.HandleFunc("GET /debug/pprof/profile", httppprof.Profile)
+	mux.HandleFunc("GET /debug/pprof/trace", httppprof.Trace)
+	// `go tool pprof` POSTs its address list to /symbol. Registering it
+	// method-less instead panics ServeMux: more methods than
+	// "GET /debug/pprof/" on a more specific path.
+	mux.HandleFunc("GET /debug/pprof/symbol", httppprof.Symbol)
+	mux.HandleFunc("POST /debug/pprof/symbol", httppprof.Symbol)
+}
+
+// startDebugServer starts the auxiliary listener carrying /metrics and
+// /debug/pprof. They are here rather than on the API router because this port
+// defaults to loopback (JOT_METRICS_HOST): an unauthenticated profiling
+// endpoint on the public port would be a free load lever.
+func (s *Server) startDebugServer() error {
+	debugAddr := fmt.Sprintf("%s:%d", s.cfg.MetricsHost, s.cfg.MetricsPort)
+	debugListener, err := (&net.ListenConfig{}).Listen(s.ctx, "tcp", debugAddr)
+	if err != nil {
+		return fmt.Errorf("listen on debug port %s (JOT_METRICS_HOST/JOT_METRICS_PORT): %w", debugAddr, err)
+	}
+
+	// A CPU profile or execution trace writes nothing until its
+	// caller-chosen duration (30s by default) elapses, so the WriteTimeout
+	// that suits /metrics would truncate every profile taken.
+	writeTimeout := 10 * time.Second
+	if s.cfg.PprofEnabled {
+		writeTimeout = 0
+	}
+
+	debugServer := &http.Server{
+		Handler:      newDebugMux(s.cfg.MetricsEnabled, s.cfg.PprofEnabled),
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: writeTimeout,
+		IdleTimeout:  30 * time.Second,
+	}
+	s.serverMu.Lock()
+	s.debugServer = debugServer
+	s.serverMu.Unlock()
+	s.bgWg.Add(1)
+	go func() {
+		defer s.bgWg.Done()
+		pprof.SetGoroutineLabels(pprof.WithLabels(s.ctx, pprof.Labels("job", "debug-server")))
+		if err := debugServer.Serve(debugListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			s.log.WithError(err).Error("Debug server stopped unexpectedly")
 		}
-		s.serverMu.Lock()
-		s.metricsServer = metricsServer
-		s.serverMu.Unlock()
-		s.bgWg.Add(1)
-		go func() {
-			defer s.bgWg.Done()
-			if err := metricsServer.Serve(metricsListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				s.log.WithError(err).Error("Metrics server stopped unexpectedly")
-			}
-		}()
-		s.log.Infof("Metrics server listening on %s", metricsAddr)
+	}()
+	s.log.Infof("Debug server listening on %s (metrics=%t pprof=%t)", debugAddr, s.cfg.MetricsEnabled, s.cfg.PprofEnabled)
+
+	return nil
+}
+
+func (s *Server) Start(addr string) error {
+	if s.cfg.MetricsEnabled || s.cfg.PprofEnabled {
+		// Start the debug server on its own port before the main server so it
+		// is ready by the time we signal readiness. A failure here is fatal —
+		// if the operator enabled metrics or profiling the port must be
+		// reachable.
+		if err := s.startDebugServer(); err != nil {
+			s.setStartResult(err)
+			return err
+		}
 	}
 
 	listener, err := (&net.ListenConfig{}).Listen(s.ctx, "tcp", addr)
 	if err != nil {
 		startErr := fmt.Errorf("listen: %w", err)
-		// Tear down the metrics server if it started successfully above.
+		// Tear down the debug server if it started successfully above.
 		s.serverMu.RLock()
-		metricsServer := s.metricsServer
+		debugServer := s.debugServer
 		s.serverMu.RUnlock()
-		if metricsServer != nil {
+		if debugServer != nil {
 			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer shutdownCancel()
-			_ = metricsServer.Shutdown(shutdownCtx)
+			_ = debugServer.Shutdown(shutdownCtx)
+			// bgWg also tracks the periodic tasks NewWithLogger started, and
+			// those only exit on ctx.Done() — without the cancel, waiting here
+			// never returns.
+			s.cancel()
 			s.bgWg.Wait()
 		}
 		s.setStartResult(startErr)
@@ -728,11 +784,11 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	s.serverMu.Unlock()
 
 	s.serverMu.RLock()
-	metricsServer := s.metricsServer
+	debugServer := s.debugServer
 	s.serverMu.RUnlock()
-	if metricsServer != nil {
-		if err := metricsServer.Shutdown(ctx); err != nil {
-			s.log.WithError(err).Warn("Metrics server shutdown error")
+	if debugServer != nil {
+		if err := debugServer.Shutdown(ctx); err != nil {
+			s.log.WithError(err).Warn("Debug server shutdown error")
 		}
 	}
 
@@ -793,10 +849,17 @@ func (s *Server) StopBackgroundTasks() {
 
 // startPeriodicTask starts a background goroutine tracked by s.bgWg that calls fn on every interval.
 // If runNow is true, fn is also called once immediately before the first tick.
-func (s *Server) startPeriodicTask(ctx context.Context, interval time.Duration, runNow bool, fn func() error, logMsg string) {
+//
+// job becomes the goroutine's pprof label. Without it every periodic task
+// profiles as the same startPeriodicTask.func1 frame, with nothing to tell
+// them apart.
+func (s *Server) startPeriodicTask(ctx context.Context, job string, interval time.Duration, runNow bool, fn func() error, logMsg string) {
 	s.bgWg.Add(1)
 	go func() {
 		defer s.bgWg.Done()
+		// Set for the goroutine's whole life, not just around fn: a stuck task
+		// is found parked on the ticker.
+		pprof.SetGoroutineLabels(pprof.WithLabels(ctx, pprof.Labels("job", job)))
 		if runNow {
 			if err := fn(); err != nil {
 				s.log.WithError(err).Errorf("Failed to %s", logMsg)

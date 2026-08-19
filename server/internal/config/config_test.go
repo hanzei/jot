@@ -379,3 +379,32 @@ func TestLoadOTelVars(t *testing.T) {
 	assert.Equal(t, "localhost:4317", cfg.OTelEndpoint)
 	assert.Equal(t, "custom-service", cfg.OTelServiceName)
 }
+
+// TestLoadPprofEnabled covers the profiling switch, which is independent of
+// JOT_METRICS_ENABLED.
+func TestLoadPprofEnabled(t *testing.T) {
+	t.Setenv("JOT_STATIC_DIR", "/tmp/static")
+
+	t.Run("defaults off", func(t *testing.T) {
+		t.Setenv("JOT_PPROF_ENABLED", "")
+		cfg, err := Load()
+		require.NoError(t, err)
+		assert.False(t, cfg.PprofEnabled)
+	})
+
+	t.Run("enabled without metrics", func(t *testing.T) {
+		t.Setenv("JOT_PPROF_ENABLED", "true")
+		t.Setenv("JOT_METRICS_ENABLED", "false")
+		cfg, err := Load()
+		require.NoError(t, err)
+		assert.True(t, cfg.PprofEnabled)
+		assert.False(t, cfg.MetricsEnabled)
+	})
+
+	t.Run("invalid value", func(t *testing.T) {
+		t.Setenv("JOT_PPROF_ENABLED", "yes")
+		_, err := Load()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "JOT_PPROF_ENABLED")
+	})
+}
