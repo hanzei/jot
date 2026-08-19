@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -92,41 +93,48 @@ func TestStartPeriodicTaskSetsGoroutineLabel(t *testing.T) {
 }
 
 // TestStartReturnsWhenMainListenerFails covers the cleanup path taken when the
-// debug server is up but the API listener cannot bind: bgWg also tracks the
-// periodic tasks, so without canceling the server context first, Start blocks
-// on them forever instead of returning the error.
+// API listener cannot bind: bgWg also tracks the periodic tasks, so without
+// canceling the server context first, Start blocks on them forever instead of
+// returning the error. The debug server may or may not be up at that point, and
+// the wait happens either way.
 func TestStartReturnsWhenMainListenerFails(t *testing.T) {
 	t.Parallel()
 
-	// Hold the address Start will try to bind, so its Listen fails.
-	blocker, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = blocker.Close() })
+	for _, debugEnabled := range []bool{true, false} {
+		t.Run(fmt.Sprintf("debug server enabled=%t", debugEnabled), func(t *testing.T) {
+			t.Parallel()
 
-	log := logrus.New()
-	log.SetOutput(io.Discard)
+			// Hold the address Start will try to bind, so its Listen fails.
+			blocker, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = blocker.Close() })
 
-	ctx, cancel := context.WithCancel(t.Context())
-	t.Cleanup(cancel)
-	s := &Server{
-		// Port 0 for the debug server: it has to start successfully for this
-		// path to be reachable, and an ephemeral port cannot collide.
-		cfg:        &config.Config{MetricsEnabled: true, MetricsHost: "127.0.0.1", MetricsPort: 0},
-		log:        log,
-		ctx:        ctx,
-		cancel:     cancel,
-		startReady: make(chan struct{}),
-	}
-	s.startPeriodicTask(ctx, "test-job", time.Hour, false, func() error { return nil }, "run the test job")
-	t.Cleanup(s.bgWg.Wait)
+			log := logrus.New()
+			log.SetOutput(io.Discard)
 
-	done := make(chan error, 1)
-	go func() { done <- s.Start(blocker.Addr().String()) }()
+			ctx, cancel := context.WithCancel(t.Context())
+			t.Cleanup(cancel)
+			s := &Server{
+				// Port 0 for the debug server: it has to start successfully for
+				// this path to be reachable, and an ephemeral port cannot collide.
+				cfg:        &config.Config{MetricsEnabled: debugEnabled, MetricsHost: "127.0.0.1", MetricsPort: 0},
+				log:        log,
+				ctx:        ctx,
+				cancel:     cancel,
+				startReady: make(chan struct{}),
+			}
+			s.startPeriodicTask(ctx, "test-job", time.Hour, false, func() error { return nil }, "run the test job")
+			t.Cleanup(s.bgWg.Wait)
 
-	select {
-	case err := <-done:
-		require.ErrorContains(t, err, "listen")
-	case <-time.After(10 * time.Second):
-		t.Fatal("Start did not return after the API listener failed")
+			done := make(chan error, 1)
+			go func() { done <- s.Start(blocker.Addr().String()) }()
+
+			select {
+			case err := <-done:
+				require.ErrorContains(t, err, "listen")
+			case <-time.After(10 * time.Second):
+				t.Fatal("Start did not return after the API listener failed")
+			}
+		})
 	}
 }
