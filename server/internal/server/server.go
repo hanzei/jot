@@ -637,25 +637,13 @@ func (s *Server) Start(addr string) error {
 		// if the operator enabled metrics or profiling the port must be
 		// reachable.
 		if err := s.startDebugServer(); err != nil {
-			s.setStartResult(err)
-			return err
+			return s.failStart(err)
 		}
 	}
 
 	listener, err := (&net.ListenConfig{}).Listen(s.ctx, "tcp", addr)
 	if err != nil {
-		startErr := fmt.Errorf("listen: %w", err)
-		// Tear down the debug server if it started successfully above.
-		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer shutdownCancel()
-		s.stopDebugServer(shutdownCtx)
-		// bgWg also tracks the periodic tasks NewWithLogger started, and those
-		// only exit on ctx.Done() — without the cancel, waiting here never
-		// returns.
-		s.cancel()
-		s.bgWg.Wait()
-		s.setStartResult(startErr)
-		return startErr
+		return s.failStart(fmt.Errorf("listen: %w", err))
 	}
 
 	httpServer := &http.Server{
@@ -710,6 +698,35 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	s.cancel()
 	s.bgWg.Wait()
 
+	return s.closeResources()
+}
+
+// failStart is the single cleanup path for a Start that never reached Serve.
+// Shutdown cannot do this work afterwards: WaitUntilStarted hands it the start
+// error and it returns before touching anything, so whatever Start leaves
+// running stays running for the life of the process.
+func (s *Server) failStart(startErr error) error {
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutdownCancel()
+	s.stopDebugServer(shutdownCtx)
+
+	// bgWg also tracks the periodic tasks NewWithLogger started, and those only
+	// exit on ctx.Done() — without the cancel, waiting here never returns.
+	s.cancel()
+	s.bgWg.Wait()
+
+	if err := s.closeResources(); err != nil {
+		// startErr is the failure worth reporting; this one only gets logged.
+		s.log.WithError(err).Warn("Cleanup after failed start")
+	}
+
+	s.setStartResult(startErr)
+
+	return startErr
+}
+
+// closeResources releases the file handles the server owns.
+func (s *Server) closeResources() error {
 	if s.staticRoot != nil {
 		if err := s.staticRoot.Close(); err != nil {
 			return fmt.Errorf("close static root: %w", err)
@@ -722,8 +739,10 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		}
 	}
 
-	if err := s.db.Close(); err != nil {
-		return fmt.Errorf("close database: %w", err)
+	if s.db != nil {
+		if err := s.db.Close(); err != nil {
+			return fmt.Errorf("close database: %w", err)
+		}
 	}
 
 	return nil

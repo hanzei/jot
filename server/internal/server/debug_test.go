@@ -3,12 +3,12 @@ package server
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"runtime/pprof"
+	"strconv"
 	"testing"
 	"time"
 
@@ -92,22 +92,63 @@ func TestStartPeriodicTaskSetsGoroutineLabel(t *testing.T) {
 	assert.Contains(t, buf.String(), `"job":"test-job"`)
 }
 
-// TestStartReturnsWhenMainListenerFails covers the cleanup path taken when the
-// API listener cannot bind: bgWg also tracks the periodic tasks, so without
-// canceling the server context first, Start blocks on them forever instead of
-// returning the error. The debug server may or may not be up at that point, and
-// the wait happens either way.
-func TestStartReturnsWhenMainListenerFails(t *testing.T) {
+// TestStartCleansUpAfterFailure covers the failed-start path for each way Start
+// can fail. bgWg tracks the periodic tasks NewWithLogger already started, and
+// Shutdown will not clean them up afterwards — it returns the start error out of
+// WaitUntilStarted first — so Start has to cancel and drain them itself.
+func TestStartCleansUpAfterFailure(t *testing.T) {
 	t.Parallel()
 
-	for _, debugEnabled := range []bool{true, false} {
-		t.Run(fmt.Sprintf("debug server enabled=%t", debugEnabled), func(t *testing.T) {
+	// occupied holds an address for the test's lifetime, so binding it fails.
+	occupied := func(t *testing.T) (addr string, port int) {
+		t.Helper()
+		l, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = l.Close() })
+		_, portStr, err := net.SplitHostPort(l.Addr().String())
+		require.NoError(t, err)
+		port, err = strconv.Atoi(portStr)
+		require.NoError(t, err)
+		return l.Addr().String(), port
+	}
+
+	tests := []struct {
+		name string
+		// setup returns the config to start with and the API address to bind.
+		setup func(t *testing.T) (*config.Config, string)
+	}{
+		{
+			name: "api listener fails with the debug server up",
+			setup: func(t *testing.T) (*config.Config, string) {
+				apiAddr, _ := occupied(t)
+				// Port 0 for the debug server: it has to start successfully for
+				// this case, and an ephemeral port cannot collide.
+				return &config.Config{MetricsEnabled: true, MetricsHost: "127.0.0.1", MetricsPort: 0}, apiAddr
+			},
+		},
+		{
+			name: "api listener fails with no debug server",
+			setup: func(t *testing.T) (*config.Config, string) {
+				apiAddr, _ := occupied(t)
+				return &config.Config{}, apiAddr
+			},
+		},
+		{
+			name: "debug listener fails",
+			setup: func(t *testing.T) (*config.Config, string) {
+				_, debugPort := occupied(t)
+				// The API address is never reached: Start gives up on the debug
+				// listener before binding it.
+				return &config.Config{MetricsEnabled: true, MetricsHost: "127.0.0.1", MetricsPort: debugPort}, "127.0.0.1:0"
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			// Hold the address Start will try to bind, so its Listen fails.
-			blocker, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
-			require.NoError(t, err)
-			t.Cleanup(func() { _ = blocker.Close() })
+			cfg, apiAddr := tt.setup(t)
 
 			log := logrus.New()
 			log.SetOutput(io.Discard)
@@ -115,25 +156,33 @@ func TestStartReturnsWhenMainListenerFails(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
 			t.Cleanup(cancel)
 			s := &Server{
-				// Port 0 for the debug server: it has to start successfully for
-				// this path to be reachable, and an ephemeral port cannot collide.
-				cfg:        &config.Config{MetricsEnabled: debugEnabled, MetricsHost: "127.0.0.1", MetricsPort: 0},
+				cfg:        cfg,
 				log:        log,
 				ctx:        ctx,
 				cancel:     cancel,
 				startReady: make(chan struct{}),
 			}
 			s.startPeriodicTask(ctx, "test-job", time.Hour, false, func() error { return nil }, "run the test job")
-			t.Cleanup(s.bgWg.Wait)
 
 			done := make(chan error, 1)
-			go func() { done <- s.Start(blocker.Addr().String()) }()
+			go func() { done <- s.Start(apiAddr) }()
 
 			select {
 			case err := <-done:
 				require.ErrorContains(t, err, "listen")
 			case <-time.After(10 * time.Second):
-				t.Fatal("Start did not return after the API listener failed")
+				t.Fatal("Start did not return after the listener failed")
+			}
+
+			drained := make(chan struct{})
+			go func() {
+				s.bgWg.Wait()
+				close(drained)
+			}()
+			select {
+			case <-drained:
+			case <-time.After(10 * time.Second):
+				t.Fatal("background tasks still running after the failed start")
 			}
 		})
 	}
