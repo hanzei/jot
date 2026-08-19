@@ -100,8 +100,8 @@ func main() {
 		logrus.WithError(err).Fatal("Failed to initialize server")
 	}
 	addr := fmt.Sprintf(":%d", cfg.Port)
-	if cfg.MetricsEnabled {
-		logrus.Infof("Starting Jot server on %s (metrics on %s:%d)", addr, cfg.MetricsHost, cfg.MetricsPort)
+	if cfg.MetricsEnabled || cfg.PprofEnabled {
+		logrus.Infof("Starting Jot server on %s (debug listener on %s:%d)", addr, cfg.MetricsHost, cfg.MetricsPort)
 	} else {
 		logrus.Infof("Starting Jot server on %s", addr)
 	}
