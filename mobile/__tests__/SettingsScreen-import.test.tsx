@@ -3,9 +3,10 @@ import SettingsScreen from '../src/screens/SettingsScreen';
 import { useAuth } from '../src/store/AuthContext';
 import { listSessions } from '../src/api/settings';
 import { importKeepFile, getNotes } from '../src/api/notes';
+import { getLabels } from '../src/api/labels';
 import * as DocumentPicker from 'expo-document-picker';
 import i18n from '../src/i18n';
-import { saveNotes } from '../src/db/noteQueries';
+import { saveLabels, saveNotes } from '../src/db/noteQueries';
 
 const mockInvalidateQueries = jest.fn();
 const SETTINGS_IMPORT_TEST_TIMEOUT_MS = 15_000;
@@ -32,8 +33,13 @@ jest.mock('../src/api/notes', () => ({
   getNotes: jest.fn(),
 }));
 
+jest.mock('../src/api/labels', () => ({
+  getLabels: jest.fn(),
+}));
+
 jest.mock('../src/db/noteQueries', () => ({
   saveNotes: jest.fn(),
+  saveLabels: jest.fn(),
   getFailedNoteIds: jest.fn().mockResolvedValue(new Set()),
 }));
 
@@ -63,6 +69,9 @@ jest.mock('@tanstack/react-query', () => ({
 
 jest.mock('../src/hooks/queryKeys', () => ({
   notesLocalQueryScopeKey: jest.fn(() => ['notes-local', 'test-scope']),
+  noteLocalQueryScopeKey: jest.fn(() => ['note-local', 'test-scope']),
+  labelsQueryKey: jest.fn(() => ['labels', 'test-scope']),
+  labelCountsQueryKey: jest.fn(() => ['label-counts', 'test-scope']),
 }));
 
 jest.mock('expo-document-picker', () => ({
@@ -83,8 +92,10 @@ const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 const mockListSessions = listSessions as jest.MockedFunction<typeof listSessions>;
 const mockImportKeepFile = importKeepFile as jest.MockedFunction<typeof importKeepFile>;
 const mockGetNotes = getNotes as jest.MockedFunction<typeof getNotes>;
+const mockGetLabels = getLabels as jest.MockedFunction<typeof getLabels>;
 const mockGetDocumentAsync = DocumentPicker.getDocumentAsync as jest.MockedFunction<typeof DocumentPicker.getDocumentAsync>;
 const mockSaveNotes = saveNotes as jest.MockedFunction<typeof saveNotes>;
+const mockSaveLabels = saveLabels as jest.MockedFunction<typeof saveLabels>;
 
 const user = {
   id: 'user-1',
@@ -112,6 +123,8 @@ describe('SettingsScreen import section', () => {
     mockListSessions.mockResolvedValue([]);
     mockGetNotes.mockResolvedValue([]);
     mockSaveNotes.mockResolvedValue(undefined);
+    mockGetLabels.mockResolvedValue([]);
+    mockSaveLabels.mockResolvedValue(undefined);
     await i18n.changeLanguage('en');
     mockUseAuth.mockImplementation(
       () =>
@@ -160,7 +173,16 @@ describe('SettingsScreen import section', () => {
       expect(mockGetNotes).toHaveBeenCalled();
       expect(mockSaveNotes).toHaveBeenCalled();
     });
+    // An import creates labels as well as notes, so the drawer's label list and
+    // its per-label counts have to be re-pulled and refreshed alongside the notes.
+    await waitFor(() => {
+      expect(mockGetLabels).toHaveBeenCalled();
+      expect(mockSaveLabels).toHaveBeenCalled();
+    });
     expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['notes-local', 'test-scope'] });
+    expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['note-local', 'test-scope'] });
+    expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['labels', 'test-scope'] });
+    expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['label-counts', 'test-scope'] });
     await waitFor(() => {
       expect(getByText(/Imported 2 notes/i)).toBeTruthy();
     });

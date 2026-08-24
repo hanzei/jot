@@ -59,6 +59,7 @@ import { useNetworkStatus } from './useNetworkStatus';
 import { useAuth } from '../store/AuthContext';
 import { assertSwitchWriteAllowed } from '../api/client';
 import {
+  labelCountsQueryKey,
   noteLocalQueryKey,
   notesLocalQueryScopeKey,
 } from './queryKeys';
@@ -153,6 +154,23 @@ function rollbackOptimisticNote(
   for (const { key, note } of context.previousListEntries) {
     queryClient.setQueryData<Note[]>(key, (old) => old?.map((n) => (n.id === noteId ? note : n)));
   }
+}
+
+/**
+ * Refreshes the drawer's per-label counts.
+ *
+ * They are derived from the notes table, not the labels one: `getLocalLabelCounts`
+ * counts each label across the *active* notes (archived and trashed excluded). So
+ * a write that changes nothing about a note's labels still changes its counts by
+ * moving the note in or out of that set — archiving, trashing, restoring,
+ * duplicating — and every such path has to say so.
+ *
+ * Membership edits (add/remove/rename/delete a label) go through useLabels.ts,
+ * which already invalidates this, as does the SSE handler for every remote note
+ * event. This is the local-write side of the same rule.
+ */
+function invalidateLabelCounts(queryClient: QueryClient): void {
+  queryClient.invalidateQueries({ queryKey: labelCountsQueryKey() });
 }
 
 export function useCreateNote() {
@@ -263,8 +281,11 @@ export function useCreateNote() {
       });
       return localNote;
     },
-    onSuccess: () => {
+    onSuccess: (_note, data) => {
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      // A create can carry labels (the sync-failure fork does), which the new
+      // note then counts towards.
+      if (data.labels?.length) invalidateLabelCounts(queryClient);
     },
   });
 }
@@ -336,7 +357,7 @@ export function useUpdateNote() {
     },
     // Roll back the optimistic edit so a failed write doesn't leave a phantom on screen.
     onError: (_err, { id }, context) => rollbackOptimisticNote(queryClient, id, context),
-    onSuccess: (updatedNote) => {
+    onSuccess: (updatedNote, { data }) => {
       queryClient.setQueryData(noteLocalQueryKey(updatedNote.id), updatedNote);
       // Synchronously patch the note in every cached notes-list so the dashboard
       // shows fresh content immediately on navigation back, without waiting for
@@ -346,6 +367,9 @@ export function useUpdateNote() {
         (old) => old?.map((n) => (n.id === updatedNote.id ? updatedNote : n)),
       );
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      // Only the archive flag moves a note in or out of the counted set; a
+      // title/content save must not re-scan every note's labels on each debounce.
+      if (data.archived !== undefined) invalidateLabelCounts(queryClient);
     },
   });
 }
@@ -680,6 +704,8 @@ export function useDeleteNote() {
     onSuccess: (_data, id) => {
       queryClient.removeQueries({ queryKey: noteLocalQueryKey(id) });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      // Trashing drops the note out of its labels' counts.
+      invalidateLabelCounts(queryClient);
     },
   });
 }
@@ -769,6 +795,8 @@ export function useDuplicateNote() {
     onSuccess: (duplicatedNote) => {
       queryClient.setQueryData(noteLocalQueryKey(duplicatedNote.id), duplicatedNote);
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      // The copy keeps the source's labels, so each of them gains a note.
+      if (duplicatedNote.labels.length > 0) invalidateLabelCounts(queryClient);
     },
   });
 }
@@ -801,6 +829,8 @@ export function useRestoreNote() {
     onSuccess: (_data, id) => {
       queryClient.removeQueries({ queryKey: noteLocalQueryKey(id) });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      // Restoring puts the note back into its labels' counts.
+      invalidateLabelCounts(queryClient);
     },
   });
 }
