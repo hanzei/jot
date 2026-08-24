@@ -565,19 +565,11 @@ const (
 	// page bootstraps itself with an inline <script> block.
 	cspSwaggerUI = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; frame-ancestors 'none'"
 
-	// maxHeaderValueCount caps how many header values either listener will
-	// parse from a request, guarding the accidental-overload case in the
-	// threat model: a client looping on a header it keeps appending costs the
-	// server parse time and allocations before any handler runs.
-	//
-	// Go 1.27 applies http.DefaultMaxHeaderValueCount when this is zero, and
-	// 500 is that default today. It is spelled as a literal rather than as
-	// that constant on purpose: the point is to pin the ceiling to a value
-	// Jot chose, so a future toolchain changing its default does not move this
-	// server's exposure without anyone deciding to. Real traffic is nowhere
-	// near it — a request behind a proxy chain carries a few dozen header
-	// values — so this is a backstop, not a budget.
-	maxHeaderValueCount = 500
+	// maxHeaderValueCount caps header values parsed per request on both
+	// listeners, guarding the accidental-overload case in the threat model. Go
+	// applies this same default when the field is zero; setting it makes the
+	// ceiling visible at the call site rather than implicit.
+	maxHeaderValueCount = http.DefaultMaxHeaderValueCount
 )
 
 func securityHeaders(cookieSecure bool) func(http.Handler) http.Handler {

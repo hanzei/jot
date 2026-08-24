@@ -93,10 +93,9 @@ func TestMaxHeaderValueCount(t *testing.T) {
 		return resp.StatusCode
 	}
 
-	// The behavioral subtests below pass on Go's own DefaultMaxHeaderValueCount
-	// too, since maxHeaderValueCount deliberately matches it. This is what
-	// actually pins the ceiling to Jot's constant, so that a toolchain changing
-	// its default cannot move it silently.
+	// The behavioral subtests below pass on Go's default too, since
+	// maxHeaderValueCount is that default. This is the one that would notice
+	// the field being dropped.
 	t.Run("the API server sets the cap explicitly rather than inheriting it", func(t *testing.T) {
 		s.serverMu.RLock()
 		defer s.serverMu.RUnlock()

@@ -71,6 +71,10 @@ type TestUser struct {
 type TestServer struct {
 	Server     *server.Server
 	HTTPServer *httptest.Server
+	// httpClient is the only client that can reach HTTPServer, which listens
+	// on an in-memory network. Holding it here is also what populates
+	// HTTPServer.URL — see setupTestServerWithConfig.
+	httpClient *http.Client
 }
 
 func defaultTestConfig(tmpDir string) *config.Config {
@@ -122,21 +126,22 @@ func setupTestServerWithConfig(t *testing.T, customize func(*config.Config)) *Te
 	// loopback port, so a suite this parallel stops burning an ephemeral port
 	// per test. Two consequences worth knowing:
 	//
-	//   - Everything reaching this server must go through HTTPServer.Client().
-	//     A client with its own transport cannot dial an in-memory listener.
-	//   - Start() is deliberately not called: it would move the server onto
-	//     loopback and undo the above. URL is instead populated by the first
-	//     Client() call, which is why it is primed here — tests read
-	//     ts.HTTPServer.URL before ever building a client, and it would
-	//     otherwise still be empty. For in-memory servers the value is
-	//     "http://example.com" and the host is not meaningful; only the path
-	//     matters.
+	//   - Everything reaching this server must go through its own Client(). A
+	//     client carrying its own transport cannot dial an in-memory listener.
+	//   - Start() is deliberately not called: it would move the server back
+	//     onto loopback and undo the above.
+	//
+	// Client() is also what populates httpServer.URL — it is set by the first
+	// call to Client, Start or StartTLS, not at construction — so resolving the
+	// client here is what makes ts.HTTPServer.URL non-empty for the tests that
+	// build a request URL before they build a client. For an in-memory server
+	// that value is "http://example.com"; only the path is meaningful.
 	httpServer := httptest.NewTestServer(t, s.GetRouter())
-	_ = httpServer.Client()
 
 	ts := &TestServer{
 		Server:     s,
 		HTTPServer: httpServer,
+		httpClient: httpServer.Client(),
 	}
 
 	t.Cleanup(func() {
@@ -153,7 +158,7 @@ func setupTestServerWithConfig(t *testing.T, customize func(*config.Config)) *Te
 // httptest's client has none, and a hung request should fail the test rather
 // than hang it.
 func (ts *TestServer) newClient() *client.Client {
-	httpClient := *ts.HTTPServer.Client()
+	httpClient := *ts.httpClient
 	httpClient.Timeout = client.DefaultTimeout
 	return client.New(ts.HTTPServer.URL).WithHTTPClient(&httpClient)
 }
