@@ -71,9 +71,8 @@ type TestUser struct {
 type TestServer struct {
 	Server     *server.Server
 	HTTPServer *httptest.Server
-	// httpClient is the only client that can reach HTTPServer, which listens
-	// on an in-memory network. Holding it here is also what populates
-	// HTTPServer.URL — see setupTestServerWithConfig.
+	// httpClient is the only client that can reach HTTPServer's in-memory
+	// listener.
 	httpClient *http.Client
 }
 
@@ -122,20 +121,11 @@ func setupTestServerWithConfig(t *testing.T, customize func(*config.Config)) *Te
 	s, err := server.NewWithLogger(cfg, log)
 	require.NoError(t, err)
 
-	// NewTestServer (Go 1.27) serves on an in-memory network rather than a real
-	// loopback port, so a suite this parallel stops burning an ephemeral port
-	// per test. Two consequences worth knowing:
-	//
-	//   - Everything reaching this server must go through its own Client(). A
-	//     client carrying its own transport cannot dial an in-memory listener.
-	//   - Start() is deliberately not called: it would move the server back
-	//     onto loopback and undo the above.
-	//
-	// Client() is also what populates httpServer.URL — it is set by the first
-	// call to Client, Start or StartTLS, not at construction — so resolving the
-	// client here is what makes ts.HTTPServer.URL non-empty for the tests that
-	// build a request URL before they build a client. For an in-memory server
-	// that value is "http://example.com"; only the path is meaningful.
+	// NewTestServer serves on an in-memory network, so this parallel suite no
+	// longer burns an ephemeral port per test. Do not call Start(): it moves the
+	// server back onto loopback. Client() below is load-bearing twice over — it
+	// is the only transport that can reach the server, and it is what sets
+	// httpServer.URL, which tests read before building a client of their own.
 	httpServer := httptest.NewTestServer(t, s.GetRouter())
 
 	ts := &TestServer{
@@ -153,10 +143,9 @@ func setupTestServerWithConfig(t *testing.T, customize func(*config.Config)) *Te
 	return ts
 }
 
-// newClient creates a new [client.Client] pointed at the test server, on the
-// in-memory transport that server listens on. The SDK's own timeout is kept:
-// httptest's client has none, and a hung request should fail the test rather
-// than hang it.
+// newClient creates a new [client.Client] on the test server's in-memory
+// transport. The SDK timeout is restored because httptest's client has none,
+// and a hung request should fail a test rather than hang it.
 func (ts *TestServer) newClient() *client.Client {
 	httpClient := *ts.httpClient
 	httpClient.Timeout = client.DefaultTimeout

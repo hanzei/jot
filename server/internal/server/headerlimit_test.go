@@ -15,18 +15,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestMaxHeaderValueCount drives the real API listener rather than a
-// httptest.Server, because the cap is a field on the http.Server that Start
-// builds: the integration harness in the root package wraps GetRouter in a
-// server of httptest's own making, so it would report a pass whether or not
-// the field is wired.
+// TestMaxHeaderValueCount drives the real API listener: the cap lives on the
+// http.Server that Start builds, and the root package's harness wraps
+// GetRouter in a server of httptest's own making, which cannot observe it.
 func TestMaxHeaderValueCount(t *testing.T) {
 	t.Parallel()
 
-	// Bind an ephemeral port, read it back, then release it so Start can take
-	// it. The window between close and re-bind is a race in principle; a
-	// collision surfaces as a "listen" error from Start rather than as a
-	// silently wrong assertion.
+	// Bind an ephemeral port, read it back, release it for Start. A collision
+	// in that window surfaces as a "listen" error, not a wrong assertion.
 	probe, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	addr := probe.Addr().String()
@@ -53,11 +49,10 @@ func TestMaxHeaderValueCount(t *testing.T) {
 	served := make(chan error, 1)
 	go func() { served <- s.Start(addr) }()
 	t.Cleanup(func() {
-		// Not t.Context(): Go cancels that just before cleanups run, and
-		// Shutdown threads its context into both WaitUntilStarted and
-		// http.Server.Shutdown. Handing it a canceled one makes Shutdown
-		// return early without stopping Serve, and the receive below then
-		// blocks until the test binary is killed.
+		// Not t.Context(): Go cancels it just before cleanups run, and Shutdown
+		// passes its context to WaitUntilStarted and http.Server.Shutdown. A
+		// canceled one makes Shutdown return without stopping Serve, hanging
+		// the receive below.
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		assert.NoError(t, s.Shutdown(ctx))
@@ -73,15 +68,14 @@ func TestMaxHeaderValueCount(t *testing.T) {
 
 	require.NoError(t, s.WaitUntilStarted(t.Context()))
 
-	// /livez needs no auth, so a non-431 status proves the request reached a
-	// handler rather than being turned away for an unrelated reason.
+	// /livez needs no auth, so a non-431 proves the request reached a handler.
 	client := &http.Client{Timeout: 10 * time.Second}
 	statusWithHeaderValues := func(t *testing.T, n int) int {
 		t.Helper()
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+addr+"/livez", nil)
 		require.NoError(t, err)
-		// Separate header lines, not one comma-separated value: the cap counts
-		// the former individually and the latter once.
+		// Separate lines, not one comma-separated value: the cap counts these
+		// individually and that as one.
 		for i := range n {
 			req.Header.Add("X-Jot-Test", fmt.Sprint(i))
 		}
@@ -93,9 +87,8 @@ func TestMaxHeaderValueCount(t *testing.T) {
 		return resp.StatusCode
 	}
 
-	// The behavioral subtests below pass on Go's default too, since
-	// maxHeaderValueCount is that default. This is the one that would notice
-	// the field being dropped.
+	// The behavioral subtests pass on Go's default too, since that is what
+	// maxHeaderValueCount is. Only this one notices the field being dropped.
 	t.Run("the API server sets the cap explicitly rather than inheriting it", func(t *testing.T) {
 		s.serverMu.RLock()
 		defer s.serverMu.RUnlock()

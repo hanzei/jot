@@ -566,9 +566,8 @@ const (
 	cspSwaggerUI = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; frame-ancestors 'none'"
 
 	// maxHeaderValueCount caps header values parsed per request on both
-	// listeners, guarding the accidental-overload case in the threat model. Go
-	// applies this same default when the field is zero; setting it makes the
-	// ceiling visible at the call site rather than implicit.
+	// listeners. Go applies this same default when the field is zero; setting
+	// it makes the ceiling explicit and gives one place to change it.
 	maxHeaderValueCount = http.DefaultMaxHeaderValueCount
 )
 
