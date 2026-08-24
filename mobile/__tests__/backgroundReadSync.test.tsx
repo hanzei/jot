@@ -170,6 +170,68 @@ describe('background read-sync retry', () => {
     expect(mockNoteQueries.markLocalNoteDeleted).toHaveBeenCalledWith(expect.anything(), 'n1');
   });
 
+  // ── useOfflineNote → notes list (issue: stale dashboard cards) ──────────────
+
+  it('refreshes the notes list after a single-note sync writes fresh data to SQLite', async () => {
+    const staleNote = {
+      ...sampleNote, note_type: 'list', title: 'Groceries', content: '',
+      items: [{ id: 'i1', text: 'Milk', completed: true, position: 0, parent_id: null, assigned_to: '' }],
+    };
+    const freshNote = {
+      ...staleNote,
+      items: [
+        ...staleNote.items,
+        { id: 'i2', text: 'Bread', completed: false, position: 1, parent_id: null, assigned_to: '' },
+      ],
+    };
+
+    mockNoteQueries.getLocalNotes.mockResolvedValue([staleNote] as never);
+    mockNoteQueries.getLocalNote.mockResolvedValue(staleNote as never);
+    // The list-level background sync never lands (still in flight), so the note
+    // sync is the only thing that writes fresh rows — exactly the case where the
+    // dashboard used to keep rendering the stale item set until an app restart.
+    mockNotesApi.getNotes.mockReturnValue(new Promise(() => {}) as never);
+    mockNotesApi.getNote.mockResolvedValue(freshNote as never);
+    mockSyncQueue.saveServerNote.mockImplementation(async () => {
+      mockNoteQueries.getLocalNotes.mockResolvedValue([freshNote] as never);
+      mockNoteQueries.getLocalNote.mockResolvedValue(freshNote as never);
+    });
+
+    const wrapper = createWrapper();
+    const { result } = await renderHook(
+      () => ({ list: useOfflineNotes(), note: useOfflineNote('n1') }),
+      { wrapper },
+    );
+
+    await act(async () => { await jest.advanceTimersByTimeAsync(0); });
+
+    expect(mockSyncQueue.saveServerNote).toHaveBeenCalledWith(expect.anything(), freshNote);
+    await waitFor(() => expect(result.current.note.data).toEqual(freshNote));
+    await waitFor(() => expect(result.current.list.data).toEqual([freshNote]));
+  });
+
+  it('refreshes the notes list after a single-note 404 tombstones the note', async () => {
+    mockNoteQueries.getLocalNotes.mockResolvedValue([sampleNote] as never);
+    mockNoteQueries.getLocalNote.mockResolvedValue(sampleNote as never);
+    mockNotesApi.getNotes.mockReturnValue(new Promise(() => {}) as never);
+    mockNotesApi.getNote.mockRejectedValue(makeAxiosError(404));
+    mockNoteQueries.markLocalNoteDeleted.mockImplementation(async () => {
+      mockNoteQueries.getLocalNotes.mockResolvedValue([]);
+      mockNoteQueries.getLocalNote.mockResolvedValue(null);
+    });
+
+    const wrapper = createWrapper();
+    const { result } = await renderHook(
+      () => ({ list: useOfflineNotes(), note: useOfflineNote('n1') }),
+      { wrapper },
+    );
+
+    await act(async () => { await jest.advanceTimersByTimeAsync(0); });
+
+    expect(mockNoteQueries.markLocalNoteDeleted).toHaveBeenCalledWith(expect.anything(), 'n1');
+    await waitFor(() => expect(result.current.list.data).toEqual([]));
+  });
+
   // ── useLabels ───────────────────────────────────────────────────────────────
 
   it('retries a transient labels sync failure and then caches server labels', async () => {
