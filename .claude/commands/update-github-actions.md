@@ -131,7 +131,7 @@ first:
 
 | In workflows | Source of truth | Skill |
 |---|---|---|
-| `go-version: "1.26"` | `server/go.mod` | `update-server-deps` |
+| `go-version: "1.27"` | `server/go.mod` | `update-server-deps` |
 | `node-version: "24"` | `.nvmrc`, `Dockerfile` | `update-webapp-deps` |
 | `java-version: "17"`, NDK/CMake pins | Expo SDK requirements | `update-mobile-deps` |
 | `postgres:16-alpine@sha256:...` | — | `update-docker-deps` |
