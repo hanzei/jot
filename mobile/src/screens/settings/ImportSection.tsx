@@ -6,8 +6,14 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '../../theme/ThemeContext';
 import { importKeepFile, getNotes } from '../../api/notes';
-import { saveServerNotes } from '../../db/syncQueue';
-import { notesLocalQueryScopeKey } from '../../hooks/queryKeys';
+import { getLabels } from '../../api/labels';
+import { saveServerLabels, saveServerNotes } from '../../db/syncQueue';
+import {
+  labelCountsQueryKey,
+  labelsQueryKey,
+  noteLocalQueryScopeKey,
+  notesLocalQueryScopeKey,
+} from '../../hooks/queryKeys';
 import { displayMessage, extractApiError } from '../../i18n/utils';
 import type { ImportResponse } from '@jot/shared';
 import { styles } from './styles';
@@ -66,12 +72,20 @@ export default function ImportSection() {
       setImportResult(response);
       setSelectedImportFile(null);
       try {
-        const latestNotes = await getNotes();
+        // An import creates labels as well as notes, and every cache below reads
+        // local SQLite — so both have to be pulled before the invalidations, or
+        // the re-read just re-serves the pre-import rows.
+        const [latestNotes, latestLabels] = await Promise.all([getNotes(), getLabels()]);
         await saveServerNotes(db, latestNotes);
+        await saveServerLabels(db, latestLabels);
       } catch (syncErr) {
-        console.warn('Post-import notes sync failed:', syncErr);
+        console.warn('Post-import sync failed:', syncErr);
       } finally {
         queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+        queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
+        queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
+        // Counts come from the note rows (labels_json), not the labels table.
+        queryClient.invalidateQueries({ queryKey: labelCountsQueryKey() });
       }
     } catch (err: unknown) {
       setImportError(extractApiError(err) ?? 'import.importFailed');
