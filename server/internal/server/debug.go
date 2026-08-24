@@ -63,10 +63,11 @@ func (s *Server) startDebugServer() error {
 	}
 
 	debugServer := &http.Server{
-		Handler:      newDebugMux(s.cfg.MetricsEnabled, s.cfg.PprofEnabled),
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: writeTimeout,
-		IdleTimeout:  30 * time.Second,
+		Handler:             newDebugMux(s.cfg.MetricsEnabled, s.cfg.PprofEnabled),
+		ReadTimeout:         10 * time.Second,
+		WriteTimeout:        writeTimeout,
+		IdleTimeout:         30 * time.Second,
+		MaxHeaderValueCount: maxHeaderValueCount,
 	}
 	s.serverMu.Lock()
 	s.debugServer = debugServer
