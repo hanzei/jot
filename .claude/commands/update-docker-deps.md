@@ -41,7 +41,7 @@ grep -rnE '^\s+image:|image: ' docker-compose.yml .github/workflows/
 ```
 
 Today that is `node:24-alpine`, `golang:1.27-alpine`, and `alpine:3.22` — each with a
-digest (see §3a) — plus `postgres:16-alpine@sha256:...` in `server-ci.yml` and
+digest (see §3a) — plus `postgres:18-alpine@sha256:...` in `server-ci.yml` and
 `hanzei/jot:latest` in the compose file. That last one is Jot's own published image and
 is deliberately left floating; everything else is pinned.
 
@@ -54,8 +54,9 @@ usual reason it comes up. Coordinate with `update-webapp-deps`; do not raise it 
 its own.
 
 **`golang:1.27-alpine`** (backend-builder) must equal the `go` directive in
-`server/go.mod` and `go-version:` in `server-ci.yml`, `webapp-ci.yml`, and
-`release.yml`. When `go.mod` is ahead of the builder image the error is a confusing
+`server/go.mod`. The workflows need no check: every `setup-go` step resolves the
+version through `go-version-file: server/go.mod`, so the Dockerfile is the only
+copy that can fall behind. When `go.mod` is ahead of the builder image the error is a confusing
 `go.mod requires go >= 1.27` that appears only in the image build, long after CI is
 green. The toolchain bump itself belongs to `update-server-deps` — this command's job is
 to notice the drift and close it in the same commit.
@@ -133,10 +134,10 @@ reverted.
 in a trailing comment:
 
 ```yaml
-image: postgres:16-alpine@sha256:e013e867... # 16-alpine
+image: postgres:18-alpine@sha256:9a8afca5... # 18-alpine
 ```
 
-Re-resolve it the same way as the base images (§3a) — `repo=library/postgres tag=16-alpine`
+Re-resolve it the same way as the base images (§3a) — `repo=library/postgres tag=18-alpine`
 for the daemon-free route — and keep the trailing comment matching the tag. Unlike a
 `FROM` line, YAML has nowhere to put the tag inline, which is why the comment carries it.
 

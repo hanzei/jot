@@ -119,7 +119,7 @@ The Go version is declared in more places than `go.mod`, and they must not drift
 
 - `server/go.mod` — `go 1.27.0`
 - `Dockerfile` — `FROM golang:1.27-alpine`
-- `README.md` prerequisites and `AGENTS.md`
+- `README.md` prerequisites and `CLAUDE.md`
 
 Update all of them in the same commit. A `go.mod` ahead of the Docker builder produces a
 confusing "go.mod requires go >= X" failure that only shows up in the image build. The

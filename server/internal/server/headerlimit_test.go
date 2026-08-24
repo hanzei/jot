@@ -49,11 +49,11 @@ func TestMaxHeaderValueCount(t *testing.T) {
 	served := make(chan error, 1)
 	go func() { served <- s.Start(addr) }()
 	t.Cleanup(func() {
-		// Not t.Context(): Go cancels it just before cleanups run, and Shutdown
-		// passes its context to WaitUntilStarted and http.Server.Shutdown. A
-		// canceled one makes Shutdown return without stopping Serve, hanging
-		// the receive below.
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		// WithoutCancel: Go cancels t.Context() just before cleanups run, and
+		// Shutdown passes its context to WaitUntilStarted and
+		// http.Server.Shutdown. A canceled one makes Shutdown return without
+		// stopping Serve, hanging the receive below.
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), 30*time.Second)
 		defer cancel()
 		assert.NoError(t, s.Shutdown(ctx))
 		s.StopBackgroundTasks()
