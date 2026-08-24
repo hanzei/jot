@@ -118,7 +118,21 @@ func setupTestServerWithConfig(t *testing.T, customize func(*config.Config)) *Te
 	s, err := server.NewWithLogger(cfg, log)
 	require.NoError(t, err)
 
-	httpServer := httptest.NewServer(s.GetRouter())
+	// NewTestServer (Go 1.27) serves on an in-memory network rather than a real
+	// loopback port, so a suite this parallel stops burning an ephemeral port
+	// per test. Two consequences worth knowing:
+	//
+	//   - Everything reaching this server must go through HTTPServer.Client().
+	//     A client with its own transport cannot dial an in-memory listener.
+	//   - Start() is deliberately not called: it would move the server onto
+	//     loopback and undo the above. URL is instead populated by the first
+	//     Client() call, which is why it is primed here — tests read
+	//     ts.HTTPServer.URL before ever building a client, and it would
+	//     otherwise still be empty. For in-memory servers the value is
+	//     "http://example.com" and the host is not meaningful; only the path
+	//     matters.
+	httpServer := httptest.NewTestServer(t, s.GetRouter())
+	_ = httpServer.Client()
 
 	ts := &TestServer{
 		Server:     s,
@@ -134,9 +148,14 @@ func setupTestServerWithConfig(t *testing.T, customize func(*config.Config)) *Te
 	return ts
 }
 
-// newClient creates a new [client.Client] pointed at the test server.
+// newClient creates a new [client.Client] pointed at the test server, on the
+// in-memory transport that server listens on. The SDK's own timeout is kept:
+// httptest's client has none, and a hung request should fail the test rather
+// than hang it.
 func (ts *TestServer) newClient() *client.Client {
-	return client.New(ts.HTTPServer.URL)
+	httpClient := *ts.HTTPServer.Client()
+	httpClient.Timeout = client.DefaultTimeout
+	return client.New(ts.HTTPServer.URL).WithHTTPClient(&httpClient)
 }
 
 // postJSON issues a POST with a JSON body as user and returns the status code.
@@ -1322,7 +1341,7 @@ func TestUploadProfileIcon(t *testing.T) {
 		require.NoError(t, err)
 		req.Header.Set("Content-Type", ct)
 
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := ts.HTTPServer.Client().Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)

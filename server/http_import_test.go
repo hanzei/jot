@@ -192,7 +192,7 @@ func TestImportUnauthenticatedReturns401(t *testing.T) {
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := ts.HTTPServer.Client().Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
@@ -790,7 +790,7 @@ func TestImportUsememosUnauthenticatedReturns401(t *testing.T) {
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := ts.HTTPServer.Client().Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
