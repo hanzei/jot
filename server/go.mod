@@ -36,7 +36,7 @@ require (
 	golang.org/x/image v0.45.0
 	golang.org/x/term v0.45.0
 	google.golang.org/grpc v1.83.1
-	modernc.org/sqlite v1.55.0
+	modernc.org/sqlite v1.57.0
 )
 
 require (
@@ -277,9 +277,9 @@ require (
 	google.golang.org/protobuf v1.36.12 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	honnef.co/go/tools v0.7.0 // indirect
-	modernc.org/libc v1.74.4 // indirect
+	modernc.org/libc v1.75.5 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
-	modernc.org/memory v1.11.0 // indirect
+	modernc.org/memory v1.12.1 // indirect
 	mvdan.cc/gofumpt v0.11.0 // indirect
 	mvdan.cc/unparam v0.0.0-20251027182757-5beb8c8f8f15 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
