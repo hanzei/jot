@@ -1,0 +1,85 @@
+name: CodeQL
+
+# Advanced setup, replacing GitHub's default setup for code scanning. The
+# reason it exists rather than the default: default setup analyses Go with
+# autobuild under GOTOOLCHAIN=local, using whatever Go the CodeQL bundle
+# ships. When go.mod requires a newer toolchain than the bundle carries,
+# extraction fails outright with
+#
+#   go: go.mod requires go >= 1.27.0 (running go 1.26.6; GOTOOLCHAIN=local)
+#
+# and there is nowhere in default setup to fix it. Here the Go job installs
+# the toolchain go.mod asks for and builds explicitly, so CodeQL traces a
+# build that actually works.
+#
+# Default setup must be turned off in Settings → Code security before this
+# runs, or GitHub refuses the upload: analyses from an advanced
+# configuration cannot be processed while default setup is enabled.
+#
+# That is why this file carries a .disabled suffix: Actions only loads
+# `*.yml` from this directory, so as named it is inert. Drop the suffix in
+# the same change that turns default setup off — activating it first only
+# buys three jobs that fail on upload.
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: ["master"]
+  pull_request:
+  schedule:
+    # Weekly, so scanning keeps up with new queries on code that is not
+    # otherwise being changed.
+    - cron: "0 3 * * 1"
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      # Uploading SARIF results.
+      security-events: write
+      # Reading workflow contents for the `actions` language.
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+          - language: javascript-typescript
+            build-mode: none
+          - language: go
+            build-mode: manual
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # Before init, so the toolchain CodeQL traces is the one go.mod asks
+      # for rather than the one bundled with the CodeQL release.
+      - name: Set up Go
+        if: matrix.language == 'go'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      # Only the compiled language needs a build. `go build ./...` covers
+      # every package in the module, which is what the extractor needs; the
+      # test files are not part of the analysed build.
+      - name: Build Go
+        if: matrix.language == 'go'
+        working-directory: server
+        run: go build ./...
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4
+        with:
+          category: "/language:${{ matrix.language }}"
