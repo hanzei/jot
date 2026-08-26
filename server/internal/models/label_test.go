@@ -5,6 +5,7 @@ import (
 
 	"github.com/hanzei/jot/server/internal/database/dbtest"
 	"github.com/hanzei/jot/server/internal/database/dialect"
+	"github.com/hanzei/jot/server/internal/labelfold"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -27,9 +28,10 @@ func newTestLabelStore(t *testing.T, driver string) (*labelStore, string) {
 }
 
 // TestLabelNameCaseInsensitivity locks in that label names are unique per user
-// without regard to case on every backend. SQLite gets that from COLLATE
-// NOCASE, PostgreSQL from a unique index on LOWER(name); both must reject the
-// same writes, so the assertions here run against each driver unchanged.
+// without regard to case on every backend. Both get that from the folded key
+// in labels.name_folded, computed by labelfold.Fold and compared as a plain
+// column, so there is no dialect left to diverge and every assertion here runs
+// against each driver unchanged.
 func TestLabelNameCaseInsensitivity(t *testing.T) {
 	dbtest.ForEachDriver(t, func(t *testing.T, driver string) {
 		t.Run("GetOrCreateLabel returns the existing label for a different casing", func(t *testing.T) {
@@ -88,29 +90,76 @@ func TestLabelNameCaseInsensitivity(t *testing.T) {
 			assert.ErrorIs(t, err, ErrLabelNameConflict)
 		})
 
-		t.Run("names differing only in non-ASCII case are distinct labels", func(t *testing.T) {
-			// SQLite's fold covers ASCII A-Z only and cannot be made
-			// Unicode-aware without ICU, so PostgreSQL is held to the same rule.
-			// Both the lookup and the unique index must agree on it, or
-			// GetOrCreateLabel would return a label the index does not consider
-			// a conflict.
+		t.Run("names differing only in non-ASCII case are one label", func(t *testing.T) {
+			// The fold is labelfold.Fold on both backends, so its reach is
+			// Unicode-wide rather than the ASCII A-Z that SQL could manage.
+			// Both the lookup and the unique index are driven by the stored
+			// key, so they cannot disagree about what counts as a conflict.
+			for _, tt := range []struct{ name, first, second string }{
+				{"german umlaut", "ÄPFEL", "äpfel"},
+				{"german sharp s", "Straße", "STRASSE"},
+				{"greek final sigma", "ΣΟΦΟΣ", "σοφος"},
+				{"french accent", "Épée", "épée"},
+				{"nfc and nfd spellings", "Café", "café"},
+			} {
+				t.Run(tt.name, func(t *testing.T) {
+					store, userID := newTestLabelStore(t, driver)
+					ctx := t.Context()
+
+					first, wasCreated, err := store.GetOrCreateLabel(ctx, userID, tt.first)
+					require.NoError(t, err)
+					assert.True(t, wasCreated)
+
+					second, wasCreated, err := store.GetOrCreateLabel(ctx, userID, tt.second)
+					require.NoError(t, err)
+					assert.False(t, wasCreated, "%q must match the existing %q", tt.second, tt.first)
+
+					assert.Equal(t, first.ID, second.ID)
+					assert.Equal(t, tt.first, second.Name, "the stored name keeps its original spelling")
+
+					labels, err := store.GetLabels(ctx, userID)
+					require.NoError(t, err)
+					assert.Len(t, labels, 1)
+				})
+			}
+		})
+
+		t.Run("an accent is a different word, not a case variant", func(t *testing.T) {
 			store, userID := newTestLabelStore(t, driver)
 			ctx := t.Context()
 
-			upper, wasCreated, err := store.GetOrCreateLabel(ctx, userID, "ÄPFEL")
+			apfel, _, err := store.GetOrCreateLabel(ctx, userID, "Apfel")
 			require.NoError(t, err)
-			assert.True(t, wasCreated)
 
-			lower, wasCreated, err := store.GetOrCreateLabel(ctx, userID, "äpfel")
+			umlaut, wasCreated, err := store.GetOrCreateLabel(ctx, userID, "Äpfel")
 			require.NoError(t, err)
-			assert.True(t, wasCreated, "a non-ASCII case difference is a separate label, so this inserts")
+			assert.True(t, wasCreated, "folding must not strip accents")
+			assert.NotEqual(t, apfel.ID, umlaut.ID)
+		})
 
-			assert.NotEqual(t, upper.ID, lower.ID)
-			assert.Equal(t, "äpfel", lower.Name)
+		t.Run("RenameLabel keeps the folded key in step with the name", func(t *testing.T) {
+			// A rename that updated only name would leave the row unreachable
+			// by every case-insensitive lookup, and free to be duplicated.
+			store, userID := newTestLabelStore(t, driver)
+			ctx := t.Context()
 
-			labels, err := store.GetLabels(ctx, userID)
+			_, err := store.CreateLabel(ctx, userID, "labl00000000000000fk1", "Work")
 			require.NoError(t, err)
-			assert.Len(t, labels, 2)
+
+			renamed, err := store.RenameLabel(ctx, "labl00000000000000fk1", userID, "Äpfel")
+			require.NoError(t, err)
+			assert.Equal(t, "Äpfel", renamed.Name)
+
+			var folded string
+			require.NoError(t, store.db.QueryRowContext(ctx,
+				store.d.RewritePlaceholders(`SELECT name_folded FROM labels WHERE id = ?`),
+				"labl00000000000000fk1").Scan(&folded))
+			assert.Equal(t, labelfold.Fold("Äpfel"), folded)
+
+			// And the new spelling now collides, where the old one no longer does.
+			_, wasCreated, err := store.GetOrCreateLabel(ctx, userID, "äpfel")
+			require.NoError(t, err)
+			assert.False(t, wasCreated, "the renamed label must be found by its new folded key")
 		})
 
 		t.Run("different users may each own the same name", func(t *testing.T) {
