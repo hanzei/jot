@@ -136,10 +136,10 @@ describe('useNoteImages hooks', () => {
     it('queues the upload when connectivity drops after mount', async () => {
       mockUseNetworkStatus.mockReturnValue({ isConnected: true });
 
-      const { result, rerender } = renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
+      const { result, rerender } = await renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
 
       mockUseNetworkStatus.mockReturnValue({ isConnected: false });
-      rerender(undefined);
+      await rerender(undefined);
 
       const file = { uri: 'file:///photo.png', name: 'photo.png', mimeType: 'image/png' };
       await result.current.mutateAsync({ noteId: 'note-1', uploadId: 'upload-1', file });
@@ -153,10 +153,10 @@ describe('useNoteImages hooks', () => {
       const image = makeImage();
       mockImagesApi.uploadNoteImage.mockResolvedValueOnce(image);
 
-      const { result, rerender } = renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
+      const { result, rerender } = await renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
 
       mockUseNetworkStatus.mockReturnValue({ isConnected: true });
-      rerender(undefined);
+      await rerender(undefined);
 
       const file = { uri: 'file:///photo.png', name: 'photo.png', mimeType: 'image/png' };
       const outcome = await result.current.mutateAsync({ noteId: 'note-1', uploadId: 'upload-1', file });
@@ -170,10 +170,10 @@ describe('useNoteImages hooks', () => {
       await saveNote(db, makeTextNote({ id: 'note-1', images: [image] }));
       mockUseNetworkStatus.mockReturnValue({ isConnected: true });
 
-      const { result, rerender } = renderHook(() => useDeleteNoteImage(), { wrapper: createWrapper() });
+      const { result, rerender } = await renderHook(() => useDeleteNoteImage(), { wrapper: createWrapper() });
 
       mockUseNetworkStatus.mockReturnValue({ isConnected: false });
-      rerender(undefined);
+      await rerender(undefined);
 
       await result.current.mutateAsync({ noteId: 'note-1', imageId: image.id });
 
@@ -187,7 +187,7 @@ describe('useNoteImages hooks', () => {
       const image = makeImage();
       mockImagesApi.uploadNoteImage.mockResolvedValueOnce(image);
 
-      const { result } = renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
 
       const file = { uri: 'file:///photo.png', name: 'photo.png', mimeType: 'image/png' };
       const outcome = await result.current.mutateAsync({ noteId: 'note-1', uploadId: 'upload-1', file });
@@ -213,7 +213,7 @@ describe('useNoteImages hooks', () => {
       await saveNote(db, makeTextNote({ id: 'note-1', images: [image] }));
       mockImagesApi.uploadNoteImage.mockResolvedValueOnce(image);
 
-      const { result } = renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
       const file = { uri: 'file:///photo.png', name: 'photo.png', mimeType: 'image/png' };
       await result.current.mutateAsync({ noteId: 'note-1', uploadId: 'upload-1', file });
 
@@ -222,7 +222,7 @@ describe('useNoteImages hooks', () => {
 
     it('rejects and leaves the local cache untouched when the server switch is in progress', async () => {
       mockClientModule.isServerSwitchInProgress.mockReturnValue(true);
-      const { result } = renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
 
       const file = { uri: 'file:///photo.png', name: 'photo.png', mimeType: 'image/png' };
       await expect(result.current.mutateAsync({ noteId: 'note-1', uploadId: 'upload-1', file })).rejects.toThrow();
@@ -239,7 +239,7 @@ describe('useNoteImages hooks', () => {
       });
       mockImagesApi.uploadNoteImage.mockRejectedValueOnce(error);
 
-      const { result } = renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
       const file = { uri: 'file:///big.png', name: 'big.png', mimeType: 'image/png' };
 
       await expect(result.current.mutateAsync({ noteId: 'note-1', uploadId: 'upload-1', file })).rejects.toBe(error);
@@ -250,7 +250,7 @@ describe('useNoteImages hooks', () => {
 
     it('queues the upload instead of attempting the request when offline (issue #618)', async () => {
       mockUseNetworkStatus.mockReturnValue({ isConnected: false });
-      const { result } = renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
       const file = { uri: 'file:///photo.png', name: 'photo.png', mimeType: 'image/png' };
 
       const outcome = await result.current.mutateAsync({ noteId: 'note-1', uploadId: 'upload-1', file });
@@ -271,7 +271,7 @@ describe('useNoteImages hooks', () => {
     it('falls back to the offline queue after a transient failure (e.g. a network error) while connected', async () => {
       const error = Object.assign(new Error('Network Error'), { isAxiosError: true, response: undefined });
       mockImagesApi.uploadNoteImage.mockRejectedValueOnce(error);
-      const { result } = renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
       const file = { uri: 'file:///photo.png', name: 'photo.png', mimeType: 'image/png' };
 
       const outcome = await result.current.mutateAsync({ noteId: 'note-1', uploadId: 'upload-1', file });
@@ -287,7 +287,7 @@ describe('useNoteImages hooks', () => {
       mockIsLocalModeActive.mockReturnValue(true);
       const image = makeImage();
       mockImagesApi.uploadNoteImage.mockResolvedValueOnce(image);
-      const { result } = renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
       const file = { uri: 'file:///photo.png', name: 'photo.png', mimeType: 'image/png' };
 
       const outcome = await result.current.mutateAsync({ noteId: 'note-1', uploadId: 'upload-1', file });
@@ -300,7 +300,7 @@ describe('useNoteImages hooks', () => {
     it('passes the caller-provided abort signal through to the upload request', async () => {
       const image = makeImage();
       mockImagesApi.uploadNoteImage.mockResolvedValueOnce(image);
-      const { result } = renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
       const file = { uri: 'file:///photo.png', name: 'photo.png', mimeType: 'image/png' };
       const controller = new AbortController();
 
@@ -314,7 +314,7 @@ describe('useNoteImages hooks', () => {
       const cancelError = new axios.CanceledError('canceled');
       mockImagesApi.uploadNoteImage.mockRejectedValueOnce(cancelError);
 
-      const { result } = renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
       const file = { uri: 'file:///photo.png', name: 'photo.png', mimeType: 'image/png' };
 
       await expect(
@@ -329,7 +329,7 @@ describe('useNoteImages hooks', () => {
       const cancelError = new axios.CanceledError('canceled');
       mockImagesApi.uploadNoteImage.mockRejectedValueOnce(cancelError);
 
-      const { result } = renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
       const file = { uri: 'file:///photo.png', name: 'photo.png', mimeType: 'image/png' };
 
       await expect(
@@ -343,7 +343,7 @@ describe('useNoteImages hooks', () => {
     it('deletes the image, removes it from the local cache, and clears the image cache', async () => {
       mockImagesApi.deleteNoteImage.mockResolvedValueOnce(undefined);
 
-      const { result } = renderHook(() => useDeleteNoteImage(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useDeleteNoteImage(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ noteId: 'note-1', imageId: 'img-1' });
 
       expect(mockImagesApi.deleteNoteImage).toHaveBeenCalledWith('img-1');
@@ -368,7 +368,7 @@ describe('useNoteImages hooks', () => {
         return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
       }
 
-      const { result } = renderHook(() => useDeleteNoteImage(), { wrapper: Wrapper });
+      const { result } = await renderHook(() => useDeleteNoteImage(), { wrapper: Wrapper });
       await result.current.mutateAsync({ noteId: 'note-1', imageId: 'img-1' });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -379,7 +379,7 @@ describe('useNoteImages hooks', () => {
       const error = new Error('Not axios, not queueable');
       mockImagesApi.deleteNoteImage.mockRejectedValueOnce(error);
 
-      const { result } = renderHook(() => useDeleteNoteImage(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useDeleteNoteImage(), { wrapper: createWrapper() });
       await expect(result.current.mutateAsync({ noteId: 'note-1', imageId: 'img-1' })).rejects.toBe(error);
       expect(mockNoteQueries.patchLocalNoteImages).not.toHaveBeenCalled();
       expect(mockEnqueueOperation).not.toHaveBeenCalled();
@@ -387,7 +387,7 @@ describe('useNoteImages hooks', () => {
 
     it('hides the image locally and queues the hard-delete for replay when offline (issue #618)', async () => {
       mockUseNetworkStatus.mockReturnValue({ isConnected: false });
-      const { result } = renderHook(() => useDeleteNoteImage(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useDeleteNoteImage(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync({ noteId: 'note-1', imageId: 'img-1' });
 
@@ -416,7 +416,7 @@ describe('useNoteImages hooks', () => {
         id: 'note-1',
         images: [makeImage({ id: 'img-1' }), makeImage({ id: 'img-2' })],
       }));
-      const { result } = renderHook(() => useDeleteNoteImage(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useDeleteNoteImage(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync({ noteId: 'note-1', imageId: 'img-1' });
 
@@ -426,7 +426,7 @@ describe('useNoteImages hooks', () => {
     it('falls back to the offline queue after a transient delete failure while connected', async () => {
       const error = Object.assign(new Error('Server Error'), { isAxiosError: true, response: { status: 503 } });
       mockImagesApi.deleteNoteImage.mockRejectedValueOnce(error);
-      const { result } = renderHook(() => useDeleteNoteImage(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useDeleteNoteImage(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync({ noteId: 'note-1', imageId: 'img-1' });
 

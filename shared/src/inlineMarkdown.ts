@@ -351,7 +351,8 @@ export function normalizeInlineTokens(
 
       case 'codespan': {
         const value = token.text ?? '';
-        nodes.push({ type: 'code', value, ...(span && { src: contentSpan(value) }) });
+        const src = contentSpan(value);
+        nodes.push(src ? { type: 'code', value, src } : { type: 'code', value });
         break;
       }
 

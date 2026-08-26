@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"runtime/pprof"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -29,7 +30,6 @@ import (
 	"github.com/hanzei/jot/server/internal/mcphandler"
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/sse"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -53,7 +53,7 @@ type Server struct {
 	router          chi.Router
 	db              *sql.DB
 	httpServer      *http.Server
-	metricsServer   *http.Server
+	debugServer     *http.Server
 	staticRoot      *os.Root
 	imageStore      *blobstore.ImageStore
 	startErr        error
@@ -180,10 +180,10 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (*Server, error) {
 		rateLimiter:     rl,
 	}
 
-	s.startPeriodicTask(ctx, time.Hour, false, func() error {
+	s.startPeriodicTask(ctx, "session-cleanup", time.Hour, false, func() error {
 		return sessionStore.DeleteExpired(ctx)
 	}, "delete expired sessions")
-	s.startPeriodicTask(ctx, time.Hour, true, func() error {
+	s.startPeriodicTask(ctx, "trash-purge", time.Hour, true, func() error {
 		shas, err := noteStore.PurgeOldTrashedNotes(ctx, 7*24*time.Hour)
 		if err != nil {
 			return err
@@ -631,53 +631,19 @@ func (s *Server) requestLoggerMiddleware(next http.Handler) http.Handler {
 }
 
 func (s *Server) Start(addr string) error {
-	if s.cfg.MetricsEnabled {
-		// Start the metrics server on its own port before the main server so it
-		// is ready by the time we signal readiness. A failure here is fatal — if
-		// the operator enabled metrics the port must be reachable.
-		metricsAddr := fmt.Sprintf("%s:%d", s.cfg.MetricsHost, s.cfg.MetricsPort)
-		metricsListener, err := (&net.ListenConfig{}).Listen(s.ctx, "tcp", metricsAddr)
-		if err != nil {
-			startErr := fmt.Errorf("listen on metrics port: %w", err)
-			s.setStartResult(startErr)
-			return startErr
+	if s.cfg.MetricsEnabled || s.cfg.PprofEnabled {
+		// Start the debug server on its own port before the main server so it
+		// is ready by the time we signal readiness. A failure here is fatal —
+		// if the operator enabled metrics or profiling the port must be
+		// reachable.
+		if err := s.startDebugServer(); err != nil {
+			return s.failStart(err)
 		}
-		mux := http.NewServeMux()
-		mux.Handle("GET /metrics", promhttp.Handler())
-		metricsServer := &http.Server{
-			Handler:      mux,
-			ReadTimeout:  10 * time.Second,
-			WriteTimeout: 10 * time.Second,
-			IdleTimeout:  30 * time.Second,
-		}
-		s.serverMu.Lock()
-		s.metricsServer = metricsServer
-		s.serverMu.Unlock()
-		s.bgWg.Add(1)
-		go func() {
-			defer s.bgWg.Done()
-			if err := metricsServer.Serve(metricsListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				s.log.WithError(err).Error("Metrics server stopped unexpectedly")
-			}
-		}()
-		s.log.Infof("Metrics server listening on %s", metricsAddr)
 	}
 
 	listener, err := (&net.ListenConfig{}).Listen(s.ctx, "tcp", addr)
 	if err != nil {
-		startErr := fmt.Errorf("listen: %w", err)
-		// Tear down the metrics server if it started successfully above.
-		s.serverMu.RLock()
-		metricsServer := s.metricsServer
-		s.serverMu.RUnlock()
-		if metricsServer != nil {
-			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer shutdownCancel()
-			_ = metricsServer.Shutdown(shutdownCtx)
-			s.bgWg.Wait()
-		}
-		s.setStartResult(startErr)
-		return startErr
+		return s.failStart(fmt.Errorf("listen: %w", err))
 	}
 
 	httpServer := &http.Server{
@@ -727,18 +693,40 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	}
 	s.serverMu.Unlock()
 
-	s.serverMu.RLock()
-	metricsServer := s.metricsServer
-	s.serverMu.RUnlock()
-	if metricsServer != nil {
-		if err := metricsServer.Shutdown(ctx); err != nil {
-			s.log.WithError(err).Warn("Metrics server shutdown error")
-		}
-	}
+	s.stopDebugServer(ctx)
 
 	s.cancel()
 	s.bgWg.Wait()
 
+	return s.closeResources()
+}
+
+// failStart is the single cleanup path for a Start that never reached Serve.
+// Shutdown cannot do this work afterwards: WaitUntilStarted hands it the start
+// error and it returns before touching anything, so whatever Start leaves
+// running stays running for the life of the process.
+func (s *Server) failStart(startErr error) error {
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutdownCancel()
+	s.stopDebugServer(shutdownCtx)
+
+	// bgWg also tracks the periodic tasks NewWithLogger started, and those only
+	// exit on ctx.Done() — without the cancel, waiting here never returns.
+	s.cancel()
+	s.bgWg.Wait()
+
+	if err := s.closeResources(); err != nil {
+		// startErr is the failure worth reporting; this one only gets logged.
+		s.log.WithError(err).Warn("Cleanup after failed start")
+	}
+
+	s.setStartResult(startErr)
+
+	return startErr
+}
+
+// closeResources releases the file handles the server owns.
+func (s *Server) closeResources() error {
 	if s.staticRoot != nil {
 		if err := s.staticRoot.Close(); err != nil {
 			return fmt.Errorf("close static root: %w", err)
@@ -751,8 +739,10 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		}
 	}
 
-	if err := s.db.Close(); err != nil {
-		return fmt.Errorf("close database: %w", err)
+	if s.db != nil {
+		if err := s.db.Close(); err != nil {
+			return fmt.Errorf("close database: %w", err)
+		}
 	}
 
 	return nil
@@ -793,10 +783,17 @@ func (s *Server) StopBackgroundTasks() {
 
 // startPeriodicTask starts a background goroutine tracked by s.bgWg that calls fn on every interval.
 // If runNow is true, fn is also called once immediately before the first tick.
-func (s *Server) startPeriodicTask(ctx context.Context, interval time.Duration, runNow bool, fn func() error, logMsg string) {
+//
+// job becomes the goroutine's pprof label. Without it every periodic task
+// profiles as the same startPeriodicTask.func1 frame, with nothing to tell
+// them apart.
+func (s *Server) startPeriodicTask(ctx context.Context, job string, interval time.Duration, runNow bool, fn func() error, logMsg string) {
 	s.bgWg.Add(1)
 	go func() {
 		defer s.bgWg.Done()
+		// Set for the goroutine's whole life, not just around fn: a stuck task
+		// is found parked on the ticker.
+		pprof.SetGoroutineLabels(pprof.WithLabels(ctx, pprof.Labels("job", job)))
 		if runNow {
 			if err := fn(); err != nil {
 				s.log.WithError(err).Errorf("Failed to %s", logMsg)

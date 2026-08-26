@@ -11,7 +11,7 @@ interface LabelPickerProps {
   selectedLabels?: Label[];
   /** For new notes: callback when labels change locally. */
   onLocalChange?: (labels: Label[]) => void;
-  onRefresh?: () => void;
+  onRefresh?: (() => void) | undefined;
   onNoteUpdate?: (note: Note) => void;
   onError?: (msg: string) => void;
   onClose: () => void;

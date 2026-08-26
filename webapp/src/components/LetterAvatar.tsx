@@ -2,12 +2,12 @@ import { useState } from 'react';
 import { AVATAR_COLORS, hashUsername } from '@jot/shared';
 
 interface LetterAvatarProps {
-  firstName?: string;
+  firstName?: string | undefined;
   username: string;
   className?: string;
-  userId?: string;
-  hasProfileIcon?: boolean;
-  iconVersion?: string;
+  userId?: string | undefined;
+  hasProfileIcon?: boolean | undefined;
+  iconVersion?: string | undefined;
 }
 
 const LetterAvatar = ({ firstName, username, className = '', userId, hasProfileIcon, iconVersion }: LetterAvatarProps) => {

@@ -69,6 +69,10 @@ jest.mock('../src/store/serverAccounts', () => ({
   getActiveServer: jest.fn(async () => ({ serverUrl: 'https://active.example.com' })),
 }));
 
+jest.mock('../src/hooks/useServerConfig', () => ({
+  useServerConfig: jest.fn(() => ({ registration_enabled: true, password_min_length: 10, upload_max_bytes: 26214400 })),
+}));
+
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 const mockUpdateMe = updateMe as jest.MockedFunction<typeof updateMe>;
 const mockListSessions = listSessions as jest.MockedFunction<typeof listSessions>;
@@ -180,14 +184,14 @@ describe('SettingsScreen language selection', () => {
       settings: updatedSettings,
     });
 
-    const { getByTestId } = render(<SettingsScreen />);
+    const { getByTestId } = await render(<SettingsScreen />);
 
     await waitFor(() => {
       expect(mockListSessions).toHaveBeenCalled();
     });
 
-    fireEvent.press(getByTestId('settings-language-dropdown'));
-    fireEvent.press(getByTestId('settings-language-de'));
+    await fireEvent.press(getByTestId('settings-language-dropdown'));
+    await fireEvent.press(getByTestId('settings-language-de'));
 
     await waitFor(() => {
       expect(mockUpdateMe).toHaveBeenCalledWith({ language: 'de' });
@@ -210,7 +214,7 @@ describe('SettingsScreen language selection', () => {
         }) as unknown as ReturnType<typeof useAuth>,
     );
 
-    const { getByTestId: getProbeByTestId } = render(
+    const { getByTestId: getProbeByTestId } = await render(
       <MobileI18nProvider>
         <TranslationProbe />
       </MobileI18nProvider>,
@@ -231,14 +235,14 @@ describe('SettingsScreen language selection', () => {
       settings: updatedSettings,
     });
 
-    const { getByTestId } = render(<SettingsScreen />);
+    const { getByTestId } = await render(<SettingsScreen />);
 
     await waitFor(() => {
       expect(mockListSessions).toHaveBeenCalled();
     });
 
-    fireEvent.press(getByTestId('settings-theme-dropdown'));
-    fireEvent.press(getByTestId('settings-theme-dark'));
+    await fireEvent.press(getByTestId('settings-theme-dropdown'));
+    await fireEvent.press(getByTestId('settings-theme-dark'));
 
     await waitFor(() => {
       expect(mockUpdateMe).toHaveBeenCalledWith({ theme: 'dark' });
@@ -248,7 +252,7 @@ describe('SettingsScreen language selection', () => {
   });
 
   it('shows active server identity in the about section only', async () => {
-    const { getByTestId, getByText, queryByText } = render(<SettingsScreen />);
+    const { getByTestId, getByText, queryByText } = await render(<SettingsScreen />);
 
     await waitFor(() => {
       expect(mockListSessions).toHaveBeenCalled();
@@ -256,7 +260,7 @@ describe('SettingsScreen language selection', () => {
 
     expect(queryByText(i18n.t('about.serverOrigin'))).toBeNull();
     expect(queryByText('https://active.example.com')).toBeNull();
-    fireEvent.press(getByTestId('settings-about-toggle'));
+    await fireEvent.press(getByTestId('settings-about-toggle'));
     await waitFor(() => {
       expect(getByText(i18n.t('about.serverOrigin'))).toBeTruthy();
       expect(getByText('https://active.example.com')).toBeTruthy();
@@ -265,7 +269,7 @@ describe('SettingsScreen language selection', () => {
   });
 
   it('asks for confirmation before revoking a session', async () => {
-    const { getByTestId, findByTestId } = render(
+    const { getByTestId, findByTestId } = await render(
       <ConfirmProvider>
         <SettingsScreen />
       </ConfirmProvider>,
@@ -275,7 +279,9 @@ describe('SettingsScreen language selection', () => {
       expect(mockListSessions).toHaveBeenCalled();
     });
 
-    fireEvent.press(getByTestId('settings-revoke-session-other-session'));
+    // Not awaited: opens a confirm dialog whose promise won't resolve
+    // until it is answered below, and awaiting fireEvent would wait for it.
+    void fireEvent.press(getByTestId('settings-revoke-session-other-session'));
 
     const dialogTitle = await findByTestId('confirm-dialog-title');
     expect(dialogTitle.props.children).toBe('Revoke session');
@@ -283,7 +289,7 @@ describe('SettingsScreen language selection', () => {
     expect(mockRevokeSession).not.toHaveBeenCalled();
 
     await act(async () => {
-      fireEvent.press(getByTestId('confirm-dialog-confirm'));
+      await fireEvent.press(getByTestId('confirm-dialog-confirm'));
     });
 
     await waitFor(() => {
@@ -292,7 +298,7 @@ describe('SettingsScreen language selection', () => {
   });
 
   it('does not revoke when the confirmation is cancelled', async () => {
-    const { getByTestId, findByTestId, queryByTestId } = render(
+    const { getByTestId, findByTestId, queryByTestId } = await render(
       <ConfirmProvider>
         <SettingsScreen />
       </ConfirmProvider>,
@@ -302,10 +308,12 @@ describe('SettingsScreen language selection', () => {
       expect(mockListSessions).toHaveBeenCalled();
     });
 
-    fireEvent.press(getByTestId('settings-revoke-session-other-session'));
+    // Not awaited: opens a confirm dialog whose promise won't resolve
+    // until it is answered below, and awaiting fireEvent would wait for it.
+    void fireEvent.press(getByTestId('settings-revoke-session-other-session'));
 
     await findByTestId('confirm-dialog-cancel');
-    fireEvent.press(getByTestId('confirm-dialog-cancel'));
+    await fireEvent.press(getByTestId('confirm-dialog-cancel'));
 
     await waitFor(() => {
       expect(queryByTestId('confirm-dialog-cancel')).toBeNull();

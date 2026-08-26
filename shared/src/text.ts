@@ -1,3 +1,5 @@
+import { VALIDATION } from './constants';
+
 // Text-length helpers that measure in Unicode code points, matching the
 // server. Every character limit in `VALIDATION` is enforced server-side with
 // `utf8.RuneCountInString` (see server/internal/handlers/validation.go), while
@@ -33,3 +35,10 @@ export const exceedsCodePointLimit = (s: string, max: number): boolean =>
 // pair. Same `.length` short-circuit as exceedsCodePointLimit.
 export const truncateToCodePoints = (s: string, max: number): string =>
   s.length <= max ? s : [...s].slice(0, max).join('');
+
+// Reports whether password is shorter than minLength code points. The
+// server's minimum is per-install and configurable, so callers with a known
+// server value should pass it explicitly; the default only applies where none
+// is available yet.
+export const isPasswordTooShort = (password: string, minLength: number = VALIDATION.PASSWORD_MIN_LENGTH): boolean =>
+  codePointLength(password) < minLength;

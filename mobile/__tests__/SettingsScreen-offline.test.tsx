@@ -63,6 +63,10 @@ jest.mock('../src/store/serverAccounts', () => ({
   getActiveServer: jest.fn(async () => ({ serverUrl: 'https://active.example.com' })),
 }));
 
+jest.mock('../src/hooks/useServerConfig', () => ({
+  useServerConfig: jest.fn(() => ({ registration_enabled: true, password_min_length: 10, upload_max_bytes: 26214400 })),
+}));
+
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ goBack: jest.fn() }),
 }));
@@ -164,11 +168,11 @@ describe('SettingsScreen offline / queued settings changes', () => {
       const { setSettings } = setupAuth();
       mockUpdateMe.mockRejectedValue(makeNetworkError());
 
-      const { getByTestId } = render(<SettingsScreen />);
+      const { getByTestId } = await render(<SettingsScreen />);
       await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
 
-      fireEvent.press(getByTestId('settings-language-dropdown'));
-      fireEvent.press(getByTestId('settings-language-de'));
+      await fireEvent.press(getByTestId('settings-language-dropdown'));
+      await fireEvent.press(getByTestId('settings-language-de'));
 
       await waitFor(() => expect(mockEnqueueOperation).toHaveBeenCalled());
 
@@ -198,11 +202,11 @@ describe('SettingsScreen offline / queued settings changes', () => {
       const { setSettings } = setupAuth();
       mockUpdateMe.mockRejectedValue(makeAxiosError(503));
 
-      const { getByTestId } = render(<SettingsScreen />);
+      const { getByTestId } = await render(<SettingsScreen />);
       await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
 
-      fireEvent.press(getByTestId('settings-language-dropdown'));
-      fireEvent.press(getByTestId('settings-language-fr'));
+      await fireEvent.press(getByTestId('settings-language-dropdown'));
+      await fireEvent.press(getByTestId('settings-language-fr'));
 
       await waitFor(() => expect(mockEnqueueOperation).toHaveBeenCalled());
 
@@ -221,11 +225,11 @@ describe('SettingsScreen offline / queued settings changes', () => {
         Object.assign(makeAxiosError(422), { response: { status: 422, data: 'invalid language' } }),
       );
 
-      const { getByTestId, getByText } = render(<SettingsScreen />);
+      const { getByTestId, getByText } = await render(<SettingsScreen />);
       await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
 
-      fireEvent.press(getByTestId('settings-language-dropdown'));
-      fireEvent.press(getByTestId('settings-language-de'));
+      await fireEvent.press(getByTestId('settings-language-dropdown'));
+      await fireEvent.press(getByTestId('settings-language-de'));
 
       await waitFor(() => {
         expect(getByText('invalid language')).toBeTruthy();
@@ -246,11 +250,11 @@ describe('SettingsScreen offline / queued settings changes', () => {
         Object.assign(makeAxiosError(400), { response: { status: 400, data: 'bad request' } }),
       );
 
-      const { getByTestId, getByText } = render(<SettingsScreen />);
+      const { getByTestId, getByText } = await render(<SettingsScreen />);
       await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
 
-      fireEvent.press(getByTestId('settings-language-dropdown'));
-      fireEvent.press(getByTestId('settings-language-de'));
+      await fireEvent.press(getByTestId('settings-language-dropdown'));
+      await fireEvent.press(getByTestId('settings-language-de'));
 
       await waitFor(() => {
         expect(getByText('bad request')).toBeTruthy();
@@ -263,11 +267,11 @@ describe('SettingsScreen offline / queued settings changes', () => {
       const { setSettings } = setupAuth();
       markServerUnreachable();
 
-      const { getByTestId } = render(<SettingsScreen />);
+      const { getByTestId } = await render(<SettingsScreen />);
       await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
 
-      fireEvent.press(getByTestId('settings-language-dropdown'));
-      fireEvent.press(getByTestId('settings-language-de'));
+      await fireEvent.press(getByTestId('settings-language-dropdown'));
+      await fireEvent.press(getByTestId('settings-language-de'));
 
       await waitFor(() => expect(mockEnqueueOperation).toHaveBeenCalled());
 
@@ -290,11 +294,11 @@ describe('SettingsScreen offline / queued settings changes', () => {
       markServerUnreachable();
       mockEnqueueOperation.mockRejectedValueOnce(new Error('sqlite write failed'));
 
-      const { getByTestId, getByText } = render(<SettingsScreen />);
+      const { getByTestId, getByText } = await render(<SettingsScreen />);
       await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
 
-      fireEvent.press(getByTestId('settings-language-dropdown'));
-      fireEvent.press(getByTestId('settings-language-de'));
+      await fireEvent.press(getByTestId('settings-language-dropdown'));
+      await fireEvent.press(getByTestId('settings-language-de'));
 
       // Nothing was queued for replay, so the optimistic language change is
       // rolled back rather than left dangling forever.
@@ -314,11 +318,11 @@ describe('SettingsScreen offline / queued settings changes', () => {
       const { setSettings } = setupAuth();
       mockUpdateMe.mockRejectedValue(makeNetworkError());
 
-      const { getByTestId } = render(<SettingsScreen />);
+      const { getByTestId } = await render(<SettingsScreen />);
       await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
 
-      fireEvent.press(getByTestId('settings-theme-dropdown'));
-      fireEvent.press(getByTestId('settings-theme-dark'));
+      await fireEvent.press(getByTestId('settings-theme-dropdown'));
+      await fireEvent.press(getByTestId('settings-theme-dark'));
 
       await waitFor(() => expect(mockEnqueueOperation).toHaveBeenCalled());
 
@@ -345,11 +349,11 @@ describe('SettingsScreen offline / queued settings changes', () => {
       const { setSettings } = setupAuth();
       mockUpdateMe.mockRejectedValue(makeAxiosError(500));
 
-      const { getByTestId } = render(<SettingsScreen />);
+      const { getByTestId } = await render(<SettingsScreen />);
       await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
 
-      fireEvent.press(getByTestId('settings-theme-dropdown'));
-      fireEvent.press(getByTestId('settings-theme-light'));
+      await fireEvent.press(getByTestId('settings-theme-dropdown'));
+      await fireEvent.press(getByTestId('settings-theme-light'));
 
       await waitFor(() => expect(mockEnqueueOperation).toHaveBeenCalled());
 
@@ -368,11 +372,11 @@ describe('SettingsScreen offline / queued settings changes', () => {
         Object.assign(makeAxiosError(422), { response: { status: 422, data: 'invalid theme' } }),
       );
 
-      const { getByTestId, getByText } = render(<SettingsScreen />);
+      const { getByTestId, getByText } = await render(<SettingsScreen />);
       await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
 
-      fireEvent.press(getByTestId('settings-theme-dropdown'));
-      fireEvent.press(getByTestId('settings-theme-dark'));
+      await fireEvent.press(getByTestId('settings-theme-dropdown'));
+      await fireEvent.press(getByTestId('settings-theme-dark'));
 
       await waitFor(() => {
         expect(getByText('invalid theme')).toBeTruthy();
@@ -391,11 +395,11 @@ describe('SettingsScreen offline / queued settings changes', () => {
         Object.assign(makeAxiosError(403), { response: { status: 403, data: 'forbidden' } }),
       );
 
-      const { getByTestId, getByText } = render(<SettingsScreen />);
+      const { getByTestId, getByText } = await render(<SettingsScreen />);
       await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
 
-      fireEvent.press(getByTestId('settings-theme-dropdown'));
-      fireEvent.press(getByTestId('settings-theme-dark'));
+      await fireEvent.press(getByTestId('settings-theme-dropdown'));
+      await fireEvent.press(getByTestId('settings-theme-dark'));
 
       await waitFor(() => {
         expect(getByText('forbidden')).toBeTruthy();
@@ -408,11 +412,11 @@ describe('SettingsScreen offline / queued settings changes', () => {
       const { setSettings } = setupAuth();
       markServerUnreachable();
 
-      const { getByTestId } = render(<SettingsScreen />);
+      const { getByTestId } = await render(<SettingsScreen />);
       await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
 
-      fireEvent.press(getByTestId('settings-theme-dropdown'));
-      fireEvent.press(getByTestId('settings-theme-dark'));
+      await fireEvent.press(getByTestId('settings-theme-dropdown'));
+      await fireEvent.press(getByTestId('settings-theme-dark'));
 
       await waitFor(() => expect(mockEnqueueOperation).toHaveBeenCalled());
 
@@ -434,11 +438,11 @@ describe('SettingsScreen offline / queued settings changes', () => {
       markServerUnreachable();
       mockEnqueueOperation.mockRejectedValueOnce(new Error('sqlite write failed'));
 
-      const { getByTestId, getByText } = render(<SettingsScreen />);
+      const { getByTestId, getByText } = await render(<SettingsScreen />);
       await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
 
-      fireEvent.press(getByTestId('settings-theme-dropdown'));
-      fireEvent.press(getByTestId('settings-theme-dark'));
+      await fireEvent.press(getByTestId('settings-theme-dropdown'));
+      await fireEvent.press(getByTestId('settings-theme-dark'));
 
       await waitFor(() => {
         expect(getByText(i18n.t('settings.failedUpdateTheme'))).toBeTruthy();
@@ -456,10 +460,10 @@ describe('SettingsScreen offline / queued settings changes', () => {
       const { setUser, setSettings } = setupAuth();
       mockUpdateMe.mockRejectedValue(makeNetworkError());
 
-      const { getByTestId } = render(<SettingsScreen />);
+      const { getByTestId } = await render(<SettingsScreen />);
       await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
 
-      fireEvent.press(getByTestId('settings-save-profile'));
+      await fireEvent.press(getByTestId('settings-save-profile'));
 
       await waitFor(() => expect(mockEnqueueOperation).toHaveBeenCalled());
 
@@ -495,10 +499,10 @@ describe('SettingsScreen offline / queued settings changes', () => {
       const { setUser } = setupAuth();
       mockUpdateMe.mockRejectedValue(makeAxiosError(503));
 
-      const { getByTestId } = render(<SettingsScreen />);
+      const { getByTestId } = await render(<SettingsScreen />);
       await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
 
-      fireEvent.press(getByTestId('settings-save-profile'));
+      await fireEvent.press(getByTestId('settings-save-profile'));
 
       await waitFor(() => expect(mockEnqueueOperation).toHaveBeenCalled());
 
@@ -518,10 +522,10 @@ describe('SettingsScreen offline / queued settings changes', () => {
         Object.assign(makeAxiosError(422), { response: { status: 422, data: 'username taken' } }),
       );
 
-      const { getByTestId, getByText } = render(<SettingsScreen />);
+      const { getByTestId, getByText } = await render(<SettingsScreen />);
       await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
 
-      fireEvent.press(getByTestId('settings-save-profile'));
+      await fireEvent.press(getByTestId('settings-save-profile'));
 
       await waitFor(() => {
         expect(getByText('username taken')).toBeTruthy();
@@ -540,10 +544,10 @@ describe('SettingsScreen offline / queued settings changes', () => {
         Object.assign(makeAxiosError(400), { response: { status: 400, data: 'invalid input' } }),
       );
 
-      const { getByTestId, getByText } = render(<SettingsScreen />);
+      const { getByTestId, getByText } = await render(<SettingsScreen />);
       await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
 
-      fireEvent.press(getByTestId('settings-save-profile'));
+      await fireEvent.press(getByTestId('settings-save-profile'));
 
       await waitFor(() => {
         expect(getByText('invalid input')).toBeTruthy();
@@ -558,10 +562,10 @@ describe('SettingsScreen offline / queued settings changes', () => {
       const { setUser } = setupAuth();
       markServerUnreachable();
 
-      const { getByTestId } = render(<SettingsScreen />);
+      const { getByTestId } = await render(<SettingsScreen />);
       await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
 
-      fireEvent.press(getByTestId('settings-save-profile'));
+      await fireEvent.press(getByTestId('settings-save-profile'));
 
       await waitFor(() => expect(mockEnqueueOperation).toHaveBeenCalled());
 

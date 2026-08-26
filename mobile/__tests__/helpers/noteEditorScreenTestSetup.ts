@@ -44,6 +44,11 @@ export const mockUseOfflineNote = jest.fn();
 export const mockShowToast = jest.fn();
 export const mockLabelPicker = jest.fn((_props: { visible: boolean }): React.ReactNode => null);
 export const mockUseUsers = jest.fn().mockReturnValue({ usersById: new Map() });
+export const mockUseServerConfig = jest.fn().mockReturnValue({
+  registration_enabled: true,
+  password_min_length: 10,
+  upload_max_bytes: 26214400,
+});
 
 // Stable `t`/`i18n` identity across renders by default, mirroring production:
 // an unstable `t` recreates callbacks (e.g. flushSave) on every render and can
@@ -167,6 +172,11 @@ jest.mock('../../src/store/UsersContext', () => ({
 jest.mock('../../src/hooks/useToast', () => ({
   __esModule: true,
   useToast: () => ({ showToast: mockShowToast }),
+}));
+
+jest.mock('../../src/hooks/useServerConfig', () => ({
+  __esModule: true,
+  useServerConfig: () => mockUseServerConfig(),
 }));
 
 jest.mock('../../src/i18n', () => ({ __esModule: true, default: {} }));

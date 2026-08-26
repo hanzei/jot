@@ -56,14 +56,6 @@ func (s *UserStore) Search(ctx context.Context, term string) (_ []*User, err err
 	return s.inner.Search(ctx, term)
 }
 
-func (s *UserStore) UpdateUsername(ctx context.Context, id, newUsername string) (_ *User, err error) {
-	ctx, end := startSpan(ctx, s.tracer, "UserStore.UpdateUsername", &err,
-		attribute.String("user.id", id),
-	)
-	defer end()
-	return s.inner.UpdateUsername(ctx, id, newUsername)
-}
-
 func (s *UserStore) UpdateProfileIcon(ctx context.Context, id string, data []byte, contentType string) (err error) {
 	ctx, end := startSpan(ctx, s.tracer, "UserStore.UpdateProfileIcon", &err,
 		attribute.String("user.id", id),
@@ -96,14 +88,6 @@ func (s *UserStore) UpdatePassword(ctx context.Context, id, newPassword string) 
 	return s.inner.UpdatePassword(ctx, id, newPassword)
 }
 
-func (s *UserStore) UpdateName(ctx context.Context, id, firstName, lastName string) (_ *User, err error) {
-	ctx, end := startSpan(ctx, s.tracer, "UserStore.UpdateName", &err,
-		attribute.String("user.id", id),
-	)
-	defer end()
-	return s.inner.UpdateName(ctx, id, firstName, lastName)
-}
-
 func (s *UserStore) UpdateProfile(ctx context.Context, id, username, firstName, lastName string) (_ *User, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "UserStore.UpdateProfile", &err,
 		attribute.String("user.id", id),
@@ -118,14 +102,6 @@ func (s *UserStore) UpdateRole(ctx context.Context, id, role string) (_ *User, e
 	)
 	defer end()
 	return s.inner.UpdateRole(ctx, id, role)
-}
-
-func (s *UserStore) Delete(ctx context.Context, id, requestingUserID string) (err error) {
-	ctx, end := startSpan(ctx, s.tracer, "UserStore.Delete", &err,
-		attribute.String("user.id", id),
-	)
-	defer end()
-	return s.inner.Delete(ctx, id, requestingUserID)
 }
 
 func (s *UserStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID string, preDelete, postDelete func(ctx context.Context, tx *sql.Tx) error) (err error) {

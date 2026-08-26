@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, type Label, type Note, type NoteType, type PatchNoteItemRequest, type UpdateNoteRequest } from '@jot/shared';
+import { DEFAULT_NOTE_COLOR, VALIDATION, type Label, type Note, type NoteType, type PatchNoteItemRequest, type UpdateNoteRequest } from '@jot/shared';
 import { notes } from '@/utils/api';
 import type { ListItem } from '@/utils/noteItems';
 import type { CompletedItemsBaseline } from '@/hooks/useCompletedItems';
@@ -19,13 +19,13 @@ export interface AutoSaveDraft {
 
 // Mergeable fields of a list item, used as the per-item baseline for diffing
 // local edits against the last-known server state.
-type ItemSnapshot = Pick<ListItem, 'text' | 'completed' | 'parentId' | 'assignedTo'>;
+type ItemSnapshot = Pick<ListItem, 'text' | 'completed' | 'parentId' | 'assigned_to'>;
 
 const itemSnapshot = (item: ListItem): ItemSnapshot => ({
   text: item.text,
   completed: item.completed,
   parentId: item.parentId,
-  assignedTo: item.assignedTo,
+  assigned_to: item.assigned_to,
 });
 
 const emptyDraft = (): AutoSaveDraft => ({
@@ -33,13 +33,13 @@ const emptyDraft = (): AutoSaveDraft => ({
   content: '',
   pinned: false,
   archived: false,
-  color: '#ffffff',
+  color: DEFAULT_NOTE_COLOR,
   checked_items_collapsed: false,
 });
 
 interface UseNoteDraftOptions {
   note?: Note | null;
-  onRefresh?: () => void;
+  onRefresh?: (() => void) | undefined;
   showError: (message: string) => void;
 }
 
@@ -63,7 +63,7 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [noteType, setNoteType] = useState<NoteType>('text');
-  const [color, setColor] = useState('#ffffff');
+  const [color, setColor] = useState(DEFAULT_NOTE_COLOR);
   const [pinned, setPinned] = useState(false);
   const [archived, setArchived] = useState(false);
   const [checkedItemsCollapsed, setCheckedItemsCollapsed] = useState(false);
@@ -191,7 +191,7 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
       if (savedOrderRef.current[i] !== it.id) return true;
       const snap = savedItemsRef.current.get(it.id);
       if (!snap || snap.text !== it.text || snap.completed !== it.completed
-        || snap.parentId !== it.parentId || snap.assignedTo !== it.assignedTo) {
+        || snap.parentId !== it.parentId || snap.assigned_to !== it.assigned_to) {
         return true;
       }
     }
@@ -243,7 +243,7 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
             position: it.position,
             completed: it.completed,
             parent_id: it.parentId ?? '',
-            ...(it.assignedTo ? { assigned_to: it.assignedTo } : {}),
+            ...(it.assigned_to ? { assigned_to: it.assigned_to } : {}),
           });
         } catch (err) {
           // 409 means a prior attempt already created this item; treat as done.
@@ -257,7 +257,7 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
       if (it.text !== snap.text) data.text = it.text;
       if (it.completed !== snap.completed) data.completed = it.completed;
       if (it.parentId !== snap.parentId) data.parent_id = it.parentId ?? '';
-      if (it.assignedTo !== snap.assignedTo) data.assigned_to = it.assignedTo;
+      if (it.assigned_to !== snap.assigned_to) data.assigned_to = it.assigned_to;
       if (Object.keys(data).length > 0) {
         await notes.updateItem(noteId, it.id, data);
         base.set(it.id, itemSnapshot(it));

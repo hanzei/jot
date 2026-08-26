@@ -11,13 +11,13 @@ interface ConfirmDialogProps {
   title: string;
   message: string;
   confirmLabel: string;
-  cancelLabel?: string;
+  cancelLabel?: string | undefined;
   onConfirm: () => void;
   // Omit to render a single, non-dismissable confirm action (no cancel button,
   // backdrop tap and hardware back are no-ops) — used for prompts the user
   // must resolve via the primary action.
-  onCancel?: () => void;
-  destructive?: boolean;
+  onCancel?: (() => void | Promise<void>) | undefined;
+  destructive?: boolean | undefined;
   // Set while a caller-driven async action (e.g. a retry) is in flight to
   // block both actions and backdrop/back dismissal — callers whose onConfirm
   // / onCancel resolve synchronously (the common useConfirm() case) never

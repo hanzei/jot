@@ -214,8 +214,7 @@ sub-projects inherit theirs. **Read them for what is on** — enumerating the
 flags here only produced a list that went stale every time one moved. What the
 configs cannot say: keep them in step. A flag one workspace has and another
 does not is drift, not a decision, and the fix is to turn it on everywhere
-rather than to record the exception. One known gap, tracked rather than
-intentional — nothing anywhere runs `exactOptionalPropertyTypes`.
+rather than to record the exception.
 
 `noUncheckedIndexedAccess` types every indexed read as `T | undefined`, so
 `arr[i]` and `record[key]` have to be handled rather than assumed
@@ -294,6 +293,12 @@ Three separate things update dependencies here, and they are easy to confuse:
   - `update-mobile-deps` — Expo/React Native packages (Expo SDK dictates most versions)
   - `update-docker-deps` — Dockerfile base images, CI container images, `docker-compose.yml`, `.dockerignore`
   - `update-github-actions` — pinned action SHAs in `.github/workflows/`, runner labels, permissions
+
+  `update-mobile-deps` also **owns `expo-doctor`** (`task check-mobile-expo`), which is
+  deliberately out of CI, `task check`, and `task check-mobile` and must not be added back:
+  it resolves its expected versions from Expo's SDK manifest at run time, so an upstream
+  patch release turns a green commit red on its own. Drift is a work item for the next
+  sweep, not a build failure — which means skipping the sweep is what lets it accumulate.
 
 **Run the command; do not update these by hand.** Each one exists because the obvious
 approach — `go get -u ./...`, `npm update`, editing a `FROM` or `uses:` line — silently

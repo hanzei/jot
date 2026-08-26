@@ -65,7 +65,7 @@ describe('NoteEditorScreen remote refresh', () => {
   // editor must now re-hydrate from the refreshed note.
   it('reflects checklist items added by another user when the editor is clean', async () => {
     mockUseOfflineNote.mockReturnValue({ data: listNote() });
-    const { getAllByTestId, rerender } = render(<NoteEditorScreen />);
+    const { getAllByTestId, rerender } = await render(<NoteEditorScreen />);
 
     expect(itemTexts(getAllByTestId)).toEqual(['Kraxxe']);
 
@@ -79,7 +79,7 @@ describe('NoteEditorScreen remote refresh', () => {
     });
     mockUseOfflineNote.mockReturnValue({ data: updated });
     await act(async () => {
-      rerender(<NoteEditorScreen />);
+      await rerender(<NoteEditorScreen />);
     });
 
     await waitFor(() => {
@@ -92,11 +92,11 @@ describe('NoteEditorScreen remote refresh', () => {
   // remote change; the editor keeps the dirty local state.
   it('does not clobber unsaved local edits when a remote update arrives', async () => {
     mockUseOfflineNote.mockReturnValue({ data: listNote() });
-    const { getByTestId, getAllByTestId, rerender } = render(<NoteEditorScreen />);
+    const { getByTestId, getAllByTestId, rerender } = await render(<NoteEditorScreen />);
 
     // Local user edits the title — this marks the editor dirty.
     await act(async () => {
-      fireEvent.changeText(getByTestId('note-title-input'), 'Packliste (mine)');
+      await fireEvent.changeText(getByTestId('note-title-input'), 'Packliste (mine)');
     });
 
     // A remote update arrives with a different title and an extra item.
@@ -110,7 +110,7 @@ describe('NoteEditorScreen remote refresh', () => {
     });
     mockUseOfflineNote.mockReturnValue({ data: updated });
     await act(async () => {
-      rerender(<NoteEditorScreen />);
+      await rerender(<NoteEditorScreen />);
     });
 
     // The local edit is preserved and the remote item was not merged in.
@@ -123,7 +123,7 @@ describe('NoteEditorScreen remote refresh', () => {
   // gets the warning banner as the only signal of the divergence.
   it('warns about a remote change only while the editor has unsaved edits', async () => {
     mockUseOfflineNote.mockReturnValue({ data: listNote() });
-    const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId, queryByTestId } = await render(<NoteEditorScreen />);
 
     // The SSE hook is mocked; grab the latest handler the editor registered so
     // we can simulate an inbound "another user updated this note" event.
@@ -138,7 +138,7 @@ describe('NoteEditorScreen remote refresh', () => {
 
     // Introduce an unsaved local edit.
     await act(async () => {
-      fireEvent.changeText(getByTestId('note-title-input'), 'Packliste (mine)');
+      await fireEvent.changeText(getByTestId('note-title-input'), 'Packliste (mine)');
     });
 
     // Now a remote update surfaces the warning banner.

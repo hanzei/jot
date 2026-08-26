@@ -3,9 +3,10 @@ import SettingsScreen from '../src/screens/SettingsScreen';
 import { useAuth } from '../src/store/AuthContext';
 import { listSessions } from '../src/api/settings';
 import { importKeepFile, getNotes } from '../src/api/notes';
+import { getLabels } from '../src/api/labels';
 import * as DocumentPicker from 'expo-document-picker';
 import i18n from '../src/i18n';
-import { saveNotes } from '../src/db/noteQueries';
+import { saveLabels, saveNotes } from '../src/db/noteQueries';
 
 const mockInvalidateQueries = jest.fn();
 const SETTINGS_IMPORT_TEST_TIMEOUT_MS = 15_000;
@@ -32,8 +33,13 @@ jest.mock('../src/api/notes', () => ({
   getNotes: jest.fn(),
 }));
 
+jest.mock('../src/api/labels', () => ({
+  getLabels: jest.fn(),
+}));
+
 jest.mock('../src/db/noteQueries', () => ({
   saveNotes: jest.fn(),
+  saveLabels: jest.fn(),
   getFailedNoteIds: jest.fn().mockResolvedValue(new Set()),
 }));
 
@@ -63,6 +69,9 @@ jest.mock('@tanstack/react-query', () => ({
 
 jest.mock('../src/hooks/queryKeys', () => ({
   notesLocalQueryScopeKey: jest.fn(() => ['notes-local', 'test-scope']),
+  noteLocalQueryScopeKey: jest.fn(() => ['note-local', 'test-scope']),
+  labelsQueryKey: jest.fn(() => ['labels', 'test-scope']),
+  labelCountsQueryKey: jest.fn(() => ['label-counts', 'test-scope']),
 }));
 
 jest.mock('expo-document-picker', () => ({
@@ -75,12 +84,18 @@ jest.mock('../src/api/client', () => ({
   cacheAuthProfile: jest.fn().mockResolvedValue(undefined),
 }));
 
+jest.mock('../src/hooks/useServerConfig', () => ({
+  useServerConfig: jest.fn(() => ({ registration_enabled: true, password_min_length: 10, upload_max_bytes: 26214400 })),
+}));
+
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 const mockListSessions = listSessions as jest.MockedFunction<typeof listSessions>;
 const mockImportKeepFile = importKeepFile as jest.MockedFunction<typeof importKeepFile>;
 const mockGetNotes = getNotes as jest.MockedFunction<typeof getNotes>;
+const mockGetLabels = getLabels as jest.MockedFunction<typeof getLabels>;
 const mockGetDocumentAsync = DocumentPicker.getDocumentAsync as jest.MockedFunction<typeof DocumentPicker.getDocumentAsync>;
 const mockSaveNotes = saveNotes as jest.MockedFunction<typeof saveNotes>;
+const mockSaveLabels = saveLabels as jest.MockedFunction<typeof saveLabels>;
 
 const user = {
   id: 'user-1',
@@ -108,6 +123,8 @@ describe('SettingsScreen import section', () => {
     mockListSessions.mockResolvedValue([]);
     mockGetNotes.mockResolvedValue([]);
     mockSaveNotes.mockResolvedValue(undefined);
+    mockGetLabels.mockResolvedValue([]);
+    mockSaveLabels.mockResolvedValue(undefined);
     await i18n.changeLanguage('en');
     mockUseAuth.mockImplementation(
       () =>
@@ -133,17 +150,17 @@ describe('SettingsScreen import section', () => {
     } as DocumentPicker.DocumentPickerResult);
     mockImportKeepFile.mockResolvedValue({ imported: 2, skipped: 1 });
 
-    const { getByTestId, getByText } = render(<SettingsScreen />);
+    const { getByTestId, getByText } = await render(<SettingsScreen />);
 
     await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
 
-    fireEvent.press(getByTestId('settings-import-select-file'));
+    await fireEvent.press(getByTestId('settings-import-select-file'));
 
     await waitFor(() => {
       expect(getByText('export.zip')).toBeTruthy();
     });
 
-    fireEvent.press(getByTestId('settings-import-submit'));
+    await fireEvent.press(getByTestId('settings-import-submit'));
 
     await waitFor(() => {
       expect(mockImportKeepFile).toHaveBeenCalledWith({
@@ -156,7 +173,16 @@ describe('SettingsScreen import section', () => {
       expect(mockGetNotes).toHaveBeenCalled();
       expect(mockSaveNotes).toHaveBeenCalled();
     });
+    // An import creates labels as well as notes, so the drawer's label list and
+    // its per-label counts have to be re-pulled and refreshed alongside the notes.
+    await waitFor(() => {
+      expect(mockGetLabels).toHaveBeenCalled();
+      expect(mockSaveLabels).toHaveBeenCalled();
+    });
     expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['notes-local', 'test-scope'] });
+    expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['note-local', 'test-scope'] });
+    expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['labels', 'test-scope'] });
+    expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['label-counts', 'test-scope'] });
     await waitFor(() => {
       expect(getByText(/Imported 2 notes/i)).toBeTruthy();
     });
@@ -169,11 +195,11 @@ describe('SettingsScreen import section', () => {
       assets: [{ uri: 'file:///tmp/notes.txt', name: 'notes.txt', mimeType: 'text/plain' }],
     } as DocumentPicker.DocumentPickerResult);
 
-    const { getByTestId, getByText, queryByText } = render(<SettingsScreen />);
+    const { getByTestId, getByText, queryByText } = await render(<SettingsScreen />);
 
     await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
 
-    fireEvent.press(getByTestId('settings-import-select-file'));
+    await fireEvent.press(getByTestId('settings-import-select-file'));
 
     await waitFor(() => {
       expect(getByText(/Invalid file type/i)).toBeTruthy();
@@ -189,16 +215,16 @@ describe('SettingsScreen import section', () => {
     } as DocumentPicker.DocumentPickerResult);
     mockImportKeepFile.mockRejectedValue({ response: { data: 'invalid JSON file' } });
 
-    const { getByTestId, getByText } = render(<SettingsScreen />);
+    const { getByTestId, getByText } = await render(<SettingsScreen />);
 
     await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
-    fireEvent.press(getByTestId('settings-import-select-file'));
+    await fireEvent.press(getByTestId('settings-import-select-file'));
 
     await waitFor(() => {
       expect(getByText('export.json')).toBeTruthy();
     });
 
-    fireEvent.press(getByTestId('settings-import-submit'));
+    await fireEvent.press(getByTestId('settings-import-submit'));
 
     await waitFor(() => {
       expect(getByText(/invalid JSON file/i)).toBeTruthy();
@@ -212,15 +238,15 @@ describe('SettingsScreen import section', () => {
     } as DocumentPicker.DocumentPickerResult);
     mockImportKeepFile.mockRejectedValue(new Error('network error'));
 
-    const { getByTestId, getByText } = render(<SettingsScreen />);
+    const { getByTestId, getByText } = await render(<SettingsScreen />);
 
     await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
-    fireEvent.press(getByTestId('settings-import-select-file'));
+    await fireEvent.press(getByTestId('settings-import-select-file'));
     await waitFor(() => {
       expect(getByText('export.json')).toBeTruthy();
     });
 
-    fireEvent.press(getByTestId('settings-import-submit'));
+    await fireEvent.press(getByTestId('settings-import-submit'));
 
     await waitFor(() => {
       expect(getByText(/Import failed/i)).toBeTruthy();
@@ -238,14 +264,14 @@ describe('SettingsScreen import section', () => {
       errors: ['failed to import "bad note": invalid json'],
     });
 
-    const { getByTestId, getByText } = render(<SettingsScreen />);
+    const { getByTestId, getByText } = await render(<SettingsScreen />);
 
     await waitFor(() => expect(mockListSessions).toHaveBeenCalled());
-    fireEvent.press(getByTestId('settings-import-select-file'));
+    await fireEvent.press(getByTestId('settings-import-select-file'));
     await waitFor(() => {
       expect(getByText('export.json')).toBeTruthy();
     });
-    fireEvent.press(getByTestId('settings-import-submit'));
+    await fireEvent.press(getByTestId('settings-import-submit'));
 
     await waitFor(() => {
       expect(getByText(/1 failed/i)).toBeTruthy();

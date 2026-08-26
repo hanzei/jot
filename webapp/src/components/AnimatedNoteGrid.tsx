@@ -169,25 +169,25 @@ interface AnimatedNoteGridProps {
    * the pinned and other sections) and is dropped instantly instead of
    * animating out, so it never appears in two sections at once.
    */
-  presentElsewhere?: Set<string>;
+  presentElsewhere?: Set<string> | undefined;
   disabled: boolean;
   inBin: boolean;
-  currentUserId?: string;
-  usersById?: Map<string, User>;
+  currentUserId?: string | undefined;
+  usersById?: Map<string, User> | undefined;
   onEdit: (note: Note) => void;
   onDelete: (noteId: string) => void;
-  onDuplicate?: (noteId: string) => Promise<void> | void;
+  onDuplicate?: ((noteId: string) => Promise<void> | void) | undefined;
   onShare: (note: Note) => void;
-  onRestore?: (noteId: string) => void;
-  onPermanentlyDelete?: (noteId: string) => void;
-  onRefresh?: () => void;
-  onLabelClick?: (labelId: string) => void;
+  onRestore?: ((noteId: string) => void) | undefined;
+  onPermanentlyDelete?: ((noteId: string) => void) | undefined;
+  onRefresh?: (() => void) | undefined;
+  onLabelClick?: ((labelId: string) => void) | undefined;
   /**
    * Notifies when the grid goes from rendering cards to rendering none (and
    * back). Lets the parent keep the section mounted while the last card animates
    * out, then drop it once the exit finishes.
    */
-  onActiveChange?: (active: boolean) => void;
+  onActiveChange?: ((active: boolean) => void) | undefined;
 }
 
 /**

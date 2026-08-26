@@ -108,29 +108,29 @@ describe('NoteCard', () => {
     fs.reset();
   });
 
-  it('shows a "didn\'t sync" badge for a note in the failed sync state', () => {
+  it('shows a "didn\'t sync" badge for a note in the failed sync state', async () => {
     mockFailedNoteIds = new Set(['note-1']);
-    const { getByTestId, getByText } = render(<NoteCard note={baseNote} onPress={jest.fn()} />);
+    const { getByTestId, getByText } = await render(<NoteCard note={baseNote} onPress={jest.fn()} />);
 
     expect(getByTestId('note-failed-badge-note-1')).toBeTruthy();
     expect(getByText("Didn't sync")).toBeTruthy();
   });
 
-  it('does not show the badge for a normally-synced note', () => {
-    const { queryByTestId } = render(<NoteCard note={baseNote} onPress={jest.fn()} />);
+  it('does not show the badge for a normally-synced note', async () => {
+    const { queryByTestId } = await render(<NoteCard note={baseNote} onPress={jest.fn()} />);
 
     expect(queryByTestId('note-failed-badge-note-1')).toBeNull();
   });
 
-  it('renders content for text notes', () => {
-    const { getByText } = render(<NoteCard note={baseNote} onPress={jest.fn()} />);
+  it('renders content for text notes', async () => {
+    const { getByText } = await render(<NoteCard note={baseNote} onPress={jest.fn()} />);
 
     expect(getByText('Some content here')).toBeTruthy();
   });
 
-  it('renders text-note content as Markdown, clamped', () => {
+  it('renders text-note content as Markdown, clamped', async () => {
     const note = { ...baseNote, content: '# Groceries\n\n- **milk**\n- eggs' };
-    const { getByTestId } = render(<NoteCard note={note} onPress={jest.fn()} />);
+    const { getByTestId } = await render(<NoteCard note={note} onPress={jest.fn()} />);
 
     const preview = getByTestId('note-card-content-note-1');
     // The clamp is what keeps a long note from blowing out the card; the card
@@ -147,7 +147,7 @@ describe('NoteCard', () => {
   // visible text is asserted alongside the absence of a handler: on its own,
   // "nothing is tappable" would also pass if link parsing had broken entirely,
   // which would show `[docs](…)` as literal source rather than `docs`.
-  it('renders links in a card as plain text, on both note types', () => {
+  it('renders links in a card as plain text, on both note types', async () => {
     const linkText = 'see https://example.com and [docs](https://example.org)';
     const asPlainText = 'see https://example.com and docs';
 
@@ -161,7 +161,7 @@ describe('NoteCard', () => {
     };
 
     const textNote = { ...baseNote, content: linkText };
-    const { getByTestId } = render(<NoteCard note={textNote} onPress={jest.fn()} />);
+    const { getByTestId } = await render(<NoteCard note={textNote} onPress={jest.fn()} />);
     const preview = getByTestId('note-card-content-note-1');
     expect(read(preview)).toBe(asPlainText);
     expect(tappable(preview)).toBe(0);
@@ -182,19 +182,19 @@ describe('NoteCard', () => {
         },
       ],
     };
-    const list = render(<NoteCard note={listNote} onPress={jest.fn()} />);
+    const list = await render(<NoteCard note={listNote} onPress={jest.fn()} />);
     const row = list.getByTestId('note-card-list-row-item-1');
     expect(read(row)).toContain(asPlainText);
     expect(tappable(row)).toBe(0);
   });
 
-  it('renders title for list notes', () => {
-    const { getByText } = render(<NoteCard note={baseListNote} onPress={jest.fn()} />);
+  it('renders title for list notes', async () => {
+    const { getByText } = await render(<NoteCard note={baseListNote} onPress={jest.fn()} />);
 
     expect(getByText('Test List Note')).toBeTruthy();
   });
 
-  it('renders list item previews for list notes', () => {
+  it('renders list item previews for list notes', async () => {
     const listNote: Note = {
       ...baseListNote,
       items: [
@@ -223,13 +223,13 @@ describe('NoteCard', () => {
       ],
     };
 
-    const { getByText } = render(<NoteCard note={listNote} onPress={jest.fn()} />);
+    const { getByText } = await render(<NoteCard note={listNote} onPress={jest.fn()} />);
 
     expect(getByText('Buy groceries')).toBeTruthy();
     expect(getByText('+1 completed items')).toBeTruthy();
   });
 
-  it('indents list preview rows using parent_id', () => {
+  it('indents list preview rows using parent_id', async () => {
     const listWithNestedItems: Note = {
       ...baseListNote,
       items: [
@@ -258,7 +258,7 @@ describe('NoteCard', () => {
       ],
     };
 
-    const { getByTestId } = render(<NoteCard note={listWithNestedItems} onPress={jest.fn()} />);
+    const { getByTestId } = await render(<NoteCard note={listWithNestedItems} onPress={jest.fn()} />);
 
     const parentRow = getByTestId('note-card-list-row-item-parent');
     const childRow = getByTestId('note-card-list-row-item-child');
@@ -267,7 +267,7 @@ describe('NoteCard', () => {
     expect(StyleSheet.flatten(childRow.props.style)?.marginLeft).toBe(1 * VALIDATION.INDENT_PX_PER_LEVEL);
   });
 
-  it('renders top-level list item with zero indentation', () => {
+  it('renders top-level list item with zero indentation', async () => {
     const listWithTopLevelItem: Note = {
       ...baseListNote,
       items: [
@@ -285,13 +285,13 @@ describe('NoteCard', () => {
       ],
     };
 
-    const { getByTestId } = render(<NoteCard note={listWithTopLevelItem} onPress={jest.fn()} />);
+    const { getByTestId } = await render(<NoteCard note={listWithTopLevelItem} onPress={jest.fn()} />);
     const row = getByTestId('note-card-list-row-item-top-level');
 
     expect(StyleSheet.flatten(row.props.style)?.marginLeft).toBe(0);
   });
 
-  it('allows list preview text to wrap instead of truncating', () => {
+  it('allows list preview text to wrap instead of truncating', async () => {
     const longListNote: Note = {
       ...baseListNote,
       items: [
@@ -309,13 +309,13 @@ describe('NoteCard', () => {
       ],
     };
 
-    const { getByText } = render(<NoteCard note={longListNote} onPress={jest.fn()} />);
+    const { getByText } = await render(<NoteCard note={longListNote} onPress={jest.fn()} />);
     const listText = getByText(longListNote.items?.[0]?.text ?? '');
 
     expect(listText.props.numberOfLines).toBeUndefined();
   });
 
-  it('renders label chips', () => {
+  it('renders label chips', async () => {
     const noteWithLabels: Note = {
       ...baseNote,
       labels: [
@@ -324,52 +324,52 @@ describe('NoteCard', () => {
       ],
     };
 
-    const { getByText } = render(<NoteCard note={noteWithLabels} onPress={jest.fn()} />);
+    const { getByText } = await render(<NoteCard note={noteWithLabels} onPress={jest.fn()} />);
 
     expect(getByText('Work')).toBeTruthy();
     expect(getByText('Personal')).toBeTruthy();
   });
 
-  it('calls onPress when tapped', () => {
+  it('calls onPress when tapped', async () => {
     const onPress = jest.fn();
-    const { getByTestId } = render(<NoteCard note={baseNote} onPress={onPress} />);
+    const { getByTestId } = await render(<NoteCard note={baseNote} onPress={onPress} />);
 
-    fireEvent.press(getByTestId('note-card-note-1'));
+    await fireEvent.press(getByTestId('note-card-note-1'));
 
     expect(onPress).toHaveBeenCalledTimes(1);
   });
 
-  it('uses note color as background for colored notes', () => {
+  it('uses note color as background for colored notes', async () => {
     const coloredNote: Note = { ...baseNote, color: '#fbbc04' };
-    const { getByTestId } = render(<NoteCard note={coloredNote} onPress={jest.fn()} />);
+    const { getByTestId } = await render(<NoteCard note={coloredNote} onPress={jest.fn()} />);
 
     const card = getByTestId('note-card-note-1');
     expect(StyleSheet.flatten(card.props.style)?.backgroundColor).toBe('#fbbc04');
   });
 
-  it('uses default white background for notes without color', () => {
-    const { getByTestId } = render(<NoteCard note={baseNote} onPress={jest.fn()} />);
+  it('uses default white background for notes without color', async () => {
+    const { getByTestId } = await render(<NoteCard note={baseNote} onPress={jest.fn()} />);
 
     const card = getByTestId('note-card-note-1');
     expect(StyleSheet.flatten(card.props.style)?.backgroundColor).toBe('#fff');
   });
 
-  it('treats shorthand white note color as default background', () => {
+  it('treats shorthand white note color as default background', async () => {
     const shorthandWhiteNote: Note = { ...baseNote, color: '#fff' };
-    const { getByTestId } = render(<NoteCard note={shorthandWhiteNote} onPress={jest.fn()} />);
+    const { getByTestId } = await render(<NoteCard note={shorthandWhiteNote} onPress={jest.fn()} />);
 
     const card = getByTestId('note-card-note-1');
     expect(StyleSheet.flatten(card.props.style)?.backgroundColor).toBe('#fff');
   });
 
-  it('does not render title when empty for list notes', () => {
+  it('does not render title when empty for list notes', async () => {
     const noTitleNote: Note = { ...baseListNote, title: '' };
-    const { queryByText } = render(<NoteCard note={noTitleNote} onPress={jest.fn()} />);
+    const { queryByText } = await render(<NoteCard note={noTitleNote} onPress={jest.fn()} />);
 
     expect(queryByText('Test List Note')).toBeNull();
   });
 
-  it('does not show assignee avatar for assigned list items', () => {
+  it('does not show assignee avatar for assigned list items', async () => {
     const sharedList: Note = {
       ...baseListNote,
       is_shared: true,
@@ -388,7 +388,7 @@ describe('NoteCard', () => {
       ],
     };
 
-    const { getByText, queryByText } = render(
+    const { getByText, queryByText } = await render(
       <NoteCard note={sharedList} onPress={jest.fn()} />,
     );
 
@@ -397,7 +397,7 @@ describe('NoteCard', () => {
     expect(queryByText('B')).toBeNull();
   });
 
-  it('renders owner avatar for shared-with-you notes', () => {
+  it('renders owner avatar for shared-with-you notes', async () => {
     const sharedNote: Note = {
       ...baseNote,
       user_id: 'owner-1',
@@ -415,7 +415,7 @@ describe('NoteCard', () => {
       ],
     };
 
-    const { getByText } = render(
+    const { getByText } = await render(
       <NoteCard note={sharedNote} onPress={jest.fn()} />,
     );
 
@@ -423,7 +423,7 @@ describe('NoteCard', () => {
     expect(getByText('?')).toBeTruthy();
   });
 
-  it('renders avatars for notes shared by the owner', () => {
+  it('renders avatars for notes shared by the owner', async () => {
     const ownedSharedNote: Note = {
       ...baseNote,
       user_id: 'current-user',
@@ -440,14 +440,14 @@ describe('NoteCard', () => {
       ],
     };
 
-    const { getByText } = render(
+    const { getByText } = await render(
       <NoteCard note={ownedSharedNote} onPress={jest.fn()} />,
     );
 
     expect(getByText('B')).toBeTruthy();
   });
 
-  it('renders a cover image from the note\'s first image', () => {
+  it('renders a cover image from the note\'s first image', async () => {
     const noteWithImages: Note = {
       ...baseNote,
       images: [
@@ -455,12 +455,12 @@ describe('NoteCard', () => {
       ],
     };
 
-    const { getByTestId } = render(<NoteCard note={noteWithImages} onPress={jest.fn()} />);
+    const { getByTestId } = await render(<NoteCard note={noteWithImages} onPress={jest.fn()} />);
 
     expect(getByTestId('note-card-cover-note-1')).toBeTruthy();
   });
 
-  it('shows a "+N" badge when the note has more than one image', () => {
+  it('shows a "+N" badge when the note has more than one image', async () => {
     const noteWithImages: Note = {
       ...baseNote,
       images: [
@@ -470,13 +470,13 @@ describe('NoteCard', () => {
       ],
     };
 
-    const { getByText } = render(<NoteCard note={noteWithImages} onPress={jest.fn()} />);
+    const { getByText } = await render(<NoteCard note={noteWithImages} onPress={jest.fn()} />);
 
     expect(getByText('+2')).toBeTruthy();
   });
 
-  it('does not render a cover image when the note has no images', () => {
-    const { queryByTestId } = render(<NoteCard note={baseNote} onPress={jest.fn()} />);
+  it('does not render a cover image when the note has no images', async () => {
+    const { queryByTestId } = await render(<NoteCard note={baseNote} onPress={jest.fn()} />);
 
     expect(queryByTestId('note-card-cover-note-1')).toBeNull();
   });
@@ -498,7 +498,7 @@ describe('NoteCard', () => {
         file: { uri: 'file:///cache/queued-photo.png', name: 'queued-photo.png', mimeType: 'image/png', sizeBytes: 1024 },
       });
 
-      const { findByTestId, findByLabelText } = render(<NoteCard note={baseNote} onPress={jest.fn()} />);
+      const { findByTestId, findByLabelText } = await render(<NoteCard note={baseNote} onPress={jest.fn()} />);
 
       expect(await findByTestId('note-card-cover-note-1')).toBeTruthy();
       expect(await findByTestId('note-card-cover-pending-note-1')).toBeTruthy();
@@ -526,7 +526,7 @@ describe('NoteCard', () => {
         ...baseNote,
         images: [{ id: 'img-1', filename: 'a.png', content_type: 'image/png', width: 800, height: 600, created_at: '2024-01-01T00:00:00Z' }],
       };
-      const { findByTestId, queryByTestId, findByText, findByLabelText, queryByLabelText } = render(<NoteCard note={noteWithImage} onPress={jest.fn()} />);
+      const { findByTestId, queryByTestId, findByText, findByLabelText, queryByLabelText } = await render(<NoteCard note={noteWithImage} onPress={jest.fn()} />);
 
       expect(await findByTestId('note-card-cover-note-1')).toBeTruthy();
       expect(await findByText('+1')).toBeTruthy();

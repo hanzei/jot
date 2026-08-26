@@ -2,7 +2,8 @@ import { useState, useEffect, useEffectEvent, useMemo, useRef, useCallback, useI
 import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, Pin, EllipsisVertical, Square, Undo2 } from 'lucide-react';
 import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, NOTE_COLORS, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type ConvertedListItem, type User, type Collaborator } from '@jot/shared';
+import type { TFunction } from 'i18next';
+import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type ConvertedListItem, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
 import { renderMarkdown, inlineMarkdownToText } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
@@ -80,8 +81,6 @@ const OVERFLOW_ITEM_SPLIT = `${OVERFLOW_ITEM_BASE} justify-between text-gray-700
 const OVERFLOW_ITEM_DANGER = `${OVERFLOW_ITEM_BASE} justify-between text-red-600 dark:text-red-400`;
 
 // Validation functions
-type TFunction = (key: string, opts?: Record<string, unknown>) => string;
-
 const validateItemText = (text: string, t: TFunction): string | null => {
   const trimmed = text.trim();
   if (trimmed.length === 0) return null; // Allow empty items (will be removed on save)
@@ -137,7 +136,7 @@ interface NoteModalProps {
   onRefresh?: () => void;
   onShare?: (note: Note) => void;
   onDelete?: (noteId: string) => void;
-  onDuplicate?: (noteId: string) => Promise<void> | void;
+  onDuplicate?: ((noteId: string) => Promise<void> | void) | undefined;
   onConvert?: (noteId: string, data: ConvertNoteTypeRequest) => Promise<void> | void;
   // A note in the bin (note.deleted_at set) opens through these instead of
   // the normal edit actions — the modal renders fully read-only, mirroring
@@ -146,18 +145,18 @@ interface NoteModalProps {
   onPermanentlyDelete?: (noteId: string) => void;
   isOwner?: boolean;
   usersById?: Map<string, User>;
-  currentUserId?: string;
+  currentUserId?: string | undefined;
   // Server-configured image upload cap, fetched via GET /config. Falls back
   // to the shared default so this component still works if a caller (e.g. a
   // test) doesn't pass it.
   uploadMaxBytes?: number;
   // Prefill for a brand-new note (note === null), e.g. from the /new deep
   // link (PWA shortcut or share target). Ignored once a note is being edited.
-  initialType?: NoteType;
-  initialContent?: string;
+  initialType?: NoteType | undefined;
+  initialContent?: string | undefined;
 }
 
-export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, onDelete, onDuplicate, onConvert, onRestore, onPermanentlyDelete, isOwner = true, usersById, currentUserId, uploadMaxBytes = UPLOAD_MAX_BYTES, initialType, initialContent }: NoteModalProps) {
+export default function NoteModal({ note = null, onClose, onSave, onRefresh, onShare, onDelete, onDuplicate, onConvert, onRestore, onPermanentlyDelete, isOwner = true, usersById, currentUserId, uploadMaxBytes = UPLOAD_MAX_BYTES, initialType, initialContent }: NoteModalProps) {
   const { t, i18n } = useTranslation();
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -310,22 +309,22 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     `${uncompletedItems.length}:${completedItems.length}:${checkedItemsCollapsed}:${noteType}:${isEditingContent}`;
   const panelRef = useSizeTransition<HTMLDivElement>(sizeTransitionKey);
 
-  const colorMeta: Record<string, { name: string; class: string }> = {
-    '#ffffff': { name: t('note.colorWhite'), class: 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600' },
-    '#f28b82': { name: t('note.colorCoral'), class: 'bg-red-200 dark:bg-red-900 border-red-300 dark:border-red-700' },
-    '#fbbc04': { name: t('note.colorYellow'), class: 'bg-yellow-100 dark:bg-yellow-900 border-yellow-300 dark:border-yellow-700' },
-    '#ccff90': { name: t('note.colorLime'), class: 'bg-lime-100 dark:bg-lime-900 border-lime-300 dark:border-lime-700' },
-    '#a7ffeb': { name: t('note.colorTeal'), class: 'bg-teal-100 dark:bg-teal-900 border-teal-300 dark:border-teal-700' },
-    '#aecbfa': { name: t('note.colorPeriwinkle'), class: 'bg-blue-100 dark:bg-blue-900 border-blue-300 dark:border-blue-700' },
-    '#d7aefb': { name: t('note.colorLavender'), class: 'bg-purple-100 dark:bg-purple-900 border-purple-300 dark:border-purple-700' },
-    '#fdcfe8': { name: t('note.colorPink'), class: 'bg-pink-100 dark:bg-pink-900 border-pink-300 dark:border-pink-700' },
-    '#e6c9a8': { name: t('note.colorSand'), class: 'bg-amber-100 dark:bg-amber-900 border-amber-300 dark:border-amber-700' },
-    '#e8eaed': { name: t('note.colorGray'), class: 'bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600' },
+  const colorClasses: Record<string, string> = {
+    '#ffffff': 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600',
+    '#f28b82': 'bg-red-200 dark:bg-red-900 border-red-300 dark:border-red-700',
+    '#fbbc04': 'bg-yellow-100 dark:bg-yellow-900 border-yellow-300 dark:border-yellow-700',
+    '#ccff90': 'bg-lime-100 dark:bg-lime-900 border-lime-300 dark:border-lime-700',
+    '#a7ffeb': 'bg-teal-100 dark:bg-teal-900 border-teal-300 dark:border-teal-700',
+    '#aecbfa': 'bg-blue-100 dark:bg-blue-900 border-blue-300 dark:border-blue-700',
+    '#d7aefb': 'bg-purple-100 dark:bg-purple-900 border-purple-300 dark:border-purple-700',
+    '#fdcfe8': 'bg-pink-100 dark:bg-pink-900 border-pink-300 dark:border-pink-700',
+    '#e6c9a8': 'bg-amber-100 dark:bg-amber-900 border-amber-300 dark:border-amber-700',
+    '#e8eaed': 'bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600',
   };
   const colors = NOTE_COLORS.map(value => ({
     value,
-    name: colorMeta[value]?.name ?? value,
-    class: colorMeta[value]?.class ?? '',
+    name: NOTE_COLOR_NAME_KEYS[value] ? t(NOTE_COLOR_NAME_KEYS[value]) : value,
+    class: colorClasses[value] ?? '',
   }));
 
   // Only offered on touch devices, where the mobile app can actually be
@@ -383,7 +382,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
           completed: item.completed,
           position: item.position,
           parentId: item.parent_id ?? null,
-          assignedTo: item.assigned_to ?? '',
+          assigned_to: item.assigned_to ?? '',
         })));
         commitItems(listItems);
         draft = { title: note.title, content: '', pinned: note.pinned, archived: note.archived, color: note.color, checked_items_collapsed: note.checked_items_collapsed };
@@ -398,12 +397,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       setTitle('');
       setContent(initialContent ?? '');
       setNoteType(initialType ?? 'text');
-      setColor('#ffffff');
+      setColor(DEFAULT_NOTE_COLOR);
       setPinned(false);
       setArchived(false);
       commitItems([]);
       setNoteLabels([]);
-      setSavedBaseline({ title: '', content: '', pinned: false, archived: false, color: '#ffffff', checked_items_collapsed: false }, []);
+      setSavedBaseline({ title: '', content: '', pinned: false, archived: false, color: DEFAULT_NOTE_COLOR, checked_items_collapsed: false }, []);
     }
   }, [commitItems, note, hasUnflushedWork, resetImagesForNoteSwitch, resetCompletedItemsForNoteSwitch,
       setSavedBaseline, setTitle, setContent, setNoteType, setColor, setPinned, setArchived,
@@ -648,7 +647,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
       const moved = arrayMove(currentItems, fromIndex, toIndex);
       const droppedIndex = moved.findIndex(item => item.id === active.id);
-      const newParentId = dropTargetParentId(moved, droppedIndex, active.id as string);
+      const above = droppedIndex > 0 ? moved[droppedIndex - 1] ?? null : null;
+      const newParentId = dropTargetParentId(moved, above, active.id as string);
       const reparented = moved.map(item =>
         item.id === active.id ? { ...item, parentId: newParentId } : item,
       );
@@ -670,7 +670,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       completed: false,
       position: 0,
       parentId,
-      assignedTo: '',
+      assigned_to: '',
     };
     commitItems(normalizeItemOrder([...currentItems, newItem]));
     autoSaveNote();
@@ -684,7 +684,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
   const insertListItemAfter = (
     afterItemId: string,
-    overrides: { text?: string; parentId?: string | null; assignedTo?: string } = {},
+    overrides: { text?: string; parentId?: string | null; assigned_to?: string } = {},
   ) => {
     if (isReadOnly) return afterItemId;
     cancelPendingSave();
@@ -697,7 +697,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       completed: afterItem ? afterItem.completed : false,
       position: 0,
       parentId: overrides.parentId !== undefined ? overrides.parentId : (afterItem ? afterItem.parentId : null),
-      assignedTo: overrides.assignedTo ?? '',
+      assigned_to: overrides.assigned_to ?? '',
     };
     const insertPos = afterItemPos >= 0 ? afterItemPos + 1 : currentItems.length;
     const newItems = [...currentItems];
@@ -712,7 +712,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   // very start of a non-empty item).
   const insertListItemBefore = (
     beforeItemId: string,
-    overrides: { parentId?: string | null; assignedTo?: string } = {},
+    overrides: { parentId?: string | null; assigned_to?: string } = {},
   ) => {
     if (isReadOnly) return beforeItemId;
     cancelPendingSave();
@@ -725,7 +725,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       completed: beforeItem ? beforeItem.completed : false,
       position: 0,
       parentId: overrides.parentId !== undefined ? overrides.parentId : (beforeItem ? beforeItem.parentId : null),
-      assignedTo: overrides.assignedTo ?? '',
+      assigned_to: overrides.assigned_to ?? '',
     };
     const insertPos = beforeItemPos >= 0 ? beforeItemPos : currentItems.length;
     const newItems = [...currentItems];
@@ -753,7 +753,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       completed: currentItem.completed,
       position: 0,
       parentId: currentItem.parentId,
-      assignedTo: currentItem.assignedTo,
+      assigned_to: currentItem.assigned_to,
     };
     const newItems = [...currentItems];
     newItems[itemPos] = { ...currentItem, text: before };
@@ -907,7 +907,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       if (cursorPos === 0 && text.length > 0) {
         const newId = insertListItemBefore(currentItem.id, {
           parentId: currentItem.parentId,
-          assignedTo: currentItem.assignedTo,
+          assigned_to: currentItem.assigned_to,
         });
         setTimeout(() => itemInputRefs.current.get(newId)?.focus(), 0);
         return;
@@ -1057,7 +1057,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         position: 0,
         // Pasted lines join the same group as the item they split from.
         parentId: currentItem.parentId,
-        assignedTo: '',
+        assigned_to: '',
       };
     });
 
@@ -1360,7 +1360,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const assignItem = async (itemId: string, userId: string) => {
     if (isReadOnly) return;
     const updatedItems = itemsRef.current.map(item =>
-      item.id === itemId ? { ...item, assignedTo: userId } : item,
+      item.id === itemId ? { ...item, assigned_to: userId } : item,
     );
     commitItems(updatedItems);
     await autoSaveNote();
@@ -1752,7 +1752,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     ? (editingItemId ? itemTextareaId(editingItemId) : undefined)
     : (isEditingContent ? contentTextareaId : undefined);
 
-  const assignedItemCount = items.filter(item => item.assignedTo).length;
+  const assignedItemCount = items.filter(item => item.assigned_to).length;
   const convertToTextConfirmMessage = assignedItemCount > 0
     ? `${t('note.convertToTextConfirmMessage')} ${t('note.convertLoseAssignments', { count: assignedItemCount })}`
     : t('note.convertToTextConfirmMessage');

@@ -12,9 +12,9 @@ function TestHarness({ onReady }: { onReady: (showToast: ToastContextType['showT
   return null;
 }
 
-function renderToast() {
+async function renderToast() {
   let showToast!: ToastContextType['showToast'];
-  const utils = render(
+  const utils = await render(
     <ToastProvider>
       <TestHarness onReady={(fn) => { showToast = fn; }} />
     </ToastProvider>,
@@ -31,16 +31,16 @@ describe('Toast onExpire', () => {
     jest.useRealTimers();
   });
 
-  it('fires onExpire when the toast auto-dismisses without the action running', () => {
-    const { showToast } = renderToast();
+  it('fires onExpire when the toast auto-dismisses without the action running', async () => {
+    const { showToast } = await renderToast();
     const onPress = jest.fn();
     const onExpire = jest.fn();
 
-    act(() => {
+    await act(() => {
       showToast()('Image removed', 'info', { label: 'Undo', onPress, onExpire });
     });
 
-    act(() => {
+    await act(() => {
       jest.advanceTimersByTime(4000);
     });
 
@@ -48,17 +48,17 @@ describe('Toast onExpire', () => {
     expect(onPress).not.toHaveBeenCalled();
   });
 
-  it('fires onExpire when the toast is dismissed via the close button', () => {
-    const { showToast, getByTestId } = renderToast();
+  it('fires onExpire when the toast is dismissed via the close button', async () => {
+    const { showToast, getByTestId } = await renderToast();
     const onPress = jest.fn();
     const onExpire = jest.fn();
 
-    act(() => {
+    await act(() => {
       showToast()('Image removed', 'info', { label: 'Undo', onPress, onExpire });
     });
 
-    act(() => {
-      fireEvent.press(getByTestId('toast-close-0'));
+    await act(async () => {
+      await fireEvent.press(getByTestId('toast-close-0'));
     });
 
     expect(onExpire).toHaveBeenCalledTimes(1);
@@ -66,39 +66,37 @@ describe('Toast onExpire', () => {
   });
 
   it('does not fire onExpire when the action runs before the timer elapses', async () => {
-    const { showToast, getByTestId } = renderToast();
+    const { showToast, getByTestId } = await renderToast();
     const onPress = jest.fn();
     const onExpire = jest.fn();
 
-    act(() => {
+    await act(() => {
       showToast()('Image removed', 'info', { label: 'Undo', onPress, onExpire });
     });
 
     await act(async () => {
-      fireEvent.press(getByTestId('toast-action-0'));
+      await fireEvent.press(getByTestId('toast-action-0'));
     });
 
     expect(onPress).toHaveBeenCalledTimes(1);
 
     // Advancing time past the original auto-dismiss point must not also fire
     // onExpire — the action already ran, so this must not double-fire.
-    act(() => {
+    await act(() => {
       jest.advanceTimersByTime(4000);
     });
     expect(onExpire).not.toHaveBeenCalled();
   });
 
-  it('does not throw for a toast with no action at all', () => {
-    const { showToast } = renderToast();
+  it('does not throw for a toast with no action at all', async () => {
+    const { showToast } = await renderToast();
 
-    act(() => {
+    await act(() => {
       showToast()('Just a message', 'success');
     });
 
-    expect(() => {
-      act(() => {
-        jest.advanceTimersByTime(4000);
-      });
-    }).not.toThrow();
+    await act(async () => {
+      jest.advanceTimersByTime(4000);
+    });
   });
 });

@@ -24,15 +24,15 @@ interface NoteCardProps {
   note: Note;
   onEdit: (note: Note) => void;
   onDelete: (noteId: string) => void;
-  onDuplicate?: (noteId: string) => Promise<void> | void;
-  onShare?: (note: Note) => void;
-  onRestore?: (noteId: string) => void;
-  onPermanentlyDelete?: (noteId: string) => void;
-  currentUserId?: string;
-  usersById?: Map<string, User>;
+  onDuplicate?: ((noteId: string) => Promise<void> | void) | undefined;
+  onShare?: ((note: Note) => void) | undefined;
+  onRestore?: ((noteId: string) => void) | undefined;
+  onPermanentlyDelete?: ((noteId: string) => void) | undefined;
+  currentUserId?: string | undefined;
+  usersById?: Map<string, User> | undefined;
   inBin?: boolean;
-  onRefresh?: () => void;
-  onLabelClick?: (labelId: string) => void;
+  onRefresh?: (() => void) | undefined;
+  onLabelClick?: ((labelId: string) => void) | undefined;
 }
 
 function MenuKbd({ children }: { children: React.ReactNode }) {

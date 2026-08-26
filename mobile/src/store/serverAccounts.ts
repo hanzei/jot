@@ -16,9 +16,11 @@ export type AddServerResult =
 export interface ServerAccountEntry {
   serverId: string;
   serverUrl: string;
-  displayName?: string;
+  displayName?: string | undefined;
   lastUsedAt: string;
 }
+
+export type ServerStorageKey = 'session' | 'cached_profile' | 'server_url' | 'server_config';
 
 interface ServerRegistryState {
   activeServerId: string | null;
@@ -152,11 +154,11 @@ async function deleteLegacyKeys(): Promise<void> {
   ]);
 }
 
-function buildServerStorageKey(serverId: string, key: 'session' | 'cached_profile' | 'server_url'): string {
+function buildServerStorageKey(serverId: string, key: ServerStorageKey): string {
   return `${SERVER_STORAGE_PREFIX}_${serverId}_${key}`;
 }
 
-export function getServerScopedStorageKey(serverId: string, key: 'session' | 'cached_profile' | 'server_url'): string {
+export function getServerScopedStorageKey(serverId: string, key: ServerStorageKey): string {
   return buildServerStorageKey(serverId, key);
 }
 
@@ -294,6 +296,7 @@ export async function removeServer(serverId: string): Promise<boolean> {
     SecureStore.deleteItemAsync(buildServerStorageKey(serverId, 'session')),
     SecureStore.deleteItemAsync(buildServerStorageKey(serverId, 'cached_profile')),
     SecureStore.deleteItemAsync(buildServerStorageKey(serverId, 'server_url')),
+    SecureStore.deleteItemAsync(buildServerStorageKey(serverId, 'server_config')),
   ]);
 
   return true;
@@ -348,14 +351,14 @@ export async function ensureServerRegistryMigrated(): Promise<void> {
   await SecureStore.setItemAsync(LEGACY_MIGRATION_KEY, '1');
 }
 
-export async function getServerStorageValue(serverId: string, key: 'session' | 'cached_profile' | 'server_url'): Promise<string | null> {
+export async function getServerStorageValue(serverId: string, key: ServerStorageKey): Promise<string | null> {
   return SecureStore.getItemAsync(buildServerStorageKey(serverId, key));
 }
 
-export async function setServerStorageValue(serverId: string, key: 'session' | 'cached_profile' | 'server_url', value: string): Promise<void> {
+export async function setServerStorageValue(serverId: string, key: ServerStorageKey, value: string): Promise<void> {
   await SecureStore.setItemAsync(buildServerStorageKey(serverId, key), value);
 }
 
-export async function deleteServerStorageValue(serverId: string, key: 'session' | 'cached_profile' | 'server_url'): Promise<void> {
+export async function deleteServerStorageValue(serverId: string, key: ServerStorageKey): Promise<void> {
   await SecureStore.deleteItemAsync(buildServerStorageKey(serverId, key));
 }

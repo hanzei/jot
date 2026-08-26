@@ -62,40 +62,40 @@ describe('useVisibleTopBanners', () => {
     setup();
   });
 
-  it('returns no banners when everything is healthy', () => {
-    const { result } = renderHook(() => useVisibleTopBanners());
+  it('returns no banners when everything is healthy', async () => {
+    const { result } = await renderHook(() => useVisibleTopBanners());
     expect(result.current).toEqual([]);
   });
 
-  it('shows only the offline banner while offline', () => {
+  it('shows only the offline banner while offline', async () => {
     // syncError/reconnect are gated on isConnected, so offline wins alone.
     setup({ isConnected: false, syncError: true, sseReconnecting: true });
-    const { result } = renderHook(() => useVisibleTopBanners());
+    const { result } = await renderHook(() => useVisibleTopBanners());
     expect(result.current).toEqual(['offline']);
   });
 
-  it('stacks the sync-failures banner below the offline banner when both apply', () => {
+  it('stacks the sync-failures banner below the offline banner when both apply', async () => {
     // Dead-lettered changes stay failed regardless of connectivity, so the
     // sync-failures banner is intentionally not gated on isConnected.
     setup({ isConnected: false, syncFailureCount: 2 });
-    const { result } = renderHook(() => useVisibleTopBanners());
+    const { result } = await renderHook(() => useVisibleTopBanners());
     expect(result.current).toEqual(['offline', 'syncFailures']);
   });
 
-  it('shows the SSE reconnect banner when online but the stream is down', () => {
+  it('shows the SSE reconnect banner when online but the stream is down', async () => {
     setup({ sseReconnecting: true });
-    const { result } = renderHook(() => useVisibleTopBanners());
+    const { result } = await renderHook(() => useVisibleTopBanners());
     expect(result.current).toEqual(['sseReconnect']);
   });
 
-  it('stacks banners in a fixed top-to-bottom order', () => {
+  it('stacks banners in a fixed top-to-bottom order', async () => {
     setup({
       sseReconnecting: true,
       syncError: true,
       revalidationFailed: true,
       syncFailureCount: 2,
     });
-    const { result } = renderHook(() => useVisibleTopBanners());
+    const { result } = await renderHook(() => useVisibleTopBanners());
     expect(result.current).toEqual([
       'sseReconnect',
       'syncError',
@@ -104,9 +104,9 @@ describe('useVisibleTopBanners', () => {
     ]);
   });
 
-  it('hides the sync-failures banner once dismissed', () => {
+  it('hides the sync-failures banner once dismissed', async () => {
     setup({ syncFailureCount: 3, syncFailuresBannerDismissed: true });
-    const { result } = renderHook(() => useVisibleTopBanners());
+    const { result } = await renderHook(() => useVisibleTopBanners());
     expect(result.current).toEqual([]);
   });
 });
@@ -117,16 +117,16 @@ describe('useBannerShown', () => {
     setup();
   });
 
-  it('is false when no banner is visible', () => {
-    const { result } = renderHook(() => useBannerShown());
+  it('is false when no banner is visible', async () => {
+    const { result } = await renderHook(() => useBannerShown());
     expect(result.current).toBe(false);
   });
 
   // Regression: the SSE reconnect bar must make screens skip their own top
   // inset, otherwise the inset is applied twice and a gap appears above the bar.
-  it('is true when only the SSE reconnect banner is showing', () => {
+  it('is true when only the SSE reconnect banner is showing', async () => {
     setup({ sseReconnecting: true });
-    const { result } = renderHook(() => useBannerShown());
+    const { result } = await renderHook(() => useBannerShown());
     expect(result.current).toBe(true);
   });
 });

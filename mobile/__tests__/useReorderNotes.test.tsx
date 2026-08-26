@@ -32,7 +32,7 @@ describe('useReorderNotes', () => {
   it('calls reorderNotes API with note IDs', async () => {
     mockNotesApi.reorderNotes.mockResolvedValueOnce(undefined);
 
-    const { result } = renderHook(() => useReorderNotes(), { wrapper: createWrapper() });
+    const { result } = await renderHook(() => useReorderNotes(), { wrapper: createWrapper() });
 
     result.current.mutate(['id-1', 'id-2', 'id-3']);
 
@@ -44,7 +44,7 @@ describe('useReorderNotes', () => {
   it('handles reorder failure', async () => {
     mockNotesApi.reorderNotes.mockRejectedValueOnce(new Error('Failed'));
 
-    const { result } = renderHook(() => useReorderNotes(), { wrapper: createWrapper() });
+    const { result } = await renderHook(() => useReorderNotes(), { wrapper: createWrapper() });
 
     result.current.mutate(['id-1']);
 
