@@ -71,11 +71,12 @@ func (s *userStore) Create(ctx context.Context, username, password string) (*Use
 		role = RoleAdmin
 	}
 
-	query := `INSERT INTO users (id, username, password_hash, role)
-			  VALUES (?, ?, ?, ?) RETURNING created_at, updated_at`
+	now := Timestamp(Now())
+	query := `INSERT INTO users (id, username, password_hash, role, created_at, updated_at)
+			  VALUES (?, ?, ?, ?, ?, ?) RETURNING created_at, updated_at`
 
 	var user User
-	err = s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), userID, username, string(hashedPassword), role).Scan(
+	err = s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), userID, username, string(hashedPassword), role, now, now).Scan(
 		&user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
@@ -221,12 +222,12 @@ func (s *userStore) Search(ctx context.Context, term string) ([]*User, error) {
 // the updated user. Returns ErrUsernameTaken if the username is already in use,
 // or another error if the id does not exist or the query fails.
 func (s *userStore) UpdateUsername(ctx context.Context, id, newUsername string) (*User, error) {
-	query := `UPDATE users SET username = ?, updated_at = CURRENT_TIMESTAMP
+	query := `UPDATE users SET username = ?, updated_at = ?
 			  WHERE id = ? RETURNING id, username, first_name, last_name, role,
 			  profile_icon IS NOT NULL AS has_profile_icon,
 			  created_at, updated_at`
 	var user User
-	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), newUsername, id).Scan(
+	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), newUsername, Timestamp(Now()), id).Scan(
 		&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
@@ -249,8 +250,8 @@ func (s *userStore) UpdateProfileIcon(ctx context.Context, id string, data []byt
 		return errors.New("profile icon content type must not be empty")
 	}
 	result, err := s.db.ExecContext(ctx,
-		s.d.RewritePlaceholders(`UPDATE users SET profile_icon = ?, profile_icon_content_type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`),
-		data, contentType, id,
+		s.d.RewritePlaceholders(`UPDATE users SET profile_icon = ?, profile_icon_content_type = ?, updated_at = ? WHERE id = ?`),
+		data, contentType, Timestamp(Now()), id,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update profile icon: %w", err)
@@ -285,8 +286,8 @@ func (s *userStore) GetProfileIcon(ctx context.Context, id string) ([]byte, stri
 
 func (s *userStore) DeleteProfileIcon(ctx context.Context, id string) error {
 	result, err := s.db.ExecContext(ctx,
-		s.d.RewritePlaceholders(`UPDATE users SET profile_icon = NULL, profile_icon_content_type = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`),
-		id,
+		s.d.RewritePlaceholders(`UPDATE users SET profile_icon = NULL, profile_icon_content_type = NULL, updated_at = ? WHERE id = ?`),
+		Timestamp(Now()), id,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to delete profile icon: %w", err)
@@ -308,8 +309,8 @@ func (s *userStore) UpdatePassword(ctx context.Context, id, newPassword string) 
 	}
 
 	result, err := s.db.ExecContext(ctx,
-		s.d.RewritePlaceholders(`UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`),
-		string(hashedPassword), id,
+		s.d.RewritePlaceholders(`UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?`),
+		string(hashedPassword), Timestamp(Now()), id,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update password: %w", err)
@@ -327,12 +328,12 @@ func (s *userStore) UpdatePassword(ctx context.Context, id, newPassword string) 
 }
 
 func (s *userStore) UpdateName(ctx context.Context, id, firstName, lastName string) (*User, error) {
-	query := `UPDATE users SET first_name = ?, last_name = ?, updated_at = CURRENT_TIMESTAMP
+	query := `UPDATE users SET first_name = ?, last_name = ?, updated_at = ?
 			  WHERE id = ? RETURNING id, username, first_name, last_name, role,
 			  profile_icon IS NOT NULL AS has_profile_icon,
 			  created_at, updated_at`
 	var user User
-	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), firstName, lastName, id).Scan(
+	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), firstName, lastName, Timestamp(Now()), id).Scan(
 		&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
@@ -357,11 +358,11 @@ func (s *userStore) UpdateProfile(ctx context.Context, id, username, firstName, 
 
 	var user User
 	err = tx.QueryRowContext(ctx,
-		s.d.RewritePlaceholders(`UPDATE users SET username = ?, first_name = ?, last_name = ?, updated_at = CURRENT_TIMESTAMP
+		s.d.RewritePlaceholders(`UPDATE users SET username = ?, first_name = ?, last_name = ?, updated_at = ?
 		 WHERE id = ? RETURNING id, username, first_name, last_name, role,
 		 profile_icon IS NOT NULL AS has_profile_icon,
 		 created_at, updated_at`),
-		username, firstName, lastName, id,
+		username, firstName, lastName, Timestamp(Now()), id,
 	).Scan(&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		if s.d.IsUniqueConstraintError(err) {
@@ -413,11 +414,11 @@ func (s *userStore) UpdateRole(ctx context.Context, id, role string) (*User, err
 
 	var user User
 	err = tx.QueryRowContext(ctx,
-		s.d.RewritePlaceholders(`UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP
+		s.d.RewritePlaceholders(`UPDATE users SET role = ?, updated_at = ?
 		 WHERE id = ? RETURNING id, username, first_name, last_name, role,
 		 profile_icon IS NOT NULL AS has_profile_icon,
 		 created_at, updated_at`),
-		role, id,
+		role, Timestamp(Now()), id,
 	).Scan(&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w", ErrUserNotFound)
@@ -516,11 +517,12 @@ func (s *userStore) CreateByAdmin(ctx context.Context, username, password string
 		return nil, fmt.Errorf("failed to generate user ID: %w", err)
 	}
 
-	query := `INSERT INTO users (id, username, password_hash, role)
-			  VALUES (?, ?, ?, ?) RETURNING created_at, updated_at`
+	now := Timestamp(Now())
+	query := `INSERT INTO users (id, username, password_hash, role, created_at, updated_at)
+			  VALUES (?, ?, ?, ?, ?, ?) RETURNING created_at, updated_at`
 
 	var user User
-	err = s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), userID, username, string(hashedPassword), role).Scan(
+	err = s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), userID, username, string(hashedPassword), role, now, now).Scan(
 		&user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {

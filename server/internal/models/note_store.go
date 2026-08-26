@@ -103,12 +103,13 @@ func (s *noteStore) CreateWithItems(ctx context.Context, userID, noteID, title, 
 	}
 
 	nextPosition := 0
+	now := Timestamp(Now())
 
 	var note Note
 	if err = tx.QueryRowContext(ctx,
-		s.d.RewritePlaceholders(`INSERT INTO notes (id, user_id, title, content, note_type)
-		 VALUES (?, ?, ?, ?, ?) RETURNING created_at, updated_at`),
-		noteID, userID, title, content, noteType,
+		s.d.RewritePlaceholders(`INSERT INTO notes (id, user_id, title, content, note_type, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING created_at, updated_at`),
+		noteID, userID, title, content, noteType, now, now,
 	).Scan(&note.CreatedAt, &note.UpdatedAt); err != nil {
 		// Two concurrent creates with the same caller-supplied ID can both pass the
 		// existence check above (neither sees the other's uncommitted insert), so
@@ -120,15 +121,15 @@ func (s *noteStore) CreateWithItems(ctx context.Context, userID, noteID, title, 
 	}
 
 	if _, err = tx.ExecContext(ctx,
-		s.d.RewritePlaceholders(`INSERT INTO note_user_state (note_id, user_id, color, pinned, archived, position, unpinned_position, checked_items_collapsed)
-		 VALUES (?, ?, ?, FALSE, FALSE, ?, ?, FALSE)`),
-		noteID, userID, color, nextPosition, nextPosition,
+		s.d.RewritePlaceholders(`INSERT INTO note_user_state (note_id, user_id, color, pinned, archived, position, unpinned_position, checked_items_collapsed, created_at, updated_at)
+		 VALUES (?, ?, ?, FALSE, FALSE, ?, ?, FALSE, ?, ?)`),
+		noteID, userID, color, nextPosition, nextPosition, now, now,
 	); err != nil {
 		return nil, fmt.Errorf("failed to create note user state: %w", err)
 	}
 
 	for _, item := range items {
-		if err = insertNewNoteItemTx(ctx, tx, s.d, noteID, item); err != nil {
+		if err = insertNewNoteItemTx(ctx, tx, s.d, noteID, item, now); err != nil {
 			return nil, err
 		}
 	}
@@ -156,7 +157,7 @@ func (s *noteStore) CreateWithItems(ctx context.Context, userID, noteID, title, 
 // supplied ID is existence-checked (ErrNoteItemExists on collision); an empty
 // ID is generated server-side. The parent ref is validated against items
 // already inserted in this note.
-func insertNewNoteItemTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string, item NewNoteItem) error {
+func insertNewNoteItemTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string, item NewNoteItem, now string) error {
 	itemID := item.ID
 	if itemID == "" {
 		var err error
@@ -182,9 +183,9 @@ func insertNewNoteItemTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, no
 	}
 
 	if _, err := tx.ExecContext(ctx,
-		d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, position, completed, parent_id, assigned_to)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`),
-		itemID, noteID, item.Text, item.Position, item.Completed, nullableParentID(item.ParentID), nullableAssignedTo(""),
+		d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, position, completed, parent_id, assigned_to, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+		itemID, noteID, item.Text, item.Position, item.Completed, nullableParentID(item.ParentID), nullableAssignedTo(""), now, now,
 	); err != nil {
 		// Concurrent replays with the same client-supplied ID can both pass the
 		// existence check above; map the constraint violation to ErrNoteItemExists.
@@ -244,13 +245,16 @@ func (s *noteStore) Duplicate(ctx context.Context, source *Note, userID, clientI
 	}
 
 	const nextPosition = 0
+	now := Timestamp(Now())
 	if _, err = tx.ExecContext(ctx,
-		s.d.RewritePlaceholders(`INSERT INTO notes (id, user_id, title, content, note_type) VALUES (?, ?, ?, ?, ?)`),
+		s.d.RewritePlaceholders(`INSERT INTO notes (id, user_id, title, content, note_type, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`),
 		noteID,
 		userID,
 		duplicateNoteTitle(source.Title),
 		source.Content,
 		source.NoteType,
+		now,
+		now,
 	); err != nil {
 		// Two concurrent duplicates with the same caller-supplied ID can both pass
 		// the existence check above; map the constraint violation to ErrNoteExists.
@@ -261,18 +265,18 @@ func (s *noteStore) Duplicate(ctx context.Context, source *Note, userID, clientI
 	}
 
 	if _, err = tx.ExecContext(ctx,
-		s.d.RewritePlaceholders(`INSERT INTO note_user_state (note_id, user_id, color, pinned, archived, position, unpinned_position, checked_items_collapsed)
-		 VALUES (?, ?, ?, FALSE, FALSE, ?, ?, ?)`),
-		noteID, userID, source.Color, nextPosition, nextPosition, source.CheckedItemsCollapsed,
+		s.d.RewritePlaceholders(`INSERT INTO note_user_state (note_id, user_id, color, pinned, archived, position, unpinned_position, checked_items_collapsed, created_at, updated_at)
+		 VALUES (?, ?, ?, FALSE, FALSE, ?, ?, ?, ?, ?)`),
+		noteID, userID, source.Color, nextPosition, nextPosition, source.CheckedItemsCollapsed, now, now,
 	); err != nil {
 		return nil, fmt.Errorf("failed to create duplicated note user state: %w", err)
 	}
 
-	if err = duplicateItemsTx(ctx, tx, s.d, noteID, source.Items, itemIDs); err != nil {
+	if err = duplicateItemsTx(ctx, tx, s.d, noteID, source.Items, itemIDs, now); err != nil {
 		return nil, fmt.Errorf("duplicate note items: %w", err)
 	}
 
-	if err = duplicateLabelsTx(ctx, tx, s.d, noteID, userID, source.Labels); err != nil {
+	if err = duplicateLabelsTx(ctx, tx, s.d, noteID, userID, source.Labels, now); err != nil {
 		return nil, fmt.Errorf("duplicate note labels: %w", err)
 	}
 
@@ -288,7 +292,7 @@ func (s *noteStore) Duplicate(ctx context.Context, source *Note, userID, clientI
 	return duplicated, nil
 }
 
-func duplicateItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string, items []NoteItem, itemIDs map[string]string) error {
+func duplicateItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string, items []NoteItem, itemIDs map[string]string, now string) error {
 	// Insert parents before their children so each child's remapped parent_id is
 	// already in idMap (and satisfies the parent_id foreign key). Position order
 	// alone is not enough — a client reorder can leave a child at a lower position
@@ -303,7 +307,7 @@ func duplicateItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteI
 			return err
 		}
 		idMap[item.ID] = newID
-		if err = insertDuplicateItemTx(ctx, tx, d, noteID, item, newID, idMap); err != nil {
+		if err = insertDuplicateItemTx(ctx, tx, d, noteID, item, newID, idMap, now); err != nil {
 			// Two concurrent replays with the same client-supplied ID can both pass
 			// the existence check above; map the constraint violation to ErrNoteItemExists.
 			if itemIDs[item.ID] != "" && d.IsUniqueConstraintError(err) {
@@ -379,7 +383,7 @@ func resolveItemIDTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, suppli
 
 // insertDuplicateItemTx inserts one cloned item into noteID, remapping its
 // parent_id through idMap (which must already contain the duplicated parent).
-func insertDuplicateItemTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string, item NoteItem, itemID string, idMap map[string]string) error {
+func insertDuplicateItemTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string, item NoteItem, itemID string, idMap map[string]string, now string) error {
 	var newParent sql.NullString
 	if item.ParentID != nil {
 		if mapped, ok := idMap[*item.ParentID]; ok {
@@ -387,14 +391,14 @@ func insertDuplicateItemTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, 
 		}
 	}
 	_, err := tx.ExecContext(ctx,
-		d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`),
-		itemID, noteID, item.Text, item.Completed, item.Position, newParent, nullableAssignedTo(""),
+		d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+		itemID, noteID, item.Text, item.Completed, item.Position, newParent, nullableAssignedTo(""), now, now,
 	)
 	return err
 }
 
-func duplicateLabelsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, userID string, labels []Label) error {
+func duplicateLabelsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, userID string, labels []Label, now string) error {
 	for _, label := range labels {
 		labelID, err := generateID()
 		if err != nil {
@@ -402,10 +406,10 @@ func duplicateLabelsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, note
 		}
 		var resolvedLabelID string
 		if err = tx.QueryRowContext(ctx,
-			d.RewritePlaceholders(`INSERT INTO labels (id, user_id, name) VALUES (?, ?, ?)
+			d.RewritePlaceholders(`INSERT INTO labels (id, user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
 			 ON CONFLICT `+d.LabelNameConflictTarget()+` DO UPDATE SET name=excluded.name
 			 RETURNING id`),
-			labelID, userID, label.Name,
+			labelID, userID, label.Name, now, now,
 		).Scan(&resolvedLabelID); err != nil {
 			return fmt.Errorf("failed to get or create duplicated label: %w", err)
 		}
@@ -414,9 +418,9 @@ func duplicateLabelsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, note
 			return fmt.Errorf("failed to generate note label ID: %w", err)
 		}
 		q := d.RewritePlaceholders(
-			d.InsertIgnore("note_labels", "id, note_id, label_id, user_id", "?, ?, ?, ?"),
+			d.InsertIgnore("note_labels", "id, note_id, label_id, user_id, created_at", "?, ?, ?, ?, ?"),
 		)
-		if _, err = tx.ExecContext(ctx, q, noteLabelID, noteID, resolvedLabelID, userID); err != nil {
+		if _, err = tx.ExecContext(ctx, q, noteLabelID, noteID, resolvedLabelID, userID, now); err != nil {
 			return fmt.Errorf("failed to attach duplicated label to note: %w", err)
 		}
 	}
@@ -756,6 +760,8 @@ func (s *noteStore) Update(ctx context.Context, id string, userID string, title,
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	now := Timestamp(Now())
+
 	// Only touch the shared fields (title/content) when the caller provided at
 	// least one AND it actually differs from the stored value. Skipping a no-op
 	// (e.g. an editor autosave that resends unchanged content) avoids a spurious
@@ -764,16 +770,16 @@ func (s *noteStore) Update(ctx context.Context, id string, userID string, title,
 	contentChanged := (title != nil || content != nil) &&
 		(resolvedTitle != currentNote.Title || resolvedContent != currentNote.Content)
 	if contentChanged {
-		if err = s.updateNoteContentTx(ctx, tx, id, resolvedTitle, resolvedContent, baseVersion); err != nil {
+		if err = s.updateNoteContentTx(ctx, tx, id, resolvedTitle, resolvedContent, baseVersion, now); err != nil {
 			return err
 		}
 	}
 
 	// Per-user fields live in note_user_state.
 	result, err := tx.ExecContext(ctx,
-		s.d.RewritePlaceholders(`UPDATE note_user_state SET pinned = ?, archived = ?, color = ?, checked_items_collapsed = ?, updated_at = CURRENT_TIMESTAMP
+		s.d.RewritePlaceholders(`UPDATE note_user_state SET pinned = ?, archived = ?, color = ?, checked_items_collapsed = ?, updated_at = ?
 		 WHERE note_id = ? AND user_id = ?`),
-		resolvedPinned, resolvedArchived, resolvedColor, resolvedCheckedItemsCollapsed, id, userID,
+		resolvedPinned, resolvedArchived, resolvedColor, resolvedCheckedItemsCollapsed, now, id, userID,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update note user state: %w", err)
@@ -802,9 +808,9 @@ func (s *noteStore) Update(ctx context.Context, id string, userID string, title,
 // the write is gated on the current version; on a version mismatch (zero rows affected) it re-reads
 // the current title/content: if they already match the requested values it returns nil (idempotent
 // success), otherwise ErrNoteVersionConflict.
-func (s *noteStore) updateNoteContentTx(ctx context.Context, tx *sql.Tx, id, title, content string, baseVersion *int) error {
-	query := `UPDATE notes SET title = ?, content = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
-	args := []any{title, content, id}
+func (s *noteStore) updateNoteContentTx(ctx context.Context, tx *sql.Tx, id, title, content string, baseVersion *int, now string) error {
+	query := `UPDATE notes SET title = ?, content = ?, version = version + 1, updated_at = ? WHERE id = ?`
+	args := []any{title, content, now, id}
 	if baseVersion != nil {
 		query += ` AND version = ?`
 		args = append(args, *baseVersion)
@@ -864,13 +870,15 @@ func (s *noteStore) ConvertType(ctx context.Context, id, userID string, targetTy
 		return nil, ErrNoteNoAccess
 	}
 
+	now := Timestamp(Now())
+
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	alreadyApplied, err := s.convertNoteRowTx(ctx, tx, id, targetType, content, targetItems, baseVersion)
+	alreadyApplied, err := s.convertNoteRowTx(ctx, tx, id, targetType, content, targetItems, baseVersion, now)
 	if err != nil {
 		return nil, err
 	}
@@ -881,7 +889,7 @@ func (s *noteStore) ConvertType(ctx context.Context, id, userID string, targetTy
 		}
 		if targetType == NoteTypeList {
 			for _, item := range targetItems {
-				if err = insertNewNoteItemTx(ctx, tx, s.d, id, item); err != nil {
+				if err = insertNewNoteItemTx(ctx, tx, s.d, id, item, now); err != nil {
 					return nil, fmt.Errorf("insert converted item: %w", err)
 				}
 			}
@@ -904,11 +912,11 @@ func (s *noteStore) ConvertType(ctx context.Context, id, userID string, targetTy
 // already committed this exact conversion (detected via the idempotent-replay
 // check below); the caller should then skip re-touching note_items and just
 // commit, since the winning write already did that atomically.
-func (s *noteStore) convertNoteRowTx(ctx context.Context, tx *sql.Tx, id string, targetType NoteType, content string, targetItems []NewNoteItem, baseVersion *int) (alreadyApplied bool, err error) {
+func (s *noteStore) convertNoteRowTx(ctx context.Context, tx *sql.Tx, id string, targetType NoteType, content string, targetItems []NewNoteItem, baseVersion *int, now string) (alreadyApplied bool, err error) {
 	// deleted_at IS NULL guards against a concurrent trash landing between the
 	// HasAccess check in ConvertType and this UPDATE.
-	query := `UPDATE notes SET title = '', content = ?, note_type = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL`
-	args := []any{content, targetType, id}
+	query := `UPDATE notes SET title = '', content = ?, note_type = ?, version = version + 1, updated_at = ? WHERE id = ? AND deleted_at IS NULL`
+	args := []any{content, targetType, now, id}
 	if baseVersion != nil {
 		query += ` AND version = ?`
 		args = append(args, *baseVersion)
@@ -1237,10 +1245,12 @@ func (s *noteStore) MoveToTrash(ctx context.Context, id string, userID string) e
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	now := Timestamp(Now())
+
 	result, err := tx.ExecContext(ctx,
-		s.d.RewritePlaceholders(`UPDATE notes SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+		s.d.RewritePlaceholders(`UPDATE notes SET deleted_at = ?, updated_at = ?
 		 WHERE id = ? AND user_id = ? AND deleted_at IS NULL`),
-		id, userID,
+		now, now, id, userID,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to move note to trash: %w", err)
@@ -1256,9 +1266,9 @@ func (s *noteStore) MoveToTrash(ctx context.Context, id string, userID string) e
 
 	// Reset all collaborators' per-user state so the note won't appear pinned/archived on restore.
 	if _, err = tx.ExecContext(ctx,
-		s.d.RewritePlaceholders(`UPDATE note_user_state SET pinned = FALSE, archived = FALSE, updated_at = CURRENT_TIMESTAMP
+		s.d.RewritePlaceholders(`UPDATE note_user_state SET pinned = FALSE, archived = FALSE, updated_at = ?
 		 WHERE note_id = ?`),
-		id,
+		now, id,
 	); err != nil {
 		return fmt.Errorf("failed to reset note user state on trash: %w", err)
 	}
@@ -1288,10 +1298,12 @@ func (s *noteStore) RestoreFromTrash(ctx context.Context, id string, userID stri
 
 	// Restore the note first — if it's not actually in the trash we bail out
 	// before shifting any positions.
+	now := Timestamp(Now())
+
 	result, err := tx.ExecContext(ctx,
-		s.d.RewritePlaceholders(`UPDATE notes SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP
+		s.d.RewritePlaceholders(`UPDATE notes SET deleted_at = NULL, updated_at = ?
 		 WHERE id = ? AND user_id = ? AND deleted_at IS NOT NULL`),
-		id, userID,
+		now, id, userID,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to restore note from trash: %w", err)
@@ -1308,9 +1320,9 @@ func (s *noteStore) RestoreFromTrash(ctx context.Context, id string, userID stri
 	// Reset all collaborators' per-user state so the restored note lands at position 0,
 	// unpinned and unarchived, for every user who has access.
 	if _, err = tx.ExecContext(ctx,
-		s.d.RewritePlaceholders(`UPDATE note_user_state SET pinned = FALSE, archived = FALSE, position = 0, unpinned_position = NULL, updated_at = CURRENT_TIMESTAMP
+		s.d.RewritePlaceholders(`UPDATE note_user_state SET pinned = FALSE, archived = FALSE, position = 0, unpinned_position = NULL, updated_at = ?
 		 WHERE note_id = ?`),
-		id,
+		now, id,
 	); err != nil {
 		return fmt.Errorf("failed to reset note user state on restore: %w", err)
 	}
@@ -1655,11 +1667,12 @@ func (s *noteStore) CreateItemWithCompleted(ctx context.Context, noteID string, 
 		return nil, fmt.Errorf("failed to generate item ID: %w", err)
 	}
 
-	query := s.d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, position, completed, parent_id, assigned_to)
-			  VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING created_at, updated_at`)
+	now := Timestamp(Now())
+	query := s.d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, position, completed, parent_id, assigned_to, created_at, updated_at)
+			  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING created_at, updated_at`)
 	var item NoteItem
 	err = s.db.QueryRowContext(ctx, query, itemID, noteID, text, position, completed, nullableParentID(parentID),
-		nullableAssignedTo(assignedTo),
+		nullableAssignedTo(assignedTo), now, now,
 	).Scan(
 		&item.CreatedAt, &item.UpdatedAt,
 	)
@@ -1680,10 +1693,10 @@ func (s *noteStore) CreateItemWithCompleted(ctx context.Context, noteID string, 
 
 // touchNoteTx bumps a note's updated_at so item-level changes are reflected in
 // note ordering (updated_at sort) and client freshness checks.
-func touchNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string) error {
+func touchNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, now string) error {
 	if _, err := tx.ExecContext(ctx,
-		d.RewritePlaceholders(`UPDATE notes SET updated_at = CURRENT_TIMESTAMP WHERE id = ?`),
-		noteID,
+		d.RewritePlaceholders(`UPDATE notes SET updated_at = ? WHERE id = ?`),
+		now, noteID,
 	); err != nil {
 		return fmt.Errorf("failed to touch note: %w", err)
 	}
@@ -1725,6 +1738,8 @@ func (s *noteStore) CreateItemWithID(ctx context.Context, noteID, itemID, text s
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	now := Timestamp(Now())
+
 	var exists int
 	if err = tx.QueryRowContext(ctx,
 		s.d.RewritePlaceholders(`SELECT COUNT(*) FROM note_items WHERE id = ?`),
@@ -1755,14 +1770,14 @@ func (s *noteStore) CreateItemWithID(ctx context.Context, noteID, itemID, text s
 
 	var item NoteItem
 	if err = tx.QueryRowContext(ctx,
-		s.d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, position, completed, parent_id, assigned_to)
-			  VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING created_at, updated_at`),
-		itemID, noteID, text, position, completed, nullableParentID(parentID), nullableAssignedTo(assignedTo),
+		s.d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, position, completed, parent_id, assigned_to, created_at, updated_at)
+			  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING created_at, updated_at`),
+		itemID, noteID, text, position, completed, nullableParentID(parentID), nullableAssignedTo(assignedTo), now, now,
 	).Scan(&item.CreatedAt, &item.UpdatedAt); err != nil {
 		return nil, fmt.Errorf("failed to create note item: %w", err)
 	}
 
-	if err = touchNoteTx(ctx, tx, s.d, noteID); err != nil {
+	if err = touchNoteTx(ctx, tx, s.d, noteID, now); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -1789,6 +1804,8 @@ func (s *noteStore) PatchItem(ctx context.Context, noteID, itemID string, patch 
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+
+	now := Timestamp(Now())
 
 	var current NoteItem
 	var assignedTo, currentParent sql.NullString
@@ -1822,9 +1839,9 @@ func (s *noteStore) PatchItem(ctx context.Context, noteID, itemID string, patch 
 
 	var item NoteItem
 	if err = tx.QueryRowContext(ctx,
-		s.d.RewritePlaceholders(`UPDATE note_items SET text = ?, completed = ?, position = ?, parent_id = ?, assigned_to = ?, updated_at = CURRENT_TIMESTAMP
+		s.d.RewritePlaceholders(`UPDATE note_items SET text = ?, completed = ?, position = ?, parent_id = ?, assigned_to = ?, updated_at = ?
 			  WHERE id = ? AND note_id = ? RETURNING created_at, updated_at`),
-		resolvedText, resolvedCompleted, resolvedPosition, nullableParentID(resolvedParent), nullableAssignedTo(resolvedAssignedTo), itemID, noteID,
+		resolvedText, resolvedCompleted, resolvedPosition, nullableParentID(resolvedParent), nullableAssignedTo(resolvedAssignedTo), now, itemID, noteID,
 	).Scan(&item.CreatedAt, &item.UpdatedAt); err != nil {
 		return nil, fmt.Errorf("failed to update note item: %w", err)
 	}
@@ -1842,12 +1859,12 @@ func (s *noteStore) PatchItem(ctx context.Context, noteID, itemID string, patch 
 	// in-flight checkbox toggle's own request has advanced the local
 	// baseline).
 	if patch.Completed != nil || patch.ParentID != nil {
-		if err = cascadeItemCompletion(ctx, tx, s.d, noteID, itemID, nullableParentID(resolvedParent), resolvedCompleted); err != nil {
+		if err = cascadeItemCompletion(ctx, tx, s.d, noteID, itemID, nullableParentID(resolvedParent), resolvedCompleted, now); err != nil {
 			return nil, err
 		}
 	}
 
-	if err = touchNoteTx(ctx, tx, s.d, noteID); err != nil {
+	if err = touchNoteTx(ctx, tx, s.d, noteID, now); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -1873,6 +1890,8 @@ func (s *noteStore) DeleteItemFromNote(ctx context.Context, noteID, itemID strin
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	now := Timestamp(Now())
+
 	result, err := tx.ExecContext(ctx,
 		s.d.RewritePlaceholders(`DELETE FROM note_items WHERE id = ? AND note_id = ?`),
 		itemID, noteID,
@@ -1888,7 +1907,7 @@ func (s *noteStore) DeleteItemFromNote(ctx context.Context, noteID, itemID strin
 		return ErrNoteItemNotFound
 	}
 
-	if err = touchNoteTx(ctx, tx, s.d, noteID); err != nil {
+	if err = touchNoteTx(ctx, tx, s.d, noteID, now); err != nil {
 		return err
 	}
 	if err = tx.Commit(); err != nil {
@@ -1907,10 +1926,12 @@ func (s *noteStore) ReorderItems(ctx context.Context, noteID string, itemIDs []s
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	now := Timestamp(Now())
+
 	for i, itemID := range itemIDs {
 		result, execErr := tx.ExecContext(ctx,
-			s.d.RewritePlaceholders(`UPDATE note_items SET position = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND note_id = ?`),
-			i, itemID, noteID,
+			s.d.RewritePlaceholders(`UPDATE note_items SET position = ?, updated_at = ? WHERE id = ? AND note_id = ?`),
+			i, now, itemID, noteID,
 		)
 		if execErr != nil {
 			return fmt.Errorf("failed to reorder note item: %w", execErr)
@@ -1924,7 +1945,7 @@ func (s *noteStore) ReorderItems(ctx context.Context, noteID string, itemIDs []s
 		}
 	}
 
-	if err = touchNoteTx(ctx, tx, s.d, noteID); err != nil {
+	if err = touchNoteTx(ctx, tx, s.d, noteID, now); err != nil {
 		return err
 	}
 	if err = tx.Commit(); err != nil {
@@ -1941,11 +1962,11 @@ func (s *noteStore) ReorderItems(ctx context.Context, noteID string, itemIDs []s
 // incomplete child never auto-completes the parent — that still requires
 // checking the parent itself. parentID is the item's parent_id as it stood
 // before this change.
-func cascadeItemCompletion(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, itemID string, parentID sql.NullString, newCompleted bool) error {
+func cascadeItemCompletion(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, itemID string, parentID sql.NullString, newCompleted bool, now string) error {
 	if !parentID.Valid {
 		if _, err := tx.ExecContext(ctx,
-			d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = CURRENT_TIMESTAMP WHERE note_id = ? AND parent_id = ?`),
-			newCompleted, noteID, itemID,
+			d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = ? WHERE note_id = ? AND parent_id = ?`),
+			newCompleted, now, noteID, itemID,
 		); err != nil {
 			return fmt.Errorf("failed to cascade completion to children: %w", err)
 		}
@@ -1953,8 +1974,8 @@ func cascadeItemCompletion(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, 
 	}
 	if !newCompleted {
 		if _, err := tx.ExecContext(ctx,
-			d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND note_id = ?`),
-			false, parentID.String, noteID,
+			d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = ? WHERE id = ? AND note_id = ?`),
+			false, now, parentID.String, noteID,
 		); err != nil {
 			return fmt.Errorf("failed to cascade completion to parent: %w", err)
 		}
@@ -1973,6 +1994,8 @@ func (s *noteStore) ToggleItemCompleted(ctx context.Context, noteID, itemID stri
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	now := Timestamp(Now())
+
 	var parentID sql.NullString
 	err = tx.QueryRowContext(ctx,
 		s.d.RewritePlaceholders(`SELECT parent_id FROM note_items WHERE id = ? AND note_id = ?`),
@@ -1986,17 +2009,17 @@ func (s *noteStore) ToggleItemCompleted(ctx context.Context, noteID, itemID stri
 	}
 
 	if _, err = tx.ExecContext(ctx,
-		s.d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND note_id = ?`),
-		completed, itemID, noteID,
+		s.d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = ? WHERE id = ? AND note_id = ?`),
+		completed, now, itemID, noteID,
 	); err != nil {
 		return nil, fmt.Errorf("failed to update note item: %w", err)
 	}
 
-	if err = cascadeItemCompletion(ctx, tx, s.d, noteID, itemID, parentID, completed); err != nil {
+	if err = cascadeItemCompletion(ctx, tx, s.d, noteID, itemID, parentID, completed, now); err != nil {
 		return nil, err
 	}
 
-	if err = touchNoteTx(ctx, tx, s.d, noteID); err != nil {
+	if err = touchNoteTx(ctx, tx, s.d, noteID, now); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -2023,6 +2046,8 @@ func (s *noteStore) SetItemsCompleted(ctx context.Context, noteID string, itemID
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	now := Timestamp(Now())
+
 	var changed int64
 	for _, itemID := range itemIDs {
 		var parentID sql.NullString
@@ -2040,8 +2065,8 @@ func (s *noteStore) SetItemsCompleted(ctx context.Context, noteID string, itemID
 		}
 
 		res, execErr := tx.ExecContext(ctx,
-			s.d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = CURRENT_TIMESTAMP WHERE note_id = ? AND id = ? AND completed != ?`),
-			completed, noteID, itemID, completed,
+			s.d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = ? WHERE note_id = ? AND id = ? AND completed != ?`),
+			completed, now, noteID, itemID, completed,
 		)
 		if execErr != nil {
 			return nil, fmt.Errorf("failed to set note item completed: %w", execErr)
@@ -2054,7 +2079,7 @@ func (s *noteStore) SetItemsCompleted(ctx context.Context, noteID string, itemID
 		// nothing (and a group already consistent is left alone).
 		if n > 0 {
 			changed += n
-			if err = cascadeItemCompletion(ctx, tx, s.d, noteID, itemID, parentID, completed); err != nil {
+			if err = cascadeItemCompletion(ctx, tx, s.d, noteID, itemID, parentID, completed, now); err != nil {
 				return nil, err
 			}
 		}
@@ -2063,7 +2088,7 @@ func (s *noteStore) SetItemsCompleted(ctx context.Context, noteID string, itemID
 	// Only bump the note when something actually changed, so a no-op call does
 	// not spuriously reorder the dashboard or emit an update to collaborators.
 	if changed > 0 {
-		if err = touchNoteTx(ctx, tx, s.d, noteID); err != nil {
+		if err = touchNoteTx(ctx, tx, s.d, noteID, now); err != nil {
 			return nil, err
 		}
 	}
@@ -2088,6 +2113,8 @@ func (s *noteStore) DeleteItems(ctx context.Context, noteID string, itemIDs []st
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	now := Timestamp(Now())
+
 	var deleted int64
 	for _, itemID := range itemIDs {
 		res, execErr := tx.ExecContext(ctx,
@@ -2107,16 +2134,16 @@ func (s *noteStore) DeleteItems(ctx context.Context, noteID string, itemIDs []st
 	if deleted > 0 {
 		// Defense-in-depth: re-home any child whose parent was just removed.
 		if _, err = tx.ExecContext(ctx,
-			s.d.RewritePlaceholders(`UPDATE note_items SET parent_id = NULL, updated_at = CURRENT_TIMESTAMP
+			s.d.RewritePlaceholders(`UPDATE note_items SET parent_id = NULL, updated_at = ?
 				WHERE note_id = ? AND parent_id IS NOT NULL
 				  AND parent_id NOT IN (SELECT id FROM note_items WHERE note_id = ?)`),
-			noteID, noteID,
+			now, noteID, noteID,
 		); err != nil {
 			return nil, fmt.Errorf("failed to re-home orphaned note items: %w", err)
 		}
 
 		// Only bump the note when something was actually deleted.
-		if err = touchNoteTx(ctx, tx, s.d, noteID); err != nil {
+		if err = touchNoteTx(ctx, tx, s.d, noteID, now); err != nil {
 			return nil, err
 		}
 	}
@@ -2363,9 +2390,9 @@ func (s *noteStore) AddLabelToNote(ctx context.Context, noteID, labelID, userID 
 		return fmt.Errorf("failed to generate note_label ID: %w", err)
 	}
 	q := s.d.RewritePlaceholders(
-		s.d.InsertIgnore("note_labels", "id, note_id, label_id, user_id", "?, ?, ?, ?"),
+		s.d.InsertIgnore("note_labels", "id, note_id, label_id, user_id, created_at", "?, ?, ?, ?, ?"),
 	)
-	_, err = s.db.ExecContext(ctx, q, id, noteID, labelID, userID)
+	_, err = s.db.ExecContext(ctx, q, id, noteID, labelID, userID, Timestamp(Now()))
 	if err != nil {
 		return fmt.Errorf("failed to add label to note: %w", err)
 	}
@@ -2462,9 +2489,11 @@ func (s *noteStore) ImportJotNotes(ctx context.Context, userID string, notes []J
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	now := Timestamp(Now())
+
 	imported := make([]importedNote, 0, len(notes))
 	for _, n := range notes {
-		noteID, createErr := insertImportedNoteTx(ctx, tx, s.d, userID, n)
+		noteID, createErr := insertImportedNoteTx(ctx, tx, s.d, userID, n, now)
 		if createErr != nil {
 			return createErr
 		}
@@ -2480,40 +2509,40 @@ func (s *noteStore) ImportJotNotes(ctx context.Context, userID string, notes []J
 
 // insertImportedNoteTx inserts a single note, its list items, and its labels
 // into the database within the provided transaction. It returns the new note ID.
-func insertImportedNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, userID string, n JotImportNote) (string, error) {
+func insertImportedNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, userID string, n JotImportNote, now string) (string, error) {
 	noteID, err := generateID()
 	if err != nil {
 		return "", fmt.Errorf("generate note ID: %w", err)
 	}
 
 	if _, err = tx.ExecContext(ctx,
-		d.RewritePlaceholders(`INSERT INTO notes (id, user_id, title, content, note_type) VALUES (?, ?, ?, ?, ?)`),
-		noteID, userID, n.Title, n.Content, n.NoteType,
+		d.RewritePlaceholders(`INSERT INTO notes (id, user_id, title, content, note_type, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`),
+		noteID, userID, n.Title, n.Content, n.NoteType, now, now,
 	); err != nil {
 		return "", fmt.Errorf("create note: %w", err)
 	}
 
 	// Use placeholder positions (0); the reorder pass sets the final values.
 	if _, err = tx.ExecContext(ctx,
-		d.RewritePlaceholders(`INSERT INTO note_user_state (note_id, user_id, color, pinned, archived, position, unpinned_position, checked_items_collapsed)
-		 VALUES (?, ?, ?, ?, ?, 0, 0, ?)`),
-		noteID, userID, n.Color, n.Pinned, n.Archived, n.CheckedItemsCollapsed,
+		d.RewritePlaceholders(`INSERT INTO note_user_state (note_id, user_id, color, pinned, archived, position, unpinned_position, checked_items_collapsed, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?, ?)`),
+		noteID, userID, n.Color, n.Pinned, n.Archived, n.CheckedItemsCollapsed, now, now,
 	); err != nil {
 		return "", fmt.Errorf("create note user state: %w", err)
 	}
 
-	if err = insertImportedItemsTx(ctx, tx, d, noteID, n.Items); err != nil {
+	if err = insertImportedItemsTx(ctx, tx, d, noteID, n.Items, now); err != nil {
 		return "", err
 	}
 
-	if err = insertImportedLabelsTx(ctx, tx, d, userID, noteID, n.Labels); err != nil {
+	if err = insertImportedLabelsTx(ctx, tx, d, userID, noteID, n.Labels, now); err != nil {
 		return "", err
 	}
 
 	return noteID, nil
 }
 
-func insertImportedItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string, items []JotImportNoteItem) error {
+func insertImportedItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string, items []JotImportNoteItem, now string) error {
 	// The import format is positional and carries indent_level (0/1) rather than
 	// item IDs, so reconstruct grouping the same way the migration backfill does:
 	// each indented item attaches to the most recent top-level item by position.
@@ -2534,9 +2563,9 @@ func insertImportedItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, 
 			parent = lastTopLevel
 		}
 		if _, err = tx.ExecContext(ctx,
-			d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, position, completed, parent_id, assigned_to)
-			 VALUES (?, ?, ?, ?, ?, ?, NULL)`),
-			itemID, noteID, item.Text, item.Position, item.Completed, parent,
+			d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, position, completed, parent_id, assigned_to, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)`),
+			itemID, noteID, item.Text, item.Position, item.Completed, parent, now, now,
 		); err != nil {
 			return fmt.Errorf("create note item: %w", err)
 		}
@@ -2544,7 +2573,7 @@ func insertImportedItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, 
 	return nil
 }
 
-func insertImportedLabelsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, userID, noteID string, labels []string) error {
+func insertImportedLabelsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, userID, noteID string, labels []string, now string) error {
 	for _, labelName := range labels {
 		labelID, err := generateID()
 		if err != nil {
@@ -2552,10 +2581,10 @@ func insertImportedLabelsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect,
 		}
 		var resolvedLabelID string
 		if err = tx.QueryRowContext(ctx,
-			d.RewritePlaceholders(`INSERT INTO labels (id, user_id, name) VALUES (?, ?, ?)
+			d.RewritePlaceholders(`INSERT INTO labels (id, user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
 			 ON CONFLICT `+d.LabelNameConflictTarget()+` DO UPDATE SET name=excluded.name
 			 RETURNING id`),
-			labelID, userID, labelName,
+			labelID, userID, labelName, now, now,
 		).Scan(&resolvedLabelID); err != nil {
 			return fmt.Errorf("get or create label %q: %w", labelName, err)
 		}
@@ -2565,9 +2594,9 @@ func insertImportedLabelsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect,
 			return fmt.Errorf("generate note_label ID: %w", err)
 		}
 		q := d.RewritePlaceholders(
-			d.InsertIgnore("note_labels", "id, note_id, label_id, user_id", "?, ?, ?, ?"),
+			d.InsertIgnore("note_labels", "id, note_id, label_id, user_id, created_at", "?, ?, ?, ?, ?"),
 		)
-		if _, err = tx.ExecContext(ctx, q, noteLabelID, noteID, resolvedLabelID, userID); err != nil {
+		if _, err = tx.ExecContext(ctx, q, noteLabelID, noteID, resolvedLabelID, userID, now); err != nil {
 			return fmt.Errorf("attach label to note: %w", err)
 		}
 	}

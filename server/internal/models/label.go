@@ -125,12 +125,13 @@ func (s *labelStore) GetOrCreateLabel(ctx context.Context, userID, name string) 
 
 	// ON CONFLICT DO NOTHING handles the rare case where a concurrent request
 	// inserts the same label between our SELECT and INSERT.
+	now := Timestamp(Now())
 	insertQ := s.d.RewritePlaceholders(
-		`INSERT INTO labels (id, user_id, name) VALUES (?, ?, ?)
+		`INSERT INTO labels (id, user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
 		 ON CONFLICT ` + s.d.LabelNameConflictTarget() + ` DO NOTHING
 		 RETURNING id, user_id, name, created_at, updated_at`,
 	)
-	err = s.db.QueryRowContext(ctx, insertQ, id, userID, name).Scan(
+	err = s.db.QueryRowContext(ctx, insertQ, id, userID, name, now, now).Scan(
 		&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt,
 	)
 	if err == nil {
@@ -153,11 +154,12 @@ func (s *labelStore) GetOrCreateLabel(ctx context.Context, userID, name string) 
 // CreateLabel inserts a new label with the given client-supplied id for idempotent offline replay.
 func (s *labelStore) CreateLabel(ctx context.Context, userID, id, name string) (*Label, error) {
 	var l Label
+	now := Timestamp(Now())
 	insertQ := s.d.RewritePlaceholders(
-		`INSERT INTO labels (id, user_id, name) VALUES (?, ?, ?)
+		`INSERT INTO labels (id, user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
 		 RETURNING id, user_id, name, created_at, updated_at`,
 	)
-	err := s.db.QueryRowContext(ctx, insertQ, id, userID, name).Scan(
+	err := s.db.QueryRowContext(ctx, insertQ, id, userID, name, now, now).Scan(
 		&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt,
 	)
 	if err == nil {
@@ -225,10 +227,10 @@ func (s *labelStore) RenameLabel(ctx context.Context, labelID, userID, newName s
 	var l Label
 	err := s.db.QueryRowContext(ctx,
 		s.d.RewritePlaceholders(`UPDATE labels
-		 SET name = ?, updated_at = CURRENT_TIMESTAMP
+		 SET name = ?, updated_at = ?
 		 WHERE id = ? AND user_id = ?
 		 RETURNING id, user_id, name, created_at, updated_at`),
-		newName, labelID, userID,
+		newName, Timestamp(Now()), labelID, userID,
 	).Scan(&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt)
 	if err != nil {
 		if s.d.IsUniqueConstraintError(err) {
