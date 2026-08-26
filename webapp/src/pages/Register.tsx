@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { Eye, EyeOff, TriangleAlert } from 'lucide-react';
 import { auth } from '@/utils/api';
 import { setUser, setSettings } from '@/utils/auth';
-import { getUsernameValidationError, isPasswordTooShort } from '@/utils/userValidation';
-import { VALIDATION } from '@jot/shared';
+import { REDIRECT_PARAM, authPathWithRedirect } from '@/utils/authRedirect';
+import { VALIDATION, getUsernameValidationError, isPasswordTooShort } from '@jot/shared';
 
 interface RegisterProps {
   onRegister: () => void;
@@ -15,6 +15,11 @@ interface RegisterProps {
 export default function Register({ onRegister, passwordMinLength }: RegisterProps) {
   const { t } = useTranslation();
   useEffect(() => { document.title = t('pageTitle.register'); }, [t]);
+  const [searchParams] = useSearchParams();
+  // Carried over from the login page, which carried it from the protected
+  // route the user originally asked for. Registering redirects through the
+  // router (see PostAuthRedirect), not from here.
+  const continueTo = searchParams.get(REDIRECT_PARAM);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -89,7 +94,7 @@ export default function Register({ onRegister, passwordMinLength }: RegisterProp
           <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-300">
             {t('auth.or')}{' '}
             <Link
-              to="/login"
+              to={authPathWithRedirect('/login', continueTo)}
               className="font-medium text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300"
             >
               {t('auth.signInExistingAccount')}

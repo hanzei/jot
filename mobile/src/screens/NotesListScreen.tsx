@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect, useRef, useContext } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef, useContext } from 'react';
 import {
   View,
   Text,
@@ -25,16 +25,14 @@ import { useConfirm } from '../hooks/useConfirm';
 import { useTheme } from '../theme/ThemeContext';
 import SkeletonNoteList from '../components/SkeletonNoteList';
 import NoteCard from '../components/NoteCard';
-import type { Note, NoteSort } from '@jot/shared';
+import { normalizeNoteSort, sortNotesForDisplay, type Note, type NoteSort } from '@jot/shared';
 import type { RootStackParamList, LayoutRect } from '../navigation/RootNavigator';
-import { normalizeNoteSort, sortNotesForDisplay } from '../utils/noteSort';
 import { isSortWarningDismissed, dismissSortWarning } from '../utils/sortWarningDismissed';
 import { emptyTrash as emptyTrashNotes } from '../api/notes';
 import { getLocalNotes, permanentDeleteLocalNote } from '../db/noteQueries';
 import { enqueueOperation, isQueueableError } from '../db/syncQueue';
 import { isOnlineWriteAllowed } from '../api/serverReachability';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
-import { useBannerShown } from '../hooks/useBannerShown';
 import { styles } from './notesList/styles';
 import { buildNoteSections, type LocalReorderState } from './notesList/noteListUtils';
 import NotesListHeader from './notesList/NotesListHeader';
@@ -51,7 +49,7 @@ import {
 
 interface NotesListScreenProps {
   variant?: 'notes' | 'archived' | 'trash' | 'my-tasks';
-  labelId?: string;
+  labelId?: string | undefined;
 }
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'MainDrawer'>;
@@ -68,7 +66,6 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const [isEmptyingTrash, setIsEmptyingTrash] = useState(false);
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const bannerShown = useBannerShown();
   const { colors } = useTheme();
   const { t } = useTranslation();
   const { confirm } = useConfirm();
@@ -80,10 +77,16 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const [sortMode, setSortMode] = useState<NoteSort>(() => normalizeNoteSort(settings?.note_sort));
   const [isSortControlsOpen, setIsSortControlsOpen] = useState(false);
   const [layout, setLayout] = useState<DashboardLayout>(DEFAULT_DASHBOARD_LAYOUT);
-  const [sortWarningDismissed, setSortWarningDismissed] = useState<boolean | null>(null);
+  // Recorded against the sort mode it was looked up for, so switching sort
+  // reads as "not yet known" (null) during render rather than briefly showing
+  // the previous mode's answer until an effect clears it.
+  const [dismissedForSort, setDismissedForSort] = useState<{ sort: NoteSort; dismissed: boolean } | null>(null);
+  const sortWarningDismissed =
+    dismissedForSort !== null && dismissedForSort.sort === sortMode ? dismissedForSort.dismissed : null;
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sortRequestIdRef = useRef(0);
   const trashCountRef = useRef(0);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   trashCountRef.current = trashCount;
   const { refreshUsers } = useUsers();
 
@@ -99,6 +102,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   }, [searchText]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
     setSortMode(normalizeNoteSort(settings?.note_sort));
   }, [settings?.note_sort]);
 
@@ -234,9 +238,8 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
   useEffect(() => {
     let cancelled = false;
-    setSortWarningDismissed(null);
     void isSortWarningDismissed(sortMode).then((dismissed) => {
-      if (!cancelled) setSortWarningDismissed(dismissed);
+      if (!cancelled) setDismissedForSort({ sort: sortMode, dismissed });
     });
     return () => {
       cancelled = true;
@@ -245,7 +248,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
   const handleDismissSortWarning = useCallback(() => {
     animateListReflow();
-    setSortWarningDismissed(true);
+    setDismissedForSort({ sort: sortMode, dismissed: true });
     void dismissSortWarning(sortMode);
   }, [sortMode]);
 
@@ -365,8 +368,21 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     return [...pinned, ...other];
   }, [archivedNotes, sortMode]);
 
-  // Clear local order overrides when server data, variant, or sort mode changes
+  // Clear local order overrides when server data, variant, or sort mode changes.
+  //
+  // This fires on *any* change to `notes`, not specifically a reorder's own
+  // confirmation — that's only safe because useReorderNotes carries its own
+  // onMutate (applyOptimisticReorder in useNotes.ts) that keeps the `notes`
+  // cache in the dragged order from the moment the drag commits. Without it,
+  // an unrelated mutation touching the same cache (e.g. archiving a note
+  // right after dragging it) would recreate `notes` from whatever order the
+  // cache still held, clear localOrder here, and reveal that stale order for
+  // one render before the real refetch landed (#815). Any local optimistic
+  // override added near this pattern later needs the same guarantee: keep
+  // the shared cache in sync with the override synchronously — don't rely on
+  // this effect to fire only once the override is safe to drop.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
     setLocalOrder(EMPTY_LOCAL_ORDER);
   }, [notes, variant, sortMode]);
 
@@ -401,8 +417,10 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
   // Refs to avoid stale closures in handleDragEnd
   const displayPinnedRef = useRef(displayPinned);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   displayPinnedRef.current = displayPinned;
   const displayUnpinnedRef = useRef(displayUnpinned);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   displayUnpinnedRef.current = displayUnpinned;
 
   const hasPinned = pinnedNotes.length > 0;
@@ -526,7 +544,6 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const header = (
     <NotesListHeader
       variant={variant}
-      bannerShown={bannerShown}
       topInset={insets.top}
       searchText={searchText}
       onSearchChange={setSearchText}

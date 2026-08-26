@@ -1,28 +1,26 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { View, Text, TouchableOpacity, TextInput } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { useAuth } from '../../store/AuthContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { changePassword } from '../../api/settings';
-import { VALIDATION } from '@jot/shared';
+import { isPasswordTooShort } from '@jot/shared';
 import { displayMessage, extractApiError } from '../../i18n/utils';
 import { styles } from './styles';
+import { useServerConfig } from '../../hooks/useServerConfig';
 
 export default function ChangePasswordSection() {
-  const { settings } = useAuth();
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const { password_min_length: passwordMinLength } = useServerConfig();
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordError, setPasswordError] = useState('');
+  // Holds a translation key, translated at render, so switching language
+  // re-renders it in the new language instead of leaving a stale string.
   const [passwordSuccess, setPasswordSuccess] = useState('');
-
-  useEffect(() => {
-    setPasswordSuccess('');
-  }, [settings?.language]);
 
   const handleChangePassword = useCallback(async () => {
     setPasswordError('');
@@ -36,15 +34,15 @@ export default function ChangePasswordSection() {
       setPasswordError(t('settings.passwordsNoMatch'));
       return;
     }
-    if ([...newPassword].length < VALIDATION.PASSWORD_MIN_LENGTH) {
-      setPasswordError(t('auth.passwordMin', { min: VALIDATION.PASSWORD_MIN_LENGTH }));
+    if (isPasswordTooShort(newPassword, passwordMinLength)) {
+      setPasswordError(t('auth.passwordMin', { min: passwordMinLength }));
       return;
     }
 
     setPasswordSaving(true);
     try {
       await changePassword({ current_password: currentPassword, new_password: newPassword });
-      setPasswordSuccess(t('settings.passwordChanged'));
+      setPasswordSuccess('settings.passwordChanged');
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
@@ -53,7 +51,7 @@ export default function ChangePasswordSection() {
     } finally {
       setPasswordSaving(false);
     }
-  }, [confirmPassword, currentPassword, newPassword, t]);
+  }, [confirmPassword, currentPassword, newPassword, passwordMinLength, t]);
 
   return (
     <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -74,7 +72,7 @@ export default function ChangePasswordSection() {
         style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBackground }]}
         value={newPassword}
         onChangeText={setNewPassword}
-        placeholder={t('settings.newPasswordPlaceholder', { min: VALIDATION.PASSWORD_MIN_LENGTH })}
+        placeholder={t('settings.newPasswordPlaceholder', { min: passwordMinLength })}
         placeholderTextColor={colors.placeholder}
         secureTextEntry
         autoCapitalize="none"
@@ -95,7 +93,9 @@ export default function ChangePasswordSection() {
       {passwordError !== '' && (
         <Text style={[styles.errorText, { color: colors.error }]}>{displayMessage(t, passwordError)}</Text>
       )}
-      {passwordSuccess !== '' && <Text style={[styles.successText, { color: colors.success }]}>{passwordSuccess}</Text>}
+      {passwordSuccess !== '' && (
+        <Text style={[styles.successText, { color: colors.success }]}>{displayMessage(t, passwordSuccess)}</Text>
+      )}
       <TouchableOpacity
         style={[styles.primaryButton, { backgroundColor: colors.primary }, passwordSaving && styles.buttonDisabled]}
         onPress={handleChangePassword}

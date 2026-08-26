@@ -1,4 +1,3 @@
-import { useRef } from 'react';
 import axios from 'axios';
 import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
@@ -32,8 +31,6 @@ export function useUploadNoteImage() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     mutationFn: async ({
@@ -53,7 +50,7 @@ export function useUploadNoteImage() {
     }): Promise<UploadNoteImageResult> => {
       assertSwitchWriteAllowed();
 
-      if (isLocalModeActive() || isOnlineWriteAllowed(isConnectedRef.current)) {
+      if (isLocalModeActive() || isOnlineWriteAllowed(isConnected)) {
         try {
           const image = await uploadNoteImage(noteId, file, onProgress, signal);
           // The SSE echo of this upload is dropped for the client that triggered
@@ -114,14 +111,12 @@ export function useDeleteNoteImage() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     mutationFn: async ({ noteId, imageId }: { noteId: string; imageId: string }): Promise<void> => {
       assertSwitchWriteAllowed();
 
-      if (isLocalModeActive() || isOnlineWriteAllowed(isConnectedRef.current)) {
+      if (isLocalModeActive() || isOnlineWriteAllowed(isConnected)) {
         try {
           await deleteNoteImage(imageId);
           // Same self-echo gap as the upload above, on the removal side.

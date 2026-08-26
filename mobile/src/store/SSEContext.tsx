@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useRef, useCallback, useMemo, useState, useEffect } from 'react';
-import { useSSE, SSENotificationCallback } from '../hooks/useSSE';
+import type { SSENotificationCallback } from '../hooks/useSSE';
+import { useSSE } from '../hooks/useSSE';
 import type { SSEStatus } from '../api/events';
 import type { SSEEvent } from '@jot/shared';
 
@@ -32,19 +33,24 @@ const SSEContext = createContext<SSEContextValue>({
 export function SSEProvider({ children }: { children: React.ReactNode }) {
   const listenersRef = useRef<Set<(event: SSEEvent) => void>>(new Set());
   const [sseStatus, setSseStatus] = useState<SSEStatus>('connecting');
-  const [sseReconnecting, setSseReconnecting] = useState(false);
+  const [bannerDelayElapsed, setBannerDelayElapsed] = useState(false);
 
   // Only a genuine reconnect (a connection attempt that failed and is retrying)
   // can surface the banner — an in-progress initial connect never does — and
   // even then only once it outlasts the delay, so a quick self-healing retry
-  // stays silent.
+  // stays silent. Leaving 'reconnecting' therefore hides the banner by itself,
+  // without a second piece of state to keep in step.
+  const sseReconnecting = sseStatus === 'reconnecting' && bannerDelayElapsed;
+
   useEffect(() => {
-    if (sseStatus !== 'reconnecting') {
-      setSseReconnecting(false);
-      return;
-    }
-    const timer = setTimeout(() => setSseReconnecting(true), SSE_BANNER_DELAY_MS);
-    return () => clearTimeout(timer);
+    if (sseStatus !== 'reconnecting') return;
+    const timer = setTimeout(() => setBannerDelayElapsed(true), SSE_BANNER_DELAY_MS);
+    return () => {
+      clearTimeout(timer);
+      // Re-arm the delay so the next reconnect waits it out again instead of
+      // showing the banner immediately.
+      setBannerDelayElapsed(false);
+    };
   }, [sseStatus]);
 
   const handleNoteUpdated: SSENotificationCallback = useCallback((event) => {
@@ -75,6 +81,7 @@ export function useSSEContext(): SSEContextValue {
 export function useSSESubscription(noteId: string | null, onUpdated: () => void): void {
   const context = useContext(SSEContext);
   const onUpdatedRef = useRef(onUpdated);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   onUpdatedRef.current = onUpdated;
 
   React.useEffect(() => {

@@ -98,7 +98,13 @@ function useBackgroundSyncQuery<T>(
 ) {
   const queryClient = useQueryClient();
   const { isConnected } = useNetworkStatus();
+  // Unlike the mutation hooks below — whose mutationFn is re-created every
+  // render, so it can read `isConnected` directly — both readers here outlive
+  // the render that registered them: retrySync polls this between backoff
+  // attempts, and the reconnect subscription is registered once. A plain
+  // closure would pin them to the connectivity of one past render.
   const isConnectedRef = useRef(isConnected);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
   // Re-entrancy guard: skip a resync while one is already running so the online
   // effect and the SSE-reconnect subscription can't start duplicate refreshes
@@ -193,8 +199,6 @@ export function useCreateLabel() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  isConnectedRef.current = isConnected;
   const { user } = useAuth();
 
   return useMutation({
@@ -202,7 +206,7 @@ export function useCreateLabel() {
       assertSwitchWriteAllowed();
       const trimmed = name.trim();
       if (!trimmed) throw new Error('Label name must not be empty');
-      if (isOnlineWriteAllowed(isConnectedRef.current)) {
+      if (isOnlineWriteAllowed(isConnected)) {
         try {
           const serverLabel = await createLabel(trimmed);
           // Persist to the canonical label store so the new (empty) label shows in
@@ -244,8 +248,6 @@ export function useAddLabelToNote() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  isConnectedRef.current = isConnected;
   const { user } = useAuth();
 
   return useMutation({
@@ -258,7 +260,7 @@ export function useAddLabelToNote() {
       // calling online against a note the server doesn't know yet (a 404 would
       // surface as an error instead of syncing).
       const pendingCreate = await isNotePendingCreate(db, noteId);
-      if (isOnlineWriteAllowed(isConnectedRef.current) && !pendingCreate) {
+      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
           const updatedNote = await addLabelToNote(noteId, trimmed);
           await saveNote(db, updatedNote);
@@ -321,8 +323,6 @@ export function useRemoveLabelFromNote() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     mutationFn: async ({ noteId, labelId }: { noteId: string; labelId: string }) => {
@@ -331,7 +331,7 @@ export function useRemoveLabelFromNote() {
       // op, so queue rather than calling online against a note the server doesn't
       // know yet.
       const pendingCreate = await isNotePendingCreate(db, noteId);
-      if (isOnlineWriteAllowed(isConnectedRef.current) && !pendingCreate) {
+      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
           const updatedNote = await removeLabelFromNote(noteId, labelId);
           await saveNote(db, updatedNote);
@@ -370,8 +370,6 @@ export function useRenameLabel() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  isConnectedRef.current = isConnected;
 
   const { user } = useAuth();
 
@@ -380,7 +378,7 @@ export function useRenameLabel() {
       assertSwitchWriteAllowed();
       const trimmed = name.trim();
       if (!trimmed) throw new Error('Label name must not be empty');
-      if (isOnlineWriteAllowed(isConnectedRef.current)) {
+      if (isOnlineWriteAllowed(isConnected)) {
         try {
           const updatedLabel = await renameLabel(labelId, trimmed);
           await renameStoredLabel(db, labelId, updatedLabel.name);
@@ -429,13 +427,11 @@ export function useDeleteLabel() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     mutationFn: async ({ labelId }: { labelId: string }) => {
       assertSwitchWriteAllowed();
-      if (isOnlineWriteAllowed(isConnectedRef.current)) {
+      if (isOnlineWriteAllowed(isConnected)) {
         try {
           await deleteLabel(labelId);
           await deleteStoredLabel(db, labelId);

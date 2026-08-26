@@ -1,21 +1,82 @@
 #!/usr/bin/env node
-// Checks that all locale translation files have the same keys as en.json.
-// Exits with code 1 if any keys are missing or extra.
+// Checks that all locale translation files have the same keys as en.json,
+// and that every key in en.json is actually referenced from source.
+// Exits with code 1 if any keys are missing, extra, or unused.
 
-import { existsSync, readFileSync, readdirSync } from "fs";
-import { join, dirname } from "path";
-import { fileURLToPath } from "url";
+import { existsSync, readFileSync, readdirSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const localeDirs = [
-  join(__dirname, "../src/i18n/locales"),
-  join(__dirname, "../../mobile/src/i18n/locales"),
+  join(__dirname, '../src/i18n/locales'),
+  join(__dirname, '../../mobile/src/i18n/locales'),
 ];
 
-function flattenKeys(obj, prefix = "") {
+// Key prefixes assembled at runtime (template literals, e.g. `t(`settings.language_${lang}`)`)
+// rather than referenced as a literal dotted path. A key under one of these prefixes cannot
+// be found by the source scan below, so it is exempted rather than flagged as unused.
+const DYNAMIC_KEY_PREFIXES = ['settings.language_', 'dashboard.sortOption.'];
+
+// i18next plural suffixes. A key like `note.itemsPasted_one` is never referenced with its
+// suffix in source — callers pass the base key (`t('note.itemsPasted', { count })`) and
+// i18next appends the suffix for the resolved plural form.
+const PLURAL_SUFFIX = /_(zero|one|two|few|many|other)$/;
+
+// Source root each locale directory's keys are referenced from, for the unused-key scan.
+const sourceRootFor = (localesDir) => join(localesDir, '../../..');
+
+// @jot/shared is compiled directly by both webapp and mobile (not a build artifact), so a
+// key referenced only from shared source (e.g. a hex-color -> i18n-key map used by both
+// clients) would otherwise look unused from either app's own tree.
+const sharedSrcDir = join(__dirname, '../../shared/src');
+
+function collectSourceFiles(dir, out = []) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === 'node_modules') continue;
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      collectSourceFiles(full, out);
+    } else if (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx')) {
+      out.push(full);
+    }
+  }
+  return out;
+}
+
+function escapeRegExp(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// A plain corpus.includes(key) treats a key as "used" whenever it appears as a
+// substring anywhere in source — including as a prefix of an unrelated, longer
+// identifier. `note.delete` is a substring of the live field access
+// `note.deleted_at`, and `share.removeAccess` is a substring of the live key
+// `share.removeAccessFor`; both hid a truly dead key from this check. Requiring
+// non-key characters (or start/end of file) on both sides of the match rules
+// that out, since a key never appears as a strict prefix of another dotted
+// identifier in valid source.
+function isKeyReferenced(key, corpus) {
+  const pattern = new RegExp(`(?<![\\w.])${escapeRegExp(key)}(?![\\w.])`);
+  return pattern.test(corpus);
+}
+
+function findUnusedKeys(keys, sourceRoot) {
+  const corpus = [...collectSourceFiles(sourceRoot), ...collectSourceFiles(sharedSrcDir)]
+    .map((f) => readFileSync(f, 'utf8'))
+    .join('\n');
+
+  return keys.filter((key) => {
+    if (DYNAMIC_KEY_PREFIXES.some((prefix) => key.startsWith(prefix))) return false;
+    const baseKey = key.replace(PLURAL_SUFFIX, '');
+    return !isKeyReferenced(key, corpus) && !isKeyReferenced(baseKey, corpus);
+  });
+}
+
+function flattenKeys(obj, prefix = '') {
   return Object.entries(obj).flatMap(([key, value]) => {
     const fullKey = prefix ? `${prefix}.${key}` : key;
-    if (value !== null && typeof value === "object") {
+    if (value !== null && typeof value === 'object') {
       const isEmpty = Array.isArray(value)
         ? value.length === 0
         : Object.keys(value).length === 0;
@@ -29,13 +90,13 @@ function flattenKeys(obj, prefix = "") {
 function parseJsonFile(filepath) {
   let result;
   try {
-    result = JSON.parse(readFileSync(filepath, "utf8"));
+    result = JSON.parse(readFileSync(filepath, 'utf8'));
   } catch (err) {
     console.error(`Failed to parse ${filepath}: ${err.message}`);
     process.exit(1);
   }
-  if (typeof result !== "object" || result === null || Array.isArray(result)) {
-    console.error(`Expected a plain object in ${filepath} (used by flattenKeys), got ${Array.isArray(result) ? "array" : typeof result}`);
+  if (typeof result !== 'object' || result === null || Array.isArray(result)) {
+    console.error(`Expected a plain object in ${filepath} (used by flattenKeys), got ${Array.isArray(result) ? 'array' : typeof result}`);
     process.exit(1);
   }
   return result;
@@ -46,8 +107,8 @@ let hasErrors = false;
 for (const localesDir of localeDirs) {
   if (!existsSync(localesDir)) continue;
 
-  const files = readdirSync(localesDir).filter((f) => f.endsWith(".json"));
-  const reference = "en.json";
+  const files = readdirSync(localesDir).filter((f) => f.endsWith('.json'));
+  const reference = 'en.json';
 
   if (!files.includes(reference)) {
     console.error(`Reference file ${reference} not found in ${localesDir}`);
@@ -59,10 +120,17 @@ for (const localesDir of localeDirs) {
     flattenKeys(parseJsonFile(join(localesDir, reference)))
   );
 
+  const unused = findUnusedKeys([...referenceKeys], sourceRootFor(localesDir));
+  if (unused.length > 0) {
+    console.error(`[${localesDir}] Unused keys in ${reference} (${unused.length}):`);
+    for (const k of unused) console.error(`  ~ ${k}`);
+    hasErrors = true;
+  }
+
   for (const file of files) {
     if (file === reference) continue;
 
-    const locale = file.replace(".json", "");
+    const locale = file.replace('.json', '');
     const keys = new Set(
       flattenKeys(parseJsonFile(join(localesDir, file)))
     );

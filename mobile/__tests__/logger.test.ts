@@ -1,4 +1,5 @@
-import { initLogger, getLogs, getPersistedLogs, clearLogs, flushLogs, LogEntry } from '../src/utils/logger';
+import type { LogEntry } from '../src/utils/logger';
+import { initLogger, getLogs, getPersistedLogs, clearLogs, flushLogs } from '../src/utils/logger';
 
 const fs = globalThis.mockFileSystem;
 
@@ -41,29 +42,29 @@ describe('log capture', () => {
     console.warn('warn message');
     const logs = getLogs();
     expect(logs).toHaveLength(1);
-    expect(logs[0].level).toBe('warn');
-    expect(logs[0].msg).toContain('warn message');
+    expect(logs[0]!.level).toBe('warn');
+    expect(logs[0]!.msg).toContain('warn message');
   });
 
   it('captures console.error with level "error"', () => {
     console.error('error message');
     const logs = getLogs();
     expect(logs).toHaveLength(1);
-    expect(logs[0].level).toBe('error');
-    expect(logs[0].msg).toContain('error message');
+    expect(logs[0]!.level).toBe('error');
+    expect(logs[0]!.msg).toContain('error message');
   });
 
   it('captures console.info with level "info"', () => {
     console.info('info message');
     const logs = getLogs();
     expect(logs).toHaveLength(1);
-    expect(logs[0].level).toBe('info');
-    expect(logs[0].msg).toContain('info message');
+    expect(logs[0]!.level).toBe('info');
+    expect(logs[0]!.msg).toContain('info message');
   });
 
   it('each entry has ts, level, and msg fields', () => {
     console.warn('check fields');
-    const entry: LogEntry = getLogs()[0];
+    const entry: LogEntry = getLogs()[0]!;
     expect(typeof entry.ts).toBe('string');
     expect(entry.ts).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     expect(['info', 'warn', 'error']).toContain(entry.level);
@@ -73,9 +74,9 @@ describe('log capture', () => {
   it('serializes non-string arguments', () => {
     console.warn('prefix', { key: 'value' }, 42);
     const logs = getLogs();
-    expect(logs[0].msg).toContain('prefix');
-    expect(logs[0].msg).toContain('"key"');
-    expect(logs[0].msg).toContain('42');
+    expect(logs[0]!.msg).toContain('prefix');
+    expect(logs[0]!.msg).toContain('"key"');
+    expect(logs[0]!.msg).toContain('42');
   });
 
   it('captures multiple entries in order', () => {
@@ -84,9 +85,9 @@ describe('log capture', () => {
     console.info('third');
     const logs = getLogs();
     expect(logs).toHaveLength(3);
-    expect(logs[0].msg).toBe('first');
-    expect(logs[1].msg).toBe('second');
-    expect(logs[2].msg).toBe('third');
+    expect(logs[0]!.msg).toBe('first');
+    expect(logs[1]!.msg).toBe('second');
+    expect(logs[2]!.msg).toBe('third');
   });
 });
 
@@ -268,8 +269,8 @@ describe('ring buffer behaviour', () => {
     const logs = getLogs();
     expect(logs).toHaveLength(200);
     // The first 5 messages (msg-0 through msg-4) should be gone
-    expect(logs[0].msg).toBe('msg-5');
-    expect(logs[199].msg).toBe('msg-204');
+    expect(logs[0]!.msg).toBe('msg-5');
+    expect(logs[199]!.msg).toBe('msg-204');
   });
 
   it('evicted entries are still readable from the persisted file', () => {
@@ -288,7 +289,7 @@ describe('ring buffer behaviour', () => {
     }
     const logs = getLogs();
     for (let i = 0; i < logs.length - 1; i++) {
-      expect(logs[i].ts <= logs[i + 1].ts).toBe(true);
+      expect(logs[i]!.ts <= logs[i + 1]!.ts).toBe(true);
     }
   });
 });

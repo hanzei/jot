@@ -1,4 +1,4 @@
-import { SQLiteDatabase } from 'expo-sqlite';
+import type { SQLiteDatabase } from 'expo-sqlite';
 import axios from 'axios';
 import api from '../api/client';
 import type { GetNotesParams, Note, NoteItem } from '@jot/shared';
@@ -314,7 +314,7 @@ function collectNoteIds(
 ): void {
   // Drop any query string (e.g. "/notes/{id}?permanent=true") before splitting,
   // and filter out the empty segment from the leading slash.
-  const segments = endpoint.split('?')[0].split('/').filter(Boolean);
+  const segments = endpoint.split('?')[0]!.split('/').filter(Boolean);
   if (segments[0] === 'images') {
     // DELETE /images/{id}: the endpoint has no note id in it, so `removeImage`
     // ops (see useNoteImages.ts) carry it in the body purely for this
@@ -344,7 +344,7 @@ function collectNoteIds(
       const dupId = body?.id;
       if (typeof dupId === 'string') ids.add(dupId);
     } else {
-      ids.add(segments[1]);
+      ids.add(segments[1]!);
     }
   }
 }
@@ -732,7 +732,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           // stale local row (e.g. leftover parent_id/position from an earlier
           // partial sync, or one deleted by another session while this
           // device was offline) never gets corrected.
-          await reconcileItemsFromResponse(db, endpoint.split('/')[2], response?.data);
+          await reconcileItemsFromResponse(db, endpoint.split('/')[2]!, response?.data);
         } else if (entry.operation === 'share') {
           // Share returns 204 (no body) and the optimistic local note carries a
           // synthetic `optimistic_<userId>` share row; re-fetch the canonical note
@@ -888,7 +888,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           // Only link dead_letter.note_id when there's a single clear note (per the
           // schema contract); a multi-note op like reorder stores NULL. The note(s)
           // are still each flagged failed below regardless.
-          await recordDeadLetter(db, entry, endpoint, body, status, noteIds.length === 1 ? noteIds[0] : null, {
+          await recordDeadLetter(db, entry, endpoint, body, status, noteIds.length === 1 ? noteIds[0]! : null, {
             attempts: entry.attempts ?? 0,
             errorMessage: axios.isAxiosError(err) ? err.message : null,
           });
@@ -946,7 +946,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         );
         const noteIds = affectedNoteIds(endpoint, body);
         discardedOperations.push({ operation: entry.operation, endpoint, status: deadLetterStatus });
-        await recordDeadLetter(db, entry, endpoint, body, deadLetterStatus, noteIds.length === 1 ? noteIds[0] : null, {
+        await recordDeadLetter(db, entry, endpoint, body, deadLetterStatus, noteIds.length === 1 ? noteIds[0]! : null, {
           attempts,
           errorMessage,
         });

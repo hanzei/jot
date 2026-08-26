@@ -141,6 +141,11 @@ body {
   .markdown-content h3 {
     @apply font-semibold text-[1.1em] mb-1 mt-2 first:mt-0;
   }
+  /* h4-h6 get no size of their own — below h3 the steps are indistinguishable
+     at note sizes, so they render as bold body text. Mobile matches. */
+  .markdown-content :is(h4, h5, h6) {
+    @apply font-bold text-[1em] mb-1 mt-2 first:mt-0;
+  }
   .markdown-content p {
     @apply mb-2 last:mb-0;
   }
@@ -159,8 +164,41 @@ body {
   .markdown-content code {
     @apply font-mono bg-black/5 dark:bg-white/10 rounded px-1 text-[0.9em];
   }
+  .markdown-content pre {
+    @apply bg-black/5 dark:bg-white/10 rounded p-2 mb-2 last:mb-0 overflow-x-auto;
+  }
+  /* The block already carries the tint and padding; the inner <code> would
+     otherwise stack a second background on top of it. */
+  .markdown-content pre code {
+    @apply bg-transparent rounded-none p-0;
+  }
+  .markdown-content hr {
+    @apply border-t border-gray-300 dark:border-gray-600 my-3;
+  }
   .markdown-content a {
     @apply text-blue-500 dark:text-blue-400 underline;
+  }
+
+  /* Inline markdown in list-item text — the subset in shared/src/inlineMarkdown.ts.
+     strong/em/del are left to the browser defaults, as .markdown-content does.
+     Links are blue-600 rather than the blue-500 above: item text renders on note
+     cards, which carry the note's colour, and blue-500 does not hold 4.5:1
+     against the lighter swatches. This is the shade LinkText used here before. */
+  /* `leading-none` is load-bearing, and not for looks. An inline box is as tall
+     as its line-height, positioned around the shared baseline — so a child in a
+     different font sits at a different offset than the line's strut and can push
+     the line box taller than the strut alone. Here that made an item row with
+     `code` in it taller *rendered* than the same row showing its source, since
+     the source is one font throughout: a visible jump on click, and one whose
+     size depends on which mono font the reader has (docs/specs/markdown-rendering.md
+     §1.2). A line-height under the strut's cannot grow the line box on any font.
+     It does not change the chip: an inline element's background paints its
+     content area, which is derived from the font, not from line-height. */
+  .markdown-inline code {
+    @apply font-mono bg-black/5 dark:bg-white/10 rounded px-1 text-[0.9em] leading-none;
+  }
+  .markdown-inline a {
+    @apply text-blue-600 dark:text-blue-400 underline hover:text-blue-800 dark:hover:text-blue-300;
   }
 
   .note-card {

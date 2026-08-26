@@ -1,4 +1,3 @@
-import { useRef } from 'react';
 import { useMutation, useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
 import { useSQLiteContext } from 'expo-sqlite';
 import {
@@ -21,7 +20,7 @@ import {
 } from '../api/notes';
 import { shareNote, unshareNote } from '../api/users';
 import { useOfflineNote } from './useOfflineNotes';
-import { generateId, textToListItems, listToText } from '@jot/shared';
+import { DEFAULT_NOTE_COLOR, generateId, textToListNote, listToText, checkConvertToListCaps, applyCompletedCascade, type ListItem } from '@jot/shared';
 import type {
   Note,
   NoteItem,
@@ -33,6 +32,7 @@ import type {
   ConvertNoteTypeRequest,
   CreateNoteItemRequest,
   PatchNoteItemRequest,
+  ConvertToListCapViolation,
 } from '@jot/shared';
 import {
   saveNote,
@@ -59,35 +59,31 @@ import { useNetworkStatus } from './useNetworkStatus';
 import { useAuth } from '../store/AuthContext';
 import { assertSwitchWriteAllowed } from '../api/client';
 import {
+  labelCountsQueryKey,
   noteLocalQueryKey,
   notesLocalQueryScopeKey,
 } from './queryKeys';
 
 /**
- * Collects the item ids a completed-toggle should cascade to, mirroring the
- * server: a top-level item's completed state cascades to all of its direct
- * children (in either direction), and unchecking a child also un-completes
- * its parent — a parent can never stay "done" with an incomplete child.
- * Completing every child does not auto-complete the parent. Only ids whose
- * `completed` actually changes are returned. Shared by the optimistic cache
- * update and the offline local-DB write so the two stay in agreement.
- *
- * (NoteEditorScreen keeps a parallel `applyCompletedCascade` over its own
- * `LocalItem[]` editor state; keep the cascade rule here in sync with it.)
+ * Collects the item ids a completed-toggle should cascade to, via the shared
+ * `applyCompletedCascade` (the same rule NoteEditorScreen applies to its own
+ * editor state). This is a shape adapter, not a fourth implementation: it maps
+ * the server-shaped `NoteItem[]` (`parent_id`) to `@jot/shared`'s `ListItem[]`
+ * (`parentId`) and back to a list of changed ids, for the optimistic cache
+ * update and the offline local-DB write.
  */
 function collectToggleCascade(items: NoteItem[], itemId: string, completed: boolean): string[] {
-  const target = items.find((i) => i.id === itemId);
-  if (!target) return [];
-  const cascadeToChildren = target.parent_id === null;
-  const uncompleteParent = target.parent_id !== null && !completed;
-  return items
-    .filter(
-      (i) =>
-        (i.id === itemId ||
-          (cascadeToChildren && i.parent_id === itemId) ||
-          (uncompleteParent && i.id === target.parent_id)) &&
-        i.completed !== completed,
-    )
+  const asListItems: ListItem[] = items.map((i) => ({
+    id: i.id,
+    text: i.text,
+    completed: i.completed,
+    position: i.position,
+    parentId: i.parent_id,
+    assigned_to: i.assigned_to,
+  }));
+  const completedById = new Map(items.map((i) => [i.id, i.completed]));
+  return applyCompletedCascade(asListItems, itemId, completed)
+    .filter((i) => completedById.get(i.id) !== i.completed)
     .map((i) => i.id);
 }
 
@@ -160,18 +156,33 @@ function rollbackOptimisticNote(
   }
 }
 
+/**
+ * Refreshes the drawer's per-label counts.
+ *
+ * They are derived from the notes table, not the labels one: `getLocalLabelCounts`
+ * counts each label across the *active* notes (archived and trashed excluded). So
+ * a write that changes nothing about a note's labels still changes its counts by
+ * moving the note in or out of that set — archiving, trashing, restoring,
+ * duplicating — and every such path has to say so.
+ *
+ * Membership edits (add/remove/rename/delete a label) go through useLabels.ts,
+ * which already invalidates this, as does the SSE handler for every remote note
+ * event. This is the local-write side of the same rule.
+ */
+function invalidateLabelCounts(queryClient: QueryClient): void {
+  queryClient.invalidateQueries({ queryKey: labelCountsQueryKey() });
+}
+
 export function useCreateNote() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  isConnectedRef.current = isConnected;
   const { user } = useAuth();
 
   return useMutation({
     mutationFn: async (data: CreateNoteRequest): Promise<Note> => {
       assertSwitchWriteAllowed();
-      if (isOnlineWriteAllowed(isConnectedRef.current)) {
+      if (isOnlineWriteAllowed(isConnected)) {
         try {
           const note = await createNote(data);
           await saveNote(db, note);
@@ -209,7 +220,7 @@ export function useCreateNote() {
         // A brand-new note starts at version 1, matching the server's default;
         // the first successful sync replaces it with the canonical server note.
         version: 1,
-        color: data.color ?? '#ffffff',
+        color: data.color ?? DEFAULT_NOTE_COLOR,
         pinned: false,
         archived: false,
         position: 0,
@@ -270,8 +281,11 @@ export function useCreateNote() {
       });
       return localNote;
     },
-    onSuccess: () => {
+    onSuccess: (_note, data) => {
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      // A create can carry labels (the sync-failure fork does), which the new
+      // note then counts towards.
+      if (data.labels?.length) invalidateLabelCounts(queryClient);
     },
   });
 }
@@ -280,8 +294,6 @@ export function useUpdateNote() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     onMutate: ({ id, data }: { id: string; data: UpdateNoteRequest }) => {
@@ -297,7 +309,7 @@ export function useUpdateNote() {
       const fields = data as { title?: string; content?: string };
       const touchesContent = fields.title !== undefined || fields.content !== undefined;
 
-      if (isOnlineWriteAllowed(isConnectedRef.current)) {
+      if (isOnlineWriteAllowed(isConnected)) {
         try {
           // Online: gate on the version we currently hold locally so the server
           // can reject a write that raced a concurrent edit on another device
@@ -345,7 +357,7 @@ export function useUpdateNote() {
     },
     // Roll back the optimistic edit so a failed write doesn't leave a phantom on screen.
     onError: (_err, { id }, context) => rollbackOptimisticNote(queryClient, id, context),
-    onSuccess: (updatedNote) => {
+    onSuccess: (updatedNote, { data }) => {
       queryClient.setQueryData(noteLocalQueryKey(updatedNote.id), updatedNote);
       // Synchronously patch the note in every cached notes-list so the dashboard
       // shows fresh content immediately on navigation back, without waiting for
@@ -355,15 +367,21 @@ export function useUpdateNote() {
         (old) => old?.map((n) => (n.id === updatedNote.id ? updatedNote : n)),
       );
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      // Only the archive flag moves a note in or out of the counted set; a
+      // title/content save must not re-scan every note's labels on each debounce.
+      if (data.archived !== undefined) invalidateLabelCounts(queryClient);
     },
   });
 }
 
 /**
- * Computes the precomputed `content`/`items` for converting `note` to the
- * opposite type, via the same shared transform (`textToListItems`/`listToText`)
- * the webapp uses — the server only validates and persists whatever is sent
- * (issue #676). Item ids are generated here (rather than left for the server)
+ * Computes the precomputed `content`/`title`/`items` for converting `note` to
+ * the opposite type, via the same shared transform
+ * (`textToListNote`/`listToText`) the webapp uses — the server only validates
+ * and persists whatever is sent (issue #676). Converting to a list promotes a
+ * leading heading in the content into the list's title, the inverse of the
+ * `# Title` line `listToText` writes in the other direction. Item ids are
+ * generated here (rather than left for the server)
  * so they stay stable across a chain of offline edits: a per-item mutation
  * queued right after an offline convert, but before it drains, can then target
  * the same id the eventual server row will have (mirrors useDuplicateNote's
@@ -371,6 +389,25 @@ export function useUpdateNote() {
  * path stamps the version current at call time, while the offline/replay path
  * resolves it fresh at drain time (see the `update` operation's handling, #489).
  */
+/**
+ * Thrown by `buildConvertNoteTypeRequest` when a text→list conversion would
+ * exceed an item cap the server enforces. Thrown before either the online
+ * request or the offline apply/enqueue below it, so a note that would be
+ * rejected never reaches the sync queue in the first place — the offline
+ * replay would otherwise reject it later with no way to explain why.
+ */
+export class NoteConversionCapError extends Error {
+  readonly kind: ConvertToListCapViolation['kind'];
+  readonly max: number;
+
+  constructor(violation: ConvertToListCapViolation) {
+    super(`Conversion exceeds cap: ${violation.kind} (max ${violation.max})`);
+    this.name = 'NoteConversionCapError';
+    this.kind = violation.kind;
+    this.max = violation.max;
+  }
+}
+
 function buildConvertNoteTypeRequest(note: Note): ConvertNoteTypeRequest {
   if (note.note_type === 'list') {
     return {
@@ -378,46 +415,66 @@ function buildConvertNoteTypeRequest(note: Note): ConvertNoteTypeRequest {
       content: listToText(note.title, note.items ?? []),
     };
   }
+  const converted = textToListNote(note.content);
+  const violation = checkConvertToListCaps(converted);
+  if (violation) {
+    throw new NoteConversionCapError(violation);
+  }
   return {
     note_type: 'list',
-    items: textToListItems(note.content).map((item, index) => ({
+    title: converted.title,
+    items: converted.items.map((item, index) => ({
       id: generateId(),
       text: item.text,
       position: index,
       completed: item.completed,
+      // The server rebuilds parent_id from this; applyConvertedNoteLocally
+      // mirrors that reconstruction so the offline result matches.
+      indent_level: item.indentLevel,
     })),
   };
 }
 
 /**
  * Applies a precomputed convert request to `note` locally, mirroring what the
- * server persists (`convertNoteRowTx`): title is always cleared, and items are
+ * server persists (`convertNoteRowTx`): the title is taken from the request
+ * (cleared when converting to text, since a text note has none), and items are
  * fully replaced (not merged) in the target-list direction.
  */
 function applyConvertedNoteLocally(note: Note, data: ConvertNoteTypeRequest, now: string): Note {
   if (data.note_type === 'text') {
     return { ...note, note_type: 'text', content: data.content ?? '', updated_at: now };
   }
-  const items: NoteItem[] = (data.items ?? []).map((item) => ({
-    id: item.id ?? generateId(),
-    note_id: note.id,
-    text: item.text,
-    completed: item.completed ?? false,
-    position: item.position,
-    parent_id: item.parent_id ?? null,
-    assigned_to: '',
-    created_at: now,
-    updated_at: now,
-  }));
-  return { ...note, note_type: 'list', title: '', checked_items_collapsed: false, items, updated_at: now };
+  // Mirrors the server's buildCreateNoteItems: an item sent with indent_level 1
+  // hangs off the nearest preceding top-level item, and off nothing when there is
+  // no such item yet. buildConvertNoteTypeRequest emits items in position order,
+  // which is the order the server sorts into before doing the same walk.
+  let lastTopLevelId: string | null = null;
+  const items: NoteItem[] = (data.items ?? []).map((item) => {
+    const id = item.id ?? generateId();
+    const parentId = item.indent_level === 1 ? lastTopLevelId : null;
+    // Only a top-level item becomes the parent for what follows. An indented item
+    // that found no parent stays childless rather than adopting the next one.
+    if (item.indent_level !== 1) lastTopLevelId = id;
+    return {
+      id,
+      note_id: note.id,
+      text: item.text,
+      completed: item.completed ?? false,
+      position: item.position,
+      parent_id: parentId,
+      assigned_to: '',
+      created_at: now,
+      updated_at: now,
+    };
+  });
+  return { ...note, note_type: 'list', title: data.title ?? '', checked_items_collapsed: false, items, updated_at: now };
 }
 
 export function useConvertNoteType() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     mutationFn: async (id: string): Promise<Note> => {
@@ -429,7 +486,7 @@ export function useConvertNoteType() {
       }
       const data = buildConvertNoteTypeRequest(existing);
 
-      if (isOnlineWriteAllowed(isConnectedRef.current)) {
+      if (isOnlineWriteAllowed(isConnected)) {
         try {
           const convertedNote = await convertNoteType(id, { ...data, base_version: existing.version });
           await saveNote(db, convertedNote);
@@ -475,8 +532,6 @@ export function useCreateNoteItem() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     mutationFn: async ({ noteId, item }: { noteId: string; item: CreateNoteItemRequest }): Promise<void> => {
@@ -498,7 +553,7 @@ export function useCreateNoteItem() {
         parent_id: itemWithId.parent_id ?? null,
         assigned_to: itemWithId.assigned_to ?? '',
       };
-      if (isOnlineWriteAllowed(isConnectedRef.current)) {
+      if (isOnlineWriteAllowed(isConnected)) {
         try {
           await createNoteItem(noteId, itemWithId);
           await createLocalItem(db, noteId, local);
@@ -527,13 +582,11 @@ export function useUpdateNoteItem() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     mutationFn: async ({ noteId, itemId, data }: { noteId: string; itemId: string; data: PatchNoteItemRequest }): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isOnlineWriteAllowed(isConnectedRef.current)) {
+      if (isOnlineWriteAllowed(isConnected)) {
         try {
           await updateNoteItem(noteId, itemId, data);
           await patchLocalItem(db, noteId, itemId, data);
@@ -562,13 +615,11 @@ export function useDeleteNoteItem() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     mutationFn: async ({ noteId, itemId }: { noteId: string; itemId: string }): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isOnlineWriteAllowed(isConnectedRef.current)) {
+      if (isOnlineWriteAllowed(isConnected)) {
         try {
           await deleteNoteItem(noteId, itemId);
           await deleteLocalItem(db, noteId, itemId);
@@ -596,13 +647,11 @@ export function useReorderNoteItems() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     mutationFn: async ({ noteId, itemIds }: { noteId: string; itemIds: string[] }): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isOnlineWriteAllowed(isConnectedRef.current)) {
+      if (isOnlineWriteAllowed(isConnected)) {
         try {
           await reorderNoteItems(noteId, itemIds);
           await reorderLocalItems(db, noteId, itemIds);
@@ -631,13 +680,11 @@ export function useDeleteNote() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     mutationFn: async (id: string): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isOnlineWriteAllowed(isConnectedRef.current)) {
+      if (isOnlineWriteAllowed(isConnected)) {
         try {
           await deleteNote(id);
           await markLocalNoteDeleted(db, id);
@@ -657,6 +704,8 @@ export function useDeleteNote() {
     onSuccess: (_data, id) => {
       queryClient.removeQueries({ queryKey: noteLocalQueryKey(id) });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      // Trashing drops the note out of its labels' counts.
+      invalidateLabelCounts(queryClient);
     },
   });
 }
@@ -665,8 +714,6 @@ export function useDuplicateNote() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     mutationFn: async (id: string): Promise<Note> => {
@@ -676,7 +723,7 @@ export function useDuplicateNote() {
       // calling online against a note the server doesn't know yet (a 404 would
       // surface as an error instead of syncing).
       const pendingCreate = await isNotePendingCreate(db, id);
-      if (isOnlineWriteAllowed(isConnectedRef.current) && !pendingCreate) {
+      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
           const duplicatedNote = await duplicateNote(id);
           await saveNote(db, duplicatedNote);
@@ -748,6 +795,8 @@ export function useDuplicateNote() {
     onSuccess: (duplicatedNote) => {
       queryClient.setQueryData(noteLocalQueryKey(duplicatedNote.id), duplicatedNote);
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      // The copy keeps the source's labels, so each of them gains a note.
+      if (duplicatedNote.labels.length > 0) invalidateLabelCounts(queryClient);
     },
   });
 }
@@ -756,13 +805,11 @@ export function useRestoreNote() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     mutationFn: async (id: string): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isOnlineWriteAllowed(isConnectedRef.current)) {
+      if (isOnlineWriteAllowed(isConnected)) {
         try {
           await restoreNote(id);
           await markLocalNoteRestored(db, id);
@@ -782,6 +829,8 @@ export function useRestoreNote() {
     onSuccess: (_data, id) => {
       queryClient.removeQueries({ queryKey: noteLocalQueryKey(id) });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      // Restoring puts the note back into its labels' counts.
+      invalidateLabelCounts(queryClient);
     },
   });
 }
@@ -790,13 +839,11 @@ export function usePermanentDeleteNote() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     mutationFn: async (id: string): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isOnlineWriteAllowed(isConnectedRef.current)) {
+      if (isOnlineWriteAllowed(isConnected)) {
         try {
           await permanentDeleteNote(id);
           await permanentDeleteLocalNote(db, id);
@@ -820,22 +867,62 @@ export function usePermanentDeleteNote() {
   });
 }
 
+/**
+ * Snapshot of the notes-list cache entries an optimistic reorder touches, for
+ * rollback if the reorder ultimately fails.
+ */
+interface OptimisticReorderSnapshot {
+  key: QueryKey;
+  notes: Note[];
+}
+
+/**
+ * Optimistically re-sorts every cached notes-list to match `noteIds`,
+ * returning a snapshot for rollback. Without this, the cache keeps its
+ * pre-drag order until the reorder's network round-trip and refetch land —
+ * and any *other* mutation's cache write in that window (e.g. archiving a
+ * note right after dragging it) recreates the list's array reference from
+ * that stale order, which trips NotesListScreen's `localOrder`-clearing
+ * effect and reveals the pre-drag order for one render (#815).
+ *
+ * Only lists whose *entire* contents `noteIds` accounts for are reordered —
+ * a filtered/partial list (search, label, archived) may share ids with
+ * `noteIds` without this drag applying to its own ordering, so leave those
+ * alone rather than guess.
+ */
+function applyOptimisticReorder(queryClient: QueryClient, noteIds: string[]): OptimisticReorderSnapshot[] {
+  const orderIndex = new Map(noteIds.map((id, index) => [id, index]));
+  const previousListEntries: OptimisticReorderSnapshot[] = [];
+  for (const [key, list] of queryClient.getQueriesData<Note[]>({ queryKey: notesLocalQueryScopeKey() })) {
+    if (!list || list.length === 0 || !list.every((note) => orderIndex.has(note.id))) continue;
+    previousListEntries.push({ key, notes: list });
+    const reordered = [...list].sort((a, b) => orderIndex.get(a.id)! - orderIndex.get(b.id)!);
+    queryClient.setQueryData<Note[]>(key, reordered);
+  }
+  return previousListEntries;
+}
+
+/** Reverts the optimistic cache entries captured by an onMutate snapshot. */
+function rollbackOptimisticReorder(queryClient: QueryClient, snapshot: OptimisticReorderSnapshot[]): void {
+  for (const { key, notes } of snapshot) {
+    queryClient.setQueryData<Note[]>(key, notes);
+  }
+}
+
 export function useReorderNotes() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     mutationFn: async (noteIds: string[]): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isOnlineWriteAllowed(isConnectedRef.current)) {
+      if (isOnlineWriteAllowed(isConnected)) {
         try {
           await reorderNotes(noteIds);
           // Update positions in local DB to match the new order
-          for (let i = 0; i < noteIds.length; i++) {
-            await updateLocalNote(db, noteIds[i], { position: i });
+          for (const [i, noteId] of noteIds.entries()) {
+            await updateLocalNote(db, noteId, { position: i });
           }
           return;
         } catch (err) {
@@ -844,8 +931,8 @@ export function useReorderNotes() {
       }
       // Offline (or a transient online failure): update local positions to
       // reflect the new order immediately, then enqueue.
-      for (let i = 0; i < noteIds.length; i++) {
-        await updateLocalNote(db, noteIds[i], { position: i });
+      for (const [i, noteId] of noteIds.entries()) {
+        await updateLocalNote(db, noteId, { position: i });
       }
       await enqueueOperation(db, {
         operation: 'reorder',
@@ -854,7 +941,15 @@ export function useReorderNotes() {
         body: { note_ids: noteIds } as Record<string, unknown>,
       });
     },
-    onSuccess: () => {
+    onMutate: (noteIds: string[]) => applyOptimisticReorder(queryClient, noteIds),
+    onError: (_err, _noteIds, snapshot) => {
+      if (snapshot) rollbackOptimisticReorder(queryClient, snapshot);
+    },
+    // Reconcile with the real local DB after either outcome, not just success:
+    // a rollback restores the pre-drag snapshot captured at onMutate time, which
+    // can itself be stale if another mutation touched the same cache while this
+    // one was in flight. Invalidating here re-pulls the true order either way.
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
     },
   });
@@ -873,8 +968,6 @@ export function useShareNote() {
   const db = useSQLiteContext();
   const queryClient = useQueryClient();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  isConnectedRef.current = isConnected;
   const { user: currentUser } = useAuth();
 
   return useMutation({
@@ -886,7 +979,7 @@ export function useShareNote() {
       // call would 404 (permanent) and surface as an error instead of syncing.
       const pendingCreate = await isNotePendingCreate(db, noteId);
 
-      if (isOnlineWriteAllowed(isConnectedRef.current) && !pendingCreate) {
+      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
           await shareNote(noteId, user.id);
           // Fetch updated note so shared_with_json in SQLite reflects server state
@@ -939,8 +1032,6 @@ export function useUnshareNote() {
   const db = useSQLiteContext();
   const queryClient = useQueryClient();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     mutationFn: async ({ noteId, userId }: { noteId: string; userId: string }) => {
@@ -949,7 +1040,7 @@ export function useUnshareNote() {
       // so queue rather than calling online against a note the server doesn't know yet.
       const pendingCreate = await isNotePendingCreate(db, noteId);
 
-      if (isOnlineWriteAllowed(isConnectedRef.current) && !pendingCreate) {
+      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
           await unshareNote(noteId, userId);
           try {
@@ -987,8 +1078,6 @@ export function useToggleNoteItemCompleted() {
   const db = useSQLiteContext();
   const queryClient = useQueryClient();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     onMutate: ({ noteId, itemId, completed }: { noteId: string; itemId: string; completed: boolean }) =>
@@ -999,7 +1088,7 @@ export function useToggleNoteItemCompleted() {
       ),
     mutationFn: async ({ noteId, itemId, completed }: { noteId: string; itemId: string; completed: boolean }): Promise<NoteItem[]> => {
       assertSwitchWriteAllowed();
-      if (isOnlineWriteAllowed(isConnectedRef.current)) {
+      if (isOnlineWriteAllowed(isConnected)) {
         try {
           const serverItems = await toggleItemCompleted(noteId, itemId, completed);
           for (const item of serverItems) {
@@ -1048,8 +1137,6 @@ export function useUncheckAllItems() {
   const db = useSQLiteContext();
   const queryClient = useQueryClient();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     onMutate: ({ noteId, itemIds }: { noteId: string; itemIds: string[] }) =>
@@ -1061,7 +1148,7 @@ export function useUncheckAllItems() {
     mutationFn: async ({ noteId, itemIds }: { noteId: string; itemIds: string[] }): Promise<NoteItem[]> => {
       assertSwitchWriteAllowed();
       if (itemIds.length === 0) return [];
-      if (isOnlineWriteAllowed(isConnectedRef.current)) {
+      if (isOnlineWriteAllowed(isConnected)) {
         try {
           const serverItems = await uncheckAllItems(noteId, itemIds);
           // The server returns the note's full, authoritative item list, so
@@ -1109,8 +1196,6 @@ export function useDeleteCompletedItems() {
   const db = useSQLiteContext();
   const queryClient = useQueryClient();
   const { isConnected } = useNetworkStatus();
-  const isConnectedRef = useRef(isConnected);
-  isConnectedRef.current = isConnected;
 
   return useMutation({
     onMutate: ({ noteId, itemIds }: { noteId: string; itemIds: string[] }) =>
@@ -1122,7 +1207,7 @@ export function useDeleteCompletedItems() {
     mutationFn: async ({ noteId, itemIds }: { noteId: string; itemIds: string[] }): Promise<NoteItem[]> => {
       assertSwitchWriteAllowed();
       if (itemIds.length === 0) return [];
-      if (isOnlineWriteAllowed(isConnectedRef.current)) {
+      if (isOnlineWriteAllowed(isConnected)) {
         try {
           const serverItems = await deleteCompletedItems(noteId, itemIds);
           // The server returns the note's full, authoritative remaining item

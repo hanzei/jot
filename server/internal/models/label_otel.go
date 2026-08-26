@@ -36,7 +36,7 @@ func (s *LabelStore) GetLabelCounts(ctx context.Context, userID string) (_ map[s
 	return s.inner.GetLabelCounts(ctx, userID)
 }
 
-func (s *LabelStore) GetOrCreateLabel(ctx context.Context, userID, name string) (_ *Label, err error) {
+func (s *LabelStore) GetOrCreateLabel(ctx context.Context, userID, name string) (_ *Label, _ bool, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "LabelStore.GetOrCreateLabel", &err)
 	defer end()
 	return s.inner.GetOrCreateLabel(ctx, userID, name)

@@ -1,4 +1,3 @@
-import React from 'react';
 import { render, waitFor, act } from '@testing-library/react-native';
 import { Text } from 'react-native';
 import type { User } from '@jot/shared';
@@ -6,21 +5,17 @@ import { UsersProvider, useUsers } from '../src/store/UsersContext';
 import { publishProfileIconUpdate } from '../src/store/profileIconEvents';
 import { publishReconnectResync } from '../src/store/resyncEvents';
 import { getUsers } from '../src/api/users';
+import { getLocalUsers, upsertUser } from '../src/db/userQueries';
+import type { TestDatabase } from './helpers/testDb';
 
 const existingUser: User = {
   id: 'collab-1', username: 'bob', first_name: 'Bob', last_name: 'B',
   role: 'user', has_profile_icon: true, created_at: '', updated_at: '2024-01-01T00:00:00Z',
 };
 
-jest.mock('expo-sqlite', () => {
-  // Stable reference across renders, mirroring the real provider — a fresh object
-  // each render would churn the db-dependent loadUsers callback and its effects.
-  const db = { runAsync: jest.fn().mockResolvedValue(undefined) };
-  return { useSQLiteContext: jest.fn(() => db) };
-});
-
+let mockAuthState = { user: null as User | null, isAuthenticated: true };
 jest.mock('../src/store/AuthContext', () => ({
-  useAuth: () => ({ user: null, isAuthenticated: true }),
+  useAuth: () => mockAuthState,
 }));
 
 let mockUsersConnected = false;
@@ -36,12 +31,19 @@ jest.mock('../src/api/client', () => ({
   getBaseUrl: () => 'http://localhost',
 }));
 
-const mockUpsertUser = jest.fn().mockResolvedValue(undefined);
-jest.mock('../src/db/userQueries', () => ({
-  getLocalUsers: jest.fn(() => Promise.resolve([existingUser])),
-  saveUsers: jest.fn().mockResolvedValue(undefined),
-  upsertUser: (...args: unknown[]) => mockUpsertUser(...args),
-}));
+// The user store runs for real against the test database (see helpers/testDb.ts);
+// these stay spies so the two timing tests below can park a read mid-flight.
+// `useSQLiteContext()` comes from the global mock and returns one stable
+// database per test, which is what the db-dependent loadUsers callback needs.
+jest.mock('../src/db/userQueries', () => {
+  const actual = jest.requireActual('../src/db/userQueries');
+  return {
+    ...actual,
+    getLocalUsers: jest.fn(actual.getLocalUsers),
+    saveUsers: jest.fn(actual.saveUsers),
+    upsertUser: jest.fn(actual.upsertUser),
+  };
+});
 
 const mockRefreshIconCache = jest.fn().mockResolvedValue(undefined);
 jest.mock('../src/utils/profileIconCache', () => ({
@@ -49,19 +51,30 @@ jest.mock('../src/utils/profileIconCache', () => ({
 }));
 
 const mockGetUsers = getUsers as jest.Mock;
+const mockGetLocalUsers = getLocalUsers as jest.Mock;
+const mockUpsertUser = upsertUser as jest.Mock;
+
+let db: TestDatabase;
+
+/** Put the collaborator in local SQLite, the way a prior sync would have. */
+async function seedExistingUser(): Promise<void> {
+  await jest.requireActual('../src/db/userQueries').saveUsers(db, [existingUser]);
+}
 
 function Probe() {
   const { usersById } = useUsers();
   return <Text testID="icon-version">{usersById.get('collab-1')?.updated_at ?? 'none'}</Text>;
 }
 
-describe('UsersContext profile_icon_updated subscription', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
+beforeEach(() => {
+  jest.clearAllMocks();
+  db = globalThis.testDb;
+});
 
+describe('UsersContext profile_icon_updated subscription', () => {
   it('applies a bus update to usersById and persists it', async () => {
-    const { getByTestId } = render(
+    await seedExistingUser();
+    const { getByTestId } = await render(
       <UsersProvider>
         <Probe />
       </UsersProvider>,
@@ -71,7 +84,7 @@ describe('UsersContext profile_icon_updated subscription', () => {
     await waitFor(() => expect(getByTestId('icon-version').props.children).toBe('2024-01-01T00:00:00Z'));
 
     const updated: User = { ...existingUser, updated_at: '2024-06-06T00:00:00Z' };
-    act(() => {
+    await act(() => {
       publishProfileIconUpdate(updated);
     });
 
@@ -79,12 +92,38 @@ describe('UsersContext profile_icon_updated subscription', () => {
     await waitFor(() => expect(getByTestId('icon-version').props.children).toBe('2024-06-06T00:00:00Z'));
     expect(mockUpsertUser).toHaveBeenCalledWith(expect.anything(), updated);
     expect(mockRefreshIconCache).toHaveBeenCalledWith([updated], 'http://localhost');
+    // The upsert really reached SQLite, so the bump survives a restart.
+    await waitFor(async () =>
+      expect(await db.getFirstAsync('SELECT updated_at FROM users WHERE id = ?', ['collab-1'])).toEqual({
+        updated_at: '2024-06-06T00:00:00Z',
+      }),
+    );
+  });
+
+  it('inserts a collaborator the local store has never seen', async () => {
+    // upsertUser writes a single row without reconciling the whole table, so a
+    // brand-new collaborator arriving over the bus must INSERT rather than no-op.
+    await render(
+      <UsersProvider>
+        <Probe />
+      </UsersProvider>,
+    );
+    await waitFor(() => expect(mockGetLocalUsers).toHaveBeenCalled());
+
+    await act(() => {
+      publishProfileIconUpdate(existingUser);
+    });
+
+    await waitFor(async () =>
+      expect(await db.getAllAsync('SELECT id, username FROM users')).toEqual([
+        { id: 'collab-1', username: 'bob' },
+      ]),
+    );
   });
 });
 
 describe('UsersContext catch-up on SSE reconnect', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
     mockUsersConnected = true;
     mockGetUsers.mockResolvedValue([]);
   });
@@ -94,7 +133,7 @@ describe('UsersContext catch-up on SSE reconnect', () => {
   });
 
   it('re-pulls the user list when a reconnect resync is published', async () => {
-    render(
+    await render(
       <UsersProvider>
         <Probe />
       </UsersProvider>,
@@ -117,7 +156,7 @@ describe('UsersContext catch-up on SSE reconnect', () => {
     mockGetUsers.mockImplementation(
       () => new Promise<User[]>((resolve) => { resolveGet = resolve; }),
     );
-    render(
+    await render(
       <UsersProvider>
         <Probe />
       </UsersProvider>,
@@ -143,5 +182,118 @@ describe('UsersContext catch-up on SSE reconnect', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(mockGetUsers).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('UsersContext sign-out', () => {
+  beforeEach(() => {
+    mockAuthState = { user: null, isAuthenticated: true };
+    // clearAllMocks resets calls but not implementations, and the tests here
+    // park the local read mid-flight, so restore it rather than leaving the
+    // next test to inherit a promise that never resolves.
+    mockGetLocalUsers.mockImplementation(jest.requireActual('../src/db/userQueries').getLocalUsers);
+  });
+
+  afterEach(() => {
+    mockAuthState = { user: null, isAuthenticated: true };
+  });
+
+  it('does not show account A’s collaborators to account B before B’s load resolves', async () => {
+    await seedExistingUser();
+
+    // Account A signed in, collaborators loaded.
+    mockAuthState = { user: { id: 'user-a' } as User, isAuthenticated: true };
+    const { getByTestId, rerender } = await render(
+      <UsersProvider>
+        <Probe />
+      </UsersProvider>,
+    );
+    await waitFor(() => {
+      expect(getByTestId('icon-version').props.children).toBe(existingUser.updated_at);
+    });
+
+    // A signs out, then B signs in. Park B's load so the assertion lands in the
+    // window before it resolves — masking on `isAuthenticated` alone reopened
+    // here, because the state still held A's map until loadUsers replaced it.
+    mockGetLocalUsers.mockImplementation(() => new Promise<User[]>(() => {}));
+
+    mockAuthState = { user: null, isAuthenticated: false };
+    await rerender(
+      <UsersProvider>
+        <Probe />
+      </UsersProvider>,
+    );
+
+    mockAuthState = { user: { id: 'user-b' } as User, isAuthenticated: true };
+    await rerender(
+      <UsersProvider>
+        <Probe />
+      </UsersProvider>,
+    );
+
+    expect(getByTestId('icon-version').props.children).toBe('none');
+  });
+
+  it('serves an empty map on the first render after sign-out', async () => {
+    await seedExistingUser();
+
+    const { getByTestId, rerender } = await render(
+      <UsersProvider>
+        <Probe />
+      </UsersProvider>,
+    );
+
+    // Loaded and visible while signed in.
+    await waitFor(() => {
+      expect(getByTestId('icon-version').props.children).toBe(existingUser.updated_at);
+    });
+
+    mockAuthState = { user: null, isAuthenticated: false };
+    await rerender(
+      <UsersProvider>
+        <Probe />
+      </UsersProvider>,
+    );
+
+    // Masked during render, so consumers never observe the previous session's
+    // collaborators — clearing this in an effect left them readable for a frame.
+    expect(getByTestId('icon-version').props.children).toBe('none');
+  });
+
+  it('does not refill the cache from a local read that resolves after sign-out', async () => {
+    await seedExistingUser();
+    // Park the real SQLite read mid-flight so the sign-out lands while it is
+    // still pending — the race this test exists for.
+    let resolveLocal: ((users: User[]) => void) | undefined;
+    mockGetLocalUsers.mockImplementation(
+      () => new Promise<User[]>((resolve) => { resolveLocal = resolve; }),
+    );
+
+    const { getByTestId, rerender } = await render(
+      <UsersProvider>
+        <Probe />
+      </UsersProvider>,
+    );
+
+    // The mount-time load is in flight, parked on the SQLite read.
+    await waitFor(() => expect(mockGetLocalUsers).toHaveBeenCalledTimes(1));
+
+    // Sign out: the effect cleanup cancels that load, and the provider serves an
+    // empty map while signed out. The provider stays mounted, so isMountedRef
+    // alone wouldn't catch it.
+    mockAuthState = { user: null, isAuthenticated: false };
+    await rerender(
+      <UsersProvider>
+        <Probe />
+      </UsersProvider>,
+    );
+
+    await act(async () => {
+      resolveLocal?.([existingUser]);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    // The previous user's collaborators must not reappear after sign-out.
+    expect(getByTestId('icon-version').props.children).toBe('none');
   });
 });

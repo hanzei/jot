@@ -1,4 +1,3 @@
-import React from 'react';
 import { Alert } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
@@ -202,8 +201,8 @@ type SortPreferenceResponse = {
 };
 
 describe('NotesListScreen sorting', () => {
-  const openSortControls = () => {
-    fireEvent.press(screen.getByTestId('sort-toggle'));
+  const openSortControls = async () => {
+    await fireEvent.press(screen.getByTestId('sort-toggle'));
   };
 
   beforeEach(() => {
@@ -238,7 +237,7 @@ describe('NotesListScreen sorting', () => {
     markServerReachable();
   });
 
-  it('normalizes an unsupported saved sort preference back to manual', () => {
+  it('normalizes an unsupported saved sort preference back to manual', async () => {
     mockUseAuth.mockReturnValue({
       user: mockUser,
       settings: { ...baseSettings, note_sort: 'unsupported' as unknown as NoteSort },
@@ -256,18 +255,18 @@ describe('NotesListScreen sorting', () => {
       isRefetching: false,
     });
 
-    render(<NotesListScreen variant="notes" />);
+    await render(<NotesListScreen variant="notes" />);
 
     // The draggable masonry only positions and reveals cards once it has
     // measured their real height via onLayout; simulate the native layout
     // pass the test renderer doesn't perform on its own. The card starts out
     // in the (accessibility-hidden) off-screen measurement pool, so it must
     // be queried with includeHiddenElements.
-    ['pinned-zulu', 'unpinned-bravo', 'unpinned-alpha'].forEach((id) => {
-      fireEvent(screen.getByTestId(`note-card-${id}`, { includeHiddenElements: true }), 'layout', {
+    for (const id of ['pinned-zulu', 'unpinned-bravo', 'unpinned-alpha']) {
+      await fireEvent(screen.getByTestId(`note-card-${id}`, { includeHiddenElements: true }), 'layout', {
         nativeEvent: { layout: { x: 0, y: 0, width: 150, height: 100 } },
       });
-    });
+    }
 
     expect(screen.queryByTestId('sort-disabled-notice')).toBeNull();
     expect(screen.queryByTestId('sort-controls')).toBeNull();
@@ -303,13 +302,13 @@ describe('NotesListScreen sorting', () => {
       settings: { ...baseSettings, note_sort: 'created_at' },
     });
 
-    render(<NotesListScreen variant="notes" />);
+    await render(<NotesListScreen variant="notes" />);
 
     expect(screen.queryByTestId('sort-disabled-notice')).toBeNull();
     // Manual sort is draggable; a non-manual sort drops to the static masonry.
     expect(screen.getByTestId('notes-masonry-draggable')).toBeTruthy();
-    openSortControls();
-    fireEvent.press(screen.getByTestId('sort-chip-created_at'));
+    await openSortControls();
+    await fireEvent.press(screen.getByTestId('sort-chip-created_at'));
 
     await waitFor(() => {
       expect(mockUpdateMe).toHaveBeenCalledWith({ note_sort: 'created_at' });
@@ -341,10 +340,10 @@ describe('NotesListScreen sorting', () => {
     });
     mockUpdateMe.mockRejectedValue(new Error('network error'));
 
-    render(<NotesListScreen variant="notes" />);
+    await render(<NotesListScreen variant="notes" />);
 
-    openSortControls();
-    fireEvent.press(screen.getByTestId('sort-chip-created_at'));
+    await openSortControls();
+    await fireEvent.press(screen.getByTestId('sort-chip-created_at'));
 
     await waitFor(() => {
       expect(mockUpdateMe).toHaveBeenCalledWith({ note_sort: 'created_at' });
@@ -375,10 +374,10 @@ describe('NotesListScreen sorting', () => {
       isRefetching: false,
     });
 
-    render(<NotesListScreen variant="notes" />);
+    await render(<NotesListScreen variant="notes" />);
 
-    openSortControls();
-    fireEvent.press(screen.getByTestId('sort-chip-created_at'));
+    await openSortControls();
+    await fireEvent.press(screen.getByTestId('sort-chip-created_at'));
 
     await waitFor(() => {
       expect(mockEnqueueOperation).toHaveBeenCalledWith(
@@ -418,10 +417,10 @@ describe('NotesListScreen sorting', () => {
       isRefetching: false,
     });
 
-    render(<NotesListScreen variant="notes" />);
+    await render(<NotesListScreen variant="notes" />);
 
-    openSortControls();
-    fireEvent.press(screen.getByTestId('sort-chip-created_at'));
+    await openSortControls();
+    await fireEvent.press(screen.getByTestId('sort-chip-created_at'));
 
     // Since the local SQLite enqueue itself failed (not just the network), the
     // change can never replay — roll back rather than silently pretending it saved.
@@ -453,10 +452,10 @@ describe('NotesListScreen sorting', () => {
     // A transient (queueable) failure: a network error surfaced as an axios error.
     mockUpdateMe.mockRejectedValue(Object.assign(new Error('Network Error'), { isAxiosError: true }));
 
-    render(<NotesListScreen variant="notes" />);
+    await render(<NotesListScreen variant="notes" />);
 
-    openSortControls();
-    fireEvent.press(screen.getByTestId('sort-chip-created_at'));
+    await openSortControls();
+    await fireEvent.press(screen.getByTestId('sort-chip-created_at'));
 
     await waitFor(() => {
       expect(mockEnqueueOperation).toHaveBeenCalledWith(
@@ -501,12 +500,12 @@ describe('NotesListScreen sorting', () => {
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(second.promise);
 
-    render(<NotesListScreen variant="notes" />);
+    await render(<NotesListScreen variant="notes" />);
 
-    openSortControls();
-    fireEvent.press(screen.getByTestId('sort-chip-updated_at'));
-    openSortControls();
-    fireEvent.press(screen.getByTestId('sort-chip-created_at'));
+    await openSortControls();
+    await fireEvent.press(screen.getByTestId('sort-chip-updated_at'));
+    await openSortControls();
+    await fireEvent.press(screen.getByTestId('sort-chip-created_at'));
 
     second.resolve({
       user: mockUser,
@@ -528,7 +527,7 @@ describe('NotesListScreen sorting', () => {
     expect(within(screen.getByTestId('sort-disabled-notice')).getByText(/Date created/)).toBeTruthy();
   });
 
-  it('toggles sort controls visibility from the compact header', () => {
+  it('toggles sort controls visibility from the compact header', async () => {
     mockUseOfflineNotes.mockReturnValue({
       data: [
         buildNote({ id: 'unpinned-bravo', title: 'sort-demo-bravo', pinned: false }),
@@ -539,19 +538,19 @@ describe('NotesListScreen sorting', () => {
       isRefetching: false,
     });
 
-    render(<NotesListScreen variant="notes" />);
+    await render(<NotesListScreen variant="notes" />);
 
     expect(screen.queryByTestId('sort-controls')).toBeNull();
-    fireEvent.press(screen.getByTestId('sort-toggle'));
+    await fireEvent.press(screen.getByTestId('sort-toggle'));
     expect(screen.getByTestId('sort-controls')).toBeTruthy();
-    fireEvent.press(screen.getByTestId('sort-toggle'));
+    await fireEvent.press(screen.getByTestId('sort-toggle'));
     expect(screen.queryByTestId('sort-controls')).toBeNull();
   });
 
-  it('opens the drawer from the compact menu button', () => {
-    render(<NotesListScreen variant="notes" />);
+  it('opens the drawer from the compact menu button', async () => {
+    await render(<NotesListScreen variant="notes" />);
 
-    fireEvent.press(screen.getByTestId('drawer-toggle'));
+    await fireEvent.press(screen.getByTestId('drawer-toggle'));
 
     expect(navigationModule.__mockDispatch).toHaveBeenCalledWith({ type: 'DRAWER_TOGGLE' });
   });
@@ -567,11 +566,11 @@ describe('NotesListScreen sorting', () => {
       isRefetching: false,
     });
 
-    render(<NotesListScreen variant="notes" />);
+    await render(<NotesListScreen variant="notes" />);
 
-    fireEvent.changeText(screen.getByTestId('search-input'), 'demo query');
+    await fireEvent.changeText(screen.getByTestId('search-input'), 'demo query');
     expect(screen.getByLabelText('Clear search')).toBeTruthy();
-    fireEvent.press(screen.getByTestId('clear-search'));
+    await fireEvent.press(screen.getByTestId('clear-search'));
 
     await waitFor(() => {
       expect(screen.queryByTestId('clear-search')).toBeNull();
@@ -590,7 +589,7 @@ describe('NotesListScreen sorting', () => {
     });
     mockUseUsers.mockReturnValue({ refreshUsers });
 
-    render(<NotesListScreen variant="notes" />);
+    await render(<NotesListScreen variant="notes" />);
 
     const emptyState = screen.getByTestId('notes-empty-state');
     const onRefresh = emptyState.props.refreshControl.props.onRefresh as () => Promise<void>;
@@ -612,7 +611,7 @@ describe('NotesListScreen sorting', () => {
     });
     mockUseUsers.mockReturnValue({ refreshUsers });
 
-    render(<NotesListScreen variant="notes" />);
+    await render(<NotesListScreen variant="notes" />);
 
     const errorState = screen.getByTestId('notes-error-state');
     const onRefresh = errorState.props.refreshControl.props.onRefresh as () => Promise<void>;
@@ -634,8 +633,8 @@ describe('NotesListScreen sorting', () => {
     });
     mockUseUsers.mockReturnValue({ refreshUsers });
 
-    render(<NotesListScreen variant="notes" />);
-    fireEvent.press(screen.getByTestId('retry-fetch'));
+    await render(<NotesListScreen variant="notes" />);
+    await fireEvent.press(screen.getByTestId('retry-fetch'));
 
     await waitFor(() => {
       expect(refetch).toHaveBeenCalledTimes(1);
@@ -693,10 +692,10 @@ describe('NotesListScreen empty trash', () => {
     markServerUnreachable();
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
 
-    renderTrashScreen();
+    await renderTrashScreen();
 
     await waitFor(() => expect(screen.getByTestId('empty-trash-button')).toBeTruthy());
-    fireEvent.press(screen.getByTestId('empty-trash-button'));
+    await fireEvent.press(screen.getByTestId('empty-trash-button'));
 
     await waitFor(() => {
       expect(alertSpy).toHaveBeenCalledWith('Error', "Empty Trash isn't available offline");
@@ -710,10 +709,10 @@ describe('NotesListScreen empty trash', () => {
     mockEmptyTrash.mockResolvedValue({ deleted_count: 1 });
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
 
-    renderTrashScreen();
+    await renderTrashScreen();
 
     await waitFor(() => expect(screen.getByTestId('empty-trash-button')).toBeTruthy());
-    fireEvent.press(screen.getByTestId('empty-trash-button'));
+    await fireEvent.press(screen.getByTestId('empty-trash-button'));
 
     await waitFor(() => {
       expect(mockEmptyTrash).toHaveBeenCalled();
@@ -757,14 +756,14 @@ describe('NotesListScreen layout toggle', () => {
       isRefetching: false,
     });
 
-    render(<NotesListScreen variant="notes" />);
+    await render(<NotesListScreen variant="notes" />);
 
     // List layout: a single masonry column.
     expect(screen.getByTestId('notes-masonry-grid')).toBeTruthy();
     expect(screen.getByTestId('masonry-column-0')).toBeTruthy();
     expect(screen.queryByTestId('masonry-column-1')).toBeNull();
 
-    fireEvent.press(screen.getByTestId('layout-toggle'));
+    await fireEvent.press(screen.getByTestId('layout-toggle'));
 
     // Grid layout: a second column appears.
     await waitFor(() => {
@@ -775,7 +774,7 @@ describe('NotesListScreen layout toggle', () => {
     expect(SecureStore.setItemAsync).toHaveBeenCalledWith('jot_dashboard_layout', 'grid');
 
     // Toggling back returns to the single-column list.
-    fireEvent.press(screen.getByTestId('layout-toggle'));
+    await fireEvent.press(screen.getByTestId('layout-toggle'));
     await waitFor(() => {
       expect(screen.queryByTestId('masonry-column-1')).toBeNull();
     });
@@ -815,12 +814,12 @@ describe('NotesListScreen archived search', () => {
       params?.archived ? archivedResult : activeResult,
     );
 
-    render(<NotesListScreen variant="notes" />);
+    await render(<NotesListScreen variant="notes" />);
 
     // No archived section before a search is entered
     expect(screen.queryByText('Archived')).toBeNull();
 
-    fireEvent.changeText(screen.getByTestId('search-input'), 'match');
+    await fireEvent.changeText(screen.getByTestId('search-input'), 'match');
 
     await waitFor(() => {
       expect(screen.getByText('Archived')).toBeTruthy();
@@ -829,11 +828,11 @@ describe('NotesListScreen archived search', () => {
     expect(screen.getByText('active match')).toBeTruthy();
   });
 
-  it('disables the archived fetch until a search is active', () => {
+  it('disables the archived fetch until a search is active', async () => {
     const activeResult = offlineResult([buildNote({ id: 'active-1', title: 'active match' })]);
     mockUseOfflineNotes.mockImplementation(() => activeResult);
 
-    render(<NotesListScreen variant="notes" />);
+    await render(<NotesListScreen variant="notes" />);
 
     // The second (archived) hook call is invoked with enabled: false while idle
     const archivedCall = mockUseOfflineNotes.mock.calls.find(

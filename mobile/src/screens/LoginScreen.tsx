@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -11,13 +11,16 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
+import { ChevronRight, Server, X } from 'lucide-react-native';
 import { useAuth } from '../store/AuthContext';
 import { getStoredServerUrl } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
-import { AuthStackParamList } from '../navigation/AuthStack';
+import { useServerAccounts } from '../hooks/useServerAccounts';
+import type { AuthStackParamList } from '../navigation/AuthStack';
 import ServerSetupGate from '../components/ServerSetupGate';
+import ServerPickerModal from '../components/drawer/ServerPickerModal';
 import FadeInView from '../components/FadeInView';
 import { displayMessage } from '../i18n/utils';
 
@@ -26,7 +29,7 @@ type LoginScreenProps = {
 };
 
 export default function LoginScreen({ navigation }: LoginScreenProps) {
-  const { login, enableLocalMode } = useAuth();
+  const { login, enableLocalMode, sessionEndedReason, clearSessionEndedReason } = useAuth();
   const { colors } = useTheme();
   const { t } = useTranslation();
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
@@ -42,6 +45,8 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
   // yet; the local-mode button stays disabled until it does so a tap can't race
   // ahead of the check and skip the confirmation.
   const [hasConfiguredServer, setHasConfiguredServer] = useState<boolean | null>(null);
+  const [isServerPickerVisible, setIsServerPickerVisible] = useState(false);
+  const { servers, activeServerId, reload: reloadServers } = useServerAccounts();
 
   useEffect(() => {
     let cancelled = false;
@@ -58,6 +63,25 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    // A registry read failure just leaves the switcher row hidden; the sign-in
+    // form below it still works against whichever server is already active.
+    void reloadServers().catch(() => undefined);
+  }, [reloadServers]);
+
+  const handleOpenServerPicker = useCallback(() => {
+    setIsServerPickerVisible(true);
+  }, []);
+
+  const handleCloseServerPicker = useCallback(() => {
+    setIsServerPickerVisible(false);
+    // The picker can switch, rename, remove, or add a server, so re-read the
+    // registry rather than tracking each outcome separately.
+    void reloadServers().catch(() => undefined);
+  }, [reloadServers]);
+
+  const activeServer = servers.find((server) => server.serverId === activeServerId) ?? servers[0];
 
   const handleLogin = async () => {
     if (!username.trim() || !password.trim()) {
@@ -126,6 +150,54 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
       <View style={[styles.inner, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         <Text style={[styles.title, { color: colors.text }]}>Jot</Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{t('auth.signInSubtitle')}</Text>
+
+        {sessionEndedReason ? (
+          <FadeInView>
+            <View
+              style={[styles.sessionEndedBanner, { backgroundColor: colors.warning, borderColor: colors.warningBorder }]}
+              testID="session-ended-banner"
+            >
+              <Text style={[styles.sessionEndedText, { color: colors.warningText }]}>
+                {t('auth.sessionEndedMessage')}
+              </Text>
+              <TouchableOpacity
+                onPress={clearSessionEndedReason}
+                style={styles.sessionEndedDismiss}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel={t('auth.sessionEndedDismiss')}
+                testID="session-ended-dismiss"
+              >
+                <X size={16} color={colors.warningText} />
+              </TouchableOpacity>
+            </View>
+          </FadeInView>
+        ) : null}
+
+        {activeServer ? (
+          <TouchableOpacity
+            style={[styles.serverSwitcher, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground }]}
+            onPress={handleOpenServerPicker}
+            testID="login-server-switcher"
+            accessibilityRole="button"
+            accessibilityLabel={t('serverPicker.open')}
+          >
+            <Server size={18} color={colors.textSecondary} />
+            <View style={styles.serverSwitcherText}>
+              <Text style={[styles.serverSwitcherLabel, { color: colors.textSecondary }]}>
+                {t('serverPicker.activeServerLabel')}
+              </Text>
+              <Text
+                style={[styles.serverSwitcherValue, { color: colors.text }]}
+                numberOfLines={1}
+                testID="login-server-switcher-name"
+              >
+                {activeServer.displayName || activeServer.serverUrl}
+              </Text>
+            </View>
+            <ChevronRight size={18} color={colors.textSecondary} />
+          </TouchableOpacity>
+        ) : null}
 
         <ServerSetupGate testPrefix="login">
           {error ? (
@@ -217,6 +289,16 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
           <Text style={[styles.localModeHint, { color: colors.textSecondary }]}>{t('auth.localModeHint')}</Text>
         </View>
       </View>
+
+      {/*
+        Signed-out access to the other registered servers (#855). A switch that
+        finds a valid stored session flips `isAuthenticated`, so RootNavigator
+        swaps this screen out on its own and there is no `onSwitched` work here.
+      */}
+      <ServerPickerModal
+        visible={isServerPickerVisible}
+        onClose={handleCloseServerPicker}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -267,6 +349,45 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 16,
     fontSize: 14,
+  },
+  sessionEndedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 16,
+    gap: 8,
+  },
+  sessionEndedText: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 19,
+  },
+  sessionEndedDismiss: {
+    padding: 2,
+  },
+  serverSwitcher: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 16,
+    gap: 10,
+  },
+  serverSwitcherText: {
+    flex: 1,
+  },
+  serverSwitcherLabel: {
+    fontSize: 12,
+  },
+  serverSwitcherValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 2,
   },
   link: {
     marginTop: 16,

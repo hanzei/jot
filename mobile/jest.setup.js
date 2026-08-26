@@ -160,31 +160,50 @@ jest.mock('expo-share-intent', () => ({
   }),
 }));
 
-const mockDb = {
-  execAsync: jest.fn().mockResolvedValue(undefined),
-  runAsync: jest.fn().mockResolvedValue({ lastInsertRowId: 1, changes: 1 }),
-  getFirstAsync: jest.fn().mockResolvedValue(null),
-  getAllAsync: jest.fn().mockResolvedValue([]),
-  closeAsync: jest.fn().mockResolvedValue(undefined),
-};
+// Real SQLite, not a stub: `__tests__/helpers/testDb.ts` implements the
+// expo-sqlite surface `src/db/` uses on top of Node's built-in `node:sqlite`,
+// so queries, constraints, migrations, and transaction rollback all execute for
+// real. Same intent as the filesystem mock above — run the app's own logic
+// rather than assert against canned return values.
+//
+// A fresh migrated in-memory database is installed before every test by
+// `jest.setupAfterEnv.js`; tests reach it through `globalThis.testDb`.
+jest.mock('expo-sqlite', () => {
+  const { getDefaultTestDb, openNamedTestDb, backupTestDb } = require('./__tests__/helpers/testDb');
+  return {
+    SQLiteProvider: ({ children, onInit }) => {
+      // Run onInit asynchronously to simulate DB initialization.
+      // onInit now runs real migrations against a real engine, so it can
+      // genuinely reject. Render the children either way — leaving `ready`
+      // false would hang the test on a missing element instead of failing on
+      // its actual assertion — and surface the reason rather than dropping it
+      // as an unhandled rejection.
+      const React = require('react');
+      const [ready, setReady] = React.useState(false);
+      React.useEffect(() => {
+        Promise.resolve(onInit?.(getDefaultTestDb())).then(
+          () => setReady(true),
+          (err) => {
+            console.error('SQLiteProvider onInit failed:', err);
+            setReady(true);
+          },
+        );
+      }, []); // eslint-disable-line react-hooks/exhaustive-deps
+      return ready ? children : null;
+    },
+    useSQLiteContext: () => getDefaultTestDb(),
+    openDatabaseAsync: jest.fn(async (name) => openNamedTestDb(name)),
+    backupDatabaseAsync: jest.fn(async ({ sourceDatabase, destDatabase }) =>
+      backupTestDb(sourceDatabase, destDatabase),
+    ),
+    defaultDatabaseDirectory: 'file:///db',
+  };
+});
 
-jest.mock('expo-sqlite', () => ({
-  SQLiteProvider: ({ children, onInit }) => {
-    // Run onInit asynchronously to simulate DB initialization
-    const React = require('react');
-    const [ready, setReady] = React.useState(false);
-    React.useEffect(() => {
-      Promise.resolve(onInit?.(mockDb)).then(() => setReady(true));
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
-    return ready ? children : null;
-  },
-  useSQLiteContext: () => mockDb,
-  openDatabaseAsync: jest.fn().mockResolvedValue(mockDb),
-  backupDatabaseAsync: jest.fn().mockResolvedValue(undefined),
-  defaultDatabaseDirectory: 'file:///db',
-}));
-
-global.mockDb = mockDb;
+// A getter, not a value: the database is replaced between tests.
+Object.defineProperty(global, 'testDb', {
+  get: () => require('./__tests__/helpers/testDb').getDefaultTestDb(),
+});
 
 jest.mock('@react-native-community/netinfo', () => ({
   __esModule: true,
@@ -201,6 +220,24 @@ jest.mock('expo-haptics', () => ({
 
 jest.mock('react-native-reanimated', () => {
   const RN = require('react-native');
+  // Mirrors reanimated's SharedValue: the `.value` accessor plus the
+  // `.get()`/`.set()` pair (the React Compiler-safe API the app uses). `.set()`
+  // takes a value or an updater, as the real one does.
+  const makeSharedValue = (init) => {
+    let current = init;
+    return {
+      get value() {
+        return current;
+      },
+      set value(next) {
+        current = next;
+      },
+      get: () => current,
+      set: (next) => {
+        current = typeof next === 'function' ? next(current) : next;
+      },
+    };
+  };
   return {
     __esModule: true,
     default: {
@@ -213,11 +250,11 @@ jest.mock('react-native-reanimated', () => {
     },
     useAnimatedStyle: () => ({}),
     useAnimatedReaction: jest.fn(),
-    useSharedValue: (init) => ({ value: init }),
+    useSharedValue: (init) => makeSharedValue(init),
     useAnimatedRef: () => ({ current: null }),
-    useScrollViewOffset: () => ({ value: 0 }),
+    useScrollViewOffset: () => makeSharedValue(0),
     useFrameCallback: () => ({ setActive: jest.fn(), isActive: false }),
-    useDerivedValue: (fn) => ({ value: typeof fn === 'function' ? undefined : fn }),
+    useDerivedValue: (fn) => makeSharedValue(typeof fn === 'function' ? undefined : fn),
     withTiming: (val) => val,
     withSpring: (val) => val,
     runOnJS: (fn) => fn,
@@ -279,10 +316,18 @@ jest.mock('react-native-gesture-handler', () => {
 // Single source of truth for the react-native-reorderable-list mock, used by
 // every test that renders the note editor. Renders each row synchronously so
 // tests can query list items without FlatList virtualization timing.
+//
+// `__getLatestProps` exposes the props NestedReorderableList was last
+// rendered with (data, onReorder, onDragEnd, ...) so a test can invoke
+// `onReorder`/`onDragEnd` directly — the same way the real library does once
+// a drag drops on a new slot — without driving an actual gesture. It's inert
+// for every test that doesn't call it.
 jest.mock('react-native-reorderable-list', () => {
   const React = require('react');
   const { View, ScrollView } = require('react-native');
+  let latestProps = null;
   function ReorderableList(props) {
+    latestProps = props;
     const data = props.data || [];
     return React.createElement(
       View,
@@ -312,6 +357,7 @@ jest.mock('react-native-reorderable-list', () => {
       copy.splice(to, 0, moved);
       return copy;
     },
+    __getLatestProps: () => latestProps,
   };
 });
 

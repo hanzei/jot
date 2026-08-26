@@ -1,32 +1,22 @@
-import React, { useCallback, useRef, useState } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  Alert,
-  Modal,
-  Pressable,
-  TextInput,
-  ActivityIndicator,
-} from 'react-native';
-import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-navigation/drawer';
+import { useCallback, useState } from 'react';
+import { View, Text, TouchableOpacity, Alert } from 'react-native';
+import type { DrawerContentComponentProps } from '@react-navigation/drawer';
+import { DrawerContentScrollView } from '@react-navigation/drawer';
 import { CommonActions } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Archive, CircleCheck, ChevronRight, Clipboard, FileText, LogOut, Pencil, Settings, Trash2, type LucideIcon } from 'lucide-react-native';
+import { Archive, ChevronRight, Clipboard, FileText, LogOut, Settings, Trash2, type LucideIcon } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../store/AuthContext';
 import { useCreateLabel, useDeleteLabel, useLabelCounts, useLabels, useRenameLabel } from '../hooks/useLabels';
 import { useTheme } from '../theme/ThemeContext';
-import { getActiveServer, listServers, removeServer, renameServer, type ServerAccountEntry } from '../store/serverAccounts';
-import { switchActiveServer } from '../api/client';
 import UserAvatar from './UserAvatar';
-import ServerSetupGate from './ServerSetupGate';
 import { extractErrorMessage } from './drawer/utils';
 import { useConfirm } from '../hooks/useConfirm';
 import { styles } from './drawer/styles';
 import LabelsSection from './drawer/LabelsSection';
 import CreateLabelModal from './drawer/CreateLabelModal';
 import RenameLabelModal from './drawer/RenameLabelModal';
+import ServerPickerModal from './drawer/ServerPickerModal';
 
 import type { Label } from '@jot/shared';
 import type { MainDrawerParamList } from '../navigation/MainDrawer';
@@ -37,8 +27,14 @@ interface NavItem {
   icon: LucideIcon;
 }
 
+// CommonActions.navigate()'s return type is widened to the full
+// react-navigation Action union, which includes ResetAction — whose payload
+// isn't exactOptionalPropertyTypes-clean — so a dispatch() call needs the
+// result pinned back down to what dispatch actually accepts.
+type DrawerDispatchAction = Parameters<DrawerContentComponentProps['navigation']['dispatch']>[0];
+
 export default function DrawerContent(props: DrawerContentComponentProps) {
-  const { user, logout, clearAuth, revalidateSession, isLocalMode } = useAuth();
+  const { user, logout, isLocalMode } = useAuth();
   const { data: labels } = useLabels();
   const { data: labelCounts } = useLabelCounts();
   const createLabel = useCreateLabel();
@@ -61,13 +57,6 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
   const [isCreateLabelVisible, setIsCreateLabelVisible] = useState(false);
   const [newLabelValue, setNewLabelValue] = useState('');
   const [isServerPickerVisible, setIsServerPickerVisible] = useState(false);
-  const [isServerSetupVisible, setIsServerSetupVisible] = useState(false);
-  const [renameServerTarget, setRenameServerTarget] = useState<ServerAccountEntry | null>(null);
-  const [renameServerValue, setRenameServerValue] = useState('');
-  const [servers, setServers] = useState<ServerAccountEntry[]>([]);
-  const [activeServerId, setActiveServerId] = useState<string | null>(null);
-  const [isServerActionPending, setIsServerActionPending] = useState(false);
-  const serverSwitchingRef = useRef(false);
   // ids of labels currently being deleted, so each row can show a spinner
   // instead of sitting with no feedback for the ~5s write timeout (#698). A
   // set (not a single id) because the confirm dialog closes before the delete
@@ -116,6 +105,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     }
   }, [activeLabelId, props.navigation]);
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- pre-existing, tracked in #777
   const handleSubmitRename = useCallback(async () => {
     const label = renameLabelTarget;
     const name = renameValue.trim();
@@ -134,6 +124,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     }
   }, [handleLabelRenameSuccess, renameLabel, renameLabelTarget, renameValue, t]);
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- pre-existing, tracked in #777
   const openRenameModal = useCallback((label: Label) => {
     setRenameLabelTarget(label);
     setRenameValue(label.name);
@@ -163,6 +154,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     }
   }, [confirm, deleteLabel, handleDeleteLabelSuccess, t]);
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- pre-existing, tracked in #777
   const handleSubmitCreateLabel = useCallback(async () => {
     const name = newLabelValue.trim();
     if (!name || createLabel.isPending) {
@@ -179,6 +171,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     }
   }, [createLabel, newLabelValue, t]);
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- pre-existing, tracked in #777
   const closeCreateLabelModal = useCallback(() => {
     if (createLabel.isPending) {
       return;
@@ -193,208 +186,41 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     }
   }, [renameLabel.isPending]);
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- pre-existing, tracked in #777
   const handleCreateLabelPress = useCallback(() => {
     setNewLabelValue('');
     setIsCreateLabelVisible(true);
   }, []);
 
   const handleSettingsPress = useCallback(() => {
-    props.navigation.dispatch(
-      CommonActions.navigate({ name: 'Settings' }),
-    );
+    // 'Settings' lives outside the drawer's own param list (it's a
+    // RootStackParamList screen), so this goes through dispatch rather than
+    // navigation.navigate.
+    props.navigation.dispatch(CommonActions.navigate('Settings') as DrawerDispatchAction);
     props.navigation.closeDrawer();
   }, [props.navigation]);
 
-  const loadServerPickerData = useCallback(async () => {
-    const [serverList, activeServer] = await Promise.all([listServers(), getActiveServer()]);
-    setServers(serverList);
-    setActiveServerId(activeServer?.serverId ?? null);
-  }, []);
-
-  const refreshServerPickerData = useCallback(async () => {
-    try {
-      await loadServerPickerData();
-      return true;
-    } catch (error) {
-      console.warn('Failed to load server picker data:', error);
-      Alert.alert(t('common.error'), t('serverPicker.switchFailed'));
-      return false;
-    }
-  }, [loadServerPickerData, t]);
-
   const handleOpenServerPicker = useCallback(() => {
     setIsServerPickerVisible(true);
-    void refreshServerPickerData();
-  }, [refreshServerPickerData]);
+  }, []);
 
-  const handleSwitchToServer = useCallback(async (serverId: string) => {
-    if (isServerActionPending || serverSwitchingRef.current) {
-      return;
-    }
-    serverSwitchingRef.current = true;
-    setIsServerActionPending(true);
-    let switchedSuccessfully = false;
-    try {
-      const switched = await switchActiveServer(serverId);
-      if (!switched) {
-        Alert.alert(t('common.error'), t('serverPicker.switchFailed'));
-        return;
-      }
-      switchedSuccessfully = true;
-
-      // revalidateSession returns false when the target server's stored session
-      // is no longer valid (expired, or the account was deleted): it clears auth
-      // so the app redirects to that server's login screen. Skip closeDrawer in
-      // that case (the navigator is already unmounting) and prompt the user to
-      // sign in again rather than reporting a switch failure.
-      const authenticated = await revalidateSession();
-      setIsServerPickerVisible(false);
-      if (authenticated) {
-        props.navigation.closeDrawer();
-      } else {
-        const targetServer = servers.find((server) => server.serverId === serverId);
-        Alert.alert(
-          t('serverPicker.sessionExpiredTitle'),
-          t('serverPicker.sessionExpiredMessage', {
-            server: targetServer?.displayName || targetServer?.serverUrl || '',
-          }),
-        );
-      }
-    } catch {
-      Alert.alert(t('common.error'), t('serverPicker.switchFailed'));
-    } finally {
-      setIsServerActionPending(false);
-      serverSwitchingRef.current = false;
-      if (switchedSuccessfully) {
-        try {
-          await loadServerPickerData();
-        } catch (error) {
-          console.warn('Failed to refresh server picker data after successful switch:', error);
-        }
-      } else {
-        await refreshServerPickerData();
-      }
-    }
-  }, [isServerActionPending, loadServerPickerData, props.navigation, revalidateSession, refreshServerPickerData, servers, t]);
-
-  const handleOpenServerSetup = useCallback(() => {
-    if (isServerActionPending) {
-      return;
-    }
+  const handleCloseServerPicker = useCallback(() => {
     setIsServerPickerVisible(false);
-    setIsServerSetupVisible(true);
-  }, [isServerActionPending]);
+  }, []);
 
-  const handleDeleteServer = useCallback((server: ServerAccountEntry) => {
-    if (isServerActionPending) {
-      return;
-    }
-    Alert.alert(
-      t('serverPicker.deleteConfirmTitle'),
-      t('serverPicker.deleteConfirmMessage', { name: server.displayName || server.serverUrl }),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('serverPicker.deleteButton'),
-          style: 'destructive',
-          onPress: async () => {
-            setIsServerActionPending(true);
-            try {
-              const removed = await removeServer(server.serverId);
-              if (!removed) {
-                Alert.alert(t('common.error'), t('serverPicker.deleteFailed'));
-                return;
-              }
-              const [serverList, newActiveServer] = await Promise.all([listServers(), getActiveServer()]);
-              setServers(serverList);
-              setActiveServerId(newActiveServer?.serverId ?? null);
-              if (serverList.length === 0) {
-                setIsServerPickerVisible(false);
-                clearAuth();
-              } else if (server.serverId === activeServerId && newActiveServer) {
-                await switchActiveServer(newActiveServer.serverId);
-                await revalidateSession();
-              }
-            } catch {
-              Alert.alert(t('common.error'), t('serverPicker.deleteFailed'));
-            } finally {
-              setIsServerActionPending(false);
-            }
-          },
-        },
-      ],
-    );
-  }, [isServerActionPending, activeServerId, clearAuth, revalidateSession, t]);
+  const handleDismissedWithoutServers = useCallback(() => {
+    // No server left to pick: return the user to the dashboard instead of
+    // leaving the drawer open behind an empty picker.
+    props.navigation.closeDrawer();
+  }, [props.navigation]);
 
-  const handleOpenRenameServer = useCallback((server: ServerAccountEntry) => {
-    if (isServerActionPending) {
-      return;
-    }
-    setRenameServerValue(server.displayName ?? '');
-    setRenameServerTarget(server);
-    setIsServerPickerVisible(false);
-  }, [isServerActionPending]);
-
-  const handleDismissRenameServer = useCallback(() => {
-    if (isServerActionPending) {
-      return;
-    }
-    setRenameServerTarget(null);
-    setRenameServerValue('');
-    setIsServerPickerVisible(true);
-  }, [isServerActionPending]);
-
-  const handleSubmitRenameServer = useCallback(async () => {
-    if (!renameServerTarget || isServerActionPending) {
-      return;
-    }
-    setIsServerActionPending(true);
-    try {
-      const trimmed = renameServerValue.trim();
-      const ok = await renameServer(renameServerTarget.serverId, trimmed);
-      if (!ok) {
-        Alert.alert(t('common.error'), t('serverPicker.renameFailed'));
-        return;
-      }
-      setServers(prev =>
-        prev.map(s =>
-          s.serverId === renameServerTarget.serverId
-            ? { ...s, displayName: trimmed.length > 0 ? trimmed : undefined }
-            : s,
-        ),
-      );
-      setRenameServerTarget(null);
-      setRenameServerValue('');
-      setIsServerPickerVisible(true);
-    } catch {
-      Alert.alert(t('common.error'), t('serverPicker.renameFailed'));
-    } finally {
-      setIsServerActionPending(false);
-    }
-  }, [renameServerTarget, renameServerValue, isServerActionPending, t]);
-
-  const handleBackToDashboardFromServerSetup = useCallback(() => {
-    setIsServerSetupVisible(false);
-    if (servers.length > 0) {
-      setIsServerPickerVisible(true);
-    } else {
+  const handleServerSwitched = useCallback((authenticated: boolean) => {
+    // On a failed revalidation the navigator is already swapping to the login
+    // stack, so this drawer is unmounting and there is nothing to close.
+    if (authenticated) {
       props.navigation.closeDrawer();
     }
-  }, [props.navigation, servers.length]);
-
-  const handleConfirmCancelSetup = useCallback(() => {
-    if (isServerActionPending) {
-      return;
-    }
-    Alert.alert(
-      t('serverPicker.cancelSetupTitle'),
-      t('serverPicker.cancelSetupMessage'),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        { text: t('serverPicker.cancelSetupConfirm'), onPress: handleBackToDashboardFromServerSetup },
-      ],
-    );
-  }, [isServerActionPending, t, handleBackToDashboardFromServerSetup]);
+  }, [props.navigation]);
 
   const displayName = user
     ? [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username
@@ -560,261 +386,13 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
         onClose={closeRenameModal}
       />
 
-      <Modal
+      <ServerPickerModal
         visible={isServerPickerVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => {
-          if (!isServerActionPending) {
-            setIsServerPickerVisible(false);
-          }
-        }}
-      >
-        <Pressable
-          style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}
-          onPress={() => {
-            if (!isServerActionPending) {
-              setIsServerPickerVisible(false);
-            }
-          }}
-        >
-          <Pressable
-            style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}
-            onPress={(event) => event.stopPropagation()}
-            testID="server-picker-modal"
-          >
-            <Text style={[styles.modalTitle, { color: colors.text }]}>
-              {t('serverPicker.title')}
-            </Text>
+        onClose={handleCloseServerPicker}
+        onSwitched={handleServerSwitched}
+        onDismissedWithoutServers={handleDismissedWithoutServers}
+      />
 
-            <View style={styles.serverList}>
-              {servers.length === 0 ? (
-                <Text style={[styles.serverRowSubtext, { color: colors.textSecondary }]}>
-                  {t('serverPicker.noServers')}
-                </Text>
-              ) : (
-                servers.map((server) => {
-                  const isActive = server.serverId === activeServerId;
-                  return (
-                    <View
-                      key={server.serverId}
-                      style={[styles.serverRow, { borderColor: colors.borderLight }]}
-                    >
-                      <TouchableOpacity
-                        style={styles.serverRowPressable}
-                        onPress={() => {
-                          if (!isActive) {
-                            void handleSwitchToServer(server.serverId);
-                          }
-                        }}
-                        disabled={isServerActionPending}
-                        testID={`server-picker-row-${server.serverId}`}
-                      >
-                        <View style={styles.serverRowContent}>
-                          <Text style={[styles.serverRowTitle, { color: colors.text }]} numberOfLines={1}>
-                            {server.displayName || server.serverUrl}
-                          </Text>
-                          {server.displayName ? (
-                            <Text style={[styles.serverRowSubtext, { color: colors.textSecondary }]} numberOfLines={1}>
-                              {server.serverUrl}
-                            </Text>
-                          ) : null}
-                        </View>
-                        {isActive ? <CircleCheck size={20} color={colors.primary} /> : null}
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={() => handleOpenRenameServer(server)}
-                        disabled={isServerActionPending}
-                        style={styles.serverRowIconButton}
-                        hitSlop={{ top: 8, right: 0, bottom: 8, left: 8 }}
-                        accessibilityRole="button"
-                        accessibilityLabel={t('serverPicker.renameButton')}
-                        testID={`server-picker-rename-${server.serverId}`}
-                      >
-                        <Pencil size={18} color={colors.icon} />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={() => handleDeleteServer(server)}
-                        disabled={isServerActionPending}
-                        style={styles.serverRowIconButton}
-                        hitSlop={{ top: 8, right: 0, bottom: 8, left: 8 }}
-                        accessibilityRole="button"
-                        accessibilityLabel={t('serverPicker.deleteButton')}
-                        testID={`server-picker-delete-${server.serverId}`}
-                      >
-                        <Trash2 size={18} color={colors.error} />
-                      </TouchableOpacity>
-                    </View>
-                  );
-                })
-              )}
-            </View>
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalSecondaryButton, { borderColor: colors.border }]}
-                onPress={() => {
-                  if (!isServerActionPending) {
-                    setIsServerPickerVisible(false);
-                  }
-                }}
-                disabled={isServerActionPending}
-              >
-                <Text style={[styles.modalSecondaryText, { color: colors.textSecondary }]}>
-                  {t('common.close')}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.modalButton,
-                  { backgroundColor: colors.primary },
-                ]}
-                onPress={handleOpenServerSetup}
-                disabled={isServerActionPending}
-                testID="server-picker-add-submit"
-                accessibilityRole="button"
-                accessibilityLabel={t('serverPicker.addButton')}
-              >
-                <Text style={styles.modalPrimaryText}>
-                  {t('serverPicker.addButton')}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
-
-      <Modal
-        visible={isServerSetupVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={handleConfirmCancelSetup}
-      >
-        <Pressable
-          style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}
-          onPress={handleConfirmCancelSetup}
-        >
-          <Pressable
-            style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}
-            onPress={(event) => event.stopPropagation()}
-            testID="server-setup-modal"
-          >
-            <ServerSetupGate
-              testPrefix="server-picker-add"
-              onServerReady={async () => {
-                setIsServerActionPending(true);
-                let initialRefreshOk = false;
-                try {
-                  const ok = await refreshServerPickerData();
-                  initialRefreshOk = ok;
-                  if (!ok) {
-                    return;
-                  }
-                  const authenticated = await revalidateSession();
-                  setIsServerSetupVisible(false);
-                  setIsServerPickerVisible(false);
-                  if (authenticated) {
-                    props.navigation.closeDrawer();
-                  }
-                } catch {
-                  Alert.alert(t('common.error'), t('serverPicker.switchFailed'));
-                } finally {
-                  setIsServerActionPending(false);
-                  if (initialRefreshOk) {
-                    await refreshServerPickerData();
-                  }
-                }
-              }}
-              skipStoredServerCheck
-              setupFooter={(
-                <View style={styles.serverSetupActions}>
-                  <TouchableOpacity
-                    style={[styles.modalButton, styles.modalSecondaryButton, { borderColor: colors.border }]}
-                    onPress={handleBackToDashboardFromServerSetup}
-                    disabled={isServerActionPending}
-                    testID="server-picker-add-cancel"
-                    accessibilityRole="button"
-                    accessibilityLabel={t('common.close')}
-                  >
-                    <Text style={[styles.modalSecondaryText, { color: colors.textSecondary }]}>
-                      {t('common.close')}
-                    </Text>
-                  </TouchableOpacity>
-                  {isServerActionPending ? (
-                    <View style={styles.serverSetupPending}>
-                      <ActivityIndicator color={colors.primary} />
-                    </View>
-                  ) : null}
-                </View>
-              )}
-            />
-          </Pressable>
-        </Pressable>
-      </Modal>
-
-      <Modal
-        visible={renameServerTarget !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={handleDismissRenameServer}
-      >
-        <Pressable
-          style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}
-          onPress={handleDismissRenameServer}
-        >
-          <Pressable
-            style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}
-            onPress={(event) => event.stopPropagation()}
-            testID="server-rename-modal"
-          >
-            <Text style={[styles.modalTitle, { color: colors.text }]}>
-              {t('serverPicker.renameTitle')}
-            </Text>
-            <TextInput
-              style={[styles.modalInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
-              value={renameServerValue}
-              onChangeText={setRenameServerValue}
-              placeholder={t('serverPicker.renamePlaceholder')}
-              placeholderTextColor={colors.placeholder}
-              autoFocus
-              editable={!isServerActionPending}
-              returnKeyType="done"
-              onSubmitEditing={() => {
-                void handleSubmitRenameServer();
-              }}
-              testID="server-rename-input"
-            />
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalSecondaryButton, { borderColor: colors.border }]}
-                onPress={handleDismissRenameServer}
-                disabled={isServerActionPending}
-                testID="server-rename-cancel"
-              >
-                <Text style={[styles.modalSecondaryText, { color: colors.textSecondary }]}>
-                  {t('common.cancel')}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.modalButton,
-                  { backgroundColor: colors.primary },
-                  isServerActionPending && styles.modalButtonDisabled,
-                ]}
-                onPress={() => {
-                  void handleSubmitRenameServer();
-                }}
-                disabled={isServerActionPending}
-                testID="server-rename-submit"
-              >
-                <Text style={styles.modalPrimaryText}>
-                  {isServerActionPending ? t('settings.saving') : t('serverPicker.renameSave')}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
     </View>
   );
 }

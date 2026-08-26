@@ -13,6 +13,7 @@ import (
 )
 
 func TestGetProfileIconNoIconReturns404(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "noiconuser", "password123", false)
 	_, _, err := user.Client.GetProfileIcon(t.Context(), user.User.ID)
@@ -20,6 +21,7 @@ func TestGetProfileIconNoIconReturns404(t *testing.T) {
 }
 
 func TestGetProfileIconUnknownUserReturns404(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "iconrequester", "password123", false)
 	_, _, err := user.Client.GetProfileIcon(t.Context(), "unknownuser1234567890ab")
@@ -27,6 +29,7 @@ func TestGetProfileIconUnknownUserReturns404(t *testing.T) {
 }
 
 func TestGetProfileIconUnauthenticatedReturns401(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "iconauth", "password123", false)
 
@@ -45,6 +48,7 @@ func TestGetProfileIconUnauthenticatedReturns401(t *testing.T) {
 }
 
 func TestGetProfileIconOtherUserCanFetch(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	iconOwner := ts.createTestUser(t, "iconowner", "password123", false)
 	otherUser := ts.createTestUser(t, "iconviewer", "password123", false)
@@ -58,7 +62,22 @@ func TestGetProfileIconOtherUserCanFetch(t *testing.T) {
 	assert.Equal(t, "image/jpeg", contentType)
 }
 
+func TestUploadProfileIconOversizeReturns413(t *testing.T) {
+	t.Parallel()
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "iconoversize", "password123", false)
+
+	// profileIconMaxBytes (5 MB) is not configurable, so the payload has to
+	// actually clear it plus the multipart-overhead allowance to trip the 413
+	// path; content doesn't need to be a valid image since the size check runs
+	// before any content-type sniffing.
+	oversized := bytes.Repeat([]byte{0xFF}, 6_000_000)
+	_, err := user.Client.UploadProfileIcon(t.Context(), "big.png", bytes.NewReader(oversized))
+	assert.Equal(t, http.StatusRequestEntityTooLarge, client.StatusCode(err))
+}
+
 func TestDeleteProfileIconReturns204(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "deliconuser", "password123", false)
 
@@ -70,6 +89,7 @@ func TestDeleteProfileIconReturns204(t *testing.T) {
 }
 
 func TestDeleteProfileIconMakesIconInaccessible(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "deliconuser2", "password123", false)
 
@@ -84,12 +104,14 @@ func TestDeleteProfileIconMakesIconInaccessible(t *testing.T) {
 }
 
 func TestDeleteProfileIconIdempotent(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "nodeliconuser", "password123", false)
 	require.NoError(t, user.Client.DeleteProfileIcon(t.Context()))
 }
 
 func TestDeleteProfileIconUnauthenticatedReturns401(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	c := ts.newClient()
 	err := c.DeleteProfileIcon(t.Context())

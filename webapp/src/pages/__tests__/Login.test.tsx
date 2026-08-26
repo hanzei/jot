@@ -1,75 +1,79 @@
-import { render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { MemoryRouter } from 'react-router'
-import Login from '../Login'
-import { auth } from '@/utils/api'
-import { setUser, setSettings } from '@/utils/auth'
-import i18n from '@/i18n'
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { MemoryRouter } from 'react-router';
+import Login from '../Login';
+import { auth } from '@/utils/api';
+import { setUser, setSettings } from '@/utils/auth';
+import i18n from '@/i18n';
 
 vi.mock('@/utils/api', () => ({
   auth: {
     login: vi.fn(),
   },
-}))
+}));
 
 vi.mock('@/utils/auth', () => ({
   setUser: vi.fn(),
   setSettings: vi.fn(),
-}))
+}));
 
-const renderLogin = (props?: { registrationEnabled?: boolean; onLogin?: () => void }) => {
-  const onLogin = props?.onLogin ?? vi.fn()
-  const registrationEnabled = props?.registrationEnabled ?? true
+const renderLogin = (props?: {
+  registrationEnabled?: boolean;
+  onLogin?: () => void;
+  initialEntry?: string;
+}) => {
+  const onLogin = props?.onLogin ?? vi.fn();
+  const registrationEnabled = props?.registrationEnabled ?? true;
 
   return {
     onLogin,
     ...render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[props?.initialEntry ?? '/login']}>
         <Login onLogin={onLogin} registrationEnabled={registrationEnabled} />
       </MemoryRouter>
     ),
-  }
-}
+  };
+};
 
 describe('Login', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-  })
+    vi.clearAllMocks();
+  });
 
   it('shows logo and registration link when registration is enabled', () => {
-    renderLogin()
+    renderLogin();
 
-    expect(screen.getByRole('img', { name: i18n.t('auth.logoAlt') })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: i18n.t('auth.createNewAccount') })).toHaveAttribute('href', '/register')
-  })
+    expect(screen.getByRole('img', { name: i18n.t('auth.logoAlt') })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: i18n.t('auth.createNewAccount') })).toHaveAttribute('href', '/register');
+  });
 
   it('hides registration link when registration is disabled', () => {
-    renderLogin({ registrationEnabled: false })
+    renderLogin({ registrationEnabled: false });
 
-    expect(screen.queryByRole('link', { name: i18n.t('auth.createNewAccount') })).not.toBeInTheDocument()
-  })
+    expect(screen.queryByRole('link', { name: i18n.t('auth.createNewAccount') })).not.toBeInTheDocument();
+  });
 
   it('toggles password visibility', async () => {
-    const user = userEvent.setup()
-    renderLogin()
+    const user = userEvent.setup();
+    renderLogin();
 
-    const passwordLabel = i18n.t('auth.passwordPlaceholder')
-    const showPasswordLabel = `${i18n.t('auth.showPassword')} (${passwordLabel})`
-    const hidePasswordLabel = `${i18n.t('auth.hidePassword')} (${passwordLabel})`
-    const passwordInput = screen.getByLabelText(passwordLabel)
-    expect(passwordInput).toHaveAttribute('type', 'password')
+    const passwordLabel = i18n.t('auth.passwordPlaceholder');
+    const showPasswordLabel = `${i18n.t('auth.showPassword')} (${passwordLabel})`;
+    const hidePasswordLabel = `${i18n.t('auth.hidePassword')} (${passwordLabel})`;
+    const passwordInput = screen.getByLabelText(passwordLabel);
+    expect(passwordInput).toHaveAttribute('type', 'password');
 
-    await user.click(screen.getByRole('button', { name: showPasswordLabel }))
-    expect(passwordInput).toHaveAttribute('type', 'text')
+    await user.click(screen.getByRole('button', { name: showPasswordLabel }));
+    expect(passwordInput).toHaveAttribute('type', 'text');
 
-    await user.click(screen.getByRole('button', { name: hidePasswordLabel }))
-    expect(passwordInput).toHaveAttribute('type', 'password')
-  })
+    await user.click(screen.getByRole('button', { name: hidePasswordLabel }));
+    expect(passwordInput).toHaveAttribute('type', 'password');
+  });
 
   it('submits credentials and calls login callbacks', async () => {
-    const user = userEvent.setup()
-    const onLogin = vi.fn()
+    const user = userEvent.setup();
+    const onLogin = vi.fn();
     const expectedUser = {
       id: 'u1',
       username: 'jotuser',
@@ -79,47 +83,54 @@ describe('Login', () => {
       has_profile_icon: false,
       created_at: '',
       updated_at: '',
-    }
+    };
     const expectedSettings = {
       user_id: 'u1',
       language: 'system',
       theme: 'system' as const,
       note_sort: 'manual' as const,
       updated_at: '',
-    }
+    };
     vi.mocked(auth.login).mockResolvedValue({
       user: expectedUser,
       settings: expectedSettings,
-    })
+    });
 
-    renderLogin({ onLogin })
+    renderLogin({ onLogin });
 
-    await user.type(screen.getByLabelText(i18n.t('auth.usernamePlaceholder')), 'jotuser')
-    await user.type(screen.getByLabelText(i18n.t('auth.passwordPlaceholder')), 'secret')
-    await user.click(screen.getByRole('button', { name: i18n.t('auth.signIn') }))
+    await user.type(screen.getByLabelText(i18n.t('auth.usernamePlaceholder')), 'jotuser');
+    await user.type(screen.getByLabelText(i18n.t('auth.passwordPlaceholder')), 'secret');
+    await user.click(screen.getByRole('button', { name: i18n.t('auth.signIn') }));
 
     await waitFor(() => {
-      expect(auth.login).toHaveBeenCalledWith({ username: 'jotuser', password: 'secret' })
-      expect(setUser).toHaveBeenCalledWith(expectedUser)
-      expect(setSettings).toHaveBeenCalledWith(expectedSettings)
-      expect(onLogin).toHaveBeenCalled()
-    })
-  })
+      expect(auth.login).toHaveBeenCalledWith({ username: 'jotuser', password: 'secret' });
+      expect(setUser).toHaveBeenCalledWith(expectedUser);
+      expect(setSettings).toHaveBeenCalledWith(expectedSettings);
+      expect(onLogin).toHaveBeenCalled();
+    });
+  });
+
+  it('carries the redirect target over to the registration link', () => {
+    renderLogin({ initialEntry: `/login?continue=${encodeURIComponent('/notes/abc123')}` });
+
+    expect(screen.getByRole('link', { name: i18n.t('auth.createNewAccount') }))
+      .toHaveAttribute('href', '/register?continue=%2Fnotes%2Fabc123');
+  });
 
   it('shows styled alert when login fails', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup();
     vi.mocked(auth.login).mockRejectedValue({
       response: { data: 'Invalid credentials' },
-    })
+    });
 
-    renderLogin()
+    renderLogin();
 
-    await user.type(screen.getByLabelText(i18n.t('auth.usernamePlaceholder')), 'jotuser')
-    await user.type(screen.getByLabelText(i18n.t('auth.passwordPlaceholder')), 'wrong')
-    await user.click(screen.getByRole('button', { name: i18n.t('auth.signIn') }))
+    await user.type(screen.getByLabelText(i18n.t('auth.usernamePlaceholder')), 'jotuser');
+    await user.type(screen.getByLabelText(i18n.t('auth.passwordPlaceholder')), 'wrong');
+    await user.click(screen.getByRole('button', { name: i18n.t('auth.signIn') }));
 
-    const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent('Invalid credentials')
-    expect(alert.querySelector('svg')).toBeTruthy()
-  })
-})
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Invalid credentials');
+    expect(alert.querySelector('svg')).toBeTruthy();
+  });
+});

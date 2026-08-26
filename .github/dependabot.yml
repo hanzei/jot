@@ -1,0 +1,46 @@
+# Dependabot version updates.
+#
+# Deliberately narrow: GitHub Actions only. Every other ecosystem is updated by
+# hand via the commands in `.claude/commands/`, which encode ordering and coupling
+# constraints Dependabot cannot express — see "Dependency Updates" in CLAUDE.md
+# for why each ecosystem is absent:
+#
+#   npm     — shared/ must be updated before webapp/ and mobile/ (both compile
+#             `shared/src` directly through the `file:../shared` link), mobile's
+#             versions are dictated by the Expo SDK rather than by "latest", and
+#             webapp pins transitive fixes in an `overrides` block and a
+#             Playwright browser build that Dependabot does not know to keep in
+#             step with `@playwright/test`.
+#   gomod   — the OpenTelemetry packages are a coupled set spanning four version
+#             lines, and a `swag` bump leaves `server/docs/` stale until someone
+#             runs `task gen-docs`, which CI then fails on.
+#   docker  — the Dockerfile's Node and Go base images are pinned to the same
+#             versions as `.nvmrc` and `server/go.mod`; bumping the image alone
+#             would silently desync them. Owned by `update-docker-deps`.
+#
+# The one ecosystem that is here also has a command: `update-github-actions`.
+# The two do not overlap so much as nest. Dependabot re-pins existing actions to
+# current SHAs, which is the part that rots on its own; the command bumps majors,
+# reconciles an action pinned to two different SHAs across workflows, and
+# reviews runner labels, permissions, and path filters — none of which
+# Dependabot touches. Keep both.
+#
+# Security updates are a separate, settings-level feature and are unaffected by
+# this file — they continue to open PRs for every ecosystem, including the ones
+# left out above.
+version: 2
+
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    # One PR for all action bumps rather than one per action — 13 distinct
+    # actions across 66 `uses:` refs would otherwise be 13 PRs a month.
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    commit-message:
+      # Dependabot appends its own "(deps)" scope, giving "chore(deps): ...".
+      prefix: "chore"

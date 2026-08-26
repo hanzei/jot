@@ -1,4 +1,3 @@
-import React from 'react';
 import { Alert } from 'react-native';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import LabelPicker from '../src/components/LabelPicker';
@@ -92,11 +91,13 @@ describe('LabelPicker', () => {
     const { promise, resolve } = deferred<unknown>();
     mockAddLabelMutateAsync.mockReturnValue(promise);
 
-    const { getByTestId, queryByTestId } = render(
+    const { getByTestId, queryByTestId } = await render(
       <LabelPicker visible noteId="note-1" noteLabels={[]} onClose={jest.fn()} />,
     );
 
-    fireEvent.press(getByTestId('label-item-label-1'));
+    // Not awaited: the triggered mutation is deliberately left pending, and
+    // awaiting fireEvent would wait for that whole chain to settle.
+    void fireEvent.press(getByTestId('label-item-label-1'));
 
     await waitFor(() => {
       expect(getByTestId('label-item-label-1-spinner')).toBeTruthy();
@@ -116,11 +117,13 @@ describe('LabelPicker', () => {
     const { promise, resolve } = deferred<unknown>();
     mockRemoveLabelMutateAsync.mockReturnValue(promise);
 
-    const { getByTestId, queryByTestId } = render(
-      <LabelPicker visible noteId="note-1" noteLabels={[labels[0]]} onClose={jest.fn()} />,
+    const { getByTestId, queryByTestId } = await render(
+      <LabelPicker visible noteId="note-1" noteLabels={[labels[0]!]} onClose={jest.fn()} />,
     );
 
-    fireEvent.press(getByTestId('label-item-label-1'));
+    // Not awaited: the triggered mutation is deliberately left pending, and
+    // awaiting fireEvent would wait for that whole chain to settle.
+    void fireEvent.press(getByTestId('label-item-label-1'));
 
     await waitFor(() => {
       expect(getByTestId('label-item-label-1-spinner')).toBeTruthy();
@@ -139,12 +142,14 @@ describe('LabelPicker', () => {
     const { promise, resolve } = deferred<unknown>();
     mockAddLabelMutateAsync.mockReturnValue(promise);
 
-    const { getByTestId, queryByTestId } = render(
+    const { getByTestId, queryByTestId } = await render(
       <LabelPicker visible noteId="note-1" noteLabels={[]} onClose={jest.fn()} />,
     );
 
-    fireEvent.changeText(getByTestId('new-label-input'), 'Errands');
-    fireEvent.press(getByTestId('add-label-btn'));
+    await fireEvent.changeText(getByTestId('new-label-input'), 'Errands');
+    // Not awaited: the triggered mutation is deliberately left pending, and
+    // awaiting fireEvent would wait for that whole chain to settle.
+    void fireEvent.press(getByTestId('add-label-btn'));
 
     await waitFor(() => {
       expect(getByTestId('add-label-btn-spinner')).toBeTruthy();
@@ -163,11 +168,11 @@ describe('LabelPicker', () => {
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
     mockAddLabelMutateAsync.mockRejectedValue(new Error('network error'));
 
-    const { getByTestId, queryByTestId } = render(
+    const { getByTestId, queryByTestId } = await render(
       <LabelPicker visible noteId="note-1" noteLabels={[]} onClose={jest.fn()} />,
     );
 
-    fireEvent.press(getByTestId('label-item-label-1'));
+    await fireEvent.press(getByTestId('label-item-label-1'));
 
     await waitFor(() => {
       expect(alertSpy).toHaveBeenCalledWith('common.error', 'labels.failedUpdate');

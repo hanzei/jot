@@ -73,12 +73,12 @@ func (s *NoteStore) Update(ctx context.Context, id string, userID string, title,
 	return s.inner.Update(ctx, id, userID, title, content, color, pinned, archived, checkedItemsCollapsed, baseVersion)
 }
 
-func (s *NoteStore) ConvertType(ctx context.Context, id, userID string, targetType NoteType, content string, targetItems []NewNoteItem, baseVersion *int) (_ *Note, err error) {
+func (s *NoteStore) ConvertType(ctx context.Context, id, userID string, targetType NoteType, title, content string, targetItems []NewNoteItem, baseVersion *int) (_ *Note, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.ConvertType", &err,
 		attribute.String("note.id", id),
 	)
 	defer end()
-	return s.inner.ConvertType(ctx, id, userID, targetType, content, targetItems, baseVersion)
+	return s.inner.ConvertType(ctx, id, userID, targetType, title, content, targetItems, baseVersion)
 }
 
 func (s *NoteStore) Delete(ctx context.Context, id string, userID string) (_ []string, err error) {
@@ -137,15 +137,6 @@ func (s *NoteStore) CreateItemWithCompleted(ctx context.Context, noteID string, 
 	)
 	defer end()
 	return s.inner.CreateItemWithCompleted(ctx, noteID, text, position, completed, parentID, assignedTo)
-}
-
-func (s *NoteStore) GetItemForNote(ctx context.Context, noteID, itemID string) (_ *NoteItem, err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.GetItemForNote", &err,
-		attribute.String("note.id", noteID),
-		attribute.String("item.id", itemID),
-	)
-	defer end()
-	return s.inner.GetItemForNote(ctx, noteID, itemID)
 }
 
 func (s *NoteStore) CreateItemWithID(ctx context.Context, noteID, itemID, text string, position int, completed bool, parentID string, assignedTo string, maxItems int) (_ *NoteItem, err error) {

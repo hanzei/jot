@@ -40,11 +40,12 @@ export default function AssigneePicker({ collaborators, currentAssigneeId, onAss
   }, [onClose]);
 
   const handleSelect = useCallback((index: number) => {
-    if (index < collaborators.length) {
-      const c = collaborators[index];
+    const c = collaborators[index];
+    if (c) {
       const isSelected = c.userId === currentAssigneeId;
       onAssign(isSelected ? '' : c.userId);
     } else {
+      // The "unassign" row, one past the collaborators.
       onAssign('');
     }
     onClose();

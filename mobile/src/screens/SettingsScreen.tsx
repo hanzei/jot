@@ -1,4 +1,4 @@
-import React, { useContext } from 'react';
+import { useContext } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,6 @@ import type { RootStackParamList } from '../navigation/RootNavigator';
 import { ArrowLeft } from 'lucide-react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../store/AuthContext';
-import { useBannerShown } from '../hooks/useBannerShown';
 import { styles } from './settings/styles';
 import ProfileIconSection from './settings/ProfileIconSection';
 import AccountSection from './settings/AccountSection';
@@ -30,14 +29,13 @@ import ConnectToServerSection from './settings/ConnectToServerSection';
 
 export default function SettingsScreen() {
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
-  const bannerShown = useBannerShown();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'Settings'>>();
   const { colors } = useTheme();
   const { t } = useTranslation();
   const { isLocalMode } = useAuth();
 
   return (
-    <View style={[styles.container, { paddingTop: bannerShown ? 0 : insets.top, backgroundColor: colors.background }]}>
+    <View style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.background }]}>
       <View style={[styles.header, { borderBottomColor: colors.borderLight, backgroundColor: colors.background }]}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}

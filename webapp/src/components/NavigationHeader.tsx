@@ -1,4 +1,5 @@
-import { ReactNode, useState } from 'react';
+import type { ReactNode} from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation } from 'react-router';
 import { Menu as MenuIcon } from 'lucide-react';
@@ -10,15 +11,15 @@ import { buildMobileDeepLink } from '@/utils/deepLink';
 import { dismissMobileAppBanner, isMobileAppBannerDismissed } from '@/utils/mobileAppBanner';
 
 interface NavigationHeaderProps {
-  title?: string;
+  title?: string | undefined;
   onLogout: () => void;
   children?: ReactNode; // For content like search bar between title and user menu
-  username?: string;
-  isAdmin?: boolean;
-  adminLinkActive?: boolean;
-  settingsLinkActive?: boolean;
+  username?: string | undefined;
+  isAdmin?: boolean | undefined;
+  adminLinkActive?: boolean | undefined;
+  settingsLinkActive?: boolean | undefined;
   onToggleSidebar?: () => void;
-  onOpenKeyboardShortcuts?: () => void;
+  onOpenKeyboardShortcuts?: (() => void) | undefined;
 }
 
 interface ProfileMenuProps {
@@ -30,7 +31,7 @@ interface ProfileMenuProps {
   adminLinkActive: boolean | undefined;
   settingsLinkActive: boolean | undefined;
   onLogout: () => void;
-  onOpenKeyboardShortcuts?: () => void;
+  onOpenKeyboardShortcuts?: (() => void) | undefined;
 }
 
 const ProfileMenu = ({ iconSrc, displayUsername, firstName, baseUsername, showAdminLink, adminLinkActive, settingsLinkActive, onLogout, onOpenKeyboardShortcuts }: ProfileMenuProps) => {

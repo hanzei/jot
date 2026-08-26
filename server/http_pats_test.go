@@ -57,6 +57,7 @@ func listPATs(t *testing.T, ts *TestServer, tu *TestUser) []patResponse {
 }
 
 func TestPATs(t *testing.T) {
+	t.Parallel()
 	t.Run("create returns token once", func(t *testing.T) {
 		ts := setupTestServer(t)
 		u := ts.createTestUser(t, "alice", "password123", false)

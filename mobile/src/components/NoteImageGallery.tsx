@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { View, Image, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { CloudOff, RefreshCw, Trash2, X } from 'lucide-react-native';
@@ -73,11 +73,14 @@ export default function NoteImageGallery({ images, editable = false, uploads = [
   // remove button there, so when an image exists, swap it into that slot
   // instead (only reachable when uploads alone already fill every visible
   // slot, i.e. 4+ concurrent uploads).
-  if (overlayCount > 0 && tiles[visibleCount - 1].kind === 'upload') {
+  const overlayTile = tiles[visibleCount - 1];
+  if (overlayCount > 0 && overlayTile?.kind === 'upload') {
     const imageIndex = tiles.findIndex((tile) => tile.kind === 'image');
-    if (imageIndex >= visibleCount) {
+    const imageTile = tiles[imageIndex];
+    if (imageTile && imageIndex >= visibleCount) {
       const swapped = [...tiles];
-      [swapped[visibleCount - 1], swapped[imageIndex]] = [swapped[imageIndex], swapped[visibleCount - 1]];
+      swapped[visibleCount - 1] = imageTile;
+      swapped[imageIndex] = overlayTile;
       tiles = swapped;
     }
   }
@@ -235,7 +238,8 @@ export default function NoteImageGallery({ images, editable = false, uploads = [
           testID="note-image-banner-container"
           onLayout={(e) => setBannerWidth(e.nativeEvent.layout.width)}
         >
-          {renderTile(visibleTiles[0], 0)}
+          {/* Not a grid means exactly one tile — zero returned null above. */}
+          {renderTile(visibleTiles[0]!, 0)}
         </View>
       )}
       <ImageLightbox

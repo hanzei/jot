@@ -1,4 +1,3 @@
-import React from 'react';
 import { render, act } from '@testing-library/react-native';
 import { Text } from 'react-native';
 import { SSEProvider, useSSEContext } from '../src/store/SSEContext';
@@ -35,14 +34,14 @@ function renderProbe() {
 
 // Drive a status change and flush the resulting effect (which arms/clears the
 // banner timer) before any subsequent timer advance.
-function emitStatus(status: Parameters<SSEStatusChangeCallback>[0]) {
-  act(() => {
+async function emitStatus(status: Parameters<SSEStatusChangeCallback>[0]) {
+  await act(() => {
     capturedStatusChange?.(status);
   });
 }
 
-function advance(ms: number) {
-  act(() => {
+async function advance(ms: number) {
+  await act(() => {
     jest.advanceTimersByTime(ms);
   });
 }
@@ -58,46 +57,46 @@ describe('SSEProvider reconnect banner gating', () => {
     jest.useRealTimers();
   });
 
-  it('never surfaces the banner for a slow initial connect, however long it takes', () => {
+  it('never surfaces the banner for a slow initial connect, however long it takes', async () => {
     // The "closed for a while" cold start: a fresh connect reports 'connecting'
     // the whole time it wakes the radio / redoes the TLS handshake. No matter how
     // long that takes, it must not flash the "Connecting to server…" banner.
-    const { getByText } = renderProbe();
+    const { getByText } = await renderProbe();
 
-    emitStatus('connecting');
-    advance(SSE_BANNER_DELAY_MS * 3);
+    await emitStatus('connecting');
+    await advance(SSE_BANNER_DELAY_MS * 3);
     expect(getByText('idle')).toBeTruthy();
 
     // It eventually connects — still no banner, no flash.
-    emitStatus('connected');
+    await emitStatus('connected');
     expect(getByText('idle')).toBeTruthy();
   });
 
-  it('does not surface the banner for a reconnect that recovers before the delay', () => {
-    const { getByText } = renderProbe();
+  it('does not surface the banner for a reconnect that recovers before the delay', async () => {
+    const { getByText } = await renderProbe();
 
     // A connection attempt fails and a retry is pending, but it recovers well
     // within the threshold.
-    emitStatus('reconnecting');
-    advance(SSE_BANNER_DELAY_MS - 1000);
-    emitStatus('connected');
+    await emitStatus('reconnecting');
+    await advance(SSE_BANNER_DELAY_MS - 1000);
+    await emitStatus('connected');
 
     // Even after the original timer would have fired, the banner stays hidden.
-    advance(SSE_BANNER_DELAY_MS);
+    await advance(SSE_BANNER_DELAY_MS);
 
     expect(getByText('idle')).toBeTruthy();
   });
 
-  it('surfaces the banner once a reconnect outlasts the delay', () => {
-    const { getByText } = renderProbe();
+  it('surfaces the banner once a reconnect outlasts the delay', async () => {
+    const { getByText } = await renderProbe();
 
-    emitStatus('reconnecting');
-    advance(SSE_BANNER_DELAY_MS);
+    await emitStatus('reconnecting');
+    await advance(SSE_BANNER_DELAY_MS);
 
     expect(getByText('reconnecting')).toBeTruthy();
 
     // Recovering clears the banner immediately.
-    emitStatus('connected');
+    await emitStatus('connected');
     expect(getByText('idle')).toBeTruthy();
   });
 });

@@ -11,6 +11,7 @@ import (
 )
 
 func TestListSessions(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "sessionlist", "password123", false)
 
@@ -24,6 +25,7 @@ func TestListSessions(t *testing.T) {
 }
 
 func TestListSessionsUnauthenticated(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	c := ts.newClient()
 
@@ -32,6 +34,7 @@ func TestListSessionsUnauthenticated(t *testing.T) {
 }
 
 func TestListSessionsMultiple(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 
 	_ = ts.createTestUser(t, "multisess", "password123", false)
@@ -58,6 +61,7 @@ func TestListSessionsMultiple(t *testing.T) {
 }
 
 func TestRevokeSession(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 
 	_ = ts.createTestUser(t, "revoke", "password123", false)
@@ -89,6 +93,7 @@ func TestRevokeSession(t *testing.T) {
 }
 
 func TestRevokeCurrentSessionFails(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "revokeself", "password123", false)
 
@@ -101,6 +106,7 @@ func TestRevokeCurrentSessionFails(t *testing.T) {
 }
 
 func TestRevokeSessionNotFound(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "revokenotfound", "password123", false)
 
@@ -109,6 +115,7 @@ func TestRevokeSessionNotFound(t *testing.T) {
 }
 
 func TestRevokeSessionUnauthenticated(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	c := ts.newClient()
 
@@ -117,6 +124,7 @@ func TestRevokeSessionUnauthenticated(t *testing.T) {
 }
 
 func TestRevokedSessionCannotAuthenticate(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 
 	user := ts.createTestUser(t, "revokecheck", "password123", false)
@@ -145,6 +153,7 @@ func TestRevokedSessionCannotAuthenticate(t *testing.T) {
 }
 
 func TestSessionUserAgentStored(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 
 	// Register a user first (with default UA)
@@ -191,6 +200,7 @@ func (u *uaRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func TestSessionCapEvictsOldest(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 
 	_ = ts.createTestUser(t, "capuser", "password123", false)
@@ -211,6 +221,7 @@ func TestSessionCapEvictsOldest(t *testing.T) {
 }
 
 func TestSessionCrossUserIsolation(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user1 := ts.createTestUser(t, "isolate1", "password123", false)
 	user2 := ts.createTestUser(t, "isolate2", "password123", false)

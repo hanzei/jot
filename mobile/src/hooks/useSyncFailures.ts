@@ -17,11 +17,13 @@ import {
   permanentDeleteLocalNote,
   markLocalNoteDeleted,
 } from '../db/noteQueries';
+import { reassignPendingImageUploads } from '../db/imageUploadQueue';
 import { getNote } from '../api/notes';
 import { useCreateNote } from './useNotes';
 import { useOfflineContext } from '../store/OfflineContext';
 import {
   deadLettersQueryKey,
+  labelCountsQueryKey,
   noteLocalQueryScopeKey,
   notesLocalQueryScopeKey,
 } from './queryKeys';
@@ -112,6 +114,12 @@ export async function reconcileDiscard(db: SQLiteDatabase, dl: DeadLetteredOpera
  * Fork the preserved local content into a brand-new note via `createNote`, then
  * accept server state for the original (#493). The fork happens first and the
  * original is dropped only on success, so a failure here can never lose bytes.
+ *
+ * A dead-lettered `create` means the original note never reached the server,
+ * so an image captured for it before the failure surfaced is still sitting in
+ * the offline upload queue against the abandoned note id (drainImageUploadQueue
+ * skips uploading it there, per issue #834). Reassign any such rows to the
+ * fork before `reconcileDiscard` deletes the original and cascades them away.
  */
 export async function keepThenDiscard(
   db: SQLiteDatabase,
@@ -121,7 +129,14 @@ export async function keepThenDiscard(
   if (dl.note_id) {
     const note = await getLocalNote(db, dl.note_id);
     if (note) {
-      await createNote(buildCreateRequestFromNote(note));
+      const forked = await createNote(buildCreateRequestFromNote(note));
+      // Only a dead-lettered `create` makes reconcileDiscard below delete the
+      // original note (an `update`/other failure keeps it and just clears the
+      // failed flag) — reassign queued uploads only in that case, or this
+      // would wrongly strip them from a note that isn't going anywhere.
+      if (dl.operation === 'create') {
+        await reassignPendingImageUploads(db, dl.note_id, forked.id);
+      }
     }
   }
   await reconcileDiscard(db, dl);
@@ -153,6 +168,10 @@ export function useSyncFailures() {
     queryClient.invalidateQueries({ queryKey: deadLettersQueryKey() });
     queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
     queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
+    // Resolving can delete a discarded local create, tombstone a note the server
+    // no longer has, or replace a note wholesale with the server's copy — each of
+    // which changes what its labels count.
+    queryClient.invalidateQueries({ queryKey: labelCountsQueryKey() });
     refreshSyncFailures();
   }, [queryClient, refreshSyncFailures]);
 

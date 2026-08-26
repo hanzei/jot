@@ -20,7 +20,15 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, v any) error {
 	return json.NewDecoder(r.Body).Decode(v)
 }
 
-var usernameRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+// usernameRegex is lower case only. Usernames are compared as raw bytes by the
+// UNIQUE index on users.username, so restricting the stored character set to
+// lower case is what makes that index case-insensitive in effect: "Ben" cannot
+// be stored alongside "ben" because "Ben" cannot be stored at all. Login folds
+// its input before the lookup (models.userStore.GetByUsername), so a user who
+// types "Ben" at the login form still signs in.
+//
+// Keep in sync with shared/src/usernameValidation.ts, used by both webapp and mobile.
+var usernameRegex = regexp.MustCompile(`^[a-z0-9_-]+$`)
 
 var hexColorRegex = regexp.MustCompile(`^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
 
@@ -55,9 +63,9 @@ func validateUsername(username string) error {
 		return errors.New("username must be 30 characters or fewer")
 	}
 
-	// Username can only contain letters, numbers, underscores, and hyphens
+	// Username can only contain lowercase letters, numbers, underscores, and hyphens
 	if !usernameRegex.MatchString(username) {
-		return errors.New("username can only contain letters, numbers, underscores, and hyphens")
+		return errors.New("username can only contain lowercase letters, numbers, underscores, and hyphens")
 	}
 
 	// Username cannot start or end with underscore or hyphen

@@ -140,11 +140,12 @@ func (h *LabelsHandler) GetLabelCounts(w http.ResponseWriter, r *http.Request) (
 //	@Accept		json
 //	@Produce	json
 //	@Param		body	body		AddLabelRequest	true	"Label name and optional client-supplied ID"
-//	@Success	200		{object}	models.Label
-//	@Failure	400		{string}	string	"bad request"
-//	@Failure	401		{string}	string	"unauthorized"
-//	@Failure	409		{string}	string	"label already exists"
-//	@Failure	500		{string}	string	"internal server error"
+//	@Success	200		{object}	models.Label	"an existing label with that name was returned unchanged"
+//	@Success	201		{object}	models.Label	"a new label was created"
+//	@Failure	400		{string}	string			"bad request"
+//	@Failure	401		{string}	string			"unauthorized"
+//	@Failure	409		{string}	string			"label already exists"
+//	@Failure	500		{string}	string			"internal server error"
 //	@Router		/labels [post]
 func (h *LabelsHandler) CreateLabel(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -163,8 +164,9 @@ func (h *LabelsHandler) CreateLabel(w http.ResponseWriter, r *http.Request) (int
 	}
 
 	var (
-		label *models.Label
-		err   error
+		label   *models.Label
+		created bool
+		err     error
 	)
 	if req.ID != "" {
 		if !models.IsValidID(req.ID) {
@@ -180,8 +182,11 @@ func (h *LabelsHandler) CreateLabel(w http.ResponseWriter, r *http.Request) (int
 			}
 			return http.StatusInternalServerError, nil, fmt.Errorf("create label: %w", err)
 		}
+		// A client-supplied ID means a real create: a name match on an existing
+		// label is a 409 above, never a silent hand-back.
+		created = true
 	} else {
-		label, err = h.labelStore.GetOrCreateLabel(r.Context(), user.ID, req.Name)
+		label, created, err = h.labelStore.GetOrCreateLabel(r.Context(), user.ID, req.Name)
 		if err != nil {
 			return http.StatusInternalServerError, nil, fmt.Errorf("get or create label: %w", err)
 		}
@@ -197,6 +202,14 @@ func (h *LabelsHandler) CreateLabel(w http.ResponseWriter, r *http.Request) (int
 		})
 	}
 
+	// 201 when a label was inserted, 200 when an existing one was returned
+	// unchanged. Without an ID this endpoint is get-or-create — the webapp and
+	// mobile add labels by typing a name, and offline replay needs the create to
+	// be idempotent — so which of the two happened is not knowable from the
+	// request alone, and the status code is what tells the client.
+	if created {
+		return http.StatusCreated, label, nil
+	}
 	return http.StatusOK, label, nil
 }
 
@@ -291,7 +304,7 @@ func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, a
 		return http.StatusBadRequest, nil, errors.New("label name is required")
 	}
 
-	label, err := h.labelStore.GetOrCreateLabel(r.Context(), user.ID, req.Name)
+	label, _, err := h.labelStore.GetOrCreateLabel(r.Context(), user.ID, req.Name)
 	if err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("get or create label: %w", err)
 	}

@@ -26,7 +26,8 @@ export const AVATAR_COLORS = [
 ];
 
 export function getAvatarColor(username: string): string {
-  return AVATAR_COLORS[hashUsername(username) % AVATAR_COLORS.length];
+  // hashUsername returns a non-negative number, so the modulo is in range.
+  return AVATAR_COLORS[hashUsername(username) % AVATAR_COLORS.length]!;
 }
 
 /** Colors light enough to need a visible border on white backgrounds. */
@@ -44,3 +45,17 @@ export const NOTE_COLORS = [
   '#e6c9a8',
   '#e8eaed',
 ] as const;
+
+/** Maps each NOTE_COLORS hex value to its i18n key (webapp/mobile locale `note.*` keys). */
+export const NOTE_COLOR_NAME_KEYS: Record<(typeof NOTE_COLORS)[number], string> = {
+  '#ffffff': 'note.colorWhite',
+  '#f28b82': 'note.colorCoral',
+  '#fbbc04': 'note.colorYellow',
+  '#ccff90': 'note.colorLime',
+  '#a7ffeb': 'note.colorTeal',
+  '#aecbfa': 'note.colorPeriwinkle',
+  '#d7aefb': 'note.colorLavender',
+  '#fdcfe8': 'note.colorPink',
+  '#e6c9a8': 'note.colorSand',
+  '#e8eaed': 'note.colorGray',
+};

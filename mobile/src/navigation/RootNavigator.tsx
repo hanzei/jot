@@ -1,4 +1,3 @@
-import React from 'react';
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { NoteType } from '@jot/shared';
@@ -6,6 +5,7 @@ import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { SSEProvider } from '../store/SSEContext';
 import TopBanners from '../components/TopBanners';
+import { ContentSafeArea } from '../components/ContentSafeArea';
 import AuthStack from './AuthStack';
 import MainDrawer from './MainDrawer';
 import NoteEditorScreen from '../screens/NoteEditorScreen';
@@ -35,14 +35,17 @@ export type RootStackParamList = {
   // open from (and closed back onto) that card. originColor is that card's
   // note color, used to seed the editor's background so the zoom-open shows
   // the right color immediately instead of flashing white until the note
-  // hydrates from cache.
+  // hydrates from cache. openKey is a fresh unique value set by callers that
+  // open a new note (noteId: null) from a global effect that can fire while
+  // some other screen is already focused — see getNoteScreenId below.
   NoteEditor: {
     noteId: string | null;
     sharedText?: string;
     initialNoteType?: NoteType;
     readOnly?: boolean;
-    originRect?: LayoutRect;
-    originColor?: string;
+    originRect?: LayoutRect | undefined;
+    originColor?: string | undefined;
+    openKey?: string;
   };
   Share: { noteId: string };
   Settings: undefined;
@@ -57,88 +60,104 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 // Identify a NoteEditor/Share screen by the note it targets. Without this,
 // React Navigation matches routes by name only, so a deep link to a different
 // note while an editor is already open navigates back to the existing instance
-// and merely merges the new params. NoteEditorScreen seeds its state from the
+// and replaces its params in place. NoteEditorScreen seeds its state from the
 // initial params and does not react to later param changes, so it would keep
 // showing the first note. Keying on noteId makes a deep link to a different
 // note push a fresh screen instead of reusing the stale one.
-export const getNoteScreenId = ({ params }: { params?: { noteId?: string | null } }): string | undefined =>
-  params?.noteId ?? undefined;
+//
+// A brand-new note (noteId: null) has no natural id, so it falls back to
+// openKey. That fallback matters: when getId resolves to undefined, React
+// Navigation's NAVIGATE handling reuses the *current* route if it has the same
+// screen name, rather than pushing a new one. A quick action or share intent
+// that arrives while some other note's editor is still the focused screen (the
+// app was backgrounded mid-edit, then relaunched via the OS) would otherwise
+// navigate back into that same stale instance instead of opening a fresh note.
+// Callers that open a new note from such a global, async-arriving effect must
+// pass a freshly generated openKey to guarantee a new screen instance.
+export const getNoteScreenId = ({ params }: { params?: { noteId?: string | null; openKey?: string } }): string | undefined =>
+  params?.noteId ?? params?.openKey;
 
 function AuthenticatedStack() {
   return (
     <SSEProvider>
       <View style={styles.flex}>
         <TopBanners />
-        <Stack.Navigator>
-          <Stack.Screen name="MainDrawer" component={MainDrawer} options={{ headerShown: false }} />
-          <Stack.Screen
-            name="NoteEditor"
-            component={NoteEditorScreen}
-            getId={getNoteScreenId}
-            options={{
-              headerShown: false,
-              // The editor animates its own transform to zoom open from (and
-              // closed back onto) the tapped card. A transparent modal keeps the
-              // dashboard rendered behind so the card shows through while the
-              // editor is scaled down; the native present/dismiss animation is
-              // disabled so only the zoom is visible, and the swipe gesture is
-              // off so every exit routes through that zoom.
-              presentation: 'transparentModal',
-              animation: 'none',
-              gestureEnabled: false,
-              contentStyle: { backgroundColor: 'transparent' },
-            }}
-          />
-          <Stack.Screen
-            name="Share"
-            component={ShareScreen}
-            getId={getNoteScreenId}
-            options={{
-              headerShown: false,
-              presentation: 'modal',
-            }}
-          />
-          <Stack.Screen
-            name="Settings"
-            component={SettingsScreen}
-            options={{
-              headerShown: false,
-              presentation: 'modal',
-            }}
-          />
-          <Stack.Screen
-            name="SyncFailures"
-            component={SyncFailuresScreen}
-            options={{
-              headerShown: false,
-              presentation: 'modal',
-            }}
-          />
-          <Stack.Screen
-            name="Diagnostics"
-            component={DiagnosticsScreen}
-            options={{
-              headerShown: false,
-              presentation: 'modal',
-            }}
-          />
-          <Stack.Screen
-            name="LogsFullscreen"
-            component={LogsFullscreenScreen}
-            options={{
-              headerShown: false,
-              presentation: 'modal',
-            }}
-          />
-          <Stack.Screen
-            name="ConnectToServer"
-            component={ConnectToServerScreen}
-            options={{
-              headerShown: false,
-              presentation: 'modal',
-            }}
-          />
-        </Stack.Navigator>
+        {/* Everything below the banners sees a top inset of 0 while a banner is
+            shown, since the banner already pads the safe area. Keep it inside
+            this View and below <TopBanners /> — the banners need the real
+            inset. */}
+        <ContentSafeArea>
+          <Stack.Navigator>
+            <Stack.Screen name="MainDrawer" component={MainDrawer} options={{ headerShown: false }} />
+            <Stack.Screen
+              name="NoteEditor"
+              component={NoteEditorScreen}
+              getId={getNoteScreenId}
+              options={{
+                headerShown: false,
+                // The editor animates its own transform to zoom open from (and
+                // closed back onto) the tapped card. A transparent modal keeps the
+                // dashboard rendered behind so the card shows through while the
+                // editor is scaled down; the native present/dismiss animation is
+                // disabled so only the zoom is visible, and the swipe gesture is
+                // off so every exit routes through that zoom.
+                presentation: 'transparentModal',
+                animation: 'none',
+                gestureEnabled: false,
+                contentStyle: { backgroundColor: 'transparent' },
+              }}
+            />
+            <Stack.Screen
+              name="Share"
+              component={ShareScreen}
+              getId={getNoteScreenId}
+              options={{
+                headerShown: false,
+                presentation: 'modal',
+              }}
+            />
+            <Stack.Screen
+              name="Settings"
+              component={SettingsScreen}
+              options={{
+                headerShown: false,
+                presentation: 'modal',
+              }}
+            />
+            <Stack.Screen
+              name="SyncFailures"
+              component={SyncFailuresScreen}
+              options={{
+                headerShown: false,
+                presentation: 'modal',
+              }}
+            />
+            <Stack.Screen
+              name="Diagnostics"
+              component={DiagnosticsScreen}
+              options={{
+                headerShown: false,
+                presentation: 'modal',
+              }}
+            />
+            <Stack.Screen
+              name="LogsFullscreen"
+              component={LogsFullscreenScreen}
+              options={{
+                headerShown: false,
+                presentation: 'modal',
+              }}
+            />
+            <Stack.Screen
+              name="ConnectToServer"
+              component={ConnectToServerScreen}
+              options={{
+                headerShown: false,
+                presentation: 'modal',
+              }}
+            />
+          </Stack.Navigator>
+        </ContentSafeArea>
       </View>
     </SSEProvider>
   );

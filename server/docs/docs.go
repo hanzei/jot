@@ -604,7 +604,13 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "an existing label with that name was returned unchanged",
+                        "schema": {
+                            "$ref": "#/definitions/models.Label"
+                        }
+                    },
+                    "201": {
+                        "description": "a new label was created",
                         "schema": {
                             "$ref": "#/definitions/models.Label"
                         }
@@ -3028,6 +3034,12 @@ const docTemplate = `{
                             "type": "string"
                         }
                     },
+                    "413": {
+                        "description": "file too large",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "internal server error",
                         "schema": {
@@ -3176,6 +3188,10 @@ const docTemplate = `{
                 },
                 "note_type": {
                     "$ref": "#/definitions/models.NoteType"
+                },
+                "title": {
+                    "description": "Title is the converted list's title, which the client promotes from a\nleading heading in the text content. Omitting it leaves the note\nuntitled — the behavior every client had before the field existed.",
+                    "type": "string"
                 }
             }
         },

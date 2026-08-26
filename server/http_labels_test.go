@@ -13,6 +13,7 @@ import (
 )
 
 func TestGetNotesByLabel(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "labeluser", "password123", false)
 
@@ -96,6 +97,7 @@ func TestGetNotesByLabel(t *testing.T) {
 }
 
 func TestCreateLabel(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "createlabel", "password123", false)
 
@@ -129,6 +131,20 @@ func TestCreateLabel(t *testing.T) {
 			}
 		}
 		assert.Equal(t, 1, existingCount)
+	})
+
+	t.Run("creating a label returns 201, returning an existing one returns 200", func(t *testing.T) {
+		// POST /labels is get-or-create when no ID is supplied, so the status
+		// code is the only thing that tells a client which of the two happened.
+		status := ts.postJSON(t, user, "/api/v1/labels", map[string]string{"name": "statuscheck"})
+		assert.Equal(t, http.StatusCreated, status)
+
+		status = ts.postJSON(t, user, "/api/v1/labels", map[string]string{"name": "statuscheck"})
+		assert.Equal(t, http.StatusOK, status)
+
+		// A name that folds onto the existing label is a match, not a create.
+		status = ts.postJSON(t, user, "/api/v1/labels", map[string]string{"name": "StatusCheck"})
+		assert.Equal(t, http.StatusOK, status)
 	})
 
 	t.Run("trims whitespace from label name", func(t *testing.T) {
@@ -178,6 +194,7 @@ func TestCreateLabel(t *testing.T) {
 }
 
 func TestCreateLabelWithClientID(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "labelwithid", "password123", false)
 
@@ -187,6 +204,13 @@ func TestCreateLabelWithClientID(t *testing.T) {
 		require.NotNil(t, label)
 		assert.Equal(t, "aaaaaaaaaaaaaaaaaaaaaa", label.ID)
 		assert.Equal(t, "work", label.Name)
+	})
+
+	t.Run("client-supplied ID always creates, so it returns 201", func(t *testing.T) {
+		status := ts.postJSON(t, user, "/api/v1/labels", map[string]string{
+			"id": "iiiiiiiiiiiiiiiiiiiiii", "name": "idstatus",
+		})
+		assert.Equal(t, http.StatusCreated, status)
 	})
 
 	t.Run("replay with same ID returns 409", func(t *testing.T) {
@@ -249,6 +273,7 @@ func TestCreateLabelWithClientID(t *testing.T) {
 }
 
 func TestGetLabelCounts(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "countlabels", "password123", false)
 
@@ -334,6 +359,7 @@ func createNoteWithLabelsFixture(t *testing.T) *TestUser {
 }
 
 func TestCreateNoteWithLabels(t *testing.T) {
+	t.Parallel()
 	t.Run("note created with labels has those labels attached", func(t *testing.T) {
 		user := createNoteWithLabelsFixture(t)
 		note, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
@@ -460,6 +486,7 @@ func TestCreateNoteWithLabels(t *testing.T) {
 }
 
 func TestRenameLabel(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "renameowner", "password123", false)
 
@@ -523,6 +550,7 @@ func TestRenameLabel(t *testing.T) {
 }
 
 func TestDeleteLabel(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 
 	t.Run("delete label removes note_labels rows and keeps notes", func(t *testing.T) {

@@ -70,7 +70,7 @@ function extractSessionCookie(setCookieHeader: string | string[] | undefined): s
   const headers = Array.isArray(setCookieHeader) ? setCookieHeader : [setCookieHeader];
   for (const header of headers) {
     const match = header.match(/jot_session=([^;]+)/);
-    if (match) return match[1];
+    if (match) return match[1]!;
   }
   return null;
 }

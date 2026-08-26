@@ -48,6 +48,7 @@ func countNotesByID(t *testing.T, ts *TestServer, noteID string) int {
 }
 
 func TestBinDeleteMovesToTrash(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "binuser1", "password123", false)
 
@@ -66,6 +67,7 @@ func TestBinDeleteMovesToTrash(t *testing.T) {
 }
 
 func TestBinTrashedNotesAppearInTrashList(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "binuser2", "password123", false)
 	note := createAndTrashNote(t, user, "Trashed Note")
@@ -85,6 +87,7 @@ func TestBinTrashedNotesAppearInTrashList(t *testing.T) {
 }
 
 func TestBinRestoreMovesToActiveList(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "binuser3", "password123", false)
 	note := createAndTrashNote(t, user, "Restore Me")
@@ -112,6 +115,7 @@ func TestBinRestoreMovesToActiveList(t *testing.T) {
 }
 
 func TestBinPermanentDeleteRemovesNote(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "binuser4", "password123", false)
 	note := createAndTrashNote(t, user, "Delete Me Permanently")
@@ -132,6 +136,7 @@ func TestBinPermanentDeleteRemovesNote(t *testing.T) {
 }
 
 func TestBinRestoreNonTrashedReturns404(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "binuser5", "password123", false)
 
@@ -145,6 +150,7 @@ func TestBinRestoreNonTrashedReturns404(t *testing.T) {
 }
 
 func TestBinPermanentDeleteNonTrashedReturns404(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "binuser6", "password123", false)
 
@@ -158,6 +164,7 @@ func TestBinPermanentDeleteNonTrashedReturns404(t *testing.T) {
 }
 
 func TestBinNonOwnerCannotRestore(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	owner := ts.createTestUser(t, "binowner", "password123", false)
 	other := ts.createTestUser(t, "binother", "password123", false)
@@ -169,6 +176,7 @@ func TestBinNonOwnerCannotRestore(t *testing.T) {
 }
 
 func TestBinNonOwnerCannotPermanentDelete(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	owner := ts.createTestUser(t, "binowner2", "password123", false)
 	other := ts.createTestUser(t, "binother2", "password123", false)
@@ -180,6 +188,7 @@ func TestBinNonOwnerCannotPermanentDelete(t *testing.T) {
 }
 
 func TestBinEmptyTrashDeletesMultipleNotes(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "binempty1", "password123", false)
 
@@ -199,6 +208,7 @@ func TestBinEmptyTrashDeletesMultipleNotes(t *testing.T) {
 }
 
 func TestBinEmptyTrashWhenAlreadyEmptyReturnsZero(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "binempty2", "password123", false)
 
@@ -208,6 +218,7 @@ func TestBinEmptyTrashWhenAlreadyEmptyReturnsZero(t *testing.T) {
 }
 
 func TestBinEmptyTrashCleansUpItemsLabelsAndShares(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	owner := ts.createTestUser(t, "binempty3", "password123", false)
 	sharedWith := ts.createTestUser(t, "binempty4", "password123", false)
@@ -243,6 +254,7 @@ func TestBinEmptyTrashCleansUpItemsLabelsAndShares(t *testing.T) {
 }
 
 func TestBinEmptyTrashDoesNotAffectOtherUsersTrashedNotes(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	userA := ts.createTestUser(t, "binempty5", "password123", false)
 	userB := ts.createTestUser(t, "binempty6", "password123", false)

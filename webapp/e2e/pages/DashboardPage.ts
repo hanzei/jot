@@ -1,4 +1,5 @@
-import { Page, expect, Locator } from '@playwright/test';
+import type { Page, Locator } from '@playwright/test';
+import { expect } from '@playwright/test';
 
 const escapeForRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -81,12 +82,61 @@ export class DashboardPage {
     return this.page.locator('[data-testid="list-item-input"]').nth(index);
   }
 
+  listItemRow(index: number): Locator {
+    return this.page.locator('[data-testid="list-item-row"]').nth(index);
+  }
+
+  /**
+   * The rendered form of the row at `index`, present only while that row is
+   * showing Markdown rather than source (docs/specs/markdown-rendering.md §1.2).
+   * Resolves to nothing for a row whose text renders as itself, so assert
+   * `toHaveCount(0)` rather than expecting it to be absent from the page.
+   */
+  listItemRendered(index: number): Locator {
+    return this.page.locator('[data-testid="list-item-rendered"]').nth(index);
+  }
+
   async focusListItem(index: number) {
     await this.listItemInput(index).focus();
   }
 
+  /**
+   * Selects a character range inside the row at `index`.
+   *
+   * Playwright has no selection API and the formatting toolbar reads the live
+   * selection, so the range has to be set in the page — same reason as
+   * NoteEditorPage.selectRange.
+   */
+  async selectListItemRange(index: number, start: number, end: number) {
+    await this.listItemInput(index).evaluate(
+      (node: HTMLTextAreaElement, range: { start: number; end: number }) => {
+        node.focus();
+        node.setSelectionRange(range.start, range.end);
+      },
+      { start, end },
+    );
+  }
+
   async expectListItemFocused(index: number) {
     await expect(this.listItemInput(index)).toBeFocused();
+  }
+
+  /**
+   * How many visual lines the row at `index` currently wraps to.
+   *
+   * The row auto-grows to fit its text, so its scroll height is one line-height
+   * per line plus the padding. Derived at runtime because the wrap point moves
+   * with the viewport, and a test that hardcodes it is asserting about the
+   * browser window rather than about the behaviour.
+   */
+  async listItemLineCount(index: number): Promise<number> {
+    return this.listItemInput(index).evaluate(el => {
+      const styles = getComputedStyle(el);
+      const lineHeight = Number.parseFloat(styles.lineHeight);
+      const padding = (Number.parseFloat(styles.paddingTop) || 0)
+        + (Number.parseFloat(styles.paddingBottom) || 0);
+      return Math.round((el.scrollHeight - padding) / lineHeight);
+    });
   }
 
   async expectListItemCount(count: number) {
@@ -142,8 +192,6 @@ export class DashboardPage {
   async deleteNote(title: string) {
     await this.openNoteMenu(title);
     await this.page.getByRole('menuitem', { name: 'Delete' }).click();
-    const confirmDialog = this.page.getByRole('dialog').last();
-    await confirmDialog.getByRole('button', { name: 'Delete' }).click();
   }
 
   async restoreNoteFromBin(title: string) {
@@ -618,27 +666,38 @@ export class DashboardPage {
     expect(binBox!.y).toBeGreaterThan(archiveBox!.y);
   }
 
-  /** Shares a note with a user via the card context menu and share modal. */
+  /**
+   * Recolours the note open in the modal. The whole panel takes the note's
+   * colour, so this changes the background every piece of modal chrome sits on.
+   */
+  async setNoteColorFromModal(colorName: string) {
+    const dialog = this.page.getByRole('dialog').last();
+    await dialog.getByRole('button', { name: 'Select note color' }).click();
+    await dialog.getByRole('button', { name: colorName, exact: true }).click();
+  }
+
+  /**
+   * Shares a note with a user via the card context menu and share modal.
+   *
+   * Waits for the collaborator avatar to appear on the card before returning:
+   * the share is only useful to a caller once it is reflected in the notes
+   * list, since UI gated on the note's collaborators (e.g. the list-item
+   * assign button) reads that list, not the share request's response.
+   */
   async shareNoteWithUser(noteTitle: string, username: string) {
     await this.openNoteMenu(noteTitle);
     await this.page.getByRole('menuitem', { name: /share/i }).click();
     await this.page.getByPlaceholder(/search users/i).fill(username);
     await this.page.getByText(username).click();
     await this.page.keyboard.press('Escape');
+
+    const card = this.page.locator('[data-testid="note-card"]').filter({ hasText: noteTitle });
+    await expect(card.getByRole('img', { name: username, exact: true })).toBeVisible();
   }
 
-  /**
-   * Creates a note and shares it, leaving a share-history record behind.
-   *
-   * Waits for the collaborator avatar to appear on the card before returning:
-   * the share is only useful to a caller once it is reflected in the notes
-   * list, and `shareNoteWithUser` closes the modal without waiting for the
-   * request to land.
-   */
+  /** Creates a note and shares it, leaving a share-history record behind. */
   async createAndShareNote(noteTitle: string, username: string) {
     await this.createNote(noteTitle);
     await this.shareNoteWithUser(noteTitle, username);
-    const card = this.page.locator('[data-testid="note-card"]').filter({ hasText: noteTitle });
-    await expect(card.locator('svg[role="img"], img[alt]').first()).toBeVisible();
   }
 }

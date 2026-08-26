@@ -10,8 +10,13 @@ if ('serviceWorker' in navigator) {
       const { Workbox } = await import('workbox-window');
       const wb = new Workbox('/service-worker.js');
 
-      wb.addEventListener('controlling', () => {
-        window.location.reload();
+      wb.addEventListener('controlling', (event) => {
+        // Only an update needs the reload. On a first-ever install the worker
+        // claims a page that is already running the build it just precached,
+        // so reloading there is a visible flash that changes nothing.
+        if (event.isUpdate) {
+          window.location.reload();
+        }
       });
 
       await wb.register();

@@ -5,7 +5,6 @@
  * dead-letter count — all mirrored into the "Share diagnostics" report.
  */
 
-import React from 'react';
 import { render, fireEvent, act } from '@testing-library/react-native';
 import { Share } from 'react-native';
 import DiagnosticsScreen from '../src/screens/DiagnosticsScreen';
@@ -141,7 +140,7 @@ describe('DiagnosticsScreen', () => {
 
     const { findByText } = await renderScreen();
     await act(async () => {
-      fireEvent.press(await findByText('Share Diagnostics Report'));
+      await fireEvent.press(await findByText('Share Diagnostics Report'));
       await Promise.resolve();
     });
 
@@ -167,7 +166,7 @@ describe('DiagnosticsScreen', () => {
 });
 
 async function renderScreen() {
-  const utils = render(<DiagnosticsScreen />);
+  const utils = await render(<DiagnosticsScreen />);
   // Let the initial refresh() effect (an async DB read) settle.
   await act(async () => {
     await Promise.resolve();

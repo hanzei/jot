@@ -1,206 +1,26 @@
-import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { VALIDATION } from '@jot/shared';
+import {
+  mockUseRoute,
+  mockNavigationAddListener,
+  mockCreateMutateAsync,
+  mockUpdateMutateAsync,
+  mockDeleteMutateAsync,
+  mockDuplicateMutateAsync,
+  mockCreateItemMutateAsync,
+  mockUpdateItemMutateAsync,
+  mockUseOfflineNote,
+  mockUseTranslation,
+} from './helpers/noteEditorScreenTestSetup';
 import NoteEditorScreen from '../src/screens/NoteEditorScreen';
 
-const mockUseRoute = jest.fn();
-const mockGoBack = jest.fn();
-const mockReplace = jest.fn();
-const mockNavigate = jest.fn();
-const mockDispatch = jest.fn();
-const mockSetParams = jest.fn();
-const mockNavigationAddListener = jest.fn().mockReturnValue(jest.fn());
-const mockCreateMutateAsync = jest.fn();
-const mockUpdateMutateAsync = jest.fn();
-const mockDeleteMutateAsync = jest.fn();
-const mockDuplicateMutateAsync = jest.fn();
-const mockCreateItemMutateAsync = jest.fn();
-const mockUpdateItemMutateAsync = jest.fn();
-const mockDeleteItemMutateAsync = jest.fn();
-const mockReorderItemsMutateAsync = jest.fn();
-const mockUseOfflineNote = jest.fn();
-
-jest.mock('@react-navigation/native', () => ({
-  __esModule: true,
-  useRoute: () => mockUseRoute(),
-  useNavigation: () => ({
-    goBack: mockGoBack,
-    replace: mockReplace,
-    navigate: mockNavigate,
-    dispatch: mockDispatch,
-    setParams: mockSetParams,
-    addListener: mockNavigationAddListener,
-  }),
-  useFocusEffect: jest.fn(),
-}));
-
-jest.mock('@react-navigation/elements', () => ({
-  __esModule: true,
-  useHeaderHeight: () => 56,
-}));
-
-jest.mock('react-native-safe-area-context', () => {
-  const { createContext } = jest.requireActual<typeof import('react')>('react');
-  const insets = { top: 0, right: 0, bottom: 0, left: 0 };
-  return {
-    __esModule: true,
-    useSafeAreaInsets: () => insets,
-    SafeAreaInsetsContext: createContext(insets),
-  };
-});
-
-jest.mock('expo-haptics', () => ({
-  __esModule: true,
-  impactAsync: jest.fn(() => Promise.resolve()),
-  notificationAsync: jest.fn(() => Promise.resolve()),
-  ImpactFeedbackStyle: { Light: 'light', Medium: 'medium' },
-  NotificationFeedbackType: { Error: 'error' },
-}));
-
-// react-native-reorderable-list is mocked once globally in jest.setup.js.
-
-jest.mock('../src/hooks/useNotes', () => ({
-  __esModule: true,
-  useCreateNote: () => ({
-    mutateAsync: mockCreateMutateAsync,
-  }),
-  useUpdateNote: () => ({
-    mutateAsync: mockUpdateMutateAsync,
-  }),
-  useDeleteNote: () => ({
-    mutateAsync: mockDeleteMutateAsync,
-  }),
-  useRestoreNote: () => ({
-    mutateAsync: jest.fn(),
-  }),
-  usePermanentDeleteNote: () => ({
-    mutateAsync: jest.fn(),
-  }),
-  useDuplicateNote: () => ({
-    mutateAsync: mockDuplicateMutateAsync,
-  }),
-  useConvertNoteType: () => ({
-    mutateAsync: jest.fn(),
-  }),
-  useCreateNoteItem: () => ({
-    mutateAsync: mockCreateItemMutateAsync,
-  }),
-  useUpdateNoteItem: () => ({
-    mutateAsync: mockUpdateItemMutateAsync,
-  }),
-  useDeleteNoteItem: () => ({
-    mutateAsync: mockDeleteItemMutateAsync,
-  }),
-  useReorderNoteItems: () => ({
-    mutateAsync: mockReorderItemsMutateAsync,
-  }),
-  useToggleNoteItemCompleted: () => ({
-    mutateAsync: jest.fn().mockResolvedValue([]),
-  }),
-  useUncheckAllItems: () => ({
-    mutateAsync: jest.fn().mockResolvedValue([]),
-  }),
-  useDeleteCompletedItems: () => ({
-    mutateAsync: jest.fn().mockResolvedValue([]),
-  }),
-}));
-
-jest.mock('../src/hooks/useNoteImages', () => ({
-  __esModule: true,
-  useUploadNoteImage: () => ({
-    mutateAsync: jest.fn(),
-  }),
-  useDeleteNoteImage: () => ({
-    mutateAsync: jest.fn(),
-  }),
-}));
-
-jest.mock('../src/hooks/usePendingImageUploads', () => ({
-  __esModule: true,
-  usePendingImageUploads: () => [],
-  useRetryPendingImageUpload: () => ({ mutate: jest.fn() }),
-  useDismissPendingImageUpload: () => ({ mutate: jest.fn() }),
-}));
-
-jest.mock('../src/hooks/useOfflineNotes', () => ({
-  __esModule: true,
-  useOfflineNote: () => mockUseOfflineNote(),
-}));
-
-jest.mock('../src/store/SSEContext', () => ({
-  __esModule: true,
-  useSSESubscription: jest.fn(),
-  useSSEContext: jest.fn(() => ({ sseReconnecting: false })),
-}));
-
-jest.mock('../src/components/LabelPicker', () => ({
-  __esModule: true,
-  default: () => null,
-}));
-
-jest.mock('react-i18next', () => ({
-  __esModule: true,
-  useTranslation: () => ({
-    t: (key: string, options?: { count?: number }) => {
-      if (key === 'note.completedItems') {
-        return `${options?.count ?? 0} completed items`;
-      }
-      return key;
-    },
-    i18n: { language: 'en' },
-  }),
-}));
-
-jest.mock('../src/theme/ThemeContext', () => ({
-  __esModule: true,
-  useTheme: () => ({
-    isDark: false,
-    colors: {
-      background: '#fff',
-      surface: '#fff',
-      border: '#ddd',
-      borderLight: '#eee',
-      text: '#111',
-      textSecondary: '#444',
-      textMuted: '#777',
-      placeholder: '#aaa',
-      icon: '#555',
-      iconMuted: '#888',
-      primary: '#2563eb',
-      primaryLight: '#dbeafe',
-      error: '#dc2626',
-      errorLight: '#fee2e2',
-      cardBackground: '#fff',
-      cardBorder: '#ddd',
-    },
-  }),
-}));
-
-jest.mock('../src/store/AuthContext', () => ({
-  __esModule: true,
-  useAuth: () => ({
-    user: { id: 'u1', username: 'alice' },
-    isAuthenticated: true,
-  }),
-}));
-
-jest.mock('../src/store/UsersContext', () => ({
-  __esModule: true,
-  useUsers: () => ({
-    usersById: new Map(),
-  }),
-}));
-
-jest.mock('../src/hooks/useToast', () => ({
-  __esModule: true,
-  useToast: () => ({
-    showToast: jest.fn(),
-  }),
-}));
-
-jest.mock('../src/i18n', () => ({
-  __esModule: true,
-  default: {},
+// A fresh `t`/`i18n` on every call (unlike the shared helper's stable default):
+// some of the flushes below rely on the resulting callback churn to re-fire
+// and coalesce a pending edit with a same-tick metadata change.
+mockUseTranslation.mockImplementation(() => ({
+  t: (key: string, options?: { count?: number }) =>
+    (key === 'note.completedItems' ? `${options?.count ?? 0} completed items` : key),
+  i18n: { language: 'en' },
 }));
 
 describe('NoteEditorScreen list submit behavior', () => {
@@ -220,15 +40,15 @@ describe('NoteEditorScreen list submit behavior', () => {
   });
 
   it('creates a new list item when submitting existing list item text input', async () => {
-    const { getByTestId, getAllByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId, getAllByTestId } = await render(<NoteEditorScreen />);
 
-    fireEvent.press(getByTestId('toggle-note-type'));
-    fireEvent.press(getByTestId('add-list-item'));
+    await fireEvent.press(getByTestId('toggle-note-type'));
+    await fireEvent.press(getByTestId('add-list-item'));
 
     const baselineCount = getAllByTestId('list-item-text').length;
-    const firstInput = getAllByTestId('list-item-text')[0];
-    fireEvent.changeText(firstInput, 'Buy milk');
-    fireEvent(firstInput, 'submitEditing');
+    const firstInput = getAllByTestId('list-item-text')[0]!;
+    await fireEvent.changeText(firstInput, 'Buy milk');
+    await fireEvent(firstInput, 'submitEditing');
 
     await waitFor(() => {
       expect(getAllByTestId('list-item-text').length).toBe(baselineCount + 1);
@@ -236,40 +56,40 @@ describe('NoteEditorScreen list submit behavior', () => {
   });
 
   it('pressing Enter at the start of a non-empty item inserts an empty item before it', async () => {
-    const { getByTestId, getAllByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId, getAllByTestId } = await render(<NoteEditorScreen />);
 
-    fireEvent.press(getByTestId('toggle-note-type'));
-    fireEvent.press(getByTestId('add-list-item'));
+    await fireEvent.press(getByTestId('toggle-note-type'));
+    await fireEvent.press(getByTestId('add-list-item'));
 
-    const input = getAllByTestId('list-item-text')[0];
-    fireEvent.changeText(input, 'hello');
-    fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 0, end: 0 } } });
-    fireEvent(input, 'submitEditing');
+    const input = getAllByTestId('list-item-text')[0]!;
+    await fireEvent.changeText(input, 'hello');
+    await fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 0, end: 0 } } });
+    await fireEvent(input, 'submitEditing');
 
     await waitFor(() => {
       const inputsAfter = getAllByTestId('list-item-text');
       expect(inputsAfter).toHaveLength(2);
-      expect(inputsAfter[0].props.value).toBe('');
-      expect(inputsAfter[1].props.value).toBe('hello');
+      expect(inputsAfter[0]!.props.value).toBe('');
+      expect(inputsAfter[1]!.props.value).toBe('hello');
     });
   });
 
   it('pressing Enter in the middle of an item splits it into two items at the cursor', async () => {
-    const { getByTestId, getAllByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId, getAllByTestId } = await render(<NoteEditorScreen />);
 
-    fireEvent.press(getByTestId('toggle-note-type'));
-    fireEvent.press(getByTestId('add-list-item'));
+    await fireEvent.press(getByTestId('toggle-note-type'));
+    await fireEvent.press(getByTestId('add-list-item'));
 
-    const input = getAllByTestId('list-item-text')[0];
-    fireEvent.changeText(input, 'helloworld');
-    fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 5, end: 5 } } });
-    fireEvent(input, 'submitEditing');
+    const input = getAllByTestId('list-item-text')[0]!;
+    await fireEvent.changeText(input, 'helloworld');
+    await fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 5, end: 5 } } });
+    await fireEvent(input, 'submitEditing');
 
     await waitFor(() => {
       const inputsAfter = getAllByTestId('list-item-text');
       expect(inputsAfter).toHaveLength(2);
-      expect(inputsAfter[0].props.value).toBe('hello');
-      expect(inputsAfter[1].props.value).toBe('world');
+      expect(inputsAfter[0]!.props.value).toBe('hello');
+      expect(inputsAfter[1]!.props.value).toBe('world');
     });
   });
 
@@ -321,11 +141,11 @@ describe('NoteEditorScreen list submit behavior', () => {
     mockUseOfflineNote.mockReturnValue({ data: existingNote });
     mockCreateItemMutateAsync.mockClear();
 
-    const { getAllByTestId } = render(<NoteEditorScreen />);
+    const { getAllByTestId } = await render(<NoteEditorScreen />);
 
-    const input = getAllByTestId('list-item-text')[1];
-    fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 5, end: 5 } } });
-    fireEvent(input, 'submitEditing');
+    const input = getAllByTestId('list-item-text')[1]!;
+    await fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 5, end: 5 } } });
+    await fireEvent(input, 'submitEditing');
 
     await waitFor(() => {
       expect(mockCreateItemMutateAsync).toHaveBeenCalledWith(
@@ -377,13 +197,13 @@ describe('NoteEditorScreen list submit behavior', () => {
     mockUseRoute.mockReturnValue({ params: { noteId: 'note-split-completed-start' } });
     mockUseOfflineNote.mockReturnValue({ data: existingNote });
 
-    const { getByTestId, getAllByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId, getAllByTestId } = await render(<NoteEditorScreen />);
 
     expect(getByTestId('checked-items-section')).toBeTruthy();
 
-    const input = getAllByTestId('list-item-text')[0];
-    fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 0, end: 0 } } });
-    fireEvent(input, 'submitEditing');
+    const input = getAllByTestId('list-item-text')[0]!;
+    await fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 0, end: 0 } } });
+    await fireEvent(input, 'submitEditing');
 
     await waitFor(() => {
       const inputsAfter = getAllByTestId('list-item-text');
@@ -391,10 +211,10 @@ describe('NoteEditorScreen list submit behavior', () => {
       expect(inputsAfter).toHaveLength(2);
       // New blank item is inserted before the original, inheriting its
       // completed state; the original item's own text is untouched.
-      expect(inputsAfter[0].props.value).toBe('');
-      expect(inputsAfter[1].props.value).toBe('hello');
-      expect(checkboxesAfter[0].props.accessibilityState.checked).toBe(true);
-      expect(checkboxesAfter[1].props.accessibilityState.checked).toBe(true);
+      expect(inputsAfter[0]!.props.value).toBe('');
+      expect(inputsAfter[1]!.props.value).toBe('hello');
+      expect(checkboxesAfter[0]!.props.accessibilityState.checked).toBe(true);
+      expect(checkboxesAfter[1]!.props.accessibilityState.checked).toBe(true);
     });
   });
 
@@ -434,13 +254,13 @@ describe('NoteEditorScreen list submit behavior', () => {
     mockUseRoute.mockReturnValue({ params: { noteId: 'note-split-completed-mid' } });
     mockUseOfflineNote.mockReturnValue({ data: existingNote });
 
-    const { getByTestId, getAllByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId, getAllByTestId } = await render(<NoteEditorScreen />);
 
     expect(getByTestId('checked-items-section')).toBeTruthy();
 
-    const input = getAllByTestId('list-item-text')[0];
-    fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 5, end: 5 } } });
-    fireEvent(input, 'submitEditing');
+    const input = getAllByTestId('list-item-text')[0]!;
+    await fireEvent(input, 'selectionChange', { nativeEvent: { selection: { start: 5, end: 5 } } });
+    await fireEvent(input, 'submitEditing');
 
     await waitFor(() => {
       const inputsAfter = getAllByTestId('list-item-text');
@@ -449,10 +269,10 @@ describe('NoteEditorScreen list submit behavior', () => {
       // The original keeps the text before the cursor; the split-off
       // remainder inherits its completed state and stays in the completed
       // section, right after it.
-      expect(inputsAfter[0].props.value).toBe('hello');
-      expect(inputsAfter[1].props.value).toBe('world');
-      expect(checkboxesAfter[0].props.accessibilityState.checked).toBe(true);
-      expect(checkboxesAfter[1].props.accessibilityState.checked).toBe(true);
+      expect(inputsAfter[0]!.props.value).toBe('hello');
+      expect(inputsAfter[1]!.props.value).toBe('world');
+      expect(checkboxesAfter[0]!.props.accessibilityState.checked).toBe(true);
+      expect(checkboxesAfter[1]!.props.accessibilityState.checked).toBe(true);
     });
   });
 
@@ -480,8 +300,8 @@ describe('NoteEditorScreen list submit behavior', () => {
     mockUseRoute.mockReturnValue({ params: { noteId: 'note-123' } });
     mockUseOfflineNote.mockReturnValue({ data: existingNote });
 
-    const { unmount } = render(<NoteEditorScreen />);
-    unmount();
+    const { unmount } = await render(<NoteEditorScreen />);
+    await unmount();
 
     await waitFor(() => {
       expect(mockUpdateMutateAsync).not.toHaveBeenCalled();
@@ -526,10 +346,10 @@ describe('NoteEditorScreen list submit behavior', () => {
     mockUpdateMutateAsync.mockClear();
     mockUpdateItemMutateAsync.mockClear();
 
-    const { getAllByTestId, unmount } = render(<NoteEditorScreen />);
+    const { getAllByTestId, unmount } = await render(<NoteEditorScreen />);
 
-    fireEvent.changeText(getAllByTestId('list-item-text')[0], 'Oat milk');
-    unmount();
+    await fireEvent.changeText(getAllByTestId('list-item-text')[0]!, 'Oat milk');
+    await unmount();
 
     await waitFor(() => {
       // The item is patched individually; the whole note is not re-sent.
@@ -548,8 +368,8 @@ describe('NoteEditorScreen list submit behavior', () => {
     mockUseRoute.mockReturnValue({ params: { noteId: 'note-456' } });
     mockUseOfflineNote.mockReturnValue({ data: null });
 
-    const { unmount } = render(<NoteEditorScreen />);
-    unmount();
+    const { unmount } = await render(<NoteEditorScreen />);
+    await unmount();
 
     await waitFor(() => {
       expect(mockUpdateMutateAsync).not.toHaveBeenCalled();
@@ -557,14 +377,14 @@ describe('NoteEditorScreen list submit behavior', () => {
   });
 
   it('keeps dirty state for color change when note id is not yet available', async () => {
-    const { getByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId } = await render(<NoteEditorScreen />);
 
-    fireEvent.changeText(getByTestId('note-content-input'), 'Draft note');
+    await fireEvent.changeText(getByTestId('note-content-input'), 'Draft note');
 
     const colorButton = getByTestId('toolbar-color-btn');
-    fireEvent.press(colorButton);
+    await fireEvent.press(colorButton);
     const swatch = await waitFor(() => getByTestId('color-swatch-f28b82'));
-    fireEvent.press(swatch);
+    await fireEvent.press(swatch);
 
     await waitFor(
       () => {

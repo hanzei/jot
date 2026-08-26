@@ -69,6 +69,11 @@ The mobile app uses SSE, React Query, and an offline SQLite sync layer — all s
 - Detect and break re-entrant sync: if a sync is already in progress, skip rather than queue a second one.
 - Cap the number of consecutive sync attempts before surfacing an error to the user.
 - Prefer idempotent writes (upsert, not insert-then-update) so a replayed sync event is harmless.
+- Write that upsert as `INSERT … ON CONFLICT(id) DO UPDATE`, **never `INSERT OR REPLACE`**.
+  SQLite implements REPLACE as DELETE + INSERT, and `PRAGMA foreign_keys = ON` is set, so
+  re-saving a parent row fires `ON DELETE CASCADE` and silently deletes its children —
+  which is how a routine note refresh used to wipe the note's queued offline image uploads.
+  REPLACE also resets columns left out of the statement to their defaults (`notes.sync_state`).
 
 ## Filesystem Access
 
@@ -122,6 +127,38 @@ in-memory buffer working.
 Anything logged now lands on disk and rides along in shared diagnostics
 reports, so don't log note content, credentials, or tokens.
 
+## Database Tests
+
+`src/db/` runs its SQL against a **real SQLite engine** in Jest, not a stub.
+`__tests__/helpers/testDb.ts` implements the `expo-sqlite` surface the app uses
+(`execAsync`, `runAsync`, `getAllAsync`, `getFirstAsync`, `withTransactionAsync`,
+`closeAsync`) on top of Node's built-in `node:sqlite`, and `jest.setup.js` mocks
+`expo-sqlite` with it. Same intent as the filesystem mock above: run the app's
+own logic rather than assert against canned return values.
+
+- A **fresh in-memory database, fully migrated**, is installed before every test
+  by `jest.setupAfterEnv.js`. Reach it as `globalThis.testDb`; it is also what
+  the mocked `useSQLiteContext()` and `SQLiteProvider` hand out. Nothing leaks
+  between tests, and no suite has to opt in.
+- Migration tests start from `createTestDb()` instead — an empty, unmigrated
+  database.
+- Every method is a `jest.fn()` wrapping real execution, so `toHaveBeenCalled`
+  still works. Prefer asserting on **query results**: pinning SQL text was what
+  let a query reference a column that does not exist and still pass.
+- Constraints, defaults, `ON DELETE CASCADE`, and transaction rollback are all
+  live. A test that seeds a `note_items` or `pending_image_uploads` row must
+  insert its parent note first, and a `withSerializedTransaction` body that
+  throws really does roll back.
+- The adapter mirrors expo-sqlite's own quirks deliberately — booleans bind as
+  1/0, `undefined` binds as NULL, `getFirstAsync` resolves `null` (not
+  `undefined`) for a missing row. Keep it that way; the point is that passing
+  here means passing on device.
+- Row builders (`makeTextNote`, `makeListNote`, `seedQueueEntry`, …) live in
+  `__tests__/helpers/fixtures.ts`.
+- `tsconfig.json` carries `"node"` in `types` so the helper can import
+  `node:sqlite`. Nothing under `src/` may rely on a Node-only global as a
+  result — the app runs on Hermes, not Node.
+
 ## Safe Area Insets
 
 Screens use `headerShown: false`, so any screen or component rendering content
@@ -130,3 +167,32 @@ apply safe-area insets itself: `paddingTop: insets.top` for top content,
 `paddingBottom: insets.bottom` for bottom content. Read insets with
 `useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 }`
 so components don't throw when rendered without a provider (e.g. in unit tests).
+
+**Apply `insets.top` unconditionally — never subtract anything from it.** The
+top banner stack (offline, SSE reconnect, …) sits above the app content and pads
+the safe area itself while visible, so content below it must not pad it a second
+time. That is handled centrally by `ContentSafeArea`
+(`src/components/ContentSafeArea.tsx`), which wraps everything below
+`<TopBanners />` in `RootNavigator` and overrides `SafeAreaInsetsContext` with
+`top: 0` for as long as a banner is shown. Inside that subtree `insets.top`
+already means *"the inset your content still has to apply"*, so a plain
+`paddingTop: insets.top` is correct with and without a banner — including in
+React Navigation's own headers, which read the same context.
+
+The flip is instant, not animated, and must stay that way: `Banner` animates its
+**height** between `topInset` (closed) and `topInset + row height` (open), so the
+strip it adds is exactly the inset the content drops, on the same commit. The two
+cancel and the content slides instead of stepping. Animating the inset — or
+letting a banner close to height 0 while it still owns the inset — reintroduces
+the jump.
+
+Screens that hand-rolled `bannerShown ? 0 : insets.top` are what this replaced;
+that pattern is now a bug, since it subtracts an inset the context has already
+zeroed. Do not reintroduce it, and do not consume `useBannerShown` outside
+`ContentSafeArea`.
+
+The one exception is a **full-screen React Native `Modal`**: it renders in its
+own native window *above* the banner stack, so the status bar is uncovered there
+and the device's real inset applies again. Such a modal reads its top inset from
+`useDeviceSafeAreaInsets()` (same module) — `ImageLightbox` is the current case.
+Bottom sheets need nothing special; only `top` is ever overridden.

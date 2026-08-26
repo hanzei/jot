@@ -25,7 +25,7 @@ jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },
 }));
 
-const mockAxiosInstance = (axios as unknown as { __mockInstance: Record<string, jest.Mock> })
+const mockAxiosInstance = (axios as unknown as { __mockInstance: Record<'get' | 'post' | 'put' | 'patch' | 'delete', jest.Mock> })
   .__mockInstance;
 
 const mockUser = {
@@ -66,7 +66,7 @@ describe('uploadProfileIcon', () => {
 
       await uploadProfileIcon('file:///photos/avatar.jpg');
 
-      const [key, fileValue] = appendSpy.mock.calls[0];
+      const [key, fileValue] = appendSpy.mock.calls[0]!;
       expect(key).toBe('file');
       expect((fileValue as unknown as { uri: string }).uri).not.toContain('file://');
     } finally {
@@ -107,7 +107,7 @@ describe('uploadProfileIcon', () => {
 
     await uploadProfileIcon('file:///photos/avatar.jpg');
 
-    const config = mockAxiosInstance.post.mock.calls[0][2] as Record<string, unknown>;
+    const config = mockAxiosInstance.post.mock.calls[0]![2] as Record<string, unknown>;
     expect(config).not.toHaveProperty('onUploadProgress');
   });
 

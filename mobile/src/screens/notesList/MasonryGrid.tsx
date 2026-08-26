@@ -36,7 +36,7 @@ interface MasonryGridProps {
 function splitIntoColumns(notes: Note[], columns: number): Note[][] {
   const result: Note[][] = Array.from({ length: columns }, () => []);
   notes.forEach((note, index) => {
-    result[index % columns].push(note);
+    result[index % columns]!.push(note);
   });
   return result;
 }
@@ -67,13 +67,18 @@ export default function MasonryGrid({
   const prevSignatureRef = useRef<string | null>(null);
   const prevViewKeyRef = useRef(viewKey);
   if (
+    // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
     prevSignatureRef.current !== null &&
+    // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
     prevViewKeyRef.current === viewKey &&
+    // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
     prevSignatureRef.current !== idSignature
   ) {
     animateListReflow();
   }
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   prevSignatureRef.current = idSignature;
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   prevViewKeyRef.current = viewKey;
 
   return (

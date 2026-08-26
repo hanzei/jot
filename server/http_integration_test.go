@@ -16,6 +16,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -29,15 +30,35 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// testLogWriter forwards logrus output to t.Log() so logs are hidden on success
-// and visible on test failure or when running with -v.
+// testLogWriter forwards a test server's logrus output to t.Log() so logs are
+// hidden on success and visible on test failure or when running with -v.
+//
+// The writer is per-test, attached to a per-server logrus.Logger rather than to
+// the process-wide standard logger, which is what lets these tests call
+// t.Parallel(). It also refuses to forward anything after stop() has run: a
+// t.Log() against an already-finished test panics the whole binary, so a log
+// line arriving late from a straggling goroutine is dropped rather than
+// allowed to take the suite down.
 type testLogWriter struct {
-	t *testing.T
+	t       *testing.T
+	mu      sync.Mutex
+	stopped bool
 }
 
 func (w *testLogWriter) Write(p []byte) (n int, err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.stopped {
+		return len(p), nil
+	}
 	w.t.Log(strings.TrimRight(string(p), "\n"))
 	return len(p), nil
+}
+
+func (w *testLogWriter) stop() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.stopped = true
 }
 
 // TestUser bundles a user model with a typed API client.
@@ -75,9 +96,16 @@ func setupTestServer(t *testing.T) *TestServer {
 func setupTestServerWithConfig(t *testing.T, customize func(*config.Config)) *TestServer {
 	t.Helper()
 
-	prevLogOutput := logrus.StandardLogger().Out
-	logrus.SetOutput(&testLogWriter{t: t})
-	t.Cleanup(func() { logrus.SetOutput(prevLogOutput) })
+	// Registered before the teardown cleanup below so it runs after it (cleanups
+	// are LIFO): by the time the writer is muted, the server and its background
+	// goroutines are already stopped.
+	logWriter := &testLogWriter{t: t}
+	t.Cleanup(logWriter.stop)
+
+	log := logrus.New()
+	log.SetOutput(logWriter)
+	log.SetFormatter(logrus.StandardLogger().Formatter)
+	log.SetLevel(logrus.StandardLogger().GetLevel())
 
 	tmpDir := t.TempDir()
 	require.NoError(t, os.WriteFile(tmpDir+"/index.html", []byte("<html><body>jot test app</body></html>"), 0o600))
@@ -87,7 +115,7 @@ func setupTestServerWithConfig(t *testing.T, customize func(*config.Config)) *Te
 		customize(cfg)
 	}
 
-	s, err := server.New(cfg)
+	s, err := server.NewWithLogger(cfg, log)
 	require.NoError(t, err)
 
 	httpServer := httptest.NewServer(s.GetRouter())
@@ -111,6 +139,25 @@ func (ts *TestServer) newClient() *client.Client {
 	return client.New(ts.HTTPServer.URL)
 }
 
+// postJSON issues a POST with a JSON body as user and returns the status code.
+// The [client.Client] SDK only surfaces a status code for failures, so tests
+// that distinguish one success code from another go through this instead.
+func (ts *TestServer) postJSON(t *testing.T, user *TestUser, path string, body any) int {
+	t.Helper()
+
+	encoded, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, ts.HTTPServer.URL+path, bytes.NewReader(encoded))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := user.Client.HTTPClient().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	return resp.StatusCode
+}
+
 func (ts *TestServer) createTestUser(t *testing.T, username, password string, isAdmin bool) *TestUser {
 	t.Helper()
 
@@ -132,6 +179,7 @@ func (ts *TestServer) createTestUser(t *testing.T, username, password string, is
 
 // Probe endpoint tests
 func TestProbeEndpoints(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	c := ts.newClient()
 
@@ -203,6 +251,7 @@ func TestProbeEndpoints(t *testing.T) {
 }
 
 func TestConfigEndpoint(t *testing.T) {
+	t.Parallel()
 	t.Run("returns registration_enabled true by default", func(t *testing.T) {
 		ts := setupTestServer(t)
 		c := ts.newClient()
@@ -275,6 +324,7 @@ func TestConfigEndpoint(t *testing.T) {
 
 // Auth endpoint tests
 func TestRegisterEndpoint(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 
 	t.Run("valid registration", func(t *testing.T) {
@@ -305,9 +355,29 @@ func TestRegisterEndpoint(t *testing.T) {
 		_, err := c.Register(t.Context(), "longpwuser", strings.Repeat("a", 73))
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
+
+	t.Run("username containing upper case is rejected", func(t *testing.T) {
+		c := ts.newClient()
+		_, err := c.Register(t.Context(), "MixedCase", "password123")
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+	})
+
+	t.Run("a username taken in another case cannot be registered", func(t *testing.T) {
+		c1 := ts.newClient()
+		_, err := c1.Register(t.Context(), "casetaken", "password123")
+		require.NoError(t, err)
+
+		// Rejected as invalid rather than as a conflict: upper case never
+		// reaches the uniqueness check, which is what keeps "Casetaken" and
+		// "casetaken" from being two accounts.
+		c2 := ts.newClient()
+		_, err = c2.Register(t.Context(), "Casetaken", "password123")
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+	})
 }
 
 func TestRegisterDisabled(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServerWithConfig(t, func(cfg *config.Config) {
 		cfg.RegistrationEnabled = false
 	})
@@ -322,6 +392,10 @@ func TestRegisterDisabled(t *testing.T) {
 	t.Run("admin can still create users", func(t *testing.T) {
 		db := ts.Server.GetDB()
 
+		// Deliberately DefaultCost, not the MinCost the suite otherwise runs at
+		// (see models.passwordHashCost): this seeds the one hash in the suite
+		// written at the production cost, so the login below proves a server
+		// running at MinCost still verifies production-cost hashes.
 		hash, err := bcrypt.GenerateFromPassword([]byte("adminpass"), bcrypt.DefaultCost)
 		require.NoError(t, err)
 		_, err = db.Exec(
@@ -341,6 +415,7 @@ func TestRegisterDisabled(t *testing.T) {
 }
 
 func TestLoginEndpoint(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 
 	c := ts.newClient()
@@ -363,9 +438,22 @@ func TestLoginEndpoint(t *testing.T) {
 		_, err := loginClient.Login(t.Context(), "loginuser", "wrongpassword")
 		assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
 	})
+
+	t.Run("username is case-insensitive at login", func(t *testing.T) {
+		// Registration stores lower case only, so typing the username with
+		// capitals must still find the account rather than reading as a wrong
+		// username and failing with 401.
+		for _, typed := range []string{"LoginUser", "LOGINUSER"} {
+			loginClient := ts.newClient()
+			auth, err := loginClient.Login(t.Context(), typed, "password123")
+			require.NoError(t, err, "login with %q", typed)
+			assert.Equal(t, "loginuser", auth.User.Username)
+		}
+	})
 }
 
 func TestLogoutEndpoint(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "logoutuser", "password123", false)
 
@@ -380,6 +468,7 @@ func TestLogoutEndpoint(t *testing.T) {
 
 // Notes endpoint tests
 func TestNotesEndpoints(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "user", "password123", false)
 
@@ -435,6 +524,7 @@ func TestNotesEndpoints(t *testing.T) {
 
 // Admin endpoint tests
 func TestAdminEndpoints(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	adminUser := ts.createTestUser(t, "admin", "password123", true)
 	user := ts.createTestUser(t, "user", "password123", false)
@@ -490,6 +580,7 @@ func TestAdminEndpoints(t *testing.T) {
 }
 
 func TestDeleteUserAdminCanDeleteOtherAdmin(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	admin1 := ts.createTestUser(t, "admin1", "password123", true)
 	admin2 := ts.createTestUser(t, "admin2", "password123", true)
@@ -498,6 +589,7 @@ func TestDeleteUserAdminCanDeleteOtherAdmin(t *testing.T) {
 }
 
 func TestAdminDeleteUserNotes(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	adminUser := ts.createTestUser(t, "notesadmin", "password123", true)
 	otherAdmin := ts.createTestUser(t, "notesadmin2", "password123", true)
@@ -549,6 +641,7 @@ func TestAdminDeleteUserNotes(t *testing.T) {
 }
 
 func TestAdminStatsEndpoint(t *testing.T) {
+	t.Parallel()
 	var dbPath string
 	ts := setupTestServerWithConfig(t, func(cfg *config.Config) {
 		dbPath = cfg.DBDSN
@@ -671,6 +764,7 @@ func TestAdminStatsEndpoint(t *testing.T) {
 }
 
 func TestUpdateUserEndpoint(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "originaluser", "password123", false)
 	other := ts.createTestUser(t, "otheruser", "password123", false)
@@ -722,6 +816,7 @@ func TestUpdateUserEndpoint(t *testing.T) {
 // SSE endpoint tests
 
 func TestSSEEndpoint(t *testing.T) { //nolint:gocognit
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "sseuser", "password123", false)
 
@@ -874,6 +969,7 @@ func TestSSEEndpoint(t *testing.T) { //nolint:gocognit
 }
 
 func TestChangePasswordEndpoint(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "passuser", "oldpassword", false)
 
@@ -907,6 +1003,7 @@ func TestChangePasswordEndpoint(t *testing.T) {
 }
 
 func TestUserSettingsEndpoints(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "settingsuser", "password123", false)
 	additionalLocales := []string{"es", "fr", "pt", "it", "nl", "pl"}
@@ -1018,6 +1115,7 @@ func TestUserSettingsEndpoints(t *testing.T) {
 }
 
 func TestListItemGrouping(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "indentuser", "password123", false)
 
@@ -1117,6 +1215,7 @@ func encodePNG(t *testing.T, img image.Image) []byte {
 }
 
 func TestUploadProfileIcon(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "iconuser", "password123", false)
 

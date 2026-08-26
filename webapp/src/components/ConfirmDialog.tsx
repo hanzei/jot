@@ -49,6 +49,13 @@ export default function ConfirmDialog({
         // keyboard listeners), which would otherwise swallow Enter/Escape meant
         // for this dialog before the browser's default button activation runs.
         e.stopPropagation();
+        // Stopping the native event also stops it reaching headlessui's own
+        // Escape listener, which is what would normally dismiss the dialog. Do
+        // it here instead, so backing out of a confirmation stays a single key
+        // press rather than a hunt for the Cancel button.
+        if (e.key === 'Escape' && !isSubmitting) {
+          onCancel();
+        }
       }}
     >
       <DialogBackdrop transition aria-hidden="true" className="fixed inset-0 bg-black/30 dark:bg-black/50 transition duration-200 ease-out data-[closed]:opacity-0 motion-reduce:transition-none" />

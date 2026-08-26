@@ -92,7 +92,7 @@ export interface RetrySyncOptions {
    */
   isServerReachable?: () => boolean;
   /** Optional cancellation token; cancel to abort an in-flight wait/loop. */
-  canceller?: SyncCanceller;
+  canceller?: SyncCanceller | undefined;
   /** Total attempts including the first. Defaults to {@link SYNC_RETRY_MAX_ATTEMPTS}. */
   maxAttempts?: number;
   /** First backoff delay. Defaults to {@link SYNC_RETRY_BASE_DELAY_MS}. */

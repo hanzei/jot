@@ -13,6 +13,7 @@ import (
 
 // Note sharing endpoint tests
 func TestNoteSharingEndpoints(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	owner := ts.createTestUser(t, "owner", "password123", false)
 	sharedUser := ts.createTestUser(t, "user", "password123", false)
@@ -91,6 +92,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 }
 
 func TestSearchUsersEndpoint(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user1 := ts.createTestUser(t, "alice", "password123", false)
 	bob := ts.createTestUser(t, "bob", "password123", false)
@@ -164,6 +166,7 @@ func TestSearchUsersEndpoint(t *testing.T) {
 // TestPerUserNoteState verifies that per-user fields (color, pinned, archived, labels)
 // are isolated per collaborator while shared fields (title, content, items) are visible to all.
 func TestPerUserNoteState(t *testing.T) {
+	t.Parallel()
 	t.Run("collaborator color change does not affect owner", func(t *testing.T) {
 		ts := setupTestServer(t)
 		owner := ts.createTestUser(t, "owner", "password123", false)
@@ -406,6 +409,7 @@ func TestPerUserNoteState(t *testing.T) {
 }
 
 func TestEdgeCases(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "user", "password123", false)
 
@@ -487,6 +491,7 @@ func TestEdgeCases(t *testing.T) {
 // TestBatchLoadNoteSharesChunkBoundary verifies that getSharesByNoteIDs correctly
 // stitches results across the 500-ID chunk boundary when listing notes.
 func TestBatchLoadNoteSharesChunkBoundary(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	owner := ts.createTestUser(t, "chunkowner", "password123", false)
 	collab := ts.createTestUser(t, "chunkcollab", "password123", false)

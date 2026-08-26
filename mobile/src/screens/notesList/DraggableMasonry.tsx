@@ -153,6 +153,7 @@ export default function DraggableMasonry({
     sections.forEach((s) => {
       next[s.key] = s.data.map((n) => n.id);
     });
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
     setOrders(next);
   }, [sections, isDragging]);
 
@@ -166,12 +167,13 @@ export default function DraggableMasonry({
   }, [sections]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
     setHeights((prev) => {
       let changed = false;
       const next: Record<string, number> = {};
       Object.keys(prev).forEach((id) => {
         if (liveIds.has(id)) {
-          next[id] = prev[id];
+          next[id] = prev[id]!;
         } else {
           changed = true;
         }
@@ -189,6 +191,7 @@ export default function DraggableMasonry({
   // reflows immediately. Ids no longer present anywhere in `sections` are
   // dropped so this cache doesn't grow unbounded.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
     setCommittedHeights((prev) => {
       let changed = false;
       const next: Record<string, number> = {};
@@ -197,15 +200,18 @@ export default function DraggableMasonry({
           changed = true;
           return;
         }
-        next[id] = heights[id] !== undefined && heights[id] !== prev[id] ? heights[id] : prev[id];
-        if (next[id] !== prev[id]) changed = true;
+        const measured = heights[id];
+        const committed = prev[id]!;
+        next[id] = measured !== undefined ? measured : committed;
+        if (next[id] !== committed) changed = true;
       });
       sections.forEach((s) => {
         const order = orders[s.key] ?? s.data.map((n) => n.id);
         const pending = order.filter((id) => next[id] === undefined);
         if (pending.length > 0 && pending.every((id) => heights[id] !== undefined)) {
           pending.forEach((id) => {
-            next[id] = heights[id];
+            // Every pending id has a measured height, per the check above.
+            next[id] = heights[id]!;
           });
           changed = true;
         }
@@ -271,15 +277,20 @@ export default function DraggableMasonry({
   }, [sections, orders, committedHeights, columnWidth, columns]);
 
   const placedRef = useRef(packedBySection);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   placedRef.current = packedBySection;
   const ordersRef = useRef(orders);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   ordersRef.current = orders;
   const activeIdRef = useRef<string | null>(null);
   const columnWidthRef = useRef(columnWidth);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   columnWidthRef.current = columnWidth;
   const columnsRef = useRef(columns);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   columnsRef.current = columns;
   const sectionKeysRef = useRef(sections.map((s) => s.key));
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   sectionKeysRef.current = sections.map((s) => s.key);
 
   const handleMeasureHeight = useCallback((id: string, height: number) => {
@@ -317,8 +328,9 @@ export default function DraggableMasonry({
 
   const commitDrop = useCallback((sectionIndex: number) => {
     const key = sectionKeysRef.current[sectionIndex];
+    if (!key) return;
     const order = ordersRef.current[key];
-    if (!key || !order) return;
+    if (!order) return;
     const data = order.map((id) => notesById.get(id)).filter((n): n is Note => !!n);
     onSectionReorder(key, data);
   }, [notesById, onSectionReorder]);
@@ -334,12 +346,12 @@ export default function DraggableMasonry({
   const bottomZone = windowHeight - AUTO_SCROLL_EDGE;
   useFrameCallback(() => {
     'worklet';
-    if (shared.activeId.value === null) return;
-    const y = shared.fingerAbsY.value;
+    if (shared.activeId.get() === null) return;
+    const y = shared.fingerAbsY.get();
     if (y < topZone) {
-      scrollTo(scrollRef, 0, Math.max(0, shared.scrollOffset.value - AUTO_SCROLL_SPEED), false);
+      scrollTo(scrollRef, 0, Math.max(0, shared.scrollOffset.get() - AUTO_SCROLL_SPEED), false);
     } else if (y > bottomZone) {
-      scrollTo(scrollRef, 0, shared.scrollOffset.value + AUTO_SCROLL_SPEED, false);
+      scrollTo(scrollRef, 0, shared.scrollOffset.get() + AUTO_SCROLL_SPEED, false);
     }
   }, true);
 
@@ -359,8 +371,11 @@ export default function DraggableMasonry({
     >
       <View style={styles.content} onLayout={handleContentLayout}>
         {columnWidth > 0 &&
+          // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
           sections.map((section, sectionIndex) => {
             const packed = packedBySection[section.key];
+            // Two section refs are always enough — see their declaration above.
+            const sectionRef = sectionRefs[sectionIndex]!;
             if (!packed) return null;
             return (
               <View key={section.key}>
@@ -368,7 +383,7 @@ export default function DraggableMasonry({
                   <Text style={[listStyles.sectionHeader, { color: colors.textMuted }]}>{section.title}</Text>
                 ) : null}
                 <Animated.View
-                  ref={sectionRefs[sectionIndex]}
+                  ref={sectionRef}
                   style={{ height: packed.containerHeight, position: 'relative' }}
                 >
                   {packed.placed.map((item) => {
@@ -383,7 +398,7 @@ export default function DraggableMasonry({
                         x={item.x}
                         y={item.y}
                         animateEntrance={hasPopulatedRef.current}
-                        sectionRef={sectionRefs[sectionIndex]}
+                        sectionRef={sectionRef}
                         shared={shared}
                         onMeasureHeight={handleMeasureHeight}
                         onBeginDrag={beginDrag}
@@ -485,17 +500,17 @@ function DraggableCard({
   const posX = useSharedValue(x);
   const posY = useSharedValue(y);
   useEffect(() => {
-    posX.value = x;
-    posY.value = y;
+    posX.set(x);
+    posY.set(y);
   }, [x, y, posX, posY]);
 
   // Entrance fade for freshly added cards. Decided once at mount; existing cards
   // never re-run it, and it no-ops under the OS "Reduce Motion" setting.
-  const shouldFadeIn = useRef(animateEntrance && !isReduceMotionEnabledSync()).current;
+  const [shouldFadeIn] = useState(() => animateEntrance && !isReduceMotionEnabledSync());
   const entrance = useSharedValue(shouldFadeIn ? 0 : 1);
   useEffect(() => {
     if (shouldFadeIn) {
-      entrance.value = withTiming(1, { duration: 200 });
+      entrance.set(withTiming(1, { duration: 200 }));
     }
     // Mount-only: entrance is fixed per card.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -507,24 +522,25 @@ function DraggableCard({
         .activateAfterLongPress(LONG_PRESS_MS)
         .onStart((e) => {
           'worklet';
-          shared.activeId.value = id;
-          shared.activeSection.value = sectionIndex;
-          shared.startX.value = posX.value;
-          shared.startY.value = posY.value;
-          shared.startAbsX.value = e.absoluteX;
-          shared.startAbsY.value = e.absoluteY;
-          shared.startScroll.value = shared.scrollOffset.value;
-          shared.dragTX.value = 0;
-          shared.dragTY.value = 0;
-          shared.fingerAbsY.value = e.absoluteY;
+          shared.activeId.set(id);
+          shared.activeSection.set(sectionIndex);
+          shared.startX.set(posX.get());
+          shared.startY.set(posY.get());
+          shared.startAbsX.set(e.absoluteX);
+          shared.startAbsY.set(e.absoluteY);
+          shared.startScroll.set(shared.scrollOffset.get());
+          shared.dragTX.set(0);
+          shared.dragTY.set(0);
+          shared.fingerAbsY.set(e.absoluteY);
           runOnJS(onBeginDrag)(id);
         })
         .onUpdate((e) => {
           'worklet';
-          shared.dragTX.value = e.absoluteX - shared.startAbsX.value;
-          shared.dragTY.value =
-            e.absoluteY - shared.startAbsY.value + (shared.scrollOffset.value - shared.startScroll.value);
-          shared.fingerAbsY.value = e.absoluteY;
+          shared.dragTX.set(e.absoluteX - shared.startAbsX.get());
+          shared.dragTY.set(
+            e.absoluteY - shared.startAbsY.get() + (shared.scrollOffset.get() - shared.startScroll.get()),
+          );
+          shared.fingerAbsY.set(e.absoluteY);
           const m = measure(sectionRef);
           if (m !== null) {
             runOnJS(onHover)(sectionIndex, e.absoluteX - m.pageX, e.absoluteY - m.pageY);
@@ -536,23 +552,23 @@ function DraggableCard({
         })
         .onFinalize(() => {
           'worklet';
-          shared.activeId.value = null;
-          shared.activeSection.value = -1;
-          shared.dragTX.value = 0;
-          shared.dragTY.value = 0;
+          shared.activeId.set(null);
+          shared.activeSection.set(-1);
+          shared.dragTX.set(0);
+          shared.dragTY.set(0);
           runOnJS(onEndDrag)();
         }),
     [id, sectionIndex, posX, posY, sectionRef, shared, onBeginDrag, onHover, onCommit, onEndDrag],
   );
 
   const animatedStyle = useAnimatedStyle(() => {
-    const isActive = shared.activeId.value === id && shared.activeSection.value === sectionIndex;
+    const isActive = shared.activeId.get() === id && shared.activeSection.get() === sectionIndex;
     if (isActive) {
       return {
-        opacity: entrance.value,
+        opacity: entrance.get(),
         transform: [
-          { translateX: shared.startX.value + shared.dragTX.value },
-          { translateY: shared.startY.value + shared.dragTY.value },
+          { translateX: shared.startX.get() + shared.dragTX.get() },
+          { translateY: shared.startY.get() + shared.dragTY.get() },
           { scale: 1.03 },
         ],
         zIndex: 999,
@@ -564,7 +580,7 @@ function DraggableCard({
       };
     }
     return {
-      opacity: entrance.value,
+      opacity: entrance.get(),
       transform: [
         { translateX: withTiming(x, { duration: 180 }) },
         { translateY: withTiming(y, { duration: 180 }) },

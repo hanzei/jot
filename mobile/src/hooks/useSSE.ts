@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { AppState, AppStateStatus } from 'react-native';
+import type { AppStateStatus } from 'react-native';
+import { AppState } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useAuth } from '../store/AuthContext';
@@ -34,16 +35,20 @@ export function useSSE(
   const db = useSQLiteContext();
   const managerRef = useRef<SSEConnectionManager | null>(null);
   const onNoteUpdatedRef = useRef(onNoteUpdatedByOther);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   onNoteUpdatedRef.current = onNoteUpdatedByOther;
   const onStatusChangeRef = useRef(onStatusChange);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   onStatusChangeRef.current = onStatusChange;
   // Tracks whether the stream has connected at least once this session, so the
   // catch-up resync fires only on a *re*connect and not the initial connect
   // (whose catch-up is already covered by the read hooks' mount-time sync).
   const hasConnectedOnceRef = useRef(false);
   const dbRef = useRef(db);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   dbRef.current = db;
   const userIdRef = useRef(user?.id);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   userIdRef.current = user?.id;
 
   const startConnection = useCallback(() => {
@@ -87,9 +92,8 @@ export function useSSE(
               // (deferring to a pending local edit on this note; see #487).
               try {
                 await saveServerNote(db, note);
-              } catch {
-                // Note has a pending/failed local op or the write failed; keep the
-                // local copy and let the queue drain / next sync reconcile it.
+              } catch (err) {
+                console.warn(`Failed to persist SSE ${event.type} for note id=${note_id}:`, err);
               }
             }
             queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(note_id) });
@@ -117,8 +121,8 @@ export function useSSE(
                 queryClient.removeQueries({ queryKey: noteLocalQueryKey(note_id) });
                 await markLocalNoteDeleted(db, note_id);
               }
-            } catch {
-              // Leave the local copy in place; a later sync reconciles it.
+            } catch (err) {
+              console.warn(`Failed to persist SSE ${event.type} for note id=${note_id}:`, err);
             }
             queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
             invalidateLabelQueries();
@@ -141,9 +145,8 @@ export function useSSE(
               } else {
                 await saveServerNote(db, await getNote(note_id));
               }
-            } catch {
-              // Pending/failed local op, fetch failure, or note inaccessible;
-              // the next background sync reconciles it.
+            } catch (err) {
+              console.warn(`Failed to persist SSE ${event.type} for note id=${note_id}:`, err);
             }
             queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(note_id) });
             queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
@@ -163,8 +166,8 @@ export function useSSE(
                   queryClient.removeQueries({ queryKey: noteLocalQueryKey(note_id) });
                   await permanentDeleteLocalNote(db, note_id);
                 }
-              } catch {
-                // Leave the local copy in place; a later sync reconciles it.
+              } catch (err) {
+                console.warn(`Failed to persist SSE ${event.type} for note id=${note_id}:`, err);
               }
             } else {
               // Owner / remaining collaborator: they keep the note but its
@@ -174,9 +177,8 @@ export function useSSE(
               // shared_with/is_shared (deferring to a pending local edit; #487).
               try {
                 await saveServerNote(db, await getNote(note_id));
-              } catch {
-                // Fetch failed or note has a pending/failed local op; the next
-                // background sync reconciles it.
+              } catch (err) {
+                console.warn(`Failed to persist SSE ${event.type} for note id=${note_id}:`, err);
               }
               queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(note_id) });
             }
@@ -198,9 +200,8 @@ export function useSSE(
                 if (!imageId) return images;
                 return images.filter((img) => img.id !== imageId);
               });
-            } catch {
-              // Note not cached locally yet, or the write failed; the next
-              // background sync/fetch reconciles it.
+            } catch (err) {
+              console.warn(`Failed to persist SSE ${event.type} for note id=${imageNoteId}:`, err);
             }
             queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(imageNoteId) });
             queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
@@ -215,8 +216,8 @@ export function useSSE(
             if (label) {
               try {
                 await upsertLabel(db, label);
-              } catch {
-                // Write failed; the next background sync reconciles the store.
+              } catch (err) {
+                console.warn(`Failed to persist SSE ${event.type} for label id=${label.id}:`, err);
               }
             }
             invalidateLabelQueries();

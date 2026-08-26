@@ -1,3 +1,4 @@
+import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures';
 
 /**
@@ -8,14 +9,15 @@ import { test, expect } from '../fixtures';
  * lands.
  */
 test.describe('Checked-item bulk actions', () => {
-  const rowCheckbox = (page: import('@playwright/test').Page, index: number) =>
+  const rowCheckbox = (page: Page, index: number) =>
     page.locator('[data-testid="list-item-row"] input[type="checkbox"]').nth(index);
 
   // Checks the first active item and waits for the completed section to appear.
   // A single forced click checks exactly one item: a plain .check() would
   // re-resolve nth(0) as the checked item reflows into the completed section and
   // end up clicking (and completing) every item in turn.
-  const checkFirstItem = async (page: import('@playwright/test').Page) => {
+  const checkFirstItem = async (page: Page) => {
+    // eslint-disable-next-line playwright/no-force-option
     await rowCheckbox(page, 0).click({ force: true });
     await expect(page.getByText(/Completed items/)).toBeVisible();
   };
@@ -49,6 +51,7 @@ test.describe('Checked-item bulk actions', () => {
     // Complete two items (the first reflows into the completed section, so the
     // second forced click lands on what is now the first active row).
     await checkFirstItem(page);
+    // eslint-disable-next-line playwright/no-force-option -- see checkFirstItem above
     await rowCheckbox(page, 0).click({ force: true });
     await expect(page.getByText('Completed items (2)')).toBeVisible();
 
@@ -115,9 +118,12 @@ test.describe('Checked-item bulk actions', () => {
       { timeout: 10_000 },
     );
     await page.getByRole('dialog').last().getByRole('button', { name: 'Add item' }).click();
-    await page.keyboard.type('Keep me');
     // Active items render before the completed section, so the new unchecked
-    // item is the first input.
+    // item is the first input. Wait for it to take focus before typing: the row
+    // is focused a tick after the click, and keystrokes sent before that land
+    // nowhere and are simply lost.
+    await dashboardPage.expectListItemFocused(0);
+    await page.keyboard.type('Keep me');
     await dashboardPage.expectListItemValue(0, 'Keep me');
     await keepCreated;
 

@@ -22,6 +22,12 @@ func scanRows[T any](rows *sql.Rows, scan func(*sql.Rows) (T, error)) iter.Seq2[
 	}
 }
 
+// scanString scans a single string column, for id/hash-only queries.
+func scanString(rows *sql.Rows) (string, error) {
+	var s string
+	return s, rows.Scan(&s)
+}
+
 // collectRows queries rows and collects results into a slice using the
 // provided scan function. It closes the rows when done.
 func collectRows[T any](rows *sql.Rows, scan func(*sql.Rows) (T, error)) ([]T, error) {

@@ -1,162 +1,11 @@
-import React from 'react';
 import { render, act, waitFor } from '@testing-library/react-native';
+import {
+  mockUseRoute,
+  mockNavigationAddListener,
+  mockUseOfflineNote,
+  mockToggleItemCompletedMutateAsync as mockToggleMutateAsync,
+} from './helpers/noteEditorScreenTestSetup';
 import NoteEditorScreen from '../src/screens/NoteEditorScreen';
-
-const mockUseRoute = jest.fn();
-const mockNavigationAddListener = jest.fn().mockReturnValue(jest.fn());
-const mockUseOfflineNote = jest.fn();
-const mockToggleMutateAsync = jest.fn();
-
-jest.mock('@react-navigation/native', () => ({
-  __esModule: true,
-  useRoute: () => mockUseRoute(),
-  useNavigation: () => ({
-    goBack: jest.fn(),
-    replace: jest.fn(),
-    navigate: jest.fn(),
-    dispatch: jest.fn(),
-    setParams: jest.fn(),
-    addListener: mockNavigationAddListener,
-  }),
-  useFocusEffect: jest.fn(),
-}));
-
-jest.mock('@react-navigation/elements', () => ({
-  __esModule: true,
-  useHeaderHeight: () => 56,
-}));
-
-jest.mock('react-native-safe-area-context', () => {
-  const { createContext } = jest.requireActual<typeof import('react')>('react');
-  const insets = { top: 0, right: 0, bottom: 0, left: 0 };
-  return {
-    __esModule: true,
-    useSafeAreaInsets: () => insets,
-    SafeAreaInsetsContext: createContext(insets),
-  };
-});
-
-jest.mock('expo-haptics', () => ({
-  __esModule: true,
-  impactAsync: jest.fn(() => Promise.resolve()),
-  notificationAsync: jest.fn(() => Promise.resolve()),
-  ImpactFeedbackStyle: { Light: 'light', Medium: 'medium' },
-  NotificationFeedbackType: { Error: 'error' },
-}));
-
-// react-native-reorderable-list is mocked once globally in jest.setup.js.
-
-jest.mock('../src/hooks/useNotes', () => ({
-  __esModule: true,
-  useCreateNote: () => ({ mutateAsync: jest.fn() }),
-  useUpdateNote: () => ({ mutateAsync: jest.fn().mockResolvedValue({}) }),
-  useDeleteNote: () => ({ mutateAsync: jest.fn() }),
-  useRestoreNote: () => ({ mutateAsync: jest.fn() }),
-  usePermanentDeleteNote: () => ({ mutateAsync: jest.fn() }),
-  useDuplicateNote: () => ({ mutateAsync: jest.fn() }),
-  useConvertNoteType: () => ({ mutateAsync: jest.fn() }),
-  useCreateNoteItem: () => ({ mutateAsync: jest.fn() }),
-  useUpdateNoteItem: () => ({ mutateAsync: jest.fn() }),
-  useDeleteNoteItem: () => ({ mutateAsync: jest.fn() }),
-  useReorderNoteItems: () => ({ mutateAsync: jest.fn() }),
-  useToggleNoteItemCompleted: () => ({ mutateAsync: mockToggleMutateAsync }),
-  useUncheckAllItems: () => ({ mutateAsync: jest.fn().mockResolvedValue([]) }),
-  useDeleteCompletedItems: () => ({ mutateAsync: jest.fn().mockResolvedValue([]) }),
-}));
-
-jest.mock('../src/hooks/useNoteImages', () => ({
-  __esModule: true,
-  useUploadNoteImage: () => ({
-    mutateAsync: jest.fn(),
-  }),
-  useDeleteNoteImage: () => ({
-    mutateAsync: jest.fn(),
-  }),
-}));
-
-jest.mock('../src/hooks/usePendingImageUploads', () => ({
-  __esModule: true,
-  usePendingImageUploads: () => [],
-  useRetryPendingImageUpload: () => ({ mutate: jest.fn() }),
-  useDismissPendingImageUpload: () => ({ mutate: jest.fn() }),
-}));
-
-jest.mock('../src/hooks/useOfflineNotes', () => ({
-  __esModule: true,
-  useOfflineNote: () => mockUseOfflineNote(),
-}));
-
-jest.mock('../src/store/SSEContext', () => ({
-  __esModule: true,
-  useSSESubscription: jest.fn(),
-  useSSEContext: jest.fn(() => ({ sseReconnecting: false })),
-}));
-
-jest.mock('../src/components/LabelPicker', () => ({
-  __esModule: true,
-  default: () => null,
-}));
-
-jest.mock('react-i18next', () => ({
-  __esModule: true,
-  useTranslation: () => ({
-    t: (key: string, options?: { count?: number }) => {
-      if (key === 'note.completedItems') {
-        return `${options?.count ?? 0} completed items`;
-      }
-      return key;
-    },
-    i18n: { language: 'en' },
-  }),
-}));
-
-jest.mock('../src/theme/ThemeContext', () => ({
-  __esModule: true,
-  useTheme: () => ({
-    isDark: false,
-    colors: {
-      background: '#fff',
-      surface: '#fff',
-      border: '#ddd',
-      borderLight: '#eee',
-      text: '#111',
-      textSecondary: '#444',
-      textMuted: '#777',
-      placeholder: '#aaa',
-      icon: '#555',
-      iconMuted: '#888',
-      primary: '#2563eb',
-      primaryLight: '#dbeafe',
-      error: '#dc2626',
-      errorLight: '#fee2e2',
-      cardBackground: '#fff',
-      cardBorder: '#ddd',
-    },
-  }),
-}));
-
-jest.mock('../src/store/AuthContext', () => ({
-  __esModule: true,
-  useAuth: () => ({
-    user: { id: 'u1', username: 'alice' },
-    isAuthenticated: true,
-  }),
-}));
-
-jest.mock('../src/store/UsersContext', () => ({
-  __esModule: true,
-  useUsers: () => ({ usersById: new Map() }),
-}));
-
-jest.mock('../src/hooks/useToast', () => ({
-  __esModule: true,
-  useToast: () => ({ showToast: jest.fn() }),
-}));
-
-jest.mock('../src/i18n', () => ({
-  __esModule: true,
-  default: {},
-}));
 
 const PARENT_ID = 'pppppppppppppppppppppp';
 const CHILD_ID = 'cccccccccccccccccccccc';
@@ -235,31 +84,28 @@ describe('NoteEditorScreen toggle rollback', () => {
       },
     );
 
-    const { getAllByTestId, getByText, UNSAFE_getAllByProps } = render(<NoteEditorScreen />);
+    const { getAllByTestId, getByText } = await render(<NoteEditorScreen />);
 
     // Both items start unchecked, so both render in the active list:
-    // [0] = Parent, [1] = Child. The checkbox composites carry onPress (= the
-    // row's toggle handler); the testID host node does not.
-    // Each checkbox surfaces as multiple nodes sharing one onPress reference;
-    // dedupe by handler identity to get one entry per row (Parent, then Child).
-    const seenToggles = new Set<unknown>();
-    const checkboxes = UNSAFE_getAllByProps({ accessibilityRole: 'checkbox' })
-      .filter((node) => typeof node.props.onPress === 'function')
-      .filter((node) => {
-        if (seenToggles.has(node.props.onPress)) return false;
-        seenToggles.add(node.props.onPress);
-        return true;
-      });
+    // [0] = Parent, [1] = Child.
+    const checkboxes = getAllByTestId('list-item-checkbox');
     expect(checkboxes).toHaveLength(2);
 
-    jest.spyOn(console, 'error').mockImplementation(() => {});
-
-    // Invoke both toggles in one act() so the parent toggle runs against the
-    // child's optimistic state before a re-render — reproducing a rapid
-    // double-tap. onPress wraps handleItemCompletedToggle(id, !completed).
-    await act(async () => {
-      checkboxes[1].props.onPress(); // check Child (request succeeds)
-      checkboxes[0].props.onPress(); // check Parent (request fails)
+    // Invoke both toggles synchronously inside one act() so the parent toggle
+    // runs against the child's optimistic state before a re-render —
+    // reproducing a rapid double-tap. `fireEvent.press` won't do here: it's
+    // async and wraps its own act() internally, so two calls without an
+    // await between them are overlapping act() calls (React warns and it's
+    // unsupported) rather than the same-tick dispatch this test needs.
+    // `onClick` is the Pressability-config handler these checkboxes render
+    // with (react-native/Libraries/Pressability/Pressability.js) — calling it
+    // directly re-creates the pre-v14 test's direct-handler-invocation
+    // approach without going through fireEvent's async wrapping.
+    const press = (checkbox: (typeof checkboxes)[number]) =>
+      (checkbox.props as { onClick?: () => void }).onClick?.();
+    await act(() => {
+      press(checkboxes[1]!); // check Child (request succeeds)
+      press(checkboxes[0]!); // check Parent (request fails)
     });
 
     // Parent rolled back to unchecked; Child stays checked.

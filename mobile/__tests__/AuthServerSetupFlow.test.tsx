@@ -1,4 +1,3 @@
-import React from 'react';
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 import LoginScreen from '../src/screens/LoginScreen';
@@ -15,6 +14,7 @@ jest.mock('../src/store/AuthContext', () => ({
 jest.mock('../src/api/client', () => ({
   getBaseUrl: jest.fn(),
   getStoredServerUrl: jest.fn(),
+  getActiveServerId: jest.fn(),
   probeServerReachability: jest.fn(),
   setServerUrl: jest.fn(),
 }));
@@ -40,6 +40,8 @@ describe('Auth first-run server setup flow', () => {
       isLoading: false,
       isLocalMode: false,
       revalidationFailed: false,
+      sessionEndedReason: null,
+      clearSessionEndedReason: jest.fn(),
       login: mockLogin,
       register: mockRegister,
       enableLocalMode: mockEnableLocalMode,
@@ -64,8 +66,8 @@ describe('Auth first-run server setup flow', () => {
     cleanup();
   });
 
-  function renderLoginScreen() {
-    return render(
+  async function renderLoginScreen() {
+    return await render(
       <LoginScreen
         navigation={
           {
@@ -76,8 +78,8 @@ describe('Auth first-run server setup flow', () => {
     );
   }
 
-  function renderRegisterScreen() {
-    return render(
+  async function renderRegisterScreen() {
+    return await render(
       <RegisterScreen
         navigation={
           {
@@ -89,7 +91,7 @@ describe('Auth first-run server setup flow', () => {
   }
 
   it('shows server setup first when no server is configured', async () => {
-    const { getByTestId, queryByTestId } = renderLoginScreen();
+    const { getByTestId, queryByTestId } = await renderLoginScreen();
 
     await waitFor(() => {
       expect(getByTestId('login-server-setup-step')).toBeTruthy();
@@ -99,14 +101,14 @@ describe('Auth first-run server setup flow', () => {
   });
 
   it('shows URL validation error for invalid server URL', async () => {
-    const { getByTestId, getByText } = renderLoginScreen();
+    const { getByTestId, getByText } = await renderLoginScreen();
 
     await waitFor(() => {
       expect(getByTestId('login-server-setup-step')).toBeTruthy();
     });
 
-    fireEvent.changeText(getByTestId('login-server-setup-input'), 'not-a-url');
-    fireEvent.press(getByTestId('login-server-setup-submit'));
+    await fireEvent.changeText(getByTestId('login-server-setup-input'), 'not-a-url');
+    await fireEvent.press(getByTestId('login-server-setup-submit'));
 
     await waitFor(() => {
       expect(getByText(i18n.t('auth.serverUrlProtocol'))).toBeTruthy();
@@ -125,14 +127,14 @@ describe('Auth first-run server setup flow', () => {
         canonicalUrl: 'http://192.168.1.42:8080',
       });
 
-    const { getByTestId, queryByTestId, getByText } = renderLoginScreen();
+    const { getByTestId, queryByTestId, getByText } = await renderLoginScreen();
 
     await waitFor(() => {
       expect(getByTestId('login-server-setup-step')).toBeTruthy();
     });
 
-    fireEvent.changeText(getByTestId('login-server-setup-input'), 'http://192.168.1.42:8080');
-    fireEvent.press(getByTestId('login-server-setup-submit'));
+    await fireEvent.changeText(getByTestId('login-server-setup-input'), 'http://192.168.1.42:8080');
+    await fireEvent.press(getByTestId('login-server-setup-submit'));
 
     await waitFor(() => {
       expect(getByText(i18n.t('auth.serverSetupConnectionFailed'))).toBeTruthy();
@@ -140,7 +142,7 @@ describe('Auth first-run server setup flow', () => {
     expect(getByTestId('login-server-setup-step')).toBeTruthy();
     expect(queryByTestId('username-input')).toBeNull();
 
-    fireEvent.press(getByTestId('login-server-setup-submit'));
+    await fireEvent.press(getByTestId('login-server-setup-submit'));
 
     await waitFor(() => {
       expect(getByTestId('username-input')).toBeTruthy();
@@ -149,23 +151,23 @@ describe('Auth first-run server setup flow', () => {
   });
 
   it('moves to login form after reachable server and keeps login flow working', async () => {
-    const { getByTestId, findByTestId } = renderLoginScreen();
+    const { getByTestId, findByTestId } = await renderLoginScreen();
 
     await waitFor(() => {
       expect(getByTestId('login-server-setup-step')).toBeTruthy();
     });
 
-    fireEvent.changeText(getByTestId('login-server-setup-input'), 'http://localhost:8080');
-    fireEvent.press(getByTestId('login-server-setup-submit'));
+    await fireEvent.changeText(getByTestId('login-server-setup-input'), 'http://localhost:8080');
+    await fireEvent.press(getByTestId('login-server-setup-submit'));
 
     await waitFor(() => {
       expect(mockSetServerUrl).toHaveBeenCalledWith('http://localhost:8080');
     });
     expect(await findByTestId('username-input')).toBeTruthy();
 
-    fireEvent.changeText(getByTestId('username-input'), 'alice');
-    fireEvent.changeText(getByTestId('password-input'), 'pass1234');
-    fireEvent.press(getByTestId('login-button'));
+    await fireEvent.changeText(getByTestId('username-input'), 'alice');
+    await fireEvent.changeText(getByTestId('password-input'), 'pass1234');
+    await fireEvent.press(getByTestId('login-button'));
 
     await waitFor(() => {
       expect(mockLogin).toHaveBeenCalledWith('alice', 'pass1234');
@@ -173,25 +175,25 @@ describe('Auth first-run server setup flow', () => {
   });
 
   it('moves to register form after reachable server and keeps registration working', async () => {
-    const { getByTestId, findByTestId } = renderRegisterScreen();
+    const { getByTestId, findByTestId } = await renderRegisterScreen();
     const validPassword = 'p'.repeat(VALIDATION.PASSWORD_MIN_LENGTH);
 
     await waitFor(() => {
       expect(getByTestId('register-server-setup-step')).toBeTruthy();
     });
 
-    fireEvent.changeText(getByTestId('register-server-setup-input'), 'http://localhost:8080');
-    fireEvent.press(getByTestId('register-server-setup-submit'));
+    await fireEvent.changeText(getByTestId('register-server-setup-input'), 'http://localhost:8080');
+    await fireEvent.press(getByTestId('register-server-setup-submit'));
 
     await waitFor(() => {
       expect(mockSetServerUrl).toHaveBeenCalledWith('http://localhost:8080');
     });
     expect(await findByTestId('username-input')).toBeTruthy();
 
-    fireEvent.changeText(getByTestId('username-input'), 'new_user');
-    fireEvent.changeText(getByTestId('password-input'), validPassword);
+    await fireEvent.changeText(getByTestId('username-input'), 'new_user');
+    await fireEvent.changeText(getByTestId('password-input'), validPassword);
 
-    fireEvent.press(getByTestId('register-button'));
+    await fireEvent.press(getByTestId('register-button'));
 
     await waitFor(() => {
       expect(mockRegister).toHaveBeenCalledWith('new_user', validPassword);
@@ -209,20 +211,20 @@ describe('Auth first-run server setup flow', () => {
         canonicalUrl: 'http://192.168.1.50:8080',
       });
 
-    const { getByTestId, getByText, findByTestId } = renderRegisterScreen();
+    const { getByTestId, getByText, findByTestId } = await renderRegisterScreen();
 
     await waitFor(() => {
       expect(getByTestId('register-server-setup-step')).toBeTruthy();
     });
 
-    fireEvent.changeText(getByTestId('register-server-setup-input'), 'http://192.168.1.50:8080');
-    fireEvent.press(getByTestId('register-server-setup-submit'));
+    await fireEvent.changeText(getByTestId('register-server-setup-input'), 'http://192.168.1.50:8080');
+    await fireEvent.press(getByTestId('register-server-setup-submit'));
 
     await waitFor(() => {
       expect(getByText(i18n.t('auth.serverSetupConnectionFailed'))).toBeTruthy();
     });
 
-    fireEvent.press(getByTestId('register-server-setup-submit'));
+    await fireEvent.press(getByTestId('register-server-setup-submit'));
 
     await waitFor(() => {
       expect(mockSetServerUrl).toHaveBeenCalledWith('http://192.168.1.50:8080');
@@ -233,7 +235,7 @@ describe('Auth first-run server setup flow', () => {
   it('skips setup when a server is already configured', async () => {
     mockGetStoredServerUrl.mockResolvedValue('https://notes.example.com');
 
-    const { getByTestId, queryByTestId } = renderLoginScreen();
+    const { getByTestId, queryByTestId } = await renderLoginScreen();
 
     await waitFor(() => {
       expect(getByTestId('username-input')).toBeTruthy();
@@ -249,14 +251,14 @@ describe('Auth first-run server setup flow', () => {
       ok: false,
       reason: 'AUTH_ENDPOINT_UNAVAILABLE',
     });
-    const { getByTestId, getByText } = renderLoginScreen();
+    const { getByTestId, getByText } = await renderLoginScreen();
 
     await waitFor(() => {
       expect(getByTestId('login-server-setup-step')).toBeTruthy();
     });
 
-    fireEvent.changeText(getByTestId('login-server-setup-input'), 'http://localhost:8080');
-    fireEvent.press(getByTestId('login-server-setup-submit'));
+    await fireEvent.changeText(getByTestId('login-server-setup-input'), 'http://localhost:8080');
+    await fireEvent.press(getByTestId('login-server-setup-submit'));
 
     await waitFor(() => {
       expect(getByText(i18n.t('auth.serverSetupConnectionInvalidServer'))).toBeTruthy();
@@ -266,14 +268,14 @@ describe('Auth first-run server setup flow', () => {
 
   it('shows connection error when server activation fails after probe success', async () => {
     mockSetServerUrl.mockRejectedValueOnce(new Error('switch failed'));
-    const { getByTestId, getByText } = renderLoginScreen();
+    const { getByTestId, getByText } = await renderLoginScreen();
 
     await waitFor(() => {
       expect(getByTestId('login-server-setup-step')).toBeTruthy();
     });
 
-    fireEvent.changeText(getByTestId('login-server-setup-input'), 'http://localhost:8080');
-    fireEvent.press(getByTestId('login-server-setup-submit'));
+    await fireEvent.changeText(getByTestId('login-server-setup-input'), 'http://localhost:8080');
+    await fireEvent.press(getByTestId('login-server-setup-submit'));
 
     await waitFor(() => {
       expect(getByText(i18n.t('auth.serverSetupConnectionFailed'))).toBeTruthy();
@@ -286,14 +288,14 @@ describe('Auth first-run server setup flow', () => {
     // Fresh install: local mode is a first-class choice, so no confirmation.
     mockGetStoredServerUrl.mockResolvedValue(null);
     const alertSpy = jest.spyOn(Alert, 'alert');
-    const { getByTestId } = renderLoginScreen();
+    const { getByTestId } = await renderLoginScreen();
 
     await waitFor(() => {
       expect(getByTestId('use-local-mode-button')).toBeTruthy();
     });
     await act(async () => {});
 
-    fireEvent.press(getByTestId('use-local-mode-button'));
+    await fireEvent.press(getByTestId('use-local-mode-button'));
 
     await waitFor(() => {
       expect(mockEnableLocalMode).toHaveBeenCalledTimes(1);
@@ -306,19 +308,19 @@ describe('Auth first-run server setup flow', () => {
     // on-device notebook away from their server notes.
     mockGetStoredServerUrl.mockResolvedValue('https://notes.example.com');
     const alertSpy = jest.spyOn(Alert, 'alert');
-    const { getByTestId, findByTestId } = renderLoginScreen();
+    const { getByTestId, findByTestId } = await renderLoginScreen();
 
     await findByTestId('username-input');
     // Flush the effect that reads the stored server URL into hasConfiguredServer.
     await act(async () => {});
 
-    fireEvent.press(getByTestId('use-local-mode-button'));
+    await fireEvent.press(getByTestId('use-local-mode-button'));
 
     expect(alertSpy).toHaveBeenCalledTimes(1);
     expect(mockEnableLocalMode).not.toHaveBeenCalled();
 
     // Invoke the confirm action from the alert's button list.
-    const buttons = alertSpy.mock.calls[0][2] as { text?: string; onPress?: () => void }[];
+    const buttons = alertSpy.mock.calls[0]![2] as { text?: string; onPress?: () => void }[];
     const confirmButton = buttons.find((b) => b.text === i18n.t('auth.localModeLink'));
     expect(confirmButton).toBeDefined();
     await act(async () => {
@@ -328,5 +330,71 @@ describe('Auth first-run server setup flow', () => {
     await waitFor(() => {
       expect(mockEnableLocalMode).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it('does not show a session-ended message by default', async () => {
+    mockGetStoredServerUrl.mockResolvedValue('https://notes.example.com');
+    const { findByTestId, queryByTestId } = await renderLoginScreen();
+
+    await findByTestId('username-input');
+    expect(queryByTestId('session-ended-banner')).toBeNull();
+  });
+
+  it('shows a session-ended message after a 401-driven logout and clears it on dismiss (#853)', async () => {
+    const mockClearSessionEndedReason = jest.fn();
+    mockUseAuth.mockReturnValue({
+      user: null,
+      settings: null,
+      isAuthenticated: false,
+      isLoading: false,
+      isLocalMode: false,
+      revalidationFailed: false,
+      sessionEndedReason: 'unauthorized',
+      clearSessionEndedReason: mockClearSessionEndedReason,
+      login: mockLogin,
+      register: mockRegister,
+      enableLocalMode: mockEnableLocalMode,
+      logout: jest.fn(),
+      clearAuth: jest.fn(),
+      revalidateSession: jest.fn(),
+      setUser: jest.fn(),
+      setSettings: jest.fn(),
+      completeServerUpgrade: jest.fn(),
+    });
+
+    const { getByTestId, queryByTestId, rerender } = await renderLoginScreen();
+
+    await waitFor(() => {
+      expect(getByTestId('session-ended-banner')).toBeTruthy();
+    });
+    expect(getByTestId('session-ended-banner')).toHaveTextContent(i18n.t('auth.sessionEndedMessage'), { exact: false });
+
+    await fireEvent.press(getByTestId('session-ended-dismiss'));
+    expect(mockClearSessionEndedReason).toHaveBeenCalledTimes(1);
+
+    // The mock is stateless (dismiss doesn't flip sessionEndedReason back to
+    // null on its own), so rerender with the reason cleared, the way
+    // AuthContext would after a real dismiss.
+    mockUseAuth.mockReturnValue({
+      user: null,
+      settings: null,
+      isAuthenticated: false,
+      isLoading: false,
+      isLocalMode: false,
+      revalidationFailed: false,
+      sessionEndedReason: null,
+      clearSessionEndedReason: mockClearSessionEndedReason,
+      login: mockLogin,
+      register: mockRegister,
+      enableLocalMode: mockEnableLocalMode,
+      logout: jest.fn(),
+      clearAuth: jest.fn(),
+      revalidateSession: jest.fn(),
+      setUser: jest.fn(),
+      setSettings: jest.fn(),
+      completeServerUpgrade: jest.fn(),
+    });
+    await rerender(<LoginScreen navigation={{ navigate: jest.fn() } as never} />);
+    expect(queryByTestId('session-ended-banner')).toBeNull();
   });
 });

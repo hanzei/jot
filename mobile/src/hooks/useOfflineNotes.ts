@@ -22,8 +22,10 @@ export function useOfflineNotes(params?: GetNotesParams, options?: { enabled?: b
   const queryClient = useQueryClient();
   const { isConnected } = useNetworkStatus();
   const paramsRef = useRef(params);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   paramsRef.current = params;
   const isConnectedRef = useRef(isConnected);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
   const enabled = options?.enabled ?? true;
   // Re-entrancy guard: skip a resync while one is already running rather than
@@ -113,6 +115,7 @@ export function useOfflineNote(id: string | null) {
   const queryClient = useQueryClient();
   const { isConnected } = useNetworkStatus();
   const isConnectedRef = useRef(isConnected);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isConnectedRef.current = isConnected;
 
   const query = useQuery<Note | null>({
@@ -122,6 +125,19 @@ export function useOfflineNote(id: string | null) {
     staleTime: Infinity,
     gcTime: Infinity,
   });
+
+  // Both note reads are SQLite-backed, so a write here has to invalidate both:
+  // the single-note query the editor renders *and* every cached notes list. The
+  // dashboard's own sync doesn't re-run on navigation, so without the list
+  // invalidation a card kept rendering the item set SQLite held when the list
+  // was last read — most visibly a shopping list whose unchecked items, added on
+  // another device while the SSE stream was down, showed in the editor (which
+  // this sync had just refreshed) but not on its card, with only an app restart
+  // clearing it.
+  const invalidateNoteReads = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
+    queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+  }, [queryClient]);
 
   // Fetch the note from the server (with retry/backoff) and refresh the local
   // cache. Shared by the online background effect and the SSE-reconnect catch-up.
@@ -135,7 +151,7 @@ export function useOfflineNote(id: string | null) {
       });
       if (canceller.cancelled) return;
       await saveServerNote(db, serverNote);
-      queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
+      invalidateNoteReads();
     } catch (err) {
       // Cancelled or offline: expected; keep the local cache.
       if (err instanceof SyncAbortedError) return;
@@ -155,7 +171,7 @@ export function useOfflineNote(id: string | null) {
           // during the await above, in which case we must not write.
           if (!canceller.cancelled && !protectedNoteIds.has(id)) {
             await markLocalNoteDeleted(db, id);
-            queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
+            invalidateNoteReads();
           }
         } catch (tombstoneErr) {
           console.warn(`Failed to tombstone note id=${id} after server reported it gone:`, tombstoneErr);
@@ -165,7 +181,7 @@ export function useOfflineNote(id: string | null) {
       // Retries exhausted (or another error): local cache is used as fallback.
       console.warn(`Background note sync failed for id=${id} after retries:`, err);
     }
-  }, [id, db, queryClient]);
+  }, [id, db, invalidateNoteReads]);
 
   // Background fetch from server when online to keep local cache fresh.
   useEffect(() => {

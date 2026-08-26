@@ -10,6 +10,7 @@ import (
 )
 
 func TestSecurityHeaders(t *testing.T) {
+	t.Parallel()
 	t.Run("standard headers are present on probe endpoint", func(t *testing.T) {
 		ts := setupTestServer(t)
 		c := ts.newClient()

@@ -9,25 +9,96 @@ permissions:
   contents: write
 
 jobs:
-  goreleaser:
+  # GoReleaser creates the release itself: draft first, archives uploaded, then
+  # undrafted. That is the only order immutable releases accept, and it breaks
+  # if the tag already has a *published* release — GoReleaser reuses it and
+  # every upload comes back as "422 Cannot upload assets to an immutable
+  # release" (this is what happened to v0.8.7). Stop before anything is built or
+  # pushed rather than discover it after cross-compiling artifacts that cannot
+  # be attached.
+  #
+  # This is a job of its own so that both publishing jobs gate on the
+  # precondition instead of on each other. The Docker images are built from
+  # source (see Dockerfile) and consume nothing GoReleaser produces, so the
+  # `needs: goreleaser` this replaced bought only the ordering — at the cost of
+  # leaving the image build idle for the length of the GoReleaser job, and of
+  # putting anything later added ahead of GoReleaser on the images' critical
+  # path too. Running them concurrently means a failure in one no longer skips
+  # the other, so a GoReleaser failure can leave images pushed for a release
+  # still sitting in draft; that draft still accepts uploads, so re-running the
+  # workflow completes it.
+  #
+  # The Android APK is the one asset that *does* need to reach GoReleaser
+  # before it runs: it has to be uploaded as a release asset in the same
+  # draft-then-undraft sequence, via .goreleaser.yml's release.extra_files, or
+  # it hits the same immutable-release 422 as everything else attached after
+  # the fact. That is why `goreleaser` (but not `docker`) needs `apk` below —
+  # unlike the Docker images, the APK has nowhere else to go.
+  check-tag:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - name: Check the tag has no published release yet
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        # --repo is explicit because this job has no checkout for `gh` to infer
+        # the repository from.
+        run: |
+          draft=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null || echo absent)
+          if [ "$draft" = "false" ]; then
+            echo "::error::Release $TAG is already published, so GoReleaser cannot attach its archives to it." \
+                 "Releases must be cut by pushing a tag, not from the GitHub Releases page." \
+                 "An immutable release's tag cannot be deleted or reused — ship the next patch version instead."
+            exit 1
+          fi
+
+  # Reusable-workflow call rather than a copy of mobile-apk.yml's job: keeps the
+  # build steps (NDK/keystore setup, gradle) defined in exactly one place.
+  # Secrets are passed explicitly, one at a time, rather than `secrets:
+  # inherit` — this job has no business handing the APK build DOCKER_HUB_* or
+  # anything else this workflow can see beyond what it declares needing.
+  apk:
+    needs: [check-tag]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/mobile-apk.yml
+    secrets:
+      GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+  goreleaser:
+    runs-on: ubuntu-latest
+    needs: [check-tag, apk]
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: "1.26"
+          go-version-file: server/go.mod
           cache-dependency-path: server/go.sum
 
-      - name: Install cross-compilation tools
-        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+      # Downloaded into the path .goreleaser.yml's release.extra_files (and
+      # checksum.extra_files) glob against, so GoReleaser attaches it to the
+      # release — and includes it in checksums.txt — in the same draft-then-
+      # undraft sequence as the jot/jotctl archives.
+      - name: Download APK artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: ${{ needs.apk.outputs.apk-name }}
+          path: mobile-apk
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@ec59f474b9834571250b370d4735c50f8e2d1e29 # v7
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
         with:
           version: "~> v2"
           args: release --clean
@@ -44,23 +115,23 @@ jobs:
           - platform: linux/arm64
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
-    needs: goreleaser
+    needs: [check-tag]
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         with:
           images: hanzei/jot
           tags: |
@@ -77,7 +148,7 @@ jobs:
 
       - name: Build and push by digest
         id: build
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           platforms: ${{ matrix.platform }}
@@ -116,17 +187,17 @@ jobs:
           merge-multiple: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         with:
           images: hanzei/jot
           tags: |

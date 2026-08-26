@@ -1,4 +1,3 @@
-import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import AssigneePicker from '../src/components/AssigneePicker';
 import type { Collaborator } from '@jot/shared';
@@ -13,8 +12,8 @@ const collaborators: Collaborator[] = [
 ];
 
 describe('AssigneePicker', () => {
-  it('renders collaborator options when visible', () => {
-    const { getByText } = render(
+  it('renders collaborator options when visible', async () => {
+    const { getByText } = await render(
       <AssigneePicker
         visible={true}
         collaborators={collaborators}
@@ -29,10 +28,10 @@ describe('AssigneePicker', () => {
     expect(getByText('Assign item')).toBeTruthy();
   });
 
-  it('calls onAssign with userId when a collaborator is pressed', () => {
+  it('calls onAssign with userId when a collaborator is pressed', async () => {
     const onAssign = jest.fn();
     const onClose = jest.fn();
-    const { getByTestId } = render(
+    const { getByTestId } = await render(
       <AssigneePicker
         visible={true}
         collaborators={collaborators}
@@ -42,14 +41,14 @@ describe('AssigneePicker', () => {
       />,
     );
 
-    fireEvent.press(getByTestId('assignee-option-u1'));
+    await fireEvent.press(getByTestId('assignee-option-u1'));
     expect(onAssign).toHaveBeenCalledWith('u1');
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('toggles off (unassigns) when pressing the already-selected collaborator', () => {
+  it('toggles off (unassigns) when pressing the already-selected collaborator', async () => {
     const onAssign = jest.fn();
-    const { getByTestId } = render(
+    const { getByTestId } = await render(
       <AssigneePicker
         visible={true}
         collaborators={collaborators}
@@ -59,14 +58,14 @@ describe('AssigneePicker', () => {
       />,
     );
 
-    fireEvent.press(getByTestId('assignee-option-u1'));
+    await fireEvent.press(getByTestId('assignee-option-u1'));
     expect(onAssign).toHaveBeenCalledWith('');
   });
 
-  it('shows unassign button when there is a current assignee', () => {
+  it('shows unassign button when there is a current assignee', async () => {
     const onAssign = jest.fn();
     const onClose = jest.fn();
-    const { getByTestId, getByText } = render(
+    const { getByTestId, getByText } = await render(
       <AssigneePicker
         visible={true}
         collaborators={collaborators}
@@ -77,13 +76,13 @@ describe('AssigneePicker', () => {
     );
 
     expect(getByText('Unassign')).toBeTruthy();
-    fireEvent.press(getByTestId('assignee-unassign'));
+    await fireEvent.press(getByTestId('assignee-unassign'));
     expect(onAssign).toHaveBeenCalledWith('');
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('does not show unassign button when no current assignee', () => {
-    const { queryByTestId } = render(
+  it('does not show unassign button when no current assignee', async () => {
+    const { queryByTestId } = await render(
       <AssigneePicker
         visible={true}
         collaborators={collaborators}
@@ -96,9 +95,9 @@ describe('AssigneePicker', () => {
     expect(queryByTestId('assignee-unassign')).toBeNull();
   });
 
-  it('calls onClose when close button pressed', () => {
+  it('calls onClose when close button pressed', async () => {
     const onClose = jest.fn();
-    const { getByTestId } = render(
+    const { getByTestId } = await render(
       <AssigneePicker
         visible={true}
         collaborators={collaborators}
@@ -108,12 +107,12 @@ describe('AssigneePicker', () => {
       />,
     );
 
-    fireEvent.press(getByTestId('assignee-picker-close'));
+    await fireEvent.press(getByTestId('assignee-picker-close'));
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('renders without crashing when collaborators is empty', () => {
-    const { getByText, queryByTestId } = render(
+  it('renders without crashing when collaborators is empty', async () => {
+    const { getByText, queryByTestId } = await render(
       <AssigneePicker
         visible={true}
         collaborators={[]}

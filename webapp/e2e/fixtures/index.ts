@@ -2,8 +2,10 @@ import { test as base, expect } from '@playwright/test';
 import { LoginPage } from '../pages/LoginPage';
 import { RegisterPage } from '../pages/RegisterPage';
 import { DashboardPage } from '../pages/DashboardPage';
+import { NoteEditorPage } from '../pages/NoteEditorPage';
 import { SettingsPage } from '../pages/SettingsPage';
 import { ToastPage } from '../pages/ToastPage';
+import { MobileAppHandoffPage } from '../pages/MobileAppHandoffPage';
 
 export { expect };
 
@@ -19,8 +21,10 @@ type Fixtures = {
   loginPage: LoginPage;
   registerPage: RegisterPage;
   dashboardPage: DashboardPage;
+  noteEditorPage: NoteEditorPage;
   settingsPage: SettingsPage;
   toastPage: ToastPage;
+  mobileAppHandoffPage: MobileAppHandoffPage;
   /** Register a fresh user and log them in; resolves to { username, password } */
   authenticatedUser: { username: string; password: string };
 };
@@ -35,11 +39,17 @@ export const test = base.extend<Fixtures>({
   dashboardPage: async ({ page }, use) => {
     await use(new DashboardPage(page));
   },
+  noteEditorPage: async ({ page }, use) => {
+    await use(new NoteEditorPage(page));
+  },
   settingsPage: async ({ page }, use) => {
     await use(new SettingsPage(page));
   },
   toastPage: async ({ page }, use) => {
     await use(new ToastPage(page));
+  },
+  mobileAppHandoffPage: async ({ page }, use) => {
+    await use(new MobileAppHandoffPage(page));
   },
   authenticatedUser: async ({ page }, use) => {
     const username = uniqueUsername();

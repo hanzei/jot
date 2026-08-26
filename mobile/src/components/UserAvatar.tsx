@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
 import { getAvatarColor } from '@jot/shared';
 import { useActiveServerBaseUrl } from '../hooks/useActiveServerBaseUrl';
@@ -11,17 +11,16 @@ const SIZE_MAP = {
 };
 
 interface UserAvatarProps {
-  userId?: string;
+  userId?: string | undefined;
   username: string;
-  hasProfileIcon?: boolean;
+  hasProfileIcon?: boolean | undefined;
   // Cache-invalidation key (typically user.updated_at). When provided, the
   // locally-cached file is tied to this version so stale icons are replaced.
-  iconVersion?: string;
+  iconVersion?: string | undefined;
   size?: 'small' | 'medium' | 'large';
 }
 
 export default function UserAvatar({ userId, username, hasProfileIcon, iconVersion, size = 'medium' }: UserAvatarProps) {
-  const [imageError, setImageError] = useState(false);
   const baseUrl = useActiveServerBaseUrl();
   const dimension = SIZE_MAP[size];
   const fontSize = size === 'small' ? 10 : size === 'medium' ? 15 : 22;
@@ -31,17 +30,23 @@ export default function UserAvatar({ userId, username, hasProfileIcon, iconVersi
 
   const localUri = useProfileIcon(userId, hasProfileIcon ?? false, iconVersion, networkUrl);
 
-  // Reset the image error state when the avatar identity changes.
-  React.useEffect(() => {
-    setImageError(false);
-  }, [baseUrl, userId, iconVersion]);
-
   const safeUsername = username || 'U';
   const bgColor = getAvatarColor(safeUsername);
   const letter = safeUsername.charAt(0).toUpperCase();
 
   // Prefer local cache; fall back to network URL; fall back to initials on error.
   const imageUri = localUri || networkUrl;
+
+  // A load failure is recorded against both the avatar identity and the exact
+  // URI that failed, so a new identity starts clean without an effect resetting
+  // the flag — which would have shown the initials fallback for one frame after
+  // every change. The URI has to be part of it because useProfileIcon resolves
+  // the local cache asynchronously: keying on identity alone meant a failed
+  // network URL kept the initials up even once a good cached file arrived under
+  // the same identity.
+  const avatarKey = `${baseUrl} ${userId ?? ''} ${iconVersion ?? ''} ${imageUri}`;
+  const [erroredKey, setErroredKey] = useState<string | null>(null);
+  const imageError = erroredKey === avatarKey;
 
   if (hasProfileIcon && userId && imageUri && !imageError) {
     return (
@@ -50,7 +55,7 @@ export default function UserAvatar({ userId, username, hasProfileIcon, iconVersi
         style={[styles.avatar, { width: dimension, height: dimension, borderRadius: dimension / 2 }]}
         accessibilityRole="image"
         accessibilityLabel={`${safeUsername} profile picture`}
-        onError={() => setImageError(true)}
+        onError={() => setErroredKey(avatarKey)}
       />
     );
   }

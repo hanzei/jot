@@ -7,17 +7,24 @@ on:
   push:
     branches: ["master"]
   pull_request:
-    paths: ["mobile/**", "shared/**", ".github/workflows/**"]
+    paths:
+      - "mobile/**"
+      - "shared/**"
+      # The translations job runs `task check-translations`, so the Taskfile
+      # and the scripts it calls are inputs to this workflow too.
+      - "Taskfile.yml"
+      - "scripts/**"
+      - ".github/workflows/**"
 
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: "24"
+          node-version-file: .nvmrc
           cache: "npm"
           cache-dependency-path: mobile/package-lock.json
 
@@ -36,16 +43,16 @@ jobs:
   translations:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: "24"
+          node-version-file: .nvmrc
           cache: "npm"
           cache-dependency-path: webapp/package-lock.json
 
       - name: Install Task
-        uses: go-task/setup-task@3be4020d41929789a01026e0e427a4321ce0ad44 # v2
+        uses: go-task/setup-task@01a4adf9db2d14c1de7a560f09170b6e0df736aa # v2
         with:
           version: 3.x
 
@@ -59,11 +66,11 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: "24"
+          node-version-file: .nvmrc
           cache: "npm"
           cache-dependency-path: mobile/package-lock.json
 

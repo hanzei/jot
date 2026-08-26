@@ -105,7 +105,7 @@ describe('SSEConnectionManager', () => {
 
     const messageHandler = mockAddEventListener.mock.calls.find(
       (call: [string, unknown]) => call[0] === 'message',
-    )?.[1] as (event: { data?: string }) => void;
+    )?.[1] as (event: { data?: string | undefined }) => void;
 
     messageHandler({ data: undefined });
     messageHandler({});
@@ -267,7 +267,7 @@ describe('SSEConnectionManager', () => {
 
     const messageHandler = mockAddEventListener.mock.calls.find(
       (call: [string, unknown]) => call[0] === 'message',
-    )?.[1] as (event: { data?: string }) => void;
+    )?.[1] as (event: { data?: string | undefined }) => void;
 
     MockEventSource.mockClear();
 

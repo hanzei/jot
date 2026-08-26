@@ -1,10 +1,18 @@
+// The Vite config, which runs in Node like the e2e suite and now gets the same
+// treatment: the base config's strictness plus Node's types. It used to stand
+// alone, inheriting neither — and `lint:ts` never ran it, so `strict` would not
+// have applied anyway. See tsconfig.e2e.json for what `composite`/`noEmit`/
+// `outDir` are doing here.
 {
+  "extends": "./tsconfig.json",
   "compilerOptions": {
     "composite": true,
-    "skipLibCheck": true,
-    "module": "ESNext",
-    "moduleResolution": "bundler",
+    "noEmit": false,
+    "outDir": "./node_modules/.tmp/tsc-node",
+    "tsBuildInfoFile": "./node_modules/.tmp/tsc-node.tsbuildinfo",
+    "types": ["node"],
     "allowSyntheticDefaultImports": true
   },
-  "include": ["vite.config.ts"]
+  "include": ["vite.config.ts"],
+  "references": []
 }

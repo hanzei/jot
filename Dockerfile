@@ -1,27 +1,30 @@
 # syntax=docker/dockerfile:1
 
 # Multi-stage build for Jot application
-FROM node:24-alpine AS frontend-builder
+FROM node:24-alpine@sha256:f70403e87646dc51b45295f4b8b70cdad0b63d2297c4c9899119b03f7af7a6b3 AS frontend-builder
 
 WORKDIR /app/webapp
 
-# Copy shared package (dependency of webapp)
-COPY shared/ ../shared/
-
-# Copy frontend package files
+# Manifests first, sources after: `npm ci` then re-runs only when a lockfile
+# changes, not on every edit to webapp/src or shared/src. shared's manifest is
+# part of this step because webapp depends on it through `file:../shared`, so
+# npm needs it present to resolve the link.
+COPY shared/package*.json ../shared/
 COPY webapp/package*.json ./
 
 # Install frontend dependencies (including dev dependencies for build)
 RUN npm ci
 
-# Copy frontend source code
+# Copy shared package source (compiled directly by the webapp build) and the
+# frontend source
+COPY shared/ ../shared/
 COPY webapp/ ./
 
 # Build the frontend
 RUN npm run build
 
 # Backend build stage
-FROM golang:1.26-alpine AS backend-builder
+FROM golang:1.26-alpine@sha256:0178a641fbb4858c5f1b48e34bdaabe0350a330a1b1149aabd498d0699ff5fb2 AS backend-builder
 
 WORKDIR /src
 
@@ -50,7 +53,7 @@ RUN --mount=type=cache,id=gomodcache-${TARGETARCH},target=/go/pkg/mod \
     -o main .
 
 # Production stage
-FROM alpine:3.22
+FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
 
 # Install runtime dependencies
 RUN apk --no-cache add ca-certificates

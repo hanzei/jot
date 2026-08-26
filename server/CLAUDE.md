@@ -1,5 +1,12 @@
 # Server Project Instructions
 
+## Formatting
+
+Enforced, via golangci-lint's `formatters:` in `.golangci.yml`: `task
+lint-server` reports and `task fmt` applies. Three formatters — **gofumpt**
+(supersedes `gofmt`), **goimports**, and **swaggo** for the handler annotation
+tables. Do not hand-align a `//	@Param` block; `task fmt` owns those columns.
+
 ## Naming Conventions (Go)
 
 - Packages: `internal/{auth,blobstore,config,database,handlers,logutil,mcphandler,models,server,sse,telemetry}`
@@ -16,6 +23,7 @@
 - In tests, use `t.Context()` instead of `context.Background()`
 - Pass `ctx context.Context` as the first parameter of any function that performs I/O, calls another service, or may need to be cancelled
 - Prefer table-driven tests with `t.Run` subtests over duplicated test functions; do not use `_` as a separator in top-level test function names (e.g. `TestCreateNote` with `t.Run("success", ...)`, not `TestCreateNote_Success`)
+- Top-level tests in the root `server` integration suite (`http_*_test.go`) call `t.Parallel()` first; see the "Server Tests" section of the root `CLAUDE.md` for what that requires of the harness
 
 ## Error Handling (Go)
 

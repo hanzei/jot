@@ -210,8 +210,10 @@ var validLanguages = map[string]bool{
 // yet and a valid theme value meaning "follow the OS preference".
 const defaultTheme = "system"
 
-var validThemes = map[string]bool{defaultTheme: true, "light": true, "dark": true}
-var validNoteSorts = map[string]bool{"manual": true, "updated_at": true, "created_at": true}
+var (
+	validThemes    = map[string]bool{defaultTheme: true, "light": true, "dark": true}
+	validNoteSorts = map[string]bool{"manual": true, "updated_at": true, "created_at": true}
+)
 
 // validateSettingsFields validates language, theme, and note sort.
 // Returns (lang, theme, noteSort, needUpdate). If all are nil, needUpdate is false.
@@ -445,6 +447,11 @@ const (
 	// http.MaxBytesReader. Shared by every single-file multipart upload
 	// endpoint (profile icon, note images).
 	multipartOverheadBytes = int64(64 << 10)
+	// profileIconMaxBytes is the upload cap for POST /users/me/profile-icon.
+	// Unlike note images (JOT_UPLOAD_MAX_BYTES, surfaced via GET /api/config),
+	// this is not configurable or client-discoverable; keep it in sync with the
+	// "max 5 MB" prose in that handler's @Param annotation.
+	profileIconMaxBytes = int64(5 << 20)
 )
 
 // isOpaqueImage reports whether img is known to have no transparent pixels.
@@ -573,10 +580,11 @@ func resizeToJPEG(img image.Image, cfg image.Config, maxDim int) ([]byte, error)
 //	@Security	CookieAuth
 //	@Accept		multipart/form-data
 //	@Produce	json
-//	@Param		file	formData	file			true	"Profile icon image (JPEG, PNG or WebP, max 5 MB)"
+//	@Param		file	formData	file	true	"Profile icon image (JPEG, PNG or WebP, max 5 MB)"
 //	@Success	200		{object}	models.User
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
+//	@Failure	413		{string}	string	"file too large"
 //	@Failure	500		{string}	string	"internal server error"
 //	@Router		/users/me/profile-icon [post]
 func (h *AuthHandler) UploadProfileIcon(w http.ResponseWriter, r *http.Request) (int, any, error) {
@@ -585,11 +593,12 @@ func (h *AuthHandler) UploadProfileIcon(w http.ResponseWriter, r *http.Request) 
 		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
-	const fileLimit = int64(5 << 20)
-	r.Body = http.MaxBytesReader(w, r.Body, fileLimit+multipartOverheadBytes)
+	r.Body = http.MaxBytesReader(w, r.Body, profileIconMaxBytes+multipartOverheadBytes)
 	//nolint:gosec // r.Body is already bounded by the MaxBytesReader above
-	if err := r.ParseMultipartForm(fileLimit); err != nil {
-		return http.StatusBadRequest, nil, fmt.Errorf("file too large (max %d MB)", fileLimit>>20)
+	if err := r.ParseMultipartForm(profileIconMaxBytes); err != nil {
+		// wrapHandler promotes a wrapped *http.MaxBytesError to 413 regardless
+		// of the status returned here.
+		return http.StatusBadRequest, nil, fmt.Errorf("parse multipart upload: %w", err)
 	}
 
 	file, _, err := r.FormFile("file")

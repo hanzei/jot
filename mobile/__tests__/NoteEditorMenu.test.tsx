@@ -1,4 +1,3 @@
-import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import NoteEditorMenu from '../src/components/NoteEditorMenu';
 
@@ -33,8 +32,8 @@ jest.mock('../src/theme/ThemeContext', () => ({
 describe('NoteEditorMenu', () => {
   const noop = () => {};
 
-  it('renders the editable-note actions and hides gated ones when their callbacks are absent', () => {
-    const { getByTestId, queryByTestId } = render(
+  it('renders the editable-note actions and hides gated ones when their callbacks are absent', async () => {
+    const { getByTestId, queryByTestId } = await render(
       <NoteEditorMenu
         visible
         onClose={noop}
@@ -55,8 +54,8 @@ describe('NoteEditorMenu', () => {
     expect(queryByTestId('editor-menu-delete-permanently')).toBeNull();
   });
 
-  it('shows Share and Labels when their callbacks are provided', () => {
-    const { getByTestId } = render(
+  it('shows Share and Labels when their callbacks are provided', async () => {
+    const { getByTestId } = await render(
       <NoteEditorMenu
         visible
         onClose={noop}
@@ -72,8 +71,8 @@ describe('NoteEditorMenu', () => {
     expect(getByTestId('editor-menu-label')).toBeTruthy();
   });
 
-  it('renders only Restore and Delete-forever for a trashed note', () => {
-    const { getByTestId, queryByTestId } = render(
+  it('renders only Restore and Delete-forever for a trashed note', async () => {
+    const { getByTestId, queryByTestId } = await render(
       <NoteEditorMenu
         visible
         onClose={noop}
@@ -94,8 +93,8 @@ describe('NoteEditorMenu', () => {
     expect(queryByTestId('editor-menu-trash')).toBeNull();
   });
 
-  it('hides the checked-items bulk actions when their callbacks are absent', () => {
-    const { queryByTestId } = render(
+  it('hides the checked-items bulk actions when their callbacks are absent', async () => {
+    const { queryByTestId } = await render(
       <NoteEditorMenu visible onClose={noop} onSend={noop} onMoveToTrash={noop} noteType="list" />,
     );
 
@@ -103,10 +102,10 @@ describe('NoteEditorMenu', () => {
     expect(queryByTestId('editor-menu-delete-checked')).toBeNull();
   });
 
-  it('shows Uncheck all items / Delete checked items when the list has completed items', () => {
+  it('shows Uncheck all items / Delete checked items when the list has completed items', async () => {
     const onUncheckAllItems = jest.fn();
     const onDeleteCheckedItems = jest.fn();
-    const { getByTestId } = render(
+    const { getByTestId } = await render(
       <NoteEditorMenu
         visible
         onClose={noop}
@@ -118,42 +117,42 @@ describe('NoteEditorMenu', () => {
       />,
     );
 
-    fireEvent.press(getByTestId('editor-menu-uncheck-all'));
+    await fireEvent.press(getByTestId('editor-menu-uncheck-all'));
     expect(onUncheckAllItems).toHaveBeenCalledTimes(1);
 
-    fireEvent.press(getByTestId('editor-menu-delete-checked'));
+    await fireEvent.press(getByTestId('editor-menu-delete-checked'));
     expect(onDeleteCheckedItems).toHaveBeenCalledTimes(1);
   });
 
-  it('closes the sheet before running an action', () => {
+  it('closes the sheet before running an action', async () => {
     const onClose = jest.fn();
     const onDuplicate = jest.fn();
-    const { getByTestId } = render(
+    const { getByTestId } = await render(
       <NoteEditorMenu visible onClose={onClose} onSend={noop} onDuplicate={onDuplicate} onMoveToTrash={noop} />,
     );
 
-    fireEvent.press(getByTestId('editor-menu-duplicate'));
+    await fireEvent.press(getByTestId('editor-menu-duplicate'));
 
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(onDuplicate).toHaveBeenCalledTimes(1);
   });
 
-  it('labels the convert action by the note\'s current type and hides it when trashed', () => {
+  it('labels the convert action by the note\'s current type and hides it when trashed', async () => {
     const onConvert = jest.fn();
-    const { getByTestId, getByText, rerender, queryByTestId } = render(
+    const { getByTestId, getByText, rerender, queryByTestId } = await render(
       <NoteEditorMenu visible onClose={noop} onSend={noop} onMoveToTrash={noop} onConvert={onConvert} noteType="text" />,
     );
 
     expect(getByText('note.convertToList')).toBeTruthy();
-    fireEvent.press(getByTestId('editor-menu-convert'));
+    await fireEvent.press(getByTestId('editor-menu-convert'));
     expect(onConvert).toHaveBeenCalledTimes(1);
 
-    rerender(
+    await rerender(
       <NoteEditorMenu visible onClose={noop} onSend={noop} onMoveToTrash={noop} onConvert={onConvert} noteType="list" />,
     );
     expect(getByText('note.convertToText')).toBeTruthy();
 
-    rerender(
+    await rerender(
       <NoteEditorMenu
         visible
         onClose={noop}

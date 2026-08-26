@@ -1,12 +1,13 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo, useContext } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, useContext } from 'react';
 import axios from 'axios';
+import type {
+  ScrollView} from 'react-native';
 import {
   Animated,
   Easing,
   View,
   Text,
   TextInput,
-  ScrollView,
   TouchableOpacity,
   Alert,
   ActivityIndicator,
@@ -17,34 +18,29 @@ import {
   Modal,
   Share,
   StyleSheet,
+  useAnimatedValue,
   useWindowDimensions,
-  type TextInputProps,
+  type NativeSyntheticEvent,
+  type TextInputSelectionChangeEventData,
   type TextInput as TextInputType,
 } from 'react-native';
-import Markdown from 'react-native-markdown-display';
 import {
   NestedReorderableList,
   ScrollViewContainer,
-  reorderItems,
-  type ReorderableListReorderEvent,
-  type ReorderableListDragEndEvent,
   type ReorderableListRenderItemInfo,
 } from 'react-native-reorderable-list';
-import { Gesture } from 'react-native-gesture-handler';
-import { LinearTransition, useSharedValue, runOnJS } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
+import { LinearTransition } from 'react-native-reanimated';
 import { Archive, ArrowLeft, Check, ChevronRight, CircleAlert, EllipsisVertical, FileText, Image, List, Palette, Pin, Plus } from 'lucide-react-native';
-import { useNavigation, useRoute, RouteProp, type NavigationAction } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
-import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useDuplicateNote, useConvertNoteType, useCreateNoteItem, useUpdateNoteItem, useDeleteNoteItem, useReorderNoteItems, useToggleNoteItemCompleted, useUncheckAllItems, useDeleteCompletedItems } from '../hooks/useNotes';
+import { useDeleteNote, useRestoreNote, usePermanentDeleteNote, useDuplicateNote, useConvertNoteType, NoteConversionCapError } from '../hooks/useNotes';
 import { useOfflineNote } from '../hooks/useOfflineNotes';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { useFailedNoteIds } from '../store/OfflineContext';
-import { useSSESubscription } from '../store/SSEContext';
 import { useToast } from '../hooks/useToast';
 import { useConfirm } from '../hooks/useConfirm';
 import ConfirmDialog from '../components/ConfirmDialog';
+import Markdown from '../components/Markdown';
 import ColorPicker from '../components/ColorPicker';
 import LabelPicker from '../components/LabelPicker';
 import AssigneePicker from '../components/AssigneePicker';
@@ -52,55 +48,52 @@ import AddImageActionSheet from '../components/AddImageActionSheet';
 import { useUploadNoteImage, useDeleteNoteImage } from '../hooks/useNoteImages';
 import { usePendingImageUploads, useRetryPendingImageUpload, useDismissPendingImageUpload } from '../hooks/usePendingImageUploads';
 import type { ImageUploadFile } from '../api/images';
-import { buildCollaborators, generateId, VALIDATION, IMAGE_MAX_PER_NOTE, exceedsCodePointLimit, truncateToCodePoints, type Collaborator, type NoteType, type NoteImage, type CreateNoteRequest, type UpdateNoteRequest, type UpdateListNoteRequest, type UpdateTextNoteRequest, type PatchNoteItemRequest, type Label } from '@jot/shared';
-import { validateImageFile as validateImageFileRaw, IMAGE_MAX_MB } from '../utils/imageValidation';
+import { buildCollaborators, generateId, IMAGE_MAX_PER_NOTE, exceedsCodePointLimit, truncateToCodePoints, validateImageFile as validateImageFileRaw, imageMaxMB, type Collaborator, type NoteImage } from '@jot/shared';
+import { useServerConfig } from '../hooks/useServerConfig';
 import { useAuth } from '../store/AuthContext';
 import { useUsers } from '../store/UsersContext';
 import { useTheme } from '../theme/ThemeContext';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
-import type { RootStackParamList } from '../navigation/RootNavigator';
 import { getCompletedSectionDividerColor, isWhiteHexColor } from '../utils/colorContrast';
 import { formatEditorStateForShare } from '../utils/noteTextFormatter';
-import { fullMarkdownStyles, preprocessMarkdown } from '../utils/markdownStyles';
 import { getActiveServer, listServers, type ServerAccountEntry } from '../store/serverAccounts';
-import { isServerReachable } from '../api/serverReachability';
 import { setPendingShare, usePendingShare } from '../store/shareIntent';
-import { useBannerShown } from '../hooks/useBannerShown';
 import {
   type LocalItem,
-  type ItemSnapshot,
-  toLocalItems,
-  serializeItems,
-  itemSnapshot,
-  normalizeItemOrder,
   itemHasChildren,
-  applyCompletedCascade,
-  droppedParentId,
-  indentLevelFromDrag,
 } from './noteEditor/listItemModel';
 import { MarkdownToolbarContent } from './noteEditor/EditorToolbars';
-import CheckedItemsSection, { type ListItemHandlers } from './noteEditor/CheckedItemsSection';
+import {
+  clampSelection,
+  continueListOnNewline,
+  cycleHeading,
+  toggleBullet,
+  toggleCheckbox,
+  toggleInlineMarker,
+  VALIDATION,
+  type EditorText,
+  type TextSelection,
+} from '@jot/shared';
+import CheckedItemsSection from './noteEditor/CheckedItemsSection';
 import NoteEditorMenu from '../components/NoteEditorMenu';
 import NoteImageGallery, { type PendingImageUpload } from '../components/NoteImageGallery';
 import UserAvatar from '../components/UserAvatar';
 import { styles } from './noteEditor/styles';
 import { animateListReflow, isReduceMotionEnabledSync } from '../utils/layoutAnimation';
 import ActiveListRow from './noteEditor/ActiveListRow';
-
-type EditorRouteProp = RouteProp<RootStackParamList, 'NoteEditor'>;
-type EditorNavProp = NativeStackNavigationProp<RootStackParamList, 'NoteEditor'>;
+import { useEditorDoc } from './noteEditor/useEditorDoc';
+import { useNoteEditorSync } from './noteEditor/useNoteEditorSync';
+import { useListItemEditing } from './noteEditor/useListItemEditing';
+import { usePendingActionIndicator } from './noteEditor/usePendingActionIndicator';
+import type { EditorNavProp, EditorRouteProp } from './noteEditor/types';
 
 const IOS_KEYBOARD_VERTICAL_OFFSET = 88;
-const FOCUSED_INPUT_KEYBOARD_MARGIN = 120;
 const MARKDOWN_TOOLBAR_ID = 'markdown-formatting-toolbar';
+// A separate accessory id from the content bar's: the two carry different
+// buttons, and an InputAccessoryView is matched to an input by nativeID.
+const ITEM_MARKDOWN_TOOLBAR_ID = 'item-markdown-formatting-toolbar';
 // Duration (ms) of the row slide when the active list reflows after a toggle/delete.
 const LIST_REFLOW_ANIM_MS = 150;
-const MAX_EXIT_SAVE_RETRIES = 3;
-// Menu-action pending bar: only show it once an action has been in flight for
-// this long, so fast actions never flash it; and once shown, keep it up for at
-// least the min-visible window so it can't blink out a frame later.
-const PENDING_BAR_DELAY_MS = 600;
-const PENDING_BAR_MIN_VISIBLE_MS = 300;
 // Duration of the zoom-open / zoom-closed transform animation.
 const ZOOM_MS = 280;
 // Override the reorderable list's default cell animation so the dragged row is
@@ -110,74 +103,54 @@ const ZOOM_MS = 280;
 // reference stays stable across renders.
 const DRAG_CELL_ANIMATIONS = { opacity: 1, transform: [] };
 
-// Re-inserts each id in `idsToRestore` back into `currentIds`, anchored right
-// after its nearest still-present predecessor in `originalOrder` (or at the
-// start, if none precedes it). Used to revert a failed bulk delete: reverting
-// to a stale full snapshot would also discard any edit or addition made to
-// *other* items while the request was in flight, so instead only the deleted
-// ids are restored, on top of whatever `currentIds` has become by the time
-// the failure is handled.
-function reinsertIds(currentIds: string[], originalOrder: string[], idsToRestore: Set<string>): string[] {
-  const present = new Set(currentIds);
-  const result = [...currentIds];
-  for (let i = 0; i < originalOrder.length; i++) {
-    const id = originalOrder[i];
-    if (!idsToRestore.has(id)) continue;
-    let anchor: string | null = null;
-    for (let j = i - 1; j >= 0; j--) {
-      if (present.has(originalOrder[j])) {
-        anchor = originalOrder[j];
-        break;
-      }
-    }
-    const insertAt = anchor ? result.indexOf(anchor) + 1 : 0;
-    result.splice(insertAt, 0, id);
-    present.add(id);
-  }
-  return result;
-}
-
 export default function NoteEditorScreen() {
   const navigation = useNavigation<EditorNavProp>();
   const route = useRoute<EditorRouteProp>();
   const { noteId: initialNoteId, sharedText, initialNoteType, readOnly, originRect, originColor } = route.params;
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const failedNoteIds = useFailedNoteIds();
+  const { upload_max_bytes: uploadMaxBytes } = useServerConfig();
+  const uploadMaxMB = imageMaxMB(uploadMaxBytes);
 
   // A new note opened from a share intent arrives with sharedText to pre-fill
   // the body.
   const openedFromShare = initialNoteId === null && !!sharedText;
-  // A new list opened from the "New list" app-icon quick action: start in list
-  // mode and focus the title so the keyboard comes up ready to type.
-  const openedAsNewList = initialNoteId === null && initialNoteType === 'list';
 
-  const [noteId, setNoteId] = useState<string | null>(initialNoteId);
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState(() => (initialNoteId === null ? sharedText ?? '' : ''));
-  const [noteType, setNoteType] = useState<NoteType>(() => (initialNoteId === null && initialNoteType ? initialNoteType : 'text'));
-  const [items, setItems] = useState<LocalItem[]>([]);
-  const [checkedItemsCollapsed, setCheckedItemsCollapsed] = useState(false);
-  // Id of the item the user just checked off, so its completed-section row pops
-  // on mount. Cleared shortly after so a later collapse/expand doesn't re-pop.
-  const [popItemId, setPopItemId] = useState<string | null>(null);
-  const popClearRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (popClearRef.current) clearTimeout(popClearRef.current); }, []);
-  const [pinned, setPinned] = useState(false);
-  const [archived, setArchived] = useState(false);
-  // Seed from the tapped card's color (passed as a nav param) so a zoom-open
-  // shows the note's background immediately; hydration below sets the
-  // authoritative value. Falls back to white for new notes / direct opens.
-  const [color, setColor] = useState(originColor || '#ffffff');
-  const [labels, setLabels] = useState<Label[]>([]);
-  const [hasCreated, setHasCreated] = useState(initialNoteId !== null);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  // The note being edited. `handle` is the stable set of refs/setters the
+  // editing and persistence hooks below act through.
+  const editor = useEditorDoc({ initialNoteId, initialNoteType, sharedText, originColor });
+  const { noteId, title, content, noteType, items, checkedItemsCollapsed, pinned, archived, color, labels, hasCreated } = editor;
+  const {
+    noteIdRef,
+    noteTypeRef,
+    titleRef,
+    contentRef,
+    itemsRef,
+    colorRef,
+    pinnedRef,
+    archivedRef,
+    setNoteId,
+    setNoteType,
+    setTitle,
+    setContent,
+    setCheckedItemsCollapsed,
+    setPinned,
+    setArchived,
+    setColor,
+    setHasCreated,
+  } = editor.handle;
+
   const [colorPickerVisible, setColorPickerVisible] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
   const [labelPickerVisible, setLabelPickerVisible] = useState(false);
   const [assigneePickerVisible, setAssigneePickerVisible] = useState(false);
   const [assigningItemId, setAssigningItemId] = useState<string | null>(null);
-  const [syncToast, setSyncToast] = useState<string | null>(null);
   const [isEditingContent, setIsEditingContent] = useState(initialNoteId === null);
+  // Set only to move the caret after an edit the user did not type (a formatting
+  // button, an auto-continued list). It is released as soon as the input reports
+  // the caret actually landed there, so normal typing stays uncontrolled and
+  // never fights the native selection.
+  const [forcedSelection, setForcedSelection] = useState<TextSelection | null>(null);
   // Share-target picker: lets a share be redirected to another server before it
   // is saved (only relevant when opened from a share and 2+ servers exist).
   const [shareServers, setShareServers] = useState<ServerAccountEntry[]>([]);
@@ -195,10 +168,6 @@ export default function NoteEditorScreen() {
   const { colors } = useTheme();
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
   const keyboardHeight = useKeyboardHeight();
-  // Live horizontal travel of the row currently being dragged. The list pan's
-  // onChange writes translationX here; the active row snaps it to an indent step
-  // for Keep-style drag-to-indent, and the drop handler reads it to commit.
-  const dragTranslateX = useSharedValue(0);
   // On Android the window is edge-to-edge and is NOT resized for the keyboard,
   // so lift the whole editor (scroll area + toolbars) above it manually. iOS
   // relies on KeyboardAvoidingView's "padding" behavior instead.
@@ -210,26 +179,16 @@ export default function NoteEditorScreen() {
   // (insets.bottom) then bridges the navigation-inset region so its buttons sit
   // flush against the top of the keyboard instead of behind it.
   const androidKeyboardInset = Platform.OS === 'android' ? keyboardHeight : 0;
-  const bannerShown = useBannerShown();
   const { data: existingNote } = useOfflineNote(noteId);
   // A trashed note opens view-only. Driven by the route param set when the note
   // is opened from the trash list, and defensively by the note's own deleted_at
   // in case it lands here already trashed.
   const isReadOnly = readOnly === true || existingNote?.deleted_at != null;
-  const createMutation = useCreateNote();
-  const updateMutation = useUpdateNote();
   const deleteMutation = useDeleteNote();
   const restoreMutation = useRestoreNote();
   const permanentDeleteMutation = usePermanentDeleteNote();
   const duplicateMutation = useDuplicateNote();
   const convertMutation = useConvertNoteType();
-  const createItemMutation = useCreateNoteItem();
-  const updateItemMutation = useUpdateNoteItem();
-  const deleteItemMutation = useDeleteNoteItem();
-  const reorderItemsMutation = useReorderNoteItems();
-  const toggleItemCompletedMutation = useToggleNoteItemCompleted();
-  const uncheckAllItemsMutation = useUncheckAllItems();
-  const deleteCompletedItemsMutation = useDeleteCompletedItems();
   const uploadImageMutation = useUploadNoteImage();
   const deleteImageMutation = useDeleteNoteImage();
   const retryPendingImageUploadMutation = useRetryPendingImageUpload();
@@ -252,18 +211,6 @@ export default function NoteEditorScreen() {
   );
   const [removedImageIds, setRemovedImageIds] = useState<Set<string>>(new Set());
 
-  // Auto-dismiss sync toast after 4 seconds
-  useEffect(() => {
-    if (!syncToast) return;
-    const timer = setTimeout(() => setSyncToast(null), 4000);
-    return () => clearTimeout(timer);
-  }, [syncToast]);
-
-  useEffect(() => {
-    setSaveError(null);
-    setSyncToast(null);
-  }, [i18n.language]);
-
   useEffect(() => {
     const sub = Keyboard.addListener('keyboardDidHide', () => {
       setIsEditingContent(false);
@@ -271,81 +218,13 @@ export default function NoteEditorScreen() {
     return () => sub.remove();
   }, []);
 
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isMountedRef = useRef(true);
-  const isInitializedRef = useRef(false);
-  const intentionalExitRef = useRef(false);
-  // True for the whole duration of a zoom-close animation, from the moment an
-  // exit action commits to closing until it actually dispatches the
-  // navigation action. intentionalExitRef is only set at that final instant
-  // (not up front) so a concurrent back press mid-animation still hits
-  // beforeRemove; it's swallowed via this flag instead of falling through to
-  // a second, unguarded pop.
-  const isClosingRef = useRef(false);
-  const hasPendingChangesRef = useRef(false);
-  const [exitSavePrompt, setExitSavePrompt] = useState<{
-    navAction: NavigationAction;
-    wantsZoom: boolean;
-    retriesLeft: number;
-  } | null>(null);
-  const [isExitRetrying, setIsExitRetrying] = useState(false);
-  // Visible pending state for menu/overflow actions (delete, restore, convert,
-  // share, manage labels, redirect-share) while they await a write. The sheet
-  // that triggered them has already closed, so without this the screen would
-  // otherwise sit with no feedback for up to the write timeout on the first
-  // action of a fresh outage (issue #697).
-  const [isMenuActionPending, setIsMenuActionPending] = useState(false);
-  // Bumped on every edit (markDirtyAndScheduleUpdate). flushSave snapshots it
-  // alongside the state refs so it can tell whether new edits arrived while its
-  // network calls were in flight — clearing the dirty flag then would mark
-  // those edits clean without ever saving them.
-  const editSeqRef = useRef(0);
-  const saveInFlightRef = useRef<Promise<boolean> | null>(null);
-  // Guards the metadata PATCH path (pin/archive/color) the same way
-  // saveInFlightRef guards the body/items save: those updates go through
-  // useUpdateNote directly (not flushSave), so they don't touch saveInFlightRef.
-  // While one is in flight the refresh effect must not re-apply a (possibly
-  // stale) refetch and revert the optimistic pin/archive/color.
-  const metadataUpdateInFlightRef = useRef(false);
-  const requiresHydrationRef = useRef(initialNoteId !== null);
-
-  // Warn when another user updates this note *while we have unsaved edits*.
-  // A clean editor auto-applies the remote change (see the refresh effect
-  // below), so no warning is needed there; when the editor is dirty that
-  // refresh is intentionally suppressed to protect the in-progress edits, so
-  // this banner is the only signal that the note has diverged on the server.
-  useSSESubscription(noteId, useCallback(() => {
-    if (!hasPendingChangesRef.current) return;
-    setSyncToast((prev) => prev ?? t('note.updatedByAnotherUser'));
-  }, [t]));
-
-  // Refs for current state to avoid stale closures in debounced save
-  const noteIdRef = useRef(noteId);
-  noteIdRef.current = noteId;
-  const noteTypeRef = useRef(noteType);
-  noteTypeRef.current = noteType;
-  const titleRef = useRef(title);
-  titleRef.current = title;
-  const contentRef = useRef(content);
-  contentRef.current = content;
-  const itemsRef = useRef(items);
-  itemsRef.current = items;
-  const checkedItemsCollapsedRef = useRef(checkedItemsCollapsed);
-  checkedItemsCollapsedRef.current = checkedItemsCollapsed;
-  const pinnedRef = useRef(pinned);
-  pinnedRef.current = pinned;
-  const archivedRef = useRef(archived);
-  archivedRef.current = archived;
-  const colorRef = useRef(color);
-  colorRef.current = color;
-
   // Zoom transition: animate the whole editor from the tapped card's rect up to
   // full screen on open, and back down on close. Decided once at mount; the
   // native present/dismiss is disabled so this transform is the only motion.
   const { width: screenW, height: screenH } = useWindowDimensions();
-  const zoomEnabled = useRef(!!originRect && !isReduceMotionEnabledSync()).current;
+  const [zoomEnabled] = useState(() => !!originRect && !isReduceMotionEnabledSync());
   // 0 = scaled/positioned onto the card, 1 = full screen.
-  const zoom = useRef(new Animated.Value(zoomEnabled ? 0 : 1)).current;
+  const zoom = useAnimatedValue(zoomEnabled ? 0 : 1);
   // Holds the editor invisible for the first frame of a zoom-open. With the
   // native driver the transform/opacity aren't written as static props on the
   // JS render — the native animation node applies them, and it only attaches
@@ -396,6 +275,40 @@ export default function NoteEditorScreen() {
     });
   }, [zoom, zoomEnabled]);
 
+  const { isPending: isMenuActionPending, withPendingIndicator } = usePendingActionIndicator();
+
+  const sync = useNoteEditorSync({
+    doc: editor.handle,
+    noteId,
+    initialNoteId,
+    existingNote,
+    navigation,
+    zoomEnabled,
+    animateClose,
+    t,
+    showToast,
+  });
+  const {
+    saveError,
+    setSaveError,
+    syncToast,
+    setSyncToast,
+    flushSave,
+    flushPendingChanges,
+    cancelScheduledSave,
+    markDirtyAndScheduleUpdate,
+    runMetadataUpdate,
+    commitMetadataBaseline,
+    isHydratingRef,
+    intentionalExitRef,
+    isClosingRef,
+    saveInFlightRef,
+    exitSavePrompt,
+    isExitRetrying,
+    handleExitRetry,
+    handleExitDiscard,
+  } = sync;
+
   // Mark the exit as intentional (so beforeRemove doesn't re-handle it), zoom
   // back onto the card, then pop. Used by every action that leaves the editor
   // via its own button (archive, trash, restore, delete-forever) so the zoom
@@ -406,7 +319,7 @@ export default function NoteEditorScreen() {
     await animateClose();
     intentionalExitRef.current = true;
     navigation.goBack();
-  }, [animateClose, navigation]);
+  }, [animateClose, intentionalExitRef, isClosingRef, navigation]);
 
   // Maps the fullscreen editor onto the originating card at zoom 0 and to its
   // natural position/size at zoom 1. A short opacity ramp softens the first
@@ -427,28 +340,12 @@ export default function NoteEditorScreen() {
       ],
     };
   }, [originRect, zoom, screenW, screenH]);
-  const createMutateRef = useRef(createMutation.mutateAsync);
-  createMutateRef.current = createMutation.mutateAsync;
-  const updateMutateRef = useRef(updateMutation.mutateAsync);
-  updateMutateRef.current = updateMutation.mutateAsync;
-  const createItemRef = useRef(createItemMutation.mutateAsync);
-  createItemRef.current = createItemMutation.mutateAsync;
-  const updateItemRef = useRef(updateItemMutation.mutateAsync);
-  updateItemRef.current = updateItemMutation.mutateAsync;
-  const deleteItemRef = useRef(deleteItemMutation.mutateAsync);
-  deleteItemRef.current = deleteItemMutation.mutateAsync;
-  const reorderItemsRef = useRef(reorderItemsMutation.mutateAsync);
-  reorderItemsRef.current = reorderItemsMutation.mutateAsync;
-  const toggleItemCompletedRef = useRef(toggleItemCompletedMutation.mutateAsync);
-  toggleItemCompletedRef.current = toggleItemCompletedMutation.mutateAsync;
-  const uncheckAllItemsRef = useRef(uncheckAllItemsMutation.mutateAsync);
-  uncheckAllItemsRef.current = uncheckAllItemsMutation.mutateAsync;
-  const deleteCompletedItemsRef = useRef(deleteCompletedItemsMutation.mutateAsync);
-  deleteCompletedItemsRef.current = deleteCompletedItemsMutation.mutateAsync;
 
   const displayedImageUploadsRef = useRef(displayedImageUploads);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   displayedImageUploadsRef.current = displayedImageUploads;
   const pendingImageUploadsRef = useRef(pendingImageUploads);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   pendingImageUploadsRef.current = pendingImageUploads;
   const imageUploadFilesRef = useRef(new Map<string, ImageUploadFile>());
   const activeImageUploadIdsRef = useRef(new Set<string>());
@@ -462,11 +359,11 @@ export default function NoteEditorScreen() {
   );
 
   const validateImageFile = useCallback((file: ImageUploadFile): string | null => {
-    const error = validateImageFileRaw(file);
+    const error = validateImageFileRaw(file, uploadMaxBytes);
     if (error === 'wrongType') return t('images.errorWrongType');
-    if (error === 'tooLarge') return t('images.errorTooLarge', { maxMB: IMAGE_MAX_MB });
+    if (error === 'tooLarge') return t('images.errorTooLarge', { maxMB: uploadMaxMB });
     return null;
-  }, [t]);
+  }, [t, uploadMaxBytes, uploadMaxMB]);
 
   const removeUploadTile = useCallback((uploadId: string) => {
     // Abort a request actually in flight for this tile (the 'uploading'
@@ -529,10 +426,10 @@ export default function NoteEditorScreen() {
       if (axios.isCancel(error)) return;
       console.error('Failed to upload note image:', error);
       const status = (error as { response?: { status?: number } })?.response?.status;
-      const message = status === 413 ? t('images.errorTooLarge', { maxMB: IMAGE_MAX_MB }) : t('images.uploadFailed');
+      const message = status === 413 ? t('images.errorTooLarge', { maxMB: uploadMaxMB }) : t('images.uploadFailed');
       setImageUploads((prev) => prev.map((u) => (u.id === uploadId ? { ...u, status: 'error', errorMessage: message } : u)));
     });
-  }, [showToast, t, uploadImageMutation]);
+  }, [noteIdRef, showToast, t, uploadImageMutation, uploadMaxMB]);
 
   const startImageUpload = useCallback((file: ImageUploadFile) => {
     const id = generateId();
@@ -544,7 +441,9 @@ export default function NoteEditorScreen() {
   const retryImageUpload = useCallback((uploadId: string) => {
     const file = imageUploadFilesRef.current.get(uploadId);
     if (file) {
-      setImageUploads((prev) => prev.map((u) => (u.id === uploadId ? { ...u, status: 'uploading', progress: 0, errorMessage: undefined } : u)));
+      setImageUploads((prev) => prev.map((u) => (u.id === uploadId
+        ? { id: u.id, filename: u.filename, previewUri: u.previewUri, status: 'uploading', progress: 0 }
+        : u)));
       runImageUpload(uploadId, file);
       return;
     }
@@ -616,324 +515,79 @@ export default function NoteEditorScreen() {
           .finally(clearRemovalState);
       },
     });
-  }, [deleteImageMutation, showToast, t]);
+  }, [deleteImageMutation, noteIdRef, showToast, t]);
 
-  // Baseline of the last-saved state, used to diff local edits into granular
-  // per-item operations (and field-only scalar patches) instead of re-sending
-  // the whole note — so a save here can't overwrite another device's edits.
-  const savedItemsRef = useRef<Map<string, ItemSnapshot>>(new Map());
-  const savedOrderRef = useRef<string[]>([]);
-  const savedScalarsRef = useRef({ title: '', content: '', pinned: false, archived: false, color: '#ffffff', checked_items_collapsed: false });
-  const isHydratingRef = useRef(initialNoteId !== null && !existingNote);
-  isHydratingRef.current = initialNoteId !== null && !existingNote;
+  // Abort any uploads still in flight on unmount so they don't keep running in
+  // the background for up to the full timeout and fire state updates after this
+  // screen has gone (issue #695). The ref's Map identity never changes across
+  // the component's lifetime (only mutated in place), so capturing it here sees
+  // the same, up-to-date entries at cleanup time.
+  useEffect(() => {
+    const uploadAbortControllers = imageUploadAbortControllersRef.current;
+    return () => {
+      for (const controller of uploadAbortControllers.values()) {
+        controller.abort();
+      }
+      uploadAbortControllers.clear();
+    };
+  }, []);
 
   const titleInputRef = useRef<TextInputType>(null);
   const contentInputRef = useRef<TextInputType>(null);
+  // Where the caret sits in the content input. The formatting bar edits text
+  // around it, so it has to be tracked even though the input is otherwise
+  // uncontrolled with respect to selection.
+  const contentSelectionRef = useRef<TextSelection>({ start: 0, end: 0 });
   const scrollViewRef = useRef<ScrollView>(null);
-  const itemInputRefsMap = useRef(new Map<string, React.RefObject<TextInputType | null>>());
-  const autoFocusItemIdRef = useRef<string | null>(null);
-  const autoFocusClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const getItemRef = useCallback((id: string): React.RefObject<TextInputType | null> => {
-    if (!itemInputRefsMap.current.has(id)) {
-      itemInputRefsMap.current.set(id, React.createRef<TextInputType>());
-    }
-    return itemInputRefsMap.current.get(id)!;
-  }, []);
+  const openAssigneePicker = useCallback((itemId: string) => {
+    if (isReadOnly) return;
+    setAssigningItemId(itemId);
+    setAssigneePickerVisible(true);
+  }, [isReadOnly]);
 
-  // New list items get a server-format ID up front so they keep a stable
-  // identity across granular per-item updates and offline replay.
-  function nextTempId(): string {
-    return generateId();
-  }
-
-  // Applies a note from the offline cache to the editor's local state and
-  // re-seeds the save baseline. Used both for the initial hydration and to
-  // refresh the editor when the note changes underneath it (see below).
-  const applyNoteToState = useCallback((note: NonNullable<typeof existingNote>) => {
-    setNoteType(note.note_type);
-    setPinned(note.pinned);
-    setArchived(note.archived);
-    setColor(note.color);
-    setLabels(note.labels ?? []);
-    let nextItems: LocalItem[] = [];
-    if (note.note_type === 'list') {
-      setTitle(note.title);
-      setCheckedItemsCollapsed(note.checked_items_collapsed);
-      nextItems = note.items ? toLocalItems(note.items) : [];
-      setItems(nextItems);
-    } else {
-      setContent(note.content);
-    }
-    // Seed the save baseline from the note so the next edit diffs against this
-    // state rather than re-sending everything.
-    savedScalarsRef.current = {
-      title: note.note_type === 'list' ? note.title : '',
-      content: note.note_type === 'text' ? note.content : '',
-      pinned: note.pinned,
-      archived: note.archived,
-      color: note.color,
-      checked_items_collapsed: note.note_type === 'list' ? note.checked_items_collapsed : false,
-    };
-    savedItemsRef.current = new Map(nextItems.map((it) => [it.id, itemSnapshot(it)]));
-    savedOrderRef.current = nextItems.map((it) => it.id);
-  }, []);
-
-  // Load existing note data (once, on first hydration).
-  useEffect(() => {
-    if (existingNote && !isInitializedRef.current) {
-      applyNoteToState(existingNote);
-      isInitializedRef.current = true;
-      requiresHydrationRef.current = false;
-    }
-  }, [existingNote, applyNoteToState]);
-
-  // Refresh the editor when the note changes underneath it — most visibly when
-  // another user edits a shared note, which arrives via SSE → SQLite → this
-  // query refetching and surfaces the "updated by another user" banner. Without
-  // this, the banner showed but the checklist/content stayed stale.
-  //
-  // Only refresh when the editor has no unsaved edits and no save (body/items
-  // or metadata) is in flight: a clean editor mirrors the last-saved baseline,
-  // so replacing it with the newer note loses nothing. When the user has
-  // in-progress edits we keep their state intact (the banner alone signals the
-  // remote change) rather than risk clobbering them, since there is no
-  // field-level merge here.
-  useEffect(() => {
-    if (
-      existingNote
-      && isInitializedRef.current
-      && !hasPendingChangesRef.current
-      && saveInFlightRef.current === null
-      && !metadataUpdateInFlightRef.current
-    ) {
-      applyNoteToState(existingNote);
-    }
-  }, [existingNote, applyNoteToState]);
-
-  // Keep labels in sync when note data refreshes after label mutations, even
-  // while the body has unsaved edits (labels are edited via their own picker
-  // and don't participate in the body's save baseline, so the refresh above
-  // may be skipped as dirty). Redundant with that refresh when the editor is
-  // clean, but idempotent.
-  useEffect(() => {
-    if (existingNote && isInitializedRef.current) {
-      setLabels(existingNote.labels ?? []);
-    }
-  }, [existingNote?.labels]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // When the queue drains, OfflineContext sets the React Query cache for the old local
-  // ID to hold the server note. Detect this by checking whether the cached note's id
-  // now differs from the local ID we hold, and update noteId + route params accordingly.
-  useEffect(() => {
-    if (existingNote && noteId && existingNote.id !== noteId) {
-      setNoteId(existingNote.id);
-      navigation.setParams({ noteId: existingNote.id });
-    }
-  }, [existingNote?.id, noteId, navigation]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Persists list-item changes as granular create/patch/delete/reorder ops by
-  // diffing the current items against the saved baseline.
-  const persistItemDiff = useCallback(async (currentNoteId: string, currentItems: LocalItem[]) => {
-    const base = savedItemsRef.current;
-    const curIds = new Set(currentItems.map((it) => it.id));
-
-    // Advance the baseline incrementally after each successful op so a later
-    // failure does not re-send already-applied ops on the next retry (which
-    // would re-create items and get stuck on 409 Conflict).
-    for (const it of currentItems) {
-      const snap = base.get(it.id);
-      if (!snap) {
-        try {
-          await createItemRef.current({
-            noteId: currentNoteId,
-            item: {
-              id: it.id,
-              text: it.text,
-              position: it.position,
-              completed: it.completed,
-              parent_id: it.parentId,
-              assigned_to: it.assigned_to || undefined,
-            },
-          });
-        } catch (err) {
-          // 409 means a prior attempt already created this item; treat as done.
-          const status = (err as { response?: { status?: number } })?.response?.status;
-          if (status !== 409) throw err;
-        }
-        base.set(it.id, itemSnapshot(it));
-        continue;
-      }
-      const data: PatchNoteItemRequest = {};
-      if (it.text !== snap.text) data.text = it.text;
-      if (it.completed !== snap.completed) data.completed = it.completed;
-      if (it.parentId !== snap.parentId) data.parent_id = it.parentId ?? '';
-      if (it.assigned_to !== snap.assigned_to) data.assigned_to = it.assigned_to;
-      if (Object.keys(data).length > 0) {
-        await updateItemRef.current({ noteId: currentNoteId, itemId: it.id, data });
-        base.set(it.id, itemSnapshot(it));
-      }
-    }
-
-    for (const id of [...base.keys()]) {
-      if (!curIds.has(id)) {
-        await deleteItemRef.current({ noteId: currentNoteId, itemId: id });
-        base.delete(id);
-      }
-    }
-
-    const curOrder = currentItems.map((it) => it.id);
-    const orderChanged = curOrder.length !== savedOrderRef.current.length
-      || curOrder.some((id, i) => savedOrderRef.current[i] !== id);
-    if (orderChanged && curOrder.length > 0) {
-      await reorderItemsRef.current({ noteId: currentNoteId, itemIds: curOrder });
-    }
-    savedOrderRef.current = curOrder;
-  }, []);
-
-  const flushSave = useCallback(async (unmounting = false): Promise<boolean> => {
-    if (!hasPendingChangesRef.current) return true;
-    // If an existing note has local edits flagged but hasn't hydrated yet,
-    // treat this as a failed flush so callers can retry after hydration.
-    if (requiresHydrationRef.current && noteIdRef.current && !isInitializedRef.current) return false;
-
-    // Serialize mutations: chain onto any in-flight save to prevent concurrent writes
-    const predecessor = saveInFlightRef.current;
-    const thisPromise = (async () => {
-      if (predecessor) {
-        try { await predecessor; } catch { /* handled by prior caller */ }
-      }
-
-      const currentNoteId = noteIdRef.current;
-      const currentTitle = titleRef.current;
-      const currentContent = contentRef.current;
-      const currentItems = itemsRef.current;
-      const currentCollapsed = checkedItemsCollapsedRef.current;
-      const currentNoteType = noteTypeRef.current;
-      const currentColor = colorRef.current;
-      const currentPinned = pinnedRef.current;
-      const currentArchived = archivedRef.current;
-      const capturedEditSeq = editSeqRef.current;
-
-      // Clear the dirty flag only if no edit arrived while the awaited network
-      // calls below were in flight. A mid-save keystroke re-marks dirty and
-      // schedules its own debounced save; unconditionally clearing here would
-      // wipe that flag, the debounced flushSave would early-return on "no
-      // pending changes", and the mid-save edit would be silently lost on exit.
-      const clearPendingUnlessEditedMidSave = () => {
-        if (editSeqRef.current === capturedEditSeq) {
-          hasPendingChangesRef.current = false;
-        }
-      };
-
-      const captureBaseline = () => {
-        savedScalarsRef.current = {
-          title: currentTitle,
-          content: currentContent,
-          pinned: currentPinned,
-          archived: currentArchived,
-          color: currentColor,
-          checked_items_collapsed: currentCollapsed,
-        };
-        savedItemsRef.current = new Map(currentItems.map((it) => [it.id, itemSnapshot(it)]));
-        savedOrderRef.current = currentItems.map((it) => it.id);
-      };
-
-      if (!currentNoteId) {
-        const isEmpty = currentNoteType === 'list'
-          ? !currentTitle && currentItems.length === 0
-          : !currentContent;
-        if (isEmpty) {
-          hasPendingChangesRef.current = false;
-          return true;
-        }
-        const req: CreateNoteRequest = currentNoteType === 'list'
-          ? {
-              note_type: 'list',
-              title: currentTitle,
-              color: !isWhiteHexColor(currentColor) ? currentColor : undefined,
-              items: serializeItems(currentItems),
-            }
-          : {
-              note_type: 'text',
-              content: currentContent,
-              color: !isWhiteHexColor(currentColor) ? currentColor : undefined,
-            };
-        const newNote = await createMutateRef.current(req);
-        clearPendingUnlessEditedMidSave();
-        // The server honors the client-supplied item IDs, so the items we just
-        // sent become the baseline for subsequent granular edits.
-        captureBaseline();
-        if (!isMountedRef.current || unmounting) return true;
-        noteIdRef.current = newNote.id;
-        setNoteId(newNote.id);
-        setHasCreated(true);
-        setSaveError(null);
-      } else {
-        // Patch only the scalar fields that changed, so a list-item edit never
-        // re-sends the title and vice versa, and another device's concurrent
-        // changes to untouched fields are preserved.
-        const base = savedScalarsRef.current;
-        const scalarData: UpdateNoteRequest = {};
-        if (currentNoteType === 'list') {
-          if (currentTitle !== base.title) (scalarData as UpdateListNoteRequest).title = currentTitle;
-          if (currentCollapsed !== base.checked_items_collapsed) (scalarData as UpdateListNoteRequest).checked_items_collapsed = currentCollapsed;
-        } else if (currentContent !== base.content) {
-          (scalarData as UpdateTextNoteRequest).content = currentContent;
-        }
-        if (currentPinned !== base.pinned) scalarData.pinned = currentPinned;
-        if (currentArchived !== base.archived) scalarData.archived = currentArchived;
-        if (currentColor !== base.color) scalarData.color = currentColor;
-
-        if (Object.keys(scalarData).length > 0) {
-          await updateMutateRef.current({ id: currentNoteId, data: scalarData });
-        }
-
-        // Items are persisted as granular per-item operations.
-        if (currentNoteType === 'list') {
-          await persistItemDiff(currentNoteId, currentItems);
-        }
-
-        clearPendingUnlessEditedMidSave();
-        captureBaseline();
-        if (!isMountedRef.current || unmounting) return true;
-        setSaveError(null);
-      }
-
-      return true;
-    })();
-
-    saveInFlightRef.current = thisPromise;
-    try {
-      await thisPromise;
-      return true;
-    } catch (err) {
-      console.error('Failed to save note:', err);
-      if (isMountedRef.current && !unmounting) {
-        setSaveError(t('note.failedSaveChanges'));
-      }
-      return false;
-    } finally {
-      if (saveInFlightRef.current === thisPromise) {
-        saveInFlightRef.current = null;
-      }
-    }
-  }, [t, persistItemDiff]);
-
-  const scheduleUpdate = useCallback(() => {
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
-    debounceRef.current = setTimeout(() => {
-      flushSave();
-    }, VALIDATION.AUTO_SAVE_TIMEOUT_MS);
-  }, [flushSave]);
-
-  const markDirtyAndScheduleUpdate = useCallback(() => {
-    editSeqRef.current += 1;
-    hasPendingChangesRef.current = true;
-    scheduleUpdate();
-  }, [scheduleUpdate]);
+  const listEditing = useListItemEditing({
+    doc: editor.handle,
+    items,
+    markDirtyAndScheduleUpdate,
+    cancelScheduledSave,
+    setSaveError,
+    savedItemsRef: sync.savedItemsRef,
+    savedOrderRef: sync.savedOrderRef,
+    withPendingIndicator,
+    scrollViewRef,
+    openAssigneePicker,
+    confirm,
+    showToast,
+    t,
+  });
+  const {
+    uncheckedItems,
+    checkedItems,
+    itemIndexMap,
+    itemIndexMapRef,
+    completedItemTexts,
+    popItemId,
+    isEditingItem,
+    getItemRef,
+    getItemSelectionRef,
+    itemSelectionRefsMap,
+    autoFocusItemIdRef,
+    focusedItemIdRef,
+    dragTranslateX,
+    listItemHandlers,
+    handleAddItem,
+    handleItemTextChange,
+    handleAcceptSuggestion,
+    handleAssignItem,
+    handleUncheckAllItems,
+    handleDeleteCompletedItems,
+    focusFirstUncheckedOrAppend,
+    listDragGesture,
+    handleListDragStart,
+    handleListDragEnd,
+    handleListReorder,
+  } = listEditing;
 
   // Pre-filled share content must be flagged dirty so it auto-saves (and is not
   // lost on unmount). Runs once on mount.
@@ -966,91 +620,6 @@ export default function NoteEditorScreen() {
     };
   }, [openedFromShare]);
 
-  // Runs `fn`, showing the menu-action pending indicator only while the server
-  // is believed reachable. When it's already known unreachable, the write
-  // underneath skips the network entirely (isOnlineWriteAllowed) and resolves
-  // near-instantly, so no indicator is needed — the action already feels
-  // immediate. When reachable (including the stale-true case on the very first
-  // request of a fresh outage), the write may genuinely block for up to the
-  // write timeout, so surface that wait instead of leaving the screen looking
-  // frozen (issue #697).
-  //
-  // The bar is shown on a delay, not immediately: a fast action (the common
-  // case — an existing note with no pending edits) finishes before
-  // PENDING_BAR_DELAY_MS and never surfaces the bar at all, so it no longer
-  // flashes in and shoves the note down. Once the bar does appear it stays up
-  // for at least PENDING_BAR_MIN_VISIBLE_MS, so an action finishing just past
-  // the delay threshold doesn't produce a one-frame blink either.
-  //
-  // pendingCountRef tracks overlapping calls (e.g. Pin and Archive tapped in
-  // quick succession). The indicator's show-delay is armed once while any call
-  // is pending, and it only hides once every in-flight call has finished, so
-  // one call's finally doesn't hide the bar while a sibling is still awaiting
-  // its write.
-  const pendingCountRef = useRef(0);
-  const pendingDelayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Timestamp (ms) at which the bar became visible, or 0 while it is hidden.
-  const pendingShownAtRef = useRef(0);
-  const withPendingIndicator = useCallback(async <T,>(fn: () => Promise<T>): Promise<T> => {
-    const showPending = isServerReachable();
-    if (showPending) {
-      pendingCountRef.current += 1;
-      // A fresh action cancels any in-flight min-visible hide: the bar should
-      // stay up (or appear) rather than blink off between back-to-back actions.
-      if (pendingHideTimerRef.current) {
-        clearTimeout(pendingHideTimerRef.current);
-        pendingHideTimerRef.current = null;
-      }
-      // Arm the delayed show once, only while the bar isn't already visible.
-      if (pendingShownAtRef.current === 0 && pendingDelayTimerRef.current === null) {
-        pendingDelayTimerRef.current = setTimeout(() => {
-          pendingDelayTimerRef.current = null;
-          if (pendingCountRef.current > 0 && isMountedRef.current) {
-            pendingShownAtRef.current = Date.now();
-            setIsMenuActionPending(true);
-          }
-        }, PENDING_BAR_DELAY_MS);
-      }
-    }
-    try {
-      return await fn();
-    } finally {
-      if (showPending) {
-        pendingCountRef.current -= 1;
-        if (pendingCountRef.current === 0) {
-          if (pendingDelayTimerRef.current !== null) {
-            // Finished before the delay elapsed — the bar never showed, so just
-            // cancel the pending show.
-            clearTimeout(pendingDelayTimerRef.current);
-            pendingDelayTimerRef.current = null;
-          } else if (pendingShownAtRef.current > 0) {
-            // The bar is visible — keep it up for the remainder of the minimum
-            // visible window so it doesn't blink out.
-            const remaining = PENDING_BAR_MIN_VISIBLE_MS - (Date.now() - pendingShownAtRef.current);
-            const hide = () => {
-              pendingHideTimerRef.current = null;
-              pendingShownAtRef.current = 0;
-              if (isMountedRef.current) setIsMenuActionPending(false);
-            };
-            if (remaining <= 0) hide();
-            else pendingHideTimerRef.current = setTimeout(hide, remaining);
-          }
-        }
-      }
-    }
-  }, []);
-
-  // Clear the menu-action pending bar's show/hide timers on unmount so a timer
-  // armed just before the screen closed can't fire a state update afterwards.
-  // Kept as its own mount/unmount-only effect (empty deps) rather than folded
-  // into the flush-on-unmount effect below, whose dependency changes on every
-  // render and would otherwise clear a live show-delay before it could fire.
-  useEffect(() => () => {
-    if (pendingDelayTimerRef.current) clearTimeout(pendingDelayTimerRef.current);
-    if (pendingHideTimerRef.current) clearTimeout(pendingHideTimerRef.current);
-  }, []);
-
   // Redirect the shared note to a different server: stash the text targeted at
   // that server and let the navigation layer switch servers and re-open the
   // editor there. We skip the unmount flush so nothing new is written to the
@@ -1063,10 +632,7 @@ export default function NoteEditorScreen() {
     if (serverId === activeShareServerId) {
       return;
     }
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-      debounceRef.current = null;
-    }
+    cancelScheduledSave();
     intentionalExitRef.current = true;
     await withPendingIndicator(async () => {
       // Wait for any in-flight create so we know whether a note already landed on
@@ -1083,7 +649,7 @@ export default function NoteEditorScreen() {
     });
     redirectInitiatedRef.current = true;
     setPendingShare({ text: contentRef.current, targetServerId: serverId });
-  }, [activeShareServerId, deleteMutation, withPendingIndicator]);
+  }, [activeShareServerId, cancelScheduledSave, contentRef, deleteMutation, intentionalExitRef, noteIdRef, saveInFlightRef, withPendingIndicator]);
 
   // If the navigation layer drops a redirect we started (the server switch
   // failed, so no remount unmounts this editor), recover instead of leaving a
@@ -1099,20 +665,12 @@ export default function NoteEditorScreen() {
     setNoteId(null);
     setHasCreated(false);
     markDirtyAndScheduleUpdate();
-  }, [pendingShare, markDirtyAndScheduleUpdate]);
+  }, [pendingShare, markDirtyAndScheduleUpdate, intentionalExitRef, noteIdRef, setNoteId, setHasCreated]);
 
   const activeShareServerName = useMemo(() => {
     const active = shareServers.find((server) => server.serverId === activeShareServerId);
     return active?.displayName || active?.serverUrl || '';
   }, [shareServers, activeShareServerId]);
-
-  const flushPendingChanges = useCallback(async (): Promise<boolean> => {
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-      debounceRef.current = null;
-    }
-    return flushSave();
-  }, [flushSave]);
 
   // Save-first wrapper for note-level actions. A new/unsaved note is created by
   // flushing before the action runs, so bar actions no longer have to be hidden
@@ -1126,178 +684,7 @@ export default function NoteEditorScreen() {
       if (!id) return; // empty note, nothing to act on
       await action(id);
     });
-  }, [flushPendingChanges, withPendingIndicator]);
-
-  // Keep input refs bounded to currently rendered items.
-  useEffect(() => {
-    const activeItemIds = new Set(items.map((item) => item.id));
-    for (const id of itemInputRefsMap.current.keys()) {
-      if (!activeItemIds.has(id)) {
-        itemInputRefsMap.current.delete(id);
-      }
-    }
-  }, [items]);
-
-  // Mark the exit as intentional (so beforeRemove doesn't re-handle it) only
-  // once the navigation action is about to dispatch, optionally zooming back
-  // onto the originating card first. isClosingRef is set immediately instead,
-  // so a back press that lands mid-animation still hits beforeRemove and gets
-  // swallowed there rather than falling through to an unguarded second pop.
-  const exitWith = useCallback((navAction: NavigationAction, wantsZoom: boolean) => {
-    setExitSavePrompt(null);
-    const dispatch = () => {
-      intentionalExitRef.current = true;
-      navigation.dispatch(navAction);
-    };
-    if (wantsZoom) {
-      isClosingRef.current = true;
-      void animateClose().then(dispatch);
-    } else {
-      dispatch();
-    }
-  }, [animateClose, navigation]);
-
-  // Flush pending edits without blocking navigation — used when we deliberately
-  // let the user leave (server known-unreachable) and on an unexpected unmount.
-  // flushSave(true) still reports failure via its return value even though its
-  // `unmounting` guard suppresses the in-editor error banner (the editor is on
-  // its way out), so a genuine background-save failure would otherwise vanish
-  // silently. Surface it with a global toast, which outlives this screen.
-  //
-  // showToast is read through a ref so this callback's identity tracks only
-  // flushSave — matching the unmount-flush effect's original `[flushSave]`
-  // dependency exactly. (A direct showToast dependency would let an unstable
-  // toast identity re-run that effect, and re-fire the flush, on every render.)
-  const showToastRef = useRef(showToast);
-  showToastRef.current = showToast;
-  const flushInBackground = useCallback(() => {
-    void flushSave(true)
-      .then((saved) => {
-        if (!saved) showToastRef.current(t('note.failedSaveChanges'), 'error');
-      })
-      .catch(() => showToastRef.current(t('note.failedSaveChanges'), 'error'));
-  }, [flushSave, t]);
-
-  // Intercept navigation away to flush pending edits before leaving, and to play
-  // the zoom-back-onto-the-card animation for back navigation.
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('beforeRemove', (event) => {
-      // Programmatic exits (delete/archive/duplicate) already set this and run
-      // their own zoom/goBack, so don't re-handle them here.
-      if (intentionalExitRef.current) {
-        return;
-      }
-      // A zoom-close animation from this or another exit action is already
-      // playing — swallow this concurrent attempt so it doesn't pop an extra
-      // screen once that animation finishes and dispatches its own action.
-      if (isClosingRef.current) {
-        event.preventDefault();
-        return;
-      }
-      const action = event.data.action;
-      const isBack = action.type === 'GO_BACK' || action.type === 'POP';
-      // Zoom back onto the card for any back navigation (header button or
-      // hardware back; the swipe gesture is disabled). Other removals fall
-      // through to an instant dispatch.
-      const wantsZoom = isBack && zoomEnabled;
-      const hasPending = hasPendingChangesRef.current;
-      if (!hasPending && !wantsZoom) {
-        return;
-      }
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-        debounceRef.current = null;
-      }
-
-      // No pending edits: nothing to save. Zoom back onto the card (a non-zoom
-      // back nav without pending edits already returned above).
-      if (!hasPending) {
-        event.preventDefault();
-        exitWith(action, wantsZoom);
-        return;
-      }
-
-      // Server known-unreachable: an online write would only stall for the
-      // request timeout before falling back to the local-persist + queue path,
-      // so there is nothing to wait for. Flush in the background and let the exit
-      // proceed — blocking here is what made leaving a note with unsaved edits
-      // feel frozen while the server was down. The edit stays durable: flushSave
-      // writes it to the local DB and enqueues it for replay. Mark the exit
-      // intentional so the unmount cleanup below doesn't flush a second time; when
-      // a zoom-back is wanted we still preventDefault and drive it via exitWith.
-      if (!isServerReachable()) {
-        intentionalExitRef.current = true;
-        flushInBackground();
-        if (wantsZoom) {
-          event.preventDefault();
-          exitWith(action, wantsZoom);
-        }
-        return;
-      }
-
-      // Server reachable: await the save so a genuine, non-queueable failure
-      // (validation/conflict) can still prompt Retry/Discard instead of silently
-      // dropping the edit. A reachable server responds promptly, so this path no
-      // longer reintroduces the long stall.
-      event.preventDefault();
-      void (async () => {
-        const saveSucceeded = await flushSave();
-        if (!saveSucceeded) {
-          setExitSavePrompt({ navAction: action, wantsZoom, retriesLeft: MAX_EXIT_SAVE_RETRIES });
-          return;
-        }
-        exitWith(action, wantsZoom);
-      })();
-    });
-    return unsubscribe;
-  }, [exitWith, flushSave, flushInBackground, navigation, zoomEnabled]);
-
-  const handleExitDiscard = useCallback(() => {
-    if (!exitSavePrompt || isExitRetrying) return;
-    exitWith(exitSavePrompt.navAction, exitSavePrompt.wantsZoom);
-  }, [exitSavePrompt, exitWith, isExitRetrying]);
-
-  // Guarded by isExitRetrying so a retry in flight can't race a second tap on
-  // Retry or Discard into a double dispatch or a stale retriesLeft update —
-  // the dialog also disables both buttons via `busy` while this is true.
-  const handleExitRetry = useCallback(async () => {
-    if (!exitSavePrompt || isExitRetrying) return;
-    setIsExitRetrying(true);
-    const { navAction, wantsZoom, retriesLeft } = exitSavePrompt;
-    const retrySucceeded = await flushSave();
-    if (retrySucceeded) {
-      exitWith(navAction, wantsZoom);
-    } else {
-      setExitSavePrompt({ navAction, wantsZoom, retriesLeft: retriesLeft - 1 });
-    }
-    setIsExitRetrying(false);
-  }, [exitSavePrompt, exitWith, flushSave, isExitRetrying]);
-
-  // Flush pending save on unmount (prevent data loss), skip if intentionally exiting
-  useEffect(() => {
-    isMountedRef.current = true;
-    // Captured once: the ref's Map identity never changes across the
-    // component's lifetime (only mutated in place), so reading it here and
-    // using it in the cleanup below sees the same, up-to-date entries.
-    const uploadAbortControllers = imageUploadAbortControllersRef.current;
-    return () => {
-      isMountedRef.current = false;
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-        debounceRef.current = null;
-      }
-      if (!intentionalExitRef.current && hasPendingChangesRef.current) {
-        flushInBackground();
-      }
-      // Abort any uploads still in flight so they don't keep running in the
-      // background for up to the full timeout and fire state updates after
-      // this screen has unmounted (issue #695).
-      for (const controller of uploadAbortControllers.values()) {
-        controller.abort();
-      }
-      uploadAbortControllers.clear();
-    };
-  }, [flushInBackground]);
+  }, [flushPendingChanges, noteIdRef, withPendingIndicator]);
 
   const handleTitleChange = useCallback(
     (newTitle: string) => {
@@ -1310,551 +697,49 @@ export default function NoteEditorScreen() {
       setTitle(clamped);
       markDirtyAndScheduleUpdate();
     },
-    [markDirtyAndScheduleUpdate],
+    [markDirtyAndScheduleUpdate, setTitle, titleRef],
   );
 
   const handleContentChange = useCallback(
     (newContent: string) => {
-      if (exceedsCodePointLimit(newContent, VALIDATION.CONTENT_MAX_LENGTH)) return;
-      setContent(newContent);
-      markDirtyAndScheduleUpdate();
-    },
-    [markDirtyAndScheduleUpdate],
-  );
-
-  const handleItemCompletedToggle = useCallback(
-    async (itemId: string, completed: boolean) => {
-      // itemsRef.current is the authoritative latest state here: each branch
-      // below writes the new array back to it synchronously, so a rapid
-      // follow-up toggle (fired before React re-renders) composes on the most
-      // recent optimistic state rather than a stale render snapshot. Without
-      // this, rows flicker back into the active list and an overlapping
-      // parent/child toggle captures a stale prior snapshot, corrupting its
-      // rollback and save baseline (issue: mobile item flicker).
-      const before = itemsRef.current;
-      const target = before.find((item) => item.id === itemId);
-      if (!target || target.completed === completed) return;
-
-      // Capture the prior completed state of just the items this toggle touches
-      // (the item plus, for a top-level item, its children — or, for a child
-      // being unchecked, its parent) from that latest state. Used to advance
-      // the save baseline and to revert precisely on failure — without
-      // clobbering any other item whose state may change before this async
-      // call settles.
-      const cascadeToChildren = target.parentId === null;
-      const uncompleteParent = target.parentId !== null && !completed;
-      const priorCompletedById = new Map(
-        before
-          .filter(
-            (item) =>
-              item.id === itemId ||
-              (cascadeToChildren && item.parentId === itemId) ||
-              (uncompleteParent && item.id === target.parentId),
-          )
-          .map((item) => [item.id, item.completed]),
+      // Enter at the end of a list item carries the marker to the next line
+      // (and clears it on an empty item) instead of dropping out of the list.
+      let continued = continueListOnNewline(
+        { text: contentRef.current, selection: contentSelectionRef.current },
+        newContent,
       );
-
-      // Optimistic cascade applied immediately, with a subtle settle as the
-      // item moves between the active list and the completed section.
-      const optimisticItems = applyCompletedCascade(before, itemId, completed);
-      itemsRef.current = optimisticItems;
-      animateListReflow();
-      // Flag the just-checked item so its completed-section row pops on mount,
-      // then clear the flag so a later collapse/expand doesn't replay the pop.
-      if (popClearRef.current) clearTimeout(popClearRef.current);
-      if (completed) {
-        setPopItemId(itemId);
-        popClearRef.current = setTimeout(() => setPopItemId(null), 400);
-      } else {
-        setPopItemId(null);
+      // The marker is extra characters the user did not type, so at the cap
+      // drop the continuation rather than the whole keystroke.
+      if (continued && exceedsCodePointLimit(continued.text, VALIDATION.CONTENT_MAX_LENGTH)) {
+        continued = null;
       }
-      setItems(optimisticItems);
-
-      // For unsaved new notes, let the bulk-create carry completed flags
-      if (!noteIdRef.current) {
-        markDirtyAndScheduleUpdate();
-        return;
+      const text = continued?.text ?? newContent;
+      if (exceedsCodePointLimit(text, VALIDATION.CONTENT_MAX_LENGTH)) return;
+      if (continued) {
+        const selection = clampSelection(continued.selection, text);
+        contentSelectionRef.current = selection;
+        setForcedSelection(selection);
       }
-
-      // Cancel any pending debounced save to avoid a race with the toggle API call
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-        debounceRef.current = null;
-      }
-
-      try {
-        const serverItems = await toggleItemCompletedRef.current({
-          noteId: noteIdRef.current,
-          itemId,
-          completed,
-        });
-        if (serverItems.length > 0) {
-          // Online: reconcile only completed flags from server response,
-          // composing on (and writing back) the latest state so a concurrent
-          // toggle's optimistic change is preserved.
-          const completedById = new Map(serverItems.map((item) => [item.id, item.completed]));
-          const reconciled = itemsRef.current.map((item) => {
-            const serverCompleted = completedById.get(item.id);
-            return serverCompleted === undefined ? item : { ...item, completed: serverCompleted };
-          });
-          itemsRef.current = reconciled;
-          setItems(reconciled);
-          // Advance the baseline so the diff engine does not re-patch completed
-          for (const [id, comp] of completedById) {
-            const snap = savedItemsRef.current.get(id);
-            if (snap) savedItemsRef.current.set(id, { ...snap, completed: comp });
-          }
-        } else {
-          // Offline: cascade was applied to local DB; advance baseline here too
-          for (const [id, prior] of priorCompletedById) {
-            if (prior === completed) continue;
-            const snap = savedItemsRef.current.get(id);
-            if (snap) savedItemsRef.current.set(id, { ...snap, completed });
-          }
-        }
-      } catch {
-        // Revert only the items this toggle changed, restoring their prior
-        // completed values, so a concurrent toggle's optimistic state survives.
-        const reverted = itemsRef.current.map((item) =>
-          priorCompletedById.has(item.id)
-            ? { ...item, completed: priorCompletedById.get(item.id)! }
-            : item,
-        );
-        itemsRef.current = reverted;
-        setItems(reverted);
-        setSaveError(t('note.failedSaveChanges'));
-      }
-    },
-    [markDirtyAndScheduleUpdate, t],
-  );
-
-  // Unchecks every currently-completed item in one bulk request (overflow
-  // menu). Non-destructive and easy to redo by hand, so no confirmation.
-  const handleUncheckAllItems = useCallback(async () => {
-    const noteId = noteIdRef.current;
-    const before = itemsRef.current;
-    const completed = before.filter((item) => item.completed);
-    if (completed.length === 0) return;
-    const ids = completed.map((item) => item.id);
-
-    const optimistic = before.map((item) => (item.completed ? { ...item, completed: false } : item));
-    itemsRef.current = optimistic;
-    setItems(optimistic);
-
-    if (!noteId) {
-      // Unsaved new note: let the bulk-create carry the completed flags.
-      markDirtyAndScheduleUpdate();
-      return;
-    }
-
-    await withPendingIndicator(async () => {
-      try {
-        const serverItems = await uncheckAllItemsRef.current({ noteId, itemIds: ids });
-        if (serverItems.length > 0) {
-          const completedById = new Map(serverItems.map((item) => [item.id, item.completed]));
-          const reconciled = itemsRef.current.map((item) => {
-            const c = completedById.get(item.id);
-            return c === undefined ? item : { ...item, completed: c };
-          });
-          itemsRef.current = reconciled;
-          setItems(reconciled);
-          for (const [id, comp] of completedById) {
-            const snap = savedItemsRef.current.get(id);
-            if (snap) savedItemsRef.current.set(id, { ...snap, completed: comp });
-          }
-        } else {
-          // Offline: the local write already applied the uncheck; advance the
-          // save baseline so the diff engine does not re-patch it later.
-          for (const id of ids) {
-            const snap = savedItemsRef.current.get(id);
-            if (snap) savedItemsRef.current.set(id, { ...snap, completed: false });
-          }
-        }
-      } catch {
-        const reverted = itemsRef.current.map((item) => (ids.includes(item.id) ? { ...item, completed: true } : item));
-        itemsRef.current = reverted;
-        setItems(reverted);
-        setSaveError(t('note.failedSaveChanges'));
-      }
-    });
-  }, [markDirtyAndScheduleUpdate, t, withPendingIndicator]);
-
-  // Deletes every currently-completed item after a confirm dialog (overflow
-  // menu); mobile has no in-editor undo-bar equivalent to the web's
-  // deferred-delete flow, so this confirms up front instead. Deleting exactly
-  // the completed set never orphans a child: the completed-cascade invariant
-  // (applyCompletedCascade / collectToggleCascade) guarantees a completed
-  // parent's children are completed too, so they are always in the same set.
-  const handleDeleteCompletedItems = useCallback(async () => {
-    const pendingCount = itemsRef.current.filter((item) => item.completed).length;
-    if (pendingCount === 0) return;
-
-    const confirmed = await confirm({
-      title: t('note.deleteCheckedItems'),
-      message: t('note.deleteCheckedItemsConfirm', { count: pendingCount }),
-      confirmLabel: t('common.delete'),
-      destructive: true,
-    });
-    if (!confirmed) return;
-
-    const before = itemsRef.current;
-    const completed = before.filter((item) => item.completed);
-    if (completed.length === 0) return;
-    const ids = completed.map((item) => item.id);
-    const idSet = new Set(ids);
-    const remaining = before.filter((item) => !item.completed);
-    const beforeSavedItems = new Map(savedItemsRef.current);
-    const beforeSavedOrder = [...savedOrderRef.current];
-
-    itemsRef.current = remaining;
-    setItems(remaining);
-    for (const id of ids) savedItemsRef.current.delete(id);
-    savedOrderRef.current = savedOrderRef.current.filter((id) => !idSet.has(id));
-
-    const noteId = noteIdRef.current;
-    if (!noteId) {
-      // Unsaved new note: let the bulk-create carry what's left in `items`.
-      markDirtyAndScheduleUpdate();
-      return;
-    }
-
-    await withPendingIndicator(async () => {
-      try {
-        await deleteCompletedItemsRef.current({ noteId, itemIds: ids });
-      } catch {
-        // Restore only the deleted items, on top of whatever itemsRef.current
-        // has become since — an edit or addition made to another item while
-        // the request was in flight must survive the revert, not just the
-        // stale `before` snapshot.
-        const byId = new Map(before.map((item) => [item.id, item]));
-        const revertedIds = reinsertIds(itemsRef.current.map((item) => item.id), before.map((item) => item.id), idSet);
-        const currentById = new Map(itemsRef.current.map((item) => [item.id, item]));
-        const reverted = revertedIds.map((id) => currentById.get(id) ?? byId.get(id)!);
-        itemsRef.current = reverted;
-        setItems(reverted);
-
-        for (const id of ids) {
-          const snap = beforeSavedItems.get(id);
-          if (snap) savedItemsRef.current.set(id, snap);
-        }
-        savedOrderRef.current = reinsertIds(savedOrderRef.current, beforeSavedOrder, idSet);
-
-        setSaveError(t('note.failedSaveChanges'));
-      }
-    });
-  }, [confirm, markDirtyAndScheduleUpdate, t, withPendingIndicator]);
-
-  const handleItemTextChange = useCallback(
-    (index: number, text: string) => {
-      if (!text.includes('\n')) {
-        // Clamp like the paste paths below: the server rejects longer item text
-        // with a 400, which would wedge the save (or dead-letter it offline).
-        const clamped = truncateToCodePoints(text, VALIDATION.ITEM_TEXT_MAX_LENGTH);
-        setItems((prev) => prev.map((item, i) => (i === index ? { ...item, text: clamped } : item)));
-        markDirtyAndScheduleUpdate();
-        return;
-      }
-
-      // Multi-line paste: split into separate items
-      const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
-
-      if (lines.length <= 1) {
-        const singleText = truncateToCodePoints(lines[0] ?? '', VALIDATION.ITEM_TEXT_MAX_LENGTH);
-        setItems((prev) => prev.map((item, i) => (i === index ? { ...item, text: singleText } : item)));
-        markDirtyAndScheduleUpdate();
-        return;
-      }
-
-      const isCompleted = itemsRef.current[index]?.completed ?? false;
-
-      if (isCompleted) {
-        setItems((prev) =>
-          prev.map((item, i) =>
-            i === index ? { ...item, text: truncateToCodePoints(lines.join(' '), VALIDATION.ITEM_TEXT_MAX_LENGTH) } : item,
-          ),
-        );
-        markDirtyAndScheduleUpdate();
-        return;
-      }
-
-      const prepasteItems = [...itemsRef.current];
-      const [firstLine, ...remainingLines] = lines;
-      const newIds = remainingLines.map(() => nextTempId());
-
-      setItems((prev) => {
-        const sourceParentId = prev[index]?.parentId ?? null;
-        const newItems: LocalItem[] = remainingLines.map((line, i) => ({
-          id: newIds[i],
-          text: truncateToCodePoints(line, VALIDATION.ITEM_TEXT_MAX_LENGTH),
-          completed: false,
-          position: 0,
-          parentId: sourceParentId,
-          assigned_to: '',
-        }));
-        const updated = prev.map((item, i) =>
-          i === index ? { ...item, text: truncateToCodePoints(firstLine, VALIDATION.ITEM_TEXT_MAX_LENGTH) } : item,
-        );
-        updated.splice(index + 1, 0, ...newItems);
-        return updated.map((item, i) => ({ ...item, position: i }));
-      });
-      markDirtyAndScheduleUpdate();
-
-      showToast(t('note.itemsPasted', { count: remainingLines.length }), 'info', {
-        label: t('dashboard.undo'),
-        onPress: () => {
-          setItems(prepasteItems);
-          markDirtyAndScheduleUpdate();
-        },
-      });
-
-      const lastId = newIds[newIds.length - 1];
-      const lastItemRef = getItemRef(lastId);
-      setTimeout(() => lastItemRef.current?.focus(), 50);
-    },
-    [markDirtyAndScheduleUpdate, getItemRef, showToast, t],
-  );
-
-  const handleDeleteItem = useCallback(
-    (index: number) => {
-      const removedItemId = itemsRef.current[index]?.id;
-      if (removedItemId) {
-        if (itemInputRefsMap.current.get(removedItemId)?.current?.isFocused()) {
-          Keyboard.dismiss();
-        }
-        itemInputRefsMap.current.delete(removedItemId);
-      }
-      // Settle the surrounding rows as this one is removed instead of snapping.
-      animateListReflow();
-      setItems((prev) => prev.filter((_, i) => i !== index));
+      setContent(text);
       markDirtyAndScheduleUpdate();
     },
-    [markDirtyAndScheduleUpdate],
+    [contentRef, markDirtyAndScheduleUpdate, setContent],
   );
-
-  const handleAddItem = useCallback(() => {
-    const newId = nextTempId();
-    // Mark before setItems so the item mounts with autoFocus={true}, which
-    // reliably opens the soft keyboard (programmatic focus() doesn't always
-    // trigger the IME on Android for newly mounted inputs).
-    autoFocusItemIdRef.current = newId;
-    // Ease the new row in rather than having the list jump to make room.
-    animateListReflow();
-    setItems((prev) => [
-      ...prev,
-      { id: newId, text: '', completed: false, position: prev.length, parentId: null, assigned_to: '' },
-    ]);
-    markDirtyAndScheduleUpdate();
-    // autoFocus is only consumed at mount; clear after a short delay so a
-    // later unmount/remount of the same ID doesn't re-open the keyboard.
-    // Cancel any pending clear from a previous rapid tap before rescheduling.
-    if (autoFocusClearTimerRef.current !== null) clearTimeout(autoFocusClearTimerRef.current);
-    autoFocusClearTimerRef.current = setTimeout(() => { autoFocusItemIdRef.current = null; }, 500);
-  }, [markDirtyAndScheduleUpdate]);
-
-  // handleItemEnterAtCursor mirrors the webapp's Enter-key handling:
-  //  - cursor at the very start of a non-empty item -> insert a blank item
-  //    before it (leaving its own text untouched), focus the new item;
-  //  - cursor mid-text -> split the item into two at the cursor, focus the
-  //    new (second) item with its cursor at the start;
-  //  - cursor at the end (or item is empty) -> append a blank item after
-  //    (previous default behavior).
-  // Newly created items inherit the current item's group (parentId),
-  // assignee, and completed state.
-  const handleItemEnterAtCursor = useCallback((index: number, cursorPosition: number) => {
-    const currentItem = itemsRef.current[index];
-    if (!currentItem) return;
-
-    const text = currentItem.text;
-    const cursorPos = Math.max(0, Math.min(cursorPosition, text.length));
-
-    if (cursorPos === 0 && text.length > 0) {
-      const newId = nextTempId();
-      const newItemRef = getItemRef(newId);
-      setItems((prev) => {
-        const newItem: LocalItem = {
-          id: newId,
-          text: '',
-          completed: prev[index]?.completed ?? false,
-          position: index,
-          parentId: prev[index]?.parentId ?? null,
-          assigned_to: prev[index]?.assigned_to ?? '',
-        };
-        const next = [...prev.slice(0, index), newItem, ...prev.slice(index)];
-        return next.map((item, i) => ({ ...item, position: i }));
-      });
-      markDirtyAndScheduleUpdate();
-      setTimeout(() => newItemRef.current?.focus(), 50);
-      return;
-    }
-
-    if (cursorPos > 0 && cursorPos < text.length) {
-      const before = text.slice(0, cursorPos);
-      const after = text.slice(cursorPos);
-      const newId = nextTempId();
-      const newItemRef = getItemRef(newId);
-      setItems((prev) => {
-        const newItem: LocalItem = {
-          id: newId,
-          text: after,
-          completed: prev[index]?.completed ?? false,
-          position: index + 1,
-          parentId: prev[index]?.parentId ?? null,
-          assigned_to: prev[index]?.assigned_to ?? '',
-        };
-        const next = [
-          ...prev.slice(0, index),
-          { ...prev[index], text: before },
-          newItem,
-          ...prev.slice(index + 1),
-        ];
-        return next.map((item, i) => ({ ...item, position: i }));
-      });
-      markDirtyAndScheduleUpdate();
-      setTimeout(() => {
-        newItemRef.current?.focus();
-        // Not all TextInput host implementations (e.g. test mocks) provide
-        // this imperative method, so guard the call.
-        newItemRef.current?.setSelection?.(0, 0);
-      }, 50);
-      return;
-    }
-
-    const newId = nextTempId();
-    const newItemRef = getItemRef(newId);
-    setItems((prev) => {
-      const newItem: LocalItem = {
-        id: newId,
-        text: '',
-        completed: prev[index]?.completed ?? false,
-        position: index + 1,
-        parentId: prev[index]?.parentId ?? null,
-        assigned_to: '',
-      };
-      const next = [...prev.slice(0, index + 1), newItem, ...prev.slice(index + 1)];
-      return next.map((item, i) => ({ ...item, position: i }));
-    });
-    markDirtyAndScheduleUpdate();
-    setTimeout(() => newItemRef.current?.focus(), 50);
-  }, [markDirtyAndScheduleUpdate, getItemRef]);
-
-  const handleBackspaceOnEmpty = useCallback((index: number) => {
-    const currentItems = itemsRef.current;
-    const item = currentItems[index];
-    if (!item || item.text !== '') {
-      return;
-    }
-    const removedItemId = item.id;
-    const focusTargetId = index > 0 ? (currentItems[index - 1]?.id ?? null) : null;
-    setItems((prev) => prev.filter((_, i) => i !== index));
-    itemInputRefsMap.current.delete(removedItemId);
-    markDirtyAndScheduleUpdate();
-    setTimeout(() => {
-      if (focusTargetId) itemInputRefsMap.current.get(focusTargetId)?.current?.focus();
-    }, 50);
-  }, [markDirtyAndScheduleUpdate]);
-
-  const handleAcceptSuggestion = useCallback(
-    (itemId: string, suggestionText: string) => {
-      // Capture the completed item ID from the ref snapshot so we can focus it after setItems
-      const restoredId = itemsRef.current.find(
-        (item) => item.completed && item.text.trim().toLowerCase() === suggestionText.toLowerCase(),
-      )?.id;
-
-      setItems((prev) => {
-        const completedItem = prev.find(
-          (item) => item.completed && item.text.trim().toLowerCase() === suggestionText.toLowerCase(),
-        );
-
-        if (!completedItem) {
-          return prev.map((item) => (item.id === itemId ? { ...item, text: suggestionText } : item));
-        }
-
-        const currentUnchecked = prev.filter((item) => !item.completed);
-        // itemId is always an unchecked item so findIndex should never return -1; Math.max guards against stale ref races
-        const insertAt = Math.max(0, currentUnchecked.findIndex((item) => item.id === itemId));
-
-        const filtered = prev.filter(
-          (item) => item.id !== itemId && item.id !== completedItem.id,
-        );
-
-        const restoredItem: LocalItem = { ...completedItem, completed: false };
-        const remainingUncompleted = filtered.filter((item) => !item.completed);
-        const remainingCompleted = filtered.filter((item) => item.completed);
-
-        const newUncompleted = [
-          ...remainingUncompleted.slice(0, insertAt),
-          restoredItem,
-          ...remainingUncompleted.slice(insertAt),
-        ].map((item, i) => ({ ...item, position: i }));
-
-        return [
-          ...newUncompleted,
-          ...remainingCompleted.map((item, i) => ({ ...item, position: newUncompleted.length + i })),
-        ];
-      });
-
-      markDirtyAndScheduleUpdate();
-
-      if (restoredId) {
-        setTimeout(() => {
-          itemInputRefsMap.current.get(restoredId)?.current?.focus();
-        }, 50);
-      }
-    },
-    [markDirtyAndScheduleUpdate],
-  );
-
-  // Metadata actions (pin/archive/color) flush pending item edits first, then
-  // PATCH only the field that changed. Sending just the changed scalar avoids
-  // re-sending (and clobbering) items or other fields edited concurrently
-  // elsewhere. The caller advances the saved baseline only after the PATCH
-  // succeeds (see commitMetadataBaseline).
-  const buildMetadataUpdateData = useCallback((overrides: Partial<UpdateNoteRequest>): UpdateNoteRequest => {
-    return { ...overrides } as UpdateNoteRequest;
-  }, []);
-
-  const commitMetadataBaseline = useCallback((overrides: Partial<UpdateNoteRequest>) => {
-    Object.assign(savedScalarsRef.current, overrides);
-  }, []);
-
-  // Runs a metadata PATCH while holding metadataUpdateInFlightRef so the
-  // existingNote refresh effect won't revert the optimistic change with a stale
-  // refetch that lands mid-request.
-  const runMetadataUpdate = useCallback(async (id: string, data: UpdateNoteRequest) => {
-    metadataUpdateInFlightRef.current = true;
-    try {
-      await updateMutation.mutateAsync({ id, data });
-    } finally {
-      metadataUpdateInFlightRef.current = false;
-    }
-  }, [updateMutation]);
 
   const handleTitleSubmit = useCallback(() => {
     if (noteTypeRef.current === 'text') {
       contentInputRef.current?.focus();
     } else {
-      const firstUnchecked = itemsRef.current.find((item) => !item.completed);
-      if (firstUnchecked) {
-        itemInputRefsMap.current.get(firstUnchecked.id)?.current?.focus();
-      } else {
-        const newId = nextTempId();
-        const newItemRef = getItemRef(newId);
-        setItems((prev) => [
-          ...prev,
-          { id: newId, text: '', completed: false, position: prev.length, parentId: null, assigned_to: '' },
-        ]);
-        markDirtyAndScheduleUpdate();
-        setTimeout(() => newItemRef.current?.focus(), 50);
-      }
+      focusFirstUncheckedOrAppend();
     }
-  }, [markDirtyAndScheduleUpdate, getItemRef]);
+  }, [focusFirstUncheckedOrAppend, noteTypeRef]);
 
   const handleToggleCollapsed = useCallback(() => {
     if (isReadOnly) return;
     animateListReflow();
     setCheckedItemsCollapsed((prev) => !prev);
     markDirtyAndScheduleUpdate();
-  }, [isReadOnly, markDirtyAndScheduleUpdate]);
+  }, [isReadOnly, markDirtyAndScheduleUpdate, setCheckedItemsCollapsed]);
 
   const collaborators = useMemo<Collaborator[]>(() => {
     if (!existingNote) return [];
@@ -1876,26 +761,10 @@ export default function NoteEditorScreen() {
     return (existingNote?.shared_with && existingNote.shared_with.length > 0) || existingNote?.is_shared;
   }, [existingNote?.shared_with, existingNote?.is_shared]);
 
-  const handleAssignItem = useCallback(
-    (itemId: string, userId: string) => {
-      setItems((prev) =>
-        prev.map((item) => (item.id === itemId ? { ...item, assigned_to: userId } : item)),
-      );
-      markDirtyAndScheduleUpdate();
-    },
-    [markDirtyAndScheduleUpdate],
-  );
-
-  const openAssigneePicker = useCallback((itemId: string) => {
-    if (isReadOnly) return;
-    setAssigningItemId(itemId);
-    setAssigneePickerVisible(true);
-  }, [isReadOnly]);
-
   const handleNativeShare = useCallback(() => {
     const text = formatEditorStateForShare(noteTypeRef.current, titleRef.current, contentRef.current, itemsRef.current);
     if (text.trim()) void Share.share({ message: text });
-  }, []);
+  }, [contentRef, itemsRef, noteTypeRef, titleRef]);
 
   const handleDelete = useCallback(async () => {
     if (!noteId) {
@@ -1908,10 +777,7 @@ export default function NoteEditorScreen() {
     try {
       // Drop any debounced autosave; the delete runs against the last persisted
       // state, and the in-flight save (if any) is awaited below.
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-        debounceRef.current = null;
-      }
+      cancelScheduledSave();
       // Run the delete with the editor still mounted so a slow write shows the
       // pending indicator (#697) and a failure surfaces as an Alert. On success
       // we zoom back onto the card afterwards.
@@ -1942,7 +808,7 @@ export default function NoteEditorScreen() {
     } catch {
       Alert.alert(t('common.error'), t('note.failedDelete'));
     }
-  }, [deleteMutation, navigation, noteId, restoreMutation, showToast, t, withPendingIndicator, zoomCloseAndExit]);
+  }, [cancelScheduledSave, deleteMutation, intentionalExitRef, navigation, noteId, noteIdRef, restoreMutation, saveInFlightRef, showToast, t, withPendingIndicator, zoomCloseAndExit]);
 
   // Restore a trashed note (read-only view) and return to the list.
   const handleRestoreNote = useCallback(async () => {
@@ -1979,19 +845,19 @@ export default function NoteEditorScreen() {
     } catch {
       Alert.alert(t('common.error'), t('note.failedDelete'));
     }
-  }, [confirm, noteId, permanentDeleteMutation, t, withPendingIndicator, zoomCloseAndExit]);
+  }, [confirm, noteId, noteIdRef, permanentDeleteMutation, t, withPendingIndicator, zoomCloseAndExit]);
 
   const handleTogglePin = useCallback(() => withSavedNote(async (id) => {
     const newPinned = !pinnedRef.current;
     setPinned(newPinned);
     try {
-      await runMetadataUpdate(id, buildMetadataUpdateData({ pinned: newPinned }));
+      await runMetadataUpdate(id, { pinned: newPinned });
       commitMetadataBaseline({ pinned: newPinned });
     } catch {
       setPinned(!newPinned);
       Alert.alert(t('common.error'), t('note.failedUpdate'));
     }
-  }), [buildMetadataUpdateData, commitMetadataBaseline, runMetadataUpdate, withSavedNote, t]);
+  }), [commitMetadataBaseline, pinnedRef, runMetadataUpdate, setPinned, withSavedNote, t]);
 
   const handleToggleArchive = useCallback(() => withSavedNote(async (id) => {
     const newArchived = !archivedRef.current;
@@ -2000,7 +866,7 @@ export default function NoteEditorScreen() {
     if (!newArchived) {
       // Unarchiving keeps the user on the note.
       try {
-        await runMetadataUpdate(id, buildMetadataUpdateData({ archived: false }));
+        await runMetadataUpdate(id, { archived: false });
         commitMetadataBaseline({ archived: false });
         showToast(t('dashboard.noteUnarchived'));
       } catch {
@@ -2017,12 +883,12 @@ export default function NoteEditorScreen() {
     commitMetadataBaseline({ archived: true });
     await zoomCloseAndExit();
     try {
-      await runMetadataUpdate(id, buildMetadataUpdateData({ archived: true }));
+      await runMetadataUpdate(id, { archived: true });
       showToast(t('dashboard.noteArchived'), 'success', {
         label: t('dashboard.undo'),
         onPress: async () => {
           try {
-            await runMetadataUpdate(id, buildMetadataUpdateData({ archived: false }));
+            await runMetadataUpdate(id, { archived: false });
             showToast(t('dashboard.noteUnarchived'));
           } catch {
             showToast(t('note.failedUnarchive'), 'error');
@@ -2032,7 +898,7 @@ export default function NoteEditorScreen() {
     } catch {
       showToast(t('note.failedArchive'), 'error');
     }
-  }), [buildMetadataUpdateData, zoomCloseAndExit, commitMetadataBaseline, runMetadataUpdate, withSavedNote, showToast, t]);
+  }), [archivedRef, zoomCloseAndExit, commitMetadataBaseline, runMetadataUpdate, setArchived, withSavedNote, showToast, t]);
 
   const handleColorSelect = useCallback(async (selectedColor: string) => {
     const saveSucceeded = await flushPendingChanges();
@@ -2055,24 +921,21 @@ export default function NoteEditorScreen() {
       return;
     }
     try {
-      await runMetadataUpdate(currentNoteId, buildMetadataUpdateData({ color: selectedColor }));
+      await runMetadataUpdate(currentNoteId, { color: selectedColor });
       commitMetadataBaseline({ color: selectedColor });
     } catch {
       setColor(prevColor);
       Alert.alert(t('common.error'), t('note.failedColorUpdate'));
     }
-  }, [buildMetadataUpdateData, commitMetadataBaseline, flushPendingChanges, markDirtyAndScheduleUpdate, runMetadataUpdate, t]);
+  }, [colorRef, commitMetadataBaseline, flushPendingChanges, isHydratingRef, markDirtyAndScheduleUpdate, noteIdRef, runMetadataUpdate, setColor, t]);
 
   const handleToggleNoteType = useCallback(() => {
     if (hasCreated) return;
     setNoteType((prev) => (prev === 'text' ? 'list' : 'text'));
-  }, [hasCreated]);
+  }, [hasCreated, setNoteType]);
 
   const handleDuplicate = useCallback(async () => {
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-      debounceRef.current = null;
-    }
+    cancelScheduledSave();
 
     const saveSucceeded = await flushSave();
     if (!saveSucceeded) {
@@ -2094,7 +957,7 @@ export default function NoteEditorScreen() {
     } catch {
       Alert.alert(t('common.error'), t('note.failedDuplicate'));
     }
-  }, [duplicateMutation, flushSave, navigation, t]);
+  }, [cancelScheduledSave, duplicateMutation, flushSave, intentionalExitRef, navigation, noteIdRef, t]);
 
   // List -> text is lossy (assignments, real checkbox/nesting structure), so
   // it's confirmed first; text -> list just reflows lines and runs directly
@@ -2102,10 +965,7 @@ export default function NoteEditorScreen() {
   // afterward, since the editor's baseline/ref state is keyed to the note's
   // pre-conversion type and shape.
   const handleConvertNoteType = useCallback(async () => {
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-      debounceRef.current = null;
-    }
+    cancelScheduledSave();
 
     const saveSucceeded = await withPendingIndicator(() => flushSave());
     if (!saveSucceeded) {
@@ -2139,158 +999,19 @@ export default function NoteEditorScreen() {
         navigation.replace('NoteEditor', { noteId: currentNoteId });
         showToast(t('note.converted'));
       });
-    } catch {
-      Alert.alert(t('common.error'), t('note.failedConvert'));
+    } catch (err) {
+      if (err instanceof NoteConversionCapError) {
+        Alert.alert(t('common.error'), err.kind === 'tooManyItems'
+          ? t('note.tooManyItems', { max: err.max })
+          : t('note.itemTooLong', { max: err.max }));
+      } else {
+        Alert.alert(t('common.error'), t('note.failedConvert'));
+      }
     }
-  }, [confirm, convertMutation, flushSave, navigation, showToast, t, withPendingIndicator]);
+  }, [cancelScheduledSave, confirm, convertMutation, flushSave, intentionalExitRef, itemsRef, navigation, noteIdRef, noteTypeRef, showToast, t, withPendingIndicator]);
 
   // Disable inputs while waiting for existing note to hydrate
   const isHydrating = initialNoteId !== null && !existingNote;
-
-  // Build index lookup for items to avoid O(n) indexOf per item
-  const itemIndexMap = useMemo(
-    () => new Map(items.map((item, i) => [item.id, i])),
-    [items],
-  );
-  const itemIndexMapRef = useRef(itemIndexMap);
-  itemIndexMapRef.current = itemIndexMap;
-
-  const uncheckedItems = useMemo(() => items.filter((item) => !item.completed), [items]);
-  const checkedItems = useMemo(() => items.filter((item) => item.completed), [items]);
-
-  const completedItemTexts = useMemo(() => {
-    const seen = new Set<string>();
-    const texts: string[] = [];
-    for (const item of checkedItems) {
-      const trimmed = item.text.trim();
-      if (trimmed && !seen.has(trimmed.toLowerCase())) {
-        seen.add(trimmed.toLowerCase());
-        texts.push(trimmed);
-      }
-    }
-    return texts;
-  }, [checkedItems]);
-
-  // Refs to avoid recreating handleListReorder on every items change
-  const checkedItemsRef = useRef(checkedItems);
-  checkedItemsRef.current = checkedItems;
-  const uncheckedItemsRef = useRef(uncheckedItems);
-  uncheckedItemsRef.current = uncheckedItems;
-
-  // Commits a finished drag: applies the vertical move (if any) and the indent
-  // implied by the horizontal drag distance, then persists. Called from both
-  // onReorder (fires only when the row changed slots) and onDragEnd (fires on
-  // every drop, which is how a purely sideways indent gets committed at all).
-  const commitDrag = useCallback(
-    (from: number, to: number) => {
-      // Apply the move to the unchecked list (a no-op when from === to, e.g. a
-      // purely sideways drag that only changed the indent).
-      const reorderedUnchecked = reorderItems(uncheckedItemsRef.current, from, to);
-      const moved = reorderedUnchecked[to];
-      let changed = from !== to;
-      if (moved) {
-        const above = to > 0 ? reorderedUnchecked[to - 1] : null;
-        const baseLevel = moved.parentId ? 1 : 0;
-        const canIndent = !itemHasChildren(itemsRef.current, moved.id) && !!above;
-        const canOutdent = baseLevel === 1;
-        const targetLevel = indentLevelFromDrag(dragTranslateX.value, baseLevel, canIndent, canOutdent);
-        let newParentId: string | null;
-        if (targetLevel !== baseLevel) {
-          // The horizontal drag past a step is an explicit indent intent.
-          newParentId = targetLevel === 1 && above ? above.parentId ?? above.id : null;
-        } else if (from !== to) {
-          // No sideways intent but the row moved: fall back to the position-based
-          // reparent so dropping into a group still nests as before.
-          newParentId = droppedParentId(itemsRef.current, moved, above);
-        } else {
-          // Released in place with no sideways intent: leave the parent untouched.
-          newParentId = moved.parentId;
-        }
-        if (newParentId !== moved.parentId) {
-          reorderedUnchecked[to] = { ...moved, parentId: newParentId };
-          changed = true;
-        }
-      }
-      // Note: dragTranslateX is intentionally not reset here. Each active row now
-      // holds its dropped indent in its own `displayLevel` until the committed
-      // re-render lands; zeroing the shared value mid-drop could clobber that hold
-      // and reintroduce the snap-back flash. The drag start resets it instead.
-      if (!changed) return;
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-      // Merge with existing checked items and normalize so each parent's
-      // children stay contiguous.
-      setItems(normalizeItemOrder([...reorderedUnchecked, ...checkedItemsRef.current]));
-      markDirtyAndScheduleUpdate();
-    },
-    [markDirtyAndScheduleUpdate, dragTranslateX],
-  );
-
-  const handleListReorder = useCallback(
-    ({ from, to }: ReorderableListReorderEvent) => commitDrag(from, to),
-    [commitDrag],
-  );
-
-  // onReorder never fires for a purely sideways drag (the library only calls it
-  // when from !== to). onDragEnd fires on every drop — inside a UI-thread
-  // worklet — so we hop back to JS to commit the indent for that case. The
-  // from !== to drops are already handled by onReorder above.
-  const handleListDragEnd = useCallback(
-    ({ from, to }: ReorderableListDragEndEvent) => {
-      'worklet';
-      if (from === to) {
-        runOnJS(commitDrag)(from, to);
-      }
-    },
-    [commitDrag],
-  );
-
-  // The reorder drag activates on movement along either axis: vertical to
-  // reorder, horizontal to indent/outdent (Google Keep style). onChange feeds
-  // translationX into dragTranslateX so the lifted row can follow the finger
-  // sideways and snap to an indent step as it is dragged. (There is no longer a
-  // separate swipe-to-indent gesture competing for the horizontal axis.) The
-  // library chains its own onBegin/onUpdate/onEnd/onFinalize handlers onto this
-  // gesture; onChange is free for us to use.
-  const listDragGesture = useMemo(
-    () =>
-      Gesture.Pan()
-        .activeOffsetX([-10, 10])
-        .activeOffsetY([-10, 10])
-        .onChange((event) => {
-          'worklet';
-          dragTranslateX.value = event.translationX;
-        }),
-    [dragTranslateX],
-  );
-
-  const handleListItemFocus = useCallback<NonNullable<TextInputProps['onFocus']>>((event) => {
-    const nativeTarget = event.nativeEvent.target;
-    if (nativeTarget == null) return;
-
-    // Use ScrollView's native keyboard helper so focused list item inputs stay
-    // visible. scrollViewRef now points at the library's ScrollViewContainer
-    // (a Reanimated ScrollView); if its forwarded ref doesn't expose
-    // getScrollResponder this degrades to a no-op rather than crashing.
-    const responder = scrollViewRef.current?.getScrollResponder?.();
-    if (
-      responder &&
-      typeof responder.scrollResponderScrollNativeHandleToKeyboard === 'function'
-    ) {
-      responder.scrollResponderScrollNativeHandleToKeyboard(
-        nativeTarget,
-        FOCUSED_INPUT_KEYBOARD_MARGIN,
-        true,
-      );
-      return;
-    }
-  }, []);
-
-  const handleFocusListItem = useCallback(
-    (_itemId: string, event: Parameters<NonNullable<TextInputProps['onFocus']>>[0]) => {
-      handleListItemFocus(event);
-    },
-    [handleListItemFocus],
-  );
 
   const hasNoteColor = !!color && !isWhiteHexColor(color);
 
@@ -2324,21 +1045,6 @@ export default function NoteEditorScreen() {
   const barIconColor = hasNoteColor ? '#444' : colors.icon;
   const disabledBarIconColor = hasNoteColor ? '#999' : colors.iconMuted;
 
-  // Per-item callbacks shared by the active list (renderListItem) and the
-  // completed-items section, so both wire ListItem the same way.
-  const listItemHandlers = useMemo<ListItemHandlers>(
-    () => ({
-      onToggle: (itemId, completed) => { void handleItemCompletedToggle(itemId, completed); },
-      onChangeText: handleItemTextChange,
-      onDelete: handleDeleteItem,
-      onEnterAtCursor: handleItemEnterAtCursor,
-      onBackspaceOnEmpty: handleBackspaceOnEmpty,
-      onAssignPress: openAssigneePicker,
-      onFocus: handleFocusListItem,
-    }),
-    [handleItemCompletedToggle, handleItemTextChange, handleDeleteItem, handleItemEnterAtCursor, handleBackspaceOnEmpty, openAssigneePicker, handleFocusListItem],
-  );
-
   const renderActiveRow = useCallback(
     ({ item, index }: ReorderableListRenderItemInfo<LocalItem>) => {
       const originalIndex = itemIndexMapRef.current.get(item.id);
@@ -2356,6 +1062,8 @@ export default function NoteEditorScreen() {
           canOutdent={baseLevel === 1}
           listItemProps={{
             inputRef: getItemRef(item.id),
+            selectionHandleRef: getItemSelectionRef(item.id),
+            inputAccessoryViewID: Platform.OS === 'ios' ? ITEM_MARKDOWN_TOOLBAR_ID : undefined,
             autoFocus: item.id === autoFocusItemIdRef.current,
             text: item.text,
             completed: item.completed,
@@ -2374,43 +1082,131 @@ export default function NoteEditorScreen() {
             onBackspaceOnEmpty: () => listItemHandlers.onBackspaceOnEmpty(originalIndex),
             onAssignPress: () => listItemHandlers.onAssignPress(item.id),
             onFocus: (event) => listItemHandlers.onFocus(item.id, event),
+            onBlur: () => listItemHandlers.onBlur(item.id),
             onAcceptSuggestion: (text) => handleAcceptSuggestion(item.id, text),
           }}
         />
       );
     },
-    [getItemRef, listItemHandlers, isNoteShared, collaborators, hasNoteColor, completedItemTexts, handleAcceptSuggestion, dragTranslateX, isReadOnly],
+    [autoFocusItemIdRef, getItemRef, getItemSelectionRef, itemIndexMapRef, itemsRef, listItemHandlers, isNoteShared, collaborators, hasNoteColor, completedItemTexts, handleAcceptSuggestion, dragTranslateX, isReadOnly],
   );
 
-  const applyToolbarEdit = useCallback((updater: (prev: string) => string) => {
-    const next = updater(contentRef.current);
-    if (next === contentRef.current || exceedsCodePointLimit(next, VALIDATION.CONTENT_MAX_LENGTH)) {
+  /**
+   * Runs a formatting-bar edit against the current text and caret, then pushes
+   * both the new text and the new caret position back into the input. The
+   * caret has to be set explicitly: without it the next keystroke would land
+   * outside the markers that were just inserted.
+   */
+  const applyToolbarEdit = useCallback((edit: (state: EditorText) => EditorText) => {
+    const previous = contentRef.current;
+    const next = edit({ text: previous, selection: contentSelectionRef.current });
+    // A dropped keystroke is at least visible as a character that never
+    // appeared; a dropped button press looks like a broken button, so this one
+    // says why nothing happened.
+    if (exceedsCodePointLimit(next.text, VALIDATION.CONTENT_MAX_LENGTH)) {
+      showToast(t('note.contentLimitReached'), 'error');
       return;
     }
-    setContent(next);
-    markDirtyAndScheduleUpdate();
-    contentInputRef.current?.focus();
-  }, [markDirtyAndScheduleUpdate]);
 
-  const wrapMobileSelection = useCallback((before: string, after: string) => {
-    applyToolbarEdit((prev) => prev + before + after);
+    const selection = clampSelection(next.selection, next.text);
+    const caret = contentSelectionRef.current;
+    // Nothing to force when the caret is already where the edit wants it — e.g.
+    // clearing a bullet with the caret at the start of the line, where the
+    // removed characters all sit after it. The input would report no selection
+    // change, so the forced value would never be released and the prop would
+    // stay controlled with a value that goes stale on the next tap.
+    const caretAlreadyThere = selection.start === caret.start && selection.end === caret.end;
+    contentSelectionRef.current = selection;
+    setForcedSelection(caretAlreadyThere ? null : selection);
+    if (next.text !== previous) {
+      setContent(next.text);
+      markDirtyAndScheduleUpdate();
+    }
+    // Normally still focused (the bar's buttons are focusable={false}), and
+    // re-focusing a focused input would issue a redundant show-keyboard command.
+    if (!contentInputRef.current?.isFocused()) contentInputRef.current?.focus();
+  }, [contentRef, markDirtyAndScheduleUpdate, setContent, showToast, t]);
+
+  const handleContentSelectionChange = useCallback(
+    (event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => {
+      const selection = event.nativeEvent.selection;
+      contentSelectionRef.current = selection;
+      // Release the forced caret only once the input confirms it landed there,
+      // so an event that arrives before the move is applied cannot cancel it.
+      setForcedSelection((forced) =>
+        forced && forced.start === selection.start && forced.end === selection.end ? null : forced,
+      );
+    },
+    [],
+  );
+
+  const toggleMobileBold = useCallback(() => {
+    applyToolbarEdit((state) => toggleInlineMarker(state, '**'));
   }, [applyToolbarEdit]);
 
-  const insertMobileBullet = useCallback(() => {
-    applyToolbarEdit((prev) => {
-      const insert = (prev.endsWith('\n') || prev === '') ? '- ' : '\n- ';
-      return prev + insert;
-    });
+  const toggleMobileItalic = useCallback(() => {
+    applyToolbarEdit((state) => toggleInlineMarker(state, '*'));
   }, [applyToolbarEdit]);
 
-  const insertMobileHeading = useCallback(() => {
-    applyToolbarEdit((prev) => {
-      const lines = prev.split('\n');
-      const lastLine = lines[lines.length - 1];
-      if (lastLine.startsWith('## ')) return prev;
-      return prev + (prev.endsWith('\n') || prev === '' ? '' : '\n') + '## ';
-    });
+  const toggleMobileStrikethrough = useCallback(() => {
+    applyToolbarEdit((state) => toggleInlineMarker(state, '~~'));
   }, [applyToolbarEdit]);
+
+  const toggleMobileHeading = useCallback(() => {
+    applyToolbarEdit(cycleHeading);
+  }, [applyToolbarEdit]);
+
+  const toggleMobileBullet = useCallback(() => {
+    applyToolbarEdit(toggleBullet);
+  }, [applyToolbarEdit]);
+
+  const toggleMobileCheckbox = useCallback(() => {
+    applyToolbarEdit(toggleCheckbox);
+  }, [applyToolbarEdit]);
+
+  /**
+   * The same thing for a list-item row: run the transform against the row that
+   * holds the caret, then put the caret back.
+   *
+   * Only the inline markers get here — the bar an item row is given carries no
+   * block buttons, because an item is lexed as inline content and would show
+   * their output as literal source (docs/specs/markdown-rendering.md §2.1).
+   */
+  const applyItemToolbarEdit = useCallback(
+    (edit: (state: EditorText) => EditorText) => {
+      const itemId = focusedItemIdRef.current;
+      if (!itemId) return;
+      const handle = itemSelectionRefsMap.current.get(itemId)?.current;
+      const index = itemsRef.current.findIndex((item) => item.id === itemId);
+      if (!handle || index === -1) return;
+
+      const previous = itemsRef.current[index]!.text;
+      const next = edit({ text: previous, selection: handle.getSelection() });
+      // The markers are characters the user did not type, so a row already at
+      // the cap drops the press rather than losing the tail of its text —
+      // handleItemTextChange would otherwise truncate it away silently.
+      if (exceedsCodePointLimit(next.text, VALIDATION.ITEM_TEXT_MAX_LENGTH)) {
+        showToast(t('note.itemLimitReached'), 'error');
+        return;
+      }
+
+      if (next.text !== previous) handleItemTextChange(index, next.text);
+      handle.setSelection(clampSelection(next.selection, next.text));
+    },
+    [focusedItemIdRef, handleItemTextChange, itemSelectionRefsMap, itemsRef, showToast, t],
+  );
+
+  const toggleItemBold = useCallback(() => {
+    applyItemToolbarEdit((state) => toggleInlineMarker(state, '**'));
+  }, [applyItemToolbarEdit]);
+
+  const toggleItemItalic = useCallback(() => {
+    applyItemToolbarEdit((state) => toggleInlineMarker(state, '*'));
+  }, [applyItemToolbarEdit]);
+
+  const toggleItemStrikethrough = useCallback(() => {
+    applyItemToolbarEdit((state) => toggleInlineMarker(state, '~~'));
+  }, [applyItemToolbarEdit]);
 
   const noteBackground = hasNoteColor ? color : colors.surface;
   const completedSectionDividerColor = hasNoteColor
@@ -2424,7 +1220,7 @@ export default function NoteEditorScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? IOS_KEYBOARD_VERTICAL_OFFSET : 0}
     >
-      <View style={[styles.header, { backgroundColor: noteBackground, borderBottomColor: hasNoteColor ? 'transparent' : colors.borderLight, paddingTop: (bannerShown ? 0 : insets.top) + 12 }]}>
+      <View style={[styles.header, { backgroundColor: noteBackground, borderBottomColor: hasNoteColor ? 'transparent' : colors.borderLight, paddingTop: insets.top + 12 }]}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -2496,15 +1292,12 @@ export default function NoteEditorScreen() {
           style={[styles.errorBanner, { backgroundColor: colors.errorLight, borderBottomColor: colors.error }]}
           onPress={() => {
             setSaveError(null);
-            if (debounceRef.current) {
-              clearTimeout(debounceRef.current);
-              debounceRef.current = null;
-            }
+            cancelScheduledSave();
             flushSave();
           }}
           testID="save-error-banner"
         >
-          <Text style={[styles.errorText, { color: colors.error }]}>{saveError}</Text>
+          <Text style={[styles.errorText, { color: colors.error }]}>{t(saveError)}</Text>
         </TouchableOpacity>
       )}
 
@@ -2514,7 +1307,7 @@ export default function NoteEditorScreen() {
           onPress={() => setSyncToast(null)}
           testID="sync-toast"
         >
-          <Text style={[styles.syncToastText, { color: colors.warningText }]}>{syncToast}</Text>
+          <Text style={[styles.syncToastText, { color: colors.warningText }]}>{t(syncToast)}</Text>
         </TouchableOpacity>
       )}
 
@@ -2557,7 +1350,7 @@ export default function NoteEditorScreen() {
             style={[styles.titleInput, { color: hasNoteColor ? '#1a1a1a' : colors.text }]}
             value={title}
             onChangeText={handleTitleChange}
-            autoFocus={openedAsNewList}
+            autoFocus={!hasCreated}
             placeholder={t('note.titlePlaceholder')}
             placeholderTextColor={hasNoteColor ? '#999' : colors.placeholder}
             returnKeyType="next"
@@ -2582,6 +1375,8 @@ export default function NoteEditorScreen() {
                 style={[styles.contentInput, { color: hasNoteColor ? '#1a1a1a' : colors.text }]}
                 value={content}
                 onChangeText={handleContentChange}
+                selection={forcedSelection ?? undefined}
+                onSelectionChange={handleContentSelectionChange}
                 textAlignVertical="top"
                 editable={!isHydrating}
                 testID="note-content-input"
@@ -2595,9 +1390,7 @@ export default function NoteEditorScreen() {
                 style={styles.contentPreview}
               >
                 {content ? (
-                  <Markdown style={fullMarkdownStyles(hasNoteColor ? '#1a1a1a' : colors.text)}>
-                    {preprocessMarkdown(content)}
-                  </Markdown>
+                  <Markdown content={content} onColoredNote={hasNoteColor} />
                 ) : (
                   <Text style={{ color: hasNoteColor ? '#999' : colors.placeholder, fontSize: 14 }}>
                     {t('note.contentPlaceholder')}
@@ -2606,36 +1399,48 @@ export default function NoteEditorScreen() {
               </TouchableOpacity>
             )}
 
-            {/* Android: formatting toolbar in layout (shown when editing) */}
-            {Platform.OS === 'android' && isEditingContent && !isReadOnly && (
-              <MarkdownToolbarContent
-                onBold={() => wrapMobileSelection('**', '**')}
-                onItalic={() => wrapMobileSelection('*', '*')}
-                onHeading={insertMobileHeading}
-                onBullet={insertMobileBullet}
-              />
-            )}
-
-            {/* iOS: formatting toolbar as InputAccessoryView (docks above keyboard) */}
-            {Platform.OS === 'ios' && noteType === 'text' && (
+            {/* iOS: formatting toolbar as InputAccessoryView (docks above keyboard).
+                Same conditions as the Android branch below — the accessory view
+                is only reachable while the content input exists. */}
+            {Platform.OS === 'ios' && noteType === 'text' && isEditingContent && !isReadOnly && (
               <InputAccessoryView nativeID={MARKDOWN_TOOLBAR_ID}>
                 <MarkdownToolbarContent
-                  onBold={() => wrapMobileSelection('**', '**')}
-                  onItalic={() => wrapMobileSelection('*', '*')}
-                  onHeading={insertMobileHeading}
-                  onBullet={insertMobileBullet}
+                  onBold={toggleMobileBold}
+                  onItalic={toggleMobileItalic}
+                  onStrikethrough={toggleMobileStrikethrough}
+                  onHeading={toggleMobileHeading}
+                  onBullet={toggleMobileBullet}
+                  onCheckbox={toggleMobileCheckbox}
+                  backgroundColor={noteBackground}
+                  hasNoteColor={hasNoteColor}
                 />
               </InputAccessoryView>
             )}
           </>
         ) : (
           <View style={styles.listContainer}>
-            <NestedReorderableList
+            <NestedReorderableList<LocalItem>
               data={uncheckedItems}
-              keyExtractor={(item) => item.id}
+              // `item` is typed non-optional, but the library reads
+              // `data[i]` at drag-start indices while finishing a drop, and
+              // those can outlive the row they pointed at (see commitDrag).
+              // Falling back to the index — the same fallback the library
+              // applies to a missing key — keeps that read from throwing.
+              keyExtractor={(item, index) => item?.id ?? String(index)}
               scrollable={false}
+              // Inherited from the ScrollViewContainer above rather than
+              // defaulted: this list is a FlatList, so it has a ScrollView of its
+              // own, and a ScrollView left at the default ('never') captures the
+              // responder for any tap that lands on something which is not a
+              // TextInput while one is focused — blurring it, dismissing the
+              // keyboard, and swallowing the tap. Harmless while every row's tap
+              // target *was* its TextInput; not once a rendered row's target is a
+              // Text (docs/specs/markdown-rendering.md §1.2), where it cost a
+              // first tap on every row-to-row move.
+              keyboardShouldPersistTaps="handled"
               shouldUpdateActiveItem
               panGesture={listDragGesture}
+              onDragStart={handleListDragStart}
               onReorder={handleListReorder}
               onDragEnd={handleListDragEnd}
               cellAnimations={DRAG_CELL_ANIMATIONS}
@@ -2643,7 +1448,9 @@ export default function NoteEditorScreen() {
               // Slide remaining rows into place when an item is checked off (and
               // moves to the completed section) or deleted. Skipped under the OS
               // Reduce Motion setting, like the editor's other animations.
-              itemLayoutAnimation={isReduceMotionEnabledSync() ? undefined : LinearTransition.duration(LIST_REFLOW_ANIM_MS)}
+              {...(!isReduceMotionEnabledSync() && {
+                itemLayoutAnimation: LinearTransition.duration(LIST_REFLOW_ANIM_MS),
+              })}
             />
 
             {!isReadOnly && (
@@ -2660,6 +1467,8 @@ export default function NoteEditorScreen() {
               collapsed={checkedItemsCollapsed}
               onToggleCollapsed={handleToggleCollapsed}
               getItemRef={getItemRef}
+              getItemSelectionRef={getItemSelectionRef}
+              itemAccessoryViewID={Platform.OS === 'ios' ? ITEM_MARKDOWN_TOOLBAR_ID : undefined}
               isNoteShared={!!isNoteShared}
               collaborators={collaborators}
               hasNoteColor={hasNoteColor}
@@ -2668,6 +1477,22 @@ export default function NoteEditorScreen() {
               popItemId={popItemId}
               editable={!isReadOnly}
             />
+
+            {/* iOS: the rows' accessory view. Every row carries this nativeID,
+                so the bar docks above the keyboard for whichever one is focused
+                and no state here has to track which. Inline-only buttons — see
+                applyItemToolbarEdit. */}
+            {Platform.OS === 'ios' && !isReadOnly && (
+              <InputAccessoryView nativeID={ITEM_MARKDOWN_TOOLBAR_ID}>
+                <MarkdownToolbarContent
+                  onBold={toggleItemBold}
+                  onItalic={toggleItemItalic}
+                  onStrikethrough={toggleItemStrikethrough}
+                  backgroundColor={noteBackground}
+                  hasNoteColor={hasNoteColor}
+                />
+              </InputAccessoryView>
+            )}
           </View>
         )}
 
@@ -2734,6 +1559,36 @@ export default function NoteEditorScreen() {
           </View>
         )}
       </ScrollViewContainer>
+
+      {/* Android: formatting toolbar fixed directly above the action bar below
+          (shown when editing), rather than inline in the scrollable content
+          where its position would drift with the content length. */}
+      {Platform.OS === 'android' && noteType === 'text' && isEditingContent && !isReadOnly && (
+        <MarkdownToolbarContent
+          onBold={toggleMobileBold}
+          onItalic={toggleMobileItalic}
+          onStrikethrough={toggleMobileStrikethrough}
+          onHeading={toggleMobileHeading}
+          onBullet={toggleMobileBullet}
+          onCheckbox={toggleMobileCheckbox}
+          backgroundColor={noteBackground}
+          hasNoteColor={hasNoteColor}
+        />
+      )}
+
+      {/* Android: the list's bar, in the same slot as the content one above and
+          on the same terms — shown while a row holds the caret, since that is
+          the only time there is text for it to act on. iOS gets this from the
+          accessory view instead. */}
+      {Platform.OS === 'android' && noteType === 'list' && isEditingItem && !isReadOnly && (
+        <MarkdownToolbarContent
+          onBold={toggleItemBold}
+          onItalic={toggleItemItalic}
+          onStrikethrough={toggleItemStrikethrough}
+          backgroundColor={noteBackground}
+          hasNoteColor={hasNoteColor}
+        />
+      )}
 
       <View style={[styles.toolbar, { backgroundColor: noteBackground, borderTopColor: hasNoteColor ? 'transparent' : colors.border, paddingBottom: insets.bottom || 8 }]}>
         {/* Color. Works on unsaved notes (deferred via autosave), so it is only

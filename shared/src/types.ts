@@ -149,13 +149,13 @@ export interface ListNote extends BaseNote {
 export type Note = TextNote | ListNote;
 
 export interface GetNotesParams {
-  archived?: boolean;
-  search?: string;
-  trashed?: boolean;
-  label?: string;
-  my_tasks?: boolean;
+  archived?: boolean | undefined;
+  search?: string | undefined;
+  trashed?: boolean | undefined;
+  label?: string | undefined;
+  my_tasks?: boolean | undefined;
   /** Used locally to filter my-tasks notes by assigned_to; not sent to the server. */
-  user_id?: string;
+  user_id?: string | undefined;
 }
 
 export interface CreateNoteItemRequest {
@@ -179,7 +179,7 @@ export interface CreateNoteItemRequest {
   indent_level?: number;
   /** Nests the new item under a top-level item (granular create only). */
   parent_id?: string | null;
-  assigned_to?: string;
+  assigned_to?: string | undefined;
 }
 
 /**
@@ -212,8 +212,8 @@ export interface CreateTextNoteRequest {
   id?: string;
   content: string;
   note_type: 'text';
-  color?: string;
-  labels?: string[];
+  color?: string | undefined;
+  labels?: string[] | undefined;
 }
 
 export interface CreateListNoteRequest {
@@ -221,9 +221,9 @@ export interface CreateListNoteRequest {
   id?: string;
   title: string;
   note_type: 'list';
-  color?: string;
+  color?: string | undefined;
   items?: CreateNoteItemRequest[];
-  labels?: string[];
+  labels?: string[] | undefined;
 }
 
 export type CreateNoteRequest = CreateTextNoteRequest | CreateListNoteRequest;
@@ -258,14 +258,20 @@ export type UpdateNoteRequest = UpdateTextNoteRequest | UpdateListNoteRequest;
 /**
  * Request body for `POST /notes/{id}/convert`, which changes a note's type in
  * place. The transform (splitting text into list items, or rendering a list
- * back into text) is computed client-side via `textToListItems`/`listToText`
+ * back into text) is computed client-side via `textToListNote`/`listToText`
  * (see `noteConversion.ts`) and sent precomputed; the server only validates
- * and persists it. `content` is used when converting to `text`; `items` when
- * converting to `list`.
+ * and persists it. `content` is used when converting to `text`; `title` and
+ * `items` when converting to `list`.
  */
 export interface ConvertNoteTypeRequest extends BaseUpdateNoteRequest {
   note_type: NoteType;
   content?: string;
+  /**
+   * The converted list's title, promoted from a leading heading in the text
+   * content. Omitted (or '') leaves the note untitled, which is what the
+   * server stored unconditionally before this field existed.
+   */
+  title?: string;
   items?: CreateNoteItemRequest[];
 }
 

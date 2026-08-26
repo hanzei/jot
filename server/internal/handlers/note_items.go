@@ -304,8 +304,8 @@ func (h *NotesHandler) DeleteNoteItem(w http.ResponseWriter, r *http.Request) (i
 //	@Tags		notes
 //	@Security	CookieAuth
 //	@Accept		json
-//	@Param		id		path	string						true	"Note ID"
-//	@Param		body	body	ReorderNoteItemsRequest		true	"Ordered item IDs"
+//	@Param		id		path	string					true	"Note ID"
+//	@Param		body	body	ReorderNoteItemsRequest	true	"Ordered item IDs"
 //	@Success	204		"no content"
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
@@ -353,21 +353,21 @@ func (h *NotesHandler) ReorderNoteItems(w http.ResponseWriter, r *http.Request) 
 
 // ToggleNoteItemCompleted godoc
 //
-//	@Summary	Toggle a list item's completed state, cascading to children
+//	@Summary		Toggle a list item's completed state, cascading to children
 //	@Description	Sets the item's completed flag. When the item is a top-level (parent) item, the same value cascades to all of its children atomically. Returns the note's full item list.
-//	@Tags		notes
-//	@Security	CookieAuth
-//	@Accept		json
-//	@Produce	json
-//	@Param		id		path		string							true	"Note ID"
-//	@Param		item_id	path		string							true	"Item ID"
-//	@Param		body	body		ToggleNoteItemCompletedRequest	true	"Completed state"
-//	@Success	200		{array}		models.NoteItem
-//	@Failure	400		{string}	string	"bad request"
-//	@Failure	401		{string}	string	"unauthorized"
-//	@Failure	404		{string}	string	"not found"
-//	@Failure	500		{string}	string	"internal server error"
-//	@Router		/notes/{id}/items/{item_id}/toggle-completed [post]
+//	@Tags			notes
+//	@Security		CookieAuth
+//	@Accept			json
+//	@Produce		json
+//	@Param			id		path		string							true	"Note ID"
+//	@Param			item_id	path		string							true	"Item ID"
+//	@Param			body	body		ToggleNoteItemCompletedRequest	true	"Completed state"
+//	@Success		200		{array}		models.NoteItem
+//	@Failure		400		{string}	string	"bad request"
+//	@Failure		401		{string}	string	"unauthorized"
+//	@Failure		404		{string}	string	"not found"
+//	@Failure		500		{string}	string	"internal server error"
+//	@Router			/notes/{id}/items/{item_id}/toggle-completed [post]
 func (h *NotesHandler) ToggleNoteItemCompleted(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -439,20 +439,20 @@ type DeleteNoteItemsRequest struct {
 
 // SetNoteItemsCompleted godoc
 //
-//	@Summary	Set the completed flag on a set of list items
+//	@Summary		Set the completed flag on a set of list items
 //	@Description	Sets completed to the given value on each of the named items (no cascade) and returns the note's full item list. Used for bulk "uncheck all" (completed=false) and its undo (completed=true); callers pass the complete set they want changed.
-//	@Tags		notes
-//	@Security	CookieAuth
-//	@Accept		json
-//	@Produce	json
-//	@Param		id		path		string							true	"Note ID"
-//	@Param		body	body		SetNoteItemsCompletedRequest	true	"Item IDs and target completed state"
-//	@Success	200		{array}		models.NoteItem
-//	@Failure	400		{string}	string	"bad request"
-//	@Failure	401		{string}	string	"unauthorized"
-//	@Failure	404		{string}	string	"not found"
-//	@Failure	500		{string}	string	"internal server error"
-//	@Router		/notes/{id}/items/set-completed [post]
+//	@Tags			notes
+//	@Security		CookieAuth
+//	@Accept			json
+//	@Produce		json
+//	@Param			id		path		string							true	"Note ID"
+//	@Param			body	body		SetNoteItemsCompletedRequest	true	"Item IDs and target completed state"
+//	@Success		200		{array}		models.NoteItem
+//	@Failure		400		{string}	string	"bad request"
+//	@Failure		401		{string}	string	"unauthorized"
+//	@Failure		404		{string}	string	"not found"
+//	@Failure		500		{string}	string	"internal server error"
+//	@Router			/notes/{id}/items/set-completed [post]
 func (h *NotesHandler) SetNoteItemsCompleted(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -490,20 +490,20 @@ func (h *NotesHandler) SetNoteItemsCompleted(w http.ResponseWriter, r *http.Requ
 
 // DeleteNoteItems godoc
 //
-//	@Summary	Delete a set of list items
+//	@Summary		Delete a set of list items
 //	@Description	Deletes each of the named items and returns the note's remaining items. Used for bulk "delete checked items"; the caller passes the item IDs it captured.
-//	@Tags		notes
-//	@Security	CookieAuth
-//	@Accept		json
-//	@Produce	json
-//	@Param		id		path		string					true	"Note ID"
-//	@Param		body	body		DeleteNoteItemsRequest	true	"Item IDs to delete"
-//	@Success	200		{array}		models.NoteItem
-//	@Failure	400		{string}	string	"bad request"
-//	@Failure	401		{string}	string	"unauthorized"
-//	@Failure	404		{string}	string	"not found"
-//	@Failure	500		{string}	string	"internal server error"
-//	@Router		/notes/{id}/items/delete [post]
+//	@Tags			notes
+//	@Security		CookieAuth
+//	@Accept			json
+//	@Produce		json
+//	@Param			id		path		string					true	"Note ID"
+//	@Param			body	body		DeleteNoteItemsRequest	true	"Item IDs to delete"
+//	@Success		200		{array}		models.NoteItem
+//	@Failure		400		{string}	string	"bad request"
+//	@Failure		401		{string}	string	"unauthorized"
+//	@Failure		404		{string}	string	"not found"
+//	@Failure		500		{string}	string	"internal server error"
+//	@Router			/notes/{id}/items/delete [post]
 func (h *NotesHandler) DeleteNoteItems(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {

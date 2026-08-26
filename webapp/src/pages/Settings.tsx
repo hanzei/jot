@@ -3,16 +3,17 @@ import { useTranslation } from 'react-i18next';
 import i18n from '@/i18n';
 import { auth, users, notes as notesApi, sessions as sessionsApi, pats as patsApi, isAxiosError } from '@/utils/api';
 import { getUser, setUser, getSettings, setSettings } from '@/utils/auth';
-import { getLanguagePreference, resolveLanguage, LanguagePreference } from '@/utils/language';
-import { isPasswordTooShort } from '@/utils/userValidation';
-import { getThemePreference, applyTheme, ThemePreference } from '@/utils/theme';
+import type { LanguagePreference } from '@/utils/language';
+import { getLanguagePreference, resolveLanguage } from '@/utils/language';
+import type { ThemePreference } from '@/utils/theme';
+import { getThemePreference, applyTheme } from '@/utils/theme';
 import PageContent from '@/components/PageContent';
 import ImportModal from '@/components/ImportModal';
 import AboutModal from '@/components/AboutModal';
 import NewPATModal from '@/components/NewPATModal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
-import type { ActiveSession, PersonalAccessToken } from '@jot/shared';
+import { isPasswordTooShort, type ActiveSession, type PersonalAccessToken } from '@jot/shared';
 import { IdentitySecurityColumn, PreferencesInfoColumn } from './settings/SettingsSections';
 
 interface SettingsProps {

@@ -14,6 +14,7 @@ import (
 )
 
 func TestExportUnauthenticatedReturns401(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/notes/export", nil)
@@ -26,6 +27,7 @@ func TestExportUnauthenticatedReturns401(t *testing.T) {
 }
 
 func TestExportEmptyAccount(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "exportempty", "password123", false)
 
@@ -39,6 +41,7 @@ func TestExportEmptyAccount(t *testing.T) {
 }
 
 func TestExportEnvelopeShape(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "exportshape", "password123", false)
 
@@ -59,6 +62,7 @@ func TestExportEnvelopeShape(t *testing.T) {
 }
 
 func TestExportOnlyOwnedNotes(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	owner := ts.createTestUser(t, "exportowner", "password123", false)
 	other := ts.createTestUser(t, "exportother", "password123", false)
@@ -82,6 +86,7 @@ func TestExportOnlyOwnedNotes(t *testing.T) {
 }
 
 func TestExportExcludesTrashedNotes(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "exporttrash", "password123", false)
 
@@ -99,6 +104,7 @@ func TestExportExcludesTrashedNotes(t *testing.T) {
 }
 
 func TestExportIncludesArchivedNotes(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "exportarchived", "password123", false)
 
@@ -116,6 +122,7 @@ func TestExportIncludesArchivedNotes(t *testing.T) {
 }
 
 func TestExportResponseHeaders(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "exportheaders", "password123", false)
 
@@ -136,6 +143,7 @@ func TestExportResponseHeaders(t *testing.T) {
 // --- Jot JSON import tests ---
 
 func TestImportJotJSONBasic(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "jotimport1", "password123", false)
 
@@ -174,6 +182,7 @@ func TestImportJotJSONBasic(t *testing.T) {
 }
 
 func TestImportJotJSONInvalidFormat(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "jotimport2", "password123", false)
 
@@ -208,6 +217,7 @@ func TestImportJotJSONInvalidFormat(t *testing.T) {
 }
 
 func TestImportJotJSONValidation(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "jotimportval", "password123", false)
 
@@ -262,6 +272,7 @@ func TestImportJotJSONValidation(t *testing.T) {
 }
 
 func TestImportJotJSONRoundTrip(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	src := ts.createTestUser(t, "roundtripsrc", "password123", false)
 	dst := ts.createTestUser(t, "roundtripdst", "password123", false)
@@ -379,6 +390,7 @@ func TestImportJotJSONRoundTrip(t *testing.T) {
 }
 
 func TestImportJotJSONDuplicateImport(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "jotduplicate", "password123", false)
 
@@ -398,6 +410,7 @@ func TestImportJotJSONDuplicateImport(t *testing.T) {
 }
 
 func TestImportJotJSONLabelsDeduplication(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "jotlabeldedupe", "password123", false)
 
@@ -415,6 +428,7 @@ func TestImportJotJSONLabelsDeduplication(t *testing.T) {
 }
 
 func TestImportJotJSONEmptyColor(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "jotcolordefault", "password123", false)
 

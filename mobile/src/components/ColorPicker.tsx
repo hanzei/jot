@@ -1,4 +1,4 @@
-import React, { useContext } from 'react';
+import { useContext } from 'react';
 import {
   Modal,
   View,
@@ -12,7 +12,7 @@ import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { Check } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
-import { NOTE_COLORS, LIGHT_NOTE_COLORS } from '@jot/shared';
+import { NOTE_COLORS, LIGHT_NOTE_COLORS, NOTE_COLOR_NAME_KEYS } from '@jot/shared';
 
 interface ColorPickerProps {
   visible: boolean;
@@ -20,19 +20,6 @@ interface ColorPickerProps {
   onSelect: (color: string) => void;
   onClose: () => void;
 }
-
-const COLOR_LABELS: Record<string, string> = {
-  '#ffffff': 'note.colorWhite',
-  '#f28b82': 'note.colorCoral',
-  '#fbbc04': 'note.colorYellow',
-  '#ccff90': 'note.colorLime',
-  '#a7ffeb': 'note.colorTeal',
-  '#aecbfa': 'note.colorPeriwinkle',
-  '#d7aefb': 'note.colorLavender',
-  '#fdcfe8': 'note.colorPink',
-  '#e6c9a8': 'note.colorSand',
-  '#e8eaed': 'note.colorGray',
-};
 
 export default function ColorPicker({ visible, currentColor, onSelect, onClose }: ColorPickerProps) {
   const { colors } = useTheme();
@@ -69,7 +56,7 @@ export default function ColorPicker({ visible, currentColor, onSelect, onClose }
                     onClose();
                   }}
                   testID={`color-swatch-${color.replace('#', '')}`}
-                  accessibilityLabel={t(COLOR_LABELS[color] ?? 'note.changeColor')}
+                  accessibilityLabel={t(NOTE_COLOR_NAME_KEYS[color] ?? 'note.changeColor')}
                 >
                   {currentColor === color && (
                     <Check

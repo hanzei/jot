@@ -1,4 +1,3 @@
-import React from 'react';
 import { Text } from 'react-native';
 import { render, act, waitFor } from '@testing-library/react-native';
 import * as QuickActions from 'expo-quick-actions';
@@ -49,7 +48,7 @@ describe('useQuickActionRouting', () => {
 
   it('registers the quick-action items on mount', async () => {
     const navigationRef = makeNavigationRef();
-    render(<Harness navigationRef={navigationRef} isAuthenticated />);
+    await render(<Harness navigationRef={navigationRef} isAuthenticated />);
     await waitFor(() => expect(mockedSetItems).toHaveBeenCalled());
     const items = mockedSetItems.mock.calls[0][0];
     expect(items).toHaveLength(2);
@@ -57,7 +56,7 @@ describe('useQuickActionRouting', () => {
 
   it('opens the editor on the requested note type when authenticated', async () => {
     const navigationRef = makeNavigationRef();
-    render(<Harness navigationRef={navigationRef} isAuthenticated />);
+    await render(<Harness navigationRef={navigationRef} isAuthenticated />);
 
     await act(async () => {
       capturedListener?.({ id: 'new_list' });
@@ -67,13 +66,14 @@ describe('useQuickActionRouting', () => {
       expect(navigationRef.navigate).toHaveBeenCalledWith('NoteEditor', {
         noteId: null,
         initialNoteType: 'list',
+        openKey: expect.any(String),
       }),
     );
   });
 
   it('waits for login before replaying, then opens the editor', async () => {
     const navigationRef = makeNavigationRef();
-    const { rerender } = render(
+    const { rerender } = await render(
       <Harness navigationRef={navigationRef} isAuthenticated={false} />,
     );
 
@@ -82,19 +82,20 @@ describe('useQuickActionRouting', () => {
     });
     expect(navigationRef.navigate).not.toHaveBeenCalled();
 
-    rerender(<Harness navigationRef={navigationRef} isAuthenticated />);
+    await rerender(<Harness navigationRef={navigationRef} isAuthenticated />);
 
     await waitFor(() =>
       expect(navigationRef.navigate).toHaveBeenCalledWith('NoteEditor', {
         noteId: null,
         initialNoteType: 'text',
+        openKey: expect.any(String),
       }),
     );
   });
 
   it('ignores actions that are not ours', async () => {
     const navigationRef = makeNavigationRef();
-    render(<Harness navigationRef={navigationRef} isAuthenticated />);
+    await render(<Harness navigationRef={navigationRef} isAuthenticated />);
 
     await act(async () => {
       capturedListener?.({ id: 'some_other_action' });

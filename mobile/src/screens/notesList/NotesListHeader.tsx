@@ -1,16 +1,15 @@
-import React from 'react';
 import { View, Text, TextInput, ScrollView, TouchableOpacity } from 'react-native';
 import { ArrowUpDown, LayoutGrid, List, Menu, Search, X } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
-import type { NoteSort } from '@jot/shared';
+import { NOTE_SORT_OPTIONS, type NoteSort } from '@jot/shared';
 import { useTheme } from '../../theme/ThemeContext';
-import { NOTE_SORT_OPTIONS, getNoteSortLabel } from '../../utils/noteSort';
+import { getNoteSortLabel } from '../../utils/noteSort';
 import type { DashboardLayout } from '../../utils/dashboardLayout';
 import { styles } from './styles';
 
 interface NotesListHeaderProps {
   variant: 'notes' | 'archived' | 'trash' | 'my-tasks';
-  bannerShown: boolean;
+  /** Top safe-area inset still to be applied by content (0 while a banner owns it). */
   topInset: number;
   searchText: string;
   onSearchChange: (text: string) => void;
@@ -28,7 +27,6 @@ interface NotesListHeaderProps {
 
 export default function NotesListHeader({
   variant,
-  bannerShown,
   topInset,
   searchText,
   onSearchChange,
@@ -54,7 +52,7 @@ export default function NotesListHeader({
       <View
         style={[
           styles.topControlsRow,
-          variant === 'notes' ? { paddingTop: bannerShown ? 0 : topInset } : undefined,
+          variant === 'notes' ? { paddingTop: topInset } : undefined,
         ]}
       >
         {variant === 'notes' && (

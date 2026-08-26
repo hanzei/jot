@@ -1,4 +1,3 @@
-import React from 'react';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import AboutSection from '../src/screens/settings/AboutSection';
 import { useAuth } from '../src/store/AuthContext';
@@ -70,14 +69,14 @@ describe('AboutSection', () => {
   });
 
   it('shows the mobile app version/commit/build time alongside the server version once expanded', async () => {
-    const { getByTestId, getByText, findByText } = render(<AboutSection />);
+    const { getByTestId, getByText, findByText } = await render(<AboutSection />);
 
     // Let the active-server lookup settle before expanding, so it doesn't race
     // with (and reset) the about-info fetch triggered by expansion below.
     await waitFor(() => expect(mockGetActiveServer).toHaveBeenCalled());
     await act(async () => {});
 
-    fireEvent.press(getByTestId('settings-about-toggle'));
+    await fireEvent.press(getByTestId('settings-about-toggle'));
 
     // App Info section shows the app's own version, commit, and build time.
     expect(getByText('App Info')).toBeTruthy();

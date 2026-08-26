@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, StyleSheet, View } from 'react-native';
+import { useEffect } from 'react';
+import { Animated, Easing, StyleSheet, useAnimatedValue, View } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 
 interface SkeletonNoteCardProps {
@@ -8,7 +8,7 @@ interface SkeletonNoteCardProps {
 
 export default function SkeletonNoteCard({ hasTitle = true }: SkeletonNoteCardProps) {
   const { colors } = useTheme();
-  const opacity = useRef(new Animated.Value(0.3)).current;
+  const opacity = useAnimatedValue(0.3);
 
   useEffect(() => {
     const animation = Animated.loop(

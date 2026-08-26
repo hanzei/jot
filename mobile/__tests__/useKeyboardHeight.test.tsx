@@ -39,39 +39,39 @@ describe('useKeyboardHeight', () => {
       setPlatformOS(os);
     });
 
-    it('starts at 0 while the keyboard is hidden', () => {
-      const { result } = renderHook(() => useKeyboardHeight());
+    it('starts at 0 while the keyboard is hidden', async () => {
+      const { result } = await renderHook(() => useKeyboardHeight());
       expect(result.current).toBe(0);
     });
 
-    it(`reports the keyboard height on ${showEvent}`, () => {
-      const { result } = renderHook(() => useKeyboardHeight());
-      act(() => {
-        listeners[showEvent]({ endCoordinates: { height: 320 } });
+    it(`reports the keyboard height on ${showEvent}`, async () => {
+      const { result } = await renderHook(() => useKeyboardHeight());
+      await act(() => {
+        listeners[showEvent]!({ endCoordinates: { height: 320 } });
       });
       expect(result.current).toBe(320);
     });
 
-    it(`resets to 0 on ${hideEvent}`, () => {
-      const { result } = renderHook(() => useKeyboardHeight());
-      act(() => {
-        listeners[showEvent]({ endCoordinates: { height: 320 } });
+    it(`resets to 0 on ${hideEvent}`, async () => {
+      const { result } = await renderHook(() => useKeyboardHeight());
+      await act(() => {
+        listeners[showEvent]!({ endCoordinates: { height: 320 } });
       });
-      act(() => {
-        listeners[hideEvent]({});
-      });
-      expect(result.current).toBe(0);
-    });
-
-    it('falls back to 0 when the event has no coordinates', () => {
-      const { result } = renderHook(() => useKeyboardHeight());
-      act(() => {
-        listeners[showEvent]({});
+      await act(() => {
+        listeners[hideEvent]!({});
       });
       expect(result.current).toBe(0);
     });
 
-    it('subscribes to the platform-specific events and removes them on unmount', () => {
+    it('falls back to 0 when the event has no coordinates', async () => {
+      const { result } = await renderHook(() => useKeyboardHeight());
+      await act(() => {
+        listeners[showEvent]!({});
+      });
+      expect(result.current).toBe(0);
+    });
+
+    it('subscribes to the platform-specific events and removes them on unmount', async () => {
       const removes: jest.Mock[] = [];
       (Keyboard.addListener as jest.Mock).mockImplementation((event: string, cb: Listener) => {
         listeners[event] = cb;
@@ -80,10 +80,10 @@ describe('useKeyboardHeight', () => {
         return { remove } as unknown as EmitterSubscription;
       });
 
-      const { unmount } = renderHook(() => useKeyboardHeight());
+      const { unmount } = await renderHook(() => useKeyboardHeight());
       expect(Object.keys(listeners).sort()).toEqual([hideEvent, showEvent].sort());
 
-      unmount();
+      await unmount();
       expect(removes).toHaveLength(2);
       removes.forEach((remove) => expect(remove).toHaveBeenCalled());
     });

@@ -1,4 +1,16 @@
+import type { Page } from '@playwright/test';
 import { test, expect, uniqueUsername } from '../fixtures';
+
+// created_at/updated_at have 1-second resolution (SQLite/Postgres DATETIME), so
+// two writes in the same second sort ambiguously. Wait for the wall clock to
+// actually cross into a new second rather than guessing a fixed delay.
+async function waitForNextSecond(page: Page) {
+  const startSecond = await page.evaluate(() => Math.floor(Date.now() / 1000));
+  await page.waitForFunction(
+    (start) => Math.floor(Date.now() / 1000) > start,
+    startSecond,
+  );
+}
 
 test.describe('Notes', () => {
   test.beforeEach(async ({ authenticatedUser }) => {
@@ -76,6 +88,60 @@ test.describe('Notes', () => {
 
     await dashboardPage.switchToNotes();
     await dashboardPage.expectNoteNotVisible('Delete Forever');
+  });
+
+  test('opens a binned note read-only, with Restore / Delete forever in the overflow menu', async ({ dashboardPage, page }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Read Only In Bin');
+    await dashboardPage.deleteNote('Read Only In Bin');
+    await dashboardPage.switchToBin();
+
+    await dashboardPage.openNote('Read Only In Bin');
+
+    const dialog = page.getByRole('dialog').last();
+    await expect(dialog.getByPlaceholder('Note title...')).toHaveAttribute('readonly', '');
+    await expect(dialog.getByRole('button', { name: 'Pin note' })).toBeDisabled();
+    await expect(dialog.getByRole('button', { name: 'Archive note' })).toBeDisabled();
+    await expect(dialog.getByRole('button', { name: 'Select note color' })).toBeDisabled();
+    await expect(dialog.getByRole('button', { name: 'Add image' })).toBeDisabled();
+
+    await dashboardPage.openModalOverflowMenu();
+    await expect(page.getByRole('menuitem', { name: 'Restore' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Delete forever' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Share' })).toHaveCount(0);
+    await expect(page.getByRole('menuitem', { name: 'Duplicate' })).toHaveCount(0);
+  });
+
+  test('restores a binned note from within the read-only modal', async ({ dashboardPage, page }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Restore From Modal');
+    await dashboardPage.deleteNote('Restore From Modal');
+    await dashboardPage.switchToBin();
+
+    await dashboardPage.openNote('Restore From Modal');
+    await dashboardPage.openModalOverflowMenu();
+    await page.getByRole('menuitem', { name: 'Restore' }).click();
+
+    await dashboardPage.expectNoteNotVisible('Restore From Modal');
+    await dashboardPage.switchToNotes();
+    await dashboardPage.expectNoteVisible('Restore From Modal');
+  });
+
+  test('permanently deletes a binned note from within the read-only modal', async ({ dashboardPage, page }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Delete Forever From Modal');
+    await dashboardPage.deleteNote('Delete Forever From Modal');
+    await dashboardPage.switchToBin();
+
+    await dashboardPage.openNote('Delete Forever From Modal');
+    await dashboardPage.openModalOverflowMenu();
+    await page.getByRole('menuitem', { name: 'Delete forever' }).click();
+    const confirmDialog = page.getByRole('dialog').last();
+    await confirmDialog.getByRole('button', { name: 'Delete forever' }).click();
+
+    await dashboardPage.expectNoteNotVisible('Delete Forever From Modal');
+    await dashboardPage.switchToNotes();
+    await dashboardPage.expectNoteNotVisible('Delete Forever From Modal');
   });
 
   test('empties trash in one action', async ({ dashboardPage }) => {
@@ -210,12 +276,12 @@ test.describe('Notes', () => {
     await page.setViewportSize({ width: 600, height: 1000 });
     await dashboardPage.goto();
 
-    // These 1.1s waits keep created/updated timestamps in distinct seconds so
-    // the sort assertions stay deterministic across create/edit operations.
+    // These waits keep created/updated timestamps in distinct seconds so the
+    // sort assertions stay deterministic across create/edit operations.
     await dashboardPage.createNote('Zulu');
-    await page.waitForTimeout(1100);
+    await waitForNextSecond(page);
     await dashboardPage.createNote('alpha');
-    await page.waitForTimeout(1100);
+    await waitForNextSecond(page);
     await dashboardPage.createNote('Bravo');
     await dashboardPage.pinNote('Zulu');
 
@@ -223,7 +289,7 @@ test.describe('Notes', () => {
     await dashboardPage.expectManualReorderDisabledNotice();
     await dashboardPage.expectVisibleNoteTitles(['Zulu', 'Bravo', 'alpha']);
 
-    await page.waitForTimeout(1100);
+    await waitForNextSecond(page);
     // Patch the alpha note directly so updated_at changes deterministically without
     // relying on modal timing or extra UI interactions in this ordering test.
     // createNote() creates list notes (title only), so content is rejected. Use a
@@ -335,14 +401,14 @@ test.describe('Notes', () => {
     // item to the collaborator and mark the second completed + nested under the
     // first. Duplication should copy text/position/completed/grouping but clear
     // assignments (and shares).
-    const assignResp = await request.patch(`/api/v1/notes/${sourceList.id}/items/${sourceList.items[0].id}`, {
+    const assignResp = await request.patch(`/api/v1/notes/${sourceList.id}/items/${sourceList.items[0]!.id}`, {
       headers: authHeaders,
       data: { assigned_to: collaboratorId },
     });
     expect(assignResp.ok()).toBeTruthy();
-    const secondItemResp = await request.patch(`/api/v1/notes/${sourceList.id}/items/${sourceList.items[1].id}`, {
+    const secondItemResp = await request.patch(`/api/v1/notes/${sourceList.id}/items/${sourceList.items[1]!.id}`, {
       headers: authHeaders,
-      data: { completed: true, parent_id: sourceList.items[0].id },
+      data: { completed: true, parent_id: sourceList.items[0]!.id },
     });
     expect(secondItemResp.ok()).toBeTruthy();
 
@@ -372,7 +438,7 @@ test.describe('Notes', () => {
         text: 'Send follow-up',
         position: 1,
         completed: true,
-        parent_id: duplicatedItems[0].id,
+        parent_id: duplicatedItems[0]!.id,
         assigned_to: '',
       }),
     );
@@ -440,6 +506,51 @@ test.describe('Notes', () => {
     await dashboardPage.expectListItemFocused(0);
   });
 
+  test('arrow keys cross the lines of a wrapped list item before leaving it', async ({ dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.clickNewNote();
+    await dashboardPage.selectListType();
+
+    // Whether a row wraps is invisible to its value, so only a real browser can
+    // answer where its lines are — the unit tests mock that measurement out.
+    // Long enough to take several lines; how many is measured below rather than
+    // assumed, since the wrap point moves with the viewport.
+    const wrapped = `Beta ${'beta '.repeat(40)}end`;
+    await dashboardPage.addListItem('Alpha');
+    await dashboardPage.addListItem(wrapped);
+    await dashboardPage.addListItem('Gamma');
+
+    // However many lines that comes to at this viewport, which is the number of
+    // presses the row should absorb before it gives the key up.
+    const lines = await dashboardPage.listItemLineCount(1);
+    expect(lines).toBeGreaterThan(2);
+
+    await dashboardPage.focusListItem(0);
+    await dashboardPage.pressKey('ArrowDown');
+    await dashboardPage.expectListItemFocused(1);
+
+    // Entering from above lands on the row's first line, so there is exactly one
+    // press per remaining line before the row runs out — which is what says the
+    // caret arrived at the top of it rather than anywhere else.
+    for (let i = 1; i < lines; i++) {
+      await dashboardPage.pressKey('ArrowDown');
+      await dashboardPage.expectListItemFocused(1);
+    }
+    await dashboardPage.pressKey('ArrowDown');
+    await dashboardPage.expectListItemFocused(2);
+
+    // Coming back up enters on the row's last line — the one the caret visually
+    // arrives at — so the same count applies in reverse.
+    await dashboardPage.pressKey('ArrowUp');
+    await dashboardPage.expectListItemFocused(1);
+    for (let i = 1; i < lines; i++) {
+      await dashboardPage.pressKey('ArrowUp');
+      await dashboardPage.expectListItemFocused(1);
+    }
+    await dashboardPage.pressKey('ArrowUp');
+    await dashboardPage.expectListItemFocused(0);
+  });
+
   test('pressing Enter on the last list item creates a new item', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.clickNewNote();
@@ -454,7 +565,7 @@ test.describe('Notes', () => {
     await dashboardPage.expectListItemFocused(1);
   });
 
-  test('converts a text note to a list and back, restoring the title as an h1 line and warning about dropped assignments', async ({ page, dashboardPage, request }) => {
+  test('converts a text note to a list and back, promoting a leading heading to the title and warning about dropped assignments', async ({ page, dashboardPage, request }) => {
     const collaboratorName = uniqueUsername('convert');
     const collaboratorPassword = 'testpass123';
 
@@ -482,12 +593,14 @@ test.describe('Notes', () => {
     // which key off an <h3> that only list notes with a title render.
     const createResp = await request.post('/api/v1/notes', {
       headers: authHeaders,
-      data: { note_type: 'text', content: '# Groceries\n- [x] Milk\n- Eggs' },
+      data: { note_type: 'text', content: '# Groceries\n- [x] **Milk**\n- Eggs\n  - [ ] Free range' },
     });
     expect(createResp.ok()).toBeTruthy();
     const sourceNote = await createResp.json();
 
-    // --- text -> list: markdown formatting is stripped and lines become items ---
+    // --- text -> list: the leading heading becomes the title, block markers are
+    // consumed, inline formatting and nesting survive
+    // (docs/specs/markdown-rendering.md §2.2) ---
     await page.reload();
     await dashboardPage.noteCardByText('Groceries').click();
     await expect(page.getByRole('dialog').getByRole('button', { name: 'Close' })).toBeVisible();
@@ -497,18 +610,22 @@ test.describe('Notes', () => {
     let allNotes = await listNotesApi();
     let converted = allNotes.find((n: { id: string }) => n.id === sourceNote.id);
     expect(converted.note_type).toBe('list');
+    expect(converted.title).toBe('Groceries');
     expect(
       converted.items.map((item: { text: string; completed: boolean }) => ({ text: item.text, completed: item.completed })),
     ).toEqual([
-      { text: 'Groceries', completed: false },
-      { text: 'Milk', completed: true },
+      { text: '**Milk**', completed: true },
       { text: 'Eggs', completed: false },
+      { text: 'Free range', completed: false },
     ]);
+    // The indented line became a child of the item above it; the server rebuilt
+    // parent_id from the indent_level the client sent.
+    expect(converted.items[1].parent_id).toBeNull();
+    expect(converted.items[2].parent_id).toBe(converted.items[1].id);
 
-    // The modal stays open on the converted list note. Give it a title so it
-    // round-trips back as an h1 line below and is findable via the title-based
-    // note-lookup helpers.
-    await page.fill('input[placeholder="Note title..."]', 'Groceries List');
+    // The modal stays open on the converted list note, showing the promoted
+    // heading in the title field it now owns.
+    await expect(page.locator('input[placeholder="Note title..."]')).toHaveValue('Groceries');
     await dashboardPage.closeNoteModal();
 
     // --- list -> text: assigning an item requires sharing the note first ---
@@ -517,14 +634,14 @@ test.describe('Notes', () => {
       data: { user_id: collaboratorId },
     });
     expect(shareResp.ok()).toBeTruthy();
-    const assignResp = await request.patch(`/api/v1/notes/${converted.id}/items/${converted.items[1].id}`, {
+    const assignResp = await request.patch(`/api/v1/notes/${converted.id}/items/${converted.items[0].id}`, {
       headers: authHeaders,
       data: { assigned_to: collaboratorId },
     });
     expect(assignResp.ok()).toBeTruthy();
 
     await page.reload();
-    await dashboardPage.openNote('Groceries List');
+    await dashboardPage.openNote('Groceries');
     await dashboardPage.openModalOverflowMenu();
     await page.getByRole('menuitem', { name: 'Convert to text' }).click();
     await expect(page.getByText(/lose the assignment of 1 item/)).toBeVisible();
@@ -535,6 +652,11 @@ test.describe('Notes', () => {
     const revertedToText = allNotes.find((n: { id: string }) => n.id === sourceNote.id);
     expect(revertedToText.note_type).toBe('text');
     expect(revertedToText.title).toBe('');
-    expect(revertedToText.content).toBe('# Groceries List\n\n- [ ] Groceries\n- [x] Milk\n- [ ] Eggs');
+    // The title, inline formatting and nesting all round-tripped: the heading
+    // that became the title comes back as the same h1 line it started as
+    // (docs/specs/markdown-rendering.md §2.2).
+    expect(revertedToText.content).toBe(
+      '# Groceries\n\n- [x] **Milk**\n- [ ] Eggs\n  - [ ] Free range',
+    );
   });
 });

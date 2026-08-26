@@ -12,7 +12,7 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 4 : undefined,
+  ...(process.env.CI && { workers: 4 }),
   reporter: [['list'], ['html', { open: 'never' }]],
   timeout: 30_000,
   use: {
@@ -34,13 +34,28 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
-      testIgnore: '**/00-admin.spec.ts',
+      testIgnore: [
+        '**/00-admin.spec.ts',
+        // The handoff is gated on a coarse pointer, so it has nothing to assert
+        // against a desktop mouse — it correctly never appears.
+        '**/mobile-app-handoff.spec.ts',
+      ],
       dependencies: ['admin'],
     },
     {
       name: 'mobile-chrome',
       use: { ...devices['Pixel 5'] },
-      testIgnore: ['**/keyboard-shortcuts.spec.ts', '**/00-admin.spec.ts', '**/notes-grouping.spec.ts'],
+      testIgnore: [
+        '**/keyboard-shortcuts.spec.ts',
+        '**/00-admin.spec.ts',
+        '**/notes-grouping.spec.ts',
+        // Both a11y specs are desktop-only. The axe scans would re-check the
+        // same components against the same rules — the markup does not change
+        // with the viewport — and the keyboard/focus specs assume a physical
+        // keyboard the mobile emulation does not model.
+        '**/accessibility.spec.ts',
+        '**/keyboard-focus.spec.ts',
+      ],
       dependencies: ['admin'],
     },
   ],

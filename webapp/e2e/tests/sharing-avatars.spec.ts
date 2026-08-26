@@ -3,6 +3,11 @@ import { LoginPage } from '../pages/LoginPage';
 
 test.describe('Sharing from NoteModal', () => {
   test('note modal share avatars update after sharing via share modal', async ({ page, authenticatedUser, dashboardPage, request }) => {
+    // Destructured for its side effect: the fixture registers and logs in the
+    // user who owns the note. Playwright only runs a fixture a test asks for,
+    // so dropping the name here would leave the test unauthenticated.
+    void authenticatedUser;
+
     const user2Name = uniqueUsername('share');
     const user2Pass = 'testpass123';
 
@@ -38,6 +43,8 @@ test.describe('Sharing from NoteModal', () => {
   });
 
   test('note modal share avatars update after unsharing via share modal', async ({ page, authenticatedUser, dashboardPage, request }) => {
+    void authenticatedUser;
+
     const user2Name = uniqueUsername('share');
     const user2Pass = 'testpass123';
 
@@ -103,6 +110,8 @@ test.describe('Sharing from NoteModal', () => {
 
 test.describe('Sharing Avatars', () => {
   test('shared note shows recipient avatar on dashboard', async ({ page, authenticatedUser, dashboardPage, request }) => {
+    void authenticatedUser;
+
     const user2Name = uniqueUsername('share');
     const user2Pass = 'testpass123';
 
@@ -143,5 +152,31 @@ test.describe('Sharing Avatars', () => {
     // The note card should show the owner's avatar
     const sharedCard = page.locator('[data-testid="note-card"]').filter({ hasText: 'Shared Note Test' });
     await expect(sharedCard.locator('svg[role="img"], img[alt]').first()).toBeVisible();
+  });
+
+  test('sharing with a second user waits for that user\'s own avatar', async ({ page, authenticatedUser, dashboardPage, request }) => {
+    void authenticatedUser;
+
+    const user2Name = uniqueUsername('share');
+    const user3Name = uniqueUsername('share');
+
+    await request.post('/api/v1/register', { data: { username: user2Name, password: 'testpass123' } });
+    await request.post('/api/v1/register', { data: { username: user3Name, password: 'testpass123' } });
+
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Multi Share Test');
+    await dashboardPage.expectNoteVisible('Multi Share Test');
+
+    // Share with a first collaborator, then a second. If the wait inside
+    // shareNoteWithUser merely checked "some avatar is visible" rather than
+    // the specific user just shared with, the second call could return as
+    // soon as the first collaborator's avatar rendered — before user3's
+    // share actually landed.
+    await dashboardPage.shareNoteWithUser('Multi Share Test', user2Name);
+    await dashboardPage.shareNoteWithUser('Multi Share Test', user3Name);
+
+    const noteCard = page.locator('[data-testid="note-card"]').filter({ hasText: 'Multi Share Test' });
+    await expect(noteCard.getByRole('img', { name: user2Name, exact: true })).toBeVisible();
+    await expect(noteCard.getByRole('img', { name: user3Name, exact: true })).toBeVisible();
   });
 });

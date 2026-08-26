@@ -5,14 +5,35 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
+	"testing"
 	"time"
 
 	"github.com/hanzei/jot/server/internal/database/dialect"
 	"golang.org/x/crypto/bcrypt"
 )
 
-// ErrUsernameTaken is returned by UpdateUsername when the requested username is
-// already in use by another account.
+// passwordHashCost is the bcrypt cost every password hash the server writes is
+// generated with. Under `go test` it drops to bcrypt.MinCost, because hashing
+// at the production cost dominated the integration suite: bcrypt was 65% of
+// the root server package's CPU time, and lowering it here cut that suite's
+// wall clock from ~74s to ~32s. Cost is not part of any assertion — it is
+// carried in the hash's own prefix, so a hash written at MinCost verifies with
+// the same CompareHashAndPassword call as one written at DefaultCost, and
+// nothing about the auth flow changes shape.
+//
+// testing.Testing() is false in any binary that is not a test binary, so a
+// production server cannot end up on this branch — unlike a config knob, which
+// would let a deployment silently weaken its own password hashing.
+var passwordHashCost = func() int {
+	if testing.Testing() {
+		return bcrypt.MinCost
+	}
+	return bcrypt.DefaultCost
+}()
+
+// ErrUsernameTaken is returned by Register, UpdateProfile, and CreateByAdmin
+// when the requested username is already in use by another account.
 var ErrUsernameTaken = errors.New("username already taken")
 
 // ErrUserNotFound is returned when a user lookup or update targets an ID that
@@ -48,7 +69,7 @@ func newUserStore(db *sql.DB, d *dialect.Dialect) *userStore {
 }
 
 func (s *userStore) Create(ctx context.Context, username, password string) (*User, error) {
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), passwordHashCost)
 	if err != nil {
 		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}
@@ -93,6 +114,14 @@ func (s *userStore) Create(ctx context.Context, username, password string) (*Use
 	return &user, nil
 }
 
+// GetByUsername looks up a user by username, folding the argument to lower case
+// first. Stored usernames are lower case by construction — the handlers reject
+// anything else — so folding the lookup key is what lets someone who registered
+// as "ben" sign in by typing "Ben". ASCII is the whole alphabet here — the
+// username character set is [a-z0-9_-] — so strings.ToLower matches the byte
+// comparison the query does on either backend, with none of the
+// Unicode-collation divergence the label-name fold in
+// internal/database/dialect has to reconcile.
 func (s *userStore) GetByUsername(ctx context.Context, username string) (*User, error) {
 	var user User
 	query := `SELECT id, username, first_name, last_name, password_hash, role,
@@ -100,7 +129,7 @@ func (s *userStore) GetByUsername(ctx context.Context, username string) (*User, 
 			         created_at, updated_at
 			  FROM users WHERE username = ?`
 
-	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), username).Scan(
+	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), strings.ToLower(username)).Scan(
 		&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.PasswordHash,
 		&user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt,
 	)
@@ -142,7 +171,7 @@ func (u *User) CheckPassword(password string) bool {
 // dummyPasswordHash is a bcrypt hash of a throwaway password, generated once
 // at startup for CheckPasswordDummy.
 var dummyPasswordHash = func() []byte {
-	hash, err := bcrypt.GenerateFromPassword([]byte("jot-dummy-timing-equalizer"), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte("jot-dummy-timing-equalizer"), passwordHashCost)
 	if err != nil {
 		panic(fmt.Sprintf("generate dummy password hash: %v", err))
 	}
@@ -190,16 +219,23 @@ func (s *userStore) GetAll(ctx context.Context) ([]*User, error) {
 }
 
 // Search returns users whose username, first name, or last name contain the
-// given search term (case-insensitive). Results are ordered by creation date
-// descending.
+// given search term, without regard to case on either backend. Results are
+// ordered by creation date descending.
+//
+// The case folding has to be explicit: a plain LIKE folds ASCII case on SQLite
+// but not on PostgreSQL, so the share and assignee pickers would quietly match
+// case-sensitively on a PostgreSQL deployment. Usernames are lower case now, but
+// first and last names are free-form and still need it.
 func (s *userStore) Search(ctx context.Context, term string) ([]*User, error) {
 	like := "%" + term + "%"
 	query := `SELECT id, username, first_name, last_name, password_hash, role,
 			         profile_icon IS NOT NULL AS has_profile_icon,
 			         created_at, updated_at
 			  FROM users
-			  WHERE username LIKE ? OR first_name LIKE ? OR last_name LIKE ?
-			  ORDER BY created_at DESC`
+			  WHERE ` + s.d.CaseInsensitiveLike("username") +
+		` OR ` + s.d.CaseInsensitiveLike("first_name") +
+		` OR ` + s.d.CaseInsensitiveLike("last_name") +
+		` ORDER BY created_at DESC`
 
 	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), like, like, like)
 	if err != nil {
@@ -216,30 +252,6 @@ func (s *userStore) Search(ctx context.Context, term string) ([]*User, error) {
 		ptrs[i] = &users[i]
 	}
 	return ptrs, nil
-}
-
-// UpdateUsername sets a new username for the user with the given id and returns
-// the updated user. Returns ErrUsernameTaken if the username is already in use,
-// or another error if the id does not exist or the query fails.
-func (s *userStore) UpdateUsername(ctx context.Context, id, newUsername string) (*User, error) {
-	query := `UPDATE users SET username = ?, updated_at = ?
-			  WHERE id = ? RETURNING id, username, first_name, last_name, role,
-			  profile_icon IS NOT NULL AS has_profile_icon,
-			  created_at, updated_at`
-	var user User
-	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), newUsername, Timestamp(Now()), id).Scan(
-		&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt,
-	)
-	if err != nil {
-		if s.d.IsUniqueConstraintError(err) {
-			return nil, ErrUsernameTaken
-		}
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrUserNotFound
-		}
-		return nil, fmt.Errorf("failed to update username: %w", err)
-	}
-	return &user, nil
 }
 
 func (s *userStore) UpdateProfileIcon(ctx context.Context, id string, data []byte, contentType string) error {
@@ -303,7 +315,7 @@ func (s *userStore) DeleteProfileIcon(ctx context.Context, id string) error {
 }
 
 func (s *userStore) UpdatePassword(ctx context.Context, id, newPassword string) error {
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), passwordHashCost)
 	if err != nil {
 		return fmt.Errorf("failed to hash password: %w", err)
 	}
@@ -325,24 +337,6 @@ func (s *userStore) UpdatePassword(ctx context.Context, id, newPassword string) 
 	}
 
 	return nil
-}
-
-func (s *userStore) UpdateName(ctx context.Context, id, firstName, lastName string) (*User, error) {
-	query := `UPDATE users SET first_name = ?, last_name = ?, updated_at = ?
-			  WHERE id = ? RETURNING id, username, first_name, last_name, role,
-			  profile_icon IS NOT NULL AS has_profile_icon,
-			  created_at, updated_at`
-	var user User
-	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), firstName, lastName, Timestamp(Now()), id).Scan(
-		&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt,
-	)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrUserNotFound
-		}
-		return nil, fmt.Errorf("failed to update name: %w", err)
-	}
-	return &user, nil
 }
 
 // UpdateProfile atomically updates the username, first name, and last name for
@@ -396,7 +390,7 @@ func (s *userStore) UpdateRole(ctx context.Context, id, role string) (*User, err
 		var currentRole string
 		err = tx.QueryRowContext(ctx, s.d.RewritePlaceholders(`SELECT role FROM users WHERE id = ?`), id).Scan(&currentRole)
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("%w", ErrUserNotFound)
+			return nil, ErrUserNotFound
 		}
 		if err != nil {
 			return nil, fmt.Errorf("failed to query current role: %w", err)
@@ -407,7 +401,7 @@ func (s *userStore) UpdateRole(ctx context.Context, id, role string) (*User, err
 				return nil, fmt.Errorf("failed to count admins: %w", err)
 			}
 			if adminCount <= 1 {
-				return nil, fmt.Errorf("%w", ErrLastAdmin)
+				return nil, ErrLastAdmin
 			}
 		}
 	}
@@ -421,7 +415,7 @@ func (s *userStore) UpdateRole(ctx context.Context, id, role string) (*User, err
 		role, Timestamp(Now()), id,
 	).Scan(&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("%w", ErrUserNotFound)
+		return nil, ErrUserNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to update role: %w", err)
@@ -431,10 +425,6 @@ func (s *userStore) UpdateRole(ctx context.Context, id, role string) (*User, err
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 	return &user, nil
-}
-
-func (s *userStore) Delete(ctx context.Context, id, requestingUserID string) error {
-	return s.DeleteWithCleanup(ctx, id, requestingUserID, nil, nil)
 }
 
 // DeleteWithCleanup deletes a user and runs optional preDelete/postDelete
@@ -448,7 +438,7 @@ func (s *userStore) Delete(ctx context.Context, id, requestingUserID string) err
 // with the delete.
 func (s *userStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID string, preDelete, postDelete func(ctx context.Context, tx *sql.Tx) error) error {
 	if id == requestingUserID {
-		return fmt.Errorf("%w", ErrCannotDeleteSelf)
+		return ErrCannotDeleteSelf
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -460,7 +450,7 @@ func (s *userStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID 
 	var role string
 	err = tx.QueryRowContext(ctx, s.d.RewritePlaceholders(`SELECT role FROM users WHERE id = ?`), id).Scan(&role)
 	if errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("%w", ErrUserNotFound)
+		return ErrUserNotFound
 	}
 	if err != nil {
 		return fmt.Errorf("failed to query user role: %w", err)
@@ -472,7 +462,7 @@ func (s *userStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID 
 			return fmt.Errorf("failed to count admins: %w", err)
 		}
 		if adminCount <= 1 {
-			return fmt.Errorf("%w", ErrLastAdmin)
+			return ErrLastAdmin
 		}
 	}
 
@@ -491,7 +481,7 @@ func (s *userStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID 
 		return fmt.Errorf("failed to check rows affected: %w", err)
 	}
 	if rows == 0 {
-		return fmt.Errorf("%w", ErrUserNotFound)
+		return ErrUserNotFound
 	}
 
 	if postDelete != nil {
@@ -507,7 +497,7 @@ func (s *userStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID 
 }
 
 func (s *userStore) CreateByAdmin(ctx context.Context, username, password string, role string) (*User, error) {
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), passwordHashCost)
 	if err != nil {
 		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}

@@ -1,4 +1,5 @@
-import { SQLiteDatabase } from 'expo-sqlite';
+import type { SQLiteDatabase } from 'expo-sqlite';
+import { DEFAULT_NOTE_COLOR } from '@jot/shared';
 
 // Migration 1: creates initial schema; idempotent via IF NOT EXISTS and column probing.
 const migration1 = async (db: SQLiteDatabase): Promise<void> => {
@@ -9,7 +10,7 @@ const migration1 = async (db: SQLiteDatabase): Promise<void> => {
       title TEXT NOT NULL DEFAULT '',
       content TEXT NOT NULL DEFAULT '',
       note_type TEXT NOT NULL DEFAULT 'text',
-      color TEXT NOT NULL DEFAULT '#ffffff',
+      color TEXT NOT NULL DEFAULT '${DEFAULT_NOTE_COLOR}',
       pinned INTEGER NOT NULL DEFAULT 0,
       archived INTEGER NOT NULL DEFAULT 0,
       position INTEGER NOT NULL DEFAULT 0,
@@ -269,7 +270,7 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   const currentVersion = versionRow?.user_version ?? 0;
 
   for (let i = currentVersion; i < MIGRATIONS.length; i++) {
-    await MIGRATIONS[i](db);
+    await MIGRATIONS[i]!(db);
     await db.runAsync(`PRAGMA user_version = ${i + 1}`);
   }
 }

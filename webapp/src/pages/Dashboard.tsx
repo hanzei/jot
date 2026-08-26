@@ -3,7 +3,19 @@ import { Plus, FileText, Archive, Trash2, ClipboardCheck, ArrowUpDown, Search, X
 import { useTranslation } from 'react-i18next';
 import { notes, users as usersApi } from '@/utils/api';
 import { getUser, getSettings, setSettings } from '@/utils/auth';
-import { UPLOAD_MAX_BYTES, type Note, type NoteImage, type NoteType, type User, type SSEEvent, type NoteSort, type ConvertNoteTypeRequest } from '@jot/shared';
+import {
+  UPLOAD_MAX_BYTES,
+  NOTE_SORT_OPTIONS,
+  normalizeNoteSort,
+  sortNotesForDisplay,
+  type Note,
+  type NoteImage,
+  type NoteType,
+  type User,
+  type SSEEvent,
+  type NoteSort,
+  type ConvertNoteTypeRequest,
+} from '@jot/shared';
 import { useSearchParams, useParams, useNavigate, useMatch } from 'react-router';
 import PageContent from '@/components/PageContent';
 import SearchBar from '@/components/SearchBar';
@@ -14,9 +26,10 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
 import { useAuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { isAnyModalDialogOpen, isEditableElementFocused, isOverlayControlFocused } from '@/utils/keyboardShortcuts';
-import { NOTE_SORT_OPTIONS, normalizeNoteSort, sortNotesForDisplay } from '@/utils/noteSort';
 import { isSortWarningDismissed, dismissSortWarning } from '@/utils/sortWarningDismissed';
 import { buildSharedContent } from '@/utils/sharedContent';
+import type {
+  DragEndEvent} from '@dnd-kit/core';
 import {
   DndContext,
   closestCenter,
@@ -24,8 +37,7 @@ import {
   MouseSensor,
   TouchSensor,
   useSensor,
-  useSensors,
-  DragEndEvent,
+  useSensors
 } from '@dnd-kit/core';
 import {
   arrayMove,
@@ -421,7 +433,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
     const handlePopState = () => {
       const notePathMatch = window.location.pathname.match(/^\/notes\/(.+)$/);
       if (notePathMatch && !openNoteIdRef.current) {
-        openNoteFromUrl(notePathMatch[1]);
+        openNoteFromUrl(notePathMatch[1]!);
       } else if (!notePathMatch && openNoteIdRef.current) {
         openNoteIdRef.current = null;
         setIsModalOpen(false);
@@ -480,8 +492,16 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
         return imgs.filter(img => img.id !== imageId);
       };
 
-      setEditingNote(prev => (prev && prev.id === imageNoteId ? { ...prev, images: patchImages(prev.images) } : prev));
-      setNotesList(prev => prev.map(n => (n.id === imageNoteId ? { ...n, images: patchImages(n.images) } : n)));
+      setEditingNote(prev => {
+        if (!prev || prev.id !== imageNoteId) return prev;
+        const patched = patchImages(prev.images);
+        return patched !== undefined ? { ...prev, images: patched } : prev;
+      });
+      setNotesList(prev => prev.map(n => {
+        if (n.id !== imageNoteId) return n;
+        const patched = patchImages(n.images);
+        return patched !== undefined ? { ...n, images: patched } : n;
+      }));
       // Also reconcile via a full reload, same as every other event type below —
       // this is the fallback for a note whose note_created hasn't loaded yet, so
       // an image added just after creation isn't silently dropped from the list.
@@ -1362,6 +1382,8 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
             onDelete={handleDeleteNote}
             onDuplicate={handleDuplicateNote}
             onConvert={handleConvertNote}
+            onRestore={handleRestoreNote}
+            onPermanentlyDelete={handlePermanentlyDeleteNote}
             isOwner={!editingNote || editingNote.user_id === user?.id}
             usersById={usersById}
             currentUserId={user?.id}

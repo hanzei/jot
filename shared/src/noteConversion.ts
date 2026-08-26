@@ -1,70 +1,224 @@
+import { VALIDATION } from './constants';
+import { exceedsCodePointLimit } from './text';
 import type { NoteItem } from './types';
+
+// Text ↔ list conversion.
+//
+// Conversion mirrors what each note type *renders* (docs/specs/markdown-rendering.md):
+// text-note content renders the full feature set, and list-item text renders the
+// strictly inline subset of it (§2.1). So converting has to remove exactly the
+// block syntax and nothing else — inline syntax survives verbatim, because the
+// item renders it the same way the text note did.
+//
+// That is why there is no inline stripper here any more. Reducing `**Buy** milk`
+// to `Buy milk` was the readable choice while item text was plain; once items
+// render bold it deletes formatting the destination would have shown. Block
+// syntax is removed instead because the item structurally replaces it — an item
+// has its own checkbox, its own nesting and its own position, so a leading `-`,
+// `#` or `>` has nothing left to describe.
+//
+// Only block syntax that is a *line prefix* is removed. A fence, a table row or
+// `---` is left alone: §2.1 renders those as literal source inside an item, so
+// keeping them shows the user what they typed. The spec's "removed entirely"
+// category is empty by choice, and this file does not add to it.
+//
+// Dropping the inline stripper also removed a ReDoS surface, which is worth
+// knowing before anyone reintroduces one. It matched links and inline code with
+// character classes that excluded the *opening* delimiters as well as the
+// closing ones, so a run of unmatched `[` or `(` failed in O(1) per position
+// instead of backtracking over the whole run — without that, note content
+// (which a collaborator can write) drives quadratic matching. Any future
+// regex-based scan of item text needs the same care.
+
+const LIST_MARKER_RE = /^(?:[-*+]|\d+\.)\s+(?:\[([ xX])\]\s*)?/;
+const BLOCKQUOTE_RE = /^(?:>\s*)+/;
+const HEADING_RE = /^#{1,6}\s+/;
+const LEADING_WHITESPACE_RE = /^[ \t]*/;
+
+/** A tab advances to the next 4-column stop, as in CommonMark. */
+const TAB_WIDTH = 4;
+/** Columns of indent that make a list line a child of the item above it. */
+const NESTED_INDENT_COLUMNS = 2;
 
 export interface ConvertedListItem {
   text: string;
   completed: boolean;
+  /**
+   * 0 for a top-level item, 1 for one nested under the nearest preceding
+   * top-level item. This is the same encoding as
+   * `CreateNoteItemRequest.indent_level`, which is what the server rebuilds
+   * `parent_id` from on the bulk-create and convert paths; the model allows a
+   * single level, so it never exceeds 1.
+   */
+  indentLevel: 0 | 1;
 }
 
-// Heuristic, line-oriented markdown stripping — not a full parser. It only
-// needs to handle the syntax subset webapp/src/utils/markdown.ts renders
-// (headings, bold/italic, inline code, links, blockquotes, lists).
-const LIST_MARKER_RE = /^(?:[-*+]|\d+\.)\s+(?:\[([ xX])\]\s*)?/;
-const BLOCKQUOTE_RE = /^(?:>\s*)+/;
-const HEADING_RE = /^#{1,6}\s+/;
-// Character classes exclude '[' and '(' too (not just the closing delimiter)
-// so a run of unmatched opening delimiters (e.g. "[[[[[[") fails to match in
-// O(1) per position instead of backtracking over the whole run — otherwise
-// this is a quadratic-time ReDoS on attacker-controlled note content.
-const LINK_RE = /\[([^[\]]*)\]\([^()]*\)/g;
-const INLINE_CODE_RE = /`([^`]+)`/g;
-// Underscore emphasis requires word boundaries, matching marked/CommonMark:
-// my_file_name is left alone, but __init__ still counts as emphasis.
-const BOLD_RE = /\*\*(.+?)\*\*|(?<!\w)__(.+?)__(?!\w)/g;
-const ITALIC_RE = /\*(.+?)\*|(?<!\w)_(.+?)_(?!\w)/g;
-
-function stripInlineFormatting(text: string): string {
-  return text
-    .replace(LINK_RE, '$1')
-    .replace(INLINE_CODE_RE, '$1')
-    .replace(BOLD_RE, (_m, a: string | undefined, b: string | undefined) => a ?? b ?? '')
-    .replace(ITALIC_RE, (_m, a: string | undefined, b: string | undefined) => a ?? b ?? '')
-    .trim();
+function indentColumns(prefix: string): number {
+  let columns = 0;
+  for (const ch of prefix) {
+    columns += ch === '\t' ? TAB_WIDTH - (columns % TAB_WIDTH) : 1;
+  }
+  return columns;
 }
 
 /**
- * Parses one line of text-note content into a list item: strips a leading
- * list/checkbox marker (recording completed state) and any inline markdown
- * formatting. Returns null for a line that is blank once stripped.
+ * Parses one line of text-note content into a list item: strips the block
+ * markdown an item structurally replaces — a leading list/checkbox marker
+ * (recording completed state), blockquote markers and a heading prefix — and
+ * records how deep the line was indented. Inline formatting is left as typed.
+ * Returns null for a line that is blank once stripped.
  */
 export function parseTextLineAsListItem(rawLine: string): ConvertedListItem | null {
-  let line = rawLine.trim();
-  if (!line) return null;
+  const leading = LEADING_WHITESPACE_RE.exec(rawLine)?.[0] ?? '';
+  const indent = indentColumns(leading);
+  // Only the *leading* whitespace comes off up front. Trailing whitespace has to
+  // survive until the marker has been matched, because the marker regex needs the
+  // space after the bullet: trimming both ends first turns a line holding nothing
+  // but a bullet ("- ", "1. ") into an item reading "-" or "1.". The text is
+  // trimmed at the end instead, once the prefixes are gone.
+  let line = rawLine.slice(leading.length);
+  if (!line.trim()) return null;
 
   let completed = false;
+  let indentLevel: 0 | 1 = 0;
+
+  // Blockquote markers are stripped on *both* sides of the list marker, because
+  // the two nest in either order and an item replaces both: `> - [x] a` is a
+  // quoted checklist, `- > a` a quote inside a list item. Stripping only before
+  // the marker would leave the `>` in the second; only after (as this did
+  // originally) leaves `- [x]` in the item text of the first — and that one also
+  // loses the completed state, then renders a literal `- [x]` next to the item's
+  // own real checkbox, which is the exact outcome §2.1 exists to prevent.
+  line = line.replace(BLOCKQUOTE_RE, '');
+
   const listMatch = line.match(LIST_MARKER_RE);
   if (listMatch) {
     line = line.slice(listMatch[0].length);
     if (listMatch[1]) completed = listMatch[1].toLowerCase() === 'x';
+    // Indent carries across only on a *list* line. An indented plain line is far
+    // more often the wrapped continuation of the paragraph above it than a
+    // deliberate child, and silently re-parenting it would be a worse surprise
+    // than losing nesting the user never asked for. An indented list line is
+    // unambiguous, and is exactly what listToText emits for a nested item.
+    if (indent >= NESTED_INDENT_COLUMNS) indentLevel = 1;
   }
 
-  line = line.replace(BLOCKQUOTE_RE, '').replace(HEADING_RE, '');
-  line = stripInlineFormatting(line);
+  line = line.replace(BLOCKQUOTE_RE, '').replace(HEADING_RE, '').trim();
 
-  return line ? { text: line, completed } : null;
+  return line ? { text: line, completed, indentLevel } : null;
 }
 
-/** Converts text-note content into a flat list of top-level list items. */
-export function textToListItems(content: string): ConvertedListItem[] {
-  return content
-    .split('\n')
-    .map(parseTextLineAsListItem)
-    .filter((item): item is ConvertedListItem => item !== null);
+export interface ConvertedListNote {
+  /**
+   * The promoted heading, or '' when the content did not open with one. A list
+   * note with no title is the normal case, not an error.
+   */
+  title: string;
+  items: ConvertedListItem[];
+}
+
+/**
+ * Returns the title a line should be promoted to, or null when it is not a
+ * promotable heading.
+ *
+ * Only a *plain* ATX heading qualifies — `> # Groceries` and `- # Groceries`
+ * do not, because there the `#` sits inside a quote or a list item and
+ * promoting it would take a title out of something the user wrote as a nested
+ * construct. A setext heading (`Groceries` over `=====`) does not qualify
+ * either: this converter is line-by-line by design, and recognizing setext
+ * would mean lookahead plus a rule for the leftover underline.
+ *
+ * The indent comes off with the same two anchored prefix matches
+ * parseTextLineAsListItem uses, rather than one `^[ \t]*#{1,6}[ \t]+(.*)$`
+ * that does the whole job: a single pattern pairing two whitespace
+ * repetitions is the shape CodeQL reports as polynomial backtracking, and
+ * note content is attacker-supplied. The `^` anchor keeps even that form
+ * linear here, but the pattern above costs nothing and has no such argument
+ * to make — see the ReDoS note at the top of this file.
+ */
+function promotableHeadingTitle(rawLine: string): string | null {
+  const leading = LEADING_WHITESPACE_RE.exec(rawLine)?.[0] ?? '';
+  const line = rawLine.slice(leading.length);
+
+  const withoutHeading = line.replace(HEADING_RE, '');
+  // Nothing consumed: the line does not open with a heading marker at all.
+  if (withoutHeading === line) return null;
+
+  const title = withoutHeading.trim();
+  // An empty heading (`#` with nothing after it) is not a title; leaving it
+  // unpromoted lets parseTextLineAsListItem drop the line as it always has.
+  if (!title) return null;
+  // Over the limit, the line stays an item rather than being truncated: the
+  // server would reject the title outright, and silently cutting a heading in
+  // half loses text the note still contains everywhere else.
+  if (exceedsCodePointLimit(title, VALIDATION.TITLE_MAX_LENGTH)) return null;
+  return title;
+}
+
+/**
+ * Converts text-note content into a list note: one item per non-blank line,
+ * each carrying the indent level the caller should send as `indent_level`.
+ *
+ * When the first non-blank line is a heading it becomes the list's title
+ * instead of its first item — the inverse of `listToText`, which writes the
+ * title out as an `# h1` line. Without this, a list note that made a round
+ * trip through text came back with its title demoted to an item and the note
+ * itself untitled. Any heading level is promoted, not just `#`: `## Groceries`
+ * is a title a user typed as a heading, and only accepting `#` would make the
+ * feature look broken for it. The level itself is not preserved — a list note
+ * has one title, and converting back writes it as `#`.
+ */
+export function textToListNote(content: string): ConvertedListNote {
+  const lines = content.split('\n');
+  const headingIndex = lines.findIndex((line) => line.trim() !== '');
+  const title = headingIndex === -1 ? null : promotableHeadingTitle(lines[headingIndex]!);
+
+  const itemLines = title === null ? lines : lines.filter((_, index) => index !== headingIndex);
+
+  return {
+    title: title ?? '',
+    items: itemLines
+      .map(parseTextLineAsListItem)
+      .filter((item): item is ConvertedListItem => item !== null),
+  };
+}
+
+export type ConvertToListCapViolation =
+  | { kind: 'tooManyItems'; max: number }
+  | { kind: 'itemTextTooLong'; max: number };
+
+/**
+ * Checks a text→list conversion against the item caps the server enforces
+ * (`ITEM_MAX_COUNT`, `ITEM_TEXT_MAX_LENGTH`) before either client sends it.
+ * `textToListNote` never truncates or drops content to stay under a cap — see
+ * its module comment — so without this check an oversized note reaches the
+ * server, which rejects it (422 for the count, 400 for a line's length) with
+ * nothing a client can turn into a specific message. Item count is checked
+ * first, same order the webapp's paste path already uses, since it is the
+ * more common way to hit a cap converting a long note.
+ */
+export function checkConvertToListCaps(converted: ConvertedListNote): ConvertToListCapViolation | null {
+  if (converted.items.length > VALIDATION.ITEM_MAX_COUNT) {
+    return { kind: 'tooManyItems', max: VALIDATION.ITEM_MAX_COUNT };
+  }
+  if (converted.items.some((item) => exceedsCodePointLimit(item.text, VALIDATION.ITEM_TEXT_MAX_LENGTH))) {
+    return { kind: 'itemTextTooLong', max: VALIDATION.ITEM_TEXT_MAX_LENGTH };
+  }
+  return null;
 }
 
 /**
  * Renders a list note's title and items back into text-note content. The
  * title (if any) becomes an h1 line; items become a markdown task list, with
  * one level of indentation for items nested under a top-level item.
+ *
+ * Item text is emitted verbatim and deliberately **not** escaped. Items render
+ * the inline Markdown subset themselves (docs/specs/markdown-rendering.md §2.1),
+ * so the source that showed as bold in the item shows as bold in the converted
+ * note; escaping would *introduce* a rendering change rather than prevent one.
+ * Block syntax in item text needs no escaping either, because every item is
+ * emitted behind a `- [ ] ` marker — a `#` or `---` stays inside a list item and
+ * stays literal, exactly as the item rendered it.
  */
 export function listToText(
   title: string,

@@ -114,19 +114,26 @@ compiled web app, while SQLite keeps the default deployment small and portable.
 - installs [Task](https://taskfile.dev/) if it is missing — every documented
   command below goes through it, so it cannot itself be installed with a task;
 - runs `npm ci` in `shared/` → `webapp/` → `mobile/`, in that order (`@jot/shared`
-  is a `file:../shared` dependency of the other two), skipping any package that
-  already has `node_modules`;
+  is a `file:../shared` dependency of the other two), skipping any package whose
+  `node_modules` is already up to date with its `package-lock.json`;
+- installs the Chromium build the pinned `@playwright/test` expects, so
+  `task test-e2e` works without a separate manual step;
+- warms the Go build cache, so the first `task lint-server` takes seconds rather
+  than the couple of minutes `golangci-lint` needs to type-check every package
+  cold;
 - warns when Node or Go is older than this repo expects, without changing either.
 
-It is idempotent, so re-running it on a provisioned checkout is close to a no-op.
-That cuts both ways: because it skips any package that already has
-`node_modules`, it will **not** pick up dependency changes after a pull — when a
-lockfile moves, run `npm ci` in the affected package yourself. Two escape
-hatches: `JOT_BOOTSTRAP_SKIP=1` skips everything, `JOT_BOOTSTRAP_SKIP_NPM=1`
-skips just the npm installs.
+It is idempotent, so re-running it on a provisioned checkout is close to a no-op:
+each package's install is stamped with a hash of its `package-lock.json`, so a
+pull that doesn't touch a lockfile skips straight past it, and one that does
+triggers `npm ci` there automatically; the Playwright install is a no-op
+whenever the expected Chromium build is already present. Four escape hatches:
+`JOT_BOOTSTRAP_SKIP=1` skips everything, `JOT_BOOTSTRAP_SKIP_NPM=1` skips just
+the npm installs, `JOT_BOOTSTRAP_SKIP_PLAYWRIGHT=1` skips just the browser
+install, and `JOT_BOOTSTRAP_SKIP_GO_CACHE=1` skips the Go warm-up.
 
-It deliberately does **not** download Playwright browsers (the slowest step, and
-most work never touches e2e) and does **not** install or switch Node/Go versions.
+It deliberately does **not** install or switch Node/Go versions — pulling in
+nvm/mise and reshaping the shell environment is too invasive to do silently.
 `nix-shell` and Claude Code's `SessionStart` hook both run this script rather than
 carrying their own copy of the setup steps.
 
@@ -143,13 +150,16 @@ go install github.com/go-task/task/v3/cmd/task@<TASK_VERSION>
 
 ```bash
 # Available commands (task --list for the full set)
-task bootstrap       # Install task + npm dependencies (same as scripts/bootstrap.sh)
+task bootstrap       # Run scripts/bootstrap.sh: task, npm deps, Playwright's Chromium, Go cache warm-up
 task run-server      # Start the Jot server
 task run-webapp      # Start webapp dev server with HMR
-task check           # Pre-PR gate: lint + all tests except e2e
-task check-server    # Lint + test one area (also check-webapp/-mobile/-shared)
+task check           # Pre-PR gate: everything CI runs except e2e
+task check-server    # Lint + test the server, plus the docs and migration checks
+task check-webapp    # Lint + test the webapp, plus the translation check
+task check-mobile    # Lint + test the mobile app (check-shared likewise)
 task test            # All tests except e2e
 task lint            # All linters
+task fmt             # Apply formatting to every workspace (Go and TypeScript)
 task test-server     # Run server tests
 task test-webapp     # Run webapp tests
 task test-e2e        # Run Playwright end-to-end tests
@@ -160,12 +170,21 @@ task lint-server     # Run server linting with golangci-lint
 task lint-webapp     # Run webapp linting
 task lint-mobile     # Run mobile app linting
 task lint-shared     # Run shared package linting
+task check-docs      # Check server/docs/ matches the handler annotations
+task check-migrations   # Check the sqlite and postgres migration trees match
 task check-translations # Check locale files for missing/extra keys
+task check-mobile-expo  # expo-doctor: Expo SDK/native alignment (run by the dep sweep, not by check)
 task gen-docs        # Regenerate Swagger API docs
 task build-webapp    # Build the webapp into webapp/build
 task build-jotctl    # Build the jotctl admin CLI binary
 task clean           # Remove generated files and node packages
 ```
+
+`task check` is the single command to run before opening a PR — it covers every
+CI job except e2e, so there is nothing else to remember. `task lint` reports
+every linter that failed rather than stopping at the first, while `task test`
+stops at the first failing suite (a broken `shared/` or `server/` would make
+everything downstream fail for reasons that are not its own).
 
 Every `test-*` task forwards extra arguments after `--`, so you can scope a run
 instead of waiting for the whole suite:
@@ -177,10 +196,11 @@ task test-e2e -- notes.spec.ts            # one Playwright spec
 ```
 
 `task test-e2e` needs the Chromium build that the pinned `@playwright/test`
-expects. Bootstrap does not download it, so the first run on a new machine stops
-with the install command (`cd webapp && npx playwright install chromium`) instead
-of failing every spec. Check it on its own with
-`./scripts/check-playwright-browser.sh`.
+expects; bootstrap already installs it. If that step was skipped
+(`JOT_BOOTSTRAP_SKIP_PLAYWRIGHT=1`, `JOT_BOOTSTRAP_SKIP=1`, or bootstrap never
+ran), `task test-e2e` stops with the install command
+(`cd webapp && npx playwright install chromium`) instead of failing every
+spec. Check it on its own with `./scripts/check-playwright-browser.sh`.
 
 4. **Access the application**:
    - Open `http://localhost:8080` in your browser
@@ -214,7 +234,7 @@ variable is unset:
 ```bash
 docker run --rm -d --name jot-test-postgres \
   -e POSTGRES_USER=jot -e POSTGRES_PASSWORD=jot -e POSTGRES_DB=jot_test \
-  -p 5432:5432 postgres:16-alpine
+  -p 5432:5432 postgres:18-alpine
 
 TEST_POSTGRES_DSN="postgres://jot:jot@localhost:5432/jot_test?sslmode=disable" task test-server
 ```
@@ -312,6 +332,7 @@ accordingly.
 | `JOT_METRICS_ENABLED` | `false` | Enables the separate Prometheus metrics HTTP server. |
 | `JOT_METRICS_HOST` | `127.0.0.1` | Bind host for the metrics server. |
 | `JOT_METRICS_PORT` | `8081` | Bind port for the metrics server. |
+| `JOT_PPROF_ENABLED` | `false` | Serves Go profiling endpoints under `/debug/pprof` on the metrics server's host/port. Starts that server on its own if `JOT_METRICS_ENABLED` is `false`. |
 | `JOT_OTEL_TRACES_ENABLED` | `false` | Enables OpenTelemetry tracing. |
 | `JOT_OTEL_METRICS_ENABLED` | `false` | Enables OTLP metric export. |
 | `JOT_OTEL_LOGS_ENABLED` | `false` | Enables OpenTelemetry log export. |
@@ -388,6 +409,35 @@ Set `JOT_METRICS_ENABLED=true` to expose Prometheus metrics on
 OpenTelemetry SDK setup. When `OTEL_EXPORTER_OTLP_ENDPOINT` is set, enabled
 signals are exported over OTLP gRPC; otherwise enabled traces/logs use stdout
 exporters for local debugging.
+
+### Profiling
+
+Set `JOT_PPROF_ENABLED=true` to serve Go's profiling endpoints at
+`http://127.0.0.1:8081/debug/pprof/` by default. They share the metrics
+server's host and port (`JOT_METRICS_HOST` / `JOT_METRICS_PORT`) but have
+their own switch, so either can run without the other. Keep the default
+loopback bind: the endpoints are unauthenticated, and taking a CPU profile
+costs 30 seconds of the caller's choosing.
+
+```bash
+go tool pprof -http=: http://127.0.0.1:8081/debug/pprof/profile?seconds=30
+go tool pprof -http=: http://127.0.0.1:8081/debug/pprof/heap
+curl http://127.0.0.1:8081/debug/pprof/goroutine?debug=1
+```
+
+Jot's background goroutines carry a `job` [pprof
+label](https://pkg.go.dev/runtime/pprof#Do) — `session-cleanup`,
+`trash-purge`, `debug-server` — because they are otherwise anonymous closures
+sharing one stack frame. Filter a CPU or goroutine profile by it with
+`-tagfocus`, or read it off the `labels:` line in the `goroutine?debug=1`
+dump:
+
+```bash
+go tool pprof -tagfocus=job=trash-purge http://127.0.0.1:8081/debug/pprof/goroutine
+```
+
+Only the CPU and goroutine profiles carry labels; heap, block, and mutex
+profiles ignore them.
 
 A starter Grafana dashboard is available at `grafana/dashboard.json`. Its
 queries use Jot's raw metric names (e.g. `notes_created_total`), matching
@@ -487,9 +537,16 @@ docker run -p 8080:8080 -e JOT_COOKIE_SECURE=false -v ./data:/data jot
 
 ### Available Tags
 
-- `hanzei/jot:latest` - Latest stable release (master branch)
-- `hanzei/jot:pr-<number>` - Pull request builds
-- `hanzei/jot:<branch>-<sha>` - Specific commit builds
+- `hanzei/jot:latest` / `hanzei/jot:stable` - Most recent tagged release
+- `hanzei/jot:<major>.<minor>.<patch>` - A specific release, also published as
+  `<major>.<minor>` and `<major>`
+- `hanzei/jot:unstable` - Latest master build (unreleased)
+- `ghcr.io/hanzei/jot:pr-<number>` - Pull request builds (published to GHCR, not
+  Docker Hub)
+- `hanzei/jot:sha-<short>` - A specific master commit
+
+Only the most recent release receives security fixes, and they ship forward
+rather than being backported — see [SECURITY.md](SECURITY.md#supported-versions).
 
 ### Custom Configuration
 
@@ -568,6 +625,20 @@ task run-webapp
 sqlite3 jot.db "SELECT * FROM users;"
 ```
 
+## Security
+
+Found a vulnerability? Please report it privately through
+[GitHub's private vulnerability reporting](https://github.com/hanzei/jot/security/advisories/new)
+rather than opening a public issue.
+
+[SECURITY.md](SECURITY.md) covers what to expect, which versions are supported,
+and Jot's threat model — including what is deliberately out of scope. Worth a
+look before reporting: Jot treats logged-in users as trustworthy collaborators,
+so the *access-control* boundary is authentication and authorization rather than
+hardening against a malicious insider. That is one category among several — see
+[the in-scope list](SECURITY.md#in-scope), which also covers injection, remote
+code execution, SSRF, and blob-storage escapes.
+
 ## Contributing
 
 1. Fork the repository.
@@ -589,10 +660,8 @@ sqlite3 jot.db "SELECT * FROM users;"
 
 ### PR checklist
 
-- `task test`
-- `task lint`
-- `task test-e2e`
-- `task check-translations` when i18n keys change
+- `task check` — lint, all tests, and the docs/migration/translation gates
+- `task test-e2e` — not part of `task check`, since it needs a browser install
 
 ### CI/CD Pipeline
 
@@ -601,6 +670,39 @@ Jot uses GitHub Actions for automated testing and Docker image publishing:
 - **Automated testing**: All PRs trigger test and lint jobs
 - **Docker publishing**: Master branch builds are published to `hanzei/jot` on Docker Hub
 - **Multi-platform**: Images support both AMD64 and ARM64 architectures
+
+### Releasing
+
+Releases are cut by pushing a tag. Do **not** create them from the GitHub
+Releases page:
+
+```bash
+git checkout master && git pull
+git tag v0.8.8
+git push origin v0.8.8
+```
+
+The `Release` workflow takes it from there. It first checks the tag has no
+published release yet (see below), then runs two halves that only meet at that
+precondition: the Android APK is built first, and once it's ready GoReleaser
+builds the `jot` and `jotctl` archives for `linux/amd64` and `linux/arm64`,
+creates the GitHub release as a draft, uploads the archives plus the APK and
+`checksums.txt`, fills in the release notes using GitHub's own generator, and
+publishes it; meanwhile the Docker jobs build and push `hanzei/jot` for both
+architectures from source, independently of the APK/GoReleaser half. Because
+the Docker jobs don't wait on GoReleaser, a GoReleaser failure no longer stops
+the images from being pushed — re-running the workflow finishes the release,
+which is still a draft and so still accepts uploads. The APK does have to
+wait: it's a release asset, and immutable releases only accept uploads before
+the release is published.
+
+Immutable releases are enabled on this repository, which is why the order
+matters: once a release is published its assets are frozen, and its tag can
+never be deleted, moved, or reused. Creating the release from the UI publishes
+it before the workflow starts, leaving the archives nowhere to go — the workflow
+fails fast if it finds a published release for the tag. A release that went out
+wrong cannot be re-cut under the same version; ship the next patch version
+instead.
 
 ## License
 

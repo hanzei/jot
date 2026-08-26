@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo, useContext } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, useContext } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,8 @@ import {
   ScrollView,
 } from 'react-native';
 import { ArrowLeft, Plus, Search, X } from 'lucide-react-native';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import type { RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -81,8 +82,10 @@ export default function ShareScreen() {
 
   // Stable mutation refs to avoid recreating callbacks on every render
   const shareMutateRef = useRef(shareMutation.mutateAsync);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   shareMutateRef.current = shareMutation.mutateAsync;
   const unshareMutateRef = useRef(unshareMutation.mutateAsync);
+  // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   unshareMutateRef.current = unshareMutation.mutateAsync;
 
   // Debounce search query
@@ -100,6 +103,7 @@ export default function ShareScreen() {
   // offline or the server is known-unreachable, mirroring the writes' gate).
   useEffect(() => {
     if (!debouncedQuery) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
       setIsSearching(false);
       setSearchResults([]);
       setSearchError(false);

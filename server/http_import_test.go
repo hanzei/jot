@@ -53,6 +53,7 @@ func buildZip(t *testing.T, files map[string][]byte) []byte {
 }
 
 func TestImportSingleJSONFile(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "importuser1", "password123", false)
 
@@ -64,6 +65,7 @@ func TestImportSingleJSONFile(t *testing.T) {
 }
 
 func TestImportZIPWithMultipleFiles(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "importuser2", "password123", false)
 
@@ -80,6 +82,7 @@ func TestImportZIPWithMultipleFiles(t *testing.T) {
 }
 
 func TestImportTrashedNoteSkipped(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "importuser3", "password123", false)
 
@@ -97,6 +100,7 @@ func TestImportTrashedNoteSkipped(t *testing.T) {
 }
 
 func TestImportMissingFileFieldReturns400(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "importuser4", "password123", false)
 
@@ -116,6 +120,7 @@ func TestImportMissingFileFieldReturns400(t *testing.T) {
 }
 
 func TestImportMissingImportTypeReturns400(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "importuser4b", "password123", false)
 
@@ -140,6 +145,7 @@ func TestImportMissingImportTypeReturns400(t *testing.T) {
 }
 
 func TestImportInvalidImportTypeReturns400(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "importuser4c", "password123", false)
 
@@ -149,6 +155,7 @@ func TestImportInvalidImportTypeReturns400(t *testing.T) {
 }
 
 func TestImportInvalidJSONReturns400(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "importuser5", "password123", false)
 
@@ -157,6 +164,7 @@ func TestImportInvalidJSONReturns400(t *testing.T) {
 }
 
 func TestImportCorruptZIPReturns400(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "importuser6", "password123", false)
 
@@ -166,6 +174,7 @@ func TestImportCorruptZIPReturns400(t *testing.T) {
 }
 
 func TestImportUnauthenticatedReturns401(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 
 	noteData := marshalKeepNote(t, keepNoteJSON{Title: "Note", TextContent: "content"})
@@ -190,6 +199,7 @@ func TestImportUnauthenticatedReturns401(t *testing.T) {
 }
 
 func TestImportNotesAppearInNotesList(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "importuser7", "password123", false)
 
@@ -211,6 +221,7 @@ func TestImportNotesAppearInNotesList(t *testing.T) {
 }
 
 func TestImportPinnedAndArchivedNote(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "importpinuser", "password123", false)
 
@@ -256,6 +267,7 @@ func TestImportPinnedAndArchivedNote(t *testing.T) {
 }
 
 func TestImportValidation(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "importvaluser", "password123", false)
 
@@ -400,6 +412,7 @@ func filterMemosByState(memos []map[string]any, state string) []map[string]any {
 }
 
 func TestImportUsememosHappyPath(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "usememosuser1", "password123", false)
 
@@ -418,6 +431,7 @@ func TestImportUsememosHappyPath(t *testing.T) {
 }
 
 func TestImportUsememosDeletedSkipped(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "usememosuser2", "password123", false)
 
@@ -438,6 +452,7 @@ func TestImportUsememosDeletedSkipped(t *testing.T) {
 }
 
 func TestImportUsememosArchivedImportedAsArchived(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "usememosuser3", "password123", false)
 
@@ -459,6 +474,7 @@ func TestImportUsememosArchivedImportedAsArchived(t *testing.T) {
 }
 
 func TestImportUsememosPinnedImportedAsPinned(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "usememosuser4", "password123", false)
 
@@ -480,6 +496,7 @@ func TestImportUsememosPinnedImportedAsPinned(t *testing.T) {
 }
 
 func TestImportUsememosTagsExtractedAndStripped(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "usememosuser5", "password123", false)
 
@@ -508,6 +525,7 @@ func TestImportUsememosTagsExtractedAndStripped(t *testing.T) {
 }
 
 func TestImportUsememosTagsInCodeFenceNotExtracted(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "usememosuser6", "password123", false)
 
@@ -537,6 +555,7 @@ func TestImportUsememosTagsInCodeFenceNotExtracted(t *testing.T) {
 }
 
 func TestImportUsememosChecklistImportedAsListNote(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "usememoschecklist1", "password123", false)
 
@@ -578,6 +597,7 @@ func TestImportUsememosChecklistImportedAsListNote(t *testing.T) {
 }
 
 func TestImportUsememosTitledChecklistImportedAsListNote(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "usememoschecklist4", "password123", false)
 
@@ -611,6 +631,7 @@ func TestImportUsememosTitledChecklistImportedAsListNote(t *testing.T) {
 }
 
 func TestImportUsememosHeadingOnlyStaysTextNote(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "usememoschecklist5", "password123", false)
 
@@ -636,6 +657,7 @@ func TestImportUsememosHeadingOnlyStaysTextNote(t *testing.T) {
 }
 
 func TestImportUsememosMixedContentStaysTextNote(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "usememoschecklist2", "password123", false)
 
@@ -660,6 +682,7 @@ func TestImportUsememosMixedContentStaysTextNote(t *testing.T) {
 }
 
 func TestImportUsememosChecklistWithTags(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "usememoschecklist3", "password123", false)
 
@@ -697,6 +720,7 @@ func TestImportUsememosChecklistWithTags(t *testing.T) {
 }
 
 func TestImportUsememosPagination(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "usememosuser7", "password123", false)
 
@@ -718,6 +742,7 @@ func TestImportUsememosPagination(t *testing.T) {
 }
 
 func TestImportUsememosInvalidURLReturns400(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "usememosuser8", "password123", false)
 
@@ -726,6 +751,7 @@ func TestImportUsememosInvalidURLReturns400(t *testing.T) {
 }
 
 func TestImportUsememosMissingURLReturns400(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "usememosuser9", "password123", false)
 
@@ -746,6 +772,7 @@ func TestImportUsememosMissingURLReturns400(t *testing.T) {
 }
 
 func TestImportUsememosUnauthenticatedReturns401(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 
 	memos := []map[string]any{{"name": "memos/1", "state": "NORMAL", "content": "hello"}}
@@ -770,6 +797,7 @@ func TestImportUsememosUnauthenticatedReturns401(t *testing.T) {
 }
 
 func TestImportUsememosOlderAPIFormat(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "usememosuser10", "password123", false)
 
@@ -829,6 +857,7 @@ func TestImportUsememosOlderAPIFormat(t *testing.T) {
 // importing a "deleted" record. This test uses a mock that does NOT filter by
 // state so a DELETED memo reaches the importer.
 func TestImportUsememosDeletedMemoFromServerSkipped(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "usememosdeleted", "password123", false)
 
@@ -867,6 +896,7 @@ func TestImportUsememosDeletedMemoFromServerSkipped(t *testing.T) {
 // tags (e.g. a Memos memo that contained only attachments/resources) are skipped
 // rather than imported as blank notes.
 func TestImportUsememosEmptyMemoSkipped(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "usememosempty", "password123", false)
 
@@ -892,6 +922,7 @@ func TestImportUsememosEmptyMemoSkipped(t *testing.T) {
 // the Memos API in the `tags` field are imported as labels alongside hashtags
 // extracted from content, deduplicated case-insensitively.
 func TestImportUsememosAPITagsMergedWithExtracted(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "usememosapitags", "password123", false)
 
@@ -927,6 +958,7 @@ func TestImportUsememosAPITagsMergedWithExtracted(t *testing.T) {
 // issues separate paginated requests for NORMAL and ARCHIVED states, matching
 // the Memos v1 API which only returns NORMAL memos by default.
 func TestImportUsememosArchivedFetchedSeparately(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "usememostwopass", "password123", false)
 

@@ -14,7 +14,7 @@ import { useTranslation } from 'react-i18next';
 import { VALIDATION, type Note, type User } from '@jot/shared';
 import { notes, images as imagesApi } from '@/utils/api';
 import LetterAvatar from '@/components/LetterAvatar';
-import LinkText from '@/components/LinkText';
+import InlineMarkdown from '@/components/InlineMarkdown';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
 import { buildShareAvatars } from '@/utils/shareAvatars';
@@ -24,15 +24,15 @@ interface NoteCardProps {
   note: Note;
   onEdit: (note: Note) => void;
   onDelete: (noteId: string) => void;
-  onDuplicate?: (noteId: string) => Promise<void> | void;
-  onShare?: (note: Note) => void;
-  onRestore?: (noteId: string) => void;
-  onPermanentlyDelete?: (noteId: string) => void;
-  currentUserId?: string;
-  usersById?: Map<string, User>;
+  onDuplicate?: ((noteId: string) => Promise<void> | void) | undefined;
+  onShare?: ((note: Note) => void) | undefined;
+  onRestore?: ((noteId: string) => void) | undefined;
+  onPermanentlyDelete?: ((noteId: string) => void) | undefined;
+  currentUserId?: string | undefined;
+  usersById?: Map<string, User> | undefined;
   inBin?: boolean;
-  onRefresh?: () => void;
-  onLabelClick?: (labelId: string) => void;
+  onRefresh?: (() => void) | undefined;
+  onLabelClick?: ((labelId: string) => void) | undefined;
 }
 
 function MenuKbd({ children }: { children: React.ReactNode }) {
@@ -160,13 +160,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
   };
 
   const handleDelete = () => {
-    setConfirmState({
-      open: true,
-      title: t('note.deleteConfirmTitle'),
-      message: t('note.deleteConfirm'),
-      confirmLabel: t('note.delete'),
-      onConfirm: () => onDelete(note.id),
-    });
+    onDelete(note.id);
   };
 
   const handleRestore = () => {
@@ -203,12 +197,11 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
       data-note-card="true"
       tabIndex={0}
       aria-label={(note.note_type === 'list' ? note.title : note.content?.slice(0, 50)) || t('share.untitledNote')}
-      className={`note-card ${getColorClass(note.color)} p-4 relative group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 ${isUpdating ? 'opacity-50' : ''} ${!inBin ? 'cursor-pointer' : ''
-        }`}
-      onClick={() => !inBin && onEdit(note)}
+      className={`note-card ${getColorClass(note.color)} p-4 relative group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 ${isUpdating ? 'opacity-50' : ''}`}
+      onClick={() => onEdit(note)}
       onKeyDown={(e) => {
         if (e.target !== e.currentTarget) return;
-        if (!inBin && (e.key === 'Enter' || e.key === ' ')) {
+        if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           onEdit(note);
         }
@@ -360,7 +353,10 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
         {note.note_type === 'text' ? (
           <div
             className="text-sm text-gray-700 dark:text-gray-200 line-clamp-6 markdown-content"
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(note.content) }}
+            // links={false} in effect: the card is one control that opens the
+            // note, so an anchor here would follow the link *and* open the note.
+            // docs/specs/markdown-rendering.md §1.1.
+            dangerouslySetInnerHTML={{ __html: renderMarkdown(note.content, { links: false }) }}
           />
         ) : (
           <div className="space-y-1">
@@ -376,15 +372,24 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
                     const normalizedIndentLevel = item.parent_id ? 1 : 0;
                     return (
                       <div key={item.id} className="flex items-start min-w-0 text-sm" style={{ marginLeft: normalizedIndentLevel * VALIDATION.INDENT_PX_PER_LEVEL }}>
+                        {/* Decorative: this preview only ever renders
+                            uncompleted items, so the box conveys nothing a
+                            screen reader needs, and leaving it in the tree
+                            adds an unlabelled control plus a tab stop inside
+                            a card that is itself a single tab stop. */}
                         <input
                           type="checkbox"
                           checked={item.completed}
                           readOnly
+                          tabIndex={-1}
+                          aria-hidden="true"
                           className="h-4 w-4 text-blue-600 rounded mr-2 mt-0.5 flex-shrink-0"
                         />
-                        <span className="min-w-0 whitespace-pre-wrap break-words text-gray-700 dark:text-gray-200">
-                          <LinkText text={item.text} />
-                        </span>
+                        <InlineMarkdown
+                          text={item.text}
+                          links={false}
+                          className="min-w-0 whitespace-pre-wrap break-words text-gray-700 dark:text-gray-200"
+                        />
                       </div>
                     );
                   })}

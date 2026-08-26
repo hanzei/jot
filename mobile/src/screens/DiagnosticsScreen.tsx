@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Platform,
   ScrollView,
@@ -115,6 +115,7 @@ export default function DiagnosticsScreen() {
   }, [db, isConnected, serverUrl]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
     refresh();
   }, [refresh]);
 
@@ -377,7 +378,7 @@ function DiagRow({
 }: {
   label: string;
   value: string;
-  valueColor?: string;
+  valueColor?: string | undefined;
   mono?: boolean;
 }) {
   const { colors } = useTheme();

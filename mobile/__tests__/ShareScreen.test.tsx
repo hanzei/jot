@@ -8,7 +8,6 @@
  * persisted share records and so must work on the same offline paths.
  */
 
-import React from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import ShareScreen from '../src/screens/ShareScreen';
 import { searchUsers } from '../src/api/users';
@@ -129,8 +128,8 @@ describe('ShareScreen user search connectivity', () => {
   it('falls back to the local filter immediately when the server is known-unreachable, without an error', async () => {
     mockIsServerReachable.mockReturnValue(false);
 
-    renderShareScreen();
-    fireEvent.changeText(screen.getByTestId('share-search-input'), 'local');
+    await renderShareScreen();
+    await fireEvent.changeText(screen.getByTestId('share-search-input'), 'local');
 
     await waitFor(() => {
       expect(screen.getByText('@localmatch')).toBeTruthy();
@@ -144,8 +143,8 @@ describe('ShareScreen user search connectivity', () => {
       { ...localUser, id: 'user-remote', username: 'remotematch' },
     ]);
 
-    renderShareScreen();
-    fireEvent.changeText(screen.getByTestId('share-search-input'), 'remote');
+    await renderShareScreen();
+    await fireEvent.changeText(screen.getByTestId('share-search-input'), 'remote');
 
     await waitFor(() => {
       expect(mockSearchUsers).toHaveBeenCalledWith('remote');
@@ -163,8 +162,8 @@ describe('ShareScreen user search connectivity', () => {
       return Promise.reject(new Error('network error'));
     });
 
-    renderShareScreen();
-    fireEvent.changeText(screen.getByTestId('share-search-input'), 'local');
+    await renderShareScreen();
+    await fireEvent.changeText(screen.getByTestId('share-search-input'), 'local');
 
     await waitFor(() => {
       expect(screen.getByText('@localmatch')).toBeTruthy();
@@ -175,8 +174,8 @@ describe('ShareScreen user search connectivity', () => {
   it('still surfaces a genuine error when the request fails but the server remains reachable', async () => {
     mockSearchUsers.mockRejectedValue(new Error('boom'));
 
-    renderShareScreen();
-    fireEvent.changeText(screen.getByTestId('share-search-input'), 'remote');
+    await renderShareScreen();
+    await fireEvent.changeText(screen.getByTestId('share-search-input'), 'remote');
 
     await waitFor(() => {
       expect(screen.getByText('Search failed. Please try again.')).toBeTruthy();
@@ -186,8 +185,8 @@ describe('ShareScreen user search connectivity', () => {
   it('uses the local filter when the device is offline, regardless of server reachability', async () => {
     mockUseNetworkStatus.mockReturnValue({ isConnected: false });
 
-    renderShareScreen();
-    fireEvent.changeText(screen.getByTestId('share-search-input'), 'local');
+    await renderShareScreen();
+    await fireEvent.changeText(screen.getByTestId('share-search-input'), 'local');
 
     await waitFor(() => {
       expect(screen.getByText('@localmatch')).toBeTruthy();
@@ -223,7 +222,7 @@ describe('ShareScreen empty-query suggestions', () => {
       { shared_with: [shareRecord(bob.id, '2026-05-01T00:00:00Z')] },
     ]);
 
-    renderShareScreen();
+    await renderShareScreen();
 
     await waitFor(() => expect(screen.getByTestId('share-recent-suggestions')).toBeTruthy());
 
@@ -240,7 +239,7 @@ describe('ShareScreen empty-query suggestions', () => {
   });
 
   it('never offers the signed-in user as a share target', async () => {
-    renderShareScreen();
+    await renderShareScreen();
 
     await waitFor(() => expect(screen.getByTestId('share-all-users')).toBeTruthy());
 
@@ -257,7 +256,7 @@ describe('ShareScreen empty-query suggestions', () => {
       { shared_with: [shareRecord(bob.id, '2026-05-01T00:00:00Z')] },
     ]);
 
-    renderShareScreen();
+    await renderShareScreen();
 
     await waitFor(() => expect(screen.getByTestId('share-all-users')).toBeTruthy());
 
@@ -270,7 +269,7 @@ describe('ShareScreen empty-query suggestions', () => {
       { shared_with: [shareRecord(bob.id, '2026-05-01T00:00:00Z', 'another-owner')] },
     ]);
 
-    renderShareScreen();
+    await renderShareScreen();
 
     await waitFor(() => expect(screen.getByTestId('share-all-users')).toBeTruthy());
 
@@ -284,7 +283,7 @@ describe('ShareScreen empty-query suggestions', () => {
       isError: false,
     } as never);
 
-    renderShareScreen();
+    await renderShareScreen();
 
     await waitFor(() => {
       expect(screen.getByText('Everyone already has access to this note.')).toBeTruthy();
@@ -297,7 +296,7 @@ describe('ShareScreen empty-query suggestions', () => {
       refreshUsers: jest.fn(),
     } as never);
 
-    renderShareScreen();
+    await renderShareScreen();
 
     await waitFor(() => {
       expect(screen.getByText('There are no other users to share with.')).toBeTruthy();
@@ -311,10 +310,10 @@ describe('ShareScreen empty-query suggestions', () => {
     // Dave sorts first alphabetically ("Dave Adams"), Carol wins on history.
     mockSearchUsers.mockResolvedValue([dave, carol]);
 
-    renderShareScreen();
+    await renderShareScreen();
     await waitFor(() => expect(screen.getByTestId('share-recent-suggestions')).toBeTruthy());
 
-    fireEvent.changeText(screen.getByTestId('share-search-input'), 'a');
+    await fireEvent.changeText(screen.getByTestId('share-search-input'), 'a');
 
     await waitFor(() => expect(screen.getByTestId('share-search-results')).toBeTruthy());
 

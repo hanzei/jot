@@ -1,4 +1,3 @@
-import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { useOfflineContext } from '../src/store/OfflineContext';
 import SyncFailuresBanner from '../src/components/SyncFailuresBanner';
@@ -34,33 +33,33 @@ describe('SyncFailuresBanner', () => {
     mockUseOfflineContext.mockReturnValue(baseContext);
   });
 
-  it('renders the failure count and opens the review screen on tap', () => {
+  it('renders the failure count and opens the review screen on tap', async () => {
     mockUseOfflineContext.mockReturnValue({ ...baseContext, syncFailureCount: 2 });
-    const { getByTestId, getByText } = render(<SyncFailuresBanner visible applyTopInset />);
+    const { getByTestId, getByText } = await render(<SyncFailuresBanner visible applyTopInset />);
 
     expect(getByText(/2 changes couldn't be saved/i)).toBeTruthy();
-    fireEvent.press(getByTestId('sync-failures-banner-press'));
+    await fireEvent.press(getByTestId('sync-failures-banner-press'));
     expect(mockNavigate).toHaveBeenCalledWith('SyncFailures');
   });
 
-  it('uses the singular form for a single failure', () => {
+  it('uses the singular form for a single failure', async () => {
     mockUseOfflineContext.mockReturnValue({ ...baseContext, syncFailureCount: 1 });
-    const { getByText } = render(<SyncFailuresBanner visible applyTopInset />);
+    const { getByText } = await render(<SyncFailuresBanner visible applyTopInset />);
     expect(getByText(/1 change couldn't be saved/i)).toBeTruthy();
   });
 
-  it('dismisses without navigating when the close button is pressed', () => {
+  it('dismisses without navigating when the close button is pressed', async () => {
     mockUseOfflineContext.mockReturnValue({ ...baseContext, syncFailureCount: 3 });
-    const { getByTestId } = render(<SyncFailuresBanner visible applyTopInset />);
+    const { getByTestId } = await render(<SyncFailuresBanner visible applyTopInset />);
 
-    fireEvent.press(getByTestId('sync-failures-banner-dismiss'));
+    await fireEvent.press(getByTestId('sync-failures-banner-dismiss'));
     expect(mockDismiss).toHaveBeenCalledTimes(1);
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
-  it('does not render when not visible', () => {
+  it('does not render when not visible', async () => {
     mockUseOfflineContext.mockReturnValue({ ...baseContext, syncFailureCount: 2 });
-    const { queryByTestId } = render(<SyncFailuresBanner visible={false} applyTopInset={false} />);
+    const { queryByTestId } = await render(<SyncFailuresBanner visible={false} applyTopInset={false} />);
     expect(queryByTestId('sync-failures-banner-press')).toBeNull();
   });
 });

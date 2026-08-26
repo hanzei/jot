@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { Animated, type ViewProps } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Animated, useAnimatedValue, type ViewProps } from 'react-native';
 import { isReduceMotionEnabledSync } from '../utils/layoutAnimation';
 
 interface FadeInViewProps extends ViewProps {
@@ -31,11 +31,9 @@ export default function FadeInView({
 }: FadeInViewProps) {
   // Decide once at mount so a mid-animation Reduce Motion toggle can't strand the
   // view at a partial opacity.
-  const reduceMotion = useRef(isReduceMotionEnabledSync()).current;
-  const opacity = useRef(new Animated.Value(reduceMotion ? 1 : 0)).current;
-  const scale = useRef(
-    new Animated.Value(reduceMotion || scaleFrom === undefined ? 1 : scaleFrom),
-  ).current;
+  const [reduceMotion] = useState(isReduceMotionEnabledSync);
+  const opacity = useAnimatedValue(reduceMotion ? 1 : 0);
+  const scale = useAnimatedValue(reduceMotion || scaleFrom === undefined ? 1 : scaleFrom);
 
   useEffect(() => {
     if (reduceMotion) return;

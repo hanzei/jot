@@ -12,151 +12,148 @@ import {
 } from '../src/db/noteQueries';
 import { getPendingLabelIds, saveServerLabels } from '../src/db/syncQueue';
 import type { Label } from '@jot/shared';
+import { makeLabel, seedQueueEntry } from './helpers/fixtures';
+import type { TestDatabase } from './helpers/testDb';
 
 jest.mock('../src/api/client', () => ({
   __esModule: true,
   default: { get: jest.fn(), post: jest.fn(), patch: jest.fn(), delete: jest.fn() },
 }));
 
-type MockDb = {
-  execAsync: jest.Mock;
-  runAsync: jest.Mock;
-  getFirstAsync: jest.Mock;
-  getAllAsync: jest.Mock;
-  withTransactionAsync: jest.Mock;
-};
+let db: TestDatabase;
 
-function makeDb(overrides: Partial<MockDb> = {}): MockDb {
-  return {
-    execAsync: jest.fn().mockResolvedValue(undefined),
-    runAsync: jest.fn().mockResolvedValue({}),
-    getFirstAsync: jest.fn().mockResolvedValue(null),
-    getAllAsync: jest.fn().mockResolvedValue([]),
-    // Run the transaction body immediately (real SQLite serializes; the mock
-    // just invokes the callback so the enclosed writes are observable).
-    withTransactionAsync: jest.fn(async (task: () => Promise<void>) => { await task(); }),
-    ...overrides,
-  };
-}
-
-const label = (id: string, name: string): Label => ({
-  id, user_id: 'u1', name, created_at: 'c', updated_at: 'u',
+beforeEach(() => {
+  db = globalThis.testDb;
 });
 
-const runSqls = (db: MockDb): string[] =>
-  (db.runAsync.mock.calls as unknown[][]).map((c) => c[0] as string);
+const label = (id: string, name: string): Label => makeLabel({ id, name, created_at: 'c', updated_at: 'u' });
+
+const storedLabelIds = async (): Promise<string[]> => {
+  const rows = await db.getAllAsync<{ id: string }>('SELECT id FROM labels ORDER BY id');
+  return rows.map((r) => r.id);
+};
 
 describe('getStoredLabels', () => {
   it('reads labels from the store sorted by name', async () => {
-    const db = makeDb({
-      getAllAsync: jest.fn().mockResolvedValue([
-        { id: 'l2', user_id: 'u1', name: 'Work', created_at: 'c', updated_at: 'u' },
-        { id: 'l1', user_id: 'u1', name: 'Alpha', created_at: 'c', updated_at: 'u' },
-      ]),
-    });
+    await upsertLabel(db, label('l2', 'Work'));
+    await upsertLabel(db, label('l1', 'Alpha'));
 
-    const labels = await getStoredLabels(db as never);
+    const labels = await getStoredLabels(db);
 
-    expect(db.getAllAsync).toHaveBeenCalledWith('SELECT * FROM labels');
     expect(labels.map((l) => l.name)).toEqual(['Alpha', 'Work']);
+  });
+
+  it('returns an empty list when the store is empty', async () => {
+    expect(await getStoredLabels(db)).toEqual([]);
   });
 });
 
 describe('upsertLabel', () => {
-  it('inserts or updates a single label by id', async () => {
-    const db = makeDb();
+  it('inserts a label that is not yet stored', async () => {
+    await upsertLabel(db, label('l1', 'Work'));
 
-    await upsertLabel(db as never, label('l1', 'Work'));
+    expect(await getStoredLabels(db)).toEqual([label('l1', 'Work')]);
+  });
 
-    expect(db.runAsync).toHaveBeenCalledTimes(1);
-    const [sql, args] = db.runAsync.mock.calls[0] as [string, unknown[]];
-    expect(sql).toContain('INSERT INTO labels');
-    expect(sql).toContain('ON CONFLICT(id) DO UPDATE');
-    expect(args).toEqual(['l1', 'u1', 'Work', 'c', 'u']);
+  it('updates in place on a repeated id rather than failing the primary key', async () => {
+    await upsertLabel(db, label('l1', 'Work'));
+
+    await upsertLabel(db, { ...label('l1', 'Renamed'), updated_at: 'u2' });
+
+    // ON CONFLICT(id) DO UPDATE — inert against a mock, enforced here.
+    expect(await getStoredLabels(db)).toEqual([{ ...label('l1', 'Renamed'), updated_at: 'u2' }]);
   });
 });
 
 describe('renameStoredLabel', () => {
   it('updates the label name', async () => {
-    const db = makeDb();
+    await upsertLabel(db, label('l1', 'Work'));
 
-    await renameStoredLabel(db as never, 'l1', 'Renamed');
+    await renameStoredLabel(db, 'l1', 'Renamed');
 
-    const [sql, args] = db.runAsync.mock.calls[0] as [string, unknown[]];
-    expect(sql).toBe('UPDATE labels SET name = ?, updated_at = ? WHERE id = ?');
-    expect(args[0]).toBe('Renamed');
-    expect(args[2]).toBe('l1');
+    const stored = (await getStoredLabels(db))[0]!;
+    expect(stored.name).toBe('Renamed');
+    expect(stored.updated_at).not.toBe('u');
+  });
+
+  it('leaves other labels alone', async () => {
+    await upsertLabel(db, label('l1', 'Work'));
+    await upsertLabel(db, label('l2', 'Home'));
+
+    await renameStoredLabel(db, 'l1', 'Renamed');
+
+    expect((await getStoredLabels(db)).map((l) => l.name)).toEqual(['Home', 'Renamed']);
   });
 });
 
 describe('deleteStoredLabel', () => {
   it('deletes the label by id', async () => {
-    const db = makeDb();
+    await upsertLabel(db, label('l1', 'Work'));
+    await upsertLabel(db, label('l2', 'Home'));
 
-    await deleteStoredLabel(db as never, 'l1');
+    await deleteStoredLabel(db, 'l1');
 
-    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM labels WHERE id = ?', ['l1']);
+    expect(await storedLabelIds()).toEqual(['l2']);
   });
 });
 
 describe('saveLabels', () => {
   it('upserts server labels and prunes local labels the server no longer has', async () => {
-    const db = makeDb({
-      getAllAsync: jest.fn().mockResolvedValue([{ id: 'l1' }, { id: 'stale' }]),
-    });
+    await upsertLabel(db, label('l1', 'Work'));
+    await upsertLabel(db, label('stale', 'Stale'));
 
-    await saveLabels(db as never, [label('l1', 'Work'), label('l2', 'Home')]);
+    await saveLabels(db, [label('l1', 'Work'), label('l2', 'Home')]);
 
-    // 'stale' is pruned; 'l1' and 'l2' are upserted.
-    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM labels WHERE id = ?', ['stale']);
-    expect(runSqls(db).filter((s) => s.startsWith('INSERT INTO labels'))).toHaveLength(2);
-    // A server-present label is never pruned.
-    expect(db.runAsync).not.toHaveBeenCalledWith('DELETE FROM labels WHERE id = ?', ['l1']);
+    expect(await storedLabelIds()).toEqual(['l1', 'l2']);
   });
 
   it('does not prune a label protected by skipLabelIds (unsynced offline create)', async () => {
-    const db = makeDb({
-      getAllAsync: jest.fn().mockResolvedValue([{ id: 'pending-local' }]),
-    });
+    await upsertLabel(db, label('pending-local', 'Offline'));
 
-    await saveLabels(db as never, [], { skipLabelIds: new Set(['pending-local']) });
+    await saveLabels(db, [], { skipLabelIds: new Set(['pending-local']) });
 
-    expect(db.runAsync).not.toHaveBeenCalledWith(
-      'DELETE FROM labels WHERE id = ?', ['pending-local'],
-    );
+    expect(await storedLabelIds()).toEqual(['pending-local']);
   });
 });
 
 describe('getPendingLabelIds', () => {
   it('collects the ids of queued createLabel ops', async () => {
-    const db = makeDb({
-      getAllAsync: jest.fn().mockResolvedValue([
-        { operation: 'createLabel', body: JSON.stringify({ id: 'a', name: 'A' }) },
-        { operation: 'createLabel', body: JSON.stringify({ id: 'b', name: 'B' }) },
-        { operation: 'createLabel', body: 'malformed' },
-      ]),
+    await seedQueueEntry(db, {
+      operation: 'createLabel', endpoint: '/labels', method: 'POST', body: { id: 'a', name: 'A' },
     });
+    await seedQueueEntry(db, {
+      operation: 'createLabel', endpoint: '/labels', method: 'POST', body: { id: 'b', name: 'B' },
+    });
+    // A malformed body is tolerated and contributes nothing.
+    await db.runAsync(
+      `INSERT INTO sync_queue (operation, endpoint, method, body, created_at)
+       VALUES ('createLabel', '/labels', 'POST', 'malformed', '2026-01-01T00:00:00Z')`,
+    );
+    // A non-label op is ignored.
+    await seedQueueEntry(db, { operation: 'update', endpoint: '/notes/n1', method: 'PATCH', body: {} });
 
-    const ids = await getPendingLabelIds(db as never);
+    expect(await getPendingLabelIds(db)).toEqual(new Set(['a', 'b']));
+  });
 
-    expect(ids).toEqual(new Set(['a', 'b']));
+  it('is empty when nothing is queued', async () => {
+    expect(await getPendingLabelIds(db)).toEqual(new Set());
   });
 });
 
 describe('saveServerLabels', () => {
   it('reconciles the store while protecting unsynced offline-created labels', async () => {
-    // First getAllAsync: the queued createLabel scan (getPendingLabelIds).
-    // Second getAllAsync: the existing-rows scan inside saveLabels.
-    const db = makeDb({
-      getAllAsync: jest.fn()
-        .mockResolvedValueOnce([{ operation: 'createLabel', body: JSON.stringify({ id: 'offline-1', name: 'Offline' }) }])
-        .mockResolvedValueOnce([{ id: 'offline-1' }, { id: 'gone' }]),
+    await upsertLabel(db, label('offline-1', 'Offline'));
+    await upsertLabel(db, label('gone', 'Gone'));
+    await seedQueueEntry(db, {
+      operation: 'createLabel',
+      endpoint: '/labels',
+      method: 'POST',
+      body: { id: 'offline-1', name: 'Offline' },
     });
 
-    await saveServerLabels(db as never, [label('srv-1', 'Server')]);
+    await saveServerLabels(db, [label('srv-1', 'Server')]);
 
     // 'gone' pruned; 'offline-1' protected (its create hasn't drained yet).
-    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM labels WHERE id = ?', ['gone']);
-    expect(db.runAsync).not.toHaveBeenCalledWith('DELETE FROM labels WHERE id = ?', ['offline-1']);
+    expect(await storedLabelIds()).toEqual(['offline-1', 'srv-1']);
   });
 });

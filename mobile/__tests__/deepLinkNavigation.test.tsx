@@ -25,13 +25,13 @@ function HomeProbe() {
 
 type Params = {
   Home: undefined;
-  NoteEditor: { noteId: string | null };
+  NoteEditor: { noteId: string | null; openKey?: string };
 };
 
-function renderNavigator(withGetId: boolean) {
+async function renderNavigator(withGetId: boolean) {
   const Stack = createNativeStackNavigator<Params>();
   const navigationRef = createNavigationContainerRef<Params>();
-  const utils = render(
+  const utils = await render(
     <NavigationContainer ref={navigationRef}>
       <Stack.Navigator>
         <Stack.Screen name="Home" component={HomeProbe} />
@@ -58,11 +58,15 @@ describe('getNoteScreenId', () => {
   it('returns undefined when params are missing', () => {
     expect(getNoteScreenId({})).toBeUndefined();
   });
+
+  it('falls back to openKey for a null note id', () => {
+    expect(getNoteScreenId({ params: { noteId: null, openKey: 'k1' } })).toBe('k1');
+  });
 });
 
 describe('deep link navigation between notes', () => {
   it('opens the second note when a deep link arrives while another note is open', async () => {
-    const { getByTestId, navigationRef } = renderNavigator(true);
+    const { getByTestId, navigationRef } = await renderNavigator(true);
 
     await act(async () => {
       navigationRef.navigate('NoteEditor', { noteId: 'note-a' });
@@ -77,7 +81,7 @@ describe('deep link navigation between notes', () => {
   });
 
   it('without getId the stale instance is reused (guards the fix is meaningful)', async () => {
-    const { getByTestId, navigationRef } = renderNavigator(false);
+    const { getByTestId, navigationRef } = await renderNavigator(false);
 
     await act(async () => {
       navigationRef.navigate('NoteEditor', { noteId: 'note-a' });
@@ -89,5 +93,43 @@ describe('deep link navigation between notes', () => {
     });
     // The existing instance is reused, so the cached note id stays on note-a.
     await waitFor(() => expect(getByTestId('current-note').props.children).toBe('note-a'));
+  });
+});
+
+// Reproduces the reported bug: open note A, background the app (its editor
+// stays the focused route — no full remount), then trigger a "new note"
+// action (app-icon quick action / share intent). Both arrive as
+// `navigate('NoteEditor', { noteId: null, ... })` from a global effect, fired
+// while note A's editor is still the current route.
+describe('opening a new note while another note is the focused screen', () => {
+  it('without openKey, the new-note navigation reuses the focused note editor (the bug)', async () => {
+    const { getByTestId, navigationRef } = await renderNavigator(true);
+
+    await act(async () => {
+      navigationRef.navigate('NoteEditor', { noteId: 'note-a' });
+    });
+    await waitFor(() => expect(getByTestId('current-note').props.children).toBe('note-a'));
+
+    // Simulates a quick action/share intent arriving with no openKey while
+    // note-a's editor is still focused: id resolves to undefined, so NAVIGATE
+    // falls back to reusing the current route instead of opening a new note.
+    await act(async () => {
+      navigationRef.navigate('NoteEditor', { noteId: null });
+    });
+    await waitFor(() => expect(getByTestId('current-note').props.children).toBe('note-a'));
+  });
+
+  it('with a fresh openKey, the new-note navigation opens a genuinely new note', async () => {
+    const { getByTestId, navigationRef } = await renderNavigator(true);
+
+    await act(async () => {
+      navigationRef.navigate('NoteEditor', { noteId: 'note-a' });
+    });
+    await waitFor(() => expect(getByTestId('current-note').props.children).toBe('note-a'));
+
+    await act(async () => {
+      navigationRef.navigate('NoteEditor', { noteId: null, openKey: 'quick-action-1' });
+    });
+    await waitFor(() => expect(getByTestId('current-note').props.children).toBe('none'));
   });
 });

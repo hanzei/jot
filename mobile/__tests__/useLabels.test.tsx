@@ -12,19 +12,15 @@ import {
 import { publishReconnectResync } from '../src/store/resyncEvents';
 import * as labelsApi from '../src/api/labels';
 import * as noteQueriesModule from '../src/db/noteQueries';
+import { makeTextNote } from './helpers/fixtures';
+import type { TestDatabase } from './helpers/testDb';
+import type { Label } from '@jot/shared';
 
 jest.mock('../src/api/labels');
 
 jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },
 }));
-
-jest.mock('expo-sqlite', () => {
-  // Stable reference across renders so the db-dependent server-sync callback in
-  // useBackgroundSyncQuery doesn't churn and re-fire its effects.
-  const db = {};
-  return { useSQLiteContext: jest.fn(() => db) };
-});
 
 jest.mock('../src/hooks/useNetworkStatus', () => ({
   useNetworkStatus: jest.fn().mockReturnValue({ isConnected: true }),
@@ -34,28 +30,42 @@ const mockUseNetworkStatus = (
   jest.requireMock('../src/hooks/useNetworkStatus') as { useNetworkStatus: jest.Mock }
 ).useNetworkStatus;
 
-jest.mock('../src/db/noteQueries', () => ({
-  saveNote: jest.fn().mockResolvedValue(undefined),
-  saveNotes: jest.fn().mockResolvedValue(undefined),
-  renameLabelInLocalNotes: jest.fn().mockResolvedValue(undefined),
-  deleteLabelFromLocalNotes: jest.fn().mockResolvedValue(undefined),
-  addLabelToLocalNote: jest.fn().mockResolvedValue(undefined),
-  removeLabelFromLocalNote: jest.fn().mockResolvedValue(undefined),
-  getStoredLabels: jest.fn().mockResolvedValue([]),
-  upsertLabel: jest.fn().mockResolvedValue(undefined),
-  renameStoredLabel: jest.fn().mockResolvedValue(undefined),
-  deleteStoredLabel: jest.fn().mockResolvedValue(undefined),
-  getLocalLabelCounts: jest.fn().mockResolvedValue({}),
-  getLocalNote: jest.fn().mockResolvedValue(null),
-  generateClientLabelId: jest.fn(() => 'client_label_id'),
-  isNotePendingCreate: jest.fn().mockResolvedValue(false),
-}));
+// The db layer runs for real against the test database (see helpers/testDb.ts);
+// each function stays a spy so the existing call assertions keep working while
+// the SQL underneath them actually executes. `useSQLiteContext()` comes from the
+// global mock and returns one stable database per test, which is what the
+// db-dependent server-sync callback in useBackgroundSyncQuery needs to avoid
+// churning. `generateClientLabelId` is the one true stub — the tests assert on
+// the minted id, so it has to be deterministic.
+jest.mock('../src/db/noteQueries', () => {
+  const actual = jest.requireActual('../src/db/noteQueries');
+  return {
+    ...actual,
+    saveNote: jest.fn(actual.saveNote),
+    saveNotes: jest.fn(actual.saveNotes),
+    renameLabelInLocalNotes: jest.fn(actual.renameLabelInLocalNotes),
+    deleteLabelFromLocalNotes: jest.fn(actual.deleteLabelFromLocalNotes),
+    addLabelToLocalNote: jest.fn(actual.addLabelToLocalNote),
+    removeLabelFromLocalNote: jest.fn(actual.removeLabelFromLocalNote),
+    getStoredLabels: jest.fn(actual.getStoredLabels),
+    upsertLabel: jest.fn(actual.upsertLabel),
+    renameStoredLabel: jest.fn(actual.renameStoredLabel),
+    deleteStoredLabel: jest.fn(actual.deleteStoredLabel),
+    getLocalLabelCounts: jest.fn(actual.getLocalLabelCounts),
+    getLocalNote: jest.fn(actual.getLocalNote),
+    generateClientLabelId: jest.fn(() => 'client_label_id'),
+    isNotePendingCreate: jest.fn(actual.isNotePendingCreate),
+  };
+});
 
-jest.mock('../src/db/syncQueue', () => ({
-  ...jest.requireActual('../src/db/syncQueue'),
-  enqueueOperation: jest.fn().mockResolvedValue(undefined),
-  saveServerLabels: jest.fn().mockResolvedValue(undefined),
-}));
+jest.mock('../src/db/syncQueue', () => {
+  const actual = jest.requireActual('../src/db/syncQueue');
+  return {
+    ...actual,
+    enqueueOperation: jest.fn(actual.enqueueOperation),
+    saveServerLabels: jest.fn(actual.saveServerLabels),
+  };
+});
 
 jest.mock('../src/store/AuthContext', () => ({
   useAuth: jest.fn().mockReturnValue({ user: { id: 'test-user-id', username: 'testuser' }, isAuthenticated: true }),
@@ -85,11 +95,25 @@ function makeNetworkError() {
   return Object.assign(new Error('Network Error'), { isAxiosError: true });
 }
 
-const sampleNote = {
-  id: 'n1', content: 'body', note_type: 'text',
-  color: '#ffffff', pinned: false, archived: false, position: 0,
-  checked_items_collapsed: false, is_shared: false, deleted_at: null,
-  user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
+const sampleNote = makeTextNote({ id: 'n1', content: 'body', created_at: '', updated_at: '' });
+
+let db: TestDatabase;
+
+/** A label already in the local store, as a prior sync would have left it. */
+const storedLabel = (id: string, name: string): Label => ({
+  id, user_id: 'u1', name, created_at: '', updated_at: '',
+});
+
+const storedLabelIds = async (): Promise<string[]> => {
+  const rows = await db.getAllAsync<{ id: string }>('SELECT id FROM labels ORDER BY id');
+  return rows.map((r) => r.id);
+};
+
+const queuedOperations = async (): Promise<string[]> => {
+  const rows = await db.getAllAsync<{ operation: string }>(
+    'SELECT operation FROM sync_queue ORDER BY id',
+  );
+  return rows.map((r) => r.operation);
 };
 
 function createWrapper() {
@@ -107,20 +131,56 @@ function createWrapper() {
 describe('useLabels write hooks', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    db = globalThis.testDb;
     mockUseNetworkStatus.mockReturnValue({ isConnected: true });
     mockClientModule.isServerSwitchInProgress.mockReturnValue(false);
-    mockNoteQueries.getStoredLabels.mockResolvedValue([]);
-    mockNoteQueries.getLocalNote.mockResolvedValue(null);
   });
 
   // ── useCreateLabel ─────────────────────────────────────────────────────────
+
+  // The other tests here fix connectivity before mounting, so they only cover
+  // the value the hook was born with. These cover it flipping while the hook
+  // stays mounted — the case the mutation hooks' write gate has to survive.
+  describe('connectivity changes while mounted', () => {
+    it('takes the offline path when connectivity drops after mount', async () => {
+      mockUseNetworkStatus.mockReturnValue({ isConnected: true });
+
+      const { result, rerender } = await renderHook(() => useCreateLabel(), { wrapper: createWrapper() });
+
+      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+      await rerender(undefined);
+
+      await result.current.mutateAsync({ name: 'Home' });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(mockLabelsApi.createLabel).not.toHaveBeenCalled();
+      expect(await queuedOperations()).toEqual(['createLabel']);
+    });
+
+    it('takes the online path when connectivity returns after mount', async () => {
+      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+      const serverLabel = { id: 'srv1', user_id: 'u1', name: 'Work', created_at: '', updated_at: '' };
+      mockLabelsApi.createLabel.mockResolvedValueOnce(serverLabel as never);
+
+      const { result, rerender } = await renderHook(() => useCreateLabel(), { wrapper: createWrapper() });
+
+      mockUseNetworkStatus.mockReturnValue({ isConnected: true });
+      await rerender(undefined);
+
+      await result.current.mutateAsync({ name: 'Work' });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(mockLabelsApi.createLabel).toHaveBeenCalledWith('Work');
+      expect(await queuedOperations()).toEqual([]);
+    });
+  });
 
   describe('useCreateLabel', () => {
     it('creates a label via the API when online', async () => {
       const serverLabel = { id: 'srv1', user_id: 'u1', name: 'Work', created_at: '', updated_at: '' };
       mockLabelsApi.createLabel.mockResolvedValueOnce(serverLabel as never);
 
-      const { result } = renderHook(() => useCreateLabel(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useCreateLabel(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ name: '  Work  ' });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -129,13 +189,14 @@ describe('useLabels write hooks', () => {
       // The new label is persisted to the store so an empty label (no notes yet)
       // shows in the drawer immediately (#691).
       expect(mockNoteQueries.upsertLabel).toHaveBeenCalledWith(expect.anything(), serverLabel);
-      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
+      expect(await noteQueriesModule.getStoredLabels(db)).toEqual([serverLabel]);
+      expect(await queuedOperations()).toEqual([]);
     });
 
     it('queues the create on a transient failure and returns a local label', async () => {
       mockLabelsApi.createLabel.mockRejectedValueOnce(makeAxiosError(503));
 
-      const { result } = renderHook(() => useCreateLabel(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useCreateLabel(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ name: 'Work' });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -154,7 +215,7 @@ describe('useLabels write hooks', () => {
     it('queues the create when offline', async () => {
       mockUseNetworkStatus.mockReturnValue({ isConnected: false });
 
-      const { result } = renderHook(() => useCreateLabel(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useCreateLabel(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ name: 'Home' });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -168,12 +229,14 @@ describe('useLabels write hooks', () => {
         expect.anything(),
         expect.objectContaining({ id: 'client_label_id', name: 'Home' }),
       );
+      expect(await storedLabelIds()).toEqual(['client_label_id']);
+      expect(await queuedOperations()).toEqual(['createLabel']);
     });
 
     it('surfaces a permanent failure (4xx) without queuing', async () => {
       mockLabelsApi.createLabel.mockRejectedValueOnce(makeAxiosError(400));
 
-      const { result } = renderHook(() => useCreateLabel(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useCreateLabel(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ name: 'Bad' }).catch(() => {});
 
       await waitFor(() => expect(result.current.isError).toBe(true));
@@ -181,7 +244,7 @@ describe('useLabels write hooks', () => {
     });
 
     it('rejects a whitespace-only name without calling the API or queuing', async () => {
-      const { result } = renderHook(() => useCreateLabel(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useCreateLabel(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ name: '   ' }).catch(() => {});
 
       await waitFor(() => expect(result.current.isError).toBe(true));
@@ -197,7 +260,7 @@ describe('useLabels write hooks', () => {
       const updatedNote = { ...sampleNote, labels: [{ id: 'srv1', user_id: 'u1', name: 'Work', created_at: '', updated_at: '' }] };
       mockLabelsApi.addLabelToNote.mockResolvedValueOnce(updatedNote as never);
 
-      const { result } = renderHook(() => useAddLabelToNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useAddLabelToNote(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ noteId: 'n1', name: '  Work  ' });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -214,10 +277,9 @@ describe('useLabels write hooks', () => {
 
     it('on a transient failure for a new label, queues both createLabel and addLabelToNote', async () => {
       mockLabelsApi.addLabelToNote.mockRejectedValueOnce(makeAxiosError(503));
-      mockNoteQueries.getLocalNote.mockResolvedValue(sampleNote as never);
-      mockNoteQueries.getStoredLabels.mockResolvedValue([]);
+      await noteQueriesModule.saveNote(db, sampleNote);
 
-      const { result } = renderHook(() => useAddLabelToNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useAddLabelToNote(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ noteId: 'n1', name: 'New' });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -235,6 +297,13 @@ describe('useLabels write hooks', () => {
         expect.anything(),
         expect.objectContaining({ id: 'client_label_id', name: 'New' }),
       );
+      expect(await storedLabelIds()).toEqual(['client_label_id']);
+      // The create must be queued ahead of the add, or the replay 404s.
+      expect(await queuedOperations()).toEqual(['createLabel', 'addLabelToNote']);
+      // ...and the note really carries the label locally in the meantime.
+      expect((await noteQueriesModule.getLocalNote(db, 'n1'))?.labels).toEqual([
+        expect.objectContaining({ id: 'client_label_id', name: 'New' }),
+      ]);
     });
 
     it('does not queue a createLabel or upsert when reusing a stored label (online, new label reuse guard)', async () => {
@@ -243,7 +312,7 @@ describe('useLabels write hooks', () => {
       const updatedNote = { ...sampleNote, labels: [{ id: 'srv-existing', user_id: 'u1', name: 'Work', created_at: '', updated_at: '' }] };
       mockLabelsApi.addLabelToNote.mockResolvedValueOnce(updatedNote as never);
 
-      const { result } = renderHook(() => useAddLabelToNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useAddLabelToNote(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ noteId: 'n1', name: 'Work' });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -256,11 +325,10 @@ describe('useLabels write hooks', () => {
     it('queues (does not call the API) for a pending-create note even when online (#475)', async () => {
       // The note's create hasn't drained yet, so a direct API call would 404.
       // The label op queues FIFO behind the create instead.
-      mockNoteQueries.isNotePendingCreate.mockResolvedValueOnce(true);
-      mockNoteQueries.getLocalNote.mockResolvedValue(sampleNote as never);
-      mockNoteQueries.getStoredLabels.mockResolvedValue([]);
+      await noteQueriesModule.saveNote(db, sampleNote);
+      await noteQueriesModule.markNotePendingCreate(db, 'n1');
 
-      const { result } = renderHook(() => useAddLabelToNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useAddLabelToNote(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ noteId: 'n1', name: 'Soon' });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -273,12 +341,10 @@ describe('useLabels write hooks', () => {
 
     it('reuses an existing local label by name without queuing a createLabel', async () => {
       mockUseNetworkStatus.mockReturnValue({ isConnected: false });
-      mockNoteQueries.getLocalNote.mockResolvedValue(sampleNote as never);
-      mockNoteQueries.getStoredLabels.mockResolvedValue([
-        { id: 'srv-existing', user_id: 'u1', name: 'Work', created_at: '', updated_at: '' },
-      ] as never);
+      await noteQueriesModule.saveNote(db, sampleNote);
+      await noteQueriesModule.upsertLabel(db, storedLabel('srv-existing', 'Work'));
 
-      const { result } = renderHook(() => useAddLabelToNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useAddLabelToNote(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ noteId: 'n1', name: 'Work' });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -299,12 +365,10 @@ describe('useLabels write hooks', () => {
 
     it('reuses an existing label whose name differs only in case (no createLabel queued)', async () => {
       mockUseNetworkStatus.mockReturnValue({ isConnected: false });
-      mockNoteQueries.getLocalNote.mockResolvedValue(sampleNote as never);
-      mockNoteQueries.getStoredLabels.mockResolvedValue([
-        { id: 'srv-existing', user_id: 'u1', name: 'urgent', created_at: '', updated_at: '' },
-      ] as never);
+      await noteQueriesModule.saveNote(db, sampleNote);
+      await noteQueriesModule.upsertLabel(db, storedLabel('srv-existing', 'urgent'));
 
-      const { result } = renderHook(() => useAddLabelToNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useAddLabelToNote(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ noteId: 'n1', name: 'Urgent' });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -321,7 +385,7 @@ describe('useLabels write hooks', () => {
     });
 
     it('rejects a whitespace-only name without touching the API, DB, or queue', async () => {
-      const { result } = renderHook(() => useAddLabelToNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useAddLabelToNote(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ noteId: 'n1', name: '   ' }).catch(() => {});
 
       await waitFor(() => expect(result.current.isError).toBe(true));
@@ -334,7 +398,7 @@ describe('useLabels write hooks', () => {
     it('surfaces a permanent failure (4xx) without queuing', async () => {
       mockLabelsApi.addLabelToNote.mockRejectedValueOnce(makeAxiosError(403));
 
-      const { result } = renderHook(() => useAddLabelToNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useAddLabelToNote(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ noteId: 'n1', name: 'Work' }).catch(() => {});
 
       await waitFor(() => expect(result.current.isError).toBe(true));
@@ -348,7 +412,7 @@ describe('useLabels write hooks', () => {
     it('removes the label via the API when online', async () => {
       mockLabelsApi.removeLabelFromNote.mockResolvedValueOnce(sampleNote as never);
 
-      const { result } = renderHook(() => useRemoveLabelFromNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useRemoveLabelFromNote(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ noteId: 'n1', labelId: 'l1' });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -359,9 +423,9 @@ describe('useLabels write hooks', () => {
 
     it('queues the removal on a transient failure', async () => {
       mockLabelsApi.removeLabelFromNote.mockRejectedValueOnce(makeNetworkError());
-      mockNoteQueries.getLocalNote.mockResolvedValue(sampleNote as never);
+      await noteQueriesModule.saveNote(db, sampleNote);
 
-      const { result } = renderHook(() => useRemoveLabelFromNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useRemoveLabelFromNote(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ noteId: 'n1', labelId: 'l1' });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -375,7 +439,7 @@ describe('useLabels write hooks', () => {
     it('surfaces a permanent failure (4xx) without queuing', async () => {
       mockLabelsApi.removeLabelFromNote.mockRejectedValueOnce(makeAxiosError(403));
 
-      const { result } = renderHook(() => useRemoveLabelFromNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useRemoveLabelFromNote(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ noteId: 'n1', labelId: 'l1' }).catch(() => {});
 
       await waitFor(() => expect(result.current.isError).toBe(true));
@@ -387,23 +451,31 @@ describe('useLabels write hooks', () => {
 
   describe('useRenameLabel', () => {
     it('renames the label via the API when online', async () => {
+      // A label already in the store, carried on a note.
+      await noteQueriesModule.upsertLabel(db, storedLabel('l1', 'Work'));
+      await noteQueriesModule.saveNote(db, { ...sampleNote, labels: [storedLabel('l1', 'Work')] });
       const serverLabel = { id: 'l1', user_id: 'u1', name: 'Renamed', created_at: '', updated_at: '' };
       mockLabelsApi.renameLabel.mockResolvedValueOnce(serverLabel as never);
 
-      const { result } = renderHook(() => useRenameLabel(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useRenameLabel(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ labelId: 'l1', name: '  Renamed  ' });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(mockLabelsApi.renameLabel).toHaveBeenCalledWith('l1', 'Renamed');
       expect(mockNoteQueries.renameStoredLabel).toHaveBeenCalledWith(expect.anything(), 'l1', 'Renamed');
       expect(mockNoteQueries.renameLabelInLocalNotes).toHaveBeenCalledWith(expect.anything(), 'l1', 'Renamed');
-      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
+      // The rename reached both the label store and the note's embedded copy.
+      expect((await noteQueriesModule.getStoredLabels(db)).map((l) => l.name)).toEqual(['Renamed']);
+      expect((await noteQueriesModule.getLocalNote(db, 'n1'))?.labels).toEqual([
+        expect.objectContaining({ id: 'l1', name: 'Renamed' }),
+      ]);
+      expect(await queuedOperations()).toEqual([]);
     });
 
     it('queues the rename when offline and applies it locally', async () => {
       mockUseNetworkStatus.mockReturnValue({ isConnected: false });
 
-      const { result } = renderHook(() => useRenameLabel(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useRenameLabel(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ labelId: 'l1', name: 'Offline' });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -419,7 +491,7 @@ describe('useLabels write hooks', () => {
     it('surfaces a permanent failure (4xx) without queuing', async () => {
       mockLabelsApi.renameLabel.mockRejectedValueOnce(makeAxiosError(400));
 
-      const { result } = renderHook(() => useRenameLabel(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useRenameLabel(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ labelId: 'l1', name: 'Dup' }).catch(() => {});
 
       await waitFor(() => expect(result.current.isError).toBe(true));
@@ -431,22 +503,28 @@ describe('useLabels write hooks', () => {
 
   describe('useDeleteLabel', () => {
     it('deletes the label via the API when online', async () => {
+      // A label already in the store, carried on a note.
+      await noteQueriesModule.upsertLabel(db, storedLabel('l1', 'Work'));
+      await noteQueriesModule.saveNote(db, { ...sampleNote, labels: [storedLabel('l1', 'Work')] });
       mockLabelsApi.deleteLabel.mockResolvedValueOnce(undefined);
 
-      const { result } = renderHook(() => useDeleteLabel(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useDeleteLabel(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ labelId: 'l1' });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(mockLabelsApi.deleteLabel).toHaveBeenCalledWith('l1');
       expect(mockNoteQueries.deleteStoredLabel).toHaveBeenCalledWith(expect.anything(), 'l1');
       expect(mockNoteQueries.deleteLabelFromLocalNotes).toHaveBeenCalledWith(expect.anything(), 'l1');
-      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
+      // Gone from the label store and from the note's embedded copy.
+      expect(await storedLabelIds()).toEqual([]);
+      expect((await noteQueriesModule.getLocalNote(db, 'n1'))?.labels).toEqual([]);
+      expect(await queuedOperations()).toEqual([]);
     });
 
     it('queues the deletion on a transient failure and applies it locally', async () => {
       mockLabelsApi.deleteLabel.mockRejectedValueOnce(makeAxiosError(500));
 
-      const { result } = renderHook(() => useDeleteLabel(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useDeleteLabel(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ labelId: 'l1' });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -461,7 +539,7 @@ describe('useLabels write hooks', () => {
     it('surfaces a permanent failure (4xx) without queuing', async () => {
       mockLabelsApi.deleteLabel.mockRejectedValueOnce(makeAxiosError(404));
 
-      const { result } = renderHook(() => useDeleteLabel(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useDeleteLabel(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ labelId: 'l1' }).catch(() => {});
 
       await waitFor(() => expect(result.current.isError).toBe(true));
@@ -473,13 +551,13 @@ describe('useLabels write hooks', () => {
 describe('useLabels catch-up on SSE reconnect', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    db = globalThis.testDb;
     mockUseNetworkStatus.mockReturnValue({ isConnected: true });
-    mockNoteQueries.getStoredLabels.mockResolvedValue([]);
     mockLabelsApi.getLabels.mockResolvedValue([]);
   });
 
   it('re-pulls labels from the server when a reconnect resync is published', async () => {
-    renderHook(() => useLabels(), { wrapper: createWrapper() });
+    await renderHook(() => useLabels(), { wrapper: createWrapper() });
 
     // Initial background sync fetches once.
     await waitFor(() => expect(mockLabelsApi.getLabels).toHaveBeenCalledTimes(1));
@@ -499,7 +577,7 @@ describe('useLabels catch-up on SSE reconnect', () => {
     mockLabelsApi.getLabels.mockImplementation(
       () => new Promise((resolve) => { resolveGet = () => resolve([]); }),
     );
-    renderHook(() => useLabels(), { wrapper: createWrapper() });
+    await renderHook(() => useLabels(), { wrapper: createWrapper() });
 
     // The mount-time sync is now in flight (getLabels pending).
     await waitFor(() => expect(mockLabelsApi.getLabels).toHaveBeenCalledTimes(1));
