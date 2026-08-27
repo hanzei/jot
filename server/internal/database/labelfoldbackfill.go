@@ -34,6 +34,14 @@ const labelNameFoldedIndex = "idx_labels_user_id_name_folded"
 // Merging is irreversible and user-visible. A user holding both "Äpfel" and
 // "äpfel" ends up with one label: no note loses a tag, but the two spellings
 // collapse into the older one.
+//
+// One case this does not cover: a pre-upgrade process still writing to the same
+// database inserts labels without name_folded, which default to the empty
+// string, and the second such row violates the index once it exists. Nothing
+// here can prevent that -- the old binary does not know the column exists -- so
+// upgrading means replacing the writers, not running both versions side by
+// side. Single-process deployments (every SQLite one, since the file is opened
+// by one server) cannot hit it at all.
 func backfillLabelNameFolded(ctx context.Context, db *sql.DB, driverName string) error {
 	d := &dialect.Dialect{Driver: driverName}
 
@@ -65,16 +73,36 @@ func backfillLabelNameFolded(ctx context.Context, db *sql.DB, driverName string)
 	}
 
 	if _, err := tx.ExecContext(ctx,
-		`CREATE UNIQUE INDEX `+labelNameFoldedIndex+` ON labels (user_id, name_folded)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS `+labelNameFoldedIndex+` ON labels (user_id, name_folded)`,
 	); err != nil {
-		return fmt.Errorf("create %s: %w", labelNameFoldedIndex, err)
+		return unlessAnotherInitializerWon(ctx, db, driverName,
+			fmt.Errorf("create %s: %w", labelNameFoldedIndex, err))
 	}
 
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit label fold backfill: %w", err)
+		return unlessAnotherInitializerWon(ctx, db, driverName,
+			fmt.Errorf("commit label fold backfill: %w", err))
 	}
 	tx = nil
 	return nil
+}
+
+// unlessAnotherInitializerWon reports err unless the backfill has meanwhile
+// been completed by someone else, in which case there is nothing left to do.
+//
+// Two server processes starting against one PostgreSQL database can both reach
+// the backfill: golang-migrate serializes the migrations themselves, but it
+// releases its lock before this runs. The loser's transaction is harmless --
+// folding is deterministic, so it recomputes the same keys, and its merge
+// deletes rows the winner already deleted -- but it can still fail on the index
+// the winner created. Treating that as success is what keeps the second process
+// from dying at startup over work that is already done.
+func unlessAnotherInitializerWon(ctx context.Context, db *sql.DB, driverName string, err error) error {
+	done, checkErr := labelNameFoldedIndexExists(ctx, db, driverName)
+	if checkErr == nil && done {
+		return nil
+	}
+	return err
 }
 
 // labelNameFoldedIndexExists reports whether the backfill has already run.

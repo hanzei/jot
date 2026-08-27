@@ -193,8 +193,11 @@ func insertImportedLabelsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect,
 		}
 		var resolvedLabelID string
 		if err = tx.QueryRowContext(ctx,
+			// The no-op SET makes RETURNING yield the existing row on a
+			// conflict, without rewriting that label's spelling to whatever the
+			// imported file used. See duplicateLabelsTx for the longer note.
 			d.RewritePlaceholders(`INSERT INTO labels (id, user_id, name, name_folded) VALUES (?, ?, ?, ?)
-			 ON CONFLICT (user_id, name_folded) DO UPDATE SET name=excluded.name
+			 ON CONFLICT (user_id, name_folded) DO UPDATE SET name = labels.name
 			 RETURNING id`),
 			labelID, userID, labelName, labelfold.Fold(labelName),
 		).Scan(&resolvedLabelID); err != nil {

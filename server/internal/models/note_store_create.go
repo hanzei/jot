@@ -368,8 +368,14 @@ func duplicateLabelsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, note
 		}
 		var resolvedLabelID string
 		if err = tx.QueryRowContext(ctx,
+			// The no-op SET is what makes RETURNING yield the existing row on a
+			// conflict; DO NOTHING returns none. It must not assign
+			// excluded.name — that would rewrite the label's spelling to
+			// whatever the duplicated note happened to use, so duplicating a
+			// note tagged "äpfel" would rename the user's "Äpfel" label.
+			// GetOrCreateLabel keeps the stored spelling, and so does this.
 			d.RewritePlaceholders(`INSERT INTO labels (id, user_id, name, name_folded) VALUES (?, ?, ?, ?)
-			 ON CONFLICT (user_id, name_folded) DO UPDATE SET name=excluded.name
+			 ON CONFLICT (user_id, name_folded) DO UPDATE SET name = labels.name
 			 RETURNING id`),
 			labelID, userID, label.Name, labelfold.Fold(label.Name),
 		).Scan(&resolvedLabelID); err != nil {

@@ -162,6 +162,39 @@ func TestLabelNameCaseInsensitivity(t *testing.T) {
 			assert.False(t, wasCreated, "the renamed label must be found by its new folded key")
 		})
 
+		t.Run("resolving a label by a different spelling leaves its name alone", func(t *testing.T) {
+			// The import and duplicate paths upsert labels by folded key. The
+			// conflict branch has to return the existing row without adopting
+			// the incoming spelling, or importing a note tagged "äpfel" would
+			// rename the user's "Äpfel" label and every other note carrying it.
+			db := dbtest.New(t, driver)
+			d := &dialect.Dialect{Driver: driver}
+			ctx := t.Context()
+
+			_, err := db.ExecContext(ctx,
+				d.RewritePlaceholders(`INSERT INTO users (id, username, password_hash) VALUES (?, ?, ?)`),
+				"user00000000000000imp", "importer", "x")
+			require.NoError(t, err)
+
+			labels := newLabelStore(db, d)
+			existing, _, err := labels.GetOrCreateLabel(ctx, "user00000000000000imp", "Äpfel")
+			require.NoError(t, err)
+
+			notes := newNoteStore(db, d)
+			require.NoError(t, notes.ImportJotNotes(ctx, "user00000000000000imp", []JotImportNote{{
+				Title:    "Einkaufsliste",
+				NoteType: NoteTypeText,
+				Color:    DefaultNoteColor,
+				Labels:   []string{"äpfel"},
+			}}))
+
+			after, err := labels.GetLabels(ctx, "user00000000000000imp")
+			require.NoError(t, err)
+			require.Len(t, after, 1, "the import must reuse the existing label")
+			assert.Equal(t, existing.ID, after[0].ID)
+			assert.Equal(t, "Äpfel", after[0].Name, "the stored spelling must survive the import")
+		})
+
 		t.Run("different users may each own the same name", func(t *testing.T) {
 			store, userID := newTestLabelStore(t, driver)
 			ctx := t.Context()
