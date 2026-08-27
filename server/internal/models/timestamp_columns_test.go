@@ -1,6 +1,8 @@
 package models
 
 import (
+	"go/scanner"
+	"go/token"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -84,6 +86,70 @@ func TestInsertsSupplyTimestampColumns(t *testing.T) {
 	// Guards the guard: a regex that stopped matching would otherwise make this
 	// test pass by checking nothing at all.
 	assert.Greater(t, checked, 15, "found far fewer INSERTs than this package has")
+}
+
+// TestStoreSQLGeneratesTimestampsInGo fails when a statement in this package
+// hands timestamp generation back to the database.
+//
+// TestInsertsSupplyTimestampColumns covers the INSERT half by checking column
+// lists, but an UPDATE has no column list to check: adding
+// `updated_at = CURRENT_TIMESTAMP` to a new UPDATE compiles, passes every
+// other test, and silently restores the second-granularity SQLite behavior
+// this package exists to avoid. Both backends generating their own value is
+// the thing being ruled out, so the check is simply that the token never
+// appears in the SQL.
+//
+// Only string literals are scanned, so the doc comments in time.go that name
+// CURRENT_TIMESTAMP to explain the rule do not trip it.
+func TestStoreSQLGeneratesTimestampsInGo(t *testing.T) {
+	entries, err := os.ReadDir(".")
+	require.NoError(t, err)
+
+	scanned := 0
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+
+		source, readErr := os.ReadFile(filepath.Clean(name))
+		require.NoError(t, readErr)
+
+		for _, literal := range stringLiterals(t, name, source) {
+			scanned++
+			assert.NotContains(t, literal, "CURRENT_TIMESTAMP",
+				"%s: generate the value in Go and bind Timestamp(Now()) instead — the two backends "+
+					"disagree on both the precision and the transaction scope of CURRENT_TIMESTAMP", name)
+		}
+	}
+
+	assert.Greater(t, scanned, 100, "found far fewer string literals than this package has")
+}
+
+// stringLiterals returns the contents of every string literal in source.
+// Tokenizing rather than matching raw text is what keeps comments out.
+func stringLiterals(t *testing.T, name string, source []byte) []string {
+	t.Helper()
+
+	var (
+		sc       scanner.Scanner
+		fset     = token.NewFileSet()
+		file     = fset.AddFile(name, fset.Base(), len(source))
+		literals []string
+	)
+	sc.Init(file, source, func(pos token.Position, msg string) {
+		t.Fatalf("scan %s: %s: %s", name, pos, msg)
+	}, 0)
+
+	for {
+		_, tok, lit := sc.Scan()
+		if tok == token.EOF {
+			return literals
+		}
+		if tok == token.STRING {
+			literals = append(literals, lit)
+		}
+	}
 }
 
 type insertMatch struct {

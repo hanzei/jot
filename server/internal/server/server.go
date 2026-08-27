@@ -605,7 +605,7 @@ func chiRouteSpanNamer(next http.Handler) http.Handler {
 
 func (s *Server) requestLoggerMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
+		start := time.Now() //nolint:gocritic // elapsed request time, never persisted; a duration has no time zone
 		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 
 		entry := s.log.WithFields(logrus.Fields{

@@ -18,7 +18,7 @@ import "time"
 // one that comes back out of the database rather than differing in digits the
 // column never stored.
 func Now() time.Time {
-	return time.Now().UTC().Truncate(time.Microsecond)
+	return time.Now().UTC().Truncate(time.Microsecond) //nolint:gocritic // the one call the rest of the rule redirects to
 }
 
 // timestampLayout is the text form every timestamp written by the store layer
