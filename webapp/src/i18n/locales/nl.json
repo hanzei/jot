@@ -386,6 +386,7 @@
     "itemLabel": "Lijstitem",
     "itemCompleted": "Item voltooid",
     "reorderItem": "Item verplaatsen",
+    "reorderNote": "Notitie verplaatsen",
     "addItem": "Item toevoegen",
     "lastEdited": "Laatst bewerkt: {{date}}",
     "saving": "Opslaan...",

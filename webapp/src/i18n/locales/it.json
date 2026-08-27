@@ -386,6 +386,7 @@
     "itemLabel": "Elemento dell’elenco",
     "itemCompleted": "Elemento completato",
     "reorderItem": "Riordina elemento",
+    "reorderNote": "Riordina nota",
     "addItem": "Aggiungi elemento",
     "lastEdited": "Ultima modifica: {{date}}",
     "saving": "Salvataggio...",

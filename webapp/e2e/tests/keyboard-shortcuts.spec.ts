@@ -11,7 +11,9 @@ test.describe('Arrow key card navigation', () => {
     await dashboardPage.createNote('KS Nav Beta');
     await dashboardPage.createNote('KS Nav Gamma');
 
-    const cards = page.locator('[data-testid="note-card"]');
+    // The focusable control each card contributes, not the card container —
+    // the container is a plain div and cannot take focus.
+    const cards = page.locator('[data-note-card="true"]');
     await expect(cards).toHaveCount(3);
 
     await cards.first().focus();
@@ -36,7 +38,9 @@ test.describe('Arrow key card navigation', () => {
     await dashboardPage.createNote('KS LR One');
     await dashboardPage.createNote('KS LR Two');
 
-    const cards = page.locator('[data-testid="note-card"]');
+    // The focusable control each card contributes, not the card container —
+    // the container is a plain div and cannot take focus.
+    const cards = page.locator('[data-note-card="true"]');
     await expect(cards).toHaveCount(2);
 
     await cards.first().focus();
@@ -61,7 +65,9 @@ test.describe('Arrow key card navigation', () => {
     );
     await dashboardPage.createNote('KS ML Short Bottom');
 
-    const cards = page.locator('[data-testid="note-card"]');
+    // The focusable control each card contributes, not the card container —
+    // the container is a plain div and cannot take focus.
+    const cards = page.locator('[data-note-card="true"]');
     await expect(cards).toHaveCount(3);
 
     await cards.first().focus();

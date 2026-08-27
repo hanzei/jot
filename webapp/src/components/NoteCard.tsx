@@ -194,19 +194,37 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
   return (
     <div
       data-testid="note-card"
-      data-note-card="true"
-      tabIndex={0}
-      aria-label={(note.note_type === 'list' ? note.title : note.content?.slice(0, 50)) || t('share.untitledNote')}
-      className={`note-card ${getColorClass(note.color)} p-4 relative group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 ${isUpdating ? 'opacity-50' : ''}`}
+      className={`note-card ${getColorClass(note.color)} p-4 relative group ${isUpdating ? 'opacity-50' : ''}`}
       onClick={() => onEdit(note)}
-      onKeyDown={(e) => {
-        if (e.target !== e.currentTarget) return;
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onEdit(note);
-        }
-      }}
     >
+      {/*
+        The card's primary action, as a real button rather than a tabIndex on
+        the card div. The card used to be its own control, which put a focusable
+        element around the overflow menu and the label chips — the
+        nested-interactive violation in #799 — and made Space mean two different
+        things depending on which of the two stops you were on.
+
+        It carries no click handler and no pointer events, which is what keeps
+        this a change of semantics rather than of behaviour:
+
+        - Keyboard activation is the browser's. Enter and Space on a <button>
+          synthesize a click, and that click bubbles to the card's own onClick.
+          One handler still owns "activating this card opens the note".
+        - `pointer-events-none` means a mouse never lands here at all. Clicks go
+          on hitting the card exactly as before, so drag-anywhere, the label
+          chips' stopPropagation, and the native tooltips on the share avatars
+          all keep working without a z-index rule between them.
+
+        It must stay a *sibling* of the menu button and the label chips. An
+        ancestor of them is the violation this replaced.
+      */}
+      <button
+        type="button"
+        data-note-card="true"
+        data-testid="note-card-open"
+        aria-label={(note.note_type === 'list' ? note.title : note.content?.slice(0, 50)) || t('share.untitledNote')}
+        className="absolute inset-0 rounded-lg pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"
+      />
       {coverImage && (
         <div className="relative -mx-4 -mt-4 mb-2 rounded-t-lg overflow-hidden" data-testid="note-card-cover">
           <img

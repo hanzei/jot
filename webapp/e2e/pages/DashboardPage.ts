@@ -441,6 +441,16 @@ export class DashboardPage {
   }
 
   /**
+   * The card's own control — the button that opens the note, and the only
+   * focusable thing the card itself contributes. The card element is a plain
+   * container: `noteCard()` is the right locator for asserting on a card's
+   * contents, and this is the right one for anything to do with focus.
+   */
+  noteCardButton(title: string): Locator {
+    return this.noteCard(title).locator('[data-note-card="true"]');
+  }
+
+  /**
    * The "Pinned" section heading. Since the per-card pin badge was removed, this
    * heading is the UI contract for "a note is pinned" on the dashboard: it is
    * visible when at least one note is pinned and absent otherwise.

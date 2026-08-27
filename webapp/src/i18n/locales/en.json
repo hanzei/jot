@@ -386,6 +386,7 @@
     "itemLabel": "List item",
     "itemCompleted": "Item completed",
     "reorderItem": "Reorder item",
+    "reorderNote": "Reorder note",
     "addItem": "Add item",
     "lastEdited": "Last edited: {{date}}",
     "saving": "Saving...",

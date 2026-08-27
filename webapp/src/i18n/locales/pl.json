@@ -386,6 +386,7 @@
     "itemLabel": "Element listy",
     "itemCompleted": "Element ukończony",
     "reorderItem": "Zmień kolejność elementu",
+    "reorderNote": "Zmień kolejność notatki",
     "addItem": "Dodaj element",
     "lastEdited": "Ostatnia edycja: {{date}}",
     "saving": "Zapisywanie...",

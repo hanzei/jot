@@ -386,6 +386,7 @@
     "itemLabel": "Listeneintrag",
     "itemCompleted": "Eintrag erledigt",
     "reorderItem": "Eintrag verschieben",
+    "reorderNote": "Notiz verschieben",
     "addItem": "Element hinzufügen",
     "lastEdited": "Zuletzt bearbeitet: {{date}}",
     "saving": "Speichern...",

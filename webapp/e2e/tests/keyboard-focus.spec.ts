@@ -78,7 +78,7 @@ test.describe('Modal focus management', () => {
     await dashboardPage.goto();
     await dashboardPage.createListNote('Focus Trap Note', ['first item']);
 
-    const card = dashboardPage.noteCard('Focus Trap Note');
+    const card = dashboardPage.noteCardButton('Focus Trap Note');
     await card.focus();
     await page.keyboard.press('Enter');
 
@@ -232,9 +232,10 @@ test.describe('Keyboard drag and drop', () => {
     await dashboardPage.createNote('DnD Second');
     await dashboardPage.expectVisibleNoteTitles(['DnD Second', 'DnD First']);
 
-    // @dnd-kit's KeyboardSensor lives on the sortable wrapper around each card,
-    // which is the element before the card in tab order.
-    await keyboardReorder(page, page.locator('[data-drag-disabled="false"]').first(), 'ArrowDown');
+    // The KeyboardSensor lives on a per-card reorder button that is invisible
+    // until focused, not on the sortable wrapper: the wrapper carries no role
+    // and no tab stop, so there is nothing there for a keypress to reach.
+    await keyboardReorder(page, page.getByRole('button', { name: 'Reorder note' }).first(), 'ArrowDown');
 
     await dashboardPage.expectVisibleNoteTitles(['DnD First', 'DnD Second']);
   });
