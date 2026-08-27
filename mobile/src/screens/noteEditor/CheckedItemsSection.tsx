@@ -34,7 +34,7 @@ interface CheckedItemsSectionProps {
   getItemRef: (id: string) => React.RefObject<TextInputType | null>;
   getItemSelectionRef: (id: string) => React.RefObject<ListItemSelectionHandle | null>;
   /** iOS accessory id for the formatting bar; undefined on Android. */
-  itemAccessoryViewID?: string;
+  itemAccessoryViewID?: string | undefined;
   isNoteShared: boolean;
   collaborators: Collaborator[];
   hasNoteColor: boolean;

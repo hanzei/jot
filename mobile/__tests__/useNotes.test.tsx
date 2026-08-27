@@ -141,7 +141,7 @@ describe('useNotes hooks', () => {
       };
       mockNotesApi.createNote.mockResolvedValueOnce(newNote as never);
 
-      const { result } = renderHook(() => useCreateNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useCreateNote(), { wrapper: createWrapper() });
 
       result.current.mutate({ content: 'Created', note_type: 'text' });
 
@@ -161,7 +161,7 @@ describe('useNotes hooks', () => {
       };
       mockNotesApi.createNote.mockResolvedValueOnce(newListNote as never);
 
-      const { result } = renderHook(() => useCreateNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useCreateNote(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync({ title: 'My List', note_type: 'list', items: [] });
 
@@ -174,7 +174,7 @@ describe('useNotes hooks', () => {
     it('blocks write when server switch is in progress', async () => {
       mockClientModule.isServerSwitchInProgress.mockReturnValue(true);
 
-      const { result } = renderHook(() => useCreateNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useCreateNote(), { wrapper: createWrapper() });
 
       await expect(
         result.current.mutateAsync({ content: 'Blocked', note_type: 'text' }),
@@ -194,10 +194,10 @@ describe('useNotes hooks', () => {
     it('takes the offline path when connectivity drops after mount', async () => {
       mockUseNetworkStatus.mockReturnValue({ isConnected: true });
 
-      const { result, rerender } = renderHook(() => useCreateNote(), { wrapper: createWrapper() });
+      const { result, rerender } = await renderHook(() => useCreateNote(), { wrapper: createWrapper() });
 
       mockUseNetworkStatus.mockReturnValue({ isConnected: false });
-      rerender(undefined);
+      await rerender(undefined);
 
       await result.current.mutateAsync({ content: 'Written after going offline', note_type: 'text' });
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -212,7 +212,7 @@ describe('useNotes hooks', () => {
     it('takes the online path when connectivity returns after mount', async () => {
       mockUseNetworkStatus.mockReturnValue({ isConnected: false });
 
-      const { result, rerender } = renderHook(() => useCreateNote(), { wrapper: createWrapper() });
+      const { result, rerender } = await renderHook(() => useCreateNote(), { wrapper: createWrapper() });
 
       const created = {
         id: 'ServerNoteId00000000A', content: 'Written after reconnecting', note_type: 'text' as const,
@@ -222,7 +222,7 @@ describe('useNotes hooks', () => {
       mockNotesApi.createNote.mockResolvedValue(created as never);
 
       mockUseNetworkStatus.mockReturnValue({ isConnected: true });
-      rerender(undefined);
+      await rerender(undefined);
 
       await result.current.mutateAsync({ content: 'Written after reconnecting', note_type: 'text' });
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -236,7 +236,7 @@ describe('useNotes hooks', () => {
     it('queues a create with a server-valid client id and flags it pending (#475)', async () => {
       mockUseNetworkStatus.mockReturnValue({ isConnected: false });
 
-      const { result } = renderHook(() => useCreateNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useCreateNote(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync({ content: 'Offline note', note_type: 'text' });
 
@@ -269,7 +269,7 @@ describe('useNotes hooks', () => {
     it('assigns inline list items a permanent server-format ID and sends it in the create body', async () => {
       mockUseNetworkStatus.mockReturnValue({ isConnected: false });
 
-      const { result } = renderHook(() => useCreateNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useCreateNote(), { wrapper: createWrapper() });
 
       const created = await result.current.mutateAsync({
         title: 'Groceries',
@@ -316,7 +316,7 @@ describe('useNotes hooks', () => {
         ],
       } as never);
 
-      const { result } = renderHook(() => useDuplicateNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useDuplicateNote(), { wrapper: createWrapper() });
       const dup = await result.current.mutateAsync('src');
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
@@ -344,7 +344,7 @@ describe('useNotes hooks', () => {
         user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
       } as never);
 
-      const { result } = renderHook(() => useDuplicateNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useDuplicateNote(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync('ServerValidButPending00');
 
@@ -376,7 +376,7 @@ describe('useNotes hooks', () => {
       };
       mockNotesApi.updateNote.mockResolvedValueOnce(updated as never);
 
-      const { result } = renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
 
       result.current.mutate({ id: '123', data: { title: 'Updated' } });
 
@@ -407,7 +407,7 @@ describe('useNotes hooks', () => {
       const { wrapper, queryClient } = createWrapperWithClient();
       const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
-      const { result } = renderHook(() => useShareNote(), { wrapper });
+      const { result } = await renderHook(() => useShareNote(), { wrapper });
       result.current.mutate({ noteId: '123', user: targetUser as never });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -423,7 +423,7 @@ describe('useNotes hooks', () => {
       const { wrapper, queryClient } = createWrapperWithClient();
       const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
-      const { result } = renderHook(() => useUnshareNote(), { wrapper });
+      const { result } = await renderHook(() => useUnshareNote(), { wrapper });
       result.current.mutate({ noteId: '123', userId: 'u2' });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -452,7 +452,7 @@ describe('useNotes hooks', () => {
       mockUseNetworkStatus.mockReturnValue({ isConnected: false });
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingTextNote as never);
 
-      const { result } = renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync({ id: '123', data: { content: 'New body' } });
 
@@ -477,7 +477,7 @@ describe('useNotes hooks', () => {
       mockUseNetworkStatus.mockReturnValue({ isConnected: false });
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingListNote as never);
 
-      const { result } = renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync({ id: '456', data: { title: 'New title' } });
 
@@ -500,7 +500,7 @@ describe('useNotes hooks', () => {
       mockUseNetworkStatus.mockReturnValue({ isConnected: false });
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingTextNote as never);
 
-      const { result } = renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync({ id: '123', data: { pinned: true } });
 
@@ -523,7 +523,7 @@ describe('useNotes hooks', () => {
       mockUseNetworkStatus.mockReturnValue({ isConnected: false });
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(null);
 
-      const { result } = renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync({ id: 'missing-id', data: { title: 'X' } }).catch(() => {});
 
@@ -551,7 +551,7 @@ describe('useNotes hooks', () => {
       mockNotesApi.updateNote.mockResolvedValueOnce(updated as never);
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingNote as never);
 
-      const { result } = renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync({ id: '123', data: { content: 'New body' } });
 
@@ -567,7 +567,7 @@ describe('useNotes hooks', () => {
       mockNotesApi.updateNote.mockRejectedValueOnce(makeAxiosError(503));
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingNote as never);
 
-      const { result } = renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync({ id: '123', data: { content: 'New body' } });
 
@@ -587,7 +587,7 @@ describe('useNotes hooks', () => {
       mockNotesApi.updateNote.mockRejectedValueOnce(makeNetworkError());
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingNote as never);
 
-      const { result } = renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync({ id: '123', data: { content: 'New body' } });
 
@@ -598,7 +598,7 @@ describe('useNotes hooks', () => {
     it('surfaces a permanent failure (4xx) without queuing', async () => {
       mockNotesApi.updateNote.mockRejectedValueOnce(makeAxiosError(400));
 
-      const { result } = renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync({ id: '123', data: { content: 'New body' } }).catch(() => {});
 
@@ -613,7 +613,7 @@ describe('useNotes hooks', () => {
     it('surfaces a 401 without queuing (the interceptor logs the user out)', async () => {
       mockNotesApi.updateNote.mockRejectedValueOnce(makeAxiosError(401));
 
-      const { result } = renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync({ id: '123', data: { content: 'New body' } }).catch(() => {});
 
@@ -626,7 +626,7 @@ describe('useNotes hooks', () => {
     it('rethrows a non-Axios (local) error instead of queuing it', async () => {
       mockNotesApi.updateNote.mockRejectedValueOnce(new Error('boom'));
 
-      const { result } = renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync({ id: '123', data: { content: 'New body' } }).catch(() => {});
 
@@ -641,7 +641,7 @@ describe('useNotes hooks', () => {
     it('useCreateNoteItem falls back to the local queue on a transient failure', async () => {
       mockNotesApi.createNoteItem.mockRejectedValueOnce(makeAxiosError(503));
 
-      const { result } = renderHook(() => useCreateNoteItem(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useCreateNoteItem(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync({ noteId: 'n1', item: { id: 'i1', text: 'New item', position: 0 } });
 
@@ -663,7 +663,7 @@ describe('useNotes hooks', () => {
         items: [{ id: 'i1', note_id: 'n1', text: 'a', completed: false, position: 0, parent_id: null, assigned_to: '', created_at: '', updated_at: '' }],
       } as never);
 
-      const { result } = renderHook(() => useToggleNoteItemCompleted(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useToggleNoteItemCompleted(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync({ noteId: 'n1', itemId: 'i1', completed: true });
 
@@ -678,7 +678,7 @@ describe('useNotes hooks', () => {
     it('useUncheckAllItems falls back to the local queue on a transient failure', async () => {
       mockNotesApi.uncheckAllItems.mockRejectedValueOnce(makeAxiosError(503));
 
-      const { result } = renderHook(() => useUncheckAllItems(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useUncheckAllItems(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync({ noteId: 'n1', itemIds: ['i1', 'i2'] });
 
@@ -699,7 +699,7 @@ describe('useNotes hooks', () => {
     it('useUncheckAllItems surfaces a permanent failure (4xx) without queuing', async () => {
       mockNotesApi.uncheckAllItems.mockRejectedValueOnce(makeAxiosError(400));
 
-      const { result } = renderHook(() => useUncheckAllItems(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useUncheckAllItems(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync({ noteId: 'n1', itemIds: ['i1'] }).catch(() => {});
 
@@ -710,7 +710,7 @@ describe('useNotes hooks', () => {
     it('useDeleteCompletedItems falls back to the local queue on a transient failure', async () => {
       mockNotesApi.deleteCompletedItems.mockRejectedValueOnce(makeAxiosError(503));
 
-      const { result } = renderHook(() => useDeleteCompletedItems(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useDeleteCompletedItems(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync({ noteId: 'n1', itemIds: ['i1', 'i2'] });
 
@@ -731,7 +731,7 @@ describe('useNotes hooks', () => {
     it('useDeleteCompletedItems surfaces a permanent failure (4xx) without queuing', async () => {
       mockNotesApi.deleteCompletedItems.mockRejectedValueOnce(makeAxiosError(400));
 
-      const { result } = renderHook(() => useDeleteCompletedItems(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useDeleteCompletedItems(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync({ noteId: 'n1', itemIds: ['i1'] }).catch(() => {});
 
@@ -742,7 +742,7 @@ describe('useNotes hooks', () => {
     it('useCreateNoteItem surfaces a permanent failure (4xx) without queuing', async () => {
       mockNotesApi.createNoteItem.mockRejectedValueOnce(makeAxiosError(400));
 
-      const { result } = renderHook(() => useCreateNoteItem(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useCreateNoteItem(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync({ noteId: 'n1', item: { id: 'i1', text: 'New item', position: 0 } }).catch(() => {});
 
@@ -756,7 +756,7 @@ describe('useNotes hooks', () => {
     it('deletes a note via API and marks it deleted locally', async () => {
       mockNotesApi.deleteNote.mockResolvedValueOnce(undefined);
 
-      const { result } = renderHook(() => useDeleteNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useDeleteNote(), { wrapper: createWrapper() });
 
       result.current.mutate('123');
 
@@ -796,7 +796,7 @@ describe('useNotes hooks', () => {
       mockNotesApi.updateNote.mockReset();
       mockNotesApi.updateNote.mockReturnValueOnce(pending.promise as never);
 
-      const { result } = renderHook(() => useUpdateNote(), { wrapper });
+      const { result } = await renderHook(() => useUpdateNote(), { wrapper });
       result.current.mutate({ id: '123', data: { content: 'New body' } });
 
       // Optimistic update is visible while the request is still in flight (we
@@ -818,7 +818,7 @@ describe('useNotes hooks', () => {
       queryClient.setQueryData(notesLocalQueryKey(undefined), [existingTextNote]);
       mockNotesApi.updateNote.mockRejectedValueOnce(makeAxiosError(400));
 
-      const { result } = renderHook(() => useUpdateNote(), { wrapper });
+      const { result } = await renderHook(() => useUpdateNote(), { wrapper });
       await result.current.mutateAsync({ id: '123', data: { content: 'New body' } }).catch(() => {});
 
       await waitFor(() => expect(result.current.isError).toBe(true));
@@ -841,7 +841,7 @@ describe('useNotes hooks', () => {
       mockNotesApi.updateNote.mockReset();
       mockNotesApi.updateNote.mockReturnValueOnce(pending.promise as never);
 
-      const { result } = renderHook(() => useUpdateNote(), { wrapper });
+      const { result } = await renderHook(() => useUpdateNote(), { wrapper });
       result.current.mutate({ id: 'a', data: { content: 'A-new' } });
 
       // Wait until A's optimistic edit lands (its onMutate has snapshotted the list).
@@ -873,7 +873,7 @@ describe('useNotes hooks', () => {
       mockNotesApi.toggleItemCompleted.mockReset();
       mockNotesApi.toggleItemCompleted.mockReturnValueOnce(pending.promise as never);
 
-      const { result } = renderHook(() => useToggleNoteItemCompleted(), { wrapper });
+      const { result } = await renderHook(() => useToggleNoteItemCompleted(), { wrapper });
       result.current.mutate({ noteId: 'n1', itemId: 'p', completed: true });
 
       await waitFor(() => {
@@ -903,7 +903,7 @@ describe('useNotes hooks', () => {
       mockNotesApi.toggleItemCompleted.mockReset();
       mockNotesApi.toggleItemCompleted.mockReturnValueOnce(pending.promise as never);
 
-      const { result } = renderHook(() => useToggleNoteItemCompleted(), { wrapper });
+      const { result } = await renderHook(() => useToggleNoteItemCompleted(), { wrapper });
       result.current.mutate({ noteId: 'n1', itemId: 'c', completed: false });
 
       await waitFor(() => {
@@ -923,7 +923,7 @@ describe('useNotes hooks', () => {
       queryClient.setQueryData(noteLocalQueryKey('n1'), listNote);
       mockNotesApi.toggleItemCompleted.mockRejectedValueOnce(makeAxiosError(404));
 
-      const { result } = renderHook(() => useToggleNoteItemCompleted(), { wrapper });
+      const { result } = await renderHook(() => useToggleNoteItemCompleted(), { wrapper });
       await result.current.mutateAsync({ noteId: 'n1', itemId: 'p', completed: true }).catch(() => {});
 
       await waitFor(() => expect(result.current.isError).toBe(true));
@@ -949,7 +949,7 @@ describe('useNotes hooks', () => {
       mockNotesApi.uncheckAllItems.mockReset();
       mockNotesApi.uncheckAllItems.mockReturnValueOnce(pending.promise as never);
 
-      const { result } = renderHook(() => useUncheckAllItems(), { wrapper });
+      const { result } = await renderHook(() => useUncheckAllItems(), { wrapper });
       result.current.mutate({ noteId: 'n1', itemIds: ['p', 'c'] });
 
       await waitFor(() => {
@@ -975,7 +975,7 @@ describe('useNotes hooks', () => {
       queryClient.setQueryData(noteLocalQueryKey('n1'), completedListNote);
       mockNotesApi.uncheckAllItems.mockRejectedValueOnce(makeAxiosError(404));
 
-      const { result } = renderHook(() => useUncheckAllItems(), { wrapper });
+      const { result } = await renderHook(() => useUncheckAllItems(), { wrapper });
       await result.current.mutateAsync({ noteId: 'n1', itemIds: ['p', 'c'] }).catch(() => {});
 
       await waitFor(() => expect(result.current.isError).toBe(true));
@@ -1001,7 +1001,7 @@ describe('useNotes hooks', () => {
       mockNotesApi.deleteCompletedItems.mockReset();
       mockNotesApi.deleteCompletedItems.mockReturnValueOnce(pending.promise as never);
 
-      const { result } = renderHook(() => useDeleteCompletedItems(), { wrapper });
+      const { result } = await renderHook(() => useDeleteCompletedItems(), { wrapper });
       result.current.mutate({ noteId: 'n1', itemIds: ['p', 'c'] });
 
       await waitFor(() => {
@@ -1026,7 +1026,7 @@ describe('useNotes hooks', () => {
       queryClient.setQueryData(noteLocalQueryKey('n1'), completedListNote);
       mockNotesApi.deleteCompletedItems.mockRejectedValueOnce(makeAxiosError(404));
 
-      const { result } = renderHook(() => useDeleteCompletedItems(), { wrapper });
+      const { result } = await renderHook(() => useDeleteCompletedItems(), { wrapper });
       await result.current.mutateAsync({ noteId: 'n1', itemIds: ['p', 'c'] }).catch(() => {});
 
       await waitFor(() => expect(result.current.isError).toBe(true));
@@ -1047,7 +1047,7 @@ describe('useNotes hooks', () => {
       };
       mockNotesApi.duplicateNote.mockResolvedValueOnce(duplicated as never);
 
-      const { result } = renderHook(() => useDuplicateNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useDuplicateNote(), { wrapper: createWrapper() });
 
       result.current.mutate('123');
 
@@ -1084,7 +1084,7 @@ describe('useNotes hooks', () => {
       mockUseNetworkStatus.mockReturnValue({ isConnected: false });
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(sourceTextNote as never);
 
-      const { result } = renderHook(() => useDuplicateNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useDuplicateNote(), { wrapper: createWrapper() });
 
       const localDuplicate = await result.current.mutateAsync('123');
 
@@ -1122,7 +1122,7 @@ describe('useNotes hooks', () => {
       mockUseNetworkStatus.mockReturnValue({ isConnected: false });
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(sourceListNote as never);
 
-      const { result } = renderHook(() => useDuplicateNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useDuplicateNote(), { wrapper: createWrapper() });
 
       const localDuplicate = await result.current.mutateAsync('456');
 
@@ -1155,7 +1155,7 @@ describe('useNotes hooks', () => {
       mockUseNetworkStatus.mockReturnValue({ isConnected: false });
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(null);
 
-      const { result } = renderHook(() => useDuplicateNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useDuplicateNote(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync('missing').catch(() => {});
 
@@ -1178,7 +1178,7 @@ describe('useNotes hooks', () => {
       mockNotesApi.duplicateNote.mockRejectedValueOnce(makeAxiosError(503));
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(sourceTextNote as never);
 
-      const { result } = renderHook(() => useDuplicateNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useDuplicateNote(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync('123');
 
@@ -1195,7 +1195,7 @@ describe('useNotes hooks', () => {
       mockNotesApi.duplicateNote.mockRejectedValueOnce(makeNetworkError());
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(sourceTextNote as never);
 
-      const { result } = renderHook(() => useDuplicateNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useDuplicateNote(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync('123');
 
@@ -1206,7 +1206,7 @@ describe('useNotes hooks', () => {
     it('surfaces a permanent failure (4xx) without queuing', async () => {
       mockNotesApi.duplicateNote.mockRejectedValueOnce(makeAxiosError(403));
 
-      const { result } = renderHook(() => useDuplicateNote(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useDuplicateNote(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync('123').catch(() => {});
 
@@ -1239,7 +1239,7 @@ describe('useNotes hooks', () => {
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(sourceTextNote as never);
       mockNotesApi.convertNoteType.mockResolvedValueOnce(converted as never);
 
-      const { result } = renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
 
       const returned = await result.current.mutateAsync('123');
 
@@ -1266,7 +1266,7 @@ describe('useNotes hooks', () => {
       } as never);
       mockNotesApi.convertNoteType.mockResolvedValueOnce(converted as never);
 
-      const { result } = renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync('123');
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -1298,7 +1298,7 @@ describe('useNotes hooks', () => {
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(sourceListNote as never);
       mockNotesApi.convertNoteType.mockResolvedValueOnce(converted as never);
 
-      const { result } = renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync('456');
 
@@ -1314,7 +1314,7 @@ describe('useNotes hooks', () => {
     it('throws when the note is missing from the local cache', async () => {
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(null);
 
-      const { result } = renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync('missing').catch(() => {});
 
@@ -1327,7 +1327,7 @@ describe('useNotes hooks', () => {
       const content = Array.from({ length: VALIDATION.ITEM_MAX_COUNT + 1 }, (_, i) => `Item ${i}`).join('\n');
       mockNoteQueries.getLocalNote.mockResolvedValueOnce({ ...sourceTextNote, content } as never);
 
-      const { result } = renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync('123').catch(() => {});
 
@@ -1344,7 +1344,7 @@ describe('useNotes hooks', () => {
       const long = 'x'.repeat(VALIDATION.ITEM_TEXT_MAX_LENGTH + 1);
       mockNoteQueries.getLocalNote.mockResolvedValueOnce({ ...sourceTextNote, content: long } as never);
 
-      const { result } = renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync('123').catch(() => {});
 
@@ -1370,7 +1370,7 @@ describe('useNotes hooks', () => {
       mockUseNetworkStatus.mockReturnValue({ isConnected: false });
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(sourceTextNote as never);
 
-      const { result } = renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
 
       const localConverted = await result.current.mutateAsync('123');
 
@@ -1404,7 +1404,7 @@ describe('useNotes hooks', () => {
         content: '# Groceries\nBuy milk',
       } as never);
 
-      const { result } = renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
 
       const localConverted = await result.current.mutateAsync('123');
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -1426,7 +1426,7 @@ describe('useNotes hooks', () => {
         content: '  - Orphan\n- Parent\n  - Child',
       } as never);
 
-      const { result } = renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
 
       const localConverted = await result.current.mutateAsync('123');
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -1445,7 +1445,7 @@ describe('useNotes hooks', () => {
       mockUseNetworkStatus.mockReturnValue({ isConnected: false });
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(null);
 
-      const { result } = renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync('missing').catch(() => {});
 
@@ -1466,7 +1466,7 @@ describe('useNotes hooks', () => {
       mockNotesApi.convertNoteType.mockRejectedValueOnce(makeAxiosError(503));
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(sourceTextNote as never);
 
-      const { result } = renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync('123');
 
@@ -1483,7 +1483,7 @@ describe('useNotes hooks', () => {
       mockNotesApi.convertNoteType.mockRejectedValueOnce(makeNetworkError());
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(sourceTextNote as never);
 
-      const { result } = renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync('123');
 
@@ -1495,7 +1495,7 @@ describe('useNotes hooks', () => {
       mockNotesApi.convertNoteType.mockRejectedValueOnce(makeAxiosError(403));
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(sourceTextNote as never);
 
-      const { result } = renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
 
       await result.current.mutateAsync('123').catch(() => {});
 

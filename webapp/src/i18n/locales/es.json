@@ -14,7 +14,9 @@
     "openMobileApp": "Abrir en la app móvil",
     "openMobileAppDescription": "¿Prefieres la experiencia nativa móvil?",
     "dismissMobileAppBanner": "Ocultar",
-    "skipToMainContent": "Saltar al contenido principal"
+    "skipToMainContent": "Saltar al contenido principal",
+    "main": "Navegación principal",
+    "secondary": "Navegación secundaria"
   },
   "mobileApp": {
     "handoffTitle": "¿Abrir en la aplicación Jot?",
@@ -86,7 +88,6 @@
     "myTasksInfo": "Mostrando notas con tus elementos de lista asignados.",
     "tabArchive": "Archivo",
     "tabBin": "Papelera",
-    "tabAdmin": "Admin",
     "noMyTasksNotesTitle": "No hay elementos de lista asignados",
     "noMyTasksNotes": "Aún no tienes elementos de lista asignados. Cuando alguien te asigne un elemento de lista en una nota compartida, aparecerá aquí.",
     "noNotesForThisLabel": "No hay notas para esta etiqueta",
@@ -131,9 +132,7 @@
     "lastNameLabel": "Apellido",
     "namePlaceholder": "Opcional",
     "profileUpdated": "Perfil actualizado correctamente.",
-    "usernameUpdated": "Nombre de usuario actualizado correctamente.",
     "failedUpdateUsername": "Error al actualizar el nombre de usuario.",
-    "logoutFailed": "Error al cerrar sesión. Inténtalo de nuevo.",
     "changePasswordSection": "Cambiar contraseña",
     "currentPasswordLabel": "Contraseña actual",
     "newPasswordLabel": "Nueva contraseña",
@@ -272,7 +271,6 @@
   "admin": {
     "pageHeading": "Admin",
     "title": "Gestión de usuarios",
-    "tabAdmin": "Admin",
     "createUser": "Crear usuario",
     "cancel": "Cancelar",
     "createNewUser": "Crear nuevo usuario",
@@ -293,7 +291,6 @@
     "failedLoadUsers": "Error al cargar usuarios",
     "failedLoadStats": "Error al cargar estadísticas",
     "failedCreateUser": "Error al crear usuario",
-    "userIdCreated": "ID: {{id}} • Creado: {{date}}",
     "userCreated": "Creado: {{date}}",
     "adminBadge": "Admin",
     "activeBadge": "Activo",
@@ -365,8 +362,6 @@
     "itemsUnchecked_many": "{{count}} elementos desmarcados",
     "itemsUnchecked_other": "{{count}} elementos desmarcados",
     "moreCompletedItems": "+{{count}} elementos completados",
-    "editNote": "Editar nota",
-    "newNote": "Nueva nota",
     "unpinNote": "Desfijar nota",
     "pinNote": "Fijar nota",
     "unarchiveNote": "Desarchivar nota",
@@ -424,10 +419,8 @@
     "addLabels": "Añadir etiquetas",
     "searchPlaceholder": "Buscar o crear etiqueta...",
     "createLabel": "Crear \"{{name}}\"",
-    "removeLabel": "Eliminar etiqueta {{name}}",
     "noLabels": "Aún no hay etiquetas",
     "newLabelPlaceholder": "Nombre de etiqueta...",
-    "createNew": "Crear nueva...",
     "newSidebar": "Nueva etiqueta",
     "createInputLabel": "Nuevo nombre de etiqueta",
     "createSave": "Crear etiqueta",
@@ -486,9 +479,6 @@
     "errorWrongType": "Solo se pueden adjuntar imágenes.",
     "errorTooLarge": "La imagen supera el límite de {{maxMB}} MB.",
     "errorTooMany": "Las notas pueden tener hasta {{max}} imágenes."
-  },
-  "serviceWorker": {
-    "updatePrompt": "¡Hay una nueva actualización disponible! Haz clic en Aceptar para actualizar"
   },
   "import": {
     "title": "Importar notas",

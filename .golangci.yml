@@ -35,7 +35,15 @@ linters:
     - gocognit
     - loggercheck
     - prealloc
+    - gocritic
   settings:
+    gocritic:
+      disable-all: true
+      enabled-checks:
+        - ruleguard
+      settings:
+        ruleguard:
+          rules: "gorules/rules.go"
     govet:
       enable-all: true
       disable:

@@ -83,7 +83,7 @@ describe('mobile i18n', () => {
   it('switches the active language when auth settings change', async () => {
     mockUseAuth.mockReturnValue({ settings: { language: 'en' } } as unknown as ReturnType<typeof useAuth>);
 
-    const { getByTestId, rerender } = render(
+    const { getByTestId, rerender } = await render(
       <MobileI18nProvider>
         <TranslationProbe />
       </MobileI18nProvider>,
@@ -94,7 +94,7 @@ describe('mobile i18n', () => {
     });
 
     mockUseAuth.mockReturnValue({ settings: { language: 'de' } } as unknown as ReturnType<typeof useAuth>);
-    rerender(
+    await rerender(
       <MobileI18nProvider>
         <TranslationProbe />
       </MobileI18nProvider>,

@@ -181,19 +181,19 @@ describe('DrawerContent', () => {
     jest.restoreAllMocks();
   });
 
-  it('applies top inset padding to drawer scroll content', () => {
+  it('applies top inset padding to drawer scroll content', async () => {
     const props = makeProps();
 
-    const { getByTestId } = render(<DrawerContent {...props} />);
+    const { getByTestId } = await render(<DrawerContent {...props} />);
     const scrollView = getByTestId('drawer-scroll-view');
 
     expect(scrollView.props.contentContainerStyle).toEqual({ paddingTop: 32 });
   });
 
-  it('applies bottom inset padding to footer actions', () => {
+  it('applies bottom inset padding to footer actions', async () => {
     const props = makeProps();
 
-    const { getByTestId } = render(<DrawerContent {...props} />);
+    const { getByTestId } = await render(<DrawerContent {...props} />);
     const bottomSection = getByTestId('drawer-bottom-section');
     expect(bottomSection.props.style).toEqual(expect.arrayContaining([expect.objectContaining({ paddingBottom: 34 })]));
   });
@@ -201,8 +201,8 @@ describe('DrawerContent', () => {
   it('opens server picker from profile section', async () => {
     const props = makeProps();
 
-    const { getByTestId, findByTestId } = render(<DrawerContent {...props} />);
-    fireEvent.press(getByTestId('drawer-profile-button'));
+    const { getByTestId, findByTestId } = await render(<DrawerContent {...props} />);
+    await fireEvent.press(getByTestId('drawer-profile-button'));
 
     await findByTestId('server-picker-modal');
     await waitFor(() => {
@@ -214,11 +214,11 @@ describe('DrawerContent', () => {
   it('opens guided add-server setup flow from server picker', async () => {
     const props = makeProps();
 
-    const { getByTestId, findByTestId, queryByTestId } = render(<DrawerContent {...props} />);
-    fireEvent.press(getByTestId('drawer-profile-button'));
+    const { getByTestId, findByTestId, queryByTestId } = await render(<DrawerContent {...props} />);
+    await fireEvent.press(getByTestId('drawer-profile-button'));
     await findByTestId('server-picker-modal');
 
-    fireEvent.press(getByTestId('server-picker-add-submit'));
+    await fireEvent.press(getByTestId('server-picker-add-submit'));
 
     await findByTestId('server-setup-modal');
     expect(queryByTestId('server-picker-modal')).toBeNull();
@@ -231,14 +231,14 @@ describe('DrawerContent', () => {
     const closeDrawer = jest.fn();
     props.navigation.closeDrawer = closeDrawer;
 
-    const { getByTestId, findByTestId, queryByTestId } = render(<DrawerContent {...props} />);
-    fireEvent.press(getByTestId('drawer-profile-button'));
+    const { getByTestId, findByTestId, queryByTestId } = await render(<DrawerContent {...props} />);
+    await fireEvent.press(getByTestId('drawer-profile-button'));
     await findByTestId('server-picker-modal');
 
-    fireEvent.press(getByTestId('server-picker-add-submit'));
+    await fireEvent.press(getByTestId('server-picker-add-submit'));
     await findByTestId('server-setup-modal');
 
-    fireEvent.press(getByTestId('server-picker-add-cancel'));
+    await fireEvent.press(getByTestId('server-picker-add-cancel'));
 
     await waitFor(() => {
       expect(queryByTestId('server-setup-modal')).toBeNull();
@@ -247,10 +247,10 @@ describe('DrawerContent', () => {
     expect(closeDrawer).toHaveBeenCalled();
   });
 
-  it('renders drawer avatar from profile icon state', () => {
+  it('renders drawer avatar from profile icon state', async () => {
     const props = makeProps();
 
-    const { getByTestId } = render(<DrawerContent {...props} />);
+    const { getByTestId } = await render(<DrawerContent {...props} />);
     expect(getByTestId('drawer-user-avatar')).toBeTruthy();
     expect(mockUserAvatar).toHaveBeenCalledWith({
       userId: 'user-1',
@@ -261,11 +261,11 @@ describe('DrawerContent', () => {
     });
   });
 
-  it('passes false hasProfileIcon to drawer avatar when icon is absent', () => {
+  it('passes false hasProfileIcon to drawer avatar when icon is absent', async () => {
     mockHasProfileIcon = false;
     const props = makeProps();
 
-    render(<DrawerContent {...props} />);
+    await render(<DrawerContent {...props} />);
     expect(mockUserAvatar).toHaveBeenCalledWith(expect.objectContaining({
       userId: 'user-1',
       username: 'alice',
@@ -274,7 +274,7 @@ describe('DrawerContent', () => {
     }));
   });
 
-  it('opens label action menu from explicit menu button', () => {
+  it('opens label action menu from explicit menu button', async () => {
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
     mockLabelsData.push({
       id: 'label-1',
@@ -286,8 +286,8 @@ describe('DrawerContent', () => {
 
     const props = makeProps();
 
-    const { getByTestId } = render(<DrawerContent {...props} />);
-    fireEvent.press(getByTestId('drawer-label-menu-label-1'));
+    const { getByTestId } = await render(<DrawerContent {...props} />);
+    await fireEvent.press(getByTestId('drawer-label-menu-label-1'));
 
     expect(alertSpy).toHaveBeenCalledTimes(1);
     const alertCall = alertSpy.mock.calls[0];
@@ -300,7 +300,7 @@ describe('DrawerContent', () => {
     );
   });
 
-  it('opens label action menu from long press', () => {
+  it('opens label action menu from long press', async () => {
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
     mockLabelsData.push({
       id: 'label-1',
@@ -314,8 +314,8 @@ describe('DrawerContent', () => {
     const props = makeProps();
     props.navigation.navigate = navigate;
 
-    const { getByTestId } = render(<DrawerContent {...props} />);
-    fireEvent(getByTestId('drawer-label-label-1'), 'onLongPress');
+    const { getByTestId } = await render(<DrawerContent {...props} />);
+    await fireEvent(getByTestId('drawer-label-label-1'), 'onLongPress');
 
     expect(alertSpy).toHaveBeenCalledTimes(1);
     const alertCall = alertSpy.mock.calls[0];
@@ -329,7 +329,7 @@ describe('DrawerContent', () => {
     expect(navigate).not.toHaveBeenCalled();
   });
 
-  it('navigates on first tap after a long press menu is canceled', () => {
+  it('navigates on first tap after a long press menu is canceled', async () => {
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
     mockLabelsData.push({
       id: 'label-1',
@@ -345,19 +345,19 @@ describe('DrawerContent', () => {
     props.navigation.navigate = navigate;
     props.navigation.closeDrawer = closeDrawer;
 
-    const { getByTestId } = render(<DrawerContent {...props} />);
-    fireEvent(getByTestId('drawer-label-label-1'), 'onLongPress');
+    const { getByTestId } = await render(<DrawerContent {...props} />);
+    await fireEvent(getByTestId('drawer-label-label-1'), 'onLongPress');
     expect(alertSpy).toHaveBeenCalledTimes(1);
     const onDismiss = (alertSpy.mock.calls[0]?.[3] as { onDismiss?: () => void } | undefined)?.onDismiss;
     onDismiss?.();
 
-    fireEvent.press(getByTestId('drawer-label-label-1'));
+    await fireEvent.press(getByTestId('drawer-label-label-1'));
 
     expect(navigate).toHaveBeenCalledWith('Notes', { labelId: 'label-1', labelName: 'Work' });
     expect(closeDrawer).toHaveBeenCalled();
   });
 
-  it('navigates to label notes when label row is pressed', () => {
+  it('navigates to label notes when label row is pressed', async () => {
     mockLabelsData.push({
       id: 'label-1',
       user_id: 'user-1',
@@ -372,14 +372,14 @@ describe('DrawerContent', () => {
     props.navigation.navigate = navigate;
     props.navigation.closeDrawer = closeDrawer;
 
-    const { getByTestId } = render(<DrawerContent {...props} />);
-    fireEvent.press(getByTestId('drawer-label-label-1'));
+    const { getByTestId } = await render(<DrawerContent {...props} />);
+    await fireEvent.press(getByTestId('drawer-label-label-1'));
 
     expect(navigate).toHaveBeenCalledWith('Notes', { labelId: 'label-1', labelName: 'Work' });
     expect(closeDrawer).toHaveBeenCalled();
   });
 
-  it('shows label count badges when counts are available', () => {
+  it('shows label count badges when counts are available', async () => {
     mockLabelsData.push({
       id: 'label-1',
       user_id: 'user-1',
@@ -390,13 +390,13 @@ describe('DrawerContent', () => {
     mockLabelCountsData['label-1'] = 7;
 
     const props = makeProps();
-    const { getByTestId, queryByTestId } = render(<DrawerContent {...props} />);
+    const { getByTestId, queryByTestId } = await render(<DrawerContent {...props} />);
 
     expect(getByTestId('drawer-label-count-label-1').props.children).toBe(7);
     expect(queryByTestId('drawer-label-count-missing')).toBeNull();
   });
 
-  it('shows zero label count badge when label count entry is missing', () => {
+  it('shows zero label count badge when label count entry is missing', async () => {
     mockLabelsData.push({
       id: 'label-1',
       user_id: 'user-1',
@@ -406,7 +406,7 @@ describe('DrawerContent', () => {
     });
 
     const props = makeProps();
-    const { getByTestId } = render(<DrawerContent {...props} />);
+    const { getByTestId } = await render(<DrawerContent {...props} />);
 
     expect(getByTestId('drawer-label-count-label-1').props.children).toBe(0);
     expect(getByTestId('drawer-label-label-1').props.accessibilityLabel).toContain('0');
@@ -416,11 +416,11 @@ describe('DrawerContent', () => {
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
     const props = makeProps();
 
-    const { getByTestId } = render(<DrawerContent {...props} />);
+    const { getByTestId } = await render(<DrawerContent {...props} />);
 
-    fireEvent.press(getByTestId('drawer-label-create'));
-    fireEvent.changeText(getByTestId('create-label-input'), 'Errands');
-    fireEvent.press(getByTestId('create-label-submit'));
+    await fireEvent.press(getByTestId('drawer-label-create'));
+    await fireEvent.changeText(getByTestId('create-label-input'), 'Errands');
+    await fireEvent.press(getByTestId('create-label-submit'));
 
     await waitFor(() => {
       expect(mockCreateLabelMutateAsync).toHaveBeenCalledWith({ name: 'Errands' });
@@ -433,11 +433,11 @@ describe('DrawerContent', () => {
     mockCreateLabelMutateAsync.mockReturnValue(promise);
     const props = makeProps();
 
-    const { getByTestId, queryByTestId } = render(<DrawerContent {...props} />);
+    const { getByTestId, queryByTestId } = await render(<DrawerContent {...props} />);
 
-    fireEvent.press(getByTestId('drawer-label-create'));
-    fireEvent.changeText(getByTestId('create-label-input'), 'Errands');
-    fireEvent.press(getByTestId('create-label-submit'));
+    await fireEvent.press(getByTestId('drawer-label-create'));
+    await fireEvent.changeText(getByTestId('create-label-input'), 'Errands');
+    await fireEvent.press(getByTestId('create-label-submit'));
 
     await waitFor(() => {
       expect(getByTestId('create-label-submit-spinner')).toBeTruthy();
@@ -471,16 +471,16 @@ describe('DrawerContent', () => {
     mockRenameLabelMutateAsync.mockReturnValue(promise);
     const props = makeProps();
 
-    const { getByTestId, queryByTestId } = render(<DrawerContent {...props} />);
+    const { getByTestId, queryByTestId } = await render(<DrawerContent {...props} />);
 
-    fireEvent.press(getByTestId('drawer-label-menu-label-1'));
+    await fireEvent.press(getByTestId('drawer-label-menu-label-1'));
     const renameButton = (alertSpy.mock.calls[0]?.[2] as Array<{ text?: string; onPress?: () => void }>).find(
       (button) => button.text === 'labels.rename',
     );
-    act(() => { renameButton?.onPress?.(); });
+    await act(() => { renameButton?.onPress?.(); });
 
-    fireEvent.changeText(getByTestId('rename-label-input'), 'Personal');
-    fireEvent.press(getByTestId('rename-label-submit'));
+    await fireEvent.changeText(getByTestId('rename-label-input'), 'Personal');
+    await fireEvent.press(getByTestId('rename-label-submit'));
 
     await waitFor(() => {
       expect(getByTestId('rename-label-submit-spinner')).toBeTruthy();
@@ -514,13 +514,13 @@ describe('DrawerContent', () => {
     mockDeleteLabelMutateAsync.mockReturnValue(promise);
     const props = makeProps();
 
-    const { getByTestId, queryByTestId } = render(
+    const { getByTestId, queryByTestId } = await render(
       <ConfirmContext.Provider value={{ confirm: async () => true }}>
         <DrawerContent {...props} />
       </ConfirmContext.Provider>,
     );
 
-    fireEvent.press(getByTestId('drawer-label-menu-label-1'));
+    await fireEvent.press(getByTestId('drawer-label-menu-label-1'));
     const alertCall = (Alert.alert as jest.Mock).mock.calls[0];
     const deleteButton = (alertCall?.[2] as Array<{ text?: string; onPress?: () => void }>).find(
       (button) => button.text === 'labels.delete',
@@ -573,14 +573,14 @@ describe('DrawerContent', () => {
     mockDeleteLabelMutateAsync.mockImplementation(({ labelId }: { labelId: string }) => deferredByLabel[labelId]!.promise);
     const props = makeProps();
 
-    const { getByTestId, queryByTestId } = render(
+    const { getByTestId, queryByTestId } = await render(
       <ConfirmContext.Provider value={{ confirm: async () => true }}>
         <DrawerContent {...props} />
       </ConfirmContext.Provider>,
     );
 
     const startDelete = async (labelId: string) => {
-      fireEvent.press(getByTestId(`drawer-label-menu-${labelId}`));
+      await fireEvent.press(getByTestId(`drawer-label-menu-${labelId}`));
       const alertCall = (Alert.alert as jest.Mock).mock.calls.at(-1);
       const deleteButton = (alertCall?.[2] as Array<{ text?: string; onPress?: () => void }>).find(
         (button) => button.text === 'labels.delete',
@@ -634,12 +634,12 @@ describe('DrawerContent', () => {
     const props = makeProps();
     props.navigation.closeDrawer = closeDrawer;
 
-    const { getByTestId, findByTestId, queryByTestId } = render(<DrawerContent {...props} />);
-    fireEvent.press(getByTestId('drawer-profile-button'));
+    const { getByTestId, findByTestId, queryByTestId } = await render(<DrawerContent {...props} />);
+    await fireEvent.press(getByTestId('drawer-profile-button'));
     await findByTestId('server-picker-modal');
     await findByTestId('server-picker-row-srv_b');
 
-    fireEvent.press(getByTestId('server-picker-row-srv_b'));
+    await fireEvent.press(getByTestId('server-picker-row-srv_b'));
 
     await waitFor(() => {
       expect(mockSwitchActiveServer).toHaveBeenCalledWith('srv_b');
@@ -672,12 +672,12 @@ describe('DrawerContent', () => {
     const props = makeProps();
     props.navigation.closeDrawer = closeDrawer;
 
-    const { getByTestId, findByTestId } = render(<DrawerContent {...props} />);
-    fireEvent.press(getByTestId('drawer-profile-button'));
+    const { getByTestId, findByTestId } = await render(<DrawerContent {...props} />);
+    await fireEvent.press(getByTestId('drawer-profile-button'));
     await findByTestId('server-picker-modal');
     await findByTestId('server-picker-row-srv_b');
 
-    fireEvent.press(getByTestId('server-picker-row-srv_b'));
+    await fireEvent.press(getByTestId('server-picker-row-srv_b'));
 
     await waitFor(() => {
       expect(mockSwitchActiveServer).toHaveBeenCalledWith('srv_b');
@@ -700,12 +700,12 @@ describe('DrawerContent', () => {
     const props = makeProps();
     props.navigation.closeDrawer = closeDrawer;
 
-    const { getByTestId, findByTestId } = render(<DrawerContent {...props} />);
-    fireEvent.press(getByTestId('drawer-profile-button'));
+    const { getByTestId, findByTestId } = await render(<DrawerContent {...props} />);
+    await fireEvent.press(getByTestId('drawer-profile-button'));
     await findByTestId('server-picker-modal');
     await findByTestId('server-picker-row-srv_b');
 
-    fireEvent.press(getByTestId('server-picker-row-srv_b'));
+    await fireEvent.press(getByTestId('server-picker-row-srv_b'));
 
     await waitFor(() => {
       expect(alertSpy).toHaveBeenCalledWith('common.error', 'serverPicker.switchFailed');

@@ -7,7 +7,13 @@ on:
   push:
     branches: ["master"]
   pull_request:
-    paths: ["shared/**", ".github/workflows/**"]
+    paths:
+      - "shared/**"
+      # Both jobs go through `task`, so the Taskfile and the scripts it calls
+      # are inputs to this workflow as much as the source is.
+      - "Taskfile.yml"
+      - "scripts/**"
+      - ".github/workflows/**"
 
 jobs:
   test:
@@ -18,17 +24,21 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: "24"
+          node-version-file: .nvmrc
           cache: "npm"
           cache-dependency-path: shared/package-lock.json
+
+      - name: Install Task
+        uses: go-task/setup-task@01a4adf9db2d14c1de7a560f09170b6e0df736aa # v2
+        with:
+          version: 3.x
 
       - name: Install dependencies
         working-directory: ./shared
         run: npm ci
 
       - name: Run tests
-        working-directory: ./shared
-        run: npm run test:run
+        run: task test-shared
 
   lint:
     runs-on: ubuntu-latest
@@ -38,18 +48,21 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: "24"
+          node-version-file: .nvmrc
           cache: "npm"
           cache-dependency-path: shared/package-lock.json
+
+      - name: Install Task
+        uses: go-task/setup-task@01a4adf9db2d14c1de7a560f09170b6e0df736aa # v2
+        with:
+          version: 3.x
 
       - name: Install dependencies
         working-directory: ./shared
         run: npm ci
 
-      - name: Run ESLint
-        working-directory: ./shared
-        run: npm run lint
-
-      - name: Run TypeScript type checking
-        working-directory: ./shared
-        run: npm run typecheck
+      # `task lint-shared` is ESLint + `tsc --noEmit`, the same pair the two
+      # steps here used to run by hand. Going through the task is what keeps
+      # CI and `task check` from drifting apart.
+      - name: Run linters
+        run: task lint-shared

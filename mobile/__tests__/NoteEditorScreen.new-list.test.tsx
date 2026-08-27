@@ -24,9 +24,9 @@ describe('NoteEditorScreen new-list quick action', () => {
     jest.restoreAllMocks();
   });
 
-  it('opens a brand-new note directly in list mode when initialNoteType is "list"', () => {
+  it('opens a brand-new note directly in list mode when initialNoteType is "list"', async () => {
     mockUseRoute.mockReturnValue({ params: { noteId: null, initialNoteType: 'list' } });
-    const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId, queryByTestId } = await render(<NoteEditorScreen />);
 
     // List UI is shown (title input + add-item row), not the text content input.
     expect(getByTestId('note-title-input')).toBeTruthy();
@@ -34,35 +34,35 @@ describe('NoteEditorScreen new-list quick action', () => {
     expect(queryByTestId('note-content-input')).toBeNull();
   });
 
-  it('opens a brand-new note in text mode by default', () => {
+  it('opens a brand-new note in text mode by default', async () => {
     mockUseRoute.mockReturnValue({ params: { noteId: null } });
-    const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId, queryByTestId } = await render(<NoteEditorScreen />);
 
     expect(getByTestId('note-content-input')).toBeTruthy();
     expect(queryByTestId('add-list-item')).toBeNull();
   });
 
-  it('measures the title limit in code points, not UTF-16 units', () => {
+  it('measures the title limit in code points, not UTF-16 units', async () => {
     mockUseRoute.mockReturnValue({ params: { noteId: null, initialNoteType: 'list' } });
-    const { getByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId } = await render(<NoteEditorScreen />);
 
     // 150 emoji is 300 UTF-16 units but only 150 code points, which is what the
     // server counts against TITLE_MAX_LENGTH — so it must be accepted whole.
     const title = '\u{1F600}'.repeat(150);
     const titleInput = getByTestId('note-title-input');
-    fireEvent.changeText(titleInput, title);
+    await fireEvent.changeText(titleInput, title);
 
     expect(titleInput.props.value).toBe(title);
   });
 
-  it('clamps an over-limit title without splitting a surrogate pair', () => {
+  it('clamps an over-limit title without splitting a surrogate pair', async () => {
     mockUseRoute.mockReturnValue({ params: { noteId: null, initialNoteType: 'list' } });
-    const { getByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId } = await render(<NoteEditorScreen />);
 
     // The leading 'a' puts the 200th UTF-16 unit inside an emoji, so a .slice
     // would leave a lone surrogate that the server stores as U+FFFD.
     const titleInput = getByTestId('note-title-input');
-    fireEvent.changeText(titleInput, `a${'\u{1F600}'.repeat(300)}`);
+    await fireEvent.changeText(titleInput, `a${'\u{1F600}'.repeat(300)}`);
 
     const value: string = titleInput.props.value;
     expect([...value]).toHaveLength(VALIDATION.TITLE_MAX_LENGTH);

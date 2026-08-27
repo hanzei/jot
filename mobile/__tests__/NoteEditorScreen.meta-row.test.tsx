@@ -56,7 +56,7 @@ describe('NoteEditorScreen collaborators + labels row', () => {
   });
 
   it('renders the note labels and collaborators', async () => {
-    const { getByText, getByTestId, queryByText } = render(<NoteEditorScreen />);
+    const { getByText, getByTestId, queryByText } = await render(<NoteEditorScreen />);
     await waitFor(() => {
       expect(getByTestId('note-meta-label-lbl-1')).toBeTruthy();
     });
@@ -69,12 +69,12 @@ describe('NoteEditorScreen collaborators + labels row', () => {
   });
 
   it('opens the label picker when a label chip is tapped', async () => {
-    const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId, queryByTestId } = await render(<NoteEditorScreen />);
     await waitFor(() => expect(getByTestId('note-meta-label-lbl-1')).toBeTruthy());
     expect(queryByTestId('label-picker-open')).toBeNull();
 
     await act(async () => {
-      fireEvent.press(getByTestId('note-meta-label-lbl-1'));
+      await fireEvent.press(getByTestId('note-meta-label-lbl-1'));
     });
 
     await waitFor(() => expect(getByTestId('label-picker-open')).toBeTruthy());
@@ -84,17 +84,17 @@ describe('NoteEditorScreen collaborators + labels row', () => {
   });
 
   it('does not render an "Add labels" affordance in the meta row', async () => {
-    const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId, queryByTestId } = await render(<NoteEditorScreen />);
     await waitFor(() => expect(getByTestId('note-meta-row')).toBeTruthy());
     expect(queryByTestId('note-meta-add-labels')).toBeNull();
   });
 
   it('navigates to the share screen when a collaborator avatar is tapped', async () => {
-    const { getByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId } = await render(<NoteEditorScreen />);
     await waitFor(() => expect(getByTestId('note-meta-collaborators')).toBeTruthy());
 
     await act(async () => {
-      fireEvent.press(getByTestId('note-meta-collaborators'));
+      await fireEvent.press(getByTestId('note-meta-collaborators'));
     });
 
     await waitFor(() => {
@@ -106,13 +106,13 @@ describe('NoteEditorScreen collaborators + labels row', () => {
     // Opened from the trash: read-only, so the avatars mirror the menu having
     // no Share action here — they display but do not navigate.
     mockUseRoute.mockReturnValue({ params: { noteId: 'note-1', readOnly: true } });
-    const { getByTestId, getByText, queryByText } = render(<NoteEditorScreen />);
+    const { getByTestId, getByText, queryByText } = await render(<NoteEditorScreen />);
     await waitFor(() => expect(getByTestId('note-meta-collaborators')).toBeTruthy());
     expect(getByText('bob')).toBeTruthy();
     expect(queryByText('alice')).toBeNull();
 
     await act(async () => {
-      fireEvent.press(getByTestId('note-meta-collaborators'));
+      await fireEvent.press(getByTestId('note-meta-collaborators'));
     });
 
     expect(mockNavigate).not.toHaveBeenCalled();

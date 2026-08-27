@@ -27,15 +27,15 @@ describe('NoteEditorScreen save-first actions', () => {
   });
 
   it('creates the note before pinning when it has not been saved yet', async () => {
-    const { getByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId } = await render(<NoteEditorScreen />);
 
     // Type some content so the note is non-empty (and therefore saveable).
     await act(async () => {
-      fireEvent.changeText(getByTestId('note-content-input'), 'Fresh note');
+      await fireEvent.changeText(getByTestId('note-content-input'), 'Fresh note');
     });
 
     await act(async () => {
-      fireEvent.press(getByTestId('toolbar-pin-btn'));
+      await fireEvent.press(getByTestId('toolbar-pin-btn'));
     });
 
     // Save-first: a create fires, then the pin update against the new id.
@@ -50,14 +50,14 @@ describe('NoteEditorScreen save-first actions', () => {
   });
 
   it('creates the note before archiving when it has not been saved yet', async () => {
-    const { getByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId } = await render(<NoteEditorScreen />);
 
     await act(async () => {
-      fireEvent.changeText(getByTestId('note-content-input'), 'Fresh note');
+      await fireEvent.changeText(getByTestId('note-content-input'), 'Fresh note');
     });
 
     await act(async () => {
-      fireEvent.press(getByTestId('toolbar-archive-btn'));
+      await fireEvent.press(getByTestId('toolbar-archive-btn'));
     });
 
     // Save-first: a create fires, then the archive update against the new id.

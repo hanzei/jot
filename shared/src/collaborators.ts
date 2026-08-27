@@ -29,10 +29,10 @@ export function buildCollaborators(
   result.push({
     userId: noteUserId,
     username: owner?.username || '?',
-    firstName: owner?.first_name,
-    lastName: owner?.last_name,
-    hasProfileIcon: owner?.has_profile_icon,
-    iconVersion: owner?.updated_at,
+    ...(owner?.first_name !== undefined && { firstName: owner.first_name }),
+    ...(owner?.last_name !== undefined && { lastName: owner.last_name }),
+    ...(owner?.has_profile_icon !== undefined && { hasProfileIcon: owner.has_profile_icon }),
+    ...(owner?.updated_at !== undefined && { iconVersion: owner.updated_at }),
   });
   seen.add(noteUserId);
 
@@ -40,13 +40,16 @@ export function buildCollaborators(
     if (seen.has(s.shared_with_user_id)) return;
     seen.add(s.shared_with_user_id);
     const u = usersById?.get(s.shared_with_user_id);
+    const firstName = u?.first_name || s.first_name;
+    const lastName = u?.last_name || s.last_name;
+    const hasProfileIcon = u?.has_profile_icon ?? s.has_profile_icon;
     result.push({
       userId: s.shared_with_user_id,
       username: u?.username || s.username || '?',
-      firstName: u?.first_name || s.first_name,
-      lastName: u?.last_name || s.last_name,
-      hasProfileIcon: u?.has_profile_icon ?? s.has_profile_icon,
-      iconVersion: u?.updated_at,
+      ...(firstName !== undefined && { firstName }),
+      ...(lastName !== undefined && { lastName }),
+      ...(hasProfileIcon !== undefined && { hasProfileIcon }),
+      ...(u?.updated_at !== undefined && { iconVersion: u.updated_at }),
     });
   });
 

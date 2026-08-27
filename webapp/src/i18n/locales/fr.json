@@ -14,7 +14,9 @@
     "openMobileApp": "Ouvrir dans l’app mobile",
     "openMobileAppDescription": "Vous préférez l’expérience mobile native ?",
     "dismissMobileAppBanner": "Masquer",
-    "skipToMainContent": "Aller au contenu principal"
+    "skipToMainContent": "Aller au contenu principal",
+    "main": "Navigation principale",
+    "secondary": "Navigation secondaire"
   },
   "mobileApp": {
     "handoffTitle": "Ouvrir dans l'application Jot ?",
@@ -86,7 +88,6 @@
     "myTasksInfo": "Affichage des notes contenant vos éléments de liste attribués.",
     "tabArchive": "Archive",
     "tabBin": "Corbeille",
-    "tabAdmin": "Admin",
     "noMyTasksNotesTitle": "Aucun élément de liste attribué",
     "noMyTasksNotes": "Aucun élément de liste ne vous a encore été attribué. Lorsque quelqu'un vous attribue un élément de liste dans une note partagée, il apparaîtra ici.",
     "noNotesForThisLabel": "Aucune note pour ce libellé",
@@ -131,9 +132,7 @@
     "lastNameLabel": "Nom",
     "namePlaceholder": "Facultatif",
     "profileUpdated": "Profil mis à jour avec succès.",
-    "usernameUpdated": "Nom d'utilisateur mis à jour avec succès.",
     "failedUpdateUsername": "Impossible de mettre à jour le nom d'utilisateur.",
-    "logoutFailed": "Échec de la déconnexion. Veuillez réessayer.",
     "changePasswordSection": "Changer le mot de passe",
     "currentPasswordLabel": "Mot de passe actuel",
     "newPasswordLabel": "Nouveau mot de passe",
@@ -272,7 +271,6 @@
   "admin": {
     "pageHeading": "Admin",
     "title": "Gestion des utilisateurs",
-    "tabAdmin": "Admin",
     "createUser": "Créer un utilisateur",
     "cancel": "Annuler",
     "createNewUser": "Créer un nouvel utilisateur",
@@ -293,7 +291,6 @@
     "failedLoadUsers": "Impossible de charger les utilisateurs",
     "failedLoadStats": "Impossible de charger les statistiques",
     "failedCreateUser": "Impossible de créer l'utilisateur",
-    "userIdCreated": "ID : {{id}} • Créé : {{date}}",
     "userCreated": "Créé : {{date}}",
     "adminBadge": "Admin",
     "activeBadge": "Actif",
@@ -365,8 +362,6 @@
     "itemsUnchecked_many": "{{count}} éléments décochés",
     "itemsUnchecked_other": "{{count}} éléments décochés",
     "moreCompletedItems": "+{{count}} éléments terminés",
-    "editNote": "Modifier la note",
-    "newNote": "Nouvelle note",
     "unpinNote": "Désépingler la note",
     "pinNote": "Épingler la note",
     "unarchiveNote": "Désarchiver la note",
@@ -424,10 +419,8 @@
     "addLabels": "Ajouter des étiquettes",
     "searchPlaceholder": "Rechercher ou créer une étiquette...",
     "createLabel": "Créer « {{name}} »",
-    "removeLabel": "Supprimer l'étiquette {{name}}",
     "noLabels": "Aucune étiquette pour l'instant",
     "newLabelPlaceholder": "Nom de l'étiquette...",
-    "createNew": "Créer nouvelle...",
     "newSidebar": "Nouvelle étiquette",
     "createInputLabel": "Nom de la nouvelle étiquette",
     "createSave": "Créer l'étiquette",
@@ -486,9 +479,6 @@
     "errorWrongType": "Seules les images peuvent être jointes.",
     "errorTooLarge": "L'image dépasse la limite de {{maxMB}} Mo.",
     "errorTooMany": "Une note peut contenir jusqu'à {{max}} images."
-  },
-  "serviceWorker": {
-    "updatePrompt": "Une nouvelle mise à jour est disponible ! Cliquez sur OK pour actualiser"
   },
   "import": {
     "title": "Importer des notes",

@@ -5,7 +5,6 @@ import { auth, users, notes as notesApi, sessions as sessionsApi, pats as patsAp
 import { getUser, setUser, getSettings, setSettings } from '@/utils/auth';
 import type { LanguagePreference } from '@/utils/language';
 import { getLanguagePreference, resolveLanguage } from '@/utils/language';
-import { isPasswordTooShort } from '@/utils/userValidation';
 import type { ThemePreference } from '@/utils/theme';
 import { getThemePreference, applyTheme } from '@/utils/theme';
 import PageContent from '@/components/PageContent';
@@ -14,7 +13,7 @@ import AboutModal from '@/components/AboutModal';
 import NewPATModal from '@/components/NewPATModal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
-import type { ActiveSession, PersonalAccessToken } from '@jot/shared';
+import { isPasswordTooShort, type ActiveSession, type PersonalAccessToken } from '@jot/shared';
 import { IdentitySecurityColumn, PreferencesInfoColumn } from './settings/SettingsSections';
 
 interface SettingsProps {

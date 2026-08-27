@@ -148,29 +148,6 @@ func (s *noteStore) CreateItemWithCompleted(ctx context.Context, noteID string, 
 	return &item, nil
 }
 
-// GetItemForNote returns a single item scoped to its note, or ErrNoteItemNotFound.
-func (s *noteStore) GetItemForNote(ctx context.Context, noteID, itemID string) (*NoteItem, error) {
-	query := s.d.RewritePlaceholders(`SELECT id, note_id, text, completed, position, parent_id,
-			  assigned_to, created_at, updated_at
-			  FROM note_items WHERE id = ? AND note_id = ?`)
-	var item NoteItem
-	var assignedTo, parentID sql.NullString
-	err := s.db.QueryRowContext(ctx, query, itemID, noteID).Scan(
-		&item.ID, &item.NoteID, &item.Text, &item.Completed,
-		&item.Position, &parentID, &assignedTo,
-		&item.CreatedAt, &item.UpdatedAt,
-	)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrNoteItemNotFound
-		}
-		return nil, fmt.Errorf("failed to get note item: %w", err)
-	}
-	item.AssignedTo = assignedTo.String
-	item.ParentID = parentIDPtr(parentID)
-	return &item, nil
-}
-
 // CreateItemWithID inserts a list item using a caller-supplied ID. Returns
 // ErrNoteItemExists if an item with that ID already exists, and bumps the
 // parent note's updated_at. When maxItems > 0 the note's item count is checked

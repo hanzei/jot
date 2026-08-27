@@ -2,9 +2,8 @@ import { useState } from 'react';
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
 import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { ROLES, VALIDATION, getUsernameValidationError, type User, type CreateUserRequest } from '@jot/shared';
+import { ROLES, VALIDATION, getUsernameValidationError, isPasswordTooShort, type User, type CreateUserRequest } from '@jot/shared';
 import { admin, isAxiosError } from '@/utils/api';
-import { isPasswordTooShort } from '@/utils/userValidation';
 
 interface CreateUserModalProps {
   passwordMinLength: number;

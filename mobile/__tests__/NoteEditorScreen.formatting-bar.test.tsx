@@ -58,25 +58,25 @@ describe('NoteEditorScreen formatting bar', () => {
   });
 
   /** Renders the editor and returns helpers bound to the content input. */
-  function renderEditor() {
-    const utils = render(<NoteEditorScreen />);
+  async function renderEditor() {
+    const utils = await render(<NoteEditorScreen />);
     const input = () => utils.getByTestId('note-content-input');
 
     const type = async (text: string) => {
       await act(async () => {
-        fireEvent.changeText(input(), text);
+        await fireEvent.changeText(input(), text);
       });
     };
 
     const placeCaret = async (start: number, end = start) => {
       await act(async () => {
-        fireEvent(input(), 'selectionChange', { nativeEvent: { selection: { start, end } } });
+        await fireEvent(input(), 'selectionChange', { nativeEvent: { selection: { start, end } } });
       });
     };
 
     const press = async (testID: string) => {
       await act(async () => {
-        fireEvent.press(utils.getByTestId(testID));
+        await fireEvent.press(utils.getByTestId(testID));
       });
     };
 
@@ -84,7 +84,7 @@ describe('NoteEditorScreen formatting bar', () => {
   }
 
   it('inserts bold markers at the caret and puts the caret between them', async () => {
-    const { input, type, placeCaret, press } = renderEditor();
+    const { input, type, placeCaret, press } = await renderEditor();
 
     await type('one\ntwo');
     await placeCaret(3); // end of the first line
@@ -96,7 +96,7 @@ describe('NoteEditorScreen formatting bar', () => {
   });
 
   it('wraps the selected text and keeps it selected', async () => {
-    const { input, type, placeCaret, press } = renderEditor();
+    const { input, type, placeCaret, press } = await renderEditor();
 
     await type('make this bold');
     await placeCaret(5, 9); // "this"
@@ -108,7 +108,7 @@ describe('NoteEditorScreen formatting bar', () => {
   });
 
   it('unwraps when the same formatting is applied twice', async () => {
-    const { input, type, placeCaret, press } = renderEditor();
+    const { input, type, placeCaret, press } = await renderEditor();
 
     await type('make this italic');
     await placeCaret(5, 9);
@@ -122,7 +122,7 @@ describe('NoteEditorScreen formatting bar', () => {
   });
 
   it('strikes through the selection and clears it on a second press', async () => {
-    const { input, type, placeCaret, press } = renderEditor();
+    const { input, type, placeCaret, press } = await renderEditor();
 
     await type('buy milk');
     await placeCaret(4, 8); // "milk"
@@ -136,7 +136,7 @@ describe('NoteEditorScreen formatting bar', () => {
   });
 
   it('headings the caret line rather than the last line of the note', async () => {
-    const { input, type, placeCaret, press } = renderEditor();
+    const { input, type, placeCaret, press } = await renderEditor();
 
     await type('title\nbody\nmore');
     await placeCaret(2); // inside "title"
@@ -147,7 +147,7 @@ describe('NoteEditorScreen formatting bar', () => {
   });
 
   it('cycles the heading level on repeated presses', async () => {
-    const { input, type, placeCaret, press } = renderEditor();
+    const { input, type, placeCaret, press } = await renderEditor();
 
     await type('title');
     await placeCaret(2);
@@ -163,7 +163,7 @@ describe('NoteEditorScreen formatting bar', () => {
   });
 
   it('bullets the caret line and toggles it back off', async () => {
-    const { input, type, placeCaret, press } = renderEditor();
+    const { input, type, placeCaret, press } = await renderEditor();
 
     await type('one\ntwo');
     await placeCaret(5); // inside "two"
@@ -176,7 +176,7 @@ describe('NoteEditorScreen formatting bar', () => {
   });
 
   it('adds a checklist marker and steps it down to a bullet', async () => {
-    const { input, type, placeCaret, press } = renderEditor();
+    const { input, type, placeCaret, press } = await renderEditor();
 
     await type('milk');
     await placeCaret(4);
@@ -189,7 +189,7 @@ describe('NoteEditorScreen formatting bar', () => {
   });
 
   it('continues a list when Enter is pressed at the end of an item', async () => {
-    const { input, type, placeCaret } = renderEditor();
+    const { input, type, placeCaret } = await renderEditor();
 
     await type('- one');
     await placeCaret(5);
@@ -200,7 +200,7 @@ describe('NoteEditorScreen formatting bar', () => {
   });
 
   it('ends the list when Enter is pressed on an empty item', async () => {
-    const { input, type, placeCaret } = renderEditor();
+    const { input, type, placeCaret } = await renderEditor();
 
     await type('- one\n- ');
     await placeCaret(8);
@@ -210,7 +210,7 @@ describe('NoteEditorScreen formatting bar', () => {
   });
 
   it('leaves ordinary typing untouched', async () => {
-    const { input, type, placeCaret } = renderEditor();
+    const { input, type, placeCaret } = await renderEditor();
 
     await type('plain');
     await placeCaret(5);
@@ -220,7 +220,7 @@ describe('NoteEditorScreen formatting bar', () => {
   });
 
   it('releases the forced caret once the input reports it landed', async () => {
-    const { input, type, placeCaret, press } = renderEditor();
+    const { input, type, placeCaret, press } = await renderEditor();
 
     await type('hi');
     await placeCaret(2);
@@ -234,7 +234,7 @@ describe('NoteEditorScreen formatting bar', () => {
   });
 
   it('does not force the caret when the edit leaves it where it already is', async () => {
-    const { input, type, placeCaret, press } = renderEditor();
+    const { input, type, placeCaret, press } = await renderEditor();
 
     await type('- one');
     await placeCaret(0); // start of the line: the marker is removed after the caret
@@ -248,7 +248,7 @@ describe('NoteEditorScreen formatting bar', () => {
   });
 
   it('says why a formatting press did nothing at the length cap', async () => {
-    const { input, type, placeCaret, press } = renderEditor();
+    const { input, type, placeCaret, press } = await renderEditor();
 
     const full = 'x'.repeat(VALIDATION.CONTENT_MAX_LENGTH);
     await type(full);
@@ -262,7 +262,7 @@ describe('NoteEditorScreen formatting bar', () => {
   });
 
   it('keeps the newline but drops the marker when a list would exceed the cap', async () => {
-    const { input, type, placeCaret } = renderEditor();
+    const { input, type, placeCaret } = await renderEditor();
 
     // One character below the cap, ending in a list item: the newline still
     // fits, the "- " it would carry over does not.
@@ -281,7 +281,7 @@ describe('NoteEditorScreen formatting bar', () => {
 
   it('renders the bar on Android too', async () => {
     Platform.OS = 'android';
-    const { getByTestId } = renderEditor();
+    const { getByTestId } = await renderEditor();
 
     expect(getByTestId('format-bold-btn')).toBeTruthy();
     expect(getByTestId('format-checkbox-btn')).toBeTruthy();
@@ -289,7 +289,7 @@ describe('NoteEditorScreen formatting bar', () => {
 
   it('drops the bar when the keyboard closes but keeps the action bar', async () => {
     Platform.OS = 'android';
-    const { getByTestId, queryByTestId } = renderEditor();
+    const { getByTestId, queryByTestId } = await renderEditor();
     expect(getByTestId('format-bold-btn')).toBeTruthy();
 
     await emitKeyboardEvent('keyboardDidHide');
@@ -302,7 +302,7 @@ describe('NoteEditorScreen formatting bar', () => {
 
   it('keeps the buttons out of the Android focus order', async () => {
     Platform.OS = 'android';
-    const { getByTestId } = renderEditor();
+    const { getByTestId } = await renderEditor();
 
     // A focusable button takes input focus from the content input on tap, which
     // hides the keyboard and so tears down the editor mid-edit.
@@ -311,23 +311,23 @@ describe('NoteEditorScreen formatting bar', () => {
     }
   });
 
-  it('hides the bar when the note is not being edited', () => {
+  it('hides the bar when the note is not being edited', async () => {
     mockUseRoute.mockReturnValue({ params: { noteId: 'note-1' } });
     mockUseOfflineNote.mockReturnValue({ data: makeNote({ content: 'Saved body' }) });
 
-    const { queryByTestId, getByTestId } = render(<NoteEditorScreen />);
+    const { queryByTestId, getByTestId } = await render(<NoteEditorScreen />);
 
     expect(getByTestId('content-preview')).toBeTruthy();
     expect(queryByTestId('format-bold-btn')).toBeNull();
   });
 
-  it('hides the bar on a read-only note', () => {
+  it('hides the bar on a read-only note', async () => {
     mockUseRoute.mockReturnValue({ params: { noteId: 'note-1', readOnly: true } });
     mockUseOfflineNote.mockReturnValue({
       data: makeNote({ content: 'Deleted body', deleted_at: '2026-07-03T00:00:00Z' }),
     });
 
-    const { queryByTestId } = render(<NoteEditorScreen />);
+    const { queryByTestId } = await render(<NoteEditorScreen />);
 
     expect(queryByTestId('format-bold-btn')).toBeNull();
   });

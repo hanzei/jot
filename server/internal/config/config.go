@@ -15,6 +15,7 @@ type Config struct {
 	MetricsEnabled      bool
 	MetricsPort         int
 	MetricsHost         string
+	PprofEnabled        bool
 	DBDriver            string
 	DBDSN               string
 	StaticDir           string
@@ -122,6 +123,14 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	cfg.MetricsEnabled = metricsEnabled
+
+	// Profiling shares the metrics listener (and therefore MetricsHost /
+	// MetricsPort) but has its own switch, so either can run without the other.
+	pprofEnabled, err := parseBoolEnv("JOT_PPROF_ENABLED", false)
+	if err != nil {
+		return nil, err
+	}
+	cfg.PprofEnabled = pprofEnabled
 
 	// Keep the allowed set in sync with the drivers supported by
 	// internal/database.New and internal/database/dialect.

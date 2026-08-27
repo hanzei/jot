@@ -45,7 +45,7 @@ export function usePendingImageUploads(noteId: string | null): PendingImageUploa
         previewUri: row.local_path,
         progress: 0,
         status: row.status,
-        errorMessage: row.error_message ?? undefined,
+        ...(row.error_message !== null && { errorMessage: row.error_message }),
       }));
     },
     enabled: noteId !== null,

@@ -15,10 +15,11 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import type { AuthStackParamList } from '../navigation/AuthStack';
-import { VALIDATION, getUsernameValidationError } from '@jot/shared';
+import { getUsernameValidationError, isPasswordTooShort } from '@jot/shared';
 import { displayMessage } from '../i18n/utils';
 import ServerSetupGate from '../components/ServerSetupGate';
 import FadeInView from '../components/FadeInView';
+import { useServerConfig } from '../hooks/useServerConfig';
 
 type RegisterScreenProps = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'Register'>;
@@ -28,6 +29,7 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
   const { register } = useAuth();
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const { password_min_length: passwordMinLength } = useServerConfig();
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -49,7 +51,7 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
       return usernameErrorTranslations[usernameError];
     }
     if (!password.trim()) return t('auth.passwordRequired');
-    if ([...password].length < VALIDATION.PASSWORD_MIN_LENGTH) return t('auth.passwordMin', { min: VALIDATION.PASSWORD_MIN_LENGTH });
+    if (isPasswordTooShort(password, passwordMinLength)) return t('auth.passwordMin', { min: passwordMinLength });
     return null;
   };
 

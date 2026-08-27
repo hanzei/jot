@@ -91,7 +91,7 @@ describe('useOfflineNotes background sync (#487)', () => {
     ];
     mockNotesApi.getNotes.mockResolvedValue(notes);
 
-    renderHook(() => useOfflineNotes(params), { wrapper: createWrapper() });
+    await renderHook(() => useOfflineNotes(params), { wrapper: createWrapper() });
 
     await waitFor(() => expect(mockSyncQueue.saveServerNotesScope).toHaveBeenCalled());
     // The scope params are forwarded so pruning targets the right view, and the
@@ -120,7 +120,7 @@ describe('useOfflineNotes background sync (#487)', () => {
     );
     mockNotesApi.getNotes.mockResolvedValue([makeTextNote('n1')]);
 
-    renderHook(() => useOfflineNotes(), { wrapper: createWrapper() });
+    await renderHook(() => useOfflineNotes(), { wrapper: createWrapper() });
 
     await waitFor(() => expect(mockSyncQueue.saveServerNotesScope).toHaveBeenCalled());
     await waitFor(async () =>
@@ -134,7 +134,7 @@ describe('useOfflineNotes background sync (#487)', () => {
 describe('useOfflineNotes catch-up on SSE reconnect', () => {
   it('re-syncs from the server when a reconnect resync is published', async () => {
     mockNotesApi.getNotes.mockResolvedValue([makeTextNote('n1')]);
-    renderHook(() => useOfflineNotes(), { wrapper: createWrapper() });
+    await renderHook(() => useOfflineNotes(), { wrapper: createWrapper() });
 
     // Initial mount-time sync.
     await waitFor(() => expect(mockNotesApi.getNotes).toHaveBeenCalledTimes(1));
@@ -153,7 +153,7 @@ describe('useOfflineNotes catch-up on SSE reconnect', () => {
     mockNotesApi.getNotes.mockImplementation(
       () => new Promise<Note[]>((resolve) => { resolveGet = resolve; }),
     );
-    renderHook(() => useOfflineNotes(), { wrapper: createWrapper() });
+    await renderHook(() => useOfflineNotes(), { wrapper: createWrapper() });
 
     // The mount-time sync is now in flight (getNotes pending).
     await waitFor(() => expect(mockNotesApi.getNotes).toHaveBeenCalledTimes(1));
@@ -182,7 +182,7 @@ describe('useOfflineNote background fetch (#487)', () => {
   it('persists the single-note fetch through the queue-aware saveServerNote writer', async () => {
     mockNotesApi.getNote.mockResolvedValue(makeTextNote('note-1'));
 
-    renderHook(() => useOfflineNote('note-1'), { wrapper: createWrapper() });
+    await renderHook(() => useOfflineNote('note-1'), { wrapper: createWrapper() });
 
     await waitFor(() => expect(mockSyncQueue.saveServerNote).toHaveBeenCalled());
     expect(mockSyncQueue.saveServerNote).toHaveBeenCalledWith(
@@ -201,7 +201,7 @@ describe('useOfflineNote background fetch (#487)', () => {
     await noteQueriesModule.saveNote(db, buildTextNote({ id: 'gone' }));
     mockNotesApi.getNote.mockRejectedValue(makeAxiosError(404));
 
-    renderHook(() => useOfflineNote('gone'), { wrapper: createWrapper() });
+    await renderHook(() => useOfflineNote('gone'), { wrapper: createWrapper() });
 
     await waitFor(() =>
       expect(mockNoteQueries.markLocalNoteDeleted).toHaveBeenCalledWith(expect.anything(), 'gone'),
@@ -227,7 +227,7 @@ describe('useOfflineNote background fetch (#487)', () => {
     );
     mockNotesApi.getNote.mockRejectedValue(makeAxiosError(404));
 
-    renderHook(() => useOfflineNote('racing'), { wrapper: createWrapper() });
+    await renderHook(() => useOfflineNote('racing'), { wrapper: createWrapper() });
 
     await waitFor(() => expect(mockSyncQueue.getProtectedNoteIds).toHaveBeenCalled());
     await flushMicrotasks();

@@ -378,7 +378,7 @@ function DiagRow({
 }: {
   label: string;
   value: string;
-  valueColor?: string;
+  valueColor?: string | undefined;
   mono?: boolean;
 }) {
   const { colors } = useTheme();

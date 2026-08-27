@@ -7,7 +7,14 @@ on:
   push:
     branches: ["master"]
   pull_request:
-    paths: ["mobile/**", "shared/**", ".github/workflows/**"]
+    paths:
+      - "mobile/**"
+      - "shared/**"
+      # The translations job runs `task check-translations`, so the Taskfile
+      # and the scripts it calls are inputs to this workflow too.
+      - "Taskfile.yml"
+      - "scripts/**"
+      - ".github/workflows/**"
 
 jobs:
   lint:
@@ -17,7 +24,7 @@ jobs:
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: "24"
+          node-version-file: .nvmrc
           cache: "npm"
           cache-dependency-path: mobile/package-lock.json
 
@@ -40,7 +47,7 @@ jobs:
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: "24"
+          node-version-file: .nvmrc
           cache: "npm"
           cache-dependency-path: webapp/package-lock.json
 
@@ -63,7 +70,7 @@ jobs:
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: "24"
+          node-version-file: .nvmrc
           cache: "npm"
           cache-dependency-path: mobile/package-lock.json
 

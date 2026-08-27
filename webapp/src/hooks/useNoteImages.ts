@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { IMAGE_ALLOWED_TYPES, IMAGE_MAX_PER_NOTE, generateId, type Note, type NoteImage } from '@jot/shared';
+import { IMAGE_MAX_PER_NOTE, generateId, imageMaxMB as sharedImageMaxMB, validateImageFile as validateImageFileRaw, type Note, type NoteImage } from '@jot/shared';
 import { images as imagesApi } from '@/utils/api';
 import type { PendingImageUpload } from '@/components/NoteImageGallery';
 
@@ -13,7 +13,7 @@ interface UseNoteImagesOptions {
   note?: Note | null;
   // Server-configured image upload cap, fetched via GET /config.
   uploadMaxBytes: number;
-  onRefresh?: () => void;
+  onRefresh?: (() => void) | undefined;
   // Surfaces a validation/upload error in the modal's own error banner.
   showError: (message: string) => void;
 }
@@ -61,7 +61,7 @@ export function useNoteImages({ note, uploadMaxBytes, onRefresh, showError }: Us
   // server-configured cap (falls back to the shared default) rather than a
   // hardcoded value, so the message matches what the server will actually
   // accept even when an admin has overridden UPLOAD_MAX_BYTES.
-  const imageMaxMB = useMemo(() => Math.round(uploadMaxBytes / (1024 * 1024)), [uploadMaxBytes]);
+  const imageMaxMB = useMemo(() => sharedImageMaxMB(uploadMaxBytes), [uploadMaxBytes]);
   const [isDraggingImage, setIsDraggingImage] = useState(false);
   const imageFileInputRef = useRef<HTMLInputElement>(null);
   const imageUploadsRef = useRef<PendingImageUpload[]>([]);
@@ -113,12 +113,9 @@ export function useNoteImages({ note, uploadMaxBytes, onRefresh, showError }: Us
   // friendly pre-check; the server (§7 of the spec) is the source of truth
   // and re-validates type/size/count regardless.
   const validateImageFile = useCallback((file: File): string | null => {
-    if (!(IMAGE_ALLOWED_TYPES as readonly string[]).includes(file.type)) {
-      return t('images.errorWrongType');
-    }
-    if (file.size > uploadMaxBytes) {
-      return t('images.errorTooLarge', { maxMB: imageMaxMB });
-    }
+    const error = validateImageFileRaw({ mimeType: file.type, sizeBytes: file.size }, uploadMaxBytes);
+    if (error === 'wrongType') return t('images.errorWrongType');
+    if (error === 'tooLarge') return t('images.errorTooLarge', { maxMB: imageMaxMB });
     return null;
   }, [t, uploadMaxBytes, imageMaxMB]);
 
@@ -182,7 +179,9 @@ export function useNoteImages({ note, uploadMaxBytes, onRefresh, showError }: Us
   const retryImageUpload = useCallback((uploadId: string) => {
     const file = imageUploadFilesRef.current.get(uploadId);
     if (!file) return;
-    setImageUploads(prev => prev.map(u => (u.id === uploadId ? { ...u, status: 'uploading', progress: 0, errorMessage: undefined } : u)));
+    setImageUploads(prev => prev.map(u => (u.id === uploadId
+      ? { id: u.id, filename: u.filename, previewUrl: u.previewUrl, status: 'uploading', progress: 0 }
+      : u)));
     runImageUpload(uploadId, file);
   }, [runImageUpload]);
 

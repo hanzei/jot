@@ -14,7 +14,9 @@
     "openMobileApp": "Otwórz w aplikacji mobilnej",
     "openMobileAppDescription": "Wolisz natywne doświadczenie mobilne?",
     "dismissMobileAppBanner": "Ukryj",
-    "skipToMainContent": "Przejdź do głównej treści"
+    "skipToMainContent": "Przejdź do głównej treści",
+    "main": "Nawigacja główna",
+    "secondary": "Nawigacja dodatkowa"
   },
   "mobileApp": {
     "handoffTitle": "Otworzyć w aplikacji Jot?",
@@ -86,7 +88,6 @@
     "myTasksInfo": "Wyświetlanie notatek z przypisanymi elementami listy.",
     "tabArchive": "Archiwum",
     "tabBin": "Kosz",
-    "tabAdmin": "Admin",
     "noMyTasksNotesTitle": "Brak przypisanych elementów listy",
     "noMyTasksNotes": "Nie masz jeszcze przypisanych elementów listy. Gdy ktoś przypisze ci element listy w udostępnionej notatce, pojawi się tutaj.",
     "noNotesForThisLabel": "Brak notatek dla tej etykiety",
@@ -131,9 +132,7 @@
     "lastNameLabel": "Nazwisko",
     "namePlaceholder": "Opcjonalnie",
     "profileUpdated": "Profil zaktualizowany pomyślnie.",
-    "usernameUpdated": "Nazwa użytkownika zaktualizowana pomyślnie.",
     "failedUpdateUsername": "Nie udało się zaktualizować nazwy użytkownika.",
-    "logoutFailed": "Wylogowanie nie powiodło się. Spróbuj ponownie.",
     "changePasswordSection": "Zmień hasło",
     "currentPasswordLabel": "Aktualne hasło",
     "newPasswordLabel": "Nowe hasło",
@@ -272,7 +271,6 @@
   "admin": {
     "pageHeading": "Admin",
     "title": "Zarządzanie użytkownikami",
-    "tabAdmin": "Admin",
     "createUser": "Utwórz użytkownika",
     "cancel": "Anuluj",
     "createNewUser": "Utwórz nowego użytkownika",
@@ -293,7 +291,6 @@
     "failedLoadUsers": "Nie udało się załadować użytkowników",
     "failedLoadStats": "Nie udało się załadować statystyk",
     "failedCreateUser": "Nie udało się utworzyć użytkownika",
-    "userIdCreated": "ID: {{id}} • Utworzono: {{date}}",
     "userCreated": "Utworzono: {{date}}",
     "adminBadge": "Admin",
     "activeBadge": "Aktywny",
@@ -365,8 +362,6 @@
     "itemsUnchecked_many": "Odznaczono {{count}} elementów",
     "itemsUnchecked_other": "Odznaczono {{count}} elementów",
     "moreCompletedItems": "+{{count}} ukończonych elementów",
-    "editNote": "Edytuj notatkę",
-    "newNote": "Nowa notatka",
     "unpinNote": "Odepnij notatkę",
     "pinNote": "Przypnij notatkę",
     "unarchiveNote": "Przywróć notatkę z archiwum",
@@ -424,10 +419,8 @@
     "addLabels": "Dodaj etykiety",
     "searchPlaceholder": "Szukaj lub utwórz etykietę...",
     "createLabel": "Utwórz \"{{name}}\"",
-    "removeLabel": "Usuń etykietę {{name}}",
     "noLabels": "Brak etykiet",
     "newLabelPlaceholder": "Nazwa etykiety...",
-    "createNew": "Utwórz nową...",
     "newSidebar": "Nowa etykieta",
     "createInputLabel": "Nazwa nowej etykiety",
     "createSave": "Utwórz etykietę",
@@ -486,9 +479,6 @@
     "errorWrongType": "Można dodawać tylko obrazy.",
     "errorTooLarge": "Obraz przekracza limit {{maxMB}} MB.",
     "errorTooMany": "Notatka może zawierać maksymalnie {{max}} obrazów."
-  },
-  "serviceWorker": {
-    "updatePrompt": "Dostępna jest nowa aktualizacja! Kliknij OK, aby odświeżyć"
   },
   "import": {
     "title": "Importuj notatki",

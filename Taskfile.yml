@@ -62,6 +62,7 @@ tasks:
     cmds:
       - task: lint-mobile
       - task: test-mobile
+      - task: check-translations
 
   check-shared:
     desc: Lint and test the shared package only
@@ -178,6 +179,21 @@ tasks:
   check-migrations:
     desc: Check migration numbers are unique and the sqlite/postgres trees match
     cmd: ./scripts/check-migrations.sh
+
+  # Catches Expo-governed packages (expo, expo-*, react-native, ...) drifting
+  # off the versions SDK 57 expects, plus other native/SDK mismatches (e.g.
+  # known Hermes regressions, app-config schema errors) — npm install and the
+  # test/typecheck suites all pass on any of these, so nothing else would catch
+  # them.
+  #
+  # Not a gate, and must not be added back to `check`, `check-mobile`, or CI:
+  # it resolves what it expects from Expo's SDK manifest at run time, so an
+  # upstream patch release turns a green commit red on its own. Owned by
+  # .claude/commands/update-mobile-deps.md; run it here on demand.
+  check-mobile-expo:
+    desc: Run expo-doctor to check mobile's Expo SDK/native alignment (run by update-mobile-deps; not a gate)
+    dir: mobile
+    cmd: npx expo-doctor
 
   test-e2e:
     desc: Run end-to-end tests

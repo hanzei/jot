@@ -45,6 +45,10 @@ dist/
 build/
 *.local
 
+# Android APK downloaded by release.yml's `goreleaser` job so GoReleaser can
+# attach it via .goreleaser.yml's release.extra_files. Never committed.
+mobile-apk/
+
 # Claude Code local settings
 .claude/settings.local.json
 .claude/worktrees/

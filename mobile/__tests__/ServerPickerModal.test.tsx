@@ -74,14 +74,14 @@ const serverTwo = {
 const revalidateSession = jest.fn();
 const clearAuth = jest.fn();
 
-function renderPicker(overrides: Partial<React.ComponentProps<typeof ServerPickerModal>> = {}) {
+async function renderPicker(overrides: Partial<React.ComponentProps<typeof ServerPickerModal>> = {}) {
   const props = {
     visible: true,
     onClose: jest.fn(),
     onSwitched: jest.fn(),
     ...overrides,
   };
-  return { ...render(<ServerPickerModal {...props} />), props };
+  return { ...await render(<ServerPickerModal {...props} />), props };
 }
 
 describe('ServerPickerModal', () => {
@@ -95,7 +95,7 @@ describe('ServerPickerModal', () => {
   });
 
   it('lists every registered server once opened', async () => {
-    const { getByTestId, getByText } = renderPicker();
+    const { getByTestId, getByText } = await renderPicker();
 
     await waitFor(() => expect(getByTestId('server-picker-row-server-one')).toBeTruthy());
     expect(getByTestId('server-picker-row-server-two')).toBeTruthy();
@@ -104,17 +104,17 @@ describe('ServerPickerModal', () => {
     expect(getByText('https://two.example.com')).toBeTruthy();
   });
 
-  it('does not read the registry while hidden', () => {
-    renderPicker({ visible: false });
+  it('does not read the registry while hidden', async () => {
+    await renderPicker({ visible: false });
     expect(mockListServers).not.toHaveBeenCalled();
   });
 
   it('switches to another server and reports the resulting session as valid', async () => {
     mockSwitchActiveServer.mockResolvedValue(true);
-    const { getByTestId, props } = renderPicker();
+    const { getByTestId, props } = await renderPicker();
     await waitFor(() => expect(getByTestId('server-picker-row-server-two')).toBeTruthy());
 
-    fireEvent.press(getByTestId('server-picker-row-server-two'));
+    await fireEvent.press(getByTestId('server-picker-row-server-two'));
 
     await waitFor(() => expect(props.onSwitched).toHaveBeenCalledWith(true));
     expect(mockSwitchActiveServer).toHaveBeenCalledWith('server-two');
@@ -126,10 +126,10 @@ describe('ServerPickerModal', () => {
   it('switches but reports an invalid session, prompting a fresh sign-in', async () => {
     mockSwitchActiveServer.mockResolvedValue(true);
     revalidateSession.mockResolvedValue(false);
-    const { getByTestId, props } = renderPicker();
+    const { getByTestId, props } = await renderPicker();
     await waitFor(() => expect(getByTestId('server-picker-row-server-two')).toBeTruthy());
 
-    fireEvent.press(getByTestId('server-picker-row-server-two'));
+    await fireEvent.press(getByTestId('server-picker-row-server-two'));
 
     await waitFor(() => expect(props.onSwitched).toHaveBeenCalledWith(false));
     expect(props.onClose).toHaveBeenCalled();
@@ -141,10 +141,10 @@ describe('ServerPickerModal', () => {
 
   it('keeps the picker open when the switch itself fails', async () => {
     mockSwitchActiveServer.mockResolvedValue(false);
-    const { getByTestId, props } = renderPicker();
+    const { getByTestId, props } = await renderPicker();
     await waitFor(() => expect(getByTestId('server-picker-row-server-two')).toBeTruthy());
 
-    fireEvent.press(getByTestId('server-picker-row-server-two'));
+    await fireEvent.press(getByTestId('server-picker-row-server-two'));
 
     await waitFor(() => expect(Alert.alert).toHaveBeenCalledWith('common.error', 'serverPicker.switchFailed'));
     expect(props.onClose).not.toHaveBeenCalled();
@@ -153,10 +153,10 @@ describe('ServerPickerModal', () => {
   });
 
   it('ignores a tap on the server that is already active', async () => {
-    const { getByTestId, props } = renderPicker();
+    const { getByTestId, props } = await renderPicker();
     await waitFor(() => expect(getByTestId('server-picker-row-server-one')).toBeTruthy());
 
-    fireEvent.press(getByTestId('server-picker-row-server-one'));
+    await fireEvent.press(getByTestId('server-picker-row-server-one'));
 
     expect(mockSwitchActiveServer).not.toHaveBeenCalled();
     expect(props.onSwitched).not.toHaveBeenCalled();
@@ -164,12 +164,12 @@ describe('ServerPickerModal', () => {
 
   it('renames a server in place and returns to the list', async () => {
     mockRenameServer.mockResolvedValue(true);
-    const { getByTestId, queryByTestId } = renderPicker();
+    const { getByTestId, queryByTestId } = await renderPicker();
     await waitFor(() => expect(getByTestId('server-picker-rename-server-two')).toBeTruthy());
 
-    fireEvent.press(getByTestId('server-picker-rename-server-two'));
-    fireEvent.changeText(getByTestId('server-rename-input'), '  Home  ');
-    fireEvent.press(getByTestId('server-rename-submit'));
+    await fireEvent.press(getByTestId('server-picker-rename-server-two'));
+    await fireEvent.changeText(getByTestId('server-rename-input'), '  Home  ');
+    await fireEvent.press(getByTestId('server-rename-submit'));
 
     await waitFor(() => expect(mockRenameServer).toHaveBeenCalledWith('server-two', 'Home'));
     await waitFor(() => expect(queryByTestId('server-picker-modal')).toBeTruthy());
@@ -185,10 +185,10 @@ describe('ServerPickerModal', () => {
       mockGetActiveServer.mockResolvedValue(null);
       return true;
     });
-    const { getByTestId, props } = renderPicker();
+    const { getByTestId, props } = await renderPicker();
     await waitFor(() => expect(getByTestId('server-picker-delete-server-one')).toBeTruthy());
 
-    fireEvent.press(getByTestId('server-picker-delete-server-one'));
+    await fireEvent.press(getByTestId('server-picker-delete-server-one'));
     // Confirm through the destructive button in the Alert.
     const confirmButton = (Alert.alert as jest.Mock).mock.calls[0][2][1];
     await act(async () => {

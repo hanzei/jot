@@ -173,6 +173,7 @@ task lint-shared     # Run shared package linting
 task check-docs      # Check server/docs/ matches the handler annotations
 task check-migrations   # Check the sqlite and postgres migration trees match
 task check-translations # Check locale files for missing/extra keys
+task check-mobile-expo  # expo-doctor: Expo SDK/native alignment (run by the dep sweep, not by check)
 task gen-docs        # Regenerate Swagger API docs
 task build-webapp    # Build the webapp into webapp/build
 task build-jotctl    # Build the jotctl admin CLI binary
@@ -331,6 +332,7 @@ accordingly.
 | `JOT_METRICS_ENABLED` | `false` | Enables the separate Prometheus metrics HTTP server. |
 | `JOT_METRICS_HOST` | `127.0.0.1` | Bind host for the metrics server. |
 | `JOT_METRICS_PORT` | `8081` | Bind port for the metrics server. |
+| `JOT_PPROF_ENABLED` | `false` | Serves Go profiling endpoints under `/debug/pprof` on the metrics server's host/port. Starts that server on its own if `JOT_METRICS_ENABLED` is `false`. |
 | `JOT_OTEL_TRACES_ENABLED` | `false` | Enables OpenTelemetry tracing. |
 | `JOT_OTEL_METRICS_ENABLED` | `false` | Enables OTLP metric export. |
 | `JOT_OTEL_LOGS_ENABLED` | `false` | Enables OpenTelemetry log export. |
@@ -407,6 +409,35 @@ Set `JOT_METRICS_ENABLED=true` to expose Prometheus metrics on
 OpenTelemetry SDK setup. When `OTEL_EXPORTER_OTLP_ENDPOINT` is set, enabled
 signals are exported over OTLP gRPC; otherwise enabled traces/logs use stdout
 exporters for local debugging.
+
+### Profiling
+
+Set `JOT_PPROF_ENABLED=true` to serve Go's profiling endpoints at
+`http://127.0.0.1:8081/debug/pprof/` by default. They share the metrics
+server's host and port (`JOT_METRICS_HOST` / `JOT_METRICS_PORT`) but have
+their own switch, so either can run without the other. Keep the default
+loopback bind: the endpoints are unauthenticated, and taking a CPU profile
+costs 30 seconds of the caller's choosing.
+
+```bash
+go tool pprof -http=: http://127.0.0.1:8081/debug/pprof/profile?seconds=30
+go tool pprof -http=: http://127.0.0.1:8081/debug/pprof/heap
+curl http://127.0.0.1:8081/debug/pprof/goroutine?debug=1
+```
+
+Jot's background goroutines carry a `job` [pprof
+label](https://pkg.go.dev/runtime/pprof#Do) — `session-cleanup`,
+`trash-purge`, `debug-server` — because they are otherwise anonymous closures
+sharing one stack frame. Filter a CPU or goroutine profile by it with
+`-tagfocus`, or read it off the `labels:` line in the `goroutine?debug=1`
+dump:
+
+```bash
+go tool pprof -tagfocus=job=trash-purge http://127.0.0.1:8081/debug/pprof/goroutine
+```
+
+Only the CPU and goroutine profiles carry labels; heap, block, and mutex
+profiles ignore them.
 
 A starter Grafana dashboard is available at `grafana/dashboard.json`. Its
 queries use Jot's raw metric names (e.g. `notes_created_total`), matching
