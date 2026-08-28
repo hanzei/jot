@@ -18,6 +18,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_TAG: pr-${{ github.event.pull_request.number }}
         run: |
+          set -o pipefail
+
           # Wait for any in-flight docker-merge run to finish before deleting.
           sleep 180
 
@@ -63,15 +65,30 @@ jobs:
             "/users/hanzei/packages/container/jot/versions" | jq -s 'add')
 
           REGISTRY_TOKEN=$(curl -fsS "https://ghcr.io/token?scope=repository:hanzei/jot:pull&service=ghcr.io" | jq -r .token)
+          if [ -z "$REGISTRY_TOKEN" ] || [ "$REGISTRY_TOKEN" = "null" ]; then
+            echo "Failed to obtain a GHCR pull token; aborting rather than risk deleting a live manifest" >&2
+            exit 1
+          fi
 
+          # A failed fetch here must abort the whole cleanup rather than be
+          # swallowed: silently treating one tag's manifest as having no
+          # children is exactly the false negative that causes its still-live
+          # children to be deleted below as "unreferenced". The loop reads
+          # from a process substitution rather than a pipe so that `exit 1`
+          # inside it terminates the step, not just a subshell.
           REFERENCED=$(mktemp)
-          echo "$ALL_VERSIONS" | jq -r '.[] | .metadata.container.tags[]?' | while read -r TAG; do
+          while read -r TAG; do
             curl -fsS \
               -H "Authorization: Bearer $REGISTRY_TOKEN" \
               -H "Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json" \
               "https://ghcr.io/v2/hanzei/jot/manifests/$TAG" \
               | jq -r '.manifests[]?.digest' >> "$REFERENCED"
-          done
+            if [ "$?" -ne 0 ]; then
+              echo "Failed to fetch manifest for tag $TAG; aborting rather than risk deleting a live manifest" >&2
+              rm -f "$REFERENCED"
+              exit 1
+            fi
+          done < <(echo "$ALL_VERSIONS" | jq -r '.[] | .metadata.container.tags[]?')
 
           CUTOFF=$(date -u -d '10 minutes ago' +%s)
           echo "$ALL_VERSIONS" | jq -r '
