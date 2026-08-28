@@ -45,19 +45,54 @@ jobs:
             echo "No image found for ${PR_TAG}, skipping"
           fi
 
-          # Delete orphaned untagged versions (per-platform manifests pushed by
-          # the build job without tags; they become orphaned once the manifest
-          # list above is deleted). Since master images go to Docker Hub, every
-          # untagged version on ghcr.io is safe to remove.
-          UNTAGGED=$(gh api \
+          # A multi-arch manifest list never tags its per-platform children or
+          # attestation manifests -- only the top-level index carries the tag.
+          # So an untagged version is not necessarily orphaned by this PR's
+          # image going away: every other open PR's pr-N tag depends on its
+          # own untagged children the same way. Deleting "every untagged
+          # version" (the old behaviour here) therefore corrupted whichever
+          # other PR images happened to be live when any PR closed.
+          #
+          # Only delete an untagged version once both hold:
+          #   - no remaining tag's manifest index still references its digest
+          #   - it is older than 10 minutes, so a concurrent docker-merge run
+          #     for another PR that hasn't tagged its index yet is not
+          #     mistaken for an orphan
+          ALL_VERSIONS=$(gh api --paginate \
             -H "Accept: application/vnd.github+json" \
-            "/users/hanzei/packages/container/jot/versions" \
-            2>/dev/null | jq -r '.[] | select(.metadata.container.tags | length == 0) | .id' || true)
+            "/users/hanzei/packages/container/jot/versions" | jq -s 'add')
 
-          for ID in $UNTAGGED; do
+          REGISTRY_TOKEN=$(curl -fsS "https://ghcr.io/token?scope=repository:hanzei/jot:pull&service=ghcr.io" | jq -r .token)
+
+          REFERENCED=$(mktemp)
+          echo "$ALL_VERSIONS" | jq -r '.[] | .metadata.container.tags[]?' | while read -r TAG; do
+            curl -fsS \
+              -H "Authorization: Bearer $REGISTRY_TOKEN" \
+              -H "Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json" \
+              "https://ghcr.io/v2/hanzei/jot/manifests/$TAG" \
+              | jq -r '.manifests[]?.digest' >> "$REFERENCED"
+          done
+
+          CUTOFF=$(date -u -d '10 minutes ago' +%s)
+          echo "$ALL_VERSIONS" | jq -r '
+            .[] | select(.metadata.container.tags | length == 0) |
+            "\(.id) \(.name) \(.created_at)"
+          ' | while read -r ID DIGEST CREATED_AT; do
+            [ -z "$ID" ] && continue
+            CREATED_TS=$(date -u -d "$CREATED_AT" +%s)
+            if [ "$CREATED_TS" -gt "$CUTOFF" ]; then
+              echo "Skipping $DIGEST: created too recently to be sure it's orphaned"
+              continue
+            fi
+            if grep -qxF "$DIGEST" "$REFERENCED"; then
+              echo "Keeping $DIGEST: still referenced by a live tag"
+              continue
+            fi
             gh api \
               --method DELETE \
               -H "Accept: application/vnd.github+json" \
               "/users/hanzei/packages/container/jot/versions/$ID"
-            echo "Deleted untagged version $ID"
+            echo "Deleted orphaned untagged version $ID ($DIGEST)"
           done
+
+          rm -f "$REFERENCED"
