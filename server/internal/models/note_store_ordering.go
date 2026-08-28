@@ -12,10 +12,10 @@ import (
 
 // touchNoteTx bumps a note's updated_at so item-level changes are reflected in
 // note ordering (updated_at sort) and client freshness checks.
-func touchNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string) error {
+func touchNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, now string) error {
 	if _, err := tx.ExecContext(ctx,
-		d.RewritePlaceholders(`UPDATE notes SET updated_at = CURRENT_TIMESTAMP WHERE id = ?`),
-		noteID,
+		d.RewritePlaceholders(`UPDATE notes SET updated_at = ? WHERE id = ?`),
+		now, noteID,
 	); err != nil {
 		return fmt.Errorf("failed to touch note: %w", err)
 	}

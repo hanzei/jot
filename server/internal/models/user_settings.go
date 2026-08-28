@@ -31,12 +31,14 @@ func newUserSettingsStore(db *sql.DB, d *dialect.Dialect) *userSettingsStore {
 // defaults and returns those. The operation is atomic: if two goroutines race
 // to create the row, one will win the INSERT and both will read consistent data.
 func (s *userSettingsStore) GetOrCreate(ctx context.Context, userID string) (*UserSettings, error) {
+	now := Timestamp(Now())
+
 	settings := &UserSettings{UserID: userID}
 	err := s.db.QueryRowContext(ctx,
-		s.d.RewritePlaceholders(`INSERT INTO user_settings (user_id, language, theme, note_sort) VALUES (?, 'system', 'system', 'manual')
+		s.d.RewritePlaceholders(`INSERT INTO user_settings (user_id, language, theme, note_sort, created_at, updated_at) VALUES (?, 'system', 'system', 'manual', ?, ?)
 		 ON CONFLICT(user_id) DO NOTHING
 		 RETURNING language, theme, note_sort, updated_at`),
-		userID,
+		userID, now, now,
 	).Scan(&settings.Language, &settings.Theme, &settings.NoteSort, &settings.UpdatedAt)
 	if err == nil {
 		return settings, nil
@@ -58,12 +60,14 @@ func (s *userSettingsStore) GetOrCreate(ctx context.Context, userID string) (*Us
 // Update persists the language, theme, and note sort preferences for the given user and
 // returns the updated settings.
 func (s *userSettingsStore) Update(ctx context.Context, userID, language, theme, noteSort string) (*UserSettings, error) {
+	now := Timestamp(Now())
+
 	settings := &UserSettings{UserID: userID}
 	err := s.db.QueryRowContext(ctx,
-		s.d.RewritePlaceholders(`INSERT INTO user_settings (user_id, language, theme, note_sort) VALUES (?, ?, ?, ?)
-		 ON CONFLICT(user_id) DO UPDATE SET language = excluded.language, theme = excluded.theme, note_sort = excluded.note_sort, updated_at = CURRENT_TIMESTAMP
+		s.d.RewritePlaceholders(`INSERT INTO user_settings (user_id, language, theme, note_sort, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(user_id) DO UPDATE SET language = excluded.language, theme = excluded.theme, note_sort = excluded.note_sort, updated_at = excluded.updated_at
 		 RETURNING language, theme, note_sort, updated_at`),
-		userID, language, theme, noteSort,
+		userID, language, theme, noteSort, now, now,
 	).Scan(&settings.Language, &settings.Theme, &settings.NoteSort, &settings.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update user settings: %w", err)

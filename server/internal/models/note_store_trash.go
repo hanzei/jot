@@ -89,10 +89,12 @@ func (s *noteStore) MoveToTrash(ctx context.Context, id string, userID string) e
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	now := Timestamp(Now())
+
 	result, err := tx.ExecContext(ctx,
-		s.d.RewritePlaceholders(`UPDATE notes SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+		s.d.RewritePlaceholders(`UPDATE notes SET deleted_at = ?, updated_at = ?
 		 WHERE id = ? AND user_id = ? AND deleted_at IS NULL`),
-		id, userID,
+		now, now, id, userID,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to move note to trash: %w", err)
@@ -108,9 +110,9 @@ func (s *noteStore) MoveToTrash(ctx context.Context, id string, userID string) e
 
 	// Reset all collaborators' per-user state so the note won't appear pinned/archived on restore.
 	if _, err = tx.ExecContext(ctx,
-		s.d.RewritePlaceholders(`UPDATE note_user_state SET pinned = FALSE, archived = FALSE, updated_at = CURRENT_TIMESTAMP
+		s.d.RewritePlaceholders(`UPDATE note_user_state SET pinned = FALSE, archived = FALSE, updated_at = ?
 		 WHERE note_id = ?`),
-		id,
+		now, id,
 	); err != nil {
 		return fmt.Errorf("failed to reset note user state on trash: %w", err)
 	}
@@ -140,10 +142,12 @@ func (s *noteStore) RestoreFromTrash(ctx context.Context, id string, userID stri
 
 	// Restore the note first — if it's not actually in the trash we bail out
 	// before shifting any positions.
+	now := Timestamp(Now())
+
 	result, err := tx.ExecContext(ctx,
-		s.d.RewritePlaceholders(`UPDATE notes SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP
+		s.d.RewritePlaceholders(`UPDATE notes SET deleted_at = NULL, updated_at = ?
 		 WHERE id = ? AND user_id = ? AND deleted_at IS NOT NULL`),
-		id, userID,
+		now, id, userID,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to restore note from trash: %w", err)
@@ -160,9 +164,9 @@ func (s *noteStore) RestoreFromTrash(ctx context.Context, id string, userID stri
 	// Reset all collaborators' per-user state so the restored note lands at position 0,
 	// unpinned and unarchived, for every user who has access.
 	if _, err = tx.ExecContext(ctx,
-		s.d.RewritePlaceholders(`UPDATE note_user_state SET pinned = FALSE, archived = FALSE, position = 0, unpinned_position = NULL, updated_at = CURRENT_TIMESTAMP
+		s.d.RewritePlaceholders(`UPDATE note_user_state SET pinned = FALSE, archived = FALSE, position = 0, unpinned_position = NULL, updated_at = ?
 		 WHERE note_id = ?`),
-		id,
+		now, id,
 	); err != nil {
 		return fmt.Errorf("failed to reset note user state on restore: %w", err)
 	}

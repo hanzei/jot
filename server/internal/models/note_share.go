@@ -55,10 +55,12 @@ func (s *noteStore) ShareNote(ctx context.Context, noteID string, sharedByUserID
 		return fmt.Errorf("failed to generate share ID: %w", err)
 	}
 
+	now := Timestamp(Now())
+
 	_, err = tx.ExecContext(ctx,
-		s.d.RewritePlaceholders(`INSERT INTO note_shares (id, note_id, shared_with_user_id, shared_by_user_id)
-		 VALUES (?, ?, ?, ?)`),
-		shareID, noteID, sharedWithUserID, sharedByUserID,
+		s.d.RewritePlaceholders(`INSERT INTO note_shares (id, note_id, shared_with_user_id, shared_by_user_id, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?)`),
+		shareID, noteID, sharedWithUserID, sharedByUserID, now, now,
 	)
 	if err != nil {
 		if s.d.IsUniqueConstraintError(err) {
@@ -91,9 +93,9 @@ func (s *noteStore) ShareNote(ctx context.Context, noteID string, sharedByUserID
 			return fmt.Errorf("failed to shift collaborator notes: %w", err)
 		}
 		if _, err = tx.ExecContext(ctx,
-			s.d.RewritePlaceholders(`INSERT INTO note_user_state (note_id, user_id, position, unpinned_position)
-			 VALUES (?, ?, 0, 0)`),
-			noteID, sharedWithUserID,
+			s.d.RewritePlaceholders(`INSERT INTO note_user_state (note_id, user_id, position, unpinned_position, created_at, updated_at)
+			 VALUES (?, ?, 0, 0, ?, ?)`),
+			noteID, sharedWithUserID, now, now,
 		); err != nil {
 			return fmt.Errorf("failed to create note user state for collaborator: %w", err)
 		}

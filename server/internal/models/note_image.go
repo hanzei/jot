@@ -64,9 +64,9 @@ func (s *noteStore) CreateNoteImage(ctx context.Context, noteID, uploaderID, fil
 		Height:      height,
 	}
 	err = tx.QueryRowContext(ctx,
-		s.d.RewritePlaceholders(`INSERT INTO note_images (id, note_id, uploader_id, filename, content_type, size_bytes, sha256, width, height)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING created_at`),
-		imageID, noteID, uploaderID, filename, contentType, sizeBytes, sha256, width, height,
+		s.d.RewritePlaceholders(`INSERT INTO note_images (id, note_id, uploader_id, filename, content_type, size_bytes, sha256, width, height, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING created_at`),
+		imageID, noteID, uploaderID, filename, contentType, sizeBytes, sha256, width, height, Timestamp(Now()),
 	).Scan(&img.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create note image: %w", err)
