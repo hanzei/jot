@@ -7,6 +7,7 @@ import (
 
 	"github.com/hanzei/jot/server/internal/database/dialect"
 	"github.com/hanzei/jot/server/internal/database/dsntest"
+	"github.com/hanzei/jot/server/internal/labelfold"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -47,33 +48,49 @@ func TestSchemaParity(t *testing.T) {
 			assert.NoError(t, err)
 		})
 
-		t.Run("label names are unique per user case-insensitively", func(t *testing.T) {
+		// insertLabel writes a label the way the stores do, with name_folded
+		// carrying labelfold.Fold(name). Going through raw SQL here is the
+		// point: it asserts what the schema enforces, not what the store
+		// remembers to do.
+		insertLabel := func(id, userID, name string) error {
 			_, err := db.ExecContext(ctx, d.RewritePlaceholders(
-				`INSERT INTO labels (id, user_id, name) VALUES (?, ?, ?)`),
-				"labl00000000000000work", "user000000000000parity", "Work")
-			require.NoError(t, err)
+				`INSERT INTO labels (id, user_id, name, name_folded) VALUES (?, ?, ?, ?)`),
+				id, userID, name, labelfold.Fold(name))
+			return err
+		}
 
-			_, err = db.ExecContext(ctx, d.RewritePlaceholders(
-				`INSERT INTO labels (id, user_id, name) VALUES (?, ?, ?)`),
-				"labl00000000000000wrk2", "user000000000000parity", "work")
+		t.Run("label names are unique per user case-insensitively", func(t *testing.T) {
+			require.NoError(t, insertLabel("labl00000000000000work", "user000000000000parity", "Work"))
+
+			err := insertLabel("labl00000000000000wrk2", "user000000000000parity", "work")
 			require.Error(t, err)
 			assert.True(t, d.IsUniqueConstraintError(err), "want a unique violation, got %v", err)
 		})
 
-		t.Run("label names differing only in non-ASCII case do not collide", func(t *testing.T) {
-			// The shared fold is ASCII A-Z only, because that is all SQLite can
-			// do. If PostgreSQL folded these together it would be the stricter
-			// backend, and a SQLite database holding both rows could not be
-			// loaded into it — the exact failure this parity work exists to stop.
-			_, err := db.ExecContext(ctx, d.RewritePlaceholders(
-				`INSERT INTO labels (id, user_id, name) VALUES (?, ?, ?)`),
-				"labl000000000000upperÄ", "user000000000000parity", "ÄPFEL")
-			require.NoError(t, err)
+		t.Run("label names differing only in non-ASCII case collide", func(t *testing.T) {
+			// Both backends fold through labelfold.Fold, so the reach is
+			// Unicode-wide and identical on each. This is the inverse of what
+			// the schema enforced before #773: the fold used to be ASCII A-Z
+			// only, because that was all SQLite's LOWER() could do, and these
+			// two rows could both exist.
+			for _, tt := range []struct{ name, a, b, idA, idB string }{
+				{"german umlaut", "ÄPFEL", "äpfel", "labl000000000000upperÄ", "labl000000000000lowerä"},
+				{"german sharp s", "Straße", "STRASSE", "labl00000000000sharps1", "labl00000000000sharps2"},
+				{"greek final sigma", "ΣΟΦΟΣ", "σοφος", "labl00000000000sigma01", "labl00000000000sigma02"},
+			} {
+				t.Run(tt.name, func(t *testing.T) {
+					require.NoError(t, insertLabel(tt.idA, "user000000000000parity", tt.a))
 
-			_, err = db.ExecContext(ctx, d.RewritePlaceholders(
-				`INSERT INTO labels (id, user_id, name) VALUES (?, ?, ?)`),
-				"labl000000000000lowerä", "user000000000000parity", "äpfel")
-			assert.NoError(t, err)
+					err := insertLabel(tt.idB, "user000000000000parity", tt.b)
+					require.Error(t, err, "%q must collide with %q", tt.b, tt.a)
+					assert.True(t, d.IsUniqueConstraintError(err), "want a unique violation, got %v", err)
+				})
+			}
+		})
+
+		t.Run("accents are folded for case but not stripped", func(t *testing.T) {
+			// "Apfel" and "Äpfel" are different words, not case variants of one.
+			require.NoError(t, insertLabel("labl0000000000noumlaut", "user000000000000parity", "Apfel"))
 		})
 
 		t.Run("label names may repeat across users", func(t *testing.T) {
@@ -82,10 +99,7 @@ func TestSchemaParity(t *testing.T) {
 				"user00000000000parity2", "parity2", "x")
 			require.NoError(t, err)
 
-			_, err = db.ExecContext(ctx, d.RewritePlaceholders(
-				`INSERT INTO labels (id, user_id, name) VALUES (?, ?, ?)`),
-				"labl0000000000000work2", "user00000000000parity2", "work")
-			assert.NoError(t, err)
+			assert.NoError(t, insertLabel("labl0000000000000work2", "user00000000000parity2", "work"))
 		})
 	})
 }

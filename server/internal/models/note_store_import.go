@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/hanzei/jot/server/internal/database/dialect"
+	"github.com/hanzei/jot/server/internal/labelfold"
 )
 
 // GetOwnedNotesForExport returns all non-trashed notes owned by userID,
@@ -194,10 +195,13 @@ func insertImportedLabelsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect,
 		}
 		var resolvedLabelID string
 		if err = tx.QueryRowContext(ctx,
-			d.RewritePlaceholders(`INSERT INTO labels (id, user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
-			 ON CONFLICT `+d.LabelNameConflictTarget()+` DO UPDATE SET name=excluded.name
+			// The no-op SET makes RETURNING yield the existing row on a
+			// conflict, without rewriting that label's spelling to whatever the
+			// imported file used. See duplicateLabelsTx for the longer note.
+			d.RewritePlaceholders(`INSERT INTO labels (id, user_id, name, name_folded, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+			 ON CONFLICT (user_id, name_folded) DO UPDATE SET name = labels.name
 			 RETURNING id`),
-			labelID, userID, labelName, now, now,
+			labelID, userID, labelName, labelfold.Fold(labelName), now, now,
 		).Scan(&resolvedLabelID); err != nil {
 			return fmt.Errorf("get or create label %q: %w", labelName, err)
 		}

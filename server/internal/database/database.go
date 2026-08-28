@@ -63,6 +63,14 @@ func New(driverName, dsn string) (*sql.DB, error) {
 		return nil, fmt.Errorf("run migrations: %w", err)
 	}
 
+	// Runs after the migrations that add labels.name_folded, because the value
+	// it stores is computed by Go and no migration can express it. A no-op once
+	// it has run; see its doc comment.
+	if err := backfillLabelNameFolded(ctx, db, driverName); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("backfill folded label names: %w", err)
+	}
+
 	return db, nil
 }
 

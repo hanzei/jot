@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/hanzei/jot/server/internal/database/dialect"
+	"github.com/hanzei/jot/server/internal/labelfold"
 )
 
 var (
@@ -105,13 +106,16 @@ func (s *labelStore) GetLabelCounts(ctx context.Context, userID string) (map[str
 // HTTP callers can answer 201 for a create and 200 for a match on an existing
 // label; a caller that only wants the label can discard it.
 func (s *labelStore) GetOrCreateLabel(ctx context.Context, userID, name string) (*Label, bool, error) {
-	// Attempt a case-insensitive lookup first.
+	// Attempt a case-insensitive lookup first. Comparing the stored folded key
+	// against the folded argument is index-backed and identical on both
+	// backends; see internal/labelfold.
+	folded := labelfold.Fold(name)
+
 	var l Label
 	selectQ := s.d.RewritePlaceholders(
-		"SELECT id, user_id, name, created_at, updated_at FROM labels WHERE user_id = ? AND " +
-			s.d.LabelNameEquals("name"),
+		`SELECT id, user_id, name, created_at, updated_at FROM labels WHERE user_id = ? AND name_folded = ?`,
 	)
-	err := s.db.QueryRowContext(ctx, selectQ, userID, name).Scan(
+	err := s.db.QueryRowContext(ctx, selectQ, userID, folded).Scan(
 		&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt,
 	)
 	if err == nil {
@@ -131,11 +135,11 @@ func (s *labelStore) GetOrCreateLabel(ctx context.Context, userID, name string) 
 	// inserts the same label between our SELECT and INSERT.
 	now := Timestamp(Now())
 	insertQ := s.d.RewritePlaceholders(
-		`INSERT INTO labels (id, user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
-		 ON CONFLICT ` + s.d.LabelNameConflictTarget() + ` DO NOTHING
+		`INSERT INTO labels (id, user_id, name, name_folded, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+		 ON CONFLICT (user_id, name_folded) DO NOTHING
 		 RETURNING id, user_id, name, created_at, updated_at`,
 	)
-	err = s.db.QueryRowContext(ctx, insertQ, id, userID, name, now, now).Scan(
+	err = s.db.QueryRowContext(ctx, insertQ, id, userID, name, folded, now, now).Scan(
 		&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt,
 	)
 	if err == nil {
@@ -146,7 +150,7 @@ func (s *labelStore) GetOrCreateLabel(ctx context.Context, userID, name string) 
 	}
 
 	// A concurrent insert won the race; retry the SELECT to get the existing row.
-	err = s.db.QueryRowContext(ctx, selectQ, userID, name).Scan(
+	err = s.db.QueryRowContext(ctx, selectQ, userID, folded).Scan(
 		&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt,
 	)
 	if err != nil {
@@ -160,10 +164,10 @@ func (s *labelStore) CreateLabel(ctx context.Context, userID, id, name string) (
 	var l Label
 	now := Timestamp(Now())
 	insertQ := s.d.RewritePlaceholders(
-		`INSERT INTO labels (id, user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
+		`INSERT INTO labels (id, user_id, name, name_folded, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)
 		 RETURNING id, user_id, name, created_at, updated_at`,
 	)
-	err := s.db.QueryRowContext(ctx, insertQ, id, userID, name, now, now).Scan(
+	err := s.db.QueryRowContext(ctx, insertQ, id, userID, name, labelfold.Fold(name), now, now).Scan(
 		&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt,
 	)
 	if err == nil {
@@ -230,11 +234,13 @@ func (s *labelStore) GetLabelNoteIDs(ctx context.Context, labelID, userID string
 func (s *labelStore) RenameLabel(ctx context.Context, labelID, userID, newName string) (*Label, error) {
 	var l Label
 	err := s.db.QueryRowContext(ctx,
+		// name_folded is updated alongside name; letting the two drift would
+		// leave the row invisible to every case-insensitive lookup.
 		s.d.RewritePlaceholders(`UPDATE labels
-		 SET name = ?, updated_at = ?
+		 SET name = ?, name_folded = ?, updated_at = ?
 		 WHERE id = ? AND user_id = ?
 		 RETURNING id, user_id, name, created_at, updated_at`),
-		newName, Timestamp(Now()), labelID, userID,
+		newName, labelfold.Fold(newName), Timestamp(Now()), labelID, userID,
 	).Scan(&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt)
 	if err != nil {
 		if s.d.IsUniqueConstraintError(err) {

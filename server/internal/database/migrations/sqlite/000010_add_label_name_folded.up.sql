@@ -1,0 +1,33 @@
+-- Add the folded label-name key. Label names are unique per user without
+-- regard to case, and until now that rule was enforced by SQL: SQLite's
+-- `name TEXT NOT NULL COLLATE NOCASE` + `UNIQUE(user_id, name)`, with
+-- PostgreSQL pinned to the same rule via COLLATE "C" in 000009. Both fold
+-- ASCII A-Z only, so "Äpfel" and "äpfel" were two labels where the user meant
+-- one -- see https://github.com/hanzei/jot/issues/773.
+--
+-- The rule now lives in Go (internal/labelfold.Fold, Unicode case folding over
+-- NFC-normalized input) and each row stores its folded key here, so both
+-- backends enforce it by comparing a plain column and no dialect is left to
+-- diverge.
+--
+-- The column is added empty and unindexed on purpose. No SQL either backend
+-- can express computes labelfold.Fold, so populating it, merging the
+-- duplicates that populating it reveals, and creating the unique index are all
+-- done in Go immediately after migrations run -- see backfillLabelNameFolded
+-- in internal/database. Keep the DEFAULT: it is what makes the column
+-- writable by the rows already in the table.
+--
+-- No COLLATE clause, deliberately. `labels.name` is COLLATE NOCASE, and
+-- inheriting that here would fold ASCII case a second time on SQLite only,
+-- reintroducing on one backend exactly the divergence this removes.
+ALTER TABLE labels ADD COLUMN name_folded TEXT NOT NULL DEFAULT '';
+
+-- The table's own UNIQUE(user_id, name) over COLLATE NOCASE stays. It is not
+-- dropped for two reasons. It is subsumed: every pair of names equal under the
+-- ASCII fold is also equal under labelfold.Fold, so it can never reject a name
+-- the new index accepts, and it never fires unless the new index already has.
+-- And removing it is not an ALTER on SQLite -- the constraint is declared
+-- inline, so it would take a full table rebuild, on a table note_labels
+-- references with a composite foreign key. That is real risk for no change in
+-- behaviour. PostgreSQL drops its equivalent index in the migration of this
+-- number because there it is a one-line DROP INDEX.

@@ -83,6 +83,25 @@ test.describe('Labels on Note Creation', () => {
     await expect(card.getByText('beta')).toBeVisible();
   });
 
+  test('an accented name differing only in case reuses the existing label', async ({ page, dashboardPage, isMobile }) => {
+    test.skip(isMobile, 'Sidebar label management is covered on desktop only.');
+    // Label names are unique per user without regard to case, and since #773
+    // that fold is Unicode-wide rather than ASCII A-Z. The sidebar creates
+    // labels straight through the API with no client-side matching, so it is
+    // where the server's rule is observable: "äpfel" resolves to the existing
+    // "Äpfel" instead of adding a second label.
+    await dashboardPage.goto();
+    await dashboardPage.createSidebarLabel('Äpfel');
+
+    await page.getByRole('button', { name: 'New Label' }).click();
+    const input = page.getByRole('textbox', { name: 'New label name' });
+    await input.fill('äpfel');
+    await input.press('Enter');
+
+    await dashboardPage.expectLabelInSidebar('Äpfel');
+    await dashboardPage.expectLabelNotInSidebar('äpfel');
+  });
+
   test('can create a sidebar label and show count after assigning it', async ({ dashboardPage, isMobile }) => {
     test.skip(isMobile, 'Sidebar label management is covered on desktop only.');
     await dashboardPage.goto();
