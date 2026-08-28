@@ -133,12 +133,13 @@ func (s *labelStore) GetOrCreateLabel(ctx context.Context, userID, name string) 
 
 	// ON CONFLICT DO NOTHING handles the rare case where a concurrent request
 	// inserts the same label between our SELECT and INSERT.
+	now := Timestamp(Now())
 	insertQ := s.d.RewritePlaceholders(
-		`INSERT INTO labels (id, user_id, name, name_folded) VALUES (?, ?, ?, ?)
+		`INSERT INTO labels (id, user_id, name, name_folded, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)
 		 ON CONFLICT (user_id, name_folded) DO NOTHING
 		 RETURNING id, user_id, name, created_at, updated_at`,
 	)
-	err = s.db.QueryRowContext(ctx, insertQ, id, userID, name, folded).Scan(
+	err = s.db.QueryRowContext(ctx, insertQ, id, userID, name, folded, now, now).Scan(
 		&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt,
 	)
 	if err == nil {
@@ -161,11 +162,12 @@ func (s *labelStore) GetOrCreateLabel(ctx context.Context, userID, name string) 
 // CreateLabel inserts a new label with the given client-supplied id for idempotent offline replay.
 func (s *labelStore) CreateLabel(ctx context.Context, userID, id, name string) (*Label, error) {
 	var l Label
+	now := Timestamp(Now())
 	insertQ := s.d.RewritePlaceholders(
-		`INSERT INTO labels (id, user_id, name, name_folded) VALUES (?, ?, ?, ?)
+		`INSERT INTO labels (id, user_id, name, name_folded, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)
 		 RETURNING id, user_id, name, created_at, updated_at`,
 	)
-	err := s.db.QueryRowContext(ctx, insertQ, id, userID, name, labelfold.Fold(name)).Scan(
+	err := s.db.QueryRowContext(ctx, insertQ, id, userID, name, labelfold.Fold(name), now, now).Scan(
 		&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt,
 	)
 	if err == nil {
@@ -235,10 +237,10 @@ func (s *labelStore) RenameLabel(ctx context.Context, labelID, userID, newName s
 		// name_folded is updated alongside name; letting the two drift would
 		// leave the row invisible to every case-insensitive lookup.
 		s.d.RewritePlaceholders(`UPDATE labels
-		 SET name = ?, name_folded = ?, updated_at = CURRENT_TIMESTAMP
+		 SET name = ?, name_folded = ?, updated_at = ?
 		 WHERE id = ? AND user_id = ?
 		 RETURNING id, user_id, name, created_at, updated_at`),
-		newName, labelfold.Fold(newName), labelID, userID,
+		newName, labelfold.Fold(newName), Timestamp(Now()), labelID, userID,
 	).Scan(&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt)
 	if err != nil {
 		if s.d.IsUniqueConstraintError(err) {

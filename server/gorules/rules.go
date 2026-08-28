@@ -14,3 +14,21 @@ func noopErrorWrap(m dsl.Matcher) {
 		Where(!m["err"].Object.Is("Nil")).
 		Report(`no-op wrap: return $err directly (server/CLAUDE.md)`)
 }
+
+// Timestamp columns are naive on both backends, so a bare time.Now stores the
+// server's local wall clock and makes cutoff comparisons drift by its UTC
+// offset — the bug #754 fixed. models.Now is the UTC, microsecond-truncated
+// replacement, and nothing but its own definition should call time.Now for a
+// value that reaches a column.
+//
+// Elapsed-time measurement is the legitimate exception (a duration has no time
+// zone); those sites carry a //nolint:gocritic with the reason.
+//
+// Test files are deliberately out of scope: a test that stamps a row wrongly
+// fails visibly, where production drift is silent, and covering them would
+// mean either churn or blanket suppressions that hide the real cases.
+func dbTimeNow(m dsl.Matcher) {
+	m.Match(`time.Now()`).
+		Where(!m.File().Name.Matches(`_test\.go$`)).
+		Report(`use models.Now() for any value persisted to or compared against a timestamp column (CLAUDE.md); //nolint:gocritic if this measures elapsed time`)
+}
