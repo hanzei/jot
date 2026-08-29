@@ -564,6 +564,11 @@ const (
 	// cspSwaggerUI additionally allows inline scripts because the Swagger UI
 	// page bootstraps itself with an inline <script> block.
 	cspSwaggerUI = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; frame-ancestors 'none'"
+
+	// maxHeaderValueCount caps header values parsed per request on both
+	// listeners. Go applies this same default when unset; naming it here gives
+	// one place to change it.
+	maxHeaderValueCount = http.DefaultMaxHeaderValueCount
 )
 
 func securityHeaders(cookieSecure bool) func(http.Handler) http.Handler {
@@ -647,11 +652,12 @@ func (s *Server) Start(addr string) error {
 	}
 
 	httpServer := &http.Server{
-		Addr:         addr,
-		Handler:      s.router,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		Addr:                addr,
+		Handler:             s.router,
+		ReadTimeout:         30 * time.Second,
+		WriteTimeout:        30 * time.Second,
+		IdleTimeout:         60 * time.Second,
+		MaxHeaderValueCount: maxHeaderValueCount,
 	}
 
 	s.serverMu.Lock()
