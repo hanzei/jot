@@ -451,7 +451,9 @@ They return an HTTP status code, a response body (serialized to JSON by `wrapHan
 
 **MCP server** — `internal/mcphandler` exposes note and label CRUD as Model Context Protocol tools over the streamable-HTTP transport. It is mounted behind auth middleware so every MCP session is scoped to the authenticated user.
 
-**Timestamps** — every timestamp column is naive (SQLite `DATETIME`, Postgres `TIMESTAMP WITHOUT TIME ZONE`) and holds a UTC wall clock. Use `models.Now()` rather than `time.Now()` for anything written to, or compared against, one of those columns. Timestamps the database generates itself (`DEFAULT CURRENT_TIMESTAMP`) are UTC too: SQLite's always is, and Postgres pools open through a connector that runs `SET TIME ZONE 'UTC'` on every session (`internal/database`.`utcConnector`).
+**Timestamps** — every timestamp column is naive (SQLite `DATETIME`, Postgres `TIMESTAMP WITHOUT TIME ZONE`) and holds a UTC wall clock. The store layer **generates every one of them in Go**: no store statement uses `CURRENT_TIMESTAMP`. Bind `models.Timestamp(models.Now())` — not a bare `time.Time`, and never `time.Now()` — taking **one value per logical operation** and sharing it across every statement in it. `internal/models`.`time.go` is where the reasoning lives; each of those three constraints is load-bearing for cross-backend parity in a way that is not obvious from the call site.
+
+The schema's `DEFAULT CURRENT_TIMESTAMP` survives only as a backstop for writes that bypass the store layer, such as data migrations. A new table with timestamp columns therefore needs an entry in `timestampColumnsByTable` (`internal/models`.`timestamp_columns_test.go`) — that test is what fails when an `INSERT` omits a timestamp column and silently falls back to the default. Postgres pools additionally open through a connector that runs `SET TIME ZONE 'UTC'` on every session (`internal/database`.`utcConnector`), which keeps those default-written rows UTC.
 
 **Observability** — `internal/telemetry` sets up optional OpenTelemetry traces (OTLP gRPC) and Prometheus metrics (separate port). Structured logs are integrated with the OTel LoggerProvider.
 

@@ -62,7 +62,7 @@ func (h *NotesHandler) ExportNotes(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusInternalServerError, nil, fmt.Errorf("export notes: %w", err)
 	}
 
-	now := time.Now().UTC()
+	now := models.Now()
 
 	exportNotes := make([]jotExportNote, 0, len(notes))
 	for _, n := range notes {

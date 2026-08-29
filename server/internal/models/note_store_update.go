@@ -44,6 +44,8 @@ func (s *noteStore) Update(ctx context.Context, id string, userID string, title,
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	now := Timestamp(Now())
+
 	// Only touch the shared fields (title/content) when the caller provided at
 	// least one AND it actually differs from the stored value. Skipping a no-op
 	// (e.g. an editor autosave that resends unchanged content) avoids a spurious
@@ -52,16 +54,16 @@ func (s *noteStore) Update(ctx context.Context, id string, userID string, title,
 	contentChanged := (title != nil || content != nil) &&
 		(resolvedTitle != currentNote.Title || resolvedContent != currentNote.Content)
 	if contentChanged {
-		if err = s.updateNoteContentTx(ctx, tx, id, resolvedTitle, resolvedContent, baseVersion); err != nil {
+		if err = s.updateNoteContentTx(ctx, tx, id, resolvedTitle, resolvedContent, baseVersion, now); err != nil {
 			return err
 		}
 	}
 
 	// Per-user fields live in note_user_state.
 	result, err := tx.ExecContext(ctx,
-		s.d.RewritePlaceholders(`UPDATE note_user_state SET pinned = ?, archived = ?, color = ?, checked_items_collapsed = ?, updated_at = CURRENT_TIMESTAMP
+		s.d.RewritePlaceholders(`UPDATE note_user_state SET pinned = ?, archived = ?, color = ?, checked_items_collapsed = ?, updated_at = ?
 		 WHERE note_id = ? AND user_id = ?`),
-		resolvedPinned, resolvedArchived, resolvedColor, resolvedCheckedItemsCollapsed, id, userID,
+		resolvedPinned, resolvedArchived, resolvedColor, resolvedCheckedItemsCollapsed, now, id, userID,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update note user state: %w", err)
@@ -90,9 +92,9 @@ func (s *noteStore) Update(ctx context.Context, id string, userID string, title,
 // the write is gated on the current version; on a version mismatch (zero rows affected) it re-reads
 // the current title/content: if they already match the requested values it returns nil (idempotent
 // success), otherwise ErrNoteVersionConflict.
-func (s *noteStore) updateNoteContentTx(ctx context.Context, tx *sql.Tx, id, title, content string, baseVersion *int) error {
-	query := `UPDATE notes SET title = ?, content = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
-	args := []any{title, content, id}
+func (s *noteStore) updateNoteContentTx(ctx context.Context, tx *sql.Tx, id, title, content string, baseVersion *int, now string) error {
+	query := `UPDATE notes SET title = ?, content = ?, version = version + 1, updated_at = ? WHERE id = ?`
+	args := []any{title, content, now, id}
 	if baseVersion != nil {
 		query += ` AND version = ?`
 		args = append(args, *baseVersion)
@@ -158,7 +160,9 @@ func (s *noteStore) ConvertType(ctx context.Context, id, userID string, targetTy
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	alreadyApplied, err := s.convertNoteRowTx(ctx, tx, id, targetType, title, content, targetItems, baseVersion)
+	now := Timestamp(Now())
+
+	alreadyApplied, err := s.convertNoteRowTx(ctx, tx, id, targetType, title, content, targetItems, baseVersion, now)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +173,7 @@ func (s *noteStore) ConvertType(ctx context.Context, id, userID string, targetTy
 		}
 		if targetType == NoteTypeList {
 			for _, item := range targetItems {
-				if err = insertNewNoteItemTx(ctx, tx, s.d, id, item); err != nil {
+				if err = insertNewNoteItemTx(ctx, tx, s.d, id, item, now); err != nil {
 					return nil, fmt.Errorf("insert converted item: %w", err)
 				}
 			}
@@ -192,11 +196,11 @@ func (s *noteStore) ConvertType(ctx context.Context, id, userID string, targetTy
 // already committed this exact conversion (detected via the idempotent-replay
 // check below); the caller should then skip re-touching note_items and just
 // commit, since the winning write already did that atomically.
-func (s *noteStore) convertNoteRowTx(ctx context.Context, tx *sql.Tx, id string, targetType NoteType, title, content string, targetItems []NewNoteItem, baseVersion *int) (alreadyApplied bool, err error) {
+func (s *noteStore) convertNoteRowTx(ctx context.Context, tx *sql.Tx, id string, targetType NoteType, title, content string, targetItems []NewNoteItem, baseVersion *int, now string) (alreadyApplied bool, err error) {
 	// deleted_at IS NULL guards against a concurrent trash landing between the
 	// HasAccess check in ConvertType and this UPDATE.
-	query := `UPDATE notes SET title = ?, content = ?, note_type = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL`
-	args := []any{title, content, targetType, id}
+	query := `UPDATE notes SET title = ?, content = ?, note_type = ?, version = version + 1, updated_at = ? WHERE id = ? AND deleted_at IS NULL`
+	args := []any{title, content, targetType, now, id}
 	if baseVersion != nil {
 		query += ` AND version = ?`
 		args = append(args, *baseVersion)

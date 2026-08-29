@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/hanzei/jot/server/internal/database/dialect"
+	"github.com/hanzei/jot/server/internal/labelfold"
 )
 
 // Create inserts a new note for the user. When noteID is empty the server
@@ -68,12 +69,13 @@ func (s *noteStore) CreateWithItems(ctx context.Context, userID, noteID, title, 
 	}
 
 	nextPosition := 0
+	now := Timestamp(Now())
 
 	var note Note
 	if err = tx.QueryRowContext(ctx,
-		s.d.RewritePlaceholders(`INSERT INTO notes (id, user_id, title, content, note_type)
-		 VALUES (?, ?, ?, ?, ?) RETURNING created_at, updated_at`),
-		noteID, userID, title, content, noteType,
+		s.d.RewritePlaceholders(`INSERT INTO notes (id, user_id, title, content, note_type, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING created_at, updated_at`),
+		noteID, userID, title, content, noteType, now, now,
 	).Scan(&note.CreatedAt, &note.UpdatedAt); err != nil {
 		// Two concurrent creates with the same caller-supplied ID can both pass the
 		// existence check above (neither sees the other's uncommitted insert), so
@@ -85,15 +87,15 @@ func (s *noteStore) CreateWithItems(ctx context.Context, userID, noteID, title, 
 	}
 
 	if _, err = tx.ExecContext(ctx,
-		s.d.RewritePlaceholders(`INSERT INTO note_user_state (note_id, user_id, color, pinned, archived, position, unpinned_position, checked_items_collapsed)
-		 VALUES (?, ?, ?, FALSE, FALSE, ?, ?, FALSE)`),
-		noteID, userID, color, nextPosition, nextPosition,
+		s.d.RewritePlaceholders(`INSERT INTO note_user_state (note_id, user_id, color, pinned, archived, position, unpinned_position, checked_items_collapsed, created_at, updated_at)
+		 VALUES (?, ?, ?, FALSE, FALSE, ?, ?, FALSE, ?, ?)`),
+		noteID, userID, color, nextPosition, nextPosition, now, now,
 	); err != nil {
 		return nil, fmt.Errorf("failed to create note user state: %w", err)
 	}
 
 	for _, item := range items {
-		if err = insertNewNoteItemTx(ctx, tx, s.d, noteID, item); err != nil {
+		if err = insertNewNoteItemTx(ctx, tx, s.d, noteID, item, now); err != nil {
 			return nil, err
 		}
 	}
@@ -121,7 +123,7 @@ func (s *noteStore) CreateWithItems(ctx context.Context, userID, noteID, title, 
 // supplied ID is existence-checked (ErrNoteItemExists on collision); an empty
 // ID is generated server-side. The parent ref is validated against items
 // already inserted in this note.
-func insertNewNoteItemTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string, item NewNoteItem) error {
+func insertNewNoteItemTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string, item NewNoteItem, now string) error {
 	itemID := item.ID
 	if itemID == "" {
 		var err error
@@ -147,9 +149,9 @@ func insertNewNoteItemTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, no
 	}
 
 	if _, err := tx.ExecContext(ctx,
-		d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, position, completed, parent_id, assigned_to)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`),
-		itemID, noteID, item.Text, item.Position, item.Completed, nullableParentID(item.ParentID), nullableAssignedTo(""),
+		d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, position, completed, parent_id, assigned_to, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+		itemID, noteID, item.Text, item.Position, item.Completed, nullableParentID(item.ParentID), nullableAssignedTo(""), now, now,
 	); err != nil {
 		// Concurrent replays with the same client-supplied ID can both pass the
 		// existence check above; map the constraint violation to ErrNoteItemExists.
@@ -209,13 +211,16 @@ func (s *noteStore) Duplicate(ctx context.Context, source *Note, userID, clientI
 	}
 
 	const nextPosition = 0
+	now := Timestamp(Now())
 	if _, err = tx.ExecContext(ctx,
-		s.d.RewritePlaceholders(`INSERT INTO notes (id, user_id, title, content, note_type) VALUES (?, ?, ?, ?, ?)`),
+		s.d.RewritePlaceholders(`INSERT INTO notes (id, user_id, title, content, note_type, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`),
 		noteID,
 		userID,
 		duplicateNoteTitle(source.Title),
 		source.Content,
 		source.NoteType,
+		now,
+		now,
 	); err != nil {
 		// Two concurrent duplicates with the same caller-supplied ID can both pass
 		// the existence check above; map the constraint violation to ErrNoteExists.
@@ -226,18 +231,18 @@ func (s *noteStore) Duplicate(ctx context.Context, source *Note, userID, clientI
 	}
 
 	if _, err = tx.ExecContext(ctx,
-		s.d.RewritePlaceholders(`INSERT INTO note_user_state (note_id, user_id, color, pinned, archived, position, unpinned_position, checked_items_collapsed)
-		 VALUES (?, ?, ?, FALSE, FALSE, ?, ?, ?)`),
-		noteID, userID, source.Color, nextPosition, nextPosition, source.CheckedItemsCollapsed,
+		s.d.RewritePlaceholders(`INSERT INTO note_user_state (note_id, user_id, color, pinned, archived, position, unpinned_position, checked_items_collapsed, created_at, updated_at)
+		 VALUES (?, ?, ?, FALSE, FALSE, ?, ?, ?, ?, ?)`),
+		noteID, userID, source.Color, nextPosition, nextPosition, source.CheckedItemsCollapsed, now, now,
 	); err != nil {
 		return nil, fmt.Errorf("failed to create duplicated note user state: %w", err)
 	}
 
-	if err = duplicateItemsTx(ctx, tx, s.d, noteID, source.Items, itemIDs); err != nil {
+	if err = duplicateItemsTx(ctx, tx, s.d, noteID, source.Items, itemIDs, now); err != nil {
 		return nil, fmt.Errorf("duplicate note items: %w", err)
 	}
 
-	if err = duplicateLabelsTx(ctx, tx, s.d, noteID, userID, source.Labels); err != nil {
+	if err = duplicateLabelsTx(ctx, tx, s.d, noteID, userID, source.Labels, now); err != nil {
 		return nil, fmt.Errorf("duplicate note labels: %w", err)
 	}
 
@@ -253,7 +258,7 @@ func (s *noteStore) Duplicate(ctx context.Context, source *Note, userID, clientI
 	return duplicated, nil
 }
 
-func duplicateItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string, items []NoteItem, itemIDs map[string]string) error {
+func duplicateItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string, items []NoteItem, itemIDs map[string]string, now string) error {
 	// Insert parents before their children so each child's remapped parent_id is
 	// already in idMap (and satisfies the parent_id foreign key). Position order
 	// alone is not enough — a client reorder can leave a child at a lower position
@@ -268,7 +273,7 @@ func duplicateItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteI
 			return err
 		}
 		idMap[item.ID] = newID
-		if err = insertDuplicateItemTx(ctx, tx, d, noteID, item, newID, idMap); err != nil {
+		if err = insertDuplicateItemTx(ctx, tx, d, noteID, item, newID, idMap, now); err != nil {
 			// Two concurrent replays with the same client-supplied ID can both pass
 			// the existence check above; map the constraint violation to ErrNoteItemExists.
 			if itemIDs[item.ID] != "" && d.IsUniqueConstraintError(err) {
@@ -344,7 +349,7 @@ func resolveItemIDTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, suppli
 
 // insertDuplicateItemTx inserts one cloned item into noteID, remapping its
 // parent_id through idMap (which must already contain the duplicated parent).
-func insertDuplicateItemTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string, item NoteItem, itemID string, idMap map[string]string) error {
+func insertDuplicateItemTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string, item NoteItem, itemID string, idMap map[string]string, now string) error {
 	var newParent sql.NullString
 	if item.ParentID != nil {
 		if mapped, ok := idMap[*item.ParentID]; ok {
@@ -352,14 +357,14 @@ func insertDuplicateItemTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, 
 		}
 	}
 	_, err := tx.ExecContext(ctx,
-		d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`),
-		itemID, noteID, item.Text, item.Completed, item.Position, newParent, nullableAssignedTo(""),
+		d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+		itemID, noteID, item.Text, item.Completed, item.Position, newParent, nullableAssignedTo(""), now, now,
 	)
 	return err
 }
 
-func duplicateLabelsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, userID string, labels []Label) error {
+func duplicateLabelsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, userID string, labels []Label, now string) error {
 	for _, label := range labels {
 		labelID, err := generateID()
 		if err != nil {
@@ -367,10 +372,16 @@ func duplicateLabelsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, note
 		}
 		var resolvedLabelID string
 		if err = tx.QueryRowContext(ctx,
-			d.RewritePlaceholders(`INSERT INTO labels (id, user_id, name) VALUES (?, ?, ?)
-			 ON CONFLICT `+d.LabelNameConflictTarget()+` DO UPDATE SET name=excluded.name
+			// The no-op SET is what makes RETURNING yield the existing row on a
+			// conflict; DO NOTHING returns none. It must not assign
+			// excluded.name — that would rewrite the label's spelling to
+			// whatever the duplicated note happened to use, so duplicating a
+			// note tagged "äpfel" would rename the user's "Äpfel" label.
+			// GetOrCreateLabel keeps the stored spelling, and so does this.
+			d.RewritePlaceholders(`INSERT INTO labels (id, user_id, name, name_folded, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+			 ON CONFLICT (user_id, name_folded) DO UPDATE SET name = labels.name
 			 RETURNING id`),
-			labelID, userID, label.Name,
+			labelID, userID, label.Name, labelfold.Fold(label.Name), now, now,
 		).Scan(&resolvedLabelID); err != nil {
 			return fmt.Errorf("failed to get or create duplicated label: %w", err)
 		}
@@ -379,9 +390,9 @@ func duplicateLabelsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, note
 			return fmt.Errorf("failed to generate note label ID: %w", err)
 		}
 		q := d.RewritePlaceholders(
-			d.InsertIgnore("note_labels", "id, note_id, label_id, user_id", "?, ?, ?, ?"),
+			d.InsertIgnore("note_labels", "id, note_id, label_id, user_id, created_at", "?, ?, ?, ?, ?"),
 		)
-		if _, err = tx.ExecContext(ctx, q, noteLabelID, noteID, resolvedLabelID, userID); err != nil {
+		if _, err = tx.ExecContext(ctx, q, noteLabelID, noteID, resolvedLabelID, userID, now); err != nil {
 			return fmt.Errorf("failed to attach duplicated label to note: %w", err)
 		}
 	}

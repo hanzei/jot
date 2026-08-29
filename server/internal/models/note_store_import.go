@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/hanzei/jot/server/internal/database/dialect"
+	"github.com/hanzei/jot/server/internal/labelfold"
 )
 
 // GetOwnedNotesForExport returns all non-trashed notes owned by userID,
@@ -99,9 +100,11 @@ func (s *noteStore) ImportJotNotes(ctx context.Context, userID string, notes []J
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	now := Timestamp(Now())
+
 	imported := make([]importedNote, 0, len(notes))
 	for _, n := range notes {
-		noteID, createErr := insertImportedNoteTx(ctx, tx, s.d, userID, n)
+		noteID, createErr := insertImportedNoteTx(ctx, tx, s.d, userID, n, now)
 		if createErr != nil {
 			return createErr
 		}
@@ -120,40 +123,40 @@ func (s *noteStore) ImportJotNotes(ctx context.Context, userID string, notes []J
 
 // insertImportedNoteTx inserts a single note, its list items, and its labels
 // into the database within the provided transaction. It returns the new note ID.
-func insertImportedNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, userID string, n JotImportNote) (string, error) {
+func insertImportedNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, userID string, n JotImportNote, now string) (string, error) {
 	noteID, err := generateID()
 	if err != nil {
 		return "", fmt.Errorf("generate note ID: %w", err)
 	}
 
 	if _, err = tx.ExecContext(ctx,
-		d.RewritePlaceholders(`INSERT INTO notes (id, user_id, title, content, note_type) VALUES (?, ?, ?, ?, ?)`),
-		noteID, userID, n.Title, n.Content, n.NoteType,
+		d.RewritePlaceholders(`INSERT INTO notes (id, user_id, title, content, note_type, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`),
+		noteID, userID, n.Title, n.Content, n.NoteType, now, now,
 	); err != nil {
 		return "", fmt.Errorf("create note: %w", err)
 	}
 
 	// Use placeholder positions (0); the reorder pass sets the final values.
 	if _, err = tx.ExecContext(ctx,
-		d.RewritePlaceholders(`INSERT INTO note_user_state (note_id, user_id, color, pinned, archived, position, unpinned_position, checked_items_collapsed)
-		 VALUES (?, ?, ?, ?, ?, 0, 0, ?)`),
-		noteID, userID, n.Color, n.Pinned, n.Archived, n.CheckedItemsCollapsed,
+		d.RewritePlaceholders(`INSERT INTO note_user_state (note_id, user_id, color, pinned, archived, position, unpinned_position, checked_items_collapsed, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?, ?)`),
+		noteID, userID, n.Color, n.Pinned, n.Archived, n.CheckedItemsCollapsed, now, now,
 	); err != nil {
 		return "", fmt.Errorf("create note user state: %w", err)
 	}
 
-	if err = insertImportedItemsTx(ctx, tx, d, noteID, n.Items); err != nil {
+	if err = insertImportedItemsTx(ctx, tx, d, noteID, n.Items, now); err != nil {
 		return "", err
 	}
 
-	if err = insertImportedLabelsTx(ctx, tx, d, userID, noteID, n.Labels); err != nil {
+	if err = insertImportedLabelsTx(ctx, tx, d, userID, noteID, n.Labels, now); err != nil {
 		return "", err
 	}
 
 	return noteID, nil
 }
 
-func insertImportedItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string, items []JotImportNoteItem) error {
+func insertImportedItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string, items []JotImportNoteItem, now string) error {
 	// The import format is positional and carries indent_level (0/1) rather than
 	// item IDs, so reconstruct grouping the same way the migration backfill does:
 	// each indented item attaches to the most recent top-level item by position.
@@ -174,9 +177,9 @@ func insertImportedItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, 
 			parent = lastTopLevel
 		}
 		if _, err = tx.ExecContext(ctx,
-			d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, position, completed, parent_id, assigned_to)
-			 VALUES (?, ?, ?, ?, ?, ?, NULL)`),
-			itemID, noteID, item.Text, item.Position, item.Completed, parent,
+			d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, position, completed, parent_id, assigned_to, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)`),
+			itemID, noteID, item.Text, item.Position, item.Completed, parent, now, now,
 		); err != nil {
 			return fmt.Errorf("create note item: %w", err)
 		}
@@ -184,7 +187,7 @@ func insertImportedItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, 
 	return nil
 }
 
-func insertImportedLabelsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, userID, noteID string, labels []string) error {
+func insertImportedLabelsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, userID, noteID string, labels []string, now string) error {
 	for _, labelName := range labels {
 		labelID, err := generateID()
 		if err != nil {
@@ -192,10 +195,13 @@ func insertImportedLabelsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect,
 		}
 		var resolvedLabelID string
 		if err = tx.QueryRowContext(ctx,
-			d.RewritePlaceholders(`INSERT INTO labels (id, user_id, name) VALUES (?, ?, ?)
-			 ON CONFLICT `+d.LabelNameConflictTarget()+` DO UPDATE SET name=excluded.name
+			// The no-op SET makes RETURNING yield the existing row on a
+			// conflict, without rewriting that label's spelling to whatever the
+			// imported file used. See duplicateLabelsTx for the longer note.
+			d.RewritePlaceholders(`INSERT INTO labels (id, user_id, name, name_folded, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+			 ON CONFLICT (user_id, name_folded) DO UPDATE SET name = labels.name
 			 RETURNING id`),
-			labelID, userID, labelName,
+			labelID, userID, labelName, labelfold.Fold(labelName), now, now,
 		).Scan(&resolvedLabelID); err != nil {
 			return fmt.Errorf("get or create label %q: %w", labelName, err)
 		}
@@ -205,9 +211,9 @@ func insertImportedLabelsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect,
 			return fmt.Errorf("generate note_label ID: %w", err)
 		}
 		q := d.RewritePlaceholders(
-			d.InsertIgnore("note_labels", "id, note_id, label_id, user_id", "?, ?, ?, ?"),
+			d.InsertIgnore("note_labels", "id, note_id, label_id, user_id, created_at", "?, ?, ?, ?, ?"),
 		)
-		if _, err = tx.ExecContext(ctx, q, noteLabelID, noteID, resolvedLabelID, userID); err != nil {
+		if _, err = tx.ExecContext(ctx, q, noteLabelID, noteID, resolvedLabelID, userID, now); err != nil {
 			return fmt.Errorf("attach label to note: %w", err)
 		}
 	}
