@@ -569,15 +569,23 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
         return;
       }
 
-      // Arrow key navigation between note cards (runs before other guards)
+      // Card navigation (runs before other guards): arrows step by one, Home
+      // and End jump to the ends.
       const isArrowKey = event.key === 'ArrowLeft' || event.key === 'ArrowRight' ||
         event.key === 'ArrowUp' || event.key === 'ArrowDown';
-      if (isArrowKey && document.activeElement?.getAttribute('data-note-card') === 'true') {
+      const isJumpKey = event.key === 'Home' || event.key === 'End';
+      if ((isArrowKey || isJumpKey) && document.activeElement?.getAttribute('data-note-card') === 'true') {
         event.preventDefault();
         const cards = Array.from(document.querySelectorAll<HTMLElement>('[data-note-card="true"]'));
         const currentCard = document.activeElement as HTMLElement;
         const currentIndex = cards.indexOf(currentCard);
-        if (event.key === 'ArrowLeft') {
+        if (isJumpKey) {
+          // The ends of the grid, not of the visual row. Which cards share a row
+          // is an accident of how the masonry columns happened to fill, so a
+          // row-wise Home would land somewhere the DOM order cannot name and
+          // would move somewhere else after a resize.
+          (event.key === 'Home' ? cards[0] : cards[cards.length - 1])?.focus();
+        } else if (event.key === 'ArrowLeft') {
           cards[Math.max(0, currentIndex - 1)]?.focus();
         } else if (event.key === 'ArrowRight') {
           cards[Math.min(cards.length - 1, currentIndex + 1)]?.focus();

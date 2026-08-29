@@ -1,5 +1,6 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { GripVertical } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Note, User } from '@jot/shared';
 import NoteCard from './NoteCard';
@@ -78,32 +79,6 @@ export default function SortableNoteCard({
         disabled ? 'cursor-default' : isDragging ? 'cursor-grabbing scale-105 shadow-xl' : 'cursor-grab'
       }`}
     >
-      {!disabled && (
-        // The keyboard half of dragging, and the only part of this that is a
-        // new element on screen — invisible until it has focus, so a pointer
-        // user never sees it and the grid looks exactly as it did.
-        //
-        // `opacity-0` rather than `sr-only`: it has to be visible when focused
-        // (WCAG 2.4.7) and `sr-only` positions the element itself, so undoing
-        // it on focus means fighting over `position` with a second utility.
-        // `pointer-events-none` keeps it out of the way of a drag that starts
-        // on the pixels underneath it.
-        //
-        // `attributes` and `listeners` go on together: the KeyboardSensor
-        // activates on keydown, so splitting them leaves a focusable element
-        // that does nothing. Being the activator node is also what makes Space
-        // unambiguous — dnd-kit ignores an activation keypress whose target is
-        // not this button, so Space on the card still opens the note.
-        <button
-          type="button"
-          ref={setActivatorNodeRef}
-          {...attributes}
-          {...listeners}
-          className="absolute top-2 left-2 z-20 rounded bg-white dark:bg-slate-800 px-2 py-1 text-xs text-gray-700 dark:text-gray-200 shadow opacity-0 pointer-events-none focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-        >
-          {t('note.reorderNote')}
-        </button>
-      )}
       <div className="group" style={{ pointerEvents: isDragging ? 'none' : 'auto' }}>
         <NoteCard
           note={note}
@@ -120,6 +95,38 @@ export default function SortableNoteCard({
           onLabelClick={onLabelClick}
         />
       </div>
+      {!disabled && (
+        // The keyboard half of dragging, and the only part of this that is a
+        // new element on screen — invisible until it has focus, so a pointer
+        // user never sees it and the grid looks exactly as it did.
+        //
+        // Last in the wrapper, so a card's tab order runs open → menu → labels
+        // → reorder: the thing you almost always want is first, and reordering,
+        // which is the rarest, is the one you tab past everything else to reach.
+        //
+        // `opacity-0` rather than `sr-only`: it has to be visible when focused
+        // (WCAG 2.4.7) and `sr-only` positions the element itself, so undoing
+        // it on focus means fighting over `position` with a second utility.
+        // `pointer-events-none` keeps it out of the way of a drag that starts
+        // on the pixels underneath it.
+        //
+        // `attributes` and `listeners` go on together: the KeyboardSensor
+        // activates on keydown, so splitting them leaves a focusable element
+        // that does nothing. Being the activator node is also what makes Space
+        // unambiguous — dnd-kit ignores an activation keypress whose target is
+        // not this button, so Space on the card still opens the note.
+        <button
+          type="button"
+          ref={setActivatorNodeRef}
+          aria-label={t('note.reorderNote')}
+          title={t('note.reorderNote')}
+          {...attributes}
+          {...listeners}
+          className="absolute bottom-2 right-2 z-20 flex items-center justify-center rounded bg-white dark:bg-slate-800 p-1 text-gray-600 dark:text-gray-200 shadow opacity-0 pointer-events-none focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+        >
+          <GripVertical className="w-4 h-4" aria-hidden="true" />
+        </button>
+      )}
     </div>
   );
 }

@@ -86,6 +86,31 @@ test.describe('Arrow key card navigation', () => {
     await page.keyboard.press('ArrowUp');
     await expect(cards.first()).toBeFocused();
   });
+
+  test('jumps to the first and last card with Home and End', async ({ authenticatedUser, page, dashboardPage }) => {
+    void authenticatedUser;
+    await page.setViewportSize({ width: 500, height: 900 });
+    await dashboardPage.goto();
+    await dashboardPage.createNote('KS Jump Alpha');
+    await dashboardPage.createNote('KS Jump Beta');
+    await dashboardPage.createNote('KS Jump Gamma');
+
+    const cards = page.locator('[data-note-card="true"]');
+    await expect(cards).toHaveCount(3);
+
+    // From the middle, so neither jump could pass by stepping one card.
+    await cards.nth(1).focus();
+
+    await page.keyboard.press('End');
+    await expect(cards.nth(2)).toBeFocused();
+
+    await page.keyboard.press('Home');
+    await expect(cards.first()).toBeFocused();
+
+    // Idempotent at the ends rather than wrapping around.
+    await page.keyboard.press('Home');
+    await expect(cards.first()).toBeFocused();
+  });
 });
 
 test.describe('ConfirmDialog keyboard confirm', () => {
@@ -176,6 +201,10 @@ test.describe('Keyboard shortcuts help dialog', () => {
     await expect(shortcutsDialog.getByTestId('shortcut-description-bin-view')).toBeVisible();
     await expect(shortcutsDialog.getByTestId('shortcut-key-open-help')).toBeVisible();
     await expect(shortcutsDialog.getByTestId('shortcut-description-open-help')).toBeVisible();
+    await expect(shortcutsDialog.getByTestId('shortcut-key-navigate-cards')).toBeVisible();
+    await expect(shortcutsDialog.getByTestId('shortcut-description-navigate-cards')).toBeVisible();
+    await expect(shortcutsDialog.getByTestId('shortcut-key-jump-first-last')).toBeVisible();
+    await expect(shortcutsDialog.getByTestId('shortcut-description-jump-first-last')).toBeVisible();
     await expect(shortcutsDialog.getByTestId('shortcut-key-escape')).toBeVisible();
     await expect(shortcutsDialog.getByTestId('shortcut-description-escape')).toBeVisible();
 
