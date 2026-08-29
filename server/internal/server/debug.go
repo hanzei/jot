@@ -29,8 +29,8 @@ func newDebugMux(metricsEnabled, pprofEnabled bool) *http.ServeMux {
 // also registers them on http.DefaultServeMux via its init(), which Jot never
 // serves, so these are the only reachable ones.
 //
-// Index covers the named profiles below it (heap, goroutine, allocs, block,
-// mutex, threadcreate); the four below have paths of their own.
+// Index covers the named profiles below it (heap, goroutine, goroutineleak,
+// allocs, block, mutex, threadcreate); the four below have paths of their own.
 func registerPprof(mux *http.ServeMux) {
 	mux.HandleFunc("GET /debug/pprof/", httppprof.Index)
 	mux.HandleFunc("GET /debug/pprof/cmdline", httppprof.Cmdline)
@@ -63,10 +63,11 @@ func (s *Server) startDebugServer() error {
 	}
 
 	debugServer := &http.Server{
-		Handler:      newDebugMux(s.cfg.MetricsEnabled, s.cfg.PprofEnabled),
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: writeTimeout,
-		IdleTimeout:  30 * time.Second,
+		Handler:             newDebugMux(s.cfg.MetricsEnabled, s.cfg.PprofEnabled),
+		ReadTimeout:         10 * time.Second,
+		WriteTimeout:        writeTimeout,
+		IdleTimeout:         30 * time.Second,
+		MaxHeaderValueCount: maxHeaderValueCount,
 	}
 	s.serverMu.Lock()
 	s.debugServer = debugServer

@@ -126,15 +126,18 @@ batch.
 ## 5. What not to touch here
 
 These appear in workflows but are owned elsewhere. Do not bump them as part of an
-action sweep — but do check they still match their source, since drift shows up here
-first:
+action sweep:
 
 | In workflows | Source of truth | Skill |
 |---|---|---|
-| `go-version: "1.26"` | `server/go.mod` | `update-server-deps` |
-| `node-version: "24"` | `.nvmrc`, `Dockerfile` | `update-webapp-deps` |
+| `go-version-file: server/go.mod`, `node-version-file: .nvmrc` | the named file | `update-server-deps`, `update-webapp-deps` |
 | `java-version: "17"`, NDK/CMake pins | Expo SDK requirements | `update-mobile-deps` |
-| `postgres:16-alpine@sha256:...` | — | `update-docker-deps` |
+| `postgres:18-alpine@sha256:...` | — | `update-docker-deps` |
+
+The first row cannot drift and needs no check: `setup-go` and `setup-node` read the
+version out of the file at run time, so the file is not a thing the workflow is kept in
+step with — it is the only copy. Leave those lines alone entirely. The rows below it are
+literals in the workflow, and those are the ones worth eyeballing against their source.
 
 ## 6. Runner labels, permissions, and fork guards
 

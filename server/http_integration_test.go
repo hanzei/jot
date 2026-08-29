@@ -71,6 +71,8 @@ type TestUser struct {
 type TestServer struct {
 	Server     *server.Server
 	HTTPServer *httptest.Server
+	// The only client that can reach HTTPServer's in-memory listener.
+	httpClient *http.Client
 }
 
 func defaultTestConfig(tmpDir string) *config.Config {
@@ -118,11 +120,15 @@ func setupTestServerWithConfig(t *testing.T, customize func(*config.Config)) *Te
 	s, err := server.NewWithLogger(cfg, log)
 	require.NoError(t, err)
 
-	httpServer := httptest.NewServer(s.GetRouter())
+	// In-memory network, so the suite stops burning a port per test. Start()
+	// would move it back onto loopback; Client() is what sets httpServer.URL,
+	// which tests read before building a client of their own.
+	httpServer := httptest.NewTestServer(t, s.GetRouter())
 
 	ts := &TestServer{
 		Server:     s,
 		HTTPServer: httpServer,
+		httpClient: httpServer.Client(),
 	}
 
 	t.Cleanup(func() {
@@ -134,9 +140,12 @@ func setupTestServerWithConfig(t *testing.T, customize func(*config.Config)) *Te
 	return ts
 }
 
-// newClient creates a new [client.Client] pointed at the test server.
+// newClient creates a new [client.Client] on the test server's in-memory
+// transport, restoring the SDK timeout that httptest's client lacks.
 func (ts *TestServer) newClient() *client.Client {
-	return client.New(ts.HTTPServer.URL)
+	httpClient := *ts.httpClient
+	httpClient.Timeout = client.DefaultTimeout
+	return client.New(ts.HTTPServer.URL).WithHTTPClient(&httpClient)
 }
 
 // postJSON issues a POST with a JSON body as user and returns the status code.
@@ -1322,7 +1331,7 @@ func TestUploadProfileIcon(t *testing.T) {
 		require.NoError(t, err)
 		req.Header.Set("Content-Type", ct)
 
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := ts.HTTPServer.Client().Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)

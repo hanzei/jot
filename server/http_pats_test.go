@@ -158,13 +158,12 @@ func TestPATs(t *testing.T) {
 
 		pat := createPAT(t, ts, u, "bearer test")
 
-		// Use a fresh client (no cookies) and authenticate with Bearer token.
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/me", nil)
 		require.NoError(t, err)
 		req.Header.Set("Authorization", "Bearer "+pat.Token)
 
-		freshClient := &http.Client{}
-		resp, err := freshClient.Do(req)
+		noCookieClient := ts.HTTPServer.Client()
+		resp, err := noCookieClient.Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
 
@@ -191,8 +190,8 @@ func TestPATs(t *testing.T) {
 		require.NoError(t, err)
 		req2.Header.Set("Authorization", "Bearer "+rawToken)
 
-		freshClient := &http.Client{}
-		resp2, err := freshClient.Do(req2)
+		noCookieClient := ts.HTTPServer.Client()
+		resp2, err := noCookieClient.Do(req2)
 		require.NoError(t, err)
 		defer resp2.Body.Close()
 		assert.Equal(t, http.StatusUnauthorized, resp2.StatusCode)
@@ -225,8 +224,8 @@ func TestPATs(t *testing.T) {
 		require.NoError(t, err)
 		req.Header.Set("Content-Type", "application/json")
 
-		freshClient := &http.Client{}
-		resp, err := freshClient.Do(req)
+		noCookieClient := ts.HTTPServer.Client()
+		resp, err := noCookieClient.Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
@@ -248,8 +247,8 @@ func TestPATs(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+firstPAT.Token)
 
-		freshClient := &http.Client{}
-		resp, err := freshClient.Do(req)
+		noCookieClient := ts.HTTPServer.Client()
+		resp, err := noCookieClient.Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
@@ -268,8 +267,8 @@ func TestPATs(t *testing.T) {
 		require.NoError(t, err)
 		req.Header.Set("Authorization", "Bearer "+firstPAT.Token)
 
-		freshClient := &http.Client{}
-		resp, err := freshClient.Do(req)
+		noCookieClient := ts.HTTPServer.Client()
+		resp, err := noCookieClient.Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
