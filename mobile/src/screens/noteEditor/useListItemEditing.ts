@@ -85,6 +85,12 @@ export interface UseListItemEditingParams {
   savedOrderRef: React.RefObject<string[]>;
   /** Surfaces the pending bar while a bulk item write is in flight. */
   withPendingIndicator: <T>(fn: () => Promise<T>) => Promise<T>;
+  /**
+   * Runs an item write with the editor's refresh effect held off, so a note
+   * re-read that resolves mid-write can't apply the pre-write item state over
+   * the optimistic one.
+   */
+  withItemWriteInFlight: <T>(op: () => Promise<T>) => Promise<T>;
   /** The editor's scroll container, kept scrolled to the focused row. */
   scrollViewRef: React.RefObject<ScrollView | null>;
   /** Opens the assignee picker for a row (the picker's state lives in the screen). */
@@ -167,6 +173,7 @@ export function useListItemEditing({
   savedItemsRef,
   savedOrderRef,
   withPendingIndicator,
+  withItemWriteInFlight,
   scrollViewRef,
   openAssigneePicker,
   confirm,
@@ -314,7 +321,8 @@ export function useListItemEditing({
       setItems(optimisticItems);
 
       // For unsaved new notes, let the bulk-create carry completed flags
-      if (!noteIdRef.current) {
+      const currentNoteId = noteIdRef.current;
+      if (!currentNoteId) {
         markDirtyAndScheduleUpdate();
         return;
       }
@@ -322,50 +330,55 @@ export function useListItemEditing({
       // Cancel any pending debounced save to avoid a race with the toggle API call
       cancelScheduledSave();
 
-      try {
-        const serverItems = await toggleItemCompletedRef.current({
-          noteId: noteIdRef.current,
-          itemId,
-          completed,
-        });
-        if (serverItems.length > 0) {
-          // Online: reconcile only completed flags from server response,
-          // composing on (and writing back) the latest state so a concurrent
-          // toggle's optimistic change is preserved.
-          const completedById = new Map(serverItems.map((item) => [item.id, item.completed]));
-          const reconciled = itemsRef.current.map((item) => {
-            const serverCompleted = completedById.get(item.id);
-            return serverCompleted === undefined ? item : { ...item, completed: serverCompleted };
+      // The request and the reconcile that follows it both run inside the
+      // in-flight window: until the reconciled state is set, a note re-read
+      // still describes this item as it was before the tap.
+      await withItemWriteInFlight(async () => {
+        try {
+          const serverItems = await toggleItemCompletedRef.current({
+            noteId: currentNoteId,
+            itemId,
+            completed,
           });
-          itemsRef.current = reconciled;
-          setItems(reconciled);
-          // Advance the baseline so the diff engine does not re-patch completed
-          for (const [id, comp] of completedById) {
-            const snap = savedItemsRef.current.get(id);
-            if (snap) savedItemsRef.current.set(id, { ...snap, completed: comp });
+          if (serverItems.length > 0) {
+            // Online: reconcile only completed flags from server response,
+            // composing on (and writing back) the latest state so a concurrent
+            // toggle's optimistic change is preserved.
+            const completedById = new Map(serverItems.map((item) => [item.id, item.completed]));
+            const reconciled = itemsRef.current.map((item) => {
+              const serverCompleted = completedById.get(item.id);
+              return serverCompleted === undefined ? item : { ...item, completed: serverCompleted };
+            });
+            itemsRef.current = reconciled;
+            setItems(reconciled);
+            // Advance the baseline so the diff engine does not re-patch completed
+            for (const [id, comp] of completedById) {
+              const snap = savedItemsRef.current.get(id);
+              if (snap) savedItemsRef.current.set(id, { ...snap, completed: comp });
+            }
+          } else {
+            // Offline: cascade was applied to local DB; advance baseline here too
+            for (const [id, prior] of priorCompletedById) {
+              if (prior === completed) continue;
+              const snap = savedItemsRef.current.get(id);
+              if (snap) savedItemsRef.current.set(id, { ...snap, completed });
+            }
           }
-        } else {
-          // Offline: cascade was applied to local DB; advance baseline here too
-          for (const [id, prior] of priorCompletedById) {
-            if (prior === completed) continue;
-            const snap = savedItemsRef.current.get(id);
-            if (snap) savedItemsRef.current.set(id, { ...snap, completed });
-          }
+        } catch {
+          // Revert only the items this toggle changed, restoring their prior
+          // completed values, so a concurrent toggle's optimistic state survives.
+          const reverted = itemsRef.current.map((item) =>
+            priorCompletedById.has(item.id)
+              ? { ...item, completed: priorCompletedById.get(item.id)! }
+              : item,
+          );
+          itemsRef.current = reverted;
+          setItems(reverted);
+          setSaveError('note.failedSaveChanges');
         }
-      } catch {
-        // Revert only the items this toggle changed, restoring their prior
-        // completed values, so a concurrent toggle's optimistic state survives.
-        const reverted = itemsRef.current.map((item) =>
-          priorCompletedById.has(item.id)
-            ? { ...item, completed: priorCompletedById.get(item.id)! }
-            : item,
-        );
-        itemsRef.current = reverted;
-        setItems(reverted);
-        setSaveError('note.failedSaveChanges');
-      }
+      });
     },
-    [cancelScheduledSave, itemsRef, markDirtyAndScheduleUpdate, noteIdRef, savedItemsRef, setItems, setSaveError],
+    [cancelScheduledSave, itemsRef, markDirtyAndScheduleUpdate, noteIdRef, savedItemsRef, setItems, setSaveError, withItemWriteInFlight],
   );
 
   // Unchecks every currently-completed item in one bulk request (overflow
@@ -387,7 +400,7 @@ export function useListItemEditing({
       return;
     }
 
-    await withPendingIndicator(async () => {
+    await withItemWriteInFlight(() => withPendingIndicator(async () => {
       try {
         const serverItems = await uncheckAllItemsRef.current({ noteId, itemIds: ids });
         if (serverItems.length > 0) {
@@ -416,8 +429,8 @@ export function useListItemEditing({
         setItems(reverted);
         setSaveError('note.failedSaveChanges');
       }
-    });
-  }, [itemsRef, markDirtyAndScheduleUpdate, noteIdRef, savedItemsRef, setItems, setSaveError, withPendingIndicator]);
+    }));
+  }, [itemsRef, markDirtyAndScheduleUpdate, noteIdRef, savedItemsRef, setItems, setSaveError, withItemWriteInFlight, withPendingIndicator]);
 
   // Deletes every currently-completed item after a confirm dialog (overflow
   // menu); mobile has no in-editor undo-bar equivalent to the web's
@@ -458,7 +471,7 @@ export function useListItemEditing({
       return;
     }
 
-    await withPendingIndicator(async () => {
+    await withItemWriteInFlight(() => withPendingIndicator(async () => {
       try {
         await deleteCompletedItemsRef.current({ noteId, itemIds: ids });
       } catch {
@@ -481,8 +494,8 @@ export function useListItemEditing({
 
         setSaveError('note.failedSaveChanges');
       }
-    });
-  }, [confirm, itemsRef, markDirtyAndScheduleUpdate, noteIdRef, savedItemsRef, savedOrderRef, setItems, setSaveError, t, withPendingIndicator]);
+    }));
+  }, [confirm, itemsRef, markDirtyAndScheduleUpdate, noteIdRef, savedItemsRef, savedOrderRef, setItems, setSaveError, t, withItemWriteInFlight, withPendingIndicator]);
 
   const handleItemTextChange = useCallback(
     (index: number, text: string) => {

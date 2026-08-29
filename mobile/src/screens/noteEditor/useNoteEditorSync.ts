@@ -86,6 +86,11 @@ export interface NoteEditorSync {
   isClosingRef: React.RefObject<boolean>;
   /** Resolves once any in-flight save settles; null when none is running. */
   saveInFlightRef: React.RefObject<Promise<boolean> | null>;
+  /**
+   * Runs an item write (toggle, bulk uncheck, bulk delete) with the refresh
+   * effect held off for its duration. See `itemWritesInFlightRef` for why.
+   */
+  withItemWriteInFlight: <T>(op: () => Promise<T>) => Promise<T>;
 
   exitSavePrompt: ExitSavePrompt | null;
   isExitRetrying: boolean;
@@ -165,6 +170,15 @@ export function useNoteEditorSync({
   // While one is in flight the refresh effect must not re-apply a (possibly
   // stale) refetch and revert the optimistic pin/archive/color.
   const metadataUpdateInFlightRef = useRef(false);
+  // Item writes (toggle, bulk uncheck, bulk delete) have their own endpoints and
+  // never go through flushSave, so — like the metadata PATCH above — they show up
+  // in none of the flags the refresh effect consults. Their optimistic state
+  // therefore has to be protected explicitly: a note re-read that resolves
+  // mid-write still describes the item as it was before, and applying it puts a
+  // just-checked row back in the active list until the write lands and re-checks
+  // it. A counter rather than a boolean, since rows can be checked off faster
+  // than the requests come back.
+  const itemWritesInFlightRef = useRef(0);
   const requiresHydrationRef = useRef(initialNoteId !== null);
 
   // Auto-dismiss sync toast after 4 seconds
@@ -272,6 +286,7 @@ export function useNoteEditorSync({
       && !hasPendingChangesRef.current
       && saveInFlightRef.current === null
       && !metadataUpdateInFlightRef.current
+      && itemWritesInFlightRef.current === 0
     ) {
       applyNoteToState(existingNote);
     }
@@ -538,6 +553,20 @@ export function useNoteEditorSync({
     Object.assign(savedScalarsRef.current, overrides);
   }, []);
 
+  // Holds the refresh effect off for the duration of an item write. A note that
+  // arrives while one is in flight is dropped rather than deferred, matching how
+  // the effect already treats a note arriving mid-save: the write's own success
+  // invalidates the note reads, so the refetch right behind it carries both the
+  // write and anything remote that landed meanwhile.
+  const withItemWriteInFlight = useCallback(async <T,>(op: () => Promise<T>): Promise<T> => {
+    itemWritesInFlightRef.current += 1;
+    try {
+      return await op();
+    } finally {
+      itemWritesInFlightRef.current -= 1;
+    }
+  }, []);
+
   // Mark the exit as intentional (so beforeRemove doesn't re-handle it) only
   // once the navigation action is about to dispatch, optionally zooming back
   // onto the originating card first. isClosingRef is set immediately instead,
@@ -703,6 +732,7 @@ export function useNoteEditorSync({
     intentionalExitRef,
     isClosingRef,
     saveInFlightRef,
+    withItemWriteInFlight,
     exitSavePrompt,
     isExitRetrying,
     handleExitRetry,

@@ -918,6 +918,72 @@ describe('useNotes hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
     });
 
+    // The local rows have to move with the optimistic cache, not trail it: both
+    // note reads are SQLite-backed, so a row that still says unchecked while the
+    // request is in flight is what any re-read in that window resolves to — and
+    // that read overwrites the optimistic cache, putting the checked item back
+    // on screen until the response lands.
+    it('useToggleNoteItemCompleted writes the cascade to the local DB before the request goes out', async () => {
+      const { wrapper, queryClient } = createWrapperWithClient();
+      queryClient.setQueryData(noteLocalQueryKey('n1'), listNote);
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce(listNote as never);
+
+      const pending = deferred<unknown[]>();
+      mockNotesApi.toggleItemCompleted.mockReset();
+      mockNotesApi.toggleItemCompleted.mockReturnValueOnce(pending.promise as never);
+
+      const { result } = await renderHook(() => useToggleNoteItemCompleted(), { wrapper });
+      result.current.mutate({ noteId: 'n1', itemId: 'p', completed: true });
+
+      // Still in flight, and the parent and its cascaded child are already
+      // checked in SQLite.
+      await waitFor(() => {
+        expect(mockNoteQueries.patchLocalItem).toHaveBeenCalledWith(expect.anything(), 'n1', 'p', { completed: true });
+      });
+      expect(mockNoteQueries.patchLocalItem).toHaveBeenCalledWith(expect.anything(), 'n1', 'c', { completed: true });
+      expect(mockNotesApi.toggleItemCompleted).toHaveBeenCalledWith('n1', 'p', true);
+
+      pending.resolve([]);
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    });
+
+    it('useToggleNoteItemCompleted takes the local rows back on a permanent failure', async () => {
+      const { wrapper, queryClient } = createWrapperWithClient();
+      queryClient.setQueryData(noteLocalQueryKey('n1'), listNote);
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce(listNote as never);
+      mockNotesApi.toggleItemCompleted.mockReset();
+      mockNotesApi.toggleItemCompleted.mockRejectedValueOnce(makeAxiosError(404));
+
+      const { result } = await renderHook(() => useToggleNoteItemCompleted(), { wrapper });
+      await result.current.mutateAsync({ noteId: 'n1', itemId: 'p', completed: true }).catch(() => {});
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      // Both the pre-flight write and its revert ran, so SQLite ends up where it
+      // started rather than holding a toggle the server rejected.
+      for (const id of ['p', 'c']) {
+        expect(mockNoteQueries.patchLocalItem).toHaveBeenCalledWith(expect.anything(), 'n1', id, { completed: true });
+        expect(mockNoteQueries.patchLocalItem).toHaveBeenCalledWith(expect.anything(), 'n1', id, { completed: false });
+      }
+      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
+    });
+
+    it('useUncheckAllItems writes to the local DB before the request, and re-checks on a permanent failure', async () => {
+      const { wrapper, queryClient } = createWrapperWithClient();
+      queryClient.setQueryData(noteLocalQueryKey('n1'), listNote);
+      mockNotesApi.uncheckAllItems.mockReset();
+      mockNotesApi.uncheckAllItems.mockRejectedValueOnce(makeAxiosError(404));
+
+      const { result } = await renderHook(() => useUncheckAllItems(), { wrapper });
+      await result.current.mutateAsync({ noteId: 'n1', itemIds: ['p', 'c'] }).catch(() => {});
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      expect(mockNoteQueries.setLocalItemsCompleted).toHaveBeenNthCalledWith(1, expect.anything(), 'n1', ['p', 'c'], false);
+      expect(mockNoteQueries.setLocalItemsCompleted).toHaveBeenNthCalledWith(2, expect.anything(), 'n1', ['p', 'c'], true);
+      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
+    });
+
     it('useToggleNoteItemCompleted rolls back the optimistic toggle on a permanent failure', async () => {
       const { wrapper, queryClient } = createWrapperWithClient();
       queryClient.setQueryData(noteLocalQueryKey('n1'), listNote);
