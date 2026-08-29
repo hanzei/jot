@@ -33,6 +33,16 @@ interface NoteCardProps {
   inBin?: boolean;
   onRefresh?: (() => void) | undefined;
   onLabelClick?: ((labelId: string) => void) | undefined;
+  /**
+   * Rendered into the card's top-right controls, beside the overflow menu.
+   *
+   * A slot rather than a `sortable` prop on purpose: the only caller passes a
+   * drag handle, and passing it as a node keeps every dnd-kit detail — the
+   * activator ref, `attributes`, `listeners` — in `SortableNoteCard`, which is
+   * the component that actually calls `useSortable`. A card rendered outside a
+   * sortable context just omits it.
+   */
+  dragHandle?: React.ReactNode;
 }
 
 function MenuKbd({ children }: { children: React.ReactNode }) {
@@ -43,7 +53,7 @@ function MenuKbd({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare, onRestore, onPermanentlyDelete, currentUserId, usersById, inBin = false, onRefresh, onLabelClick }: NoteCardProps) {
+export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare, onRestore, onPermanentlyDelete, currentUserId, usersById, inBin = false, onRefresh, onLabelClick, dragHandle }: NoteCardProps) {
   const { t } = useTranslation();
   const { showToast } = useToast();
   const [isUpdating, setIsUpdating] = useState(false);
@@ -243,7 +253,12 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
         </div>
       )}
 
-      {/* Menu */}
+      {/* The card's controls, top right. The drag handle sits to the left of
+          the menu and comes after it in the DOM, so the tab order within a card
+          is open → menu → reorder while the menu keeps the corner it has always
+          had. Both are absolute rather than a flex row: the handle is invisible
+          until focused, and a flex row would still reserve its width and shift
+          the menu left by that much at rest. */}
       <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
       <Menu>
         <MenuButton aria-label={t('note.menuOptions')} className="p-1 rounded-full hover:bg-gray-200 transition-colors">
@@ -359,6 +374,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
         </MenuItems>
       </Menu>
       </div>
+      {dragHandle}
 
       {/* Content */}
       <div>

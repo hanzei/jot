@@ -72,8 +72,9 @@ export default function SortableNoteCard({
       //
       // `onKeyDown` is withheld for a different reason. The KeyboardSensor is
       // the one sensor that needs focus, so it lives on the reorder button
-      // below — and this wrapper sees every keypress that bubbles up out of the
-      // card, including that button's, which would activate the drag twice.
+      // passed in as `dragHandle` — and this wrapper sees every keypress that
+      // bubbles up out of the card, including that button's, which would
+      // otherwise activate the drag a second time.
       {...(!disabled ? { ...listeners, onKeyDown: undefined } : {})}
       className={`group select-none relative ${
         disabled ? 'cursor-default' : isDragging ? 'cursor-grabbing scale-105 shadow-xl' : 'cursor-grab'
@@ -81,6 +82,38 @@ export default function SortableNoteCard({
     >
       <div className="group" style={{ pointerEvents: isDragging ? 'none' : 'auto' }}>
         <NoteCard
+          dragHandle={!disabled && (
+            // The keyboard half of dragging, and the only part of this that is
+            // a new element on screen — invisible until it has focus, so a
+            // pointer user never sees it and the grid looks exactly as it did.
+            //
+            // `opacity-0` rather than `sr-only`: it has to be visible when
+            // focused (WCAG 2.4.7) and `sr-only` positions the element itself,
+            // so undoing it on focus means fighting over `position` with a
+            // second utility. `pointer-events-none` keeps it out of the way of
+            // a drag that starts on the pixels underneath it — and it is why
+            // this does not reveal on hover the way the menu does: a pointer
+            // user can already drag from anywhere on the card, so a visible
+            // grip would be decoration.
+            //
+            // `attributes` and `listeners` go on together: the KeyboardSensor
+            // activates on keydown, so splitting them leaves a focusable
+            // element that does nothing. Being the activator node is also what
+            // makes Space unambiguous — dnd-kit ignores an activation keypress
+            // whose target is not this button, so Space on the card still
+            // opens the note.
+            <button
+              type="button"
+              ref={setActivatorNodeRef}
+              aria-label={t('note.reorderNote')}
+              title={t('note.reorderNote')}
+              {...attributes}
+              {...listeners}
+              className="absolute top-2 right-9 z-20 p-1 rounded-full text-gray-600 dark:text-gray-300 opacity-0 pointer-events-none focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            >
+              <GripVertical className="h-4 w-4" aria-hidden="true" />
+            </button>
+          )}
           note={note}
           onEdit={onEdit}
           onDelete={onDelete}
@@ -95,38 +128,6 @@ export default function SortableNoteCard({
           onLabelClick={onLabelClick}
         />
       </div>
-      {!disabled && (
-        // The keyboard half of dragging, and the only part of this that is a
-        // new element on screen — invisible until it has focus, so a pointer
-        // user never sees it and the grid looks exactly as it did.
-        //
-        // Last in the wrapper, so a card's tab order runs open → menu → labels
-        // → reorder: the thing you almost always want is first, and reordering,
-        // which is the rarest, is the one you tab past everything else to reach.
-        //
-        // `opacity-0` rather than `sr-only`: it has to be visible when focused
-        // (WCAG 2.4.7) and `sr-only` positions the element itself, so undoing
-        // it on focus means fighting over `position` with a second utility.
-        // `pointer-events-none` keeps it out of the way of a drag that starts
-        // on the pixels underneath it.
-        //
-        // `attributes` and `listeners` go on together: the KeyboardSensor
-        // activates on keydown, so splitting them leaves a focusable element
-        // that does nothing. Being the activator node is also what makes Space
-        // unambiguous — dnd-kit ignores an activation keypress whose target is
-        // not this button, so Space on the card still opens the note.
-        <button
-          type="button"
-          ref={setActivatorNodeRef}
-          aria-label={t('note.reorderNote')}
-          title={t('note.reorderNote')}
-          {...attributes}
-          {...listeners}
-          className="absolute bottom-2 right-2 z-20 flex items-center justify-center rounded bg-white dark:bg-slate-800 p-1 text-gray-600 dark:text-gray-200 shadow opacity-0 pointer-events-none focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-        >
-          <GripVertical className="w-4 h-4" aria-hidden="true" />
-        </button>
-      )}
     </div>
   );
 }
