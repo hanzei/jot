@@ -117,13 +117,14 @@ Two things reliably break here — expect them rather than being surprised:
 
 The Go version is declared in more places than `go.mod`, and they must not drift:
 
-- `server/go.mod` — `go 1.26.0`
-- `.github/workflows/server-ci.yml` and `.github/workflows/release.yml` — `go-version: "1.26"`
-- `Dockerfile` — `FROM golang:1.26-alpine`
-- `README.md` prerequisites and `AGENTS.md`
+- `server/go.mod` — `go 1.27.0`
+- `Dockerfile` — `FROM golang:1.27-alpine`
+- `README.md` prerequisites and `CLAUDE.md`
 
 Update all of them in the same commit. A `go.mod` ahead of the Docker builder produces a
-confusing "go.mod requires go >= X" failure that only shows up in the image build.
+confusing "go.mod requires go >= X" failure that only shows up in the image build. The
+workflows need nothing: every `setup-go` step resolves the version through
+`go-version-file: server/go.mod`, so CI follows the bump on its own.
 
 ## 5. Verify
 

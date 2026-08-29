@@ -82,7 +82,7 @@ compiled web app, while SQLite keeps the default deployment small and portable.
 
 ### Prerequisites
 
-- **Go 1.26+**: [Download Go](https://golang.org/dl/)
+- **Go 1.27+**: [Download Go](https://golang.org/dl/)
 - **Node.js 24+**: [Download Node.js](https://nodejs.org/)
 - **npm**: Package manager for web, shared, and mobile dependencies
 

@@ -422,7 +422,7 @@ mobile's transform.)
 
 ### Technology Stack
 
-- **Go 1.26**
+- **Go 1.27**
 - **Chi v5** — HTTP router with middleware
 - **go-chi/cors** — CORS middleware
 - **SQLite 3** — Default database (pure Go via `modernc.org/sqlite`, no CGO required)
@@ -654,7 +654,7 @@ To serve the built SPA from the Go binary instead of Vite, run `task build-webap
 
 Setup is `./scripts/bootstrap.sh` (see [Environment Setup](#environment-setup)); the notes below are what it checks and what to fall back to.
 
-- **Go 1.26** (`go.mod`), **Node 24** (`.nvmrc`, Dockerfile, CI). Older Go works only via toolchain auto-download; older Node is untested. Bootstrap warns on both but changes neither.
+- **Go 1.27** (`go.mod`), **Node 24** (`.nvmrc`, Dockerfile, CI). Older Go works only via toolchain auto-download; older Node is untested. Bootstrap warns on both but changes neither.
 - The SQLite driver is pure Go (`modernc.org/sqlite`) — **no CGO or gcc required**.
 - `@jot/shared` is a `file:../shared` dependency of both webapp and mobile. Install its deps before theirs. Use `npm ci`, not `npm install`.
 
@@ -685,7 +685,7 @@ unprefixed `COOKIE_SECURE=false` is silently ignored.
 
 Multi-stage `Dockerfile`:
 1. **Node 24 Alpine** — builds the React app (`npm ci && npm run build`)
-2. **Go 1.26 Alpine** — compiles the Go binary (pure Go, no CGO)
+2. **Go 1.27 Alpine** — compiles the Go binary (pure Go, no CGO)
 3. **Alpine runtime** — copies binary and frontend build; exposes port 8080
 
 ```bash
