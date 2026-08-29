@@ -936,11 +936,11 @@ describe('useNotes hooks', () => {
       result.current.mutate({ noteId: 'n1', itemId: 'p', completed: true });
 
       // Still in flight, and the parent and its cascaded child are already
-      // checked in SQLite.
+      // checked in SQLite — in one grouped write, so no read can land between
+      // the parent and its children.
       await waitFor(() => {
-        expect(mockNoteQueries.patchLocalItem).toHaveBeenCalledWith(expect.anything(), 'n1', 'p', { completed: true });
+        expect(mockNoteQueries.setLocalItemsCompleted).toHaveBeenCalledWith(expect.anything(), 'n1', ['p', 'c'], true);
       });
-      expect(mockNoteQueries.patchLocalItem).toHaveBeenCalledWith(expect.anything(), 'n1', 'c', { completed: true });
       expect(mockNotesApi.toggleItemCompleted).toHaveBeenCalledWith('n1', 'p', true);
 
       pending.resolve([]);
@@ -961,10 +961,8 @@ describe('useNotes hooks', () => {
 
       // Both the pre-flight write and its revert ran, so SQLite ends up where it
       // started rather than holding a toggle the server rejected.
-      for (const id of ['p', 'c']) {
-        expect(mockNoteQueries.patchLocalItem).toHaveBeenCalledWith(expect.anything(), 'n1', id, { completed: true });
-        expect(mockNoteQueries.patchLocalItem).toHaveBeenCalledWith(expect.anything(), 'n1', id, { completed: false });
-      }
+      expect(mockNoteQueries.setLocalItemsCompleted).toHaveBeenNthCalledWith(1, expect.anything(), 'n1', ['p', 'c'], true);
+      expect(mockNoteQueries.setLocalItemsCompleted).toHaveBeenNthCalledWith(2, expect.anything(), 'n1', ['p', 'c'], false);
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
     });
 

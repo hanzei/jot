@@ -99,7 +99,9 @@ function applyToggleToItems(items: NoteItem[], itemId: string, completed: boolea
  * ids it changed so a permanent failure can put them back.
  *
  * Every id the cascade yields is one whose value actually flips, so the whole
- * set moves to `completed` and reverting is the same write with `!completed`.
+ * set moves to `completed` in one grouped write and reverting is the same call
+ * with `!completed` — no per-id transaction, and no window where a re-read can
+ * catch a parent checked but its children not.
  */
 async function applyToggleToLocalItems(
   db: SQLiteDatabase,
@@ -110,22 +112,8 @@ async function applyToggleToLocalItems(
   const note = await getLocalNote(db, noteId);
   if (!note || note.note_type !== 'list' || !note.items) return [];
   const ids = collectToggleCascade(note.items, itemId, completed);
-  for (const id of ids) {
-    await patchLocalItem(db, noteId, id, { completed });
-  }
+  await setLocalItemsCompleted(db, noteId, ids, completed);
   return ids;
-}
-
-/** Puts `itemIds` back to `completed` after a write failed permanently. */
-async function revertLocalItemsCompleted(
-  db: SQLiteDatabase,
-  noteId: string,
-  itemIds: string[],
-  completed: boolean,
-): Promise<void> {
-  for (const id of itemIds) {
-    await patchLocalItem(db, noteId, id, { completed });
-  }
 }
 
 /**
@@ -1163,7 +1151,7 @@ export function useToggleNoteItemCompleted() {
           try {
             rethrowIfNotQueueable(err);
           } catch (permanent) {
-            await revertLocalItemsCompleted(db, noteId, cascadeIds, !completed);
+            await setLocalItemsCompleted(db, noteId, cascadeIds, !completed);
             throw permanent;
           }
         }
