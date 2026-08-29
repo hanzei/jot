@@ -158,7 +158,6 @@ func TestPATs(t *testing.T) {
 
 		pat := createPAT(t, ts, u, "bearer test")
 
-		// The server's client has no cookie jar, so this is Bearer-only.
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/me", nil)
 		require.NoError(t, err)
 		req.Header.Set("Authorization", "Bearer "+pat.Token)

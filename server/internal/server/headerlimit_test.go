@@ -16,13 +16,12 @@ import (
 )
 
 // TestMaxHeaderValueCount drives the real API listener: the cap lives on the
-// http.Server that Start builds, and the root package's harness wraps
-// GetRouter in a server of httptest's own making, which cannot observe it.
+// http.Server that Start builds, which the root package's harness cannot observe.
 func TestMaxHeaderValueCount(t *testing.T) {
 	t.Parallel()
 
-	// Bind an ephemeral port, read it back, release it for Start. A collision
-	// in that window surfaces as a "listen" error, not a wrong assertion.
+	// Claim an ephemeral port and release it for Start. A collision in that
+	// window surfaces as a "listen" error, not a wrong assertion.
 	probe, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	addr := probe.Addr().String()
@@ -50,8 +49,7 @@ func TestMaxHeaderValueCount(t *testing.T) {
 	go func() { served <- s.Start(addr) }()
 	t.Cleanup(func() {
 		// WithoutCancel: Go cancels t.Context() just before cleanups run, and
-		// Shutdown passes its context to WaitUntilStarted and
-		// http.Server.Shutdown. A canceled one makes Shutdown return without
+		// Shutdown passes its context on. A canceled one returns without
 		// stopping Serve, hanging the receive below.
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), 30*time.Second)
 		defer cancel()
@@ -74,8 +72,8 @@ func TestMaxHeaderValueCount(t *testing.T) {
 		t.Helper()
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+addr+"/livez", nil)
 		require.NoError(t, err)
-		// Separate lines, not one comma-separated value: the cap counts these
-		// individually and that as one.
+		// Separate lines: the cap counts these individually, a comma-separated
+		// value once.
 		for i := range n {
 			req.Header.Add("X-Jot-Test", fmt.Sprint(i))
 		}
@@ -87,8 +85,8 @@ func TestMaxHeaderValueCount(t *testing.T) {
 		return resp.StatusCode
 	}
 
-	// The behavioral subtests pass on Go's default too, since that is what
-	// maxHeaderValueCount is. Only this one notices the field being dropped.
+	// maxHeaderValueCount is Go's own default, so only this subtest notices the
+	// field being dropped.
 	t.Run("the API server sets the cap explicitly rather than inheriting it", func(t *testing.T) {
 		s.serverMu.RLock()
 		defer s.serverMu.RUnlock()

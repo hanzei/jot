@@ -71,8 +71,7 @@ type TestUser struct {
 type TestServer struct {
 	Server     *server.Server
 	HTTPServer *httptest.Server
-	// httpClient is the only client that can reach HTTPServer's in-memory
-	// listener.
+	// The only client that can reach HTTPServer's in-memory listener.
 	httpClient *http.Client
 }
 
@@ -121,11 +120,9 @@ func setupTestServerWithConfig(t *testing.T, customize func(*config.Config)) *Te
 	s, err := server.NewWithLogger(cfg, log)
 	require.NoError(t, err)
 
-	// NewTestServer serves on an in-memory network, so this parallel suite no
-	// longer burns an ephemeral port per test. Do not call Start(): it moves the
-	// server back onto loopback. Client() below is load-bearing twice over — it
-	// is the only transport that can reach the server, and it is what sets
-	// httpServer.URL, which tests read before building a client of their own.
+	// In-memory network, so the suite stops burning a port per test. Start()
+	// would move it back onto loopback; Client() is what sets httpServer.URL,
+	// which tests read before building a client of their own.
 	httpServer := httptest.NewTestServer(t, s.GetRouter())
 
 	ts := &TestServer{
@@ -144,8 +141,7 @@ func setupTestServerWithConfig(t *testing.T, customize func(*config.Config)) *Te
 }
 
 // newClient creates a new [client.Client] on the test server's in-memory
-// transport. The SDK timeout is restored because httptest's client has none,
-// and a hung request should fail a test rather than hang it.
+// transport, restoring the SDK timeout that httptest's client lacks.
 func (ts *TestServer) newClient() *client.Client {
 	httpClient := *ts.httpClient
 	httpClient.Timeout = client.DefaultTimeout
