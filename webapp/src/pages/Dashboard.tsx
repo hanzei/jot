@@ -101,6 +101,14 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   // Whether each grid section still has cards rendered (live or animating out),
   // so the last card can finish its exit animation before the section unmounts.
   const [sectionActive, setSectionActive] = useState({ pinned: false, other: false, archived: false });
+  // Roving tabindex (#950): the note id whose card most recently held focus —
+  // via a click, Tab, or the arrow-key/Home/End navigation below, all of which
+  // eventually call `.focus()` on a card control and so fire this. It, not an
+  // index, is what a card's `isActive` prop is derived from further down.
+  const [lastFocusedCardId, setLastFocusedCardId] = useState<string | null>(null);
+  const handleCardFocus = useCallback((noteId: string) => {
+    setLastFocusedCardId(noteId);
+  }, []);
   const user = getUser();
   const isMountedRef = useRef(true);
   const selectedLabelIdRef = useRef<string | null>(selectedLabelId);
@@ -1068,6 +1076,19 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
     () => new Set([...displayedPinned, ...displayedOther, ...displayedArchived].map(note => note.id)),
     [displayedPinned, displayedOther, displayedArchived],
   );
+  // Roving-tabindex order (#950): a `Set`'s iteration order is its insertion
+  // order, so this is `displayedIds` in the same pinned/other/archived, DOM
+  // order the arrow-key/Home/End handler above already walks via
+  // `[data-note-card="true"]`. Falling back to the first id here — rather than
+  // clamping an index, the way SortableItem's suggestion highlight has to —
+  // is what makes the active card self-heal across reorder, SSE updates and
+  // filtering for free: an id that is still present stays active, and one
+  // that isn't just drops out, with no reconciliation step of its own.
+  const orderedCardIds = useMemo(() => [...displayedIds], [displayedIds]);
+  const activeCardId =
+    lastFocusedCardId !== null && orderedCardIds.includes(lastFocusedCardId)
+      ? lastFocusedCardId
+      : (orderedCardIds[0] ?? null);
   const activeSortLabel = t(`dashboard.sortOption.${noteSort}`);
   const focusSearchShortcutHint = isApplePlatform() ? '⌘ + F' : t('keyboardShortcuts.focusSearchKey');
   const showCreateFirstNoteCta =
@@ -1312,6 +1333,8 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
                     inBin={showBin}
                     onRefresh={loadNotes}
                     onLabelClick={!showBin ? handleLabelClick : undefined}
+                    activeCardId={activeCardId}
+                    onCardFocus={handleCardFocus}
                   />
                 </div>
               )}
@@ -1342,6 +1365,8 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
                     inBin={showBin}
                     onRefresh={loadNotes}
                     onLabelClick={!showBin ? handleLabelClick : undefined}
+                    activeCardId={activeCardId}
+                    onCardFocus={handleCardFocus}
                   />
                 </div>
               )}
@@ -1373,6 +1398,8 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
                     inBin={showBin}
                     onRefresh={loadNotes}
                     onLabelClick={!showBin ? handleLabelClick : undefined}
+                    activeCardId={activeCardId}
+                    onCardFocus={handleCardFocus}
                   />
                 </div>
               )}

@@ -21,6 +21,8 @@ const baseProps = {
   onEdit: vi.fn(),
   onDelete: vi.fn(),
   onShare: vi.fn(),
+  activeCardId: null,
+  onCardFocus: vi.fn(),
 };
 
 const renderGrid = (notes: Note[], viewKey = 'notes', presentElsewhere?: Set<string>) =>

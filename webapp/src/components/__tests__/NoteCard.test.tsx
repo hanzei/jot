@@ -754,6 +754,37 @@ describe('NoteCard', () => {
     });
   });
 
+  describe('Roving tabindex (#950)', () => {
+    it('defaults to an ordinary, always-focusable open button', () => {
+      renderNoteCard(defaultProps);
+
+      expect(screen.getByTestId('note-card-open')).toHaveAttribute('tabIndex', '0');
+      expect(screen.getByRole('button', { name: 'Note options' })).toHaveAttribute('tabIndex', '0');
+    });
+
+    it('takes the open button and overflow menu out of the Tab sequence when not active', () => {
+      renderNoteCard({ ...defaultProps, isActive: false });
+
+      expect(screen.getByTestId('note-card-open')).toHaveAttribute('tabIndex', '-1');
+      expect(screen.getByRole('button', { name: 'Note options' })).toHaveAttribute('tabIndex', '-1');
+    });
+
+    it('reports the note id when any control inside the card gains focus', async () => {
+      const user = userEvent.setup();
+      const onCardFocus = vi.fn();
+
+      renderNoteCard({ ...defaultProps, onCardFocus });
+
+      await user.click(screen.getByTestId('note-card-open'));
+      expect(onCardFocus).toHaveBeenCalledWith(defaultProps.note.id);
+
+      onCardFocus.mockClear();
+      await user.hover(screen.getByTestId('note-card'));
+      await user.click(screen.getByRole('button', { name: 'Note options' }));
+      expect(onCardFocus).toHaveBeenCalledWith(defaultProps.note.id);
+    });
+  });
+
   describe('Data Integrity Edge Cases', () => {
     it('handles malformed note data', () => {
       const malformedNote = {
