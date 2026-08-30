@@ -476,7 +476,7 @@ export async function permanentDeleteLocalNote(db: SQLiteDatabase, id: string): 
   await db.runAsync('DELETE FROM notes WHERE id = ?', [id]);
 }
 
-interface LocalNoteChanges {
+export interface LocalNoteChanges {
   title?: string;
   content?: string;
   pinned?: boolean;
@@ -512,6 +512,24 @@ export async function updateLocalNote(
   values.push(id);
 
   await db.runAsync(`UPDATE notes SET ${fields.join(', ')} WHERE id = ?`, values);
+}
+
+/**
+ * Read the current `position` of each of `ids` that exists locally, as a map.
+ * Used by the optimistic reorder (#947) to snapshot the pre-drag positions so a
+ * permanently-rejected reorder can put them back — the new positions are the
+ * array indices, but the old ones are whatever they were, so they have to be
+ * captured before the pre-flight write. Ids absent from the local DB are simply
+ * omitted (nothing to restore).
+ */
+export async function getLocalNotePositions(db: SQLiteDatabase, ids: string[]): Promise<Map<string, number>> {
+  if (ids.length === 0) return new Map();
+  const placeholders = ids.map(() => '?').join(', ');
+  const rows = await db.getAllAsync<{ id: string; position: number }>(
+    `SELECT id, position FROM notes WHERE id IN (${placeholders})`,
+    ids,
+  );
+  return new Map(rows.map((row) => [row.id, row.position]));
 }
 
 /**

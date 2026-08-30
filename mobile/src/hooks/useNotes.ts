@@ -34,6 +34,7 @@ import type {
   PatchNoteItemRequest,
   ConvertToListCapViolation,
 } from '@jot/shared';
+import type { LocalNoteChanges } from '../db/noteQueries';
 import {
   saveNote,
   saveNotes,
@@ -45,6 +46,7 @@ import {
   generateClientNoteId,
   markNotePendingCreate,
   isNotePendingCreate,
+  getLocalNotePositions,
   createLocalItem,
   patchLocalItem,
   deleteLocalItem,
@@ -325,13 +327,40 @@ export function useCreateNote() {
   });
 }
 
+/**
+ * Builds the `updateLocalNote` changes that put a note's scalar fields back to
+ * their pre-write values, for exactly the fields `data` touched. Used to revert
+ * the pre-flight local write in {@link useUpdateNote} when the server
+ * permanently rejects the edit. Only the fields the write could have changed are
+ * restored, so a concurrent change to a different field is left alone. Title is
+ * a list-note field and content a text-note one, so each is restored only for
+ * the matching type.
+ */
+function buildLocalNoteRevert(existing: Note, data: UpdateNoteRequest): LocalNoteChanges {
+  const changed = data as Record<string, unknown>;
+  const revert: LocalNoteChanges = {};
+  if ('pinned' in changed) revert.pinned = existing.pinned;
+  if ('archived' in changed) revert.archived = existing.archived;
+  if ('color' in changed) revert.color = existing.color;
+  if ('content' in changed && existing.note_type === 'text') revert.content = existing.content;
+  if ('title' in changed && existing.note_type === 'list') revert.title = existing.title;
+  if ('checked_items_collapsed' in changed && existing.note_type === 'list') {
+    revert.checked_items_collapsed = existing.checked_items_collapsed;
+  }
+  return revert;
+}
+
 export function useUpdateNote() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
 
   return useMutation({
-    onMutate: ({ id, data }: { id: string; data: UpdateNoteRequest }) => {
+    onMutate: async ({ id, data }: { id: string; data: UpdateNoteRequest }) => {
+      // Cancel in-flight note reads before patching the cache, so a refetch
+      // already on the wire can't resolve over the optimistic edit (the same
+      // revert a re-read *during* the request causes, from the other direction).
+      await cancelNoteReads(queryClient, id);
       const now = new Date().toISOString();
       return applyOptimisticNote(queryClient, id, (note) => ({ ...note, ...data, updated_at: now }));
     },
@@ -343,6 +372,22 @@ export function useUpdateNote() {
       // (color/pinned/archived/collapsed) live in note_user_state and aren't.
       const fields = data as { title?: string; content?: string };
       const touchesContent = fields.title !== undefined || fields.content !== undefined;
+
+      // Write the edit to SQLite up front, before the request goes out (same
+      // reasoning as useToggleNoteItemCompleted / #945): both note reads are
+      // SQLite-backed with staleTime: Infinity, so while the row still holds the
+      // pre-edit note any invalidation in the request window (the queue drain,
+      // an unrelated note's SSE update, the background sync) refetches the old
+      // value and overwrites the optimistic cache — the dashboard card flashes
+      // the pre-edit note for a round trip. Writing first keeps the local row in
+      // step with the optimistic cache for the whole flight, so a re-read is a
+      // no-op. base_version stays pinned to the version read above: updateLocalNote
+      // never touches the version column, so the pre-flight write can't bump the
+      // value the server gates against, and a queued retry resolves it fresh at
+      // drain time (#489).
+      if (existing) {
+        await updateLocalNote(db, id, data);
+      }
 
       if (isOnlineWriteAllowed(isConnected)) {
         try {
@@ -356,22 +401,24 @@ export function useUpdateNote() {
           return updatedNote;
         } catch (err) {
           // Transient failure: fall through to the offline path so the edit is
-          // persisted locally and queued for replay instead of being lost.
-          rethrowIfNotQueueable(err);
+          // queued for replay instead of being lost. A permanent one takes the
+          // pre-flight local write back with it, mirroring the cache rollback in
+          // onError — otherwise the write above would outlive the failed edit.
+          try {
+            rethrowIfNotQueueable(err);
+          } catch (permanent) {
+            if (existing) await updateLocalNote(db, id, buildLocalNoteRevert(existing, data));
+            throw permanent;
+          }
         }
       }
 
-      // Offline (or a transient online failure): update local DB and queue the
-      // server operation.
+      // Offline (or a transient online failure): the edit is already in the local
+      // DB, so only the replay op is left to enqueue.
       if (!existing) {
         throw new Error(`Note ${id} not found in local DB`);
       }
       const now = new Date().toISOString();
-
-      // List items are edited via the granular item mutations, so this path only
-      // carries scalar fields for both note types (title/content/pinned/archived/
-      // color/collapsed).
-      await updateLocalNote(db, id, data);
 
       // Queue only the fields the user actually changed. The server PATCH is a
       // partial update (absent fields are left unchanged), so sending the full
@@ -952,23 +999,45 @@ export function useReorderNotes() {
   return useMutation({
     mutationFn: async (noteIds: string[]): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isOnlineWriteAllowed(isConnected)) {
-        try {
-          await reorderNotes(noteIds);
-          // Update positions in local DB to match the new order
-          for (const [i, noteId] of noteIds.entries()) {
-            await updateLocalNote(db, noteId, { position: i });
-          }
-          return;
-        } catch (err) {
-          rethrowIfNotQueueable(err);
-        }
-      }
-      // Offline (or a transient online failure): update local positions to
-      // reflect the new order immediately, then enqueue.
+
+      // Snapshot the current positions before touching them, so a permanently
+      // rejected reorder can put them back (the new positions are the array
+      // indices below, but the old ones are whatever they were).
+      const previousPositions = await getLocalNotePositions(db, noteIds);
+
+      // Write the new positions to SQLite up front, before the request goes out
+      // (same reasoning as useToggleNoteItemCompleted / #945): the list query is
+      // SQLite-backed with staleTime: Infinity, so while the rows still hold the
+      // pre-drag positions any invalidation in the request window (the queue
+      // drain, an unrelated note's SSE update, the background sync) refetches
+      // them and snaps the cards back to the old order for a round trip. Writing
+      // first keeps the local rows in step with the optimistic order for the
+      // whole flight, so a re-read is a no-op.
       for (const [i, noteId] of noteIds.entries()) {
         await updateLocalNote(db, noteId, { position: i });
       }
+
+      if (isOnlineWriteAllowed(isConnected)) {
+        try {
+          await reorderNotes(noteIds);
+          return;
+        } catch (err) {
+          // Transient failure: fall through to the offline path so the reorder
+          // is queued for replay instead of being lost. A permanent one restores
+          // the pre-drag positions, mirroring the cache rollback in onError —
+          // otherwise the pre-flight write above would outlive the failed reorder.
+          try {
+            rethrowIfNotQueueable(err);
+          } catch (permanent) {
+            for (const [noteId, position] of previousPositions) {
+              await updateLocalNote(db, noteId, { position });
+            }
+            throw permanent;
+          }
+        }
+      }
+      // Offline (or a transient online failure): the new positions are already
+      // written, so only the replay op is left to enqueue.
       await enqueueOperation(db, {
         operation: 'reorder',
         endpoint: '/notes/reorder',
@@ -976,7 +1045,13 @@ export function useReorderNotes() {
         body: { note_ids: noteIds } as Record<string, unknown>,
       });
     },
-    onMutate: (noteIds: string[]) => applyOptimisticReorder(queryClient, noteIds),
+    onMutate: async (noteIds: string[]) => {
+      // Cancel in-flight list reads before re-sorting the cache, so a refetch
+      // already on the wire can't resolve over the optimistic order (the same
+      // snap-back a re-read *during* the request causes, from the other direction).
+      await queryClient.cancelQueries({ queryKey: notesLocalQueryScopeKey() });
+      return applyOptimisticReorder(queryClient, noteIds);
+    },
     onError: (_err, _noteIds, snapshot) => {
       if (snapshot) rollbackOptimisticReorder(queryClient, snapshot);
     },

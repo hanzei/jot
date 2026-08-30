@@ -35,6 +35,7 @@ jest.mock('../src/db/noteQueries', () => ({
   generateClientNoteId: jest.fn(() => 'ClientNoteId000000000A'),
   markNotePendingCreate: jest.fn().mockResolvedValue(undefined),
   isNotePendingCreate: jest.fn().mockResolvedValue(false),
+  getLocalNotePositions: jest.fn().mockResolvedValue(new Map()),
   createLocalItem: jest.fn().mockResolvedValue(undefined),
   patchLocalItem: jest.fn().mockResolvedValue(undefined),
   deleteLocalItem: jest.fn().mockResolvedValue(undefined),
@@ -1097,6 +1098,66 @@ describe('useNotes hooks', () => {
 
       const cached = queryClient.getQueryData(noteLocalQueryKey('n1')) as { items: Array<{ id: string }> };
       expect(cached.items).toHaveLength(2);
+      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
+    });
+  });
+
+  // The local row has to move with the optimistic cache, not trail it: both note
+  // reads are SQLite-backed, so a row that still holds the pre-edit note while
+  // the PATCH is in flight is what any re-read in that window resolves to — and
+  // that read overwrites the optimistic cache, flashing the old value on the
+  // dashboard card until the response lands (#946).
+  describe('useUpdateNote writes SQLite before the request (#946)', () => {
+    const existingTextNote = {
+      id: '123', title: '', content: 'Old body', note_type: 'text', version: 7,
+      color: '#ffffff', pinned: false, archived: false, position: 0,
+      checked_items_collapsed: false, is_shared: false, deleted_at: null,
+      user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
+    };
+
+    it('writes the edit to the local DB before the request goes out', async () => {
+      const { wrapper, queryClient } = createWrapperWithClient();
+      queryClient.setQueryData(noteLocalQueryKey('123'), existingTextNote);
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingTextNote as never);
+
+      const pending = deferred<typeof existingTextNote>();
+      mockNotesApi.updateNote.mockReset();
+      mockNotesApi.updateNote.mockReturnValueOnce(pending.promise as never);
+
+      const { result } = await renderHook(() => useUpdateNote(), { wrapper });
+      result.current.mutate({ id: '123', data: { content: 'New body' } });
+
+      // Still in flight (pending unresolved), and SQLite already holds the edit,
+      // so a re-read in this window resolves to the new body instead of the
+      // stale row that would snap the card back.
+      await waitFor(() => {
+        expect(mockNoteQueries.updateLocalNote).toHaveBeenCalledWith(expect.anything(), '123', { content: 'New body' });
+      });
+      // The pre-flight write must not bump the version the server gates against:
+      // base_version stays the value read before the write (#489).
+      expect(mockNotesApi.updateNote).toHaveBeenCalledWith('123', { content: 'New body', base_version: 7 });
+
+      pending.resolve({ ...existingTextNote, content: 'New body', version: 8 } as never);
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    });
+
+    it('takes the local row back on a permanent failure', async () => {
+      const { wrapper, queryClient } = createWrapperWithClient();
+      queryClient.setQueryData(noteLocalQueryKey('123'), existingTextNote);
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingTextNote as never);
+      mockNotesApi.updateNote.mockReset();
+      // A 409 (version conflict) is permanent, so it surfaces rather than queues.
+      mockNotesApi.updateNote.mockRejectedValueOnce(makeAxiosError(409));
+
+      const { result } = await renderHook(() => useUpdateNote(), { wrapper });
+      await result.current.mutateAsync({ id: '123', data: { content: 'New body' } }).catch(() => {});
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      // Both the pre-flight write and its revert ran, so SQLite ends up where it
+      // started rather than holding an edit the server rejected.
+      expect(mockNoteQueries.updateLocalNote).toHaveBeenNthCalledWith(1, expect.anything(), '123', { content: 'New body' });
+      expect(mockNoteQueries.updateLocalNote).toHaveBeenNthCalledWith(2, expect.anything(), '123', { content: 'Old body' });
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
     });
   });
