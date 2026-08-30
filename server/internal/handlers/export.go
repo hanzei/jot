@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"mime"
@@ -28,8 +28,8 @@ type jotExportNote struct {
 	Pinned                bool                `json:"pinned"`
 	Archived              bool                `json:"archived"`
 	Position              int                 `json:"position"`
-	UnpinnedPosition      *int                `json:"unpinned_position,omitempty"`
-	CheckedItemsCollapsed bool                `json:"checked_items_collapsed,omitempty"`
+	UnpinnedPosition      *int                `json:"unpinned_position,omitzero"`
+	CheckedItemsCollapsed bool                `json:"checked_items_collapsed,omitzero"`
 	Labels                []string            `json:"labels"`
 	Items                 []jotExportNoteItem `json:"items,omitempty"`
 }
@@ -119,7 +119,7 @@ func (h *NotesHandler) ExportNotes(w http.ResponseWriter, r *http.Request) (int,
 	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": filename}))
 	w.WriteHeader(http.StatusOK)
 
-	if err := json.NewEncoder(w).Encode(export); err != nil {
+	if err := json.MarshalWrite(w, export); err != nil {
 		logutil.FromContext(r.Context()).WithError(err).Error("Failed to encode export")
 	}
 

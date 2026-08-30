@@ -3,7 +3,7 @@ package server
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"net"
@@ -471,7 +471,7 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 		if body != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(statusCode)
-			if err := json.NewEncoder(w).Encode(body); err != nil {
+			if err := json.MarshalWrite(w, body); err != nil {
 				logutil.FromContext(r.Context()).WithError(err).Error("Failed to encode response body")
 			}
 		} else if statusCode > 0 {

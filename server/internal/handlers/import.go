@@ -4,7 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
-	"encoding/json"
+	jsonv1 "encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -163,7 +163,7 @@ func parseKeepNotesFromZip(zr *zip.Reader) []keepNote {
 			continue // read error or entry exceeded per-entry limit
 		}
 		var kn keepNote
-		if err := json.Unmarshal(jsonData, &kn); err != nil {
+		if err := jsonv1.Unmarshal(jsonData, &kn); err != nil {
 			continue
 		}
 		if kn.isEmpty() {
@@ -187,7 +187,7 @@ func parseKeepNotesFromData(filename string, data []byte) ([]keepNote, error) {
 	}
 
 	var kn keepNote
-	if err := json.Unmarshal(data, &kn); err != nil {
+	if err := jsonv1.Unmarshal(data, &kn); err != nil {
 		return nil, errors.New("invalid JSON file")
 	}
 	if kn.isEmpty() {
@@ -254,7 +254,7 @@ type jotImportEnvelope struct {
 
 func (h *NotesHandler) importJotJSON(ctx context.Context, userID string, data []byte) (int, int, error) {
 	var raw jotImportEnvelope
-	if err := json.Unmarshal(data, &raw); err != nil {
+	if err := jsonv1.Unmarshal(data, &raw); err != nil {
 		return 0, http.StatusBadRequest, errors.New("invalid JSON file")
 	}
 	if raw.Format != jotExportFormat {
@@ -707,7 +707,7 @@ func fetchUsememosMemosForState(ctx context.Context, baseURL, token, state strin
 		}
 
 		var apiResp usememosAPIResponse
-		if err := json.Unmarshal(body, &apiResp); err != nil {
+		if err := jsonv1.Unmarshal(body, &apiResp); err != nil {
 			return nil, false, fmt.Errorf("parse response: %w", err)
 		}
 		all = append(all, apiResp.memos()...)
