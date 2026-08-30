@@ -283,8 +283,8 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
       {dragHandle}
       <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
       <Menu>
-        <MenuButton aria-label={t('note.menuOptions')} className="p-1 rounded-full hover:bg-gray-200 transition-colors">
-          <EllipsisVertical className="h-4 w-4 text-gray-600" />
+        <MenuButton aria-label={t('note.menuOptions')} className="p-1 rounded-full bg-white/80 dark:bg-slate-900/70 text-gray-700 dark:text-gray-200 shadow-sm hover:bg-white dark:hover:bg-slate-900 transition-colors">
+          <EllipsisVertical className="h-4 w-4" />
         </MenuButton>
         <MenuItems transition onKeyDownCapture={handleMenuKeyDown} className="absolute right-0 mt-1 w-52 origin-top-right bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black/5 dark:ring-slate-600/20 focus:outline-none z-10 border border-gray-200 dark:border-slate-600 transition duration-100 ease-out data-[closed]:scale-95 data-[closed]:opacity-0 motion-reduce:transition-none">
           <div className="py-1">

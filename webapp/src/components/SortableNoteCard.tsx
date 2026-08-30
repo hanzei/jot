@@ -109,7 +109,11 @@ export default function SortableNoteCard({
               title={t('note.reorderNote')}
               {...attributes}
               {...listeners}
-              className="absolute top-2 right-9 z-20 p-1 rounded-full text-gray-600 dark:text-gray-300 opacity-0 pointer-events-none focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              // Same backdrop as the overflow menu beside it: a fixed-colour
+              // icon over an arbitrary cover image has no guaranteed contrast
+              // (WCAG 1.4.11), so both controls carry a translucent chip rather
+              // than relying on the image behind them.
+              className="absolute top-2 right-9 z-20 p-1 rounded-full bg-white/80 dark:bg-slate-900/70 text-gray-700 dark:text-gray-200 shadow-sm opacity-0 pointer-events-none focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
             >
               <GripVertical className="h-4 w-4" aria-hidden="true" />
             </button>
