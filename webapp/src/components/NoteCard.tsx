@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   EllipsisVertical,
   Trash2,
@@ -64,6 +64,8 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
     confirmLabel: string;
     onConfirm: () => void;
   }>({ open: false, title: '', message: '', confirmLabel: '', onConfirm: () => {} });
+
+  const openButtonRef = useRef<HTMLButtonElement>(null);
 
   const isOwner = note.user_id === currentUserId;
   const coverImage = note.images?.[0];
@@ -205,7 +207,21 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
     <div
       data-testid="note-card"
       className={`note-card ${getColorClass(note.color)} p-4 relative group ${isUpdating ? 'opacity-50' : ''}`}
-      onClick={() => onEdit(note)}
+      onClick={() => {
+        // Hand focus to the card's own control before opening. A click used to
+        // focus the card itself, because the card div carried tabIndex={0};
+        // now it is a plain container and the button over it takes no pointer
+        // events, so without this a click leaves focus on <main>. Two things
+        // depend on it: the note modal restores focus to whatever was focused
+        // when it opened, and the dashboard's arrow / Home / End navigation
+        // only runs when a card holds focus.
+        //
+        // Safe to do unconditionally here — the overflow menu and the label
+        // chips stop propagation, so this handler only ever sees a click on the
+        // card itself.
+        openButtonRef.current?.focus();
+        onEdit(note);
+      }}
     >
       {/*
         The card's primary action, as a real button rather than a tabIndex on
@@ -230,6 +246,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
       */}
       <button
         type="button"
+        ref={openButtonRef}
         data-note-card="true"
         data-testid="note-card-open"
         aria-label={(note.note_type === 'list' ? note.title : note.content?.slice(0, 50)) || t('share.untitledNote')}

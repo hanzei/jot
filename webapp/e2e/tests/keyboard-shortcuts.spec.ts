@@ -111,6 +111,38 @@ test.describe('Arrow key card navigation', () => {
     await page.keyboard.press('Home');
     await expect(cards.first()).toBeFocused();
   });
+
+  test('keeps navigating after a note is opened and closed with the mouse', async ({ authenticatedUser, page, dashboardPage }) => {
+    void authenticatedUser;
+    await page.setViewportSize({ width: 500, height: 900 });
+    await dashboardPage.goto();
+    await dashboardPage.createNote('KS Mouse Alpha');
+    await dashboardPage.createNote('KS Mouse Beta');
+    await dashboardPage.createNote('KS Mouse Gamma');
+
+    const cards = page.locator('[data-note-card="true"]');
+    await expect(cards).toHaveCount(3);
+
+    // The mouse path, which every other test here skips by focusing a card
+    // directly. It is the one that can silently stop working: the card is a
+    // plain container and the button covering it takes no pointer events, so a
+    // click reaches neither, and focus would be left on <main> — where the
+    // navigation keys below are guarded off and the modal has no card to
+    // restore to. The card handing focus to its own button on click is what
+    // holds this together.
+    const dialog = page.locator('[role="dialog"][aria-modal="true"]');
+    await dashboardPage.noteCard('KS Mouse Beta').click();
+    await expect(dialog.first()).toBeAttached();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(dashboardPage.noteCardButton('KS Mouse Beta')).toBeFocused();
+
+    await page.keyboard.press('End');
+    await expect(cards.nth(2)).toBeFocused();
+
+    await page.keyboard.press('ArrowUp');
+    await expect(cards.nth(1)).toBeFocused();
+  });
 });
 
 test.describe('ConfirmDialog keyboard confirm', () => {
