@@ -11,7 +11,9 @@ test.describe('Arrow key card navigation', () => {
     await dashboardPage.createNote('KS Nav Beta');
     await dashboardPage.createNote('KS Nav Gamma');
 
-    const cards = page.locator('[data-testid="note-card"]');
+    // The focusable control each card contributes, not the card container —
+    // the container is a plain div and cannot take focus.
+    const cards = page.locator('[data-note-card="true"]');
     await expect(cards).toHaveCount(3);
 
     await cards.first().focus();
@@ -36,7 +38,9 @@ test.describe('Arrow key card navigation', () => {
     await dashboardPage.createNote('KS LR One');
     await dashboardPage.createNote('KS LR Two');
 
-    const cards = page.locator('[data-testid="note-card"]');
+    // The focusable control each card contributes, not the card container —
+    // the container is a plain div and cannot take focus.
+    const cards = page.locator('[data-note-card="true"]');
     await expect(cards).toHaveCount(2);
 
     await cards.first().focus();
@@ -61,7 +65,9 @@ test.describe('Arrow key card navigation', () => {
     );
     await dashboardPage.createNote('KS ML Short Bottom');
 
-    const cards = page.locator('[data-testid="note-card"]');
+    // The focusable control each card contributes, not the card container —
+    // the container is a plain div and cannot take focus.
+    const cards = page.locator('[data-note-card="true"]');
     await expect(cards).toHaveCount(3);
 
     await cards.first().focus();
@@ -79,6 +85,95 @@ test.describe('Arrow key card navigation', () => {
 
     await page.keyboard.press('ArrowUp');
     await expect(cards.first()).toBeFocused();
+  });
+
+  test('jumps to the first and last card with Home and End', async ({ authenticatedUser, page, dashboardPage }) => {
+    void authenticatedUser;
+    await page.setViewportSize({ width: 500, height: 900 });
+    await dashboardPage.goto();
+    await dashboardPage.createNote('KS Jump Alpha');
+    await dashboardPage.createNote('KS Jump Beta');
+    await dashboardPage.createNote('KS Jump Gamma');
+
+    const cards = page.locator('[data-note-card="true"]');
+    await expect(cards).toHaveCount(3);
+
+    // From the middle, so neither jump could pass by stepping one card.
+    await cards.nth(1).focus();
+
+    await page.keyboard.press('End');
+    await expect(cards.nth(2)).toBeFocused();
+
+    await page.keyboard.press('Home');
+    await expect(cards.first()).toBeFocused();
+
+    // Idempotent at the ends rather than wrapping around.
+    await page.keyboard.press('Home');
+    await expect(cards.first()).toBeFocused();
+  });
+
+  test('Home and End reach the grid from elsewhere on the page, but not from a text field', async ({ authenticatedUser, page, dashboardPage }) => {
+    void authenticatedUser;
+    await page.setViewportSize({ width: 500, height: 900 });
+    await dashboardPage.goto();
+    await dashboardPage.createNote('KS Anywhere Alpha');
+    await dashboardPage.createNote('KS Anywhere Beta');
+    await dashboardPage.createNote('KS Anywhere Gamma');
+
+    const cards = page.locator('[data-note-card="true"]');
+    await expect(cards).toHaveCount(3);
+
+    // The whole point of the change: reach the grid without first tabbing onto
+    // a card. Focus a non-card control, then End jumps to the last card.
+    await page.getByRole('button', { name: 'New Note' }).focus();
+    await page.keyboard.press('End');
+    await expect(cards.nth(2)).toBeFocused();
+
+    // Home from a card still lands on the first (the on-card path now runs
+    // through the same handler).
+    await page.keyboard.press('Home');
+    await expect(cards.first()).toBeFocused();
+
+    // But a text field keeps Home for caret movement — the grid must not steal
+    // it. Type first so a caret move is observable, then assert focus stayed.
+    const search = page.locator('form[role="search"] input');
+    await search.focus();
+    await search.fill('abc');
+    await page.keyboard.press('Home');
+    await expect(search).toBeFocused();
+    await expect(cards.first()).not.toBeFocused();
+  });
+
+  test('keeps navigating after a note is opened and closed with the mouse', async ({ authenticatedUser, page, dashboardPage }) => {
+    void authenticatedUser;
+    await page.setViewportSize({ width: 500, height: 900 });
+    await dashboardPage.goto();
+    await dashboardPage.createNote('KS Mouse Alpha');
+    await dashboardPage.createNote('KS Mouse Beta');
+    await dashboardPage.createNote('KS Mouse Gamma');
+
+    const cards = page.locator('[data-note-card="true"]');
+    await expect(cards).toHaveCount(3);
+
+    // The mouse path, which every other test here skips by focusing a card
+    // directly. It is the one that can silently stop working: the card is a
+    // plain container and the button covering it takes no pointer events, so a
+    // click reaches neither, and focus would be left on <main> — where the
+    // navigation keys below are guarded off and the modal has no card to
+    // restore to. The card handing focus to its own button on click is what
+    // holds this together.
+    const dialog = page.locator('[role="dialog"][aria-modal="true"]');
+    await dashboardPage.noteCard('KS Mouse Beta').click();
+    await expect(dialog.first()).toBeAttached();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(dashboardPage.noteCardButton('KS Mouse Beta')).toBeFocused();
+
+    await page.keyboard.press('End');
+    await expect(cards.nth(2)).toBeFocused();
+
+    await page.keyboard.press('ArrowUp');
+    await expect(cards.nth(1)).toBeFocused();
   });
 });
 
@@ -170,6 +265,10 @@ test.describe('Keyboard shortcuts help dialog', () => {
     await expect(shortcutsDialog.getByTestId('shortcut-description-bin-view')).toBeVisible();
     await expect(shortcutsDialog.getByTestId('shortcut-key-open-help')).toBeVisible();
     await expect(shortcutsDialog.getByTestId('shortcut-description-open-help')).toBeVisible();
+    await expect(shortcutsDialog.getByTestId('shortcut-key-navigate-cards')).toBeVisible();
+    await expect(shortcutsDialog.getByTestId('shortcut-description-navigate-cards')).toBeVisible();
+    await expect(shortcutsDialog.getByTestId('shortcut-key-jump-first-last')).toBeVisible();
+    await expect(shortcutsDialog.getByTestId('shortcut-description-jump-first-last')).toBeVisible();
     await expect(shortcutsDialog.getByTestId('shortcut-key-escape')).toBeVisible();
     await expect(shortcutsDialog.getByTestId('shortcut-description-escape')).toBeVisible();
 

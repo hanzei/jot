@@ -101,10 +101,14 @@ describe('NoteCard', () => {
       });
       renderNoteCard({ ...defaultProps, note: specialNote });
 
-      // DOMPurify strips <script> tags; the XSS attempt is sanitized out
-      const card = screen.getByTestId('note-card');
-      expect(card.innerHTML).not.toContain('<script>');
-      expect(card.innerHTML).toContain('🚀💡');
+      // DOMPurify strips <script> tags; the XSS attempt is sanitized out.
+      // Scoped to the rendered content rather than the whole card: the card
+      // also holds the open button, whose accessible name is the note's raw
+      // text, and an attribute value would match either assertion for reasons
+      // that have nothing to do with sanitizing.
+      const content = screen.getByTestId('note-card').querySelector('.markdown-content')!;
+      expect(content.innerHTML).not.toContain('<script>');
+      expect(content.innerHTML).toContain('🚀💡');
     });
 
     it('renders list note with special characters in title', () => {
@@ -704,7 +708,9 @@ describe('NoteCard', () => {
 
       renderNoteCard({ ...defaultProps, onEdit, inBin: true });
 
-      screen.getByTestId('note-card').focus();
+      // The card's control, not the card: Enter fires a click on the button,
+      // which bubbles to the card's own handler.
+      screen.getByTestId('note-card-open').focus();
       await user.keyboard('{Enter}');
 
       expect(onEdit).toHaveBeenCalledWith(defaultProps.note);
@@ -715,9 +721,11 @@ describe('NoteCard', () => {
     it('renders markdown in text note content', () => {
       const note = createMockNote({ note_type: 'text', content: '**bold text**' });
       renderNoteCard({ ...defaultProps, note });
-      const card = screen.getByTestId('note-card');
-      expect(card.innerHTML).toContain('<strong>bold text</strong>');
-      expect(card.innerHTML).not.toContain('**bold text**');
+      // See the sanitizing test above for why this reads the content element
+      // rather than the card.
+      const content = screen.getByTestId('note-card').querySelector('.markdown-content')!;
+      expect(content.innerHTML).toContain('<strong>bold text</strong>');
+      expect(content.innerHTML).not.toContain('**bold text**');
     });
 
     // The card is one control that opens the note. An anchor inside it would

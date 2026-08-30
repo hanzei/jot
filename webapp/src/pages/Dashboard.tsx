@@ -569,7 +569,11 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
         return;
       }
 
-      // Arrow key navigation between note cards (runs before other guards)
+      // Arrow keys step between cards, but only when a card already holds
+      // focus (runs before the guards below): they mean nothing elsewhere on
+      // the page and must not shadow native caret movement or scrolling. Home
+      // and End, which jump into the grid from anywhere, are handled after the
+      // guards instead.
       const isArrowKey = event.key === 'ArrowLeft' || event.key === 'ArrowRight' ||
         event.key === 'ArrowUp' || event.key === 'ArrowDown';
       if (isArrowKey && document.activeElement?.getAttribute('data-note-card') === 'true') {
@@ -608,6 +612,27 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
       }
 
       if (isEditableElementFocused() || isOverlayControlFocused() || isAnyModalDialogOpen()) {
+        return;
+      }
+
+      // Home / End focus the first / last card from anywhere on the dashboard,
+      // not only when a card already holds focus. This is the way into the grid
+      // without tabbing past the sidebar's whole label list — the key a user
+      // presses to reach the first card only worked once they were already on
+      // one. The guard above keeps it from shadowing caret movement in the
+      // search box or navigation inside an open menu.
+      //
+      // The ends are the grid's, in DOM order, not the visual row's: which
+      // cards share a row is an accident of how the masonry columns filled, so
+      // a row-wise Home would land somewhere the DOM order cannot name and
+      // would move after a resize.
+      if (event.key === 'Home' || event.key === 'End') {
+        const cards = Array.from(document.querySelectorAll<HTMLElement>('[data-note-card="true"]'));
+        if (cards.length === 0) {
+          return;
+        }
+        event.preventDefault();
+        (event.key === 'Home' ? cards[0] : cards[cards.length - 1])?.focus();
         return;
       }
 

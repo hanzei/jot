@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   EllipsisVertical,
   Trash2,
@@ -33,6 +33,16 @@ interface NoteCardProps {
   inBin?: boolean;
   onRefresh?: (() => void) | undefined;
   onLabelClick?: ((labelId: string) => void) | undefined;
+  /**
+   * Rendered into the card's top-right controls, beside the overflow menu.
+   *
+   * A slot rather than a `sortable` prop on purpose: the only caller passes a
+   * drag handle, and passing it as a node keeps every dnd-kit detail — the
+   * activator ref, `attributes`, `listeners` — in `SortableNoteCard`, which is
+   * the component that actually calls `useSortable`. A card rendered outside a
+   * sortable context just omits it.
+   */
+  dragHandle?: React.ReactNode;
 }
 
 function MenuKbd({ children }: { children: React.ReactNode }) {
@@ -43,7 +53,7 @@ function MenuKbd({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare, onRestore, onPermanentlyDelete, currentUserId, usersById, inBin = false, onRefresh, onLabelClick }: NoteCardProps) {
+export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare, onRestore, onPermanentlyDelete, currentUserId, usersById, inBin = false, onRefresh, onLabelClick, dragHandle }: NoteCardProps) {
   const { t } = useTranslation();
   const { showToast } = useToast();
   const [isUpdating, setIsUpdating] = useState(false);
@@ -54,6 +64,8 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
     confirmLabel: string;
     onConfirm: () => void;
   }>({ open: false, title: '', message: '', confirmLabel: '', onConfirm: () => {} });
+
+  const openButtonRef = useRef<HTMLButtonElement>(null);
 
   const isOwner = note.user_id === currentUserId;
   const coverImage = note.images?.[0];
@@ -194,19 +206,52 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
   return (
     <div
       data-testid="note-card"
-      data-note-card="true"
-      tabIndex={0}
-      aria-label={(note.note_type === 'list' ? note.title : note.content?.slice(0, 50)) || t('share.untitledNote')}
-      className={`note-card ${getColorClass(note.color)} p-4 relative group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 ${isUpdating ? 'opacity-50' : ''}`}
-      onClick={() => onEdit(note)}
-      onKeyDown={(e) => {
-        if (e.target !== e.currentTarget) return;
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onEdit(note);
-        }
+      className={`note-card ${getColorClass(note.color)} p-4 relative group ${isUpdating ? 'opacity-50' : ''}`}
+      onClick={() => {
+        // Hand focus to the card's own control before opening. A click used to
+        // focus the card itself, because the card div carried tabIndex={0};
+        // now it is a plain container and the button over it takes no pointer
+        // events, so without this a click leaves focus on <main>. Two things
+        // depend on it: the note modal restores focus to whatever was focused
+        // when it opened, and the dashboard's arrow / Home / End navigation
+        // only runs when a card holds focus.
+        //
+        // Safe to do unconditionally here — the overflow menu and the label
+        // chips stop propagation, so this handler only ever sees a click on the
+        // card itself.
+        openButtonRef.current?.focus();
+        onEdit(note);
       }}
     >
+      {/*
+        The card's primary action, as a real button rather than a tabIndex on
+        the card div. The card used to be its own control, which put a focusable
+        element around the overflow menu and the label chips — the
+        nested-interactive violation in #799 — and made Space mean two different
+        things depending on which of the two stops you were on.
+
+        It carries no click handler and no pointer events, which is what keeps
+        this a change of semantics rather than of behaviour:
+
+        - Keyboard activation is the browser's. Enter and Space on a <button>
+          synthesize a click, and that click bubbles to the card's own onClick.
+          One handler still owns "activating this card opens the note".
+        - `pointer-events-none` means a mouse never lands here at all. Clicks go
+          on hitting the card exactly as before, so drag-anywhere, the label
+          chips' stopPropagation, and the native tooltips on the share avatars
+          all keep working without a z-index rule between them.
+
+        It must stay a *sibling* of the menu button and the label chips. An
+        ancestor of them is the violation this replaced.
+      */}
+      <button
+        type="button"
+        ref={openButtonRef}
+        data-note-card="true"
+        data-testid="note-card-open"
+        aria-label={(note.note_type === 'list' ? note.title : note.content?.slice(0, 50)) || t('share.untitledNote')}
+        className="absolute inset-0 rounded-lg pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"
+      />
       {coverImage && (
         <div className="relative -mx-4 -mt-4 mb-2 rounded-t-lg overflow-hidden" data-testid="note-card-cover">
           <img
@@ -225,11 +270,21 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
         </div>
       )}
 
-      {/* Menu */}
+      {/* The card's controls, top right: the drag handle, then the overflow
+          menu, which keeps the corner it has always had.
+
+          DOM order matches left-to-right order on purpose. These two sit side
+          by side, so a tab order that ran the other way would move focus right
+          and then back left across a pair of adjacent icons.
+
+          Both are absolute rather than a flex row: the handle is invisible
+          until focused, and a flex row would still reserve its width and shift
+          the menu left by that much at rest. */}
+      {dragHandle}
       <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
       <Menu>
-        <MenuButton aria-label={t('note.menuOptions')} className="p-1 rounded-full hover:bg-gray-200 transition-colors">
-          <EllipsisVertical className="h-4 w-4 text-gray-600" />
+        <MenuButton aria-label={t('note.menuOptions')} className="p-1 rounded-full bg-white/80 dark:bg-slate-900/70 text-gray-700 dark:text-gray-200 shadow-sm hover:bg-white dark:hover:bg-slate-900 transition-colors">
+          <EllipsisVertical className="h-4 w-4" />
         </MenuButton>
         <MenuItems transition onKeyDownCapture={handleMenuKeyDown} className="absolute right-0 mt-1 w-52 origin-top-right bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black/5 dark:ring-slate-600/20 focus:outline-none z-10 border border-gray-200 dark:border-slate-600 transition duration-100 ease-out data-[closed]:scale-95 data-[closed]:opacity-0 motion-reduce:transition-none">
           <div className="py-1">

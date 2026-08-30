@@ -69,6 +69,16 @@ export default function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardSho
       description: t('keyboardShortcuts.helpDescription'),
     },
     {
+      id: 'navigate-cards',
+      key: t('keyboardShortcuts.navigateCardsKey'),
+      description: t('keyboardShortcuts.navigateCardsDescription'),
+    },
+    {
+      id: 'jump-first-last',
+      key: t('keyboardShortcuts.jumpFirstLastKey'),
+      description: t('keyboardShortcuts.jumpFirstLastDescription'),
+    },
+    {
       id: 'open-note',
       key: t('keyboardShortcuts.openNoteKey'),
       description: t('keyboardShortcuts.openNoteDescription'),

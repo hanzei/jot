@@ -1,5 +1,5 @@
 import { test, expect, E2E_ADMIN_CREDENTIALS } from '../fixtures';
-import { expectNoViolations, type AcceptedViolation } from '../fixtures/axe';
+import { expectNoViolations } from '../fixtures/axe';
 import type { Page } from '@playwright/test';
 
 /**
@@ -24,23 +24,6 @@ const NOTE_COLOURS = [
   'Coral', 'Yellow', 'Lime', 'Teal', 'Periwinkle',
   'Lavender', 'Pink', 'Sand', 'Gray', 'White',
 ] as const;
-
-/**
- * The one violation in the baseline that is not fixable without redesigning the
- * note grid. The options and their trade-offs are in the linked issue.
- *
- * Scoped to the sortable wrapper by its `data-drag-disabled` attribute, so
- * `nested-interactive` still fails for any other element on these pages.
- */
-const NOTE_CARD_NESTED_INTERACTIVE: AcceptedViolation = {
-  rule: 'nested-interactive',
-  match: 'data-drag-disabled',
-  reason:
-    'The whole note card is the drag surface, so @dnd-kit gives its wrapper role="button", ' +
-    'and the card contains the overflow-menu button. Clearing this means either a dedicated ' +
-    'drag handle or demoting the card from a single activatable target — both redesigns. ' +
-    'Tracked in https://github.com/hanzei/jot/issues/799.',
-};
 
 /**
  * Confirms the emulated colour scheme actually reached the DOM.
@@ -85,7 +68,7 @@ for (const theme of THEMES) {
       await dashboardPage.createListNote('A11y List Note', ['first item', 'second item']);
       await expectTheme(page, theme);
 
-      await expectNoViolations(page, { accept: [NOTE_CARD_NESTED_INTERACTIVE] });
+      await expectNoViolations(page);
     });
 
     test('note modal has no WCAG A/AA violations', async ({ page, authenticatedUser, dashboardPage }) => {
@@ -98,7 +81,7 @@ for (const theme of THEMES) {
 
       // The dashboard behind the open modal is still in the accessibility
       // tree, so its note cards are part of this scan too.
-      await expectNoViolations(page, { accept: [NOTE_CARD_NESTED_INTERACTIVE] });
+      await expectNoViolations(page);
     });
 
     test('read-only bin note modal has no WCAG A/AA violations', async ({ page, authenticatedUser, dashboardPage }) => {
@@ -111,7 +94,7 @@ for (const theme of THEMES) {
       await expect(page.locator('[role="dialog"][aria-modal="true"]').getByPlaceholder('Note title...')).toBeVisible();
       await expectTheme(page, theme);
 
-      await expectNoViolations(page, { accept: [NOTE_CARD_NESTED_INTERACTIVE] });
+      await expectNoViolations(page);
     });
 
     test('note modal has no WCAG A/AA violations in any note colour', async ({ page, authenticatedUser, dashboardPage }) => {
@@ -144,7 +127,7 @@ for (const theme of THEMES) {
         await expectNoViolations(page, { include: ['[data-testid="note-save-status"]'] });
 
         await expect(saveStatus.getByText(/Last edited/)).toBeVisible();
-        await expectNoViolations(page, { accept: [NOTE_CARD_NESTED_INTERACTIVE] });
+        await expectNoViolations(page);
       }
     });
 

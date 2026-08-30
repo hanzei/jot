@@ -26,9 +26,24 @@ When you add UI:
 
 Fix a failing scan rather than suppressing it. Suppression
 (`AcceptedViolation` in `e2e/fixtures/axe.ts`) is for violations whose fix is a
-redesign, and needs a reason and a tracking issue. There is exactly one today,
-`nested-interactive` on the note-card sortable wrappers
-([#799](https://github.com/hanzei/jot/issues/799)).
+redesign, and needs a reason and a tracking issue. **There are none today.** The
+last one — `nested-interactive` on the note-card sortable wrappers
+([#799](https://github.com/hanzei/jot/issues/799)) — is fixed, so every rule in
+the ruleset enforces on every scanned surface.
+
+That fix is also the pattern to copy the next time a card has to be both a
+control and a container:
+
+- **The card is not the control.** A `NoteCard` is a plain `div`; the button
+  that opens it is `[data-note-card]`, stretched over the card with
+  `pointer-events-none` so a pointer still lands on the card as before while the
+  keyboard gets one named, announced stop. Anything to do with focus wants that
+  button — `DashboardPage.noteCardButton()` in e2e, not `noteCard()`.
+- **The drag surface carries `listeners` but not `attributes`.** The pointer
+  sensors activate on mousedown/touchstart, which a role-less `div` receives
+  perfectly well, so dragging the whole card costs no ARIA role and no tab stop.
+  Only `@dnd-kit`'s KeyboardSensor needs focus, and it lives on a per-card
+  reorder button that is invisible until focused.
 
 What these checks are *not*: axe catches roughly a third of WCAG issues, nothing
 here runs a real screen reader, and a green suite is a regression guard rather

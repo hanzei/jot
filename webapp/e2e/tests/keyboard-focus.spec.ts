@@ -78,7 +78,7 @@ test.describe('Modal focus management', () => {
     await dashboardPage.goto();
     await dashboardPage.createListNote('Focus Trap Note', ['first item']);
 
-    const card = dashboardPage.noteCard('Focus Trap Note');
+    const card = dashboardPage.noteCardButton('Focus Trap Note');
     await card.focus();
     await page.keyboard.press('Enter');
 
@@ -232,11 +232,30 @@ test.describe('Keyboard drag and drop', () => {
     await dashboardPage.createNote('DnD Second');
     await dashboardPage.expectVisibleNoteTitles(['DnD Second', 'DnD First']);
 
-    // @dnd-kit's KeyboardSensor lives on the sortable wrapper around each card,
-    // which is the element before the card in tab order.
-    await keyboardReorder(page, page.locator('[data-drag-disabled="false"]').first(), 'ArrowDown');
+    // The KeyboardSensor lives on a per-card reorder button that is invisible
+    // until focused, not on the sortable wrapper: the wrapper carries no role
+    // and no tab stop, so there is nothing there for a keypress to reach.
+    await keyboardReorder(page, page.getByRole('button', { name: 'Reorder note' }).first(), 'ArrowDown');
 
     await dashboardPage.expectVisibleNoteTitles(['DnD First', 'DnD Second']);
+  });
+
+  test('reveals the reorder handle when the card is highlighted, before it is tabbed to', async ({ authenticatedUser, page, dashboardPage }) => {
+    void authenticatedUser;
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Grip Reveal Note');
+
+    // The reveal is an opacity transition, and Playwright's toBeVisible() does
+    // not read opacity — an opacity-0 element still counts as visible — so this
+    // asserts on the computed value instead.
+    const grip = page.getByRole('button', { name: 'Reorder note' }).first();
+    await expect(grip).toHaveCSS('opacity', '0');
+
+    // Focus the card itself, not the grip. The grip has to appear alongside the
+    // overflow menu on this highlight — if it only revealed on its own focus,
+    // it would stay hidden until an extra Tab.
+    await dashboardPage.noteCardButton('Grip Reveal Note').focus();
+    await expect(grip).toHaveCSS('opacity', '1');
   });
 
   test('reorders list items in the note modal with the keyboard', async ({ authenticatedUser, page, dashboardPage }) => {
