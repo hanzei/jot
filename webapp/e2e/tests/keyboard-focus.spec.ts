@@ -240,6 +240,24 @@ test.describe('Keyboard drag and drop', () => {
     await dashboardPage.expectVisibleNoteTitles(['DnD First', 'DnD Second']);
   });
 
+  test('reveals the reorder handle when the card is highlighted, before it is tabbed to', async ({ authenticatedUser, page, dashboardPage }) => {
+    void authenticatedUser;
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Grip Reveal Note');
+
+    // The reveal is an opacity transition, and Playwright's toBeVisible() does
+    // not read opacity — an opacity-0 element still counts as visible — so this
+    // asserts on the computed value instead.
+    const grip = page.getByRole('button', { name: 'Reorder note' }).first();
+    await expect(grip).toHaveCSS('opacity', '0');
+
+    // Focus the card itself, not the grip. The grip has to appear alongside the
+    // overflow menu on this highlight — if it only revealed on its own focus,
+    // it would stay hidden until an extra Tab.
+    await dashboardPage.noteCardButton('Grip Reveal Note').focus();
+    await expect(grip).toHaveCSS('opacity', '1');
+  });
+
   test('reorders list items in the note modal with the keyboard', async ({ authenticatedUser, page, dashboardPage }) => {
     void authenticatedUser;
     await dashboardPage.goto();

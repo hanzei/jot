@@ -113,7 +113,14 @@ export default function SortableNoteCard({
               // icon over an arbitrary cover image has no guaranteed contrast
               // (WCAG 1.4.11), so both controls carry a translucent chip rather
               // than relying on the image behind them.
-              className="absolute top-2 right-9 z-20 p-1 rounded-full bg-white/80 dark:bg-slate-900/70 text-gray-700 dark:text-gray-200 shadow-sm opacity-0 pointer-events-none focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              //
+              // Reveals on `group-focus-within` — whenever any control in the
+              // card holds focus — so highlighting the card shows the grip and
+              // the menu together, rather than the grip only appearing once it
+              // is itself tabbed to. It stays hidden on hover, unlike the menu:
+              // a mouse can already drag from anywhere on the card, so a grip
+              // revealed to the pointer would be decoration.
+              className="absolute top-2 right-9 z-20 p-1 rounded-full bg-white/80 dark:bg-slate-900/70 text-gray-700 dark:text-gray-200 shadow-sm opacity-0 pointer-events-none group-focus-within:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
             >
               <GripVertical className="h-4 w-4" aria-hidden="true" />
             </button>
