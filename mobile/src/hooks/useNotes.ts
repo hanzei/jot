@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
-import { useSQLiteContext } from 'expo-sqlite';
+import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
 import {
   getNote,
   createNote,
@@ -92,6 +92,41 @@ function applyToggleToItems(items: NoteItem[], itemId: string, completed: boolea
   const ids = new Set(collectToggleCascade(items, itemId, completed));
   if (ids.size === 0) return items;
   return items.map((i) => (ids.has(i.id) ? { ...i, completed } : i));
+}
+
+/**
+ * Applies a completed-toggle cascade to the note's rows in SQLite, returning the
+ * ids it changed so a permanent failure can put them back.
+ *
+ * Every id the cascade yields is one whose value actually flips, so the whole
+ * set moves to `completed` in one grouped write and reverting is the same call
+ * with `!completed` — no per-id transaction, and no window where a re-read can
+ * catch a parent checked but its children not.
+ */
+async function applyToggleToLocalItems(
+  db: SQLiteDatabase,
+  noteId: string,
+  itemId: string,
+  completed: boolean,
+): Promise<string[]> {
+  const note = await getLocalNote(db, noteId);
+  if (!note || note.note_type !== 'list' || !note.items) return [];
+  const ids = collectToggleCascade(note.items, itemId, completed);
+  await setLocalItemsCompleted(db, noteId, ids, completed);
+  return ids;
+}
+
+/**
+ * Stops any in-flight read of this note before an optimistic write patches the
+ * cache. Without it a refetch that started first can still resolve afterwards
+ * and overwrite the patch with the pre-write note — the same visible revert
+ * that a re-read *during* the request causes, just from the other direction.
+ */
+async function cancelNoteReads(queryClient: QueryClient, noteId: string): Promise<void> {
+  await Promise.all([
+    queryClient.cancelQueries({ queryKey: noteLocalQueryKey(noteId) }),
+    queryClient.cancelQueries({ queryKey: notesLocalQueryScopeKey() }),
+  ]);
 }
 
 /** Returns a copy of `items` with `completed` set on every id in `itemIds`. */
@@ -1080,14 +1115,27 @@ export function useToggleNoteItemCompleted() {
   const { isConnected } = useNetworkStatus();
 
   return useMutation({
-    onMutate: ({ noteId, itemId, completed }: { noteId: string; itemId: string; completed: boolean }) =>
-      applyOptimisticNote(queryClient, noteId, (note) =>
+    onMutate: async ({ noteId, itemId, completed }: { noteId: string; itemId: string; completed: boolean }) => {
+      await cancelNoteReads(queryClient, noteId);
+      return applyOptimisticNote(queryClient, noteId, (note) =>
         note.note_type === 'list' && note.items
           ? { ...note, items: applyToggleToItems(note.items, itemId, completed) }
           : note,
-      ),
+      );
+    },
     mutationFn: async ({ noteId, itemId, completed }: { noteId: string; itemId: string; completed: boolean }): Promise<NoteItem[]> => {
       assertSwitchWriteAllowed();
+
+      // Write the cascade to SQLite up front, before the request goes out. Both
+      // note reads are SQLite-backed, so while the row still says unchecked any
+      // re-read in that window (the queue drain's invalidation, a background
+      // note sync, a sibling toggle's onSuccess) resolves to the pre-toggle note
+      // and overwrites the optimistic cache above — the checked row visibly
+      // comes back for the length of one round trip before the response
+      // re-checks it. Writing first makes the local rows agree with the
+      // optimistic cache for the whole flight, so a re-read is a no-op.
+      const cascadeIds = await applyToggleToLocalItems(db, noteId, itemId, completed);
+
       if (isOnlineWriteAllowed(isConnected)) {
         try {
           const serverItems = await toggleItemCompleted(noteId, itemId, completed);
@@ -1097,19 +1145,20 @@ export function useToggleNoteItemCompleted() {
           return serverItems;
         } catch (err) {
           // Transient failure: fall through to the offline path so the toggle is
-          // applied locally and queued for replay instead of being lost.
-          rethrowIfNotQueueable(err);
+          // queued for replay instead of being lost. A permanent one takes the
+          // local rows back with it, mirroring the cache rollback in onError —
+          // otherwise the pre-flight write above would outlive the failed toggle.
+          try {
+            rethrowIfNotQueueable(err);
+          } catch (permanent) {
+            await setLocalItemsCompleted(db, noteId, cascadeIds, !completed);
+            throw permanent;
+          }
         }
       }
 
-      // Offline (or a transient online failure): apply cascade to local DB,
-      // enqueue a single toggle op.
-      const note = await getLocalNote(db, noteId);
-      if (note && note.note_type === 'list' && note.items) {
-        for (const id of collectToggleCascade(note.items, itemId, completed)) {
-          await patchLocalItem(db, noteId, id, { completed });
-        }
-      }
+      // Offline (or a transient online failure): the cascade is already in the
+      // local DB, so only the replay op is left to enqueue.
       await enqueueOperation(db, {
         operation: 'toggleItemCompleted',
         endpoint: `/notes/${noteId}/items/${itemId}/toggle-completed`,
@@ -1139,15 +1188,23 @@ export function useUncheckAllItems() {
   const { isConnected } = useNetworkStatus();
 
   return useMutation({
-    onMutate: ({ noteId, itemIds }: { noteId: string; itemIds: string[] }) =>
-      applyOptimisticNote(queryClient, noteId, (note) =>
+    onMutate: async ({ noteId, itemIds }: { noteId: string; itemIds: string[] }) => {
+      await cancelNoteReads(queryClient, noteId);
+      return applyOptimisticNote(queryClient, noteId, (note) =>
         note.note_type === 'list' && note.items
           ? { ...note, items: applySetCompletedToItems(note.items, itemIds, false) }
           : note,
-      ),
+      );
+    },
     mutationFn: async ({ noteId, itemIds }: { noteId: string; itemIds: string[] }): Promise<NoteItem[]> => {
       assertSwitchWriteAllowed();
       if (itemIds.length === 0) return [];
+
+      // Local rows first, for the reason spelled out in useToggleNoteItemCompleted:
+      // a note re-read while the request is in flight must not resolve to the
+      // still-checked rows and undo the optimistic uncheck on screen.
+      await setLocalItemsCompleted(db, noteId, itemIds, false);
+
       if (isOnlineWriteAllowed(isConnected)) {
         try {
           const serverItems = await uncheckAllItems(noteId, itemIds);
@@ -1158,14 +1215,20 @@ export function useUncheckAllItems() {
           return serverItems;
         } catch (err) {
           // Transient failure: fall through to the offline path so the change is
-          // applied locally and queued for replay instead of being lost.
-          rethrowIfNotQueueable(err);
+          // queued for replay instead of being lost. A permanent one re-checks
+          // the local rows, mirroring the cache rollback in onError.
+          try {
+            rethrowIfNotQueueable(err);
+          } catch (permanent) {
+            await setLocalItemsCompleted(db, noteId, itemIds, true);
+            throw permanent;
+          }
         }
       }
 
-      // Offline (or a transient online failure): apply locally, enqueue a
-      // single bulk op carrying the exact ids captured at click time.
-      await setLocalItemsCompleted(db, noteId, itemIds, false);
+      // Offline (or a transient online failure): the uncheck is already in the
+      // local DB, so only the replay op is left to enqueue. It carries the exact
+      // ids captured at click time.
       await enqueueOperation(db, {
         operation: 'uncheckAllItems',
         endpoint: `/notes/${noteId}/items/set-completed`,
@@ -1198,12 +1261,21 @@ export function useDeleteCompletedItems() {
   const { isConnected } = useNetworkStatus();
 
   return useMutation({
-    onMutate: ({ noteId, itemIds }: { noteId: string; itemIds: string[] }) =>
-      applyOptimisticNote(queryClient, noteId, (note) => {
+    // Unlike the two completed-flag mutations above, the local rows are *not*
+    // deleted before the request: restoring them after a permanent failure means
+    // re-inserting rows rather than flipping a column back, and a delete that is
+    // briefly undone on screen is far less likely than the checked-item flicker
+    // (nothing re-reads a note between the confirm dialog and the response).
+    // Cancelling in-flight reads still keeps a refetch already on the wire from
+    // resolving over the optimistic removal.
+    onMutate: async ({ noteId, itemIds }: { noteId: string; itemIds: string[] }) => {
+      await cancelNoteReads(queryClient, noteId);
+      return applyOptimisticNote(queryClient, noteId, (note) => {
         if (note.note_type !== 'list' || !note.items) return note;
         const ids = new Set(itemIds);
         return { ...note, items: note.items.filter((item) => !ids.has(item.id)) };
-      }),
+      });
+    },
     mutationFn: async ({ noteId, itemIds }: { noteId: string; itemIds: string[] }): Promise<NoteItem[]> => {
       assertSwitchWriteAllowed();
       if (itemIds.length === 0) return [];
