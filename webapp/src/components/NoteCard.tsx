@@ -253,12 +253,17 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
         </div>
       )}
 
-      {/* The card's controls, top right. The drag handle sits to the left of
-          the menu and comes after it in the DOM, so the tab order within a card
-          is open → menu → reorder while the menu keeps the corner it has always
-          had. Both are absolute rather than a flex row: the handle is invisible
+      {/* The card's controls, top right: the drag handle, then the overflow
+          menu, which keeps the corner it has always had.
+
+          DOM order matches left-to-right order on purpose. These two sit side
+          by side, so a tab order that ran the other way would move focus right
+          and then back left across a pair of adjacent icons.
+
+          Both are absolute rather than a flex row: the handle is invisible
           until focused, and a flex row would still reserve its width and shift
           the menu left by that much at rest. */}
+      {dragHandle}
       <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
       <Menu>
         <MenuButton aria-label={t('note.menuOptions')} className="p-1 rounded-full hover:bg-gray-200 transition-colors">
@@ -374,7 +379,6 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
         </MenuItems>
       </Menu>
       </div>
-      {dragHandle}
 
       {/* Content */}
       <div>
