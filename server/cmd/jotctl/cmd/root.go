@@ -204,11 +204,13 @@ func (a *App) printf(format string, args ...any) {
 
 func (a *App) printJSON(v any) error {
 	if err := json.MarshalWrite(a.out, v, jsontext.WithIndent("  ")); err != nil {
-		return err
+		return fmt.Errorf("marshal json output: %w", err)
 	}
 	// MarshalWrite omits the trailing newline that json.Encoder.Encode wrote.
-	_, err := io.WriteString(a.out, "\n")
-	return err
+	if _, err := io.WriteString(a.out, "\n"); err != nil {
+		return fmt.Errorf("write json output: %w", err)
+	}
+	return nil
 }
 
 func wrapAPIError(err error) error {
