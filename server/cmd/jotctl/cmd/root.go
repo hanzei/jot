@@ -1,7 +1,8 @@
 package cmd
 
 import (
-	"encoding/json"
+	jsontext "encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -136,7 +137,8 @@ func writeSessionFile(sd *sessionData) error {
 		return fmt.Errorf("create config dir: %w", err)
 	}
 
-	//nolint:gosec // session token is intentionally persisted to disk for reuse across invocations
+	// The session token is intentionally persisted to disk here for reuse across
+	// invocations; the file is written with 0600 permissions below.
 	data, err := json.Marshal(sd)
 	if err != nil {
 		return fmt.Errorf("marshal session: %w", err)
@@ -201,9 +203,14 @@ func (a *App) printf(format string, args ...any) {
 }
 
 func (a *App) printJSON(v any) error {
-	enc := json.NewEncoder(a.out)
-	enc.SetIndent("", "  ")
-	return enc.Encode(v)
+	if err := json.MarshalWrite(a.out, v, jsontext.WithIndent("  ")); err != nil {
+		return fmt.Errorf("marshal json output: %w", err)
+	}
+	// MarshalWrite omits the trailing newline that json.Encoder.Encode wrote.
+	if _, err := io.WriteString(a.out, "\n"); err != nil {
+		return fmt.Errorf("write json output: %w", err)
+	}
+	return nil
 }
 
 func wrapAPIError(err error) error {

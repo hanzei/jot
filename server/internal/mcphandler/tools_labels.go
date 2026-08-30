@@ -2,7 +2,7 @@ package mcphandler
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )

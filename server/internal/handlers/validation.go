@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/http"
@@ -17,7 +17,7 @@ import (
 // not call this function and should set their own limit instead.
 func decodeJSONBody(w http.ResponseWriter, r *http.Request, v any) error {
 	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodySize)
-	return json.NewDecoder(r.Body).Decode(v)
+	return json.UnmarshalRead(r.Body, v)
 }
 
 // usernameRegex is lower case only. Usernames are compared as raw bytes by the

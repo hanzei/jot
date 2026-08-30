@@ -3,7 +3,8 @@ package client
 import (
 	"bufio"
 	"context"
-	"encoding/json"
+	jsontext "encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"net/http"
 	"strings"
@@ -49,16 +50,16 @@ type SSEEvent struct {
 
 // sseEventWire is the raw JSON shape of an SSE event envelope.
 type sseEventWire struct {
-	Type         string          `json:"type"`
-	SourceUserID string          `json:"source_user_id"`
-	TargetUserID string          `json:"target_user_id,omitempty"`
-	ClientID     string          `json:"client_id,omitempty"`
-	Data         json.RawMessage `json:"data,omitempty"`
+	Type         string         `json:"type"`
+	SourceUserID string         `json:"source_user_id"`
+	TargetUserID string         `json:"target_user_id,omitempty"`
+	ClientID     string         `json:"client_id,omitempty"`
+	Data         jsontext.Value `json:"data,omitempty"`
 }
 
 // unmarshalSSEData decodes raw into a new *T, treating an empty payload as a
 // zero-valued (non-nil) result rather than an error.
-func unmarshalSSEData[T any](raw json.RawMessage) (*T, bool) {
+func unmarshalSSEData[T any](raw jsontext.Value) (*T, bool) {
 	var d T
 	if len(raw) > 0 {
 		if err := json.Unmarshal(raw, &d); err != nil {

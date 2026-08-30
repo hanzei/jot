@@ -159,14 +159,14 @@ type CreateNoteItem struct {
 // UpdateTextNoteRequest is the body for PATCH /api/v1/notes/{id} on a text note.
 // Nil pointer fields are omitted and keep their server-side values.
 type UpdateTextNoteRequest struct {
-	Content  *string `json:"content,omitempty"`
-	Pinned   *bool   `json:"pinned,omitempty"`
-	Archived *bool   `json:"archived,omitempty"`
-	Color    *string `json:"color,omitempty"`
+	Content  *string `json:"content,omitzero"`
+	Pinned   *bool   `json:"pinned,omitzero"`
+	Archived *bool   `json:"archived,omitzero"`
+	Color    *string `json:"color,omitzero"`
 	// BaseVersion enables optimistic concurrency: when set, the server rejects
 	// the update with 409 unless the note's current version still matches it
 	// (issue #489). Omit for last-write-wins behavior.
-	BaseVersion *int `json:"base_version,omitempty"`
+	BaseVersion *int `json:"base_version,omitzero"`
 }
 
 // UpdateListNoteRequest is the body for PATCH /api/v1/notes/{id} on a list note.
@@ -174,13 +174,13 @@ type UpdateTextNoteRequest struct {
 // are edited through the dedicated item endpoints (CreateNoteItem,
 // UpdateNoteItem, DeleteNoteItem, ReorderNoteItems), not this request.
 type UpdateListNoteRequest struct {
-	Title                 *string `json:"title,omitempty"`
-	Pinned                *bool   `json:"pinned,omitempty"`
-	Archived              *bool   `json:"archived,omitempty"`
-	Color                 *string `json:"color,omitempty"`
-	CheckedItemsCollapsed *bool   `json:"checked_items_collapsed,omitempty"`
+	Title                 *string `json:"title,omitzero"`
+	Pinned                *bool   `json:"pinned,omitzero"`
+	Archived              *bool   `json:"archived,omitzero"`
+	Color                 *string `json:"color,omitzero"`
+	CheckedItemsCollapsed *bool   `json:"checked_items_collapsed,omitzero"`
 	// BaseVersion enables optimistic concurrency; see UpdateTextNoteRequest.
-	BaseVersion *int `json:"base_version,omitempty"`
+	BaseVersion *int `json:"base_version,omitzero"`
 }
 
 // ConvertNoteTypeRequest is the body for POST /api/v1/notes/{id}/convert,
@@ -190,14 +190,14 @@ type UpdateListNoteRequest struct {
 // Items when converting to "list". The server only validates and persists it.
 type ConvertNoteTypeRequest struct {
 	NoteType NoteType `json:"note_type"`
-	Content  *string  `json:"content,omitempty"`
+	Content  *string  `json:"content,omitzero"`
 	// Title is the converted list's title. Leaving it nil leaves the note
 	// untitled; the official clients promote a leading heading in the text
 	// content into it.
-	Title *string          `json:"title,omitempty"`
+	Title *string          `json:"title,omitzero"`
 	Items []CreateNoteItem `json:"items,omitempty"`
 	// BaseVersion enables optimistic concurrency; see UpdateTextNoteRequest.
-	BaseVersion *int `json:"base_version,omitempty"`
+	BaseVersion *int `json:"base_version,omitzero"`
 }
 
 // CreateNoteItemRequest is the body for POST /api/v1/notes/{id}/items. ID is
@@ -214,21 +214,21 @@ type CreateNoteItemRequest struct {
 // PatchNoteItemRequest is the body for PATCH /api/v1/notes/{id}/items/{item_id}.
 // Nil fields are left unchanged so concurrent edits to different columns merge.
 type PatchNoteItemRequest struct {
-	Text       *string `json:"text,omitempty"`
-	Completed  *bool   `json:"completed,omitempty"`
-	Position   *int    `json:"position,omitempty"`
-	ParentID   *string `json:"parent_id,omitempty"`
-	AssignedTo *string `json:"assigned_to,omitempty"`
+	Text       *string `json:"text,omitzero"`
+	Completed  *bool   `json:"completed,omitzero"`
+	Position   *int    `json:"position,omitzero"`
+	ParentID   *string `json:"parent_id,omitzero"`
+	AssignedTo *string `json:"assigned_to,omitzero"`
 }
 
 // UpdateUserRequest is the body for PATCH /api/v1/users/me.
 type UpdateUserRequest struct {
-	Username  *string `json:"username,omitempty"`
-	FirstName *string `json:"first_name,omitempty"`
-	LastName  *string `json:"last_name,omitempty"`
-	Language  *string `json:"language,omitempty"`
-	Theme     *string `json:"theme,omitempty"`
-	NoteSort  *string `json:"note_sort,omitempty"`
+	Username  *string `json:"username,omitzero"`
+	FirstName *string `json:"first_name,omitzero"`
+	LastName  *string `json:"last_name,omitzero"`
+	Language  *string `json:"language,omitzero"`
+	Theme     *string `json:"theme,omitzero"`
+	NoteSort  *string `json:"note_sort,omitzero"`
 }
 
 // ListNotesOptions holds optional query parameters for listing notes.
@@ -264,8 +264,8 @@ type JotExportNote struct {
 	Pinned                bool                `json:"pinned"`
 	Archived              bool                `json:"archived"`
 	Position              int                 `json:"position"`
-	UnpinnedPosition      *int                `json:"unpinned_position,omitempty"`
-	CheckedItemsCollapsed bool                `json:"checked_items_collapsed,omitempty"`
+	UnpinnedPosition      *int                `json:"unpinned_position,omitzero"`
+	CheckedItemsCollapsed bool                `json:"checked_items_collapsed,omitzero"`
 	Labels                []string            `json:"labels"`
 	Items                 []JotExportNoteItem `json:"items,omitempty"`
 }
