@@ -3,7 +3,7 @@ package server
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"net"
@@ -471,7 +471,11 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 		if body != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(statusCode)
-			if err := json.NewEncoder(w).Encode(body); err != nil {
+			// encoding/json/v2: nil slices marshal as [] rather than null, which
+			// aligns the wire with the client type declarations (e.g. Note.labels
+			// is Label[], not Label[] | null). Semantics are otherwise v1-compatible
+			// for Jot's response shapes.
+			if err := jsonv2.MarshalWrite(w, body); err != nil {
 				logutil.FromContext(r.Context()).WithError(err).Error("Failed to encode response body")
 			}
 		} else if statusCode > 0 {

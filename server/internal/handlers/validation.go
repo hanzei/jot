@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/http"
@@ -15,9 +15,15 @@ import (
 // decodeJSONBody limits the request body to maxJSONBodySize and decodes it
 // into v. Handlers that accept larger bodies (e.g. multipart uploads) must
 // not call this function and should set their own limit instead.
+//
+// Decoding uses encoding/json/v2's default options, which differ from v1 in two
+// ways that matter here: duplicate object member names are rejected (a payload
+// like {"title":"a","title":"b"} is a 400 rather than silent last-write-wins),
+// and field-name matching is case-sensitive. Every caller maps a decode error
+// to 400, so the stricter parse surfaces as a clean malformed-body response.
 func decodeJSONBody(w http.ResponseWriter, r *http.Request, v any) error {
 	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodySize)
-	return json.NewDecoder(r.Body).Decode(v)
+	return jsonv2.UnmarshalRead(r.Body, v)
 }
 
 // usernameRegex is lower case only. Usernames are compared as raw bytes by the
