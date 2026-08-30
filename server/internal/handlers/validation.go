@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	jsonv2 "encoding/json/v2"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/http"
@@ -23,7 +23,7 @@ import (
 // to 400, so the stricter parse surfaces as a clean malformed-body response.
 func decodeJSONBody(w http.ResponseWriter, r *http.Request, v any) error {
 	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodySize)
-	return jsonv2.UnmarshalRead(r.Body, v)
+	return json.UnmarshalRead(r.Body, v)
 }
 
 // usernameRegex is lower case only. Usernames are compared as raw bytes by the

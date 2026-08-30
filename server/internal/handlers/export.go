@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	jsonv2 "encoding/json/v2"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"mime"
@@ -119,7 +119,7 @@ func (h *NotesHandler) ExportNotes(w http.ResponseWriter, r *http.Request) (int,
 	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": filename}))
 	w.WriteHeader(http.StatusOK)
 
-	if err := jsonv2.MarshalWrite(w, export); err != nil {
+	if err := json.MarshalWrite(w, export); err != nil {
 		logutil.FromContext(r.Context()).WithError(err).Error("Failed to encode export")
 	}
 

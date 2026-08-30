@@ -3,7 +3,7 @@ package client
 import (
 	"bytes"
 	"context"
-	jsonv2 "encoding/json/v2"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -109,7 +109,7 @@ func (c *Client) url(path string) string {
 func (c *Client) doJSON(ctx context.Context, method, path string, body any, result any) error {
 	var reqBody io.Reader
 	if body != nil {
-		data, err := jsonv2.Marshal(body)
+		data, err := json.Marshal(body)
 		if err != nil {
 			return fmt.Errorf("marshal request body: %w", err)
 		}
@@ -140,7 +140,7 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any, resu
 	}
 
 	if result != nil && len(respBody) > 0 {
-		if err := jsonv2.Unmarshal(respBody, result); err != nil {
+		if err := json.Unmarshal(respBody, result); err != nil {
 			return fmt.Errorf("unmarshal response: %w", err)
 		}
 	}
@@ -195,7 +195,7 @@ func (c *Client) doMultipartUpload(ctx context.Context, path, filename string, d
 	}
 
 	if result != nil && len(respBody) > 0 {
-		if err := jsonv2.Unmarshal(respBody, result); err != nil {
+		if err := json.Unmarshal(respBody, result); err != nil {
 			return fmt.Errorf("unmarshal response: %w", err)
 		}
 	}

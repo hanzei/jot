@@ -2,7 +2,7 @@ package cmd
 
 import (
 	jsontext "encoding/json/jsontext"
-	jsonv2 "encoding/json/v2"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -120,7 +120,7 @@ func readSessionFile() (*sessionData, error) {
 	}
 
 	var sd sessionData
-	if err := jsonv2.Unmarshal(data, &sd); err != nil {
+	if err := json.Unmarshal(data, &sd); err != nil {
 		return nil, fmt.Errorf("parse session file: %w", err)
 	}
 
@@ -139,7 +139,7 @@ func writeSessionFile(sd *sessionData) error {
 
 	// The session token is intentionally persisted to disk here for reuse across
 	// invocations; the file is written with 0600 permissions below.
-	data, err := jsonv2.Marshal(sd)
+	data, err := json.Marshal(sd)
 	if err != nil {
 		return fmt.Errorf("marshal session: %w", err)
 	}
@@ -203,7 +203,7 @@ func (a *App) printf(format string, args ...any) {
 }
 
 func (a *App) printJSON(v any) error {
-	if err := jsonv2.MarshalWrite(a.out, v, jsontext.WithIndent("  ")); err != nil {
+	if err := json.MarshalWrite(a.out, v, jsontext.WithIndent("  ")); err != nil {
 		return err
 	}
 	// MarshalWrite omits the trailing newline that json.Encoder.Encode wrote.
