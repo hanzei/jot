@@ -112,6 +112,38 @@ test.describe('Arrow key card navigation', () => {
     await expect(cards.first()).toBeFocused();
   });
 
+  test('Home and End reach the grid from elsewhere on the page, but not from a text field', async ({ authenticatedUser, page, dashboardPage }) => {
+    void authenticatedUser;
+    await page.setViewportSize({ width: 500, height: 900 });
+    await dashboardPage.goto();
+    await dashboardPage.createNote('KS Anywhere Alpha');
+    await dashboardPage.createNote('KS Anywhere Beta');
+    await dashboardPage.createNote('KS Anywhere Gamma');
+
+    const cards = page.locator('[data-note-card="true"]');
+    await expect(cards).toHaveCount(3);
+
+    // The whole point of the change: reach the grid without first tabbing onto
+    // a card. Focus a non-card control, then End jumps to the last card.
+    await page.getByRole('button', { name: 'New Note' }).focus();
+    await page.keyboard.press('End');
+    await expect(cards.nth(2)).toBeFocused();
+
+    // Home from a card still lands on the first (the on-card path now runs
+    // through the same handler).
+    await page.keyboard.press('Home');
+    await expect(cards.first()).toBeFocused();
+
+    // But a text field keeps Home for caret movement — the grid must not steal
+    // it. Type first so a caret move is observable, then assert focus stayed.
+    const search = page.locator('form[role="search"] input');
+    await search.focus();
+    await search.fill('abc');
+    await page.keyboard.press('Home');
+    await expect(search).toBeFocused();
+    await expect(cards.first()).not.toBeFocused();
+  });
+
   test('keeps navigating after a note is opened and closed with the mouse', async ({ authenticatedUser, page, dashboardPage }) => {
     void authenticatedUser;
     await page.setViewportSize({ width: 500, height: 900 });
