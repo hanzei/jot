@@ -71,8 +71,6 @@ func (h *EventsHandler) ServeSSE(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			// encoding/json/v2 so SSE-delivered notes match the REST response
-			// shape (nil slices as [], not null); see wrapHandler in server.go.
 			data, err := json.Marshal(event)
 			if err != nil {
 				logutil.FromContext(r.Context()).WithError(err).WithField("type", event.Type).Error("Failed to marshal SSE event")
