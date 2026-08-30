@@ -4,7 +4,7 @@
 package mcphandler
 
 import (
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"net/http"
 
@@ -84,7 +84,7 @@ func toolDeletedResult(id string, extra map[string]any) (*mcp.CallToolResult, an
 	payload["id"] = id
 	payload["deleted"] = true
 
-	data, err := json.Marshal(payload)
+	data, err := jsonv2.Marshal(payload)
 	if err != nil {
 		return toolError("marshal response: %w", err)
 	}

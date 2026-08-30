@@ -2,7 +2,7 @@ package mcphandler
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 
 	"github.com/hanzei/jot/server/internal/blobstore"
 	"github.com/hanzei/jot/server/internal/logutil"
@@ -53,7 +53,7 @@ func (h *Handler) handleListNotes(userID string) mcp.ToolHandlerFor[listNotesInp
 		if err != nil {
 			return toolError("list notes: %w", err)
 		}
-		data, err := json.Marshal(notes)
+		data, err := jsonv2.Marshal(notes)
 		if err != nil {
 			return toolError("marshal notes: %w", err)
 		}
@@ -76,7 +76,7 @@ func (h *Handler) handleGetNote(userID string) mcp.ToolHandlerFor[getNoteInput, 
 		if err != nil {
 			return toolError("get note: %w", err)
 		}
-		data, err := json.Marshal(note)
+		data, err := jsonv2.Marshal(note)
 		if err != nil {
 			return toolError("marshal note: %w", err)
 		}
@@ -141,7 +141,7 @@ func (h *Handler) handleCreateNote(userID string) mcp.ToolHandlerFor[createNoteI
 			}
 		}
 
-		data, err := json.Marshal(note)
+		data, err := jsonv2.Marshal(note)
 		if err != nil {
 			return toolError("marshal note: %w", err)
 		}
@@ -173,7 +173,7 @@ func (h *Handler) handleUpdateNote(userID string) mcp.ToolHandlerFor[updateNoteI
 		if err != nil {
 			return toolError("get updated note: %w", err)
 		}
-		data, err := json.Marshal(note)
+		data, err := jsonv2.Marshal(note)
 		if err != nil {
 			return toolError("marshal note: %w", err)
 		}

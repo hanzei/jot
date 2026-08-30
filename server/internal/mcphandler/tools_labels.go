@@ -2,7 +2,7 @@ package mcphandler
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -45,7 +45,7 @@ func (h *Handler) handleListLabels(userID string) mcp.ToolHandlerFor[listLabelsI
 		if err != nil {
 			return toolError("list labels: %w", err)
 		}
-		data, err := json.Marshal(labels)
+		data, err := jsonv2.Marshal(labels)
 		if err != nil {
 			return toolError("marshal labels: %w", err)
 		}
@@ -72,7 +72,7 @@ func (h *Handler) handleUpdateLabel(userID string) mcp.ToolHandlerFor[updateLabe
 		if err != nil {
 			return toolError("update label: %w", err)
 		}
-		data, err := json.Marshal(label)
+		data, err := jsonv2.Marshal(label)
 		if err != nil {
 			return toolError("marshal label: %w", err)
 		}
@@ -124,7 +124,7 @@ func (h *Handler) handleAddLabelToNote(userID string) mcp.ToolHandlerFor[addLabe
 		if err != nil {
 			return toolError("get note after label add: %w", err)
 		}
-		data, err := json.Marshal(note)
+		data, err := jsonv2.Marshal(note)
 		if err != nil {
 			return toolError("marshal note: %w", err)
 		}
@@ -154,7 +154,7 @@ func (h *Handler) handleRemoveLabelFromNote(userID string) mcp.ToolHandlerFor[re
 		if err != nil {
 			return toolError("get note after label remove: %w", err)
 		}
-		data, err := json.Marshal(note)
+		data, err := jsonv2.Marshal(note)
 		if err != nil {
 			return toolError("marshal note: %w", err)
 		}

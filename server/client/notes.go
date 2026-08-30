@@ -3,7 +3,7 @@ package client
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -297,7 +297,7 @@ func (c *Client) doImportRequest(ctx context.Context, importType string, writePa
 	}
 
 	var result ImportResponse
-	if err = json.Unmarshal(respBody, &result); err != nil {
+	if err = jsonv2.Unmarshal(respBody, &result); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
 	return &result, nil

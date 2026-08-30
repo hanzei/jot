@@ -2,7 +2,7 @@ package mcphandler
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"unicode/utf8"
@@ -149,7 +149,7 @@ func (h *Handler) handleCreateNoteItem(userID string) mcp.ToolHandlerFor[createN
 		if err != nil {
 			return toolError("create note item: %w", itemCapError(err))
 		}
-		data, err := json.Marshal(item)
+		data, err := jsonv2.Marshal(item)
 		if err != nil {
 			return toolError("marshal note item: %w", err)
 		}
@@ -191,7 +191,7 @@ func (h *Handler) handleUpdateNoteItem(userID string) mcp.ToolHandlerFor[updateN
 		if err != nil {
 			return toolError("update note item: %w", err)
 		}
-		data, err := json.Marshal(item)
+		data, err := jsonv2.Marshal(item)
 		if err != nil {
 			return toolError("marshal note item: %w", err)
 		}
