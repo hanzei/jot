@@ -240,6 +240,52 @@ test.describe('Keyboard drag and drop', () => {
     await dashboardPage.expectVisibleNoteTitles(['DnD First', 'DnD Second']);
   });
 
+  test('keeps the same note active after it moves via reorder', async ({ authenticatedUser, page, dashboardPage }) => {
+    void authenticatedUser;
+    // Single column so DOM order matches what a user sees top to bottom.
+    await page.setViewportSize({ width: 500, height: 900 });
+    await dashboardPage.goto();
+    // Newest first, so the display order is Second, First.
+    await dashboardPage.createNote('Roving DnD First');
+    await dashboardPage.createNote('Roving DnD Second');
+    await dashboardPage.expectVisibleNoteTitles(['Roving DnD Second', 'Roving DnD First']);
+
+    // Make the note that is about to move the roving-tabindex stop before
+    // reordering it (#950's active-card-survives-reorder requirement).
+    const secondCard = dashboardPage.noteCardButton('Roving DnD Second');
+    await secondCard.focus();
+    await expect(secondCard).toHaveAttribute('tabIndex', '0');
+
+    await keyboardReorder(page, page.getByRole('button', { name: 'Reorder note' }).first(), 'ArrowDown');
+    await dashboardPage.expectVisibleNoteTitles(['Roving DnD First', 'Roving DnD Second']);
+
+    // Tracked by note id, not DOM position: the active stop follows the note
+    // to its new slot instead of staying pinned to the slot it left.
+    await expect(secondCard).toHaveAttribute('tabIndex', '0');
+  });
+
+  test('keeps the reorder handle and overflow menu out of the tab sequence for an inactive card', async ({ authenticatedUser, page, dashboardPage }) => {
+    void authenticatedUser;
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Roving Handle Alpha');
+    await dashboardPage.createNote('Roving Handle Beta');
+
+    const grips = page.getByRole('button', { name: 'Reorder note' });
+    const menus = page.getByRole('button', { name: 'Note options' });
+    await expect(grips).toHaveCount(2);
+
+    // Neither card has been focused yet, so the first (default) card is
+    // active: its own handle and menu stay ordinary Tab stops.
+    await expect(grips.nth(0)).toHaveAttribute('tabIndex', '0');
+    await expect(menus.nth(0)).toHaveAttribute('tabIndex', '0');
+
+    // The other card is not active: still reachable by a click or `.focus()`
+    // — tabIndex only governs Tab order — but skipped by Tab itself, or the
+    // three-stops-per-card problem #950 exists to fix would only shrink to two.
+    await expect(grips.nth(1)).toHaveAttribute('tabIndex', '-1');
+    await expect(menus.nth(1)).toHaveAttribute('tabIndex', '-1');
+  });
+
   test('reveals the reorder handle when the card is highlighted, before it is tabbed to', async ({ authenticatedUser, page, dashboardPage }) => {
     void authenticatedUser;
     await dashboardPage.goto();

@@ -188,6 +188,15 @@ interface AnimatedNoteGridProps {
    * out, then drop it once the exit finishes.
    */
   onActiveChange?: ((active: boolean) => void) | undefined;
+  /**
+   * The note id of the grid's one roving-tabindex stop (#950), computed by the
+   * parent across every section so only one card in the whole dashboard is a
+   * Tab stop at a time. `null` when nothing has been focused yet and the
+   * parent has no cards to fall back to.
+   */
+  activeCardId: string | null;
+  /** Fires when any control inside a card gains focus, to update `activeCardId`. */
+  onCardFocus: (noteId: string) => void;
 }
 
 /**
@@ -213,6 +222,8 @@ export default function AnimatedNoteGrid({
   onRefresh,
   onLabelClick,
   onActiveChange,
+  activeCardId,
+  onCardFocus,
 }: AnimatedNoteGridProps) {
   const [state, setState] = useState<ReconcileResult>(() => swap(notes));
   // Track the inputs the current `state` was derived from so we can reconcile
@@ -270,6 +281,8 @@ export default function AnimatedNoteGrid({
               inBin={inBin}
               onRefresh={onRefresh}
               onLabelClick={onLabelClick}
+              isActive={entry.note.id === activeCardId}
+              onCardFocus={onCardFocus}
             />
           </AnimatedCard>
         ))}

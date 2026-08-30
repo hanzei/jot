@@ -177,6 +177,87 @@ test.describe('Arrow key card navigation', () => {
   });
 });
 
+/**
+ * The roving tabindex introduced by #950. Before this, every card contributed
+ * three tab stops (open button, reorder handle, overflow menu), so tabbing
+ * through or past a grid of N notes cost roughly 3×N stops. Now exactly one
+ * card's open button is a Tab stop at a time and arrow/Home/End move it —
+ * those keys are unchanged and stay covered by the describe block above.
+ */
+test.describe('Roving tabindex (#950)', () => {
+  test('collapses the grid to one tab stop that moves with focus, regardless of note count', async ({ authenticatedUser, page, dashboardPage }) => {
+    void authenticatedUser;
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Roving Alpha');
+    await dashboardPage.createNote('Roving Beta');
+    await dashboardPage.createNote('Roving Gamma');
+
+    const cards = page.locator('[data-note-card="true"]');
+    await expect(cards).toHaveCount(3);
+
+    // Nothing has been focused yet, so the first card is the resting default.
+    await expect(cards.nth(0)).toHaveAttribute('tabIndex', '0');
+    await expect(cards.nth(1)).toHaveAttribute('tabIndex', '-1');
+    await expect(cards.nth(2)).toHaveAttribute('tabIndex', '-1');
+
+    // Moving focus — with the arrow keys here, but Home/End and a click all
+    // go through the same `onFocus` — moves the roving stop with it, not just
+    // the browser's own focus.
+    await cards.nth(0).focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(cards.nth(1)).toBeFocused();
+    await expect(cards.nth(0)).toHaveAttribute('tabIndex', '-1');
+    await expect(cards.nth(1)).toHaveAttribute('tabIndex', '0');
+    await expect(cards.nth(2)).toHaveAttribute('tabIndex', '-1');
+  });
+
+  test('falls back to the first remaining card when the active one is deleted', async ({ authenticatedUser, page, dashboardPage }) => {
+    void authenticatedUser;
+    await page.setViewportSize({ width: 500, height: 900 });
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Churn Alpha');
+    await dashboardPage.createNote('Churn Beta');
+    await dashboardPage.createNote('Churn Gamma');
+
+    const cards = page.locator('[data-note-card="true"]');
+    await expect(cards).toHaveCount(3);
+
+    // Middle card active, then removed out from under the roving stop.
+    await cards.nth(1).focus();
+    await expect(cards.nth(1)).toHaveAttribute('tabIndex', '0');
+
+    await dashboardPage.deleteNote('Churn Beta');
+    await expect(cards).toHaveCount(2);
+
+    // Falls back to the first surviving card rather than leaving the grid
+    // with no Tab stop, or one pointing at a node that no longer exists.
+    await expect(cards.nth(0)).toHaveAttribute('tabIndex', '0');
+    await expect(cards.nth(1)).toHaveAttribute('tabIndex', '-1');
+  });
+
+  test('falls back to the first visible card when a search filters out the active one', async ({ authenticatedUser, page, dashboardPage }) => {
+    void authenticatedUser;
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Filter Keep One');
+    await dashboardPage.createNote('Filter Drop');
+    await dashboardPage.createNote('Filter Keep Two');
+
+    const cards = page.locator('[data-note-card="true"]');
+    await expect(cards).toHaveCount(3);
+
+    // Focus the note this search is about to filter out.
+    const dropCard = dashboardPage.noteCardButton('Filter Drop');
+    await dropCard.focus();
+    await expect(dropCard).toHaveAttribute('tabIndex', '0');
+
+    await dashboardPage.search('Keep');
+    await expect(cards).toHaveCount(2);
+
+    await expect(cards.nth(0)).toHaveAttribute('tabIndex', '0');
+    await expect(cards.nth(1)).toHaveAttribute('tabIndex', '-1');
+  });
+});
+
 test.describe('ConfirmDialog keyboard confirm', () => {
   test('pressing Enter in the permanent-delete confirmation dialog deletes the note forever', async ({ authenticatedUser, dashboardPage, page }) => {
     void authenticatedUser;

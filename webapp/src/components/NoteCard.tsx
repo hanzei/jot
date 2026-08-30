@@ -43,6 +43,22 @@ interface NoteCardProps {
    * sortable context just omits it.
    */
   dragHandle?: React.ReactNode;
+  /**
+   * Whether this card holds the grid's one roving-tabindex stop (#950):
+   * exactly one card's open button (and, when it's also this one, the drag
+   * handle and overflow menu) is a Tab stop at a time, collapsing what used to
+   * be three stops per card down to a stop per grid. Defaults to `true` so a
+   * card rendered outside `SortableNoteCard` — as every test in
+   * `NoteCard.test.tsx` does — keeps its ordinary, always-focusable button.
+   */
+  isActive?: boolean;
+  /**
+   * Fires when any focusable control inside the card gains focus. Relies on
+   * React's `onFocus` bubbling (it's backed by the native `focusin` event),
+   * so one handler on the card's own container catches the open button, the
+   * drag handle and the overflow menu alike without wiring each separately.
+   */
+  onCardFocus?: ((noteId: string) => void) | undefined;
 }
 
 function MenuKbd({ children }: { children: React.ReactNode }) {
@@ -53,7 +69,7 @@ function MenuKbd({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare, onRestore, onPermanentlyDelete, currentUserId, usersById, inBin = false, onRefresh, onLabelClick, dragHandle }: NoteCardProps) {
+export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare, onRestore, onPermanentlyDelete, currentUserId, usersById, inBin = false, onRefresh, onLabelClick, dragHandle, isActive = true, onCardFocus }: NoteCardProps) {
   const { t } = useTranslation();
   const { showToast } = useToast();
   const [isUpdating, setIsUpdating] = useState(false);
@@ -222,6 +238,12 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
         openButtonRef.current?.focus();
         onEdit(note);
       }}
+      // Roving tabindex (#950): React's onFocus is backed by the bubbling
+      // native `focusin` event, so this one handler sees focus land on the
+      // open button below, the drag handle, or the overflow menu — whichever
+      // of the card's controls a click, Tab, or the dashboard's arrow-key/
+      // Home/End navigation actually focuses — without wiring each of them.
+      onFocus={() => onCardFocus?.(note.id)}
     >
       {/*
         The card's primary action, as a real button rather than a tabIndex on
@@ -250,6 +272,10 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
         data-note-card="true"
         data-testid="note-card-open"
         aria-label={(note.note_type === 'list' ? note.title : note.content?.slice(0, 50)) || t('share.untitledNote')}
+        // Roving tabindex (#950): the grid's one Tab stop lives on whichever
+        // card's open button is currently active; every other card's is
+        // reachable only by `.focus()` (arrow keys, Home/End, a click).
+        tabIndex={isActive ? 0 : -1}
         className="absolute inset-0 rounded-lg pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"
       />
       {coverImage && (
@@ -283,7 +309,12 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
       {dragHandle}
       <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
       <Menu>
-        <MenuButton aria-label={t('note.menuOptions')} className="p-1 rounded-full bg-white/80 dark:bg-slate-900/70 text-gray-700 dark:text-gray-200 shadow-sm hover:bg-white dark:hover:bg-slate-900 transition-colors">
+        {/* Roving tabindex (#950): out of the Tab sequence for every card but
+            the active one, same as the drag handle in SortableNoteCard —
+            otherwise the per-card stop count this issue exists to collapse
+            only shrinks from three to two. A click still reaches it, tabIndex
+            only governs sequential Tab order. */}
+        <MenuButton aria-label={t('note.menuOptions')} tabIndex={isActive ? 0 : -1} className="p-1 rounded-full bg-white/80 dark:bg-slate-900/70 text-gray-700 dark:text-gray-200 shadow-sm hover:bg-white dark:hover:bg-slate-900 transition-colors">
           <EllipsisVertical className="h-4 w-4" />
         </MenuButton>
         <MenuItems transition onKeyDownCapture={handleMenuKeyDown} className="absolute right-0 mt-1 w-52 origin-top-right bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black/5 dark:ring-slate-600/20 focus:outline-none z-10 border border-gray-200 dark:border-slate-600 transition duration-100 ease-out data-[closed]:scale-95 data-[closed]:opacity-0 motion-reduce:transition-none">

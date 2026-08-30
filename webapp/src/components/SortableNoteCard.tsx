@@ -19,6 +19,9 @@ interface SortableNoteCardProps {
   inBin?: boolean;
   onRefresh?: (() => void) | undefined;
   onLabelClick?: ((labelId: string) => void) | undefined;
+  /** Whether this card holds the grid's one roving-tabindex stop (#950). */
+  isActive: boolean;
+  onCardFocus: (noteId: string) => void;
 }
 
 export default function SortableNoteCard({
@@ -35,6 +38,8 @@ export default function SortableNoteCard({
   inBin = false,
   onRefresh,
   onLabelClick,
+  isActive,
+  onCardFocus,
 }: SortableNoteCardProps) {
   const { t } = useTranslation();
   const {
@@ -109,6 +114,13 @@ export default function SortableNoteCard({
               title={t('note.reorderNote')}
               {...attributes}
               {...listeners}
+              // Roving tabindex (#950): out of the Tab sequence for every card
+              // but the active one, or the per-card tab-stop count this issue
+              // exists to collapse only shrinks from three to two. Reachable by
+              // `.focus()` regardless — dnd-kit's own keyboard tests and the
+              // arrow-key/Home/End navigation both call it directly rather than
+              // relying on Tab, so this costs them nothing.
+              tabIndex={isActive ? 0 : -1}
               // Same backdrop as the overflow menu beside it: a fixed-colour
               // icon over an arbitrary cover image has no guaranteed contrast
               // (WCAG 1.4.11), so both controls carry a translucent chip rather
@@ -137,6 +149,8 @@ export default function SortableNoteCard({
           inBin={inBin}
           onRefresh={onRefresh}
           onLabelClick={onLabelClick}
+          isActive={isActive}
+          onCardFocus={onCardFocus}
         />
       </div>
     </div>
