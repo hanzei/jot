@@ -48,7 +48,8 @@ function listUser(id: string): User {
 
 describe('saveUsers', () => {
   it('persists a user with no timestamps instead of tripping the NOT NULL constraint', async () => {
-    await expect(saveUsers(db, [listUser('a')])).resolves.not.toThrow();
+    // A rejection here (the NOT NULL violation this guards against) fails the test.
+    await saveUsers(db, [listUser('a')]);
 
     const [stored] = await getLocalUsers(db);
     expect(stored?.id).toBe('a');
