@@ -27,6 +27,7 @@ import {
   isNotePendingCreate,
 } from '../db/noteQueries';
 import { enqueueOperation, rethrowIfNotQueueable, saveServerNotes, saveServerLabels } from '../db/syncQueue';
+import { isClosedDatabaseError } from '../db/errors';
 import { isOnlineWriteAllowed } from '../api/serverReachability';
 import { useNetworkStatus } from './useNetworkStatus';
 import { retrySync, SyncAbortedError, SyncCanceller } from '../utils/retryWithBackoff';
@@ -134,6 +135,9 @@ function useBackgroundSyncQuery<T>(
     } catch (err) {
       // Cancelled or offline: expected; keep the local cache.
       if (err instanceof SyncAbortedError) return;
+      // The SQLiteProvider was torn down mid-sync and the persist hit a closed
+      // handle; a fresh provider instance drives the next sync (issue #971).
+      if (isClosedDatabaseError(err)) return;
       // Retries exhausted (or a permanent error): local cache remains.
       console.warn('Background sync failed after retries:', err);
     } finally {

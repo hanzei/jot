@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSQLiteContext } from 'expo-sqlite';
 import axios from 'axios';
 import { getLocalNotes, getLocalNote, markLocalNoteDeleted } from '../db/noteQueries';
+import { isClosedDatabaseError } from '../db/errors';
 import { getProtectedNoteIds, saveServerNote, saveServerNotesScope } from '../db/syncQueue';
 import { getNotes, getNote } from '../api/notes';
 import type { GetNotesParams, Note } from '@jot/shared';
@@ -63,6 +64,10 @@ export function useOfflineNotes(params?: GetNotesParams, options?: { enabled?: b
     } catch (err) {
       // Cancelled or offline: expected; keep the local cache.
       if (err instanceof SyncAbortedError) return;
+      // The SQLiteProvider was torn down mid-sync and the persist hit a closed
+      // handle (server switch / DB-init retry / sign-out); a fresh provider
+      // instance drives the next sync, so swallow it (issue #971).
+      if (isClosedDatabaseError(err)) return;
       // Retries exhausted (or a permanent error): local data is used as fallback.
       console.warn('Background notes sync failed after retries:', err);
     } finally {
@@ -178,6 +183,9 @@ export function useOfflineNote(id: string | null) {
         }
         return;
       }
+      // The SQLiteProvider was torn down mid-sync and the persist hit a closed
+      // handle; a fresh provider instance drives the next sync (issue #971).
+      if (isClosedDatabaseError(err)) return;
       // Retries exhausted (or another error): local cache is used as fallback.
       console.warn(`Background note sync failed for id=${id} after retries:`, err);
     }

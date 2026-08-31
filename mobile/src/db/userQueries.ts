@@ -55,6 +55,14 @@ export async function upsertUser(db: SQLiteDatabase, user: User): Promise<void> 
 // would fire `ON DELETE CASCADE` on any future table that references users(id)
 // (see the identical reasoning, and the incident it caused, in noteQueries.ts
 // around saveNoteInTx).
+//
+// created_at/updated_at preserve an existing non-empty value rather than letting
+// `excluded` overwrite it with ''. The share-target list endpoint (`GET /users`)
+// returns the server's `UserInfo` shape, which omits both timestamps, so those
+// fields arrive undefined and bind as '' (see userUpsertParams). A live
+// `profile_icon_updated` SSE event, by contrast, carries a real updated_at that
+// avatar cache-busting depends on — so a later timestamp-less list sync must not
+// clobber it back to ''.
 const UPSERT_USER_SQL = `
   INSERT INTO users (id, username, first_name, last_name, role, has_profile_icon, created_at, updated_at)
   VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -64,11 +72,26 @@ const UPSERT_USER_SQL = `
     last_name = excluded.last_name,
     role = excluded.role,
     has_profile_icon = excluded.has_profile_icon,
-    created_at = excluded.created_at,
-    updated_at = excluded.updated_at`;
+    created_at = COALESCE(NULLIF(excluded.created_at, ''), users.created_at),
+    updated_at = COALESCE(NULLIF(excluded.updated_at, ''), users.updated_at)`;
 
+// created_at/updated_at coerce undefined → '' so the bind never lands as NULL and
+// trips the columns' NOT NULL constraint. `GET /users` returns UserInfo, which
+// has no timestamps, so a listed collaborator's User carries `undefined` here
+// even though the shared type declares them required. '' matches the columns'
+// schema default and the rowToUser read fallback: the codebase's sentinel for an
+// unknown timestamp.
 function userUpsertParams(user: User): (string | number)[] {
-  return [user.id, user.username, user.first_name, user.last_name, user.role, user.has_profile_icon ? 1 : 0, user.created_at, user.updated_at];
+  return [
+    user.id,
+    user.username,
+    user.first_name,
+    user.last_name,
+    user.role,
+    user.has_profile_icon ? 1 : 0,
+    user.created_at ?? '',
+    user.updated_at ?? '',
+  ];
 }
 
 export async function getLocalUsers(db: SQLiteDatabase): Promise<User[]> {
