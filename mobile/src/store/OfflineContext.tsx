@@ -15,6 +15,7 @@ import { drainQueue, getPendingCount, getDeadLetterCount, subscribeToEnqueue } f
 import { isServerReachable, markServerReachable } from '../api/serverReachability';
 import { drainImageUploadQueue, getQueuedImageUploadCount } from '../db/imageUploadQueue';
 import { getPendingCreateNoteIds, getFailedNoteIds } from '../db/noteQueries';
+import { isClosedDatabaseError } from '../db/errors';
 import { useAuth } from './AuthContext';
 import { isLocalModeActive } from './localMode';
 import { isSyncDrainPaused } from './serverSwitchLifecycle';
@@ -319,6 +320,19 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
         setLastSyncedAt(new Date().toISOString());
       }
     } catch (err) {
+      // The SQLiteProvider that owns `db` was torn down mid-drain (server switch,
+      // DB-init retry, or sign-out) and closed the handle underneath us. The
+      // handle never reopens and a fresh provider instance is already driving
+      // sync, so stop quietly instead of backing off against the dead handle —
+      // onDrainStalled would otherwise walk to its failure cap and set syncError
+      // while flooding diagnostics with `Access to closed resource` (issue #971).
+      if (isClosedDatabaseError(err)) {
+        // Set stalled so the finally's rerun-requested path doesn't immediately
+        // reschedule another pass that would hit the same closed handle.
+        stalled = true;
+        clearDrainTimer();
+        return;
+      }
       console.warn('Queue drain failed:', err);
       stalled = true;
       onDrainStalled();

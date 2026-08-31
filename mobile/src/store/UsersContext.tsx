@@ -5,6 +5,7 @@ import { getBaseUrl } from '../api/client';
 import { useAuth } from './AuthContext';
 import { useSQLiteContext } from 'expo-sqlite';
 import { getLocalUsers, saveUsers, upsertUser } from '../db/userQueries';
+import { isClosedDatabaseError } from '../db/errors';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { retrySync, SyncAbortedError, SyncCanceller } from '../utils/retryWithBackoff';
 import { refreshIconCacheForUsers } from '../utils/profileIconCache';
@@ -88,6 +89,11 @@ export function UsersProvider({ children }: { children: React.ReactNode }) {
       } catch (err) {
         // Cancelled or offline: expected; SQLite data is used as fallback.
         if (err instanceof SyncAbortedError) return;
+        // The SQLiteProvider was torn down mid-sync and `saveUsers` hit a closed
+        // handle (server switch / DB-init retry / sign-out). A fresh provider
+        // instance drives the next load, so swallow it rather than logging a
+        // failure for a handle that is simply gone (issue #971).
+        if (isClosedDatabaseError(err)) return;
         // Retries exhausted (or a permanent error): SQLite data is the fallback.
         console.warn('Background users sync failed after retries:', err);
       }
