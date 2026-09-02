@@ -268,6 +268,25 @@ describe('useNoteImages hooks', () => {
       expect(fs.files.has('file:///docs/pending-image-uploads/upload-1')).toBe(true);
     });
 
+    it('queues the upload for a pending-create note instead of 404ing while online (#475)', async () => {
+      // note-1's offline create hasn't drained yet — the server doesn't know the
+      // note, so a direct upload would 404 and the picked file would be dropped
+      // rather than queued. The upload must take the offline queue, which waits
+      // for the create to drain (drainImageUploadQueue) before retrying.
+      await db.runAsync(`UPDATE notes SET sync_state = 'pending' WHERE id = ?`, ['note-1']);
+      const { result } = await renderHook(() => useUploadNoteImage(), { wrapper: createWrapper() });
+      const file = { uri: 'file:///photo.png', name: 'photo.png', mimeType: 'image/png' };
+
+      const outcome = await result.current.mutateAsync({ noteId: 'note-1', uploadId: 'upload-1', file });
+
+      expect(outcome).toEqual({ status: 'queued' });
+      expect(mockImagesApi.uploadNoteImage).not.toHaveBeenCalled();
+      expect(mockEnqueueImageUpload).toHaveBeenCalledWith(
+        expect.anything(),
+        { id: 'upload-1', noteId: 'note-1', file },
+      );
+    });
+
     it('falls back to the offline queue after a transient failure (e.g. a network error) while connected', async () => {
       const error = Object.assign(new Error('Network Error'), { isAxiosError: true, response: undefined });
       mockImagesApi.uploadNoteImage.mockRejectedValueOnce(error);

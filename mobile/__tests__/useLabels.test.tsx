@@ -497,6 +497,29 @@ describe('useLabels write hooks', () => {
       await waitFor(() => expect(result.current.isError).toBe(true));
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
     });
+
+    it('queues the rename for an offline-created label instead of 404ing while online (#546)', async () => {
+      // l1's createLabel op is still queued, so the server doesn't know the label
+      // yet: a direct PATCH would 404 and drop the rename. It must queue FIFO
+      // behind the create instead.
+      await db.runAsync(
+        `INSERT INTO sync_queue (operation, endpoint, method, body, created_at)
+         VALUES ('createLabel', '/labels', 'POST', ?, '')`,
+        [JSON.stringify({ id: 'l1', name: 'Work' })],
+      );
+      await noteQueriesModule.upsertLabel(db, storedLabel('l1', 'Work'));
+
+      const { result } = await renderHook(() => useRenameLabel(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ labelId: 'l1', name: 'Renamed' });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockLabelsApi.renameLabel).not.toHaveBeenCalled();
+      expect(mockNoteQueries.renameStoredLabel).toHaveBeenCalledWith(expect.anything(), 'l1', 'Renamed');
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ operation: 'renameLabel', endpoint: '/labels/l1', method: 'PATCH', body: { name: 'Renamed' } }),
+      );
+    });
   });
 
   // ── useDeleteLabel ─────────────────────────────────────────────────────────
@@ -544,6 +567,29 @@ describe('useLabels write hooks', () => {
 
       await waitFor(() => expect(result.current.isError).toBe(true));
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
+    });
+
+    it('queues the deletion for an offline-created label instead of 404ing while online (#546)', async () => {
+      // l1's createLabel op is still queued, so the server doesn't know the label
+      // yet: a direct DELETE would 404 and drop the deletion. It must queue FIFO
+      // behind the create instead.
+      await db.runAsync(
+        `INSERT INTO sync_queue (operation, endpoint, method, body, created_at)
+         VALUES ('createLabel', '/labels', 'POST', ?, '')`,
+        [JSON.stringify({ id: 'l1', name: 'Work' })],
+      );
+      await noteQueriesModule.upsertLabel(db, storedLabel('l1', 'Work'));
+
+      const { result } = await renderHook(() => useDeleteLabel(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ labelId: 'l1' });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockLabelsApi.deleteLabel).not.toHaveBeenCalled();
+      expect(mockNoteQueries.deleteStoredLabel).toHaveBeenCalledWith(expect.anything(), 'l1');
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ operation: 'deleteLabel', endpoint: '/labels/l1', method: 'DELETE' }),
+      );
     });
   });
 });

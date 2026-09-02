@@ -26,7 +26,7 @@ import {
   generateClientLabelId,
   isNotePendingCreate,
 } from '../db/noteQueries';
-import { enqueueOperation, rethrowIfNotQueueable, saveServerNotes, saveServerLabels } from '../db/syncQueue';
+import { enqueueOperation, rethrowIfNotQueueable, saveServerNotes, saveServerLabels, getPendingLabelIds } from '../db/syncQueue';
 import { isClosedDatabaseError } from '../db/errors';
 import { isOnlineWriteAllowed } from '../api/serverReachability';
 import { useNetworkStatus } from './useNetworkStatus';
@@ -382,7 +382,12 @@ export function useRenameLabel() {
       assertSwitchWriteAllowed();
       const trimmed = name.trim();
       if (!trimmed) throw new Error('Label name must not be empty');
-      if (isOnlineWriteAllowed(isConnected)) {
+      // A label created offline carries a server-valid id (#546) but its queued
+      // createLabel drains FIFO before this rename, so queue rather than calling
+      // online against a label the server doesn't know yet — a direct PATCH would
+      // 404 (permanent) and drop the rename instead of syncing it.
+      const pendingCreate = (await getPendingLabelIds(db)).has(labelId);
+      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
           const updatedLabel = await renameLabel(labelId, trimmed);
           await renameStoredLabel(db, labelId, updatedLabel.name);
@@ -435,7 +440,12 @@ export function useDeleteLabel() {
   return useMutation({
     mutationFn: async ({ labelId }: { labelId: string }) => {
       assertSwitchWriteAllowed();
-      if (isOnlineWriteAllowed(isConnected)) {
+      // A label created offline carries a server-valid id (#546) but its queued
+      // createLabel drains FIFO before this delete, so queue rather than calling
+      // online against a label the server doesn't know yet — a direct DELETE would
+      // 404 (permanent) and drop the deletion instead of syncing it.
+      const pendingCreate = (await getPendingLabelIds(db)).has(labelId);
+      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
           await deleteLabel(labelId);
           await deleteStoredLabel(db, labelId);
