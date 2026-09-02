@@ -46,6 +46,7 @@ import {
   generateClientNoteId,
   markNotePendingCreate,
   isNotePendingCreate,
+  getPendingCreateNoteIds,
   getLocalNotePositions,
   createLocalItem,
   patchLocalItem,
@@ -1030,6 +1031,16 @@ export function useReorderNotes() {
     mutationFn: async (noteIds: string[]): Promise<void> => {
       assertSwitchWriteAllowed();
 
+      // Queue instead of calling online when *any* note in the batch is still
+      // pending-create (#475): the server reorders in one transaction and a
+      // pending note has no note_user_state row yet, so it rejects the whole
+      // request with 403 (permanent) and rolls back — dropping every note's
+      // position, not just the pending one's (#956). The queued reorder drains
+      // FIFO after the create lands, and the create carries the note's position,
+      // so the brief gap before the reorder replays is harmless.
+      const pendingIds = await getPendingCreateNoteIds(db);
+      const batchHasPending = noteIds.some((id) => pendingIds.has(id));
+
       // Snapshot the current positions before touching them, so a permanently
       // rejected reorder can put them back (the new positions are the array
       // indices below, but the old ones are whatever they were).
@@ -1047,7 +1058,7 @@ export function useReorderNotes() {
         await updateLocalNote(db, noteId, { position: i });
       }
 
-      if (isOnlineWriteAllowed(isConnected)) {
+      if (isOnlineWriteAllowed(isConnected) && !batchHasPending) {
         try {
           await reorderNotes(noteIds);
           return;
