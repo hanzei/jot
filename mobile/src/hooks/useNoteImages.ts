@@ -3,7 +3,7 @@ import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
 import type { NoteImage } from '@jot/shared';
 import { uploadNoteImage, deleteNoteImage, type ImageUploadFile } from '../api/images';
-import { patchLocalNoteImages } from '../db/noteQueries';
+import { patchLocalNoteImages, isNotePendingCreate } from '../db/noteQueries';
 import { enqueueOperation, rethrowIfNotQueueable } from '../db/syncQueue';
 import { enqueueImageUpload } from '../db/imageUploadQueue';
 import { deleteCachedNoteImage } from '../utils/noteImageCache';
@@ -50,7 +50,14 @@ export function useUploadNoteImage() {
     }): Promise<UploadNoteImageResult> => {
       assertSwitchWriteAllowed();
 
-      if (isLocalModeActive() || isOnlineWriteAllowed(isConnected)) {
+      // While the note's own create is still queued (#475) it doesn't exist on
+      // the server, so a direct upload would 404 — permanent, so the picked file
+      // would be dropped rather than queued. Take the offline upload queue, which
+      // waits for the create to drain before retrying (drainImageUploadQueue).
+      // Local mode has no server and never marks a note pending, so it is
+      // unaffected and still uploads (terminally) below.
+      const pendingCreate = await isNotePendingCreate(db, noteId);
+      if (isLocalModeActive() || (isOnlineWriteAllowed(isConnected) && !pendingCreate)) {
         try {
           const image = await uploadNoteImage(noteId, file, onProgress, signal);
           // The SSE echo of this upload is dropped for the client that triggered

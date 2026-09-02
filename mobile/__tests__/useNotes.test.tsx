@@ -1,7 +1,7 @@
 import React from 'react';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useCreateNote, useUpdateNote, useDeleteNote, useDuplicateNote, useConvertNoteType, useCreateNoteItem, useToggleNoteItemCompleted, useUncheckAllItems, useDeleteCompletedItems, useShareNote, useUnshareNote, NoteConversionCapError } from '../src/hooks/useNotes';
+import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useDuplicateNote, useConvertNoteType, useCreateNoteItem, useUpdateNoteItem, useDeleteNoteItem, useReorderNoteItems, useToggleNoteItemCompleted, useUncheckAllItems, useDeleteCompletedItems, useShareNote, useUnshareNote, NoteConversionCapError } from '../src/hooks/useNotes';
 import { VALIDATION } from '@jot/shared';
 import { noteLocalQueryKey, notesLocalQueryKey, notesLocalQueryScopeKey } from '../src/hooks/queryKeys';
 import * as notesApi from '../src/api/notes';
@@ -363,6 +363,175 @@ describe('useNotes hooks', () => {
       expect(mockNoteQueries.markNotePendingCreate).toHaveBeenCalledWith(
         expect.anything(),
         'ClientNoteId000000000A',
+      );
+    });
+  });
+
+  // A note created offline carries a server-valid id (#475) but its create is
+  // still queued: the server doesn't know the note yet. Every write to it must
+  // queue FIFO behind that create instead of calling online, or the direct call
+  // 404s — a *permanent* status, so the edit is dropped rather than retried, and
+  // an error banner is shown. This is the note-editor cascade from indenting an
+  // item moments after the note first autosaved offline. The guard already
+  // covered duplicate/share/unshare/labels; these cover the note-content,
+  // list-item, and lifecycle mutations that were missing it.
+  describe('pending-create guard (#475): writes queue instead of calling online', () => {
+    const PENDING_ID = 'PendingNote000000000AA';
+    const pendingListNote = {
+      id: PENDING_ID, title: 'L', content: '', note_type: 'list', version: 1,
+      color: '#ffffff', pinned: false, archived: false, position: 0,
+      checked_items_collapsed: false, is_shared: false, deleted_at: null,
+      user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
+      items: [{ id: 'i1', note_id: PENDING_ID, text: 'a', completed: false, position: 0, parent_id: null, assigned_to: '', created_at: '', updated_at: '' }],
+    };
+
+    beforeEach(() => {
+      // The note is online-reachable in principle, but pending-create — so the
+      // guard, not connectivity, is what must divert the write to the queue.
+      mockUseNetworkStatus.mockReturnValue({ isConnected: true });
+      mockNoteQueries.isNotePendingCreate.mockResolvedValue(true);
+      // Mutations that read the note locally need it present, else their offline
+      // path throws "not found" before it can enqueue.
+      mockNoteQueries.getLocalNote.mockResolvedValue(pendingListNote as never);
+    });
+
+    // Restore the factory defaults so a persistent mockResolvedValue here can't
+    // leak "pending / present" into unrelated tests later in the file.
+    afterEach(() => {
+      mockNoteQueries.isNotePendingCreate.mockResolvedValue(false);
+      mockNoteQueries.getLocalNote.mockResolvedValue(null);
+    });
+
+    it('useUpdateNote queues a content edit', async () => {
+      const { result } = await renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ id: PENDING_ID, data: { content: 'New body' } });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockNotesApi.updateNote).not.toHaveBeenCalled();
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ operation: 'update', endpoint: `/notes/${PENDING_ID}`, method: 'PATCH' }),
+      );
+    });
+
+    it('useConvertNoteType queues the conversion', async () => {
+      const { result } = await renderHook(() => useConvertNoteType(), { wrapper: createWrapper() });
+      await result.current.mutateAsync(PENDING_ID);
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockNotesApi.convertNoteType).not.toHaveBeenCalled();
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ operation: 'convertNoteType', endpoint: `/notes/${PENDING_ID}/convert` }),
+      );
+    });
+
+    it('useCreateNoteItem queues the new item', async () => {
+      const { result } = await renderHook(() => useCreateNoteItem(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ noteId: PENDING_ID, item: { id: 'i2', text: 'New', position: 1 } });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockNotesApi.createNoteItem).not.toHaveBeenCalled();
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ operation: 'createItem', endpoint: `/notes/${PENDING_ID}/items` }),
+      );
+    });
+
+    // The actual reported action: indenting an item is a parent_id PATCH.
+    it('useUpdateNoteItem queues an item edit (the indent that triggered the bug)', async () => {
+      const { result } = await renderHook(() => useUpdateNoteItem(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ noteId: PENDING_ID, itemId: 'i1', data: { parent_id: 'i0' } });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockNotesApi.updateNoteItem).not.toHaveBeenCalled();
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ operation: 'updateItem', endpoint: `/notes/${PENDING_ID}/items/i1`, method: 'PATCH' }),
+      );
+    });
+
+    it('useDeleteNoteItem queues the deletion', async () => {
+      const { result } = await renderHook(() => useDeleteNoteItem(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ noteId: PENDING_ID, itemId: 'i1' });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockNotesApi.deleteNoteItem).not.toHaveBeenCalled();
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ operation: 'deleteItem', endpoint: `/notes/${PENDING_ID}/items/i1`, method: 'DELETE' }),
+      );
+    });
+
+    it('useReorderNoteItems queues the reorder', async () => {
+      const { result } = await renderHook(() => useReorderNoteItems(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ noteId: PENDING_ID, itemIds: ['i1'] });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockNotesApi.reorderNoteItems).not.toHaveBeenCalled();
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ operation: 'reorderItems', endpoint: `/notes/${PENDING_ID}/items/reorder` }),
+      );
+    });
+
+    it('useToggleNoteItemCompleted queues the toggle', async () => {
+      const { result } = await renderHook(() => useToggleNoteItemCompleted(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ noteId: PENDING_ID, itemId: 'i1', completed: true });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockNotesApi.toggleItemCompleted).not.toHaveBeenCalled();
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ operation: 'toggleItemCompleted', endpoint: `/notes/${PENDING_ID}/items/i1/toggle-completed` }),
+      );
+    });
+
+    it('useUncheckAllItems queues the bulk uncheck', async () => {
+      const { result } = await renderHook(() => useUncheckAllItems(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ noteId: PENDING_ID, itemIds: ['i1'] });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockNotesApi.uncheckAllItems).not.toHaveBeenCalled();
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ operation: 'uncheckAllItems', endpoint: `/notes/${PENDING_ID}/items/set-completed` }),
+      );
+    });
+
+    it('useDeleteCompletedItems queues the bulk delete', async () => {
+      const { result } = await renderHook(() => useDeleteCompletedItems(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ noteId: PENDING_ID, itemIds: ['i1'] });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockNotesApi.deleteCompletedItems).not.toHaveBeenCalled();
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ operation: 'deleteCompletedItems', endpoint: `/notes/${PENDING_ID}/items/delete` }),
+      );
+    });
+
+    it('useDeleteNote queues the trash', async () => {
+      const { result } = await renderHook(() => useDeleteNote(), { wrapper: createWrapper() });
+      await result.current.mutateAsync(PENDING_ID);
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockNotesApi.deleteNote).not.toHaveBeenCalled();
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ operation: 'delete', endpoint: `/notes/${PENDING_ID}`, method: 'DELETE' }),
+      );
+    });
+
+    it('useRestoreNote queues the restore', async () => {
+      const { result } = await renderHook(() => useRestoreNote(), { wrapper: createWrapper() });
+      await result.current.mutateAsync(PENDING_ID);
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockNotesApi.restoreNote).not.toHaveBeenCalled();
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ operation: 'restore', endpoint: `/notes/${PENDING_ID}/restore` }),
+      );
+    });
+
+    it('usePermanentDeleteNote queues the permanent delete', async () => {
+      const { result } = await renderHook(() => usePermanentDeleteNote(), { wrapper: createWrapper() });
+      await result.current.mutateAsync(PENDING_ID);
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockNotesApi.permanentDeleteNote).not.toHaveBeenCalled();
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ operation: 'permanentDelete', endpoint: `/notes/${PENDING_ID}?permanent=true` }),
       );
     });
   });

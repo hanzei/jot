@@ -389,7 +389,10 @@ export function useUpdateNote() {
         await updateLocalNote(db, id, data);
       }
 
-      if (isOnlineWriteAllowed(isConnected)) {
+      // Queue instead of calling online while the note's create is still pending:
+      // it drains FIFO first (#475), and a direct call would 404 and drop the edit.
+      const pendingCreate = await isNotePendingCreate(db, id);
+      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
           // Online: gate on the version we currently hold locally so the server
           // can reject a write that raced a concurrent edit on another device
@@ -568,7 +571,10 @@ export function useConvertNoteType() {
       }
       const data = buildConvertNoteTypeRequest(existing);
 
-      if (isOnlineWriteAllowed(isConnected)) {
+      // Queue instead of calling online while the note's create is still pending:
+      // it drains FIFO first (#475), and a direct call would 404 and drop the edit.
+      const pendingCreate = await isNotePendingCreate(db, id);
+      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
           const convertedNote = await convertNoteType(id, { ...data, base_version: existing.version });
           await saveNote(db, convertedNote);
@@ -635,7 +641,10 @@ export function useCreateNoteItem() {
         parent_id: itemWithId.parent_id ?? null,
         assigned_to: itemWithId.assigned_to ?? '',
       };
-      if (isOnlineWriteAllowed(isConnected)) {
+      // Queue instead of calling online while the note's create is still pending:
+      // it drains FIFO first (#475), and a direct call would 404 and drop the edit.
+      const pendingCreate = await isNotePendingCreate(db, noteId);
+      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
           await createNoteItem(noteId, itemWithId);
           await createLocalItem(db, noteId, local);
@@ -668,7 +677,10 @@ export function useUpdateNoteItem() {
   return useMutation({
     mutationFn: async ({ noteId, itemId, data }: { noteId: string; itemId: string; data: PatchNoteItemRequest }): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isOnlineWriteAllowed(isConnected)) {
+      // Queue instead of calling online while the note's create is still pending:
+      // it drains FIFO first (#475), and a direct call would 404 and drop the edit.
+      const pendingCreate = await isNotePendingCreate(db, noteId);
+      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
           await updateNoteItem(noteId, itemId, data);
           await patchLocalItem(db, noteId, itemId, data);
@@ -701,7 +713,10 @@ export function useDeleteNoteItem() {
   return useMutation({
     mutationFn: async ({ noteId, itemId }: { noteId: string; itemId: string }): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isOnlineWriteAllowed(isConnected)) {
+      // Queue instead of calling online while the note's create is still pending:
+      // it drains FIFO first (#475), and a direct call would 404 and drop the edit.
+      const pendingCreate = await isNotePendingCreate(db, noteId);
+      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
           await deleteNoteItem(noteId, itemId);
           await deleteLocalItem(db, noteId, itemId);
@@ -733,7 +748,10 @@ export function useReorderNoteItems() {
   return useMutation({
     mutationFn: async ({ noteId, itemIds }: { noteId: string; itemIds: string[] }): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isOnlineWriteAllowed(isConnected)) {
+      // Queue instead of calling online while the note's create is still pending:
+      // it drains FIFO first (#475), and a direct call would 404 and drop the edit.
+      const pendingCreate = await isNotePendingCreate(db, noteId);
+      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
           await reorderNoteItems(noteId, itemIds);
           await reorderLocalItems(db, noteId, itemIds);
@@ -766,7 +784,11 @@ export function useDeleteNote() {
   return useMutation({
     mutationFn: async (id: string): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isOnlineWriteAllowed(isConnected)) {
+      // An offline-created note (#475) drains its create FIFO before this delete,
+      // so queue rather than calling online against a note the server doesn't know
+      // yet — a direct call would 404 (permanent) and surface as an error.
+      const pendingCreate = await isNotePendingCreate(db, id);
+      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
           await deleteNote(id);
           await markLocalNoteDeleted(db, id);
@@ -891,7 +913,11 @@ export function useRestoreNote() {
   return useMutation({
     mutationFn: async (id: string): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isOnlineWriteAllowed(isConnected)) {
+      // An offline-created note (#475) drains its create FIFO before this restore,
+      // so queue rather than calling online against a note the server doesn't know
+      // yet — a direct call would 404 (permanent) and surface as an error.
+      const pendingCreate = await isNotePendingCreate(db, id);
+      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
           await restoreNote(id);
           await markLocalNoteRestored(db, id);
@@ -925,7 +951,11 @@ export function usePermanentDeleteNote() {
   return useMutation({
     mutationFn: async (id: string): Promise<void> => {
       assertSwitchWriteAllowed();
-      if (isOnlineWriteAllowed(isConnected)) {
+      // An offline-created note (#475) drains its create FIFO before this delete,
+      // so queue rather than calling online against a note the server doesn't know
+      // yet — a direct call would 404 (permanent) and surface as an error.
+      const pendingCreate = await isNotePendingCreate(db, id);
+      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
           await permanentDeleteNote(id);
           await permanentDeleteLocalNote(db, id);
@@ -1211,7 +1241,10 @@ export function useToggleNoteItemCompleted() {
       // optimistic cache for the whole flight, so a re-read is a no-op.
       const cascadeIds = await applyToggleToLocalItems(db, noteId, itemId, completed);
 
-      if (isOnlineWriteAllowed(isConnected)) {
+      // Queue instead of calling online while the note's create is still pending:
+      // it drains FIFO first (#475), and a direct call would 404 and drop the edit.
+      const pendingCreate = await isNotePendingCreate(db, noteId);
+      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
           const serverItems = await toggleItemCompleted(noteId, itemId, completed);
           for (const item of serverItems) {
@@ -1280,7 +1313,10 @@ export function useUncheckAllItems() {
       // still-checked rows and undo the optimistic uncheck on screen.
       await setLocalItemsCompleted(db, noteId, itemIds, false);
 
-      if (isOnlineWriteAllowed(isConnected)) {
+      // Queue instead of calling online while the note's create is still pending:
+      // it drains FIFO first (#475), and a direct call would 404 and drop the edit.
+      const pendingCreate = await isNotePendingCreate(db, noteId);
+      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
           const serverItems = await uncheckAllItems(noteId, itemIds);
           // The server returns the note's full, authoritative item list, so
@@ -1354,7 +1390,10 @@ export function useDeleteCompletedItems() {
     mutationFn: async ({ noteId, itemIds }: { noteId: string; itemIds: string[] }): Promise<NoteItem[]> => {
       assertSwitchWriteAllowed();
       if (itemIds.length === 0) return [];
-      if (isOnlineWriteAllowed(isConnected)) {
+      // Queue instead of calling online while the note's create is still pending:
+      // it drains FIFO first (#475), and a direct call would 404 and drop the edit.
+      const pendingCreate = await isNotePendingCreate(db, noteId);
+      if (isOnlineWriteAllowed(isConnected) && !pendingCreate) {
         try {
           const serverItems = await deleteCompletedItems(noteId, itemIds);
           // The server returns the note's full, authoritative remaining item
