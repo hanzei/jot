@@ -46,6 +46,7 @@ import {
   generateClientNoteId,
   markNotePendingCreate,
   isNotePendingCreate,
+  getPendingCreateNoteIds,
   getLocalNotePositions,
   createLocalItem,
   patchLocalItem,
@@ -1030,10 +1031,32 @@ export function useReorderNotes() {
     mutationFn: async (noteIds: string[]): Promise<void> => {
       assertSwitchWriteAllowed();
 
+      // Queue instead of calling online when *any* note in the batch is still
+      // pending-create (#475): the server reorders in one transaction and a
+      // pending note has no note_user_state row yet, so it rejects the whole
+      // request with 403 (permanent) and rolls back — dropping every note's
+      // position, not just the pending one's (#956). The queued reorder drains
+      // FIFO after the create lands, and the create carries the note's position,
+      // so the brief gap before the reorder replays is harmless.
+      const pendingIds = await getPendingCreateNoteIds(db);
+      const batchHasPending = noteIds.some((id) => pendingIds.has(id));
+
       // Snapshot the current positions before touching them, so a permanently
       // rejected reorder can put them back (the new positions are the array
       // indices below, but the old ones are whatever they were).
       const previousPositions = await getLocalNotePositions(db, noteIds);
+
+      // Restore the pre-drag positions in SQLite. Every terminal-failure path
+      // below calls this before throwing, mirroring the cache rollback in
+      // onError — otherwise the pre-flight write below would outlive the failed
+      // reorder, and onSettled's invalidation would refetch that phantom order
+      // straight back out of SQLite. This runs before the throw, so the local
+      // rows are already restored by the time onError/onSettled fire.
+      const restorePositions = async (): Promise<void> => {
+        for (const [noteId, position] of previousPositions) {
+          await updateLocalNote(db, noteId, { position });
+        }
+      };
 
       // Write the new positions to SQLite up front, before the request goes out
       // (same reasoning as useToggleNoteItemCompleted / #945): the list query is
@@ -1047,33 +1070,37 @@ export function useReorderNotes() {
         await updateLocalNote(db, noteId, { position: i });
       }
 
-      if (isOnlineWriteAllowed(isConnected)) {
+      if (isOnlineWriteAllowed(isConnected) && !batchHasPending) {
         try {
           await reorderNotes(noteIds);
           return;
         } catch (err) {
           // Transient failure: fall through to the offline path so the reorder
           // is queued for replay instead of being lost. A permanent one restores
-          // the pre-drag positions, mirroring the cache rollback in onError —
-          // otherwise the pre-flight write above would outlive the failed reorder.
+          // the pre-drag positions.
           try {
             rethrowIfNotQueueable(err);
           } catch (permanent) {
-            for (const [noteId, position] of previousPositions) {
-              await updateLocalNote(db, noteId, { position });
-            }
+            await restorePositions();
             throw permanent;
           }
         }
       }
       // Offline (or a transient online failure): the new positions are already
-      // written, so only the replay op is left to enqueue.
-      await enqueueOperation(db, {
-        operation: 'reorder',
-        endpoint: '/notes/reorder',
-        method: 'POST',
-        body: { note_ids: noteIds } as Record<string, unknown>,
-      });
+      // written, so only the replay op is left to enqueue. If enqueueing fails
+      // the reorder can never be replayed, so restore the pre-drag positions too
+      // rather than leave the local rows holding an order that will never sync.
+      try {
+        await enqueueOperation(db, {
+          operation: 'reorder',
+          endpoint: '/notes/reorder',
+          method: 'POST',
+          body: { note_ids: noteIds } as Record<string, unknown>,
+        });
+      } catch (err) {
+        await restorePositions();
+        throw err;
+      }
     },
     onMutate: async (noteIds: string[]) => {
       // Cancel in-flight list reads before re-sorting the cache, so a refetch
