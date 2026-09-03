@@ -129,6 +129,28 @@ describe('useReorderNotes', () => {
     expect(positions.get('a')).toBe(1);
   });
 
+  // If enqueueing the replay op fails, the reorder can never sync, so the
+  // pre-flight local write must be undone rather than left as a phantom order
+  // that onSettled's refetch would pull straight back out of SQLite (#957).
+  it('restores the pre-drag positions when enqueueing the offline op fails', async () => {
+    const db = getDefaultTestDb();
+    await saveNotes(db, [makeTextNote({ id: 'a', position: 0 }), makeTextNote({ id: 'b', position: 1 })]);
+
+    // Force the offline path (transient network failure) and make the enqueue
+    // throw by removing the table it writes to.
+    mockNotesApi.reorderNotes.mockRejectedValueOnce(makeAxiosError(503));
+    await db.execAsync('DROP TABLE sync_queue');
+
+    const { result } = await renderHook(() => useReorderNotes(), { wrapper: createWrapper() });
+    await result.current.mutateAsync(['b', 'a']).catch(() => {});
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    const positions = await getLocalNotePositions(db, ['a', 'b']);
+    expect(positions.get('a')).toBe(0);
+    expect(positions.get('b')).toBe(1);
+  });
+
   it('restores the pre-drag positions on a permanent failure', async () => {
     const db = getDefaultTestDb();
     await saveNotes(db, [makeTextNote({ id: 'a', position: 0 }), makeTextNote({ id: 'b', position: 1 })]);
