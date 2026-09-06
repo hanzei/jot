@@ -6,6 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   Animated,
+  Platform,
   type GestureResponderEvent,
   type NativeSyntheticEvent,
   type TextLayoutEventData,
@@ -183,6 +184,18 @@ function ListItem({
   // input is back in flow. See there for why the focus cannot happen in the tap
   // handler itself.
   const focusAfterSwapRef = useRef(false);
+  // Android delivers `onKeyPress` *after* the edit is applied, so on the
+  // keystroke that clears a row's last character the handler already sees an
+  // empty `text` and cannot tell it apart from a backspace on an
+  // already-empty row — which is what made clearing the last character delete
+  // the whole row in one press. This arms on that first empty keystroke and
+  // only removes the row on the *next* backspace, so clearing the last
+  // character leaves an empty row instead. It starts armed for a row that
+  // mounts empty (e.g. a freshly added item), so backspacing that removes it
+  // on the first press. onChangeText disarms it on every edit; the Backspace
+  // handler re-arms it once the row is empty. iOS delivers `onKeyPress` before
+  // the edit, so it keeps the simpler pre-edit `text === ''` check.
+  const emptyBackspaceArmedRef = useRef(text === '');
 
   useEffect(() => {
     return () => {
@@ -421,6 +434,9 @@ function ListItem({
                   selection={forcedSelection ?? undefined}
                   onChangeText={(newText) => {
                     onChangeText?.(newText);
+                    // Any edit disarms the empty-backspace guard; the Backspace
+                    // handler re-arms it once the row is empty (see the ref).
+                    emptyBackspaceArmedRef.current = false;
                     // Approximate the cursor moving to the end of freshly typed text;
                     // onSelectionChange refines this once the native event arrives.
                     selectionRef.current = { start: newText.length, end: newText.length };
@@ -463,9 +479,21 @@ function ListItem({
                   textAlignVertical="top"
                   inputAccessoryViewID={inputAccessoryViewID}
                   onKeyPress={({ nativeEvent }) => {
-                    if (nativeEvent.key === 'Backspace' && text === '') {
-                      onBackspaceOnEmpty?.();
+                    if (nativeEvent.key !== 'Backspace') return;
+                    if (Platform.OS === 'android') {
+                      // `text` is the post-edit value here (see
+                      // emptyBackspaceArmedRef): only an already-empty row
+                      // deletes, and the keystroke that just emptied the row
+                      // arms it for next time instead.
+                      if (text !== '') return;
+                      if (emptyBackspaceArmedRef.current) {
+                        onBackspaceOnEmpty?.();
+                      } else {
+                        emptyBackspaceArmedRef.current = true;
+                      }
+                      return;
                     }
+                    if (text === '') onBackspaceOnEmpty?.();
                   }}
                   testID="list-item-text"
                 />

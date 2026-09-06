@@ -1,7 +1,7 @@
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, act } from '@testing-library/react-native';
 import type { TestInstance } from 'test-renderer';
-import { Animated, StyleSheet, type TextInput } from 'react-native';
+import { Animated, Platform, StyleSheet, type TextInput } from 'react-native';
 import { VALIDATION } from '@jot/shared';
 import ListItem from '../src/components/ListItem';
 import * as layoutAnimation from '../src/utils/layoutAnimation';
@@ -445,6 +445,96 @@ describe('ListItem', () => {
     await fireEvent(getByTestId('list-item-text'), 'submitEditing');
 
     expect(onSubmitEditing).toHaveBeenCalledWith('helloworld'.length);
+  });
+
+  describe('backspace on an empty row', () => {
+    const originalPlatform = Platform.OS;
+    afterEach(() => {
+      Platform.OS = originalPlatform;
+    });
+
+    // Mirrors the note editor: the row's text is controlled by the parent and
+    // updated from onChangeText, so a keystroke that clears the last character
+    // re-renders the row with an empty `text` before the next event.
+    function Controlled({
+      initial,
+      onBackspaceOnEmpty,
+    }: {
+      initial: string;
+      onBackspaceOnEmpty: () => void;
+    }) {
+      const [text, setText] = React.useState(initial);
+      return (
+        <ListItem
+          text={text}
+          completed={false}
+          onChangeText={setText}
+          onBackspaceOnEmpty={onBackspaceOnEmpty}
+        />
+      );
+    }
+
+    const backspace = async (input: TestInstance) => {
+      await act(async () => {
+        await fireEvent(input, 'keyPress', { nativeEvent: { key: 'Backspace' } });
+      });
+    };
+
+    it('on Android, clearing the last character leaves an empty row; a second backspace removes it', async () => {
+      // Android delivers onKeyPress *after* the edit, so the keystroke that
+      // clears "a" already reports an empty `text`.
+      Platform.OS = 'android';
+      const onBackspaceOnEmpty = jest.fn();
+      const { getByTestId } = await render(
+        <Controlled initial="a" onBackspaceOnEmpty={onBackspaceOnEmpty} />,
+      );
+      const input = getByTestId('list-item-text');
+
+      // Keystroke 1: the native edit fires first (clearing the char), then the
+      // key event — the row is now empty but must not be removed yet.
+      await act(async () => {
+        await fireEvent.changeText(input, '');
+      });
+      await backspace(input);
+      expect(onBackspaceOnEmpty).not.toHaveBeenCalled();
+
+      // Keystroke 2: backspace on the already-empty row removes it.
+      await backspace(input);
+      expect(onBackspaceOnEmpty).toHaveBeenCalledTimes(1);
+    });
+
+    it('on Android, removes a row that mounts already empty on the first backspace', async () => {
+      Platform.OS = 'android';
+      const onBackspaceOnEmpty = jest.fn();
+      const { getByTestId } = await render(
+        <Controlled initial="" onBackspaceOnEmpty={onBackspaceOnEmpty} />,
+      );
+
+      await backspace(getByTestId('list-item-text'));
+      expect(onBackspaceOnEmpty).toHaveBeenCalledTimes(1);
+    });
+
+    it('on iOS, clearing the last character leaves an empty row; a second backspace removes it', async () => {
+      // iOS delivers onKeyPress *before* the edit, so the clearing keystroke
+      // still reports the pre-edit "a".
+      Platform.OS = 'ios';
+      const onBackspaceOnEmpty = jest.fn();
+      const { getByTestId } = await render(
+        <Controlled initial="a" onBackspaceOnEmpty={onBackspaceOnEmpty} />,
+      );
+      const input = getByTestId('list-item-text');
+
+      // Keystroke 1: key event first (text still "a"), then the edit clears it.
+      await backspace(input);
+      expect(onBackspaceOnEmpty).not.toHaveBeenCalled();
+      await act(async () => {
+        await fireEvent.changeText(input, '');
+      });
+
+      // Keystroke 2: backspace on the empty row removes it.
+      await backspace(input);
+      expect(onBackspaceOnEmpty).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('checkbox pop animation', () => {
