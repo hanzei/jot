@@ -665,6 +665,9 @@ describe('AuthContext', () => {
     });
     expect(getByTestId('authenticated').props.children).toBe('false');
 
+    // A session appeared after mount (e.g. a server switch elsewhere) — revalidateSession
+    // now guards on a stored token, so it must resolve one to reach auth.me().
+    mockGetStoredSession.mockResolvedValue('token');
     const updatedResponse = { user: { ...mockUser, username: 'revalidated' }, settings: mockSettings };
     mockAuth.me.mockResolvedValue(updatedResponse);
     expect(revalidateFn).not.toBeNull();
@@ -676,6 +679,34 @@ describe('AuthContext', () => {
     expect(getByTestId('authenticated').props.children).toBe('true');
     expect(getByTestId('username').props.children).toBe('revalidated');
     expect(mockCacheAuthProfile).toHaveBeenCalledWith(updatedResponse);
+    await unmount();
+  });
+
+  it('revalidateSession resolves false and never calls auth.me() with no stored session', async () => {
+    mockGetStoredSession.mockResolvedValue(null);
+
+    const { getByTestId, unmount } = await render(
+      <AuthProvider>
+        <RevalidateConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('loading').props.children).toBe('false');
+    });
+    expect(getByTestId('authenticated').props.children).toBe('false');
+    expect(revalidateFn).not.toBeNull();
+
+    mockAuth.me.mockClear();
+
+    let result: boolean | undefined;
+    await act(async () => {
+      result = await revalidateFn!();
+    });
+
+    expect(result).toBe(false);
+    expect(mockAuth.me).not.toHaveBeenCalled();
+    expect(getByTestId('authenticated').props.children).toBe('false');
     await unmount();
   });
 
