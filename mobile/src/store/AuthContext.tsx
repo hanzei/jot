@@ -304,6 +304,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (isLocalMode) {
       return true;
     }
+    // Nothing to revalidate when signed out: without this, a cold start or
+    // foreground with no stored session still issues an authenticated GET
+    // /me, which 401s and manufactures a spurious "you were signed out"
+    // banner (issue #962). getStoredSession() is memoised, so this costs
+    // nothing on the hot path where a session does exist.
+    const token = await getStoredSession();
+    if (!token) {
+      return false;
+    }
     try {
       const response = await auth.me();
       setUser(response.user);
