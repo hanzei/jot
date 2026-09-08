@@ -22,9 +22,15 @@ running on the host is `http://10.0.2.2:8080` — `localhost` there is the
 emulator itself.
 
 **Build for the ABI the target actually runs.** `.github/workflows/mobile-apk.yml`
-builds `arm64-v8a`, which is right for a phone and will not install on an
-x86_64 emulator; pass `-PreactNativeArchitectures=x86_64` for that. The Gradle
-plugin's `-P` override takes precedence over `gradle.properties`.
+builds `arm64-v8a`, which is right for a phone. Whether that APK also runs on an
+x86_64 emulator depends on the system image: many current ones (including
+`android-35;google_apis;x86_64`) advertise `ro.product.cpu.abilist=x86_64,arm64-v8a`
+and translate arm64 native code, while others reject the install outright. Check
+the target with `adb shell getprop ro.product.cpu.abilist`.
+
+Translated native code is slower and is not the code path a device runs, so for
+emulator work build the ABI natively: `-PreactNativeArchitectures=x86_64`. The
+Gradle plugin's `-P` override takes precedence over `gradle.properties`.
 
 **JS and TS changes hot-reload — do not rebuild for them.** A native rebuild is
 several minutes and is only needed when native code changes: a new native
@@ -34,6 +40,12 @@ module, a config plugin, or an Expo SDK bump.
 but also **rewrites this package's `package.json`**, changing the `android` and
 `ios` scripts from `expo start --*` to `expo run:*`. That file is tracked —
 revert it unless the change is intended.
+
+`android/` is generated output, not source: CI rebuilds it from scratch with
+`expo prebuild --clean` on every run, so hand-edits there are silently
+overwritten and never reach a release build. Native customization belongs in a
+config plugin (`app.json`'s `plugins`), which is how `expo-share-intent` adds
+its intent filters.
 
 ## Driving the UI from a terminal
 
@@ -67,6 +79,11 @@ files, including `files/SQLite/` — so `notes`, `sync_queue`,
 `pending_image_uploads`, and `dead_letter` can be inspected directly rather than
 inferred. Copy all three of `.db`, `.db-shm`, and `.db-wal`: with WAL enabled
 the `.db` alone is usually empty.
+
+Those three files are copied one at a time, so a running app can commit between
+them and leave the snapshot inconsistent. Stop it first —
+`adb shell am force-stop com.jot.app` — whenever the answer has to be exact;
+for a quick look at an idle app the live copy is usually fine.
 
 ## i18n / Translations
 
