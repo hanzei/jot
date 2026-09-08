@@ -1,5 +1,90 @@
 # Mobile Project Instructions
 
+## Running the app on a device
+
+`npm test` and `npm run typecheck` do not tell you whether a screen renders.
+For anything user-facing, run it — on an emulator or a physical device — before
+calling it done.
+
+**Expo Go does not work.** The app depends on native modules Expo Go does not
+bundle — `expo-share-intent` (also a config plugin, see `app.json`) and
+`expo-quick-actions` among them — so it needs a dev build (`npx expo
+run:android`, or an EAS build installed with `adb install`).
+
+Once a dev build is installed, Metro serves JS over `adb reverse tcp:8081
+tcp:8081`. That forward is per-adb-connection state and disappears whenever the
+device or the adb server restarts; when it is missing the app opens to a **blank
+white screen with no error in logcat**, which reads like a broken build and is
+not one. Re-apply it before investigating anything else.
+
+`10.0.2.2` is the host loopback as seen from an Android emulator, so a server
+running on the host is `http://10.0.2.2:8080` — `localhost` there is the
+emulator itself.
+
+**Build for the ABI the target actually runs.** `.github/workflows/mobile-apk.yml`
+builds `arm64-v8a`, which is right for a phone. Whether that APK also runs on an
+x86_64 emulator depends on the system image: many current ones (including
+`android-35;google_apis;x86_64`) advertise `ro.product.cpu.abilist=x86_64,arm64-v8a`
+and translate arm64 native code, while others reject the install outright. Check
+the target with `adb shell getprop ro.product.cpu.abilist`.
+
+Translated native code is slower and is not the code path a device runs, so for
+emulator work build the ABI natively: `-PreactNativeArchitectures=x86_64`. The
+Gradle plugin's `-P` override takes precedence over `gradle.properties`.
+
+**JS and TS changes hot-reload — do not rebuild for them.** A native rebuild is
+several minutes and is only needed when native code changes: a new native
+module, a config plugin, or an Expo SDK bump.
+
+`npx expo prebuild` regenerates `android/` (gitignored, so that part is safe)
+but also **rewrites this package's `package.json`**, changing the `android` and
+`ios` scripts from `expo start --*` to `expo run:*`. That file is tracked —
+revert it unless the change is intended.
+
+`android/` is generated output, not source: CI rebuilds it from scratch with
+`expo prebuild --clean` on every run, so hand-edits there are silently
+overwritten and never reach a release build. Native customization belongs in a
+config plugin (`app.json`'s `plugins`), which is how `expo-share-intent` adds
+its intent filters.
+
+## Driving the UI from a terminal
+
+Screens set `testID`s, and Android surfaces them as `resource-id`. That makes
+the UI scriptable by name instead of by pixel guessing, which is how a change
+gets verified without a human at the screen:
+
+```bash
+adb shell uiautomator dump /sdcard/ui.xml
+adb shell cat /sdcard/ui.xml | sed 's/></>\n</g' \
+  | sed -nE 's/.*text="([^"]*)".*resource-id="([^"]*)".*bounds="([^"]*)".*/\2\t\1\t\3/p'
+
+adb exec-out screencap -p > /tmp/screen.png
+adb shell input tap <x> <y>
+adb logcat -d | grep -E "ReactNativeJS|AndroidRuntime|FATAL"
+```
+
+Note the `sed`, not `tr '>' '>\n'`: `tr` maps character-to-character and
+truncates the longer set, so that spelling splits nothing and every later filter
+silently matches against the whole document.
+
+**Re-dump between every step.** Coordinates are stale as soon as the layout
+moves, and opening the soft keyboard moves every field on the screen — a tap
+computed before the keyboard appeared lands somewhere else afterwards.
+
+Keep adding `testID`s to new interactive elements. They cost nothing at runtime
+and they are what makes a screen debuggable from outside.
+
+On a debug build, `adb shell run-as com.jot.app` reaches the app's private
+files, including `files/SQLite/` — so `notes`, `sync_queue`,
+`pending_image_uploads`, and `dead_letter` can be inspected directly rather than
+inferred. Copy all three of `.db`, `.db-shm`, and `.db-wal`: with WAL enabled
+the `.db` alone is usually empty.
+
+Those three files are copied one at a time, so a running app can commit between
+them and leave the snapshot inconsistent. Stop it first —
+`adb shell am force-stop com.jot.app` — whenever the answer has to be exact;
+for a quick look at an idle app the live copy is usually fine.
+
 ## i18n / Translations
 
 When adding new i18n keys to `src/i18n/locales/en.json`, you **must** also add
