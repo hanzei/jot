@@ -180,6 +180,7 @@
     "failedUpdateLanguage": "Falha ao atualizar o idioma",
     "failedUpdateTheme": "Falha ao atualizar o tema",
     "sessionsSection": "Sessões ativas",
+    "sessionsDescription": "Gerencie suas sessões de login ativas em todos os dispositivos.",
     "sessionsLoadFailed": "Falha ao carregar sessões",
     "sessionsBrowserOnOS": "{{browser}} em {{os}}",
     "sessionsCurrent": "Atual",

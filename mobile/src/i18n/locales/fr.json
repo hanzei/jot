@@ -157,6 +157,7 @@
     "failedUpdateLanguage": "Impossible de mettre à jour la langue",
     "failedUpdateTheme": "Impossible de mettre à jour le thème",
     "sessionsSection": "Sessions actives",
+    "sessionsDescription": "Gérez vos sessions de connexion actives sur tous vos appareils.",
     "sessionsLoadFailed": "Impossible de charger les sessions",
     "sessionsBrowserOnOS": "{{browser}} sur {{os}}",
     "sessionsCurrent": "Actuelle",

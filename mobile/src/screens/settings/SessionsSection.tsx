@@ -108,7 +108,7 @@ export default function SessionsSection() {
     <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('settings.sessionsSection')}</Text>
       <Text style={[styles.sectionDescription, { color: colors.textSecondary }]}>
-        {t('settings.sectionDescription')}
+        {t('settings.sessionsDescription')}
       </Text>
       {sessionsLoading ? (
         <ActivityIndicator size="small" color={colors.primary} style={styles.sectionLoader} />

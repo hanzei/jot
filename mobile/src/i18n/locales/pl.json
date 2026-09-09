@@ -157,6 +157,7 @@
     "failedUpdateLanguage": "Nie udało się zaktualizować języka",
     "failedUpdateTheme": "Nie udało się zaktualizować motywu",
     "sessionsSection": "Aktywne sesje",
+    "sessionsDescription": "Zarządzaj aktywnymi sesjami logowania na wszystkich urządzeniach.",
     "sessionsLoadFailed": "Nie udało się załadować sesji",
     "sessionsBrowserOnOS": "{{browser}} na {{os}}",
     "sessionsCurrent": "Bieżąca",

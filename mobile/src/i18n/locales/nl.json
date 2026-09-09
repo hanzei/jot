@@ -180,6 +180,7 @@
     "failedUpdateLanguage": "Taal bijwerken mislukt",
     "failedUpdateTheme": "Thema bijwerken mislukt",
     "sessionsSection": "Actieve sessies",
+    "sessionsDescription": "Beheer je actieve inlogsessies op alle apparaten.",
     "sessionsLoadFailed": "Sessies laden mislukt",
     "sessionsBrowserOnOS": "{{browser}} op {{os}}",
     "sessionsCurrent": "Huidig",
