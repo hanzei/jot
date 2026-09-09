@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Checks that all locale translation files have the same keys as en.json,
-// and that every key in en.json is actually referenced from source.
-// Exits with code 1 if any keys are missing, extra, or unused.
+// that every key in en.json is actually referenced from source, and that
+// every literal key referenced from source actually exists in en.json.
+// Exits with code 1 if any keys are missing, extra, unused, or undefined.
 
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join, dirname } from 'path';
@@ -61,16 +62,51 @@ function isKeyReferenced(key, corpus) {
   return pattern.test(corpus);
 }
 
-function findUnusedKeys(keys, sourceRoot) {
-  const corpus = [...collectSourceFiles(sourceRoot), ...collectSourceFiles(sharedSrcDir)]
+function buildCorpus(sourceRoot) {
+  return [...collectSourceFiles(sourceRoot), ...collectSourceFiles(sharedSrcDir)]
     .map((f) => readFileSync(f, 'utf8'))
     .join('\n');
+}
 
+function findUnusedKeys(keys, corpus) {
   return keys.filter((key) => {
     if (DYNAMIC_KEY_PREFIXES.some((prefix) => key.startsWith(prefix))) return false;
     const baseKey = key.replace(PLURAL_SUFFIX, '');
     return !isKeyReferenced(key, corpus) && !isKeyReferenced(baseKey, corpus);
   });
+}
+
+// Matches literal, dotted i18n keys passed to t(): t('settings.foo'), t("note.bar"),
+// including a leading whitespace/newline before the quote. Backtick template literals
+// (t(`settings.language_${lang}`)) are intentionally excluded — a runtime-assembled key
+// has no literal to verify — as is any t preceded by a word/`$` char (format(), etc.).
+const T_CALL_KEY = /(?<![\w$])t\(\s*(['"])([\w.]+)\1/g;
+
+// A literal key referenced from source that resolves to no key in en.json. This is the
+// reverse of findUnusedKeys: it catches the typo the other direction, where the code asks
+// i18next for a key that was never added to the locales (i18next then renders the raw key
+// string — e.g. a settings screen showing "settings.sectionDescription" verbatim).
+//
+// Scoped to keys whose top-level section already exists in en.json, so an unrelated t()
+// (or a genuinely new section still being wired up) is not misread as a broken key. Plural
+// callers pass the base key (t('note.itemsPasted')) while en.json holds only the suffixed
+// forms, so a key counts as defined if the base — with any plural suffix stripped — is
+// present.
+function findMissingReferencedKeys(referenceKeys, corpus) {
+  const definedKeys = new Set(referenceKeys);
+  for (const key of referenceKeys) definedKeys.add(key.replace(PLURAL_SUFFIX, ''));
+
+  const sections = new Set([...referenceKeys].map((key) => key.split('.')[0]));
+
+  const missing = new Set();
+  for (const match of corpus.matchAll(T_CALL_KEY)) {
+    const key = match[2];
+    if (!key.includes('.')) continue;
+    if (!sections.has(key.split('.')[0])) continue;
+    if (DYNAMIC_KEY_PREFIXES.some((prefix) => key.startsWith(prefix))) continue;
+    if (!definedKeys.has(key)) missing.add(key);
+  }
+  return [...missing].sort();
 }
 
 function flattenKeys(obj, prefix = '') {
@@ -120,10 +156,19 @@ for (const localesDir of localeDirs) {
     flattenKeys(parseJsonFile(join(localesDir, reference)))
   );
 
-  const unused = findUnusedKeys([...referenceKeys], sourceRootFor(localesDir));
+  const corpus = buildCorpus(sourceRootFor(localesDir));
+
+  const unused = findUnusedKeys([...referenceKeys], corpus);
   if (unused.length > 0) {
     console.error(`[${localesDir}] Unused keys in ${reference} (${unused.length}):`);
     for (const k of unused) console.error(`  ~ ${k}`);
+    hasErrors = true;
+  }
+
+  const undefinedKeys = findMissingReferencedKeys(referenceKeys, corpus);
+  if (undefinedKeys.length > 0) {
+    console.error(`[${localesDir}] Keys referenced in source but missing from ${reference} (${undefinedKeys.length}):`);
+    for (const k of undefinedKeys) console.error(`  ! ${k}`);
     hasErrors = true;
   }
 
