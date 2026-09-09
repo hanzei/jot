@@ -180,6 +180,7 @@
     "failedUpdateLanguage": "Impossibile aggiornare la lingua",
     "failedUpdateTheme": "Impossibile aggiornare il tema",
     "sessionsSection": "Sessioni attive",
+    "sessionsDescription": "Gestisci le tue sessioni di accesso attive su tutti i dispositivi.",
     "sessionsLoadFailed": "Impossibile caricare le sessioni",
     "sessionsBrowserOnOS": "{{browser}} su {{os}}",
     "sessionsCurrent": "Corrente",

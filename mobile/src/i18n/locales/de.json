@@ -157,6 +157,7 @@
     "failedUpdateLanguage": "Sprache konnte nicht aktualisiert werden",
     "failedUpdateTheme": "Design konnte nicht aktualisiert werden",
     "sessionsSection": "Aktive Sitzungen",
+    "sessionsDescription": "Verwalte deine aktiven Anmeldesitzungen auf verschiedenen Geräten.",
     "sessionsLoadFailed": "Sitzungen konnten nicht geladen werden",
     "sessionsBrowserOnOS": "{{browser}} auf {{os}}",
     "sessionsCurrent": "Aktuell",

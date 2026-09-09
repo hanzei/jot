@@ -180,6 +180,7 @@
     "failedUpdateLanguage": "Error al actualizar el idioma",
     "failedUpdateTheme": "Error al actualizar el tema",
     "sessionsSection": "Sesiones activas",
+    "sessionsDescription": "Gestiona tus sesiones de inicio de sesión activas en todos tus dispositivos.",
     "sessionsLoadFailed": "Error al cargar las sesiones",
     "sessionsBrowserOnOS": "{{browser}} en {{os}}",
     "sessionsCurrent": "Actual",

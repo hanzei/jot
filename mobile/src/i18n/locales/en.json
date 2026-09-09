@@ -180,6 +180,7 @@
     "failedUpdateLanguage": "Failed to update language",
     "failedUpdateTheme": "Failed to update theme",
     "sessionsSection": "Active Sessions",
+    "sessionsDescription": "Manage your active login sessions across devices.",
     "sessionsLoadFailed": "Failed to load sessions",
     "sessionsBrowserOnOS": "{{browser}} on {{os}}",
     "sessionsCurrent": "Current",
