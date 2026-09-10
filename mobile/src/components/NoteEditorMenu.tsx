@@ -35,7 +35,7 @@ interface NoteEditorMenuProps {
   /** Shown only when the list has completed items (list notes only). */
   onUncheckAllItems?: (() => void | Promise<void>) | undefined;
   onDeleteCheckedItems?: (() => void | Promise<void>) | undefined;
-  onMoveToTrash?: () => void;
+  onMoveToTrash?: (() => void) | undefined;
   // Trashed-note actions.
   onRestore?: () => void;
   onDeletePermanently?: () => void;

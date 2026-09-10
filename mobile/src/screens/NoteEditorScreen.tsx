@@ -1679,7 +1679,7 @@ export default function NoteEditorScreen() {
         onManageLabels={openLabelPicker}
         onUncheckAllItems={noteType === 'list' && checkedItems.length > 0 ? handleUncheckAllItems : undefined}
         onDeleteCheckedItems={noteType === 'list' && checkedItems.length > 0 ? handleDeleteCompletedItems : undefined}
-        onMoveToTrash={handleDelete}
+        onMoveToTrash={ownsNote ? handleDelete : undefined}
         onRestore={handleRestoreNote}
         onDeletePermanently={handleDeletePermanently}
       />
