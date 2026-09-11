@@ -2479,7 +2479,7 @@ const docTemplate = `{
                         }
                     },
                     "403": {
-                        "description": "not owner",
+                        "description": "no access",
                         "schema": {
                             "type": "string"
                         }
@@ -2500,6 +2500,7 @@ const docTemplate = `{
         },
         "/notes/{id}/shares/{user_id}": {
             "delete": {
+                "description": "Owners may remove any collaborator; collaborators may remove only themselves (leave the note).",
                 "tags": [
                     "sharing"
                 ],
@@ -2537,7 +2538,7 @@ const docTemplate = `{
                         }
                     },
                     "403": {
-                        "description": "not owner",
+                        "description": "forbidden",
                         "schema": {
                             "type": "string"
                         }

@@ -1,7 +1,8 @@
 {
   "common": {
     "close": "Zamknij",
-    "done": "Gotowe"
+    "done": "Gotowe",
+    "cancel": "Anuluj"
   },
   "nav": {
     "profileMenu": "Menu profilu",
@@ -416,7 +417,8 @@
     "removeItem": "Usuń element",
     "unassign": "Usuń przypisanie",
     "assignedTo": "Przypisano do {{name}}",
-    "completedSuggestions": "Podpowiedzi z ukończonych elementów"
+    "completedSuggestions": "Podpowiedzi z ukończonych elementów",
+    "sharing": "Udostępnianie"
   },
   "labels": {
     "title": "Etykiety",
@@ -463,7 +465,12 @@
     "cannotShareSelf": "Nie możesz udostępnić notatki sobie.",
     "failedShare": "Nie udało się udostępnić notatki. Spróbuj ponownie.",
     "unsharedSuccess": "Udostępnianie notatki zostało anulowane pomyślnie!",
-    "failedUnshare": "Nie udało się anulować udostępniania notatki. Spróbuj ponownie."
+    "failedUnshare": "Nie udało się anulować udostępniania notatki. Spróbuj ponownie.",
+    "peopleWithAccess": "Osoby z dostępem",
+    "you": "Ty",
+    "leave": "Opuść notatkę",
+    "leaveConfirm": "Opuścić tę notatkę? Utracisz dostęp wraz ze swoimi etykietami i kolorem dla niej.",
+    "confirmLeave": "Opuść"
   },
   "images": {
     "openLightbox": "Wyświetl {{filename}}",

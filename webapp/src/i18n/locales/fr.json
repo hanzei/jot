@@ -1,7 +1,8 @@
 {
   "common": {
     "close": "Fermer",
-    "done": "Terminé"
+    "done": "Terminé",
+    "cancel": "Annuler"
   },
   "nav": {
     "profileMenu": "Menu profil",
@@ -416,7 +417,8 @@
     "removeItem": "Supprimer l'élément",
     "unassign": "Désassigner",
     "assignedTo": "Assigné à {{name}}",
-    "completedSuggestions": "Suggestions d'éléments terminés"
+    "completedSuggestions": "Suggestions d'éléments terminés",
+    "sharing": "Partage"
   },
   "labels": {
     "title": "Étiquettes",
@@ -463,7 +465,12 @@
     "cannotShareSelf": "Vous ne pouvez pas partager une note avec vous-même.",
     "failedShare": "Impossible de partager la note. Veuillez réessayer.",
     "unsharedSuccess": "Partage de la note annulé avec succès !",
-    "failedUnshare": "Impossible d'annuler le partage de la note. Veuillez réessayer."
+    "failedUnshare": "Impossible d'annuler le partage de la note. Veuillez réessayer.",
+    "peopleWithAccess": "Personnes ayant accès",
+    "you": "vous",
+    "leave": "Quitter la note",
+    "leaveConfirm": "Quitter cette note ? Vous perdrez l'accès, ainsi que vos étiquettes et votre couleur pour celle-ci.",
+    "confirmLeave": "Quitter"
   },
   "images": {
     "openLightbox": "Voir {{filename}}",

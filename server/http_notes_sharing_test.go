@@ -18,6 +18,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 	owner := ts.createTestUser(t, "owner", "password123", false)
 	sharedUser := ts.createTestUser(t, "user", "password123", false)
 	other := ts.createTestUser(t, "other", "password123", false)
+	stranger := ts.createTestUser(t, "stranger", "password123", false)
 
 	note, err := owner.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
 		Content: "This will be shared",
@@ -66,8 +67,16 @@ func TestNoteSharingEndpoints(t *testing.T) {
 		assert.GreaterOrEqual(t, len(shares), 1)
 	})
 
-	t.Run("get note shares by non-owner returns forbidden", func(t *testing.T) {
-		_, err := other.Client.GetNoteShares(t.Context(), note.ID)
+	t.Run("get note shares by collaborator succeeds", func(t *testing.T) {
+		// other is a collaborator (shared with above); collaborators may see the
+		// full list of who the note is shared with.
+		shares, err := other.Client.GetNoteShares(t.Context(), note.ID)
+		require.NoError(t, err)
+		assert.GreaterOrEqual(t, len(shares), 1)
+	})
+
+	t.Run("get note shares by non-collaborator returns forbidden", func(t *testing.T) {
+		_, err := stranger.Client.GetNoteShares(t.Context(), note.ID)
 		assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
 	})
 
@@ -87,6 +96,69 @@ func TestNoteSharingEndpoints(t *testing.T) {
 
 	t.Run("unshare non-shared user returns not found", func(t *testing.T) {
 		err := owner.Client.UnshareNote(t.Context(), note.ID, sharedUser.User.ID)
+		assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
+	})
+}
+
+// TestNoteSelfRemoval verifies that a collaborator can remove their own share
+// (leave a note) without being the owner, while they still cannot remove anyone
+// else, and a user with no share cannot "leave" a note they were never on.
+func TestNoteSelfRemoval(t *testing.T) {
+	t.Parallel()
+
+	t.Run("collaborator can remove themselves", func(t *testing.T) {
+		ts := setupTestServer(t)
+		owner := ts.createTestUser(t, "owner", "password123", false)
+		collab := ts.createTestUser(t, "collab", "password123", false)
+
+		note, err := owner.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "Shared Note"})
+		require.NoError(t, err)
+		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab.User.ID))
+
+		// Sanity check: the collaborator can see the note before leaving.
+		_, err = collab.Client.GetNote(t.Context(), note.ID)
+		require.NoError(t, err)
+
+		// The collaborator removes their own share.
+		require.NoError(t, collab.Client.UnshareNote(t.Context(), note.ID, collab.User.ID))
+
+		// Access is gone afterwards.
+		_, err = collab.Client.GetNote(t.Context(), note.ID)
+		assert.Contains(t, []int{http.StatusForbidden, http.StatusNotFound}, client.StatusCode(err))
+
+		// The owner still owns and can list their shares (now empty).
+		shares, err := owner.Client.GetNoteShares(t.Context(), note.ID)
+		require.NoError(t, err)
+		assert.Empty(t, shares)
+	})
+
+	t.Run("collaborator cannot remove another collaborator", func(t *testing.T) {
+		ts := setupTestServer(t)
+		owner := ts.createTestUser(t, "owner", "password123", false)
+		collabA := ts.createTestUser(t, "collaba", "password123", false)
+		collabB := ts.createTestUser(t, "collabb", "password123", false)
+
+		note, err := owner.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "Shared Note"})
+		require.NoError(t, err)
+		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collabA.User.ID))
+		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collabB.User.ID))
+
+		// collabA may not remove collabB's share.
+		err = collabA.Client.UnshareNote(t.Context(), note.ID, collabB.User.ID)
+		assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
+	})
+
+	t.Run("non-collaborator self-removal returns not found", func(t *testing.T) {
+		ts := setupTestServer(t)
+		owner := ts.createTestUser(t, "owner", "password123", false)
+		stranger := ts.createTestUser(t, "stranger", "password123", false)
+
+		note, err := owner.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "Private Note"})
+		require.NoError(t, err)
+
+		// stranger was never shared with: passing the ownership gate (self), the
+		// store finds no share row to remove.
+		err = stranger.Client.UnshareNote(t.Context(), note.ID, stranger.User.ID)
 		assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
 	})
 }

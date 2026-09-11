@@ -94,18 +94,19 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, a
 
 // UnshareNote godoc
 //
-//	@Summary	Remove a share from a note
-//	@Tags		sharing
-//	@Security	CookieAuth
-//	@Param		id		path	string	true	"Note ID"
-//	@Param		user_id	path	string	true	"User ID to unshare with"
-//	@Success	204
-//	@Failure	400	{string}	string	"bad request"
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	403	{string}	string	"not owner"
-//	@Failure	404	{string}	string	"not found"
-//	@Failure	500	{string}	string	"internal server error"
-//	@Router		/notes/{id}/shares/{user_id} [delete]
+//	@Summary		Remove a share from a note
+//	@Description	Owners may remove any collaborator; collaborators may remove only themselves (leave the note).
+//	@Tags			sharing
+//	@Security		CookieAuth
+//	@Param			id		path	string	true	"Note ID"
+//	@Param			user_id	path	string	true	"User ID to unshare with"
+//	@Success		204
+//	@Failure		400	{string}	string	"bad request"
+//	@Failure		401	{string}	string	"unauthorized"
+//	@Failure		403	{string}	string	"forbidden"
+//	@Failure		404	{string}	string	"not found"
+//	@Failure		500	{string}	string	"internal server error"
+//	@Router			/notes/{id}/shares/{user_id} [delete]
 func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -129,18 +130,24 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusBadRequest, nil, errors.New("invalid user_id")
 	}
 
-	isOwner, err := h.noteStore.IsOwner(r.Context(), id, user.ID)
-	if err != nil {
-		return http.StatusInternalServerError, nil, fmt.Errorf("check note ownership: %w", err)
-	}
-	if !isOwner {
-		return http.StatusForbidden, nil, errors.New("not owner")
+	// Owners may remove any collaborator. A non-owner may remove only their own
+	// share — i.e. leave a note shared with them. Any other combination is
+	// forbidden. Removing only your own access never crosses an auth boundary
+	// (it reduces your own privileges), so ownership is not required for it.
+	if userID != user.ID {
+		isOwner, err := h.noteStore.IsOwner(r.Context(), id, user.ID)
+		if err != nil {
+			return http.StatusInternalServerError, nil, fmt.Errorf("check note ownership: %w", err)
+		}
+		if !isOwner {
+			return http.StatusForbidden, nil, errors.New("not owner")
+		}
 	}
 
 	// Fetch audience before unsharing so the target user is still in the list.
 	audienceIDs, audienceErr := h.noteStore.GetNoteAudienceIDs(r.Context(), id)
 
-	err = h.noteStore.UnshareNote(r.Context(), id, userID)
+	err := h.noteStore.UnshareNote(r.Context(), id, userID)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteShareNotFound) {
 			return http.StatusNotFound, nil, err
@@ -171,7 +178,7 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 //	@Success	200	{array}		models.NoteShare
 //	@Failure	400	{string}	string	"bad request"
 //	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	403	{string}	string	"not owner"
+//	@Failure	403	{string}	string	"no access"
 //	@Failure	500	{string}	string	"internal server error"
 //	@Router		/notes/{id}/shares [get]
 func (h *NotesHandler) GetNoteShares(w http.ResponseWriter, r *http.Request) (int, any, error) {
@@ -188,12 +195,15 @@ func (h *NotesHandler) GetNoteShares(w http.ResponseWriter, r *http.Request) (in
 		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
 	}
 
-	isOwner, err := h.noteStore.IsOwner(r.Context(), id, user.ID)
+	// Anyone with access to the note may see who it is shared with: the owner
+	// and every collaborator. Only owners can change shares (see ShareNote and
+	// UnshareNote), but the collaborator list is shared context, not a secret.
+	hasAccess, err := h.noteStore.HasAccess(r.Context(), id, user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, nil, fmt.Errorf("check note ownership: %w", err)
+		return http.StatusInternalServerError, nil, fmt.Errorf("check note access: %w", err)
 	}
-	if !isOwner {
-		return http.StatusForbidden, nil, errors.New("not owner")
+	if !hasAccess {
+		return http.StatusForbidden, nil, errors.New("no access")
 	}
 
 	shares, err := h.noteStore.GetNoteShares(r.Context(), id)

@@ -1,5 +1,5 @@
 import { useState, useEffect, useEffectEvent, useMemo, useRef, useCallback, useId, type ReactElement, type ReactNode } from 'react';
-import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, Pin, EllipsisVertical, Square, Undo2 } from 'lucide-react';
+import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Users, Check, Tag, Copy, Smartphone, Palette, Image, ArrowLeftRight, Pin, EllipsisVertical, Square, Undo2 } from 'lucide-react';
 import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
@@ -1719,7 +1719,7 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
       handleDuplicate();
     } else if (key === 's') {
       e.preventDefault();
-      if (!onShare || !isOwner) return;
+      if (!onShare) return;
       onShare(note);
     } else if (key === 'l') {
       e.preventDefault();
@@ -2316,14 +2316,14 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
                     />
                   </div>
                 ));
-                return isOwner && onShare && !isReadOnly ? (
+                return onShare && !isReadOnly ? (
                   <button
                     type="button"
                     onClick={() => onShare(note)}
                     onMouseDown={(event) => event.stopPropagation()}
                     className="flex items-center -space-x-1 rounded-full transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                    title={t('note.share')}
-                    aria-label={t('note.share')}
+                    title={isOwner ? t('note.share') : t('note.sharing')}
+                    aria-label={isOwner ? t('note.share') : t('note.sharing')}
                   >
                     {avatarEls}
                   </button>
@@ -2588,15 +2588,19 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
                                 </MenuItem>
                               </>
                             )}
-                            {isOwner && onShare && (
+                            {onShare && (
                               <MenuItem>
                                 <button
                                   onClick={() => onShare(note)}
                                   className={OVERFLOW_ITEM_SPLIT}
                                 >
                                   <span className="flex items-center">
-                                    <UserPlus className="h-4 w-4 mr-2" />
-                                    {t('note.share')}
+                                    {isOwner ? (
+                                      <UserPlus className="h-4 w-4 mr-2" />
+                                    ) : (
+                                      <Users className="h-4 w-4 mr-2" />
+                                    )}
+                                    {isOwner ? t('note.share') : t('note.sharing')}
                                   </span>
                                   <MenuKbd>S</MenuKbd>
                                 </button>
