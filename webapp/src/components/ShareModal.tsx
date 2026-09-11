@@ -477,7 +477,10 @@ export default function ShareModal({ note, isOpen, onClose, notesList, currentUs
               </p>
             )}
 
-            {!isOwner && (
+            {/* Only offer leaving once identity is resolved: handleLeave needs a
+                currentUserId to target, so never render a control we couldn't
+                attribute. In the normal mount flow currentUserId is always set. */}
+            {!isOwner && currentUserId && (
               <div className="mt-6 border-t border-gray-200 dark:border-slate-700 pt-4">
                 {confirmingLeave ? (
                   <div>
