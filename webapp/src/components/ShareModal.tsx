@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react';
-import { X, Trash2, ChevronDown } from 'lucide-react';
+import { X, Trash2, ChevronDown, LogOut } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
   ROLES,
@@ -41,9 +41,18 @@ export default function ShareModal({ note, isOpen, onClose, notesList, currentUs
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  // Leave-note flow (read-only viewers only): a two-step confirm, since leaving
+  // also discards the viewer's per-note state (labels, color) the same way an
+  // owner's unshare does.
+  const [confirmingLeave, setConfirmingLeave] = useState(false);
+  const [isLeaving, setIsLeaving] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
   const sharesRequestIdRef = useRef(0);
+
+  // Owners manage shares; collaborators get a read-only view of who has access
+  // plus the ability to remove only themselves. The owner is the note's author.
+  const isOwner = !!note && note.user_id === currentUserId;
 
   const trimmedQuery = searchQuery.trim();
   const isSearching = trimmedQuery.length > 0;
@@ -85,7 +94,7 @@ export default function ShareModal({ note, isOpen, onClose, notesList, currentUs
   // Softly animate the modal's height when its contents change (a collaborator
   // added/removed, suggestions toggled, or a status message shown/hidden).
   const sizeTransitionKey =
-    `${shares.length}:${showSuggestions}:${orderedSuggestions.length}:${!!error}:${!!success}`;
+    `${shares.length}:${showSuggestions}:${orderedSuggestions.length}:${!!error}:${!!success}:${confirmingLeave}`;
   const panelRef = useSizeTransition<HTMLDivElement>(sizeTransitionKey);
 
   // Written as a promise chain rather than an `async` function so state is only
@@ -118,6 +127,11 @@ export default function ShareModal({ note, isOpen, onClose, notesList, currentUs
     let cancelled = false;
 
     loadShares();
+    // The user directory only feeds the owner's share picker; a read-only
+    // viewer never searches, so skip the request for them.
+    if (!isOwner) {
+      return () => { cancelled = true; };
+    }
     usersApi.search()
       .then(usersList => {
         if (cancelled) return;
@@ -132,7 +146,7 @@ export default function ShareModal({ note, isOpen, onClose, notesList, currentUs
       });
 
     return () => { cancelled = true; };
-  }, [note, isOpen, loadShares]);
+  }, [note, isOpen, isOwner, loadShares]);
 
   // Handle click outside to close suggestions
   useEffect(() => {
@@ -194,6 +208,24 @@ export default function ShareModal({ note, isOpen, onClose, notesList, currentUs
     }
   };
 
+  // A read-only viewer removing their own share. On success the viewer loses
+  // access, so the modal closes and the caller refreshes the list (and closes
+  // the note view if it was open on this note).
+  const handleLeave = async () => {
+    if (!note || !currentUserId) return;
+
+    setIsLeaving(true);
+    setError('');
+    try {
+      await notes.unshare(note.id, currentUserId);
+      handleClose();
+    } catch {
+      setError(t('share.failedUnshare'));
+      setIsLeaving(false);
+      setConfirmingLeave(false);
+    }
+  };
+
   // Suggestion visibility is driven from the event handlers that can change it
   // (typing, focus, selection, Escape, click-outside) instead of an effect that
   // mirrors `searchQuery`. The dropdown additionally renders only when there is
@@ -249,6 +281,8 @@ export default function ShareModal({ note, isOpen, onClose, notesList, currentUs
     setShares([]);
     setShowSuggestions(false);
     setSelectedUserIndex(-1);
+    setConfirmingLeave(false);
+    setIsLeaving(false);
     onClose();
   };
 
@@ -300,7 +334,7 @@ export default function ShareModal({ note, isOpen, onClose, notesList, currentUs
   if (!note) return null;
 
   return (
-    <Dialog open={isOpen} onClose={handleClose} aria-label={t('note.share')} className="relative z-50">
+    <Dialog open={isOpen} onClose={handleClose} aria-label={isOwner ? t('note.share') : t('note.sharing')} className="relative z-50">
       <DialogBackdrop transition className="fixed inset-0 bg-black/25 transition duration-200 ease-out data-[closed]:opacity-0 motion-reduce:transition-none" />
 
       <div className="fixed inset-0 overflow-y-auto">
@@ -328,6 +362,7 @@ export default function ShareModal({ note, isOpen, onClose, notesList, currentUs
               </div>
             )}
 
+            {isOwner && (
             <div className="mb-6">
               <label htmlFor="user-search" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 {t('share.shareWithUser')}
@@ -392,14 +427,19 @@ export default function ShareModal({ note, isOpen, onClose, notesList, currentUs
                 </p>
               )}
             </div>
+            )}
 
             {shares && shares.length > 0 && (
               <div>
                 <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                  {t('share.sharedWith', { count: shares.length })}
+                  {isOwner
+                    ? t('share.sharedWith', { count: shares.length })
+                    : t('share.peopleWithAccess')}
                 </h4>
                 <div className="space-y-2 max-h-40 overflow-y-auto scrollbar-subtle">
-                  {shares.map((share) => (
+                  {shares.map((share) => {
+                    const isSelf = share.shared_with_user_id === currentUserId;
+                    return (
                     <div key={share.id} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-slate-700 rounded">
                       <div>
                         <span className="text-sm text-gray-700 dark:text-gray-200">
@@ -410,7 +450,11 @@ export default function ShareModal({ note, isOpen, onClose, notesList, currentUs
                         {(share.first_name || share.last_name) && (
                           <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">({share.username})</span>
                         )}
+                        {!isOwner && isSelf && (
+                          <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">({t('share.you')})</span>
+                        )}
                       </div>
+                      {isOwner && (
                       <button
                         onClick={() => handleUnshare(share.shared_with_user_id)}
                         className="text-red-600 hover:text-red-800 p-1"
@@ -419,16 +463,57 @@ export default function ShareModal({ note, isOpen, onClose, notesList, currentUs
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
+                      )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
 
-            {(!shares || shares.length === 0) && (
+            {isOwner && (!shares || shares.length === 0) && (
               <p className="text-sm text-gray-500 dark:text-gray-300">
                 {t('share.notSharedYet')}
               </p>
+            )}
+
+            {/* Only offer leaving once identity is resolved: handleLeave needs a
+                currentUserId to target, so never render a control we couldn't
+                attribute. In the normal mount flow currentUserId is always set. */}
+            {!isOwner && currentUserId && (
+              <div className="mt-6 border-t border-gray-200 dark:border-slate-700 pt-4">
+                {confirmingLeave ? (
+                  <div>
+                    <p className="text-sm text-gray-700 dark:text-gray-200 mb-3">
+                      {t('share.leaveConfirm')}
+                    </p>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={() => setConfirmingLeave(false)}
+                        disabled={isLeaving}
+                        className="px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 rounded-md border border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 disabled:opacity-50"
+                      >
+                        {t('common.cancel')}
+                      </button>
+                      <button
+                        onClick={handleLeave}
+                        disabled={isLeaving}
+                        className="px-3 py-1.5 text-sm text-white bg-red-600 hover:bg-red-700 rounded-md disabled:opacity-50"
+                      >
+                        {t('share.confirmLeave')}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmingLeave(true)}
+                    className="flex items-center text-sm font-medium text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+                  >
+                    <LogOut aria-hidden="true" className="h-4 w-4 mr-2" />
+                    {t('share.leave')}
+                  </button>
+                )}
+              </div>
             )}
           </DialogPanel>
         </div>

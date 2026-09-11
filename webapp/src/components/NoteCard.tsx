@@ -5,6 +5,7 @@ import {
   Archive,
   ArchiveX,
   UserPlus,
+  Users,
   Undo2,
   Copy,
   Pin,
@@ -100,7 +101,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
       e.preventDefault(); e.stopPropagation(); handleToggleArchive();
     } else if (key === 'd' && onDuplicate) {
       e.preventDefault(); e.stopPropagation(); handleDuplicate();
-    } else if (key === 's' && isOwner && onShare) {
+    } else if (key === 's' && onShare) {
       e.preventDefault(); e.stopPropagation(); onShare(note);
     } else if (isDeleteKey && isOwner) {
       e.preventDefault(); e.stopPropagation(); handleDelete();
@@ -346,15 +347,19 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
               </>
             ) : (
               <>
-                {isOwner && onShare && (
+                {onShare && (
                   <MenuItem>
                     <button
                       onClick={() => onShare(note)}
                       className="flex items-center justify-between w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700"
                     >
                       <span className="flex items-center">
-                        <UserPlus className="h-4 w-4 mr-2" />
-                        {t('note.share')}
+                        {isOwner ? (
+                          <UserPlus className="h-4 w-4 mr-2" />
+                        ) : (
+                          <Users className="h-4 w-4 mr-2" />
+                        )}
+                        {isOwner ? t('note.share') : t('note.sharing')}
                       </span>
                       <MenuKbd>S</MenuKbd>
                     </button>

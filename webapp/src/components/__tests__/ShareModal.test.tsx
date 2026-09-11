@@ -63,6 +63,10 @@ const defaultProps = {
   note: mockNote,
   isOpen: true,
   onClose: vi.fn(),
+  // mockNote.user_id is 'user1', so the default props put the modal in owner
+  // mode (the full share-management experience). Read-only viewer behaviour is
+  // covered by its own describe block below.
+  currentUserId: 'user1',
 };
 
 beforeEach(() => {
@@ -423,6 +427,67 @@ describe('ShareModal', () => {
       await user.click(closeBtn);
 
       expect(onClose).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('read-only viewer (collaborator)', () => {
+    // mockNote.user_id is 'user1'; viewing as 'user2' (a collaborator) puts the
+    // modal in read-only mode.
+    const viewerProps = { ...defaultProps, currentUserId: 'user2' };
+
+    it('does not show the share picker and does not fetch the user directory', async () => {
+      mockGetShares.mockResolvedValue([mockShare1]);
+      render(<ShareModal {...viewerProps} />);
+
+      await waitFor(() => expect(mockGetShares).toHaveBeenCalled());
+
+      expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+      expect(mockUsersSearch).not.toHaveBeenCalled();
+    });
+
+    it('lists who has access and marks the viewer', async () => {
+      mockGetShares.mockResolvedValue([mockShare1]);
+      render(<ShareModal {...viewerProps} />);
+
+      await waitFor(() => expect(screen.getByText('Alice Smith')).toBeInTheDocument());
+      // mockShare1 is shared_with 'user2', i.e. the viewer themselves.
+      expect(screen.getByText('(you)')).toBeInTheDocument();
+      // No per-row remove controls for a read-only viewer.
+      expect(screen.queryByRole('button', { name: /remove access/i })).not.toBeInTheDocument();
+    });
+
+    it('lets the viewer leave the note after confirming', async () => {
+      const onClose = vi.fn();
+      const user = userEvent.setup();
+      mockGetShares.mockResolvedValue([mockShare1]);
+      mockUnshare.mockResolvedValue(undefined);
+      render(<ShareModal {...viewerProps} onClose={onClose} />);
+
+      await waitFor(() => expect(screen.getByText('Alice Smith')).toBeInTheDocument());
+
+      await user.click(screen.getByRole('button', { name: /leave note/i }));
+      // Confirmation step is required before the share is removed.
+      expect(mockUnshare).not.toHaveBeenCalled();
+
+      await user.click(screen.getByRole('button', { name: /^leave$/i }));
+
+      await waitFor(() => expect(mockUnshare).toHaveBeenCalledWith('note1', 'user2'));
+      expect(onClose).toHaveBeenCalled();
+    });
+
+    it('does not remove the share when the confirmation is cancelled', async () => {
+      const user = userEvent.setup();
+      mockGetShares.mockResolvedValue([mockShare1]);
+      render(<ShareModal {...viewerProps} />);
+
+      await waitFor(() => expect(screen.getByText('Alice Smith')).toBeInTheDocument());
+
+      await user.click(screen.getByRole('button', { name: /leave note/i }));
+      await user.click(screen.getByRole('button', { name: /cancel/i }));
+
+      expect(mockUnshare).not.toHaveBeenCalled();
+      // The leave entry point is back.
+      expect(screen.getByRole('button', { name: /leave note/i })).toBeInTheDocument();
     });
   });
 });

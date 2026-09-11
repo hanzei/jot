@@ -533,6 +533,16 @@ export class DashboardPage {
     await this.page.getByRole('menuitem', { name: 'Share' }).click();
   }
 
+  /**
+   * Opens the read-only sharing view from the note modal's overflow menu. This
+   * is the entry point a collaborator (non-owner) sees — labelled "Sharing"
+   * rather than "Share".
+   */
+  async openSharingModalFromModal() {
+    await this.openModalOverflowMenu();
+    await this.page.getByRole('menuitem', { name: 'Sharing' }).click();
+  }
+
   /** Opens a note and creates a new label, attaching it to the note. */
   async addLabelToNote(noteTitle: string, labelName: string) {
     await this.openNote(noteTitle);

@@ -1,7 +1,8 @@
 {
   "common": {
     "close": "Close",
-    "done": "Done"
+    "done": "Done",
+    "cancel": "Cancel"
   },
   "nav": {
     "profileMenu": "Profile menu",
@@ -416,7 +417,8 @@
     "removeItem": "Remove item",
     "unassign": "Unassign",
     "assignedTo": "Assigned to {{name}}",
-    "completedSuggestions": "Suggestions from completed items"
+    "completedSuggestions": "Suggestions from completed items",
+    "sharing": "Sharing"
   },
   "labels": {
     "title": "Labels",
@@ -463,7 +465,12 @@
     "cannotShareSelf": "You cannot share a note with yourself.",
     "failedShare": "Failed to share note. Please try again.",
     "unsharedSuccess": "Note unshared successfully!",
-    "failedUnshare": "Failed to unshare note. Please try again."
+    "failedUnshare": "Failed to unshare note. Please try again.",
+    "peopleWithAccess": "People with access",
+    "you": "you",
+    "leave": "Leave note",
+    "leaveConfirm": "Leave this note? You'll lose access, along with your labels and color for it.",
+    "confirmLeave": "Leave"
   },
   "images": {
     "openLightbox": "View {{filename}}",
