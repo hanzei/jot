@@ -10,16 +10,18 @@ import {
   Alert,
   ScrollView,
 } from 'react-native';
-import { ArrowLeft, Plus, Search, X } from 'lucide-react-native';
+import { ArrowLeft, LogOut, Plus, Search, X } from 'lucide-react-native';
 import type { RouteProp } from '@react-navigation/native';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { useSQLiteContext } from 'expo-sqlite';
 import { searchUsers } from '../api/users';
-import { useNoteShares, useShareNote, useUnshareNote } from '../hooks/useNotes';
+import { useNoteShares, useShareNote, useUnshareNote, useLeaveNote } from '../hooks/useNotes';
 import UserAvatar from '../components/UserAvatar';
 import { useTheme } from '../theme/ThemeContext';
+import { useConfirm } from '../hooks/useConfirm';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { isServerReachable } from '../api/serverReachability';
 import { useAuth } from '../store/AuthContext';
@@ -33,11 +35,12 @@ type ShareRouteProp = RouteProp<RootStackParamList, 'Share'>;
 const SEARCH_DEBOUNCE_MS = 300;
 
 export default function ShareScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<ShareRouteProp>();
   const { noteId } = route.params;
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const { confirm } = useConfirm();
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -76,9 +79,18 @@ export default function ShareScreen() {
   const [pendingUserIds, setPendingUserIds] = useState<Set<string>>(new Set());
   const pendingUserIdsRef = useRef<Set<string>>(new Set());
 
-  const { data: currentShares, isLoading: isLoadingShares, isError: isSharesError } = useNoteShares(noteId);
+  const { data: currentShares, ownerId, isLoading: isLoadingShares, isError: isSharesError } = useNoteShares(noteId);
   const shareMutation = useShareNote();
   const unshareMutation = useUnshareNote();
+  const leaveMutation = useLeaveNote();
+
+  // The owner manages shares; a collaborator gets a read-only view of who has
+  // access plus the ability to remove only themselves ("leave note"). Until the
+  // note has loaded the owner is unknown, and we default to owner mode — the
+  // screen is only ever opened from a note the current user can already see, and
+  // the management controls no-op without a loaded note anyway.
+  const isReadOnlyViewer = !!currentUser && ownerId != null && ownerId !== currentUser.id;
+  const isOwner = !isReadOnlyViewer;
 
   // Stable mutation refs to avoid recreating callbacks on every render
   const shareMutateRef = useRef(shareMutation.mutateAsync);
@@ -221,6 +233,27 @@ export default function ShareScreen() {
 
   const isUnsharing = unshareMutation.isPending;
 
+  // Leave a note shared with the current user. Confirmed first, since leaving
+  // also discards the user's per-note state (labels, color) the same way an
+  // owner's unshare does. On success the note is gone from the local DB, so pop
+  // back to the notes list rather than to the now-defunct editor beneath us.
+  const handleLeave = useCallback(async () => {
+    const confirmed = await confirm({
+      title: t('share.leave'),
+      message: t('share.leaveConfirm'),
+      confirmLabel: t('share.confirmLeave'),
+      cancelLabel: t('common.cancel'),
+      destructive: true,
+    });
+    if (!confirmed) return;
+    try {
+      await leaveMutation.mutateAsync({ noteId });
+      navigation.popToTop();
+    } catch {
+      Alert.alert(t('common.error'), t('share.failedUnshare'));
+    }
+  }, [confirm, leaveMutation, noteId, navigation, t]);
+
   const renderSearchResult = useCallback(
     ({ item }: { item: User }) => (
       <TouchableOpacity
@@ -258,7 +291,9 @@ export default function ShareScreen() {
     ) : null;
 
   const renderSharedUser = useCallback(
-    ({ item }: { item: NoteShare }) => (
+    ({ item }: { item: NoteShare }) => {
+      const isSelf = item.shared_with_user_id === currentUser?.id;
+      return (
       <View style={[styles.userRow, { borderBottomColor: colors.borderLight }]} testID={`shared-user-${item.shared_with_user_id}`}>
         <UserAvatar
           userId={item.shared_with_user_id}
@@ -271,20 +306,28 @@ export default function ShareScreen() {
           {(item.first_name || item.last_name) && (
             <Text style={[styles.userName, { color: colors.text }]}>{[item.first_name, item.last_name].filter(Boolean).join(' ')}</Text>
           )}
-          <Text style={[styles.userHandle, { color: colors.textSecondary }]}>@{item.username ?? item.shared_with_user_id}</Text>
+          <Text style={[styles.userHandle, { color: colors.textSecondary }]}>
+            @{item.username ?? item.shared_with_user_id}
+            {isSelf && <Text style={{ color: colors.textMuted }}> ({t('share.you')})</Text>}
+          </Text>
         </View>
-        <TouchableOpacity
-          onPress={() => handleUnshare(item)}
-          testID={`remove-share-${item.shared_with_user_id}`}
-          disabled={isUnsharing}
-          accessibilityRole="button"
-          accessibilityLabel={t('share.removeAccessFor', { username: item.username ?? item.shared_with_user_id })}
-        >
-          <X size={22} color={colors.error} />
-        </TouchableOpacity>
+        {/* Only the owner can remove collaborators; a read-only viewer leaves via
+            the dedicated action below instead of a per-row remove. */}
+        {isOwner && (
+          <TouchableOpacity
+            onPress={() => handleUnshare(item)}
+            testID={`remove-share-${item.shared_with_user_id}`}
+            disabled={isUnsharing}
+            accessibilityRole="button"
+            accessibilityLabel={t('share.removeAccessFor', { username: item.username ?? item.shared_with_user_id })}
+          >
+            <X size={22} color={colors.error} />
+          </TouchableOpacity>
+        )}
       </View>
-    ),
-    [colors, handleUnshare, isUnsharing, t],
+      );
+    },
+    [colors, handleUnshare, isUnsharing, isOwner, currentUser?.id, t],
   );
 
   return (
@@ -298,37 +341,41 @@ export default function ShareScreen() {
         >
           <ArrowLeft size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>{t('note.share')}</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>{isOwner ? t('note.share') : t('note.sharing')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
-      <View style={[styles.searchContainer, { backgroundColor: colors.inputBackground, borderColor: colors.searchBorder }]}>
-        <Search size={18} color={colors.iconMuted} style={styles.searchIcon} />
-        <TextInput
-          style={[styles.searchInput, { color: colors.text }]}
-          placeholder={t('share.searchUsersPlaceholder')}
-          placeholderTextColor={colors.placeholder}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          autoCapitalize="none"
-          autoCorrect={false}
-          returnKeyType="search"
-          testID="share-search-input"
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity
-            onPress={() => setSearchQuery('')}
-            testID="clear-share-search"
-            accessibilityRole="button"
-            accessibilityLabel={t('common.clearSearch')}
-          >
-            <X size={18} color={colors.iconMuted} />
-          </TouchableOpacity>
-        )}
-      </View>
+      {/* The share picker is owner-only. A collaborator sees a read-only list of
+          who has access plus the option to leave the note. */}
+      {isOwner && (
+        <View style={[styles.searchContainer, { backgroundColor: colors.inputBackground, borderColor: colors.searchBorder }]}>
+          <Search size={18} color={colors.iconMuted} style={styles.searchIcon} />
+          <TextInput
+            style={[styles.searchInput, { color: colors.text }]}
+            placeholder={t('share.searchUsersPlaceholder')}
+            placeholderTextColor={colors.placeholder}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
+            testID="share-search-input"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity
+              onPress={() => setSearchQuery('')}
+              testID="clear-share-search"
+              accessibilityRole="button"
+              accessibilityLabel={t('common.clearSearch')}
+            >
+              <X size={18} color={colors.iconMuted} />
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom }}>
-        {debouncedQuery.length > 0 ? (
+        {isOwner && (debouncedQuery.length > 0 ? (
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>{t('share.results')}</Text>
             {isSearching ? (
@@ -365,18 +412,22 @@ export default function ShareScreen() {
               </View>
             )}
           </>
-        )}
+        ))}
 
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>
-            {t('share.sharedWith', { count: currentShares?.length ?? 0 })}
+            {isOwner
+              ? t('share.sharedWith', { count: currentShares?.length ?? 0 })
+              : t('share.peopleWithAccess')}
           </Text>
           {isLoadingShares ? (
             <ActivityIndicator size="small" color={colors.primary} style={styles.spinner} />
           ) : isSharesError ? (
             <Text style={[styles.errorText, { color: colors.error }]}>{t('share.failedLoad')}</Text>
           ) : !currentShares || currentShares.length === 0 ? (
-            <Text style={[styles.emptyText, { color: colors.textMuted }]}>{t('share.notSharedYet')}</Text>
+            isOwner ? (
+              <Text style={[styles.emptyText, { color: colors.textMuted }]}>{t('share.notSharedYet')}</Text>
+            ) : null
           ) : (
             <FlatList
               data={currentShares}
@@ -387,6 +438,25 @@ export default function ShareScreen() {
             />
           )}
         </View>
+
+        {/* Leaving is a collaborator-only action: it removes the current user's
+            own share and drops the note from their list. */}
+        {isReadOnlyViewer && (
+          <View style={[styles.section, styles.leaveSection, { borderTopColor: colors.borderLight }]}>
+            <TouchableOpacity
+              onPress={handleLeave}
+              disabled={leaveMutation.isPending}
+              style={styles.leaveButton}
+              testID="leave-note-button"
+              accessibilityRole="button"
+              accessibilityLabel={t('share.leave')}
+              accessibilityState={{ disabled: leaveMutation.isPending }}
+            >
+              <LogOut size={20} color={colors.error} />
+              <Text style={[styles.leaveButtonText, { color: colors.error }]}>{t('share.leave')}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -469,5 +539,19 @@ const styles = StyleSheet.create({
   spinner: {
     paddingVertical: 8,
     alignSelf: 'flex-start',
+  },
+  leaveSection: {
+    borderTopWidth: 1,
+    paddingTop: 16,
+  },
+  leaveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 8,
+  },
+  leaveButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

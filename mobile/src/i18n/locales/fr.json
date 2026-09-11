@@ -282,7 +282,8 @@
     "uncheckAllItems": "Décocher tous les éléments",
     "deleteCheckedItems": "Supprimer les éléments cochés",
     "deleteCheckedItemsConfirm_one": "Supprimer {{count}} élément coché ? Cette action est irréversible.",
-    "deleteCheckedItemsConfirm_other": "Supprimer {{count}} éléments cochés ? Cette action est irréversible."
+    "deleteCheckedItemsConfirm_other": "Supprimer {{count}} éléments cochés ? Cette action est irréversible.",
+    "sharing": "Partage"
   },
   "images": {
     "openLightbox": "Voir {{filename}}",
@@ -350,7 +351,12 @@
     "results": "Résultats",
     "searchFailed": "Recherche échouée. Veuillez réessayer.",
     "failedLoad": "Impossible de charger les partages",
-    "removeAccessFor": "Retirer le partage pour {{username}}"
+    "removeAccessFor": "Retirer le partage pour {{username}}",
+    "peopleWithAccess": "Personnes ayant accès",
+    "you": "vous",
+    "leave": "Quitter la note",
+    "leaveConfirm": "Quitter cette note ? Vous perdrez l'accès, ainsi que vos étiquettes et votre couleur pour celle-ci.",
+    "confirmLeave": "Quitter"
   },
   "deepLink": {
     "missingServerTitle": "Avertissement de lien profond",

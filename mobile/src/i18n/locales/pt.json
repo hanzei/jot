@@ -305,7 +305,8 @@
     "uncheckAllItems": "Desmarcar todos os itens",
     "deleteCheckedItems": "Excluir itens marcados",
     "deleteCheckedItemsConfirm_one": "Excluir {{count}} item marcado? Esta ação não pode ser desfeita.",
-    "deleteCheckedItemsConfirm_other": "Excluir {{count}} itens marcados? Esta ação não pode ser desfeita."
+    "deleteCheckedItemsConfirm_other": "Excluir {{count}} itens marcados? Esta ação não pode ser desfeita.",
+    "sharing": "Compartilhamento"
   },
   "images": {
     "openLightbox": "Ver {{filename}}",
@@ -373,7 +374,12 @@
     "results": "Resultados",
     "searchFailed": "Pesquisa falhou. Tente novamente.",
     "failedLoad": "Falha ao carregar os compartilhamentos",
-    "removeAccessFor": "Remover compartilhamento para {{username}}"
+    "removeAccessFor": "Remover compartilhamento para {{username}}",
+    "peopleWithAccess": "Pessoas com acesso",
+    "you": "você",
+    "leave": "Sair da nota",
+    "leaveConfirm": "Sair desta nota? Você perderá o acesso, junto com suas etiquetas e cor para ela.",
+    "confirmLeave": "Sair"
   },
   "deepLink": {
     "missingServerTitle": "Aviso de link profundo",

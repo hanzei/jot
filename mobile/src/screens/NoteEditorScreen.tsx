@@ -1028,6 +1028,11 @@ export default function NoteEditorScreen() {
   // them (a note shared with the user can't be re-shared).
   const ownsNote = noteId === null || (!!existingNote && existingNote.user_id === currentUser?.id);
   const canShareWithCollaborators = !isLocalMode && ownsNote;
+  // A collaborator (the note is shared with them but they don't own it) can open
+  // the sharing view too — read-only, to see who has access and to leave the
+  // note. Like owner-side sharing it needs a central server; an existing note
+  // the user can see but doesn't own is one shared with them.
+  const canOpenSharing = canShareWithCollaborators || (!isLocalMode && !!existingNote && !ownsNote);
 
   // Save-first openers shared by the overflow menu and the inline
   // labels/collaborators row below the note body, so tapping a label chip or a
@@ -1539,15 +1544,16 @@ export default function NoteEditorScreen() {
                   />
                 </View>
               ));
-              // Tappable only when the note can actually be (re)shared: a
-              // read-only (trashed) note has no Share action in the menu, so
-              // its avatars stay a plain, non-interactive display too.
-              return canShareWithCollaborators && !isReadOnly ? (
+              // Tappable when the sharing view can be opened — the owner's
+              // management screen or a collaborator's read-only view. A
+              // read-only (trashed) note has no Share action in the menu, so its
+              // avatars stay a plain, non-interactive display too.
+              return canOpenSharing && !isReadOnly ? (
                 <TouchableOpacity
                   style={styles.metaAvatars}
                   onPress={openShareScreen}
                   testID="note-meta-collaborators"
-                  accessibilityLabel={t('note.share')}
+                  accessibilityLabel={ownsNote ? t('note.share') : t('note.sharing')}
                 >
                   {avatars}
                 </TouchableOpacity>
@@ -1673,7 +1679,8 @@ export default function NoteEditorScreen() {
         title={noteType === 'list' ? title : undefined}
         noteType={noteType}
         onSend={handleNativeShare}
-        onShare={canShareWithCollaborators ? openShareScreen : undefined}
+        onShare={canOpenSharing ? openShareScreen : undefined}
+        shareIsReadOnly={!ownsNote}
         onDuplicate={handleDuplicate}
         onConvert={handleConvertNoteType}
         onManageLabels={openLabelPicker}
