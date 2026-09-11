@@ -122,7 +122,8 @@ function renderShareScreen() {
 describe('ShareScreen user search connectivity', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockUseNoteShares.mockReturnValue({ data: [], isLoading: false, isError: false } as never);
+    // signedInUser owns the note here, so the modal is in owner (management) mode.
+    mockUseNoteShares.mockReturnValue({ data: [], ownerId: signedInUser.id, isLoading: false, isError: false } as never);
     mockUseShareNote.mockReturnValue({ mutateAsync: jest.fn() } as never);
     mockUseUnshareNote.mockReturnValue({ mutateAsync: jest.fn(), isPending: false } as never);
     mockUseLeaveNote.mockReturnValue({ mutateAsync: jest.fn(), isPending: false } as never);
@@ -214,7 +215,8 @@ describe('ShareScreen empty-query suggestions', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockUseNoteShares.mockReturnValue({ data: [], isLoading: false, isError: false } as never);
+    // signedInUser owns the note here, so the modal is in owner (management) mode.
+    mockUseNoteShares.mockReturnValue({ data: [], ownerId: signedInUser.id, isLoading: false, isError: false } as never);
     mockUseShareNote.mockReturnValue({ mutateAsync: jest.fn() } as never);
     mockUseUnshareNote.mockReturnValue({ mutateAsync: jest.fn(), isPending: false } as never);
     mockUseLeaveNote.mockReturnValue({ mutateAsync: jest.fn(), isPending: false } as never);
@@ -263,6 +265,7 @@ describe('ShareScreen empty-query suggestions', () => {
   it('excludes collaborators the note is already shared with', async () => {
     mockUseNoteShares.mockReturnValue({
       data: [shareRecord(bob.id, '2026-05-01T00:00:00Z')],
+      ownerId: signedInUser.id,
       isLoading: false,
       isError: false,
     } as never);
@@ -293,6 +296,7 @@ describe('ShareScreen empty-query suggestions', () => {
   it('explains an empty list when everyone already has access', async () => {
     mockUseNoteShares.mockReturnValue({
       data: [bob, carol, dave].map((u) => shareRecord(u.id, '2026-05-01T00:00:00Z')),
+      ownerId: signedInUser.id,
       isLoading: false,
       isError: false,
     } as never);
@@ -406,5 +410,45 @@ describe('ShareScreen read-only viewer (collaborator)', () => {
     await waitFor(() => expect(confirmFn).toHaveBeenCalled());
     expect(mockLeave).not.toHaveBeenCalled();
     expect(mockPopToTop).not.toHaveBeenCalled();
+  });
+});
+
+describe('ShareScreen with unresolved ownership', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockUseShareNote.mockReturnValue({ mutateAsync: jest.fn() } as never);
+    mockUseUnshareNote.mockReturnValue({ mutateAsync: jest.fn(), isPending: false } as never);
+    mockUseLeaveNote.mockReturnValue({ mutateAsync: jest.fn(), isPending: false } as never);
+    mockUseConfirm.mockReturnValue({ confirm: jest.fn().mockResolvedValue(true) });
+    mockUseUsers.mockReturnValue({
+      usersById: new Map([[signedInUser.id, signedInUser]]),
+      refreshUsers: jest.fn(),
+    } as never);
+    mockUseAuth.mockReturnValue({ user: signedInUser } as never);
+    mockGetLocalShareHistory.mockResolvedValue([]);
+    mockUseNetworkStatus.mockReturnValue({ isConnected: true });
+    mockIsServerReachable.mockReturnValue(true);
+  });
+
+  // Until the note loads (or if the read errors) the owner is unknown, so the
+  // screen must show neither the owner's picker nor the collaborator's leave
+  // action — showing either would flash a privileged control at the wrong user.
+  it('shows no owner picker and no leave action while the owner is unknown', async () => {
+    mockUseNoteShares.mockReturnValue({ data: undefined, ownerId: undefined, isLoading: true, isError: false } as never);
+
+    await renderShareScreen();
+
+    expect(screen.queryByTestId('share-search-input')).toBeNull();
+    expect(screen.queryByTestId('leave-note-button')).toBeNull();
+  });
+
+  it('shows no owner picker and no leave action when the shares read errors', async () => {
+    mockUseNoteShares.mockReturnValue({ data: undefined, ownerId: undefined, isLoading: false, isError: true } as never);
+
+    await renderShareScreen();
+
+    await waitFor(() => expect(screen.getByText('Failed to load shares')).toBeTruthy());
+    expect(screen.queryByTestId('share-search-input')).toBeNull();
+    expect(screen.queryByTestId('leave-note-button')).toBeNull();
   });
 });

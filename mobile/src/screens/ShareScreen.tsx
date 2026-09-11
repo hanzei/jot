@@ -85,12 +85,13 @@ export default function ShareScreen() {
   const leaveMutation = useLeaveNote();
 
   // The owner manages shares; a collaborator gets a read-only view of who has
-  // access plus the ability to remove only themselves ("leave note"). Until the
-  // note has loaded the owner is unknown, and we default to owner mode — the
-  // screen is only ever opened from a note the current user can already see, and
-  // the management controls no-op without a loaded note anyway.
+  // access plus the ability to remove only themselves ("leave note"). Both are
+  // resolved positively — neither is the default — so while ownership is unknown
+  // (the note hasn't loaded yet, or the read errored) no privileged control
+  // shows: not the owner's picker/remove buttons, and not the collaborator's
+  // leave action. Once the note loads exactly one of these becomes true.
+  const isOwner = !!currentUser && ownerId != null && ownerId === currentUser.id;
   const isReadOnlyViewer = !!currentUser && ownerId != null && ownerId !== currentUser.id;
-  const isOwner = !isReadOnlyViewer;
 
   // Stable mutation refs to avoid recreating callbacks on every render
   const shareMutateRef = useRef(shareMutation.mutateAsync);
