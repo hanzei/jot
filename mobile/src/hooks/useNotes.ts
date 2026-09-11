@@ -1126,6 +1126,10 @@ export function useNoteShares(noteId: string | null) {
   const { data: note, isLoading, isError } = useOfflineNote(noteId);
   return {
     data: note?.shared_with,
+    // The note's owner, so the share screen can tell an owner (full management)
+    // from a collaborator (read-only view + leave). Undefined until the note is
+    // loaded; the screen treats an unknown owner as the owner-mode default.
+    ownerId: note?.user_id,
     isLoading,
     isError,
   };
@@ -1237,6 +1241,69 @@ export function useUnshareNote() {
       queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
       // Refresh the notes list so dashboard cards re-render collaborator avatars.
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+    },
+  });
+}
+
+/**
+ * Leave a note shared with the current user. This is the collaborator side of
+ * unsharing: it hits the same `DELETE /notes/{id}/shares/{user_id}` endpoint an
+ * owner uses to remove a collaborator, but targeting the current user's own
+ * share (the server allows a non-owner to remove only themselves).
+ *
+ * The difference from {@link useUnshareNote} is the local effect: an owner
+ * dropping a collaborator keeps the note and just prunes a `shared_with` row,
+ * whereas a collaborator who leaves loses access entirely, so the note must be
+ * removed from the local DB and disappear from their list — not left behind
+ * holding a stale copy the server will never refresh again.
+ */
+export function useLeaveNote() {
+  const db = useSQLiteContext();
+  const queryClient = useQueryClient();
+  const { isConnected } = useNetworkStatus();
+  const { user: currentUser } = useAuth();
+
+  return useMutation({
+    mutationFn: async ({ noteId }: { noteId: string }) => {
+      assertSwitchWriteAllowed();
+      const userId = currentUser?.id;
+      if (!userId) throw new Error('Cannot leave a note without a signed-in user');
+
+      // A note shared *with* the user is always a note its owner already created
+      // on the server, so there is no pending-create case to guard against as
+      // there is for the owner-side writes above.
+      if (isOnlineWriteAllowed(isConnected)) {
+        try {
+          await unshareNote(noteId, userId);
+          // Access is gone now, so there is nothing to re-fetch (a GET would
+          // 403/404) — drop the local copy so the note leaves the user's list.
+          await permanentDeleteLocalNote(db, noteId);
+          return;
+        } catch (err) {
+          rethrowIfNotQueueable(err);
+        }
+      }
+
+      // Offline (or a transient online failure): remove the note locally and
+      // queue the self-removal for replay. The queued op reuses `unshare` — the
+      // endpoint and method are identical, it is already treated as idempotent
+      // when the target is gone (GONE_IDEMPOTENT_OPERATIONS), and its drain
+      // tolerates the follow-up reconcile GET returning 403 for a note the user
+      // no longer has access to.
+      const note = await getLocalNote(db, noteId);
+      if (!note) throw new Error(`Note ${noteId} not found in local cache`);
+      await permanentDeleteLocalNote(db, noteId);
+      await enqueueOperation(db, {
+        operation: 'unshare',
+        endpoint: `/notes/${noteId}/shares/${userId}`,
+        method: 'DELETE',
+      });
+    },
+    onSuccess: (_data, { noteId }) => {
+      queryClient.removeQueries({ queryKey: noteLocalQueryKey(noteId) });
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      // The note drops out of any labels the user had applied to it locally.
+      invalidateLabelCounts(queryClient);
     },
   });
 }

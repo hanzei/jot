@@ -8,7 +8,7 @@ import {
   Pressable,
 } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
-import { ArrowLeftRight, Copy, Share2, Square, Tag, Trash2, Undo2, UserPlus, type LucideIcon } from 'lucide-react-native';
+import { ArrowLeftRight, Copy, Share2, Square, Tag, Trash2, Undo2, UserPlus, Users, type LucideIcon } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import type { NoteType } from '@jot/shared';
@@ -29,6 +29,12 @@ interface NoteEditorMenuProps {
   // editor's current ownership/state.
   onSend?: () => void;
   onShare?: (() => void) | undefined;
+  /**
+   * When the current user is a collaborator rather than the note's owner, the
+   * share entry opens a read-only view (who has access + leave), so it is
+   * labelled "Sharing" with a neutral icon instead of "Share" / add-person.
+   */
+  shareIsReadOnly?: boolean;
   onDuplicate?: () => void;
   onConvert?: () => void;
   onManageLabels?: () => void;
@@ -63,6 +69,7 @@ export default function NoteEditorMenu({
   noteType,
   onSend,
   onShare,
+  shareIsReadOnly = false,
   onDuplicate,
   onConvert,
   onManageLabels,
@@ -111,8 +118,8 @@ export default function NoteEditorMenu({
     }
     if (onShare) {
       actions.push({
-        icon: UserPlus,
-        label: t('note.share'),
+        icon: shareIsReadOnly ? Users : UserPlus,
+        label: shareIsReadOnly ? t('note.sharing') : t('note.share'),
         onPress: run(onShare),
         testId: 'editor-menu-share',
       });

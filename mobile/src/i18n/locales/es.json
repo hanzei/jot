@@ -305,7 +305,8 @@
     "uncheckAllItems": "Desmarcar todos los elementos",
     "deleteCheckedItems": "Eliminar elementos marcados",
     "deleteCheckedItemsConfirm_one": "¿Eliminar {{count}} elemento marcado? Esta acción no se puede deshacer.",
-    "deleteCheckedItemsConfirm_other": "¿Eliminar {{count}} elementos marcados? Esta acción no se puede deshacer."
+    "deleteCheckedItemsConfirm_other": "¿Eliminar {{count}} elementos marcados? Esta acción no se puede deshacer.",
+    "sharing": "Uso compartido"
   },
   "images": {
     "openLightbox": "Ver {{filename}}",
@@ -373,7 +374,12 @@
     "results": "Resultados",
     "searchFailed": "Búsqueda fallida. Inténtalo de nuevo.",
     "failedLoad": "Error al cargar los accesos compartidos",
-    "removeAccessFor": "Eliminar acceso compartido para {{username}}"
+    "removeAccessFor": "Eliminar acceso compartido para {{username}}",
+    "peopleWithAccess": "Personas con acceso",
+    "you": "tú",
+    "leave": "Salir de la nota",
+    "leaveConfirm": "¿Salir de esta nota? Perderás el acceso, junto con tus etiquetas y color para ella.",
+    "confirmLeave": "Salir"
   },
   "deepLink": {
     "missingServerTitle": "Advertencia de enlace profundo",

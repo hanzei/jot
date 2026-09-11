@@ -282,7 +282,8 @@
     "uncheckAllItems": "Alle Häkchen entfernen",
     "deleteCheckedItems": "Erledigte Einträge löschen",
     "deleteCheckedItemsConfirm_one": "{{count}} erledigten Eintrag löschen? Dies kann nicht rückgängig gemacht werden.",
-    "deleteCheckedItemsConfirm_other": "{{count}} erledigte Einträge löschen? Dies kann nicht rückgängig gemacht werden."
+    "deleteCheckedItemsConfirm_other": "{{count}} erledigte Einträge löschen? Dies kann nicht rückgängig gemacht werden.",
+    "sharing": "Freigabe"
   },
   "images": {
     "openLightbox": "{{filename}} anzeigen",
@@ -350,7 +351,12 @@
     "results": "Ergebnisse",
     "searchFailed": "Suche fehlgeschlagen. Bitte erneut versuchen.",
     "failedLoad": "Freigaben konnten nicht geladen werden",
-    "removeAccessFor": "Freigabe für {{username}} entfernen"
+    "removeAccessFor": "Freigabe für {{username}} entfernen",
+    "peopleWithAccess": "Personen mit Zugriff",
+    "you": "du",
+    "leave": "Notiz verlassen",
+    "leaveConfirm": "Diese Notiz verlassen? Du verlierst den Zugriff sowie deine Labels und die Farbe dafür.",
+    "confirmLeave": "Verlassen"
   },
   "deepLink": {
     "missingServerTitle": "Deep-Link-Warnung",

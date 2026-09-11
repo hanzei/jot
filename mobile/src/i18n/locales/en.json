@@ -305,7 +305,8 @@
     "uncheckAllItems": "Uncheck all items",
     "deleteCheckedItems": "Delete checked items",
     "deleteCheckedItemsConfirm_one": "Delete {{count}} checked item? This cannot be undone.",
-    "deleteCheckedItemsConfirm_other": "Delete {{count}} checked items? This cannot be undone."
+    "deleteCheckedItemsConfirm_other": "Delete {{count}} checked items? This cannot be undone.",
+    "sharing": "Sharing"
   },
   "images": {
     "openLightbox": "View {{filename}}",
@@ -373,7 +374,12 @@
     "results": "Results",
     "searchFailed": "Search failed. Please try again.",
     "failedLoad": "Failed to load shares",
-    "removeAccessFor": "Remove share for {{username}}"
+    "removeAccessFor": "Remove share for {{username}}",
+    "peopleWithAccess": "People with access",
+    "you": "you",
+    "leave": "Leave note",
+    "leaveConfirm": "Leave this note? You'll lose access, along with your labels and color for it.",
+    "confirmLeave": "Leave"
   },
   "deepLink": {
     "missingServerTitle": "Deep link warning",

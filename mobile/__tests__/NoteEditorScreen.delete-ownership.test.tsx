@@ -70,7 +70,7 @@ describe('NoteEditorScreen move-to-trash ownership gating', () => {
     });
   });
 
-  it('hides Move to trash in the overflow menu for a note shared with the user', async () => {
+  it('hides Move to trash but offers read-only Sharing for a note shared with the user', async () => {
     // Owned by u2, shared with the current user (u1): editable, not trashed.
     mockUseOfflineNote.mockReturnValue({
       data: makeNote({
@@ -84,10 +84,13 @@ describe('NoteEditorScreen move-to-trash ownership gating', () => {
 
     await fireEvent.press(getByTestId('toolbar-menu-btn'));
 
-    // Delete is owner-only, so the non-owner never sees the action. Sharing is
-    // likewise owner-only, so that row is absent too.
+    // Delete is owner-only, so the non-owner never sees the action.
     expect(queryByTestId('editor-menu-trash')).toBeNull();
-    expect(queryByTestId('editor-menu-share')).toBeNull();
+    // A collaborator can still open the sharing view — read-only, labelled
+    // "Sharing" — to see who has access and leave the note (issue #969).
+    const shareItem = getByTestId('editor-menu-share');
+    expect(shareItem).toBeTruthy();
+    expect(shareItem.props.accessibilityLabel).toBe('note.sharing');
     expect(mockDeleteMutateAsync).not.toHaveBeenCalled();
     expect(mockGoBack).not.toHaveBeenCalled();
   });

@@ -305,7 +305,8 @@
     "uncheckAllItems": "Deseleziona tutti gli elementi",
     "deleteCheckedItems": "Elimina elementi completati",
     "deleteCheckedItemsConfirm_one": "Eliminare {{count}} elemento completato? Questa azione è irreversibile.",
-    "deleteCheckedItemsConfirm_other": "Eliminare {{count}} elementi completati? Questa azione è irreversibile."
+    "deleteCheckedItemsConfirm_other": "Eliminare {{count}} elementi completati? Questa azione è irreversibile.",
+    "sharing": "Condivisione"
   },
   "images": {
     "openLightbox": "Visualizza {{filename}}",
@@ -373,7 +374,12 @@
     "results": "Risultati",
     "searchFailed": "Ricerca non riuscita. Riprova.",
     "failedLoad": "Impossibile caricare le condivisioni",
-    "removeAccessFor": "Rimuovi condivisione per {{username}}"
+    "removeAccessFor": "Rimuovi condivisione per {{username}}",
+    "peopleWithAccess": "Persone con accesso",
+    "you": "tu",
+    "leave": "Abbandona la nota",
+    "leaveConfirm": "Abbandonare questa nota? Perderai l'accesso, insieme alle tue etichette e al colore per essa.",
+    "confirmLeave": "Abbandona"
   },
   "deepLink": {
     "missingServerTitle": "Avviso link profondo",

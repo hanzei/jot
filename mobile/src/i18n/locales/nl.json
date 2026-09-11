@@ -305,7 +305,8 @@
     "uncheckAllItems": "Alle items uitvinken",
     "deleteCheckedItems": "Aangevinkte items verwijderen",
     "deleteCheckedItemsConfirm_one": "{{count}} aangevinkt item verwijderen? Dit kan niet ongedaan worden gemaakt.",
-    "deleteCheckedItemsConfirm_other": "{{count}} aangevinkte items verwijderen? Dit kan niet ongedaan worden gemaakt."
+    "deleteCheckedItemsConfirm_other": "{{count}} aangevinkte items verwijderen? Dit kan niet ongedaan worden gemaakt.",
+    "sharing": "Delen"
   },
   "images": {
     "openLightbox": "{{filename}} bekijken",
@@ -373,7 +374,12 @@
     "results": "Resultaten",
     "searchFailed": "Zoeken mislukt. Probeer het opnieuw.",
     "failedLoad": "Gedeelde items laden mislukt",
-    "removeAccessFor": "Delen verwijderen voor {{username}}"
+    "removeAccessFor": "Delen verwijderen voor {{username}}",
+    "peopleWithAccess": "Personen met toegang",
+    "you": "jij",
+    "leave": "Notitie verlaten",
+    "leaveConfirm": "Deze notitie verlaten? Je verliest de toegang, samen met je labels en kleur ervoor.",
+    "confirmLeave": "Verlaten"
   },
   "deepLink": {
     "missingServerTitle": "Waarschuwing deep link",

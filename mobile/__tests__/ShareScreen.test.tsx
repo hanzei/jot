@@ -11,16 +11,19 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import ShareScreen from '../src/screens/ShareScreen';
 import { searchUsers } from '../src/api/users';
-import { useNoteShares, useShareNote, useUnshareNote } from '../src/hooks/useNotes';
+import { useNoteShares, useShareNote, useUnshareNote, useLeaveNote } from '../src/hooks/useNotes';
 import { useNetworkStatus } from '../src/hooks/useNetworkStatus';
+import { useConfirm } from '../src/hooks/useConfirm';
 import { useUsers } from '../src/store/UsersContext';
 import { useAuth } from '../src/store/AuthContext';
 import { getLocalShareHistory } from '../src/db/noteQueries';
 import { isServerReachable } from '../src/api/serverReachability';
 import type { NoteShare, User } from '@jot/shared';
 
+const mockPopToTop = jest.fn();
+
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ goBack: jest.fn() }),
+  useNavigation: () => ({ goBack: jest.fn(), popToTop: mockPopToTop }),
   useRoute: () => ({ params: { noteId: 'note-1' } }),
 }));
 
@@ -41,6 +44,11 @@ jest.mock('../src/hooks/useNotes', () => ({
   useNoteShares: jest.fn(),
   useShareNote: jest.fn(),
   useUnshareNote: jest.fn(),
+  useLeaveNote: jest.fn(),
+}));
+
+jest.mock('../src/hooks/useConfirm', () => ({
+  useConfirm: jest.fn(),
 }));
 
 jest.mock('../src/hooks/useNetworkStatus', () => ({
@@ -67,6 +75,8 @@ const mockSearchUsers = searchUsers as jest.MockedFunction<typeof searchUsers>;
 const mockUseNoteShares = useNoteShares as jest.MockedFunction<typeof useNoteShares>;
 const mockUseShareNote = useShareNote as jest.MockedFunction<typeof useShareNote>;
 const mockUseUnshareNote = useUnshareNote as jest.MockedFunction<typeof useUnshareNote>;
+const mockUseLeaveNote = useLeaveNote as jest.MockedFunction<typeof useLeaveNote>;
+const mockUseConfirm = useConfirm as jest.MockedFunction<typeof useConfirm>;
 const mockUseNetworkStatus = useNetworkStatus as jest.MockedFunction<typeof useNetworkStatus>;
 const mockUseUsers = useUsers as jest.MockedFunction<typeof useUsers>;
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
@@ -112,9 +122,12 @@ function renderShareScreen() {
 describe('ShareScreen user search connectivity', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockUseNoteShares.mockReturnValue({ data: [], isLoading: false, isError: false } as never);
+    // signedInUser owns the note here, so the modal is in owner (management) mode.
+    mockUseNoteShares.mockReturnValue({ data: [], ownerId: signedInUser.id, isLoading: false, isError: false } as never);
     mockUseShareNote.mockReturnValue({ mutateAsync: jest.fn() } as never);
     mockUseUnshareNote.mockReturnValue({ mutateAsync: jest.fn(), isPending: false } as never);
+    mockUseLeaveNote.mockReturnValue({ mutateAsync: jest.fn(), isPending: false } as never);
+    mockUseConfirm.mockReturnValue({ confirm: jest.fn().mockResolvedValue(true) });
     mockUseUsers.mockReturnValue({
       usersById: new Map([[localUser.id, localUser]]),
       refreshUsers: jest.fn(),
@@ -202,9 +215,12 @@ describe('ShareScreen empty-query suggestions', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockUseNoteShares.mockReturnValue({ data: [], isLoading: false, isError: false } as never);
+    // signedInUser owns the note here, so the modal is in owner (management) mode.
+    mockUseNoteShares.mockReturnValue({ data: [], ownerId: signedInUser.id, isLoading: false, isError: false } as never);
     mockUseShareNote.mockReturnValue({ mutateAsync: jest.fn() } as never);
     mockUseUnshareNote.mockReturnValue({ mutateAsync: jest.fn(), isPending: false } as never);
+    mockUseLeaveNote.mockReturnValue({ mutateAsync: jest.fn(), isPending: false } as never);
+    mockUseConfirm.mockReturnValue({ confirm: jest.fn().mockResolvedValue(true) });
     mockUseUsers.mockReturnValue({
       // As in the real provider, the map is seeded with the signed-in user.
       usersById: new Map([signedInUser, bob, carol, dave].map((u) => [u.id, u])),
@@ -249,6 +265,7 @@ describe('ShareScreen empty-query suggestions', () => {
   it('excludes collaborators the note is already shared with', async () => {
     mockUseNoteShares.mockReturnValue({
       data: [shareRecord(bob.id, '2026-05-01T00:00:00Z')],
+      ownerId: signedInUser.id,
       isLoading: false,
       isError: false,
     } as never);
@@ -279,6 +296,7 @@ describe('ShareScreen empty-query suggestions', () => {
   it('explains an empty list when everyone already has access', async () => {
     mockUseNoteShares.mockReturnValue({
       data: [bob, carol, dave].map((u) => shareRecord(u.id, '2026-05-01T00:00:00Z')),
+      ownerId: signedInUser.id,
       isLoading: false,
       isError: false,
     } as never);
@@ -321,5 +339,116 @@ describe('ShareScreen empty-query suggestions', () => {
       .getAllByText(/^@(carol|dave)$/)
       .map((node) => [node.props.children].flat().join(''));
     expect(rendered).toEqual(['@carol', '@dave']);
+  });
+});
+
+describe('ShareScreen read-only viewer (collaborator)', () => {
+  // The note is owned by someone else; the signed-in user (user-me) is one of
+  // the collaborators it is shared with.
+  const owner = makeUser({ id: 'owner-other', username: 'owner', first_name: 'Owner', last_name: 'One' });
+  const bob = makeUser({ id: 'user-bob', username: 'bob', first_name: 'Bob', last_name: 'Jones' });
+
+  const viewerShares: NoteShare[] = [
+    { ...shareRecord(signedInUser.id, '2026-05-01T00:00:00Z', owner.id), username: 'me', first_name: 'Me', last_name: 'Myself' },
+    { ...shareRecord(bob.id, '2026-05-01T00:00:00Z', owner.id), username: 'bob', first_name: 'Bob', last_name: 'Jones' },
+  ];
+
+  const mockLeave = jest.fn();
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockUseNoteShares.mockReturnValue({ data: viewerShares, ownerId: owner.id, isLoading: false, isError: false } as never);
+    mockUseShareNote.mockReturnValue({ mutateAsync: jest.fn() } as never);
+    mockUseUnshareNote.mockReturnValue({ mutateAsync: jest.fn(), isPending: false } as never);
+    mockLeave.mockResolvedValue(undefined);
+    mockUseLeaveNote.mockReturnValue({ mutateAsync: mockLeave, isPending: false } as never);
+    mockUseConfirm.mockReturnValue({ confirm: jest.fn().mockResolvedValue(true) });
+    mockUseUsers.mockReturnValue({
+      usersById: new Map([signedInUser, owner, bob].map((u) => [u.id, u])),
+      refreshUsers: jest.fn(),
+    } as never);
+    mockUseAuth.mockReturnValue({ user: signedInUser } as never);
+    mockGetLocalShareHistory.mockResolvedValue([]);
+    mockUseNetworkStatus.mockReturnValue({ isConnected: true });
+    mockIsServerReachable.mockReturnValue(true);
+  });
+
+  it('shows a read-only access list with no share picker and no per-row remove', async () => {
+    await renderShareScreen();
+
+    await waitFor(() => expect(screen.getByText('People with access')).toBeTruthy());
+    // The collaborator cannot add people, so there is no search box…
+    expect(screen.queryByTestId('share-search-input')).toBeNull();
+    // …and cannot remove anyone from the list.
+    expect(screen.queryByTestId(`remove-share-${signedInUser.id}`)).toBeNull();
+    expect(screen.queryByTestId(`remove-share-${bob.id}`)).toBeNull();
+    // The signed-in user is marked as themselves.
+    expect(screen.getByText(/\(you\)/)).toBeTruthy();
+  });
+
+  it('leaves the note after confirmation and returns to the notes list', async () => {
+    await renderShareScreen();
+    await waitFor(() => expect(screen.getByTestId('leave-note-button')).toBeTruthy());
+
+    await fireEvent.press(screen.getByTestId('leave-note-button'));
+
+    // Removes the current user's own share, then pops back past the (now gone)
+    // editor to the list.
+    await waitFor(() => expect(mockLeave).toHaveBeenCalledWith({ noteId: 'note-1' }));
+    expect(mockPopToTop).toHaveBeenCalled();
+  });
+
+  it('does not leave when the confirmation is declined', async () => {
+    const confirmFn = jest.fn().mockResolvedValue(false);
+    mockUseConfirm.mockReturnValue({ confirm: confirmFn });
+
+    await renderShareScreen();
+    await waitFor(() => expect(screen.getByTestId('leave-note-button')).toBeTruthy());
+
+    await fireEvent.press(screen.getByTestId('leave-note-button'));
+
+    await waitFor(() => expect(confirmFn).toHaveBeenCalled());
+    expect(mockLeave).not.toHaveBeenCalled();
+    expect(mockPopToTop).not.toHaveBeenCalled();
+  });
+});
+
+describe('ShareScreen with unresolved ownership', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockUseShareNote.mockReturnValue({ mutateAsync: jest.fn() } as never);
+    mockUseUnshareNote.mockReturnValue({ mutateAsync: jest.fn(), isPending: false } as never);
+    mockUseLeaveNote.mockReturnValue({ mutateAsync: jest.fn(), isPending: false } as never);
+    mockUseConfirm.mockReturnValue({ confirm: jest.fn().mockResolvedValue(true) });
+    mockUseUsers.mockReturnValue({
+      usersById: new Map([[signedInUser.id, signedInUser]]),
+      refreshUsers: jest.fn(),
+    } as never);
+    mockUseAuth.mockReturnValue({ user: signedInUser } as never);
+    mockGetLocalShareHistory.mockResolvedValue([]);
+    mockUseNetworkStatus.mockReturnValue({ isConnected: true });
+    mockIsServerReachable.mockReturnValue(true);
+  });
+
+  // Until the note loads (or if the read errors) the owner is unknown, so the
+  // screen must show neither the owner's picker nor the collaborator's leave
+  // action — showing either would flash a privileged control at the wrong user.
+  it('shows no owner picker and no leave action while the owner is unknown', async () => {
+    mockUseNoteShares.mockReturnValue({ data: undefined, ownerId: undefined, isLoading: true, isError: false } as never);
+
+    await renderShareScreen();
+
+    expect(screen.queryByTestId('share-search-input')).toBeNull();
+    expect(screen.queryByTestId('leave-note-button')).toBeNull();
+  });
+
+  it('shows no owner picker and no leave action when the shares read errors', async () => {
+    mockUseNoteShares.mockReturnValue({ data: undefined, ownerId: undefined, isLoading: false, isError: true } as never);
+
+    await renderShareScreen();
+
+    await waitFor(() => expect(screen.getByText('Failed to load shares')).toBeTruthy());
+    expect(screen.queryByTestId('share-search-input')).toBeNull();
+    expect(screen.queryByTestId('leave-note-button')).toBeNull();
   });
 });

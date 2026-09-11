@@ -1,7 +1,7 @@
 import React from 'react';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useDuplicateNote, useConvertNoteType, useCreateNoteItem, useUpdateNoteItem, useDeleteNoteItem, useReorderNoteItems, useToggleNoteItemCompleted, useUncheckAllItems, useDeleteCompletedItems, useShareNote, useUnshareNote, NoteConversionCapError } from '../src/hooks/useNotes';
+import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useDuplicateNote, useConvertNoteType, useCreateNoteItem, useUpdateNoteItem, useDeleteNoteItem, useReorderNoteItems, useToggleNoteItemCompleted, useUncheckAllItems, useDeleteCompletedItems, useShareNote, useUnshareNote, useLeaveNote, NoteConversionCapError } from '../src/hooks/useNotes';
 import { VALIDATION } from '@jot/shared';
 import { noteLocalQueryKey, notesLocalQueryKey, notesLocalQueryScopeKey } from '../src/hooks/queryKeys';
 import * as notesApi from '../src/api/notes';
@@ -600,6 +600,80 @@ describe('useNotes hooks', () => {
 
       expect(mockUsersApi.unshareNote).toHaveBeenCalledWith('123', 'u2');
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() });
+    });
+  });
+
+  // Leaving a note shared with the current user is the collaborator side of
+  // unsharing: it targets the signed-in user's own share and, unlike an owner's
+  // unshare, removes the note from the local DB entirely so it disappears from
+  // the user's list (issue #969). The auth mock signs in as 'test-user-id'.
+  describe('useLeaveNote', () => {
+    const sharedWithMeNote = {
+      id: 'n1', title: 'Shared with me', content: '', note_type: 'text', version: 1,
+      color: '#ffffff', pinned: false, archived: false, position: 0,
+      checked_items_collapsed: false, is_shared: true, deleted_at: null,
+      user_id: 'owner-1', created_at: '', updated_at: '', labels: [], shared_with: [],
+    };
+
+    it('online: removes the current user\'s own share and deletes the note locally', async () => {
+      mockUsersApi.unshareNote.mockResolvedValueOnce(undefined as never);
+
+      const { result } = await renderHook(() => useLeaveNote(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ noteId: 'n1' });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(mockUsersApi.unshareNote).toHaveBeenCalledWith('n1', 'test-user-id');
+      // The note is gone locally — not merely tombstoned — so it leaves the list.
+      expect(mockNoteQueries.permanentDeleteLocalNote).toHaveBeenCalledWith(expect.anything(), 'n1');
+      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
+    });
+
+    it('offline: deletes the note locally and queues the self-removal', async () => {
+      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce(sharedWithMeNote as never);
+
+      const { result } = await renderHook(() => useLeaveNote(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ noteId: 'n1' });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(mockUsersApi.unshareNote).not.toHaveBeenCalled();
+      expect(mockNoteQueries.permanentDeleteLocalNote).toHaveBeenCalledWith(expect.anything(), 'n1');
+      // Reuses the `unshare` op — same endpoint/method, idempotent when the target
+      // is gone — targeting the current user's own share.
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          operation: 'unshare',
+          endpoint: '/notes/n1/shares/test-user-id',
+          method: 'DELETE',
+        }),
+      );
+    });
+
+    it('falls back to the local queue when the online removal fails transiently', async () => {
+      mockUsersApi.unshareNote.mockRejectedValueOnce(makeAxiosError(503));
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce(sharedWithMeNote as never);
+
+      const { result } = await renderHook(() => useLeaveNote(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ noteId: 'n1' });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(mockNoteQueries.permanentDeleteLocalNote).toHaveBeenCalledWith(expect.anything(), 'n1');
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ operation: 'unshare', endpoint: '/notes/n1/shares/test-user-id', method: 'DELETE' }),
+      );
+    });
+
+    it('surfaces a permanent failure (4xx) without deleting locally or queuing', async () => {
+      mockUsersApi.unshareNote.mockRejectedValueOnce(makeAxiosError(403));
+
+      const { result } = await renderHook(() => useLeaveNote(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ noteId: 'n1' }).catch(() => {});
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      expect(mockNoteQueries.permanentDeleteLocalNote).not.toHaveBeenCalled();
+      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
     });
   });
 
