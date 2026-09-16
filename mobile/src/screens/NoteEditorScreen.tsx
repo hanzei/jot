@@ -369,10 +369,12 @@ export default function NoteEditorScreen() {
   // via its own button (archive, trash, restore, delete-forever) so the zoom
   // and any dashboard removal reflow plays consistently instead of only on
   // some exit paths.
+  // Action exits (archive/trash/delete/restore) keep the frozen origin: the note
+  // has left the current view by the time we zoom, so the editor fades over its
+  // old slot rather than chasing a gone or hidden card. Only a plain back close
+  // re-measures the live card (animateClose's default).
   const zoomCloseAndExit = useCallback(async () => {
     isClosingRef.current = true;
-    // Action exits keep the frozen origin — the card is leaving the list, so the
-    // note fades out over its old slot rather than chasing a card mid-removal.
     await animateClose(false);
     intentionalExitRef.current = true;
     navigation.goBack();
@@ -918,32 +920,57 @@ export default function NoteEditorScreen() {
     }
   }), [commitMetadataBaseline, pinnedRef, runMetadataUpdate, setPinned, withSavedNote, t]);
 
-  const handleToggleArchive = useCallback(() => withSavedNote(async (id) => {
-    const newArchived = !archivedRef.current;
-    setArchived(newArchived);
-
-    if (!newArchived) {
+  const handleToggleArchive = useCallback(() => {
+    if (archivedRef.current) {
       // Unarchiving keeps the user on the note.
-      try {
-        await runMetadataUpdate(id, { archived: false });
-        commitMetadataBaseline({ archived: false });
-        showToast(t('dashboard.noteUnarchived'));
-      } catch {
-        setArchived(true);
-        Alert.alert(t('common.error'), t('note.failedUpdate'));
-      }
-      return;
+      return withSavedNote(async (id) => {
+        setArchived(false);
+        try {
+          await runMetadataUpdate(id, { archived: false });
+          commitMetadataBaseline({ archived: false });
+          showToast(t('dashboard.noteUnarchived'));
+        } catch {
+          setArchived(true);
+          Alert.alert(t('common.error'), t('note.failedUpdate'));
+        }
+      });
     }
 
-    // Archiving from the single-note view returns the user to the dashboard.
-    // Zoom back onto the card first, then archive so the dashboard plays its
-    // removal reflow on the still-present card. The editor is unmounted by the
-    // time we mutate, so failures surface as a toast rather than an alert.
-    commitMetadataBaseline({ archived: true });
-    await zoomCloseAndExit();
-    try {
-      await runMetadataUpdate(id, { archived: true });
-      showToast(t('dashboard.noteArchived'), 'success', {
+    // Archiving returns the user to the dashboard. Fold `archived` into the same
+    // save that flushes pending edits — flushSave sends it as a changed scalar —
+    // so the note flips to archived and leaves the active list in ONE update.
+    // Flushing the edit on its own first (the old order) bumped updated_at and,
+    // under a recency sort, reordered the card to the top for a beat before the
+    // separate archive removed it. Set the ref too so the synchronous flush reads
+    // the new value, and mark dirty so the flush runs even with no content edits.
+    return withPendingIndicator(async () => {
+      const wasNew = noteIdRef.current === null;
+      setArchived(true);
+      archivedRef.current = true;
+      markDirtyAndScheduleUpdate();
+      const saved = await flushPendingChanges();
+      if (!saved) {
+        // Save failed (error already surfaced); undo the optimistic archive.
+        setArchived(false);
+        archivedRef.current = false;
+        return;
+      }
+      const id = noteIdRef.current;
+      // A brand-new note is created unarchived (the create request carries no
+      // archived flag), so archive it with a follow-up PATCH. An existing note
+      // already went out archived within the flush above (folded in as a changed
+      // scalar), so it needs no second write — and that single update is what
+      // keeps the card from reordering to the top before it disappears.
+      if (wasNew && id) {
+        try {
+          await runMetadataUpdate(id, { archived: true });
+        } catch {
+          showToast(t('note.failedArchive'), 'error');
+          await zoomCloseAndExit();
+          return;
+        }
+      }
+      showToast(t('dashboard.noteArchived'), 'success', id ? {
         label: t('dashboard.undo'),
         onPress: async () => {
           try {
@@ -953,11 +980,10 @@ export default function NoteEditorScreen() {
             showToast(t('note.failedUnarchive'), 'error');
           }
         },
-      });
-    } catch {
-      showToast(t('note.failedArchive'), 'error');
-    }
-  }), [archivedRef, zoomCloseAndExit, commitMetadataBaseline, runMetadataUpdate, setArchived, withSavedNote, showToast, t]);
+      } : undefined);
+      await zoomCloseAndExit();
+    });
+  }, [archivedRef, noteIdRef, zoomCloseAndExit, commitMetadataBaseline, runMetadataUpdate, setArchived, withSavedNote, withPendingIndicator, flushPendingChanges, markDirtyAndScheduleUpdate, showToast, t]);
 
   const handleColorSelect = useCallback(async (selectedColor: string) => {
     const saveSucceeded = await flushPendingChanges();
