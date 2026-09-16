@@ -44,6 +44,12 @@ describe('getAppBuildInfo', () => {
     });
   });
 
+  it('truncates a full-length commit SHA to the short 7-char form', () => {
+    process.env.EXPO_PUBLIC_COMMIT_SHA = 'ebc5a80b568687b4afb49357a8cfaf38ae3a8bc0';
+
+    expect(getAppBuildInfo().commit).toBe('ebc5a80');
+  });
+
   it('falls back to the static app.json version when the resolved config has none', () => {
     mockConstants.expoConfig = { version: null };
     expect(getAppBuildInfo().version).toBe(appJson.expo.version);
