@@ -233,6 +233,14 @@ export default function NoteEditorScreen() {
   // change), so the frozen origin would zoom back onto the card's old slot.
   const cardRects = useCardRectRegistry();
   const [zoomRect, setZoomRect] = useState<LayoutRect | undefined>(originRect);
+  // Bumped to request the zoom-close animation. It runs from an effect keyed on
+  // this tick (not inline in animateClose) so a re-target — the setZoomRect that
+  // moves the animation's endpoint onto the card's current position — is
+  // guaranteed committed to the transform before the animation reads it, rather
+  // than racing a still-pending render. closeResolveRef carries animateClose's
+  // promise resolver through to that effect.
+  const [closeTick, setCloseTick] = useState(0);
+  const closeResolveRef = useRef<(() => void) | null>(null);
   // Holds the editor invisible for the first frame of a zoom-open. With the
   // native driver the transform/opacity aren't written as static props on the
   // JS render — the native animation node applies them, and it only attaches
@@ -271,39 +279,56 @@ export default function NoteEditorScreen() {
   // (archive/trash/delete) pass false: the card is leaving the list, so the
   // note fades out over its old slot (the measure would miss and fall back
   // anyway, but skipping it avoids catching the card mid-removal).
+  //
+  // The re-target (setZoomRect) and the animation request (setCloseTick) are set
+  // together so React commits the moved endpoint and the trigger in one render;
+  // the close effect below then starts the animation once that has landed.
   const animateClose = useCallback((retarget = true) => {
     if (!zoomEnabled) return Promise.resolve();
     // Blur any focused input first. A focused TextInput and its input-accessory
     // toolbar render outside the transformed view, so without this they "hang"
-    // in place while the editor scales away. Wait a frame so the blur takes
-    // effect before the zoom starts.
+    // in place while the editor scales away.
     Keyboard.dismiss();
-    const runZoom = () =>
-      new Promise<void>((resolve) => {
-        // A frame's wait lets a just-committed re-target (setZoomRect) reach the
-        // native transform before the animation reads it, and lets the blur
-        // above take effect.
-        requestAnimationFrame(() => {
-          Animated.timing(zoom, {
-            toValue: 0,
-            duration: ZOOM_MS,
-            easing: Easing.in(Easing.cubic),
-            useNativeDriver: true,
-          }).start(() => resolve());
-        });
-      });
-    const noteId = noteIdRef.current;
-    if (!retarget || !cardRects || !noteId) return runZoom();
-    // Keep the frozen origin if the card can't be measured (gone from the list,
-    // or not mounted): setZoomRect only moves the target when we have a fresh rect.
-    return cardRects
-      .measure(noteId)
-      .then((rect) => {
+    return new Promise<void>((resolve) => {
+      closeResolveRef.current = resolve;
+      const request = (rect: LayoutRect | null) => {
         if (rect) setZoomRect(rect);
-      })
-      .catch(() => {})
-      .then(runZoom);
-  }, [zoom, zoomEnabled, cardRects, noteIdRef]);
+        setCloseTick((tick) => tick + 1);
+      };
+      const noteId = noteIdRef.current;
+      // Keep the frozen origin when there's nothing to re-target onto (retarget
+      // off, no registry, or the card can't be measured — gone from the list or
+      // not mounted). `originRect` disambiguates a note rendered by more than one
+      // mounted list, picking the card nearest where it was opened.
+      if (!retarget || !cardRects || !noteId) {
+        request(null);
+        return;
+      }
+      cardRects
+        .measure(noteId, originRect)
+        .then(request)
+        .catch(() => request(null));
+    });
+  }, [zoomEnabled, cardRects, noteIdRef, originRect]);
+
+  // Run the zoom-close once a close has been requested and its (possibly
+  // re-targeted) endpoint committed. Keyed on closeTick so it fires per request
+  // and only after the transform reflects the current zoomRect.
+  useEffect(() => {
+    if (closeTick === 0) return;
+    const resolve = closeResolveRef.current;
+    closeResolveRef.current = null;
+    // One frame lets the blur from Keyboard.dismiss settle before the zoom.
+    const raf = requestAnimationFrame(() => {
+      Animated.timing(zoom, {
+        toValue: 0,
+        duration: ZOOM_MS,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }).start(() => resolve?.());
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [closeTick, zoom]);
 
   const { isPending: isMenuActionPending, withPendingIndicator } = usePendingActionIndicator();
 

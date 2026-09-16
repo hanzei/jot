@@ -8,16 +8,28 @@ import type { LayoutRect } from '../../navigation/RootNavigator';
 export type CardRectMeasurer = () => Promise<LayoutRect | null>;
 
 interface CardRectRegistry {
-  /** Register a note card's measurer. Call again to replace; unregister on unmount. */
+  /** Register a note card's measurer. Unregister the same reference on unmount. */
   register: (noteId: string, measure: CardRectMeasurer) => void;
-  /** Remove a measurer. The `measure` reference guards against clobbering a
-   *  remount that already registered a newer one. */
+  /** Remove a measurer. Removing one leaves any others for that id in place. */
   unregister: (noteId: string, measure: CardRectMeasurer) => void;
-  /** Measure the currently-mounted card for a note, or null if none is mounted. */
-  measure: (noteId: string) => Promise<LayoutRect | null>;
+  /**
+   * Measure the currently-mounted card(s) for a note, or null if none is
+   * mounted. The *same* note can be rendered by more than one mounted list at
+   * once — a checklist assigned to you shows up in both Notes and My Tasks, and
+   * the drawer keeps visited screens mounted — so several cards may be
+   * registered under one id. When `near` is given the rect whose centre is
+   * closest to it wins; the editor passes the tap-time origin, which resolves to
+   * the card the user actually opened rather than a same-note card on a hidden
+   * screen.
+   */
+  measure: (noteId: string, near?: LayoutRect) => Promise<LayoutRect | null>;
 }
 
 const CardRectRegistryContext = createContext<CardRectRegistry | null>(null);
+
+function centre(rect: LayoutRect): { x: number; y: number } {
+  return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+}
 
 /**
  * Shares live note-card positions from the notes list to the note editor.
@@ -30,22 +42,45 @@ const CardRectRegistryContext = createContext<CardRectRegistry | null>(null);
  * rect when the card is gone (archived/trashed/deleted, or not mounted).
  */
 export function CardRectRegistryProvider({ children }: { children: React.ReactNode }) {
-  const measurers = useRef(new Map<string, CardRectMeasurer>());
+  const measurers = useRef(new Map<string, Set<CardRectMeasurer>>());
 
   const register = useCallback((noteId: string, measure: CardRectMeasurer) => {
-    measurers.current.set(noteId, measure);
+    const set = measurers.current.get(noteId) ?? new Set<CardRectMeasurer>();
+    set.add(measure);
+    measurers.current.set(noteId, set);
   }, []);
 
   const unregister = useCallback((noteId: string, measure: CardRectMeasurer) => {
-    if (measurers.current.get(noteId) === measure) {
-      measurers.current.delete(noteId);
-    }
+    const set = measurers.current.get(noteId);
+    if (!set) return;
+    set.delete(measure);
+    if (set.size === 0) measurers.current.delete(noteId);
   }, []);
 
-  const measure = useCallback(async (noteId: string): Promise<LayoutRect | null> => {
-    const measurer = measurers.current.get(noteId);
-    return measurer ? measurer() : null;
-  }, []);
+  const measure = useCallback(
+    async (noteId: string, near?: LayoutRect): Promise<LayoutRect | null> => {
+      const set = measurers.current.get(noteId);
+      if (!set || set.size === 0) return null;
+      const rects = (await Promise.all([...set].map((m) => m().catch(() => null)))).filter(
+        (rect): rect is LayoutRect => rect !== null,
+      );
+      if (rects.length === 0) return null;
+      if (rects.length === 1 || !near) return rects[0]!;
+      const target = centre(near);
+      let best = rects[0]!;
+      let bestDistance = Infinity;
+      for (const rect of rects) {
+        const c = centre(rect);
+        const distance = (c.x - target.x) ** 2 + (c.y - target.y) ** 2;
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = rect;
+        }
+      }
+      return best;
+    },
+    [],
+  );
 
   const value = useMemo<CardRectRegistry>(
     () => ({ register, unregister, measure }),

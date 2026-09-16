@@ -23,33 +23,45 @@ describe('cardRectRegistry', () => {
     await expect(registry.measure('missing')).resolves.toBeNull();
   });
 
-  it('replaces a measurer when the same id registers again', async () => {
+  it('picks the card nearest `near` when a note is registered by two screens', async () => {
     const { result } = await renderHook(() => useCardRectRegistry(), { wrapper });
     const registry = result.current!;
 
-    registry.register('a', async () => rect(1));
-    registry.register('a', async () => rect(2));
+    // The same note rendered by two mounted lists (e.g. Notes and My Tasks).
+    registry.register('a', async () => rect(0));
+    registry.register('a', async () => rect(100));
 
-    await expect(registry.measure('a')).resolves.toEqual(rect(2));
+    await expect(registry.measure('a', rect(90))).resolves.toEqual(rect(100));
+    await expect(registry.measure('a', rect(5))).resolves.toEqual(rect(0));
   });
 
-  it('unregister removes only the measurer it still owns', async () => {
+  it('ignores measurers that resolve null and returns null when all do', async () => {
     const { result } = await renderHook(() => useCardRectRegistry(), { wrapper });
     const registry = result.current!;
 
-    const first: CardRectMeasurer = async () => rect(1);
-    const second: CardRectMeasurer = async () => rect(2);
+    registry.register('a', async () => null);
+    registry.register('a', async () => rect(7));
+    await expect(registry.measure('a', rect(0))).resolves.toEqual(rect(7));
 
-    // A remount registers `second` before the old card's cleanup runs; the
-    // stale `first` cleanup must not wipe the live `second`.
+    registry.register('b', async () => null);
+    await expect(registry.measure('b', rect(0))).resolves.toBeNull();
+  });
+
+  it('unregister removes only the given measurer, leaving others in place', async () => {
+    const { result } = await renderHook(() => useCardRectRegistry(), { wrapper });
+    const registry = result.current!;
+
+    const first: CardRectMeasurer = async () => rect(0);
+    const second: CardRectMeasurer = async () => rect(100);
+
     registry.register('a', first);
     registry.register('a', second);
-    registry.unregister('a', first);
 
-    await expect(registry.measure('a')).resolves.toEqual(rect(2));
+    registry.unregister('a', first);
+    await expect(registry.measure('a', rect(0))).resolves.toEqual(rect(100));
 
     registry.unregister('a', second);
-    await expect(registry.measure('a')).resolves.toBeNull();
+    await expect(registry.measure('a', rect(0))).resolves.toBeNull();
   });
 
   it('returns null when used without a provider', async () => {
