@@ -50,6 +50,7 @@ import {
 interface NotesListScreenProps {
   variant?: 'notes' | 'archived' | 'trash' | 'my-tasks';
   labelId?: string | undefined;
+  labelName?: string | undefined;
 }
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'MainDrawer'>;
@@ -58,7 +59,7 @@ const SEARCH_DEBOUNCE_MS = 300;
 const EMPTY_NOTES: Note[] = [];
 const EMPTY_LOCAL_ORDER: LocalReorderState = { pinned: null, unpinned: null };
 
-export default function NotesListScreen({ variant = 'notes', labelId }: NotesListScreenProps) {
+export default function NotesListScreen({ variant = 'notes', labelId, labelName }: NotesListScreenProps) {
   const [searchText, setSearchText] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const { user, settings, setSettings, isLocalMode } = useAuth();
@@ -150,6 +151,10 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
   const handleLabelPress = useCallback((pressedLabelId: string, pressedLabelName: string) => {
     navigation.dispatch(DrawerActions.jumpTo('Notes', { labelId: pressedLabelId, labelName: pressedLabelName }));
+  }, [navigation]);
+
+  const handleClearLabel = useCallback(() => {
+    navigation.dispatch(DrawerActions.jumpTo('Notes', { labelId: undefined, labelName: undefined }));
   }, [navigation]);
 
   const handleSortChange = useCallback(async (nextSort: NoteSort) => {
@@ -544,7 +549,8 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const header = (
     <NotesListHeader
       variant={variant}
-      topInset={insets.top}
+      labelName={labelName}
+      onClearLabel={handleClearLabel}
       searchText={searchText}
       onSearchChange={setSearchText}
       onClearSearch={handleClearSearch}
@@ -622,7 +628,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
       variant === 'my-tasks' ? Clipboard : FileText;
     return (
       <View style={[styles.emptyWrapper, { backgroundColor: colors.background }]}>
-        {variant === 'notes' && header}
+        {header}
         {variant === 'trash' && (
           <View style={[styles.trashBanner, { backgroundColor: colors.warning, borderBottomColor: colors.warningBorder }]}>
             <Info size={16} color={colors.warningText} style={styles.trashBannerIcon} />
@@ -675,7 +681,9 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Trash banner */}
+      {header}
+
+      {/* Trash banner — sits below the header so the header owns the top inset. */}
       {variant === 'trash' && (
         <View style={[styles.trashBanner, { backgroundColor: colors.warning, borderBottomColor: colors.warningBorder }]}>
           <View style={styles.trashBannerMessage}>
@@ -702,8 +710,6 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           )}
         </View>
       )}
-
-      {header}
 
       {/* Notes list — both the single-column list and the two-column grid are
           rendered by the same masonry engine; only the column count differs.

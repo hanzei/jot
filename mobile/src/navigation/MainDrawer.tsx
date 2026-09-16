@@ -1,12 +1,8 @@
-import { TouchableOpacity, StyleSheet } from 'react-native';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import type { RouteProp } from '@react-navigation/native';
 import { useRoute } from '@react-navigation/native';
-import { Menu } from 'lucide-react-native';
-import { useTranslation } from 'react-i18next';
 import NotesListScreen from '../screens/NotesListScreen';
 import DrawerContent from '../components/DrawerContent';
-import { useTheme } from '../theme/ThemeContext';
 
 export type MainDrawerParamList = {
   Notes: { labelId?: string; labelName?: string } | undefined;
@@ -19,8 +15,7 @@ const Drawer = createDrawerNavigator<MainDrawerParamList>();
 
 function NotesScreen() {
   const route = useRoute<RouteProp<MainDrawerParamList, 'Notes'>>();
-  const labelId = route.params?.labelId;
-  return <NotesListScreen variant="notes" labelId={labelId} />;
+  return <NotesListScreen variant="notes" labelId={route.params?.labelId} labelName={route.params?.labelName} />;
 }
 
 function MyTasksScreen() {
@@ -36,62 +31,18 @@ function TrashScreen() {
 }
 
 export default function MainDrawer() {
-  const { colors } = useTheme();
-  const { t } = useTranslation();
-
+  // Every screen renders its own header via NotesListHeader (search row plus a
+  // context strip for the view title / label filter), so the native drawer
+  // header stays off across the board — one header system, not two.
   return (
     <Drawer.Navigator
       drawerContent={(props) => <DrawerContent {...props} />}
-      screenOptions={({ navigation }) => ({
-        headerShown: true,
-        headerTitleStyle: [styles.headerTitle, { color: colors.text }],
-        headerShadowVisible: false,
-        headerStyle: {
-          backgroundColor: colors.background,
-          borderBottomWidth: 1,
-          borderBottomColor: colors.borderLight,
-        },
-        drawerType: 'front',
-        headerLeft: () => (
-          <TouchableOpacity
-            onPress={() => navigation.toggleDrawer()}
-            style={styles.menuButton}
-            testID="drawer-toggle"
-            accessibilityLabel={t('nav.openMenu')}
-            accessibilityRole="button"
-          >
-            <Menu size={24} color={colors.text} />
-          </TouchableOpacity>
-        ),
-      })}
+      screenOptions={{ headerShown: false, drawerType: 'front' }}
     >
-      <Drawer.Screen
-        name="Notes"
-        component={NotesScreen}
-        options={{ headerShown: false }}
-      />
-      <Drawer.Screen
-        name="MyTasks"
-        component={MyTasksScreen}
-        options={{ title: t('dashboard.tabMyTasks') }}
-      />
-      <Drawer.Screen name="Archived" component={ArchivedScreen} options={{ title: t('dashboard.tabArchive') }} />
-      <Drawer.Screen name="Trash" component={TrashScreen} options={{ title: t('dashboard.tabBin') }} />
+      <Drawer.Screen name="Notes" component={NotesScreen} />
+      <Drawer.Screen name="MyTasks" component={MyTasksScreen} />
+      <Drawer.Screen name="Archived" component={ArchivedScreen} />
+      <Drawer.Screen name="Trash" component={TrashScreen} />
     </Drawer.Navigator>
   );
 }
-
-const styles = StyleSheet.create({
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  menuButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 8,
-  },
-});
