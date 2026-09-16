@@ -13,6 +13,7 @@ jest.mock('@react-navigation/native', () => {
     useNavigation: jest.fn().mockReturnValue({ navigate: jest.fn(), dispatch: mockDispatch }),
     DrawerActions: {
       toggleDrawer: () => ({ type: 'DRAWER_TOGGLE' }),
+      jumpTo: (name: string, params?: Record<string, unknown>) => ({ type: 'JUMP_TO', payload: { name, params } }),
     },
     __mockDispatch: mockDispatch,
   };
@@ -839,5 +840,70 @@ describe('NotesListScreen archived search', () => {
       ([params]) => params?.archived === true,
     );
     expect(archivedCall?.[1]).toEqual({ enabled: false });
+  });
+});
+
+describe('NotesListScreen view header', () => {
+  const offlineResult = (notes: ReturnType<typeof buildNote>[]) => ({
+    data: notes,
+    isLoading: false,
+    isError: false,
+    refetch: jest.fn(),
+    isRefetching: false,
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    markServerReachable();
+    mockGetLocalNotes.mockResolvedValue([]);
+    mockUseToast.mockReturnValue({ showToast: jest.fn() });
+    notesHooks.useUpdateNote.mockReturnValue({ mutateAsync: mockMutateAsync });
+    notesHooks.useDeleteNote.mockReturnValue({ mutateAsync: mockMutateAsync });
+    notesHooks.useRestoreNote.mockReturnValue({ mutateAsync: mockMutateAsync });
+    notesHooks.usePermanentDeleteNote.mockReturnValue({ mutateAsync: mockMutateAsync });
+    notesHooks.useReorderNotes.mockReturnValue({ mutateAsync: mockMutateAsync });
+    notesHooks.useDuplicateNote.mockReturnValue({ mutateAsync: mockMutateAsync });
+    mockUseUsers.mockReturnValue({ refreshUsers: jest.fn() });
+    mockUseTheme.mockReturnValue({ colors: lightColors });
+    mockUseAuth.mockReturnValue({ user: mockUser, settings: baseSettings, setSettings: jest.fn() });
+    mockUseOfflineNote.mockReturnValue({ data: null });
+    mockUseOfflineNotes.mockReturnValue(offlineResult([]));
+  });
+
+  it('shows the drawer toggle and view title on the archive view', async () => {
+    await render(<NotesListScreen variant="archived" />);
+
+    // The custom header now carries the menu button on every variant, since
+    // the native drawer header (which used to provide it) is gone.
+    expect(screen.getByTestId('drawer-toggle')).toBeTruthy();
+    expect(screen.getByTestId('view-title-text')).toHaveTextContent('Archive');
+    // The label chip is only for label-filtered notes views.
+    expect(screen.queryByTestId('label-filter-chip')).toBeNull();
+  });
+
+  it('shows a clearable label chip when filtered by a label', async () => {
+    mockUseOfflineNotes.mockReturnValue(offlineResult([buildNote({ id: 'n1', title: 'labelled note' })]));
+
+    await render(<NotesListScreen variant="notes" labelId="lbl-1" labelName="Work" />);
+
+    expect(screen.getByTestId('label-filter-chip')).toBeTruthy();
+    expect(screen.getByText('Work')).toBeTruthy();
+    // A label-filtered notes view is not a destination, so no plain title.
+    expect(screen.queryByTestId('view-title')).toBeNull();
+
+    await fireEvent.press(screen.getByTestId('clear-label-filter'));
+
+    expect(navigationModule.__mockDispatch).toHaveBeenCalledWith({
+      type: 'JUMP_TO',
+      payload: { name: 'Notes', params: { labelId: undefined, labelName: undefined } },
+    });
+  });
+
+  it('shows neither a title nor a chip on the unfiltered dashboard', async () => {
+    await render(<NotesListScreen variant="notes" />);
+
+    expect(screen.queryByTestId('view-title')).toBeNull();
+    expect(screen.queryByTestId('label-filter-chip')).toBeNull();
+    expect(screen.getByTestId('drawer-toggle')).toBeTruthy();
   });
 });

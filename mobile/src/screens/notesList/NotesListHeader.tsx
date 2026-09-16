@@ -1,5 +1,5 @@
 import { View, Text, TextInput, ScrollView, TouchableOpacity } from 'react-native';
-import { ArrowUpDown, LayoutGrid, List, Menu, Search, X } from 'lucide-react-native';
+import { Archive, ArrowUpDown, Clipboard, LayoutGrid, List, Menu, Search, Tag, Trash2, X, type LucideIcon } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { NOTE_SORT_OPTIONS, type NoteSort } from '@jot/shared';
 import { useTheme } from '../../theme/ThemeContext';
@@ -11,6 +11,9 @@ interface NotesListHeaderProps {
   variant: 'notes' | 'archived' | 'trash' | 'my-tasks';
   /** Top safe-area inset still to be applied by content (0 while a banner owns it). */
   topInset: number;
+  /** Name of the label the notes view is filtered to, if any. */
+  labelName?: string | undefined;
+  onClearLabel: () => void;
   searchText: string;
   onSearchChange: (text: string) => void;
   onClearSearch: () => void;
@@ -28,6 +31,8 @@ interface NotesListHeaderProps {
 export default function NotesListHeader({
   variant,
   topInset,
+  labelName,
+  onClearLabel,
   searchText,
   onSearchChange,
   onClearSearch,
@@ -47,25 +52,29 @@ export default function NotesListHeader({
   const isGrid = layout === 'grid';
   const LayoutIcon = isGrid ? List : LayoutGrid;
 
+  // A "destination" view (archive/bin/my-tasks) shows an icon + title; the
+  // notes view filtered to a label shows a clearable chip instead. The plain
+  // dashboard shows neither. This context strip is what replaces the native
+  // drawer header the destinations used to carry.
+  const destination: { Icon: LucideIcon; title: string } | null =
+    variant === 'archived' ? { Icon: Archive, title: t('dashboard.tabArchive') } :
+    variant === 'trash' ? { Icon: Trash2, title: t('dashboard.tabBin') } :
+    variant === 'my-tasks' ? { Icon: Clipboard, title: t('dashboard.tabMyTasks') } :
+    null;
+  const showLabelChip = variant === 'notes' && !!labelName;
+
   return (
     <>
-      <View
-        style={[
-          styles.topControlsRow,
-          variant === 'notes' ? { paddingTop: topInset } : undefined,
-        ]}
-      >
-        {variant === 'notes' && (
-          <TouchableOpacity
-            style={[styles.menuButton, { backgroundColor: colors.surface, borderColor: colors.searchBorder }]}
-            onPress={onToggleDrawer}
-            testID="drawer-toggle"
-            accessibilityLabel={t('nav.openMenu')}
-            accessibilityRole="button"
-          >
-            <Menu size={22} color={colors.text} />
-          </TouchableOpacity>
-        )}
+      <View style={[styles.topControlsRow, { paddingTop: topInset }]}>
+        <TouchableOpacity
+          style={[styles.menuButton, { backgroundColor: colors.surface, borderColor: colors.searchBorder }]}
+          onPress={onToggleDrawer}
+          testID="drawer-toggle"
+          accessibilityLabel={t('nav.openMenu')}
+          accessibilityRole="button"
+        >
+          <Menu size={22} color={colors.text} />
+        </TouchableOpacity>
         <View style={[styles.searchContainer, { backgroundColor: colors.searchBackground, borderColor: colors.searchBorder }]}>
           <Search size={18} color={colors.iconMuted} style={styles.searchIcon} />
           <TextInput
@@ -123,6 +132,36 @@ export default function NotesListHeader({
           <ArrowUpDown size={18} color={isSortOpen ? colors.primary : colors.icon} />
         </TouchableOpacity>
       </View>
+
+      {destination && (
+        <View style={styles.contextStrip} testID="view-title">
+          <destination.Icon size={18} color={colors.textSecondary} style={styles.contextTitleIcon} />
+          <Text style={[styles.contextTitleText, { color: colors.text }]} testID="view-title-text">{destination.title}</Text>
+        </View>
+      )}
+
+      {showLabelChip && (
+        <View style={styles.contextStrip}>
+          <View
+            style={[styles.labelChip, { backgroundColor: colors.primaryLight, borderColor: colors.primary }]}
+            testID="label-filter-chip"
+          >
+            <Tag size={13} color={colors.primary} />
+            <Text style={[styles.labelChipText, { color: colors.primary }]} numberOfLines={1}>
+              {labelName}
+            </Text>
+            <TouchableOpacity
+              onPress={onClearLabel}
+              testID="clear-label-filter"
+              accessibilityRole="button"
+              accessibilityLabel={t('dashboard.clearLabelFilter')}
+              hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+            >
+              <X size={14} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {/* Sort preference is global across notes, archived, trash, labels, and my-tasks views. */}
       {isSortOpen && (

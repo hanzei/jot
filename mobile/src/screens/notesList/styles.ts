@@ -127,6 +127,36 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  contextStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 16,
+    marginBottom: 8,
+  },
+  contextTitleIcon: {
+    marginRight: 2,
+  },
+  contextTitleText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  labelChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingLeft: 11,
+    paddingRight: 7,
+    paddingVertical: 5,
+    flexShrink: 1,
+  },
+  labelChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    flexShrink: 1,
+  },
   sortControlsContainer: {
     marginHorizontal: 12,
     marginBottom: 8,
