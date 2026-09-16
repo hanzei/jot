@@ -82,10 +82,12 @@ import { styles } from './noteEditor/styles';
 import { animateListReflow, isReduceMotionEnabledSync } from '../utils/layoutAnimation';
 import ActiveListRow from './noteEditor/ActiveListRow';
 import { useEditorDoc } from './noteEditor/useEditorDoc';
+import { useCardRectRegistry } from './notesList/cardRectRegistry';
 import { useNoteEditorSync } from './noteEditor/useNoteEditorSync';
 import { useListItemEditing } from './noteEditor/useListItemEditing';
 import { usePendingActionIndicator } from './noteEditor/usePendingActionIndicator';
 import type { EditorNavProp, EditorRouteProp } from './noteEditor/types';
+import type { LayoutRect } from '../navigation/RootNavigator';
 
 const IOS_KEYBOARD_VERTICAL_OFFSET = 88;
 const MARKDOWN_TOOLBAR_ID = 'markdown-formatting-toolbar';
@@ -225,6 +227,20 @@ export default function NoteEditorScreen() {
   const [zoomEnabled] = useState(() => !!originRect && !isReduceMotionEnabledSync());
   // 0 = scaled/positioned onto the card, 1 = full screen.
   const zoom = useAnimatedValue(zoomEnabled ? 0 : 1);
+  // The card rect the zoom animates against. Seeded from the tap-time origin,
+  // but re-targeted onto the card's *current* position at close time — the list
+  // reflows behind the open editor (a longer note, a pin, a reorder, a sort
+  // change), so the frozen origin would zoom back onto the card's old slot.
+  const cardRects = useCardRectRegistry();
+  const [zoomRect, setZoomRect] = useState<LayoutRect | undefined>(originRect);
+  // Bumped to request the zoom-close animation. It runs from an effect keyed on
+  // this tick (not inline in animateClose) so a re-target — the setZoomRect that
+  // moves the animation's endpoint onto the card's current position — is
+  // guaranteed committed to the transform before the animation reads it, rather
+  // than racing a still-pending render. closeResolveRef carries animateClose's
+  // promise resolver through to that effect.
+  const [closeTick, setCloseTick] = useState(0);
+  const closeResolveRef = useRef<(() => void) | null>(null);
   // Holds the editor invisible for the first frame of a zoom-open. With the
   // native driver the transform/opacity aren't written as static props on the
   // JS render — the native animation node applies them, and it only attaches
@@ -256,24 +272,63 @@ export default function NoteEditorScreen() {
 
   // Zoom the editor back down onto the card, resolving when done. Instant when
   // the note wasn't opened from a card or Reduce Motion is on.
-  const animateClose = useCallback(() => {
+  //
+  // `retarget` re-measures the note's live card and zooms onto its *current*
+  // position instead of the frozen tap-time origin — used for a plain back
+  // exit, where the list may have reflowed under the editor. Action exits
+  // (archive/trash/delete) pass false: the card is leaving the list, so the
+  // note fades out over its old slot (the measure would miss and fall back
+  // anyway, but skipping it avoids catching the card mid-removal).
+  //
+  // The re-target (setZoomRect) and the animation request (setCloseTick) are set
+  // together so React commits the moved endpoint and the trigger in one render;
+  // the close effect below then starts the animation once that has landed.
+  const animateClose = useCallback((retarget = true) => {
     if (!zoomEnabled) return Promise.resolve();
     // Blur any focused input first. A focused TextInput and its input-accessory
     // toolbar render outside the transformed view, so without this they "hang"
-    // in place while the editor scales away. Wait a frame so the blur takes
-    // effect before the zoom starts.
+    // in place while the editor scales away.
     Keyboard.dismiss();
     return new Promise<void>((resolve) => {
-      requestAnimationFrame(() => {
-        Animated.timing(zoom, {
-          toValue: 0,
-          duration: ZOOM_MS,
-          easing: Easing.in(Easing.cubic),
-          useNativeDriver: true,
-        }).start(() => resolve());
-      });
+      closeResolveRef.current = resolve;
+      const request = (rect: LayoutRect | null) => {
+        if (rect) setZoomRect(rect);
+        setCloseTick((tick) => tick + 1);
+      };
+      const noteId = noteIdRef.current;
+      // Keep the frozen origin when there's nothing to re-target onto (retarget
+      // off, no registry, or the card can't be measured — gone from the list or
+      // not mounted). `originRect` disambiguates a note rendered by more than one
+      // mounted list, picking the card nearest where it was opened.
+      if (!retarget || !cardRects || !noteId) {
+        request(null);
+        return;
+      }
+      cardRects
+        .measure(noteId, originRect)
+        .then(request)
+        .catch(() => request(null));
     });
-  }, [zoom, zoomEnabled]);
+  }, [zoomEnabled, cardRects, noteIdRef, originRect]);
+
+  // Run the zoom-close once a close has been requested and its (possibly
+  // re-targeted) endpoint committed. Keyed on closeTick so it fires per request
+  // and only after the transform reflects the current zoomRect.
+  useEffect(() => {
+    if (closeTick === 0) return;
+    const resolve = closeResolveRef.current;
+    closeResolveRef.current = null;
+    // One frame lets the blur from Keyboard.dismiss settle before the zoom.
+    const raf = requestAnimationFrame(() => {
+      Animated.timing(zoom, {
+        toValue: 0,
+        duration: ZOOM_MS,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }).start(() => resolve?.());
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [closeTick, zoom]);
 
   const { isPending: isMenuActionPending, withPendingIndicator } = usePendingActionIndicator();
 
@@ -314,20 +369,25 @@ export default function NoteEditorScreen() {
   // via its own button (archive, trash, restore, delete-forever) so the zoom
   // and any dashboard removal reflow plays consistently instead of only on
   // some exit paths.
+  // Action exits (archive/trash/delete/restore) keep the frozen origin: the note
+  // has left the current view by the time we zoom, so the editor fades over its
+  // old slot rather than chasing a gone or hidden card. Only a plain back close
+  // re-measures the live card (animateClose's default).
   const zoomCloseAndExit = useCallback(async () => {
     isClosingRef.current = true;
-    await animateClose();
+    await animateClose(false);
     intentionalExitRef.current = true;
     navigation.goBack();
   }, [animateClose, intentionalExitRef, isClosingRef, navigation]);
 
   // Maps the fullscreen editor onto the originating card at zoom 0 and to its
-  // natural position/size at zoom 1. A short opacity ramp softens the first
-  // (most distorted) frames of the non-uniform scale.
+  // natural position/size at zoom 1. Reads zoomRect (the tap-time origin, or the
+  // card's re-measured position on a plain close). A short opacity ramp softens
+  // the first (most distorted) frames of the non-uniform scale.
   const zoomStyle = useMemo(() => {
-    if (!originRect) return null;
-    const centerX = originRect.x + originRect.width / 2;
-    const centerY = originRect.y + originRect.height / 2;
+    if (!zoomRect) return null;
+    const centerX = zoomRect.x + zoomRect.width / 2;
+    const centerY = zoomRect.y + zoomRect.height / 2;
     return {
       // Fade fully out at the card end so the pop after the close zoom isn't a
       // visible snap; fade in quickly on open.
@@ -335,11 +395,11 @@ export default function NoteEditorScreen() {
       transform: [
         { translateX: zoom.interpolate({ inputRange: [0, 1], outputRange: [centerX - screenW / 2, 0] }) },
         { translateY: zoom.interpolate({ inputRange: [0, 1], outputRange: [centerY - screenH / 2, 0] }) },
-        { scaleX: zoom.interpolate({ inputRange: [0, 1], outputRange: [originRect.width / screenW, 1] }) },
-        { scaleY: zoom.interpolate({ inputRange: [0, 1], outputRange: [originRect.height / screenH, 1] }) },
+        { scaleX: zoom.interpolate({ inputRange: [0, 1], outputRange: [zoomRect.width / screenW, 1] }) },
+        { scaleY: zoom.interpolate({ inputRange: [0, 1], outputRange: [zoomRect.height / screenH, 1] }) },
       ],
     };
-  }, [originRect, zoom, screenW, screenH]);
+  }, [zoomRect, zoom, screenW, screenH]);
 
   const displayedImageUploadsRef = useRef(displayedImageUploads);
   // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
@@ -860,32 +920,57 @@ export default function NoteEditorScreen() {
     }
   }), [commitMetadataBaseline, pinnedRef, runMetadataUpdate, setPinned, withSavedNote, t]);
 
-  const handleToggleArchive = useCallback(() => withSavedNote(async (id) => {
-    const newArchived = !archivedRef.current;
-    setArchived(newArchived);
-
-    if (!newArchived) {
+  const handleToggleArchive = useCallback(() => {
+    if (archivedRef.current) {
       // Unarchiving keeps the user on the note.
-      try {
-        await runMetadataUpdate(id, { archived: false });
-        commitMetadataBaseline({ archived: false });
-        showToast(t('dashboard.noteUnarchived'));
-      } catch {
-        setArchived(true);
-        Alert.alert(t('common.error'), t('note.failedUpdate'));
-      }
-      return;
+      return withSavedNote(async (id) => {
+        setArchived(false);
+        try {
+          await runMetadataUpdate(id, { archived: false });
+          commitMetadataBaseline({ archived: false });
+          showToast(t('dashboard.noteUnarchived'));
+        } catch {
+          setArchived(true);
+          Alert.alert(t('common.error'), t('note.failedUpdate'));
+        }
+      });
     }
 
-    // Archiving from the single-note view returns the user to the dashboard.
-    // Zoom back onto the card first, then archive so the dashboard plays its
-    // removal reflow on the still-present card. The editor is unmounted by the
-    // time we mutate, so failures surface as a toast rather than an alert.
-    commitMetadataBaseline({ archived: true });
-    await zoomCloseAndExit();
-    try {
-      await runMetadataUpdate(id, { archived: true });
-      showToast(t('dashboard.noteArchived'), 'success', {
+    // Archiving returns the user to the dashboard. Fold `archived` into the same
+    // save that flushes pending edits — flushSave sends it as a changed scalar —
+    // so the note flips to archived and leaves the active list in ONE update.
+    // Flushing the edit on its own first (the old order) bumped updated_at and,
+    // under a recency sort, reordered the card to the top for a beat before the
+    // separate archive removed it. Set the ref too so the synchronous flush reads
+    // the new value, and mark dirty so the flush runs even with no content edits.
+    return withPendingIndicator(async () => {
+      const wasNew = noteIdRef.current === null;
+      setArchived(true);
+      archivedRef.current = true;
+      markDirtyAndScheduleUpdate();
+      const saved = await flushPendingChanges();
+      if (!saved) {
+        // Save failed (error already surfaced); undo the optimistic archive.
+        setArchived(false);
+        archivedRef.current = false;
+        return;
+      }
+      const id = noteIdRef.current;
+      // A brand-new note is created unarchived (the create request carries no
+      // archived flag), so archive it with a follow-up PATCH. An existing note
+      // already went out archived within the flush above (folded in as a changed
+      // scalar), so it needs no second write — and that single update is what
+      // keeps the card from reordering to the top before it disappears.
+      if (wasNew && id) {
+        try {
+          await runMetadataUpdate(id, { archived: true });
+        } catch {
+          showToast(t('note.failedArchive'), 'error');
+          await zoomCloseAndExit();
+          return;
+        }
+      }
+      showToast(t('dashboard.noteArchived'), 'success', id ? {
         label: t('dashboard.undo'),
         onPress: async () => {
           try {
@@ -895,11 +980,10 @@ export default function NoteEditorScreen() {
             showToast(t('note.failedUnarchive'), 'error');
           }
         },
-      });
-    } catch {
-      showToast(t('note.failedArchive'), 'error');
-    }
-  }), [archivedRef, zoomCloseAndExit, commitMetadataBaseline, runMetadataUpdate, setArchived, withSavedNote, showToast, t]);
+      } : undefined);
+      await zoomCloseAndExit();
+    });
+  }, [archivedRef, noteIdRef, zoomCloseAndExit, commitMetadataBaseline, runMetadataUpdate, setArchived, withSavedNote, withPendingIndicator, flushPendingChanges, markDirtyAndScheduleUpdate, showToast, t]);
 
   const handleColorSelect = useCallback(async (selectedColor: string) => {
     const saveSucceeded = await flushPendingChanges();
