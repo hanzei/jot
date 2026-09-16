@@ -549,7 +549,6 @@ export default function NotesListScreen({ variant = 'notes', labelId, labelName 
   const header = (
     <NotesListHeader
       variant={variant}
-      topInset={insets.top}
       labelName={labelName}
       onClearLabel={handleClearLabel}
       searchText={searchText}

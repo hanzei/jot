@@ -1,5 +1,7 @@
+import { useContext } from 'react';
 import { View, Text, TextInput, ScrollView, TouchableOpacity } from 'react-native';
 import { Archive, ArrowUpDown, Clipboard, LayoutGrid, List, Menu, Search, Tag, Trash2, X, type LucideIcon } from 'lucide-react-native';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { NOTE_SORT_OPTIONS, type NoteSort } from '@jot/shared';
 import { useTheme } from '../../theme/ThemeContext';
@@ -9,8 +11,6 @@ import { styles } from './styles';
 
 interface NotesListHeaderProps {
   variant: 'notes' | 'archived' | 'trash' | 'my-tasks';
-  /** Top safe-area inset still to be applied by content (0 while a banner owns it). */
-  topInset: number;
   /** Name of the label the notes view is filtered to, if any. */
   labelName?: string | undefined;
   onClearLabel: () => void;
@@ -30,7 +30,6 @@ interface NotesListHeaderProps {
 
 export default function NotesListHeader({
   variant,
-  topInset,
   labelName,
   onClearLabel,
   searchText,
@@ -48,6 +47,10 @@ export default function NotesListHeader({
 }: NotesListHeaderProps) {
   const { t } = useTranslation();
   const { colors } = useTheme();
+  // The header renders against the top screen edge, so it owns the top inset
+  // itself rather than receiving it as a prop. Inside ContentSafeArea's subtree
+  // this value is already 0 whenever a top banner owns the inset.
+  const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
   const activeSortLabel = getNoteSortLabel(sortMode, t);
   const isGrid = layout === 'grid';
   const LayoutIcon = isGrid ? List : LayoutGrid;
@@ -65,7 +68,7 @@ export default function NotesListHeader({
 
   return (
     <>
-      <View style={[styles.topControlsRow, { paddingTop: topInset }]}>
+      <View style={[styles.topControlsRow, { paddingTop: insets.top }]}>
         <TouchableOpacity
           style={[styles.menuButton, { backgroundColor: colors.surface, borderColor: colors.searchBorder }]}
           onPress={onToggleDrawer}
