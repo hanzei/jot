@@ -82,10 +82,12 @@ import { styles } from './noteEditor/styles';
 import { animateListReflow, isReduceMotionEnabledSync } from '../utils/layoutAnimation';
 import ActiveListRow from './noteEditor/ActiveListRow';
 import { useEditorDoc } from './noteEditor/useEditorDoc';
+import { useCardRectRegistry } from './notesList/cardRectRegistry';
 import { useNoteEditorSync } from './noteEditor/useNoteEditorSync';
 import { useListItemEditing } from './noteEditor/useListItemEditing';
 import { usePendingActionIndicator } from './noteEditor/usePendingActionIndicator';
 import type { EditorNavProp, EditorRouteProp } from './noteEditor/types';
+import type { LayoutRect } from '../navigation/RootNavigator';
 
 const IOS_KEYBOARD_VERTICAL_OFFSET = 88;
 const MARKDOWN_TOOLBAR_ID = 'markdown-formatting-toolbar';
@@ -225,6 +227,12 @@ export default function NoteEditorScreen() {
   const [zoomEnabled] = useState(() => !!originRect && !isReduceMotionEnabledSync());
   // 0 = scaled/positioned onto the card, 1 = full screen.
   const zoom = useAnimatedValue(zoomEnabled ? 0 : 1);
+  // The card rect the zoom animates against. Seeded from the tap-time origin,
+  // but re-targeted onto the card's *current* position at close time — the list
+  // reflows behind the open editor (a longer note, a pin, a reorder, a sort
+  // change), so the frozen origin would zoom back onto the card's old slot.
+  const cardRects = useCardRectRegistry();
+  const [zoomRect, setZoomRect] = useState<LayoutRect | undefined>(originRect);
   // Holds the editor invisible for the first frame of a zoom-open. With the
   // native driver the transform/opacity aren't written as static props on the
   // JS render — the native animation node applies them, and it only attaches
@@ -256,24 +264,46 @@ export default function NoteEditorScreen() {
 
   // Zoom the editor back down onto the card, resolving when done. Instant when
   // the note wasn't opened from a card or Reduce Motion is on.
-  const animateClose = useCallback(() => {
+  //
+  // `retarget` re-measures the note's live card and zooms onto its *current*
+  // position instead of the frozen tap-time origin — used for a plain back
+  // exit, where the list may have reflowed under the editor. Action exits
+  // (archive/trash/delete) pass false: the card is leaving the list, so the
+  // note fades out over its old slot (the measure would miss and fall back
+  // anyway, but skipping it avoids catching the card mid-removal).
+  const animateClose = useCallback((retarget = true) => {
     if (!zoomEnabled) return Promise.resolve();
     // Blur any focused input first. A focused TextInput and its input-accessory
     // toolbar render outside the transformed view, so without this they "hang"
     // in place while the editor scales away. Wait a frame so the blur takes
     // effect before the zoom starts.
     Keyboard.dismiss();
-    return new Promise<void>((resolve) => {
-      requestAnimationFrame(() => {
-        Animated.timing(zoom, {
-          toValue: 0,
-          duration: ZOOM_MS,
-          easing: Easing.in(Easing.cubic),
-          useNativeDriver: true,
-        }).start(() => resolve());
+    const runZoom = () =>
+      new Promise<void>((resolve) => {
+        // A frame's wait lets a just-committed re-target (setZoomRect) reach the
+        // native transform before the animation reads it, and lets the blur
+        // above take effect.
+        requestAnimationFrame(() => {
+          Animated.timing(zoom, {
+            toValue: 0,
+            duration: ZOOM_MS,
+            easing: Easing.in(Easing.cubic),
+            useNativeDriver: true,
+          }).start(() => resolve());
+        });
       });
-    });
-  }, [zoom, zoomEnabled]);
+    const noteId = noteIdRef.current;
+    if (!retarget || !cardRects || !noteId) return runZoom();
+    // Keep the frozen origin if the card can't be measured (gone from the list,
+    // or not mounted): setZoomRect only moves the target when we have a fresh rect.
+    return cardRects
+      .measure(noteId)
+      .then((rect) => {
+        if (rect) setZoomRect(rect);
+      })
+      .catch(() => {})
+      .then(runZoom);
+  }, [zoom, zoomEnabled, cardRects, noteIdRef]);
 
   const { isPending: isMenuActionPending, withPendingIndicator } = usePendingActionIndicator();
 
@@ -316,18 +346,21 @@ export default function NoteEditorScreen() {
   // some exit paths.
   const zoomCloseAndExit = useCallback(async () => {
     isClosingRef.current = true;
-    await animateClose();
+    // Action exits keep the frozen origin — the card is leaving the list, so the
+    // note fades out over its old slot rather than chasing a card mid-removal.
+    await animateClose(false);
     intentionalExitRef.current = true;
     navigation.goBack();
   }, [animateClose, intentionalExitRef, isClosingRef, navigation]);
 
   // Maps the fullscreen editor onto the originating card at zoom 0 and to its
-  // natural position/size at zoom 1. A short opacity ramp softens the first
-  // (most distorted) frames of the non-uniform scale.
+  // natural position/size at zoom 1. Reads zoomRect (the tap-time origin, or the
+  // card's re-measured position on a plain close). A short opacity ramp softens
+  // the first (most distorted) frames of the non-uniform scale.
   const zoomStyle = useMemo(() => {
-    if (!originRect) return null;
-    const centerX = originRect.x + originRect.width / 2;
-    const centerY = originRect.y + originRect.height / 2;
+    if (!zoomRect) return null;
+    const centerX = zoomRect.x + zoomRect.width / 2;
+    const centerY = zoomRect.y + zoomRect.height / 2;
     return {
       // Fade fully out at the card end so the pop after the close zoom isn't a
       // visible snap; fade in quickly on open.
@@ -335,11 +368,11 @@ export default function NoteEditorScreen() {
       transform: [
         { translateX: zoom.interpolate({ inputRange: [0, 1], outputRange: [centerX - screenW / 2, 0] }) },
         { translateY: zoom.interpolate({ inputRange: [0, 1], outputRange: [centerY - screenH / 2, 0] }) },
-        { scaleX: zoom.interpolate({ inputRange: [0, 1], outputRange: [originRect.width / screenW, 1] }) },
-        { scaleY: zoom.interpolate({ inputRange: [0, 1], outputRange: [originRect.height / screenH, 1] }) },
+        { scaleX: zoom.interpolate({ inputRange: [0, 1], outputRange: [zoomRect.width / screenW, 1] }) },
+        { scaleY: zoom.interpolate({ inputRange: [0, 1], outputRange: [zoomRect.height / screenH, 1] }) },
       ],
     };
-  }, [originRect, zoom, screenW, screenH]);
+  }, [zoomRect, zoom, screenW, screenH]);
 
   const displayedImageUploadsRef = useRef(displayedImageUploads);
   // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777

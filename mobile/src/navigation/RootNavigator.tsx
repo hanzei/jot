@@ -8,6 +8,7 @@ import TopBanners from '../components/TopBanners';
 import { ContentSafeArea } from '../components/ContentSafeArea';
 import AuthStack from './AuthStack';
 import MainDrawer from './MainDrawer';
+import { CardRectRegistryProvider } from '../screens/notesList/cardRectRegistry';
 import NoteEditorScreen from '../screens/NoteEditorScreen';
 import ShareScreen from '../screens/ShareScreen';
 import SettingsScreen from '../screens/SettingsScreen';
@@ -87,76 +88,78 @@ function AuthenticatedStack() {
             this View and below <TopBanners /> — the banners need the real
             inset. */}
         <ContentSafeArea>
-          <Stack.Navigator>
-            <Stack.Screen name="MainDrawer" component={MainDrawer} options={{ headerShown: false }} />
-            <Stack.Screen
-              name="NoteEditor"
-              component={NoteEditorScreen}
-              getId={getNoteScreenId}
-              options={{
-                headerShown: false,
-                // The editor animates its own transform to zoom open from (and
-                // closed back onto) the tapped card. A transparent modal keeps the
-                // dashboard rendered behind so the card shows through while the
-                // editor is scaled down; the native present/dismiss animation is
-                // disabled so only the zoom is visible, and the swipe gesture is
-                // off so every exit routes through that zoom.
-                presentation: 'transparentModal',
-                animation: 'none',
-                gestureEnabled: false,
-                contentStyle: { backgroundColor: 'transparent' },
-              }}
-            />
-            <Stack.Screen
-              name="Share"
-              component={ShareScreen}
-              getId={getNoteScreenId}
-              options={{
-                headerShown: false,
-                presentation: 'modal',
-              }}
-            />
-            <Stack.Screen
-              name="Settings"
-              component={SettingsScreen}
-              options={{
-                headerShown: false,
-                presentation: 'modal',
-              }}
-            />
-            <Stack.Screen
-              name="SyncFailures"
-              component={SyncFailuresScreen}
-              options={{
-                headerShown: false,
-                presentation: 'modal',
-              }}
-            />
-            <Stack.Screen
-              name="Diagnostics"
-              component={DiagnosticsScreen}
-              options={{
-                headerShown: false,
-                presentation: 'modal',
-              }}
-            />
-            <Stack.Screen
-              name="LogsFullscreen"
-              component={LogsFullscreenScreen}
-              options={{
-                headerShown: false,
-                presentation: 'modal',
-              }}
-            />
-            <Stack.Screen
-              name="ConnectToServer"
-              component={ConnectToServerScreen}
-              options={{
-                headerShown: false,
-                presentation: 'modal',
-              }}
-            />
-          </Stack.Navigator>
+          <CardRectRegistryProvider>
+            <Stack.Navigator>
+              <Stack.Screen name="MainDrawer" component={MainDrawer} options={{ headerShown: false }} />
+              <Stack.Screen
+                name="NoteEditor"
+                component={NoteEditorScreen}
+                getId={getNoteScreenId}
+                options={{
+                  headerShown: false,
+                  // The editor animates its own transform to zoom open from (and
+                  // closed back onto) the tapped card. A transparent modal keeps the
+                  // dashboard rendered behind so the card shows through while the
+                  // editor is scaled down; the native present/dismiss animation is
+                  // disabled so only the zoom is visible, and the swipe gesture is
+                  // off so every exit routes through that zoom.
+                  presentation: 'transparentModal',
+                  animation: 'none',
+                  gestureEnabled: false,
+                  contentStyle: { backgroundColor: 'transparent' },
+                }}
+              />
+              <Stack.Screen
+                name="Share"
+                component={ShareScreen}
+                getId={getNoteScreenId}
+                options={{
+                  headerShown: false,
+                  presentation: 'modal',
+                }}
+              />
+              <Stack.Screen
+                name="Settings"
+                component={SettingsScreen}
+                options={{
+                  headerShown: false,
+                  presentation: 'modal',
+                }}
+              />
+              <Stack.Screen
+                name="SyncFailures"
+                component={SyncFailuresScreen}
+                options={{
+                  headerShown: false,
+                  presentation: 'modal',
+                }}
+              />
+              <Stack.Screen
+                name="Diagnostics"
+                component={DiagnosticsScreen}
+                options={{
+                  headerShown: false,
+                  presentation: 'modal',
+                }}
+              />
+              <Stack.Screen
+                name="LogsFullscreen"
+                component={LogsFullscreenScreen}
+                options={{
+                  headerShown: false,
+                  presentation: 'modal',
+                }}
+              />
+              <Stack.Screen
+                name="ConnectToServer"
+                component={ConnectToServerScreen}
+                options={{
+                  headerShown: false,
+                  presentation: 'modal',
+                }}
+              />
+            </Stack.Navigator>
+          </CardRectRegistryProvider>
         </ContentSafeArea>
       </View>
     </SSEProvider>

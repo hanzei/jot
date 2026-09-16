@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
 import { CircleAlert, CloudOff, Square } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
@@ -16,6 +16,7 @@ import { isWhiteHexColor } from '../utils/colorContrast';
 import MarkdownPreview from './MarkdownPreview';
 import InlineMarkdown from './InlineMarkdown';
 import type { LayoutRect } from '../navigation/RootNavigator';
+import { useCardRectRegistry } from '../screens/notesList/cardRectRegistry';
 
 const CARD_RADIUS = 12;
 
@@ -187,6 +188,30 @@ function NoteCard({ note, onPress, onLongPress, onLabelPress }: NoteCardProps) {
     }
     open();
   }, [onPress]);
+
+  // Publish this card's live position so the editor's zoom-close can land on
+  // where the card sits *now* rather than the frozen tap-time origin, which goes
+  // stale as the list reflows under the open editor (a longer note, a pin, a
+  // reorder, a sort change). The editor measures this at close time and falls
+  // back to the frozen origin when the card is gone. Degrades to no-op without a
+  // registry (unit tests).
+  const registry = useCardRectRegistry();
+  useEffect(() => {
+    if (!registry) return;
+    const measure = () =>
+      new Promise<LayoutRect | null>((resolve) => {
+        const node = cardRef.current;
+        if (!node) {
+          resolve(null);
+          return;
+        }
+        node.measureInWindow((x, y, width, height) =>
+          resolve(width && height ? { x, y, width, height } : null),
+        );
+      });
+    registry.register(note.id, measure);
+    return () => registry.unregister(note.id, measure);
+  }, [registry, note.id]);
 
   return (
     <TouchableOpacity
