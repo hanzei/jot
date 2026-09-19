@@ -54,6 +54,15 @@ export default function ShareModal({ note, isOpen, onClose, notesList, currentUs
   // plus the ability to remove only themselves. The owner is the note's author.
   const isOwner = !!note && note.user_id === currentUserId;
 
+  // The owner also has access but is never one of the `shared_with` records
+  // (those list only the people the note was shared with), so resolve them from
+  // the directory to head a collaborator's access list. Undefined until the
+  // directory loads, or if the owner somehow isn't in it.
+  const owner = useMemo(
+    () => users.find(user => user.id === note?.user_id),
+    [users, note?.user_id],
+  );
+
   const trimmedQuery = searchQuery.trim();
   const isSearching = trimmedQuery.length > 0;
 
@@ -127,11 +136,10 @@ export default function ShareModal({ note, isOpen, onClose, notesList, currentUs
     let cancelled = false;
 
     loadShares();
-    // The user directory only feeds the owner's share picker; a read-only
-    // viewer never searches, so skip the request for them.
-    if (!isOwner) {
-      return () => { cancelled = true; };
-    }
+    // The directory feeds the owner's share picker and also lets a read-only
+    // viewer name the owner at the head of the access list — the owner is never
+    // a `shared_with` record — so both roles fetch it. It stays a single request
+    // per open; a viewer never searches, so nothing else consumes it for them.
     usersApi.search()
       .then(usersList => {
         if (cancelled) return;
@@ -146,7 +154,7 @@ export default function ShareModal({ note, isOpen, onClose, notesList, currentUs
       });
 
     return () => { cancelled = true; };
-  }, [note, isOpen, isOwner, loadShares]);
+  }, [note, isOpen, loadShares]);
 
   // Handle click outside to close suggestions
   useEffect(() => {
@@ -437,6 +445,25 @@ export default function ShareModal({ note, isOpen, onClose, notesList, currentUs
                     : t('share.peopleWithAccess')}
                 </h4>
                 <div className="space-y-2 max-h-40 overflow-y-auto scrollbar-subtle">
+                  {/* The owner heads a collaborator's access list, tagged as the
+                      owner. They are never a `shared_with` record, so this row is
+                      rendered on its own above the shares. The owner's own view
+                      lists only the collaborators, so it is skipped there. */}
+                  {!isOwner && owner && (
+                    <div className="flex items-center justify-between p-2 bg-gray-50 dark:bg-slate-700 rounded" data-testid="owner-row">
+                      <div>
+                        <span className="text-sm text-gray-700 dark:text-gray-200">
+                          {owner.first_name || owner.last_name
+                            ? `${owner.first_name} ${owner.last_name}`.trim()
+                            : owner.username}
+                        </span>
+                        {(owner.first_name || owner.last_name) && (
+                          <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">({owner.username})</span>
+                        )}
+                        <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">({t('share.owner')})</span>
+                      </div>
+                    </div>
+                  )}
                   {shares.map((share) => {
                     const isSelf = share.shared_with_user_id === currentUserId;
                     return (

@@ -262,6 +262,16 @@ describe('ShareScreen empty-query suggestions', () => {
     expect(screen.queryByText('@me')).toBeNull();
   });
 
+  it('does not show an owner row in the owner’s own view', async () => {
+    await renderShareScreen();
+
+    await waitFor(() => expect(screen.getByTestId('share-all-users')).toBeTruthy());
+
+    // The owner heads the list only for read-only viewers; the owner's own
+    // view lists just the collaborators.
+    expect(screen.queryByText(/\(owner\)/)).toBeNull();
+  });
+
   it('excludes collaborators the note is already shared with', async () => {
     mockUseNoteShares.mockReturnValue({
       data: [shareRecord(bob.id, '2026-05-01T00:00:00Z')],
@@ -383,6 +393,18 @@ describe('ShareScreen read-only viewer (collaborator)', () => {
     expect(screen.queryByTestId(`remove-share-${signedInUser.id}`)).toBeNull();
     expect(screen.queryByTestId(`remove-share-${bob.id}`)).toBeNull();
     // The signed-in user is marked as themselves.
+    expect(screen.getByText(/\(you\)/)).toBeTruthy();
+  });
+
+  it('heads the access list with the note owner, tagged as owner', async () => {
+    await renderShareScreen();
+
+    await waitFor(() => expect(screen.getByText('People with access')).toBeTruthy());
+    // The owner is a different user, absent from `shared_with`, resolved from
+    // the directory and shown at the top of the list.
+    expect(screen.getByTestId(`owner-${owner.id}`)).toBeTruthy();
+    expect(screen.getByText(/\(owner\)/)).toBeTruthy();
+    // The collaborators, including the viewer, still follow.
     expect(screen.getByText(/\(you\)/)).toBeTruthy();
   });
 

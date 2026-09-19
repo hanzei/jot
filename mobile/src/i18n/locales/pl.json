@@ -355,6 +355,7 @@
     "removeAccessFor": "Usuń udostępnienie dla {{username}}",
     "peopleWithAccess": "Osoby z dostępem",
     "you": "Ty",
+    "owner": "właściciel",
     "leave": "Opuść notatkę",
     "leaveConfirm": "Opuścić tę notatkę? Utracisz dostęp wraz ze swoimi etykietami i kolorem dla niej.",
     "confirmLeave": "Opuść"

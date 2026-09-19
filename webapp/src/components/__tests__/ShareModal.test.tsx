@@ -59,6 +59,19 @@ const mockUser3: User = {
   has_profile_icon: false,
 };
 
+// The note's owner (mockNote.user_id === 'user1'), as returned by the directory
+// search so a read-only viewer can name them at the head of the access list.
+const mockOwner: User = {
+  id: 'user1',
+  username: 'olivia',
+  first_name: 'Olivia',
+  last_name: 'Owner',
+  role: 'user',
+  created_at: '2024-01-01T00:00:00Z',
+  updated_at: '2024-01-01T00:00:00Z',
+  has_profile_icon: false,
+};
+
 const defaultProps = {
   note: mockNote,
   isOpen: true,
@@ -105,6 +118,17 @@ describe('ShareModal', () => {
       await waitFor(() => {
         expect(screen.getByText(/not shared with anyone yet/i)).toBeInTheDocument();
       });
+    });
+
+    it('does not add an owner row in the owner’s own view', async () => {
+      mockGetShares.mockResolvedValue([mockShare1]);
+      // The owner would be in the directory, but their own view lists only the
+      // collaborators — the owner heads the list for read-only viewers.
+      mockUsersSearch.mockResolvedValue([mockOwner]);
+      render(<ShareModal {...defaultProps} />);
+
+      await waitFor(() => expect(screen.getByText('Alice Smith')).toBeInTheDocument());
+      expect(screen.queryByTestId('owner-row')).not.toBeInTheDocument();
     });
   });
 
@@ -435,23 +459,31 @@ describe('ShareModal', () => {
     // modal in read-only mode.
     const viewerProps = { ...defaultProps, currentUserId: 'user2' };
 
-    it('does not show the share picker and does not fetch the user directory', async () => {
+    it('does not show the share picker, but fetches the directory to name the owner', async () => {
       mockGetShares.mockResolvedValue([mockShare1]);
       render(<ShareModal {...viewerProps} />);
 
       await waitFor(() => expect(mockGetShares).toHaveBeenCalled());
 
+      // A collaborator cannot add people, so there is no search box…
       expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
-      expect(mockUsersSearch).not.toHaveBeenCalled();
+      // …but the directory is still loaded, since the owner (never a
+      // `shared_with` record) has to be resolved from it for the access list.
+      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled());
     });
 
-    it('lists who has access and marks the viewer', async () => {
+    it('lists who has access, heading it with the owner and marking the viewer', async () => {
       mockGetShares.mockResolvedValue([mockShare1]);
+      mockUsersSearch.mockResolvedValue([mockOwner]);
       render(<ShareModal {...viewerProps} />);
 
       await waitFor(() => expect(screen.getByText('Alice Smith')).toBeInTheDocument());
       // mockShare1 is shared_with 'user2', i.e. the viewer themselves.
       expect(screen.getByText('(you)')).toBeInTheDocument();
+      // The owner heads the list, resolved from the directory and tagged.
+      const ownerRow = await screen.findByTestId('owner-row');
+      expect(within(ownerRow).getByText('Olivia Owner')).toBeInTheDocument();
+      expect(within(ownerRow).getByText('(owner)')).toBeInTheDocument();
       // No per-row remove controls for a read-only viewer.
       expect(screen.queryByRole('button', { name: /remove access/i })).not.toBeInTheDocument();
     });

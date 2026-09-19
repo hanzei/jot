@@ -93,6 +93,13 @@ export default function ShareScreen() {
   const isOwner = !!currentUser && ownerId != null && ownerId === currentUser.id;
   const isReadOnlyViewer = !!currentUser && ownerId != null && ownerId !== currentUser.id;
 
+  // The owner also has access, but never appears in `shared_with` (which lists
+  // only the people the note was shared *with*). Resolve them from the user
+  // directory so a collaborator's access list can be headed by the owner rather
+  // than showing only the collaborators. Undefined until the directory loads —
+  // the row simply appears once it does, mirroring the offline-first list.
+  const owner = ownerId != null ? usersById.get(ownerId) : undefined;
+
   // Stable mutation refs to avoid recreating callbacks on every render
   const shareMutateRef = useRef(shareMutation.mutateAsync);
   // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
@@ -331,6 +338,32 @@ export default function ShareScreen() {
     [colors, handleUnshare, isUnsharing, isOwner, currentUser?.id, t],
   );
 
+  // The owner heads a collaborator's access list, tagged as the owner. They are
+  // never a `shared_with` entry, so this row is rendered separately above the
+  // shares rather than through `renderSharedUser`. Nothing while the owner is
+  // still unresolved from the directory.
+  const renderOwnerRow = () =>
+    owner ? (
+      <View style={[styles.userRow, { borderBottomColor: colors.borderLight }]} testID={`owner-${owner.id}`}>
+        <UserAvatar
+          userId={owner.id}
+          username={owner.username}
+          hasProfileIcon={owner.has_profile_icon}
+          iconVersion={owner.updated_at}
+          size="medium"
+        />
+        <View style={styles.userInfo}>
+          {(owner.first_name || owner.last_name) && (
+            <Text style={[styles.userName, { color: colors.text }]}>{[owner.first_name, owner.last_name].filter(Boolean).join(' ')}</Text>
+          )}
+          <Text style={[styles.userHandle, { color: colors.textSecondary }]}>
+            @{owner.username}
+            <Text style={{ color: colors.textMuted }}> ({t('share.owner')})</Text>
+          </Text>
+        </View>
+      </View>
+    ) : null;
+
   return (
     <View style={[styles.container, { backgroundColor: colors.surface, paddingTop: insets.top }]}>
       <View style={[styles.header, { borderBottomColor: colors.borderLight }]}>
@@ -421,6 +454,9 @@ export default function ShareScreen() {
               ? t('share.sharedWith', { count: currentShares?.length ?? 0 })
               : t('share.peopleWithAccess')}
           </Text>
+          {/* The owner heads a collaborator's list; the owner's own view lists
+              only the collaborators, so no owner row there. */}
+          {isReadOnlyViewer && renderOwnerRow()}
           {isLoadingShares ? (
             <ActivityIndicator size="small" color={colors.primary} style={styles.spinner} />
           ) : isSharesError ? (
