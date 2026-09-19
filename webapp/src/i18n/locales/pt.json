@@ -468,6 +468,7 @@
     "failedUnshare": "Falha ao cancelar o compartilhamento da nota. Tente novamente.",
     "peopleWithAccess": "Pessoas com acesso",
     "you": "você",
+    "owner": "proprietário",
     "leave": "Sair da nota",
     "leaveConfirm": "Sair desta nota? Você perderá o acesso, junto com suas etiquetas e cor para ela.",
     "confirmLeave": "Sair"

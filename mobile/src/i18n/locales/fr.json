@@ -355,6 +355,7 @@
     "removeAccessFor": "Retirer le partage pour {{username}}",
     "peopleWithAccess": "Personnes ayant accès",
     "you": "vous",
+    "owner": "propriétaire",
     "leave": "Quitter la note",
     "leaveConfirm": "Quitter cette note ? Vous perdrez l'accès, ainsi que vos étiquettes et votre couleur pour celle-ci.",
     "confirmLeave": "Quitter"

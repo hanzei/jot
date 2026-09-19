@@ -378,6 +378,7 @@
     "removeAccessFor": "Remove share for {{username}}",
     "peopleWithAccess": "People with access",
     "you": "you",
+    "owner": "owner",
     "leave": "Leave note",
     "leaveConfirm": "Leave this note? You'll lose access, along with your labels and color for it.",
     "confirmLeave": "Leave"

@@ -355,6 +355,7 @@
     "removeAccessFor": "Freigabe für {{username}} entfernen",
     "peopleWithAccess": "Personen mit Zugriff",
     "you": "du",
+    "owner": "Besitzer",
     "leave": "Notiz verlassen",
     "leaveConfirm": "Diese Notiz verlassen? Du verlierst den Zugriff sowie deine Labels und die Farbe dafür.",
     "confirmLeave": "Verlassen"

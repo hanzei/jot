@@ -468,6 +468,7 @@
     "failedUnshare": "Delen van notitie ongedaan maken mislukt. Probeer het opnieuw.",
     "peopleWithAccess": "Personen met toegang",
     "you": "jij",
+    "owner": "eigenaar",
     "leave": "Notitie verlaten",
     "leaveConfirm": "Deze notitie verlaten? Je verliest de toegang, samen met je labels en kleur ervoor.",
     "confirmLeave": "Verlaten"

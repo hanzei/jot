@@ -468,6 +468,7 @@
     "failedUnshare": "Impossibile annullare la condivisione della nota. Riprova.",
     "peopleWithAccess": "Persone con accesso",
     "you": "tu",
+    "owner": "proprietario",
     "leave": "Abbandona la nota",
     "leaveConfirm": "Abbandonare questa nota? Perderai l'accesso, insieme alle tue etichette e al colore per essa.",
     "confirmLeave": "Abbandona"

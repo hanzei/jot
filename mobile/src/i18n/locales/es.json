@@ -378,6 +378,7 @@
     "removeAccessFor": "Eliminar acceso compartido para {{username}}",
     "peopleWithAccess": "Personas con acceso",
     "you": "tú",
+    "owner": "propietario",
     "leave": "Salir de la nota",
     "leaveConfirm": "¿Salir de esta nota? Perderás el acceso, junto con tus etiquetas y color para ella.",
     "confirmLeave": "Salir"

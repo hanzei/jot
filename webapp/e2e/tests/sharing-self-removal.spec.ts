@@ -3,9 +3,9 @@ import { LoginPage } from '../pages/LoginPage';
 
 test.describe('Leaving a shared note', () => {
   test('a collaborator can view who has access and remove themselves', async ({ page, authenticatedUser, dashboardPage, request }) => {
-    // Destructured for its side effect: the fixture registers and logs in the
-    // owner of the note. Playwright only runs a fixture a test names.
-    void authenticatedUser;
+    // The fixture registers and logs in the owner of the note; its username is
+    // also asserted below, as the owner heads the collaborator's access list.
+    const owner = authenticatedUser.username;
 
     const collaborator = uniqueUsername('leave');
     const collaboratorPass = 'testpass123';
@@ -35,6 +35,12 @@ test.describe('Leaving a shared note', () => {
     // Read-only: the access list is shown, but there is no share picker.
     await expect(shareDialog.getByText(/people with access/i)).toBeVisible();
     await expect(shareDialog.getByRole('textbox')).toHaveCount(0);
+
+    // The owner heads the access list, tagged as the owner, so a collaborator
+    // sees who shared the note rather than only themselves.
+    const ownerRow = shareDialog.getByTestId('owner-row');
+    await expect(ownerRow).toContainText(owner);
+    await expect(ownerRow).toContainText('(owner)');
 
     // Leaving requires a confirmation step: the first click only reveals the
     // confirm control.
