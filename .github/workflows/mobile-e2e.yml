@@ -182,7 +182,7 @@ jobs:
         # under two months.
         run: |
           curl -fsSL -o /tmp/maestro.zip \
-            "https://github.com/mobile-dev-inc/maestro/releases/download/v${{ steps.maestro.outputs.version }}/maestro.zip"
+            "https://github.com/mobile-dev-inc/Maestro/releases/download/cli-${{ steps.maestro.outputs.version }}/maestro.zip"
           unzip -q /tmp/maestro.zip -d "$HOME/.maestro-dist"
 
       - name: Add Maestro to PATH
