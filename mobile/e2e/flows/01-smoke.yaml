@@ -14,6 +14,11 @@ appId: com.jot.app
     id: "login-server-setup-input"
 - tapOn:
     id: "login-server-setup-input"
+# The field is pre-filled with getBaseUrl() (http://10.0.2.2:8080 on Android),
+# and Maestro's inputText appends rather than replaces — without erasing first,
+# the URL doubles and server validation rejects it, leaving the login form
+# (username-input) never shown.
+- eraseText
 - inputText: "${MAESTRO_JOT_SERVER_URL}"
 - tapOn:
     id: "login-server-setup-submit"

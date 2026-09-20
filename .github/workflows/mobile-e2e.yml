@@ -244,10 +244,17 @@ jobs:
             adb shell pkill -INT screenrecord 2>/dev/null || true
             wait "$REC_PID" 2>/dev/null || true
             adb pull /sdcard/e2e.mp4 mobile/e2e/e2e-video.mp4 2>/dev/null || true
-            # Maestro writes per-step screenshots and hierarchy dumps here; copy
-            # them into the workspace so the upload step can find them without
-            # relying on ~ expansion in an action's path input.
-            cp -r "$HOME/.maestro/tests" mobile/e2e/maestro-debug 2>/dev/null || true
+
+            # On failure, capture what is on screen while the emulator is still
+            # up. adb is guaranteed here, so this never depends on Maestro's own
+            # artifact layout. Maestro's default per-step dump (~/.maestro/tests)
+            # is copied too when present.
+            if [ "$STATUS" -ne 0 ]; then
+              adb exec-out screencap -p > mobile/e2e/failure-screenshot.png 2>/dev/null || true
+              adb shell uiautomator dump /sdcard/ui.xml 2>/dev/null || true
+              adb pull /sdcard/ui.xml mobile/e2e/ui-hierarchy.xml 2>/dev/null || true
+              cp -r "$HOME/.maestro/tests" mobile/e2e/maestro-debug 2>/dev/null || true
+            fi
 
             exit "$STATUS"
 
@@ -262,6 +269,8 @@ jobs:
           path: |
             mobile/e2e/report.xml
             mobile/e2e/e2e-video.mp4
+            mobile/e2e/failure-screenshot.png
+            mobile/e2e/ui-hierarchy.xml
             mobile/e2e/maestro-debug/
           retention-days: 7
           if-no-files-found: warn
