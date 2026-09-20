@@ -512,8 +512,7 @@ function DraggableCard({
     if (shouldFadeIn) {
       entrance.set(withTiming(1, { duration: 200 }));
     }
-    // Mount-only: entrance is fixed per card.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only; entrance is fixed per card
   }, []);
 
   const pan = useMemo(

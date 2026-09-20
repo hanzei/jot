@@ -199,7 +199,7 @@ func (t *tableWriter) flush() error {
 // discarded: a.out is either os.Stdout (CLI) or a bytes.Buffer (tests), and
 // neither can meaningfully fail.
 func (a *App) printf(format string, args ...any) {
-	fmt.Fprintf(a.out, format, args...) //nolint:errcheck
+	fmt.Fprintf(a.out, format, args...) //nolint:errcheck // a.out is os.Stdout or a test buffer; neither can meaningfully fail (see doc comment)
 }
 
 func (a *App) printJSON(v any) error {

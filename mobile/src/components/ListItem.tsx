@@ -247,8 +247,7 @@ function ListItem({
     });
     animation.start();
     return () => animation.stop();
-    // Mount-only: popOnMount/checkScale are fixed for this row's lifetime.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only; popOnMount/checkScale are fixed for this row's lifetime
   }, []);
 
   const suggestions = useMemo(() => {

@@ -17,7 +17,7 @@ test.describe('Checked-item bulk actions', () => {
   // re-resolve nth(0) as the checked item reflows into the completed section and
   // end up clicking (and completing) every item in turn.
   const checkFirstItem = async (page: Page) => {
-    // eslint-disable-next-line playwright/no-force-option
+    // eslint-disable-next-line playwright/no-force-option -- one forced click checks exactly one item before it reflows into the completed section
     await rowCheckbox(page, 0).click({ force: true });
     await expect(page.getByText(/Completed items/)).toBeVisible();
   };

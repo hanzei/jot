@@ -36,7 +36,7 @@ type PendingDeepLinkStore = typeof import('../src/store/pendingDeepLink');
 
 function loadStore(): PendingDeepLinkStore {
   jest.resetModules();
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- require() reloads the store after jest.resetModules to simulate a restart
   return require('../src/store/pendingDeepLink') as PendingDeepLinkStore;
 }
 

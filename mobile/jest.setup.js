@@ -188,7 +188,7 @@ jest.mock('expo-sqlite', () => {
             setReady(true);
           },
         );
-      }, []); // eslint-disable-line react-hooks/exhaustive-deps
+      }, []); // eslint-disable-line react-hooks/exhaustive-deps -- mount-only init of the mock SQLite provider
       return ready ? children : null;
     },
     useSQLiteContext: () => getDefaultTestDb(),

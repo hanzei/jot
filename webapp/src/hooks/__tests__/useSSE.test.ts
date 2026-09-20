@@ -56,19 +56,19 @@ class MockEventSource {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- reading the global EventSource off globalThis needs a cast past its DOM type
 const originalEventSource = (globalThis as any).EventSource;
 
 beforeEach(() => {
   MockEventSource.instances = [];
   // setup.ts defined EventSource as writable so we can assign directly.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- installing the test double on the global needs a cast past its DOM type
   (globalThis as any).EventSource = MockEventSource;
 });
 
 afterEach(() => {
   vi.clearAllMocks();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- restoring the global EventSource needs a cast past its DOM type
   (globalThis as any).EventSource = originalEventSource;
 });
 

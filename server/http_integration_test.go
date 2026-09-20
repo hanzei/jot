@@ -824,7 +824,7 @@ func TestUpdateUserEndpoint(t *testing.T) {
 
 // SSE endpoint tests
 
-func TestSSEEndpoint(t *testing.T) { //nolint:gocognit
+func TestSSEEndpoint(t *testing.T) { //nolint:gocognit // one end-to-end SSE flow: many sequential subscribe/emit/assert phases, clearer kept whole
 	t.Parallel()
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "sseuser", "password123", false)

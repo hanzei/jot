@@ -207,7 +207,7 @@ func (a *App) deleteNonAdminUsers(ctx context.Context, c *client.Client, users [
 
 // runSeed creates all seed users and their notes/settings via the API.
 // Returns (usersCreated, notesCreated, labelsCreated, imagesCreated, error).
-func (a *App) runSeed(ctx context.Context, adminClient *client.Client) (int, int, int, int, error) { //nolint:gocognit,gocyclo
+func (a *App) runSeed(ctx context.Context, adminClient *client.Client) (int, int, int, int, error) { //nolint:gocognit,gocyclo // dev-only seeder: a long flat sequence of independent create/mutate steps, not worth splitting
 	logf := func(format string, args ...any) {
 		if !a.jsonOutput {
 			a.printf(format+"\n", args...)
@@ -354,7 +354,7 @@ func (a *App) runSeed(ctx context.Context, adminClient *client.Client) (int, int
 // createNote creates one note (text or list) and applies any post-create
 // mutations (pinned, archived, checkedItemsCollapsed). It returns the note ID.
 // Trashing is handled by the caller after sharing is done.
-func createNote(ctx context.Context, uc *client.Client, n seedNote) (string, error) { //nolint:gocognit
+func createNote(ctx context.Context, uc *client.Client, n seedNote) (string, error) { //nolint:gocognit // dev-only seeder: sequential create plus optional post-create mutations
 	switch n.noteType {
 	case client.NoteTypeText:
 		created, err := uc.CreateTextNote(ctx, &client.CreateTextNoteRequest{

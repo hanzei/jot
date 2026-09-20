@@ -48,7 +48,7 @@ test.describe('Grouped to-do items', () => {
       .filter({ hasText: 'Socks' })
       .last()
       .locator('input[type="checkbox"]')
-      // eslint-disable-next-line playwright/no-force-option
+      // eslint-disable-next-line playwright/no-force-option -- force-uncheck avoids the strict stability wait tripping on the save/reconcile reflow
       .uncheck({ force: true });
 
     await expect(page.getByLabel('Group: Packing')).toHaveCount(0);

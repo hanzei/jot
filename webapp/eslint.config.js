@@ -6,6 +6,7 @@ import react from 'eslint-plugin-react';
 import tseslint from '@typescript-eslint/eslint-plugin';
 import tsparser from '@typescript-eslint/parser';
 import playwright from 'eslint-plugin-playwright';
+import comments from '@eslint-community/eslint-plugin-eslint-comments';
 
 // The TypeScript baseline, shared by the app and the e2e suite so the two
 // cannot drift apart. Everything React lives in the app block below; e2e adds
@@ -163,6 +164,21 @@ export default [
     rules: {
       semi: ['error', 'always'],
       quotes: ['error', 'single', { avoidEscape: true, allowTemplateLiterals: true }],
+    },
+  },
+  // Enforces the CLAUDE.md rule that every suppression carries a visible
+  // reason: a disable directive must spell out why, inline, after `--`. A
+  // closing `eslint-enable` is exempt — the `eslint-disable` it pairs with
+  // already states the reason. Trailing block for the same reason as the
+  // formatting one above: it applies across every block, and its pattern is
+  // the union of what they already match, so it widens no file's coverage.
+  {
+    files: ['**/*.{ts,tsx,js}'],
+    plugins: {
+      '@eslint-community/eslint-comments': comments,
+    },
+    rules: {
+      '@eslint-community/eslint-comments/require-description': ['error', { ignore: ['eslint-enable'] }],
     },
   },
 ];
