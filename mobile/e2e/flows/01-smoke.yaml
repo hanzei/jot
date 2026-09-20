@@ -1,0 +1,67 @@
+# Smoke flow: the whole harness end to end.
+#
+# Its job is not coverage — it is to prove that the emulator, the APK, the app's
+# boot path, the Go server on the host, and Maestro's selectors all work
+# together. Feature flows build on top of it once this is reliably green.
+#
+# The server runs on the CI host (or your machine); 10.0.2.2 is the Android
+# emulator's alias for the host loopback, which is what `getDefaultBaseUrl()` in
+# src/api/client.ts already returns on Android. So the URL typed below matches
+# the app's own default and the setup step is mostly a formality — it is kept
+# explicit anyway, because it is the step that fails loudly when the server is
+# not reachable from inside the emulator, which is the most common way this
+# suite breaks.
+appId: com.jot.app
+---
+- launchApp:
+    clearState: true
+
+# The app opens on Login, which wraps its form in ServerSetupGate until a server
+# is known. `login` is that gate's testPrefix (src/screens/LoginScreen.tsx).
+- assertVisible:
+    id: "login-server-setup-input"
+- tapOn:
+    id: "login-server-setup-input"
+- inputText: "${MAESTRO_JOT_SERVER_URL}"
+- tapOn:
+    id: "login-server-setup-submit"
+
+# Past the gate the login form renders. Register a fresh user instead of logging
+# in: the suite runs against a throwaway database, so there is no account yet.
+- assertVisible:
+    id: "username-input"
+- tapOn:
+    id: "create-account-link"
+
+- tapOn:
+    id: "username-input"
+- inputText: "${MAESTRO_JOT_USERNAME}"
+- tapOn:
+    id: "password-input"
+- inputText: "${MAESTRO_JOT_PASSWORD}"
+- hideKeyboard
+- tapOn:
+    id: "register-button"
+
+# Registration lands on the notes list. A fresh account has no notes, so the
+# empty state is the reliable thing to wait for.
+- assertVisible:
+    id: "notes-empty-state"
+
+- tapOn:
+    id: "create-note-fab"
+- tapOn:
+    id: "note-title-input"
+- inputText: "${MAESTRO_JOT_NOTE_TITLE}"
+- tapOn:
+    id: "note-content-input"
+- inputText: "Created by the Maestro smoke flow."
+- hideKeyboard
+
+# Leaving the editor is what commits the note (there is no explicit save button).
+- tapOn:
+    id: "editor-back"
+
+# Note cards carry testIDs keyed by note id (`note-card-<id>`), which the flow
+# cannot know, so assert on the title text instead.
+- assertVisible: "${MAESTRO_JOT_NOTE_TITLE}"

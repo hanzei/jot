@@ -221,6 +221,43 @@ tasks:
     dir: mobile
     cmd: npm test -- --ci {{.CLI_ARGS}}
 
+  # The mobile counterpart to test-e2e. Unlike Playwright's browser, Maestro is
+  # not installed by bootstrap.sh (a ~300MB JVM CLI that is useless without an
+  # emulator), so the check below is a hard prerequisite rather than a safety
+  # net — see scripts/check-maestro.sh for the install commands it prints.
+  #
+  # An emulator must already be booted; the suite drives whatever `adb devices`
+  # reports. The server is started by e2e/run.sh, so nothing needs to be
+  # running first.
+  test-mobile-e2e:
+    desc: Run mobile device tests against a booted emulator (needs Maestro)
+    cmds:
+      - ./scripts/check-maestro.sh
+      - ./mobile/e2e/run.sh {{.CLI_ARGS}}
+
+  # Syntax-checks the Maestro flows without a device or an emulator, which is
+  # what makes it cheap enough to run on every PR. It catches the common
+  # breakage (a mistyped command or property) in seconds; it cannot tell you a
+  # selector no longer matches, which only a real run finds.
+  check-mobile-flows:
+    desc: Validate the Maestro flow syntax (no emulator needed)
+    # `maestro check-syntax` takes one file and refuses a directory, so loop.
+    # Every flow is checked before exiting rather than stopping at the first
+    # failure — same reasoning as `task lint`, one pass should report all of it.
+    # Each iteration starts a JVM (~3s); revisit if the flow count grows.
+    cmd: |
+      set -u
+      status=0
+      for flow in mobile/e2e/flows/*.yaml; do
+        if out="$(maestro check-syntax "$flow" 2>&1)"; then
+          printf 'ok   %s\n' "$flow"
+        else
+          printf 'FAIL %s\n%s\n' "$flow" "$out" >&2
+          status=1
+        fi
+      done
+      exit "$status"
+
   lint-mobile:
     desc: Run mobile app linting
     dir: mobile

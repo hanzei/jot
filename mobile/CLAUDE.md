@@ -85,6 +85,39 @@ them and leave the snapshot inconsistent. Stop it first —
 `adb shell am force-stop com.jot.app` — whenever the answer has to be exact;
 for a quick look at an idle app the live copy is usually fine.
 
+## Device Tests (Maestro)
+
+`e2e/flows/` holds [Maestro](https://maestro.dev) flows that drive the real app
+on an emulator — the automated form of the `adb` driving above, resolving the
+same `testID`s. Run them with `task test-mobile-e2e`; `e2e/run.sh` starts a
+throwaway Jot server itself, so nothing needs to be running first.
+
+These tests are **additive and deliberately narrow**. They exist for what Jest
+structurally cannot reach: real connectivity transitions, process lifecycle, and
+OS integration (share intents, quick actions). Anything testable in Jest belongs
+in Jest — it is faster, it runs on every PR, and it does not need an emulator.
+
+- **The emulator reaches the host at `10.0.2.2`**, which is what
+  `getDefaultBaseUrl()` already returns on Android. The server fixture mirrors
+  the webapp e2e env (`JOT_COOKIE_SECURE=false`, `JOT_RATE_LIMIT_ENABLED=false`,
+  throwaway `JOT_DB_DSN`).
+- **Maestro cannot shell out mid-flow.** `runScript` is a GraalJS sandbox with
+  no `child_process`, so anything needing `adb` — airplane mode, delivering a
+  share intent — is sequenced from `e2e/run.sh` *between* flows. Flows are
+  numbered so that ordering is explicit.
+- **Do not write drag-and-drop flows.** Maestro has `swipe` and `longPressOn`
+  but no press-hold-then-move primitive, and both drag paths here activate on a
+  long press (`activateAfterLongPress`, `delayLongPress`). Gesture coverage
+  belongs in Jest via `fireGestureHandler` instead.
+- **Assert on `testID` where one exists**, and add one when it does not — per
+  the section above. Note cards are the exception: their `testID`s embed the
+  note id (`note-card-<id>`), which a flow cannot know, so match the title text.
+- **The Maestro version is pinned** in `scripts/check-maestro.sh`. `latest`
+  moved 2.8.0 → 2.10.0 in under two months; bump it deliberately and re-run the
+  flows.
+- `task check-mobile-flows` syntax-checks the flows without an emulator. It
+  catches a mistyped command; it cannot tell you a selector stopped matching.
+
 ## i18n / Translations
 
 When adding new i18n keys to `src/i18n/locales/en.json`, you **must** also add

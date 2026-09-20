@@ -164,6 +164,7 @@ task test-server     # Run server tests
 task test-webapp     # Run webapp tests
 task test-e2e        # Run Playwright end-to-end tests
 task test-mobile     # Run mobile app tests
+task test-mobile-e2e # Run mobile device tests on an emulator (needs Maestro)
 task test-shared     # Run shared package tests
 task coverage        # Run server tests with coverage report
 task lint-server     # Run server linting with golangci-lint
@@ -173,6 +174,7 @@ task lint-shared     # Run shared package linting
 task check-docs      # Check server/docs/ matches the handler annotations
 task check-migrations   # Check the sqlite and postgres migration trees match
 task check-translations # Check locale files for missing/extra keys
+task check-mobile-flows # Validate the Maestro flow syntax (no emulator needed)
 task check-mobile-expo  # expo-doctor: Expo SDK/native alignment (run by the dep sweep, not by check)
 task gen-docs        # Regenerate Swagger API docs
 task build-webapp    # Build the webapp into webapp/build
@@ -201,6 +203,27 @@ expects; bootstrap already installs it. If that step was skipped
 ran), `task test-e2e` stops with the install command
 (`cd webapp && npx playwright install chromium`) instead of failing every
 spec. Check it on its own with `./scripts/check-playwright-browser.sh`.
+
+`task test-mobile-e2e` runs the mobile app on a real Android emulator with
+[Maestro](https://maestro.dev), covering what Jest structurally cannot reach —
+OS integration and process lifecycle. It is **not** part of `task check`, and
+unlike Playwright's browser its prerequisites are not installed by bootstrap:
+Maestro is a ~300 MB JVM CLI that is useless without an emulator, and most
+sessions never run device tests. You need both:
+
+```bash
+curl -Ls "https://get.maestro.mobile.dev" | bash   # once per machine
+emulator -avd <your-avd> -no-window -no-audio &    # any booted emulator/device
+```
+
+`./scripts/check-maestro.sh` runs first and stops with the exact install command
+when either is missing, rather than failing every flow. The suite starts its own
+Jot server on a throwaway database, so nothing needs to be running beforehand.
+
+Flow syntax is checked separately by `task check-mobile-flows`, which needs
+Maestro but **no** emulator — that is what makes it cheap enough for CI to run
+on every PR. It catches a mistyped command or property in seconds; only a real
+run can tell you a selector stopped matching.
 
 4. **Access the application**:
    - Open `http://localhost:8080` in your browser
@@ -670,6 +693,9 @@ code execution, SSRF, and blob-storage escapes.
 
 - `task check` — lint, all tests, and the docs/migration/translation gates
 - `task test-e2e` — not part of `task check`, since it needs a browser install
+- `task test-mobile-e2e` — only when you touched the mobile app; not part of
+  `task check`, since it needs Maestro and a booted emulator. CI runs it for
+  you, and syntax-checks the flows on every PR.
 
 ### CI/CD Pipeline
 
