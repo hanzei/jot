@@ -289,6 +289,7 @@ jest.mock('react-native-gesture-handler', () => {
       'failOffsetX',
       'failOffsetY',
       'withRef',
+      'withTestId',
     ].forEach((method) => {
       gesture[method] = chain;
     });

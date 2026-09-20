@@ -110,6 +110,29 @@ export function nearestCard(
 }
 
 /**
+ * Decides how far to scroll on a single auto-scroll frame while a card is held
+ * near a screen edge. Returns a signed per-frame step: negative to scroll up,
+ * positive to scroll down, and 0 when the finger is outside both edge bands.
+ *
+ * This is the branching that used to live inline in the drag component's
+ * `useFrameCallback` worklet. It is extracted so the decision can be unit-tested
+ * without a device; the caller still owns the edge/speed constants and clamps
+ * the resulting offset to the scrollable range. It is a worklet because the
+ * frame callback that drives it runs on the UI thread.
+ */
+export function autoScrollDelta(
+  fingerY: number,
+  topZone: number,
+  bottomZone: number,
+  speed: number,
+): number {
+  'worklet';
+  if (fingerY < topZone) return -speed;
+  if (fingerY > bottomZone) return speed;
+  return 0;
+}
+
+/**
  * Returns a new ordering with `id` moved to `targetIndex`, where `targetIndex`
  * is expressed in the ordering that excludes `id`.
  */
