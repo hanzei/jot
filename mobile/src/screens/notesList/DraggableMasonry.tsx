@@ -25,7 +25,7 @@ import { useTheme } from '../../theme/ThemeContext';
 import { isReduceMotionEnabledSync } from '../../utils/layoutAnimation';
 import { styles as listStyles } from './styles';
 import type { NoteSection } from './noteListUtils';
-import { packColumns, reorderForPointer, type PlacedItem } from './masonry';
+import { autoScrollDelta, packColumns, reorderForPointer, type PlacedItem } from './masonry';
 import {
   MASONRY_COLUMN_GAP,
   MASONRY_ROW_GAP,
@@ -49,6 +49,7 @@ interface SharedDragState {
   startAbsX: SharedValue<number>;
   startAbsY: SharedValue<number>;
   startScroll: SharedValue<number>;
+  fingerAbsX: SharedValue<number>;
   fingerAbsY: SharedValue<number>;
   scrollOffset: SharedValue<number>;
 }
@@ -115,6 +116,7 @@ export default function DraggableMasonry({
   const startAbsX = useSharedValue(0);
   const startAbsY = useSharedValue(0);
   const startScroll = useSharedValue(0);
+  const fingerAbsX = useSharedValue(0);
   const fingerAbsY = useSharedValue(0);
   const shared: SharedDragState = useMemo(
     () => ({
@@ -127,10 +129,11 @@ export default function DraggableMasonry({
       startAbsX,
       startAbsY,
       startScroll,
+      fingerAbsX,
       fingerAbsY,
       scrollOffset,
     }),
-    [activeId, activeSection, dragTX, dragTY, startX, startY, startAbsX, startAbsY, startScroll, fingerAbsY, scrollOffset],
+    [activeId, activeSection, dragTX, dragTY, startX, startY, startAbsX, startAbsY, startScroll, fingerAbsX, fingerAbsY, scrollOffset],
   );
 
   // contentWidth is the measured border-box width of the padded container, so
@@ -348,10 +351,24 @@ export default function DraggableMasonry({
     'worklet';
     if (shared.activeId.get() === null) return;
     const y = shared.fingerAbsY.get();
-    if (y < topZone) {
-      scrollTo(scrollRef, 0, Math.max(0, shared.scrollOffset.get() - AUTO_SCROLL_SPEED), false);
-    } else if (y > bottomZone) {
-      scrollTo(scrollRef, 0, shared.scrollOffset.get() + AUTO_SCROLL_SPEED, false);
+    const delta = autoScrollDelta(y, topZone, bottomZone, AUTO_SCROLL_SPEED);
+    if (delta === 0) return;
+    scrollTo(scrollRef, 0, Math.max(0, shared.scrollOffset.get() + delta), false);
+    // Auto-scroll moves the content underneath a stationary finger, but
+    // `onUpdate` only fires on finger movement — so without re-running the drag
+    // math here the lifted card stops tracking the scrolling content and the
+    // drop target is never re-evaluated against the cards scrolling into view.
+    // Recompute both every frame we scroll, mirroring `onUpdate`.
+    shared.dragTY.set(
+      y - shared.startAbsY.get() + (shared.scrollOffset.get() - shared.startScroll.get()),
+    );
+    const sectionIndex = shared.activeSection.get();
+    const sectionRef = sectionRefs[sectionIndex];
+    if (sectionRef) {
+      const m = measure(sectionRef);
+      if (m !== null) {
+        runOnJS(handleHover)(sectionIndex, shared.fingerAbsX.get() - m.pageX, y - m.pageY);
+      }
     }
   }, true);
 
@@ -518,6 +535,7 @@ function DraggableCard({
   const pan = useMemo(
     () =>
       Gesture.Pan()
+        .withTestId(`masonry-card-${id}`)
         .activateAfterLongPress(LONG_PRESS_MS)
         .onStart((e) => {
           'worklet';
@@ -530,6 +548,7 @@ function DraggableCard({
           shared.startScroll.set(shared.scrollOffset.get());
           shared.dragTX.set(0);
           shared.dragTY.set(0);
+          shared.fingerAbsX.set(e.absoluteX);
           shared.fingerAbsY.set(e.absoluteY);
           runOnJS(onBeginDrag)(id);
         })
@@ -539,6 +558,7 @@ function DraggableCard({
           shared.dragTY.set(
             e.absoluteY - shared.startAbsY.get() + (shared.scrollOffset.get() - shared.startScroll.get()),
           );
+          shared.fingerAbsX.set(e.absoluteX);
           shared.fingerAbsY.set(e.absoluteY);
           const m = measure(sectionRef);
           if (m !== null) {

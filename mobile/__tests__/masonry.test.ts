@@ -1,4 +1,5 @@
 import {
+  autoScrollDelta,
   packColumns,
   nearestCard,
   moveToIndex,
@@ -34,6 +35,31 @@ describe('packColumns', () => {
 
   it('returns zero height for an empty list', () => {
     expect(packColumns([], {}, opts).containerHeight).toBe(0);
+  });
+});
+
+describe('autoScrollDelta', () => {
+  // topZone/bottomZone are absolute screen-Y thresholds; speed is the per-frame
+  // step. The band is [topZone, bottomZone] — inside it there is no scroll.
+  const top = 100;
+  const bottom = 700;
+  const speed = 9;
+
+  it('scrolls up (negative) when the finger is above the top zone', () => {
+    expect(autoScrollDelta(40, top, bottom, speed)).toBe(-speed);
+  });
+
+  it('scrolls down (positive) when the finger is below the bottom zone', () => {
+    expect(autoScrollDelta(760, top, bottom, speed)).toBe(speed);
+  });
+
+  it('does not scroll when the finger is between the two zones', () => {
+    expect(autoScrollDelta(400, top, bottom, speed)).toBe(0);
+  });
+
+  it('treats the zone edges as inside the band (no scroll)', () => {
+    expect(autoScrollDelta(top, top, bottom, speed)).toBe(0);
+    expect(autoScrollDelta(bottom, top, bottom, speed)).toBe(0);
   });
 });
 
