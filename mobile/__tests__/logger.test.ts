@@ -176,7 +176,7 @@ describe('persistence', () => {
     const patchedConsole = { warn: console.warn, error: console.error, info: console.info };
     try {
       jest.isolateModules(() => {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        // eslint-disable-next-line @typescript-eslint/no-require-imports -- require() loads a fresh logger instance inside jest.isolateModules
         const logger = require('../src/utils/logger') as typeof import('../src/utils/logger');
         logger.initLogger();
 

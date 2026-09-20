@@ -13,7 +13,7 @@ class MockEventSource {
   onmessage: ((e: MessageEvent) => void) | null = null;
   onerror: (() => void) | null = null;
   close() {}
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- stub mirrors the EventSource constructor signature; args are unused
   constructor(_url: string, _opts?: EventSourceInit) {}
 }
 

@@ -4,6 +4,7 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import react from 'eslint-plugin-react';
 import tseslint from '@typescript-eslint/eslint-plugin';
 import tsparser from '@typescript-eslint/parser';
+import comments from '@eslint-community/eslint-plugin-eslint-comments';
 
 export default [
   {
@@ -134,6 +135,21 @@ export default [
     rules: {
       semi: ['error', 'always'],
       quotes: ['error', 'single', { avoidEscape: true, allowTemplateLiterals: true }],
+    },
+  },
+  // Enforces the CLAUDE.md rule that every suppression carries a visible
+  // reason: a disable directive must spell out why, inline, after `--`. A
+  // closing `eslint-enable` is exempt — the `eslint-disable` it pairs with
+  // already states the reason. Trailing block, as in webapp/ and shared/: it
+  // applies across every block above and its pattern is the union of what they
+  // match, so it widens no file's rule set beyond this one.
+  {
+    files: ['**/*.{ts,tsx,js,jsx,mjs}'],
+    plugins: {
+      '@eslint-community/eslint-comments': comments,
+    },
+    rules: {
+      '@eslint-community/eslint-comments/require-description': ['error', { ignore: ['eslint-enable'] }],
     },
   },
 ];

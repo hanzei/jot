@@ -266,8 +266,7 @@ export default function NoteEditorScreen() {
       cancelAnimationFrame(raf);
       anim.stop();
     };
-    // Mount-only; zoom/zoomEnabled are stable.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only; zoom/zoomEnabled are stable
   }, []);
 
   // Zoom the editor back down onto the card, resolving when done. Instant when

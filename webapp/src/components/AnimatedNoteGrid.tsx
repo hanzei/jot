@@ -50,8 +50,7 @@ function AnimatedCard({ animateEnter, leaving, onLeaveComplete, children }: Anim
       animationRef.current?.cancel();
       animationRef.current = null;
     };
-    // Enter runs a single time on mount; animateEnter is fixed per card.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- enter runs once on mount; animateEnter is fixed per card
   }, []);
 
   // Animate out once the parent marks the card as leaving, then notify so it can

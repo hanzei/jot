@@ -301,7 +301,7 @@ export function useNoteEditorSync({
     if (existingNote && isInitializedRef.current) {
       doc.setLabels(existingNote.labels ?? []);
     }
-  }, [existingNote?.labels]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [existingNote?.labels]); // eslint-disable-line react-hooks/exhaustive-deps -- resync only when the server note's labels change; doc is a stable ref
 
   // When the queue drains, OfflineContext sets the React Query cache for the old local
   // ID to hold the server note. Detect this by checking whether the cached note's id
@@ -311,7 +311,7 @@ export function useNoteEditorSync({
       doc.setNoteId(existingNote.id);
       navigation.setParams({ noteId: existingNote.id });
     }
-  }, [existingNote?.id, noteId, navigation]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [existingNote?.id, noteId, navigation]); // eslint-disable-line react-hooks/exhaustive-deps -- runs only when the adopted server id diverges; doc is a stable ref
 
   // Persists list-item changes as granular create/patch/delete/reorder ops by
   // diffing the current items against the saved baseline.

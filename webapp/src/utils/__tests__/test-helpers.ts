@@ -34,11 +34,11 @@ export const createMockListNote = (overrides: Partial<ListNote> = {}): ListNote 
 export const createMockNote = (overrides: Partial<Note> = {}): Note => {
   const noteType = (overrides as Partial<Note>).note_type ?? 'text';
   if (noteType === 'list') {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- destructuring strips note_type; the binding is intentionally unused
     const { note_type: _, ...rest } = overrides as Partial<ListNote>;
     return createMockListNote(rest);
   }
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- destructuring strips note_type; the binding is intentionally unused
   const { note_type: _, ...rest } = overrides as Partial<TextNote>;
   return createMockTextNote(rest);
 };

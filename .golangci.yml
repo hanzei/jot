@@ -100,6 +100,12 @@ linters:
       exclude-functions:
         - (io.Closer).Close
         - (net/http.ResponseWriter).Write
+    nolintlint:
+      # Every //nolint must say why, inline after a second `//`, matching the
+      # CLAUDE.md rule that suppressions carry a visible reason. This is the Go
+      # counterpart to the eslint-comments require-description rule the TS
+      # workspaces enforce.
+      require-explanation: true
 
 issues:
   max-issues-per-linter: 0

@@ -39,7 +39,7 @@ export interface AuthenticatedLayoutContext {
   setSearchBar: (content: ReactNode) => void;
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
+// eslint-disable-next-line react-refresh/only-export-components -- context hook colocated with its layout by design; not worth a separate module
 export const useAuthenticatedLayout = () => useOutletContext<AuthenticatedLayoutContext>();
 
 interface AuthenticatedLayoutProps {
