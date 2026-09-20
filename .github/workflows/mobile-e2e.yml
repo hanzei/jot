@@ -225,8 +225,12 @@ jobs:
           # server, waits for readiness, and runs the flows against 10.0.2.2.
           # A best-effort screenrecord provides the failure video; run.sh's own
           # non-zero exit on a failed flow is preserved and propagated.
+          #
+          # android-emulator-runner runs this script under `sh` (dash), not
+          # bash, so it must stay POSIX: `set -e` only, no `pipefail`. run.sh
+          # itself is invoked as an executable and keeps its own bash shebang.
           script: |
-            set -eo pipefail
+            set -e
             adb install -r -g apk/app-release.apk
 
             adb shell screenrecord --bit-rate 4000000 --time-limit 180 /sdcard/e2e.mp4 &
