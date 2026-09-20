@@ -95,4 +95,29 @@ EOF
   exit 1
 fi
 
+# Emulators only, deliberately. The suite points the app at 10.0.2.2, which is
+# the emulator's alias for the host loopback and means nothing on a physical
+# device — there it resolves to some unrelated host (or nothing), and the flows
+# fail at the server-setup step with a connection error that says nothing about
+# the real cause. Supporting a physical device needs `adb reverse` plus a
+# different URL, which is worth adding when someone actually wants it.
+emulators="$(printf '%s\n' "$devices" | grep '^emulator-' || true)"
+if [ -z "$emulators" ]; then
+  cat >&2 <<EOF
+
+Only physical devices are attached:
+$(printf '%s\n' "$devices" | sed 's/^/  /')
+
+This suite targets an emulator: it points the app at 10.0.2.2, the emulator's
+alias for the host loopback, which does not resolve to your machine on a
+physical device.
+
+Start an emulator instead:
+  emulator -avd <your-avd> -no-window -no-audio &
+  adb wait-for-device
+
+EOF
+  exit 1
+fi
+
 exit 0

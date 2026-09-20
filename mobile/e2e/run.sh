@@ -26,8 +26,20 @@ readonly E2E_DIR REPO_ROOT
 # app's default and the suite's fixture agree with no extra configuration.
 JOT_E2E_PORT="${JOT_E2E_PORT:-8080}"
 SERVER_URL_FROM_EMULATOR="http://10.0.2.2:${JOT_E2E_PORT}"
-DB_DSN="/tmp/jot-mobile-e2e-$$-$(date +%s).db"
-readonly JOT_E2E_PORT SERVER_URL_FROM_EMULATOR DB_DSN
+# An owned directory rather than a name in shared /tmp: mktemp -d creates it
+# atomically with private permissions, so the path cannot have been pre-created
+# as a symlink pointing somewhere else. It also makes cleanup complete — SQLite
+# leaves `-wal` and `-shm` files beside the database, which removing the `.db`
+# alone would strand.
+RUN_DIR="$(mktemp -d "${TMPDIR:-/tmp}/jot-mobile-e2e-XXXXXX")"
+DB_DSN="$RUN_DIR/jot.db"
+# The server refuses to start if its static directory is missing, and it
+# defaults to webapp/build — which only exists after a webapp build. The mobile
+# app never touches the SPA, so point it at an empty directory instead of making
+# this suite depend on `task build-webapp`.
+STATIC_DIR="$RUN_DIR/static"
+mkdir -p "$STATIC_DIR"
+readonly JOT_E2E_PORT SERVER_URL_FROM_EMULATOR RUN_DIR DB_DSN STATIC_DIR
 
 SERVER_PID=""
 cleanup() {
@@ -35,7 +47,7 @@ cleanup() {
     kill "$SERVER_PID" 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
   fi
-  rm -f "$DB_DSN"
+  rm -rf "$RUN_DIR"
 }
 trap cleanup EXIT
 
@@ -52,6 +64,7 @@ echo "==> Starting the server on port $JOT_E2E_PORT (db: $DB_DSN)"
   # register users in a tight loop, which trips the per-IP auth limit almost
   # immediately; cookies are non-Secure because the emulator talks plain HTTP.
   JOT_DB_DSN="$DB_DSN" \
+  JOT_STATIC_DIR="$STATIC_DIR" \
   JOT_PORT="$JOT_E2E_PORT" \
   JOT_COOKIE_SECURE=false \
   JOT_RATE_LIMIT_ENABLED=false \
@@ -60,8 +73,12 @@ echo "==> Starting the server on port $JOT_E2E_PORT (db: $DB_DSN)"
 SERVER_PID=$!
 
 echo "==> Waiting for /readyz"
+# Bounded so a server that accepts the connection but never answers costs one
+# second per attempt rather than hanging the loop indefinitely — without a
+# timeout the "60 attempts" below is not a bound on anything.
+readonly READY_CURL_OPTS=(--connect-timeout 2 --max-time 5 -fsS)
 for _ in $(seq 1 60); do
-  if curl -fsS "http://localhost:${JOT_E2E_PORT}/readyz" >/dev/null 2>&1; then
+  if curl "${READY_CURL_OPTS[@]}" "http://localhost:${JOT_E2E_PORT}/readyz" >/dev/null 2>&1; then
     break
   fi
   if ! kill -0 "$SERVER_PID" 2>/dev/null; then
@@ -71,7 +88,7 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 
-if ! curl -fsS "http://localhost:${JOT_E2E_PORT}/readyz" >/dev/null 2>&1; then
+if ! curl "${READY_CURL_OPTS[@]}" "http://localhost:${JOT_E2E_PORT}/readyz" >/dev/null 2>&1; then
   echo "Server did not become ready within 60s." >&2
   exit 1
 fi

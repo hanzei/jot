@@ -213,17 +213,20 @@ sessions never run device tests. You need both:
 
 ```bash
 curl -Ls "https://get.maestro.mobile.dev" | bash   # once per machine
-emulator -avd <your-avd> -no-window -no-audio &    # any booted emulator/device
+emulator -avd <your-avd> -no-window -no-audio &    # an emulator, not a device
 ```
 
-`./scripts/check-maestro.sh` runs first and stops with the exact install command
-when either is missing, rather than failing every flow. The suite starts its own
-Jot server on a throwaway database, so nothing needs to be running beforehand.
+An **emulator** specifically: the suite points the app at `10.0.2.2`, the
+emulator's alias for the host loopback, which does not reach your machine from a
+physical device. `./scripts/check-maestro.sh` runs first and stops with the exact
+install command when a prerequisite is missing, rather than failing every flow.
+The suite starts its own Jot server on a throwaway database, so nothing needs to
+be running beforehand.
 
 Flow syntax is checked separately by `task check-mobile-flows`, which needs
-Maestro but **no** emulator — that is what makes it cheap enough for CI to run
-on every PR. It catches a mistyped command or property in seconds; only a real
-run can tell you a selector stopped matching.
+Maestro but **no** emulator, so it is quick to run while editing flows. It
+catches a mistyped command or property in seconds; only a real run can tell you
+a selector stopped matching.
 
 4. **Access the application**:
    - Open `http://localhost:8080` in your browser
@@ -694,8 +697,7 @@ code execution, SSRF, and blob-storage escapes.
 - `task check` — lint, all tests, and the docs/migration/translation gates
 - `task test-e2e` — not part of `task check`, since it needs a browser install
 - `task test-mobile-e2e` — only when you touched the mobile app; not part of
-  `task check`, since it needs Maestro and a booted emulator. CI runs it for
-  you, and syntax-checks the flows on every PR.
+  `task check`, since it needs Maestro and a booted emulator
 
 ### CI/CD Pipeline
 
