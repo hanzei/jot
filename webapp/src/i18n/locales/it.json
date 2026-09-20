@@ -314,7 +314,7 @@
     "resetPassword": "Reimposta password",
     "resetPasswordLabel": "Reimposta la password di {{username}}",
     "resetPasswordTitle": "Reimposta password",
-    "resetPasswordDescription": "Imposta una nuova password per {{name}}. L'utente verrà disconnesso da tutte le sessioni.",
+    "resetPasswordDescription": "Imposta una nuova password per {{name}}. Questo invalida le sue sessioni esistenti.",
     "newPasswordLabel": "Nuova password",
     "generatePassword": "Genera",
     "showPassword": "Mostra password",
@@ -322,7 +322,7 @@
     "resetPasswordHint": "Almeno {{min}} caratteri. Condividila in modo sicuro; l'utente dovrebbe cambiarla dopo l'accesso.",
     "resetPasswordButton": "Reimposta password",
     "resettingPassword": "Reimpostazione...",
-    "resetPasswordSuccess": "Password reimpostata per {{username}}. L'utente è stato disconnesso da tutte le sessioni.",
+    "resetPasswordSuccess": "Password reimpostata per {{username}}. Le sue sessioni esistenti sono state invalidate.",
     "failedResetPassword": "Impossibile reimpostare la password.",
     "stats": {
       "title": "Panoramica dell'istanza",

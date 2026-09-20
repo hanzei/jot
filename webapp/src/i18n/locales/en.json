@@ -314,7 +314,7 @@
     "resetPassword": "Reset password",
     "resetPasswordLabel": "Reset password for {{username}}",
     "resetPasswordTitle": "Reset password",
-    "resetPasswordDescription": "Set a new password for {{name}}. They will be signed out of all their sessions.",
+    "resetPasswordDescription": "Set a new password for {{name}}. This invalidates their existing sessions.",
     "newPasswordLabel": "New password",
     "generatePassword": "Generate",
     "showPassword": "Show password",
@@ -322,7 +322,7 @@
     "resetPasswordHint": "At least {{min}} characters. Share it securely; the user should change it after signing in.",
     "resetPasswordButton": "Reset password",
     "resettingPassword": "Resetting...",
-    "resetPasswordSuccess": "Password reset for {{username}}. They have been signed out of all sessions.",
+    "resetPasswordSuccess": "Password reset for {{username}}. Their existing sessions have been invalidated.",
     "failedResetPassword": "Failed to reset password.",
     "stats": {
       "title": "Instance Overview",

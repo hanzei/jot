@@ -254,6 +254,8 @@ definitions:
     properties:
       new_password:
         type: string
+    required:
+    - new_password
     type: object
   handlers.ShareNoteRequest:
     properties:

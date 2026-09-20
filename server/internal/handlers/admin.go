@@ -197,7 +197,7 @@ func (h *AdminHandler) UpdateUserRole(w http.ResponseWriter, r *http.Request) (i
 }
 
 type SetUserPasswordRequest struct {
-	NewPassword string `json:"new_password"`
+	NewPassword string `json:"new_password" validate:"required"`
 }
 
 // SetUserPassword godoc

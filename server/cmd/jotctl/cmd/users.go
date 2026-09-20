@@ -186,7 +186,15 @@ func (a *App) runUsersSetPassword(cmd *cobra.Command, userID, password string, g
 		if password != "" {
 			return fmt.Errorf("--generate cannot be combined with --password")
 		}
-		pw, err := generatePassword()
+		// Generate at least the server's configured minimum length so the
+		// generated password always passes validation. The config endpoint is
+		// public; if it is unreachable, fall back to the baseline length and let
+		// the server reject a too-short password with a clear error.
+		length := generatedPasswordLength
+		if cfg, err := a.client.Config(cmd.Context()); err == nil && cfg.PasswordMinLength > length {
+			length = cfg.PasswordMinLength
+		}
+		pw, err := generatePassword(length)
 		if err != nil {
 			return fmt.Errorf("generate password: %w", err)
 		}
@@ -222,13 +230,17 @@ func (a *App) runUsersSetPassword(cmd *cobra.Command, userID, password string, g
 	return nil
 }
 
-// generatePassword returns a cryptographically random 24-character alphanumeric
-// password, comfortably above the server's default minimum length and within its
-// maximum. It mirrors the rejection-sampling approach in internal/models.generateID
-// to avoid modulo bias without importing that internal package into the CLI.
-func generatePassword() (string, error) {
+// generatedPasswordLength is the baseline length for a generated password. The
+// caller raises it to the server's configured minimum when that is longer, so a
+// generated password always satisfies validation.
+const generatedPasswordLength = 24
+
+// generatePassword returns a cryptographically random alphanumeric password of
+// the given length. It mirrors the rejection-sampling approach in
+// internal/models.generateID to avoid modulo bias without importing that
+// internal package into the CLI.
+func generatePassword(length int) (string, error) {
 	const chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	const length = 24
 	const maxByte = 256 - (256 % len(chars))
 	result := make([]byte, length)
 	var buf [1]byte

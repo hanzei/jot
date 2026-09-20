@@ -314,7 +314,7 @@
     "resetPassword": "Wachtwoord opnieuw instellen",
     "resetPasswordLabel": "Wachtwoord van {{username}} opnieuw instellen",
     "resetPasswordTitle": "Wachtwoord opnieuw instellen",
-    "resetPasswordDescription": "Stel een nieuw wachtwoord in voor {{name}}. De gebruiker wordt afgemeld bij alle sessies.",
+    "resetPasswordDescription": "Stel een nieuw wachtwoord in voor {{name}}. Hierdoor worden de bestaande sessies van de gebruiker ongeldig.",
     "newPasswordLabel": "Nieuw wachtwoord",
     "generatePassword": "Genereren",
     "showPassword": "Wachtwoord tonen",
@@ -322,7 +322,7 @@
     "resetPasswordHint": "Minimaal {{min}} tekens. Deel het veilig; de gebruiker zou het na het inloggen moeten wijzigen.",
     "resetPasswordButton": "Wachtwoord opnieuw instellen",
     "resettingPassword": "Bezig met opnieuw instellen...",
-    "resetPasswordSuccess": "Wachtwoord opnieuw ingesteld voor {{username}}. De gebruiker is afgemeld bij alle sessies.",
+    "resetPasswordSuccess": "Wachtwoord opnieuw ingesteld voor {{username}}. De bestaande sessies van de gebruiker zijn ongeldig gemaakt.",
     "failedResetPassword": "Wachtwoord opnieuw instellen mislukt.",
     "stats": {
       "title": "Instantie-overzicht",

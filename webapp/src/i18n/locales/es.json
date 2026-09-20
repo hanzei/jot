@@ -314,7 +314,7 @@
     "resetPassword": "Restablecer contraseña",
     "resetPasswordLabel": "Restablecer la contraseña de {{username}}",
     "resetPasswordTitle": "Restablecer contraseña",
-    "resetPasswordDescription": "Establece una nueva contraseña para {{name}}. Se cerrarán todas sus sesiones.",
+    "resetPasswordDescription": "Establece una nueva contraseña para {{name}}. Esto invalida sus sesiones existentes.",
     "newPasswordLabel": "Nueva contraseña",
     "generatePassword": "Generar",
     "showPassword": "Mostrar contraseña",
@@ -322,7 +322,7 @@
     "resetPasswordHint": "Al menos {{min}} caracteres. Compártela de forma segura; el usuario debería cambiarla después de iniciar sesión.",
     "resetPasswordButton": "Restablecer contraseña",
     "resettingPassword": "Restableciendo...",
-    "resetPasswordSuccess": "Contraseña restablecida para {{username}}. Se han cerrado todas sus sesiones.",
+    "resetPasswordSuccess": "Contraseña restablecida para {{username}}. Sus sesiones existentes se han invalidado.",
     "failedResetPassword": "No se pudo restablecer la contraseña.",
     "stats": {
       "title": "Resumen de la instancia",

@@ -3552,6 +3552,9 @@ const docTemplate = `{
         },
         "handlers.SetUserPasswordRequest": {
             "type": "object",
+            "required": [
+                "new_password"
+            ],
             "properties": {
                 "new_password": {
                     "type": "string"

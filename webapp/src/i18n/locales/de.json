@@ -314,7 +314,7 @@
     "resetPassword": "Passwort zurücksetzen",
     "resetPasswordLabel": "Passwort für {{username}} zurücksetzen",
     "resetPasswordTitle": "Passwort zurücksetzen",
-    "resetPasswordDescription": "Legen Sie ein neues Passwort für {{name}} fest. Der Benutzer wird aus allen Sitzungen abgemeldet.",
+    "resetPasswordDescription": "Legen Sie ein neues Passwort für {{name}} fest. Dadurch werden die bestehenden Sitzungen des Benutzers ungültig.",
     "newPasswordLabel": "Neues Passwort",
     "generatePassword": "Generieren",
     "showPassword": "Passwort anzeigen",
@@ -322,7 +322,7 @@
     "resetPasswordHint": "Mindestens {{min}} Zeichen. Teilen Sie es sicher mit; der Benutzer sollte es nach der Anmeldung ändern.",
     "resetPasswordButton": "Passwort zurücksetzen",
     "resettingPassword": "Wird zurückgesetzt...",
-    "resetPasswordSuccess": "Passwort für {{username}} zurückgesetzt. Der Benutzer wurde aus allen Sitzungen abgemeldet.",
+    "resetPasswordSuccess": "Passwort für {{username}} zurückgesetzt. Die bestehenden Sitzungen des Benutzers wurden ungültig gemacht.",
     "failedResetPassword": "Passwort konnte nicht zurückgesetzt werden.",
     "stats": {
       "title": "Instanzübersicht",

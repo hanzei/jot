@@ -314,7 +314,7 @@
     "resetPassword": "Réinitialiser le mot de passe",
     "resetPasswordLabel": "Réinitialiser le mot de passe de {{username}}",
     "resetPasswordTitle": "Réinitialiser le mot de passe",
-    "resetPasswordDescription": "Définissez un nouveau mot de passe pour {{name}}. Toutes ses sessions seront fermées.",
+    "resetPasswordDescription": "Définissez un nouveau mot de passe pour {{name}}. Cela invalide ses sessions existantes.",
     "newPasswordLabel": "Nouveau mot de passe",
     "generatePassword": "Générer",
     "showPassword": "Afficher le mot de passe",
@@ -322,7 +322,7 @@
     "resetPasswordHint": "Au moins {{min}} caractères. Partagez-le de manière sécurisée ; l'utilisateur devrait le modifier après connexion.",
     "resetPasswordButton": "Réinitialiser le mot de passe",
     "resettingPassword": "Réinitialisation...",
-    "resetPasswordSuccess": "Mot de passe réinitialisé pour {{username}}. Toutes ses sessions ont été fermées.",
+    "resetPasswordSuccess": "Mot de passe réinitialisé pour {{username}}. Ses sessions existantes ont été invalidées.",
     "failedResetPassword": "Échec de la réinitialisation du mot de passe.",
     "stats": {
       "title": "Aperçu de l'instance",

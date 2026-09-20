@@ -12,11 +12,16 @@ interface ResetPasswordModalProps {
   onSuccess: (user: User) => void;
 }
 
-// generatePassword returns a cryptographically random 24-character alphanumeric
-// password using the Web Crypto API, with rejection sampling to avoid modulo bias.
-function generatePassword(): string {
+// Baseline length for generated passwords; the actual length is raised to the
+// server's configured minimum when that is longer, so a generated password
+// always satisfies validation.
+const GENERATED_PASSWORD_LENGTH = 24;
+
+// generatePassword returns a cryptographically random alphanumeric password of
+// the given length using the Web Crypto API, with rejection sampling to avoid
+// modulo bias.
+function generatePassword(length: number): string {
   const chars = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  const length = 24;
   const maxByte = 256 - (256 % chars.length);
   const result: string[] = [];
   const buf = new Uint8Array(1);
@@ -58,7 +63,7 @@ export default function ResetPasswordModal({ user, passwordMinLength, onClose, o
   );
 
   const handleGenerate = () => {
-    setPassword(generatePassword());
+    setPassword(generatePassword(Math.max(GENERATED_PASSWORD_LENGTH, passwordMinLength)));
     setShowPassword(true);
     setTouched(true);
     if (error) setError('');
