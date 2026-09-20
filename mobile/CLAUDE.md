@@ -85,6 +85,29 @@ them and leave the snapshot inconsistent. Stop it first —
 `adb shell am force-stop com.jot.app` — whenever the answer has to be exact;
 for a quick look at an idle app the live copy is usually fine.
 
+## Device Tests (Maestro)
+
+`e2e/flows/` holds [Maestro](https://maestro.dev) flows that drive the real app
+on an emulator — the automated form of the `adb` driving above, resolving the
+same `testID`s. Run them with `task test-mobile-e2e`; `e2e/run.sh` starts a
+throwaway server itself. `task check-mobile-flows` syntax-checks the flows
+without an emulator, but cannot tell you a selector stopped matching.
+
+These tests are **additive and deliberately narrow** — they exist for what Jest
+cannot reach: real connectivity transitions, process lifecycle, and OS
+integration. Anything testable in Jest belongs in Jest.
+
+- **Maestro cannot shell out mid-flow.** `runScript` is a GraalJS sandbox with
+  no `child_process`, so anything needing `adb` (airplane mode, share intents)
+  is sequenced from `e2e/run.sh` *between* flows. Flows are numbered for that.
+- **Do not write drag-and-drop flows.** Maestro has no press-hold-then-move
+  primitive, and both drag paths here activate on a long press. Gesture
+  coverage belongs in Jest via `fireGestureHandler`.
+- **Assert on `testID`**, adding one where missing. Note cards are the
+  exception — theirs embed the note id, so match the title text.
+- **The Maestro version is pinned** in `scripts/check-maestro.sh`; `latest`
+  moved 2.8.0 → 2.10.0 in under two months.
+
 ## i18n / Translations
 
 When adding new i18n keys to `src/i18n/locales/en.json`, you **must** also add

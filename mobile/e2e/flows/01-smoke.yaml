@@ -1,0 +1,55 @@
+# Smoke flow: proves the harness, not the features.
+#
+# Emulator, APK, app boot, server reachability and selectors all have to work
+# for this to pass. Feature flows build on it once it is reliably green.
+appId: com.jot.app
+---
+- launchApp:
+    clearState: true
+
+# The app opens on Login, which gates its form behind ServerSetupGate until a
+# server is known. This step is also what fails loudly when the server is not
+# reachable from inside the emulator — the usual way this suite breaks.
+- assertVisible:
+    id: "login-server-setup-input"
+- tapOn:
+    id: "login-server-setup-input"
+- inputText: "${MAESTRO_JOT_SERVER_URL}"
+- tapOn:
+    id: "login-server-setup-submit"
+
+# Register rather than log in: the database is thrown away each run.
+- assertVisible:
+    id: "username-input"
+- tapOn:
+    id: "create-account-link"
+
+- tapOn:
+    id: "username-input"
+- inputText: "${MAESTRO_JOT_USERNAME}"
+- tapOn:
+    id: "password-input"
+- inputText: "${MAESTRO_JOT_PASSWORD}"
+- hideKeyboard
+- tapOn:
+    id: "register-button"
+
+- assertVisible:
+    id: "notes-empty-state"
+
+- tapOn:
+    id: "create-note-fab"
+- tapOn:
+    id: "note-title-input"
+- inputText: "${MAESTRO_JOT_NOTE_TITLE}"
+- tapOn:
+    id: "note-content-input"
+- inputText: "Created by the Maestro smoke flow."
+- hideKeyboard
+
+# Leaving the editor commits the note; there is no explicit save button.
+- tapOn:
+    id: "editor-back"
+
+# Note cards key their testID by note id, which a flow cannot know.
+- assertVisible: "${MAESTRO_JOT_NOTE_TITLE}"

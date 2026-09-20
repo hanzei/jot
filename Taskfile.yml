@@ -221,6 +221,35 @@ tasks:
     dir: mobile
     cmd: npm test -- --ci {{.CLI_ARGS}}
 
+  # The mobile counterpart to test-e2e. Maestro is not installed by bootstrap,
+  # so the check is a hard prerequisite, not a safety net. An emulator must
+  # already be booted; e2e/run.sh starts the server itself.
+  test-mobile-e2e:
+    desc: Run mobile device tests against a booted emulator (needs Maestro)
+    cmds:
+      - ./scripts/check-maestro.sh
+      - ./mobile/e2e/run.sh {{.CLI_ARGS}}
+
+  # No device needed. Catches a mistyped command or property; cannot tell you a
+  # selector stopped matching — only a real run finds that.
+  check-mobile-flows:
+    desc: Validate the Maestro flow syntax (no emulator needed)
+    # check-syntax takes one file and refuses a directory, so loop. Reports
+    # every failure rather than stopping at the first, as `task lint` does.
+    # Each iteration starts a JVM (~3s); revisit if the flow count grows.
+    cmd: |
+      set -u
+      status=0
+      for flow in mobile/e2e/flows/*.yaml; do
+        if out="$(maestro check-syntax "$flow" 2>&1)"; then
+          printf 'ok   %s\n' "$flow"
+        else
+          printf 'FAIL %s\n%s\n' "$flow" "$out" >&2
+          status=1
+        fi
+      done
+      exit "$status"
+
   lint-mobile:
     desc: Run mobile app linting
     dir: mobile

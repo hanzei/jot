@@ -5,6 +5,10 @@ pkgs.mkShell {
     go # `task` deliberately comes from bootstrap.sh, which pins its version
     watchman
     playwright-driver.browsers
+    # For Maestro (`task test-mobile-e2e`), which bundles no runtime. Maestro
+    # itself stays out: useless without an emulator nix would also have to
+    # provide, and check-maestro.sh explains how to install both.
+    jdk
   ];
   shellHook = ''
     export PLAYWRIGHT_BROWSERS_PATH=${pkgs.playwright-driver.browsers}
