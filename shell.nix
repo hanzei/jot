@@ -5,12 +5,9 @@ pkgs.mkShell {
     go # `task` deliberately comes from bootstrap.sh, which pins its version
     watchman
     playwright-driver.browsers
-    # Maestro (`task test-mobile-e2e`) is a JVM CLI that bundles no runtime of
-    # its own. Maestro itself is deliberately not here — it is a ~300MB download
-    # that is useless without an Android emulator, which nix would have to
-    # provide too — but the JDK is cheap and is the non-obvious half of the
-    # requirement, so `./scripts/check-maestro.sh` only has to tell you about
-    # the parts you actually choose to install.
+    # For Maestro (`task test-mobile-e2e`), which bundles no runtime. Maestro
+    # itself stays out: useless without an emulator nix would also have to
+    # provide, and check-maestro.sh explains how to install both.
     jdk
   ];
   shellHook = ''

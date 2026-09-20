@@ -1,23 +1,19 @@
 #!/usr/bin/env bash
 #
 # check-maestro.sh — verify the prerequisites for the mobile device-test suite
-# are present before running it.
+# before running it.
 #
-# Unlike Playwright's browser, Maestro is deliberately NOT installed by
-# bootstrap.sh: it is a ~300 MB JVM CLI, it needs a running emulator to be of
-# any use, and the overwhelming majority of sessions never run device tests.
-# The cost of leaving it out is that a missing Maestro or a dead emulator
-# otherwise surfaces as a wall of failing flows, which reads like a broken
-# suite rather than a one-command fix. This turns it into that one command.
+# Unlike Playwright's browser, bootstrap.sh deliberately does not install
+# Maestro: a ~300 MB JVM CLI that is useless without an emulator, which most
+# sessions never need. Without this check that choice surfaces as a wall of
+# failing flows instead of one command to run.
 #
-# `task test-mobile-e2e` runs this first. Run it directly with:
-#   ./scripts/check-maestro.sh
+# `task test-mobile-e2e` runs this first.
 
 set -uo pipefail
 
-# Pinned on purpose. `latest` moved 2.8.0 -> 2.10.0 in under two months, and a
-# suite whose behaviour changes because upstream shipped a release is worse
-# than no suite. Bump this deliberately, and re-run the flows when you do.
+# Pinned: `latest` moved 2.8.0 -> 2.10.0 in under two months, and a suite that
+# changes behaviour because upstream shipped is worse than no suite.
 MAESTRO_VERSION="2.10.0"
 readonly MAESTRO_VERSION
 
@@ -41,10 +37,8 @@ EOF
   exit 1
 fi
 
-# Maestro ships no JRE of its own — it is a Gradle-style start script that needs
-# JAVA_HOME or `java` on PATH, and dies if neither is there. Checked before
-# running it so the failure names Java rather than surfacing as "maestro
-# --version printed nothing", which points at the wrong thing entirely.
+# Maestro bundles no JRE. Checked before invoking it, so the failure names Java
+# instead of surfacing as "maestro --version printed nothing".
 if [ -z "${JAVA_HOME:-}" ] && ! command -v java >/dev/null 2>&1; then
   cat >&2 <<EOF
 
@@ -66,10 +60,8 @@ if [ -z "$installed" ]; then
   exit 1
 fi
 
-# A mismatch is a warning, not a failure: pinning exists to keep CI reproducible
-# and to make a behaviour change traceable, not to stop someone debugging a flow
-# against a newer build on their own machine. CI installs the pin exactly, so
-# this stays quiet there.
+# Warning, not failure: CI installs the pin exactly, and hard-failing would
+# block debugging a flow against a newer Maestro locally.
 if [ "$installed" != "$MAESTRO_VERSION" ]; then
   cat >&2 <<EOF
 Warning: Maestro $installed is installed, but this suite is pinned to $MAESTRO_VERSION.
@@ -78,8 +70,7 @@ Flows may behave differently. Pin in scripts/check-maestro.sh if you are bumping
 EOF
 fi
 
-# `maestro test` against no device fails deep inside a flow run with a message
-# about a driver, which is a poor way to learn the emulator never booted.
+# Without this, `maestro test` fails deep in a flow run with a driver message.
 if ! command -v adb >/dev/null 2>&1; then
   cat >&2 <<EOF
 
@@ -93,8 +84,7 @@ EOF
   exit 1
 fi
 
-# `adb devices` prints a header line plus one line per device; a device that is
-# still booting shows as "offline", which is not usable yet.
+# Skip the header row; a still-booting device lists as "offline", not "device".
 devices="$(adb devices | awk 'NR>1 && $2 == "device" {print $1}')"
 if [ -z "$devices" ]; then
   cat >&2 <<EOF
@@ -114,12 +104,8 @@ EOF
   exit 1
 fi
 
-# Emulators only, deliberately. The suite points the app at 10.0.2.2, which is
-# the emulator's alias for the host loopback and means nothing on a physical
-# device — there it resolves to some unrelated host (or nothing), and the flows
-# fail at the server-setup step with a connection error that says nothing about
-# the real cause. Supporting a physical device needs `adb reverse` plus a
-# different URL, which is worth adding when someone actually wants it.
+# Emulators only: the suite points the app at 10.0.2.2, which reaches nothing
+# from a physical device. Supporting one needs `adb reverse` and a different URL.
 emulators="$(printf '%s\n' "$devices" | grep '^emulator-' || true)"
 if [ -z "$emulators" ]; then
   cat >&2 <<EOF

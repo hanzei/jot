@@ -1,23 +1,15 @@
-# Smoke flow: the whole harness end to end.
+# Smoke flow: proves the harness, not the features.
 #
-# Its job is not coverage — it is to prove that the emulator, the APK, the app's
-# boot path, the Go server on the host, and Maestro's selectors all work
-# together. Feature flows build on top of it once this is reliably green.
-#
-# The server runs on the CI host (or your machine); 10.0.2.2 is the Android
-# emulator's alias for the host loopback, which is what `getDefaultBaseUrl()` in
-# src/api/client.ts already returns on Android. So the URL typed below matches
-# the app's own default and the setup step is mostly a formality — it is kept
-# explicit anyway, because it is the step that fails loudly when the server is
-# not reachable from inside the emulator, which is the most common way this
-# suite breaks.
+# Emulator, APK, app boot, server reachability and selectors all have to work
+# for this to pass. Feature flows build on it once it is reliably green.
 appId: com.jot.app
 ---
 - launchApp:
     clearState: true
 
-# The app opens on Login, which wraps its form in ServerSetupGate until a server
-# is known. `login` is that gate's testPrefix (src/screens/LoginScreen.tsx).
+# The app opens on Login, which gates its form behind ServerSetupGate until a
+# server is known. This step is also what fails loudly when the server is not
+# reachable from inside the emulator — the usual way this suite breaks.
 - assertVisible:
     id: "login-server-setup-input"
 - tapOn:
@@ -26,8 +18,7 @@ appId: com.jot.app
 - tapOn:
     id: "login-server-setup-submit"
 
-# Past the gate the login form renders. Register a fresh user instead of logging
-# in: the suite runs against a throwaway database, so there is no account yet.
+# Register rather than log in: the database is thrown away each run.
 - assertVisible:
     id: "username-input"
 - tapOn:
@@ -43,8 +34,6 @@ appId: com.jot.app
 - tapOn:
     id: "register-button"
 
-# Registration lands on the notes list. A fresh account has no notes, so the
-# empty state is the reliable thing to wait for.
 - assertVisible:
     id: "notes-empty-state"
 
@@ -58,10 +47,9 @@ appId: com.jot.app
 - inputText: "Created by the Maestro smoke flow."
 - hideKeyboard
 
-# Leaving the editor is what commits the note (there is no explicit save button).
+# Leaving the editor commits the note; there is no explicit save button.
 - tapOn:
     id: "editor-back"
 
-# Note cards carry testIDs keyed by note id (`note-card-<id>`), which the flow
-# cannot know, so assert on the title text instead.
+# Note cards key their testID by note id, which a flow cannot know.
 - assertVisible: "${MAESTRO_JOT_NOTE_TITLE}"
