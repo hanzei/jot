@@ -41,6 +41,25 @@ EOF
   exit 1
 fi
 
+# Maestro ships no JRE of its own — it is a Gradle-style start script that needs
+# JAVA_HOME or `java` on PATH, and dies if neither is there. Checked before
+# running it so the failure names Java rather than surfacing as "maestro
+# --version printed nothing", which points at the wrong thing entirely.
+if [ -z "${JAVA_HOME:-}" ] && ! command -v java >/dev/null 2>&1; then
+  cat >&2 <<EOF
+
+Maestro needs a Java runtime, and neither JAVA_HOME nor a 'java' command is set.
+Maestro does not bundle one.
+
+Install a JDK (17 or newer), e.g.:
+  apt install default-jdk        # Debian/Ubuntu
+  brew install openjdk           # macOS
+  nix-shell -p jdk               # nix, outside this repo's shell.nix
+
+EOF
+  exit 1
+fi
+
 installed="$(maestro --version 2>/dev/null | tail -1 | tr -d '[:space:]')"
 if [ -z "$installed" ]; then
   echo "Could not determine the installed Maestro version ('maestro --version' printed nothing)." >&2
