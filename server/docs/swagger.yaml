@@ -250,6 +250,13 @@ definitions:
     - completed
     - item_ids
     type: object
+  handlers.SetUserPasswordRequest:
+    properties:
+      new_password:
+        type: string
+    required:
+    - new_password
+    type: object
   handlers.ShareNoteRequest:
     properties:
       user_id:
@@ -797,6 +804,49 @@ paths:
       security:
       - CookieAuth: []
       summary: Delete all notes owned by a user (admin only)
+      tags:
+      - admin
+  /admin/users/{id}/password:
+    put:
+      consumes:
+      - application/json
+      description: Sets a new password for the given user without requiring the user's
+        current password. All of the target user's existing sessions are invalidated.
+        Intended for administrative account recovery.
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: New password
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.SetUserPasswordRequest'
+      responses:
+        "204":
+          description: no content
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "403":
+          description: forbidden
+          schema:
+            type: string
+        "404":
+          description: user not found
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Set a user's password (admin only)
       tags:
       - admin
   /admin/users/{id}/role:

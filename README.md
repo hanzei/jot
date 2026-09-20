@@ -385,8 +385,16 @@ task build-jotctl
 ./server/jotctl users list
 ./server/jotctl users create --username alice --password change-me
 ./server/jotctl users set-role <user-id> admin
+./server/jotctl users set-password <user-id>            # prompts for the new password
+./server/jotctl users set-password <user-id> --generate # generates one and prints it
 ./server/jotctl dev seed
 ```
+
+`users set-password` sets a new password for any user without needing their
+current one — the recovery path for a locked-out account. It reads the password
+from a secure prompt unless you pass `--password` or `--generate`, and
+invalidates all of that user's existing sessions. Share the new password
+securely and have the user change it after signing in.
 
 Development-only helpers live under `jotctl dev`: `dev seed` adds test data and
 `dev reset` deletes all non-admin users and every note. Do not run them against

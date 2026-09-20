@@ -14,6 +14,7 @@ vi.mock('@/utils/api', () => ({
     getUsers: vi.fn(),
     createUser: vi.fn(),
     updateUserRole: vi.fn(),
+    setUserPassword: vi.fn(),
     deleteUser: vi.fn(),
   },
   isAxiosError: vi.fn(),
@@ -338,6 +339,74 @@ describe('Admin', () => {
       await waitFor(() => {
         expect(within(dialog).getByRole('alert')).toHaveTextContent('username already exists');
       });
+    });
+  });
+
+  describe('Reset password', () => {
+    it('sets a new password and shows a success message', async () => {
+      const user = userEvent.setup();
+      vi.mocked(admin.setUserPassword).mockResolvedValue(undefined);
+
+      renderAdmin();
+
+      await waitFor(() => {
+        expect(screen.getByText('regularuser')).toBeInTheDocument();
+      });
+
+      const userRow = screen.getByText('regularuser').closest('li')!;
+      await user.click(within(userRow).getByRole('button', { name: /Reset password for regularuser/i }));
+
+      const dialog = await screen.findByRole('dialog');
+      await user.type(within(dialog).getByLabelText('New password'), 'a-brand-new-password');
+      await user.click(within(dialog).getByRole('button', { name: /^Reset password$/ }));
+
+      await waitFor(() => {
+        expect(admin.setUserPassword).toHaveBeenCalledWith('user2', { new_password: 'a-brand-new-password' });
+      });
+      expect(await screen.findByRole('status')).toHaveTextContent(/regularuser/);
+    });
+
+    it('generates a password that satisfies the length requirement and enables submit', async () => {
+      const user = userEvent.setup();
+
+      renderAdmin();
+
+      await waitFor(() => {
+        expect(screen.getByText('regularuser')).toBeInTheDocument();
+      });
+
+      const userRow = screen.getByText('regularuser').closest('li')!;
+      await user.click(within(userRow).getByRole('button', { name: /Reset password for regularuser/i }));
+
+      const dialog = await screen.findByRole('dialog');
+      await user.click(within(dialog).getByRole('button', { name: 'Generate' }));
+
+      const input = within(dialog).getByLabelText('New password') as HTMLInputElement;
+      expect(input.value.length).toBeGreaterThanOrEqual(VALIDATION.PASSWORD_MIN_LENGTH);
+      // Generated passwords are revealed so the admin can copy them.
+      expect(input).toHaveAttribute('type', 'text');
+      expect(within(dialog).getByRole('button', { name: /^Reset password$/ })).toBeEnabled();
+    });
+
+    it('shows a server error message when the reset fails', async () => {
+      const user = userEvent.setup();
+      vi.mocked(isAxiosError).mockReturnValue(true);
+      vi.mocked(admin.setUserPassword).mockRejectedValue({ response: { data: '  something went wrong  ' } });
+
+      renderAdmin();
+
+      await waitFor(() => {
+        expect(screen.getByText('regularuser')).toBeInTheDocument();
+      });
+
+      const userRow = screen.getByText('regularuser').closest('li')!;
+      await user.click(within(userRow).getByRole('button', { name: /Reset password for regularuser/i }));
+
+      const dialog = await screen.findByRole('dialog');
+      await user.type(within(dialog).getByLabelText('New password'), 'a-brand-new-password');
+      await user.click(within(dialog).getByRole('button', { name: /^Reset password$/ }));
+
+      expect(await within(dialog).findByRole('alert')).toHaveTextContent('something went wrong');
     });
   });
 

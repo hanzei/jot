@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, NoteItem, CreateNoteRequest, UpdateNoteRequest, ConvertNoteTypeRequest, CreateNoteItemRequest, PatchNoteItemRequest, User, CreateUserRequest, UserListResponse, AdminStatsResponse, ShareNoteRequest, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, Label, ActiveSession, EmptyTrashResponse, PersonalAccessToken, CreatePATRequest, NoteImage, LabelCountsResponse } from '@jot/shared';
+import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, NoteItem, CreateNoteRequest, UpdateNoteRequest, ConvertNoteTypeRequest, CreateNoteItemRequest, PatchNoteItemRequest, User, CreateUserRequest, UserListResponse, AdminStatsResponse, ShareNoteRequest, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, SetUserPasswordRequest, Label, ActiveSession, EmptyTrashResponse, PersonalAccessToken, CreatePATRequest, NoteImage, LabelCountsResponse } from '@jot/shared';
 import { removeUser } from '@/utils/auth';
 import { authPathWithRedirect, currentRedirectTarget } from '@/utils/authRedirect';
 
@@ -257,6 +257,9 @@ export const admin = {
 
   updateUserRole: (id: string, data: UpdateUserRoleRequest): Promise<User> =>
     api.put(`/admin/users/${id}/role`, data).then(res => res.data),
+
+  setUserPassword: (id: string, data: SetUserPasswordRequest): Promise<void> =>
+    api.put(`/admin/users/${id}/password`, data).then(() => undefined),
 
   deleteUser: (id: string): Promise<void> =>
     api.delete(`/admin/users/${id}`).then(() => undefined),

@@ -48,6 +48,15 @@ func (c *Client) AdminUpdateUserRole(ctx context.Context, userID string, role Ro
 	return &user, nil
 }
 
+// AdminSetUserPassword sets a new password for the given user without requiring
+// the user's current password (admin only). The target user's existing sessions
+// are invalidated server-side.
+func (c *Client) AdminSetUserPassword(ctx context.Context, userID, newPassword string) error {
+	return c.doNoContent(ctx, http.MethodPut, fmt.Sprintf("/api/v1/admin/users/%s/password", userID), map[string]string{
+		"new_password": newPassword,
+	})
+}
+
 // AdminDeleteUser deletes a user account (admin only).
 func (c *Client) AdminDeleteUser(ctx context.Context, userID string) error {
 	return c.doNoContent(ctx, http.MethodDelete, fmt.Sprintf("/api/v1/admin/users/%s", userID), nil)

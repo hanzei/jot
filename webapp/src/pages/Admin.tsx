@@ -6,6 +6,7 @@ import { getUser } from '@/utils/auth';
 import PageContent from '@/components/PageContent';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import CreateUserModal from '@/components/CreateUserModal';
+import ResetPasswordModal from '@/components/ResetPasswordModal';
 
 interface AdminProps {
   passwordMinLength: number;
@@ -60,8 +61,10 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
   const [stats, setStats] = useState<AdminStatsResponse | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [statsError, setStatsError] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [resetPasswordUser, setResetPasswordUser] = useState<User | null>(null);
   const [roleUpdating, setRoleUpdating] = useState<Set<string>>(new Set());
   const [deleteLoading, setDeleteLoading] = useState<Set<string>>(new Set());
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; user: User | null }>({ open: false, user: null });
@@ -140,6 +143,11 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
     refreshStats();
   };
 
+  const handleResetPasswordSuccess = (targetUser: User) => {
+    setError('');
+    setSuccess(t('admin.resetPasswordSuccess', { username: targetUser.username }));
+  };
+
   const handleRoleToggle = async (targetUser: User) => {
     const newRole = targetUser.role === ROLES.ADMIN ? ROLES.USER : ROLES.ADMIN;
     setError('');
@@ -199,6 +207,11 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{t('admin.pageHeading')}</h1>
         </div>
 
+        {success && (
+          <div role="status" className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 px-4 py-3 rounded mb-4">
+            {success}
+          </div>
+        )}
         {error && (
           <div role="alert" className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-4 py-3 rounded mb-4">
             {error}
@@ -360,6 +373,13 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
                               : t('admin.makeAdmin')}
                         </button>
                         <button
+                          onClick={() => { setSuccess(''); setResetPasswordUser(user); }}
+                          aria-label={t('admin.resetPasswordLabel', { username: user.username })}
+                          className="text-sm px-3 py-1 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600"
+                        >
+                          {t('admin.resetPassword')}
+                        </button>
+                        <button
                           disabled={user.id === currentUser?.id || deleteLoading.has(user.id)}
                           onClick={() => handleDeleteUser(user)}
                           aria-label={t('admin.deleteUserLabel', { username: user.username })}
@@ -397,6 +417,15 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
             passwordMinLength={passwordMinLength}
             onClose={() => setShowCreateModal(false)}
             onSuccess={handleCreateUserSuccess}
+          />
+        )}
+
+        {resetPasswordUser && (
+          <ResetPasswordModal
+            user={resetPasswordUser}
+            passwordMinLength={passwordMinLength}
+            onClose={() => setResetPasswordUser(null)}
+            onSuccess={handleResetPasswordSuccess}
           />
         )}
       </PageContent>

@@ -222,6 +222,44 @@ test.describe('Admin', () => {
     await expect(usersList.getByTestId(`user-row-${managedUsername}`)).toHaveCount(0);
   });
 
+  test('admin can reset a user\'s password', async ({ page, request }) => {
+    const adminPage = new AdminPage(page);
+    const username = uniqueUsername('resetpw');
+    const oldPassword = 'old-password-123';
+    const newPassword = 'new-password-456';
+
+    await ensureAdminSession(page);
+
+    const registerResponse = await request.post('/api/v1/register', {
+      data: { username, password: oldPassword },
+    });
+    await expectOk(registerResponse, 'register reset target');
+
+    await adminPage.goto();
+    await expect(page).toHaveURL('/admin');
+    expect(await adminPage.isVisible()).toBe(true);
+
+    const userRow = page.getByTestId('users-list').getByTestId(`user-row-${username}`);
+    await expect(userRow).toBeVisible();
+
+    await userRow.getByRole('button', { name: `Reset password for ${username}` }).click();
+    const resetModal = page.getByRole('dialog', { name: 'Reset password' });
+    await resetModal.getByLabel('New password').fill(newPassword);
+    await resetModal.getByRole('button', { name: 'Reset password', exact: true }).click();
+
+    await expect(page.getByRole('status')).toContainText(username);
+
+    // The old password no longer works and the new one does. `request` is a
+    // separate context from the admin's page session, so logging in here does
+    // not disturb the admin session under test.
+    const oldLogin = await request.post('/api/v1/login', { data: { username, password: oldPassword } });
+    expect(oldLogin.status()).toBe(401);
+    await expectOk(
+      await request.post('/api/v1/login', { data: { username, password: newPassword } }),
+      'login with new password',
+    );
+  });
+
   test('non-admin users are redirected away from admin page', async ({
     page,
     loginPage,

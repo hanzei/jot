@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { test, expect } from '../fixtures';
+import { test, expect, E2E_ADMIN_CREDENTIALS } from '../fixtures';
 import type { Locator, Page } from '@playwright/test';
 
 /**
@@ -218,6 +218,29 @@ test.describe('Modal focus management', () => {
 
     await page.keyboard.press('Escape');
     await expect(page.getByText('1 / 2')).toBeHidden();
+  });
+
+  test('reset password modal traps focus and restores it to the reset button on cancel', async ({ page }) => {
+    // The admin surface needs the bootstrap admin. Resetting a password is
+    // allowed on any row including the admin's own, so no extra user is needed.
+    const login = await page.request.post('/api/v1/login', { data: E2E_ADMIN_CREDENTIALS });
+    expect(login.ok(), `admin login failed with ${login.status()}`).toBeTruthy();
+
+    await page.goto('/admin');
+    await expect(page.getByRole('heading', { name: 'User Management' })).toBeVisible();
+
+    const row = page.getByTestId(`user-row-${E2E_ADMIN_CREDENTIALS.username}`);
+    const resetButton = row.getByRole('button', { name: `Reset password for ${E2E_ADMIN_CREDENTIALS.username}` });
+    await resetButton.click();
+
+    const dialog = page.getByRole('dialog', { name: 'Reset password' });
+    await expect(dialog.getByLabel('New password')).toBeVisible();
+    expect(await focusIsInside(dialog)).toBe(true);
+    await expectFocusTrapped(page, dialog);
+
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(resetButton).toBeFocused();
   });
 });
 
