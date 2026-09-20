@@ -20,6 +20,7 @@ type AdminHandler struct {
 	statsStore        *models.AdminStatsStore
 	userSettingsStore *models.UserSettingsStore
 	imageStore        *blobstore.ImageStore
+	sessionService    *auth.SessionService
 	dbPath            string
 	passwordMinLength int
 }
@@ -30,6 +31,7 @@ func NewAdminHandler(
 	statsStore *models.AdminStatsStore,
 	userSettingsStore *models.UserSettingsStore,
 	imageStore *blobstore.ImageStore,
+	sessionService *auth.SessionService,
 	dbPath string,
 	passwordMinLength int,
 ) *AdminHandler {
@@ -39,6 +41,7 @@ func NewAdminHandler(
 		statsStore:        statsStore,
 		userSettingsStore: userSettingsStore,
 		imageStore:        imageStore,
+		sessionService:    sessionService,
 		dbPath:            dbPath,
 		passwordMinLength: passwordMinLength,
 	}
@@ -191,6 +194,66 @@ func (h *AdminHandler) UpdateUserRole(w http.ResponseWriter, r *http.Request) (i
 		return http.StatusInternalServerError, nil, err
 	}
 	return http.StatusOK, user, nil
+}
+
+type SetUserPasswordRequest struct {
+	NewPassword string `json:"new_password"`
+}
+
+// SetUserPassword godoc
+//
+//	@Summary		Set a user's password (admin only)
+//	@Description	Sets a new password for the given user without requiring the user's current password. All of the target user's existing sessions are invalidated. Intended for administrative account recovery.
+//	@Tags			admin
+//	@Security		CookieAuth
+//	@Accept			json
+//	@Param			id		path	string					true	"User ID"
+//	@Param			body	body	SetUserPasswordRequest	true	"New password"
+//	@Success		204		"no content"
+//	@Failure		400		{string}	string	"bad request"
+//	@Failure		401		{string}	string	"unauthorized"
+//	@Failure		403		{string}	string	"forbidden"
+//	@Failure		404		{string}	string	"user not found"
+//	@Router			/admin/users/{id}/password [put]
+func (h *AdminHandler) SetUserPassword(w http.ResponseWriter, r *http.Request) (int, any, error) {
+	requestingUser, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	}
+
+	targetID := chi.URLParam(r, "id")
+
+	var req SetUserPasswordRequest
+	if err := decodeJSONBody(w, r, &req); err != nil {
+		return http.StatusBadRequest, nil, err
+	}
+
+	if err := validatePassword(req.NewPassword, h.passwordMinLength); err != nil {
+		return http.StatusBadRequest, nil, err
+	}
+
+	if err := h.userStore.UpdatePassword(r.Context(), targetID, req.NewPassword); err != nil {
+		if errors.Is(err, models.ErrUserNotFound) {
+			return http.StatusNotFound, nil, err
+		}
+		return http.StatusInternalServerError, nil, fmt.Errorf("update password: %w", err)
+	}
+
+	// Invalidate the target user's existing sessions so no login can continue
+	// with the old password after a reset.
+	if err := h.sessionService.InvalidateUserSessions(r.Context(), targetID); err != nil {
+		return http.StatusInternalServerError, nil, fmt.Errorf("invalidate user sessions: %w", err)
+	}
+
+	// If the admin reset their own password, issue a fresh session so the
+	// current request stays authenticated (mirrors AuthHandler.ChangePassword).
+	if targetID == requestingUser.ID {
+		if err := h.sessionService.CreateSession(w, r, requestingUser.ID); err != nil {
+			return http.StatusInternalServerError, nil, fmt.Errorf("create session: %w", err)
+		}
+	}
+
+	return http.StatusNoContent, nil, nil
 }
 
 // DeleteUser godoc

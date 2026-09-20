@@ -181,6 +181,83 @@ func TestAdminUpdateUserRoleEndpoint(t *testing.T) {
 	})
 }
 
+func TestAdminSetUserPasswordEndpoint(t *testing.T) {
+	t.Parallel()
+	ts := setupTestServer(t)
+
+	const oldPassword = "old-password-123"
+	const newPassword = "new-password-456"
+
+	t.Run("admin resets another user's password and invalidates their sessions", func(t *testing.T) {
+		admin := ts.createTestUser(t, "pwreset-admin", "password123", true)
+		target := ts.createTestUser(t, "pwreset-target", oldPassword, false)
+
+		// The target starts with a live session.
+		_, err := target.Client.Me(t.Context())
+		require.NoError(t, err)
+
+		err = admin.Client.AdminSetUserPassword(t.Context(), target.User.ID, newPassword)
+		require.NoError(t, err)
+
+		// The target's existing session is invalidated by the reset.
+		_, err = target.Client.Me(t.Context())
+		assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
+
+		// The old password no longer works.
+		reject := ts.newClient()
+		_, err = reject.Login(t.Context(), "pwreset-target", oldPassword)
+		assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
+
+		// The new password works.
+		accept := ts.newClient()
+		_, err = accept.Login(t.Context(), "pwreset-target", newPassword)
+		require.NoError(t, err)
+	})
+
+	t.Run("admin resetting own password keeps the current session authenticated", func(t *testing.T) {
+		admin := ts.createTestUser(t, "pwreset-self-admin", oldPassword, true)
+
+		err := admin.Client.AdminSetUserPassword(t.Context(), admin.User.ID, newPassword)
+		require.NoError(t, err)
+
+		// The request that performed the reset stays authenticated via a re-issued session.
+		_, err = admin.Client.Me(t.Context())
+		require.NoError(t, err)
+
+		// A fresh login with the new password also succeeds.
+		c := ts.newClient()
+		_, err = c.Login(t.Context(), "pwreset-self-admin", newPassword)
+		require.NoError(t, err)
+	})
+
+	t.Run("non-admin cannot set passwords", func(t *testing.T) {
+		regular := ts.createTestUser(t, "pwreset-regular", "password123", false)
+		target := ts.createTestUser(t, "pwreset-victim", oldPassword, false)
+
+		err := regular.Client.AdminSetUserPassword(t.Context(), target.User.ID, newPassword)
+		assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
+
+		// The target's original password still works.
+		c := ts.newClient()
+		_, err = c.Login(t.Context(), "pwreset-victim", oldPassword)
+		require.NoError(t, err)
+	})
+
+	t.Run("too-short password returns 400", func(t *testing.T) {
+		admin := ts.createTestUser(t, "pwreset-admin-short", "password123", true)
+		target := ts.createTestUser(t, "pwreset-target-short", oldPassword, false)
+
+		err := admin.Client.AdminSetUserPassword(t.Context(), target.User.ID, "short")
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+	})
+
+	t.Run("unknown user returns 404", func(t *testing.T) {
+		admin := ts.createTestUser(t, "pwreset-admin-unknown", "password123", true)
+		err := admin.Client.AdminSetUserPassword(t.Context(), "nonexistentid12345678", newPassword)
+		assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
+	})
+}
+
 func TestAdminUpdateUserRolePreventsDemotingLastAdmin(t *testing.T) {
 	t.Parallel()
 	ts := setupTestServer(t)

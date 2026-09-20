@@ -145,7 +145,7 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (*Server, error) {
 	}
 	labelsHandler := handlers.NewLabelsHandler(noteStore, labelStore, hub)
 	eventsHandler := handlers.NewEventsHandler(hub)
-	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, userSettingsStore, imageStore, cfg.DBDSN, cfg.PasswordMinLength)
+	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, userSettingsStore, imageStore, sessionService, cfg.DBDSN, cfg.PasswordMinLength)
 	sessionsHandler := handlers.NewSessionsHandler(sessionStore)
 	patsHandler := handlers.NewPATsHandler(patStore)
 
@@ -359,6 +359,7 @@ func (s *Server) setupRoutes() error {
 			r.Get("/admin/users", s.wrapHandler(s.adminHandler.GetUsers))
 			r.Post("/admin/users", s.wrapHandler(s.adminHandler.CreateUser))
 			r.Put("/admin/users/{id}/role", s.wrapHandler(s.adminHandler.UpdateUserRole))
+			r.Put("/admin/users/{id}/password", s.wrapHandler(s.adminHandler.SetUserPassword))
 			r.Delete("/admin/users/{id}", s.wrapHandler(s.adminHandler.DeleteUser))
 			r.Delete("/admin/users/{id}/notes", s.wrapHandler(s.adminHandler.DeleteUserNotes))
 		})

@@ -138,6 +138,53 @@ func TestUsersDeleteCmd(t *testing.T) {
 	})
 }
 
+func TestUsersSetPasswordCmd(t *testing.T) {
+	ts := setupTestServer(t)
+	admin := ts.createAdmin(t, "admin", "adminpass")
+
+	t.Run("sets password via flag", func(t *testing.T) {
+		u, err := admin.AdminCreateUser(t.Context(), "flagpw", "oldpass", client.RoleUser)
+		require.NoError(t, err)
+
+		res := runJotCTL(t, ts, admin, "users", "set-password", u.ID, "--password", "brandnewpass")
+		require.NoError(t, res.Err)
+		assert.Contains(t, res.Stdout, "Set password")
+
+		// The new password works.
+		c := client.New(ts.httpServer.URL)
+		_, err = c.Login(t.Context(), "flagpw", "brandnewpass")
+		require.NoError(t, err)
+	})
+
+	t.Run("generates a password and prints it", func(t *testing.T) {
+		u, err := admin.AdminCreateUser(t.Context(), "genpw", "oldpass", client.RoleUser)
+		require.NoError(t, err)
+
+		res := runJotCTL(t, ts, admin, "--json", "users", "set-password", u.ID, "--generate")
+		require.NoError(t, res.Err)
+
+		var result setPasswordResult
+		require.NoError(t, json.Unmarshal([]byte(res.Stdout), &result))
+		assert.Equal(t, u.ID, result.ID)
+		assert.True(t, result.Updated)
+		require.NotEmpty(t, result.GeneratedPassword)
+
+		// The generated password actually authenticates.
+		c := client.New(ts.httpServer.URL)
+		_, err = c.Login(t.Context(), "genpw", result.GeneratedPassword)
+		require.NoError(t, err)
+	})
+
+	t.Run("rejects --generate combined with --password", func(t *testing.T) {
+		u, err := admin.AdminCreateUser(t.Context(), "bothpw", "oldpass", client.RoleUser)
+		require.NoError(t, err)
+
+		res := runJotCTL(t, ts, admin, "users", "set-password", u.ID, "--generate", "--password", "somepass")
+		require.Error(t, res.Err)
+		assert.Contains(t, res.Err.Error(), "cannot be combined")
+	})
+}
+
 func TestUsersSetRoleCmd(t *testing.T) {
 	ts := setupTestServer(t)
 	admin := ts.createAdmin(t, "admin", "adminpass")

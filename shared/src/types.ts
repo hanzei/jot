@@ -361,6 +361,10 @@ export interface UpdateUserRoleRequest {
   role: UserRole;
 }
 
+export interface SetUserPasswordRequest {
+  new_password: string;
+}
+
 export interface ActiveSession {
   id: string;
   browser: string;
