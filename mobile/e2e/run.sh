@@ -247,6 +247,12 @@ foreground_app() {
   adb shell monkey -p com.jot.app -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
 }
 
+# The app's main process id, or empty if it is not running. `pidof` ships with
+# Android's toybox; the CR strip removes the carriage return adb shell appends.
+app_pid() {
+  adb shell pidof com.jot.app | tr -d '\r'
+}
+
 # Create a note directly against the server API, out-of-band from the app, given
 # its content text as $1. Used by the SSE catch-up scenario (10-11) to mutate
 # server state while the app is backgrounded and its stream is down, so the note
@@ -334,7 +340,23 @@ assert_note_synced "$MAESTRO_JOT_KILL_NOTE"
 # resync. The adb/API steps are sequenced here for the reason on
 # set_airplane_mode/force_stop_app (Maestro cannot shell out mid-flow).
 maestro_flow 10-sse-resync-arm.yaml "$@"
+# Capture the app's pid before backgrounding. The scenario is only valid if
+# foreground_app warm-resumes the *same* process: if Android reaped the
+# backgrounded process (memory pressure), the launcher intent cold-starts it and
+# flow 11 would pass by cold-loading every note rather than via the reconnect
+# resync — a false green. Assert the pid is unchanged and fail loudly otherwise.
+sse_pre_pid="$(app_pid || true)"
+if [ -z "$sse_pre_pid" ]; then
+  echo "com.jot.app is not running before the SSE resync scenario." >&2
+  exit 1
+fi
 background_app
 create_note_via_api "$MAESTRO_JOT_SSE_NOTE"
 foreground_app
+sse_post_pid="$(app_pid || true)"
+if [ "$sse_post_pid" != "$sse_pre_pid" ]; then
+  echo "com.jot.app was restarted across backgrounding (pid ${sse_pre_pid} -> ${sse_post_pid:-none})." >&2
+  echo "Flow 11 would exercise a cold start, not the reconnect resync. Failing." >&2
+  exit 1
+fi
 maestro_flow 11-sse-resync-catchup.yaml "$@"
