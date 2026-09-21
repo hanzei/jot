@@ -168,9 +168,20 @@ export class DashboardPage {
   }
 
   async openNote(title: string) {
-    await this.page.locator('[data-testid="note-card"]').filter({
+    const card = this.page.locator('[data-testid="note-card"]').filter({
       has: this.page.locator('h3').getByText(title, { exact: true }),
-    }).click();
+    });
+    await expect(card).toBeVisible();
+    // Activate the card's real control (noteCardButton, see webapp/CLAUDE.md) by
+    // keyboard rather than clicking the card div. The masonry list animates cards
+    // into place and re-renders as data settles, so a positional click on the
+    // card loops on "element is not stable" / "detached from the DOM" and times
+    // out. Keyboard activation needs no positional stability; and the open button
+    // is pointer-events-none (a pointer click falls through to the card), so it is
+    // also the interaction that actually targets the control. Mirrors openNoteMenu.
+    const openButton = card.locator('[data-note-card="true"]');
+    await openButton.focus();
+    await this.page.keyboard.press('Enter');
   }
 
   async closeNoteModal() {
