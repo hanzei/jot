@@ -110,11 +110,6 @@ link lost if the app restarts before sign-in). App-icon quick actions stay
 Jest-only: `adb` cannot construct `expo-quick-actions`' Parcelable-`Bundle`
 intent extra, so there is no genuine on-device trigger for them.
 
-`07`/`08`/`09` cover the **process-lifecycle** guarantee — the strengthened form
-of the 02/03 round-trip, with `run.sh` `am force-stop`ing the app mid-queue
-between the offline write and the reconnect. Jest cannot kill a process, so this
-is device-only; the flows' own headers carry the sequencing.
-
 - **Maestro cannot shell out mid-flow.** `runScript` is a GraalJS sandbox with
   no `child_process`, so anything needing `adb` (airplane mode, share intents)
   is sequenced from `e2e/run.sh` *between* flows (`set_airplane_mode`). Flows are
