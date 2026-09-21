@@ -43,17 +43,19 @@ appId: com.jot.app
 
 - tapOn:
     id: "create-note-fab"
-- tapOn:
-    id: "note-title-input"
-- inputText: "${MAESTRO_JOT_NOTE_TITLE}"
+# A new note is a text note, which has no title field — NoteEditorScreen renders
+# note-title-input only for list notes (noteType === 'list'). Put the identifying
+# text in the content: a text note's card shows its content preview, so the
+# assertion below still finds it.
 - tapOn:
     id: "note-content-input"
-- inputText: "Created by the Maestro smoke flow."
+- inputText: "${MAESTRO_JOT_NOTE_TITLE}"
 - hideKeyboard
 
 # Leaving the editor commits the note; there is no explicit save button.
 - tapOn:
     id: "editor-back"
 
-# Note cards key their testID by note id, which a flow cannot know.
+# Note cards key their testID by note id, which a flow cannot know, so match the
+# visible content text instead.
 - assertVisible: "${MAESTRO_JOT_NOTE_TITLE}"
