@@ -12,14 +12,13 @@ appId: com.jot.app
 # reachable from inside the emulator — the usual way this suite breaks.
 - assertVisible:
     id: "login-server-setup-input"
-- tapOn:
-    id: "login-server-setup-input"
-# The field is pre-filled with getBaseUrl() (http://10.0.2.2:8080 on Android),
-# and Maestro's inputText appends rather than replaces — without erasing first,
-# the URL doubles and server validation rejects it, leaving the login form
-# (username-input) never shown.
-- eraseText
-- inputText: "${MAESTRO_JOT_SERVER_URL}"
+# The field is pre-filled with getBaseUrl(), which on Android returns the
+# emulator's host-loopback alias http://10.0.2.2:8080 — exactly the fixture
+# server. Retyping it is both unnecessary and unreliable: Maestro's tapOn lands
+# the cursor mid-text and eraseText only clears backward from it, so a pre-filled
+# value gets mangled (observed: http://10.0.2.2:808080, an out-of-range port that
+# validation rejects). Assert the default is the URL we want, then submit it.
+- assertVisible: "${MAESTRO_JOT_SERVER_URL}"
 - tapOn:
     id: "login-server-setup-submit"
 
