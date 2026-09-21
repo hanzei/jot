@@ -62,6 +62,28 @@ set_airplane_mode() {
   fi
 }
 
+# Fire a real OS intent via adb between flows — the same constraint that forces
+# set_airplane_mode out of the flows (Maestro's runScript is a GraalJS sandbox
+# with no child_process) applies to intent delivery too, which is why the flows
+# are numbered and the intent is sequenced here. Passing the target package to
+# `am start` alongside the action resolves the intent to the app's own
+# intent-filtered activity with no chooser; the running app receives it via
+# onNewIntent.
+send_share_intent() {
+  echo "==> Sending share intent (text: $MAESTRO_JOT_SHARE_TEXT)"
+  # expo-share-intent's plugin registers the ACTION_SEND text/* filter (app.json).
+  adb shell am start -a android.intent.action.SEND -t text/plain \
+    --es android.intent.extra.TEXT "$MAESTRO_JOT_SHARE_TEXT" com.jot.app
+}
+
+send_deep_link() {
+  echo "==> Sending deep-link intent ($DEEP_LINK_URL)"
+  # The jot:// scheme filter comes from app.json's `scheme`. The URL is one
+  # unquoted token (no spaces); the device shell passes an unmatched glob (the
+  # `?`) through literally, so `am start` receives the URL intact.
+  adb shell am start -a android.intent.action.VIEW -d "$DEEP_LINK_URL" com.jot.app
+}
+
 echo "==> Building the server"
 # Built rather than `go run` so the readiness wait measures startup, not a
 # cold compile — same reasoning as `warm-server-build`.
@@ -107,8 +129,17 @@ MAESTRO_JOT_USERNAME="e2e${RUN_ID}"
 MAESTRO_JOT_PASSWORD="maestro-e2e-password"
 MAESTRO_JOT_NOTE_TITLE="Smoke note ${RUN_ID}"
 MAESTRO_JOT_OFFLINE_NOTE="Offline note ${RUN_ID}"
+# No spaces: the share text is passed to `adb shell am start --es ...`, whose
+# argument survives the adb-shell → device-sh hop only as a single unquoted
+# token. Hyphens keep it one token end to end.
+MAESTRO_JOT_SHARE_TEXT="Shared-intent-note-${RUN_ID}"
+# Deep link delivered signed out (flow 05) that must resolve after sign-in (06).
+# The ?server= param is canonicalized identically on both sides so it matches the
+# known server (no "unknown server" prompt fires); `settings` is a protected path
+# that needs no pre-existing entity to resolve.
+DEEP_LINK_URL="jot://settings?server=${SERVER_URL_FROM_EMULATOR}"
 readonly RUN_ID MAESTRO_JOT_USERNAME MAESTRO_JOT_PASSWORD MAESTRO_JOT_NOTE_TITLE \
-  MAESTRO_JOT_OFFLINE_NOTE
+  MAESTRO_JOT_OFFLINE_NOTE MAESTRO_JOT_SHARE_TEXT DEEP_LINK_URL
 
 # One flow at a time so airplane mode can be toggled between them. Each flow gets
 # its own JUnit report (report-<flow>.xml) so a multi-flow run does not clobber
@@ -123,6 +154,7 @@ maestro_flow() {
     -e MAESTRO_JOT_PASSWORD="$MAESTRO_JOT_PASSWORD" \
     -e MAESTRO_JOT_NOTE_TITLE="$MAESTRO_JOT_NOTE_TITLE" \
     -e MAESTRO_JOT_OFFLINE_NOTE="$MAESTRO_JOT_OFFLINE_NOTE" \
+    -e MAESTRO_JOT_SHARE_TEXT="$MAESTRO_JOT_SHARE_TEXT" \
     --format junit \
     --output "$E2E_DIR/report-$(basename "$flow" .yaml).xml" \
     "$@" \
@@ -171,3 +203,18 @@ maestro_flow 02-offline-write.yaml "$@"
 set_airplane_mode disable
 maestro_flow 03-online-sync.yaml "$@"
 assert_offline_note_synced
+
+# 04 — share intent (OS integration). A real ACTION_SEND text intent, fired here
+# because Maestro cannot shell out, opens a new note pre-filled with the shared
+# text. The flow does not relaunch — that would drop the just-delivered intent —
+# so the intent is sent immediately before it. Continues the signed-in session.
+send_share_intent
+maestro_flow 04-share-intent.yaml "$@"
+
+# 05-06 — deep link delivered while signed out must still resolve after sign-in
+# (the #854 regression). 05 signs out and lands on the login screen; the jot://
+# VIEW intent is delivered *here*, while signed out, so useDeepLinkRouting stashes
+# it; 06 signs back in and asserts the stashed link resolved to the target screen.
+maestro_flow 05-deep-link-signout.yaml "$@"
+send_deep_link
+maestro_flow 06-deep-link-replay.yaml "$@"

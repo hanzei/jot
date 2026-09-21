@@ -35,7 +35,7 @@ export default function SettingsScreen() {
   const { isLocalMode } = useAuth();
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.background }]}>
+    <View style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.background }]} testID="settings-screen">
       <View style={[styles.header, { borderBottomColor: colors.borderLight, backgroundColor: colors.background }]}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}

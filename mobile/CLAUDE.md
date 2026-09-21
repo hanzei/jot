@@ -106,6 +106,28 @@ rather than merely still rendering locally). A flow that continues a prior flow'
 session therefore cannot be run in isolation. Each flow writes its own
 `report-<flow>.xml`.
 
+The later flows cover the **OS-integration entry points** — the native intent
+paths the Jest suite stubs wholesale, so they have never run end to end:
+
+- `04-share-intent` — `run.sh` fires a real `ACTION_SEND` text intent
+  (`send_share_intent`); the app opens a new note pre-filled with the shared
+  text (`expo-share-intent` → `NoteEditor`, not a separate share screen). The
+  flow does not relaunch, so the intent is sent immediately before it.
+- `05-deep-link-signout` / `06-deep-link-replay` — the #854 regression ("a
+  pending deep link is lost if the app restarts before sign-in completes"). `05`
+  signs out; `run.sh` then fires a `jot://` `VIEW` intent (`send_deep_link`)
+  *while signed out*, so it is stashed; `06` signs back in and asserts the
+  stashed link resolved to its target screen. The intent is sequenced between
+  the two flows for the same reason airplane mode is.
+
+**App-icon quick actions are deliberately not a device flow.** `expo-quick-actions`
+delivers only through a nested Parcelable `Bundle` intent extra (`shortcut_data`),
+which `adb am start` cannot construct (it sets primitive/string extras only), and
+`cmd shortcut` has no verb to launch a registered dynamic shortcut. There is no
+adb-only way to fire a genuine quick-action intent, so the routing stays covered
+by Jest (`useQuickActionRouting`) rather than faked on-device against a shim that
+would not exercise the real OS path.
+
 - **Maestro cannot shell out mid-flow.** `runScript` is a GraalJS sandbox with
   no `child_process`, so anything needing `adb` (airplane mode, share intents)
   is sequenced from `e2e/run.sh` *between* flows (`set_airplane_mode`). Flows are
