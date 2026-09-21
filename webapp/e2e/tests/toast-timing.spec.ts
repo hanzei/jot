@@ -13,6 +13,15 @@ const STANDARD_TOAST_VISIBLE_MS = 4000;
 // Mirrors Toast.tsx's TOAST_EXIT_ANIMATION_MS: the fade-out delay between a
 // toast's auto-dismiss timer firing and it actually leaving the DOM.
 const TOAST_EXIT_ANIMATION_MS = 200;
+// Extra virtual time to run *past* the exit-unmount timer rather than landing
+// exactly on it. The auto-dismiss timer fires partway through the final advance
+// and only then schedules the exit-unmount timer, so stopping the fake clock on
+// that nested timer's exact due time is a boundary race — and can leave React's
+// unmount commit unflushed — which is what made this test intermittently see the
+// toast still present (count 1). The buffer removes that sensitivity; timers are
+// relative to each toast's creation, so over-running here does not affect the
+// standard-toast timing checked afterwards.
+const TOAST_EXIT_SETTLE_BUFFER_MS = 500;
 
 test.describe('Toast timing', () => {
   test.beforeEach(async ({ authenticatedUser }) => {
@@ -38,7 +47,7 @@ test.describe('Toast timing', () => {
 
     await page.clock.runFor(UNDO_TOAST_VISIBLE_MS - 1);
     await expect(undoToast).toBeVisible();
-    await page.clock.runFor(1 + TOAST_EXIT_ANIMATION_MS);
+    await page.clock.runFor(1 + TOAST_EXIT_ANIMATION_MS + TOAST_EXIT_SETTLE_BUFFER_MS);
     await expect(page.getByTestId('toast')).toHaveCount(0);
 
     await dashboardPage.switchToBin();
@@ -49,7 +58,7 @@ test.describe('Toast timing', () => {
     await expect(standardToast.getByRole('button', { name: 'Undo' })).toHaveCount(0);
     await page.clock.runFor(STANDARD_TOAST_VISIBLE_MS - 1);
     await expect(standardToast).toBeVisible();
-    await page.clock.runFor(1 + TOAST_EXIT_ANIMATION_MS);
+    await page.clock.runFor(1 + TOAST_EXIT_ANIMATION_MS + TOAST_EXIT_SETTLE_BUFFER_MS);
     await expect(page.getByTestId('toast')).toHaveCount(0);
   });
 });
