@@ -20,6 +20,9 @@ on:
     paths:
       - "mobile/**"
       - "shared/**"
+      # The Maestro version pin the jobs read lives here, so a bump must
+      # re-exercise the device tests.
+      - "scripts/check-maestro.sh"
       - ".github/workflows/mobile-e2e.yml"
   workflow_dispatch:
 
