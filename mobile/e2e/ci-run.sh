@@ -8,36 +8,59 @@
 # cleanup all break there (a bare `set -o pipefail` even fails outright — dash).
 # Keeping the logic in one script means one shell: `set`, the screenrecord
 # background job, $status, and the on-failure diagnostics all work, and it stays
-# shellcheckable.
+# clean under shellcheck.
 #
 # Preconditions the workflow guarantees: a booted emulator on adb, and the debug
 # APK already downloaded to the path passed as $1 (default apk/app-release.apk,
 # relative to the workspace root this runs from).
+#
+# The whole flow set (run.sh) is retried once by default on a transient
+# device-driver death — see the retry loop at the bottom and is_infra_failure.
 set -uo pipefail
 
 E2E_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APK="${1:-apk/app-release.apk}"
-readonly E2E_DIR APK
+# One retry by default. run.sh is a self-contained session (its own throwaway
+# server + DB, and flow 01 does `launchApp: clearState`), so re-running the
+# whole thing is a clean reset — which is why the retry is whole-run rather than
+# per-flow: the flows share state, so flow N cannot be re-run without 1..N-1.
+MAX_ATTEMPTS="${E2E_MAX_ATTEMPTS:-2}"
+readonly E2E_DIR APK MAX_ATTEMPTS
+
+# Failure markers that mean the on-device Maestro driver (the uiautomator gRPC
+# server) or the emulator dropped out mid-flow, rather than an assertion failing.
+# Kept in step with the signatures seen failing master (runs #27/#30): a Maestro
+# DeviceServerDiedException, the gRPC "UNAVAILABLE: End of stream" underneath it,
+# the bare "<failure>Unknown error" Maestro writes when it cannot classify a
+# driver death, and adbd's "failed to connect to socket" when the driver port
+# drops. A genuine assertion failure carries none of these and is NOT retried, so
+# a real regression still fails fast and loud.
+readonly INFRA_FAILURE_RE='DeviceServerDied|Device server died|UNAVAILABLE: End of stream|StatusRuntimeException|Unknown error|failed to connect to socket|io\.grpc'
+
+# android-emulator-runner only starts this script once the emulator reports
+# booted, but the window manager and launcher can still be settling, and the
+# first viewHierarchy dump racing that is one way the driver dies early. Wait
+# explicitly, then give it a short settle. Bounded and best-effort — a stuck
+# device surfaces as the flows failing, which is the right signal.
+echo "==> Waiting for the emulator to finish booting"
+adb wait-for-device
+for _ in $(seq 1 60); do
+  if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '[:space:]')" = "1" ]; then
+    break
+  fi
+  sleep 2
+done
+sleep 5
 
 echo "==> Installing $APK"
 adb install -r -g "$APK"
 
-# Best-effort screen recording for the failure video (screenrecord caps at 180s).
-adb shell screenrecord --bit-rate 4000000 --time-limit 180 /sdcard/e2e.mp4 &
-rec_pid=$!
-
-# run.sh starts the throwaway server and runs the flows. Capture its status
-# instead of letting a failure abort this driver, so the diagnostics below always
-# run on a red flow.
-status=0
-"$E2E_DIR/run.sh" || status=$?
-
-adb shell pkill -INT screenrecord 2>/dev/null || true
-wait "$rec_pid" 2>/dev/null || true
-adb pull /sdcard/e2e.mp4 "$E2E_DIR/e2e-video.mp4" 2>/dev/null || true
-
-if [ "$status" -ne 0 ]; then
-  echo "==> Flow failed (status $status); collecting on-screen diagnostics"
+# Collect on-screen and log diagnostics for the attempt that just failed.
+# Overwrites per attempt, so the uploaded artifact reflects the final attempt —
+# and, crucially, writes logcat.txt before is_infra_failure reads it.
+collect_diagnostics() {
+  local status="$1"
+  echo "==> Flow run failed (status $status); collecting on-screen diagnostics"
   # adb is guaranteed here, so this never depends on Maestro's own artifact
   # layout. Maestro's per-step dump (~/.maestro/tests) is copied too when present.
   adb exec-out screencap -p > "$E2E_DIR/failure-screenshot.png" 2>/dev/null || true
@@ -70,6 +93,58 @@ if [ "$status" -ne 0 ]; then
   sed 's/></>\n</g' "$E2E_DIR/ui-hierarchy.xml" 2>/dev/null \
     | sed -nE 's/.*text="([^"]*)".*resource-id="([^"]*)".*/\2 | \1/p' \
     | grep -vE '^ \| $' | head -80 || true
-fi
+}
+
+# True when the just-collected reports/logcat show a device-driver death rather
+# than an assertion failure. Reads the files collect_diagnostics wrote.
+is_infra_failure() {
+  { cat "$E2E_DIR"/report-*.xml 2>/dev/null; cat "$E2E_DIR/logcat.txt" 2>/dev/null; } \
+    | grep -Eq "$INFRA_FAILURE_RE"
+}
+
+# Force a clean slate before a retry. run.sh's own EXIT trap already disables any
+# airplane mode it toggled, but a driver death can leave the radio or the app in
+# an odd state; reset both so the next attempt's flow 01 (launchApp clearState)
+# starts from the same place the first attempt did.
+reset_device_state() {
+  adb shell cmd connectivity airplane-mode disable >/dev/null 2>&1 || true
+  adb shell am force-stop com.jot.app >/dev/null 2>&1 || true
+}
+
+# One pass over the whole flow set. run.sh starts the throwaway server and runs
+# the flows; capture its status instead of letting a failure abort this driver so
+# the diagnostics/retry logic below always runs. Stale reports from a prior
+# attempt are cleared first so is_infra_failure and the artifact reflect this one.
+run_attempt() {
+  rm -f "$E2E_DIR"/report-*.xml
+  # Best-effort screen recording for the failure video (screenrecord caps at 180s).
+  adb shell screenrecord --bit-rate 4000000 --time-limit 180 /sdcard/e2e.mp4 &
+  local rec_pid=$!
+  local status=0
+  "$E2E_DIR/run.sh" || status=$?
+  adb shell pkill -INT screenrecord 2>/dev/null || true
+  wait "$rec_pid" 2>/dev/null || true
+  adb pull /sdcard/e2e.mp4 "$E2E_DIR/e2e-video.mp4" 2>/dev/null || true
+  return "$status"
+}
+
+status=0
+attempt=1
+while : ; do
+  echo "==> Running Maestro flows (attempt $attempt/$MAX_ATTEMPTS)"
+  status=0
+  run_attempt || status=$?
+  [ "$status" -eq 0 ] && break
+
+  collect_diagnostics "$status"
+
+  if [ "$attempt" -lt "$MAX_ATTEMPTS" ] && is_infra_failure; then
+    echo "==> Failure matches a transient device-driver signature; retrying (attempt $((attempt + 1))/$MAX_ATTEMPTS)."
+    reset_device_state
+    attempt=$((attempt + 1))
+    continue
+  fi
+  break
+done
 
 exit "$status"
