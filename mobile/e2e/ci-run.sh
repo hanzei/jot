@@ -25,6 +25,10 @@ APK="${1:-apk/app-release.apk}"
 # whole thing is a clean reset — which is why the retry is whole-run rather than
 # per-flow: the flows share state, so flow N cannot be re-run without 1..N-1.
 MAX_ATTEMPTS="${E2E_MAX_ATTEMPTS:-2}"
+if ! [[ "$MAX_ATTEMPTS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "E2E_MAX_ATTEMPTS must be a positive integer, got: '$MAX_ATTEMPTS'" >&2
+  exit 2
+fi
 readonly E2E_DIR APK MAX_ATTEMPTS
 
 # Failure markers that mean the on-device Maestro driver (the uiautomator gRPC
@@ -40,16 +44,23 @@ readonly INFRA_FAILURE_RE='DeviceServerDied|Device server died|UNAVAILABLE: End 
 # android-emulator-runner only starts this script once the emulator reports
 # booted, but the window manager and launcher can still be settling, and the
 # first viewHierarchy dump racing that is one way the driver dies early. Wait
-# explicitly, then give it a short settle. Bounded and best-effort — a stuck
-# device surfaces as the flows failing, which is the right signal.
+# explicitly for boot to complete (then a short settle); if it never does within
+# the bound the emulator is stuck, so fail with a clear message rather than
+# install onto a half-booted device and hit a confusing downstream failure.
 echo "==> Waiting for the emulator to finish booting"
 adb wait-for-device
+booted=0
 for _ in $(seq 1 60); do
   if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '[:space:]')" = "1" ]; then
+    booted=1
     break
   fi
   sleep 2
 done
+if [ "$booted" -ne 1 ]; then
+  echo "Emulator did not finish booting within 120s (sys.boot_completed never became 1)." >&2
+  exit 1
+fi
 sleep 5
 
 echo "==> Installing $APK"
@@ -117,6 +128,11 @@ reset_device_state() {
 # attempt are cleared first so is_infra_failure and the artifact reflect this one.
 run_attempt() {
   rm -f "$E2E_DIR"/report-*.xml
+  # Clear the device log buffer so logcat.txt — and the is_infra_failure scan
+  # over it — reflects only this attempt, not a driver death from a prior one
+  # (adb logcat -d dumps the whole ring buffer, which otherwise persists across
+  # attempts and could misclassify a genuine failure as infra and retry it).
+  adb logcat -c 2>/dev/null || true
   # Best-effort screen recording for the failure video (screenrecord caps at 180s).
   adb shell screenrecord --bit-rate 4000000 --time-limit 180 /sdcard/e2e.mp4 &
   local rec_pid=$!
