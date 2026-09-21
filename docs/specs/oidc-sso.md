@@ -473,13 +473,12 @@ IdP, which is a benefit but not the justification for this work.
    linking** (§5) — the user proves local password + IdP auth; no auto-match, no
    email column. First SSO login with no link provisions a new account.
    Verified-email auto-link stays a deferred, opt-in bulk-migration feature.
-2. **Default `provider_name`** when unset — `"SSO"`, or require it when OIDC is
-   enabled?
-3. **`local_login_enabled` default** — keep `true` (mixed mode by default) as
-   proposed, agreed?
-4. Admin-initiated password reset already shipped (#977), so the only recovery
-   question left is whether a **self-service / email-based** reset flow is wanted
-   at all — a separate effort gated on adding mail transport, and independent of
-   OIDC either way.
+2. ~~Default `provider_name`~~ **Resolved:** defaults to `"SSO"` when unset (not
+   required). (§4)
+3. ~~`local_login_enabled` default~~ **Resolved:** defaults to `true` — mixed
+   mode (local + SSO) out of the box.
+4. ~~Self-service / email-based password reset~~ **Resolved: not now.**
+   Admin-initiated reset (#977) is sufficient; a self-service/email reset flow
+   is not pursued at this time (and would be independent of OIDC regardless).
 5. **Adopt vs. defer:** this spec recommends *adopt, phased* rather than "not
    yet". Confirm.
