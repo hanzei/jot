@@ -1,0 +1,34 @@
+# Reconnect: run.sh disables airplane mode before this flow. The offline banner
+# must clear and the offline-created note must survive without dead-lettering —
+# the regression class from #955/#957, where an offline write to a not-yet-synced
+# resource hit a permanent 4xx and was dropped rather than queued. That the note
+# actually reached the server (not just that it still renders locally) is proven
+# separately in run.sh, which polls the server API for it.
+appId: com.jot.app
+---
+# No clearState: same account, session, and local database — now with the radio
+# back on.
+- launchApp
+
+# launchApp cold-restarts the app, so wait for the notes list to render before
+# asserting on its contents rather than racing the boot. The offline-created note
+# is read from the local DB, so it reappears a beat after launch regardless of
+# the network — and its survival across the restart is itself worth asserting.
+# extendedWaitUntil waits up to the timeout; a plain assertVisible only briefly
+# retries and would fail against the still-booting screen.
+- extendedWaitUntil:
+    visible: "${MAESTRO_JOT_OFFLINE_NOTE}"
+    timeout: 20000
+
+# Back online, so the offline banner has cleared. NetInfo can briefly report
+# offline on a cold start, so wait for it to be gone rather than asserting once.
+- extendedWaitUntil:
+    notVisible:
+      id: "offline-banner"
+    timeout: 20000
+
+# The offline write drained without dead-lettering. A dropped offline write
+# surfaces as a per-card failed badge (note-failed-badge-<id>); assert no card
+# shows one. This is a regex over the id, so it matches a badge on any note.
+- assertNotVisible:
+    id: "note-failed-badge-.*"

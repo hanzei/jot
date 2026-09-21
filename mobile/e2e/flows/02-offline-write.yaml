@@ -1,0 +1,40 @@
+# Offline write: a note created while the device is offline must persist locally
+# and surface the offline banner. This flow continues the session flow 01 left
+# logged in — run.sh enables airplane mode between the two flows, because Maestro
+# cannot toggle it mid-flow (runScript is a sandbox with no child_process).
+appId: com.jot.app
+---
+# No clearState: keep the account and session flow 01 registered. The app
+# relaunches with the radio off, so it comes up offline against the same local
+# database.
+- launchApp
+
+# NetInfo reports the device offline, so the offline banner is shown. Wait for
+# it rather than asserting immediately — NetInfo's first emission can land a beat
+# after the UI mounts.
+- extendedWaitUntil:
+    visible:
+      id: "offline-banner"
+    timeout: 15000
+
+# Create a note while offline. Local-first: the editor opens on a locally created
+# note and the write is enqueued for replay, never blocking on the unreachable
+# server. A text note has no title field, so the identifying text goes in the
+# content — its card shows a content preview (same reasoning as 01-smoke).
+- tapOn:
+    id: "create-note-fab"
+- tapOn:
+    id: "note-content-input"
+- inputText: "${MAESTRO_JOT_OFFLINE_NOTE}"
+- hideKeyboard
+
+# Leaving the editor commits the note; there is no explicit save button.
+- tapOn:
+    id: "editor-back"
+
+# The note appears immediately from local state, and the app is still offline.
+# Note cards key their testID by note id, which a flow cannot know, so match the
+# visible content text.
+- assertVisible:
+    id: "offline-banner"
+- assertVisible: "${MAESTRO_JOT_OFFLINE_NOTE}"

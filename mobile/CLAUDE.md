@@ -97,9 +97,19 @@ These tests are **additive and deliberately narrow** — they exist for what Jes
 cannot reach: real connectivity transitions, process lifecycle, and OS
 integration. Anything testable in Jest belongs in Jest.
 
+The flows are numbered and run in order by `run.sh`, **sharing app state** (only
+`01` clears it): `01-smoke` registers and lands on the notes list, then `02`/`03`
+continue that same session to exercise the offline→reconnect round trip — a note
+created in airplane mode (`02`) must survive the reconnect and reach the server
+(`03`, plus an API poll in `run.sh` that proves the queued write actually synced
+rather than merely still rendering locally). A flow that continues a prior flow's
+session therefore cannot be run in isolation. Each flow writes its own
+`report-<flow>.xml`.
+
 - **Maestro cannot shell out mid-flow.** `runScript` is a GraalJS sandbox with
   no `child_process`, so anything needing `adb` (airplane mode, share intents)
-  is sequenced from `e2e/run.sh` *between* flows. Flows are numbered for that.
+  is sequenced from `e2e/run.sh` *between* flows (`set_airplane_mode`). Flows are
+  numbered for that.
 - **Do not write drag-and-drop flows.** Maestro has no press-hold-then-move
   primitive, and both drag paths here activate on a long press. Gesture
   coverage belongs in Jest via `fireGestureHandler`.
