@@ -20,8 +20,13 @@ server/jotctl
 server/server
 jot-server
 
-# Maestro device-test output (mobile/e2e/run.sh)
+# Maestro device-test output (mobile/e2e/run.sh + the CI failure artifacts)
 mobile/e2e/report.xml
+mobile/e2e/e2e-video.mp4
+mobile/e2e/failure-screenshot.png
+mobile/e2e/ui-hierarchy.xml
+mobile/e2e/logcat.txt
+mobile/e2e/maestro-debug/
 
 # Test binary, built with `go test -c`
 *.test

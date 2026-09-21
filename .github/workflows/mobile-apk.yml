@@ -3,6 +3,14 @@ name: Mobile — APK Build
 permissions:
   contents: read
 
+# Cancel a superseded PR run so a new push abandons the in-flight ~9-minute APK
+# build instead of letting it finish. Only PR runs cancel: master builds and the
+# workflow_call from release.yml (a tag build, github.event_name = push) each run
+# to completion, so a release's APK is never cancelled out from under GoReleaser.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # Tag builds are driven by release.yml, which calls this workflow rather than
 # letting it fire on its own `push: tags:` trigger — GoReleaser needs the APK
 # in hand (as a build artifact) before it creates the release, so the two runs

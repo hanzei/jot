@@ -12,9 +12,13 @@ appId: com.jot.app
 # reachable from inside the emulator — the usual way this suite breaks.
 - assertVisible:
     id: "login-server-setup-input"
-- tapOn:
-    id: "login-server-setup-input"
-- inputText: "${MAESTRO_JOT_SERVER_URL}"
+# The field is pre-filled with getBaseUrl(), which on Android returns the
+# emulator's host-loopback alias http://10.0.2.2:8080 — exactly the fixture
+# server. Retyping it is both unnecessary and unreliable: Maestro's tapOn lands
+# the cursor mid-text and eraseText only clears backward from it, so a pre-filled
+# value gets mangled (observed: http://10.0.2.2:808080, an out-of-range port that
+# validation rejects). Assert the default is the URL we want, then submit it.
+- assertVisible: "${MAESTRO_JOT_SERVER_URL}"
 - tapOn:
     id: "login-server-setup-submit"
 
@@ -39,17 +43,19 @@ appId: com.jot.app
 
 - tapOn:
     id: "create-note-fab"
-- tapOn:
-    id: "note-title-input"
-- inputText: "${MAESTRO_JOT_NOTE_TITLE}"
+# A new note is a text note, which has no title field — NoteEditorScreen renders
+# note-title-input only for list notes (noteType === 'list'). Put the identifying
+# text in the content: a text note's card shows its content preview, so the
+# assertion below still finds it.
 - tapOn:
     id: "note-content-input"
-- inputText: "Created by the Maestro smoke flow."
+- inputText: "${MAESTRO_JOT_NOTE_TITLE}"
 - hideKeyboard
 
 # Leaving the editor commits the note; there is no explicit save button.
 - tapOn:
     id: "editor-back"
 
-# Note cards key their testID by note id, which a flow cannot know.
+# Note cards key their testID by note id, which a flow cannot know, so match the
+# visible content text instead.
 - assertVisible: "${MAESTRO_JOT_NOTE_TITLE}"

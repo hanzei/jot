@@ -27,7 +27,7 @@ Install it (once per machine, ~300 MB):
 
 If that host is blocked (some proxies return 403), take the release zip instead:
   curl -fsSL -o /tmp/maestro.zip \\
-    https://github.com/mobile-dev-inc/maestro/releases/download/v$MAESTRO_VERSION/maestro.zip
+    https://github.com/mobile-dev-inc/Maestro/releases/download/cli-$MAESTRO_VERSION/maestro.zip
   unzip -q /tmp/maestro.zip -d "\$HOME/.maestro-dist"
   export PATH="\$HOME/.maestro-dist/maestro/bin:\$PATH"
 

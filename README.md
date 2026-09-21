@@ -228,6 +228,14 @@ Maestro but **no** emulator, so it is quick to run while editing flows. It
 catches a mistyped command or property in seconds; only a real run can tell you
 a selector stopped matching.
 
+CI runs both. The `flows` job in `mobile-ci.yml` syntax-checks the flows on
+every PR touching `mobile/**`, and `mobile-e2e.yml` boots an x86_64 Android
+emulator to run the smoke flow on those PRs (plus `master` and
+`workflow_dispatch`), building a self-contained debug-signed APK for it. On a
+failed run it uploads the JUnit report, a screen recording, and Maestro's
+per-step screenshots so a flow that cannot be reproduced locally is still
+debuggable.
+
 4. **Access the application**:
    - Open `http://localhost:8080` in your browser
    - Register your first account with a username and password (becomes admin automatically)
@@ -703,7 +711,8 @@ code execution, SSRF, and blob-storage escapes.
 
 Jot uses GitHub Actions for automated testing and Docker image publishing:
 
-- **Automated testing**: All PRs trigger test and lint jobs
+- **Automated testing**: All PRs trigger test and lint jobs; PRs touching the
+  mobile app also run the Maestro smoke flow on an Android emulator
 - **Docker publishing**: Master branch builds are published to `hanzei/jot` on Docker Hub
 - **Multi-platform**: Images support both AMD64 and ARM64 architectures
 
