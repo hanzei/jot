@@ -480,5 +480,7 @@ IdP, which is a benefit but not the justification for this work.
 4. ~~Self-service / email-based password reset~~ **Resolved: not now.**
    Admin-initiated reset (#977) is sufficient; a self-service/email reset flow
    is not pursued at this time (and would be independent of OIDC regardless).
-5. **Adopt vs. defer:** this spec recommends *adopt, phased* rather than "not
-   yet". Confirm.
+5. ~~Adopt vs. defer~~ **Resolved: adopt, phased.** The build proceeds per §14,
+   webapp-first. (Note: #977 already closed the account-recovery motivation, so
+   OIDC now stands on the single-credential-store / inherit-IdP-MFA-and-
+   offboarding merits alone.)
