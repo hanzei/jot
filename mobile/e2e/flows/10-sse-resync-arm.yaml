@@ -1,0 +1,35 @@
+# SSE catch-up resync, part 1 of 2 (see 11). Arms the foreground-after-SSE-drop
+# scenario from #987 (follow-up to #979/#984; related bug #481).
+#
+# The recovery rule under test: on SSE *reopen* the app publishes a one-shot
+# catch-up resync (src/store/resyncEvents.ts) so the read caches re-pull events
+# that arrived while the stream was down — because backgrounding tears the stream
+# down (useSSE's AppState 'background' → stopConnection) but a bare foreground
+# does not flip NetInfo's isConnected, so the isConnected-keyed refresh alone
+# misses it. Jest mocks react-native-sse and NetInfo, so a real teardown/reopen
+# has never run against a live server + SSE stream.
+#
+# No launchApp: this continues flow 09's *running* process (still signed in, on
+# the notes list, SSE connected). That matters — the resync only fires on a
+# *re*connect (useSSE's hasConnectedOnceRef), which is already true from this
+# process's earlier connect. A relaunch here would reset that ref and, worse,
+# cold-load every note, masking exactly the bug the pair proves.
+#
+# run.sh then backgrounds the app (KEYCODE_HOME), creates a note out-of-band via
+# the server API while the stream is down, and foregrounds it — all sequenced
+# from run.sh because Maestro cannot shell out mid-flow (runScript is a GraalJS
+# sandbox with no child_process). Flow 11 asserts the out-of-band note pulled in.
+appId: com.jot.app
+---
+# Attach to the running app on the notes list. The kill-persist note from the
+# 07-09 trio is read from the local DB and confirms we are on the list in the
+# same session, not a fresh screen.
+- extendedWaitUntil:
+    visible: "${MAESTRO_JOT_KILL_NOTE}"
+    timeout: 20000
+
+# The out-of-band note does not exist yet — run.sh creates it only after this
+# flow, while the app is backgrounded. Asserting its absence here proves flow 11
+# sees a genuinely new note pulled by the catch-up resync, not one already on
+# screen.
+- assertNotVisible: "${MAESTRO_JOT_SSE_NOTE}"
