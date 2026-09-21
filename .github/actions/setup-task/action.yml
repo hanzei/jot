@@ -1,0 +1,32 @@
+name: Setup Task
+description: >-
+  Install the Task runner at a pinned version, restoring it from the runner
+  tool-cache so a transient release-CDN failure cannot fail an otherwise-green
+  build. A 504 while downloading Task from GitHub releases took master's Mobile
+  CI red once; caching the binary means the download only happens on a cache
+  miss.
+
+inputs:
+  version:
+    description: >-
+      Exact Task version to install. This is the single pin for Task across
+      every workflow — keep it exact (no `3.x` range) so builds are
+      reproducible and the tool-cache key is stable.
+    default: "3.53.1"
+
+runs:
+  using: composite
+  steps:
+    # go-task/setup-task calls tool-cache find("task", version) before it
+    # downloads anything, so a hit here skips the network entirely. The marker
+    # file setup-task writes lives inside this directory, so it is restored too.
+    - name: Cache Task
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      with:
+        path: ${{ runner.tool_cache }}/task/${{ inputs.version }}
+        key: task-${{ runner.os }}-${{ inputs.version }}
+
+    - name: Install Task
+      uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2
+      with:
+        version: ${{ inputs.version }}
