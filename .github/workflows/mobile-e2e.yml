@@ -82,6 +82,23 @@ jobs:
         run: npx expo prebuild --platform android --clean
         working-directory: ./mobile
 
+      # The app talks to the emulator's host loopback over plain HTTP
+      # (http://10.0.2.2:8080). Android blocks cleartext by default on API 28+,
+      # and only Expo's *debug* manifest opts in — a release build blocks it, so
+      # the app's server-reachability probe fails before any request leaves the
+      # device and the smoke flow never gets past server setup. This runs a
+      # release build (a debug build would load its JS from a Metro dev server
+      # that does not exist in CI), so allow cleartext in the generated manifest.
+      # This patches only the regenerated CI build; app.json and the production
+      # APK (mobile-apk.yml) are untouched.
+      - name: Allow cleartext HTTP to the emulator host (CI build only)
+        run: |
+          manifest=./mobile/android/app/src/main/AndroidManifest.xml
+          if ! grep -q 'usesCleartextTraffic' "$manifest"; then
+            sed -i 's/<application /<application android:usesCleartextTraffic="true" /' "$manifest"
+          fi
+          grep -o '<application android:usesCleartextTraffic="[^"]*"' "$manifest"
+
       - name: Configure gradle.properties
         run: |
           file=./mobile/android/gradle.properties

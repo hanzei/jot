@@ -47,6 +47,11 @@ if [ "$status" -ne 0 ]; then
   # from a Maestro assertion failure — the two need different fixes.
   adb logcat -d > "$E2E_DIR/logcat.txt" 2>/dev/null || true
   cp -r "$HOME/.maestro/tests" "$E2E_DIR/maestro-debug" 2>/dev/null || true
+  # Echo the interesting lines into the job log too, so a failure is diagnosable
+  # without downloading the artifact.
+  echo "==> logcat highlights:"
+  grep -iE 'cleartext|androidruntime|reactnativejs|fatal|econnrefused|failed to connect|jotmobile' \
+    "$E2E_DIR/logcat.txt" 2>/dev/null | tail -40 || true
 fi
 
 exit "$status"
