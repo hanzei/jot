@@ -36,9 +36,7 @@ jobs:
           cache-dependency-path: webapp/package-lock.json
 
       - name: Install Task
-        uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2
-        with:
-          version: 3.x
+        uses: ./.github/actions/setup-task
 
       - name: Install dependencies
         working-directory: ./webapp
@@ -60,9 +58,7 @@ jobs:
           cache-dependency-path: webapp/package-lock.json
 
       - name: Install Task
-        uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2
-        with:
-          version: 3.x
+        uses: ./.github/actions/setup-task
 
       - name: Install dependencies
         working-directory: ./webapp
@@ -84,9 +80,7 @@ jobs:
           cache-dependency-path: webapp/package-lock.json
 
       - name: Install Task
-        uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2
-        with:
-          version: 3.x
+        uses: ./.github/actions/setup-task
 
       - name: Install dependencies
         working-directory: ./webapp
@@ -115,9 +109,7 @@ jobs:
           cache-dependency-path: webapp/package-lock.json
 
       - name: Install Task
-        uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2
-        with:
-          version: 3.x
+        uses: ./.github/actions/setup-task
 
       - name: Install dependencies
         working-directory: ./webapp
