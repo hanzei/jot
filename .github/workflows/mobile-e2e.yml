@@ -3,6 +3,13 @@ name: Mobile — Device E2E
 permissions:
   contents: read
 
+# Cancel a superseded PR run rather than let an in-flight ~15-minute APK build +
+# emulator boot finish after a newer commit has landed. Only PR runs cancel;
+# master and workflow_dispatch runs each get a full run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # Runs the Maestro smoke flow (mobile/e2e/flows/) against the real app on an
 # Android emulator. This is the CI half of the harness landed in #980 — the
 # part with no local verification loop, because the Claude Code environment has
@@ -27,6 +34,63 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Fast gate for the costly jobs below: a malformed flow fails here in seconds
+  # instead of after a ~9-minute APK build and an emulator boot. It cannot tell
+  # you a selector stopped matching — only a real run does. This duplicates
+  # mobile-ci.yml's `flows` job because a job cannot depend on another workflow's
+  # job; the cost is ~one cheap runner-minute, and mobile-ci's copy still covers
+  # the broader path set (Taskfile/scripts/other workflows) that does not start
+  # this workflow.
+  check-flows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # Maestro is a Gradle-style start script that bundles no JRE.
+      - uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install Task
+        uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2
+        with:
+          version: 3.x
+
+      # The Maestro pin lives in scripts/check-maestro.sh; read it back rather
+      # than duplicate the version here.
+      - name: Resolve pinned Maestro version
+        id: maestro
+        run: |
+          version="$(sed -n 's/^MAESTRO_VERSION="\([^"]*\)".*/\1/p' scripts/check-maestro.sh)"
+          if [ -z "$version" ]; then
+            echo "Could not read MAESTRO_VERSION from scripts/check-maestro.sh" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Maestro
+        id: maestro-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.maestro-dist
+          key: maestro-${{ steps.maestro.outputs.version }}
+
+      - name: Install Maestro
+        if: steps.maestro-cache.outputs.cache-hit != 'true'
+        # get.maestro.mobile.dev returns 403 through some proxies; the release
+        # zip is the reliable source.
+        run: |
+          curl -fsSL -o /tmp/maestro.zip \
+            "https://github.com/mobile-dev-inc/Maestro/releases/download/cli-${{ steps.maestro.outputs.version }}/maestro.zip"
+          unzip -q /tmp/maestro.zip -d "$HOME/.maestro-dist"
+
+      - name: Add Maestro to PATH
+        run: echo "$HOME/.maestro-dist/maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Check Maestro flow syntax
+        run: task check-mobile-flows
+
   # Builds the APK the emulator job installs. Kept separate from mobile-apk.yml
   # on purpose:
   #
@@ -49,6 +113,7 @@ jobs:
   # and which a bare debug build does not have.
   build-apk:
     runs-on: ubuntu-latest
+    needs: check-flows
     steps:
       # On pull_request GitHub checks out the ephemeral merge commit by default;
       # check out the PR head so the built APK matches a reviewable commit. The
