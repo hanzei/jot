@@ -52,6 +52,8 @@ have and is out of scope here — see §12.
   match or auto-provision a local user and issue a normal Jot session.
 - Match returning users on the stable `(issuer, subject)` claim pair via new
   `users` columns, in **both** migration dialect trees.
+- Let a user with a local account **self-service link** an SSO identity to it
+  (prove local password + authenticate at IdP), and unlink it (§5).
 - Mixed mode: local password login can stay enabled alongside OIDC, or be
   disabled entirely for SSO-only deployments.
 - PATs continue to work for an SSO-provisioned user who has no local password.
@@ -183,20 +185,51 @@ never as the match key.
    Insert with `password_hash = NULL`, `oidc_issuer`, `oidc_subject`, and role
    per §6. Issue session.
 
-**Linking to a pre-existing local account is NOT automatic in v1.** If someone
-already has local account `ben` and later signs in via SSO with an email that
-resolves to `ben`, we do **not** silently attach the SSO identity — that is an
-account-takeover vector if the IdP's email is attacker-controlled or
-mis-configured. Two acceptable v1 stances:
+**Linking to a pre-existing local account: self-service only (decided).** SSO
+login **never auto-matches** an incoming identity to a local account — not by
+email, not by `preferred_username`. Auto-matching would delegate an authz
+boundary to a claim the IdP controls (an attacker-controlled or reassigned
+email/handle would land on someone else's notes), and Jot stores no email today
+anyway. Instead, the *only* way an SSO identity binds to an existing local
+account is that **the user proves control of both sides**:
 
-- Provision a *new* distinct account (safe, but can surprise a user who expected
-  to land on their existing notes).
-- Provide an **admin-driven or self-service explicit link** (user proves control
-  of the local account by logging into it, then links SSO from settings) — nicer
-  UX, more work. Recommend shipping the safe auto-provision in v1 and filing
-  explicit linking as a fast follow.
+1. The user signs in to their local account with their password (proving local
+   ownership).
+2. From Settings → "Connect SSO", they run the OIDC flow.
+3. On the callback, Jot binds `(issuer, sub)` to the **currently authenticated
+   user** — the session already establishes *which* local account, so no claim
+   is trusted to identify it.
 
-Open question for review: which of the two above is the v1 default? (§15)
+This needs no email column and no IdP-email trust; it is the strongest available
+proof. Mechanics:
+
+- **Endpoints:** `GET /api/v1/auth/oidc/link` (authenticated) starts a
+  link-intent flow; the shared `…/callback` reads a *link* intent + the user id
+  from its signed state and performs the bind instead of a login.
+  `POST /api/v1/auth/oidc/unlink` (authenticated) clears the columns.
+- **Guards:**
+  - If the incoming `(issuer, sub)` is already bound to a *different* user, the
+    unique index rejects it → "this SSO identity is already linked to another
+    account." Never silently rebind.
+  - **Unlink may not strand an account.** A user whose `password_hash` is NULL
+    (SSO-provisioned, never had a password) cannot unlink their only credential;
+    require setting a password first. A user who linked SSO onto an existing
+    local account still has their password, so unlink is safe for them.
+  - Linking requires local login to be enabled (step 1 needs it). When
+    `JOT_LOCAL_LOGIN_ENABLED=false`, there is no local side to prove, so linking
+    is not offered and only provisioning (below) applies.
+
+**Fallback when no link exists:** a first SSO login with no `(issuer, sub)` match
+provisions a **new** account (the provisioning steps above). Consequence to
+document for users: *link before your first SSO login.* Someone who signs in via
+SSO first gets a second, empty account; recovering from that (merging the two)
+is out of scope for v1 — an admin can reassign or the user can re-share, and a
+merge tool is a possible later addition.
+
+Deferred (not v1, noted for direction): auto-link by **verified** email
+(`email_verified` gated, opt-in flag) for bulk migration of an existing local
+userbase — it requires first adding and populating an `email` column and
+accepting single-trusted-IdP email trust, so it is a separate effort (§15).
 
 ---
 
@@ -405,6 +438,10 @@ IdP, which is a benefit but not the justification for this work.
   username de-duplication, and the SSO-only first-user-is-admin bootstrap.
 - **PAT regression:** an SSO-provisioned (password-less) user creates and uses a
   PAT.
+- **Self-service linking:** a logged-in local user links an SSO identity and can
+  then log in via SSO to the same account; linking an `(issuer, sub)` already
+  bound to another user is rejected; unlink is blocked for a password-less user
+  and allowed once a password exists.
 - **Webapp:** `Login` renders the provider button from `sso`, hides the password
   form when `local_login_enabled` is false; a Vitest unit test plus an **e2e
   spec** (required for a new user-facing flow — CLAUDE.md), which can point at a
@@ -432,9 +469,10 @@ IdP, which is a benefit but not the justification for this work.
 
 ## 15. Open decisions for review
 
-1. **Pre-existing local account + matching SSO email:** provision a *new*
-   distinct account (safe default), or build explicit self-service linking for
-   v1? (§5)
+1. ~~Pre-existing local account linking~~ **Resolved:** v1 ships **self-service
+   linking** (§5) — the user proves local password + IdP auth; no auto-match, no
+   email column. First SSO login with no link provisions a new account.
+   Verified-email auto-link stays a deferred, opt-in bulk-migration feature.
 2. **Default `provider_name`** when unset — `"SSO"`, or require it when OIDC is
    enabled?
 3. **`local_login_enabled` default** — keep `true` (mixed mode by default) as
