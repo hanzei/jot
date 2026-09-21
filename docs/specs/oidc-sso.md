@@ -149,15 +149,24 @@ fails startup today.
   plain unique index also permits many local-only users — verify parity per the
   cross-backend rules in `CLAUDE.md`).
 
-**`password_hash` must become nullable.** Today it is `NOT NULL` (`000001`). An
-SSO-only user has no password. Options:
+**`password_hash` becomes nullable (decided).** Today it is `NOT NULL`
+(`000001`). An SSO-only user has no password. The options considered were:
 
-- **A (recommended): make `password_hash` nullable.** `CheckPassword` already
-  returns false for a bad compare; an empty/NULL hash simply never authenticates
-  a password login, which is exactly right for an SSO-only account. Login's
-  timing-equalizer path (`CheckPasswordDummy`) is unaffected.
-- B: store a sentinel unusable hash. Avoids the migration but is a lie in the
-  schema and invites a future bug where something treats it as real. Rejected.
+- **A (chosen): make `password_hash` nullable.** A NULL hash never authenticates
+  a password login — `CheckPassword` already returns false for a bad compare,
+  and Login's timing-equalizer path (`CheckPasswordDummy`) is unaffected. The
+  schema stays honest: a user with no local password has NULL, not a fabricated
+  value.
+- B: keep `NOT NULL` and store `''` (empty string) for SSO users. Identical
+  runtime behavior with no schema change — but was rejected in favor of A's
+  schema honesty. **Note the cost of that choice: relaxing `NOT NULL` on SQLite
+  forces a full rebuild of the `users` table (§11), which is the single riskiest
+  step in this whole change.** A is the deliberate call to pay that cost for a
+  truthful column rather than encode "no password" as an empty string.
+
+Whether a user has a local password is determined by `oidc_subject IS NOT NULL`
+(an SSO-provisioned account), never by inspecting the hash — so no code path
+depends on distinguishing NULL from any other hash value.
 
 **Matching key: `(issuer, sub)`.** `sub` is the only claim guaranteed stable and
 unique per user at an IdP. `email`/`preferred_username` can change or be reused
@@ -306,15 +315,50 @@ pretending they are one piece of work.
 
 - **`000011_add_oidc_identity`** in both `migrations/sqlite/` and
   `migrations/postgres/`, same filename in each (the `migrations` CI job diffs
-  the trees). Adds `oidc_issuer`, `oidc_subject`, the partial-unique index, and
-  relaxes `password_hash` to nullable.
-  - SQLite has no `ALTER COLUMN`; dropping `NOT NULL` requires the
-    table-rebuild dance (create new table, copy, drop, rename) or was already
-    permissive enough to sidestep — verify against the actual `000001` DDL and
-    keep the two dialects behavior-equivalent, not SQL-identical (per the
-    migrations guidance in `CLAUDE.md`).
-- `users` is not in `timestampColumnsByTable` territory for new *timestamp*
-  columns (none added here), but confirm the parity test still passes.
+  the trees). Each migration does three things: add `oidc_issuer` +
+  `oidc_subject`, add the `(oidc_issuer, oidc_subject)` unique index, and relax
+  `password_hash` to nullable.
+- The **two new columns and the index are trivial and safe on both backends** —
+  `ALTER TABLE users ADD COLUMN …` (SQLite supports adding a nullable column
+  with no rebuild) plus `CREATE UNIQUE INDEX …`.
+- **Relaxing `password_hash` to nullable is the risky part, and only on SQLite.**
+  - Postgres: `ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL` —
+    one line, safe.
+  - SQLite has no "drop NOT NULL", so the only route is the table-rebuild
+    pattern already used by `000008` (create `users_new`, copy, drop, rename).
+    But `000008` rebuilt `note_shares`, a **child** table nothing references.
+    `users` is the schema's most-referenced **parent** table, and two hazards
+    make its rebuild materially more dangerous:
+
+    1. **FK cascades on `DROP TABLE`.** `notes`, `note_items`, `note_shares`,
+       `note_images`, `sessions`, and `pats` reference `users` with
+       `ON DELETE CASCADE`. With `PRAGMA foreign_keys = ON` (set at startup in
+       `database.go`), SQLite performs an implicit `DELETE` of all rows before
+       dropping the table — so `DROP TABLE users` would **cascade-delete every
+       user's notes**. The rebuild must therefore run with `foreign_keys = OFF`.
+    2. **The pragma cannot be toggled inside the migration.** golang-migrate's
+       SQLite driver wraps each migration in a transaction, and SQLite ignores
+       `PRAGMA foreign_keys` changes issued inside one. So a
+       `PRAGMA foreign_keys=OFF;` line at the top of the `.up.sql` is a silent
+       no-op.
+
+  - **Proposed mitigation** (validate during implementation): move the startup
+    `PRAGMA foreign_keys = ON` in `database.go` to run **after** `runMigrations`
+    rather than before it. SQLite's default for a fresh connection is
+    `foreign_keys = OFF`, which is also the state the SQLite docs recommend for
+    schema-change rebuilds, so migrations run with enforcement off and the
+    `users` rebuild's `DROP` no longer cascades. Follow the rebuild with a
+    `PRAGMA foreign_key_check` (run outside the migrate transaction, e.g. as a
+    post-migration step beside `backfillLabelNameFolded`) to prove no dangling
+    references were introduced, then enable enforcement for normal operation.
+    This is a small, contained change to startup ordering but it alters a
+    startup invariant, so it needs its own review and a test that a **user with
+    notes, shares, and a session survives the migration intact**.
+  - Keep the two dialects behavior-equivalent, not SQL-identical (per the
+    migrations guidance in `CLAUDE.md`): both must end with a nullable
+    `password_hash`, the two new columns, and the unique index.
+- `users` gains no new *timestamp* columns, so `timestampColumnsByTable` is
+  unaffected; confirm the parity test still passes.
 - **Fully backward compatible at runtime:** no `JOT_OIDC_*` set ⇒ `sso.enabled`
   false, login screen and every existing flow unchanged. Existing local accounts
   keep working with local login. This is an additive, non-breaking change — no
@@ -350,7 +394,11 @@ IdP, which is a benefit but not the justification for this work.
   parsing.
 - **Store/migration:** `(oidc_issuer, oidc_subject)` uniqueness and the nullable
   `password_hash` behavior, run against SQLite unconditionally and Postgres when
-  `TEST_POSTGRES_DSN` is set (per the store-test harness).
+  `TEST_POSTGRES_DSN` is set (per the store-test harness). **Plus a dedicated
+  SQLite `users`-rebuild survival test** (§11): seed a user with notes, a share,
+  a note image, and a session, run the migration, and assert every dependent row
+  is intact and no cascade fired — this is the migration's highest-risk failure
+  mode.
 - **Handler/integration** (`http_*_test.go`, each `t.Parallel()`): the callback
   against a **mock OIDC issuer** (a small in-test JWKS + signed ID token — no
   real network), covering first-login provisioning, returning-user match,
