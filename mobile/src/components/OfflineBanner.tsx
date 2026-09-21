@@ -17,6 +17,7 @@ export default function OfflineBanner({ visible, applyTopInset }: TopBannerProps
     <Banner
       visible={visible}
       applyTopInset={applyTopInset}
+      testID="offline-banner"
       icon={CloudOff}
       text={t('offline.message')}
       backgroundColor={colors.offlineBanner}

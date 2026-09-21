@@ -323,7 +323,7 @@ jobs:
         with:
           name: mobile-e2e-failure
           path: |
-            mobile/e2e/report.xml
+            mobile/e2e/report*.xml
             mobile/e2e/e2e-video.mp4
             mobile/e2e/failure-screenshot.png
             mobile/e2e/ui-hierarchy.xml
