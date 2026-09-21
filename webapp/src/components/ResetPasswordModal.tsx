@@ -57,10 +57,7 @@ export default function ResetPasswordModal({ user, passwordMinLength, onClose, o
 
   const passwordValidationError = validatePassword(password);
   const passwordFieldError = (touched || showValidationErrors) ? passwordValidationError : '';
-  const hasBlockingValidationErrors = Boolean(
-    (touched && passwordValidationError) ||
-    (showValidationErrors && passwordValidationError),
-  );
+  const hasBlockingValidationErrors = Boolean(passwordFieldError);
 
   const handleGenerate = () => {
     setPassword(generatePassword(Math.max(GENERATED_PASSWORD_LENGTH, passwordMinLength)));

@@ -151,6 +151,7 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
   const handleRoleToggle = async (targetUser: User) => {
     const newRole = targetUser.role === ROLES.ADMIN ? ROLES.USER : ROLES.ADMIN;
     setError('');
+    setSuccess('');
     setRoleUpdating(prev => new Set(prev).add(targetUser.id));
     try {
       const updated = await admin.updateUserRole(targetUser.id, { role: newRole });
@@ -180,6 +181,7 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
     if (!targetUser) return;
     setDeleteConfirm({ open: false, user: null });
     setError('');
+    setSuccess('');
     setDeleteLoading(prev => new Set(prev).add(targetUser.id));
     try {
       await admin.deleteUser(targetUser.id);
