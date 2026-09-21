@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -46,6 +47,15 @@ var ErrLastAdmin = errors.New("cannot demote the last admin")
 
 // ErrCannotDeleteSelf is returned when an admin tries to delete their own account.
 var ErrCannotDeleteSelf = errors.New("cannot delete your own account")
+
+// ErrOIDCIdentityLinked is returned when an attempt is made to bind an
+// (issuer, subject) pair that is already linked to a different user.
+var ErrOIDCIdentityLinked = errors.New("this SSO identity is already linked to another account")
+
+// ErrWouldStrandAccount is returned when unlinking an SSO identity would leave
+// the user with no way to authenticate — a user whose password_hash is NULL
+// (SSO-provisioned, never had a password) must set a password before unlinking.
+var ErrWouldStrandAccount = errors.New("cannot unlink SSO: set a password first or the account would have no way to sign in")
 
 type User struct {
 	ID             string    `json:"id"`
@@ -124,7 +134,7 @@ func (s *userStore) Create(ctx context.Context, username, password string) (*Use
 // internal/database/dialect has to reconcile.
 func (s *userStore) GetByUsername(ctx context.Context, username string) (*User, error) {
 	var user User
-	query := `SELECT id, username, first_name, last_name, password_hash, role,
+	query := `SELECT id, username, first_name, last_name, COALESCE(password_hash, '') AS password_hash, role,
 			         profile_icon IS NOT NULL AS has_profile_icon,
 			         created_at, updated_at
 			  FROM users WHERE username = ?`
@@ -144,7 +154,7 @@ func (s *userStore) GetByUsername(ctx context.Context, username string) (*User, 
 
 func (s *userStore) GetByID(ctx context.Context, id string) (*User, error) {
 	var user User
-	query := `SELECT id, username, first_name, last_name, password_hash, role,
+	query := `SELECT id, username, first_name, last_name, COALESCE(password_hash, '') AS password_hash, role,
 			         profile_icon IS NOT NULL AS has_profile_icon,
 			         created_at, updated_at
 			  FROM users WHERE id = ?`
@@ -196,7 +206,7 @@ func scanUser(rows *sql.Rows) (User, error) {
 }
 
 func (s *userStore) GetAll(ctx context.Context) ([]*User, error) {
-	query := `SELECT id, username, first_name, last_name, password_hash, role,
+	query := `SELECT id, username, first_name, last_name, COALESCE(password_hash, '') AS password_hash, role,
 			         profile_icon IS NOT NULL AS has_profile_icon,
 			         created_at, updated_at
 			  FROM users ORDER BY created_at DESC`
@@ -228,7 +238,7 @@ func (s *userStore) GetAll(ctx context.Context) ([]*User, error) {
 // first and last names are free-form and still need it.
 func (s *userStore) Search(ctx context.Context, term string) ([]*User, error) {
 	like := "%" + term + "%"
-	query := `SELECT id, username, first_name, last_name, password_hash, role,
+	query := `SELECT id, username, first_name, last_name, COALESCE(password_hash, '') AS password_hash, role,
 			         profile_icon IS NOT NULL AS has_profile_icon,
 			         created_at, updated_at
 			  FROM users
@@ -527,4 +537,182 @@ func (s *userStore) CreateByAdmin(ctx context.Context, username, password string
 	user.Role = role
 
 	return &user, nil
+}
+
+// userSelectColumns is the column list every full-user SELECT shares, so the
+// OIDC lookups scan identically to GetByID/GetByUsername.
+const userSelectColumns = `id, username, first_name, last_name, COALESCE(password_hash, '') AS password_hash, role,
+		         profile_icon IS NOT NULL AS has_profile_icon,
+		         created_at, updated_at`
+
+// GetByOIDCIdentity looks up the user bound to an (issuer, subject) pair.
+// Returns ErrUserNotFound when no account is linked to that identity.
+func (s *userStore) GetByOIDCIdentity(ctx context.Context, issuer, subject string) (*User, error) {
+	var user User
+	query := `SELECT ` + userSelectColumns + `
+			  FROM users WHERE oidc_issuer = ? AND oidc_subject = ?`
+
+	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), issuer, subject).Scan(
+		&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.PasswordHash,
+		&user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("failed to get user by OIDC identity: %w", err)
+	}
+	return &user, nil
+}
+
+// ssoUsernameFallback is used when a derived candidate username cannot be
+// sanitized into anything valid; the caller always passes a non-empty seed in
+// practice (it falls back to the subject), so this only guards pathological
+// claims.
+const ssoUsernameFallback = "user"
+
+// ProvisionSSOUser creates a new SSO-backed user for the (issuer, subject) pair.
+// The username is seeded from usernameSeed, sanitized to satisfy the username
+// rules, and de-duplicated on collision by appending -2, -3, … The account has
+// a NULL password_hash (no local password). Role follows §6 of the OIDC spec:
+// the first user is admin only when grantAdminIfFirst is set (SSO-only
+// deployments, where local login is disabled), otherwise a plain user.
+func (s *userStore) ProvisionSSOUser(ctx context.Context, issuer, subject, usernameSeed string, grantAdminIfFirst bool) (*User, error) {
+	base := sanitizeUsername(usernameSeed)
+	if base == "" {
+		base = ssoUsernameFallback
+	}
+
+	userID, err := generateID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate user ID: %w", err)
+	}
+
+	var count int
+	if err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders("SELECT COUNT(*) FROM users")).Scan(&count); err != nil {
+		return nil, fmt.Errorf("failed to count users: %w", err)
+	}
+	role := RoleUser
+	if count == 0 && grantAdminIfFirst {
+		role = RoleAdmin
+	}
+
+	now := Timestamp(Now())
+	query := `INSERT INTO users (id, username, password_hash, role, oidc_issuer, oidc_subject, created_at, updated_at)
+			  VALUES (?, ?, NULL, ?, ?, ?, ?, ?) RETURNING created_at, updated_at`
+
+	// Try the bare candidate, then candidate-2, -3, … on username collision.
+	// A collision on (oidc_issuer, oidc_subject) is not expected here — the
+	// caller only provisions after GetByOIDCIdentity missed — but is surfaced
+	// as ErrOIDCIdentityLinked rather than retried, since retrying would spin.
+	const maxAttempts = 100
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		username := base
+		if attempt > 1 {
+			username = fmt.Sprintf("%s-%d", base, attempt)
+		}
+
+		var user User
+		err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query),
+			userID, username, role, issuer, subject, now, now).Scan(&user.CreatedAt, &user.UpdatedAt)
+		if err == nil {
+			user.ID = userID
+			user.Username = username
+			user.Role = role
+			return &user, nil
+		}
+		if !s.d.IsUniqueConstraintError(err) {
+			return nil, fmt.Errorf("failed to provision SSO user: %w", err)
+		}
+		// A unique violation is either the username (retry with a suffix) or the
+		// OIDC identity (already linked — do not retry). Distinguish by checking
+		// whether the identity now resolves to an existing user.
+		if _, lookupErr := s.GetByOIDCIdentity(ctx, issuer, subject); lookupErr == nil {
+			return nil, ErrOIDCIdentityLinked
+		}
+		// Otherwise it was a username collision; loop to try the next suffix.
+	}
+	return nil, fmt.Errorf("failed to provision SSO user: exhausted username candidates for %q", base)
+}
+
+// LinkOIDCIdentity binds an (issuer, subject) pair to an existing user. Returns
+// ErrOIDCIdentityLinked if that pair already belongs to a different user (the
+// unique index rejects it), and ErrUserNotFound if the user does not exist.
+func (s *userStore) LinkOIDCIdentity(ctx context.Context, userID, issuer, subject string) error {
+	result, err := s.db.ExecContext(ctx,
+		s.d.RewritePlaceholders(`UPDATE users SET oidc_issuer = ?, oidc_subject = ?, updated_at = ? WHERE id = ?`),
+		issuer, subject, Timestamp(Now()), userID,
+	)
+	if err != nil {
+		if s.d.IsUniqueConstraintError(err) {
+			return ErrOIDCIdentityLinked
+		}
+		return fmt.Errorf("failed to link OIDC identity: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check rows affected: %w", err)
+	}
+	if rows == 0 {
+		return ErrUserNotFound
+	}
+	return nil
+}
+
+// UnlinkOIDCIdentity clears the OIDC identity columns for a user. It refuses to
+// strand an account: a user whose password_hash is NULL has no other way to
+// sign in, so unlinking is rejected with ErrWouldStrandAccount until they set a
+// password. Returns ErrUserNotFound if the user does not exist.
+func (s *userStore) UnlinkOIDCIdentity(ctx context.Context, userID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var passwordHash sql.Null[string]
+	err = tx.QueryRowContext(ctx, s.d.RewritePlaceholders(`SELECT password_hash FROM users WHERE id = ?`), userID).Scan(&passwordHash)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrUserNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("failed to read user for unlink: %w", err)
+	}
+	if !passwordHash.Valid || passwordHash.V == "" {
+		return ErrWouldStrandAccount
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		s.d.RewritePlaceholders(`UPDATE users SET oidc_issuer = NULL, oidc_subject = NULL, updated_at = ? WHERE id = ?`),
+		Timestamp(Now()), userID,
+	); err != nil {
+		return fmt.Errorf("failed to unlink OIDC identity: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+	return nil
+}
+
+// ssoUsernameRegex mirrors the allowed username character set enforced by the
+// handlers (validateUsername / usernameRegex). sanitizeUsername strips
+// everything else so a claim can seed a valid username.
+var ssoUsernameRegex = regexp.MustCompile(`[^a-z0-9_-]+`)
+
+// sanitizeUsername turns an arbitrary claim value into a candidate that
+// satisfies the username rules: lower-cased, restricted to [a-z0-9_-], with no
+// leading/trailing '_' or '-', clamped to the 2–30 character range. It returns
+// "" when nothing valid remains, letting the caller fall back.
+func sanitizeUsername(seed string) string {
+	s := strings.ToLower(strings.TrimSpace(seed))
+	s = ssoUsernameRegex.ReplaceAllString(s, "")
+	s = strings.Trim(s, "_-")
+	if len(s) > 30 {
+		s = strings.Trim(s[:30], "_-")
+	}
+	if len(s) < 2 {
+		return ""
+	}
+	return s
 }

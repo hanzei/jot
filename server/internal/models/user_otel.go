@@ -117,3 +117,31 @@ func (s *UserStore) CreateByAdmin(ctx context.Context, username, password string
 	defer end()
 	return s.inner.CreateByAdmin(ctx, username, password, role)
 }
+
+func (s *UserStore) GetByOIDCIdentity(ctx context.Context, issuer, subject string) (_ *User, err error) {
+	ctx, end := startSpan(ctx, s.tracer, "UserStore.GetByOIDCIdentity", &err)
+	defer end()
+	return s.inner.GetByOIDCIdentity(ctx, issuer, subject)
+}
+
+func (s *UserStore) ProvisionSSOUser(ctx context.Context, issuer, subject, usernameSeed string, grantAdminIfFirst bool) (_ *User, err error) {
+	ctx, end := startSpan(ctx, s.tracer, "UserStore.ProvisionSSOUser", &err)
+	defer end()
+	return s.inner.ProvisionSSOUser(ctx, issuer, subject, usernameSeed, grantAdminIfFirst)
+}
+
+func (s *UserStore) LinkOIDCIdentity(ctx context.Context, userID, issuer, subject string) (err error) {
+	ctx, end := startSpan(ctx, s.tracer, "UserStore.LinkOIDCIdentity", &err,
+		attribute.String("user.id", userID),
+	)
+	defer end()
+	return s.inner.LinkOIDCIdentity(ctx, userID, issuer, subject)
+}
+
+func (s *UserStore) UnlinkOIDCIdentity(ctx context.Context, userID string) (err error) {
+	ctx, end := startSpan(ctx, s.tracer, "UserStore.UnlinkOIDCIdentity", &err,
+		attribute.String("user.id", userID),
+	)
+	defer end()
+	return s.inner.UnlinkOIDCIdentity(ctx, userID)
+}

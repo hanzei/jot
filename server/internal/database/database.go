@@ -48,14 +48,21 @@ func New(driverName, dsn string) (*sql.DB, error) {
 	if driverName == driverSQLite {
 		// Serialize all access through a single connection. SQLite supports only one
 		// concurrent writer; a single connection eliminates SQLITE_BUSY errors.
+		// The single connection is also what lets the connection-scoped
+		// foreign_keys pragma set below hold for every later query.
 		db.SetMaxOpenConns(1)
 
 		if _, err := db.ExecContext(ctx, `PRAGMA journal_mode=WAL`); err != nil {
 			return nil, fmt.Errorf("enable WAL mode: %w", err)
 		}
-		if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = ON`); err != nil {
-			return nil, fmt.Errorf("enable foreign key enforcement: %w", err)
-		}
+		// foreign_keys is deliberately left OFF (SQLite's default) here so it is
+		// off while migrations run. Migration 000011 rebuilds the `users` parent
+		// table with DROP TABLE, which with enforcement on would cascade-delete
+		// every user's notes; SQLite ignores a foreign_keys pragma issued inside
+		// golang-migrate's per-migration transaction, so the only place to hold it
+		// off is out here. Enforcement is turned on below, after migrations and the
+		// post-migration backfill, once foreign_key_check has confirmed the schema
+		// changes introduced no dangling references.
 	}
 
 	if err := runMigrations(db, driverName); err != nil {
@@ -71,7 +78,64 @@ func New(driverName, dsn string) (*sql.DB, error) {
 		return nil, fmt.Errorf("backfill folded label names: %w", err)
 	}
 
+	if driverName == driverSQLite {
+		// Migrations ran with foreign_keys off (see above). Prove no dangling
+		// references were introduced — chiefly by 000011's `users` rebuild — then
+		// enable enforcement for the rest of the connection's life, which is what
+		// makes ON DELETE CASCADE work in normal operation.
+		if err := verifyForeignKeys(ctx, db); err != nil {
+			_ = db.Close()
+			return nil, err
+		}
+		if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = ON`); err != nil {
+			_ = db.Close()
+			return nil, fmt.Errorf("enable foreign key enforcement: %w", err)
+		}
+	}
+
 	return db, nil
+}
+
+// verifyForeignKeys runs PRAGMA foreign_key_check and fails if it reports any
+// violation. It is the gate that makes running migrations with enforcement off
+// safe: a rebuild that orphaned a child row (a bug in a migration) surfaces
+// here at startup rather than silently at the first cascade. It reports the
+// first offending (table, rowid) so a failure is diagnosable.
+func verifyForeignKeys(ctx context.Context, db *sql.DB) error {
+	rows, err := db.QueryContext(ctx, `PRAGMA foreign_key_check`)
+	if err != nil {
+		return fmt.Errorf("run foreign_key_check: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var (
+		violations int
+		firstTable string
+		firstRowID sql.NullInt64
+	)
+	for rows.Next() {
+		// Columns: table, rowid, referenced table, fkid.
+		var (
+			table    string
+			rowID    sql.NullInt64
+			refTable string
+			fkID     int
+		)
+		if scanErr := rows.Scan(&table, &rowID, &refTable, &fkID); scanErr != nil {
+			return fmt.Errorf("scan foreign_key_check row: %w", scanErr)
+		}
+		if violations == 0 {
+			firstTable, firstRowID = table, rowID
+		}
+		violations++
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate foreign_key_check rows: %w", err)
+	}
+	if violations > 0 {
+		return fmt.Errorf("foreign_key_check found %d violation(s) after migrations; first in table %q rowid %v", violations, firstTable, firstRowID.Int64)
+	}
+	return nil
 }
 
 // open returns a connection pool for driverName. PostgreSQL goes through
