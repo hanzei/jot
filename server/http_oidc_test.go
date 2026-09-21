@@ -54,12 +54,12 @@ func newMockOIDC(t *testing.T, clientID string) *mockOIDC {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/.well-known/openid-configuration", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, map[string]any{
-			"issuer":                 m.issuer(),
-			"authorization_endpoint": m.issuer() + "/authorize",
-			"token_endpoint":         m.issuer() + "/token",
-			"jwks_uri":               m.issuer() + "/jwks",
-			"response_types_supported": []string{"code"},
-			"subject_types_supported":  []string{"public"},
+			"issuer":                                m.issuer(),
+			"authorization_endpoint":                m.issuer() + "/authorize",
+			"token_endpoint":                        m.issuer() + "/token",
+			"jwks_uri":                              m.issuer() + "/jwks",
+			"response_types_supported":              []string{"code"},
+			"subject_types_supported":               []string{"public"},
 			"id_token_signing_alg_values_supported": []string{"RS256"},
 		})
 	})
@@ -67,7 +67,10 @@ func newMockOIDC(t *testing.T, clientID string) *mockOIDC {
 		writeJSON(w, m.jwks())
 	})
 	mux.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
-		require.NoError(t, r.ParseForm())
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "bad form", http.StatusBadRequest)
+			return
+		}
 		code := r.FormValue("code")
 		m.mu.Lock()
 		claims, ok := m.codes[code]

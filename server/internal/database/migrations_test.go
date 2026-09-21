@@ -525,11 +525,11 @@ func TestMigration000011UsersRebuildSurvival(t *testing.T) {
 
 		if driver == driverSQLite {
 			// No dangling references were introduced by the rebuild.
-			rows, err := db.QueryContext(ctx, `PRAGMA foreign_key_check`)
-			require.NoError(t, err)
-			defer func() { _ = rows.Close() }()
-			assert.False(t, rows.Next(), "foreign_key_check must report no violations after the users rebuild")
-			require.NoError(t, rows.Err())
+			fkRows, fkErr := db.QueryContext(ctx, `PRAGMA foreign_key_check`)
+			require.NoError(t, fkErr)
+			defer func() { _ = fkRows.Close() }()
+			assert.False(t, fkRows.Next(), "foreign_key_check must report no violations after the users rebuild")
+			require.NoError(t, fkRows.Err())
 		}
 
 		// password_hash is now nullable: an SSO-style row with a NULL hash and an

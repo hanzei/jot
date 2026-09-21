@@ -328,6 +328,47 @@ another client, expect timestamp columns to hold UTC wall-clock values.
 | `JOT_REGISTRATION_ENABLED` | `true` | Set to `false` to disable public registration; admins can still create users. |
 | `JOT_PASSWORD_MIN_LENGTH` | `10` | Minimum password length, from 1 to 72 characters. |
 
+### Single sign-on (OIDC / SSO)
+
+Jot can delegate authentication to an OpenID Connect provider (Keycloak,
+Authentik, Dex, Entra ID, Google Workspace, …) using the authorization-code
+flow with PKCE. It is **optional and off by default**: set no `JOT_OIDC_*`
+variables and every existing login flow behaves exactly as before.
+
+SSO is **all-or-nothing** — if any of the four core variables is set, all four
+must be present, and `JOT_OIDC_ISSUER`/`JOT_OIDC_REDIRECT_URL` must be absolute
+URLs, or the server refuses to start. The discovery document and JWKS are
+fetched once at startup, so an unreachable or misconfigured provider fails the
+boot rather than surfacing per request.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `JOT_OIDC_ISSUER` | empty | Provider issuer URL; its `/.well-known/openid-configuration` is fetched at startup. Required to enable SSO. |
+| `JOT_OIDC_CLIENT_ID` | empty | OAuth client ID. Required to enable SSO. |
+| `JOT_OIDC_CLIENT_SECRET` | empty | OAuth client secret (confidential, server-side flow). Required to enable SSO. |
+| `JOT_OIDC_REDIRECT_URL` | empty | Callback URL registered with the provider; must resolve to `…/api/v1/auth/oidc/callback`. Required to enable SSO. |
+| `JOT_OIDC_PROVIDER_NAME` | `SSO` | Button label shown on the login screen (surfaced via `GET /api/v1/config`). |
+| `JOT_OIDC_SCOPES` | `openid profile email` | Space-separated scopes requested from the provider. |
+| `JOT_OIDC_USERNAME_CLAIM` | `preferred_username` | Claim used to seed a new user's username (falls back to the email local-part, then the subject). |
+| `JOT_LOCAL_LOGIN_ENABLED` | `true` | Set to `false` to hide the password form and allow SSO only. Rejected at startup unless SSO is configured. |
+
+Notes for operators:
+
+- **Accounts are matched on the stable `(issuer, subject)` claim pair**, never
+  by email or username. A first SSO login with no match **provisions a new
+  account**; tell users to *link before their first SSO login* if they already
+  have a local account (Settings → link, which proves both the local password
+  and the IdP identity). Roles stay Jot's own `role` column — the IdP
+  authenticates, Jot decides who is admin — except that on an SSO-only
+  deployment (`JOT_LOCAL_LOGIN_ENABLED=false`, no users yet) the first
+  provisioned user becomes admin so the deployment can be administered.
+- **SSO is an authentication event only.** Jot keeps its own 30-day session; it
+  stores no IdP tokens and does no refresh or back-channel logout. Disabling a
+  user at the IdP does not immediately end their live Jot session — revoke it
+  (`DELETE /api/v1/sessions/{id}`) or delete the user.
+- Personal access tokens work unchanged for SSO-provisioned (password-less)
+  users.
+
 ### Rate limiting
 
 Every authenticated `/api/v1` route, plus `/register`, `/login`, and `/logout`,

@@ -152,36 +152,15 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (*Server, error) {
 	sessionsHandler := handlers.NewSessionsHandler(sessionStore)
 	patsHandler := handlers.NewPATsHandler(patStore)
 
-	// OIDC is optional: only build the provider (which performs discovery + JWKS
-	// fetch over the network) and its handler when configured. A discovery
-	// failure fails startup, symmetric with a bad DB DSN.
-	var oidcHandler *handlers.OIDCHandler
-	if cfg.OIDCEnabled {
-		provider, oidcErr := oidc.NewProvider(ctx, oidc.Config{
-			Issuer:       cfg.OIDCIssuer,
-			ClientID:     cfg.OIDCClientID,
-			ClientSecret: cfg.OIDCClientSecret,
-			RedirectURL:  cfg.OIDCRedirectURL,
-			Scopes:       cfg.OIDCScopes,
-		})
-		if oidcErr != nil {
-			cancel()
-			_ = imageStore.Close()
-			_ = db.Close()
-			return nil, fmt.Errorf("initialize OIDC provider: %w", oidcErr)
-		}
-		// The flow-cookie signing key is random per server start; see OIDCHandler.
-		signingKey := make([]byte, 32)
-		if _, keyErr := rand.Read(signingKey); keyErr != nil {
-			cancel()
-			_ = imageStore.Close()
-			_ = db.Close()
-			return nil, fmt.Errorf("generate OIDC signing key: %w", keyErr)
-		}
-		oidcHandler = handlers.NewOIDCHandler(
-			provider, userStore, userSettingsStore, sessionService,
-			cfg.OIDCUsernameClaim, cfg.LocalLoginEnabled, cfg.CookieSecure, signingKey,
-		)
+	// OIDC is optional: buildOIDCHandler returns nil when it is not configured,
+	// and an error (which fails startup, symmetric with a bad DB DSN) if
+	// discovery fails.
+	oidcHandler, err := buildOIDCHandler(ctx, cfg, userStore, userSettingsStore, sessionService)
+	if err != nil {
+		cancel()
+		_ = imageStore.Close()
+		_ = db.Close()
+		return nil, err
 	}
 
 	rl, err := newRateLimiter(cfg)
@@ -246,6 +225,45 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (*Server, error) {
 		return nil, fmt.Errorf("setup routes: %w", err)
 	}
 	return s, nil
+}
+
+// buildOIDCHandler constructs the OIDC handler when OIDC is configured,
+// performing provider discovery (a network call) and generating the flow-cookie
+// signing key. It returns (nil, nil) when OIDC is disabled. Kept separate from
+// NewWithLogger so the optional-dependency branching does not inflate that
+// constructor's complexity.
+func buildOIDCHandler(
+	ctx context.Context,
+	cfg *config.Config,
+	userStore *models.UserStore,
+	userSettingsStore *models.UserSettingsStore,
+	sessionService *auth.SessionService,
+) (*handlers.OIDCHandler, error) {
+	if !cfg.OIDCEnabled {
+		return nil, nil //nolint:nilnil // OIDC disabled is a valid, non-error state: no handler and no error, and the caller treats a nil handler as "not configured"
+	}
+
+	provider, err := oidc.NewProvider(ctx, oidc.Config{
+		Issuer:       cfg.OIDCIssuer,
+		ClientID:     cfg.OIDCClientID,
+		ClientSecret: cfg.OIDCClientSecret,
+		RedirectURL:  cfg.OIDCRedirectURL,
+		Scopes:       cfg.OIDCScopes,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("initialize OIDC provider: %w", err)
+	}
+
+	// The flow-cookie signing key is random per server start; see OIDCHandler.
+	signingKey := make([]byte, 32)
+	if _, err := rand.Read(signingKey); err != nil {
+		return nil, fmt.Errorf("generate OIDC signing key: %w", err)
+	}
+
+	return handlers.NewOIDCHandler(
+		provider, userStore, userSettingsStore, sessionService,
+		cfg.OIDCUsernameClaim, cfg.LocalLoginEnabled, cfg.CookieSecure, signingKey,
+	), nil
 }
 
 func (s *Server) setupRoutes() error {
