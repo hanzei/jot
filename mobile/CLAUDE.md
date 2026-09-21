@@ -97,26 +97,21 @@ These tests are **additive and deliberately narrow** — they exist for what Jes
 cannot reach: real connectivity transitions, process lifecycle, and OS
 integration. Anything testable in Jest belongs in Jest.
 
-The flows are numbered and run in order by `run.sh`, **sharing app state** (only
-`01` clears it): `01-smoke` registers, then `02`/`03` continue that session for
-the offline→reconnect round trip. A continuation flow therefore cannot run in
-isolation, and each writes its own `report-<flow>.xml`.
-
-`04`/`05`/`06` extend that set to the **OS-integration entry points** the Jest
-suite stubs wholesale: `run.sh` fires a real share (`ACTION_SEND`) and deep-link
-(`jot://` `VIEW`) intent via `adb`, and the flows assert the resulting screen.
-The deep-link pair delivers its intent while signed out to cover #854 (a pending
-link lost if the app restarts before sign-in). App-icon quick actions stay
-Jest-only: `adb` cannot construct `expo-quick-actions`' Parcelable-`Bundle`
-intent extra, so there is no genuine on-device trigger for them.
+The flows are numbered and run in order by `run.sh`, **sharing app state** — only
+`01` clears it, so a flow that continues an earlier one cannot run in isolation.
+Each writes its own `report-<flow>.xml`. What each flow covers lives in its own
+header, not here.
 
 - **Maestro cannot shell out mid-flow.** `runScript` is a GraalJS sandbox with
-  no `child_process`, so anything needing `adb` (airplane mode, share intents)
-  is sequenced from `e2e/run.sh` *between* flows (`set_airplane_mode`). Flows are
+  no `child_process`, so anything needing `adb` (airplane mode, force-stop, share
+  and deep-link intents) is sequenced from `e2e/run.sh` *between* flows. Flows are
   numbered for that.
 - **Do not write drag-and-drop flows.** Maestro has no press-hold-then-move
   primitive, and both drag paths here activate on a long press. Gesture
   coverage belongs in Jest via `fireGestureHandler`.
+- **App-icon quick actions stay Jest-only.** `adb` cannot construct
+  `expo-quick-actions`' Parcelable-`Bundle` intent extra, so there is no genuine
+  on-device trigger to drive from a flow.
 - **Assert on `testID`**, adding one where missing. Note cards are the
   exception — theirs embed the note id, so match the title text.
 - **The Maestro version is pinned** in `scripts/check-maestro.sh`; `latest`

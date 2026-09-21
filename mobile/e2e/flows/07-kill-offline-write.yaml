@@ -1,0 +1,51 @@
+# Process-kill persistence, part 1 of 3 (see 08, 09). Follow-up to the
+# 02/03 offline round-trip: that pair proves an offline write survives a *clean*
+# relaunch and drains on reconnect. This trio proves the stronger property — the
+# write survives a process *kill* while the sync queue still holds it, then
+# drains after the next reconnect. run.sh sequences the adb steps the flows
+# cannot: airplane mode is already on before this flow, it force-stops the app
+# between 07 and 08, and it disables airplane mode between 08 and 09.
+#
+# This flow just seeds the undrained write: create a note while offline so it
+# commits to SQLite and enqueues on sync_queue without reaching the server. The
+# kill (run.sh, before 08) then happens with the queue non-empty and before any
+# reconnect — the mid-drain window 03 never exercises.
+appId: com.jot.app
+---
+# No clearState: keep the account, session, and local database the earlier flows
+# left in place. Airplane mode is already on (run.sh), so the app comes up
+# offline against the same local database.
+- launchApp
+
+# NetInfo reports the device offline, so the offline banner is shown. Wait for
+# it rather than asserting immediately — NetInfo's first emission can land a beat
+# after the UI mounts.
+- extendedWaitUntil:
+    visible:
+      id: "offline-banner"
+    timeout: 15000
+
+# Create a note while offline. Local-first: the editor opens on a locally created
+# note and the write is enqueued for replay, never blocking on the unreachable
+# server. A text note has no title field, so the identifying text goes in the
+# content — its card shows a content preview (same reasoning as 02-offline-write).
+# A distinct note text from the 02 offline note keeps this write independent of
+# the one 03 already drained.
+- tapOn:
+    id: "create-note-fab"
+- tapOn:
+    id: "note-content-input"
+- inputText: "${MAESTRO_JOT_KILL_NOTE}"
+- hideKeyboard
+
+# Leaving the editor commits the note; there is no explicit save button.
+- tapOn:
+    id: "editor-back"
+
+# The note appears immediately from local state, and the app is still offline —
+# so the write is queued and undrained, exactly the state the kill (run.sh) must
+# catch. Note cards key their testID by note id, which a flow cannot know, so
+# match the visible content text.
+- assertVisible:
+    id: "offline-banner"
+- assertVisible: "${MAESTRO_JOT_KILL_NOTE}"

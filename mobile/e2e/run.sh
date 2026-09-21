@@ -144,13 +144,16 @@ MAESTRO_JOT_OFFLINE_NOTE="Offline note ${RUN_ID}"
 # argument survives the adb-shell → device-sh hop only as a single unquoted
 # token. Hyphens keep it one token end to end.
 MAESTRO_JOT_SHARE_TEXT="Shared-intent-note-${RUN_ID}"
+# Distinct from the 02 offline note so the process-kill trio (07-09) exercises
+# its own undrained write, independent of the one 03 already drained.
+MAESTRO_JOT_KILL_NOTE="Kill-persist note ${RUN_ID}"
 # Deep link delivered signed out (flow 05) that must resolve after sign-in (06).
 # The ?server= param is canonicalized identically on both sides so it matches the
 # known server (no "unknown server" prompt fires); `settings` is a protected path
 # that needs no pre-existing entity to resolve.
 DEEP_LINK_URL="jot://settings?server=${SERVER_URL_FROM_EMULATOR}"
 readonly RUN_ID MAESTRO_JOT_USERNAME MAESTRO_JOT_PASSWORD MAESTRO_JOT_NOTE_TITLE \
-  MAESTRO_JOT_OFFLINE_NOTE MAESTRO_JOT_SHARE_TEXT DEEP_LINK_URL
+  MAESTRO_JOT_OFFLINE_NOTE MAESTRO_JOT_SHARE_TEXT MAESTRO_JOT_KILL_NOTE DEEP_LINK_URL
 
 # One flow at a time so airplane mode can be toggled between them. Each flow gets
 # its own JUnit report (report-<flow>.xml) so a multi-flow run does not clobber
@@ -166,36 +169,50 @@ maestro_flow() {
     -e MAESTRO_JOT_NOTE_TITLE="$MAESTRO_JOT_NOTE_TITLE" \
     -e MAESTRO_JOT_OFFLINE_NOTE="$MAESTRO_JOT_OFFLINE_NOTE" \
     -e MAESTRO_JOT_SHARE_TEXT="$MAESTRO_JOT_SHARE_TEXT" \
+    -e MAESTRO_JOT_KILL_NOTE="$MAESTRO_JOT_KILL_NOTE" \
     --format junit \
     --output "$E2E_DIR/report-$(basename "$flow" .yaml).xml" \
     "$@" \
     "$E2E_DIR/flows/$flow"
 }
 
-# Bounded wait for the offline-created note to reach the server. The flows prove
-# the UI recovered on reconnect; this proves the queued write actually synced
-# (not just that it still renders from the local database). Deterministic where a
-# fixed sleep would be flaky. Uses the same account flow 01 registered.
-assert_offline_note_synced() {
-  echo "==> Verifying the offline note reached the server"
+# Bounded wait for a queued note to reach the server, given its content text as
+# $1. The flows prove the UI recovered on reconnect; this proves the queued write
+# actually synced (not just that it still renders from the local database).
+# Deterministic where a fixed sleep would be flaky. Uses the same account flow 01
+# registered. Two call sites: the offline round-trip (03) and the process-kill
+# trio (09).
+assert_note_synced() {
+  local note_text="$1"
+  echo "==> Verifying the note reached the server ($note_text)"
   local api="http://localhost:${JOT_E2E_PORT}/api/v1"
   local jar="$RUN_DIR/cookies.txt"
   if ! curl "${READY_CURL_OPTS[@]}" -c "$jar" -H 'Content-Type: application/json' \
       -d "{\"username\":\"${MAESTRO_JOT_USERNAME}\",\"password\":\"${MAESTRO_JOT_PASSWORD}\"}" \
       "$api/login" >/dev/null 2>&1; then
-    echo "Could not log in to verify the offline note synced." >&2
+    echo "Could not log in to verify the note synced." >&2
     return 1
   fi
   for _ in $(seq 1 30); do
     if curl "${READY_CURL_OPTS[@]}" -b "$jar" "$api/notes" 2>/dev/null \
-        | grep -qF "$MAESTRO_JOT_OFFLINE_NOTE"; then
-      echo "Offline note synced to the server."
+        | grep -qF "$note_text"; then
+      echo "Note synced to the server."
       return 0
     fi
     sleep 1
   done
-  echo "Offline note never reached the server within 30s." >&2
+  echo "Note never reached the server within 30s." >&2
   return 1
+}
+
+# Kill the app between flows, so a subsequent launchApp is a cold start from a
+# dead process rather than a clean relaunch. Same sequenced-from-run.sh constraint
+# as the airplane and intent helpers: Maestro's runScript is a GraalJS sandbox
+# with no child_process, so the force-stop cannot live in a flow. force-stop
+# succeeds whether or not the app is running, so this needs no running-state guard.
+force_stop_app() {
+  echo "==> Force-stopping com.jot.app"
+  adb shell am force-stop com.jot.app
 }
 
 echo "==> Running Maestro flows"
@@ -213,7 +230,7 @@ set_airplane_mode enable
 maestro_flow 02-offline-write.yaml "$@"
 set_airplane_mode disable
 maestro_flow 03-online-sync.yaml "$@"
-assert_offline_note_synced
+assert_note_synced "$MAESTRO_JOT_OFFLINE_NOTE"
 
 # 04 — share intent (OS integration). A real ACTION_SEND text intent, fired here
 # because Maestro cannot shell out, opens a new note pre-filled with the shared
@@ -229,3 +246,21 @@ maestro_flow 04-share-intent.yaml "$@"
 maestro_flow 05-deep-link-signout.yaml "$@"
 send_deep_link
 maestro_flow 06-deep-link-replay.yaml "$@"
+
+# 07-09 — process-kill persistence (follow-up to the 02/03 round-trip). The
+# stronger guarantee: an offline write survives a process *kill* while the sync
+# queue still holds it, then drains on the next reconnect — the mid-drain window
+# 03's clean relaunch never hits. 07 creates the note offline (queued, undrained);
+# the force-stop below kills the app with the queue non-empty and before any
+# reconnect; 08 relaunches from that dead process, still offline, and asserts the
+# note is read back from SQLite (the server never had it); then airplane mode goes
+# off and 09 asserts it drains without dead-lettering, with the API poll below as
+# the authoritative "actually synced" proof. Continues the signed-in session; the
+# adb steps are sequenced here for the reason on set_airplane_mode/force_stop_app.
+set_airplane_mode enable
+maestro_flow 07-kill-offline-write.yaml "$@"
+force_stop_app
+maestro_flow 08-kill-survives-relaunch.yaml "$@"
+set_airplane_mode disable
+maestro_flow 09-kill-drains.yaml "$@"
+assert_note_synced "$MAESTRO_JOT_KILL_NOTE"
