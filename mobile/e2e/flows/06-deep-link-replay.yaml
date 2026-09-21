@@ -1,0 +1,33 @@
+# Deep link, part 2 of 2 — sign in and assert the stashed link resolves (#854).
+#
+# Continues flow 05: we are on the login screen, and run.sh has fired the
+# jot://settings VIEW intent while signed out, so useDeepLinkRouting has stashed
+# it in the persisted pending-deep-link store. Signing in flips isAuthenticated,
+# and the replay effect resets navigation to the stashed target — proving the
+# link survived the signed-out window rather than being dropped.
+#
+# No launchApp: a relaunch would cold-restart into a fresh process. The point is
+# that the *running* signed-out app captured the intent and replays it on
+# sign-in, so this flow stays in that same process and just logs in. Same
+# account flow 01 registered (logout cleared only the session, not the server
+# account).
+appId: com.jot.app
+---
+- tapOn:
+    id: "username-input"
+- inputText: "${MAESTRO_JOT_USERNAME}"
+- tapOn:
+    id: "password-input"
+- inputText: "${MAESTRO_JOT_PASSWORD}"
+- hideKeyboard
+- tapOn:
+    id: "login-button"
+
+# The stashed jot://settings link replays once authenticated and the navigation
+# tree is ready, resetting the root to the Settings screen. extendedWaitUntil
+# rather than assertVisible: the replay runs after login completes and the nav
+# container remounts, so the Settings screen lands a beat later.
+- extendedWaitUntil:
+    visible:
+      id: "settings-screen"
+    timeout: 20000

@@ -1,0 +1,42 @@
+# Deep link, part 1 of 2 — sign out so the link arrives while unauthenticated.
+#
+# This pair covers the #854 regression ("a pending deep link is lost if the app
+# restarts before sign-in completes"): a jot:// VIEW intent delivered while
+# signed out must be stashed and still resolve after the user signs in. No Jest
+# test exercises that from a real OS intent — Linking is mocked in jest.setup.js.
+#
+# Split into two flows because the real intent has to be fired from run.sh
+# *between* them (Maestro cannot shell out mid-flow): this flow lands on the
+# login screen signed out, run.sh fires `adb shell am start -a
+# android.intent.action.VIEW -d "jot://settings?server=..."`, then 06 signs back
+# in and asserts the stashed link resolved.
+#
+# launchApp (no clearState) relaunches to a known screen — the notes list, still
+# signed in from the earlier flows — regardless of what editor state flow 04
+# left open. Logout keeps the server account (only the session is cleared), so
+# the login form shows directly (not the server-setup gate) and the link's
+# ?server= param still matches a known server on replay.
+appId: com.jot.app
+---
+- launchApp
+
+- extendedWaitUntil:
+    visible:
+      id: "drawer-toggle"
+    timeout: 20000
+- tapOn:
+    id: "drawer-toggle"
+
+- tapOn:
+    id: "drawer-logout"
+# Logout is confirmed through the in-app ConfirmDialog (testID'd), not a native
+# Alert, so the button is addressable by id.
+- tapOn:
+    id: "confirm-dialog-confirm"
+
+# Signed out: the login form is shown. The pending deep link is delivered next,
+# by run.sh, while we sit here.
+- extendedWaitUntil:
+    visible:
+      id: "login-button"
+    timeout: 20000

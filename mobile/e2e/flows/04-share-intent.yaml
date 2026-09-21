@@ -1,0 +1,32 @@
+# Share intent: an OS "share text to Jot" reaches the app and opens a new note
+# pre-filled with the shared text. This is the native intent-filter path that
+# app.json's expo-share-intent plugin adds (androidIntentFilters: text/*) — the
+# Jest suite stubs expo-share-intent wholesale, so no unit test exercises a real
+# Android SEND intent end to end.
+#
+# run.sh fires the real intent with `adb shell am start -a
+# android.intent.action.SEND` *before* this flow, because Maestro cannot shell
+# out mid-flow (runScript is a GraalJS sandbox with no child_process). The intent
+# foregrounds the app and expo-share-intent routes it to the note editor, so
+# there is deliberately no launchApp here: a relaunch would race or drop the
+# just-delivered intent. This flow attaches to the app the intent brought
+# forward. It continues the session flow 01 registered (still signed in).
+#
+# The share opens NoteEditor on a brand-new text note with the text pre-filled
+# (see useShareIntentNavigation → navigate('NoteEditor', { sharedText })), not a
+# dedicated "share screen"; the editor's content field carries the shared text.
+appId: com.jot.app
+---
+# Wait for the editor rather than asserting immediately: the intent is delivered
+# asynchronously (onNewIntent → expo-share-intent → the pending-share replay
+# effect), so the editor lands a beat after the intent fires.
+- extendedWaitUntil:
+    visible:
+      id: "note-content-input"
+    timeout: 20000
+
+# The shared text pre-fills the new note's content. run.sh fires the intent with
+# this exact string (no spaces, to survive the adb-shell → device-sh quoting).
+- extendedWaitUntil:
+    visible: "${MAESTRO_JOT_SHARE_TEXT}"
+    timeout: 10000
