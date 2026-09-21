@@ -72,16 +72,27 @@ set_airplane_mode() {
 send_share_intent() {
   echo "==> Sending share intent (text: $MAESTRO_JOT_SHARE_TEXT)"
   # expo-share-intent's plugin registers the ACTION_SEND text/* filter (app.json).
-  adb shell am start -a android.intent.action.SEND -t text/plain \
+  # -W blocks until the launch completes, so the intent is delivered and the app
+  # is foregrounded before flow 04 attaches (the flow does not relaunch); flow
+  # 04's extendedWaitUntil then absorbs the async editor navigation.
+  adb shell am start -W -a android.intent.action.SEND -t text/plain \
     --es android.intent.extra.TEXT "$MAESTRO_JOT_SHARE_TEXT" com.jot.app
 }
 
 send_deep_link() {
   echo "==> Sending deep-link intent ($DEEP_LINK_URL)"
+  # -W blocks until the activity launch completes, so the VIEW intent has been
+  # delivered to the running app (onNewIntent → the Linking 'url' handler) before
+  # run.sh returns and starts flow 06. That handler stashes the link
+  # asynchronously — two SecureStore reads (getStoredServerUrl, listServers)
+  # before setPendingDeepLink sets its in-memory mirror synchronously — and flow
+  # 06 only reads it back after Maestro's ~10s flow startup plus the sign-in
+  # round-trip, so the stash is in place with a wide margin before the replay
+  # effect runs on the isAuthenticated flip.
   # The jot:// scheme filter comes from app.json's `scheme`. The URL is one
   # unquoted token (no spaces); the device shell passes an unmatched glob (the
   # `?`) through literally, so `am start` receives the URL intact.
-  adb shell am start -a android.intent.action.VIEW -d "$DEEP_LINK_URL" com.jot.app
+  adb shell am start -W -a android.intent.action.VIEW -d "$DEEP_LINK_URL" com.jot.app
 }
 
 echo "==> Building the server"
