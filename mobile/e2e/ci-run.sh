@@ -52,6 +52,13 @@ if [ "$status" -ne 0 ]; then
   echo "==> logcat highlights:"
   grep -iE 'cleartext|androidruntime|reactnativejs|fatal|econnrefused|failed to connect|jotmobile' \
     "$E2E_DIR/logcat.txt" 2>/dev/null | tail -40 || true
+  # The on-screen widgets (resource-id | text) show which screen we are stuck on
+  # and any error text — e.g. the server-setup input's current value and the
+  # login-server-setup-error message when server validation rejects the URL.
+  echo "==> UI hierarchy (resource-id | text):"
+  sed 's/></>\n</g' "$E2E_DIR/ui-hierarchy.xml" 2>/dev/null \
+    | sed -nE 's/.*text="([^"]*)".*resource-id="([^"]*)".*/\2 | \1/p' \
+    | grep -vE '^ \| $' | head -80 || true
 fi
 
 exit "$status"
