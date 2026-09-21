@@ -47,6 +47,17 @@ if [ "$status" -ne 0 ]; then
   # from a Maestro assertion failure — the two need different fixes.
   adb logcat -d > "$E2E_DIR/logcat.txt" 2>/dev/null || true
   cp -r "$HOME/.maestro/tests" "$E2E_DIR/maestro-debug" 2>/dev/null || true
+  # The per-command assertion error (which step failed, and why) goes to the
+  # JUnit report, not Maestro's stdout, so echo the failing report(s) here — the
+  # emulator artifacts are awkward to pull after the fact. Each flow's report is
+  # tiny, so cat the whole thing rather than trying to parse out the <failure>.
+  echo "==> Maestro JUnit report(s) with failures:"
+  for report in "$E2E_DIR"/report-*.xml; do
+    [ -f "$report" ] || continue
+    grep -q '<\(failure\|error\)' "$report" || continue
+    echo "--- $(basename "$report")"
+    cat "$report"
+  done
   # Echo the interesting lines into the job log too, so a failure is diagnosable
   # without downloading the artifact.
   echo "==> logcat highlights:"
