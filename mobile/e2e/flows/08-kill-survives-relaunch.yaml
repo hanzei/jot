@@ -1,0 +1,36 @@
+# Process-kill persistence, part 2 of 3 (see 07, 09). Between 07 and this flow,
+# run.sh runs `adb shell am force-stop com.jot.app` — killing the app while the
+# queued write from 07 is still undrained and while the device is still offline.
+# This is the crux of the ticket: the note reappearing here can only have come
+# from SQLite, because it never reached the server (it was queued, then killed,
+# and the radio is still off). That is the process-lifecycle guarantee the Jest
+# db-layer tests cannot reach — only a real force-stop and cold restart prove it.
+appId: com.jot.app
+---
+# No clearState: same account, session, and local database. The app was
+# force-stopped by run.sh, so this launchApp is a genuine cold start from a dead
+# process — not the clean relaunch 03 tests. Airplane mode is still on, so it
+# comes back up offline.
+- launchApp
+
+# The killed-and-restarted app is still offline, so the offline banner returns.
+# NetInfo can briefly report offline on a cold start regardless; either way the
+# banner is expected here. Wait for it rather than asserting once against the
+# still-booting screen.
+- extendedWaitUntil:
+    visible:
+      id: "offline-banner"
+    timeout: 20000
+
+# The queued note survived the force-stop: it is read back from the local DB and
+# rendered while still offline, so the server had no part in it. extendedWaitUntil
+# waits up to the timeout; a plain assertVisible only briefly retries and would
+# race the still-booting screen.
+- extendedWaitUntil:
+    visible: "${MAESTRO_JOT_KILL_NOTE}"
+    timeout: 20000
+
+# Still offline after the restart, and the write is still queued (undrained) —
+# run.sh disables airplane mode next (before 09) to prove it then drains.
+- assertVisible:
+    id: "offline-banner"
