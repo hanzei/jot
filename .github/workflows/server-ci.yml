@@ -46,9 +46,7 @@ jobs:
           cache-dependency-path: server/go.sum
 
       - name: Install Task
-        uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2
-        with:
-          version: 3.x
+        uses: ./.github/actions/setup-task
 
       - name: Run tests
         run: task test-server
@@ -65,9 +63,7 @@ jobs:
           cache-dependency-path: server/go.sum
 
       - name: Install Task
-        uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2
-        with:
-          version: 3.x
+        uses: ./.github/actions/setup-task
 
       - name: Run golangci-lint
         run: task lint-server
@@ -84,9 +80,7 @@ jobs:
           cache-dependency-path: server/go.sum
 
       - name: Install Task
-        uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2
-        with:
-          version: 3.x
+        uses: ./.github/actions/setup-task
 
       # Same task the pre-PR gate runs, so a green `task check` means this job
       # is green too.
