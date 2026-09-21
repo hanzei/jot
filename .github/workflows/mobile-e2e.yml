@@ -291,7 +291,10 @@ jobs:
           arch: x86_64
           target: google_apis
           force-avd-creation: false
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          # -memory/-cores give the emulator headroom: the Maestro driver
+          # (uiautomator) is prone to being killed under memory pressure on the
+          # stock ~2 GB default, which is a source of the mid-flow driver deaths.
+          emulator-options: -memory 4096 -cores 2 -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: false
           script: echo "Generated AVD snapshot for caching."
 
@@ -302,7 +305,9 @@ jobs:
           arch: x86_64
           target: google_apis
           force-avd-creation: false
-          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          # Match the snapshot job's headroom (see there): more memory/cores
+          # keeps the Maestro uiautomator driver from being reaped mid-flow.
+          emulator-options: -memory 4096 -cores 2 -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           # The driver is a committed script, not inline: android-emulator-runner
           # runs this `script` line by line as separate `sh -c` calls and stops
