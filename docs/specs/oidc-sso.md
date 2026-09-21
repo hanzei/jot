@@ -29,12 +29,15 @@ treated purely as an authentication event** (Jot keeps its own session
 lifetime; no IdP token storage, refresh, or back-channel logout). Mobile and
 group-based role mapping are explicit follow-ups.
 
-There is a sharp **secondary motivation**: Jot has no password-reset flow at
-all. A user who forgets their password today cannot be recovered without direct
-database manipulation. SSO sidesteps this for deployments with an IdP, but not
-for everyone else. This spec recommends shipping a small `jotctl` admin
-password-reset command **independently** of OIDC (§12) rather than letting the
-recovery gap ride on this larger surface.
+The issue also raised account recovery as a **secondary motivation**: at the
+time Jot had no password-reset flow at all. That gap has since been closed for
+the admin-operated case by [#977](https://github.com/hanzei/jot/pull/977)
+(merged) — `PUT /api/v1/admin/users/{id}/password`, `jotctl users set-password`,
+and an admin-page reset modal. SSO still *removes* the second credential store
+for IdP-backed deployments, but it is no longer needed to close the recovery
+gap. The only remaining recovery gap is **self-service** (a user resetting their
+own password without an admin), which needs mail infrastructure Jot does not
+have and is out of scope here — see §12.
 
 ---
 
@@ -320,22 +323,23 @@ pretending they are one piece of work.
 
 ---
 
-## 12. Local password reset (independent, recommended alongside)
+## 12. Local password reset (already shipped — context only)
 
-SSO does not solve account recovery for password-only deployments. Rather than
-couple that gap to this large surface, ship a small admin tool **independently**:
+The issue framed a missing password-reset flow as a sharp secondary reason to
+want SSO. That is **already addressed for the admin-operated case** by
+[#977](https://github.com/hanzei/jot/pull/977) (merged): an admin can set any
+user's password via `PUT /api/v1/admin/users/{id}/password`, from the webapp
+admin page or `jotctl users set-password` (with `--generate`), and the reset
+invalidates the target's existing sessions. So OIDC does **not** need to carry
+any part of account recovery, and this spec no longer proposes a `jotctl` reset
+command as phase 1.
 
-- `jotctl users set-password <username>` (and/or `reset-password` that prints a
-  generated one). Reuses `userStore.UpdatePassword`, which already exists and
-  already invalidates nothing on its own — pair it with session invalidation as
-  `ChangePassword` does.
-- No email/SMTP dependency, no public reset endpoint, no new attack surface —
-  fits a self-hosted admin-operated model.
-
-A self-service, email-based reset flow is a larger, separate discussion (Jot has
-no mail transport today). Recommend filing the `jotctl` command as its own issue
-and doing it first, since it is small and unblocks the recovery gap for everyone
-regardless of whether OIDC is adopted.
+The only recovery gap left is **self-service** reset — a user recovering their
+own account with no admin involved — which requires mail infrastructure Jot does
+not have. That is a larger, separate discussion (SMTP config, tokened reset
+links, rate limiting) and is out of scope for both this spec and OIDC. SSO
+happens to sidestep it for IdP-backed deployments by moving credentials to the
+IdP, which is a benefit but not the justification for this work.
 
 ---
 
@@ -365,15 +369,16 @@ regardless of whether OIDC is adopted.
 
 ## 14. Phasing
 
-1. **`jotctl` admin password reset** — independent, small, unblocks recovery now
-   (§12). Its own issue/PR.
-2. **This design doc** — agree the open decisions in §15.
-3. **Webapp OIDC v1** — config + migration + callback + `/config` + login UI,
+1. **This design doc** — agree the open decisions in §15.
+2. **Webapp OIDC v1** — config + migration + callback + `/config` + login UI,
    local role authoritative, mixed mode, no RP logout. Prototype against Dex
    first, then harden.
-4. **Mobile OIDC** — separate issue (§10).
-5. **v2, if wanted** — group→role mapping, explicit account linking UI,
+3. **Mobile OIDC** — separate issue (§10).
+4. **v2, if wanted** — group→role mapping, explicit account linking UI,
    RP-initiated logout / IdP-driven revocation.
+
+(Admin-initiated password reset, previously a phase-0 item, already shipped in
+[#977](https://github.com/hanzei/jot/pull/977) — see §12.)
 
 ---
 
@@ -386,8 +391,9 @@ regardless of whether OIDC is adopted.
    enabled?
 3. **`local_login_enabled` default** — keep `true` (mixed mode by default) as
    proposed, agreed?
-4. Confirm the recommendation to **ship `jotctl` password reset independently and
-   first**, and whether a public/email-based reset flow is wanted at all given
-   there is no mail transport today.
+4. Admin-initiated password reset already shipped (#977), so the only recovery
+   question left is whether a **self-service / email-based** reset flow is wanted
+   at all — a separate effort gated on adding mail transport, and independent of
+   OIDC either way.
 5. **Adopt vs. defer:** this spec recommends *adopt, phased* rather than "not
    yet". Confirm.
