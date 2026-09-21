@@ -221,42 +221,13 @@ jobs:
           force-avd-creation: false
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          # -r reinstalls, -g pre-grants runtime permissions. run.sh starts the
-          # server, waits for readiness, and runs the flows against 10.0.2.2.
-          # A best-effort screenrecord provides the failure video; run.sh's own
-          # non-zero exit on a failed flow is preserved and propagated.
-          #
-          # android-emulator-runner runs this script under `sh` (dash), not
-          # bash, so it must stay POSIX: `set -e` only, no `pipefail`. run.sh
-          # itself is invoked as an executable and keeps its own bash shebang.
-          script: |
-            set -e
-            adb install -r -g apk/app-release.apk
-
-            adb shell screenrecord --bit-rate 4000000 --time-limit 180 /sdcard/e2e.mp4 &
-            REC_PID=$!
-
-            set +e
-            ./mobile/e2e/run.sh
-            STATUS=$?
-            set -e
-
-            adb shell pkill -INT screenrecord 2>/dev/null || true
-            wait "$REC_PID" 2>/dev/null || true
-            adb pull /sdcard/e2e.mp4 mobile/e2e/e2e-video.mp4 2>/dev/null || true
-
-            # On failure, capture what is on screen while the emulator is still
-            # up. adb is guaranteed here, so this never depends on Maestro's own
-            # artifact layout. Maestro's default per-step dump (~/.maestro/tests)
-            # is copied too when present.
-            if [ "$STATUS" -ne 0 ]; then
-              adb exec-out screencap -p > mobile/e2e/failure-screenshot.png 2>/dev/null || true
-              adb shell uiautomator dump /sdcard/ui.xml 2>/dev/null || true
-              adb pull /sdcard/ui.xml mobile/e2e/ui-hierarchy.xml 2>/dev/null || true
-              cp -r "$HOME/.maestro/tests" mobile/e2e/maestro-debug 2>/dev/null || true
-            fi
-
-            exit "$STATUS"
+          # The driver is a committed script, not inline: android-emulator-runner
+          # runs this `script` line by line as separate `sh -c` calls and stops
+          # at the first failure, which breaks inline control flow, backgrounding
+          # and post-failure cleanup. One script invocation is one shell, so the
+          # screenrecord, the captured status, and the on-failure diagnostics all
+          # work. It installs the APK, runs run.sh, and collects artifacts.
+          script: ./mobile/e2e/ci-run.sh
 
       # JUnit XML, the screen recording, and Maestro's own per-step
       # screenshots/hierarchy dump — debugging a flow that cannot be reproduced
@@ -271,6 +242,7 @@ jobs:
             mobile/e2e/e2e-video.mp4
             mobile/e2e/failure-screenshot.png
             mobile/e2e/ui-hierarchy.xml
+            mobile/e2e/logcat.txt
             mobile/e2e/maestro-debug/
           retention-days: 7
           if-no-files-found: warn
