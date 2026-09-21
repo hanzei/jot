@@ -424,6 +424,132 @@ const docTemplate = `{
                 ]
             }
         },
+        "/auth/oidc/callback": {
+            "get": {
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Complete an SSO flow",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "authorization code",
+                        "name": "code",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "state token",
+                        "name": "state",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "302": {
+                        "description": "redirect to the app"
+                    },
+                    "400": {
+                        "description": "invalid flow",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "authentication failed",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "409": {
+                        "description": "identity already linked",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/oidc/link": {
+            "get": {
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Begin SSO account linking",
+                "responses": {
+                    "302": {
+                        "description": "redirect to the identity provider"
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "403": {
+                        "description": "linking unavailable",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/auth/oidc/login": {
+            "get": {
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Begin SSO login",
+                "responses": {
+                    "302": {
+                        "description": "redirect to the identity provider"
+                    }
+                }
+            }
+        },
+        "/auth/oidc/unlink": {
+            "post": {
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Unlink the SSO identity from the current account",
+                "responses": {
+                    "204": {
+                        "description": "no content"
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "422": {
+                        "description": "would strand the account",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ]
+            }
+        },
         "/config": {
             "get": {
                 "produces": [
@@ -4097,8 +4223,25 @@ const docTemplate = `{
                 "registration_enabled": {
                     "type": "boolean"
                 },
+                "sso": {
+                    "$ref": "#/definitions/server.ssoConfig"
+                },
                 "upload_max_bytes": {
                     "type": "integer"
+                }
+            }
+        },
+        "server.ssoConfig": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "local_login_enabled": {
+                    "type": "boolean"
+                },
+                "provider_name": {
+                    "type": "string"
                 }
             }
         }

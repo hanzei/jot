@@ -87,6 +87,8 @@ func defaultTestConfig(tmpDir string) *config.Config {
 		CookieSecure:        false,
 		RegistrationEnabled: true,
 		PasswordMinLength:   10,
+		// Mirrors config.Load's default; OIDC tests override it explicitly.
+		LocalLoginEnabled: true,
 	}
 }
 

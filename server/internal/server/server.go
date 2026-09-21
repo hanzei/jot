@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
 	"encoding/json/v2"
 	"errors"
@@ -29,6 +30,7 @@ import (
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/mcphandler"
 	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/oidc"
 	"github.com/hanzei/jot/server/internal/sse"
 	"github.com/sirupsen/logrus"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
@@ -73,6 +75,7 @@ type Server struct {
 	adminHandler    *handlers.AdminHandler
 	sessionsHandler *handlers.SessionsHandler
 	patsHandler     *handlers.PATsHandler
+	oidcHandler     *handlers.OIDCHandler
 	noteStore       *models.NoteStore
 	labelStore      *models.LabelStore
 	rateLimiter     *rateLimiter
@@ -149,6 +152,38 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (*Server, error) {
 	sessionsHandler := handlers.NewSessionsHandler(sessionStore)
 	patsHandler := handlers.NewPATsHandler(patStore)
 
+	// OIDC is optional: only build the provider (which performs discovery + JWKS
+	// fetch over the network) and its handler when configured. A discovery
+	// failure fails startup, symmetric with a bad DB DSN.
+	var oidcHandler *handlers.OIDCHandler
+	if cfg.OIDCEnabled {
+		provider, oidcErr := oidc.NewProvider(ctx, oidc.Config{
+			Issuer:       cfg.OIDCIssuer,
+			ClientID:     cfg.OIDCClientID,
+			ClientSecret: cfg.OIDCClientSecret,
+			RedirectURL:  cfg.OIDCRedirectURL,
+			Scopes:       cfg.OIDCScopes,
+		})
+		if oidcErr != nil {
+			cancel()
+			_ = imageStore.Close()
+			_ = db.Close()
+			return nil, fmt.Errorf("initialize OIDC provider: %w", oidcErr)
+		}
+		// The flow-cookie signing key is random per server start; see OIDCHandler.
+		signingKey := make([]byte, 32)
+		if _, keyErr := rand.Read(signingKey); keyErr != nil {
+			cancel()
+			_ = imageStore.Close()
+			_ = db.Close()
+			return nil, fmt.Errorf("generate OIDC signing key: %w", keyErr)
+		}
+		oidcHandler = handlers.NewOIDCHandler(
+			provider, userStore, userSettingsStore, sessionService,
+			cfg.OIDCUsernameClaim, cfg.LocalLoginEnabled, cfg.CookieSecure, signingKey,
+		)
+	}
+
 	rl, err := newRateLimiter(cfg)
 	if err != nil {
 		cancel()
@@ -174,6 +209,7 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (*Server, error) {
 		adminHandler:    adminHandler,
 		sessionsHandler: sessionsHandler,
 		patsHandler:     patsHandler,
+		oidcHandler:     oidcHandler,
 		noteStore:       noteStore,
 		labelStore:      labelStore,
 		imageStore:      imageStore,
@@ -264,6 +300,14 @@ func (s *Server) setupRoutes() error {
 			r.Post("/register", s.wrapHandler(s.authHandler.Register))
 			r.Post("/login", s.wrapHandler(s.authHandler.Login))
 			r.Post("/logout", s.wrapHandler(s.authHandler.Logout))
+
+			// OIDC login and callback are unauthenticated (the callback is a
+			// top-level navigation back from the IdP) and share this per-IP
+			// bucket. Registered only when OIDC is configured.
+			if s.oidcHandler != nil {
+				r.Get("/auth/oidc/login", s.wrapHandler(s.oidcHandler.Login))
+				r.Get("/auth/oidc/callback", s.wrapHandler(s.oidcHandler.Callback))
+			}
 		})
 
 		// Baseline per-user rate limit, keyed on the authenticated user so it
@@ -346,6 +390,14 @@ func (s *Server) setupRoutes() error {
 			r.With(auth.SessionRequired).Get("/pats", s.wrapHandler(s.patsHandler.ListPATs))
 			r.With(auth.SessionRequired).Post("/pats", s.wrapHandler(s.patsHandler.CreatePAT))
 			r.With(auth.SessionRequired).Delete("/pats/{id}", s.wrapHandler(s.patsHandler.RevokePAT))
+
+			// SSO account linking is session-only (like PAT/session management):
+			// it is an account-management action, not something a PAT should do.
+			// Registered only when OIDC is configured.
+			if s.oidcHandler != nil {
+				r.With(auth.SessionRequired).Get("/auth/oidc/link", s.wrapHandler(s.oidcHandler.Link))
+				r.With(auth.SessionRequired).Post("/auth/oidc/unlink", s.wrapHandler(s.oidcHandler.Unlink))
+			}
 
 			r.Handle("/mcp", mcphandler.New(s.noteStore, s.labelStore, s.imageStore).NewStreamableHTTPHandler())
 		})
@@ -528,9 +580,21 @@ func (s *Server) handleAbout(_ http.ResponseWriter, _ *http.Request) (int, any, 
 }
 
 type configResponse struct {
-	RegistrationEnabled bool `json:"registration_enabled"`
-	PasswordMinLength   int  `json:"password_min_length"`
-	UploadMaxBytes      int  `json:"upload_max_bytes"`
+	RegistrationEnabled bool      `json:"registration_enabled"`
+	PasswordMinLength   int       `json:"password_min_length"`
+	UploadMaxBytes      int       `json:"upload_max_bytes"`
+	SSO                 ssoConfig `json:"sso"`
+}
+
+// ssoConfig is the public, login-UI-facing slice of the OIDC configuration.
+// It never exposes the issuer, client id, or secret — only what the login
+// screen needs to render the provider button and decide whether to keep the
+// password form. When OIDC is not configured, Enabled is false and the other
+// fields are empty.
+type ssoConfig struct {
+	Enabled           bool   `json:"enabled"`
+	ProviderName      string `json:"provider_name"`
+	LocalLoginEnabled bool   `json:"local_login_enabled"`
 }
 
 // handleConfig godoc
@@ -545,6 +609,11 @@ func (s *Server) handleConfig(_ http.ResponseWriter, _ *http.Request) (int, any,
 		RegistrationEnabled: s.cfg.RegistrationEnabled,
 		PasswordMinLength:   s.cfg.PasswordMinLength,
 		UploadMaxBytes:      s.cfg.UploadMaxBytes,
+		SSO: ssoConfig{
+			Enabled:           s.cfg.OIDCEnabled,
+			ProviderName:      s.cfg.OIDCProviderName,
+			LocalLoginEnabled: s.cfg.LocalLoginEnabled,
+		},
 	}, nil
 }
 
