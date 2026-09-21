@@ -1,0 +1,32 @@
+# SSE catch-up resync, part 2 of 2 (see 10). Asserts the resync from #987.
+#
+# Between flow 10 and this one, run.sh:
+#   1. backgrounded the app (adb KEYCODE_HOME) — useSSE's AppState 'background'
+#      handler ran stopConnection(), tearing the SSE stream down;
+#   2. created a note out-of-band via POST /api/v1/notes while the stream was
+#      down, so the app never received the note_created SSE event for it;
+#   3. foregrounded the app with a launcher intent (adb monkey), a *warm* resume
+#      of the same singleTask process — no cold relaunch, so nothing re-loaded
+#      the note list from scratch.
+#
+# On foreground, useSSE reopens the stream; because this process already
+# connected once, the reopen fires publishReconnectResync(), and the notes cache
+# re-pulls from the server (fetch → persist → invalidate). The out-of-band note
+# must therefore appear *without* a relaunch — a relaunch would mask the bug by
+# cold-loading everything.
+#
+# No launchApp, for that exact reason: this attaches to the warm-resumed process.
+appId: com.jot.app
+---
+# The catch-up resync runs after the stream reopens, which is after the foreground
+# warm-resume, so the note lands a beat later. extendedWaitUntil waits it out;
+# a plain assertVisible would only briefly retry and could race the resync fetch.
+# Note cards match by their content text (their testID embeds the note id, which
+# a flow cannot know); this is a text note whose card shows its content preview.
+- extendedWaitUntil:
+    visible: "${MAESTRO_JOT_SSE_NOTE}"
+    timeout: 30000
+
+# The kill-persist note from earlier flows is still present — the resync added the
+# out-of-band note to the list rather than replacing what was already there.
+- assertVisible: "${MAESTRO_JOT_KILL_NOTE}"

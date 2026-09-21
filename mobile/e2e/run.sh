@@ -147,13 +147,19 @@ MAESTRO_JOT_SHARE_TEXT="Shared-intent-note-${RUN_ID}"
 # Distinct from the 02 offline note so the process-kill trio (07-09) exercises
 # its own undrained write, independent of the one 03 already drained.
 MAESTRO_JOT_KILL_NOTE="Kill-persist note ${RUN_ID}"
+# Created out-of-band via the server API (create_note_via_api) while the app is
+# backgrounded and its SSE stream is torn down, for the catch-up resync scenario
+# (10-11). No spaces: the card matches on this exact content text, and keeping it
+# one token mirrors the other note titles here.
+MAESTRO_JOT_SSE_NOTE="SSE-resync-note-${RUN_ID}"
 # Deep link delivered signed out (flow 05) that must resolve after sign-in (06).
 # The ?server= param is canonicalized identically on both sides so it matches the
 # known server (no "unknown server" prompt fires); `settings` is a protected path
 # that needs no pre-existing entity to resolve.
 DEEP_LINK_URL="jot://settings?server=${SERVER_URL_FROM_EMULATOR}"
 readonly RUN_ID MAESTRO_JOT_USERNAME MAESTRO_JOT_PASSWORD MAESTRO_JOT_NOTE_TITLE \
-  MAESTRO_JOT_OFFLINE_NOTE MAESTRO_JOT_SHARE_TEXT MAESTRO_JOT_KILL_NOTE DEEP_LINK_URL
+  MAESTRO_JOT_OFFLINE_NOTE MAESTRO_JOT_SHARE_TEXT MAESTRO_JOT_KILL_NOTE \
+  MAESTRO_JOT_SSE_NOTE DEEP_LINK_URL
 
 # One flow at a time so airplane mode can be toggled between them. Each flow gets
 # its own JUnit report (report-<flow>.xml) so a multi-flow run does not clobber
@@ -170,6 +176,7 @@ maestro_flow() {
     -e MAESTRO_JOT_OFFLINE_NOTE="$MAESTRO_JOT_OFFLINE_NOTE" \
     -e MAESTRO_JOT_SHARE_TEXT="$MAESTRO_JOT_SHARE_TEXT" \
     -e MAESTRO_JOT_KILL_NOTE="$MAESTRO_JOT_KILL_NOTE" \
+    -e MAESTRO_JOT_SSE_NOTE="$MAESTRO_JOT_SSE_NOTE" \
     --format junit \
     --output "$E2E_DIR/report-$(basename "$flow" .yaml).xml" \
     "$@" \
@@ -213,6 +220,57 @@ assert_note_synced() {
 force_stop_app() {
   echo "==> Force-stopping com.jot.app"
   adb shell am force-stop com.jot.app
+}
+
+# Background the app by sending it to the launcher (adb HOME) — the same
+# sequenced-from-run.sh constraint as the helpers above (Maestro's runScript is a
+# GraalJS sandbox with no child_process). This is deliberately *not* a force-stop:
+# the process stays alive, so useSSE's AppState 'background' handler runs
+# stopConnection() and tears the live SSE stream down, while React state (notably
+# useSSE's hasConnectedOnceRef) survives. The short settle lets the 'background'
+# transition and the stream teardown land before we mutate server state.
+background_app() {
+  echo "==> Backgrounding com.jot.app (HOME)"
+  adb shell input keyevent KEYCODE_HOME
+  sleep 3
+}
+
+# Foreground the app with a launcher intent. MainActivity is singleTask (Expo's
+# scheme/deep-link support requires it — the jot:// flows rely on the same), so a
+# LAUNCHER intent to the still-alive backgrounded task *warm-resumes* the existing
+# instance (onNewIntent → onResume) rather than cold-starting it. That preserves
+# the running JS state, so useSSE reopens the stream and — because the process
+# already connected once — fires the catch-up resync. A cold relaunch would reset
+# hasConnectedOnceRef and reload the note list from scratch, masking the bug.
+foreground_app() {
+  echo "==> Foregrounding com.jot.app (warm resume)"
+  adb shell monkey -p com.jot.app -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
+}
+
+# Create a note directly against the server API, out-of-band from the app, given
+# its content text as $1. Used by the SSE catch-up scenario (10-11) to mutate
+# server state while the app is backgrounded and its stream is down, so the note
+# is one the app never received an SSE event for. Logs in with the same account
+# flow 01 registered (reusing assert_note_synced's cookie jar) and POSTs a text
+# note; the server replies 201 with the created note.
+create_note_via_api() {
+  local note_text="$1"
+  echo "==> Creating a note out-of-band via the API ($note_text)"
+  local api="http://localhost:${JOT_E2E_PORT}/api/v1"
+  local jar="$RUN_DIR/cookies.txt"
+  if ! curl "${READY_CURL_OPTS[@]}" -c "$jar" -H 'Content-Type: application/json' \
+      -d "{\"username\":\"${MAESTRO_JOT_USERNAME}\",\"password\":\"${MAESTRO_JOT_PASSWORD}\"}" \
+      "$api/login" >/dev/null 2>&1; then
+    echo "Could not log in to create the out-of-band note." >&2
+    return 1
+  fi
+  if ! curl "${READY_CURL_OPTS[@]}" -b "$jar" -H 'Content-Type: application/json' \
+      -d "{\"content\":\"${note_text}\",\"note_type\":\"text\"}" \
+      "$api/notes" >/dev/null 2>&1; then
+    echo "Could not create the out-of-band note." >&2
+    return 1
+  fi
+  echo "Out-of-band note created on the server."
 }
 
 echo "==> Running Maestro flows"
@@ -264,3 +322,19 @@ maestro_flow 08-kill-survives-relaunch.yaml "$@"
 set_airplane_mode disable
 maestro_flow 09-kill-drains.yaml "$@"
 assert_note_synced "$MAESTRO_JOT_KILL_NOTE"
+
+# 10-11 — SSE catch-up resync on foreground-after-drop (#987; related bug #481).
+# The guarantee: an event that arrived while the stream was down (e.g. while
+# backgrounded) is re-pulled when the app is foregrounded, *without* a cold
+# relaunch masking it. 10 arms the scenario in the still-running signed-in
+# session (SSE connected). Then the app is backgrounded (HOME) — which tears the
+# stream down client-side — a note is created out-of-band via the server API
+# while the stream is down, and the app is warm-resumed with a launcher intent
+# (no cold start); 11 asserts the out-of-band note appears via the reconnect
+# resync. The adb/API steps are sequenced here for the reason on
+# set_airplane_mode/force_stop_app (Maestro cannot shell out mid-flow).
+maestro_flow 10-sse-resync-arm.yaml "$@"
+background_app
+create_note_via_api "$MAESTRO_JOT_SSE_NOTE"
+foreground_app
+maestro_flow 11-sse-resync-catchup.yaml "$@"
