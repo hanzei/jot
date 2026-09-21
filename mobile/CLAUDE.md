@@ -98,13 +98,9 @@ cannot reach: real connectivity transitions, process lifecycle, and OS
 integration. Anything testable in Jest belongs in Jest.
 
 The flows are numbered and run in order by `run.sh`, **sharing app state** (only
-`01` clears it): `01-smoke` registers and lands on the notes list, then `02`/`03`
-continue that same session to exercise the offline→reconnect round trip — a note
-created in airplane mode (`02`) must survive the reconnect and reach the server
-(`03`, plus an API poll in `run.sh` that proves the queued write actually synced
-rather than merely still rendering locally). A flow that continues a prior flow's
-session therefore cannot be run in isolation. Each flow writes its own
-`report-<flow>.xml`.
+`01` clears it): `01-smoke` registers, then `02`/`03` continue that session for
+the offline→reconnect round trip. A continuation flow therefore cannot run in
+isolation, and each writes its own `report-<flow>.xml`.
 
 `04`/`05`/`06` extend that set to the **OS-integration entry points** the Jest
 suite stubs wholesale: `run.sh` fires a real share (`ACTION_SEND`) and deep-link
