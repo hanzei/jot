@@ -138,7 +138,7 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (*Server, error) {
 		return nil, fmt.Errorf("initialize image store: %w", err)
 	}
 
-	authHandler := handlers.NewAuthHandler(userStore, noteStore, sessionService, userSettingsStore, hub, cfg.RegistrationEnabled, cfg.PasswordMinLength)
+	authHandler := handlers.NewAuthHandler(userStore, noteStore, sessionService, userSettingsStore, hub, cfg.RegistrationEnabled, cfg.LocalLoginEnabled, cfg.PasswordMinLength)
 	notesHandler, err := handlers.NewNotesHandler(noteStore, userStore, labelStore, hub, imageStore, int64(cfg.UploadMaxBytes))
 	if err != nil {
 		cancel()

@@ -351,6 +351,37 @@ func TestOIDCSsoOnlyFirstUserIsAdmin(t *testing.T) {
 	assert.Equal(t, client.RoleUser, me2.User.Role)
 }
 
+func TestOIDCLocalLoginDisabledRejectsPasswordAuth(t *testing.T) {
+	t.Parallel()
+	// SSO-only deployment: the webapp hides the password form, but the server
+	// must also refuse password login and registration on the API, or the
+	// boundary is cosmetic only.
+	ts, mock := setupOIDCTestServer(t, func(cfg *config.Config) {
+		cfg.LocalLoginEnabled = false
+	})
+
+	t.Run("login is forbidden", func(t *testing.T) {
+		_, err := ts.newClient().Login(t.Context(), "someone", "password123")
+		assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
+	})
+
+	t.Run("registration is forbidden", func(t *testing.T) {
+		_, err := ts.newClient().Register(t.Context(), "someone", "password123")
+		assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
+	})
+
+	t.Run("SSO login still works", func(t *testing.T) {
+		c := ts.oidcClient(t)
+		resp := ts.driveFlow(t, mock, c, "/api/v1/auth/oidc/login", map[string]any{
+			"sub":                "sub-ssoonly",
+			"preferred_username": "ssoonly",
+		})
+		defer resp.Body.Close()
+		// Provisioned and logged in despite local login being disabled.
+		assert.Equal(t, http.StatusFound, resp.StatusCode)
+	})
+}
+
 func TestOIDCCallbackRejectsTamperedState(t *testing.T) {
 	t.Parallel()
 	ts, _ := setupOIDCTestServer(t, nil)

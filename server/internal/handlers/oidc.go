@@ -252,7 +252,17 @@ func (h *OIDCHandler) resolveOrProvision(ctx context.Context, identity *oidc.Ide
 		return nil, err
 	}
 	grantAdminIfFirst := !h.localLoginEnabled
-	return h.userStore.ProvisionSSOUser(ctx, identity.Issuer, identity.Subject, h.usernameSeed(identity), grantAdminIfFirst)
+	user, err = h.userStore.ProvisionSSOUser(ctx, identity.Issuer, identity.Subject, h.usernameSeed(identity), grantAdminIfFirst)
+	if errors.Is(err, models.ErrOIDCIdentityLinked) {
+		// Lost a race with a concurrent first login of the *same* identity: the
+		// row now exists and belongs to this same (issuer, subject), so resolve
+		// it rather than surfacing a "linked to another account" conflict.
+		return h.userStore.GetByOIDCIdentity(ctx, identity.Issuer, identity.Subject)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return user, nil
 }
 
 // usernameSeed derives a human-readable username candidate from the verified

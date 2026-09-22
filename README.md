@@ -348,7 +348,7 @@ boot rather than surfacing per request.
 | `JOT_OIDC_CLIENT_SECRET` | empty | OAuth client secret (confidential, server-side flow). Required to enable SSO. |
 | `JOT_OIDC_REDIRECT_URL` | empty | Callback URL registered with the provider; must resolve to `…/api/v1/auth/oidc/callback`. Required to enable SSO. |
 | `JOT_OIDC_PROVIDER_NAME` | `SSO` | Button label shown on the login screen (surfaced via `GET /api/v1/config`). |
-| `JOT_OIDC_SCOPES` | `openid profile email` | Space-separated scopes requested from the provider. |
+| `JOT_OIDC_SCOPES` | `openid profile email` | Space-separated scopes requested from the provider. Must include `openid` (rejected at startup otherwise). |
 | `JOT_OIDC_USERNAME_CLAIM` | `preferred_username` | Claim used to seed a new user's username (falls back to the email local-part, then the subject). |
 | `JOT_LOCAL_LOGIN_ENABLED` | `true` | Set to `false` to hide the password form and allow SSO only. Rejected at startup unless SSO is configured. |
 

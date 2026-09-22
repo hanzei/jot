@@ -28,10 +28,11 @@ type AuthHandler struct {
 	userSettingsStore   *models.UserSettingsStore
 	hub                 *sse.Hub
 	registrationEnabled bool
+	localLoginEnabled   bool
 	passwordMinLength   int
 }
 
-func NewAuthHandler(userStore *models.UserStore, noteStore *models.NoteStore, sessionService *auth.SessionService, userSettingsStore *models.UserSettingsStore, hub *sse.Hub, registrationEnabled bool, passwordMinLength int) *AuthHandler {
+func NewAuthHandler(userStore *models.UserStore, noteStore *models.NoteStore, sessionService *auth.SessionService, userSettingsStore *models.UserSettingsStore, hub *sse.Hub, registrationEnabled, localLoginEnabled bool, passwordMinLength int) *AuthHandler {
 	return &AuthHandler{
 		userStore:           userStore,
 		noteStore:           noteStore,
@@ -39,9 +40,15 @@ func NewAuthHandler(userStore *models.UserStore, noteStore *models.NoteStore, se
 		userSettingsStore:   userSettingsStore,
 		hub:                 hub,
 		registrationEnabled: registrationEnabled,
+		localLoginEnabled:   localLoginEnabled,
 		passwordMinLength:   passwordMinLength,
 	}
 }
+
+// errLocalLoginDisabled is returned by the password-auth endpoints when the
+// deployment is SSO-only (JOT_LOCAL_LOGIN_ENABLED=false). Hiding the form in the
+// webapp is cosmetic; this is what actually closes the password door on the API.
+var errLocalLoginDisabled = errors.New("local login is disabled; use SSO")
 
 type RegisterRequest struct {
 	Username string `json:"username"`
@@ -72,6 +79,9 @@ type AuthResponse struct {
 //	@Failure	500		{string}	string	"internal server error"
 //	@Router		/register [post]
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, any, error) {
+	if !h.localLoginEnabled {
+		return http.StatusForbidden, nil, errLocalLoginDisabled
+	}
 	if !h.registrationEnabled {
 		return http.StatusForbidden, nil, errors.New("registration is disabled")
 	}
@@ -128,6 +138,10 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, any
 //	@Failure	500		{string}	string	"internal server error"
 //	@Router		/login [post]
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) (int, any, error) {
+	if !h.localLoginEnabled {
+		return http.StatusForbidden, nil, errLocalLoginDisabled
+	}
+
 	var req LoginRequest
 	if err := decodeJSONBody(w, r, &req); err != nil {
 		return http.StatusBadRequest, nil, err

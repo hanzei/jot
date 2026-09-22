@@ -55,6 +55,7 @@ func setupTestServerWithConfig(t *testing.T, customize func(*config.Config)) *jo
 		CORSAllowedOrigin:   "http://localhost:5173",
 		CookieSecure:        false,
 		RegistrationEnabled: true,
+		LocalLoginEnabled:   true, // mirrors config.Load's default; direct Config{} construction bypasses it
 		PasswordMinLength:   4,
 	}
 	if customize != nil {

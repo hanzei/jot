@@ -459,6 +459,15 @@ func TestLoadOIDCEnabled(t *testing.T) {
 	})
 }
 
+func TestLoadOIDCScopesMustIncludeOpenID(t *testing.T) {
+	setCoreOIDC(t)
+	t.Setenv("JOT_OIDC_SCOPES", "profile email") // missing openid
+	_, err := Load()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "JOT_OIDC_SCOPES")
+	assert.Contains(t, err.Error(), "openid")
+}
+
 func TestLoadOIDCPartialConfigRejected(t *testing.T) {
 	// Each core var missing in turn must fail with an all-or-nothing error that
 	// names the missing var.

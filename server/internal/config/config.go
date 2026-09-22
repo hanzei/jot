@@ -338,6 +338,14 @@ func loadOIDC(cfg *Config) error {
 	}
 	cfg.OIDCScopes = strings.Fields(scopes)
 
+	// "openid" is what makes this an OpenID Connect flow: without it the token
+	// endpoint returns no id_token and every login fails at runtime (see
+	// internal/oidc.Provider.Verify). Reject it at startup instead, matching how
+	// the other OIDC settings are validated here.
+	if !slices.Contains(cfg.OIDCScopes, "openid") {
+		return fmt.Errorf("invalid JOT_OIDC_SCOPES value %q: must include the \"openid\" scope", scopes)
+	}
+
 	cfg.OIDCUsernameClaim = os.Getenv("JOT_OIDC_USERNAME_CLAIM")
 	if cfg.OIDCUsernameClaim == "" {
 		cfg.OIDCUsernameClaim = "preferred_username"
