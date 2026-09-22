@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -323,6 +324,9 @@ func loadOIDC(cfg *Config) error {
 	if err := requireAbsoluteURL("JOT_OIDC_ISSUER", cfg.OIDCIssuer); err != nil {
 		return err
 	}
+	if err := requireHTTPSIssuer(cfg.OIDCIssuer); err != nil {
+		return err
+	}
 	if err := requireAbsoluteURL("JOT_OIDC_REDIRECT_URL", cfg.OIDCRedirectURL); err != nil {
 		return err
 	}
@@ -352,6 +356,26 @@ func loadOIDC(cfg *Config) error {
 	}
 
 	return nil
+}
+
+// requireHTTPSIssuer enforces that the OIDC issuer uses HTTPS. The OpenID
+// Connect spec requires an https issuer, and discovery/token exchange over plain
+// HTTP is exposed to network attackers. Loopback hosts (localhost, 127.0.0.1,
+// ::1) are exempt so local development and tests can run against an HTTP
+// provider without a separate opt-in.
+func requireHTTPSIssuer(issuer string) error {
+	u, err := url.Parse(issuer)
+	if err != nil {
+		return fmt.Errorf("invalid JOT_OIDC_ISSUER value %q: %w", issuer, err)
+	}
+	host := u.Hostname()
+	if u.Scheme == "https" || host == "localhost" {
+		return nil
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return nil
+	}
+	return fmt.Errorf("invalid JOT_OIDC_ISSUER value %q: must use https (only loopback hosts may use http)", issuer)
 }
 
 // requireAbsoluteURL fails unless v parses as an absolute URL (scheme + host),

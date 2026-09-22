@@ -243,7 +243,12 @@ func buildOIDCHandler(
 		return nil, nil //nolint:nilnil // OIDC disabled is a valid, non-error state: no handler and no error, and the caller treats a nil handler as "not configured"
 	}
 
-	provider, err := oidc.NewProvider(ctx, oidc.Config{
+	// Bound discovery so an unreachable IdP fails startup promptly instead of
+	// hanging the boot on a network call with no deadline of its own.
+	discoveryCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	provider, err := oidc.NewProvider(discoveryCtx, oidc.Config{
 		Issuer:       cfg.OIDCIssuer,
 		ClientID:     cfg.OIDCClientID,
 		ClientSecret: cfg.OIDCClientSecret,

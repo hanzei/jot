@@ -609,7 +609,7 @@ func (s *userStore) ProvisionSSOUser(ctx context.Context, issuer, subject, usern
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		username := base
 		if attempt > 1 {
-			username = fmt.Sprintf("%s-%d", base, attempt)
+			username = usernameWithSuffix(base, attempt)
 		}
 
 		var user User
@@ -700,6 +700,23 @@ func (s *userStore) UnlinkOIDCIdentity(ctx context.Context, userID string) error
 // everything else so a claim can seed a valid username.
 var ssoUsernameRegex = regexp.MustCompile(`[^a-z0-9_-]+`)
 
+// maxUsernameLen mirrors the handlers' validateUsername upper bound (30 code
+// points). Kept here so provisioned usernames — including their collision
+// suffix — stay within the same limit the API enforces on user-supplied ones.
+const maxUsernameLen = 30
+
+// usernameWithSuffix appends a "-N" de-duplication suffix to base, truncating
+// base first so the whole result stays within maxUsernameLen even for
+// multi-digit N. The trailing '_'/'-' left by truncation is trimmed so the
+// result never reads as "foo--2".
+func usernameWithSuffix(base string, attempt int) string {
+	suffix := fmt.Sprintf("-%d", attempt)
+	if len(base)+len(suffix) > maxUsernameLen {
+		base = strings.TrimRight(base[:maxUsernameLen-len(suffix)], "_-")
+	}
+	return base + suffix
+}
+
 // sanitizeUsername turns an arbitrary claim value into a candidate that
 // satisfies the username rules: lower-cased, restricted to [a-z0-9_-], with no
 // leading/trailing '_' or '-', clamped to the 2–30 character range. It returns
@@ -708,8 +725,8 @@ func sanitizeUsername(seed string) string {
 	s := strings.ToLower(strings.TrimSpace(seed))
 	s = ssoUsernameRegex.ReplaceAllString(s, "")
 	s = strings.Trim(s, "_-")
-	if len(s) > 30 {
-		s = strings.Trim(s[:30], "_-")
+	if len(s) > maxUsernameLen {
+		s = strings.Trim(s[:maxUsernameLen], "_-")
 	}
 	if len(s) < 2 {
 		return ""

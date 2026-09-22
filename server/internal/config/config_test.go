@@ -507,6 +507,32 @@ func TestLoadOIDCInvalidURLs(t *testing.T) {
 	})
 }
 
+func TestLoadOIDCIssuerRequiresHTTPS(t *testing.T) {
+	t.Run("http issuer on a non-loopback host is rejected", func(t *testing.T) {
+		setCoreOIDC(t)
+		t.Setenv("JOT_OIDC_ISSUER", "http://idp.example.com")
+		_, err := Load()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "JOT_OIDC_ISSUER")
+		assert.Contains(t, err.Error(), "https")
+	})
+
+	t.Run("http issuer on loopback is allowed for local development", func(t *testing.T) {
+		setCoreOIDC(t)
+		t.Setenv("JOT_OIDC_ISSUER", "http://127.0.0.1:5556/dex")
+		cfg, err := Load()
+		require.NoError(t, err)
+		assert.Equal(t, "http://127.0.0.1:5556/dex", cfg.OIDCIssuer)
+	})
+
+	t.Run("http issuer on localhost is allowed", func(t *testing.T) {
+		setCoreOIDC(t)
+		t.Setenv("JOT_OIDC_ISSUER", "http://localhost:5556")
+		_, err := Load()
+		require.NoError(t, err)
+	})
+}
+
 func TestLoadLocalLoginDisabledRequiresOIDC(t *testing.T) {
 	t.Run("disabled without OIDC is rejected", func(t *testing.T) {
 		t.Setenv("JOT_STATIC_DIR", "/tmp/static")

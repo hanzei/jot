@@ -336,10 +336,13 @@ flow with PKCE. It is **optional and off by default**: set no `JOT_OIDC_*`
 variables and every existing login flow behaves exactly as before.
 
 SSO is **all-or-nothing** — if any of the four core variables is set, all four
-must be present, and `JOT_OIDC_ISSUER`/`JOT_OIDC_REDIRECT_URL` must be absolute
-URLs, or the server refuses to start. The discovery document and JWKS are
-fetched once at startup, so an unreachable or misconfigured provider fails the
-boot rather than surfacing per request.
+must be present, `JOT_OIDC_ISSUER`/`JOT_OIDC_REDIRECT_URL` must be absolute
+URLs, and the issuer must use `https` (loopback hosts such as
+`http://localhost` are exempt for local development), or the server refuses to
+start. The **discovery document** is fetched once at startup, so an unreachable
+or misconfigured issuer fails the boot rather than surfacing per request; the
+**JWKS** is fetched lazily on the first SSO login, so a signing-key endpoint
+that is down only at startup does not block boot.
 
 | Variable | Default | Description |
 | --- | --- | --- |

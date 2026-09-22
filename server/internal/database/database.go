@@ -55,14 +55,18 @@ func New(driverName, dsn string) (*sql.DB, error) {
 		if _, err := db.ExecContext(ctx, `PRAGMA journal_mode=WAL`); err != nil {
 			return nil, fmt.Errorf("enable WAL mode: %w", err)
 		}
-		// foreign_keys is deliberately left OFF (SQLite's default) here so it is
-		// off while migrations run. Migration 000011 rebuilds the `users` parent
-		// table with DROP TABLE, which with enforcement on would cascade-delete
-		// every user's notes; SQLite ignores a foreign_keys pragma issued inside
-		// golang-migrate's per-migration transaction, so the only place to hold it
-		// off is out here. Enforcement is turned on below, after migrations and the
-		// post-migration backfill, once foreign_key_check has confirmed the schema
+		// Explicitly disable foreign-key enforcement while migrations run, rather
+		// than relying on SQLite's OFF default: a DSN that turns foreign_keys on
+		// (e.g. `?_pragma=foreign_keys(1)`) would otherwise make migration 000011's
+		// `users` rebuild (DROP TABLE) cascade-delete every user's notes. SQLite
+		// ignores a foreign_keys pragma issued inside golang-migrate's
+		// per-migration transaction, so it has to be set here, on the connection,
+		// before migrations. Enforcement is turned on below, after migrations and
+		// the post-migration backfill, once foreign_key_check confirms the schema
 		// changes introduced no dangling references.
+		if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
+			return nil, fmt.Errorf("disable foreign key enforcement for migrations: %w", err)
+		}
 	}
 
 	if err := runMigrations(db, driverName); err != nil {
@@ -85,7 +89,7 @@ func New(driverName, dsn string) (*sql.DB, error) {
 		// makes ON DELETE CASCADE work in normal operation.
 		if err := verifyForeignKeys(ctx, db); err != nil {
 			_ = db.Close()
-			return nil, err
+			return nil, fmt.Errorf("verify foreign key integrity: %w", err)
 		}
 		if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = ON`); err != nil {
 			_ = db.Close()

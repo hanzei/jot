@@ -1,6 +1,7 @@
 package models
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/hanzei/jot/server/internal/database/dbtest"
@@ -71,6 +72,18 @@ func TestProvisionSSOUser(t *testing.T) {
 			u, err := store.ProvisionSSOUser(ctx, testIssuer, testSubject, "Alice.Smith@example.com", false)
 			require.NoError(t, err)
 			assert.Equal(t, "alicesmithexamplecom", u.Username)
+		})
+
+		t.Run("de-duplicated username stays within the length limit", func(t *testing.T) {
+			store := newTestUserStore(t, driver)
+			base := strings.Repeat("a", 30) // already at the 30-char limit
+			_, err := store.Create(ctx, base, "password123")
+			require.NoError(t, err)
+
+			u, err := store.ProvisionSSOUser(ctx, testIssuer, "sub-long", base, false)
+			require.NoError(t, err)
+			assert.LessOrEqual(t, len(u.Username), 30, "suffixed username must not exceed the 30-char limit")
+			assert.True(t, strings.HasSuffix(u.Username, "-2"), "got %q", u.Username)
 		})
 	})
 }

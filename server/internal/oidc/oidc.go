@@ -5,7 +5,10 @@
 // and verify a callback's code into a resolved identity.
 //
 // It is constructed once at server startup when OIDC is configured; a discovery
-// or JWKS failure there is a startup error, not a per-request surprise.
+// failure there is a startup error, not a per-request surprise. The JWKS is
+// fetched lazily by the verifier on the first ID-token verification (go-oidc's
+// remote key set), so a JWKS-only outage surfaces at that first callback rather
+// than at startup.
 package oidc
 
 import (
