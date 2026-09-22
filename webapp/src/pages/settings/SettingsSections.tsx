@@ -1,4 +1,4 @@
-import type { ChangeEvent, FormEvent, RefObject } from 'react';
+import type { ChangeEvent, FormEvent, ReactNode, RefObject } from 'react';
 import { useState } from 'react';
 import { Upload, Download } from 'lucide-react';
 import type { TFunction } from 'i18next';
@@ -34,6 +34,8 @@ interface IdentitySecurityColumnProps {
   accountForm: AccountFormProps;
   passwordForm: PasswordFormProps;
   patsSection: PATsSectionProps;
+  /** Optional SSO connect/disconnect card, rendered only when OIDC is enabled. */
+  ssoSection?: ReactNode;
   displayMsg: (msg: string) => string;
 }
 
@@ -118,6 +120,7 @@ export const IdentitySecurityColumn = ({
     onRevokePAT,
     displayMsg: patDisplayMsg,
   },
+  ssoSection,
   displayMsg,
 }: IdentitySecurityColumnProps) => {
   const [newPATName, setNewPATName] = useState('');
@@ -370,6 +373,8 @@ export const IdentitySecurityColumn = ({
         </ul>
       )}
     </SettingsSectionCard>
+
+    {ssoSection}
 
     <ConfirmDialog
       open={Boolean(patPendingRevoke)}

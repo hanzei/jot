@@ -13,14 +13,16 @@ import AboutModal from '@/components/AboutModal';
 import NewPATModal from '@/components/NewPATModal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
-import { isPasswordTooShort, type ActiveSession, type PersonalAccessToken } from '@jot/shared';
+import { isPasswordTooShort, type ActiveSession, type PersonalAccessToken, type SSOConfig } from '@jot/shared';
 import { IdentitySecurityColumn, PreferencesInfoColumn } from './settings/SettingsSections';
+import SsoSettingsSection from './settings/SsoSettingsSection';
 
 interface SettingsProps {
   passwordMinLength: number;
+  sso: SSOConfig;
 }
 
-const Settings = ({ passwordMinLength }: SettingsProps) => {
+const Settings = ({ passwordMinLength, sso }: SettingsProps) => {
   const { t } = useTranslation();
   const { showToast } = useToast();
   useEffect(() => { document.title = t('pageTitle.settings'); }, [t]);
@@ -43,6 +45,7 @@ const Settings = ({ passwordMinLength }: SettingsProps) => {
   const [isExporting, setIsExporting] = useState(false);
   const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
   const [hasProfileIcon, setHasProfileIcon] = useState(currentUser?.has_profile_icon ?? false);
+  const [ssoLinked, setSsoLinked] = useState(currentUser?.has_sso_linked ?? false);
   const [iconError, setIconError] = useState('');
   const [iconUploading, setIconUploading] = useState(false);
   const [iconDeleting, setIconDeleting] = useState(false);
@@ -308,6 +311,16 @@ const Settings = ({ passwordMinLength }: SettingsProps) => {
     }
   };
 
+  // Refresh the stored user after an unlink so the section (and the rest of the
+  // app) reflects the cleared identity without a full reload.
+  const handleSsoUnlinked = () => {
+    setSsoLinked(false);
+    showToast(t('settings.ssoDisconnected'), 'success');
+    auth.me()
+      .then(({ user }) => setUser(user))
+      .catch(() => { /* the local state already flipped; a stale cache self-heals on next load */ });
+  };
+
   const handleExport = async () => {
     setIsExporting(true);
     try {
@@ -389,6 +402,15 @@ const Settings = ({ passwordMinLength }: SettingsProps) => {
               onRevokePAT: handleRevokePAT,
               displayMsg,
             }}
+            ssoSection={sso.enabled ? (
+              <SsoSettingsSection
+                t={t}
+                providerName={sso.provider_name || 'SSO'}
+                linked={ssoLinked}
+                onUnlinked={handleSsoUnlinked}
+                displayMsg={displayMsg}
+              />
+            ) : undefined}
             displayMsg={displayMsg}
           />
 

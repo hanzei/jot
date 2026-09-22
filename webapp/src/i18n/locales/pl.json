@@ -58,7 +58,9 @@
     "showPassword": "Pokaż hasło",
     "hidePassword": "Ukryj hasło",
     "passwordHint": "Co najmniej {{min}} znaków",
-    "logoAlt": "Logo Jot"
+    "logoAlt": "Logo Jot",
+    "ssoSignInWith": "Zaloguj się przez {{provider}}",
+    "ssoDivider": "lub"
   },
   "dashboard": {
     "newNote": "Nowa notatka",
@@ -208,7 +210,17 @@
     "patsLoadError": "Nie udało się załadować tokenów.",
     "aboutSection": "O aplikacji",
     "aboutButton": "O Jot",
-    "patsLoading": "Ładowanie tokenów..."
+    "patsLoading": "Ładowanie tokenów...",
+    "ssoSection": "Logowanie jednokrotne",
+    "ssoLinkedDescription": "Twoje konto jest połączone z {{provider}}. Możesz logować się przez {{provider}}.",
+    "ssoUnlinkedDescription": "Połącz swoje konto z {{provider}}, aby logować się za jego pomocą.",
+    "ssoConnect": "Połącz {{provider}}",
+    "ssoDisconnect": "Odłącz {{provider}}",
+    "ssoDisconnecting": "Odłączanie…",
+    "ssoDisconnectFailed": "Nie udało się odłączyć SSO.",
+    "ssoDisconnected": "Odłączono SSO.",
+    "ssoDisconnectConfirmTitle": "Odłączyć SSO?",
+    "ssoDisconnectConfirmMessage": "Spowoduje to odłączenie {{provider}} od Twojego konta. Do zalogowania będzie potrzebne hasło."
   },
   "about": {
     "title": "O Jot",

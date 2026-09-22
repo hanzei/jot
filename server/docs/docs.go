@@ -4155,6 +4155,9 @@ const docTemplate = `{
                 "has_profile_icon": {
                     "type": "boolean"
                 },
+                "has_sso_linked": {
+                    "type": "boolean"
+                },
                 "id": {
                     "type": "string"
                 },

@@ -58,7 +58,9 @@
     "showPassword": "Show password",
     "hidePassword": "Hide password",
     "passwordHint": "At least {{min}} characters",
-    "logoAlt": "Jot logo"
+    "logoAlt": "Jot logo",
+    "ssoSignInWith": "Sign in with {{provider}}",
+    "ssoDivider": "or"
   },
   "dashboard": {
     "newNote": "New Note",
@@ -208,7 +210,17 @@
     "patsLoadError": "Failed to load tokens.",
     "aboutSection": "About",
     "aboutButton": "About Jot",
-    "patsLoading": "Loading tokens..."
+    "patsLoading": "Loading tokens...",
+    "ssoSection": "Single Sign-On",
+    "ssoLinkedDescription": "Your account is linked to {{provider}}. You can sign in with {{provider}}.",
+    "ssoUnlinkedDescription": "Connect your account to {{provider}} to sign in with it.",
+    "ssoConnect": "Connect {{provider}}",
+    "ssoDisconnect": "Disconnect {{provider}}",
+    "ssoDisconnecting": "Disconnecting…",
+    "ssoDisconnectFailed": "Failed to disconnect SSO.",
+    "ssoDisconnected": "Disconnected from SSO.",
+    "ssoDisconnectConfirmTitle": "Disconnect SSO?",
+    "ssoDisconnectConfirmMessage": "This unlinks {{provider}} from your account. You'll need your password to sign in."
   },
   "about": {
     "title": "About Jot",

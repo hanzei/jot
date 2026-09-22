@@ -13,7 +13,11 @@ import { isAdmin, setUser, setSettings, removeUser } from '@/utils/auth';
 import { auth, serverConfig } from '@/utils/api';
 import { applyTheme, getThemePreference } from '@/utils/theme';
 import { LoginRedirect, PostAuthRedirect } from '@/components/AuthRedirect';
-import { VALIDATION, UPLOAD_MAX_BYTES } from '@jot/shared';
+import { VALIDATION, UPLOAD_MAX_BYTES, type SSOConfig } from '@jot/shared';
+
+// Default when the server omits `sso` (a pre-SSO server) or the config fetch
+// fails: SSO off, local login on — i.e. exactly today's behavior.
+const SSO_DISABLED: SSOConfig = { enabled: false, provider_name: '', local_login_enabled: true };
 
 function App() {
   const [isAuth, setIsAuth] = useState(false);
@@ -27,6 +31,7 @@ function App() {
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
   const [passwordMinLength, setPasswordMinLength] = useState<number>(VALIDATION.PASSWORD_MIN_LENGTH);
   const [uploadMaxBytes, setUploadMaxBytes] = useState<number>(UPLOAD_MAX_BYTES);
+  const [sso, setSso] = useState<SSOConfig>(SSO_DISABLED);
 
   useEffect(() => {
     applyTheme(getThemePreference());
@@ -40,6 +45,7 @@ function App() {
         setRegistrationEnabled(cfg.registration_enabled);
         setPasswordMinLength(cfg.password_min_length);
         setUploadMaxBytes(cfg.upload_max_bytes);
+        setSso(cfg.sso ?? SSO_DISABLED);
       })
       .catch(() => { /* keep defaults if config fetch fails */ });
 
@@ -87,7 +93,7 @@ function App() {
         <Routes>
           <Route
             path="/login"
-            element={!isAuth ? <Login onLogin={() => setIsAuth(true)} registrationEnabled={registrationEnabled} /> : <PostAuthRedirect />}
+            element={!isAuth ? <Login onLogin={() => setIsAuth(true)} registrationEnabled={registrationEnabled} sso={sso} /> : <PostAuthRedirect />}
           />
           <Route
             path="/register"
@@ -111,7 +117,7 @@ function App() {
             />
             <Route
               path="/settings"
-              element={<Settings passwordMinLength={passwordMinLength} />}
+              element={<Settings passwordMinLength={passwordMinLength} sso={sso} />}
             />
           </Route>
         </Routes>

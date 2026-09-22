@@ -58,7 +58,9 @@
     "showPassword": "Afficher le mot de passe",
     "hidePassword": "Masquer le mot de passe",
     "passwordHint": "Au moins {{min}} caractères",
-    "logoAlt": "Logo Jot"
+    "logoAlt": "Logo Jot",
+    "ssoSignInWith": "Se connecter avec {{provider}}",
+    "ssoDivider": "ou"
   },
   "dashboard": {
     "newNote": "Nouvelle note",
@@ -208,7 +210,17 @@
     "patsLoadError": "Échec du chargement des jetons.",
     "aboutSection": "À propos",
     "aboutButton": "À propos de Jot",
-    "patsLoading": "Chargement des jetons..."
+    "patsLoading": "Chargement des jetons...",
+    "ssoSection": "Authentification unique",
+    "ssoLinkedDescription": "Votre compte est lié à {{provider}}. Vous pouvez vous connecter avec {{provider}}.",
+    "ssoUnlinkedDescription": "Liez votre compte à {{provider}} pour vous connecter avec.",
+    "ssoConnect": "Lier {{provider}}",
+    "ssoDisconnect": "Dissocier {{provider}}",
+    "ssoDisconnecting": "Dissociation…",
+    "ssoDisconnectFailed": "Échec de la dissociation du SSO.",
+    "ssoDisconnected": "SSO dissocié.",
+    "ssoDisconnectConfirmTitle": "Dissocier le SSO ?",
+    "ssoDisconnectConfirmMessage": "Cela dissocie {{provider}} de votre compte. Vous aurez besoin de votre mot de passe pour vous connecter."
   },
   "about": {
     "title": "À propos de Jot",

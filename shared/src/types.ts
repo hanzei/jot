@@ -1,7 +1,26 @@
+/**
+ * Public SSO slice of the server config, surfaced by `GET /config`. Never
+ * exposes issuer/client internals — only what the login UI needs to render the
+ * provider button and decide whether to keep the password form. `enabled` is
+ * false when no OIDC provider is configured.
+ */
+export interface SSOConfig {
+  enabled: boolean;
+  provider_name: string;
+  local_login_enabled: boolean;
+}
+
 export interface ServerConfig {
   registration_enabled: boolean;
   password_min_length: number;
   upload_max_bytes: number;
+  /**
+   * SSO/OIDC login config. Optional so the mobile app (no SSO in v1) and
+   * pre-SSO servers stay valid; the webapp defaults a missing value to
+   * disabled. Current servers always include it (with `enabled: false` when
+   * unconfigured).
+   */
+  sso?: SSOConfig;
 }
 
 export interface AboutInfo {
@@ -20,6 +39,14 @@ export interface User {
   last_name: string;
   role: UserRole;
   has_profile_icon: boolean;
+  /**
+   * True when an OIDC/SSO identity is bound to this account
+   * (`oidc_subject IS NOT NULL`). The server populates it on every user
+   * response; optional here so the mobile app and existing fixtures — which
+   * have no SSO concept in v1 — need not construct it. Read it with a
+   * `?? false` default.
+   */
+  has_sso_linked?: boolean;
   created_at: string;
   updated_at: string;
 }

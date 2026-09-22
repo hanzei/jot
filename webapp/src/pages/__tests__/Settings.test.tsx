@@ -4,9 +4,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router';
 import Settings from '../Settings';
 import { ToastProvider } from '@/components/Toast';
-import { users, auth, sessions, isAxiosError } from '@/utils/api';
+import { users, auth, sessions, sso, isAxiosError } from '@/utils/api';
 import * as authUtils from '@/utils/auth';
-import type { UserSettings } from '@jot/shared';
+import type { SSOConfig, UserSettings } from '@jot/shared';
 import i18n from '@/i18n';
 
 vi.mock('@/utils/api', () => ({
@@ -29,6 +29,10 @@ vi.mock('@/utils/api', () => ({
     create: vi.fn(),
     revoke: vi.fn().mockResolvedValue(undefined),
   },
+  sso: {
+    unlink: vi.fn().mockResolvedValue(undefined),
+  },
+  SSO_LINK_URL: '/api/v1/auth/oidc/link',
   isAxiosError: vi.fn(),
 }));
 
@@ -69,11 +73,13 @@ const activeSession = {
   expires_at: '2023-02-01T00:00:00Z',
 };
 
-const renderSettings = () => {
+const SSO_DISABLED: SSOConfig = { enabled: false, provider_name: '', local_login_enabled: true };
+
+const renderSettings = (ssoConfig: SSOConfig = SSO_DISABLED) => {
   return render(
     <MemoryRouter>
       <ToastProvider>
-        <Settings passwordMinLength={10} />
+        <Settings passwordMinLength={10} sso={ssoConfig} />
       </ToastProvider>
     </MemoryRouter>
   );
@@ -300,6 +306,68 @@ describe('Settings', () => {
       await waitFor(() => {
         expect(screen.queryByRole('heading', { name: 'Revoke session' })).not.toBeInTheDocument();
       });
+    });
+  });
+
+  describe('SSO section', () => {
+    const ssoEnabled: SSOConfig = { enabled: true, provider_name: 'Keycloak', local_login_enabled: true };
+
+    it('does not render the SSO section when SSO is disabled', () => {
+      renderSettings();
+      expect(screen.queryByRole('heading', { name: i18n.t('settings.ssoSection') })).not.toBeInTheDocument();
+    });
+
+    it('shows a Connect action when the account is not linked', () => {
+      vi.mocked(authUtils.getUser).mockReturnValue({ ...mockUser, has_sso_linked: false });
+      renderSettings(ssoEnabled);
+      const connect = screen.getByRole('link', { name: 'Connect Keycloak' });
+      expect(connect).toHaveAttribute('href', '/api/v1/auth/oidc/link');
+      expect(screen.queryByRole('button', { name: 'Disconnect Keycloak' })).not.toBeInTheDocument();
+    });
+
+    it('shows a Disconnect action when the account is linked', () => {
+      vi.mocked(authUtils.getUser).mockReturnValue({ ...mockUser, has_sso_linked: true });
+      renderSettings(ssoEnabled);
+      expect(screen.getByRole('button', { name: 'Disconnect Keycloak' })).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Connect Keycloak' })).not.toBeInTheDocument();
+    });
+
+    it('unlinks after confirming and flips to the Connect action', async () => {
+      const user = userEvent.setup();
+      vi.mocked(authUtils.getUser).mockReturnValue({ ...mockUser, has_sso_linked: true });
+      renderSettings(ssoEnabled);
+
+      await user.click(screen.getByRole('button', { name: 'Disconnect Keycloak' }));
+      const dialog = screen.getByRole('dialog', { name: i18n.t('settings.ssoDisconnectConfirmTitle') });
+      await user.click(within(dialog).getByRole('button', { name: 'Disconnect Keycloak' }));
+
+      await waitFor(() => {
+        expect(sso.unlink).toHaveBeenCalled();
+      });
+      await waitFor(() => {
+        expect(screen.getByRole('link', { name: 'Connect Keycloak' })).toBeInTheDocument();
+      });
+    });
+
+    it('surfaces the server error when unlink is refused', async () => {
+      const user = userEvent.setup();
+      vi.mocked(authUtils.getUser).mockReturnValue({ ...mockUser, has_sso_linked: true });
+      vi.mocked(isAxiosError).mockReturnValue(true);
+      vi.mocked(sso.unlink).mockRejectedValueOnce({
+        response: { status: 422, data: 'cannot unlink SSO: set a password first' },
+      });
+
+      renderSettings(ssoEnabled);
+
+      await user.click(screen.getByRole('button', { name: 'Disconnect Keycloak' }));
+      const dialog = screen.getByRole('dialog', { name: i18n.t('settings.ssoDisconnectConfirmTitle') });
+      await user.click(within(dialog).getByRole('button', { name: 'Disconnect Keycloak' }));
+
+      await waitFor(() => {
+        expect(screen.getByRole('alert')).toHaveTextContent('cannot unlink SSO: set a password first');
+      });
+      // Still linked — the refused unlink must not flip the UI to Connect.
+      expect(screen.queryByRole('link', { name: 'Connect Keycloak' })).not.toBeInTheDocument();
     });
   });
 });

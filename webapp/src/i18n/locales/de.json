@@ -58,7 +58,9 @@
     "showPassword": "Passwort anzeigen",
     "hidePassword": "Passwort verbergen",
     "passwordHint": "Mindestens {{min}} Zeichen",
-    "logoAlt": "Jot-Logo"
+    "logoAlt": "Jot-Logo",
+    "ssoSignInWith": "Mit {{provider}} anmelden",
+    "ssoDivider": "oder"
   },
   "dashboard": {
     "newNote": "Neue Notiz",
@@ -208,7 +210,17 @@
     "patsLoadError": "Token konnten nicht geladen werden.",
     "aboutSection": "Info",
     "aboutButton": "Info zu Jot",
-    "patsLoading": "Token werden geladen..."
+    "patsLoading": "Token werden geladen...",
+    "ssoSection": "Single Sign-On",
+    "ssoLinkedDescription": "Dein Konto ist mit {{provider}} verknüpft. Du kannst dich mit {{provider}} anmelden.",
+    "ssoUnlinkedDescription": "Verknüpfe dein Konto mit {{provider}}, um dich damit anzumelden.",
+    "ssoConnect": "{{provider}} verknüpfen",
+    "ssoDisconnect": "{{provider}} trennen",
+    "ssoDisconnecting": "Wird getrennt …",
+    "ssoDisconnectFailed": "SSO konnte nicht getrennt werden.",
+    "ssoDisconnected": "SSO getrennt.",
+    "ssoDisconnectConfirmTitle": "SSO trennen?",
+    "ssoDisconnectConfirmMessage": "Dadurch wird {{provider}} von deinem Konto getrennt. Zur Anmeldung benötigst du dein Passwort."
   },
   "about": {
     "title": "Info zu Jot",
