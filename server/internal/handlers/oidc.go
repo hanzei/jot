@@ -249,7 +249,7 @@ func (h *OIDCHandler) resolveOrProvision(ctx context.Context, identity *oidc.Ide
 		return user, nil
 	}
 	if !errors.Is(err, models.ErrUserNotFound) {
-		return nil, err
+		return nil, fmt.Errorf("look up OIDC identity: %w", err)
 	}
 	grantAdminIfFirst := !h.localLoginEnabled
 	user, err = h.userStore.ProvisionSSOUser(ctx, identity.Issuer, identity.Subject, h.usernameSeed(identity), grantAdminIfFirst)
@@ -257,10 +257,14 @@ func (h *OIDCHandler) resolveOrProvision(ctx context.Context, identity *oidc.Ide
 		// Lost a race with a concurrent first login of the *same* identity: the
 		// row now exists and belongs to this same (issuer, subject), so resolve
 		// it rather than surfacing a "linked to another account" conflict.
-		return h.userStore.GetByOIDCIdentity(ctx, identity.Issuer, identity.Subject)
+		user, err = h.userStore.GetByOIDCIdentity(ctx, identity.Issuer, identity.Subject)
+		if err != nil {
+			return nil, fmt.Errorf("resolve raced OIDC identity: %w", err)
+		}
+		return user, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("provision SSO user: %w", err)
 	}
 	return user, nil
 }
