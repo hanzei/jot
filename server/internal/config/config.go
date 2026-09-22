@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -36,6 +38,20 @@ type Config struct {
 	RateLimitPerMinute          int
 	RateLimitAuthPerMinute      int
 	RateLimitExpensivePerMinute int
+
+	// OIDC / SSO. OIDCEnabled is derived: it is true when the four core vars
+	// are set. When it is false every other OIDC field is empty and LocalLogin
+	// is forced on, so a deployment that sets no JOT_OIDC_* vars behaves exactly
+	// as before.
+	OIDCEnabled       bool
+	OIDCIssuer        string
+	OIDCClientID      string
+	OIDCClientSecret  string
+	OIDCRedirectURL   string
+	OIDCProviderName  string
+	OIDCScopes        []string
+	OIDCUsernameClaim string
+	LocalLoginEnabled bool
 }
 
 // parseBoolEnv reads an environment variable that must be "true", "false", or
@@ -244,5 +260,133 @@ func Load() (*Config, error) {
 	}
 	cfg.RateLimitExpensivePerMinute = rateLimitExpensivePerMinute
 
+	if err := loadOIDC(cfg); err != nil {
+		return nil, err
+	}
+
 	return cfg, nil
+}
+
+// loadOIDC reads and validates the JOT_OIDC_* and JOT_LOCAL_LOGIN_ENABLED
+// settings. OIDC is all-or-nothing: "enabled" means any of the four core vars
+// (issuer, client id, client secret, redirect URL) is set, and when it is, all
+// four must be present. The issuer and redirect URL must parse as absolute
+// URLs. Local login defaults on; disabling it is only allowed when OIDC is
+// enabled, since otherwise the deployment could authenticate no one.
+func loadOIDC(cfg *Config) error {
+	cfg.OIDCIssuer = os.Getenv("JOT_OIDC_ISSUER")
+	cfg.OIDCClientID = os.Getenv("JOT_OIDC_CLIENT_ID")
+	cfg.OIDCClientSecret = os.Getenv("JOT_OIDC_CLIENT_SECRET")
+	cfg.OIDCRedirectURL = os.Getenv("JOT_OIDC_REDIRECT_URL")
+
+	// "enabled" is defined as any core var set, so a partial configuration is
+	// reported as a missing-var error rather than silently treated as disabled.
+	core := map[string]string{
+		"JOT_OIDC_ISSUER":        cfg.OIDCIssuer,
+		"JOT_OIDC_CLIENT_ID":     cfg.OIDCClientID,
+		"JOT_OIDC_CLIENT_SECRET": cfg.OIDCClientSecret,
+		"JOT_OIDC_REDIRECT_URL":  cfg.OIDCRedirectURL,
+	}
+	anySet := false
+	for _, v := range core {
+		if v != "" {
+			anySet = true
+			break
+		}
+	}
+	cfg.OIDCEnabled = anySet
+
+	localLoginEnabled, err := parseBoolEnv("JOT_LOCAL_LOGIN_ENABLED", true)
+	if err != nil {
+		return err
+	}
+	cfg.LocalLoginEnabled = localLoginEnabled
+
+	if !cfg.OIDCEnabled {
+		if !cfg.LocalLoginEnabled {
+			return fmt.Errorf("JOT_LOCAL_LOGIN_ENABLED=false requires OIDC to be configured, otherwise no user could authenticate")
+		}
+		return nil
+	}
+
+	// Sort the missing names for a stable, testable error message.
+	var missing []string
+	for name, v := range core {
+		if v == "" {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) > 0 {
+		slices.Sort(missing)
+		return fmt.Errorf("OIDC is enabled but these required variables are missing: %s", strings.Join(missing, ", "))
+	}
+
+	if err := requireAbsoluteURL("JOT_OIDC_ISSUER", cfg.OIDCIssuer); err != nil {
+		return err
+	}
+	if err := requireHTTPSIssuer(cfg.OIDCIssuer); err != nil {
+		return err
+	}
+	if err := requireAbsoluteURL("JOT_OIDC_REDIRECT_URL", cfg.OIDCRedirectURL); err != nil {
+		return err
+	}
+
+	cfg.OIDCProviderName = os.Getenv("JOT_OIDC_PROVIDER_NAME")
+	if cfg.OIDCProviderName == "" {
+		cfg.OIDCProviderName = "SSO"
+	}
+
+	scopes := os.Getenv("JOT_OIDC_SCOPES")
+	if scopes == "" {
+		scopes = "openid profile email"
+	}
+	cfg.OIDCScopes = strings.Fields(scopes)
+
+	// "openid" is what makes this an OpenID Connect flow: without it the token
+	// endpoint returns no id_token and every login fails at runtime (see
+	// internal/oidc.Provider.Verify). Reject it at startup instead, matching how
+	// the other OIDC settings are validated here.
+	if !slices.Contains(cfg.OIDCScopes, "openid") {
+		return fmt.Errorf("invalid JOT_OIDC_SCOPES value %q: must include the \"openid\" scope", scopes)
+	}
+
+	cfg.OIDCUsernameClaim = os.Getenv("JOT_OIDC_USERNAME_CLAIM")
+	if cfg.OIDCUsernameClaim == "" {
+		cfg.OIDCUsernameClaim = "preferred_username"
+	}
+
+	return nil
+}
+
+// requireHTTPSIssuer enforces that the OIDC issuer uses HTTPS. The OpenID
+// Connect spec requires an https issuer, and discovery/token exchange over plain
+// HTTP is exposed to network attackers. Loopback hosts (localhost, 127.0.0.1,
+// ::1) are exempt so local development and tests can run against an HTTP
+// provider without a separate opt-in.
+func requireHTTPSIssuer(issuer string) error {
+	u, err := url.Parse(issuer)
+	if err != nil {
+		return fmt.Errorf("invalid JOT_OIDC_ISSUER value %q: %w", issuer, err)
+	}
+	host := u.Hostname()
+	if u.Scheme == "https" || host == "localhost" {
+		return nil
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return nil
+	}
+	return fmt.Errorf("invalid JOT_OIDC_ISSUER value %q: must use https (only loopback hosts may use http)", issuer)
+}
+
+// requireAbsoluteURL fails unless v parses as an absolute URL (scheme + host),
+// matching how the package rejects other malformed settings at startup.
+func requireAbsoluteURL(name, v string) error {
+	u, err := url.Parse(v)
+	if err != nil {
+		return fmt.Errorf("invalid %s value %q: %w", name, v, err)
+	}
+	if !u.IsAbs() || u.Host == "" {
+		return fmt.Errorf("invalid %s value %q: must be an absolute URL", name, v)
+	}
+	return nil
 }

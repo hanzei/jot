@@ -408,3 +408,146 @@ func TestLoadPprofEnabled(t *testing.T) {
 		assert.Contains(t, err.Error(), "JOT_PPROF_ENABLED")
 	})
 }
+
+// setCoreOIDC sets the four required OIDC vars to valid values. Individual
+// tests override or clear them to exercise the all-or-nothing validation.
+func setCoreOIDC(t *testing.T) {
+	t.Helper()
+	t.Setenv("JOT_STATIC_DIR", "/tmp/static")
+	t.Setenv("JOT_OIDC_ISSUER", "https://idp.example.com")
+	t.Setenv("JOT_OIDC_CLIENT_ID", "jot-client")
+	t.Setenv("JOT_OIDC_CLIENT_SECRET", "s3cret")
+	t.Setenv("JOT_OIDC_REDIRECT_URL", "https://jot.example.com/api/v1/auth/oidc/callback")
+}
+
+func TestLoadOIDCDefaults(t *testing.T) {
+	t.Setenv("JOT_STATIC_DIR", "/tmp/static")
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	assert.False(t, cfg.OIDCEnabled)
+	assert.True(t, cfg.LocalLoginEnabled, "local login defaults on when OIDC is not configured")
+	assert.Empty(t, cfg.OIDCIssuer)
+	assert.Empty(t, cfg.OIDCProviderName)
+	assert.Empty(t, cfg.OIDCScopes)
+}
+
+func TestLoadOIDCEnabled(t *testing.T) {
+	setCoreOIDC(t)
+
+	t.Run("all core vars present applies defaults", func(t *testing.T) {
+		cfg, err := Load()
+		require.NoError(t, err)
+		assert.True(t, cfg.OIDCEnabled)
+		assert.Equal(t, "https://idp.example.com", cfg.OIDCIssuer)
+		assert.Equal(t, "jot-client", cfg.OIDCClientID)
+		assert.Equal(t, "SSO", cfg.OIDCProviderName)
+		assert.Equal(t, []string{"openid", "profile", "email"}, cfg.OIDCScopes)
+		assert.Equal(t, "preferred_username", cfg.OIDCUsernameClaim)
+		assert.True(t, cfg.LocalLoginEnabled)
+	})
+
+	t.Run("optional vars override defaults", func(t *testing.T) {
+		t.Setenv("JOT_OIDC_PROVIDER_NAME", "Keycloak")
+		t.Setenv("JOT_OIDC_SCOPES", "openid email groups")
+		t.Setenv("JOT_OIDC_USERNAME_CLAIM", "email")
+		cfg, err := Load()
+		require.NoError(t, err)
+		assert.Equal(t, "Keycloak", cfg.OIDCProviderName)
+		assert.Equal(t, []string{"openid", "email", "groups"}, cfg.OIDCScopes)
+		assert.Equal(t, "email", cfg.OIDCUsernameClaim)
+	})
+}
+
+func TestLoadOIDCScopesMustIncludeOpenID(t *testing.T) {
+	setCoreOIDC(t)
+	t.Setenv("JOT_OIDC_SCOPES", "profile email") // missing openid
+	_, err := Load()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "JOT_OIDC_SCOPES")
+	assert.Contains(t, err.Error(), "openid")
+}
+
+func TestLoadOIDCPartialConfigRejected(t *testing.T) {
+	// Each core var missing in turn must fail with an all-or-nothing error that
+	// names the missing var.
+	for _, missing := range []string{
+		"JOT_OIDC_ISSUER",
+		"JOT_OIDC_CLIENT_ID",
+		"JOT_OIDC_CLIENT_SECRET",
+		"JOT_OIDC_REDIRECT_URL",
+	} {
+		t.Run(missing, func(t *testing.T) {
+			setCoreOIDC(t)
+			t.Setenv(missing, "")
+			_, err := Load()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), missing)
+		})
+	}
+}
+
+func TestLoadOIDCInvalidURLs(t *testing.T) {
+	t.Run("non-absolute issuer", func(t *testing.T) {
+		setCoreOIDC(t)
+		t.Setenv("JOT_OIDC_ISSUER", "idp.example.com")
+		_, err := Load()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "JOT_OIDC_ISSUER")
+		assert.Contains(t, err.Error(), "absolute URL")
+	})
+
+	t.Run("non-absolute redirect URL", func(t *testing.T) {
+		setCoreOIDC(t)
+		t.Setenv("JOT_OIDC_REDIRECT_URL", "/callback")
+		_, err := Load()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "JOT_OIDC_REDIRECT_URL")
+		assert.Contains(t, err.Error(), "absolute URL")
+	})
+}
+
+func TestLoadOIDCIssuerRequiresHTTPS(t *testing.T) {
+	t.Run("http issuer on a non-loopback host is rejected", func(t *testing.T) {
+		setCoreOIDC(t)
+		t.Setenv("JOT_OIDC_ISSUER", "http://idp.example.com")
+		_, err := Load()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "JOT_OIDC_ISSUER")
+		assert.Contains(t, err.Error(), "https")
+	})
+
+	t.Run("http issuer on loopback is allowed for local development", func(t *testing.T) {
+		setCoreOIDC(t)
+		t.Setenv("JOT_OIDC_ISSUER", "http://127.0.0.1:5556/dex")
+		cfg, err := Load()
+		require.NoError(t, err)
+		assert.Equal(t, "http://127.0.0.1:5556/dex", cfg.OIDCIssuer)
+	})
+
+	t.Run("http issuer on localhost is allowed", func(t *testing.T) {
+		setCoreOIDC(t)
+		t.Setenv("JOT_OIDC_ISSUER", "http://localhost:5556")
+		_, err := Load()
+		require.NoError(t, err)
+	})
+}
+
+func TestLoadLocalLoginDisabledRequiresOIDC(t *testing.T) {
+	t.Run("disabled without OIDC is rejected", func(t *testing.T) {
+		t.Setenv("JOT_STATIC_DIR", "/tmp/static")
+		t.Setenv("JOT_LOCAL_LOGIN_ENABLED", "false")
+		_, err := Load()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "JOT_LOCAL_LOGIN_ENABLED")
+	})
+
+	t.Run("disabled with OIDC is allowed", func(t *testing.T) {
+		setCoreOIDC(t)
+		t.Setenv("JOT_LOCAL_LOGIN_ENABLED", "false")
+		cfg, err := Load()
+		require.NoError(t, err)
+		assert.True(t, cfg.OIDCEnabled)
+		assert.False(t, cfg.LocalLoginEnabled)
+	})
+}

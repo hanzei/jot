@@ -444,3 +444,108 @@ func TestMigration000009PostgresBackfill(t *testing.T) {
 		assert.True(t, d.IsUniqueConstraintError(err), "want a unique violation, got %v", err)
 	})
 }
+
+// TestMigration000011UsersRebuildSurvival is the highest-risk guard for 000011.
+// On SQLite the migration rebuilds the `users` parent table (DROP TABLE +
+// rename) to relax password_hash to nullable. `users` is referenced by notes,
+// note_shares, note_images, and sessions with ON DELETE CASCADE, so if the
+// rebuild ran with foreign_keys enforcement on, the DROP would cascade-delete
+// every dependent row. This seeds a user with all four kinds of dependent row,
+// runs the migration the way database.New does (enforcement off during
+// migrations), and asserts every row survives, that foreign_key_check reports
+// no dangling references, and that password_hash is now nullable.
+func TestMigration000011UsersRebuildSurvival(t *testing.T) {
+	dsntest.ForEachDriver(t, func(t *testing.T, driver string) {
+		db := dsntest.RawDB(t, driver)
+		d := &dialect.Dialect{Driver: driver}
+		ctx := t.Context()
+
+		m := newMigrator(t, db, driver)
+		// Step to v10 — before the OIDC migration, password_hash still NOT NULL.
+		require.NoError(t, m.Migrate(10))
+
+		if driver == driverSQLite {
+			// Mirror database.New: migrations run with foreign_keys OFF so the
+			// users rebuild's DROP TABLE cannot cascade. RawDB turns enforcement
+			// on, so turn it back off here for the duration of the migration.
+			_, err := db.ExecContext(ctx, `PRAGMA foreign_keys = OFF`)
+			require.NoError(t, err)
+		}
+
+		// Seed alice (with a real password hash), bob, a note owned by alice
+		// shared with bob, a note image, and a session.
+		_, err := db.ExecContext(ctx, d.RewritePlaceholders(
+			`INSERT INTO users (id, username, password_hash) VALUES (?, ?, ?)`),
+			"user0000000000000alice", "alice", "hashed-alice-password")
+		require.NoError(t, err)
+		_, err = db.ExecContext(ctx, d.RewritePlaceholders(
+			`INSERT INTO users (id, username, password_hash) VALUES (?, ?, ?)`),
+			"user00000000000000bob1", "bob", "hashed-bob-password")
+		require.NoError(t, err)
+		_, err = db.ExecContext(ctx, d.RewritePlaceholders(
+			`INSERT INTO notes (id, user_id, note_type) VALUES (?, ?, ?)`),
+			"note0000000000000alice", "user0000000000000alice", "text")
+		require.NoError(t, err)
+		_, err = db.ExecContext(ctx, d.RewritePlaceholders(
+			`INSERT INTO note_shares (id, note_id, shared_with_user_id, shared_by_user_id) VALUES (?, ?, ?, ?)`),
+			"shar0000000000000alice", "note0000000000000alice", "user00000000000000bob1", "user0000000000000alice")
+		require.NoError(t, err)
+		_, err = db.ExecContext(ctx, d.RewritePlaceholders(
+			`INSERT INTO note_images (id, note_id, uploader_id, filename, content_type, size_bytes, sha256, width, height)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+			"img00000000000000alice", "note0000000000000alice", "user0000000000000alice",
+			"pic.png", "image/png", 123, "deadbeef", 10, 10)
+		require.NoError(t, err)
+		_, err = db.ExecContext(ctx, d.RewritePlaceholders(
+			`INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)`),
+			"sessionhash0000alice", "user0000000000000alice", "2099-01-01 00:00:00")
+		require.NoError(t, err)
+
+		// Apply 000011: the users rebuild (SQLite) / column changes (Postgres).
+		require.NoError(t, m.Migrate(11))
+
+		countRows := func(table string) int {
+			var n int
+			require.NoError(t, db.QueryRowContext(ctx, `SELECT COUNT(*) FROM `+table).Scan(&n))
+			return n
+		}
+
+		// Every dependent row survives — nothing cascaded.
+		assert.Equal(t, 2, countRows("users"), "both users survive the rebuild")
+		assert.Equal(t, 1, countRows("notes"), "note survives")
+		assert.Equal(t, 1, countRows("note_shares"), "share survives")
+		assert.Equal(t, 1, countRows("note_images"), "note image survives")
+		assert.Equal(t, 1, countRows("sessions"), "session survives")
+
+		// The existing password hash is preserved verbatim.
+		var hash string
+		require.NoError(t, db.QueryRowContext(ctx, d.RewritePlaceholders(
+			`SELECT password_hash FROM users WHERE id = ?`), "user0000000000000alice").Scan(&hash))
+		assert.Equal(t, "hashed-alice-password", hash)
+
+		if driver == driverSQLite {
+			// No dangling references were introduced by the rebuild.
+			fkRows, fkErr := db.QueryContext(ctx, `PRAGMA foreign_key_check`)
+			require.NoError(t, fkErr)
+			defer func() { _ = fkRows.Close() }()
+			assert.False(t, fkRows.Next(), "foreign_key_check must report no violations after the users rebuild")
+			require.NoError(t, fkRows.Err())
+		}
+
+		// password_hash is now nullable: an SSO-style row with a NULL hash and an
+		// OIDC identity inserts cleanly, and the identity is unique.
+		_, err = db.ExecContext(ctx, d.RewritePlaceholders(
+			`INSERT INTO users (id, username, password_hash, oidc_issuer, oidc_subject)
+			 VALUES (?, ?, NULL, ?, ?)`),
+			"user000000000000ssoid", "ssouser", "https://idp.example.com", "sub-1")
+		require.NoError(t, err, "password_hash must be nullable after the migration")
+
+		// A second row with the same (issuer, subject) is rejected by the unique index.
+		_, err = db.ExecContext(ctx, d.RewritePlaceholders(
+			`INSERT INTO users (id, username, password_hash, oidc_issuer, oidc_subject)
+			 VALUES (?, ?, NULL, ?, ?)`),
+			"user000000000000ssoi2", "ssouser2", "https://idp.example.com", "sub-1")
+		require.Error(t, err, "duplicate (oidc_issuer, oidc_subject) must be rejected")
+		assert.True(t, d.IsUniqueConstraintError(err), "want a unique violation, got %v", err)
+	})
+}

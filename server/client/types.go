@@ -350,9 +350,18 @@ type SessionInfo struct {
 
 // ServerConfig holds public server configuration returned by GET /api/v1/config.
 type ServerConfig struct {
-	RegistrationEnabled bool `json:"registration_enabled"`
-	PasswordMinLength   int  `json:"password_min_length"`
-	UploadMaxBytes      int  `json:"upload_max_bytes"`
+	RegistrationEnabled bool      `json:"registration_enabled"`
+	PasswordMinLength   int       `json:"password_min_length"`
+	UploadMaxBytes      int       `json:"upload_max_bytes"`
+	SSO                 SSOConfig `json:"sso"`
+}
+
+// SSOConfig is the public SSO slice of the server config: only what the login
+// UI needs. Enabled is false when no OIDC provider is configured.
+type SSOConfig struct {
+	Enabled           bool   `json:"enabled"`
+	ProviderName      string `json:"provider_name"`
+	LocalLoginEnabled bool   `json:"local_login_enabled"`
 }
 
 // Ptr returns a pointer to v; useful for building UpdateUserRequest fields.
