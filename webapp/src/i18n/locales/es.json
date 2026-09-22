@@ -58,7 +58,9 @@
     "showPassword": "Mostrar contraseña",
     "hidePassword": "Ocultar contraseña",
     "passwordHint": "Al menos {{min}} caracteres",
-    "logoAlt": "Logotipo de Jot"
+    "logoAlt": "Logotipo de Jot",
+    "ssoSignInWith": "Iniciar sesión con {{provider}}",
+    "ssoDivider": "o"
   },
   "dashboard": {
     "newNote": "Nueva nota",
@@ -208,7 +210,17 @@
     "patsLoadError": "No se pudieron cargar los tokens.",
     "aboutSection": "Acerca de",
     "aboutButton": "Acerca de Jot",
-    "patsLoading": "Cargando tokens..."
+    "patsLoading": "Cargando tokens...",
+    "ssoSection": "Inicio de sesión único",
+    "ssoLinkedDescription": "Tu cuenta está vinculada a {{provider}}. Puedes iniciar sesión con {{provider}}.",
+    "ssoUnlinkedDescription": "Vincula tu cuenta a {{provider}} para iniciar sesión con él.",
+    "ssoConnect": "Vincular {{provider}}",
+    "ssoDisconnect": "Desvincular {{provider}}",
+    "ssoDisconnecting": "Desvinculando…",
+    "ssoDisconnectFailed": "No se pudo desvincular el SSO.",
+    "ssoDisconnected": "SSO desvinculado.",
+    "ssoDisconnectConfirmTitle": "¿Desvincular el SSO?",
+    "ssoDisconnectConfirmMessage": "Esto desvincula {{provider}} de tu cuenta. Necesitarás tu contraseña para iniciar sesión."
   },
   "about": {
     "title": "Acerca de Jot",

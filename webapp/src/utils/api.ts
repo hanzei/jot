@@ -38,6 +38,19 @@ export const serverConfig = {
     api.get('/config').then(res => res.data),
 };
 
+// OIDC/SSO endpoints. The login and link flows are server-side redirect flows,
+// so the browser must do a full-page navigation to these absolute URLs (an
+// anchor or `window.location`) — an axios/XHR call would follow the IdP 302 in
+// the background and never hand control to the identity provider. Only unlink
+// is a plain JSON API call.
+export const SSO_LOGIN_URL = '/api/v1/auth/oidc/login';
+export const SSO_LINK_URL = '/api/v1/auth/oidc/link';
+
+export const sso = {
+  unlink: (): Promise<void> =>
+    api.post('/auth/oidc/unlink').then(() => undefined),
+};
+
 export const auth = {
   login: (data: LoginRequest): Promise<AuthResponse> =>
     api.post('/login', data).then(res => res.data),

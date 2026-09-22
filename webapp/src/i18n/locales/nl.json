@@ -58,7 +58,9 @@
     "showPassword": "Wachtwoord tonen",
     "hidePassword": "Wachtwoord verbergen",
     "passwordHint": "Minimaal {{min}} tekens",
-    "logoAlt": "Jot-logo"
+    "logoAlt": "Jot-logo",
+    "ssoSignInWith": "Inloggen met {{provider}}",
+    "ssoDivider": "of"
   },
   "dashboard": {
     "newNote": "Nieuwe notitie",
@@ -208,7 +210,17 @@
     "patsLoadError": "Tokens laden mislukt.",
     "aboutSection": "Over",
     "aboutButton": "Over Jot",
-    "patsLoading": "Tokens laden..."
+    "patsLoading": "Tokens laden...",
+    "ssoSection": "Eenmalige aanmelding",
+    "ssoLinkedDescription": "Je account is gekoppeld aan {{provider}}. Je kunt inloggen met {{provider}}.",
+    "ssoUnlinkedDescription": "Koppel je account aan {{provider}} om ermee in te loggen.",
+    "ssoConnect": "{{provider}} koppelen",
+    "ssoDisconnect": "{{provider}} loskoppelen",
+    "ssoDisconnecting": "Loskoppelen…",
+    "ssoDisconnectFailed": "Loskoppelen van SSO is mislukt.",
+    "ssoDisconnected": "SSO losgekoppeld.",
+    "ssoDisconnectConfirmTitle": "SSO loskoppelen?",
+    "ssoDisconnectConfirmMessage": "Hiermee ontkoppel je {{provider}} van je account. Je hebt je wachtwoord nodig om in te loggen."
   },
   "about": {
     "title": "Over Jot",

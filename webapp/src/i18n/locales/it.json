@@ -58,7 +58,9 @@
     "showPassword": "Mostra password",
     "hidePassword": "Nascondi password",
     "passwordHint": "Almeno {{min}} caratteri",
-    "logoAlt": "Logo Jot"
+    "logoAlt": "Logo Jot",
+    "ssoSignInWith": "Accedi con {{provider}}",
+    "ssoDivider": "oppure"
   },
   "dashboard": {
     "newNote": "Nuova nota",
@@ -208,7 +210,17 @@
     "patsLoadError": "Impossibile caricare i token.",
     "aboutSection": "Informazioni",
     "aboutButton": "Informazioni su Jot",
-    "patsLoading": "Caricamento token..."
+    "patsLoading": "Caricamento token...",
+    "ssoSection": "Single Sign-On",
+    "ssoLinkedDescription": "Il tuo account è collegato a {{provider}}. Puoi accedere con {{provider}}.",
+    "ssoUnlinkedDescription": "Collega il tuo account a {{provider}} per accedere con esso.",
+    "ssoConnect": "Collega {{provider}}",
+    "ssoDisconnect": "Scollega {{provider}}",
+    "ssoDisconnecting": "Scollegamento…",
+    "ssoDisconnectFailed": "Impossibile scollegare l'SSO.",
+    "ssoDisconnected": "SSO scollegato.",
+    "ssoDisconnectConfirmTitle": "Scollegare l'SSO?",
+    "ssoDisconnectConfirmMessage": "Questo scollega {{provider}} dal tuo account. Ti servirà la password per accedere."
   },
   "about": {
     "title": "Informazioni su Jot",

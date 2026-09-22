@@ -2,16 +2,18 @@ import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { Eye, EyeOff, TriangleAlert } from 'lucide-react';
-import { auth } from '@/utils/api';
+import type { SSOConfig } from '@jot/shared';
+import { auth, SSO_LOGIN_URL } from '@/utils/api';
 import { setUser, setSettings } from '@/utils/auth';
 import { REDIRECT_PARAM, authPathWithRedirect } from '@/utils/authRedirect';
 
 interface LoginProps {
   onLogin: () => void;
   registrationEnabled: boolean;
+  sso: SSOConfig;
 }
 
-export default function Login({ onLogin, registrationEnabled }: LoginProps) {
+export default function Login({ onLogin, registrationEnabled, sso }: LoginProps) {
   const { t } = useTranslation();
   useEffect(() => { document.title = t('pageTitle.login'); }, [t]);
   const [searchParams] = useSearchParams();
@@ -19,6 +21,13 @@ export default function Login({ onLogin, registrationEnabled }: LoginProps) {
   // over to the registration link; the redirect itself is the router's job
   // (see PostAuthRedirect), which is what runs once onLogin flips this route.
   const continueTo = searchParams.get(REDIRECT_PARAM);
+
+  // With SSO enabled and local login turned off, the password form and the
+  // register link disappear entirely — SSO becomes the only way in. A pre-SSO
+  // or SSO-disabled server keeps local login on, so the page is unchanged.
+  const showLocalLogin = !sso.enabled || sso.local_login_enabled;
+  // The server defaults an unset provider name to "SSO"; fall back defensively.
+  const providerName = sso.provider_name || 'SSO';
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -53,7 +62,7 @@ export default function Login({ onLogin, registrationEnabled }: LoginProps) {
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-white">
             {t('auth.signInTitle')}
           </h2>
-          {registrationEnabled && (
+          {showLocalLogin && registrationEnabled && (
             <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-300">
               {t('auth.or')}{' '}
               <Link
@@ -65,6 +74,37 @@ export default function Login({ onLogin, registrationEnabled }: LoginProps) {
             </p>
           )}
         </div>
+
+        {sso.enabled && (
+          <div className="mt-8 space-y-6">
+            {/*
+              A full-page navigation, not an axios call: the server 302s to the
+              identity provider, so the browser has to leave the SPA. An anchor
+              does exactly that and stays keyboard/screen-reader accessible.
+            */}
+            <a
+              href={SSO_LOGIN_URL}
+              className="group relative w-full flex justify-center py-2 px-4 border border-gray-300 dark:border-slate-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-gray-50 dark:focus:ring-offset-slate-900"
+            >
+              {t('auth.ssoSignInWith', { provider: providerName })}
+            </a>
+
+            {showLocalLogin && (
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                  <div className="w-full border-t border-gray-300 dark:border-slate-600" />
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="bg-gray-50 dark:bg-slate-900 px-2 text-gray-500 dark:text-gray-400">
+                    {t('auth.ssoDivider')}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {showLocalLogin && (
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="rounded-md shadow-sm -space-y-px">
             <div>
@@ -137,6 +177,7 @@ export default function Login({ onLogin, registrationEnabled }: LoginProps) {
             </button>
           </div>
         </form>
+        )}
       </div>
     </div>
   );

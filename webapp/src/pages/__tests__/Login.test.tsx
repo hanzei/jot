@@ -5,12 +5,14 @@ import { MemoryRouter } from 'react-router';
 import Login from '../Login';
 import { auth } from '@/utils/api';
 import { setUser, setSettings } from '@/utils/auth';
+import type { SSOConfig } from '@jot/shared';
 import i18n from '@/i18n';
 
 vi.mock('@/utils/api', () => ({
   auth: {
     login: vi.fn(),
   },
+  SSO_LOGIN_URL: '/api/v1/auth/oidc/login',
 }));
 
 vi.mock('@/utils/auth', () => ({
@@ -18,19 +20,23 @@ vi.mock('@/utils/auth', () => ({
   setSettings: vi.fn(),
 }));
 
+const SSO_DISABLED: SSOConfig = { enabled: false, provider_name: '', local_login_enabled: true };
+
 const renderLogin = (props?: {
   registrationEnabled?: boolean;
   onLogin?: () => void;
   initialEntry?: string;
+  sso?: SSOConfig;
 }) => {
   const onLogin = props?.onLogin ?? vi.fn();
   const registrationEnabled = props?.registrationEnabled ?? true;
+  const sso = props?.sso ?? SSO_DISABLED;
 
   return {
     onLogin,
     ...render(
       <MemoryRouter initialEntries={[props?.initialEntry ?? '/login']}>
-        <Login onLogin={onLogin} registrationEnabled={registrationEnabled} />
+        <Login onLogin={onLogin} registrationEnabled={registrationEnabled} sso={sso} />
       </MemoryRouter>
     ),
   };
@@ -115,6 +121,43 @@ describe('Login', () => {
 
     expect(screen.getByRole('link', { name: i18n.t('auth.createNewAccount') }))
       .toHaveAttribute('href', '/register?continue=%2Fnotes%2Fabc123');
+  });
+
+  describe('SSO', () => {
+    const ssoEnabled = (localLoginEnabled: boolean): SSOConfig => ({
+      enabled: true,
+      provider_name: 'Keycloak',
+      local_login_enabled: localLoginEnabled,
+    });
+
+    it('does not render an SSO button when SSO is disabled', () => {
+      renderLogin();
+      expect(screen.queryByRole('link', { name: /Sign in with/ })).not.toBeInTheDocument();
+      expect(screen.getByLabelText(i18n.t('auth.usernamePlaceholder'))).toBeInTheDocument();
+    });
+
+    it('renders a full-page SSO button when enabled', () => {
+      renderLogin({ sso: ssoEnabled(true) });
+      const ssoButton = screen.getByRole('link', { name: 'Sign in with Keycloak' });
+      expect(ssoButton).toHaveAttribute('href', '/api/v1/auth/oidc/login');
+    });
+
+    it('keeps the password form and shows a divider in mixed mode', () => {
+      renderLogin({ sso: ssoEnabled(true) });
+      expect(screen.getByRole('link', { name: 'Sign in with Keycloak' })).toBeInTheDocument();
+      expect(screen.getByLabelText(i18n.t('auth.usernamePlaceholder'))).toBeInTheDocument();
+      expect(screen.getByLabelText(i18n.t('auth.passwordPlaceholder'))).toBeInTheDocument();
+      expect(screen.getByText(i18n.t('auth.ssoDivider'))).toBeInTheDocument();
+    });
+
+    it('hides the password form and register link when local login is disabled', () => {
+      renderLogin({ sso: ssoEnabled(false) });
+      expect(screen.getByRole('link', { name: 'Sign in with Keycloak' })).toBeInTheDocument();
+      expect(screen.queryByLabelText(i18n.t('auth.usernamePlaceholder'))).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(i18n.t('auth.passwordPlaceholder'))).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: i18n.t('auth.signIn') })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: i18n.t('auth.createNewAccount') })).not.toBeInTheDocument();
+    });
   });
 
   it('shows styled alert when login fails', async () => {
