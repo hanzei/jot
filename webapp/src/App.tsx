@@ -97,7 +97,7 @@ function App() {
           />
           <Route
             path="/register"
-            element={!isAuth && registrationEnabled ? <Register onRegister={() => setIsAuth(true)} passwordMinLength={passwordMinLength} /> : (isAuth ? <PostAuthRedirect /> : <Navigate to="/login" />)}
+            element={!isAuth && registrationEnabled && (!sso.enabled || sso.local_login_enabled) ? <Register onRegister={() => setIsAuth(true)} passwordMinLength={passwordMinLength} /> : (isAuth ? <PostAuthRedirect /> : <Navigate to="/login" />)}
           />
           <Route
             element={
