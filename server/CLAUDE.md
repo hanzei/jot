@@ -1,33 +1,25 @@
 # Server Project Instructions
 
-## Formatting
+Do not hand-align a `//	@Param` annotation block; `task fmt` (swaggo) owns those
+columns.
 
-Enforced, via golangci-lint's `formatters:` in `.golangci.yml`: `task
-lint-server` reports and `task fmt` applies. Three formatters — **gofumpt**
-(supersedes `gofmt`), **goimports**, and **swaggo** for the handler annotation
-tables. Do not hand-align a `//	@Param` block; `task fmt` owns those columns.
+## Conventions (Go)
 
-## Naming Conventions (Go)
-
-- Packages: `internal/{auth,blobstore,config,database,handlers,logutil,mcphandler,models,server,sse,telemetry}`
-- Go types: PascalCase when exported (`UserStore`, `NoteStore`, `PATStore`); variables: camelCase (`noteStore`, `userID`)
-- Database columns: snake_case (`note_type`, `user_id`)
-- JSON fields: snake_case (`note_type`, `user_id`)
-- Error wrapping: `fmt.Errorf("context: %w", err)`
-- Use `any` instead of `interface{}`
-- Use `errors.Is` instead of `==` when comparing errors
-- Use `logrus` instead of the standard `log` package for all logging
-- In HTTP handlers and middleware, use `logutil.FromContext(ctx)` (from `server/internal/logutil`) to obtain the request-scoped logger. It automatically carries `request_id`, `user_id` (when authenticated), `method`, and `path` on every log line.
-- Reserve bare `logrus.*` calls for background goroutines and startup code that have no request context.
-- Log messages should start with a capital letter (e.g., `"Server shutdown complete"`).
-- In tests, use `t.Context()` instead of `context.Background()`
-- Pass `ctx context.Context` as the first parameter of any function that performs I/O, calls another service, or may need to be cancelled
-- Prefer table-driven tests with `t.Run` subtests over duplicated test functions; do not use `_` as a separator in top-level test function names (e.g. `TestCreateNote` with `t.Run("success", ...)`, not `TestCreateNote_Success`)
-- Top-level tests in the root `server` integration suite (`http_*_test.go`) call `t.Parallel()` first; see the "Server Tests" section of the root `CLAUDE.md` for what that requires of the harness
+- Use `any`, not `interface{}`.
+- Log with `logrus`, never the standard `log` package. In handlers and
+  middleware use `logutil.FromContext(ctx)`, which carries request ID, user,
+  method, and path; bare `logrus.*` is only for startup code and background
+  goroutines. Log messages start with a capital letter.
+- `ctx context.Context` is the first parameter of anything that does I/O, calls
+  another service, or may need cancelling. In tests use `t.Context()`.
+- Prefer table-driven tests with `t.Run` subtests. No `_` in top-level test
+  names: `TestCreateNote` + `t.Run("success", …)`, not `TestCreateNote_Success`.
 
 ## Error Handling (Go)
 
-- Errors that cross a function boundary should be wrapped with a short, lowercase description of the operation that failed: `return nil, fmt.Errorf("get note by id: %w", err)`.
-- Prefer wrapping over bare `return err` or `return nil, err` when returning up the call stack — the added context makes log traces easier to follow.
-- Do **not** re-wrap sentinel errors (`sql.ErrNoRows`, `ErrNoteNotFound`, etc.) that have already been identified with `errors.Is` and are being returned directly. Re-wrapping them adds a redundant message layer without useful context (`errors.Is` traverses the `%w` chain, so matching still works either way).
-- Do not wrap errors inside `defer` functions or inside log statements.
+- Wrap errors crossing a function boundary with a short, lowercase description
+  of the failed operation — `fmt.Errorf("get note by id: %w", err)` — rather
+  than a bare `return err`.
+- Do **not** re-wrap a sentinel (`sql.ErrNoRows`, `ErrNoteNotFound`, …) that has
+  already been matched with `errors.Is` and is being returned as-is.
+- Do not wrap errors inside `defer` functions or log statements.
