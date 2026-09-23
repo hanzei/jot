@@ -147,7 +147,7 @@ catch SDK drift: run it even when the sweep looked like a no-op, and don't treat
 Hermes regressions, and app-config schema errors.
 
 The mobile test suite mocks the filesystem via `globalThis.mockFileSystem` in
-`jest.setup.js` (see `mobile/CLAUDE.md`). If `expo-file-system` moved, confirm that mock
+`jest.setup.js`. If `expo-file-system` moved, confirm that mock
 still matches the module's API surface rather than assuming green tests mean a working
 `src/utils/fs.ts`.
 

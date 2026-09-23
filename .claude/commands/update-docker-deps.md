@@ -201,13 +201,9 @@ nothing.
 
 ## 9. Documentation
 
-Two places restate the stages by version and go stale silently:
-
-- `README.md` → "Docker Deployment" (stage list, available tags)
-- root `CLAUDE.md` → "Docker (Production)" (`Node 24 Alpine` / `Go 1.27 Alpine` / Alpine runtime)
-
-Root `CLAUDE.md` requires documentation updates when build tooling changes; both of
-these count.
+`README.md` → "Docker Deployment" restates the stages by version (stage list,
+available tags) and goes stale silently. Root `CLAUDE.md` requires documentation
+updates when build tooling changes; this counts.
 
 ## 10. Commit and describe
 
