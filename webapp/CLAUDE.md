@@ -25,5 +25,7 @@ drag-and-drop, live regions) both block `task test-e2e`. When you add UI:
 ## i18n / Translations
 
 Every key added to `src/i18n/locales/en.json` needs a real translation in every
-other locale file — never the English string as a placeholder. Verify with
-`task check-translations`.
+other locale file — never the English string as a placeholder.
+`task check-translations` checks key parity (missing, extra, unused keys) only;
+it cannot tell a real translation from a copied English value, so review the
+values yourself.

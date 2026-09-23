@@ -64,9 +64,10 @@ integration. **Anything testable in Jest belongs in Jest.**
 ## i18n / Translations
 
 Every key added to `src/i18n/locales/en.json` needs a real translation in every
-other locale file — never the English string as a placeholder. Verify with
-`task check-translations`, which lives under the webapp but checks mobile's
-locales too (it is not part of `task check-mobile`).
+other locale file — never the English string as a placeholder.
+`task check-translations` checks key parity (missing, extra, unused keys) only;
+it cannot tell a real translation from a copied English value, so review the
+values yourself.
 
 ## Connectivity & Offline Handling
 
