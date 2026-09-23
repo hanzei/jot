@@ -216,6 +216,9 @@ are persisted (`pending_image_uploads.local_path`) and must stay comparable
 across app versions. Build them with `documentPath()` (durable) or
 `cachePath()` (OS may purge).
 
+In tests, seed the in-memory `globalThis.mockFileSystem` from `jest.setup.js`
+rather than stubbing individual calls, so the real `fs.ts` logic runs.
+
 ## Diagnostics Logging
 
 `src/utils/logger.ts` patches `console.info/warn/error` (installed by
