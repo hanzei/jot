@@ -26,8 +26,9 @@ authorization model**, which materially lowers its risk.
 Scope of v1 is deliberately narrow: **webapp only**, **standard authorization
 -code flow with PKCE**, **local `role` column stays authoritative**, and **OIDC
 treated purely as an authentication event** (Jot keeps its own session
-lifetime; no IdP token storage, refresh, or back-channel logout). Mobile and
-group-based role mapping are explicit follow-ups.
+lifetime; no IdP token storage, refresh, or back-channel logout). Mobile is
+phase 3, with its native hand-off designed in §10; group-based role mapping is
+an explicit follow-up.
 
 The issue also raised account recovery as a **secondary motivation**: at the
 time Jot had no password-reset flow at all. That gap has since been closed for
@@ -61,8 +62,8 @@ have and is out of scope here — see §12.
   exactly as today.
 
 **Non-goals (v1)**
-- Mobile OIDC (native flow needs `expo-auth-session` + a redirect scheme; the
-  cookie model does not transfer cleanly — see §10). Explicit follow-up.
+- Mobile OIDC in the webapp v1 build. Its design is settled in §10 (a
+  one-time code hand-off) and it ships as phase 3.
 - Group/claim-based role mapping (IdP group → admin). Local role authoritative
   in v1; revisit in v2 (§6).
 - RP-initiated (back-channel/front-channel) logout, IdP session revocation,
@@ -322,25 +323,151 @@ for the user to reach any authenticated screen anyway. Add a regression test for
 
 ---
 
-## 10. Mobile (explicit follow-up, out of scope for v1)
+## 10. Mobile — native hand-off (phase 3)
 
-The RN app supports multiple servers and stores credentials in Expo Secure
-Store; today it has `expo-secure-store` but **not** `expo-auth-session` or
-`expo-web-browser`. A native OIDC flow needs:
+Mobile is outside the webapp v1 build, but its security model is settled here
+so it can be built as a follow-up without re-deciding it.
 
-- `expo-auth-session` + `expo-web-browser` for the system-browser
-  authorization-code + PKCE flow.
-- A registered redirect scheme (`jot://oidc-callback` or a universal link),
-  coordinated with the deep-linking spec (`docs/specs/deep-linking.md`).
-- A decision on the session token model: the webapp relies on an HttpOnly
-  cookie, which does not transfer cleanly to a native client. The likely answer
-  is that the OIDC callback mints a **PAT-like bearer token** (or a session
-  token returned in the body rather than a cookie) that mobile stores in Secure
-  Store — a different transport from the webapp, and precisely why this is its
-  own body of work.
+### 10.1 Why the web flow does not transfer
 
-Scope v1 webapp-first and file mobile OIDC as a separate issue rather than
-pretending they are one piece of work.
+Mobile authenticates by capturing the `jot_session` token from the
+`Set-Cookie` of `POST /login`, keeping it in Expo Secure Store, and replaying it
+as a `Cookie` header (`mobile/src/api/client.ts`). The web OIDC flow ends by
+setting that cookie *inside the browser* and redirecting to the web root; a
+system browser sheet opened by the app has no way to hand that cookie back.
+Native needs its own ending: the server returns something to the app through
+the app's `jot://` scheme (already registered in `mobile/app.json`; see
+`docs/specs/deep-linking.md`).
+
+That custom-scheme redirect is the weak link. On Android any installed app can
+register `jot://` and receive it, and URLs end up in browser history and logs.
+So nothing usable on its own may travel in that URL.
+
+### 10.2 Decision: one-time code, bound to an app-held secret
+
+Options considered:
+
+- **Session token in the redirect** — least work, but a leaked redirect hands
+  over a 30-day, self-renewing session. Rejected.
+- **Mint a PAT** — answers *which* credential, not *how it travels* (it still
+  needs one of the other transports), and a PAT-authenticated app loses the
+  session-only endpoints (Sessions, PAT management, SSO link/unlink). PATs also
+  never expire or slide, count toward the per-user PAT cap, and clutter the
+  PAT list with one entry per phone login. Rejected.
+- **One-time code with a PKCE-style binding** (RFC 7636, S256) — chosen. A
+  redirect caught by another app is worthless even inside the code's lifetime,
+  and mobile stays on the session model it uses today.
+
+### 10.3 Flow
+
+1. The app generates a random `code_verifier` (43–128 characters), keeps it in
+   memory alongside which server the flow targets, and computes
+   `code_challenge = BASE64URL(SHA256(code_verifier))`.
+2. The app opens
+   `GET /api/v1/auth/oidc/native/start?intent=login|link&code_challenge=…`
+   with `WebBrowser.openAuthSessionAsync(url, "jot://oidc-callback")`. This
+   reuses the web flow's machinery (signed flow cookie holding
+   state/nonce/verifier, 302 to the IdP), with the flow state additionally
+   marked *native* and carrying the intent and `code_challenge`. It is
+   unauthenticated even for `link` — the browser sheet has no Jot session —
+   because authorization happens at step 5. It sits in the per-IP auth
+   rate-limit bucket with the other unauthenticated auth endpoints.
+3. The IdP redirects to the **existing** `JOT_OIDC_REDIRECT_URL` callback. No
+   new IdP client registration or redirect URI is needed.
+4. The callback verifies the ID token exactly as today but, for a native flow,
+   **performs no effect**: no provisioning, no bind, and no `jot_session` in the
+   browser. It stores a one-time code record
+   `{ code_hash, issuer, sub, the claims provisioning needs, intent,
+   code_challenge, expires_at = now + 60 s }` and 302s to
+   `jot://oidc-callback?code=…` (or `jot://oidc-callback?error=…` on failure).
+   The target is a server constant, never taken from the request, so the
+   server is not an open redirect.
+5. The app, back in the foreground, completes by intent:
+   - **login** → `POST /api/v1/auth/oidc/native/exchange
+     { code, code_verifier }` (per-IP auth bucket, unauthenticated). The server
+     consumes the code atomically, checks the intent and that
+     `SHA256(code_verifier)` matches the stored challenge, then runs the same
+     resolve-or-provision as the web callback (§5, §6) and the existing
+     `SessionService.CreateSession`. The response is identical to
+     `POST /login` — `Set-Cookie: jot_session` plus `{ user, settings }` — so
+     mobile's existing capture-and-store path applies unchanged. Because the
+     app makes this request, the new session carries the app's user agent in
+     the Sessions list.
+   - **link** → `POST /api/v1/auth/oidc/native/link { code, code_verifier }`
+     (session required, via the app's `Cookie` header). Same checks, then binds
+     the identity to the **session's** user with all the §5 guards (an identity
+     already bound to another user is rejected). Returns 204; the app refreshes
+     `/me` for `has_sso_linked`.
+
+Unlink needs nothing new: `POST /api/v1/auth/oidc/unlink` is already a plain
+session-authenticated JSON call.
+
+### 10.4 Security properties
+
+- **Leaked redirect** → a code that is useless without the verifier, which
+  never left the app.
+- **Leaked start URL** → harmless: whoever completes it gets a code bound to a
+  challenge they cannot satisfy.
+- **Injected `jot://oidc-callback?code=…`** (login CSRF) → the app only
+  exchanges while it has a pending flow, and a foreign code fails the verifier
+  check.
+- **Native link without an authenticated browser** → safe because every effect
+  is deferred to the exchange: the bind is authorized by the app's own session
+  at step 5, not by whoever is in the browser sheet.
+- **Codes** are single-use, expire after 60 s, are stored hashed, accept S256
+  only, and are intent-scoped (a login code is rejected at `/native/link` and
+  vice versa).
+
+### 10.5 Code storage
+
+An in-memory, size-bounded map with expiry sweeping. Jot is single-process —
+the rate limiter and the SSE hub already keep their state in memory — and a
+restart only drops codes younger than a minute (the user retries). The bound
+keeps a runaway client from growing the map (threat model: internal overload);
+the per-IP auth rate limit already covers start and exchange. If Jot ever runs
+as multiple replicas, this moves to the database together with the rate
+limiter.
+
+### 10.6 Mobile client
+
+- **Dependencies:** `expo-web-browser` (the auth session) and `expo-crypto`
+  (SHA-256), added with `npx expo install` so the Expo SDK pins their versions.
+  `expo-auth-session` is not needed: the app is not an OIDC client, it only
+  opens a URL and receives a redirect.
+- **Deep-link routing:** `jot://oidc-callback` belongs to the auth session. The
+  deep-link router (`docs/specs/deep-linking.md`) must ignore it rather than try
+  to route it as a note link.
+- **Multi-server:** the pending flow records which server it started against,
+  and the exchange goes there. Nothing about the server travels in the redirect.
+- **Login screen:** SSO button when that server's `/config` has
+  `sso.enabled`; hide the password form when `sso.local_login_enabled` is
+  false. `ServerConfig.sso` is already optional in `@jot/shared`; the
+  cached-config parser in `useServerConfig.ts` must carry it through.
+- **Settings:** connect/disconnect driven by `has_sso_linked`, as in the webapp.
+- **Connectivity:** SSO login is an auth one-shot op under
+  `docs/specs/mobile-connectivity-handling.md` §4.3 — a finite timeout on the
+  exchange, a visible pending state, and a clear terminal error. The user
+  dismissing the browser sheet is a quiet return to the login screen, not an
+  error.
+
+### 10.7 Tests
+
+- **Server** (mock issuer, like the web tests): native start marks the flow and
+  sets no `jot_session`; the callback issues a code and redirects to
+  `jot://oidc-callback`; exchange succeeds once and fails on reuse, expiry, a
+  wrong verifier, and an intent mismatch; `/native/link` requires a session and
+  binds to the session's user with the §5 guards; start rejects a missing or
+  malformed challenge.
+- **Mobile** (Jest): verifier/challenge generation; the login and link paths
+  with `openAuthSessionAsync` mocked for success, user cancel, and `?error=`;
+  the deep-link router ignoring `oidc-callback`. A Maestro device flow needs a
+  live IdP and is a follow-up.
+
+### 10.8 Phasing
+
+Two PRs, mirroring v1: (1) the server native hand-off (§10.3–10.5 and the
+server tests), then (2) the mobile client (§10.6 and the mobile tests) once (1)
+has merged.
 
 ---
 
@@ -458,7 +585,8 @@ IdP, which is a benefit but not the justification for this work.
 2. **Webapp OIDC v1** — config + migration + callback + `/config` + login UI,
    local role authoritative, mixed mode, no RP logout. Prototype against Dex
    first, then harden.
-3. **Mobile OIDC** — separate issue (§10).
+3. **Mobile OIDC** — two PRs per §10.8: the server native hand-off, then the
+   mobile client.
 4. **v2, if wanted** — group→role mapping, explicit account linking UI,
    RP-initiated logout / IdP-driven revocation.
 
