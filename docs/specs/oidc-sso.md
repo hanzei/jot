@@ -384,9 +384,16 @@ Options considered:
    server is not an open redirect.
 5. The app, back in the foreground, completes by intent:
    - **login** → `POST /api/v1/auth/oidc/native/exchange
-     { code, code_verifier }` (per-IP auth bucket, unauthenticated). The server
-     consumes the code atomically, checks the intent and that
-     `SHA256(code_verifier)` matches the stored challenge, then runs the same
+     { code, code_verifier }` (per-IP auth bucket, unauthenticated). In one
+     atomic step the server looks the code up and checks that it has not
+     expired, that its intent is `login`, and that
+     `BASE64URL(SHA256(code_verifier))` equals the stored `code_challenge`;
+     only when every check passes does it consume the code. A failed check
+     leaves the code in place, so an attempt with a wrong verifier or at the
+     wrong endpoint cannot burn it before the legitimate app exchanges it.
+     Leaving it available gives nothing to attack: guessing a random verifier
+     within the code's 60-second life, under the per-IP rate limit, is not
+     feasible. The server then runs the same
      resolve-or-provision as the web callback (§5, §6) and the existing
      `SessionService.CreateSession`. The response is identical to
      `POST /login` — `Set-Cookie: jot_session` plus `{ user, settings }` — so
@@ -394,7 +401,8 @@ Options considered:
      app makes this request, the new session carries the app's user agent in
      the Sessions list.
    - **link** → `POST /api/v1/auth/oidc/native/link { code, code_verifier }`
-     (session required, via the app's `Cookie` header). Same checks, then binds
+     (session required, via the app's `Cookie` header). The same
+     check-then-consume step, with intent `link`, then binds
      the identity to the **session's** user with all the §5 guards (an identity
      already bound to another user is rejected). Returns 204; the app refreshes
      `/me` for `has_sso_linked`.
@@ -416,7 +424,8 @@ session-authenticated JSON call.
   at step 5, not by whoever is in the browser sheet.
 - **Codes** are single-use, expire after 60 s, are stored hashed, accept S256
   only, and are intent-scoped (a login code is rejected at `/native/link` and
-  vice versa).
+  vice versa). A failed exchange does not consume the code; only a fully
+  successful check does.
 
 ### 10.5 Code storage
 
@@ -455,7 +464,12 @@ limiter.
 - **Server** (mock issuer, like the web tests): native start marks the flow and
   sets no `jot_session`; the callback issues a code and redirects to
   `jot://oidc-callback`; exchange succeeds once and fails on reuse, expiry, a
-  wrong verifier, and an intent mismatch; `/native/link` requires a session and
+  wrong verifier, and an intent mismatch; a wrong-verifier or wrong-intent
+  attempt leaves the code usable, so the correct exchange still succeeds
+  afterwards (at both `/native/exchange` and `/native/link`); the verifier
+  check compares `BASE64URL(SHA256(code_verifier))` with `code_challenge`, so
+  presenting the challenge itself, or a hex-encoded digest, as the verifier
+  fails; `/native/link` requires a session and
   binds to the session's user with the §5 guards; start rejects a missing or
   malformed challenge.
 - **Mobile** (Jest): verifier/challenge generation; the login and link paths
