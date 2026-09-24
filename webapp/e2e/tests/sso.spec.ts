@@ -52,6 +52,12 @@ async function mockLinkedSso(page: Page, localLoginEnabled: boolean, hasPassword
   });
 }
 
+// The mocked /me handler awaits route.fetch(); a refetch still in flight when a
+// test ends would otherwise throw "Test ended" outside any test and fail the run.
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
 test.describe('SSO enabled, linked account (mocked config)', () => {
   test('mixed mode offers Disconnect', async ({ page, authenticatedUser, settingsPage }) => {
     void authenticatedUser;
