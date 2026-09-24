@@ -55,6 +55,9 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
   // yet; the local-mode button stays disabled until it does so a tap can't race
   // ahead of the check and skip the confirmation.
   const [hasConfiguredServer, setHasConfiguredServer] = useState<boolean | null>(null);
+  // One sign-in at a time: entering local mode mid server sign-in (or the
+  // reverse) would race two auth states.
+  const localModeDisabled = localModeLoading || loading || ssoLoading || hasConfiguredServer === null;
   const [isServerPickerVisible, setIsServerPickerVisible] = useState(false);
   const { servers, activeServerId, reload: reloadServers } = useServerAccounts();
 
@@ -241,11 +244,11 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
             <TouchableOpacity
               style={[styles.button, styles.ssoButton, { backgroundColor: colors.primary }, ssoLoading && styles.buttonDisabled]}
               onPress={handleSsoLogin}
-              disabled={ssoLoading || loading}
+              disabled={ssoLoading || loading || localModeLoading}
               testID="login-sso-button"
               accessibilityRole="button"
               accessibilityLabel={t('auth.ssoSignInWith', { provider: ssoProviderName })}
-              accessibilityState={{ disabled: ssoLoading || loading, busy: ssoLoading }}
+              accessibilityState={{ disabled: ssoLoading || loading || localModeLoading, busy: ssoLoading }}
             >
               {ssoLoading ? (
                 <ActivityIndicator color="#fff" />
@@ -293,11 +296,11 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
               <TouchableOpacity
                 style={[styles.button, { backgroundColor: colors.primary }, loading && styles.buttonDisabled]}
                 onPress={handleLogin}
-                disabled={loading || ssoLoading}
+                disabled={loading || ssoLoading || localModeLoading}
                 testID="login-button"
                 accessibilityRole="button"
                 accessibilityLabel={loading ? t('auth.signingIn') : t('auth.signIn')}
-                accessibilityState={{ disabled: loading || ssoLoading, busy: loading }}
+                accessibilityState={{ disabled: loading || ssoLoading || localModeLoading, busy: loading }}
               >
                 {loading ? (
                   <ActivityIndicator color="#fff" />
@@ -328,12 +331,12 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
 
           <TouchableOpacity
             onPress={handleUseLocalMode}
-            disabled={localModeLoading || hasConfiguredServer === null}
+            disabled={localModeDisabled}
             style={[styles.localModeButton, { borderColor: colors.primary }, localModeLoading && styles.buttonDisabled]}
             testID="use-local-mode-button"
             accessibilityRole="button"
             accessibilityLabel={t('auth.localModeLink')}
-            accessibilityState={{ disabled: localModeLoading || hasConfiguredServer === null, busy: localModeLoading }}
+            accessibilityState={{ disabled: localModeDisabled, busy: localModeLoading }}
           >
             {localModeLoading ? (
               <ActivityIndicator color={colors.primary} />

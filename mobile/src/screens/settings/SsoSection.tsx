@@ -104,7 +104,9 @@ export default function SsoSection() {
     return null;
   }
   const canConnect = sso.local_login_enabled;
-  if (!linked && !canConnect) {
+  // Nothing to offer an unlinked account when linking is refused — but keep
+  // the section up while it shows feedback (e.g. right after a disconnect).
+  if (!linked && !canConnect && error === '' && success === '') {
     return null;
   }
 
@@ -143,7 +145,7 @@ export default function SsoSection() {
             {busy === 'disconnect' ? t('settings.ssoDisconnecting') : t('settings.ssoDisconnect', { provider: providerName })}
           </Text>
         </TouchableOpacity>
-      ) : (
+      ) : canConnect ? (
         <TouchableOpacity
           style={[styles.primaryButton, { backgroundColor: colors.primary }, busy !== null && styles.buttonDisabled]}
           onPress={handleConnect}
@@ -159,7 +161,7 @@ export default function SsoSection() {
             <Text style={styles.primaryButtonText}>{t('settings.ssoConnect', { provider: providerName })}</Text>
           )}
         </TouchableOpacity>
-      )}
+      ) : null}
     </View>
   );
 }

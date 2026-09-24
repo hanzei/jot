@@ -1,3 +1,4 @@
+import { Alert } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { ServerConfig } from '@jot/shared';
@@ -47,6 +48,7 @@ const ssoOnly: ServerConfig = { ...baseConfig, sso: { enabled: true, provider_na
 
 const mockLoginWithSso = jest.fn();
 const mockLogin = jest.fn();
+const mockEnableLocalMode = jest.fn();
 
 async function renderLogin(config: ServerConfig) {
   mockUseServerConfig.mockReturnValue(config);
@@ -63,7 +65,7 @@ describe('LoginScreen SSO', () => {
     mockUseAuth.mockReturnValue({
       login: mockLogin,
       loginWithSso: mockLoginWithSso,
-      enableLocalMode: jest.fn(),
+      enableLocalMode: mockEnableLocalMode,
       sessionEndedReason: null,
       clearSessionEndedReason: jest.fn(),
     } as unknown as ReturnType<typeof useAuth>);
@@ -131,6 +133,38 @@ describe('LoginScreen SSO', () => {
       finish('signedIn');
     });
     expect(getByTestId('login-sso-button').props.accessibilityState).toEqual({ disabled: false, busy: false });
+  });
+
+  it('blocks entering local mode while an SSO sign-in is pending', async () => {
+    mockLoginWithSso.mockImplementation(() => new Promise(() => {}));
+    const { getByTestId } = await renderLogin(mixedMode);
+    await waitFor(() => expect(getByTestId('login-sso-button')).toBeTruthy());
+    await waitFor(() => expect(getByTestId('use-local-mode-button').props.accessibilityState.disabled).toBe(false));
+
+    await act(async () => {
+      fireEvent.press(getByTestId('login-sso-button'));
+    });
+
+    expect(getByTestId('use-local-mode-button').props.accessibilityState).toEqual(expect.objectContaining({ disabled: true }));
+  });
+
+  it('blocks both server sign-ins while local mode is being entered', async () => {
+    mockEnableLocalMode.mockImplementation(() => new Promise(() => {}));
+    const { getByTestId } = await renderLogin(mixedMode);
+    await waitFor(() => expect(getByTestId('use-local-mode-button').props.accessibilityState.disabled).toBe(false));
+    // A configured server makes local mode confirm first; accept it.
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation((_title, _message, buttons) => {
+      buttons?.[1]?.onPress?.();
+    });
+
+    await act(async () => {
+      fireEvent.press(getByTestId('use-local-mode-button'));
+    });
+
+    expect(mockEnableLocalMode).toHaveBeenCalled();
+    expect(getByTestId('login-sso-button').props.accessibilityState).toEqual(expect.objectContaining({ disabled: true }));
+    expect(getByTestId('login-button').props.accessibilityState).toEqual(expect.objectContaining({ disabled: true }));
+    alertSpy.mockRestore();
   });
 
   it('returns quietly when the user dismisses the browser sheet', async () => {

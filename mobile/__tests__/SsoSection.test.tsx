@@ -177,6 +177,33 @@ describe('SsoSection', () => {
     expect(getByTestId('settings-sso-success')).toHaveTextContent('settings.ssoDisconnected');
   });
 
+  it('keeps the disconnect confirmation visible in SSO-only mode, without a Connect action', async () => {
+    mockUnlink.mockResolvedValue(undefined);
+    let currentUser: User = { ...baseUser, has_sso_linked: true };
+    mockUseServerConfig.mockReturnValue(ssoOnly);
+    mockUseAuth.mockImplementation(() => ({ user: currentUser, setUser, revalidateSession }) as unknown as ReturnType<typeof useAuth>);
+    setUser.mockImplementation((update: (prev: User | null) => User | null) => {
+      currentUser = update(currentUser) ?? currentUser;
+    });
+    const utils = await render(
+      <ConfirmContext.Provider value={{ confirm }}>
+        <SsoSection />
+      </ConfirmContext.Provider>,
+    );
+
+    await press(utils.getByTestId('settings-sso-disconnect'));
+    await utils.rerender(
+      <ConfirmContext.Provider value={{ confirm }}>
+        <SsoSection />
+      </ConfirmContext.Provider>,
+    );
+
+    expect(currentUser.has_sso_linked).toBe(false);
+    expect(utils.getByTestId('settings-sso-success')).toHaveTextContent('settings.ssoDisconnected');
+    expect(utils.queryByTestId('settings-sso-connect')).toBeNull();
+    expect(utils.queryByTestId('settings-sso-disconnect')).toBeNull();
+  });
+
   it('does nothing when the confirmation is declined', async () => {
     confirm.mockResolvedValue(false);
     const { getByTestId } = await renderSection(mixedMode, { ...baseUser, has_sso_linked: true });
