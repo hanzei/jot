@@ -511,21 +511,16 @@ export class DashboardPage {
     const search = this.page.getByRole('textbox', { name: 'Search or create label...' });
     await search.fill(labelName);
     const existing = this.page.getByRole('option', { name: labelName, exact: true });
+    const create = this.page.getByRole('option', { name: `Create "${labelName}"`, exact: true });
+    // The picker loads its label list asynchronously, so wait for it to settle
+    // on one of the two options before branching; count() alone does not wait.
+    await expect(existing.or(create).first()).toBeVisible();
     if (await existing.count() > 0) {
       if ((await existing.first().getAttribute('aria-selected')) !== 'true') {
         await existing.first().click();
       }
     } else {
-      for (let attempt = 0; ; attempt++) {
-        try {
-          await this.page.getByRole('option', { name: `Create "${labelName}"`, exact: true }).click();
-          break;
-        } catch (error) {
-          if (attempt === 2) throw error;
-          await search.fill('');
-          await search.fill(labelName);
-        }
-      }
+      await create.click();
     }
     await expect(
       this.page.getByRole('option', { name: labelName, exact: true, selected: true }),
