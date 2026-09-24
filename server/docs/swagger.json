@@ -441,7 +441,7 @@
                 ],
                 "responses": {
                     "302": {
-                        "description": "redirect to the app"
+                        "description": "redirect to the app (web), or to jot://oidc-callback with a code or error (native)"
                     },
                     "400": {
                         "description": "invalid flow",
@@ -503,6 +503,164 @@
                 "responses": {
                     "302": {
                         "description": "redirect to the identity provider"
+                    }
+                }
+            }
+        },
+        "/auth/oidc/native/exchange": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Complete a mobile SSO login",
+                "parameters": [
+                    {
+                        "description": "one-time code and its PKCE verifier",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.NativeExchangeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.AuthResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "invalid or expired code",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "409": {
+                        "description": "identity already linked",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/oidc/native/link": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Complete mobile SSO account linking",
+                "parameters": [
+                    {
+                        "description": "one-time code and its PKCE verifier",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.NativeExchangeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "no content"
+                    },
+                    "400": {
+                        "description": "invalid or expired code",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "403": {
+                        "description": "linking unavailable",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "409": {
+                        "description": "identity already linked",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/auth/oidc/native/start": {
+            "get": {
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Begin a mobile SSO hand-off",
+                "parameters": [
+                    {
+                        "enum": [
+                            "login",
+                            "link"
+                        ],
+                        "type": "string",
+                        "description": "what the resulting code may be redeemed for",
+                        "name": "intent",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "BASE64URL(SHA256(code_verifier)), unpadded (S256)",
+                        "name": "code_challenge",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "302": {
+                        "description": "redirect to the identity provider"
+                    },
+                    "400": {
+                        "description": "invalid intent or code_challenge",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "403": {
+                        "description": "linking unavailable",
+                        "schema": {
+                            "type": "string"
+                        }
                     }
                 }
             }
@@ -3561,6 +3719,17 @@
                     "type": "string"
                 },
                 "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.NativeExchangeRequest": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "code_verifier": {
                     "type": "string"
                 }
             }

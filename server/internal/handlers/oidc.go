@@ -53,6 +53,9 @@ type OIDCHandler struct {
 	// invalidates in-flight logins, and single-instance self-hosted deployments
 	// are the target.
 	signingKey []byte
+	// nativeCodes holds the one-time codes of the mobile native hand-off
+	// (see oidc_native.go).
+	nativeCodes *oidc.NativeCodeStore
 }
 
 // NewOIDCHandler builds an OIDCHandler. signingKey must be a non-empty secret
@@ -76,6 +79,7 @@ func NewOIDCHandler(
 		localLoginEnabled: localLoginEnabled,
 		cookieSecure:      cookieSecure,
 		signingKey:        signingKey,
+		nativeCodes:       oidc.NewNativeCodeStore(oidc.NativeCodeCapacity, oidc.NativeCodeTTL),
 	}
 }
 
@@ -88,6 +92,10 @@ type flowState struct {
 	Intent   string `json:"intent"`
 	UserID   string `json:"user_id,omitempty"`
 	IssuedAt int64  `json:"iat"`
+	// Native marks a mobile native hand-off flow: the callback performs no
+	// effect and instead issues a one-time code bound to CodeChallenge.
+	Native        bool   `json:"native,omitzero"`
+	CodeChallenge string `json:"code_challenge,omitempty"`
 }
 
 // Login begins a login-intent OIDC flow (unauthenticated).
@@ -97,7 +105,7 @@ type flowState struct {
 //	@Success	302	"redirect to the identity provider"
 //	@Router		/auth/oidc/login [get]
 func (h *OIDCHandler) Login(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	return h.startFlow(w, r, oidcIntentLogin, "")
+	return h.startFlow(w, r, flowState{Intent: oidcIntentLogin})
 }
 
 // Link begins a link-intent OIDC flow for the authenticated user, binding the
@@ -120,10 +128,13 @@ func (h *OIDCHandler) Link(w http.ResponseWriter, r *http.Request) (int, any, er
 	if !ok {
 		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
-	return h.startFlow(w, r, oidcIntentLink, user.ID)
+	return h.startFlow(w, r, flowState{Intent: oidcIntentLink, UserID: user.ID})
 }
 
-func (h *OIDCHandler) startFlow(w http.ResponseWriter, r *http.Request, intent, userID string) (int, any, error) {
+// startFlow fills in fs's per-flow secrets (state, nonce, PKCE verifier) and
+// issue time, sets the signed flow cookie, and redirects to the IdP. The caller
+// supplies the intent and any intent-specific fields.
+func (h *OIDCHandler) startFlow(w http.ResponseWriter, r *http.Request, fs flowState) (int, any, error) {
 	state, err := randomToken()
 	if err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("generate state: %w", err)
@@ -134,14 +145,10 @@ func (h *OIDCHandler) startFlow(w http.ResponseWriter, r *http.Request, intent, 
 	}
 	verifier := oauth2.GenerateVerifier()
 
-	fs := flowState{
-		State:    state,
-		Nonce:    nonce,
-		Verifier: verifier,
-		Intent:   intent,
-		UserID:   userID,
-		IssuedAt: time.Now().Unix(), //nolint:gocritic // transient flow-cookie timestamp for TTL, never persisted to or compared against a DB timestamp column
-	}
+	fs.State = state
+	fs.Nonce = nonce
+	fs.Verifier = verifier
+	fs.IssuedAt = time.Now().Unix() //nolint:gocritic // transient flow-cookie timestamp for TTL, never persisted to or compared against a DB timestamp column
 	if err := h.setFlowCookie(w, fs); err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("set flow cookie: %w", err)
 	}
@@ -153,13 +160,14 @@ func (h *OIDCHandler) startFlow(w http.ResponseWriter, r *http.Request, intent, 
 // Callback completes an OIDC flow: it validates the signed flow cookie and the
 // returned state, exchanges and verifies the code, checks the nonce, and then
 // either provisions/logs in the user (login intent) or binds the identity to
-// the authenticated user (link intent).
+// the authenticated user (link intent). A native (mobile) flow instead issues
+// a one-time code and redirects to the app; see completeNative.
 //
 //	@Summary	Complete an SSO flow
 //	@Tags		auth
 //	@Param		code	query	string	true	"authorization code"
 //	@Param		state	query	string	true	"state token"
-//	@Success	302		"redirect to the app"
+//	@Success	302		"redirect to the app (web), or to jot://oidc-callback with a code or error (native)"
 //	@Failure	400		{string}	string	"invalid flow"
 //	@Failure	401		{string}	string	"authentication failed"
 //	@Failure	409		{string}	string	"identity already linked"
@@ -173,24 +181,12 @@ func (h *OIDCHandler) Callback(w http.ResponseWriter, r *http.Request) (int, any
 		return http.StatusBadRequest, nil, fmt.Errorf("invalid or expired SSO flow: %w", err)
 	}
 
-	q := r.URL.Query()
-	if idpErr := q.Get("error"); idpErr != "" {
-		return http.StatusUnauthorized, nil, fmt.Errorf("identity provider returned an error: %s", idpErr)
+	identity, cbErr := h.verifyCallback(r, fs)
+	if fs.Native {
+		return h.completeNative(w, r, fs, identity, cbErr)
 	}
-	if q.Get("state") != fs.State {
-		return http.StatusBadRequest, nil, errors.New("state mismatch")
-	}
-	code := q.Get("code")
-	if code == "" {
-		return http.StatusBadRequest, nil, errors.New("missing authorization code")
-	}
-
-	identity, err := h.provider.Verify(r.Context(), code, fs.Verifier)
-	if err != nil {
-		return http.StatusUnauthorized, nil, fmt.Errorf("verify SSO callback: %w", err)
-	}
-	if identity.Nonce != fs.Nonce {
-		return http.StatusUnauthorized, nil, errors.New("nonce mismatch")
+	if cbErr != nil {
+		return cbErr.status, nil, cbErr.err
 	}
 
 	switch fs.Intent {
@@ -203,48 +199,108 @@ func (h *OIDCHandler) Callback(w http.ResponseWriter, r *http.Request) (int, any
 	}
 }
 
+// callbackError is a failed callback check: the HTTP status and error a web
+// flow returns, plus the error code a native flow puts in its app redirect.
+type callbackError struct {
+	status     int
+	nativeCode string
+	err        error
+}
+
+// verifyCallback checks the IdP's response against the flow state and verifies
+// the ID token: IdP error, state, code presence, token signature/claims, and
+// nonce. It is shared by web and native flows.
+func (h *OIDCHandler) verifyCallback(r *http.Request, fs flowState) (*oidc.Identity, *callbackError) {
+	q := r.URL.Query()
+	if idpErr := q.Get("error"); idpErr != "" {
+		nativeCode := oidcNativeErrIdP
+		if idpErr == oidcNativeErrAccessDenied {
+			nativeCode = oidcNativeErrAccessDenied
+		}
+		return nil, &callbackError{http.StatusUnauthorized, nativeCode, fmt.Errorf("identity provider returned an error: %s", idpErr)}
+	}
+	if q.Get("state") != fs.State {
+		return nil, &callbackError{http.StatusBadRequest, oidcNativeErrInvalidRequest, errors.New("state mismatch")}
+	}
+	code := q.Get("code")
+	if code == "" {
+		return nil, &callbackError{http.StatusBadRequest, oidcNativeErrInvalidRequest, errors.New("missing authorization code")}
+	}
+
+	identity, err := h.provider.Verify(r.Context(), code, fs.Verifier)
+	if err != nil {
+		return nil, &callbackError{http.StatusUnauthorized, oidcNativeErrAuthFailed, fmt.Errorf("verify SSO callback: %w", err)}
+	}
+	if identity.Nonce != fs.Nonce {
+		return nil, &callbackError{http.StatusUnauthorized, oidcNativeErrAuthFailed, errors.New("nonce mismatch")}
+	}
+	return identity, nil
+}
+
 func (h *OIDCHandler) completeLink(w http.ResponseWriter, r *http.Request, userID string, identity *oidc.Identity) (int, any, error) {
-	err := h.userStore.LinkOIDCIdentity(r.Context(), userID, identity.Issuer, identity.Subject)
-	switch {
-	case errors.Is(err, models.ErrOIDCIdentityLinked):
-		return http.StatusConflict, nil, models.ErrOIDCIdentityLinked
-	case errors.Is(err, models.ErrUserNotFound):
-		return http.StatusUnauthorized, nil, errors.New("unauthorized")
-	case err != nil:
-		return http.StatusInternalServerError, nil, fmt.Errorf("link SSO identity: %w", err)
+	if status, err := h.bindIdentity(r.Context(), userID, identity.Issuer, identity.Subject); err != nil {
+		return status, nil, err
 	}
 	http.Redirect(w, r, oidcAppRoot, http.StatusFound)
 	return 0, nil, nil
 }
 
+// bindIdentity binds (issuer, subject) to userID with the §5 guards: an
+// identity already bound to another user is rejected (409), never rebound. It
+// returns the HTTP status and error to report on failure.
+func (h *OIDCHandler) bindIdentity(ctx context.Context, userID, issuer, subject string) (int, error) {
+	err := h.userStore.LinkOIDCIdentity(ctx, userID, issuer, subject)
+	switch {
+	case errors.Is(err, models.ErrOIDCIdentityLinked):
+		return http.StatusConflict, models.ErrOIDCIdentityLinked
+	case errors.Is(err, models.ErrUserNotFound):
+		return http.StatusUnauthorized, errors.New("unauthorized")
+	case err != nil:
+		return http.StatusInternalServerError, fmt.Errorf("link SSO identity: %w", err)
+	}
+	return 0, nil
+}
+
 func (h *OIDCHandler) completeLogin(w http.ResponseWriter, r *http.Request, identity *oidc.Identity) (int, any, error) {
-	user, err := h.resolveOrProvision(r.Context(), identity)
+	if _, status, err := h.signIn(w, r, identity.Issuer, identity.Subject, h.usernameSeed(identity)); err != nil {
+		return status, nil, err
+	}
+	http.Redirect(w, r, oidcAppRoot, http.StatusFound)
+	return 0, nil, nil
+}
+
+// signIn resolves or provisions the user for (issuer, subject), ensures their
+// settings exist, and creates a session (setting the jot_session cookie). It
+// returns the same {user, settings} body as POST /login, or the HTTP status and
+// error to report on failure.
+func (h *OIDCHandler) signIn(w http.ResponseWriter, r *http.Request, issuer, subject, usernameSeed string) (*AuthResponse, int, error) {
+	user, err := h.resolveOrProvision(r.Context(), issuer, subject, usernameSeed)
 	if err != nil {
 		if errors.Is(err, models.ErrOIDCIdentityLinked) {
-			return http.StatusConflict, nil, models.ErrOIDCIdentityLinked
+			return nil, http.StatusConflict, models.ErrOIDCIdentityLinked
 		}
-		return http.StatusInternalServerError, nil, fmt.Errorf("resolve SSO user: %w", err)
+		return nil, http.StatusInternalServerError, fmt.Errorf("resolve SSO user: %w", err)
 	}
 
 	// Ensure settings exist so the app's first authenticated fetch behaves like
 	// it does after a local register/login.
-	if _, err := h.userSettingsStore.GetOrCreate(r.Context(), user.ID); err != nil {
-		return http.StatusInternalServerError, nil, fmt.Errorf("get or create user settings: %w", err)
+	settings, err := h.userSettingsStore.GetOrCreate(r.Context(), user.ID)
+	if err != nil {
+		return nil, http.StatusInternalServerError, fmt.Errorf("get or create user settings: %w", err)
 	}
 
 	if err := h.sessionService.CreateSession(w, r, user.ID); err != nil {
-		return http.StatusInternalServerError, nil, fmt.Errorf("create session: %w", err)
+		return nil, http.StatusInternalServerError, fmt.Errorf("create session: %w", err)
 	}
-
-	http.Redirect(w, r, oidcAppRoot, http.StatusFound)
-	return 0, nil, nil
+	return &AuthResponse{User: user, Settings: settings}, 0, nil
 }
 
-// resolveOrProvision returns the user bound to the verified identity, creating
-// a new SSO user on first login. Auto-provisioning grants admin only for an
-// SSO-only deployment's first user (see §6 of the OIDC spec).
-func (h *OIDCHandler) resolveOrProvision(ctx context.Context, identity *oidc.Identity) (*models.User, error) {
-	user, err := h.userStore.GetByOIDCIdentity(ctx, identity.Issuer, identity.Subject)
+// resolveOrProvision returns the user bound to (issuer, subject), creating a
+// new SSO user seeded from usernameSeed on first login. Auto-provisioning
+// grants admin only for an SSO-only deployment's first user (see §6 of the
+// OIDC spec).
+func (h *OIDCHandler) resolveOrProvision(ctx context.Context, issuer, subject, usernameSeed string) (*models.User, error) {
+	user, err := h.userStore.GetByOIDCIdentity(ctx, issuer, subject)
 	if err == nil {
 		return user, nil
 	}
@@ -252,12 +308,12 @@ func (h *OIDCHandler) resolveOrProvision(ctx context.Context, identity *oidc.Ide
 		return nil, fmt.Errorf("look up OIDC identity: %w", err)
 	}
 	grantAdminIfFirst := !h.localLoginEnabled
-	user, err = h.userStore.ProvisionSSOUser(ctx, identity.Issuer, identity.Subject, h.usernameSeed(identity), grantAdminIfFirst)
+	user, err = h.userStore.ProvisionSSOUser(ctx, issuer, subject, usernameSeed, grantAdminIfFirst)
 	if errors.Is(err, models.ErrOIDCIdentityLinked) {
 		// Lost a race with a concurrent first login of the *same* identity: the
 		// row now exists and belongs to this same (issuer, subject), so resolve
 		// it rather than surfacing a "linked to another account" conflict.
-		user, err = h.userStore.GetByOIDCIdentity(ctx, identity.Issuer, identity.Subject)
+		user, err = h.userStore.GetByOIDCIdentity(ctx, issuer, subject)
 		if err != nil {
 			return nil, fmt.Errorf("resolve raced OIDC identity: %w", err)
 		}
