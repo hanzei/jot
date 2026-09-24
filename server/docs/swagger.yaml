@@ -180,6 +180,13 @@ definitions:
       username:
         type: string
     type: object
+  handlers.NativeExchangeRequest:
+    properties:
+      code:
+        type: string
+      code_verifier:
+        type: string
+    type: object
   handlers.PatchNoteItemRequest:
     properties:
       assigned_to:
@@ -925,7 +932,8 @@ paths:
         type: string
       responses:
         "302":
-          description: redirect to the app
+          description: redirect to the app (web), or to jot://oidc-callback with a
+            code or error (native)
         "400":
           description: invalid flow
           schema:
@@ -965,6 +973,108 @@ paths:
         "302":
           description: redirect to the identity provider
       summary: Begin SSO login
+      tags:
+      - auth
+  /auth/oidc/native/exchange:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: one-time code and its PKCE verifier
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.NativeExchangeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.AuthResponse'
+        "400":
+          description: invalid or expired code
+          schema:
+            type: string
+        "409":
+          description: identity already linked
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      summary: Complete a mobile SSO login
+      tags:
+      - auth
+  /auth/oidc/native/link:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: one-time code and its PKCE verifier
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.NativeExchangeRequest'
+      responses:
+        "204":
+          description: no content
+        "400":
+          description: invalid or expired code
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "403":
+          description: linking unavailable
+          schema:
+            type: string
+        "409":
+          description: identity already linked
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Complete mobile SSO account linking
+      tags:
+      - auth
+  /auth/oidc/native/start:
+    get:
+      parameters:
+      - description: what the resulting code may be redeemed for
+        enum:
+        - login
+        - link
+        in: query
+        name: intent
+        required: true
+        type: string
+      - description: BASE64URL(SHA256(code_verifier)), unpadded (S256)
+        in: query
+        name: code_challenge
+        required: true
+        type: string
+      responses:
+        "302":
+          description: redirect to the identity provider
+        "400":
+          description: invalid intent or code_challenge
+          schema:
+            type: string
+        "403":
+          description: linking unavailable
+          schema:
+            type: string
+      summary: Begin a mobile SSO hand-off
       tags:
       - auth
   /auth/oidc/unlink:
