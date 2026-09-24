@@ -60,7 +60,12 @@
     "localModeConfirmTitle": "Utiliser sans serveur ?",
     "localModeConfirmMessage": "Vous êtes connecté à un serveur. Si vous continuez, un carnet distinct s’ouvrira sur cet appareil : vos notes du serveur y restent, et vous pourrez les retrouver en vous reconnectant.",
     "sessionEndedMessage": "Vous avez été déconnecté. Cela se produit après un changement de mot de passe ou lorsque la session est révoquée.",
-    "sessionEndedDismiss": "Ignorer"
+    "sessionEndedDismiss": "Ignorer",
+    "ssoSignInWith": "Se connecter avec {{provider}}",
+    "ssoCancelled": "La connexion a été annulée.",
+    "ssoTryAgainLater": "L'authentification unique est momentanément saturée. Réessayez dans une minute.",
+    "ssoFailed": "Échec de l'authentification unique. Veuillez réessayer.",
+    "ssoServerChanged": "Le serveur a changé pendant la connexion. Veuillez réessayer."
   },
   "dashboard": {
     "newNote": "Nouvelle note",
@@ -187,7 +192,22 @@
     "patsRevokeError": "Échec de la révocation du jeton.",
     "patsNone": "Aucun jeton d'accès personnel pour l'instant.",
     "patsNewTokenTitle": "Votre nouveau jeton d'accès",
-    "patsLoadError": "Échec du chargement des jetons."
+    "patsLoadError": "Échec du chargement des jetons.",
+    "ssoSection": "Authentification unique",
+    "ssoLinkedDescription": "Votre compte est lié à {{provider}}. Vous pouvez vous connecter avec {{provider}}.",
+    "ssoUnlinkedDescription": "Liez votre compte à {{provider}} pour vous connecter avec.",
+    "ssoConnect": "Lier {{provider}}",
+    "ssoConnected": "SSO lié.",
+    "ssoDisconnect": "Dissocier {{provider}}",
+    "ssoDisconnecting": "Dissociation…",
+    "ssoDisconnected": "SSO dissocié.",
+    "ssoDisconnectFailed": "Échec de la dissociation du SSO.",
+    "ssoDisconnectConfirmTitle": "Dissocier le SSO ?",
+    "ssoDisconnectConfirmMessage": "Cela dissocie {{provider}} de votre compte. Vous aurez besoin de votre mot de passe pour vous connecter.",
+    "ssoLinkConflict": "Cette identité SSO est déjà liée à un autre compte.",
+    "ssoLinkUnavailable": "Ce serveur n'autorise pas la liaison d'un compte SSO.",
+    "ssoLinkFailed": "Impossible de lier le SSO. Veuillez réessayer.",
+    "ssoUnlinkWouldStrand": "Impossible de dissocier le SSO : votre compte n'a pas de mot de passe, vous ne pourriez plus vous connecter."
   },
   "about": {
     "clientInfo": "Infos client",

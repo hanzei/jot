@@ -83,7 +83,12 @@
     "localModeConfirmTitle": "¿Usar sin servidor?",
     "localModeConfirmMessage": "Has iniciado sesión en un servidor. Si continúas, se abrirá un cuaderno independiente en este dispositivo: tus notas del servidor permanecerán en el servidor y podrás volver a ellas iniciando sesión de nuevo.",
     "sessionEndedMessage": "Se cerró tu sesión. Esto ocurre tras un cambio de contraseña o cuando se revoca la sesión.",
-    "sessionEndedDismiss": "Descartar"
+    "sessionEndedDismiss": "Descartar",
+    "ssoSignInWith": "Iniciar sesión con {{provider}}",
+    "ssoCancelled": "Se canceló el inicio de sesión.",
+    "ssoTryAgainLater": "El inicio de sesión único está ocupado. Inténtalo de nuevo en un minuto.",
+    "ssoFailed": "Error en el inicio de sesión único. Inténtalo de nuevo.",
+    "ssoServerChanged": "El servidor cambió durante el inicio de sesión. Inténtalo de nuevo."
   },
   "dashboard": {
     "newNote": "Nueva nota",
@@ -210,7 +215,22 @@
     "patsRevokeError": "No se pudo revocar el token.",
     "patsNone": "Aún no hay tokens de acceso personal.",
     "patsNewTokenTitle": "Tu nuevo token de acceso",
-    "patsLoadError": "No se pudieron cargar los tokens."
+    "patsLoadError": "No se pudieron cargar los tokens.",
+    "ssoSection": "Inicio de sesión único",
+    "ssoLinkedDescription": "Tu cuenta está vinculada a {{provider}}. Puedes iniciar sesión con {{provider}}.",
+    "ssoUnlinkedDescription": "Vincula tu cuenta a {{provider}} para iniciar sesión con él.",
+    "ssoConnect": "Vincular {{provider}}",
+    "ssoConnected": "SSO vinculado.",
+    "ssoDisconnect": "Desvincular {{provider}}",
+    "ssoDisconnecting": "Desvinculando…",
+    "ssoDisconnected": "SSO desvinculado.",
+    "ssoDisconnectFailed": "No se pudo desvincular el SSO.",
+    "ssoDisconnectConfirmTitle": "¿Desvincular el SSO?",
+    "ssoDisconnectConfirmMessage": "Esto desvincula {{provider}} de tu cuenta. Necesitarás tu contraseña para iniciar sesión.",
+    "ssoLinkConflict": "Esta identidad SSO ya está vinculada a otra cuenta.",
+    "ssoLinkUnavailable": "Este servidor no permite vincular una cuenta SSO.",
+    "ssoLinkFailed": "No se pudo vincular el SSO. Inténtalo de nuevo.",
+    "ssoUnlinkWouldStrand": "No se puede desvincular el SSO: tu cuenta no tiene contraseña y no podrías iniciar sesión."
   },
   "about": {
     "clientInfo": "Información del cliente",

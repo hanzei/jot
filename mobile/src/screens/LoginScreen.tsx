@@ -23,13 +23,16 @@ import ServerSetupGate from '../components/ServerSetupGate';
 import ServerPickerModal from '../components/drawer/ServerPickerModal';
 import FadeInView from '../components/FadeInView';
 import { displayMessage } from '../i18n/utils';
+import { useServerConfig } from '../hooks/useServerConfig';
+import { oidcExchangeErrorMessage, SsoFlowError } from '../store/oidcFlow';
 
 type LoginScreenProps = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'Login'>;
 };
 
 export default function LoginScreen({ navigation }: LoginScreenProps) {
-  const { login, enableLocalMode, sessionEndedReason, clearSessionEndedReason } = useAuth();
+  const { login, loginWithSso, enableLocalMode, sessionEndedReason, clearSessionEndedReason } = useAuth();
+  const { sso } = useServerConfig();
   const { colors } = useTheme();
   const { t } = useTranslation();
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
@@ -38,6 +41,13 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [localModeLoading, setLocalModeLoading] = useState(false);
+  const [ssoLoading, setSsoLoading] = useState(false);
+  // With SSO on and local login off, SSO is the only way in: the password form
+  // and the registration link go. A pre-SSO or SSO-off server leaves the
+  // screen exactly as it was.
+  const ssoEnabled = sso?.enabled === true;
+  const showLocalLogin = !ssoEnabled || sso?.local_login_enabled !== false;
+  const ssoProviderName = sso?.provider_name || 'SSO';
   // When a server account already exists (e.g. the user was bounced here by an
   // expired session), entering local mode would switch them into a separate,
   // empty on-device notebook. Confirm first so an accidental tap can't strand
@@ -107,6 +117,21 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  // An auth one-shot op (mobile-connectivity-handling §4.3): a visible pending
+  // state for the whole browser round trip plus the exchange, which runs on
+  // the finite auth timeout. Closing the browser sheet is a quiet return.
+  const handleSsoLogin = async () => {
+    setError('');
+    setSsoLoading(true);
+    try {
+      await loginWithSso();
+    } catch (err: unknown) {
+      setError(displayMessage(t, err instanceof SsoFlowError ? err.messageKey : oidcExchangeErrorMessage(err)));
+    } finally {
+      setSsoLoading(false);
     }
   };
 
@@ -212,56 +237,86 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
             </FadeInView>
           ) : null}
 
-          <TextInput
-            style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.text }]}
-            placeholder={t('auth.usernamePlaceholder')}
-            placeholderTextColor={colors.placeholder}
-            autoCapitalize="none"
-            autoCorrect={false}
-            value={username}
-            onChangeText={setUsername}
-            accessibilityLabel={t('settings.usernameLabel')}
-            testID="username-input"
-          />
+          {ssoEnabled ? (
+            <TouchableOpacity
+              style={[styles.button, styles.ssoButton, { backgroundColor: colors.primary }, ssoLoading && styles.buttonDisabled]}
+              onPress={handleSsoLogin}
+              disabled={ssoLoading || loading}
+              testID="login-sso-button"
+              accessibilityRole="button"
+              accessibilityLabel={t('auth.ssoSignInWith', { provider: ssoProviderName })}
+              accessibilityState={{ disabled: ssoLoading || loading, busy: ssoLoading }}
+            >
+              {ssoLoading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.buttonText}>{t('auth.ssoSignInWith', { provider: ssoProviderName })}</Text>
+              )}
+            </TouchableOpacity>
+          ) : null}
 
-          <TextInput
-            style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.text }]}
-            placeholder={t('auth.passwordPlaceholder')}
-            placeholderTextColor={colors.placeholder}
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
-            value={password}
-            onChangeText={setPassword}
-            accessibilityLabel={t('auth.passwordPlaceholder')}
-            testID="password-input"
-          />
+          {ssoEnabled && showLocalLogin ? (
+            <View style={styles.dividerRow} testID="login-sso-divider">
+              <View style={[styles.dividerLine, { backgroundColor: colors.inputBorder }]} />
+              <Text style={[styles.dividerText, { color: colors.textSecondary }]}>{t('common.or')}</Text>
+              <View style={[styles.dividerLine, { backgroundColor: colors.inputBorder }]} />
+            </View>
+          ) : null}
 
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: colors.primary }, loading && styles.buttonDisabled]}
-            onPress={handleLogin}
-            disabled={loading}
-            testID="login-button"
-            accessibilityRole="button"
-            accessibilityLabel={loading ? t('auth.signingIn') : t('auth.signIn')}
-            accessibilityState={{ disabled: loading, busy: loading }}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>{t('auth.signIn')}</Text>
-            )}
-          </TouchableOpacity>
+          {showLocalLogin ? (
+            <>
+              <TextInput
+                style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.text }]}
+                placeholder={t('auth.usernamePlaceholder')}
+                placeholderTextColor={colors.placeholder}
+                autoCapitalize="none"
+                autoCorrect={false}
+                value={username}
+                onChangeText={setUsername}
+                accessibilityLabel={t('settings.usernameLabel')}
+                testID="username-input"
+              />
 
-          <TouchableOpacity
-            onPress={() => navigation.navigate('Register')}
-            style={styles.link}
-            testID="create-account-link"
-            accessibilityRole="button"
-            accessibilityLabel={t('auth.createAccountLink')}
-          >
-            <Text style={[styles.linkText, { color: colors.primary }]}>{t('auth.createAccountLink')}</Text>
-          </TouchableOpacity>
+              <TextInput
+                style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.text }]}
+                placeholder={t('auth.passwordPlaceholder')}
+                placeholderTextColor={colors.placeholder}
+                secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+                value={password}
+                onChangeText={setPassword}
+                accessibilityLabel={t('auth.passwordPlaceholder')}
+                testID="password-input"
+              />
+
+              <TouchableOpacity
+                style={[styles.button, { backgroundColor: colors.primary }, loading && styles.buttonDisabled]}
+                onPress={handleLogin}
+                disabled={loading || ssoLoading}
+                testID="login-button"
+                accessibilityRole="button"
+                accessibilityLabel={loading ? t('auth.signingIn') : t('auth.signIn')}
+                accessibilityState={{ disabled: loading || ssoLoading, busy: loading }}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.buttonText}>{t('auth.signIn')}</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => navigation.navigate('Register')}
+                style={styles.link}
+                testID="create-account-link"
+                accessibilityRole="button"
+                accessibilityLabel={t('auth.createAccountLink')}
+              >
+                <Text style={[styles.linkText, { color: colors.primary }]}>{t('auth.createAccountLink')}</Text>
+              </TouchableOpacity>
+            </>
+          ) : null}
         </ServerSetupGate>
 
         <View style={styles.localModeSection}>
@@ -336,6 +391,9 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
     marginTop: 8,
+  },
+  ssoButton: {
+    marginTop: 0,
   },
   buttonDisabled: {
     opacity: 0.6,

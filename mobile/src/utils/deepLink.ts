@@ -6,6 +6,17 @@ export function isJotSchemeUrl(url: string): boolean {
   return /^jot:\/\//i.test(url);
 }
 
+/**
+ * The redirect target of the native SSO hand-off (docs/specs/oidc-sso.md
+ * §10.3). It belongs to the auth session in `src/store/oidcFlow.ts`, never to
+ * the deep-link router.
+ */
+export const OIDC_CALLBACK_URL = 'jot://oidc-callback';
+
+export function isOidcCallbackUrl(url: string): boolean {
+  return /^jot:\/\/oidc-callback\/?(?:[?#]|$)/i.test(url.trim());
+}
+
 export function normalizeServerOrigin(url: string): string | null {
   return canonicalizeServerOrigin(url);
 }

@@ -5,6 +5,15 @@ import { AuthProvider, useAuth } from '../src/store/AuthContext';
 import { auth, getStoredSession, setOnUnauthorized, clearStoredSession, cacheAuthProfile, getCachedAuthProfile, clearCachedProfile } from '../src/api/client';
 import { getLocalIdentity, enableLocalMode as persistEnableLocalMode, disableLocalMode, updateLocalSettings, updateLocalUser } from '../src/store/localMode';
 
+import { runOidcBrowserFlow, SsoFlowError } from '../src/store/oidcFlow';
+
+jest.mock('../src/store/oidcFlow', () => ({
+  ...jest.requireActual('../src/store/oidcFlow'),
+  runOidcBrowserFlow: jest.fn(),
+}));
+
+const mockRunOidcBrowserFlow = runOidcBrowserFlow as jest.Mock;
+
 const mockQueryClient = { clear: jest.fn() };
 jest.mock('@tanstack/react-query', () => ({
   useQueryClient: () => mockQueryClient,
@@ -23,6 +32,7 @@ jest.mock('../src/api/client', () => ({
   auth: {
     login: jest.fn(),
     register: jest.fn(),
+    oidcNativeExchange: jest.fn(),
     logout: jest.fn(),
     me: jest.fn(),
   },
@@ -37,9 +47,10 @@ jest.mock('../src/api/client', () => ({
   clearCachedProfile: jest.fn().mockResolvedValue(undefined),
 }));
 
-const mockAuth = auth as {
+const mockAuth = auth as unknown as {
   login: jest.Mock;
   register: jest.Mock;
+  oidcNativeExchange: jest.Mock;
   logout: jest.Mock;
   me: jest.Mock;
 };
@@ -974,6 +985,121 @@ describe('AuthContext', () => {
     expect(getByTestId('local-mode').props.children).toBe('false');
     expect(mockDisableLocalMode).toHaveBeenCalled();
     expect(mockAuth.logout).not.toHaveBeenCalled();
+    await unmount();
+  });
+});
+
+describe('AuthContext loginWithSso', () => {
+  let loginWithSsoFn: (() => Promise<'signedIn' | 'cancelled'>) | null = null;
+
+  function SsoConsumer() {
+    const { user, isLoading, sessionEndedReason, loginWithSso } = useAuth();
+    // eslint-disable-next-line react-hooks/globals -- test probe captures render output by design
+    loginWithSsoFn = loginWithSso;
+    return (
+      <>
+        <Text testID="loading">{String(isLoading)}</Text>
+        <Text testID="username">{user?.username || 'none'}</Text>
+        <Text testID="session-ended-reason">{sessionEndedReason ?? 'none'}</Text>
+      </>
+    );
+  }
+
+  async function renderSso() {
+    const utils = await render(
+      <AuthProvider>
+        <SsoConsumer />
+      </AuthProvider>,
+    );
+    await waitFor(() => expect(utils.getByTestId('loading').props.children).toBe('false'));
+    return utils;
+  }
+
+  beforeAll(() => {
+    configure({ asyncUtilTimeout: CI_WAIT_TIMEOUT_MS });
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    loginWithSsoFn = null;
+    mockGetStoredSession.mockResolvedValue(null);
+    mockClientModule.getStoredServerUrl.mockResolvedValue(null);
+    mockGetLocalIdentity.mockResolvedValue(null);
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  afterAll(() => {
+    configure({ asyncUtilTimeout: 1000 });
+  });
+
+  it('exchanges the code, signs in, and caches the profile like password login', async () => {
+    const response = { user: { ...mockUser, username: 'sso-user' }, settings: mockSettings };
+    mockRunOidcBrowserFlow.mockResolvedValue({ type: 'code', code: 'the-code', codeVerifier: 'the-verifier' });
+    mockAuth.oidcNativeExchange.mockResolvedValue(response);
+    const { getByTestId, unmount } = await renderSso();
+
+    let result: string | undefined;
+    await act(async () => {
+      result = await loginWithSsoFn!();
+    });
+
+    expect(result).toBe('signedIn');
+    expect(mockRunOidcBrowserFlow).toHaveBeenCalledWith('login');
+    expect(mockAuth.oidcNativeExchange).toHaveBeenCalledWith('the-code', 'the-verifier');
+    expect(mockCacheAuthProfile).toHaveBeenCalledWith(response);
+    expect(getByTestId('username').props.children).toBe('sso-user');
+    await unmount();
+  });
+
+  it('returns quietly when the browser sheet is dismissed', async () => {
+    mockRunOidcBrowserFlow.mockResolvedValue({ type: 'cancelled' });
+    const { getByTestId, unmount } = await renderSso();
+
+    let result: string | undefined;
+    await act(async () => {
+      result = await loginWithSsoFn!();
+    });
+
+    expect(result).toBe('cancelled');
+    expect(mockAuth.oidcNativeExchange).not.toHaveBeenCalled();
+    expect(getByTestId('username').props.children).toBe('none');
+    await unmount();
+  });
+
+  it('rejects with the callback error and makes no request', async () => {
+    mockRunOidcBrowserFlow.mockResolvedValue({ type: 'error', messageKey: 'auth.ssoTryAgainLater' });
+    const { unmount } = await renderSso();
+
+    let caught: unknown;
+    await act(async () => {
+      await loginWithSsoFn!().catch((err: unknown) => { caught = err; });
+    });
+
+    expect(caught).toBeInstanceOf(SsoFlowError);
+    expect((caught as SsoFlowError).messageKey).toBe('auth.ssoTryAgainLater');
+    expect(mockAuth.oidcNativeExchange).not.toHaveBeenCalled();
+    await unmount();
+  });
+
+  it('surfaces an exchange 400 without clearing any session', async () => {
+    const badCode = { response: { status: 400, data: 'invalid or expired code' } };
+    mockRunOidcBrowserFlow.mockResolvedValue({ type: 'code', code: 'stale', codeVerifier: 'v' });
+    mockAuth.oidcNativeExchange.mockRejectedValue(badCode);
+    const { getByTestId, unmount } = await renderSso();
+
+    let caught: unknown;
+    await act(async () => {
+      await loginWithSsoFn!().catch((err: unknown) => { caught = err; });
+    });
+
+    expect(caught).toBe(badCode);
+    expect(mockClearStoredSession).not.toHaveBeenCalled();
+    expect(mockClearCachedProfile).not.toHaveBeenCalled();
+    expect(mockQueryClient.clear).not.toHaveBeenCalled();
+    expect(getByTestId('session-ended-reason').props.children).toBe('none');
     await unmount();
   });
 });

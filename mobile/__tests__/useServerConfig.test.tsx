@@ -1,7 +1,7 @@
-import { renderHook, waitFor } from '@testing-library/react-native';
-import { useServerConfig } from '../src/hooks/useServerConfig';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
+import { parseCachedConfig, useServerConfig } from '../src/hooks/useServerConfig';
 import { DEFAULT_SERVER_CONFIG, fetchServerConfig } from '../src/api/config';
-import { getActiveServerId, getStoredServerUrl } from '../src/api/client';
+import { getActiveServerId, getStoredServerUrl, subscribeToClientActiveServerChanges } from '../src/api/client';
 import { getServerStorageValue, setServerStorageValue } from '../src/store/serverAccounts';
 
 jest.mock('../src/api/config', () => ({
@@ -11,6 +11,7 @@ jest.mock('../src/api/config', () => ({
 jest.mock('../src/api/client', () => ({
   getActiveServerId: jest.fn(),
   getStoredServerUrl: jest.fn(),
+  subscribeToClientActiveServerChanges: jest.fn(() => () => {}),
 }));
 jest.mock('../src/store/serverAccounts', () => ({
   getServerStorageValue: jest.fn(),
@@ -22,6 +23,7 @@ const mockGetActiveServerId = getActiveServerId as jest.MockedFunction<typeof ge
 const mockGetStoredServerUrl = getStoredServerUrl as jest.MockedFunction<typeof getStoredServerUrl>;
 const mockGetServerStorageValue = getServerStorageValue as jest.MockedFunction<typeof getServerStorageValue>;
 const mockSetServerStorageValue = setServerStorageValue as jest.MockedFunction<typeof setServerStorageValue>;
+const mockSubscribe = subscribeToClientActiveServerChanges as jest.Mock;
 
 describe('useServerConfig', () => {
   beforeEach(() => {
@@ -78,5 +80,67 @@ describe('useServerConfig', () => {
 
     await waitFor(() => expect(mockGetServerStorageValue).toHaveBeenCalled());
     expect(result.current).toEqual(DEFAULT_SERVER_CONFIG);
+  });
+
+  it('carries a cached sso block through', async () => {
+    const cached = {
+      registration_enabled: true,
+      password_min_length: 10,
+      upload_max_bytes: 1024,
+      sso: { enabled: true, provider_name: 'Keycloak', local_login_enabled: false },
+    };
+    mockGetServerStorageValue.mockResolvedValue(JSON.stringify(cached));
+    mockFetchServerConfig.mockReturnValue(new Promise(() => {}));
+
+    const { result } = await renderHook(() => useServerConfig());
+
+    await waitFor(() => expect(result.current).toEqual(cached));
+  });
+
+  it('reloads for the new server when the active server changes', async () => {
+    let notify: (serverId: string | null) => void = () => {};
+    mockSubscribe.mockImplementation((listener: (serverId: string | null) => void) => {
+      notify = listener;
+      return () => {};
+    });
+    const ssoServer = {
+      registration_enabled: true, password_min_length: 10, upload_max_bytes: 1024,
+      sso: { enabled: true, provider_name: 'Keycloak', local_login_enabled: true },
+    };
+    const plainServer = { registration_enabled: true, password_min_length: 10, upload_max_bytes: 1024 };
+    mockFetchServerConfig.mockResolvedValueOnce(ssoServer).mockResolvedValueOnce(plainServer);
+
+    const { result } = await renderHook(() => useServerConfig());
+    await waitFor(() => expect(result.current).toEqual(ssoServer));
+
+    mockGetActiveServerId.mockReturnValue('server-2');
+    await act(async () => {
+      notify('server-2');
+    });
+
+    await waitFor(() => expect(result.current).toEqual(plainServer));
+    expect(mockSetServerStorageValue).toHaveBeenLastCalledWith('server-2', 'server_config', JSON.stringify(plainServer));
+  });
+});
+
+describe('parseCachedConfig', () => {
+  const base = { registration_enabled: false, password_min_length: 8, upload_max_bytes: 10 };
+
+  it('reads a pre-SSO entry as SSO off', () => {
+    expect(parseCachedConfig(JSON.stringify(base))).toEqual(base);
+  });
+
+  it('keeps a well-formed sso block', () => {
+    const sso = { enabled: true, provider_name: 'Okta', local_login_enabled: true };
+    expect(parseCachedConfig(JSON.stringify({ ...base, sso }))).toEqual({ ...base, sso });
+  });
+
+  it('drops a malformed sso block but keeps the rest', () => {
+    expect(parseCachedConfig(JSON.stringify({ ...base, sso: { enabled: 'yes' } }))).toEqual(base);
+    expect(parseCachedConfig(JSON.stringify({ ...base, sso: null }))).toEqual(base);
+  });
+
+  it('rejects an entry missing the base fields', () => {
+    expect(parseCachedConfig(JSON.stringify({ sso: { enabled: true, provider_name: 'x', local_login_enabled: true } }))).toBeNull();
   });
 });

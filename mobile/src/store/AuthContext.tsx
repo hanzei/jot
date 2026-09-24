@@ -14,6 +14,7 @@ import {
   initializeServerContext,
 } from '../api/client';
 import { isTransientHttpStatus } from '../db/syncQueue';
+import { runOidcBrowserFlow, SsoFlowError } from './oidcFlow';
 import { getLocalIdentity, enableLocalMode as persistEnableLocalMode, disableLocalMode, setLocalModeActive, updateLocalSettings, updateLocalUser } from './localMode';
 
 /**
@@ -52,6 +53,14 @@ interface AuthState {
   clearSessionEndedReason: () => void;
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, password: string) => Promise<void>;
+  /**
+   * Sign in through the server's SSO provider (docs/specs/oidc-sso.md §10.3).
+   * Resolves `'cancelled'` when the user closed the browser sheet — a quiet
+   * return, not an error. Rejects with `SsoFlowError` for a callback-reported
+   * failure, or with the request error when the code exchange fails; neither
+   * touches an existing stored session.
+   */
+  loginWithSso: () => Promise<'signedIn' | 'cancelled'>;
   /** Enter serverless local mode, provisioning a persistent on-device identity. */
   enableLocalMode: () => Promise<void>;
   /**
@@ -254,6 +263,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await cacheAuthProfile(response);
   }, []);
 
+  const loginWithSso = useCallback(async (): Promise<'signedIn' | 'cancelled'> => {
+    const outcome = await runOidcBrowserFlow('login');
+    if (outcome.type === 'cancelled') {
+      return 'cancelled';
+    }
+    if (outcome.type === 'error') {
+      throw new SsoFlowError(outcome.messageKey);
+    }
+    const response = await auth.oidcNativeExchange(outcome.code, outcome.codeVerifier);
+    setUser(response.user);
+    setSettings(response.settings);
+    setSessionEndedReason(null);
+    await cacheAuthProfile(response);
+    return 'signedIn';
+  }, []);
+
   const enableLocalMode = useCallback(async () => {
     const identity = await persistEnableLocalMode();
     setUser(identity.user);
@@ -364,6 +389,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       clearSessionEndedReason,
       login,
       register,
+      loginWithSso,
       enableLocalMode,
       completeServerUpgrade,
       logout,
@@ -382,6 +408,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       clearSessionEndedReason,
       login,
       register,
+      loginWithSso,
       enableLocalMode,
       completeServerUpgrade,
       logout,

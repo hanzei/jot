@@ -371,6 +371,11 @@ Notes for operators:
   (`DELETE /api/v1/sessions/{id}`) or delete the user.
 - Personal access tokens work unchanged for SSO-provisioned (password-less)
   users.
+- **The mobile app** signs in and links accounts through the same provider,
+  with no extra IdP registration: it opens the server's native hand-off in the
+  system browser and receives a one-time code on `jot://oidc-callback`
+  (`docs/specs/oidc-sso.md` §10). It needs an app build that includes
+  `expo-web-browser` and `expo-crypto`.
 
 ### Rate limiting
 

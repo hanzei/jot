@@ -83,7 +83,12 @@
     "localModeConfirmTitle": "Usare senza server?",
     "localModeConfirmMessage": "Hai effettuato l’accesso a un server. Continuando si aprirà un blocco note separato su questo dispositivo: le tue note sul server restano sul server e potrai ritrovarle accedendo di nuovo.",
     "sessionEndedMessage": "Sei stato disconnesso. Questo accade dopo una modifica della password o quando la sessione viene revocata.",
-    "sessionEndedDismiss": "Ignora"
+    "sessionEndedDismiss": "Ignora",
+    "ssoSignInWith": "Accedi con {{provider}}",
+    "ssoCancelled": "L'accesso è stato annullato.",
+    "ssoTryAgainLater": "Il Single Sign-On è occupato al momento. Riprova tra un minuto.",
+    "ssoFailed": "Single Sign-On non riuscito. Riprova.",
+    "ssoServerChanged": "Il server è cambiato durante l'accesso. Riprova."
   },
   "dashboard": {
     "newNote": "Nuova nota",
@@ -210,7 +215,22 @@
     "patsRevokeError": "Impossibile revocare il token.",
     "patsNone": "Nessun token di accesso personale ancora.",
     "patsNewTokenTitle": "Il tuo nuovo token di accesso",
-    "patsLoadError": "Impossibile caricare i token."
+    "patsLoadError": "Impossibile caricare i token.",
+    "ssoSection": "Single Sign-On",
+    "ssoLinkedDescription": "Il tuo account è collegato a {{provider}}. Puoi accedere con {{provider}}.",
+    "ssoUnlinkedDescription": "Collega il tuo account a {{provider}} per accedere con esso.",
+    "ssoConnect": "Collega {{provider}}",
+    "ssoConnected": "SSO collegato.",
+    "ssoDisconnect": "Scollega {{provider}}",
+    "ssoDisconnecting": "Scollegamento…",
+    "ssoDisconnected": "SSO scollegato.",
+    "ssoDisconnectFailed": "Impossibile scollegare l'SSO.",
+    "ssoDisconnectConfirmTitle": "Scollegare l'SSO?",
+    "ssoDisconnectConfirmMessage": "Questo scollega {{provider}} dal tuo account. Ti servirà la password per accedere.",
+    "ssoLinkConflict": "Questa identità SSO è già collegata a un altro account.",
+    "ssoLinkUnavailable": "Questo server non consente di collegare un account SSO.",
+    "ssoLinkFailed": "Impossibile collegare l'SSO. Riprova.",
+    "ssoUnlinkWouldStrand": "Impossibile scollegare l'SSO: il tuo account non ha una password e non potresti più accedere."
   },
   "about": {
     "clientInfo": "Informazioni client",

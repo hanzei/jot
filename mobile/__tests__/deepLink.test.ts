@@ -1,5 +1,6 @@
 import {
   isJotSchemeUrl,
+  isOidcCallbackUrl,
   parseDeepLink,
   getDeepLinkPath,
   isProtectedDeepLinkPath,
@@ -120,5 +121,26 @@ describe('normalizeServerOrigin', () => {
 
   it('returns null for an invalid URL', () => {
     expect(normalizeServerOrigin('not-a-url')).toBeNull();
+  });
+});
+
+describe('isOidcCallbackUrl', () => {
+  it.each([
+    'jot://oidc-callback',
+    'jot://oidc-callback?code=abc',
+    'jot://oidc-callback/?error=access_denied',
+    'JOT://OIDC-CALLBACK?code=abc',
+    'jot://oidc-callback#frag',
+  ])('matches %s', (url) => {
+    expect(isOidcCallbackUrl(url)).toBe(true);
+  });
+
+  it.each([
+    'jot://notes/abc',
+    'jot://oidc-callbackx?code=abc',
+    'jot://notes/oidc-callback',
+    'https://jot.example.com/oidc-callback?code=abc',
+  ])('does not match %s', (url) => {
+    expect(isOidcCallbackUrl(url)).toBe(false);
   });
 });

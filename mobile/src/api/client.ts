@@ -222,7 +222,8 @@ export const WRITE_REQUEST_TIMEOUT_MS = 5000;
 
 // Auth requests have no offline queue fallback and may be slow on a weak link,
 // so they keep the default (longer) timeout rather than the short write budget.
-const AUTH_ENDPOINT_PATHS = new Set(['/login', '/register', '/logout']);
+const OIDC_NATIVE_EXCHANGE_PATH = '/auth/oidc/native/exchange';
+const AUTH_ENDPOINT_PATHS = new Set(['/login', '/register', '/logout', OIDC_NATIVE_EXCHANGE_PATH]);
 
 const api = axios.create({
   baseURL: `${currentBaseUrl}/api/v1`,
@@ -597,6 +598,31 @@ export const auth = {
     const res = await api.post('/register', data);
     await storeSessionFromResponse(res.headers as Record<string, string | string[] | undefined>);
     return res.data;
+  },
+
+  /**
+   * Redeems a native SSO hand-off code (docs/specs/oidc-sso.md §10.3). The
+   * server answers exactly like `POST /login`, so the session is captured the
+   * same way. A bad, expired, or reused code (or a wrong verifier) is a 400.
+   */
+  oidcNativeExchange: async (code: string, codeVerifier: string): Promise<AuthResponse> => {
+    const res = await api.post(OIDC_NATIVE_EXCHANGE_PATH, { code, code_verifier: codeVerifier });
+    await storeSessionFromResponse(res.headers as Record<string, string | string[] | undefined>);
+    return res.data;
+  },
+
+  /**
+   * Binds the identity behind a link-intent hand-off code to the signed-in
+   * user. 204 on success; 409 when the identity belongs to another account,
+   * 403 when the server has local login disabled, 400 for a bad code.
+   */
+  oidcNativeLink: async (code: string, codeVerifier: string): Promise<void> => {
+    await api.post('/auth/oidc/native/link', { code, code_verifier: codeVerifier });
+  },
+
+  /** Unbinds the SSO identity; the server refuses (422) when that would strand a password-less account. */
+  oidcUnlink: async (): Promise<void> => {
+    await api.post('/auth/oidc/unlink');
   },
 
   logout: async (): Promise<void> => {
