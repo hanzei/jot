@@ -462,6 +462,43 @@ func TestOIDCLinkAndUnlink(t *testing.T) {
 	})
 }
 
+func TestOIDCUnlinkForbiddenWhenLocalLoginDisabled(t *testing.T) {
+	t.Parallel()
+	// SSO-only deployment: a password cannot be used to sign in, so unlinking
+	// would orphan even an account that has one — its next SSO login would
+	// provision a fresh, empty account.
+	ts, mock := setupOIDCTestServer(t, func(cfg *config.Config) {
+		cfg.LocalLoginEnabled = false
+	})
+
+	claims := map[string]any{
+		"sub":                "sub-haspass",
+		"preferred_username": "haspass",
+	}
+	c := ts.oidcClient(t)
+	provResp := ts.driveFlow(t, mock, c, "/api/v1/auth/oidc/login", claims)
+	require.NoError(t, provResp.Body.Close())
+	me, status := ts.me(t, c)
+	require.Equal(t, http.StatusOK, status)
+
+	// Give the account a password, as one carried over from mixed mode would
+	// have, so the store's strand guard alone would let the unlink through.
+	_, err := ts.Server.GetDB().Exec("UPDATE users SET password_hash = ? WHERE id = ?", "legacy-hash", me.User.ID)
+	require.NoError(t, err)
+
+	unlinkResp := ts.postForm(t, c, "/api/v1/auth/oidc/unlink")
+	require.NoError(t, unlinkResp.Body.Close())
+	assert.Equal(t, http.StatusForbidden, unlinkResp.StatusCode)
+
+	// The identity is still bound: a fresh SSO login reaches the same account.
+	c2 := ts.oidcClient(t)
+	loginResp := ts.driveFlow(t, mock, c2, "/api/v1/auth/oidc/login", claims)
+	require.NoError(t, loginResp.Body.Close())
+	me2, status2 := ts.me(t, c2)
+	require.Equal(t, http.StatusOK, status2)
+	assert.Equal(t, me.User.ID, me2.User.ID)
+}
+
 func TestOIDCProvisionedUserCanUsePAT(t *testing.T) {
 	t.Parallel()
 	ts, mock := setupOIDCTestServer(t, nil)

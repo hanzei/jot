@@ -215,7 +215,13 @@ proof. Mechanics:
   - **Unlink may not strand an account.** A user whose `password_hash` is NULL
     (SSO-provisioned, never had a password) cannot unlink their only credential;
     require setting a password first. A user who linked SSO onto an existing
-    local account still has their password, so unlink is safe for them.
+    local account still has their password, so unlink is safe for them — but
+    only while local login is enabled. When `JOT_LOCAL_LOGIN_ENABLED=false` a
+    password cannot sign in, so SSO is every account's only credential:
+    unlink is refused with 403 before the store is touched, whatever
+    `password_hash` holds. (Otherwise the next SSO login would find no bound
+    user and provision a fresh, empty account, orphaning the original.)
+    Clients hide Disconnect in that mode.
   - Linking requires local login to be enabled (step 1 needs it). When
     `JOT_LOCAL_LOGIN_ENABLED=false`, there is no local side to prove, so linking
     is not offered and only provisioning (below) applies.
@@ -582,7 +588,8 @@ IdP, which is a benefit but not the justification for this work.
 - **Self-service linking:** a logged-in local user links an SSO identity and can
   then log in via SSO to the same account; linking an `(issuer, sub)` already
   bound to another user is rejected; unlink is blocked for a password-less user
-  and allowed once a password exists.
+  and allowed once a password exists, and is refused (403) on an SSO-only
+  server even when the account has a password.
 - **Webapp:** `Login` renders the provider button from `sso`, hides the password
   form when `local_login_enabled` is false; a Vitest unit test plus an **e2e
   spec** (required for a new user-facing flow — CLAUDE.md), which can point at a

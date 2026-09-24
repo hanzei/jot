@@ -1,3 +1,4 @@
+import type { Page } from '@playwright/test';
 import { test, expect, uniqueUsername } from '../fixtures';
 
 /**
@@ -27,5 +28,48 @@ test.describe('SSO disabled (default)', () => {
     await page.goto('/settings');
     await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Single Sign-On' })).toHaveCount(0);
+  });
+});
+
+/**
+ * Pretends the server has SSO enabled and the account is linked, by rewriting
+ * the /config and /me responses. Enough to pin which Settings controls render
+ * for each mode; the flows themselves need a live identity provider.
+ */
+async function mockLinkedSso(page: Page, localLoginEnabled: boolean) {
+  await page.route('**/api/v1/config', async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      response,
+      json: { ...body, sso: { enabled: true, provider_name: 'Keycloak', local_login_enabled: localLoginEnabled } },
+    });
+  });
+  await page.route('**/api/v1/me', async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({ response, json: { ...body, user: { ...body.user, has_sso_linked: true } } });
+  });
+}
+
+test.describe('SSO enabled, linked account (mocked config)', () => {
+  test('mixed mode offers Disconnect', async ({ page, authenticatedUser, settingsPage }) => {
+    void authenticatedUser;
+    await mockLinkedSso(page, true);
+    await settingsPage.goto();
+
+    await expect(page.getByRole('heading', { name: 'Single Sign-On' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Disconnect Keycloak' })).toBeVisible();
+  });
+
+  test('SSO-only mode hides Disconnect, since unlinking would orphan the account', async ({ page, authenticatedUser, settingsPage }) => {
+    void authenticatedUser;
+    await mockLinkedSso(page, false);
+    await settingsPage.goto();
+
+    await expect(page.getByRole('heading', { name: 'Single Sign-On' })).toBeVisible();
+    await expect(page.getByText('Your account is linked to Keycloak.')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Disconnect Keycloak' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Connect Keycloak' })).toHaveCount(0);
   });
 });

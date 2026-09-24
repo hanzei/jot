@@ -347,10 +347,17 @@ func (h *OIDCHandler) usernameSeed(identity *oidc.Identity) string {
 //	@Security	CookieAuth
 //	@Success	204	"no content"
 //	@Failure	401	{string}	string	"unauthorized"
+//	@Failure	403	{string}	string	"unlinking unavailable"
 //	@Failure	422	{string}	string	"would strand the account"
 //	@Failure	500	{string}	string	"internal server error"
 //	@Router		/auth/oidc/unlink [post]
 func (h *OIDCHandler) Unlink(_ http.ResponseWriter, r *http.Request) (int, any, error) {
+	// With local login disabled a password cannot be used to sign in, so SSO is
+	// every account's only credential: unlinking would orphan the account (the
+	// next SSO login provisions a fresh one). Checked before touching the store.
+	if !h.localLoginEnabled {
+		return http.StatusForbidden, nil, errors.New("unlinking SSO is unavailable when local login is disabled")
+	}
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
 		return http.StatusUnauthorized, nil, errors.New("unauthorized")
