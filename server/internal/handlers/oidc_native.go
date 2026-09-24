@@ -10,7 +10,7 @@ import (
 	"github.com/hanzei/jot/server/internal/oidc"
 )
 
-// Mobile native hand-off (spec docs/specs/oidc-sso.md §10). The app opens
+// Mobile native hand-off. The app opens
 // NativeStart in a system browser sheet; the shared Callback verifies the ID
 // token but performs no effect, instead issuing a one-time code bound to the
 // app's PKCE-style code_challenge and redirecting to oidcNativeRedirect. The
