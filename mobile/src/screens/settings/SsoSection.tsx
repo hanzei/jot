@@ -18,9 +18,10 @@ import { styles } from './styles';
  * Connect / disconnect the account's SSO identity (docs/specs/oidc-sso.md
  * §10.3, §10.6). Shown only when the active server has SSO enabled. Connect
  * runs the native hand-off with `intent=link` and redeems the code against
- * the current session; the server refuses linking when local login is
- * disabled, so Connect is hidden then. Disconnect may be refused by the
- * server's strand guard, which is surfaced rather than swallowed.
+ * the current session. The server refuses both linking and unlinking when
+ * local login is disabled (unlinking would orphan the account), so neither is
+ * offered then. Disconnect may be refused by the server's strand guard, which
+ * is surfaced rather than swallowed.
  */
 export default function SsoSection() {
   const { colors } = useTheme();
@@ -103,10 +104,9 @@ export default function SsoSection() {
   if (!sso?.enabled) {
     return null;
   }
-  const canConnect = sso.local_login_enabled;
-  // Nothing to offer an unlinked account when linking is refused — but keep
-  // the section up while it shows feedback (e.g. right after a disconnect).
-  if (!linked && !canConnect && error === '' && success === '') {
+  const canManage = sso.local_login_enabled;
+  // Nothing to show an unlinked account when linking is refused.
+  if (!linked && !canManage) {
     return null;
   }
 
@@ -131,7 +131,7 @@ export default function SsoSection() {
           {displayMessage(t, success)}
         </Text>
       )}
-      {linked ? (
+      {!canManage ? null : linked ? (
         <TouchableOpacity
           style={[styles.primaryButton, styles.ssoDisconnectButton, { borderColor: colors.border }, busy !== null && styles.buttonDisabled]}
           onPress={handleDisconnect}
@@ -145,7 +145,7 @@ export default function SsoSection() {
             {busy === 'disconnect' ? t('settings.ssoDisconnecting') : t('settings.ssoDisconnect', { provider: providerName })}
           </Text>
         </TouchableOpacity>
-      ) : canConnect ? (
+      ) : (
         <TouchableOpacity
           style={[styles.primaryButton, { backgroundColor: colors.primary }, busy !== null && styles.buttonDisabled]}
           onPress={handleConnect}
@@ -161,7 +161,7 @@ export default function SsoSection() {
             <Text style={styles.primaryButtonText}>{t('settings.ssoConnect', { provider: providerName })}</Text>
           )}
         </TouchableOpacity>
-      ) : null}
+      )}
     </View>
   );
 }

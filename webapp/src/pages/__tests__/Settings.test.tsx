@@ -369,5 +369,34 @@ describe('Settings', () => {
       // Still linked — the refused unlink must not flip the UI to Connect.
       expect(screen.queryByRole('link', { name: 'Connect Keycloak' })).not.toBeInTheDocument();
     });
+
+    describe('with local login disabled (SSO-only)', () => {
+      const ssoOnly: SSOConfig = { ...ssoEnabled, local_login_enabled: false };
+
+      it('shows the linked provider without a Disconnect action', () => {
+        // Unlinking would orphan the account: the password cannot sign in.
+        vi.mocked(authUtils.getUser).mockReturnValue({ ...mockUser, has_sso_linked: true });
+        renderSettings(ssoOnly);
+        expect(screen.getByText(i18n.t('settings.ssoLinkedDescription', { provider: 'Keycloak' }))).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Disconnect Keycloak' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('link', { name: 'Connect Keycloak' })).not.toBeInTheDocument();
+      });
+
+      it('does not render the section for an unlinked account', () => {
+        vi.mocked(authUtils.getUser).mockReturnValue({ ...mockUser, has_sso_linked: false });
+        renderSettings(ssoOnly);
+        expect(screen.queryByRole('heading', { name: i18n.t('settings.ssoSection') })).not.toBeInTheDocument();
+      });
+
+      it('hides Change Password, since a password cannot sign in', () => {
+        renderSettings(ssoOnly);
+        expect(screen.queryByRole('heading', { name: i18n.t('settings.changePasswordSection') })).not.toBeInTheDocument();
+      });
+    });
+
+    it('keeps Change Password in mixed mode', () => {
+      renderSettings(ssoEnabled);
+      expect(screen.getByRole('heading', { name: i18n.t('settings.changePasswordSection') })).toBeInTheDocument();
+    });
   });
 });

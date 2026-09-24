@@ -688,6 +688,12 @@ const docTemplate = `{
                             "type": "string"
                         }
                     },
+                    "403": {
+                        "description": "unlinking unavailable",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "422": {
                         "description": "would strand the account",
                         "schema": {

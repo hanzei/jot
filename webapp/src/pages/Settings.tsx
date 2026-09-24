@@ -392,6 +392,7 @@ const Settings = ({ passwordMinLength, sso }: SettingsProps) => {
               passwordMinLength,
               onPasswordSubmit: handlePasswordChange,
             }}
+            showPasswordForm={!sso.enabled || sso.local_login_enabled}
             patsSection={{
               pats: patsList,
               patsLoading,
@@ -407,6 +408,7 @@ const Settings = ({ passwordMinLength, sso }: SettingsProps) => {
                 t={t}
                 providerName={sso.provider_name || 'SSO'}
                 linked={ssoLinked}
+                localLoginEnabled={sso.local_login_enabled}
                 onUnlinked={handleSsoUnlinked}
                 displayMsg={displayMsg}
               />

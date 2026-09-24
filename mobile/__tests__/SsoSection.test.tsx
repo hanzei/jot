@@ -106,9 +106,11 @@ describe('SsoSection', () => {
     expect(queryByTestId('settings-sso-section')).toBeNull();
   });
 
-  it('still offers Disconnect in SSO-only mode', async () => {
-    const { getByTestId } = await renderSection(ssoOnly, { ...baseUser, has_sso_linked: true });
-    expect(getByTestId('settings-sso-disconnect')).toBeTruthy();
+  it('hides Disconnect in SSO-only mode (unlinking would orphan the account)', async () => {
+    const { getByTestId, queryByTestId } = await renderSection(ssoOnly, { ...baseUser, has_sso_linked: true });
+    expect(getByTestId('settings-sso-description')).toHaveTextContent('settings.ssoLinkedDescription:Keycloak');
+    expect(queryByTestId('settings-sso-disconnect')).toBeNull();
+    expect(queryByTestId('settings-sso-connect')).toBeNull();
   });
 
   it('links through the browser flow and refreshes /me', async () => {
@@ -177,33 +179,6 @@ describe('SsoSection', () => {
     expect(getByTestId('settings-sso-success')).toHaveTextContent('settings.ssoDisconnected');
   });
 
-  it('keeps the disconnect confirmation visible in SSO-only mode, without a Connect action', async () => {
-    mockUnlink.mockResolvedValue(undefined);
-    let currentUser: User = { ...baseUser, has_sso_linked: true };
-    mockUseServerConfig.mockReturnValue(ssoOnly);
-    mockUseAuth.mockImplementation(() => ({ user: currentUser, setUser, revalidateSession }) as unknown as ReturnType<typeof useAuth>);
-    setUser.mockImplementation((update: (prev: User | null) => User | null) => {
-      currentUser = update(currentUser) ?? currentUser;
-    });
-    const utils = await render(
-      <ConfirmContext.Provider value={{ confirm }}>
-        <SsoSection />
-      </ConfirmContext.Provider>,
-    );
-
-    await press(utils.getByTestId('settings-sso-disconnect'));
-    await utils.rerender(
-      <ConfirmContext.Provider value={{ confirm }}>
-        <SsoSection />
-      </ConfirmContext.Provider>,
-    );
-
-    expect(currentUser.has_sso_linked).toBe(false);
-    expect(utils.getByTestId('settings-sso-success')).toHaveTextContent('settings.ssoDisconnected');
-    expect(utils.queryByTestId('settings-sso-connect')).toBeNull();
-    expect(utils.queryByTestId('settings-sso-disconnect')).toBeNull();
-  });
-
   it('does nothing when the confirmation is declined', async () => {
     confirm.mockResolvedValue(false);
     const { getByTestId } = await renderSection(mixedMode, { ...baseUser, has_sso_linked: true });
@@ -215,7 +190,7 @@ describe('SsoSection', () => {
 
   it('surfaces the strand guard when unlinking would lock the account out', async () => {
     mockUnlink.mockRejectedValue({ response: { status: 422, data: 'cannot unlink SSO: set a password first' } });
-    const { getByTestId } = await renderSection(ssoOnly, { ...baseUser, has_sso_linked: true });
+    const { getByTestId } = await renderSection(mixedMode, { ...baseUser, has_sso_linked: true });
 
     await press(getByTestId('settings-sso-disconnect'));
 

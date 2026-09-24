@@ -9,6 +9,12 @@ interface SsoSettingsSectionProps {
   providerName: string;
   /** Whether an SSO identity is currently bound to this account. */
   linked: boolean;
+  /**
+   * Whether the server allows password login. When it does not, the server
+   * refuses both linking and unlinking (unlinking would orphan the account), so
+   * neither action is offered.
+   */
+  localLoginEnabled: boolean;
   /** Called after a successful unlink so the parent can refresh the user. */
   onUnlinked: () => void;
   /** Resolves a server error string that may or may not be an i18n key. */
@@ -22,9 +28,11 @@ interface SsoSettingsSectionProps {
  * not axios — the server 302s to the identity provider). Disconnect is a JSON
  * call behind a confirmation; the server may refuse it (the "don't strand the
  * account" guard when the user has no local password), and that error is
- * surfaced here rather than swallowed.
+ * surfaced here rather than swallowed. On an SSO-only server (local login
+ * disabled) the section is informational: a linked account sees its provider,
+ * an unlinked one sees nothing.
  */
-export default function SsoSettingsSection({ t, providerName, linked, onUnlinked, displayMsg }: SsoSettingsSectionProps) {
+export default function SsoSettingsSection({ t, providerName, linked, localLoginEnabled, onUnlinked, displayMsg }: SsoSettingsSectionProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [error, setError] = useState('');
@@ -48,6 +56,10 @@ export default function SsoSettingsSection({ t, providerName, linked, onUnlinked
     }
   };
 
+  if (!localLoginEnabled && !linked) {
+    return null;
+  }
+
   return (
     <SettingsSectionCard title={t('settings.ssoSection')}>
       {linked ? (
@@ -55,14 +67,16 @@ export default function SsoSettingsSection({ t, providerName, linked, onUnlinked
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
             {t('settings.ssoLinkedDescription', { provider: providerName })}
           </p>
-          <button
-            type="button"
-            onClick={() => setConfirmOpen(true)}
-            disabled={disconnecting}
-            className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-slate-600 text-sm font-medium rounded-md shadow-sm text-red-600 dark:text-red-400 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-gray-50 dark:focus:ring-offset-slate-900 disabled:opacity-50"
-          >
-            {disconnecting ? t('settings.ssoDisconnecting') : t('settings.ssoDisconnect', { provider: providerName })}
-          </button>
+          {localLoginEnabled && (
+            <button
+              type="button"
+              onClick={() => setConfirmOpen(true)}
+              disabled={disconnecting}
+              className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-slate-600 text-sm font-medium rounded-md shadow-sm text-red-600 dark:text-red-400 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-gray-50 dark:focus:ring-offset-slate-900 disabled:opacity-50"
+            >
+              {disconnecting ? t('settings.ssoDisconnecting') : t('settings.ssoDisconnect', { provider: providerName })}
+            </button>
+          )}
         </>
       ) : (
         <>
