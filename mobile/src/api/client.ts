@@ -223,7 +223,16 @@ export const WRITE_REQUEST_TIMEOUT_MS = 5000;
 // Auth requests have no offline queue fallback and may be slow on a weak link,
 // so they keep the default (longer) timeout rather than the short write budget.
 const OIDC_NATIVE_EXCHANGE_PATH = '/auth/oidc/native/exchange';
-const AUTH_ENDPOINT_PATHS = new Set(['/login', '/register', '/logout', OIDC_NATIVE_EXCHANGE_PATH]);
+const OIDC_NATIVE_LINK_PATH = '/auth/oidc/native/link';
+const OIDC_UNLINK_PATH = '/auth/oidc/unlink';
+const AUTH_ENDPOINT_PATHS = new Set([
+  '/login',
+  '/register',
+  '/logout',
+  OIDC_NATIVE_EXCHANGE_PATH,
+  OIDC_NATIVE_LINK_PATH,
+  OIDC_UNLINK_PATH,
+]);
 
 const api = axios.create({
   baseURL: `${currentBaseUrl}/api/v1`,
@@ -617,12 +626,12 @@ export const auth = {
    * 403 when the server has local login disabled, 400 for a bad code.
    */
   oidcNativeLink: async (code: string, codeVerifier: string): Promise<void> => {
-    await api.post('/auth/oidc/native/link', { code, code_verifier: codeVerifier });
+    await api.post(OIDC_NATIVE_LINK_PATH, { code, code_verifier: codeVerifier });
   },
 
   /** Unbinds the SSO identity; the server refuses (422) when that would strand a password-less account. */
   oidcUnlink: async (): Promise<void> => {
-    await api.post('/auth/oidc/unlink');
+    await api.post(OIDC_UNLINK_PATH);
   },
 
   logout: async (): Promise<void> => {

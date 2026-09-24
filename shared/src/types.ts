@@ -15,9 +15,8 @@ export interface ServerConfig {
   password_min_length: number;
   upload_max_bytes: number;
   /**
-   * SSO/OIDC login config. Optional so the mobile app (no SSO in v1) and
-   * pre-SSO servers stay valid; the webapp defaults a missing value to
-   * disabled. Current servers always include it (with `enabled: false` when
+   * SSO/OIDC login config. Optional so pre-SSO servers (and cached configs
+   * from them) stay valid; clients default a missing value to disabled. Current servers always include it (with `enabled: false` when
    * unconfigured).
    */
   sso?: SSOConfig;

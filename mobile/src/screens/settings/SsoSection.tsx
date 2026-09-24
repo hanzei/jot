@@ -66,9 +66,10 @@ export default function SsoSection() {
         return;
       }
       await auth.oidcNativeLink(outcome.code, outcome.codeVerifier);
+      // Auth state outlives this screen: record the bind even if it unmounted.
+      setLinked(true);
       if (!isMountedRef.current) return;
       setSuccess('settings.ssoConnected');
-      setLinked(true);
     } catch (err: unknown) {
       if (isMountedRef.current) setError(oidcLinkErrorMessage(err));
     } finally {
@@ -89,9 +90,9 @@ export default function SsoSection() {
     setBusy('disconnect');
     try {
       await auth.oidcUnlink();
+      setLinked(false);
       if (!isMountedRef.current) return;
       setSuccess('settings.ssoDisconnected');
-      setLinked(false);
     } catch (err: unknown) {
       if (isMountedRef.current) setError(oidcUnlinkErrorMessage(err));
     } finally {

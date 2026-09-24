@@ -2,6 +2,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { getBaseUrl } from '../api/client';
 import { createPkcePair } from '../utils/pkce';
 import { OIDC_CALLBACK_URL, isOidcCallbackUrl } from '../utils/deepLink';
+import { extractApiError } from '../i18n/utils';
 
 /**
  * The native SSO hand-off (docs/specs/oidc-sso.md §10.3): open the server's
@@ -179,11 +180,6 @@ function getHttpStatus(error: unknown): number | undefined {
   return (error as { response?: { status?: number } })?.response?.status;
 }
 
-function getServerMessage(error: unknown): string | undefined {
-  const data = (error as { response?: { data?: unknown } })?.response?.data;
-  return typeof data === 'string' && data.trim() ? data.trim() : undefined;
-}
-
 /**
  * Message (i18n key or server text) for a failed `/native/exchange`. A 400 is
  * a bad, expired, or already-used code — the server's text for it is
@@ -197,10 +193,10 @@ export function oidcExchangeErrorMessage(error: unknown): string {
   if (status === 400) {
     return 'auth.ssoFailed';
   }
-  return getServerMessage(error) ?? 'auth.ssoFailed';
+  return extractApiError(error) ?? 'auth.ssoFailed';
 }
 
-/** Message (i18n key or server text) for a failed `/native/link`. */
+/** Message (i18n key) for a failed `/native/link`. */
 export function oidcLinkErrorMessage(error: unknown): string {
   const status = getHttpStatus(error);
   if (status === undefined) {
@@ -224,5 +220,5 @@ export function oidcUnlinkErrorMessage(error: unknown): string {
   if (status === 422) {
     return 'settings.ssoUnlinkWouldStrand';
   }
-  return getServerMessage(error) ?? 'settings.ssoDisconnectFailed';
+  return extractApiError(error) ?? 'settings.ssoDisconnectFailed';
 }

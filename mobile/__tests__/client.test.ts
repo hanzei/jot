@@ -499,12 +499,15 @@ describe('API Client', () => {
       expect(config.timeout).toBe(DEFAULT_REQUEST_TIMEOUT_MS);
     });
 
-    it('keeps the default timeout for the SSO code exchange (an auth request)', async () => {
-      const config = await getRequestInterceptor()({
-        method: 'post', url: '/auth/oidc/native/exchange', headers: {}, timeout: DEFAULT_REQUEST_TIMEOUT_MS,
-      });
-      expect(config.timeout).toBe(DEFAULT_REQUEST_TIMEOUT_MS);
-    });
+    it.each(['/auth/oidc/native/exchange', '/auth/oidc/native/link', '/auth/oidc/unlink'])(
+      'keeps the default timeout for the SSO auth request %s',
+      async (url) => {
+        const config = await getRequestInterceptor()({
+          method: 'post', url, headers: {}, timeout: DEFAULT_REQUEST_TIMEOUT_MS,
+        });
+        expect(config.timeout).toBe(DEFAULT_REQUEST_TIMEOUT_MS);
+      },
+    );
 
     it('keeps the default timeout for multipart uploads', async () => {
       const config = await getRequestInterceptor()({
