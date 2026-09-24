@@ -47,6 +47,12 @@ receiving a link the mobile app resolves it against the servers it knows
 offers to add it if it is unknown, and stashes the link to replay after login if
 the session there is not valid.
 
+One `jot://` URL is not a deep link: `jot://oidc-callback` is the redirect that
+ends the mobile SSO hand-off (`docs/specs/oidc-sso.md` §10). It belongs to the
+auth session opened by `mobile/src/store/oidcFlow.ts`, so the router ignores it
+— on cold start and as a `Linking` event — rather than routing, stashing, or
+warning about it.
+
 `webapp/src/utils/deepLink.ts` owns the web→mobile mapping and is the single
 place that knows which web paths have a mobile screen. Two callers use it to
 offer the app manually: the banner in `NavigationHeader` and the deep-link

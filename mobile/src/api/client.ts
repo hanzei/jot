@@ -222,7 +222,17 @@ export const WRITE_REQUEST_TIMEOUT_MS = 5000;
 
 // Auth requests have no offline queue fallback and may be slow on a weak link,
 // so they keep the default (longer) timeout rather than the short write budget.
-const AUTH_ENDPOINT_PATHS = new Set(['/login', '/register', '/logout']);
+const OIDC_NATIVE_EXCHANGE_PATH = '/auth/oidc/native/exchange';
+const OIDC_NATIVE_LINK_PATH = '/auth/oidc/native/link';
+const OIDC_UNLINK_PATH = '/auth/oidc/unlink';
+const AUTH_ENDPOINT_PATHS = new Set([
+  '/login',
+  '/register',
+  '/logout',
+  OIDC_NATIVE_EXCHANGE_PATH,
+  OIDC_NATIVE_LINK_PATH,
+  OIDC_UNLINK_PATH,
+]);
 
 const api = axios.create({
   baseURL: `${currentBaseUrl}/api/v1`,
@@ -536,21 +546,28 @@ api.interceptors.response.use(
   },
 );
 
-async function storeSessionFromResponse(headers: Record<string, string | string[] | undefined>): Promise<void> {
+async function storeSessionFromResponse(
+  headers: Record<string, string | string[] | undefined>,
+  boundServerId?: string,
+): Promise<void> {
   const token = extractSessionCookie(headers['set-cookie']);
   if (!token) {
     return;
   }
-  const serverId = await resolveActiveServerId();
+  const serverId = boundServerId ?? await resolveActiveServerId();
   if (serverId) {
     await setServerStorageValue(serverId, SESSION_KEY, token);
-    sessionCache = token;
+    // The in-memory cache belongs to the active server only.
+    if (serverId === activeServerId) {
+      sessionCache = token;
+    }
   }
 }
 
-export async function cacheAuthProfile(response: AuthResponse): Promise<void> {
+/** Omit `boundServerId` to cache under the active server. */
+export async function cacheAuthProfile(response: AuthResponse, boundServerId?: string): Promise<void> {
   try {
-    const serverId = await resolveActiveServerId();
+    const serverId = boundServerId ?? await resolveActiveServerId();
     if (!serverId) {
       return;
     }
@@ -597,6 +614,49 @@ export const auth = {
     const res = await api.post('/register', data);
     await storeSessionFromResponse(res.headers as Record<string, string | string[] | undefined>);
     return res.data;
+  },
+
+  /**
+   * Redeems a native SSO hand-off code (docs/specs/oidc-sso.md §10.3). The
+   * server answers exactly like `POST /login`, so the session is captured the
+   * same way. A bad, expired, or reused code (or a wrong verifier) is a 400.
+   */
+  //
+  // Unlike `login`, the result is bound to the server the exchange started on:
+  // the login screen's server switcher stays usable while it is in flight, so
+  // the response is discarded (CanceledError) if the active server changed,
+  // and the session and profile are stored under the captured server ID
+  // rather than re-resolving the active one.
+  oidcNativeExchange: async (code: string, codeVerifier: string): Promise<AuthResponse> => {
+    const serverId = await resolveActiveServerId();
+    if (!serverId) {
+      throw new Error('No active server for the SSO exchange.');
+    }
+    const assertStillActive = () => {
+      if (activeServerId !== serverId) {
+        throw new CanceledError('Active server changed during the SSO exchange.');
+      }
+    };
+    const res = await api.post(OIDC_NATIVE_EXCHANGE_PATH, { code, code_verifier: codeVerifier });
+    assertStillActive();
+    await storeSessionFromResponse(res.headers as Record<string, string | string[] | undefined>, serverId);
+    await cacheAuthProfile(res.data, serverId);
+    assertStillActive();
+    return res.data;
+  },
+
+  /**
+   * Binds the identity behind a link-intent hand-off code to the signed-in
+   * user. 204 on success; 409 when the identity belongs to another account,
+   * 403 when the server has local login disabled, 400 for a bad code.
+   */
+  oidcNativeLink: async (code: string, codeVerifier: string): Promise<void> => {
+    await api.post(OIDC_NATIVE_LINK_PATH, { code, code_verifier: codeVerifier });
+  },
+
+  /** Unbinds the SSO identity; the server refuses (422) when that would strand a password-less account. */
+  oidcUnlink: async (): Promise<void> => {
+    await api.post(OIDC_UNLINK_PATH);
   },
 
   logout: async (): Promise<void> => {

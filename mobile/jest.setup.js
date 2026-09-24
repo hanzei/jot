@@ -141,6 +141,30 @@ jest.mock('expo-localization', () => ({
   getLocales: jest.fn(() => [{ languageTag: 'en-US', languageCode: 'en' }]),
 }));
 
+// Backed by Node's crypto so PKCE runs real SHA-256 and real randomness.
+jest.mock('expo-crypto', () => {
+  const nodeCrypto = require('crypto');
+  return {
+    __esModule: true,
+    CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
+    CryptoEncoding: { HEX: 'hex', BASE64: 'base64' },
+    getRandomBytes: jest.fn((count) => new Uint8Array(nodeCrypto.randomBytes(count))),
+    digestStringAsync: jest.fn(async (algorithm, data, options) => {
+      if (algorithm !== 'SHA-256') {
+        throw new Error(`unsupported digest in mock: ${algorithm}`);
+      }
+      return nodeCrypto.createHash('sha256').update(data, 'utf8').digest(options?.encoding ?? 'hex');
+    }),
+  };
+});
+
+// Tests drive the auth session by resolving openAuthSessionAsync themselves.
+jest.mock('expo-web-browser', () => ({
+  __esModule: true,
+  openAuthSessionAsync: jest.fn().mockResolvedValue({ type: 'dismiss' }),
+  dismissAuthSession: jest.fn(),
+}));
+
 jest.mock('expo-quick-actions', () => ({
   __esModule: true,
   initial: undefined,

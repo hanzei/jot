@@ -83,7 +83,12 @@
     "localModeConfirmTitle": "Usar sem servidor?",
     "localModeConfirmMessage": "Tens sessão iniciada num servidor. Se continuares, será aberto um bloco de notas separado neste dispositivo — as tuas notas do servidor permanecem no servidor e podes voltar a aceder a elas iniciando sessão novamente.",
     "sessionEndedMessage": "A tua sessão foi terminada. Isto acontece após uma alteração de palavra-passe ou quando a sessão é revogada.",
-    "sessionEndedDismiss": "Descartar"
+    "sessionEndedDismiss": "Descartar",
+    "ssoSignInWith": "Iniciar sessão com {{provider}}",
+    "ssoCancelled": "O início de sessão foi cancelado.",
+    "ssoTryAgainLater": "O início de sessão único está ocupado neste momento. Tenta novamente dentro de um minuto.",
+    "ssoFailed": "O início de sessão único falhou. Tenta novamente.",
+    "ssoServerChanged": "O servidor mudou durante o início de sessão. Tenta novamente."
   },
   "dashboard": {
     "newNote": "Nova nota",
@@ -210,7 +215,22 @@
     "patsRevokeError": "Falha ao revogar o token.",
     "patsNone": "Nenhum token de acesso pessoal ainda.",
     "patsNewTokenTitle": "Seu novo token de acesso",
-    "patsLoadError": "Falha ao carregar os tokens."
+    "patsLoadError": "Falha ao carregar os tokens.",
+    "ssoSection": "Início de sessão único",
+    "ssoLinkedDescription": "A tua conta está associada a {{provider}}. Podes iniciar sessão com {{provider}}.",
+    "ssoUnlinkedDescription": "Associa a tua conta a {{provider}} para iniciares sessão com ele.",
+    "ssoConnect": "Associar {{provider}}",
+    "ssoConnected": "SSO associado.",
+    "ssoDisconnect": "Desassociar {{provider}}",
+    "ssoDisconnecting": "A desassociar…",
+    "ssoDisconnected": "SSO desassociado.",
+    "ssoDisconnectFailed": "Não foi possível desassociar o SSO.",
+    "ssoDisconnectConfirmTitle": "Desassociar o SSO?",
+    "ssoDisconnectConfirmMessage": "Isto desassocia {{provider}} da tua conta. Precisarás da tua palavra-passe para iniciar sessão.",
+    "ssoLinkConflict": "Esta identidade SSO já está associada a outra conta.",
+    "ssoLinkUnavailable": "Este servidor não permite associar uma conta SSO.",
+    "ssoLinkFailed": "Não foi possível associar o SSO. Tenta novamente.",
+    "ssoUnlinkWouldStrand": "Não é possível desassociar o SSO: a tua conta não tem palavra-passe e deixarias de conseguir iniciar sessão."
   },
   "about": {
     "clientInfo": "Informações do cliente",

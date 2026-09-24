@@ -83,7 +83,12 @@
     "localModeConfirmTitle": "Use without a server?",
     "localModeConfirmMessage": "You’re signed in to a server. Continuing opens a separate notebook on this device — your server notes stay on the server, and you can get back to them by signing in again.",
     "sessionEndedMessage": "You were signed out. This happens after a password change or when the session is revoked.",
-    "sessionEndedDismiss": "Dismiss"
+    "sessionEndedDismiss": "Dismiss",
+    "ssoSignInWith": "Sign in with {{provider}}",
+    "ssoCancelled": "Sign-in was cancelled.",
+    "ssoTryAgainLater": "Single sign-on is busy right now. Try again in a minute.",
+    "ssoFailed": "Single sign-on failed. Please try again.",
+    "ssoServerChanged": "The server changed during sign-in. Please try again."
   },
   "dashboard": {
     "newNote": "New Note",
@@ -210,7 +215,22 @@
     "patsRevokeError": "Failed to revoke token.",
     "patsNone": "No personal access tokens yet.",
     "patsNewTokenTitle": "Your new access token",
-    "patsLoadError": "Failed to load tokens."
+    "patsLoadError": "Failed to load tokens.",
+    "ssoSection": "Single Sign-On",
+    "ssoLinkedDescription": "Your account is linked to {{provider}}. You can sign in with {{provider}}.",
+    "ssoUnlinkedDescription": "Connect your account to {{provider}} to sign in with it.",
+    "ssoConnect": "Connect {{provider}}",
+    "ssoConnected": "Connected to SSO.",
+    "ssoDisconnect": "Disconnect {{provider}}",
+    "ssoDisconnecting": "Disconnecting…",
+    "ssoDisconnected": "Disconnected from SSO.",
+    "ssoDisconnectFailed": "Failed to disconnect SSO.",
+    "ssoDisconnectConfirmTitle": "Disconnect SSO?",
+    "ssoDisconnectConfirmMessage": "This unlinks {{provider}} from your account. You'll need your password to sign in.",
+    "ssoLinkConflict": "This SSO identity is already linked to another account.",
+    "ssoLinkUnavailable": "This server does not allow connecting an SSO account.",
+    "ssoLinkFailed": "Could not connect SSO. Please try again.",
+    "ssoUnlinkWouldStrand": "SSO cannot be disconnected: your account has no password, so you would be unable to sign in."
   },
   "about": {
     "clientInfo": "Client Info",

@@ -60,7 +60,12 @@
     "localModeConfirmTitle": "Użyć bez serwera?",
     "localModeConfirmMessage": "Masz zalogowaną sesję na serwerze. Kontynuacja otworzy oddzielny notatnik na tym urządzeniu — Twoje notatki pozostaną na serwerze i możesz do nich wrócić, logując się ponownie.",
     "sessionEndedMessage": "Nastąpiło wylogowanie. Dzieje się tak po zmianie hasła lub gdy sesja zostanie unieważniona.",
-    "sessionEndedDismiss": "Odrzuć"
+    "sessionEndedDismiss": "Odrzuć",
+    "ssoSignInWith": "Zaloguj się przez {{provider}}",
+    "ssoCancelled": "Logowanie zostało anulowane.",
+    "ssoTryAgainLater": "Logowanie jednokrotne jest teraz przeciążone. Spróbuj ponownie za minutę.",
+    "ssoFailed": "Logowanie jednokrotne nie powiodło się. Spróbuj ponownie.",
+    "ssoServerChanged": "Serwer zmienił się podczas logowania. Spróbuj ponownie."
   },
   "dashboard": {
     "newNote": "Nowa notatka",
@@ -187,7 +192,22 @@
     "patsRevokeError": "Nie udało się unieważnić tokena.",
     "patsNone": "Brak osobistych tokenów dostępu.",
     "patsNewTokenTitle": "Twój nowy token dostępu",
-    "patsLoadError": "Nie udało się załadować tokenów."
+    "patsLoadError": "Nie udało się załadować tokenów.",
+    "ssoSection": "Logowanie jednokrotne",
+    "ssoLinkedDescription": "Twoje konto jest połączone z {{provider}}. Możesz logować się przez {{provider}}.",
+    "ssoUnlinkedDescription": "Połącz swoje konto z {{provider}}, aby logować się za jego pomocą.",
+    "ssoConnect": "Połącz {{provider}}",
+    "ssoConnected": "Połączono SSO.",
+    "ssoDisconnect": "Odłącz {{provider}}",
+    "ssoDisconnecting": "Odłączanie…",
+    "ssoDisconnected": "Odłączono SSO.",
+    "ssoDisconnectFailed": "Nie udało się odłączyć SSO.",
+    "ssoDisconnectConfirmTitle": "Odłączyć SSO?",
+    "ssoDisconnectConfirmMessage": "Spowoduje to odłączenie {{provider}} od Twojego konta. Do zalogowania będzie potrzebne hasło.",
+    "ssoLinkConflict": "Ta tożsamość SSO jest już połączona z innym kontem.",
+    "ssoLinkUnavailable": "Ten serwer nie pozwala na połączenie konta SSO.",
+    "ssoLinkFailed": "Nie udało się połączyć SSO. Spróbuj ponownie.",
+    "ssoUnlinkWouldStrand": "Nie można odłączyć SSO: Twoje konto nie ma hasła, więc logowanie byłoby niemożliwe."
   },
   "about": {
     "clientInfo": "Informacje o kliencie",

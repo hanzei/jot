@@ -21,6 +21,7 @@ import AccountSection from './settings/AccountSection';
 import ChangePasswordSection from './settings/ChangePasswordSection';
 import SessionsSection from './settings/SessionsSection';
 import PATsSection from './settings/PATsSection';
+import SsoSection from './settings/SsoSection';
 import ImportSection from './settings/ImportSection';
 import AppearanceSection from './settings/AppearanceSection';
 import DeveloperSection from './settings/DeveloperSection';
@@ -63,6 +64,7 @@ export default function SettingsScreen() {
           {!isLocalMode && <ProfileIconSection />}
           <AccountSection />
           {!isLocalMode && <ChangePasswordSection />}
+          {!isLocalMode && <SsoSection />}
           {!isLocalMode && <SessionsSection />}
           {!isLocalMode && <PATsSection />}
           {!isLocalMode && <ImportSection />}

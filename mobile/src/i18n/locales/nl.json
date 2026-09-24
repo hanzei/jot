@@ -83,7 +83,12 @@
     "localModeConfirmTitle": "Zonder server gebruiken?",
     "localModeConfirmMessage": "Je bent aangemeld bij een server. Als je doorgaat, wordt er een apart notitieboek op dit apparaat geopend — je servernotities blijven op de server en je kunt er weer bij door opnieuw in te loggen.",
     "sessionEndedMessage": "Je bent afgemeld. Dit gebeurt na een wachtwoordwijziging of wanneer de sessie wordt ingetrokken.",
-    "sessionEndedDismiss": "Negeren"
+    "sessionEndedDismiss": "Negeren",
+    "ssoSignInWith": "Inloggen met {{provider}}",
+    "ssoCancelled": "Inloggen is geannuleerd.",
+    "ssoTryAgainLater": "Eenmalige aanmelding is momenteel bezet. Probeer het over een minuut opnieuw.",
+    "ssoFailed": "Eenmalige aanmelding mislukt. Probeer het opnieuw.",
+    "ssoServerChanged": "De server is tijdens het inloggen gewijzigd. Probeer het opnieuw."
   },
   "dashboard": {
     "newNote": "Nieuwe notitie",
@@ -210,7 +215,22 @@
     "patsRevokeError": "Token intrekken mislukt.",
     "patsNone": "Nog geen persoonlijke toegangstokens.",
     "patsNewTokenTitle": "Jouw nieuwe toegangstoken",
-    "patsLoadError": "Tokens laden mislukt."
+    "patsLoadError": "Tokens laden mislukt.",
+    "ssoSection": "Eenmalige aanmelding",
+    "ssoLinkedDescription": "Je account is gekoppeld aan {{provider}}. Je kunt inloggen met {{provider}}.",
+    "ssoUnlinkedDescription": "Koppel je account aan {{provider}} om ermee in te loggen.",
+    "ssoConnect": "{{provider}} koppelen",
+    "ssoConnected": "SSO gekoppeld.",
+    "ssoDisconnect": "{{provider}} loskoppelen",
+    "ssoDisconnecting": "Loskoppelen…",
+    "ssoDisconnected": "SSO losgekoppeld.",
+    "ssoDisconnectFailed": "Loskoppelen van SSO is mislukt.",
+    "ssoDisconnectConfirmTitle": "SSO loskoppelen?",
+    "ssoDisconnectConfirmMessage": "Hiermee ontkoppel je {{provider}} van je account. Je hebt je wachtwoord nodig om in te loggen.",
+    "ssoLinkConflict": "Deze SSO-identiteit is al aan een ander account gekoppeld.",
+    "ssoLinkUnavailable": "Deze server staat het koppelen van een SSO-account niet toe.",
+    "ssoLinkFailed": "SSO koppelen is mislukt. Probeer het opnieuw.",
+    "ssoUnlinkWouldStrand": "SSO kan niet worden losgekoppeld: je account heeft geen wachtwoord, dus je zou niet meer kunnen inloggen."
   },
   "about": {
     "clientInfo": "Clientinformatie",

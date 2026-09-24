@@ -27,6 +27,7 @@ import {
   DEEP_LINK_PREFIXES,
   getDeepLinkPath,
   isJotSchemeUrl,
+  isOidcCallbackUrl,
   isProtectedDeepLinkPath,
   normalizeServerOrigin,
   parseDeepLink,
@@ -180,7 +181,9 @@ export function useDeepLinkRouting({
       prefixes: DEEP_LINK_PREFIXES,
       getInitialURL: async () => {
         const url = await Linking.getInitialURL();
-        if (!url || !isJotSchemeUrl(url)) {
+        // The SSO redirect can also surface through Linking (Android); it
+        // belongs to the auth session, not the router.
+        if (!url || !isJotSchemeUrl(url) || isOidcCallbackUrl(url)) {
           return null;
         }
 
@@ -193,7 +196,7 @@ export function useDeepLinkRouting({
       },
       subscribe: (listener) => {
         const subscription = Linking.addEventListener('url', ({ url }) => {
-          if (!isJotSchemeUrl(url)) {
+          if (!isJotSchemeUrl(url) || isOidcCallbackUrl(url)) {
             return;
           }
 

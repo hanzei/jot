@@ -4,7 +4,7 @@ import LoginScreen from '../src/screens/LoginScreen';
 import RegisterScreen from '../src/screens/RegisterScreen';
 import i18n from '../src/i18n';
 import { useAuth } from '../src/store/AuthContext';
-import { getBaseUrl, getStoredServerUrl, probeServerReachability, setServerUrl } from '../src/api/client';
+import { getBaseUrl, getStoredServerUrl, probeServerReachability, setServerUrl, subscribeToClientActiveServerChanges } from '../src/api/client';
 import { VALIDATION } from '@jot/shared';
 
 jest.mock('../src/store/AuthContext', () => ({
@@ -17,6 +17,7 @@ jest.mock('../src/api/client', () => ({
   getActiveServerId: jest.fn(),
   probeServerReachability: jest.fn(),
   setServerUrl: jest.fn(),
+  subscribeToClientActiveServerChanges: jest.fn(),
 }));
 
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
@@ -44,6 +45,7 @@ describe('Auth first-run server setup flow', () => {
       clearSessionEndedReason: jest.fn(),
       login: mockLogin,
       register: mockRegister,
+      loginWithSso: jest.fn(),
       enableLocalMode: mockEnableLocalMode,
       logout: jest.fn(),
       clearAuth: jest.fn(),
@@ -53,6 +55,7 @@ describe('Auth first-run server setup flow', () => {
       completeServerUpgrade: jest.fn(),
     });
 
+    (subscribeToClientActiveServerChanges as jest.Mock).mockReturnValue(() => {});
     mockGetBaseUrl.mockReturnValue('http://localhost:8080');
     mockGetStoredServerUrl.mockResolvedValue(null);
     mockProbeServerReachability.mockResolvedValue({
@@ -353,6 +356,7 @@ describe('Auth first-run server setup flow', () => {
       clearSessionEndedReason: mockClearSessionEndedReason,
       login: mockLogin,
       register: mockRegister,
+      loginWithSso: jest.fn(),
       enableLocalMode: mockEnableLocalMode,
       logout: jest.fn(),
       clearAuth: jest.fn(),
@@ -386,6 +390,7 @@ describe('Auth first-run server setup flow', () => {
       clearSessionEndedReason: mockClearSessionEndedReason,
       login: mockLogin,
       register: mockRegister,
+      loginWithSso: jest.fn(),
       enableLocalMode: mockEnableLocalMode,
       logout: jest.fn(),
       clearAuth: jest.fn(),

@@ -63,6 +63,9 @@ export const styles = StyleSheet.create({
     marginTop: 0,
     borderWidth: 1,
   },
+  ssoDisconnectButton: {
+    borderWidth: 1,
+  },
   importSelectButtonText: {
     fontSize: 15,
     fontWeight: '500',

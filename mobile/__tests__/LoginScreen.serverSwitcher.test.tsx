@@ -12,6 +12,8 @@ jest.mock('../src/store/AuthContext', () => ({
 jest.mock('../src/api/client', () => ({
   getStoredServerUrl: jest.fn().mockResolvedValue('https://one.example.com'),
   getBaseUrl: jest.fn(() => 'https://one.example.com'),
+  getActiveServerId: jest.fn(() => 'server-one'),
+  subscribeToClientActiveServerChanges: jest.fn(() => () => {}),
   probeServerReachability: jest.fn(),
   setServerUrl: jest.fn(),
   switchActiveServer: jest.fn(),

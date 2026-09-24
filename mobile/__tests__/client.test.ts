@@ -1,9 +1,10 @@
-import axios from 'axios';
+import axios, { CanceledError } from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import {
   auth,
   getStoredSession,
   clearStoredSession,
+  setOnUnauthorized,
   cacheAuthProfile,
   getCachedAuthProfile,
   clearCachedProfile,
@@ -170,6 +171,162 @@ describe('API Client', () => {
       mockAxiosInstance.post.mockRejectedValueOnce(new Error('Network Error'));
 
       await expect(auth.register({ username: 'new', password: 'pass' })).rejects.toThrow('Network Error');
+    });
+  });
+
+  describe('auth.oidcNativeExchange', () => {
+    it('redeems the code and stores the session exactly like POST /login', async () => {
+      const mockResponse = {
+        data: { user: { id: '1', username: 'test' }, settings: { theme: 'system', note_sort: 'manual' } },
+        headers: { 'set-cookie': ['jot_session=sso-token; Path=/; HttpOnly'] },
+      };
+      mockAxiosInstance.post.mockResolvedValueOnce(mockResponse);
+
+      const result = await auth.oidcNativeExchange('one-time-code', 'the-verifier');
+
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith('/auth/oidc/native/exchange', {
+        code: 'one-time-code',
+        code_verifier: 'the-verifier',
+      });
+      expect(mockSecureStore.setItemAsync).toHaveBeenCalledWith(expect.stringMatching(/^jot_server_v1_.*_session$/), 'sso-token');
+      expect(await getStoredSession()).toBe('sso-token');
+      expect(result).toEqual(mockResponse.data);
+    });
+
+    it('stores the session under the same key /login uses', async () => {
+      const response = (token: string) => ({
+        data: { user: { id: '1', username: 'test' }, settings: {} },
+        headers: { 'set-cookie': [`jot_session=${token}; Path=/`] },
+      });
+      mockAxiosInstance.post.mockResolvedValueOnce(response('from-login'));
+      await auth.login({ username: 'test', password: 'pass' });
+      const loginKey = mockSecureStore.setItemAsync.mock.calls.at(-1)?.[0];
+
+      mockAxiosInstance.post.mockResolvedValueOnce(response('from-sso'));
+      await auth.oidcNativeExchange('code', 'verifier');
+      const ssoKey = mockSecureStore.setItemAsync.mock.calls.find((call) => call[1] === 'from-sso')?.[0];
+
+      expect(ssoKey).toBe(loginKey);
+    });
+
+    it('caches the profile under the server the exchange ran against', async () => {
+      const serverId = await getActiveTestServerId();
+      const data = { user: { id: '1', username: 'sso' }, settings: {} };
+      mockAxiosInstance.post.mockResolvedValueOnce({ data, headers: { 'set-cookie': ['jot_session=t; Path=/'] } });
+
+      await auth.oidcNativeExchange('code', 'verifier');
+
+      expect(memory.get(getServerScopedStorageKey(serverId, 'cached_profile'))).toBe(JSON.stringify(data));
+    });
+
+    it('discards the result when the active server changes mid-exchange', async () => {
+      await setServerUrl('https://sso-a.example.com');
+      const serverA = await getActiveServer();
+      await setServerUrl('https://sso-b.example.com');
+      const serverB = await getActiveServer();
+      if (!serverA || !serverB) {
+        throw new Error('missing servers');
+      }
+      await switchActiveServer(serverA.serverId);
+      mockAxiosInstance.post.mockImplementationOnce(async () => {
+        // The user picks another server while the exchange is in flight.
+        await switchActiveServer(serverB.serverId);
+        return {
+          data: { user: { id: 'a', username: 'from-a' }, settings: {} },
+          headers: { 'set-cookie': ['jot_session=token-from-a; Path=/'] },
+        };
+      });
+
+      const result = auth.oidcNativeExchange('code', 'verifier');
+
+      await expect(result).rejects.toBeInstanceOf(CanceledError);
+      for (const id of [serverA.serverId, serverB.serverId]) {
+        expect(memory.has(getServerScopedStorageKey(id, 'session'))).toBe(false);
+        expect(memory.has(getServerScopedStorageKey(id, 'cached_profile'))).toBe(false);
+      }
+      expect(await getStoredSession()).toBeNull();
+    });
+
+    it('propagates a 400 without storing anything', async () => {
+      mockAxiosInstance.post.mockRejectedValueOnce({ response: { status: 400, data: 'invalid or expired code' } });
+
+      await expect(auth.oidcNativeExchange('stale', 'verifier')).rejects.toEqual(
+        expect.objectContaining({ response: expect.objectContaining({ status: 400 }) }),
+      );
+      expect(mockSecureStore.setItemAsync).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('auth.oidcNativeLink / auth.oidcUnlink', () => {
+    it('posts the code and verifier to /auth/oidc/native/link', async () => {
+      mockAxiosInstance.post.mockResolvedValueOnce({ status: 204, data: '', headers: {} });
+
+      await auth.oidcNativeLink('link-code', 'link-verifier');
+
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith('/auth/oidc/native/link', {
+        code: 'link-code',
+        code_verifier: 'link-verifier',
+      });
+    });
+
+    it('posts to /auth/oidc/unlink', async () => {
+      mockAxiosInstance.post.mockResolvedValueOnce({ status: 204, data: '', headers: {} });
+
+      await auth.oidcUnlink();
+
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith('/auth/oidc/unlink');
+    });
+  });
+
+  describe('SSO requests and the 401 funnel', () => {
+    const getResponseErrorHandler = () => {
+      const responseUse = mockAxiosInstance.interceptors.response.use;
+      return responseUse.mock.calls[0]?.[1] as (error: unknown) => Promise<unknown>;
+    };
+
+    // Signs in through the real /login path so the in-memory session cache
+    // holds the token, as it does on device.
+    const signInWithSession = async (token: string): Promise<string> => {
+      mockAxiosInstance.post.mockResolvedValueOnce({
+        data: { user: { id: '1', username: 'test' }, settings: {} },
+        headers: { 'set-cookie': [`jot_session=${token}; Path=/`] },
+      });
+      await auth.login({ username: 'test', password: 'pass' });
+      return getActiveTestServerId();
+    };
+
+    afterEach(() => {
+      setOnUnauthorized(null);
+    });
+
+    it.each([
+      ['/auth/oidc/native/exchange', 400],
+      ['/auth/oidc/native/link', 400],
+      ['/auth/oidc/native/link', 403],
+      ['/auth/oidc/native/link', 409],
+      ['/auth/oidc/unlink', 422],
+    ])('a %s %i leaves the stored session alone', async (url, status) => {
+      const serverId = await signInWithSession('still-valid');
+      const onUnauthorized = jest.fn();
+      setOnUnauthorized(onUnauthorized);
+
+      await expect(getResponseErrorHandler()({ response: { status }, config: { url } })).rejects.toBeDefined();
+
+      expect(onUnauthorized).not.toHaveBeenCalled();
+      expect(memory.get(getServerScopedStorageKey(serverId, 'session'))).toBe('still-valid');
+    });
+
+    it('a /auth/oidc/native/link 401 still means the session expired', async () => {
+      const serverId = await signInWithSession('expired');
+      const onUnauthorized = jest.fn();
+      setOnUnauthorized(onUnauthorized);
+
+      await expect(
+        getResponseErrorHandler()({ response: { status: 401 }, config: { url: '/auth/oidc/native/link' } }),
+      ).rejects.toBeDefined();
+
+      expect(onUnauthorized).toHaveBeenCalledTimes(1);
+      expect(memory.has(getServerScopedStorageKey(serverId, 'session'))).toBe(false);
     });
   });
 
@@ -379,6 +536,16 @@ describe('API Client', () => {
       });
       expect(config.timeout).toBe(DEFAULT_REQUEST_TIMEOUT_MS);
     });
+
+    it.each(['/auth/oidc/native/exchange', '/auth/oidc/native/link', '/auth/oidc/unlink'])(
+      'keeps the default timeout for the SSO auth request %s',
+      async (url) => {
+        const config = await getRequestInterceptor()({
+          method: 'post', url, headers: {}, timeout: DEFAULT_REQUEST_TIMEOUT_MS,
+        });
+        expect(config.timeout).toBe(DEFAULT_REQUEST_TIMEOUT_MS);
+      },
+    );
 
     it('keeps the default timeout for multipart uploads', async () => {
       const config = await getRequestInterceptor()({
