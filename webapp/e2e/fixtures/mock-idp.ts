@@ -18,6 +18,7 @@
  * redirect URI, no consent, no refresh tokens, no userinfo endpoint.
  */
 import { createHash, generateKeyPairSync, randomBytes, sign, timingSafeEqual } from 'node:crypto';
+import { realpathSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { fileURLToPath } from 'node:url';
@@ -327,6 +328,9 @@ function startMockIdp(): void {
   });
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+// argv[1] keeps any symlink in the path while import.meta.url is the resolved
+// real path, so compare real paths or a symlinked checkout never starts.
+const entryPoint = process.argv[1];
+if (entryPoint && realpathSync(entryPoint) === fileURLToPath(import.meta.url)) {
   startMockIdp();
 }
