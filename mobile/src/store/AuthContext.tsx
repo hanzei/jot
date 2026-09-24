@@ -271,11 +271,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (outcome.type === 'error') {
       throw new SsoFlowError(outcome.messageKey);
     }
+    // The exchange stores the session and caches the profile under the server
+    // it ran against, and rejects if the active server changed meanwhile.
     const response = await auth.oidcNativeExchange(outcome.code, outcome.codeVerifier);
     setUser(response.user);
     setSettings(response.settings);
     setSessionEndedReason(null);
-    await cacheAuthProfile(response);
     return 'signedIn';
   }, []);
 

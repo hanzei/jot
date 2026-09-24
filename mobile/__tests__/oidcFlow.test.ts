@@ -1,3 +1,4 @@
+import { CanceledError } from 'axios';
 import * as WebBrowser from 'expo-web-browser';
 import { getBaseUrl } from '../src/api/client';
 import { computeCodeChallenge } from '../src/utils/pkce';
@@ -147,6 +148,7 @@ describe('oidcFlow', () => {
 
     it('maps exchange failures', () => {
       expect(oidcExchangeErrorMessage(new Error('Network Error'))).toBe('auth.unableToConnect');
+      expect(oidcExchangeErrorMessage(new CanceledError('switched'))).toBe('auth.ssoServerChanged');
       expect(oidcExchangeErrorMessage({ response: { status: 400, data: 'invalid or expired code' } })).toBe('auth.ssoFailed');
       expect(oidcExchangeErrorMessage({ response: { status: 403, data: 'account disabled' } })).toBe('account disabled');
       expect(oidcExchangeErrorMessage({ response: { status: 500 } })).toBe('auth.ssoFailed');

@@ -546,21 +546,28 @@ api.interceptors.response.use(
   },
 );
 
-async function storeSessionFromResponse(headers: Record<string, string | string[] | undefined>): Promise<void> {
+async function storeSessionFromResponse(
+  headers: Record<string, string | string[] | undefined>,
+  boundServerId?: string,
+): Promise<void> {
   const token = extractSessionCookie(headers['set-cookie']);
   if (!token) {
     return;
   }
-  const serverId = await resolveActiveServerId();
+  const serverId = boundServerId ?? await resolveActiveServerId();
   if (serverId) {
     await setServerStorageValue(serverId, SESSION_KEY, token);
-    sessionCache = token;
+    // The in-memory cache belongs to the active server only.
+    if (serverId === activeServerId) {
+      sessionCache = token;
+    }
   }
 }
 
-export async function cacheAuthProfile(response: AuthResponse): Promise<void> {
+/** Omit `boundServerId` to cache under the active server. */
+export async function cacheAuthProfile(response: AuthResponse, boundServerId?: string): Promise<void> {
   try {
-    const serverId = await resolveActiveServerId();
+    const serverId = boundServerId ?? await resolveActiveServerId();
     if (!serverId) {
       return;
     }
@@ -614,9 +621,27 @@ export const auth = {
    * server answers exactly like `POST /login`, so the session is captured the
    * same way. A bad, expired, or reused code (or a wrong verifier) is a 400.
    */
+  //
+  // Unlike `login`, the result is bound to the server the exchange started on:
+  // the login screen's server switcher stays usable while it is in flight, so
+  // the response is discarded (CanceledError) if the active server changed,
+  // and the session and profile are stored under the captured server ID
+  // rather than re-resolving the active one.
   oidcNativeExchange: async (code: string, codeVerifier: string): Promise<AuthResponse> => {
+    const serverId = await resolveActiveServerId();
+    if (!serverId) {
+      throw new Error('No active server for the SSO exchange.');
+    }
+    const assertStillActive = () => {
+      if (activeServerId !== serverId) {
+        throw new CanceledError('Active server changed during the SSO exchange.');
+      }
+    };
     const res = await api.post(OIDC_NATIVE_EXCHANGE_PATH, { code, code_verifier: codeVerifier });
-    await storeSessionFromResponse(res.headers as Record<string, string | string[] | undefined>);
+    assertStillActive();
+    await storeSessionFromResponse(res.headers as Record<string, string | string[] | undefined>, serverId);
+    await cacheAuthProfile(res.data, serverId);
+    assertStillActive();
     return res.data;
   },
 

@@ -1,3 +1,4 @@
+import axios from 'axios';
 import * as WebBrowser from 'expo-web-browser';
 import { getBaseUrl } from '../api/client';
 import { createPkcePair } from '../utils/pkce';
@@ -186,6 +187,11 @@ function getHttpStatus(error: unknown): number | undefined {
  * technical, so it gets the generic retry message.
  */
 export function oidcExchangeErrorMessage(error: unknown): string {
+  // A server switch mid-exchange discards the result; the user retries on the
+  // server now active.
+  if (axios.isCancel(error)) {
+    return 'auth.ssoServerChanged';
+  }
   const status = getHttpStatus(error);
   if (status === undefined) {
     return 'auth.unableToConnect';

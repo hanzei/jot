@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { CanceledError } from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import {
   auth,
@@ -204,9 +204,47 @@ describe('API Client', () => {
 
       mockAxiosInstance.post.mockResolvedValueOnce(response('from-sso'));
       await auth.oidcNativeExchange('code', 'verifier');
-      const ssoKey = mockSecureStore.setItemAsync.mock.calls.at(-1)?.[0];
+      const ssoKey = mockSecureStore.setItemAsync.mock.calls.find((call) => call[1] === 'from-sso')?.[0];
 
       expect(ssoKey).toBe(loginKey);
+    });
+
+    it('caches the profile under the server the exchange ran against', async () => {
+      const serverId = await getActiveTestServerId();
+      const data = { user: { id: '1', username: 'sso' }, settings: {} };
+      mockAxiosInstance.post.mockResolvedValueOnce({ data, headers: { 'set-cookie': ['jot_session=t; Path=/'] } });
+
+      await auth.oidcNativeExchange('code', 'verifier');
+
+      expect(memory.get(getServerScopedStorageKey(serverId, 'cached_profile'))).toBe(JSON.stringify(data));
+    });
+
+    it('discards the result when the active server changes mid-exchange', async () => {
+      await setServerUrl('https://sso-a.example.com');
+      const serverA = await getActiveServer();
+      await setServerUrl('https://sso-b.example.com');
+      const serverB = await getActiveServer();
+      if (!serverA || !serverB) {
+        throw new Error('missing servers');
+      }
+      await switchActiveServer(serverA.serverId);
+      mockAxiosInstance.post.mockImplementationOnce(async () => {
+        // The user picks another server while the exchange is in flight.
+        await switchActiveServer(serverB.serverId);
+        return {
+          data: { user: { id: 'a', username: 'from-a' }, settings: {} },
+          headers: { 'set-cookie': ['jot_session=token-from-a; Path=/'] },
+        };
+      });
+
+      const result = auth.oidcNativeExchange('code', 'verifier');
+
+      await expect(result).rejects.toBeInstanceOf(CanceledError);
+      for (const id of [serverA.serverId, serverB.serverId]) {
+        expect(memory.has(getServerScopedStorageKey(id, 'session'))).toBe(false);
+        expect(memory.has(getServerScopedStorageKey(id, 'cached_profile'))).toBe(false);
+      }
+      expect(await getStoredSession()).toBeNull();
     });
 
     it('propagates a 400 without storing anything', async () => {

@@ -1035,7 +1035,7 @@ describe('AuthContext loginWithSso', () => {
     configure({ asyncUtilTimeout: 1000 });
   });
 
-  it('exchanges the code, signs in, and caches the profile like password login', async () => {
+  it('exchanges the code and signs in', async () => {
     const response = { user: { ...mockUser, username: 'sso-user' }, settings: mockSettings };
     mockRunOidcBrowserFlow.mockResolvedValue({ type: 'code', code: 'the-code', codeVerifier: 'the-verifier' });
     mockAuth.oidcNativeExchange.mockResolvedValue(response);
@@ -1049,7 +1049,9 @@ describe('AuthContext loginWithSso', () => {
     expect(result).toBe('signedIn');
     expect(mockRunOidcBrowserFlow).toHaveBeenCalledWith('login');
     expect(mockAuth.oidcNativeExchange).toHaveBeenCalledWith('the-code', 'the-verifier');
-    expect(mockCacheAuthProfile).toHaveBeenCalledWith(response);
+    // The exchange caches the profile under its own server; re-caching here
+    // would re-resolve the active server.
+    expect(mockCacheAuthProfile).not.toHaveBeenCalled();
     expect(getByTestId('username').props.children).toBe('sso-user');
     await unmount();
   });
