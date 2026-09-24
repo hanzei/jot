@@ -55,6 +55,20 @@ describe('LabelPicker', () => {
     expect(screen.queryByText('Create "Bar"')).not.toBeInTheDocument();
   });
 
+  it('hides the create option until the label list has loaded', async () => {
+    let resolveLabels: (labels: Label[]) => void = () => {};
+    mockGetAll.mockReturnValue(new Promise<Label[]>(resolve => { resolveLabels = resolve; }));
+    render(<LabelPicker selectedLabels={[]} onLocalChange={vi.fn()} onClose={vi.fn()} />);
+
+    // "Bar" already exists; offering to create it before the list arrives would be wrong.
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Bar' } });
+    expect(screen.queryByText('Create "Bar"')).not.toBeInTheDocument();
+
+    resolveLabels([makeLabel('Bar')]);
+    expect(await screen.findByRole('option', { name: 'Bar' })).toBeInTheDocument();
+    expect(screen.queryByText('Create "Bar"')).not.toBeInTheDocument();
+  });
+
   it('adds the selected label locally for a new note', async () => {
     const onLocalChange = vi.fn();
     render(<LabelPicker selectedLabels={[]} onLocalChange={onLocalChange} onClose={vi.fn()} />);

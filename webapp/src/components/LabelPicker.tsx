@@ -20,6 +20,9 @@ interface LabelPickerProps {
 export default function LabelPicker({ note, selectedLabels, onLocalChange, onRefresh, onNoteUpdate, onError, onClose }: LabelPickerProps) {
   const { t } = useTranslation();
   const [allLabels, setAllLabels] = useState<Label[]>([]);
+  // Until the label list arrives we cannot tell whether the query names an
+  // existing label, so the create row stays hidden.
+  const [labelsLoaded, setLabelsLoaded] = useState(false);
   const [query, setQuery] = useState('');
   const [highlightIndex, setHighlightIndex] = useState(0);
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties | null>(null);
@@ -52,6 +55,7 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
 
   // Offer to create only when there's input and no existing label matches it exactly.
   const showCreate =
+    labelsLoaded &&
     trimmedQuery.length > 0 &&
     !allLabels.some(l => l.name.toLowerCase() === trimmedQuery.toLowerCase());
 
@@ -63,7 +67,8 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
   useEffect(() => {
     labelsApi.getAll()
       .then(setAllLabels)
-      .catch((err: Error) => onError?.(err.message));
+      .catch((err: Error) => onError?.(err.message))
+      .finally(() => setLabelsLoaded(true));
   }, [onError]);
 
   useEffect(() => {
