@@ -46,6 +46,13 @@ export interface User {
    * `?? false` default.
    */
   has_sso_linked?: boolean;
+  /**
+   * False for an account with no password (`password_hash IS NULL`), e.g. one
+   * created by SSO sign-in. Such a user sets a first password without
+   * `current_password`. Optional like `has_sso_linked`; read it with a
+   * `?? true` default so an absent flag keeps the Change Password form.
+   */
+  has_password?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -365,7 +372,8 @@ export interface UpdateMeRequest {
 }
 
 export interface ChangePasswordRequest {
-  current_password: string;
+  /** Omitted when the user has no password yet (`has_password` false). */
+  current_password?: string;
   new_password: string;
 }
 

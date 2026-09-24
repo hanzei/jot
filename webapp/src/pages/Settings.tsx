@@ -46,6 +46,9 @@ const Settings = ({ passwordMinLength, sso }: SettingsProps) => {
   const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
   const [hasProfileIcon, setHasProfileIcon] = useState(currentUser?.has_profile_icon ?? false);
   const [ssoLinked, setSsoLinked] = useState(currentUser?.has_sso_linked ?? false);
+  // False for an account with no password (e.g. created by SSO sign-in): it
+  // gets a Set Password form with no current-password field.
+  const [hasPassword, setHasPassword] = useState(currentUser?.has_password ?? true);
   const [iconError, setIconError] = useState('');
   const [iconUploading, setIconUploading] = useState(false);
   const [iconDeleting, setIconDeleting] = useState(false);
@@ -183,19 +186,27 @@ const Settings = ({ passwordMinLength, sso }: SettingsProps) => {
       return;
     }
 
+    const failedKey = hasPassword ? 'settings.failedChangePassword' : 'settings.failedSetPassword';
     setPasswordSaving(true);
     try {
-      await users.changePassword({ current_password: currentPassword, new_password: newPassword });
-      showToast(t('settings.passwordChanged'), 'success');
+      await users.changePassword(hasPassword
+        ? { current_password: currentPassword, new_password: newPassword }
+        : { new_password: newPassword });
+      showToast(t(hasPassword ? 'settings.passwordChanged' : 'settings.passwordSet'), 'success');
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
+      if (!hasPassword) {
+        setHasPassword(true);
+        const user = getUser();
+        if (user) setUser({ ...user, has_password: true });
+      }
     } catch (err: unknown) {
       if (isAxiosError(err)) {
         const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
-        setPasswordError(msg || 'settings.failedChangePassword');
+        setPasswordError(msg || failedKey);
       } else {
-        setPasswordError('settings.failedChangePassword');
+        setPasswordError(failedKey);
       }
     } finally {
       setPasswordSaving(false);
@@ -381,6 +392,7 @@ const Settings = ({ passwordMinLength, sso }: SettingsProps) => {
               onAccountSubmit: handleSubmit,
             }}
             passwordForm={{
+              hasPassword,
               currentPassword,
               newPassword,
               confirmPassword,

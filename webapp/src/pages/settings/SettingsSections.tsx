@@ -67,6 +67,11 @@ interface AccountFormProps {
 }
 
 interface PasswordFormProps {
+  /**
+   * False when the account has no password yet (e.g. created by SSO sign-in):
+   * the card becomes Set Password, without the current-password field.
+   */
+  hasPassword: boolean;
   currentPassword: string;
   newPassword: string;
   confirmPassword: string;
@@ -104,6 +109,7 @@ export const IdentitySecurityColumn = ({
     onAccountSubmit,
   },
   passwordForm: {
+    hasPassword,
     currentPassword,
     newPassword,
     confirmPassword,
@@ -256,23 +262,29 @@ export const IdentitySecurityColumn = ({
     </SettingsSectionCard>
 
     {showPasswordForm && (
-      <SettingsSectionCard title={t('settings.changePasswordSection')}>
+      <SettingsSectionCard title={t(hasPassword ? 'settings.changePasswordSection' : 'settings.setPasswordSection')}>
         <form onSubmit={onPasswordSubmit}>
-          <div>
-            <label htmlFor="current-password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              {t('settings.currentPasswordLabel')}
-            </label>
-            <input
-              id="current-password"
-              type="password"
-              required
-              value={currentPassword}
-              onChange={(e) => onCurrentPasswordChange(e.target.value)}
-              className="mt-1 block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
+          {hasPassword ? (
+            <div className="mb-4">
+              <label htmlFor="current-password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                {t('settings.currentPasswordLabel')}
+              </label>
+              <input
+                id="current-password"
+                type="password"
+                required
+                value={currentPassword}
+                onChange={(e) => onCurrentPasswordChange(e.target.value)}
+                className="mt-1 block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              {t('settings.setPasswordDescription')}
+            </p>
+          )}
 
-          <div className="mt-4">
+          <div>
             <label htmlFor="new-password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
               {t('settings.newPasswordLabel')}
             </label>
@@ -313,7 +325,9 @@ export const IdentitySecurityColumn = ({
               disabled={passwordSaving}
               className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 disabled:bg-blue-400 dark:disabled:bg-blue-500 text-white px-4 py-2 rounded-md text-sm font-medium"
             >
-              {passwordSaving ? t('settings.changing') : t('settings.changePassword')}
+              {passwordSaving
+                ? t(hasPassword ? 'settings.changing' : 'settings.saving')
+                : t(hasPassword ? 'settings.changePassword' : 'settings.setPassword')}
             </button>
           </div>
         </form>

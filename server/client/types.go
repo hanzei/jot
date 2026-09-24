@@ -27,6 +27,7 @@ type User struct {
 	Role           Role      `json:"role"`
 	HasProfileIcon bool      `json:"has_profile_icon"`
 	HasSSOLinked   bool      `json:"has_sso_linked"`
+	HasPassword    bool      `json:"has_password"`
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
 }

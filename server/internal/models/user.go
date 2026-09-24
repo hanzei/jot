@@ -66,6 +66,7 @@ type User struct {
 	Role           string    `json:"role"`
 	HasProfileIcon bool      `json:"has_profile_icon"`
 	HasSSOLinked   bool      `json:"has_sso_linked"`
+	HasPassword    bool      `json:"has_password"`
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
 }
@@ -121,6 +122,7 @@ func (s *userStore) Create(ctx context.Context, username, password string) (*Use
 	user.ID = userID
 	user.Username = username
 	user.Role = role
+	user.HasPassword = true
 
 	return &user, nil
 }
@@ -138,12 +140,13 @@ func (s *userStore) GetByUsername(ctx context.Context, username string) (*User, 
 	query := `SELECT id, username, first_name, last_name, COALESCE(password_hash, '') AS password_hash, role,
 			         profile_icon IS NOT NULL AS has_profile_icon,
 			         oidc_subject IS NOT NULL AS has_sso_linked,
+			         COALESCE(password_hash, '') <> '' AS has_password,
 			         created_at, updated_at
 			  FROM users WHERE username = ?`
 
 	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), strings.ToLower(username)).Scan(
 		&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.PasswordHash,
-		&user.Role, &user.HasProfileIcon, &user.HasSSOLinked, &user.CreatedAt, &user.UpdatedAt,
+		&user.Role, &user.HasProfileIcon, &user.HasSSOLinked, &user.HasPassword, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -159,12 +162,13 @@ func (s *userStore) GetByID(ctx context.Context, id string) (*User, error) {
 	query := `SELECT id, username, first_name, last_name, COALESCE(password_hash, '') AS password_hash, role,
 			         profile_icon IS NOT NULL AS has_profile_icon,
 			         oidc_subject IS NOT NULL AS has_sso_linked,
+			         COALESCE(password_hash, '') <> '' AS has_password,
 			         created_at, updated_at
 			  FROM users WHERE id = ?`
 
 	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), id).Scan(
 		&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.PasswordHash,
-		&user.Role, &user.HasProfileIcon, &user.HasSSOLinked, &user.CreatedAt, &user.UpdatedAt,
+		&user.Role, &user.HasProfileIcon, &user.HasSSOLinked, &user.HasPassword, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -203,7 +207,7 @@ func scanUser(rows *sql.Rows) (User, error) {
 	var user User
 	err := rows.Scan(
 		&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.PasswordHash,
-		&user.Role, &user.HasProfileIcon, &user.HasSSOLinked, &user.CreatedAt, &user.UpdatedAt,
+		&user.Role, &user.HasProfileIcon, &user.HasSSOLinked, &user.HasPassword, &user.CreatedAt, &user.UpdatedAt,
 	)
 	return user, err
 }
@@ -212,6 +216,7 @@ func (s *userStore) GetAll(ctx context.Context) ([]*User, error) {
 	query := `SELECT id, username, first_name, last_name, COALESCE(password_hash, '') AS password_hash, role,
 			         profile_icon IS NOT NULL AS has_profile_icon,
 			         oidc_subject IS NOT NULL AS has_sso_linked,
+			         COALESCE(password_hash, '') <> '' AS has_password,
 			         created_at, updated_at
 			  FROM users ORDER BY created_at DESC`
 
@@ -245,6 +250,7 @@ func (s *userStore) Search(ctx context.Context, term string) ([]*User, error) {
 	query := `SELECT id, username, first_name, last_name, COALESCE(password_hash, '') AS password_hash, role,
 			         profile_icon IS NOT NULL AS has_profile_icon,
 			         oidc_subject IS NOT NULL AS has_sso_linked,
+			         COALESCE(password_hash, '') <> '' AS has_password,
 			         created_at, updated_at
 			  FROM users
 			  WHERE ` + s.d.CaseInsensitiveLike("username") +
@@ -371,9 +377,10 @@ func (s *userStore) UpdateProfile(ctx context.Context, id, username, firstName, 
 		 WHERE id = ? RETURNING id, username, first_name, last_name, role,
 		 profile_icon IS NOT NULL AS has_profile_icon,
 		 oidc_subject IS NOT NULL AS has_sso_linked,
+		 COALESCE(password_hash, '') <> '' AS has_password,
 		 created_at, updated_at`),
 		username, firstName, lastName, Timestamp(Now()), id,
-	).Scan(&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.Role, &user.HasProfileIcon, &user.HasSSOLinked, &user.CreatedAt, &user.UpdatedAt)
+	).Scan(&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.Role, &user.HasProfileIcon, &user.HasSSOLinked, &user.HasPassword, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		if s.d.IsUniqueConstraintError(err) {
 			return nil, ErrUsernameTaken
@@ -428,9 +435,10 @@ func (s *userStore) UpdateRole(ctx context.Context, id, role string) (*User, err
 		 WHERE id = ? RETURNING id, username, first_name, last_name, role,
 		 profile_icon IS NOT NULL AS has_profile_icon,
 		 oidc_subject IS NOT NULL AS has_sso_linked,
+		 COALESCE(password_hash, '') <> '' AS has_password,
 		 created_at, updated_at`),
 		role, Timestamp(Now()), id,
-	).Scan(&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.Role, &user.HasProfileIcon, &user.HasSSOLinked, &user.CreatedAt, &user.UpdatedAt)
+	).Scan(&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.Role, &user.HasProfileIcon, &user.HasSSOLinked, &user.HasPassword, &user.CreatedAt, &user.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrUserNotFound
 	}
@@ -542,6 +550,7 @@ func (s *userStore) CreateByAdmin(ctx context.Context, username, password string
 	user.ID = userID
 	user.Username = username
 	user.Role = role
+	user.HasPassword = true
 
 	return &user, nil
 }
@@ -551,6 +560,7 @@ func (s *userStore) CreateByAdmin(ctx context.Context, username, password string
 const userSelectColumns = `id, username, first_name, last_name, COALESCE(password_hash, '') AS password_hash, role,
 		         profile_icon IS NOT NULL AS has_profile_icon,
 		         oidc_subject IS NOT NULL AS has_sso_linked,
+		         COALESCE(password_hash, '') <> '' AS has_password,
 		         created_at, updated_at`
 
 // GetByOIDCIdentity looks up the user bound to an (issuer, subject) pair.
@@ -562,7 +572,7 @@ func (s *userStore) GetByOIDCIdentity(ctx context.Context, issuer, subject strin
 
 	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), issuer, subject).Scan(
 		&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.PasswordHash,
-		&user.Role, &user.HasProfileIcon, &user.HasSSOLinked, &user.CreatedAt, &user.UpdatedAt,
+		&user.Role, &user.HasProfileIcon, &user.HasSSOLinked, &user.HasPassword, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

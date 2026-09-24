@@ -167,9 +167,10 @@ fails startup today.
   step in this whole change.** A is the deliberate call to pay that cost for a
   truthful column rather than encode "no password" as an empty string.
 
-Whether a user has a local password is determined by `oidc_subject IS NOT NULL`
-(an SSO-provisioned account), never by inspecting the hash — so no code path
-depends on distinguishing NULL from any other hash value.
+Whether a user has a local password is whether `password_hash` holds a hash
+(NULL or empty means none). The API exposes it as `has_password` on the user
+object, next to `has_sso_linked`; the two are independent — a local user who
+linked SSO has both.
 
 **Matching key: `(issuer, sub)`.** `sub` is the only claim guaranteed stable and
 unique per user at an IdP. `email`/`preferred_username` can change or be reused
@@ -214,7 +215,14 @@ proof. Mechanics:
     account." Never silently rebind.
   - **Unlink may not strand an account.** A user whose `password_hash` is NULL
     (SSO-provisioned, never had a password) cannot unlink their only credential;
-    require setting a password first. A user who linked SSO onto an existing
+    require setting a password first. They do that from Settings: for a user
+    with `has_password: false` the Change Password card becomes **Set
+    Password** (new + confirm, no current-password field), and
+    `PUT /api/v1/users/me/password` accepts the request without
+    `current_password` exactly when the account has no password. Everyone else
+    must still supply it. Setting a first password is refused with 403 while
+    local login is disabled, since the password could not sign in (the card is
+    hidden in that mode anyway). A user who linked SSO onto an existing
     local account still has their password, so unlink is safe for them — but
     only while local login is enabled. When `JOT_LOCAL_LOGIN_ENABLED=false` a
     password cannot sign in, so SSO is every account's only credential:
