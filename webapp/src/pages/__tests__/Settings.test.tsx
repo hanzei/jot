@@ -387,6 +387,16 @@ describe('Settings', () => {
         renderSettings(ssoOnly);
         expect(screen.queryByRole('heading', { name: i18n.t('settings.ssoSection') })).not.toBeInTheDocument();
       });
+
+      it('hides Change Password, since a password cannot sign in', () => {
+        renderSettings(ssoOnly);
+        expect(screen.queryByRole('heading', { name: i18n.t('settings.changePasswordSection') })).not.toBeInTheDocument();
+      });
+    });
+
+    it('keeps Change Password in mixed mode', () => {
+      renderSettings(ssoEnabled);
+      expect(screen.getByRole('heading', { name: i18n.t('settings.changePasswordSection') })).toBeInTheDocument();
     });
   });
 });

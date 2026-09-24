@@ -11,7 +11,7 @@ import { useServerConfig } from '../../hooks/useServerConfig';
 export default function ChangePasswordSection() {
   const { colors } = useTheme();
   const { t } = useTranslation();
-  const { password_min_length: passwordMinLength } = useServerConfig();
+  const { password_min_length: passwordMinLength, sso } = useServerConfig();
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -52,6 +52,11 @@ export default function ChangePasswordSection() {
       setPasswordSaving(false);
     }
   }, [confirmPassword, currentPassword, newPassword, passwordMinLength, t]);
+
+  // On an SSO-only server a password cannot be used to sign in.
+  if (sso?.enabled && !sso.local_login_enabled) {
+    return null;
+  }
 
   return (
     <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>

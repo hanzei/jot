@@ -60,9 +60,10 @@ test.describe('SSO enabled, linked account (mocked config)', () => {
 
     await expect(page.getByRole('heading', { name: 'Single Sign-On' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Disconnect Keycloak' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Change Password' })).toBeVisible();
   });
 
-  test('SSO-only mode hides Disconnect, since unlinking would orphan the account', async ({ page, authenticatedUser, settingsPage }) => {
+  test('SSO-only mode hides Disconnect and Change Password', async ({ page, authenticatedUser, settingsPage }) => {
     void authenticatedUser;
     await mockLinkedSso(page, false);
     await settingsPage.goto();
@@ -71,5 +72,7 @@ test.describe('SSO enabled, linked account (mocked config)', () => {
     await expect(page.getByText('Your account is linked to Keycloak.')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Disconnect Keycloak' })).toHaveCount(0);
     await expect(page.getByRole('link', { name: 'Connect Keycloak' })).toHaveCount(0);
+    // A password cannot sign in either, so there is nothing to change.
+    await expect(page.getByRole('heading', { name: 'Change Password' })).toHaveCount(0);
   });
 });

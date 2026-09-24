@@ -33,6 +33,11 @@ interface IdentitySecurityColumnProps {
   profileIcon: ProfileIconProps;
   accountForm: AccountFormProps;
   passwordForm: PasswordFormProps;
+  /**
+   * False on an SSO-only server (local login disabled), where a password
+   * cannot be used to sign in, so the Change Password card is not offered.
+   */
+  showPasswordForm: boolean;
   patsSection: PATsSectionProps;
   /** Optional SSO connect/disconnect card, rendered only when OIDC is enabled. */
   ssoSection?: ReactNode;
@@ -110,6 +115,7 @@ export const IdentitySecurityColumn = ({
     passwordMinLength,
     onPasswordSubmit,
   },
+  showPasswordForm,
   patsSection: {
     pats,
     patsLoading,
@@ -249,68 +255,70 @@ export const IdentitySecurityColumn = ({
       </form>
     </SettingsSectionCard>
 
-    <SettingsSectionCard title={t('settings.changePasswordSection')}>
-      <form onSubmit={onPasswordSubmit}>
-        <div>
-          <label htmlFor="current-password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-            {t('settings.currentPasswordLabel')}
-          </label>
-          <input
-            id="current-password"
-            type="password"
-            required
-            value={currentPassword}
-            onChange={(e) => onCurrentPasswordChange(e.target.value)}
-            className="mt-1 block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-          />
-        </div>
-
-        <div className="mt-4">
-          <label htmlFor="new-password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-            {t('settings.newPasswordLabel')}
-          </label>
-          <input
-            id="new-password"
-            type="password"
-            required
-            value={newPassword}
-            onChange={(e) => onNewPasswordChange(e.target.value)}
-            className="mt-1 block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-            placeholder={t('settings.newPasswordPlaceholder', { min: passwordMinLength })}
-          />
-        </div>
-
-        <div className="mt-4">
-          <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-            {t('settings.confirmNewPasswordLabel')}
-          </label>
-          <input
-            id="confirm-password"
-            type="password"
-            required
-            value={confirmPassword}
-            onChange={(e) => onConfirmPasswordChange(e.target.value)}
-            className="mt-1 block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-          />
-        </div>
-
-        {passwordError && (
-          <div role="alert" className="mt-4 text-red-600 dark:text-red-400 text-sm">
-            {displayMsg(passwordError)}
+    {showPasswordForm && (
+      <SettingsSectionCard title={t('settings.changePasswordSection')}>
+        <form onSubmit={onPasswordSubmit}>
+          <div>
+            <label htmlFor="current-password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              {t('settings.currentPasswordLabel')}
+            </label>
+            <input
+              id="current-password"
+              type="password"
+              required
+              value={currentPassword}
+              onChange={(e) => onCurrentPasswordChange(e.target.value)}
+              className="mt-1 block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            />
           </div>
-        )}
 
-        <div className="mt-6">
-          <button
-            type="submit"
-            disabled={passwordSaving}
-            className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 disabled:bg-blue-400 dark:disabled:bg-blue-500 text-white px-4 py-2 rounded-md text-sm font-medium"
-          >
-            {passwordSaving ? t('settings.changing') : t('settings.changePassword')}
-          </button>
-        </div>
-      </form>
-    </SettingsSectionCard>
+          <div className="mt-4">
+            <label htmlFor="new-password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              {t('settings.newPasswordLabel')}
+            </label>
+            <input
+              id="new-password"
+              type="password"
+              required
+              value={newPassword}
+              onChange={(e) => onNewPasswordChange(e.target.value)}
+              className="mt-1 block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              placeholder={t('settings.newPasswordPlaceholder', { min: passwordMinLength })}
+            />
+          </div>
+
+          <div className="mt-4">
+            <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              {t('settings.confirmNewPasswordLabel')}
+            </label>
+            <input
+              id="confirm-password"
+              type="password"
+              required
+              value={confirmPassword}
+              onChange={(e) => onConfirmPasswordChange(e.target.value)}
+              className="mt-1 block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+
+          {passwordError && (
+            <div role="alert" className="mt-4 text-red-600 dark:text-red-400 text-sm">
+              {displayMsg(passwordError)}
+            </div>
+          )}
+
+          <div className="mt-6">
+            <button
+              type="submit"
+              disabled={passwordSaving}
+              className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 disabled:bg-blue-400 dark:disabled:bg-blue-500 text-white px-4 py-2 rounded-md text-sm font-medium"
+            >
+              {passwordSaving ? t('settings.changing') : t('settings.changePassword')}
+            </button>
+          </div>
+        </form>
+      </SettingsSectionCard>
+    )}
 
     <SettingsSectionCard title={t('settings.patsSection')}>
       <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">

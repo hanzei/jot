@@ -221,7 +221,7 @@ proof. Mechanics:
     unlink is refused with 403 before the store is touched, whatever
     `password_hash` holds. (Otherwise the next SSO login would find no bound
     user and provision a fresh, empty account, orphaning the original.)
-    Clients hide Disconnect in that mode.
+    Clients hide Disconnect in that mode, and Change Password with it.
   - Linking requires local login to be enabled (step 1 needs it). When
     `JOT_LOCAL_LOGIN_ENABLED=false`, there is no local side to prove, so linking
     is not offered and only provisioning (below) applies.
