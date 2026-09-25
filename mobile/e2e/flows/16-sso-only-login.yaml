@@ -1,0 +1,42 @@
+# SSO, part 5 — SSO-only mode (#1016).
+#
+# run.sh has restarted the server with JOT_LOCAL_LOGIN_ENABLED=false. Signed in
+# as the account flow 15 provisioned, sign out: the login screen offers the SSO
+# button and no local form. Then sign in through SSO once more, the only way in.
+appId: com.jot.app
+---
+- launchApp
+
+- extendedWaitUntil:
+    visible:
+      id: "drawer-toggle"
+    timeout: 20000
+- tapOn:
+    id: "drawer-toggle"
+- tapOn:
+    id: "drawer-logout"
+- tapOn:
+    id: "confirm-dialog-confirm"
+
+- extendedWaitUntil:
+    visible:
+      id: "login-sso-button"
+    timeout: 20000
+# The cached config still says mixed mode until the background refresh lands.
+- extendedWaitUntil:
+    notVisible:
+      id: "username-input"
+    timeout: 20000
+- takeScreenshot: sso-16-login-sso-only
+
+- tapOn:
+    id: "login-sso-button"
+- runFlow: helpers/mock-idp-page.yaml
+- tapOn: "Username"
+- inputText: "${MAESTRO_JOT_SSO_USERNAME}"
+- tapOn: "Approve"
+
+- extendedWaitUntil:
+    visible:
+      id: "drawer-toggle"
+    timeout: 30000

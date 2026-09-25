@@ -1,0 +1,41 @@
+# SSO, part 2 — deny at the IdP (#1016).
+#
+# Signs out of the local account flow 12 linked and lands on the mixed-mode
+# login screen: the SSO button above the local form. Denying at the IdP comes
+# back as `error=access_denied` on the jot://oidc-callback redirect, which the
+# app reports as a cancellation rather than a failure.
+appId: com.jot.app
+---
+- launchApp
+
+- extendedWaitUntil:
+    visible:
+      id: "drawer-toggle"
+    timeout: 20000
+- tapOn:
+    id: "drawer-toggle"
+- tapOn:
+    id: "drawer-logout"
+- tapOn:
+    id: "confirm-dialog-confirm"
+
+- extendedWaitUntil:
+    visible:
+      id: "login-sso-button"
+    timeout: 20000
+# Mixed mode: the local form stays alongside the SSO button.
+- assertVisible:
+    id: "username-input"
+- takeScreenshot: sso-13-login-mixed
+
+- tapOn:
+    id: "login-sso-button"
+- runFlow: helpers/mock-idp-page.yaml
+- tapOn: "Deny"
+
+- extendedWaitUntil:
+    visible:
+      id: "login-error"
+      text: "Sign-in was cancelled."
+    timeout: 30000
+- takeScreenshot: sso-13-denied

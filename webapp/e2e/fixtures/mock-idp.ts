@@ -32,7 +32,11 @@ export const MOCK_IDP_PORT = 8091;
 export const MOCK_IDP_ISSUER = `http://127.0.0.1:${MOCK_IDP_PORT}`;
 export const MOCK_IDP_CLIENT_ID = 'jot-e2e';
 export const MOCK_IDP_CLIENT_SECRET = 'jot-e2e-secret';
-/** The one redirect URI registered for the client: the SSO Jot instance's callback. */
+/**
+ * The one redirect URI registered for the client: by default the Playwright SSO
+ * Jot instance's callback. The mobile device suite (`mobile/e2e/run.sh`) sets
+ * `MOCK_IDP_REDIRECT_URI` to a callback the emulator's browser can reach.
+ */
 export const MOCK_IDP_REDIRECT_URI = 'http://localhost:8090/api/v1/auth/oidc/callback';
 export const MOCK_IDP_READY_PATH = '/healthz';
 
@@ -66,6 +70,7 @@ function base64url(input: Buffer | string): string {
 }
 
 function startMockIdp(): void {
+  const registeredRedirectUri = process.env.MOCK_IDP_REDIRECT_URI || MOCK_IDP_REDIRECT_URI;
   const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
   const kid = base64url(randomBytes(8));
   const jwks = { keys: [{ ...publicKey.export({ format: 'jwk' }), kid, use: 'sig', alg: 'RS256' }] };
@@ -113,7 +118,7 @@ function startMockIdp(): void {
     if (params.get('client_id') !== MOCK_IDP_CLIENT_ID) {
       return 'unknown client_id';
     }
-    if (params.get('redirect_uri') !== MOCK_IDP_REDIRECT_URI) {
+    if (params.get('redirect_uri') !== registeredRedirectUri) {
       return 'redirect_uri does not match the registered one';
     }
     if (params.get('response_type') !== 'code') {
@@ -132,7 +137,7 @@ function startMockIdp(): void {
       return 'only the S256 code_challenge_method is supported';
     }
     return {
-      redirectUri: MOCK_IDP_REDIRECT_URI,
+      redirectUri: registeredRedirectUri,
       state: params.get('state') ?? '',
       nonce: params.get('nonce') ?? '',
       codeChallenge,

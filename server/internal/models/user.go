@@ -621,6 +621,9 @@ func (s *userStore) ProvisionSSOUser(ctx context.Context, issuer, subject, usern
 			user.ID = userID
 			user.Username = username
 			user.Role = role
+			// Match what a read of the row reports: callers return this user to
+			// the client as-is (e.g. the native exchange response).
+			user.HasSSOLinked = true
 			return &user, nil
 		}
 		if !s.d.IsUniqueConstraintError(err) {

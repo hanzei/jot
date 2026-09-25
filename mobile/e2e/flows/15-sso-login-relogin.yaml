@@ -1,0 +1,57 @@
+# SSO, part 4 — sign up through SSO, sign out, and sign back in (#1016).
+#
+# Continues on the mixed-mode login screen. The first SSO sign-in with an IdP
+# username Jot has never seen provisions a new account from it; the second must
+# land in that same account. The UI cannot tell two same-named accounts apart,
+# so run.sh settles that on the server afterwards (exactly one new account,
+# linked). The last steps capture the Settings SSO section for such an account.
+appId: com.jot.app
+---
+- tapOn:
+    id: "login-sso-button"
+- runFlow: helpers/mock-idp-page.yaml
+- tapOn: "Username"
+- inputText: "${MAESTRO_JOT_SSO_USERNAME}"
+- tapOn: "Approve"
+
+- extendedWaitUntil:
+    visible:
+      id: "drawer-toggle"
+    timeout: 30000
+- takeScreenshot: sso-15-first-login
+
+- tapOn:
+    id: "drawer-toggle"
+- tapOn:
+    id: "drawer-logout"
+- tapOn:
+    id: "confirm-dialog-confirm"
+- extendedWaitUntil:
+    visible:
+      id: "login-sso-button"
+    timeout: 20000
+
+- tapOn:
+    id: "login-sso-button"
+- runFlow: helpers/mock-idp-page.yaml
+- tapOn: "Username"
+- inputText: "${MAESTRO_JOT_SSO_USERNAME}"
+- tapOn: "Approve"
+
+- extendedWaitUntil:
+    visible:
+      id: "drawer-toggle"
+    timeout: 30000
+- tapOn:
+    id: "drawer-toggle"
+- tapOn:
+    id: "drawer-settings"
+- extendedWaitUntil:
+    visible:
+      id: "settings-screen"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      id: "settings-sso-disconnect"
+    timeout: 20000
+- takeScreenshot: sso-15-settings-sso-account

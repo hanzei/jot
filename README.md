@@ -226,7 +226,9 @@ emulator's alias for the host loopback, which does not reach your machine from a
 physical device. `./scripts/check-maestro.sh` runs first and stops with the exact
 install command when a prerequisite is missing, rather than failing every flow.
 The suite starts its own Jot server on a throwaway database, so nothing needs to
-be running beforehand.
+be running beforehand. Its SSO flows also start the mock OIDC provider on port
+8091 (Node 22.18 or newer, as for `task test-e2e`) and `adb reverse` that port
+into the emulator.
 
 Flow syntax is checked separately by `task check-mobile-flows`, which needs
 Maestro but **no** emulator, so it is quick to run while editing flows. It
@@ -236,8 +238,9 @@ a selector stopped matching.
 CI runs both. The `flows` job in `mobile-ci.yml` syntax-checks the flows on
 every PR touching `mobile/**`, and `mobile-e2e.yml` boots an x86_64 Android
 emulator to run the smoke flow on those PRs (plus `master` and
-`workflow_dispatch`), building a self-contained debug-signed APK for it. On a
-failed run it uploads the JUnit report, a screen recording, and Maestro's
+`workflow_dispatch`), building a self-contained debug-signed APK for it. Every run uploads the
+screenshots the flows take (`mobile-e2e-screenshots`, e.g. the SSO screens); on
+a failed run it also uploads the JUnit report, a screen recording, and Maestro's
 per-step screenshots so a flow that cannot be reproduced locally is still
 debuggable.
 

@@ -1,0 +1,49 @@
+# SSO, part 1 — connect SSO from Settings for a local account (#1016).
+#
+# run.sh has restarted the server with OIDC pointed at the mock IdP (mixed mode:
+# local login stays on) against the same database, so the app is still signed in
+# as the local account flows 01-11 used. This is the only flow that drives the
+# `intent=link` hand-off: Settings opens the browser sheet, the IdP approves, the
+# jot://oidc-callback redirect returns the one-time code, and the app redeems it
+# against the current session. run.sh then checks on the server that the local
+# account — not a new one — got the SSO identity.
+appId: com.jot.app
+---
+- launchApp
+
+- extendedWaitUntil:
+    visible:
+      id: "drawer-toggle"
+    timeout: 20000
+- tapOn:
+    id: "drawer-toggle"
+- tapOn:
+    id: "drawer-settings"
+- extendedWaitUntil:
+    visible:
+      id: "settings-screen"
+    timeout: 20000
+
+# The section renders only once useServerConfig's background refresh reports SSO
+# enabled — the cached config predates the restart — so this waits for that too.
+- scrollUntilVisible:
+    element:
+      id: "settings-sso-connect"
+    timeout: 30000
+- takeScreenshot: sso-12-settings-unlinked
+
+- tapOn:
+    id: "settings-sso-connect"
+- runFlow: helpers/mock-idp-page.yaml
+# Tapping the label focuses its input, as in any browser.
+- tapOn: "Username"
+- inputText: "${MAESTRO_JOT_SSO_LINK_USERNAME}"
+- tapOn: "Approve"
+
+- extendedWaitUntil:
+    visible:
+      id: "settings-sso-success"
+    timeout: 30000
+- assertVisible:
+    id: "settings-sso-disconnect"
+- takeScreenshot: sso-12-settings-linked

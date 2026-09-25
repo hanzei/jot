@@ -30,6 +30,8 @@ on:
       # The Maestro version pin the jobs read lives here, so a bump must
       # re-exercise the device tests.
       - "scripts/check-maestro.sh"
+      # run.sh starts this mock IdP for the SSO flows.
+      - "webapp/e2e/fixtures/mock-idp.ts"
       - ".github/workflows/mobile-e2e.yml"
   workflow_dispatch:
 
@@ -233,6 +235,13 @@ jobs:
           go-version-file: server/go.mod
           cache-dependency-path: server/go.sum
 
+      # run.sh starts the mock IdP (webapp/e2e/fixtures/mock-idp.ts) for the SSO
+      # flows. Node runs it directly through built-in type stripping, which
+      # needs Node 22.18+; no npm install, it imports only node: built-ins.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .nvmrc
+
       - name: Download e2e APK
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
@@ -316,6 +325,17 @@ jobs:
           # screenrecord, the captured status, and the on-failure diagnostics all
           # work. It installs the APK, runs run.sh, and collects artifacts.
           script: ./mobile/e2e/ci-run.sh
+
+      # What the flows capture with takeScreenshot (the SSO screens, #1016), on
+      # every run: the only way to see those screens without an emulator.
+      - name: Upload flow screenshots
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: mobile-e2e-screenshots
+          path: mobile/e2e/screenshots/
+          retention-days: 14
+          if-no-files-found: warn
 
       # JUnit XML, the screen recording, and Maestro's own per-step
       # screenshots/hierarchy dump — debugging a flow that cannot be reproduced

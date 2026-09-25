@@ -240,7 +240,7 @@ tasks:
     cmd: |
       set -u
       status=0
-      for flow in mobile/e2e/flows/*.yaml; do
+      for flow in mobile/e2e/flows/*.yaml mobile/e2e/flows/helpers/*.yaml; do
         if out="$(maestro check-syntax "$flow" 2>&1)"; then
           printf 'ok   %s\n' "$flow"
         else
