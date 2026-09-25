@@ -6,7 +6,7 @@ import { OIDC_CALLBACK_URL, isOidcCallbackUrl } from '../utils/deepLink';
 import { extractApiError } from '../i18n/utils';
 
 /**
- * The native SSO hand-off (docs/specs/oidc-sso.md §10.3): open the server's
+ * The native SSO hand-off: open the server's
  * `/auth/oidc/native/start` in the system browser sheet and turn the
  * `jot://oidc-callback` redirect into a one-time code plus the PKCE verifier
  * that redeems it. Redeeming (exchange for login, link for Settings) is the

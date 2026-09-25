@@ -15,8 +15,7 @@ import { displayMessage } from '../../i18n/utils';
 import { styles } from './styles';
 
 /**
- * Connect / disconnect the account's SSO identity (docs/specs/oidc-sso.md
- * §10.3, §10.6). Shown only when the active server has SSO enabled. Connect
+ * Connect / disconnect the account's SSO identity. Shown only when the active server has SSO enabled. Connect
  * runs the native hand-off with `intent=link` and redeems the code against
  * the current session. The server refuses both linking and unlinking when
  * local login is disabled (unlinking would orphan the account), so neither is

@@ -431,6 +431,7 @@ func TestOIDCLinkAndUnlink(t *testing.T) {
 		require.Equal(t, http.StatusOK, status)
 		assert.Equal(t, "linker", me.User.Username)
 		assert.Equal(t, user.User.ID, me.User.ID)
+		assert.True(t, me.User.HasPassword, "a local user keeps its password after linking")
 	})
 
 	t.Run("linking an identity already bound to another user is rejected", func(t *testing.T) {
@@ -460,6 +461,83 @@ func TestOIDCLinkAndUnlink(t *testing.T) {
 		require.NoError(t, unlinkResp.Body.Close())
 		assert.Equal(t, http.StatusUnprocessableEntity, unlinkResp.StatusCode)
 	})
+}
+
+func TestOIDCSSOUserSetsPassword(t *testing.T) {
+	t.Parallel()
+	ts, mock := setupOIDCTestServer(t, nil)
+
+	c := ts.oidcClient(t)
+	provResp := ts.driveFlow(t, mock, c, "/api/v1/auth/oidc/login", map[string]any{
+		"sub":                "sub-setpass",
+		"preferred_username": "setpass",
+	})
+	require.NoError(t, provResp.Body.Close())
+
+	me, status := ts.me(t, c)
+	require.Equal(t, http.StatusOK, status)
+	assert.False(t, me.User.HasPassword, "an SSO-provisioned user starts without a password")
+	assert.True(t, me.User.HasSSOLinked)
+
+	t.Run("a too-short password is rejected", func(t *testing.T) {
+		resp := ts.putPassword(t, c, `{"new_password":"x"}`)
+		require.NoError(t, resp.Body.Close())
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("the first password is set without current_password", func(t *testing.T) {
+		resp := ts.putPassword(t, c, `{"new_password":"newpassword123"}`)
+		require.NoError(t, resp.Body.Close())
+		require.Equal(t, http.StatusNoContent, resp.StatusCode)
+
+		me, status := ts.me(t, c)
+		require.Equal(t, http.StatusOK, status, "the request's session is reissued")
+		assert.True(t, me.User.HasPassword)
+
+		// The new password signs in.
+		_, err := ts.newClient().Login(t.Context(), "setpass", "newpassword123")
+		require.NoError(t, err)
+	})
+
+	t.Run("once set, current_password is required again", func(t *testing.T) {
+		resp := ts.putPassword(t, c, `{"new_password":"anotherpassword123"}`)
+		require.NoError(t, resp.Body.Close())
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+		resp = ts.putPassword(t, c, `{"current_password":"wrong-password","new_password":"anotherpassword123"}`)
+		require.NoError(t, resp.Body.Close())
+		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	})
+
+	t.Run("unlink now succeeds", func(t *testing.T) {
+		resp := ts.postForm(t, c, "/api/v1/auth/oidc/unlink")
+		require.NoError(t, resp.Body.Close())
+		assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+	})
+}
+
+func TestOIDCSSOUserCannotSetPasswordWhenLocalLoginDisabled(t *testing.T) {
+	t.Parallel()
+	// SSO-only deployment: a password could not sign in, so setting a first
+	// one is refused rather than creating an unusable credential.
+	ts, mock := setupOIDCTestServer(t, func(cfg *config.Config) {
+		cfg.LocalLoginEnabled = false
+	})
+
+	c := ts.oidcClient(t)
+	provResp := ts.driveFlow(t, mock, c, "/api/v1/auth/oidc/login", map[string]any{
+		"sub":                "sub-ssoonly-setpass",
+		"preferred_username": "ssoonlysetpass",
+	})
+	require.NoError(t, provResp.Body.Close())
+
+	resp := ts.putPassword(t, c, `{"new_password":"newpassword123"}`)
+	require.NoError(t, resp.Body.Close())
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+
+	me, status := ts.me(t, c)
+	require.Equal(t, http.StatusOK, status)
+	assert.False(t, me.User.HasPassword)
 }
 
 func TestOIDCUnlinkForbiddenWhenLocalLoginDisabled(t *testing.T) {
@@ -551,6 +629,18 @@ func (ts *TestServer) postForm(t *testing.T, c *http.Client, path string) *http.
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, ts.HTTPServer.URL+path, nil)
 	require.NoError(t, err)
+	resp, err := c.Do(req)
+	require.NoError(t, err)
+	return resp
+}
+
+// putPassword sends PUT /users/me/password with the given JSON body via the
+// session client c.
+func (ts *TestServer) putPassword(t *testing.T, c *http.Client, body string) *http.Response {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, ts.HTTPServer.URL+"/api/v1/users/me/password", strings.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.Do(req)
 	require.NoError(t, err)
 	return resp

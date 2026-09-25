@@ -352,23 +352,27 @@ func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, a
 }
 
 type ChangePasswordRequest struct {
+	// CurrentPassword is required unless the account has no password yet
+	// (has_password is false, e.g. an SSO-provisioned user), in which case it
+	// is ignored and the request sets the first password.
 	CurrentPassword string `json:"current_password"`
 	NewPassword     string `json:"new_password"`
 }
 
 // ChangePassword godoc
 //
-//	@Summary	Change the current user's password
-//	@Tags		users
-//	@Security	CookieAuth
-//	@Accept		json
-//	@Param		body	body	ChangePasswordRequest	true	"Password change"
-//	@Success	204		"no content"
-//	@Failure	400		{string}	string	"bad request"
-//	@Failure	401		{string}	string	"unauthorized"
-//	@Failure	403		{string}	string	"current password is incorrect"
-//	@Failure	500		{string}	string	"internal server error"
-//	@Router		/users/me/password [put]
+//	@Summary		Change or set the current user's password
+//	@Description	Changes the password, verifying current_password. An account with no password (has_password false, e.g. created by SSO sign-in) sets its first password without current_password; that is refused with 403 while local login is disabled, since the password could not sign in.
+//	@Tags			users
+//	@Security		CookieAuth
+//	@Accept			json
+//	@Param			body	body	ChangePasswordRequest	true	"Password change"
+//	@Success		204		"no content"
+//	@Failure		400		{string}	string	"bad request"
+//	@Failure		401		{string}	string	"unauthorized"
+//	@Failure		403		{string}	string	"current password is incorrect, or local login is disabled"
+//	@Failure		500		{string}	string	"internal server error"
+//	@Router			/users/me/password [put]
 func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -380,21 +384,30 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (in
 		return http.StatusBadRequest, nil, err
 	}
 
-	if req.CurrentPassword == "" || req.NewPassword == "" {
-		return http.StatusBadRequest, nil, errors.New("current_password and new_password are required")
+	if req.NewPassword == "" {
+		return http.StatusBadRequest, nil, errors.New("new_password is required")
+	}
+
+	user, err := h.userStore.GetByID(r.Context(), currentUser.ID)
+	if err != nil {
+		return http.StatusInternalServerError, nil, fmt.Errorf("get user: %w", err)
+	}
+
+	if user.HasPassword {
+		if req.CurrentPassword == "" {
+			return http.StatusBadRequest, nil, errors.New("current_password is required")
+		}
+	} else if !h.localLoginEnabled {
+		// Setting a first password on an SSO-only server would create a
+		// credential nothing can sign in with.
+		return http.StatusForbidden, nil, errLocalLoginDisabled
 	}
 
 	if err := validatePassword(req.NewPassword, h.passwordMinLength); err != nil {
 		return http.StatusBadRequest, nil, err
 	}
 
-	// Verify current password
-	user, err := h.userStore.GetByID(r.Context(), currentUser.ID)
-	if err != nil {
-		return http.StatusInternalServerError, nil, fmt.Errorf("get user: %w", err)
-	}
-
-	if !user.CheckPassword(req.CurrentPassword) {
+	if user.HasPassword && !user.CheckPassword(req.CurrentPassword) {
 		return http.StatusForbidden, nil, errors.New("current password is incorrect")
 	}
 

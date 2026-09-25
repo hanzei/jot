@@ -378,8 +378,7 @@ Notes for operators:
   users.
 - **The mobile app** signs in and links accounts through the same provider,
   with no extra IdP registration: it opens the server's native hand-off in the
-  system browser and receives a one-time code on `jot://oidc-callback`
-  (`docs/specs/oidc-sso.md` §10). It needs an app build that includes
+  system browser and receives a one-time code on `jot://oidc-callback`. It needs an app build that includes
   `expo-web-browser` and `expo-crypto`.
 
 ### Rate limiting

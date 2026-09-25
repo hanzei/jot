@@ -15,6 +15,7 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
 import { isPasswordTooShort, type ActiveSession, type PersonalAccessToken, type SSOConfig } from '@jot/shared';
 import { IdentitySecurityColumn, PreferencesInfoColumn } from './settings/SettingsSections';
+import { passwordFormKeys } from './settings/passwordFormKeys';
 import SsoSettingsSection from './settings/SsoSettingsSection';
 
 interface SettingsProps {
@@ -46,6 +47,9 @@ const Settings = ({ passwordMinLength, sso }: SettingsProps) => {
   const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
   const [hasProfileIcon, setHasProfileIcon] = useState(currentUser?.has_profile_icon ?? false);
   const [ssoLinked, setSsoLinked] = useState(currentUser?.has_sso_linked ?? false);
+  // False for an account with no password (e.g. created by SSO sign-in): it
+  // gets a Set Password form with no current-password field.
+  const [hasPassword, setHasPassword] = useState(currentUser?.has_password ?? true);
   const [iconError, setIconError] = useState('');
   const [iconUploading, setIconUploading] = useState(false);
   const [iconDeleting, setIconDeleting] = useState(false);
@@ -183,19 +187,27 @@ const Settings = ({ passwordMinLength, sso }: SettingsProps) => {
       return;
     }
 
+    const keys = passwordFormKeys(hasPassword);
     setPasswordSaving(true);
     try {
-      await users.changePassword({ current_password: currentPassword, new_password: newPassword });
-      showToast(t('settings.passwordChanged'), 'success');
+      await users.changePassword(hasPassword
+        ? { current_password: currentPassword, new_password: newPassword }
+        : { new_password: newPassword });
+      showToast(t(keys.success), 'success');
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
+      if (!hasPassword) {
+        setHasPassword(true);
+        const user = getUser();
+        if (user) setUser({ ...user, has_password: true });
+      }
     } catch (err: unknown) {
       if (isAxiosError(err)) {
         const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
-        setPasswordError(msg || 'settings.failedChangePassword');
+        setPasswordError(msg || keys.failed);
       } else {
-        setPasswordError('settings.failedChangePassword');
+        setPasswordError(keys.failed);
       }
     } finally {
       setPasswordSaving(false);
@@ -381,6 +393,7 @@ const Settings = ({ passwordMinLength, sso }: SettingsProps) => {
               onAccountSubmit: handleSubmit,
             }}
             passwordForm={{
+              hasPassword,
               currentPassword,
               newPassword,
               confirmPassword,

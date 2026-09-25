@@ -330,7 +330,7 @@ func (s *Server) setupRoutes() error {
 			if s.oidcHandler != nil {
 				r.Get("/auth/oidc/login", s.wrapHandler(s.oidcHandler.Login))
 				r.Get("/auth/oidc/callback", s.wrapHandler(s.oidcHandler.Callback))
-				// Mobile native hand-off (spec §10): start is unauthenticated even
+				// Mobile native hand-off: start is unauthenticated even
 				// for link, and exchange is how an app signs in.
 				r.Get("/auth/oidc/native/start", s.wrapHandler(s.oidcHandler.NativeStart))
 				r.Post("/auth/oidc/native/exchange", s.wrapHandler(s.oidcHandler.NativeExchange))
