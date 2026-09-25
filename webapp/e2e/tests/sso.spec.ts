@@ -2,13 +2,12 @@ import type { Page } from '@playwright/test';
 import { test, expect, uniqueUsername } from '../fixtures';
 
 /**
- * SSO/OIDC is a server-configured feature (JOT_OIDC_* env). The e2e server runs
- * with it unset, so these specs pin the *SSO-disabled default*: the login and
- * settings surfaces must look and behave exactly as they did before the SSO UI
- * existed. The enabled states (provider button, connect/disconnect, the full
- * authorization-code redirect) need a live identity provider to exercise and
- * are covered by the Vitest unit specs plus a follow-up IdP fixture — see the
- * PR description.
+ * SSO/OIDC is a server-configured feature (JOT_OIDC_* env). The main e2e server
+ * runs with it unset, so these specs pin the *SSO-disabled default*: the login
+ * and settings surfaces must look and behave exactly as they did before the SSO
+ * UI existed. The enabled states (provider button, connect/disconnect, the full
+ * authorization-code redirect) run against a live mock identity provider in
+ * `sso-enabled.spec.ts`, on a second, SSO-enabled instance (`sso` project).
  */
 test.describe('SSO disabled (default)', () => {
   test('login page shows the local form and no SSO button', async ({ page, loginPage }) => {
@@ -34,7 +33,8 @@ test.describe('SSO disabled (default)', () => {
 /**
  * Pretends the server has SSO enabled and the account is linked, by rewriting
  * the /config and /me responses. Enough to pin which Settings controls render
- * for each mode; the flows themselves need a live identity provider.
+ * for each mode, including SSO-only mode, which the SSO-enabled instance (mixed
+ * mode) does not run; the flows themselves are in `sso-enabled.spec.ts`.
  */
 async function mockLinkedSso(page: Page, localLoginEnabled: boolean, hasPassword = true) {
   await page.route('**/api/v1/config', async (route) => {

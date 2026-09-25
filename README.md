@@ -204,6 +204,11 @@ ran), `task test-e2e` stops with the install command
 (`cd webapp && npx playwright install chromium`) instead of failing every
 spec. Check it on its own with `./scripts/check-playwright-browser.sh`.
 
+`task test-e2e` starts its own servers and needs ports 8080, 8090 and 8091 free:
+the main Jot instance, a second, SSO-enabled instance for the `sso` project, and
+the mock OIDC provider it signs in against (`webapp/e2e/fixtures/mock-idp.ts`,
+run directly by Node, so Node 22.18 or newer).
+
 `task test-mobile-e2e` runs the mobile app on a real Android emulator with
 [Maestro](https://maestro.dev), covering what Jest structurally cannot reach —
 OS integration and process lifecycle. It is **not** part of `task check`, and
