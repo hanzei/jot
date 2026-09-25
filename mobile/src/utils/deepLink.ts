@@ -7,8 +7,7 @@ export function isJotSchemeUrl(url: string): boolean {
 }
 
 /**
- * The redirect target of the native SSO hand-off (docs/specs/oidc-sso.md
- * §10.3). It belongs to the auth session in `src/store/oidcFlow.ts`, never to
+ * The redirect target of the native SSO hand-off. It belongs to the auth session in `src/store/oidcFlow.ts`, never to
  * the deep-link router.
  */
 export const OIDC_CALLBACK_URL = 'jot://oidc-callback';

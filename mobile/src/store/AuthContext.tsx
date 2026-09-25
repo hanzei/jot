@@ -54,7 +54,7 @@ interface AuthState {
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, password: string) => Promise<void>;
   /**
-   * Sign in through the server's SSO provider (docs/specs/oidc-sso.md §10.3).
+   * Sign in through the server's SSO provider.
    * Resolves `'cancelled'` when the user closed the browser sheet — a quiet
    * return, not an error. Rejects with `SsoFlowError` for a callback-reported
    * failure, or with the request error when the code exchange fails; neither

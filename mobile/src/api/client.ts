@@ -617,7 +617,7 @@ export const auth = {
   },
 
   /**
-   * Redeems a native SSO hand-off code (docs/specs/oidc-sso.md §10.3). The
+   * Redeems a native SSO hand-off code. The
    * server answers exactly like `POST /login`, so the session is captured the
    * same way. A bad, expired, or reused code (or a wrong verifier) is a 400.
    */

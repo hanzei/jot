@@ -31,18 +31,18 @@ test.describe('SSO disabled (default)', () => {
 });
 
 /**
- * Pretends the server has SSO enabled and the account is linked, by rewriting
- * the /config and /me responses. Enough to pin which Settings controls render
- * for each mode, including SSO-only mode, which the SSO-enabled instance (mixed
- * mode) does not run; the flows themselves are in `sso-enabled.spec.ts`.
+ * Pretends the server is SSO-only (local login disabled) and the account is
+ * linked, by rewriting the /config and /me responses. The SSO-enabled instance
+ * in `sso-enabled.spec.ts` runs mixed mode, so this is the only coverage of
+ * which Settings controls SSO-only mode hides; the flows themselves are there.
  */
-async function mockLinkedSso(page: Page, localLoginEnabled: boolean) {
+async function mockSsoOnlyLinked(page: Page) {
   await page.route('**/api/v1/config', async (route) => {
     const response = await route.fetch();
     const body = await response.json();
     await route.fulfill({
       response,
-      json: { ...body, sso: { enabled: true, provider_name: 'Keycloak', local_login_enabled: localLoginEnabled } },
+      json: { ...body, sso: { enabled: true, provider_name: 'Keycloak', local_login_enabled: false } },
     });
   });
   await page.route('**/api/v1/me', async (route) => {
@@ -52,27 +52,24 @@ async function mockLinkedSso(page: Page, localLoginEnabled: boolean) {
   });
 }
 
-test.describe('SSO enabled, linked account (mocked config)', () => {
-  test('mixed mode offers Disconnect', async ({ page, authenticatedUser, settingsPage }) => {
-    void authenticatedUser;
-    await mockLinkedSso(page, true);
-    await settingsPage.goto();
+// The mocked /me handler awaits route.fetch(); a refetch still in flight when a
+// test ends would otherwise throw "Test ended" outside any test and fail the run.
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
 
-    await expect(page.getByRole('heading', { name: 'Single Sign-On' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Disconnect Keycloak' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Change Password' })).toBeVisible();
-  });
-
-  test('SSO-only mode hides Disconnect and Change Password', async ({ page, authenticatedUser, settingsPage }) => {
+test.describe('SSO-only mode, linked account (mocked config)', () => {
+  test('hides Disconnect and Change Password', async ({ page, authenticatedUser, settingsPage }) => {
     void authenticatedUser;
-    await mockLinkedSso(page, false);
+    await mockSsoOnlyLinked(page);
     await settingsPage.goto();
 
     await expect(page.getByRole('heading', { name: 'Single Sign-On' })).toBeVisible();
     await expect(page.getByText('Your account is linked to Keycloak.')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Disconnect Keycloak' })).toHaveCount(0);
     await expect(page.getByRole('link', { name: 'Connect Keycloak' })).toHaveCount(0);
-    // A password cannot sign in either, so there is nothing to change.
+    // A password cannot sign in either, so there is nothing to change or set.
     await expect(page.getByRole('heading', { name: 'Change Password' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Set Password' })).toHaveCount(0);
   });
 });

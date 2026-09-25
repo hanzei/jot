@@ -399,4 +399,51 @@ describe('Settings', () => {
       expect(screen.getByRole('heading', { name: i18n.t('settings.changePasswordSection') })).toBeInTheDocument();
     });
   });
+
+  describe('Set password (account without a password)', () => {
+    const ssoEnabled: SSOConfig = { enabled: true, provider_name: 'Keycloak', local_login_enabled: true };
+    const passwordlessUser = { ...mockUser, has_sso_linked: true, has_password: false };
+
+    it('shows Set Password without a current-password field', () => {
+      vi.mocked(authUtils.getUser).mockReturnValue(passwordlessUser);
+      renderSettings(ssoEnabled);
+      expect(screen.getByRole('heading', { name: 'Set Password' })).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'Change Password' })).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Current Password')).not.toBeInTheDocument();
+    });
+
+    it('sets the password without current_password and flips to Change Password', async () => {
+      const user = userEvent.setup();
+      vi.mocked(authUtils.getUser).mockReturnValue(passwordlessUser);
+      vi.mocked(users.changePassword).mockResolvedValue(undefined);
+      renderSettings(ssoEnabled);
+
+      await user.type(screen.getByLabelText('New Password'), 'newpassword123');
+      await user.type(screen.getByLabelText('Confirm New Password'), 'newpassword123');
+      await user.click(screen.getByRole('button', { name: 'Set Password' }));
+
+      await waitFor(() => {
+        expect(users.changePassword).toHaveBeenCalledWith({ new_password: 'newpassword123' });
+      });
+      expect(await screen.findByRole('heading', { name: 'Change Password' })).toBeInTheDocument();
+      expect(screen.getByLabelText('Current Password')).toBeInTheDocument();
+      expect(screen.getByRole('status')).toHaveTextContent('Password set.');
+      expect(authUtils.setUser).toHaveBeenCalledWith({ ...passwordlessUser, has_password: true });
+    });
+
+    it('sends current_password for an account that has one', async () => {
+      const user = userEvent.setup();
+      vi.mocked(users.changePassword).mockResolvedValue(undefined);
+      renderSettings();
+
+      await user.type(screen.getByLabelText('Current Password'), 'oldpassword123');
+      await user.type(screen.getByLabelText('New Password'), 'newpassword123');
+      await user.type(screen.getByLabelText('Confirm New Password'), 'newpassword123');
+      await user.click(screen.getByRole('button', { name: 'Change Password' }));
+
+      await waitFor(() => {
+        expect(users.changePassword).toHaveBeenCalledWith({ current_password: 'oldpassword123', new_password: 'newpassword123' });
+      });
+    });
+  });
 });

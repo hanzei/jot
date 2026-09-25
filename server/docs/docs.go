@@ -3295,13 +3295,14 @@ const docTemplate = `{
         },
         "/users/me/password": {
             "put": {
+                "description": "Changes the password, verifying current_password. An account with no password (has_password false, e.g. created by SSO sign-in) sets its first password without current_password; that is refused with 403 while local login is disabled, since the password could not sign in.",
                 "consumes": [
                     "application/json"
                 ],
                 "tags": [
                     "users"
                 ],
-                "summary": "Change the current user's password",
+                "summary": "Change or set the current user's password",
                 "parameters": [
                     {
                         "description": "Password change",
@@ -3330,7 +3331,7 @@ const docTemplate = `{
                         }
                     },
                     "403": {
-                        "description": "current password is incorrect",
+                        "description": "current password is incorrect, or local login is disabled",
                         "schema": {
                             "type": "string"
                         }
@@ -3517,6 +3518,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "current_password": {
+                    "description": "CurrentPassword is required unless the account has no password yet\n(has_password is false, e.g. an SSO-provisioned user), in which case it\nis ignored and the request sets the first password.",
                     "type": "string"
                 },
                 "new_password": {
@@ -4326,6 +4328,9 @@ const docTemplate = `{
                 },
                 "first_name": {
                     "type": "string"
+                },
+                "has_password": {
+                    "type": "boolean"
                 },
                 "has_profile_icon": {
                     "type": "boolean"

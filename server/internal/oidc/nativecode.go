@@ -13,7 +13,7 @@ import (
 
 const (
 	// NativeCodeTTL is how long a native hand-off code stays redeemable after
-	// the callback issues it (spec §10.3: 60 seconds).
+	// the callback issues it.
 	NativeCodeTTL = 60 * time.Second
 	// NativeCodeCapacity bounds how many unexpired codes the store holds at
 	// once. A code lives for a minute and each one needs a completed IdP round
@@ -55,8 +55,8 @@ type nativeCodeEntry struct {
 	expiresAt time.Time
 }
 
-// NativeCodeStore holds one-time codes for the mobile native hand-off (spec
-// §10.5): an in-memory, mutex-guarded, size-bounded map keyed by the SHA-256 of
+// NativeCodeStore holds one-time codes for the mobile native hand-off: an
+// in-memory, mutex-guarded, size-bounded map keyed by the SHA-256 of
 // the code, so the raw code is never stored. Expired entries are swept on every
 // Issue and dropped when a Redeem finds them.
 type NativeCodeStore struct {

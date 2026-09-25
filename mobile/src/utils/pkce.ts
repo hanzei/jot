@@ -1,8 +1,7 @@
 import * as Crypto from 'expo-crypto';
 
 /**
- * PKCE (RFC 7636, S256) for the mobile SSO hand-off (docs/specs/oidc-sso.md
- * §10.3). The verifier stays in memory for the one flow that minted it; it is
+ * PKCE (RFC 7636, S256) for the mobile SSO hand-off. The verifier stays in memory for the one flow that minted it; it is
  * never persisted or logged.
  */
 

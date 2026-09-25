@@ -22,6 +22,10 @@ definitions:
   handlers.ChangePasswordRequest:
     properties:
       current_password:
+        description: |-
+          CurrentPassword is required unless the account has no password yet
+          (has_password is false, e.g. an SSO-provisioned user), in which case it
+          is ignored and the request sets the first password.
         type: string
       new_password:
         type: string
@@ -588,6 +592,8 @@ definitions:
         type: string
       first_name:
         type: string
+      has_password:
+        type: boolean
       has_profile_icon:
         type: boolean
       has_sso_linked:
@@ -2786,6 +2792,10 @@ paths:
     put:
       consumes:
       - application/json
+      description: Changes the password, verifying current_password. An account with
+        no password (has_password false, e.g. created by SSO sign-in) sets its first
+        password without current_password; that is refused with 403 while local login
+        is disabled, since the password could not sign in.
       parameters:
       - description: Password change
         in: body
@@ -2805,7 +2815,7 @@ paths:
           schema:
             type: string
         "403":
-          description: current password is incorrect
+          description: current password is incorrect, or local login is disabled
           schema:
             type: string
         "500":
@@ -2814,7 +2824,7 @@ paths:
             type: string
       security:
       - CookieAuth: []
-      summary: Change the current user's password
+      summary: Change or set the current user's password
       tags:
       - users
   /users/me/profile-icon:

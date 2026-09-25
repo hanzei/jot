@@ -39,9 +39,10 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -99,7 +100,7 @@ func main() {
 	if err != nil {
 		logrus.WithError(err).Fatal("Failed to initialize server")
 	}
-	addr := fmt.Sprintf(":%d", cfg.Port)
+	addr := net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port))
 	if cfg.MetricsEnabled || cfg.PprofEnabled {
 		logrus.Infof("Starting Jot server on %s (debug listener on %s:%d)", addr, cfg.MetricsHost, cfg.MetricsPort)
 	} else {
