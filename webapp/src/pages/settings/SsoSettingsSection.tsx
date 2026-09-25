@@ -72,7 +72,7 @@ export default function SsoSettingsSection({ t, providerName, linked, localLogin
               type="button"
               onClick={() => setConfirmOpen(true)}
               disabled={disconnecting}
-              className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-slate-600 text-sm font-medium rounded-md shadow-sm text-red-600 dark:text-red-400 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-gray-50 dark:focus:ring-offset-slate-900 disabled:opacity-50"
+              className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-slate-600 text-sm font-medium rounded-md shadow-sm text-red-600 dark:text-red-300 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-gray-50 dark:focus:ring-offset-slate-900 disabled:opacity-50"
             >
               {disconnecting ? t('settings.ssoDisconnecting') : t('settings.ssoDisconnect', { provider: providerName })}
             </button>

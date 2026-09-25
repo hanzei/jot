@@ -592,8 +592,11 @@ IdP, which is a benefit but not the justification for this work.
   server even when the account has a password.
 - **Webapp:** `Login` renders the provider button from `sso`, hides the password
   form when `local_login_enabled` is false; a Vitest unit test plus an **e2e
-  spec** (required for a new user-facing flow — CLAUDE.md), which can point at a
-  containerized Dex/Keycloak or a stub authorize endpoint.
+  spec** (required for a new user-facing flow — CLAUDE.md). The disabled default
+  is `webapp/e2e/tests/sso.spec.ts`; the enabled flows run in
+  `sso-enabled.spec.ts` against a second, SSO-enabled Jot instance and a
+  Node-only mock IdP (`webapp/e2e/fixtures/mock-idp.ts`), wired up in
+  `webapp/playwright.config.ts`.
 - **Prototype gate:** before committing to the full surface, stand up Dex (or
   Keycloak) in a container and drive the webapp flow end to end, as the issue
   asks.
