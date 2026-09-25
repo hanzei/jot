@@ -40,3 +40,10 @@ export function pendingImageUploadsQueryScopeKey(): [string, string] {
 export function pendingImageUploadsQueryKey(noteId: string | null): [string, string, string | null] {
   return ['pending-image-uploads', currentQueryServerScope(), noteId];
 }
+
+// Config has no SQLiteProvider remount to reset it on server switch (it's read
+// from screens that render before login, with no db), so the server id comes
+// from the caller's own reactive state rather than currentQueryServerScope().
+export function serverConfigQueryKey(serverId: string | null): [string, string] {
+  return ['server-config', serverId ?? 'no-server'];
+}

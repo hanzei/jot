@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ServerConfig, SSOConfig } from '@jot/shared';
 import { DEFAULT_SERVER_CONFIG, fetchServerConfig } from '../api/config';
 import { getActiveServerId, getStoredServerUrl, subscribeToClientActiveServerChanges } from '../api/client';
 import { getServerStorageValue, setServerStorageValue } from '../store/serverAccounts';
+import { serverConfigQueryKey } from './queryKeys';
 
 function parseSsoConfig(value: unknown): SSOConfig | undefined {
   if (!value || typeof value !== 'object') {
@@ -46,6 +48,14 @@ export function parseCachedConfig(raw: string): ServerConfig | null {
   return null;
 }
 
+async function loadCachedServerConfig(serverId: string): Promise<ServerConfig> {
+  const cached = await getServerStorageValue(serverId, 'server_config').catch(() => null);
+  if (!cached) {
+    return DEFAULT_SERVER_CONFIG;
+  }
+  return parseCachedConfig(cached) ?? DEFAULT_SERVER_CONFIG;
+}
+
 // The active server's public /config values (password_min_length,
 // upload_max_bytes, registration_enabled, sso). Never blocks: renders the
 // cached or shared-default value immediately, then refreshes in the
@@ -53,56 +63,28 @@ export function parseCachedConfig(raw: string): ServerConfig | null {
 // on a network call, and there is no queue to fall back on for a GET. Reloads
 // when the active server changes, so the login screen's SSO button follows the
 // server picker.
+//
+// Keyed by server id and backed by a React Query query (rather than a bare
+// effect per caller), so mounting several callers for the same server — e.g.
+// Settings' ChangePasswordSection and SsoSection — collapses into one
+// `/config` request instead of one per caller (#1017).
 export function useServerConfig(): ServerConfig {
-  const [config, setConfig] = useState<ServerConfig>(DEFAULT_SERVER_CONFIG);
+  const queryClient = useQueryClient();
+  const [serverId, setServerId] = useState<string | null>(() => getActiveServerId());
 
   useEffect(() => {
     let cancelled = false;
-    let generation = 0;
-    let loadedServerId: string | null = null;
 
-    const load = async () => {
-      const current = ++generation;
-      const isStale = () => cancelled || current !== generation;
+    void getStoredServerUrl().then(() => {
+      if (!cancelled) {
+        setServerId(getActiveServerId());
+      }
+    });
 
-      await getStoredServerUrl();
-      const serverId = getActiveServerId();
-      if (isStale()) {
-        return;
+    const unsubscribe = subscribeToClientActiveServerChanges((id) => {
+      if (!cancelled) {
+        setServerId(id);
       }
-      if (serverId !== loadedServerId) {
-        // Another server's values must not linger while this one loads.
-        loadedServerId = serverId;
-        setConfig(DEFAULT_SERVER_CONFIG);
-      }
-      if (!serverId) {
-        return;
-      }
-
-      const cached = await getServerStorageValue(serverId, 'server_config').catch(() => null);
-      if (cached && !isStale()) {
-        const parsedConfig = parseCachedConfig(cached);
-        if (parsedConfig) {
-          setConfig(parsedConfig);
-        }
-      }
-
-      try {
-        const fresh = await fetchServerConfig();
-        if (!isStale()) {
-          setConfig(fresh);
-          setServerStorageValue(serverId, 'server_config', JSON.stringify(fresh)).catch(() => {
-            // Best-effort cache write — a SecureStore failure shouldn't surface here.
-          });
-        }
-      } catch {
-        // Server unreachable or the request failed — keep the cached/default value.
-      }
-    };
-
-    void load().catch(() => undefined);
-    const unsubscribe = subscribeToClientActiveServerChanges(() => {
-      void load().catch(() => undefined);
     });
 
     return () => {
@@ -111,5 +93,32 @@ export function useServerConfig(): ServerConfig {
     };
   }, []);
 
-  return config;
+  const queryKey = serverConfigQueryKey(serverId);
+  const query = useQuery<ServerConfig>({
+    queryKey,
+    queryFn: async () => {
+      if (!serverId) {
+        return DEFAULT_SERVER_CONFIG;
+      }
+
+      const cached = await loadCachedServerConfig(serverId);
+      // Publish the cached value right away so every observer of this query
+      // (all callers for this server) renders it while the network call below
+      // is still in flight, rather than staying on the previous/default value.
+      queryClient.setQueryData(queryKey, cached);
+
+      try {
+        const fresh = await fetchServerConfig();
+        setServerStorageValue(serverId, 'server_config', JSON.stringify(fresh)).catch(() => {
+          // Best-effort cache write — a SecureStore failure shouldn't surface here.
+        });
+        return fresh;
+      } catch {
+        // Server unreachable or the request failed — keep the cached/default value.
+        return cached;
+      }
+    },
+  });
+
+  return query.data ?? DEFAULT_SERVER_CONFIG;
 }
