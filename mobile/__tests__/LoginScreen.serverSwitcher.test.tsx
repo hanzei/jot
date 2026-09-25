@@ -1,4 +1,6 @@
+import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import LoginScreen from '../src/screens/LoginScreen';
 import { useAuth } from '../src/store/AuthContext';
@@ -24,6 +26,20 @@ jest.mock('../src/store/serverAccounts', () => ({
   getActiveServer: jest.fn(),
   removeServer: jest.fn(),
   renameServer: jest.fn(),
+  getServerStorageValue: jest.fn().mockResolvedValue(null),
+  setServerStorageValue: jest.fn().mockResolvedValue(undefined),
+}));
+
+// useServerConfig() renders regardless of what this screen is actually
+// testing (the server switcher), so give it a config it can resolve
+// immediately rather than letting it hit the real (unmocked) `/config` call.
+jest.mock('../src/api/config', () => ({
+  DEFAULT_SERVER_CONFIG: { registration_enabled: true, password_min_length: 10, upload_max_bytes: 26214400 },
+  fetchServerConfig: jest.fn().mockResolvedValue({
+    registration_enabled: true,
+    password_min_length: 10,
+    upload_max_bytes: 26214400,
+  }),
 }));
 
 jest.mock('../src/theme/ThemeContext', () => ({
@@ -73,9 +89,16 @@ const unnamedServer = {
   lastUsedAt: '2026-08-07T10:00:00.000Z',
 };
 
+function createWrapper() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return function Wrapper({ children }: { children: React.ReactNode }) {
+    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  };
+}
+
 async function renderLogin() {
   const navigation = { navigate: jest.fn() } as unknown as NativeStackNavigationProp<AuthStackParamList, 'Login'>;
-  return await render(<LoginScreen navigation={navigation} />);
+  return await render(<LoginScreen navigation={navigation} />, { wrapper: createWrapper() });
 }
 
 describe('LoginScreen server switcher', () => {

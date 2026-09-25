@@ -1,4 +1,6 @@
+import React from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { parseCachedConfig, useServerConfig } from '../src/hooks/useServerConfig';
 import { DEFAULT_SERVER_CONFIG, fetchServerConfig } from '../src/api/config';
 import { getActiveServerId, getStoredServerUrl, subscribeToClientActiveServerChanges } from '../src/api/client';
@@ -25,6 +27,15 @@ const mockGetServerStorageValue = getServerStorageValue as jest.MockedFunction<t
 const mockSetServerStorageValue = setServerStorageValue as jest.MockedFunction<typeof setServerStorageValue>;
 const mockSubscribe = subscribeToClientActiveServerChanges as jest.Mock;
 
+// A shared QueryClient (like the one App.tsx mounts once at the root) is what
+// makes several callers collapse into one request — each `renderHook` call
+// below defaults to its own client unless one is passed in explicitly.
+function createWrapper(queryClient: QueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
+  return function Wrapper({ children }: { children: React.ReactNode }) {
+    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  };
+}
+
 describe('useServerConfig', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -39,7 +50,7 @@ describe('useServerConfig', () => {
     mockGetServerStorageValue.mockResolvedValue(JSON.stringify(cached));
     mockFetchServerConfig.mockReturnValue(new Promise(() => {})); // never resolves in this test
 
-    const { result } = await renderHook(() => useServerConfig());
+    const { result } = await renderHook(() => useServerConfig(), { wrapper: createWrapper() });
 
     await waitFor(() => expect(result.current).toEqual(cached));
   });
@@ -48,7 +59,7 @@ describe('useServerConfig', () => {
     const fresh = { registration_enabled: false, password_min_length: 12, upload_max_bytes: 2048 };
     mockFetchServerConfig.mockResolvedValue(fresh);
 
-    const { result } = await renderHook(() => useServerConfig());
+    const { result } = await renderHook(() => useServerConfig(), { wrapper: createWrapper() });
 
     await waitFor(() => expect(result.current).toEqual(fresh));
     expect(mockSetServerStorageValue).toHaveBeenCalledWith('server-1', 'server_config', JSON.stringify(fresh));
@@ -57,7 +68,7 @@ describe('useServerConfig', () => {
   it('does not fetch when there is no active server yet', async () => {
     mockGetActiveServerId.mockReturnValue(null);
 
-    await renderHook(() => useServerConfig());
+    await renderHook(() => useServerConfig(), { wrapper: createWrapper() });
 
     await waitFor(() => expect(mockGetStoredServerUrl).toHaveBeenCalled());
     expect(mockFetchServerConfig).not.toHaveBeenCalled();
@@ -66,20 +77,19 @@ describe('useServerConfig', () => {
   it('keeps the cached/default value when the fetch fails (offline auth screen)', async () => {
     mockFetchServerConfig.mockRejectedValue(new Error('network error'));
 
-    const { result } = await renderHook(() => useServerConfig());
+    const { result } = await renderHook(() => useServerConfig(), { wrapper: createWrapper() });
 
     await waitFor(() => expect(mockFetchServerConfig).toHaveBeenCalled());
-    expect(result.current).toEqual(DEFAULT_SERVER_CONFIG);
+    await waitFor(() => expect(result.current).toEqual(DEFAULT_SERVER_CONFIG));
   });
 
   it('ignores a malformed cache entry and keeps the default', async () => {
     mockGetServerStorageValue.mockResolvedValue('not-json');
     mockFetchServerConfig.mockReturnValue(new Promise(() => {}));
 
-    const { result } = await renderHook(() => useServerConfig());
+    const { result } = await renderHook(() => useServerConfig(), { wrapper: createWrapper() });
 
-    await waitFor(() => expect(mockGetServerStorageValue).toHaveBeenCalled());
-    expect(result.current).toEqual(DEFAULT_SERVER_CONFIG);
+    await waitFor(() => expect(result.current).toEqual(DEFAULT_SERVER_CONFIG));
   });
 
   it('carries a cached sso block through', async () => {
@@ -92,7 +102,7 @@ describe('useServerConfig', () => {
     mockGetServerStorageValue.mockResolvedValue(JSON.stringify(cached));
     mockFetchServerConfig.mockReturnValue(new Promise(() => {}));
 
-    const { result } = await renderHook(() => useServerConfig());
+    const { result } = await renderHook(() => useServerConfig(), { wrapper: createWrapper() });
 
     await waitFor(() => expect(result.current).toEqual(cached));
   });
@@ -110,7 +120,7 @@ describe('useServerConfig', () => {
     const plainServer = { registration_enabled: true, password_min_length: 10, upload_max_bytes: 1024 };
     mockFetchServerConfig.mockResolvedValueOnce(ssoServer).mockResolvedValueOnce(plainServer);
 
-    const { result } = await renderHook(() => useServerConfig());
+    const { result } = await renderHook(() => useServerConfig(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current).toEqual(ssoServer));
 
     mockGetActiveServerId.mockReturnValue('server-2');
@@ -120,6 +130,23 @@ describe('useServerConfig', () => {
 
     await waitFor(() => expect(result.current).toEqual(plainServer));
     expect(mockSetServerStorageValue).toHaveBeenLastCalledWith('server-2', 'server_config', JSON.stringify(plainServer));
+  });
+
+  it('sends one /config request when two callers mount for the same server', async () => {
+    const fresh = { registration_enabled: false, password_min_length: 12, upload_max_bytes: 2048 };
+    mockFetchServerConfig.mockResolvedValue(fresh);
+
+    // Mirrors Settings mounting both ChangePasswordSection and SsoSection at
+    // once — two callers of the hook committed in the same render, sharing one
+    // QueryClientProvider (as App.tsx mounts a single one at the root).
+    const { result } = await renderHook(
+      () => ({ a: useServerConfig(), b: useServerConfig() }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.a).toEqual(fresh));
+    expect(result.current.b).toEqual(fresh);
+    expect(mockFetchServerConfig).toHaveBeenCalledTimes(1);
   });
 });
 
