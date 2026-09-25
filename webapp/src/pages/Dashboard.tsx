@@ -250,7 +250,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
       });
   }, []);
 
-  const loadNotes = useCallback(() => {
+  const loadNotesForCurrentView = useCallback(() => {
     const requestId = ++loadNotesRequestIdRef.current;
 
     const fetchNotes = async () => {
@@ -310,6 +310,16 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
       });
   }, [showArchived, showBin, debouncedSearchQuery, selectedLabelId, showMyTasks, showToast, t]);
 
+  // Refreshes after a mutation or SSE event must load the view that is showing
+  // when they fire, not the one captured when the mutation started. Otherwise a
+  // delete still in flight when the user switches to the bin reloads the notes
+  // view last, and its newer request id wins over the bin load.
+  const latestLoadNotesRef = useRef(loadNotesForCurrentView);
+  useLayoutEffect(() => {
+    latestLoadNotesRef.current = loadNotesForCurrentView;
+  }, [loadNotesForCurrentView]);
+  const loadNotes = useCallback(() => latestLoadNotesRef.current(), []);
+
   // Register Dashboard-specific label callbacks so the layout can notify us
   // after a label rename (note cards need refresh) or delete (may clear selection).
   useEffect(() => {
@@ -348,8 +358,8 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   }, [loadUsers]);
 
   useEffect(() => {
-    void loadNotes();
-  }, [loadNotes]);
+    void loadNotesForCurrentView();
+  }, [loadNotesForCurrentView]);
 
   const restoreReturnUrl = useCallback(() => {
     if (isNewNoteRoute) {
