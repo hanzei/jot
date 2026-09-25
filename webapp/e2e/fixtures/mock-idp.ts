@@ -122,8 +122,13 @@ function startMockIdp(): void {
     if (!(params.get('scope') ?? '').split(' ').includes('openid')) {
       return 'scope must include openid';
     }
+    // PKCE is mandatory here, stricter than the spec allows a real IdP to be,
+    // so the suite fails if Jot ever stops sending a challenge.
     const codeChallenge = params.get('code_challenge') ?? '';
-    if (codeChallenge && params.get('code_challenge_method') !== 'S256') {
+    if (!codeChallenge) {
+      return 'code_challenge is required';
+    }
+    if (params.get('code_challenge_method') !== 'S256') {
       return 'only the S256 code_challenge_method is supported';
     }
     return {
@@ -238,13 +243,11 @@ function startMockIdp(): void {
       sendJson(res, 400, { error: 'invalid_grant', error_description: 'redirect_uri mismatch' });
       return;
     }
-    if (pending.codeChallenge) {
-      const verifier = form.get('code_verifier') ?? '';
-      const challenge = base64url(createHash('sha256').update(verifier).digest());
-      if (!verifier || challenge !== pending.codeChallenge) {
-        sendJson(res, 400, { error: 'invalid_grant', error_description: 'PKCE verification failed' });
-        return;
-      }
+    const verifier = form.get('code_verifier') ?? '';
+    const challenge = base64url(createHash('sha256').update(verifier).digest());
+    if (!verifier || challenge !== pending.codeChallenge) {
+      sendJson(res, 400, { error: 'invalid_grant', error_description: 'PKCE verification failed' });
+      return;
     }
 
     const now = Math.floor(Date.now() / 1000);
