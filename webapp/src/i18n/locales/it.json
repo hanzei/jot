@@ -60,7 +60,9 @@
     "passwordHint": "Almeno {{min}} caratteri",
     "logoAlt": "Logo Jot",
     "ssoSignInWith": "Accedi con {{provider}}",
-    "ssoDivider": "oppure"
+    "ssoDivider": "oppure",
+    "ssoCancelled": "L'accesso è stato annullato.",
+    "ssoFailed": "Single Sign-On non riuscito. Riprova."
   },
   "dashboard": {
     "newNote": "Nuova nota",
@@ -225,7 +227,10 @@
     "ssoDisconnectFailed": "Impossibile scollegare l'SSO.",
     "ssoDisconnected": "SSO scollegato.",
     "ssoDisconnectConfirmTitle": "Scollegare l'SSO?",
-    "ssoDisconnectConfirmMessage": "Questo scollega {{provider}} dal tuo account. Ti servirà la password per accedere."
+    "ssoDisconnectConfirmMessage": "Questo scollega {{provider}} dal tuo account. Ti servirà la password per accedere.",
+    "ssoLinkCancelled": "Il collegamento dell'SSO è stato annullato.",
+    "ssoLinkConflict": "Questa identità SSO è già collegata a un altro account.",
+    "ssoLinkFailed": "Impossibile collegare l'SSO. Riprova."
   },
   "about": {
     "title": "Informazioni su Jot",

@@ -22,15 +22,6 @@ const (
 	// It is a constant, never taken from the request, so the callback is not an
 	// open redirect.
 	oidcNativeRedirect = "jot://oidc-callback"
-
-	// Error codes a native flow's callback reports as
-	// jot://oidc-callback?error=<code>.
-	oidcNativeErrAccessDenied   = "access_denied"           // the user denied consent at the IdP
-	oidcNativeErrIdP            = "idp_error"               // any other IdP-reported error
-	oidcNativeErrInvalidRequest = "invalid_request"         // state mismatch or missing authorization code
-	oidcNativeErrAuthFailed     = "authentication_failed"   // ID token or nonce verification failed
-	oidcNativeErrUnavailable    = "temporarily_unavailable" // the code store is at capacity
-	oidcNativeErrServer         = "server_error"            // unexpected internal failure
 )
 
 var errInvalidNativeCode = errors.New("invalid or expired code")
@@ -80,7 +71,7 @@ func (h *OIDCHandler) completeNative(w http.ResponseWriter, r *http.Request, fs 
 	log := logutil.FromContext(r.Context())
 	if cbErr != nil {
 		log.WithError(cbErr.err).Warn("Native SSO callback failed")
-		return h.nativeRedirect(w, r, "error", cbErr.nativeCode)
+		return h.nativeRedirect(w, r, "error", cbErr.code)
 	}
 
 	code, err := h.nativeCodes.Issue(oidc.NativeCodeRecord{
@@ -93,10 +84,10 @@ func (h *OIDCHandler) completeNative(w http.ResponseWriter, r *http.Request, fs 
 	switch {
 	case errors.Is(err, oidc.ErrNativeCodeStoreFull):
 		log.WithError(err).Warn("Native SSO code store is full")
-		return h.nativeRedirect(w, r, "error", oidcNativeErrUnavailable)
+		return h.nativeRedirect(w, r, "error", oidcErrUnavailable)
 	case err != nil:
 		log.WithError(err).Error("Failed to issue native SSO code")
-		return h.nativeRedirect(w, r, "error", oidcNativeErrServer)
+		return h.nativeRedirect(w, r, "error", oidcErrServer)
 	}
 	return h.nativeRedirect(w, r, "code", code)
 }

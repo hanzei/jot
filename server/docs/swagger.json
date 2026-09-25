@@ -441,25 +441,7 @@
                 ],
                 "responses": {
                     "302": {
-                        "description": "redirect to the app (web), or to jot://oidc-callback with a code or error (native)"
-                    },
-                    "400": {
-                        "description": "invalid flow",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "401": {
-                        "description": "authentication failed",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "409": {
-                        "description": "identity already linked",
-                        "schema": {
-                            "type": "string"
-                        }
+                        "description": "web: redirect to the app, or on failure to /login or /settings with ?sso_error=\u003ccode\u003e; native: redirect to jot://oidc-callback with a code or error"
                     }
                 }
             }

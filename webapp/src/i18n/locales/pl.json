@@ -60,7 +60,9 @@
     "passwordHint": "Co najmniej {{min}} znaków",
     "logoAlt": "Logo Jot",
     "ssoSignInWith": "Zaloguj się przez {{provider}}",
-    "ssoDivider": "lub"
+    "ssoDivider": "lub",
+    "ssoCancelled": "Logowanie zostało anulowane.",
+    "ssoFailed": "Logowanie jednokrotne nie powiodło się. Spróbuj ponownie."
   },
   "dashboard": {
     "newNote": "Nowa notatka",
@@ -225,7 +227,10 @@
     "ssoDisconnectFailed": "Nie udało się odłączyć SSO.",
     "ssoDisconnected": "Odłączono SSO.",
     "ssoDisconnectConfirmTitle": "Odłączyć SSO?",
-    "ssoDisconnectConfirmMessage": "Spowoduje to odłączenie {{provider}} od Twojego konta. Do zalogowania będzie potrzebne hasło."
+    "ssoDisconnectConfirmMessage": "Spowoduje to odłączenie {{provider}} od Twojego konta. Do zalogowania będzie potrzebne hasło.",
+    "ssoLinkCancelled": "Łączenie SSO zostało anulowane.",
+    "ssoLinkConflict": "Ta tożsamość SSO jest już połączona z innym kontem.",
+    "ssoLinkFailed": "Nie udało się połączyć SSO. Spróbuj ponownie."
   },
   "about": {
     "title": "O Jot",

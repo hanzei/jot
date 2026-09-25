@@ -382,25 +382,130 @@ func TestOIDCLocalLoginDisabledRejectsPasswordAuth(t *testing.T) {
 	})
 }
 
-func TestOIDCCallbackRejectsTamperedState(t *testing.T) {
+// webErrorRedirect asserts resp is a failed web callback's redirect back into
+// the app and returns the landing page's path and its sso_error code.
+func webErrorRedirect(t *testing.T, resp *http.Response) (string, string) {
+	t.Helper()
+	require.Equal(t, http.StatusFound, resp.StatusCode)
+	assert.Nil(t, sessionCookie(resp), "a failed callback must not set jot_session")
+	loc, err := url.Parse(resp.Header.Get("Location"))
+	require.NoError(t, err)
+	assert.Empty(t, loc.Host, "the redirect must stay on the app's origin")
+	return loc.Path, loc.Query().Get("sso_error")
+}
+
+func TestOIDCWebCallbackErrorsRedirect(t *testing.T) {
 	t.Parallel()
-	ts, _ := setupOIDCTestServer(t, nil)
-	c := ts.oidcClient(t)
+	ts, mock := setupOIDCTestServer(t, nil)
+	linker := ts.createTestUser(t, "webfail", "password123", false)
 
-	// Begin a flow to obtain a valid flow cookie, then call the callback with a
-	// state that does not match the cookie.
-	startReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/auth/oidc/login", nil)
-	require.NoError(t, err)
-	startResp, err := c.Do(startReq)
-	require.NoError(t, err)
-	require.NoError(t, startResp.Body.Close())
+	// start begins a web flow at startPath on c and returns the state and
+	// nonce, for driving a custom callback.
+	start := func(t *testing.T, c *http.Client, startPath string) (string, string) {
+		t.Helper()
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+startPath, nil)
+		require.NoError(t, err)
+		resp, err := c.Do(req)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		require.Equal(t, http.StatusFound, resp.StatusCode)
+		loc, err := url.Parse(resp.Header.Get("Location"))
+		require.NoError(t, err)
+		return loc.Query().Get("state"), loc.Query().Get("nonce")
+	}
+	callback := func(t *testing.T, c *http.Client, query url.Values) (string, string) {
+		t.Helper()
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/auth/oidc/callback?"+query.Encode(), nil)
+		require.NoError(t, err)
+		resp, err := c.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		return webErrorRedirect(t, resp)
+	}
 
-	cbReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/auth/oidc/callback?code=x&state=wrong-state", nil)
-	require.NoError(t, err)
-	cbResp, err := c.Do(cbReq)
-	require.NoError(t, err)
-	defer cbResp.Body.Close()
-	assert.Equal(t, http.StatusBadRequest, cbResp.StatusCode)
+	intents := []struct {
+		name      string
+		startPath string
+		client    func(t *testing.T) *http.Client
+		page      string
+	}{
+		{"login", "/api/v1/auth/oidc/login", ts.oidcClient, "/login"},
+		{"link", "/api/v1/auth/oidc/link", func(t *testing.T) *http.Client { return sessionClientFrom(t, ts, linker) }, "/settings"},
+	}
+	for _, intent := range intents {
+		t.Run(intent.name, func(t *testing.T) {
+			t.Run("IdP access_denied", func(t *testing.T) {
+				c := intent.client(t)
+				state, _ := start(t, c, intent.startPath)
+				page, code := callback(t, c, url.Values{"state": {state}, "error": {"access_denied"}})
+				assert.Equal(t, intent.page, page)
+				assert.Equal(t, "access_denied", code)
+			})
+
+			t.Run("other IdP errors", func(t *testing.T) {
+				c := intent.client(t)
+				state, _ := start(t, c, intent.startPath)
+				page, code := callback(t, c, url.Values{"state": {state}, "error": {"server_error"}})
+				assert.Equal(t, intent.page, page)
+				assert.Equal(t, "idp_error", code)
+			})
+
+			t.Run("state mismatch", func(t *testing.T) {
+				c := intent.client(t)
+				start(t, c, intent.startPath)
+				page, code := callback(t, c, url.Values{"state": {"wrong"}, "code": {"x"}})
+				assert.Equal(t, intent.page, page)
+				assert.Equal(t, "invalid_request", code)
+			})
+
+			t.Run("missing authorization code", func(t *testing.T) {
+				c := intent.client(t)
+				state, _ := start(t, c, intent.startPath)
+				page, code := callback(t, c, url.Values{"state": {state}})
+				assert.Equal(t, intent.page, page)
+				assert.Equal(t, "invalid_request", code)
+			})
+
+			t.Run("ID token verification fails", func(t *testing.T) {
+				c := intent.client(t)
+				state, _ := start(t, c, intent.startPath)
+				// A code the mock IdP never issued: the token exchange fails.
+				page, code := callback(t, c, url.Values{"state": {state}, "code": {"unknown-code"}})
+				assert.Equal(t, intent.page, page)
+				assert.Equal(t, "authentication_failed", code)
+			})
+
+			t.Run("nonce mismatch", func(t *testing.T) {
+				c := intent.client(t)
+				state, _ := start(t, c, intent.startPath)
+				idpCode := "code-badnonce-" + intent.name
+				mock.registerCode(idpCode, "not-the-nonce", map[string]any{"sub": "sub-badnonce"})
+				page, code := callback(t, c, url.Values{"state": {state}, "code": {idpCode}})
+				assert.Equal(t, intent.page, page)
+				assert.Equal(t, "authentication_failed", code)
+			})
+		})
+	}
+
+	// Without the flow cookie the intent is unknown, so even a link flow lands
+	// on the login page.
+	t.Run("missing flow cookie lands on login", func(t *testing.T) {
+		page, code := callback(t, ts.oidcClient(t), url.Values{"state": {"x"}, "code": {"x"}})
+		assert.Equal(t, "/login", page)
+		assert.Equal(t, "invalid_request", code)
+	})
+
+	t.Run("tampered flow cookie lands on login", func(t *testing.T) {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/auth/oidc/callback?state=x&code=x", nil)
+		require.NoError(t, err)
+		req.Header.Set("Cookie", "jot_oidc_flow=forged.signature")
+		resp, err := ts.oidcClient(t).Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		page, code := webErrorRedirect(t, resp)
+		assert.Equal(t, "/login", page)
+		assert.Equal(t, "invalid_request", code)
+	})
 }
 
 func TestOIDCLinkAndUnlink(t *testing.T) {
@@ -444,7 +549,9 @@ func TestOIDCLinkAndUnlink(t *testing.T) {
 			"preferred_username": "other",
 		})
 		defer resp.Body.Close()
-		assert.Equal(t, http.StatusConflict, resp.StatusCode)
+		page, code := webErrorRedirect(t, resp)
+		assert.Equal(t, "/settings", page)
+		assert.Equal(t, "identity_linked", code)
 	})
 
 	t.Run("unlink is blocked for a password-less SSO user until a password is set", func(t *testing.T) {

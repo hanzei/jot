@@ -60,7 +60,9 @@
     "passwordHint": "At least {{min}} characters",
     "logoAlt": "Jot logo",
     "ssoSignInWith": "Sign in with {{provider}}",
-    "ssoDivider": "or"
+    "ssoDivider": "or",
+    "ssoCancelled": "Sign-in was cancelled.",
+    "ssoFailed": "Single sign-on failed. Please try again."
   },
   "dashboard": {
     "newNote": "New Note",
@@ -225,7 +227,10 @@
     "ssoDisconnectFailed": "Failed to disconnect SSO.",
     "ssoDisconnected": "Disconnected from SSO.",
     "ssoDisconnectConfirmTitle": "Disconnect SSO?",
-    "ssoDisconnectConfirmMessage": "This unlinks {{provider}} from your account. You'll need your password to sign in."
+    "ssoDisconnectConfirmMessage": "This unlinks {{provider}} from your account. You'll need your password to sign in.",
+    "ssoLinkCancelled": "Connecting SSO was cancelled.",
+    "ssoLinkConflict": "This SSO identity is already linked to another account.",
+    "ssoLinkFailed": "Could not connect SSO. Please try again."
   },
   "about": {
     "title": "About Jot",

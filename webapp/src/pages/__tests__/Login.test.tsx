@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, useLocation } from 'react-router';
 import Login from '../Login';
 import { auth } from '@/utils/api';
 import { setUser, setSettings } from '@/utils/auth';
@@ -22,6 +22,12 @@ vi.mock('@/utils/auth', () => ({
 
 const SSO_DISABLED: SSOConfig = { enabled: false, provider_name: '', local_login_enabled: true };
 
+/** Renders the router's current path and query, to assert URL cleanup. */
+const LocationProbe = () => {
+  const location = useLocation();
+  return <div data-testid="location">{location.pathname + location.search}</div>;
+};
+
 const renderLogin = (props?: {
   registrationEnabled?: boolean;
   onLogin?: () => void;
@@ -37,6 +43,7 @@ const renderLogin = (props?: {
     ...render(
       <MemoryRouter initialEntries={[props?.initialEntry ?? '/login']}>
         <Login onLogin={onLogin} registrationEnabled={registrationEnabled} sso={sso} />
+        <LocationProbe />
       </MemoryRouter>
     ),
   };
@@ -157,6 +164,35 @@ describe('Login', () => {
       expect(screen.queryByLabelText(i18n.t('auth.passwordPlaceholder'))).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: i18n.t('auth.signIn') })).not.toBeInTheDocument();
       expect(screen.queryByRole('link', { name: i18n.t('auth.createNewAccount') })).not.toBeInTheDocument();
+    });
+
+    it('shows a denied sign-in as a cancellation and removes sso_error from the URL', async () => {
+      renderLogin({ sso: ssoEnabled(true), initialEntry: '/login?sso_error=access_denied&continue=%2Fnotes%2Fabc' });
+      const status = screen.getByRole('status');
+      expect(status).toHaveTextContent(i18n.t('auth.ssoCancelled'));
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByTestId('location')).toHaveTextContent(/^\/login\?continue=%2Fnotes%2Fabc$/);
+      });
+      // The message outlives the parameter.
+      expect(screen.getByRole('status')).toHaveTextContent(i18n.t('auth.ssoCancelled'));
+    });
+
+    it.each(['invalid_request', 'authentication_failed', 'idp_error', 'server_error', 'something_new'])(
+      'shows sso_error=%s as a failure',
+      async (code) => {
+        renderLogin({ sso: ssoEnabled(false), initialEntry: `/login?sso_error=${code}` });
+        expect(screen.getByRole('alert')).toHaveTextContent(i18n.t('auth.ssoFailed'));
+        await waitFor(() => {
+          expect(screen.getByTestId('location')).toHaveTextContent(/^\/login$/);
+        });
+      },
+    );
+
+    it('shows no SSO message without sso_error', () => {
+      renderLogin({ sso: ssoEnabled(true) });
+      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     });
   });
 

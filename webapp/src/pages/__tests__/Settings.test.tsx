@@ -1,7 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, useLocation } from 'react-router';
 import Settings from '../Settings';
 import { ToastProvider } from '@/components/Toast';
 import { users, auth, sessions, sso, isAxiosError } from '@/utils/api';
@@ -75,11 +75,18 @@ const activeSession = {
 
 const SSO_DISABLED: SSOConfig = { enabled: false, provider_name: '', local_login_enabled: true };
 
-const renderSettings = (ssoConfig: SSOConfig = SSO_DISABLED) => {
+/** Renders the router's current path and query, to assert URL cleanup. */
+const LocationProbe = () => {
+  const location = useLocation();
+  return <div data-testid="location">{location.pathname + location.search}</div>;
+};
+
+const renderSettings = (ssoConfig: SSOConfig = SSO_DISABLED, initialEntry = '/settings') => {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <ToastProvider>
         <Settings passwordMinLength={10} sso={ssoConfig} />
+        <LocationProbe />
       </ToastProvider>
     </MemoryRouter>
   );
@@ -311,6 +318,21 @@ describe('Settings', () => {
 
   describe('SSO section', () => {
     const ssoEnabled: SSOConfig = { enabled: true, provider_name: 'Keycloak', local_login_enabled: true };
+
+    it.each([
+      ['access_denied', 'settings.ssoLinkCancelled'],
+      ['identity_linked', 'settings.ssoLinkConflict'],
+      ['authentication_failed', 'settings.ssoLinkFailed'],
+    ])('reports a failed Connect with sso_error=%s once and removes it from the URL', async (code, key) => {
+      vi.mocked(authUtils.getUser).mockReturnValue({ ...mockUser, has_sso_linked: false });
+      renderSettings(ssoEnabled, `/settings?sso_error=${code}`);
+      const toasts = await screen.findAllByTestId('toast');
+      expect(toasts).toHaveLength(1);
+      expect(toasts[0]).toHaveTextContent(i18n.t(key));
+      await waitFor(() => {
+        expect(screen.getByTestId('location')).toHaveTextContent(/^\/settings$/);
+      });
+    });
 
     it('does not render the SSO section when SSO is disabled', () => {
       renderSettings();

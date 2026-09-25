@@ -11,10 +11,12 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
 	"github.com/hanzei/jot/server/internal/auth"
+	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/oidc"
 	"golang.org/x/oauth2"
@@ -35,6 +37,25 @@ const (
 
 	// oidcAppRoot is where a successful login or link redirects the browser.
 	oidcAppRoot = "/"
+
+	// oidcWebErrorParam carries a failed web flow's error code to the page it
+	// lands on: /login for the login intent, /settings for the link intent.
+	oidcWebErrorParam = "sso_error"
+	oidcLoginPage     = "/login"
+	oidcSettingsPage  = "/settings"
+)
+
+// Error codes a failed callback reports: as jot://oidc-callback?error=<code>
+// for a native flow, as ?sso_error=<code> on the landing page for a web flow.
+// The clients map each code to a message, so these are part of their contract.
+const (
+	oidcErrAccessDenied   = "access_denied"           // the user denied consent at the IdP
+	oidcErrIdP            = "idp_error"               // any other IdP-reported error
+	oidcErrInvalidRequest = "invalid_request"         // missing/expired flow, state mismatch, or missing authorization code
+	oidcErrAuthFailed     = "authentication_failed"   // ID token or nonce verification failed
+	oidcErrIdentityLinked = "identity_linked"         // web only: the identity is bound to another account
+	oidcErrUnavailable    = "temporarily_unavailable" // native only: the code store is at capacity
+	oidcErrServer         = "server_error"            // unexpected internal failure
 )
 
 // OIDCHandler serves the SSO authorization-code + PKCE endpoints. It is only
@@ -163,14 +184,16 @@ func (h *OIDCHandler) startFlow(w http.ResponseWriter, r *http.Request, fs flowS
 // the authenticated user (link intent). A native (mobile) flow instead issues
 // a one-time code and redirects to the app; see completeNative.
 //
+// The callback is a browser navigation, so it never ends on an error body: a
+// failed web flow redirects to /login (login intent) or /settings (link
+// intent) with ?sso_error=<code>, and a failed native flow redirects to
+// jot://oidc-callback?error=<code>.
+//
 //	@Summary	Complete an SSO flow
 //	@Tags		auth
 //	@Param		code	query	string	true	"authorization code"
 //	@Param		state	query	string	true	"state token"
-//	@Success	302		"redirect to the app (web), or to jot://oidc-callback with a code or error (native)"
-//	@Failure	400		{string}	string	"invalid flow"
-//	@Failure	401		{string}	string	"authentication failed"
-//	@Failure	409		{string}	string	"identity already linked"
+//	@Success	302		"web: redirect to the app, or on failure to /login or /settings with ?sso_error=<code>; native: redirect to jot://oidc-callback with a code or error"
 //	@Router		/auth/oidc/callback [get]
 func (h *OIDCHandler) Callback(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	fs, err := h.readFlowCookie(r)
@@ -178,7 +201,11 @@ func (h *OIDCHandler) Callback(w http.ResponseWriter, r *http.Request) (int, any
 	// stale handle cannot linger.
 	h.clearFlowCookie(w)
 	if err != nil {
-		return http.StatusBadRequest, nil, fmt.Errorf("invalid or expired SSO flow: %w", err)
+		// Without the cookie neither the intent nor whether the flow was native
+		// is known, so the login page is the only landing there is. A native
+		// flow that lost its cookie thus shows the web login page inside the
+		// app's browser sheet, which the user simply closes.
+		return h.webError(w, r, oidcIntentLogin, &callbackError{oidcErrInvalidRequest, fmt.Errorf("invalid or expired SSO flow: %w", err)})
 	}
 
 	identity, cbErr := h.verifyCallback(r, fs)
@@ -186,7 +213,7 @@ func (h *OIDCHandler) Callback(w http.ResponseWriter, r *http.Request) (int, any
 		return h.completeNative(w, r, fs, identity, cbErr)
 	}
 	if cbErr != nil {
-		return cbErr.status, nil, cbErr.err
+		return h.webError(w, r, fs.Intent, cbErr)
 	}
 
 	switch fs.Intent {
@@ -195,16 +222,40 @@ func (h *OIDCHandler) Callback(w http.ResponseWriter, r *http.Request) (int, any
 	case oidcIntentLogin:
 		return h.completeLogin(w, r, identity)
 	default:
-		return http.StatusBadRequest, nil, fmt.Errorf("unknown SSO intent %q", fs.Intent)
+		return h.webError(w, r, oidcIntentLogin, &callbackError{oidcErrInvalidRequest, fmt.Errorf("unknown SSO intent %q", fs.Intent)})
 	}
 }
 
-// callbackError is a failed callback check: the HTTP status and error a web
-// flow returns, plus the error code a native flow puts in its app redirect.
+// callbackError is a failed callback: the error code reported to the client
+// and the underlying error, which is only logged.
 type callbackError struct {
-	status     int
-	nativeCode string
-	err        error
+	code string
+	err  error
+}
+
+// webError logs a failed web callback and redirects the browser back into the
+// app: the Settings page for the link intent, the login page otherwise.
+func (h *OIDCHandler) webError(w http.ResponseWriter, r *http.Request, intent string, cbErr *callbackError) (int, any, error) {
+	log := logutil.FromContext(r.Context()).WithError(cbErr.err).WithField("sso_error", cbErr.code)
+	if cbErr.code == oidcErrServer {
+		log.Error("SSO callback failed")
+	} else {
+		log.Warn("SSO callback failed")
+	}
+	page := oidcLoginPage
+	if intent == oidcIntentLink {
+		page = oidcSettingsPage
+	}
+	http.Redirect(w, r, page+"?"+url.Values{oidcWebErrorParam: {cbErr.code}}.Encode(), http.StatusFound)
+	return 0, nil, nil
+}
+
+// effectError classifies a failed login or link effect for webError.
+func effectError(err error) *callbackError {
+	if errors.Is(err, models.ErrOIDCIdentityLinked) {
+		return &callbackError{oidcErrIdentityLinked, err}
+	}
+	return &callbackError{oidcErrServer, err}
 }
 
 // verifyCallback checks the IdP's response against the flow state and verifies
@@ -213,33 +264,33 @@ type callbackError struct {
 func (h *OIDCHandler) verifyCallback(r *http.Request, fs flowState) (*oidc.Identity, *callbackError) {
 	q := r.URL.Query()
 	if idpErr := q.Get("error"); idpErr != "" {
-		nativeCode := oidcNativeErrIdP
-		if idpErr == oidcNativeErrAccessDenied {
-			nativeCode = oidcNativeErrAccessDenied
+		code := oidcErrIdP
+		if idpErr == oidcErrAccessDenied {
+			code = oidcErrAccessDenied
 		}
-		return nil, &callbackError{http.StatusUnauthorized, nativeCode, fmt.Errorf("identity provider returned an error: %s", idpErr)}
+		return nil, &callbackError{code, fmt.Errorf("identity provider returned an error: %s", idpErr)}
 	}
 	if q.Get("state") != fs.State {
-		return nil, &callbackError{http.StatusBadRequest, oidcNativeErrInvalidRequest, errors.New("state mismatch")}
+		return nil, &callbackError{oidcErrInvalidRequest, errors.New("state mismatch")}
 	}
 	code := q.Get("code")
 	if code == "" {
-		return nil, &callbackError{http.StatusBadRequest, oidcNativeErrInvalidRequest, errors.New("missing authorization code")}
+		return nil, &callbackError{oidcErrInvalidRequest, errors.New("missing authorization code")}
 	}
 
 	identity, err := h.provider.Verify(r.Context(), code, fs.Verifier)
 	if err != nil {
-		return nil, &callbackError{http.StatusUnauthorized, oidcNativeErrAuthFailed, fmt.Errorf("verify SSO callback: %w", err)}
+		return nil, &callbackError{oidcErrAuthFailed, fmt.Errorf("verify SSO callback: %w", err)}
 	}
 	if identity.Nonce != fs.Nonce {
-		return nil, &callbackError{http.StatusUnauthorized, oidcNativeErrAuthFailed, errors.New("nonce mismatch")}
+		return nil, &callbackError{oidcErrAuthFailed, errors.New("nonce mismatch")}
 	}
 	return identity, nil
 }
 
 func (h *OIDCHandler) completeLink(w http.ResponseWriter, r *http.Request, userID string, identity *oidc.Identity) (int, any, error) {
-	if status, err := h.bindIdentity(r.Context(), userID, identity.Issuer, identity.Subject); err != nil {
-		return status, nil, err
+	if _, err := h.bindIdentity(r.Context(), userID, identity.Issuer, identity.Subject); err != nil {
+		return h.webError(w, r, oidcIntentLink, effectError(err))
 	}
 	http.Redirect(w, r, oidcAppRoot, http.StatusFound)
 	return 0, nil, nil
@@ -262,8 +313,8 @@ func (h *OIDCHandler) bindIdentity(ctx context.Context, userID, issuer, subject 
 }
 
 func (h *OIDCHandler) completeLogin(w http.ResponseWriter, r *http.Request, identity *oidc.Identity) (int, any, error) {
-	if _, status, err := h.signIn(w, r, identity.Issuer, identity.Subject, h.usernameSeed(identity)); err != nil {
-		return status, nil, err
+	if _, _, err := h.signIn(w, r, identity.Issuer, identity.Subject, h.usernameSeed(identity)); err != nil {
+		return h.webError(w, r, oidcIntentLogin, effectError(err))
 	}
 	http.Redirect(w, r, oidcAppRoot, http.StatusFound)
 	return 0, nil, nil

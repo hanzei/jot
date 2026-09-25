@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import { Eye, EyeOff, TriangleAlert } from 'lucide-react';
+import { Eye, EyeOff, Info, TriangleAlert } from 'lucide-react';
 import type { SSOConfig } from '@jot/shared';
 import { auth, SSO_LOGIN_URL } from '@/utils/api';
 import { setUser, setSettings } from '@/utils/auth';
 import { REDIRECT_PARAM, authPathWithRedirect } from '@/utils/authRedirect';
+import { ssoLoginErrorMessage, useSsoErrorParam } from '@/utils/ssoError';
 
 interface LoginProps {
   onLogin: () => void;
@@ -21,6 +22,10 @@ export default function Login({ onLogin, registrationEnabled, sso }: LoginProps)
   // over to the registration link; the redirect itself is the router's job
   // (see PostAuthRedirect), which is what runs once onLogin flips this route.
   const continueTo = searchParams.get(REDIRECT_PARAM);
+  // A failed SSO sign-in lands back here with the reason (see the server's
+  // OIDC callback).
+  const ssoErrorCode = useSsoErrorParam();
+  const ssoError = ssoErrorCode === null ? null : ssoLoginErrorMessage(ssoErrorCode);
 
   // With SSO enabled and local login turned off, the password form and the
   // register link disappear entirely — SSO becomes the only way in. A pre-SSO
@@ -74,6 +79,28 @@ export default function Login({ onLogin, registrationEnabled, sso }: LoginProps)
             </p>
           )}
         </div>
+
+        {ssoError && (ssoError.cancelled ? (
+          <div
+            role="status"
+            className="rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700 dark:border-slate-700 dark:bg-slate-800 dark:text-gray-200"
+          >
+            <div className="flex items-start gap-2">
+              <Info className="mt-0.5 h-5 w-5 flex-shrink-0 text-blue-500 dark:text-blue-400" />
+              <span>{t(ssoError.key)}</span>
+            </div>
+          </div>
+        ) : (
+          <div
+            role="alert"
+            className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400"
+          >
+            <div className="flex items-start gap-2">
+              <TriangleAlert className="mt-0.5 h-5 w-5 flex-shrink-0" />
+              <span>{t(ssoError.key)}</span>
+            </div>
+          </div>
+        ))}
 
         {sso.enabled && (
           <div className="mt-8 space-y-6">
@@ -158,7 +185,7 @@ export default function Login({ onLogin, registrationEnabled, sso }: LoginProps)
           {error && (
             <div
               role="alert"
-              className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400 animate-fade-in motion-reduce:animate-none"
+              className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400 animate-fade-in motion-reduce:animate-none"
             >
               <div className="flex items-start gap-2">
                 <TriangleAlert className="mt-0.5 h-5 w-5 flex-shrink-0" />
