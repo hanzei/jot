@@ -2507,9 +2507,8 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
                           <EllipsisVertical className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                         </MenuButton>
                         <MenuItems
-                          transition
                           anchor={{ to: 'top start', gap: 4 }}
-                          className="w-56 origin-bottom-left bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black/5 dark:ring-slate-600/20 focus:outline-none z-50 border border-gray-200 dark:border-slate-600 transition duration-100 ease-out data-[closed]:scale-95 data-[closed]:opacity-0 motion-reduce:transition-none"
+                          className="w-56 origin-bottom-left bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black/5 dark:ring-slate-600/20 focus:outline-none z-50 border border-gray-200 dark:border-slate-600 transition duration-100 ease-out starting:scale-95 starting:opacity-0 motion-reduce:transition-none"
                         >
                           <div className="py-1">
                             {noteDeepLinkHref && (

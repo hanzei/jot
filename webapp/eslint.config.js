@@ -54,6 +54,17 @@ export default [
       'react/react-in-jsx-scope': 'off', // Not needed with React 17+ JSX transform
       'react/jsx-uses-react': 'off', // Paired with react-in-jsx-scope
       'react/prop-types': 'off', // TypeScript interfaces handle prop types
+      // Headless UI's `transition` prop on MenuItems can leave a closed menu
+      // mounted for good (#1013): closing it while the enter transition is
+      // still running takes an "interrupted" path that gives up if any
+      // transition is still in flight and never checks again. The menu stays
+      // in the DOM at opacity 0, still catching clicks and still matched by
+      // role queries. Animate the open with `starting:` (CSS @starting-style)
+      // instead, so a closed menu unmounts at once.
+      'no-restricted-syntax': ['error', {
+        selector: "JSXOpeningElement[name.name='MenuItems'] > JSXAttribute[name.name='transition']",
+        message: 'Do not use the `transition` prop on MenuItems (#1013); animate the open with `starting:` classes instead.',
+      }],
     },
     settings: {
       react: {
