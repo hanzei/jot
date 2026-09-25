@@ -1,4 +1,6 @@
+import React from 'react';
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Alert } from 'react-native';
 import LoginScreen from '../src/screens/LoginScreen';
 import RegisterScreen from '../src/screens/RegisterScreen';
@@ -69,6 +71,13 @@ describe('Auth first-run server setup flow', () => {
     cleanup();
   });
 
+  function createWrapper() {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return function Wrapper({ children }: { children: React.ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    };
+  }
+
   async function renderLoginScreen() {
     return await render(
       <LoginScreen
@@ -78,6 +87,7 @@ describe('Auth first-run server setup flow', () => {
           } as never
         }
       />,
+      { wrapper: createWrapper() },
     );
   }
 
@@ -90,6 +100,7 @@ describe('Auth first-run server setup flow', () => {
           } as never
         }
       />,
+      { wrapper: createWrapper() },
     );
   }
 
