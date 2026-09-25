@@ -4,6 +4,7 @@ import type { ServerConfig, SSOConfig } from '@jot/shared';
 import { DEFAULT_SERVER_CONFIG, fetchServerConfig } from '../api/config';
 import { getActiveServerId, getStoredServerUrl, subscribeToClientActiveServerChanges } from '../api/client';
 import { getServerStorageValue, setServerStorageValue } from '../store/serverAccounts';
+import { getCurrentSwitchGenerationId } from '../store/serverSwitchLifecycle';
 import { serverConfigQueryKey } from './queryKeys';
 
 function parseSsoConfig(value: unknown): SSOConfig | undefined {
@@ -101,14 +102,33 @@ export function useServerConfig(): ServerConfig {
         return DEFAULT_SERVER_CONFIG;
       }
 
+      // fetchServerConfig() rides the shared axios client, whose base URL and
+      // session are mutated in place on a server switch — they aren't bound to
+      // this closure's `serverId`. If a switch lands between the cache read
+      // below and the network call resolving, the response could belong to a
+      // different server than the one we're about to persist it under.
+      // Capture the switch generation now and re-check it (and the active
+      // server id) before firing the request and again once it resolves, so a
+      // stale in-flight fetch can't get attributed to, and cached under, the
+      // wrong server.
+      const generationId = getCurrentSwitchGenerationId();
+      const isStillActive = () => generationId === getCurrentSwitchGenerationId() && getActiveServerId() === serverId;
+
       const cached = await loadCachedServerConfig(serverId);
       // Publish the cached value right away so every observer of this query
       // (all callers for this server) renders it while the network call below
       // is still in flight, rather than staying on the previous/default value.
       queryClient.setQueryData(queryKey, cached);
 
+      if (!isStillActive()) {
+        return cached;
+      }
+
       try {
         const fresh = await fetchServerConfig();
+        if (!isStillActive()) {
+          return cached;
+        }
         setServerStorageValue(serverId, 'server_config', JSON.stringify(fresh)).catch(() => {
           // Best-effort cache write — a SecureStore failure shouldn't surface here.
         });
