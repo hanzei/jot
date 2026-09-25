@@ -21,6 +21,7 @@ const PASSWORD = 'testpass123';
 interface Me {
   username: string;
   has_sso_linked: boolean;
+  has_password: boolean;
 }
 
 /** The logged-in user as the server sees it, through the page's own session cookie. */
@@ -112,6 +113,51 @@ test.describe('SSO enabled (mock IdP)', () => {
     await settingsPage.goto();
     await ssoSection(page).getByRole('button', { name: `Disconnect ${PROVIDER}` }).click();
     await page.getByRole('dialog').getByRole('button', { name: `Disconnect ${PROVIDER}` }).click();
+    await settingsPage.expectSuccess('Disconnected from SSO.');
+    await expect(ssoSection(page).getByRole('link', { name: `Connect ${PROVIDER}` })).toBeVisible();
+    expect((await currentUser(page)).has_sso_linked).toBe(false);
+  });
+
+  test('an SSO-provisioned account sets a password, signs in with it, and can then unlink', async ({ page, loginPage, dashboardPage, settingsPage, mockIdpPage }) => {
+    const idpUsername = uniqueUsername('idp');
+    const disconnect = () => ssoSection(page).getByRole('button', { name: `Disconnect ${PROVIDER}` });
+    const confirmDisconnect = () => page.getByRole('dialog').getByRole('button', { name: `Disconnect ${PROVIDER}` });
+
+    await loginPage.goto();
+    await ssoLoginLink(page).click();
+    await mockIdpPage.approve(idpUsername);
+    await loginPage.expectRedirectedToDashboard();
+    expect(await currentUser(page)).toMatchObject({ username: idpUsername, has_sso_linked: true, has_password: false });
+
+    // SSO is the account's only credential, so the server refuses to unlink it.
+    await settingsPage.goto();
+    await disconnect().click();
+    await confirmDisconnect().click();
+    await expect(ssoSection(page)).toContainText('set a password first');
+    expect((await currentUser(page)).has_sso_linked).toBe(true);
+
+    // Set Password: no current-password field, since there is none to give.
+    await expect(page.getByRole('heading', { name: 'Set Password' })).toBeVisible();
+    await expect(page.getByLabel('Current Password')).toHaveCount(0);
+    await page.getByLabel('New Password', { exact: true }).fill(PASSWORD);
+    await page.getByLabel('Confirm New Password').fill(PASSWORD);
+    await page.getByRole('button', { name: 'Set Password' }).click();
+    await settingsPage.expectSuccess('Password set.');
+    await expect(page.getByRole('heading', { name: 'Change Password' })).toBeVisible();
+    await expect(page.getByLabel('Current Password')).toBeVisible();
+    expect((await currentUser(page)).has_password).toBe(true);
+
+    // The password is a working credential on its own.
+    await dashboardPage.logout();
+    await expect(page).toHaveURL('/login');
+    await loginPage.login(idpUsername, PASSWORD);
+    await loginPage.expectRedirectedToDashboard();
+    expect(await currentUser(page)).toMatchObject({ username: idpUsername, has_password: true });
+
+    // With a password in place, unlinking no longer strands the account.
+    await settingsPage.goto();
+    await disconnect().click();
+    await confirmDisconnect().click();
     await settingsPage.expectSuccess('Disconnected from SSO.');
     await expect(ssoSection(page).getByRole('link', { name: `Connect ${PROVIDER}` })).toBeVisible();
     expect((await currentUser(page)).has_sso_linked).toBe(false);
