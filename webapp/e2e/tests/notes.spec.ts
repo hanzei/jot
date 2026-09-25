@@ -166,6 +166,34 @@ test.describe('Notes', () => {
     );
   });
 
+  test('shows a note deleted while switching to the bin', async ({ dashboardPage, page }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Deleted In Flight');
+
+    // Hold the DELETE until the bin has loaded, so the post-delete refresh
+    // lands after the view switch. It must reload the bin, not the notes view.
+    let releaseDelete!: () => void;
+    const deleteReleased = new Promise<void>(resolve => { releaseDelete = resolve; });
+    await page.route('**/api/v1/notes/*', async route => {
+      if (route.request().method() === 'DELETE') await deleteReleased;
+      await route.continue();
+    });
+
+    const deleteDone = page.waitForResponse(res =>
+      res.request().method() === 'DELETE' && res.url().includes('/api/v1/notes/'));
+    await dashboardPage.deleteNote('Deleted In Flight');
+    await dashboardPage.switchToBin();
+    await dashboardPage.expectEmptyState(
+      'Bin is empty',
+      'Deleted notes remain here until they are removed.',
+    );
+    releaseDelete();
+    await deleteDone;
+
+    await dashboardPage.expectNoteVisible('Deleted In Flight');
+    await dashboardPage.expectEmptyTrashButtonVisible();
+  });
+
   test('pins a note and it appears in the pinned section', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createNote('Note to Pin');
