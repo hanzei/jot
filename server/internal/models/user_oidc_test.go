@@ -40,6 +40,19 @@ func TestProvisionSSOUser(t *testing.T) {
 			assert.Equal(t, RoleUser, u2.Role)
 		})
 
+		t.Run("returned user reports the SSO link like a fresh read", func(t *testing.T) {
+			store := newTestUserStore(t, driver)
+			u, err := store.ProvisionSSOUser(ctx, testIssuer, testSubject, "alice", false)
+			require.NoError(t, err)
+			assert.True(t, u.HasSSOLinked)
+			assert.False(t, u.HasPassword)
+
+			fetched, err := store.GetByID(ctx, u.ID)
+			require.NoError(t, err)
+			assert.Equal(t, fetched.HasSSOLinked, u.HasSSOLinked)
+			assert.Equal(t, fetched.HasPassword, u.HasPassword)
+		})
+
 		t.Run("has no local password", func(t *testing.T) {
 			store := newTestUserStore(t, driver)
 			u, err := store.ProvisionSSOUser(ctx, testIssuer, testSubject, "alice", false)

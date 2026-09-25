@@ -31,7 +31,25 @@ STATIC_DIR="$RUN_DIR/static"
 mkdir -p "$STATIC_DIR"
 readonly JOT_E2E_PORT SERVER_URL_FROM_EMULATOR RUN_DIR DB_DSN STATIC_DIR
 
+# The SSO flows (12-15) run against webapp/e2e/fixtures/mock-idp.ts, the same
+# dependency-free mock IdP the Playwright SSO project uses. Its issuer is fixed
+# at http://127.0.0.1:8091, which has to work from two places: the server's own
+# discovery and token calls (host loopback, fine), and the authorize page the
+# emulator's browser opens. `adb reverse` makes the device's 127.0.0.1:8091 the
+# host's, so one issuer URL serves both, and requireHTTPSIssuer's loopback
+# exemption keeps plain http allowed. The callback, by contrast, is loaded by
+# the device browser only, so it uses the emulator's host alias — which is also
+# the host the flow cookie was set on by /native/start.
+MOCK_IDP_PORT=8091
+MOCK_IDP_ISSUER="http://127.0.0.1:${MOCK_IDP_PORT}"
+OIDC_REDIRECT_URL="${SERVER_URL_FROM_EMULATOR}/api/v1/auth/oidc/callback"
+readonly MOCK_IDP_PORT MOCK_IDP_ISSUER OIDC_REDIRECT_URL
+
 SERVER_PID=""
+IDP_PID=""
+# Set once the SSO flows reverse the IdP port, so cleanup only removes a
+# forward this script added.
+IDP_REVERSED=0
 # Set once the offline flow puts the device in airplane mode, so cleanup only
 # touches the radio when this script was the one that changed it — a flow that
 # fails while offline must not leave a local emulator stuck that way.
@@ -40,11 +58,23 @@ cleanup() {
   if [ "$AIRPLANE_TOGGLED" -eq 1 ]; then
     adb shell cmd connectivity airplane-mode disable >/dev/null 2>&1 || true
   fi
+  if [ "$IDP_REVERSED" -eq 1 ]; then
+    adb reverse --remove "tcp:${MOCK_IDP_PORT}" >/dev/null 2>&1 || true
+  fi
+  stop_server
+  if [ -n "$IDP_PID" ] && kill -0 "$IDP_PID" 2>/dev/null; then
+    kill "$IDP_PID" 2>/dev/null || true
+    wait "$IDP_PID" 2>/dev/null || true
+  fi
+  rm -rf "$RUN_DIR"
+}
+
+stop_server() {
   if [ -n "$SERVER_PID" ] && kill -0 "$SERVER_PID" 2>/dev/null; then
     kill "$SERVER_PID" 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
   fi
-  rm -rf "$RUN_DIR"
+  SERVER_PID=""
 }
 trap cleanup EXIT
 
@@ -100,39 +130,63 @@ echo "==> Building the server"
 # cold compile — same reasoning as `warm-server-build`.
 (cd "$REPO_ROOT/server" && go build -buildvcs=false -o "$REPO_ROOT/server/jot-e2e" .)
 
-echo "==> Starting the server on port $JOT_E2E_PORT (db: $DB_DSN)"
-(
-  cd "$REPO_ROOT/server"
-  # Rate limiting off because the flows register in a tight loop; cookies
-  # non-Secure because the emulator talks plain HTTP.
-  JOT_DB_DSN="$DB_DSN" \
-  JOT_STATIC_DIR="$STATIC_DIR" \
-  JOT_PORT="$JOT_E2E_PORT" \
-  JOT_COOKIE_SECURE=false \
-  JOT_RATE_LIMIT_ENABLED=false \
-    ./jot-e2e
-) &
-SERVER_PID=$!
-
-echo "==> Waiting for /readyz"
 # Bounded: without a timeout, a server that accepts the connection but never
 # answers makes "60 attempts" a bound on nothing.
 readonly READY_CURL_OPTS=(--connect-timeout 2 --max-time 5 -fsS)
-for _ in $(seq 1 60); do
-  if curl "${READY_CURL_OPTS[@]}" "http://localhost:${JOT_E2E_PORT}/readyz" >/dev/null 2>&1; then
-    break
-  fi
-  if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-    echo "Server exited before becoming ready." >&2
-    exit 1
-  fi
-  sleep 1
-done
 
-if ! curl "${READY_CURL_OPTS[@]}" "http://localhost:${JOT_E2E_PORT}/readyz" >/dev/null 2>&1; then
-  echo "Server did not become ready within 60s." >&2
-  exit 1
-fi
+# Wait up to 60s for $1 (a URL) to answer, failing early if process $2 exits.
+wait_ready() {
+  local url="$1" pid="$2" name="$3"
+  for _ in $(seq 1 60); do
+    if curl "${READY_CURL_OPTS[@]}" "$url" >/dev/null 2>&1; then
+      return 0
+    fi
+    if ! kill -0 "$pid" 2>/dev/null; then
+      echo "$name exited before becoming ready." >&2
+      return 1
+    fi
+    sleep 1
+  done
+  echo "$name did not become ready within 60s." >&2
+  return 1
+}
+
+# Start the server against the run's database, with any extra NAME=value
+# settings given as arguments (the SSO flows restart it with OIDC on). The
+# database outlives a restart, and sessions live in it, so the signed-in app
+# stays signed in across one.
+start_server() {
+  echo "==> Starting the server on port $JOT_E2E_PORT (db: $DB_DSN)${1:+ with $*}"
+  (
+    cd "$REPO_ROOT/server"
+    # Rate limiting off because the flows register in a tight loop; cookies
+    # non-Secure because the emulator talks plain HTTP.
+    env \
+      JOT_DB_DSN="$DB_DSN" \
+      JOT_STATIC_DIR="$STATIC_DIR" \
+      JOT_PORT="$JOT_E2E_PORT" \
+      JOT_COOKIE_SECURE=false \
+      JOT_RATE_LIMIT_ENABLED=false \
+      "$@" \
+      ./jot-e2e
+  ) &
+  SERVER_PID=$!
+  echo "==> Waiting for /readyz"
+  wait_ready "http://localhost:${JOT_E2E_PORT}/readyz" "$SERVER_PID" "Server"
+}
+
+# The OIDC settings for the SSO flows, pointed at the mock IdP. Mixed mode
+# (local login still on) unless the caller appends JOT_LOCAL_LOGIN_ENABLED=false.
+OIDC_ENV=(
+  JOT_OIDC_ISSUER="$MOCK_IDP_ISSUER"
+  JOT_OIDC_CLIENT_ID=jot-e2e
+  JOT_OIDC_CLIENT_SECRET=jot-e2e-secret
+  JOT_OIDC_REDIRECT_URL="$OIDC_REDIRECT_URL"
+  JOT_OIDC_PROVIDER_NAME="Mock IdP"
+)
+readonly OIDC_ENV
+
+start_server
 
 # Fresh per run, so the suite survives a server that was not torn down.
 RUN_ID="$(date +%s)$$"
@@ -157,14 +211,22 @@ MAESTRO_JOT_SSE_NOTE="SSE-resync-note-${RUN_ID}"
 # known server (no "unknown server" prompt fires); `settings` is a protected path
 # that needs no pre-existing entity to resolve.
 DEEP_LINK_URL="jot://settings?server=${SERVER_URL_FROM_EMULATOR}"
+# IdP usernames for the SSO flows, which become Jot usernames when an account
+# is provisioned from them, so they stay within the username rules (lower case,
+# at most 30 characters). Distinct from each other: the one flow 12 links to the
+# local account must not be the one flow 15 provisions a fresh account from.
+MAESTRO_JOT_SSO_LINK_USERNAME="link${RUN_ID}"
+MAESTRO_JOT_SSO_USERNAME="sso${RUN_ID}"
 readonly RUN_ID MAESTRO_JOT_USERNAME MAESTRO_JOT_PASSWORD MAESTRO_JOT_NOTE_TITLE \
   MAESTRO_JOT_OFFLINE_NOTE MAESTRO_JOT_SHARE_TEXT MAESTRO_JOT_KILL_NOTE \
-  MAESTRO_JOT_SSE_NOTE DEEP_LINK_URL
+  MAESTRO_JOT_SSE_NOTE DEEP_LINK_URL MAESTRO_JOT_SSO_LINK_USERNAME \
+  MAESTRO_JOT_SSO_USERNAME
 
 # One flow at a time so airplane mode can be toggled between them. Each flow gets
 # its own JUnit report (report-<flow>.xml) so a multi-flow run does not clobber
-# earlier results; the CI artifact glob is report*.xml. `$@` forwards any extra
-# maestro flags (e.g. --debug-output) to every flow.
+# earlier results; the CI artifact glob is report*.xml. Screenshots a flow takes
+# (`takeScreenshot`) land under screenshots/, which CI uploads on every run.
+# `$@` forwards any extra maestro flags (e.g. --debug-output) to every flow.
 maestro_flow() {
   local flow="$1"
   shift
@@ -177,8 +239,11 @@ maestro_flow() {
     -e MAESTRO_JOT_SHARE_TEXT="$MAESTRO_JOT_SHARE_TEXT" \
     -e MAESTRO_JOT_KILL_NOTE="$MAESTRO_JOT_KILL_NOTE" \
     -e MAESTRO_JOT_SSE_NOTE="$MAESTRO_JOT_SSE_NOTE" \
+    -e MAESTRO_JOT_SSO_LINK_USERNAME="$MAESTRO_JOT_SSO_LINK_USERNAME" \
+    -e MAESTRO_JOT_SSO_USERNAME="$MAESTRO_JOT_SSO_USERNAME" \
     --format junit \
     --output "$E2E_DIR/report-$(basename "$flow" .yaml).xml" \
+    --test-output-dir "$E2E_DIR/screenshots" \
     "$@" \
     "$E2E_DIR/flows/$flow"
 }
@@ -279,6 +344,74 @@ create_note_via_api() {
   echo "Out-of-band note created on the server."
 }
 
+# Start the mock IdP (see MOCK_IDP_ISSUER above) with its registered redirect
+# URI set to the callback the emulator's browser loads. It must be up before an
+# OIDC-enabled server starts: the server runs discovery at boot and refuses to
+# start without it. Node runs the .ts file directly (built-in type stripping),
+# with no npm install: the mock imports only node: built-ins.
+start_mock_idp() {
+  echo "==> Starting the mock IdP on $MOCK_IDP_ISSUER"
+  MOCK_IDP_REDIRECT_URI="$OIDC_REDIRECT_URL" \
+    node "$REPO_ROOT/webapp/e2e/fixtures/mock-idp.ts" &
+  IDP_PID=$!
+  wait_ready "${MOCK_IDP_ISSUER}/healthz" "$IDP_PID" "Mock IdP"
+  echo "==> Forwarding the device's 127.0.0.1:${MOCK_IDP_PORT} to the host (adb reverse)"
+  adb reverse "tcp:${MOCK_IDP_PORT}" "tcp:${MOCK_IDP_PORT}"
+  IDP_REVERSED=1
+}
+
+# The SSO sheet is a Chrome Custom Tab, and a fresh emulator's Chrome opens on
+# its first-run screens instead of the page. Chrome reads extra switches from
+# this file on a debuggable build or when it is the debug app, so skip first run
+# that way. Best-effort: the flows also dismiss the first-run screens if they
+# still appear (flows/helpers/mock-idp-page.yaml).
+skip_chrome_first_run() {
+  echo "==> Asking Chrome to skip its first-run screens"
+  adb shell 'echo "_ --disable-fre --no-default-browser-check --no-first-run" > /data/local/tmp/chrome-command-line' || true
+  adb shell am set-debug-app --persistent com.android.chrome >/dev/null 2>&1 || true
+}
+
+# Check an SSO outcome on the server rather than trusting the UI alone, as
+# assert_note_synced does for sync: the server has exactly $1 accounts, and each
+# username after it exists with an SSO identity linked. Reads GET /admin/users
+# as the account flow 01 registered, which is the admin because it came first.
+assert_sso_linked() {
+  local expected_count="$1"
+  shift
+  echo "==> Verifying on the server: $expected_count account(s); SSO linked for $*"
+  local api="http://localhost:${JOT_E2E_PORT}/api/v1"
+  local jar="$RUN_DIR/cookies.txt"
+  if ! curl "${READY_CURL_OPTS[@]}" -c "$jar" -H 'Content-Type: application/json' \
+      -d "{\"username\":\"${MAESTRO_JOT_USERNAME}\",\"password\":\"${MAESTRO_JOT_PASSWORD}\"}" \
+      "$api/login" >/dev/null 2>&1; then
+    echo "Could not log in to list the accounts." >&2
+    return 1
+  fi
+  local users
+  if ! users="$(curl "${READY_CURL_OPTS[@]}" -b "$jar" "$api/admin/users")"; then
+    echo "Could not list the accounts." >&2
+    return 1
+  fi
+  # No jq on a bare dev machine; node is already required for the mock IdP.
+  if ! printf '%s' "$users" | node -e '
+    const expectedCount = Number(process.argv[1]);
+    const linked = process.argv.slice(2);
+    const users = JSON.parse(require("node:fs").readFileSync(0, "utf8")).users;
+    const ok = users.length === expectedCount &&
+      linked.every((name) => users.some((u) => u.username === name && u.has_sso_linked === true));
+    if (!ok) {
+      console.error(JSON.stringify(users.map((u) => ({ username: u.username, has_sso_linked: u.has_sso_linked }))));
+      process.exit(1);
+    }' "$expected_count" "$@"; then
+    echo "The accounts on the server do not match." >&2
+    return 1
+  fi
+  echo "Accounts match."
+}
+
+# Screenshots from an earlier run would be indistinguishable from this one's.
+rm -rf "$E2E_DIR/screenshots"
+
 echo "==> Running Maestro flows"
 
 # 01 — harness smoke test: register, create a note online, land on the notes list.
@@ -360,3 +493,27 @@ if [ "$sse_post_pid" != "$sse_pre_pid" ]; then
   exit 1
 fi
 maestro_flow 11-sse-resync-catchup.yaml "$@"
+
+# 12-16 — SSO (#1016), against the mock IdP. The server restarts with OIDC on
+# (same database, so the app stays signed in) once the mock IdP is up and the
+# device can reach it. The IdP's authorize page opens in a Chrome Custom Tab,
+# which Maestro drives like any other app. 12 connects SSO from Settings for the
+# local account flows 01-11 used; 13 signs out and denies at the IdP; 14 closes
+# the sheet; 15 signs up through SSO, signs out, and signs back in. 16 runs after
+# a restart into SSO-only mode. The server checks prove what the UI can only
+# suggest: the link landed on the local account, and the second SSO sign-in
+# reused the account the first one provisioned instead of making another.
+start_mock_idp
+skip_chrome_first_run
+stop_server
+start_server "${OIDC_ENV[@]}"
+maestro_flow 12-sso-connect-settings.yaml "$@"
+assert_sso_linked 1 "$MAESTRO_JOT_USERNAME"
+maestro_flow 13-sso-deny.yaml "$@"
+maestro_flow 14-sso-close-sheet.yaml "$@"
+maestro_flow 15-sso-login-relogin.yaml "$@"
+assert_sso_linked 2 "$MAESTRO_JOT_USERNAME" "$MAESTRO_JOT_SSO_USERNAME"
+
+stop_server
+start_server "${OIDC_ENV[@]}" JOT_LOCAL_LOGIN_ENABLED=false
+maestro_flow 16-sso-only-login.yaml "$@"

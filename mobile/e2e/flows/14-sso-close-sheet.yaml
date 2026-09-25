@@ -1,0 +1,21 @@
+# SSO, part 3 — close the browser sheet (#1016).
+#
+# Continues on the login screen flow 13 left, with its "Sign-in was cancelled"
+# message still shown. Closing the sheet without deciding at the IdP is a quiet
+# return: the login screen again, and no message at all (starting the attempt
+# cleared 13's). Back closes a Custom Tab whose only history entry is the
+# authorize page — /native/start reached it by redirect.
+appId: com.jot.app
+---
+- tapOn:
+    id: "login-sso-button"
+- runFlow: helpers/mock-idp-page.yaml
+- back
+
+- extendedWaitUntil:
+    visible:
+      id: "login-sso-button"
+      enabled: true
+    timeout: 20000
+- assertNotVisible:
+    id: "login-error"

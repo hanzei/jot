@@ -53,6 +53,10 @@ deliberately narrow — real connectivity transitions, process lifecycle, OS
 integration. **Anything testable in Jest belongs in Jest.**
 
 - Flows run in numbered order and **share app state**; only `01` clears it.
+- Steps shared between flows go in `e2e/flows/helpers/` (called with
+  `runFlow`), which `run.sh` never runs on their own.
+- The SSO flows drive the mock IdP's page inside a Chrome Custom Tab; match
+  its visible text (`"Username"`, `"Approve"`), since it has no `testID`s.
 - Maestro cannot shell out mid-flow, so `adb` steps (airplane mode, force-stop,
   intents) are sequenced in `run.sh` between flows.
 - No drag-and-drop flows (Maestro has no press-hold-then-move) and no quick

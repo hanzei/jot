@@ -1,0 +1,30 @@
+# Shared by the SSO flows (12-16): wait for the mock IdP's authorize page in the
+# browser sheet the app just opened. Not a flow of its own — run.sh never runs
+# it directly; the numbered flows call it with runFlow.
+#
+# The sheet is a Chrome Custom Tab, so this is Chrome's UI, not Jot's: Maestro
+# reads it through the same accessibility tree, and the page's text (heading,
+# label, buttons) is what there is to match on. run.sh asks Chrome to skip its
+# first-run screens, but that switch is best-effort, so dismiss them here too
+# when they show up anyway.
+appId: com.jot.app
+---
+- runFlow:
+    when:
+      visible: "Accept & continue"
+    commands:
+      - tapOn: "Accept & continue"
+- runFlow:
+    when:
+      visible: "No thanks"
+    commands:
+      - tapOn: "No thanks"
+- runFlow:
+    when:
+      visible: "Use without an account"
+    commands:
+      - tapOn: "Use without an account"
+
+- extendedWaitUntil:
+    visible: "Mock IdP"
+    timeout: 30000

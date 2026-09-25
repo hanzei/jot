@@ -234,6 +234,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
                 style={[styles.error, { color: colors.error }]}
                 accessibilityRole="alert"
                 accessibilityLiveRegion="polite"
+                testID="login-error"
               >
                 {error}
               </Text>

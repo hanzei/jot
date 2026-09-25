@@ -27,6 +27,7 @@ mobile/e2e/failure-screenshot.png
 mobile/e2e/ui-hierarchy.xml
 mobile/e2e/logcat.txt
 mobile/e2e/maestro-debug/
+mobile/e2e/screenshots/
 
 # Test binary, built with `go test -c`
 *.test
