@@ -137,11 +137,7 @@ func (s *userStore) Create(ctx context.Context, username, password string) (*Use
 // internal/database/dialect has to reconcile.
 func (s *userStore) GetByUsername(ctx context.Context, username string) (*User, error) {
 	var user User
-	query := `SELECT id, username, first_name, last_name, COALESCE(password_hash, '') AS password_hash, role,
-			         profile_icon IS NOT NULL AS has_profile_icon,
-			         oidc_subject IS NOT NULL AS has_sso_linked,
-			         COALESCE(password_hash, '') <> '' AS has_password,
-			         created_at, updated_at
+	query := `SELECT ` + userSelectColumns + `
 			  FROM users WHERE username = ?`
 
 	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), strings.ToLower(username)).Scan(
@@ -159,11 +155,7 @@ func (s *userStore) GetByUsername(ctx context.Context, username string) (*User, 
 
 func (s *userStore) GetByID(ctx context.Context, id string) (*User, error) {
 	var user User
-	query := `SELECT id, username, first_name, last_name, COALESCE(password_hash, '') AS password_hash, role,
-			         profile_icon IS NOT NULL AS has_profile_icon,
-			         oidc_subject IS NOT NULL AS has_sso_linked,
-			         COALESCE(password_hash, '') <> '' AS has_password,
-			         created_at, updated_at
+	query := `SELECT ` + userSelectColumns + `
 			  FROM users WHERE id = ?`
 
 	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), id).Scan(
@@ -213,11 +205,7 @@ func scanUser(rows *sql.Rows) (User, error) {
 }
 
 func (s *userStore) GetAll(ctx context.Context) ([]*User, error) {
-	query := `SELECT id, username, first_name, last_name, COALESCE(password_hash, '') AS password_hash, role,
-			         profile_icon IS NOT NULL AS has_profile_icon,
-			         oidc_subject IS NOT NULL AS has_sso_linked,
-			         COALESCE(password_hash, '') <> '' AS has_password,
-			         created_at, updated_at
+	query := `SELECT ` + userSelectColumns + `
 			  FROM users ORDER BY created_at DESC`
 
 	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query))
@@ -247,11 +235,7 @@ func (s *userStore) GetAll(ctx context.Context) ([]*User, error) {
 // first and last names are free-form and still need it.
 func (s *userStore) Search(ctx context.Context, term string) ([]*User, error) {
 	like := "%" + term + "%"
-	query := `SELECT id, username, first_name, last_name, COALESCE(password_hash, '') AS password_hash, role,
-			         profile_icon IS NOT NULL AS has_profile_icon,
-			         oidc_subject IS NOT NULL AS has_sso_linked,
-			         COALESCE(password_hash, '') <> '' AS has_password,
-			         created_at, updated_at
+	query := `SELECT ` + userSelectColumns + `
 			  FROM users
 			  WHERE ` + s.d.CaseInsensitiveLike("username") +
 		` OR ` + s.d.CaseInsensitiveLike("first_name") +
@@ -555,8 +539,8 @@ func (s *userStore) CreateByAdmin(ctx context.Context, username, password string
 	return &user, nil
 }
 
-// userSelectColumns is the column list every full-user SELECT shares, so the
-// OIDC lookups scan identically to GetByID/GetByUsername.
+// userSelectColumns is the column list every full-user SELECT shares, so they
+// all scan in the same order (see scanUser).
 const userSelectColumns = `id, username, first_name, last_name, COALESCE(password_hash, '') AS password_hash, role,
 		         profile_icon IS NOT NULL AS has_profile_icon,
 		         oidc_subject IS NOT NULL AS has_sso_linked,

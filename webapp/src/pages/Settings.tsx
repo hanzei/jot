@@ -15,6 +15,7 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
 import { isPasswordTooShort, type ActiveSession, type PersonalAccessToken, type SSOConfig } from '@jot/shared';
 import { IdentitySecurityColumn, PreferencesInfoColumn } from './settings/SettingsSections';
+import { passwordFormKeys } from './settings/passwordFormKeys';
 import SsoSettingsSection from './settings/SsoSettingsSection';
 
 interface SettingsProps {
@@ -186,13 +187,13 @@ const Settings = ({ passwordMinLength, sso }: SettingsProps) => {
       return;
     }
 
-    const failedKey = hasPassword ? 'settings.failedChangePassword' : 'settings.failedSetPassword';
+    const keys = passwordFormKeys(hasPassword);
     setPasswordSaving(true);
     try {
       await users.changePassword(hasPassword
         ? { current_password: currentPassword, new_password: newPassword }
         : { new_password: newPassword });
-      showToast(t(hasPassword ? 'settings.passwordChanged' : 'settings.passwordSet'), 'success');
+      showToast(t(keys.success), 'success');
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
@@ -204,9 +205,9 @@ const Settings = ({ passwordMinLength, sso }: SettingsProps) => {
     } catch (err: unknown) {
       if (isAxiosError(err)) {
         const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
-        setPasswordError(msg || failedKey);
+        setPasswordError(msg || keys.failed);
       } else {
-        setPasswordError(failedKey);
+        setPasswordError(keys.failed);
       }
     } finally {
       setPasswordSaving(false);

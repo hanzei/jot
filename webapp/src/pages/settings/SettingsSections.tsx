@@ -6,6 +6,7 @@ import LetterAvatar from '@/components/LetterAvatar';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import MobileAppPreference from '@/components/MobileAppPreference';
 import SettingsSectionCard from '@/pages/settings/SettingsSectionCard';
+import { passwordFormKeys } from '@/pages/settings/passwordFormKeys';
 import { SUPPORTED_LANGUAGES, type LanguagePreference } from '@/utils/language';
 import type { ThemePreference } from '@/utils/theme';
 import { VALIDATION } from '@jot/shared';
@@ -262,7 +263,7 @@ export const IdentitySecurityColumn = ({
     </SettingsSectionCard>
 
     {showPasswordForm && (
-      <SettingsSectionCard title={t(hasPassword ? 'settings.changePasswordSection' : 'settings.setPasswordSection')}>
+      <SettingsSectionCard title={t(passwordFormKeys(hasPassword).title)}>
         <form onSubmit={onPasswordSubmit}>
           {hasPassword ? (
             <div className="mb-4">
@@ -325,9 +326,7 @@ export const IdentitySecurityColumn = ({
               disabled={passwordSaving}
               className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 disabled:bg-blue-400 dark:disabled:bg-blue-500 text-white px-4 py-2 rounded-md text-sm font-medium"
             >
-              {passwordSaving
-                ? t(hasPassword ? 'settings.changing' : 'settings.saving')
-                : t(hasPassword ? 'settings.changePassword' : 'settings.setPassword')}
+              {t(passwordSaving ? passwordFormKeys(hasPassword).saving : passwordFormKeys(hasPassword).submit)}
             </button>
           </div>
         </form>

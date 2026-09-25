@@ -395,7 +395,7 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (in
 
 	if user.HasPassword {
 		if req.CurrentPassword == "" {
-			return http.StatusBadRequest, nil, errors.New("current_password and new_password are required")
+			return http.StatusBadRequest, nil, errors.New("current_password is required")
 		}
 	} else if !h.localLoginEnabled {
 		// Setting a first password on an SSO-only server would create a
