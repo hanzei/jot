@@ -17,6 +17,7 @@ import { isPasswordTooShort, type ActiveSession, type PersonalAccessToken, type 
 import { IdentitySecurityColumn, PreferencesInfoColumn } from './settings/SettingsSections';
 import { passwordFormKeys } from './settings/passwordFormKeys';
 import SsoSettingsSection from './settings/SsoSettingsSection';
+import { ssoLinkErrorMessage, useSsoErrorParam } from '@/utils/ssoError';
 
 interface SettingsProps {
   passwordMinLength: number;
@@ -322,6 +323,21 @@ const Settings = ({ passwordMinLength, sso }: SettingsProps) => {
       setIconDeleting(false);
     }
   };
+
+  // A failed Connect lands back here with the reason (see the server's OIDC
+  // callback). A toast rather than an inline message: the SSO section is
+  // usually below the fold. The ref keeps StrictMode's double effect from
+  // showing it twice.
+  const ssoErrorCode = useSsoErrorParam();
+  const ssoErrorShownRef = useRef(false);
+  useEffect(() => {
+    if (ssoErrorCode === null || ssoErrorShownRef.current) {
+      return;
+    }
+    ssoErrorShownRef.current = true;
+    const { key, cancelled } = ssoLinkErrorMessage(ssoErrorCode);
+    showToast(t(key), cancelled ? 'info' : 'error');
+  }, [ssoErrorCode, showToast, t]);
 
   // Refresh the stored user after an unlink so the section (and the rest of the
   // app) reflects the cleared identity without a full reload.

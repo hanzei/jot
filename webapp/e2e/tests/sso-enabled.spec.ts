@@ -163,28 +163,62 @@ test.describe('SSO enabled (mock IdP)', () => {
     expect((await currentUser(page)).has_sso_linked).toBe(false);
   });
 
-  /**
-   * Pins today's behavior, which is a dead end rather than a return to the
-   * login page: the callback answers the IdP's `error=access_denied` with a raw
-   * 401 and a plain-text error, and the browser stays on the API URL. A UX gap
-   * flagged in the PR that added this spec; update this test when it is fixed.
-   */
-  test('denying at the IdP ends on the raw callback error', async ({ page, loginPage, mockIdpPage }) => {
+  test('denying at the IdP returns to the login page as a cancellation', async ({ page, loginPage, mockIdpPage }) => {
     await loginPage.goto();
     await ssoLoginLink(page).click();
-
-    const callback = page.waitForResponse((response) => response.url().includes('/api/v1/auth/oidc/callback'));
     await mockIdpPage.deny();
-    const response = await callback;
 
-    expect(response.status()).toBe(401);
-    expect(new URL(response.url()).searchParams.get('error')).toBe('access_denied');
-    await expect(page).toHaveURL(/\/api\/v1\/auth\/oidc\/callback\?/);
-    await expect(page.locator('body')).toHaveText('identity provider returned an error: access_denied');
+    // The callback redirects to /login?sso_error=access_denied, and the page
+    // then drops the parameter so a reload does not repeat the message.
+    await expect(page).toHaveURL('/login');
+    await expect(page.getByRole('status')).toHaveText('Sign-in was cancelled.');
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    await expect(ssoLoginLink(page)).toBeVisible();
 
     // And no session was created.
     const me = await page.request.get('/api/v1/me');
     expect(me.status()).toBe(401);
+
+    await page.reload();
+    await expect(page.getByRole('status')).toHaveCount(0);
+  });
+
+  test('connecting an identity already linked to another account returns to Settings', async ({ page, registerPage, loginPage, dashboardPage, settingsPage, mockIdpPage }) => {
+    // The IdP identity first provisions an account of its own.
+    const idpUsername = uniqueUsername('idp');
+    await loginPage.goto();
+    await ssoLoginLink(page).click();
+    await mockIdpPage.approve(idpUsername);
+    await loginPage.expectRedirectedToDashboard();
+    await dashboardPage.logout();
+    await expect(page).toHaveURL('/login');
+
+    // A different, local account then tries to connect that same identity.
+    await registerPage.goto();
+    await registerPage.register(uniqueUsername('local'), PASSWORD);
+    await expect(page).toHaveURL('/');
+    await settingsPage.goto();
+    await ssoSection(page).getByRole('link', { name: `Connect ${PROVIDER}` }).click();
+    await mockIdpPage.approve(idpUsername);
+
+    await expect(page).toHaveURL('/settings');
+    await expect(page.getByTestId('toast')).toContainText('This SSO identity is already linked to another account.');
+    // Still signed in to the local account, and still unlinked.
+    await expect(ssoSection(page).getByRole('link', { name: `Connect ${PROVIDER}` })).toBeVisible();
+    expect((await currentUser(page)).has_sso_linked).toBe(false);
+  });
+
+  test('cancelling a Connect at the IdP returns to Settings', async ({ page, registerPage, settingsPage, mockIdpPage }) => {
+    await registerPage.goto();
+    await registerPage.register(uniqueUsername('local'), PASSWORD);
+    await expect(page).toHaveURL('/');
+    await settingsPage.goto();
+    await ssoSection(page).getByRole('link', { name: `Connect ${PROVIDER}` }).click();
+    await mockIdpPage.deny();
+
+    await expect(page).toHaveURL('/settings');
+    await expect(page.getByTestId('toast')).toContainText('Connecting SSO was cancelled.');
+    expect((await currentUser(page)).has_sso_linked).toBe(false);
   });
 });
 
@@ -209,6 +243,19 @@ for (const theme of ['light', 'dark'] as const) {
       await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
       await expectTheme(page);
 
+      await expectNoViolations(page);
+    });
+
+    // Both message styles: the neutral cancellation note and the failure alert.
+    test('SSO error messages on the login page have no WCAG A/AA violations', async ({ page }) => {
+      await page.goto('/login?sso_error=access_denied');
+      await expect(page.getByRole('status')).toHaveText('Sign-in was cancelled.');
+      await expectTheme(page);
+      await expectNoViolations(page);
+
+      await page.goto('/login?sso_error=authentication_failed');
+      await expect(page.getByRole('alert')).toHaveText('Single sign-on failed. Please try again.');
+      await expectTheme(page);
       await expectNoViolations(page);
     });
 

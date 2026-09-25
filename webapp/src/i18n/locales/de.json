@@ -60,7 +60,9 @@
     "passwordHint": "Mindestens {{min}} Zeichen",
     "logoAlt": "Jot-Logo",
     "ssoSignInWith": "Mit {{provider}} anmelden",
-    "ssoDivider": "oder"
+    "ssoDivider": "oder",
+    "ssoCancelled": "Die Anmeldung wurde abgebrochen.",
+    "ssoFailed": "Single Sign-On fehlgeschlagen. Bitte versuche es erneut."
   },
   "dashboard": {
     "newNote": "Neue Notiz",
@@ -225,7 +227,10 @@
     "ssoDisconnectFailed": "SSO konnte nicht getrennt werden.",
     "ssoDisconnected": "SSO getrennt.",
     "ssoDisconnectConfirmTitle": "SSO trennen?",
-    "ssoDisconnectConfirmMessage": "Dadurch wird {{provider}} von deinem Konto getrennt. Zur Anmeldung benötigst du dein Passwort."
+    "ssoDisconnectConfirmMessage": "Dadurch wird {{provider}} von deinem Konto getrennt. Zur Anmeldung benötigst du dein Passwort.",
+    "ssoLinkCancelled": "Das Verknüpfen von SSO wurde abgebrochen.",
+    "ssoLinkConflict": "Diese SSO-Identität ist bereits mit einem anderen Konto verknüpft.",
+    "ssoLinkFailed": "SSO konnte nicht verknüpft werden. Bitte versuche es erneut."
   },
   "about": {
     "title": "Info zu Jot",

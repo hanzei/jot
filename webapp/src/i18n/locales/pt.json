@@ -60,7 +60,9 @@
     "passwordHint": "Pelo menos {{min}} caracteres",
     "logoAlt": "Logotipo do Jot",
     "ssoSignInWith": "Iniciar sessão com {{provider}}",
-    "ssoDivider": "ou"
+    "ssoDivider": "ou",
+    "ssoCancelled": "O início de sessão foi cancelado.",
+    "ssoFailed": "O início de sessão único falhou. Tenta novamente."
   },
   "dashboard": {
     "newNote": "Nova nota",
@@ -225,7 +227,10 @@
     "ssoDisconnectFailed": "Não foi possível desassociar o SSO.",
     "ssoDisconnected": "SSO desassociado.",
     "ssoDisconnectConfirmTitle": "Desassociar o SSO?",
-    "ssoDisconnectConfirmMessage": "Isto desassocia {{provider}} da tua conta. Precisarás da tua palavra-passe para iniciar sessão."
+    "ssoDisconnectConfirmMessage": "Isto desassocia {{provider}} da tua conta. Precisarás da tua palavra-passe para iniciar sessão.",
+    "ssoLinkCancelled": "A associação do SSO foi cancelada.",
+    "ssoLinkConflict": "Esta identidade SSO já está associada a outra conta.",
+    "ssoLinkFailed": "Não foi possível associar o SSO. Tenta novamente."
   },
   "about": {
     "title": "Sobre o Jot",

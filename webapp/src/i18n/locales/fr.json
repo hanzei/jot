@@ -60,7 +60,9 @@
     "passwordHint": "Au moins {{min}} caractères",
     "logoAlt": "Logo Jot",
     "ssoSignInWith": "Se connecter avec {{provider}}",
-    "ssoDivider": "ou"
+    "ssoDivider": "ou",
+    "ssoCancelled": "La connexion a été annulée.",
+    "ssoFailed": "Échec de l'authentification unique. Veuillez réessayer."
   },
   "dashboard": {
     "newNote": "Nouvelle note",
@@ -225,7 +227,10 @@
     "ssoDisconnectFailed": "Échec de la dissociation du SSO.",
     "ssoDisconnected": "SSO dissocié.",
     "ssoDisconnectConfirmTitle": "Dissocier le SSO ?",
-    "ssoDisconnectConfirmMessage": "Cela dissocie {{provider}} de votre compte. Vous aurez besoin de votre mot de passe pour vous connecter."
+    "ssoDisconnectConfirmMessage": "Cela dissocie {{provider}} de votre compte. Vous aurez besoin de votre mot de passe pour vous connecter.",
+    "ssoLinkCancelled": "La liaison du SSO a été annulée.",
+    "ssoLinkConflict": "Cette identité SSO est déjà liée à un autre compte.",
+    "ssoLinkFailed": "Impossible de lier le SSO. Veuillez réessayer."
   },
   "about": {
     "title": "À propos de Jot",

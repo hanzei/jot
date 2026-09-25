@@ -60,7 +60,9 @@
     "passwordHint": "Minimaal {{min}} tekens",
     "logoAlt": "Jot-logo",
     "ssoSignInWith": "Inloggen met {{provider}}",
-    "ssoDivider": "of"
+    "ssoDivider": "of",
+    "ssoCancelled": "Inloggen is geannuleerd.",
+    "ssoFailed": "Eenmalige aanmelding mislukt. Probeer het opnieuw."
   },
   "dashboard": {
     "newNote": "Nieuwe notitie",
@@ -225,7 +227,10 @@
     "ssoDisconnectFailed": "Loskoppelen van SSO is mislukt.",
     "ssoDisconnected": "SSO losgekoppeld.",
     "ssoDisconnectConfirmTitle": "SSO loskoppelen?",
-    "ssoDisconnectConfirmMessage": "Hiermee ontkoppel je {{provider}} van je account. Je hebt je wachtwoord nodig om in te loggen."
+    "ssoDisconnectConfirmMessage": "Hiermee ontkoppel je {{provider}} van je account. Je hebt je wachtwoord nodig om in te loggen.",
+    "ssoLinkCancelled": "SSO koppelen is geannuleerd.",
+    "ssoLinkConflict": "Deze SSO-identiteit is al aan een ander account gekoppeld.",
+    "ssoLinkFailed": "SSO koppelen is mislukt. Probeer het opnieuw."
   },
   "about": {
     "title": "Over Jot",
