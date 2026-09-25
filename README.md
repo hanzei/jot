@@ -307,6 +307,7 @@ App-specific variables use a `JOT_` prefix.
 | Variable | Default | Description |
 | --- | --- | --- |
 | `JOT_PORT` | `8080` | HTTP port for the main web/API server. |
+| `JOT_HOST` | empty | Bind host for the main web/API server. Empty listens on every interface. Set `127.0.0.1` (or `::1`) to accept only local connections, for example when a reverse proxy on the same host is the only way in. A host name or bare IP address, without a port or brackets. |
 | `JOT_STATIC_DIR` | `../webapp/build` from `server/` | Directory containing the compiled web app. |
 | `JOT_CORS_ALLOWED_ORIGIN` | empty | Allowed browser origin for credentialed cross-origin API calls, such as `http://localhost:5173` during Vite development. |
 
