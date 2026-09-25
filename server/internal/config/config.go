@@ -13,6 +13,7 @@ import (
 
 // Config holds all server configuration values.
 type Config struct {
+	Host                string
 	Port                int
 	MetricsEnabled      bool
 	MetricsPort         int
@@ -99,6 +100,21 @@ func parseEnumEnv(name, defaultVal string, allowed ...string) (string, error) {
 	return "", fmt.Errorf("invalid %s value %q: must be one of %s", name, v, strings.Join(allowed, ", "))
 }
 
+// parseHostEnv reads a bind-host environment variable. It must be a host name
+// or a bare IP address: the port has its own variable, and an IPv6 literal is
+// written without brackets (`::1`, not `[::1]`). Returns "" when the variable
+// is not set, which binds every interface.
+func parseHostEnv(name string) (string, error) {
+	v := os.Getenv(name)
+	if v == "" || net.ParseIP(v) != nil {
+		return v, nil
+	}
+	if strings.ContainsAny(v, ":[]/ ") {
+		return "", fmt.Errorf("invalid %s value %q: must be a host name or IP address without a port or brackets", name, v)
+	}
+	return v, nil
+}
+
 // Load reads configuration from environment variables, applying defaults
 // for any values not set.
 //
@@ -123,6 +139,12 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	cfg.Port = port
+
+	host, err := parseHostEnv("JOT_HOST")
+	if err != nil {
+		return nil, err
+	}
+	cfg.Host = host
 
 	metricsPort, err := parseIntRangeEnv("JOT_METRICS_PORT", 8081, 1, 65535)
 	if err != nil {

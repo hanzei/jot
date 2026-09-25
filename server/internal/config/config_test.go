@@ -11,6 +11,7 @@ import (
 
 func TestLoadDefaults(t *testing.T) {
 	t.Setenv("JOT_PORT", "")
+	t.Setenv("JOT_HOST", "")
 	t.Setenv("JOT_DB_DRIVER", "")
 	t.Setenv("JOT_DB_DSN", "")
 	t.Setenv("JOT_UPLOAD_DIR", "")
@@ -24,6 +25,7 @@ func TestLoadDefaults(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 8080, cfg.Port)
+	assert.Empty(t, cfg.Host)
 	assert.Equal(t, "sqlite", cfg.DBDriver)
 	assert.Equal(t, "./jot.db", cfg.DBDSN)
 	assert.Equal(t, "./uploads", cfg.UploadDir)
@@ -96,6 +98,28 @@ func TestLoadInvalidPort(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, 65535, cfg.Port)
 	})
+}
+
+func TestLoadHost(t *testing.T) {
+	t.Setenv("JOT_STATIC_DIR", "/tmp/static")
+
+	for _, v := range []string{"127.0.0.1", "0.0.0.0", "::1", "::", "localhost", "jot.internal"} {
+		t.Run("valid "+v, func(t *testing.T) {
+			t.Setenv("JOT_HOST", v)
+			cfg, err := Load()
+			require.NoError(t, err)
+			assert.Equal(t, v, cfg.Host)
+		})
+	}
+
+	for _, v := range []string{"127.0.0.1:8080", "[::1]", "localhost:8080", "http://localhost", "local host"} {
+		t.Run("invalid "+v, func(t *testing.T) {
+			t.Setenv("JOT_HOST", v)
+			_, err := Load()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "JOT_HOST")
+		})
+	}
 }
 
 func TestLoadDBDriver(t *testing.T) {

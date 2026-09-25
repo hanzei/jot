@@ -27,6 +27,10 @@ const JOT_TEST_ENV = {
   // E2E tests register a fresh user per test across parallel workers,
   // which blows past the per-IP auth rate limit almost immediately.
   JOT_RATE_LIMIT_ENABLED: 'false',
+  // With rate limiting off and insecure cookies, keep the servers off every
+  // other interface. The base URLs say `localhost`; Node and Chromium fall
+  // back to 127.0.0.1 when it resolves to ::1 first.
+  JOT_HOST: '127.0.0.1',
 };
 
 export default defineConfig({
