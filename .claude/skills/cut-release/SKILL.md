@@ -7,8 +7,8 @@ description: Cut a new Jot release (push the version tag and let GoReleaser own 
 
 Two jobs, always in this order:
 
-1. **Cut the release** — push a tag, let the `Release` workflow (GoReleaser + Docker)
-   build and publish it.
+1. **Cut the release** — push a tag, let the `Release` workflow (GoReleaser, Android APK,
+   Docker) build and publish it.
 2. **Rewrite the changelog** — replace the bare, auto-generated "What's Changed" PR-title
    list with a curated one: highlights, breaking changes grouped together with migration
    steps, improvements, bug fixes.
@@ -20,20 +20,21 @@ GoReleaser has created and published the release.
 
 Immutable releases are enabled on this repository. Once a release is **published**, GitHub
 freezes its assets — no further uploads, ever. GoReleaser already handles this correctly on
-its own: it creates the release as a **draft**, uploads the `jot`/`jotctl` archives and
-`checksums.txt`, then undrafts (publishes) it. That order only works if GoReleaser is the
+its own: it creates the release as a **draft**, uploads the `jot`/`jotctl` archives, the
+Android APK (via `release.extra_files`) and `checksums.txt`, then undrafts (publishes) it. That order only works if GoReleaser is the
 one *creating* the release.
 
 If a release for the tag already exists and is published — e.g. someone created it from the
 GitHub UI, which publishes immediately — GoReleaser reuses that release as-is and every
 asset upload comes back `422 Cannot upload assets to an immutable release`. This is exactly
 what happened to [v0.8.7](https://github.com/hanzei/jot/releases/tag/v0.8.7): it shipped
-with **zero assets**, and because the Docker jobs `needs: goreleaser`, no `hanzei/jot:0.8.7`
-image was pushed either. Worse: an immutable release's tag cannot be deleted, moved, or
+with **zero assets**, and because the Docker jobs then had `needs: goreleaser`, no
+`hanzei/jot:0.8.7` image was pushed either. Worse: an immutable release's tag cannot be deleted, moved, or
 reused, so there was no way to re-cut it — the fix had to ship as the next patch version.
 See [PR #809](https://github.com/hanzei/jot/pull/809) for the full writeup and the fix
 (`.goreleaser.yml`'s `changelog.use: github-native`, and a pre-flight guard step in
-`release.yml` that fails fast if the tag already has a published release).
+`release.yml` that fails fast if the tag already has a published release — today its own
+`check-tag` job).
 
 **The one rule that follows from all of this: releases are cut by pushing a tag, never by
 clicking "Draft a new release" on GitHub.**
@@ -65,8 +66,15 @@ git fetch origin master && git log HEAD..origin/master --oneline   # nothing to 
 ## 1. Decide the version
 
 ```bash
+git fetch origin --tags
 git tag --sort=-v:refname | head -5
+git ls-remote --tags origin 'vX.Y.Z'   # already pushed?
 ```
+
+**The maintainer sometimes pushes the tag themselves before asking** (this happened with
+v0.13.0). If `ls-remote` shows the tag already on origin, don't tag anything: confirm it
+points at the expected commit (normally `origin/master`'s head), find its `Release` run
+(step 3), and pick up from there.
 
 Jot is pre-1.0 and doesn't tie the version bump to whether the release contains breaking
 changes — v0.8.7 shipped several API-breaking changes (see root `CLAUDE.md`'s Development
@@ -76,7 +84,8 @@ practice: default to the next patch (`v0.8.6` → `v0.8.7`), and only propose a 
 the user asks for one or the release is clearly a deliberate milestone. Either way, **state
 the version you're about to tag and get explicit confirmation before pushing it** — an
 immutable release's tag is permanent; a wrong version number cannot be taken back the way a
-bad commit can.
+bad commit can. A version the user named explicitly in the request ("release v0.13.0")
+counts as that confirmation; a version you picked yourself does not.
 
 ## 2. Cut it
 
@@ -92,9 +101,23 @@ user has confirmed the version number from step 1.
 
 ## 3. Watch the workflow
 
-The `goreleaser` job runs the guard step from #809 first — if it fails, the tag already had
-a published release (shouldn't happen if step 0 passed, but check) and no assets went out;
-the `docker` and `docker-merge` jobs are skipped (`needs: goreleaser`) and never run either.
+Job graph (see the comment at the top of `release.yml` for why):
+
+```
+check-tag ─┬─ apk (mobile-apk.yml) ── goreleaser
+           └─ docker (amd64, arm64) ── docker-merge
+```
+
+- `check-tag` holds the guard step from #809. If it fails, the tag already had a published
+  release (shouldn't happen if step 0 passed, but check); every other job is skipped, so no
+  assets and no images went out.
+- `goreleaser` waits for `apk` because the APK must be attached inside GoReleaser's
+  draft-then-undraft sequence. The APK build is the long pole — expect the whole run to take
+  roughly 10–15 minutes, with Docker finishing well before GoReleaser even starts.
+- The Docker branch does **not** depend on GoReleaser. A GoReleaser failure can therefore
+  leave `hanzei/jot:X.Y.Z` pushed while the release is still a draft. A draft still accepts
+  uploads, so re-running the failed jobs completes it — that is the one case where
+  re-running the same tag is correct.
 
 Poll the run rather than guessing when it's done:
 
@@ -103,12 +126,27 @@ actions_list(method: list_workflow_runs, owner: hanzei, repo: jot,
              resource_id: release.yml, workflow_runs_filter: { branch: vX.Y.Z })
 ```
 
-then `actions_get(method: get_workflow_run, resource_id: <run id>)` until `status:
-completed`. A full run (build + archives + Docker for both platforms) takes a few minutes.
-If `gh` is available in the environment, `gh run watch <run-id>` is equivalent and cheaper
-than polling.
+then `actions_list(method: list_workflow_jobs, resource_id: <run id>)` for per-job status.
+If `gh` is available, `gh run watch <run-id>` is equivalent. Without `gh`, the repo is
+public, so a background `Monitor` polling the unauthenticated API works well and avoids
+burning turns — emit one line per job as it completes and exit when the run does:
 
-If the `goreleaser` job fails at the guard step, do **not** retry the same tag — re-running
+```bash
+prev=""
+while true; do
+  cur=$(curl -s https://api.github.com/repos/hanzei/jot/actions/runs/<run id>/jobs \
+        | jq -r '.jobs[]? | select(.status=="completed") | "\(.name): \(.conclusion)"' | sort)
+  comm -13 <(echo "$prev") <(echo "$cur"); prev=$cur
+  st=$(curl -s https://api.github.com/repos/hanzei/jot/actions/runs/<run id> | jq -r .status)
+  [ "$st" = completed ] && { echo "RUN COMPLETED"; break; }
+  sleep 45
+done
+```
+
+Draft the changelog (step 5, from `git log` and the PR descriptions) while the run is in
+progress — only *applying* it has to wait for the release to exist.
+
+If the `check-tag` job fails at the guard step, do **not** retry the same tag — re-running
 just fails the same way, per the #809 writeup. Ship the next patch version instead and say
 so plainly to the user.
 
@@ -118,9 +156,11 @@ so plainly to the user.
 get_release_by_tag(owner: hanzei, repo: jot, tag: vX.Y.Z)
 ```
 
-Expect **5 assets**: `jot_vX.Y.Z_linux_amd64.tar.gz`, `jot_vX.Y.Z_linux_arm64.tar.gz`,
-`jotctl_vX.Y.Z_linux_amd64.tar.gz`, `jotctl_vX.Y.Z_linux_arm64.tar.gz`, `checksums.txt`,
-and `"draft": false`. Also confirm the `docker-merge` job succeeded — that's what pushes the
+Expect **6 assets** — note the file names carry the version **without** the `v`:
+`jot_X.Y.Z_linux_amd64.tar.gz`, `jot_X.Y.Z_linux_arm64.tar.gz`,
+`jotctl_X.Y.Z_linux_amd64.tar.gz`, `jotctl_X.Y.Z_linux_arm64.tar.gz`,
+`jot-X.Y.Z-arm64-v8a.apk`, and `checksums.txt` (which also covers the APK) — plus
+`"draft": false` and `"immutable": true`. Also confirm the `docker-merge` job succeeded — that's what pushes the
 multi-arch `hanzei/jot:X.Y.Z` / `:X.Y` / `:X` / `:latest` / `:stable` manifest, not the two
 per-platform `docker` jobs.
 
@@ -141,10 +181,16 @@ step recovers it.
    the `body` field is the "What's Changed" list. Pull the PR number out of each bullet's
    URL; that list is the authoritative "what's actually in this release," sourced the same
    way GoReleaser built it (commits between the previous tag and this one).
+   It only lists **merged PRs**, though: cross-check with
+   `git log --oneline --first-parent vPREV..vX.Y.Z` for commits pushed straight to master
+   (v0.13.0 had one, the OIDC design spec) and fold those in too.
 
 2. **Pull each PR's full description.**
    `pull_request_read(method: get, owner: hanzei, repo: jot, pullNumber: N)` for every PR in
    the list. Skip fetching the diff/files — the description is what has the impact writeup.
+   With 20+ PRs, a bulk fetch of the public API is cheaper than one tool call each:
+   `curl -s https://api.github.com/repos/hanzei/jot/pulls/N | jq -r .body` in a loop into
+   the scratchpad, then `grep -i -A5 breaking` across them.
 
 3. **Classify each one.** Look for the sections root `CLAUDE.md` mandates:
    - A `## API-breaking change` / `## Breaking changes` heading (spelling varies slightly
@@ -170,6 +216,11 @@ step recovers it.
      breaking-change section includes a SQL check, a before→after table, or exact
      commands, keep them — that's the part that actually helps someone upgrading a running
      instance.
+     If nothing is breaking, title this section **⚠️ Upgrade notes** instead and still
+     fill it: new migrations (especially SQLite table rebuilds — tell people to back up the
+     DB and `JOT_UPLOAD_DIR`), new `JOT_*` config vars (a table with defaults), endpoint
+     behavior changes, new API fields, and mobile changes that need a native rebuild rather
+     than an OTA update. PRs saying "not breaking" still often carry this content.
    - **Improvements**
    - **Bug fixes**
    - **Internal / maintenance** — condensed, links only, no migration content (there isn't
@@ -180,9 +231,11 @@ step recovers it.
 5. **Apply it.** If `gh` is available: `gh release edit vX.Y.Z --notes-file <file>` (this
    preserves the release title and tag; only the body changes). If the environment only has
    the GitHub MCP tools with no release-update tool exposed — check first, don't assume;
-   confirm no such tool exists in the current session before falling back — there is
-   currently no way to push the rewrite programmatically. In that case, write the drafted
-   body to a file, hand it to the user, and say plainly that it needs to be pasted in via
+   confirm no such tool exists in the current session before falling back (as of v0.13.0
+   the MCP server offers only `get_release_by_tag`, `get_latest_release` and
+   `list_releases`) — there is no way to push the rewrite programmatically. In that case,
+   write the drafted body to a file **in the scratchpad, not the repo** (an untracked file in
+   the checkout trips the stop hook's commit-and-push check), send it to the user, and say plainly that it needs to be pasted in via
    GitHub's "Edit release" UI. Don't claim the changelog was updated if it wasn't actually
    applied.
 
