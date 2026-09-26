@@ -365,9 +365,12 @@ start_mock_idp() {
 # this file on a debuggable build or when it is the debug app, so skip first run
 # that way. Best-effort: the flows also dismiss the first-run screens if they
 # still appear (flows/helpers/mock-idp-page.yaml).
+# --force-renderer-accessibility rides along: Chrome builds a page's
+# accessibility tree lazily, and one run drew the mock IdP page without ever
+# exposing its content to Maestro.
 skip_chrome_first_run() {
   echo "==> Asking Chrome to skip its first-run screens"
-  adb shell 'echo "_ --disable-fre --no-default-browser-check --no-first-run" > /data/local/tmp/chrome-command-line' || true
+  adb shell 'echo "_ --disable-fre --no-default-browser-check --no-first-run --force-renderer-accessibility" > /data/local/tmp/chrome-command-line' || true
   adb shell am set-debug-app --persistent com.android.chrome >/dev/null 2>&1 || true
 }
 

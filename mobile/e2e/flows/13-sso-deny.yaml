@@ -28,9 +28,10 @@ appId: com.jot.app
     id: "username-input"
 - takeScreenshot: sso-13-login-mixed
 
-- tapOn:
-    id: "login-sso-button"
-- runFlow: helpers/mock-idp-page.yaml
+- runFlow:
+    file: helpers/mock-idp-page.yaml
+    env:
+      OPEN_BUTTON_ID: "login-sso-button"
 - tapOn: "Deny"
 
 - extendedWaitUntil:
