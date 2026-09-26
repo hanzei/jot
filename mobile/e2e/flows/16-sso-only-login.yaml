@@ -32,9 +32,10 @@ appId: com.jot.app
 - tapOn:
     id: "login-sso-button"
 - runFlow: helpers/mock-idp-page.yaml
-- tapOn: "Username"
-- inputText: "${MAESTRO_JOT_SSO_USERNAME}"
-- tapOn: "Approve"
+- runFlow:
+    file: helpers/mock-idp-username.yaml
+    env:
+      IDP_USERNAME: "${MAESTRO_JOT_SSO_USERNAME}"
 
 - extendedWaitUntil:
     visible:

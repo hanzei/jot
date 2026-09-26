@@ -1,0 +1,22 @@
+# Shared by the SSO flows (12, 15, 16): type IDP_USERNAME into the mock IdP's
+# username field and approve. Not a flow of its own — the numbered flows call it
+# with runFlow after helpers/mock-idp-page.yaml, passing IDP_USERNAME in env.
+#
+# Typing into the Chrome Custom Tab right after focusing the field can lose the
+# first keystroke: one CI run sent "so<id>" instead of "sso<id>", the IdP signed
+# that in as a different user, and the flow still passed — only run.sh's account
+# check noticed. So check the field holds exactly the username before approving,
+# and retype if not. The field starts empty (autocomplete="off"), so the erase is
+# a no-op on the first attempt and clears a mangled value on a retry.
+appId: com.jot.app
+---
+- retry:
+    maxRetries: 2
+    commands:
+      # Tapping the label focuses its input, as in any browser.
+      - tapOn: "Username"
+      - waitForAnimationToEnd
+      - eraseText: 64
+      - inputText: "${IDP_USERNAME}"
+      - assertVisible: "${IDP_USERNAME}"
+- tapOn: "Approve"

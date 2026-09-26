@@ -35,10 +35,10 @@ appId: com.jot.app
 - tapOn:
     id: "settings-sso-connect"
 - runFlow: helpers/mock-idp-page.yaml
-# Tapping the label focuses its input, as in any browser.
-- tapOn: "Username"
-- inputText: "${MAESTRO_JOT_SSO_LINK_USERNAME}"
-- tapOn: "Approve"
+- runFlow:
+    file: helpers/mock-idp-username.yaml
+    env:
+      IDP_USERNAME: "${MAESTRO_JOT_SSO_LINK_USERNAME}"
 
 - extendedWaitUntil:
     visible:
