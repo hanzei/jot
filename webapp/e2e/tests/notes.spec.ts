@@ -181,7 +181,7 @@ test.describe('Notes', () => {
 
     const deleteDone = page.waitForResponse(res =>
       res.request().method() === 'DELETE' && res.url().includes('/api/v1/notes/'));
-    await dashboardPage.deleteNote('Deleted In Flight');
+    await dashboardPage.deleteNote('Deleted In Flight', { waitForRemoval: false });
     await dashboardPage.switchToBin();
     await dashboardPage.expectEmptyState(
       'Bin is empty',
@@ -192,6 +192,34 @@ test.describe('Notes', () => {
 
     await dashboardPage.expectNoteVisible('Deleted In Flight');
     await dashboardPage.expectEmptyTrashButtonVisible();
+  });
+
+  test('does not show the previous view\'s notes while the bin loads', async ({ dashboardPage, page }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Binned While Loading');
+    await dashboardPage.createNote('Still Active');
+    await dashboardPage.deleteNote('Binned While Loading');
+
+    // Hold the bin's GET /notes open. The notes view's cards must not stay on
+    // screen (and clickable) under the Bin in the meantime: opening one would
+    // hand the modal a stale copy of the note (#1027).
+    let releaseBin!: () => void;
+    const binReleased = new Promise<void>(resolve => { releaseBin = resolve; });
+    await page.route('**/api/v1/notes?*', async route => {
+      if (new URL(route.request().url()).searchParams.get('trashed') === 'true') await binReleased;
+      await route.continue();
+    });
+
+    await dashboardPage.switchToBin();
+    await expect(page.getByTestId('loading-spinner')).toBeVisible();
+    await expect(dashboardPage.noteCard('Still Active')).toHaveCount(0);
+
+    releaseBin();
+    await dashboardPage.expectNoteVisible('Binned While Loading');
+    await expect(dashboardPage.noteCard('Still Active')).toHaveCount(0);
+
+    await dashboardPage.openNote('Binned While Loading');
+    await expect(page.getByRole('dialog').last().getByPlaceholder('Note title...')).toHaveAttribute('readonly', '');
   });
 
   test('pins a note and it appears in the pinned section', async ({ dashboardPage }) => {
