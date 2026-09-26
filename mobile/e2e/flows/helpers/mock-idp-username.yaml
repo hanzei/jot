@@ -2,21 +2,25 @@
 # username field and approve. Not a flow of its own — the numbered flows call it
 # with runFlow after helpers/mock-idp-page.yaml, passing IDP_USERNAME in env.
 #
-# Typing into the Chrome Custom Tab right after focusing the field can lose the
-# first keystroke: one CI run sent "so<id>" instead of "sso<id>", the IdP signed
-# that in as a different user, and the flow still passed — only run.sh's account
-# check noticed. So check the field holds exactly the username before approving,
-# and retype if not. The field starts empty (autocomplete="off"), so the erase is
-# a no-op on the first attempt and clears a mangled value on a retry.
+# The Custom Tab can drop the first keystroke, and the IdP then signs in a
+# different user without any flow step failing. So approve only once the field
+# holds exactly IDP_USERNAME, and otherwise clear it and retype.
 appId: com.jot.app
 ---
+- evalScript: ${output.idpUsernameAttempt = 0}
 - retry:
     maxRetries: 2
     commands:
+      - evalScript: ${output.idpUsernameAttempt += 1}
       # Tapping the label focuses its input, as in any browser.
       - tapOn: "Username"
-      - waitForAnimationToEnd
-      - eraseText: 64
+      - runFlow:
+          when:
+            true: ${output.idpUsernameAttempt > 1}
+          commands:
+            - eraseText: 64
       - inputText: "${IDP_USERNAME}"
-      - assertVisible: "${IDP_USERNAME}"
+      - extendedWaitUntil:
+          visible: "${IDP_USERNAME}"
+          timeout: 5000
 - tapOn: "Approve"

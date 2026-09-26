@@ -9,28 +9,33 @@
 # first-run screens, but that switch is best-effort, so dismiss them here too
 # when they show up anyway.
 #
-# Chrome occasionally draws the page but never exposes its content to the
-# accessibility tree: one CI run saw only the toolbar and the tab title for the
-# whole wait. Waiting longer does not help, so close that sheet and open a fresh
-# one. Back closes it (the authorize page is its only history entry, as flow 14
-# relies on) and returns to the screen holding OPEN_BUTTON_ID. The url_bar guard
-# keeps Back from ever firing on Jot's own screen, where it could leave the app.
+# Chrome has drawn the page without ever exposing its content to accessibility,
+# so a retry closes the sheet and opens a fresh one. Back closes it, as in flow
+# 14, and only fires while Chrome's url_bar shows, never on Jot's own screen.
+# The attempt counter keeps that check off the first attempt, where it would
+# only cost an optional-lookup wait.
 appId: com.jot.app
 ---
+- evalScript: ${output.idpPageAttempt = 0}
 - retry:
     maxRetries: 2
     commands:
+      - evalScript: ${output.idpPageAttempt += 1}
       - runFlow:
           when:
-            visible:
-              id: "com.android.chrome:id/url_bar"
+            true: ${output.idpPageAttempt > 1}
           commands:
-            - back
-            - extendedWaitUntil:
-                visible:
-                  id: "${OPEN_BUTTON_ID}"
-                  enabled: true
-                timeout: 20000
+            - runFlow:
+                when:
+                  visible:
+                    id: "com.android.chrome:id/url_bar"
+                commands:
+                  - back
+                  - extendedWaitUntil:
+                      visible:
+                        id: "${OPEN_BUTTON_ID}"
+                        enabled: true
+                      timeout: 20000
       - tapOn:
           id: "${OPEN_BUTTON_ID}"
       - runFlow:
