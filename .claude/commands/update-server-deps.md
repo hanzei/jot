@@ -45,10 +45,10 @@ set with three parallel version lines that must stay consistent with each other:
 
 | Line | Current | Modules |
 |---|---|---|
-| Stable | `v1.44.0` | `otel`, `otel/trace`, `otel/metric`, `otel/sdk`, `exporters/otlp/otlp{trace,metric}*`, `exporters/stdout/stdouttrace` |
-| Experimental log | `v0.20.0` | `otel/log`, `otel/sdk/log`, `exporters/otlp/otlplog/*`, `exporters/stdout/stdoutlog` |
-| Prometheus exporter | `v0.66.0` | `exporters/prometheus` |
-| Contrib | `v0.19.0` / `v0.69.0` | `contrib/bridges/otellogrus`, `contrib/instrumentation/*` |
+| Stable | `v1.46.0` | `otel`, `otel/trace`, `otel/metric`, `otel/sdk`, `exporters/otlp/otlp{trace,metric}*`, `exporters/stdout/stdouttrace` |
+| Experimental log | `v0.22.0` | `otel/log`, `otel/sdk/log`, `exporters/otlp/otlplog/*`, `exporters/stdout/stdoutlog` |
+| Prometheus exporter | `v0.68.0` | `exporters/prometheus` |
+| Contrib | `v0.20.1` / `v0.71.0` | `contrib/bridges/otellogrus`, `contrib/instrumentation/*` |
 
 Mixing lines (e.g. stable `1.45` with a log exporter still on the `1.44`-era `0.20`)
 compiles but panics or silently drops signals at runtime. Bump every OTel module in one
