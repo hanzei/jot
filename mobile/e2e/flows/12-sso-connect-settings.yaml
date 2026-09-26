@@ -32,9 +32,10 @@ appId: com.jot.app
     timeout: 30000
 - takeScreenshot: sso-12-settings-unlinked
 
-- tapOn:
-    id: "settings-sso-connect"
-- runFlow: helpers/mock-idp-page.yaml
+- runFlow:
+    file: helpers/mock-idp-page.yaml
+    env:
+      OPEN_BUTTON_ID: "settings-sso-connect"
 - runFlow:
     file: helpers/mock-idp-username.yaml
     env:

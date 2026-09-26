@@ -1,30 +1,53 @@
-# Shared by the SSO flows (12-16): wait for the mock IdP's authorize page in the
-# browser sheet the app just opened. Not a flow of its own — run.sh never runs
-# it directly; the numbered flows call it with runFlow.
+# Shared by the SSO flows (12-16): tap OPEN_BUTTON_ID (passed in env) to open
+# the mock IdP's authorize page in a browser sheet, and wait for the page. Not a
+# flow of its own — run.sh never runs it directly; the numbered flows call it
+# with runFlow.
 #
 # The sheet is a Chrome Custom Tab, so this is Chrome's UI, not Jot's: Maestro
 # reads it through the same accessibility tree, and the page's text (heading,
 # label, buttons) is what there is to match on. run.sh asks Chrome to skip its
 # first-run screens, but that switch is best-effort, so dismiss them here too
 # when they show up anyway.
+#
+# Chrome occasionally draws the page but never exposes its content to the
+# accessibility tree: one CI run saw only the toolbar and the tab title for the
+# whole wait. Waiting longer does not help, so close that sheet and open a fresh
+# one. Back closes it (the authorize page is its only history entry, as flow 14
+# relies on) and returns to the screen holding OPEN_BUTTON_ID. The url_bar guard
+# keeps Back from ever firing on Jot's own screen, where it could leave the app.
 appId: com.jot.app
 ---
-- runFlow:
-    when:
-      visible: "Accept & continue"
+- retry:
+    maxRetries: 2
     commands:
-      - tapOn: "Accept & continue"
-- runFlow:
-    when:
-      visible: "No thanks"
-    commands:
-      - tapOn: "No thanks"
-- runFlow:
-    when:
-      visible: "Use without an account"
-    commands:
-      - tapOn: "Use without an account"
-
-- extendedWaitUntil:
-    visible: "Mock IdP"
-    timeout: 30000
+      - runFlow:
+          when:
+            visible:
+              id: "com.android.chrome:id/url_bar"
+          commands:
+            - back
+            - extendedWaitUntil:
+                visible:
+                  id: "${OPEN_BUTTON_ID}"
+                  enabled: true
+                timeout: 20000
+      - tapOn:
+          id: "${OPEN_BUTTON_ID}"
+      - runFlow:
+          when:
+            visible: "Accept & continue"
+          commands:
+            - tapOn: "Accept & continue"
+      - runFlow:
+          when:
+            visible: "No thanks"
+          commands:
+            - tapOn: "No thanks"
+      - runFlow:
+          when:
+            visible: "Use without an account"
+          commands:
+            - tapOn: "Use without an account"
+      - extendedWaitUntil:
+          visible: "Mock IdP"
+          timeout: 30000

@@ -7,9 +7,10 @@
 # linked). The last steps capture the Settings SSO section for such an account.
 appId: com.jot.app
 ---
-- tapOn:
-    id: "login-sso-button"
-- runFlow: helpers/mock-idp-page.yaml
+- runFlow:
+    file: helpers/mock-idp-page.yaml
+    env:
+      OPEN_BUTTON_ID: "login-sso-button"
 - runFlow:
     file: helpers/mock-idp-username.yaml
     env:
@@ -32,9 +33,10 @@ appId: com.jot.app
       id: "login-sso-button"
     timeout: 20000
 
-- tapOn:
-    id: "login-sso-button"
-- runFlow: helpers/mock-idp-page.yaml
+- runFlow:
+    file: helpers/mock-idp-page.yaml
+    env:
+      OPEN_BUTTON_ID: "login-sso-button"
 - runFlow:
     file: helpers/mock-idp-username.yaml
     env:

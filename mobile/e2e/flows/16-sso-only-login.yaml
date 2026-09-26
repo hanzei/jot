@@ -29,9 +29,10 @@ appId: com.jot.app
     timeout: 20000
 - takeScreenshot: sso-16-login-sso-only
 
-- tapOn:
-    id: "login-sso-button"
-- runFlow: helpers/mock-idp-page.yaml
+- runFlow:
+    file: helpers/mock-idp-page.yaml
+    env:
+      OPEN_BUTTON_ID: "login-sso-button"
 - runFlow:
     file: helpers/mock-idp-username.yaml
     env:
