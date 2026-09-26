@@ -843,11 +843,14 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   };
 
   const handleEmptyTrash = async () => {
+    // Only reachable from the bin. Clear the list only if it still holds the
+    // bin's notes: the user may have switched views while the request ran.
+    const binListViewKey = listViewKey;
     setIsEmptyingTrash(true);
     try {
       await notes.emptyTrash();
       if (isMountedRef.current) {
-        updateNotesList(() => []);
+        setLoadedNotes(prev => (prev.listViewKey === binListViewKey ? { ...prev, notes: [] } : prev));
         setTrashCount(0);
       }
       setShowEmptyTrashConfirm(false);

@@ -205,18 +205,15 @@ export class DashboardPage {
   }
 
   /**
-   * Waits for the post-delete reload to take the card out of the list (a
-   * leaving card is aria-hidden, so this does not wait on its exit animation),
-   * so a following view switch starts from a settled list. Pass
+   * Waits for the post-delete reload to take the card out of the list, so a
+   * following view switch starts from a settled list. Pass
    * `waitForRemoval: false` when the test holds the DELETE request open.
    */
   async deleteNote(title: string, { waitForRemoval = true } = {}) {
     await this.openNoteMenu(title);
     await this.page.getByRole('menuitem', { name: 'Delete' }).click();
     if (waitForRemoval) {
-      await expect(
-        this.noteCardByExactTitle(title).getByRole('button', { name: 'Note options' }),
-      ).toHaveCount(0);
+      await expect(this.noteCardByExactTitle(title)).toHaveCount(0);
     }
   }
 
