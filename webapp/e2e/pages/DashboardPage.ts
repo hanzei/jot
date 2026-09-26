@@ -188,10 +188,14 @@ export class DashboardPage {
     await this.closeActiveDialog();
   }
 
-  private async openNoteMenu(title: string) {
-    const card = this.page.locator('[data-testid="note-card"]').filter({
+  private noteCardByExactTitle(title: string): Locator {
+    return this.page.locator('[data-testid="note-card"]').filter({
       has: this.page.locator('h3').getByText(title, { exact: true }),
     });
+  }
+
+  private async openNoteMenu(title: string) {
+    const card = this.noteCardByExactTitle(title);
     await expect(card).toBeVisible();
     const menuButton = card.getByRole('button', { name: 'Note options' });
     // Focus + keyboard activation avoids pointer-interception flakes from overlays.
@@ -200,9 +204,17 @@ export class DashboardPage {
     await expect(menuButton).toHaveAttribute('aria-expanded', 'true');
   }
 
-  async deleteNote(title: string) {
+  /**
+   * Waits for the post-delete reload to take the card out of the list, so a
+   * following view switch starts from a settled list. Pass
+   * `waitForRemoval: false` when the test holds the DELETE request open.
+   */
+  async deleteNote(title: string, { waitForRemoval = true } = {}) {
     await this.openNoteMenu(title);
     await this.page.getByRole('menuitem', { name: 'Delete' }).click();
+    if (waitForRemoval) {
+      await expect(this.noteCardByExactTitle(title)).toHaveCount(0);
+    }
   }
 
   async restoreNoteFromBin(title: string) {

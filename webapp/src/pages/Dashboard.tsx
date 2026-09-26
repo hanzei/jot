@@ -48,6 +48,7 @@ import {
 } from '@dnd-kit/modifiers';
 
 const SEARCH_DEBOUNCE_MS = 300;
+const NO_NOTES: Note[] = [];
 const isApplePlatform = () => typeof navigator !== 'undefined' && /mac|iphone|ipad|ipod/i.test(navigator.platform);
 
 interface DashboardProps {
@@ -71,10 +72,8 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
     registerSSECallbacks,
     setSearchBar,
   } = useAuthenticatedLayout();
-  const [notesList, setNotesList] = useState<Note[]>([]);
   const [noteSort, setNoteSort] = useState<NoteSort>(() => normalizeNoteSort(getSettings()?.note_sort));
   const [sortWarningDismissed, setSortWarningDismissed] = useState<boolean>(() => isSortWarningDismissed(noteSort));
-  const [loading, setLoading] = useState(true);
   const [trashCount, setTrashCount] = useState(0);
   const [isEmptyingTrash, setIsEmptyingTrash] = useState(false);
   const [showEmptyTrashConfirm, setShowEmptyTrashConfirm] = useState(false);
@@ -90,6 +89,20 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   const showArchived = activeView === 'archive';
   const showBin = activeView === 'bin';
   const showMyTasks = activeView === 'my-tasks';
+  // Which list is on screen, ignoring search. Loaded notes are tagged with the
+  // key they were fetched for and are shown only while it still matches: the
+  // previous view's cards stay clickable otherwise, and opening one hands
+  // NoteModal a stale copy (a just-binned note opened editable, #1027). Search
+  // is deliberately left out so typing keeps the current results on screen
+  // until the new ones arrive.
+  const listViewKey = `${showArchived ? 'archive' : showBin ? 'bin' : showMyTasks ? 'my-tasks' : 'notes'}|${selectedLabelId ?? ''}`;
+  const [loadedNotes, setLoadedNotes] = useState<{ listViewKey: string | null; notes: Note[] }>({ listViewKey: null, notes: [] });
+  const loading = loadedNotes.listViewKey === null;
+  const isViewPending = loadedNotes.listViewKey !== listViewKey;
+  const notesList = isViewPending ? NO_NOTES : loadedNotes.notes;
+  const updateNotesList = useCallback((update: (prev: Note[]) => Note[]) => {
+    setLoadedNotes(prev => ({ ...prev, notes: update(prev.notes) }));
+  }, []);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   // Prefill for a note created via the /new deep link (PWA shortcut or share
@@ -291,7 +304,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
     return fetchNotes()
       .then(({ notesData, nextTrashCount }) => {
         if (isMountedRef.current && requestId === loadNotesRequestIdRef.current) {
-          setNotesList(notesData);
+          setLoadedNotes({ listViewKey, notes: notesData });
           setTrashCount(nextTrashCount);
         }
       })
@@ -301,14 +314,12 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
         if (isMountedRef.current && requestId === loadNotesRequestIdRef.current) {
           console.error('Failed to load notes:', error);
           showToast(t('dashboard.failedLoadNotes'), 'error');
-        }
-      })
-      .finally(() => {
-        if (isMountedRef.current && requestId === loadNotesRequestIdRef.current) {
-          setLoading(false);
+          // A failed reload keeps the view's current notes; a failed first load
+          // of a new view shows it empty rather than leaving it pending.
+          setLoadedNotes(prev => (prev.listViewKey === listViewKey ? prev : { listViewKey, notes: [] }));
         }
       });
-  }, [showArchived, showBin, debouncedSearchQuery, selectedLabelId, showMyTasks, showToast, t]);
+  }, [listViewKey, showArchived, showBin, debouncedSearchQuery, selectedLabelId, showMyTasks, showToast, t]);
 
   // Refreshes after a mutation or SSE event must load the view that is showing
   // when they fire, not the one captured when the mutation started. Otherwise a
@@ -515,7 +526,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
         const patched = patchImages(prev.images);
         return patched !== undefined ? { ...prev, images: patched } : prev;
       });
-      setNotesList(prev => prev.map(n => {
+      updateNotesList(prev => prev.map(n => {
         if (n.id !== imageNoteId) return n;
         const patched = patchImages(n.images);
         return patched !== undefined ? { ...n, images: patched } : n;
@@ -559,7 +570,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
     if (event.type === 'note_created' || event.type === 'note_updated') {
       loadLabels();
     }
-  }, [editingNote, sharingNote, loadNotes, loadLabels, loadLabelCounts, setSearchParams, user?.id, restoreReturnUrl]);
+  }, [editingNote, sharingNote, loadNotes, loadLabels, loadLabelCounts, setSearchParams, user?.id, restoreReturnUrl, updateNotesList]);
 
   useEffect(() => {
     registerSSECallbacks({ onEvent: handleSSEEvent, onConnected: loadNotes });
@@ -832,11 +843,14 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   };
 
   const handleEmptyTrash = async () => {
+    // Only reachable from the bin. Clear the list only if it still holds the
+    // bin's notes: the user may have switched views while the request ran.
+    const binListViewKey = listViewKey;
     setIsEmptyingTrash(true);
     try {
       await notes.emptyTrash();
       if (isMountedRef.current) {
-        setNotesList([]);
+        setLoadedNotes(prev => (prev.listViewKey === binListViewKey ? { ...prev, notes: [] } : prev));
         setTrashCount(0);
       }
       setShowEmptyTrashConfirm(false);
@@ -1018,9 +1032,9 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
       const unpinnedNotes = updatedNotesList.filter(note => !note.pinned);
 
       if (activeNote.pinned) {
-        setNotesList([...reorderedNotes, ...unpinnedNotes]);
+        updateNotesList(() => [...reorderedNotes, ...unpinnedNotes]);
       } else {
-        setNotesList([...pinnedNotes, ...reorderedNotes]);
+        updateNotesList(() => [...pinnedNotes, ...reorderedNotes]);
       }
 
       try {
@@ -1064,7 +1078,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   const dragReorderingDisabled = showArchived || showBin || showMyTasks || isSearching || isFilteringByLabel || noteSort !== 'manual';
   // Signature of the active view/filter/search. The grids swap instantly when it
   // changes, so only in-view card changes (create, delete, archive, …) animate.
-  const viewKey = `${showArchived ? 'archive' : showBin ? 'bin' : showMyTasks ? 'my-tasks' : 'notes'}|${selectedLabelId ?? ''}|${debouncedSearchQuery}`;
+  const viewKey = `${listViewKey}|${debouncedSearchQuery}`;
   const handlePinnedActive = useCallback((active: boolean) => {
     setSectionActive(prev => (prev.pinned === active ? prev : { ...prev, pinned: active }));
   }, []);
@@ -1278,7 +1292,11 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
           </div>
         )}
 
-        {!renderPinnedSection && !renderOtherSection && !renderArchivedSection ? (
+        {isViewPending ? (
+          <div className="flex justify-center py-12">
+            <div data-testid="loading-spinner" className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+          </div>
+        ) : !renderPinnedSection && !renderOtherSection && !renderArchivedSection ? (
           <div className="py-12">
             <div
               data-testid="dashboard-empty-state"

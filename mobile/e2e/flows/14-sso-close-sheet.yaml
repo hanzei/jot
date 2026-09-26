@@ -7,9 +7,10 @@
 # authorize page — /native/start reached it by redirect.
 appId: com.jot.app
 ---
-- tapOn:
-    id: "login-sso-button"
-- runFlow: helpers/mock-idp-page.yaml
+- runFlow:
+    file: helpers/mock-idp-page.yaml
+    env:
+      OPEN_BUTTON_ID: "login-sso-button"
 - back
 
 - extendedWaitUntil:

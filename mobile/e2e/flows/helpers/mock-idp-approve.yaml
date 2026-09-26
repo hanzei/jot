@@ -1,0 +1,45 @@
+# Shared by the SSO flows (12, 15, 16): open the mock IdP's page with
+# OPEN_BUTTON_ID, sign in as IDP_USERNAME, and approve. Not a flow of its own —
+# the numbered flows call it with runFlow, passing both in env.
+#
+# The Custom Tab can drop the first keystroke, and the IdP then signs in a
+# different user without any flow step failing. So approve only once the field
+# holds exactly IDP_USERNAME. A wrong value is not fixed in place: tapping the
+# field lands the cursor mid-text and eraseText only clears backward from it
+# (see 01-smoke). Instead, close the sheet and start over on a fresh page, whose
+# field is empty. Back only fires while Chrome's url_bar shows, as in
+# mock-idp-page.yaml.
+appId: com.jot.app
+---
+- evalScript: ${output.idpApproveAttempt = 0}
+- retry:
+    maxRetries: 2
+    commands:
+      - evalScript: ${output.idpApproveAttempt += 1}
+      - runFlow:
+          when:
+            true: ${output.idpApproveAttempt > 1}
+          commands:
+            - hideKeyboard
+            - runFlow:
+                when:
+                  visible:
+                    id: "com.android.chrome:id/url_bar"
+                commands:
+                  - back
+            - extendedWaitUntil:
+                visible:
+                  id: "${OPEN_BUTTON_ID}"
+                  enabled: true
+                timeout: 20000
+      - runFlow:
+          file: mock-idp-page.yaml
+          env:
+            OPEN_BUTTON_ID: "${OPEN_BUTTON_ID}"
+      # Tapping the label focuses its input, as in any browser.
+      - tapOn: "Username"
+      - inputText: "${IDP_USERNAME}"
+      - extendedWaitUntil:
+          visible: "${IDP_USERNAME}"
+          timeout: 5000
+- tapOn: "Approve"
