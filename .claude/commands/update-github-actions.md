@@ -4,8 +4,8 @@ description: Re-pin GitHub Actions to current commit SHAs, bump action majors, a
 
 # Update GitHub Actions
 
-Eight workflows live in `.github/workflows/`: `server-ci`, `webapp-ci`, `shared-ci`,
-`mobile-ci`, `mobile-apk`, `docker`, `docker-cleanup`, and `release`.
+Nine workflows live in `.github/workflows/`: `server-ci`, `webapp-ci`, `shared-ci`,
+`mobile-ci`, `mobile-apk`, `mobile-e2e`, `docker`, `docker-cleanup`, and `release`.
 
 Dependabot (`.github/dependabot.yml`) opens one grouped PR a month that re-pins these
 actions to current SHAs, so routine drift is already handled — this command is for the work
@@ -50,7 +50,7 @@ versioned by the commit you are on and take no pin.
 
 Only then check for divergence — the same action pinned to two different SHAs in two
 workflows, the failure mode this repo is most prone to because `actions/checkout`
-appears in seven files:
+appears in eight files:
 
 ```bash
 grep -rhoE '[A-Za-z0-9._/-]+@[0-9a-f]{40}' .github/workflows \
@@ -158,8 +158,9 @@ literals in the workflow, and those are the ones worth eyeballing against their 
 
 The CI workflows include `.github/workflows/**` in their `paths:` filter, so editing any
 workflow re-runs server, webapp, shared, and mobile CI — that coverage is free.
-`docker.yml` filters on source directories plus its own file only, so an edit to a
-different workflow does **not** rebuild images, and `release.yml` and
+`docker.yml` and `mobile-e2e.yml` filter on source directories plus their own file only,
+so an edit to a different workflow does **not** rebuild images or re-run the emulator
+flows, and `release.yml` and
 `docker-cleanup.yml` never run on a PR at all. If your change touches those, re-read the
 diff carefully and say in the PR that they are unverified until a tag or a PR close
 exercises them.
