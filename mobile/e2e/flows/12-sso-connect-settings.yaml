@@ -33,12 +33,9 @@ appId: com.jot.app
 - takeScreenshot: sso-12-settings-unlinked
 
 - runFlow:
-    file: helpers/mock-idp-page.yaml
+    file: helpers/mock-idp-approve.yaml
     env:
       OPEN_BUTTON_ID: "settings-sso-connect"
-- runFlow:
-    file: helpers/mock-idp-username.yaml
-    env:
       IDP_USERNAME: "${MAESTRO_JOT_SSO_LINK_USERNAME}"
 
 - extendedWaitUntil:

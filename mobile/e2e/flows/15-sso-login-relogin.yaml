@@ -8,12 +8,9 @@
 appId: com.jot.app
 ---
 - runFlow:
-    file: helpers/mock-idp-page.yaml
+    file: helpers/mock-idp-approve.yaml
     env:
       OPEN_BUTTON_ID: "login-sso-button"
-- runFlow:
-    file: helpers/mock-idp-username.yaml
-    env:
       IDP_USERNAME: "${MAESTRO_JOT_SSO_USERNAME}"
 
 - extendedWaitUntil:
@@ -34,12 +31,9 @@ appId: com.jot.app
     timeout: 20000
 
 - runFlow:
-    file: helpers/mock-idp-page.yaml
+    file: helpers/mock-idp-approve.yaml
     env:
       OPEN_BUTTON_ID: "login-sso-button"
-- runFlow:
-    file: helpers/mock-idp-username.yaml
-    env:
       IDP_USERNAME: "${MAESTRO_JOT_SSO_USERNAME}"
 
 - extendedWaitUntil:

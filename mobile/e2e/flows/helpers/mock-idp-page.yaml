@@ -1,7 +1,7 @@
 # Shared by the SSO flows (12-16): tap OPEN_BUTTON_ID (passed in env) to open
 # the mock IdP's authorize page in a browser sheet, and wait for the page. Not a
-# flow of its own — run.sh never runs it directly; the numbered flows call it
-# with runFlow.
+# flow of its own — run.sh never runs it directly; flows 13-14 and
+# mock-idp-approve.yaml call it with runFlow.
 #
 # The sheet is a Chrome Custom Tab, so this is Chrome's UI, not Jot's: Maestro
 # reads it through the same accessibility tree, and the page's text (heading,
