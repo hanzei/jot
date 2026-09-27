@@ -6,7 +6,7 @@ description: Update npm dependencies in webapp/ — React, Vite, Tailwind, ESLin
 
 `webapp/` is the largest npm surface in the repo and the one users see. It has three
 things that make a blind `npm update` unreliable: a `file:../shared` link to
-`@jot/shared`, an `overrides` block pinning transitive packages for security, and a
+`@jot/shared`, security `overrides` that go stale once upstream ships a fix, and a
 Playwright browser version that must match the installed `@playwright/test`.
 
 Update in batches and verify after each, so a regression is attributable to one bump.
@@ -49,6 +49,9 @@ Split what you find:
   dependency here, so it can drift from the one Vite resolves — check they agree).
 - **Vitest**: `vitest` and `@vitest/coverage-v8` must share a major, or coverage silently
   fails to instrument.
+  `jsdom` (the test environment) is held at 30.0.x: on 30.1 Vitest's
+  `URL.createObjectURL` shim cannot find jsdom's Blob internals, so the image-upload tests
+  in `useNoteImages`/`NoteModal` fail. Retry it when either side releases.
 - **Tailwind**: `tailwindcss` and `@tailwindcss/vite` — same version. Tailwind v4 is
   CSS-config-first; a major bump means checking the `@import`/`@theme` blocks in the
   stylesheet, not just `package.json`.
@@ -59,24 +62,22 @@ Split what you find:
 
   `shared/` is already on ESLint 10 while this package is on 9. The drift is harmless
   (separate lockfiles, separate `node_modules`, separate flat configs, lint always runs
-  from the workspace directory) and it is not a stylistic choice — two plugins hold this
-  package back. Check the current peer ranges before assuming it's still true:
+  from the workspace directory) and it is not a stylistic choice — `eslint-plugin-react`
+  holds this package back. Check the current peer range before assuming it's still true:
 
   ```bash
   npm info eslint-plugin-react peerDependencies.eslint
-  npm info eslint-plugin-react-hooks peerDependencies.eslint
   ```
 
-  At the versions pinned today, `eslint-plugin-react@7.37.5` accepts up to `^9.7` and
-  `eslint-plugin-react-hooks@7.0.1` up to `^9.0.0`; `eslint-plugin-react-refresh` (`^9 ||
-  ^10`) and `@typescript-eslint@8.65` (`^8.57 || ^9 || ^10`) are already ESLint 10-ready.
-  So ESLint 10 lands here when — and only when — both react plugins publish support.
+  At the versions pinned today, `eslint-plugin-react@7.37.5` accepts up to `^9.7`;
+  `eslint-plugin-react-hooks@7.1.1` (`^9 || ^10`), `eslint-plugin-react-refresh`, and
+  `@typescript-eslint@8.70` (`^8.57 || ^9 || ^10`) are already ESLint 10-ready. So ESLint
+  10 lands here when — and only when — `eslint-plugin-react` publishes support.
 
-  **When you do make that jump, declare `@eslint/js` explicitly.** `eslint.config.js`
-  imports it, but this package doesn't list it as a devDependency — under ESLint 9 the
-  import resolves through a hoisted transitive copy. ESLint 10 stopped providing that, and
-  the identical omission in `shared/` broke CI (#749). Add `@eslint/js` at the matching
-  major in the same commit as the `eslint` bump. `mobile/` has the same latent gap.
+  **When you do make that jump, bump `@eslint/js` in the same commit.** `eslint.config.js`
+  imports it, and it is declared as a devDependency; keep it on the same major as
+  `eslint`. ESLint 10 no longer provides it transitively, and an undeclared copy in
+  `shared/` broke CI (#749). `mobile/` still has that latent gap.
 - **Workbox**: every `workbox-*` package plus `vite-plugin-pwa` — mismatched Workbox
   versions produce a service worker that builds but fails at runtime, which unit tests
   will not catch. After any Workbox or PWA change, run `npm run build` and confirm the
@@ -91,6 +92,11 @@ npx npm-check-updates -u --filter vite,@vitejs/plugin-react,vite-plugin-pwa && n
 ```
 
 `npm install` re-links `@jot/shared`; never edit that entry's `file:../shared` specifier.
+
+Run these with Node 24's npm (11). npm 10 fails with `ERESOLVE ... Conflicting peer
+dependency: @babel/core@8` on any `@vitejs/plugin-react` change: it resolves the plugin's
+optional `@rolldown/plugin-babel` peer chain against Babel 8 even though none of it is
+installed. `npx -y npm@11 install ...` works if your local Node is older.
 
 Commit `package-lock.json` — CI uses `npm ci` and fails on lockfile drift.
 
@@ -119,18 +125,11 @@ i18next or react-i18next moved.
 
 ## 4. The `overrides` block
 
-`package.json` pins transitive versions to close advisories:
-
-```json
-"overrides": { "serialize-javascript": "...", "minimatch": "...", "brace-expansion": "..." }
-```
-
-These exist because a *direct* dependency hadn't yet released a fix. After upgrading, check
-whether each is still doing work:
-
-```bash
-npm ls serialize-javascript minimatch brace-expansion
-```
+`package.json` may carry an `overrides` block pinning transitive versions to close
+advisories. None is needed today — the last three (`serialize-javascript`, `minimatch`,
+`brace-expansion`) were dropped once every resolved copy was a patched release. When one
+exists, it is there because a *direct* dependency hadn't yet released a fix; after
+upgrading, check whether each is still doing work with `npm ls <package>`.
 
 If the resolved tree already satisfies the safe version without the override, remove that
 entry, re-run `npm install`, and confirm `npm audit` stays clean. Stale overrides are worse

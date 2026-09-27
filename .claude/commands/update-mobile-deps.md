@@ -37,8 +37,12 @@ the React Native version it's built for.
 despite the names), plus the dev tooling: `eslint`, `@typescript-eslint/*`, `typescript`,
 `jest`, `@testing-library/react-native`.
 
-`react-test-renderer` is a special case: it must exactly equal the `react` version, so it
-moves only when Expo moves React.
+`jest` and `@types/jest` are ordinary, but their major is gated by `jest-expo`: SDK 57's
+`jest-expo` depends on `@jest/globals ^29`, so Jest 30 waits for an Expo SDK that moves.
+
+`@testing-library/react-native` 14 renders through `test-renderer`, an ordinary package
+(peer `react ^19`). It replaced `react-test-renderer`, which had to match `react` exactly;
+don't reintroduce that.
 
 `typescript` is in the ordinary list but is **not** a mobile-local decision: `shared/`,
 `webapp/`, and `mobile/` are deliberately on the same range because both consumers
@@ -80,7 +84,7 @@ user actually wants, say so and treat it as its own change:
 
 ```bash
 npm outdated                                   # no extra tool to install; still queries the registry
-npx npm-check-updates --filter '@react-navigation/*,@tanstack/react-query,axios,i18next,react-i18next,lucide-react-native,react-native-sse,react-native-markdown-display,react-native-reorderable-list,expo-quick-actions,expo-share-intent,eslint,@typescript-eslint/*,typescript,jest,@testing-library/react-native,@types/jest'
+npx npm-check-updates --filter '@react-navigation/*,@tanstack/react-query,axios,i18next,react-i18next,lucide-react-native,react-native-sse,react-native-markdown-display,react-native-reorderable-list,expo-quick-actions,expo-share-intent,marked,eslint,@typescript-eslint/*,globals,typescript,jest,@types/jest,@testing-library/react-native,test-renderer'
 ```
 
 An explicit allow-list beats a reject pattern here — new Expo-governed packages get added
@@ -99,8 +103,8 @@ partial bump fails at runtime rather than at build time.
 
 **ESLint here is on 9 while `shared/` is on 10.** The drift is harmless — separate
 lockfiles, `node_modules`, and flat configs, and lint runs from this directory — and it's
-forced rather than chosen: `eslint-plugin-react` and `eslint-plugin-react-hooks` don't
-accept ESLint 10 at the versions pinned here. Check
+forced rather than chosen: `eslint-plugin-react@7.37.5` doesn't accept ESLint 10
+(`eslint-plugin-react-hooks@7.1.1` already does). Check
 `npm info eslint-plugin-react peerDependencies.eslint` before assuming that's still true.
 When ESLint 10 does become possible, add `@eslint/js` as an explicit devDependency in the
 same commit: `eslint.config.js` imports it but doesn't declare it, and under ESLint 9 that
@@ -115,11 +119,13 @@ two halves of the update interact and it's worth catching now.
 
 ## 3. The `overrides` block
 
-`package.json` pins `js-yaml`, `markdown-it`, and `uuid` transitively to close advisories.
+`package.json` pins `uuid` transitively to close an advisory (`expo`'s tree still pulls
+uuid 7 otherwise). `js-yaml` and `markdown-it` used to be here too and were dropped once
+the tree resolved to patched releases without them.
 After upgrading, check whether each is still needed:
 
 ```bash
-npm ls js-yaml markdown-it uuid
+npm ls uuid
 npm audit
 ```
 
