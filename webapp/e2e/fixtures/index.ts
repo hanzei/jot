@@ -7,6 +7,7 @@ import { SettingsPage } from '../pages/SettingsPage';
 import { ToastPage } from '../pages/ToastPage';
 import { MobileAppHandoffPage } from '../pages/MobileAppHandoffPage';
 import { MockIdpPage } from '../pages/MockIdpPage';
+import { NoteConflictBanner } from '../pages/NoteConflictBanner';
 
 export { expect };
 
@@ -28,6 +29,7 @@ type Fixtures = {
   mobileAppHandoffPage: MobileAppHandoffPage;
   /** The mock IdP's authorize page; only reachable from the `sso` project. */
   mockIdpPage: MockIdpPage;
+  noteConflictBanner: NoteConflictBanner;
   /** Register a fresh user and log them in; resolves to { username, password } */
   authenticatedUser: { username: string; password: string };
 };
@@ -56,6 +58,9 @@ export const test = base.extend<Fixtures>({
   },
   mockIdpPage: async ({ page }, use) => {
     await use(new MockIdpPage(page));
+  },
+  noteConflictBanner: async ({ page }, use) => {
+    await use(new NoteConflictBanner(page));
   },
   authenticatedUser: async ({ page }, use) => {
     const username = uniqueUsername();

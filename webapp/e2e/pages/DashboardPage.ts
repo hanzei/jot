@@ -184,6 +184,18 @@ export class DashboardPage {
     await this.page.keyboard.press('Enter');
   }
 
+  /**
+   * Opens a text note, which has no h3 title, by its content. Same keyboard
+   * activation as openNote, for the same reasons.
+   */
+  async openTextNote(content: string) {
+    const card = this.noteCardByText(content);
+    await expect(card).toBeVisible();
+    await card.locator('[data-note-card="true"]').focus();
+    await this.page.keyboard.press('Enter');
+    await expect(this.page.getByTestId('note-content-preview')).toBeVisible();
+  }
+
   async closeNoteModal() {
     await this.closeActiveDialog();
   }

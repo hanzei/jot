@@ -16,7 +16,7 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
 import { useNoteImages } from '@/hooks/useNoteImages';
 import { useCompletedItems } from '@/hooks/useCompletedItems';
-import { useNoteDraft, type AutoSaveDraft } from '@/hooks/useNoteDraft';
+import { useNoteDraft, NoteConflictError, type AutoSaveDraft } from '@/hooks/useNoteDraft';
 import { useSizeTransition } from '@/hooks/useSizeTransition';
 import { applyTextareaEdit } from '@/utils/textareaEdit';
 import { getCaretLine, getOffsetAtLine } from '@/utils/textareaCaret';
@@ -202,6 +202,7 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
     items, itemsRef, commitItems,
     noteLabels, setNoteLabels,
     showSaved, flashSaved, markDirty,
+    conflict, overwriteConflict,
     setSavedBaseline, markScalarSaved, applyDraftScalars, isDirty, hasUnflushedWork, baseline,
     autoSaveNote, scheduleAutoSave, cancelPendingSave, flushSave,
     beginExclusiveSave, endExclusiveSave, isSaving, requestAnotherSavePass,
@@ -337,6 +338,54 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
     ? buildMobileDeepLink(`/notes/${note.id}`, appOrigin)
     : null;
 
+  // Replaces the editor's state and save baseline with `next` (or a blank draft
+  // for a new note). Used by the adoption effect below and by the conflict
+  // banner's Reload, which adopts a freshly fetched copy over local edits.
+  const adoptNote = useCallback((next: Note | null) => {
+    if (next) {
+      setNoteType(next.note_type);
+      setColor(next.color);
+      setPinned(next.pinned);
+      setArchived(next.archived);
+      let listItems: ListItem[] = [];
+      let draft: AutoSaveDraft;
+      if (next.note_type === 'list') {
+        setTitle(next.title);
+        setCheckedItemsCollapsed(next.checked_items_collapsed);
+        // Items arrive ordered by position from the server. normalizeItemOrder
+        // keeps each group contiguous and re-sequences positions so all later
+        // mutations build on a consistent ordering.
+        listItems = normalizeItemOrder((next.items ?? []).map((item, index) => ({
+          id: item.id || `existing_${item.position}_${index}`,
+          text: item.text,
+          completed: item.completed,
+          position: item.position,
+          parentId: item.parent_id ?? null,
+          assigned_to: item.assigned_to ?? '',
+        })));
+        commitItems(listItems);
+        draft = { title: next.title, content: '', pinned: next.pinned, archived: next.archived, color: next.color, checked_items_collapsed: next.checked_items_collapsed };
+      } else {
+        setContent(next.content);
+        commitItems([]);
+        draft = { title: '', content: next.content, pinned: next.pinned, archived: next.archived, color: next.color, checked_items_collapsed: false };
+      }
+      setNoteLabels(next.labels ?? []);
+      setSavedBaseline(draft, listItems, next.version);
+    } else {
+      setTitle('');
+      setContent(initialContent ?? '');
+      setNoteType(initialType ?? 'text');
+      setColor(DEFAULT_NOTE_COLOR);
+      setPinned(false);
+      setArchived(false);
+      commitItems([]);
+      setNoteLabels([]);
+      setSavedBaseline({ title: '', content: '', pinned: false, archived: false, color: DEFAULT_NOTE_COLOR, checked_items_collapsed: false }, [], null);
+    }
+  }, [commitItems, setSavedBaseline, setTitle, setContent, setNoteType, setColor, setPinned, setArchived,
+      setCheckedItemsCollapsed, setNoteLabels, initialType, initialContent]);
+
   useEffect(() => {
     // Decide whether to adopt the incoming note prop into local editor state.
     // Switching to a different note always adopts. A refresh of the *same* note
@@ -363,50 +412,8 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
       resetCompletedItemsForNoteSwitch();
     }
 
-    if (note) {
-      setNoteType(note.note_type);
-      setColor(note.color);
-      setPinned(note.pinned);
-      setArchived(note.archived);
-      let listItems: ListItem[] = [];
-      let draft: AutoSaveDraft;
-      if (note.note_type === 'list') {
-        setTitle(note.title);
-        setCheckedItemsCollapsed(note.checked_items_collapsed);
-        // Items arrive ordered by position from the server. normalizeItemOrder
-        // keeps each group contiguous and re-sequences positions so all later
-        // mutations build on a consistent ordering.
-        listItems = normalizeItemOrder((note.items ?? []).map((item, index) => ({
-          id: item.id || `existing_${item.position}_${index}`,
-          text: item.text,
-          completed: item.completed,
-          position: item.position,
-          parentId: item.parent_id ?? null,
-          assigned_to: item.assigned_to ?? '',
-        })));
-        commitItems(listItems);
-        draft = { title: note.title, content: '', pinned: note.pinned, archived: note.archived, color: note.color, checked_items_collapsed: note.checked_items_collapsed };
-      } else {
-        setContent(note.content);
-        commitItems([]);
-        draft = { title: '', content: note.content, pinned: note.pinned, archived: note.archived, color: note.color, checked_items_collapsed: false };
-      }
-      setNoteLabels(note.labels ?? []);
-      setSavedBaseline(draft, listItems);
-    } else {
-      setTitle('');
-      setContent(initialContent ?? '');
-      setNoteType(initialType ?? 'text');
-      setColor(DEFAULT_NOTE_COLOR);
-      setPinned(false);
-      setArchived(false);
-      commitItems([]);
-      setNoteLabels([]);
-      setSavedBaseline({ title: '', content: '', pinned: false, archived: false, color: DEFAULT_NOTE_COLOR, checked_items_collapsed: false }, []);
-    }
-  }, [commitItems, note, hasUnflushedWork, resetImagesForNoteSwitch, resetCompletedItemsForNoteSwitch,
-      setSavedBaseline, setTitle, setContent, setNoteType, setColor, setPinned, setArchived,
-      setCheckedItemsCollapsed, setNoteLabels, initialType, initialContent]);
+    adoptNote(note);
+  }, [adoptNote, note, hasUnflushedWork, resetImagesForNoteSwitch, resetCompletedItemsForNoteSwitch]);
 
   useEffect(() => {
     if (!showColorPicker) return;
@@ -463,6 +470,7 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
   // through the DOM instead of straight into state.
 
   const contentTextareaId = useId();
+  const conflictDescriptionId = useId();
 
   /** Commits an edit that textareaEdit could not replay (undo stack is lost). */
   const commitContentDirectly = useCallback((next: EditorText) => {
@@ -1414,11 +1422,45 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
       }
       onSave();
     } catch (error) {
-      console.error('Failed to save note:', error);
-      showError(t('note.failedSaveChanges'));
+      // A stale write keeps the modal open behind the conflict banner instead.
+      if (!(error instanceof NoteConflictError)) {
+        console.error('Failed to save note:', error);
+        showError(t('note.failedSaveChanges'));
+      }
     } finally {
       endExclusiveSave();
       setLoading(false);
+    }
+  };
+
+  // Conflict banner actions. Both are refused while another save holds the
+  // lock; the banner stays up, so the click can simply be repeated.
+  const [conflictBusy, setConflictBusy] = useState(false);
+
+  // Reload: drop the local edits and adopt the server's current copy.
+  const handleConflictReload = async () => {
+    if (!note || conflictBusy || isSaving()) return;
+    setConflictBusy(true);
+    try {
+      cancelPendingSave();
+      adoptNote(await notes.getById(note.id));
+      onRefresh?.();
+    } catch (error) {
+      console.error('Failed to reload note:', error);
+      showError(t('note.failedSaveChanges'));
+    } finally {
+      setConflictBusy(false);
+    }
+  };
+
+  // Overwrite: re-send the local edits against the server's current version.
+  const handleConflictOverwrite = async () => {
+    if (conflictBusy || isSaving()) return;
+    setConflictBusy(true);
+    try {
+      await overwriteConflict();
+    } finally {
+      setConflictBusy(false);
     }
   };
 
@@ -1858,6 +1900,50 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
 
           {/* Content */}
           <div className="p-2 sm:p-4 pt-10 space-y-4 overflow-y-auto scrollbar-subtle max-h-[calc(90vh-8rem)]">
+            {/* Stale-write conflict banner. The live region is always mounted
+                (visually hidden while empty) so the banner is announced when
+                it appears. It carries its own background, so its contrast does
+                not depend on the note colour, and its right margin clears the
+                absolutely positioned Done/Close buttons. */}
+            <div
+              role="status"
+              aria-live="polite"
+              className={conflict ? undefined : 'sr-only'}
+              data-testid="note-conflict-region"
+            >
+              {conflict && (
+                <div
+                  className="mr-12 rounded-md border border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-600 dark:bg-amber-950 dark:text-amber-50"
+                  data-testid="note-conflict-banner"
+                >
+                  <p className="font-medium">{t('note.conflictTitle')}</p>
+                  <p id={conflictDescriptionId} className="mt-0.5">{t('note.conflictDescription')}</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={handleConflictReload}
+                      disabled={conflictBusy}
+                      aria-describedby={conflictDescriptionId}
+                      className="rounded-md border border-amber-800 px-2.5 py-1 font-medium text-amber-950 hover:bg-amber-100 disabled:opacity-60 dark:border-amber-200 dark:text-amber-50 dark:hover:bg-amber-900"
+                      data-testid="note-conflict-reload"
+                    >
+                      {t('note.conflictReload')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleConflictOverwrite}
+                      disabled={conflictBusy}
+                      aria-describedby={conflictDescriptionId}
+                      className="rounded-md border border-amber-800 px-2.5 py-1 font-medium text-amber-950 hover:bg-amber-100 disabled:opacity-60 dark:border-amber-200 dark:text-amber-50 dark:hover:bg-amber-900"
+                      data-testid="note-conflict-overwrite"
+                    >
+                      {t('note.conflictOverwrite')}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Image gallery, rendered above the title. Persisted images come
                 from the note prop so SSE-driven updates from OTHER clients
                 render live; displayedImages layers this session's own

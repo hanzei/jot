@@ -1,32 +1,41 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { DEFAULT_NOTE_COLOR, VALIDATION, type Label, type Note, type NoteType, type PatchNoteItemRequest, type UpdateNoteRequest } from '@jot/shared';
+import {
+  DEFAULT_NOTE_COLOR,
+  VALIDATION,
+  buildScalarPatch,
+  diffItems,
+  itemSnapshot,
+  itemsDiffer,
+  patchTouchesSharedContent,
+  type ItemSnapshot,
+  type Label,
+  type Note,
+  type NoteScalars,
+  type NoteType,
+} from '@jot/shared';
 import { notes } from '@/utils/api';
 import type { ListItem } from '@/utils/noteItems';
 import type { CompletedItemsBaseline } from '@/hooks/useCompletedItems';
 
-// The scalar (non-item) fields of a note, as the editor holds them. Every field
-// is optional because a text note has no title/collapse state and a list note
-// has no content — buildScalarPatch below picks the relevant half by note type.
-export interface AutoSaveDraft {
-  title?: string;
-  content?: string;
-  pinned?: boolean;
-  archived?: boolean;
-  color?: string;
-  checked_items_collapsed?: boolean;
+// The scalar (non-item) fields of a note, as the editor holds them. A text note
+// has no title/collapse state and a list note has no content — buildScalarPatch
+// (@jot/shared) picks the relevant half by note type.
+export type AutoSaveDraft = NoteScalars;
+
+// Thrown by flushSave when the server rejects a title/content write because the
+// note changed elsewhere since the version this editor last saw (409 on
+// base_version). The hook has already raised its conflict state by then, so
+// callers should not report it as a generic save failure.
+export class NoteConflictError extends Error {
+  constructor() {
+    super('note was changed elsewhere');
+    this.name = 'NoteConflictError';
+  }
 }
 
-// Mergeable fields of a list item, used as the per-item baseline for diffing
-// local edits against the last-known server state.
-type ItemSnapshot = Pick<ListItem, 'text' | 'completed' | 'parentId' | 'assigned_to'>;
-
-const itemSnapshot = (item: ListItem): ItemSnapshot => ({
-  text: item.text,
-  completed: item.completed,
-  parentId: item.parentId,
-  assigned_to: item.assigned_to,
-});
+const httpStatus = (err: unknown): number | undefined =>
+  (err as { response?: { status?: number } })?.response?.status;
 
 const emptyDraft = (): AutoSaveDraft => ({
   title: '',
@@ -70,6 +79,10 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
   const [items, setItems] = useState<ListItem[]>([]);
   const [noteLabels, setNoteLabels] = useState<Label[]>([]);
   const [showSaved, setShowSaved] = useState(false);
+  // True while a title/content save was rejected as stale. The editor keeps the
+  // local text and shows a banner offering Reload/Overwrite; autosave is paused
+  // until the user picks one (or a fresh note is adopted).
+  const [conflict, setConflictState] = useState(false);
 
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const savedTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -84,6 +97,12 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
   const savedScalarsRef = useRef<AutoSaveDraft>(emptyDraft());
   const savedItemsRef = useRef<Map<string, ItemSnapshot>>(new Map());
   const savedOrderRef = useRef<string[]>([]);
+  // The note version the baseline's title/content correspond to, sent as
+  // base_version with every title/content write so a stale tab gets a 409
+  // instead of silently overwriting a newer edit from another device (#489).
+  // Null for a note not yet created.
+  const versionRef = useRef<number | null>(null);
+  const conflictRef = useRef(false);
   // Set while a save is in flight to request one more pass once it finishes,
   // so edits made during the save are not lost.
   const pendingSaveRef = useRef(false);
@@ -147,22 +166,30 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
     }
   }, []);
 
-  // Records the current local state as the server baseline (called after a
-  // successful save and when adopting a fresh note from props).
-  const setSavedBaseline = useCallback((draft: AutoSaveDraft, listItems: ListItem[]) => {
+  const setConflict = useCallback((next: boolean) => {
+    conflictRef.current = next;
+    setConflictState(next);
+  }, []);
+
+  // Records the given state as the server baseline — called when adopting a
+  // note from props, which also settles any open conflict, since the editor
+  // now shows the server's copy.
+  const setSavedBaseline = useCallback((draft: AutoSaveDraft, listItems: ListItem[], version: number | null) => {
     savedScalarsRef.current = { ...draft };
+    versionRef.current = version;
+    setConflict(false);
     const map = new Map<string, ItemSnapshot>();
     for (const it of listItems) {
       map.set(it.id, itemSnapshot(it));
     }
     savedItemsRef.current = map;
     savedOrderRef.current = listItems.map(it => it.id);
-  }, []);
+  }, [setConflict]);
 
   // Advances the scalar baseline for fields persisted outside the autosave
   // pipeline — the pin, archive and collapse toggles each PATCH their own field
   // directly, so the baseline has to catch up or the next save would re-send it.
-  const markScalarSaved = useCallback((patch: AutoSaveDraft) => {
+  const markScalarSaved = useCallback((patch: Partial<AutoSaveDraft>) => {
     savedScalarsRef.current = { ...savedScalarsRef.current, ...patch };
   }, []);
 
@@ -170,33 +197,15 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
   // only where a setState is immediately followed by autoSaveNote() in the same
   // handler (the color swatches): the effect that syncs the draft ref hasn't run
   // yet at that point, so the save would otherwise send the previous value.
-  const applyDraftScalars = useCallback((patch: AutoSaveDraft) => {
+  const applyDraftScalars = useCallback((patch: Partial<AutoSaveDraft>) => {
     autoSaveDraftRef.current = { ...autoSaveDraftRef.current, ...patch };
   }, []);
 
   // True when local editor state differs from the server baseline. Used to
   // avoid clobbering unsaved edits when an SSE refresh re-supplies the note.
-  const isDirty = useCallback((): boolean => {
-    const cur = autoSaveDraftRef.current;
-    const base = savedScalarsRef.current;
-    if (cur.pinned !== base.pinned || cur.archived !== base.archived || cur.color !== base.color) return true;
-    if (noteTypeRef.current === 'list') {
-      if (cur.title !== base.title || cur.checked_items_collapsed !== base.checked_items_collapsed) return true;
-    } else if (cur.content !== base.content) {
-      return true;
-    }
-    const items = itemsRef.current;
-    if (items.length !== savedOrderRef.current.length) return true;
-    for (const [i, it] of items.entries()) {
-      if (savedOrderRef.current[i] !== it.id) return true;
-      const snap = savedItemsRef.current.get(it.id);
-      if (!snap || snap.text !== it.text || snap.completed !== it.completed
-        || snap.parentId !== it.parentId || snap.assigned_to !== it.assigned_to) {
-        return true;
-      }
-    }
-    return false;
-  }, []);
+  const isDirty = useCallback((): boolean =>
+    buildScalarPatch(noteTypeRef.current, autoSaveDraftRef.current, savedScalarsRef.current) !== null
+    || itemsDiffer(savedItemsRef.current, savedOrderRef.current, itemsRef.current), []);
 
   // True when a save is running, queued, or still needed — the note-adoption
   // guard, which must not overwrite local edits that haven't reached the server.
@@ -205,98 +214,79 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
     [isDirty],
   );
 
-  // Builds a note patch containing only the scalar fields that changed vs the
-  // baseline, so a list-item edit never re-sends (and clobbers) the title, and
-  // a title edit never re-sends stale items.
-  const buildScalarPatch = useCallback((): UpdateNoteRequest | null => {
-    const cur = autoSaveDraftRef.current;
-    const base = savedScalarsRef.current;
-    const patch: Record<string, unknown> = {};
-    if (cur.pinned !== base.pinned) patch.pinned = cur.pinned;
-    if (cur.archived !== base.archived) patch.archived = cur.archived;
-    if (cur.color !== base.color) patch.color = cur.color;
-    if (noteTypeRef.current === 'list') {
-      if (cur.title !== base.title) patch.title = cur.title;
-      if (cur.checked_items_collapsed !== base.checked_items_collapsed) patch.checked_items_collapsed = cur.checked_items_collapsed;
-    } else if (cur.content !== base.content) {
-      patch.content = cur.content;
-    }
-    return Object.keys(patch).length > 0 ? (patch as UpdateNoteRequest) : null;
-  }, []);
-
-  // Persists item changes as granular create/patch/delete/reorder operations
-  // (diffed against the baseline). The baseline is advanced incrementally after
-  // each successful op so that if a later op fails (e.g. network error), the
-  // already-applied ops are not re-sent on the next retry — which would
-  // otherwise re-create items and get stuck on 409 Conflict.
+  // Persists item changes as the granular create/patch/delete/reorder
+  // operations diffItems computes against the baseline. The baseline is
+  // advanced incrementally after each successful op so that if a later op fails
+  // (e.g. network error), the already-applied ops are not re-sent on the next
+  // retry — which would otherwise re-create items and get stuck on 409 Conflict.
   const persistItemDiff = useCallback(async (noteId: string, listItems: ListItem[]) => {
     const base = savedItemsRef.current;
-    const curIds = new Set(listItems.map(it => it.id));
-
-    for (const it of listItems) {
-      const snap = base.get(it.id);
-      if (!snap) {
-        try {
-          await notes.createItem(noteId, {
-            id: it.id,
-            text: it.text,
-            position: it.position,
-            completed: it.completed,
-            parent_id: it.parentId ?? '',
-            ...(it.assigned_to ? { assigned_to: it.assigned_to } : {}),
-          });
-        } catch (err) {
-          // 409 means a prior attempt already created this item; treat as done.
-          const status = (err as { response?: { status?: number } })?.response?.status;
-          if (status !== 409) throw err;
-        }
-        base.set(it.id, itemSnapshot(it));
-        continue;
-      }
-      const data: PatchNoteItemRequest = {};
-      if (it.text !== snap.text) data.text = it.text;
-      if (it.completed !== snap.completed) data.completed = it.completed;
-      if (it.parentId !== snap.parentId) data.parent_id = it.parentId ?? '';
-      if (it.assigned_to !== snap.assigned_to) data.assigned_to = it.assigned_to;
-      if (Object.keys(data).length > 0) {
-        await notes.updateItem(noteId, it.id, data);
-        base.set(it.id, itemSnapshot(it));
+    for (const op of diffItems(base, savedOrderRef.current, listItems)) {
+      switch (op.kind) {
+        case 'create':
+          try {
+            await notes.createItem(noteId, op.request);
+          } catch (err) {
+            // 409 means a prior attempt already created this item; treat as done.
+            if (httpStatus(err) !== 409) throw err;
+          }
+          base.set(op.itemId, op.snapshot);
+          break;
+        case 'patch':
+          await notes.updateItem(noteId, op.itemId, op.patch);
+          base.set(op.itemId, op.snapshot);
+          break;
+        case 'delete':
+          await notes.deleteItem(noteId, op.itemId);
+          base.delete(op.itemId);
+          break;
+        case 'reorder':
+          await notes.reorderItems(noteId, op.itemIds);
+          break;
       }
     }
-
-    for (const id of [...base.keys()]) {
-      if (!curIds.has(id)) {
-        await notes.deleteItem(noteId, id);
-        base.delete(id);
-      }
-    }
-
-    const curOrder = listItems.map(it => it.id);
-    const orderChanged = curOrder.length !== savedOrderRef.current.length
-      || curOrder.some((id, i) => savedOrderRef.current[i] !== id);
-    if (orderChanged && curOrder.length > 0) {
-      await notes.reorderItems(noteId, curOrder);
-    }
-    savedOrderRef.current = curOrder;
+    savedOrderRef.current = listItems.map(it => it.id);
   }, []);
 
   // Flushes all pending scalar and item changes to the server in one pass.
+  // Throws NoteConflictError (with the conflict state raised) when the note
+  // changed elsewhere; nothing is sent while a conflict is open.
   const flushSave = useCallback(async () => {
     const noteId = noteIdRef.current;
     if (!noteId) return;
-    const scalarPatch = buildScalarPatch();
+    if (conflictRef.current) throw new NoteConflictError();
+    // Snapshot the scalar state now, before awaiting, so the baseline reflects
+    // exactly what was sent — not any later edits made while the request (or a
+    // subsequent failing item op) was in flight.
+    const scalarSnapshot = { ...autoSaveDraftRef.current };
+    const scalarPatch = buildScalarPatch(noteTypeRef.current, scalarSnapshot, savedScalarsRef.current);
     if (scalarPatch) {
-      // Snapshot the scalar state now, before awaiting, so the baseline reflects
-      // exactly what was sent — not any later edits made while the request (or a
-      // subsequent failing item op) was in flight.
-      const scalarSnapshot = { ...autoSaveDraftRef.current };
-      await notes.update(noteId, scalarPatch);
+      const baseVersion = versionRef.current;
+      const guarded = patchTouchesSharedContent(scalarPatch) && baseVersion !== null;
+      let updated: Note;
+      try {
+        updated = await notes.update(noteId, guarded ? { ...scalarPatch, base_version: baseVersion } : scalarPatch);
+      } catch (err) {
+        // The whole PATCH is rejected on a version conflict (per-user fields in
+        // it included), so the baseline stays where it was and the local edits
+        // stay on screen for the user to reload over or re-send.
+        if (guarded && httpStatus(err) === 409) {
+          setConflict(true);
+          throw new NoteConflictError();
+        }
+        throw err;
+      }
       savedScalarsRef.current = scalarSnapshot;
+      // Only a content write moves the version this editor's text is based on.
+      // A per-user-only PATCH echoes the server's current version, which may
+      // include another device's edit we have not adopted — taking it would
+      // let the next save overwrite that edit unchecked.
+      if (guarded) versionRef.current = updated.version;
     }
     if (noteTypeRef.current === 'list') {
       await persistItemDiff(noteId, itemsRef.current);
     }
-  }, [buildScalarPatch, persistItemDiff]);
+  }, [persistItemDiff, setConflict]);
 
   // Persists local edits to the server as granular operations. The latest state
   // is always read from itemsRef/autoSaveDraftRef, so queued saves pick up the
@@ -305,6 +295,8 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
     if (!noteIdRef.current) return;
     // Cancel any pending debounced text-save so it can't fire a duplicate pass.
     cancelPendingSave();
+    // Paused until the user resolves the conflict banner.
+    if (conflictRef.current) return;
     if (savingRef.current) {
       pendingSaveRef.current = true;
       return;
@@ -320,12 +312,32 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
         flashSaved();
       } while (pendingSaveRef.current);
     } catch (error) {
-      console.error('Failed to auto-save note:', error);
-      showError(t('note.failedSaveChanges'));
+      // A conflict is reported by its own banner, not the generic error.
+      if (!(error instanceof NoteConflictError)) {
+        console.error('Failed to auto-save note:', error);
+        showError(t('note.failedSaveChanges'));
+      }
     } finally {
       savingRef.current = false;
     }
   }, [cancelPendingSave, flashSaved, flushSave, markDirty, onRefresh, showError, t]);
+
+  // The banner's Overwrite action: re-reads the note's current version and
+  // re-sends the local edits against it, knowingly replacing the other change.
+  // A failed re-read leaves the banner up so the user can try again.
+  const overwriteConflict = useCallback(async () => {
+    const noteId = noteIdRef.current;
+    if (!noteId || !conflictRef.current) return;
+    try {
+      versionRef.current = (await notes.getById(noteId)).version;
+    } catch (error) {
+      console.error('Failed to refetch note version for overwrite:', error);
+      showError(t('note.failedSaveChanges'));
+      return;
+    }
+    setConflict(false);
+    await autoSaveNote();
+  }, [autoSaveNote, setConflict, showError, t]);
 
   // Debounced save for keystroke-level edits (title, content, item text).
   const scheduleAutoSave = useCallback(() => {
@@ -400,6 +412,8 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
     noteLabels, setNoteLabels,
     // Save status indicator
     showSaved, flashSaved, markDirty,
+    // Stale-write conflict (409 on base_version)
+    conflict, overwriteConflict,
     // Baseline
     setSavedBaseline, markScalarSaved, applyDraftScalars, isDirty, hasUnflushedWork, baseline,
     // Save pipeline
