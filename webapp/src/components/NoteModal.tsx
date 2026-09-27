@@ -1497,8 +1497,11 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
     try {
       await persistExistingNote();
     } catch (error) {
-      console.error('Failed to save note before conversion:', error);
-      showError(t('note.failedSaveChanges'));
+      // A stale write is already reported by the conflict banner.
+      if (!(error instanceof NoteConflictError)) {
+        console.error('Failed to save note before conversion:', error);
+        showError(t('note.failedSaveChanges'));
+      }
       endExclusiveSave();
       setLoading(false);
       setShowConvertConfirm(false);
@@ -1553,8 +1556,11 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
     try {
       await persistExistingNote();
     } catch (error) {
-      console.error('Failed to save note before duplicate:', error);
-      showError(t('note.failedSaveChanges'));
+      // A stale write is already reported by the conflict banner.
+      if (!(error instanceof NoteConflictError)) {
+        console.error('Failed to save note before duplicate:', error);
+        showError(t('note.failedSaveChanges'));
+      }
       endExclusiveSave();
       setLoading(false);
       return;

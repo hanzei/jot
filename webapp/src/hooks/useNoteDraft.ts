@@ -103,6 +103,9 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
   // Null for a note not yet created.
   const versionRef = useRef<number | null>(null);
   const conflictRef = useRef(false);
+  // False once the editor has unmounted. A save pass requested on close keeps
+  // running after unmount, and a conflict it hits then has no banner to show.
+  const mountedRef = useRef(true);
   // Set while a save is in flight to request one more pass once it finishes,
   // so edits made during the save are not lost.
   const pendingSaveRef = useRef(false);
@@ -128,7 +131,9 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
   }, [archived, checkedItemsCollapsed, color, content, pinned, title]);
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
+      mountedRef.current = false;
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       if (savedTimeoutRef.current) clearTimeout(savedTimeoutRef.current);
     };
@@ -312,8 +317,10 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
         flashSaved();
       } while (pendingSaveRef.current);
     } catch (error) {
-      // A conflict is reported by its own banner, not the generic error.
-      if (!(error instanceof NoteConflictError)) {
+      // A conflict is reported by its own banner, not the generic error —
+      // unless the editor closed mid-save, when there is no banner left and
+      // the unsaved edits would otherwise be dropped silently.
+      if (!(error instanceof NoteConflictError) || !mountedRef.current) {
         console.error('Failed to auto-save note:', error);
         showError(t('note.failedSaveChanges'));
       }
