@@ -8,6 +8,8 @@ import (
 	"io"
 	"io/fs"
 	"path/filepath"
+	"strings"
+	"sync"
 )
 
 // ImageStore stores note-image bytes on the filesystem: originals, laid out
@@ -34,6 +36,13 @@ import (
 // both in one call rather than requiring a separate DeleteThumbnail.
 type ImageStore struct {
 	blobStore
+
+	// reclaimMu guards pins and is held across reclaimIfOrphaned's pin
+	// check, refcount query and delete, so a Pin either lands before that
+	// sequence (and the reclaim skips the hash) or after the blob is gone
+	// (and the pinning upload's Put writes it again).
+	reclaimMu sync.Mutex
+	pins      map[string]int // hash -> in-flight uploads holding it
 }
 
 // NewImageStore creates an ImageStore rooted at root, creating the
@@ -43,7 +52,7 @@ func NewImageStore(root string) (*ImageStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ImageStore{blobStore: *bs}, nil
+	return &ImageStore{blobStore: *bs, pins: make(map[string]int)}, nil
 }
 
 // relPath returns the path of sha's original blob relative to the store
@@ -66,6 +75,29 @@ func thumbRelPath(sha string) (string, error) {
 		return "", err
 	}
 	return filepath.Join("thumb", canon[0:2], canon[2:4], canon+".jpg"), nil
+}
+
+// Pin marks sha as held by an in-flight upload: until the returned release
+// is called, no reclaim (ReclaimIfOrphaned or Sweep) deletes it, even while
+// no committed row references it yet. An upload pins before Put and releases
+// once its row has committed or failed — and must release before its own
+// rollback reclaim, which would otherwise skip the hash it still pins.
+// Pins are in-process only. release is idempotent.
+func (s *ImageStore) Pin(sha string) (release func()) {
+	key := strings.ToLower(sha)
+	s.reclaimMu.Lock()
+	s.pins[key]++
+	s.reclaimMu.Unlock()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			s.reclaimMu.Lock()
+			defer s.reclaimMu.Unlock()
+			if s.pins[key]--; s.pins[key] <= 0 {
+				delete(s.pins, key)
+			}
+		})
+	}
 }
 
 // Put stores the bytes read from r under sha, verifying that they actually

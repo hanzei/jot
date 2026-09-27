@@ -371,13 +371,17 @@ images (notes still round-trip; images are re-added afterward):
   `Blobstore.Put` and the row commit, a crash after a row delete, or a reclaim
   that failed. It loads every referenced hash in one query, walks `blobs/` and
   `thumb/`, and reclaims each hash no row references (blob and thumbnail
-  together), re-stating its files against the grace period and re-checking its
-  refcount right before deleting. It also removes
+  together), re-checking its refcount right before deleting. It also removes
   temp files an interrupted write left behind.
-  - **Grace period.** Only files older than one hour are touched, so an upload
-    whose blob is written but whose row has not committed is left alone. `Put`
-    refreshes the mtime of a blob it dedups against, so reusing a long-orphaned
-    blob is covered too.
+  - **In-flight uploads.** An upload pins its hash (`ImageStore.Pin`) from `Put`
+    until its row commits or fails, and every reclaim — the sweep and the
+    synchronous path alike — skips pinned hashes, checking the pin, the
+    refcount and deleting under one lock. This also closes the race between a
+    delete's reclaim and a concurrent upload of the same content. Pins are
+    in-process, so this assumes one server process per upload directory.
+  - **Grace period.** As defense in depth (and for anything a pin cannot see),
+    only files older than one hour are touched, re-statted right before
+    deleting. `Put` refreshes the mtime of a blob it dedups against.
   - **Empty-database guard.** If no row references any image, the sweep deletes
     nothing and warns instead: that almost always means Jot was started against
     the wrong or a fresh database next to a real upload directory.

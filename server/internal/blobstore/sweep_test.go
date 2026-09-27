@@ -261,3 +261,18 @@ func TestSweepRestatsBeforeReclaiming(t *testing.T) {
 	assertBlobPresent(t, store, sha)
 	assert.Zero(t, sw.report.Reclaimed)
 }
+
+func TestSweepLeavesPinnedBlob(t *testing.T) {
+	// An upload pinned its hash, and its Put and row commit both land between
+	// the sweep's re-stat and its delete: the pin keeps the blob.
+	store := newTestImageStore(t)
+	sha := putAged(t, store, "pinned")
+	release := store.Pin(sha)
+	defer release()
+
+	report, err := Sweep(t.Context(), refs(otherRef), store, testGrace)
+	require.NoError(t, err)
+
+	assertBlobPresent(t, store, sha)
+	assert.Zero(t, report.Reclaimed)
+}
