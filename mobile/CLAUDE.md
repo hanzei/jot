@@ -139,6 +139,23 @@ current process's last 200 entries.
 - `tsconfig.json` includes Node `types` for that helper only; nothing in `src/`
   may use a Node-only global (the app runs on Hermes).
 
+## Console Output in Tests
+
+`jest.setupAfterEnv.js` fails any test that writes an unexpected
+`console.error` (`__tests__/helpers/consoleGuard.ts`), so a clean run prints
+nothing.
+
+- **React act() warnings are bugs in the test.** Await RNTL's async APIs
+  (`await fireEvent…`, `await render`, `await unmount()`), wrap direct triggers
+  in `await act(...)`, and wait on conditions with `waitFor` — never a
+  real-timer sleep.
+- A test that drives an error path on purpose calls
+  `allowConsoleError('<expected text>')`; expected warn/info diagnostics use
+  `silenceConsole('warn', /pattern/)`. Both reset after every test.
+- There is no `forceExit`. A "worker process has failed to exit gracefully"
+  warning means something leaked a handle; locate it with
+  `npm run test:handles`.
+
 ## Safe Area Insets
 
 Screens use `headerShown: false`, so edge-touching content applies insets itself.

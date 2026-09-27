@@ -133,7 +133,7 @@ describe('usePendingActionIndicator', () => {
 
     const call = result.current.withPendingIndicator(() => action.promise);
 
-    unmount();
+    await unmount();
 
     // The armed show-delay must not fire a state update on an unmounted hook.
     await act(async () => { jest.advanceTimersByTime(DELAY_MS * 2); });

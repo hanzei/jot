@@ -20,6 +20,7 @@ import { getLocalNote, getPendingCreateNoteIds, markNotePendingCreate, markNoteS
 import { subscribeToEnqueue, MAX_ENTRY_DRAIN_ATTEMPTS } from '../src/db/syncQueue';
 import { makeListNote, makeNoteItem, makeTextNote } from './helpers/fixtures';
 import type { TestDatabase } from './helpers/testDb';
+import { silenceConsole } from './helpers/consoleGuard';
 
 jest.mock('../src/api/images', () => ({
   uploadNoteImage: jest.fn(),
@@ -87,6 +88,14 @@ beforeEach(() => {
   db = globalThis.testDb;
   // The picked source file that enqueueImageUpload copies from.
   fs.files.set('file:///cache/photo.png', 'png-bytes');
+  // The drain logs each stop, give-up and failed local patch; the drain suites
+  // below drive exactly those paths.
+  silenceConsole(
+    'warn',
+    /^Image upload queue drain stopped at entry/,
+    /^Flagging image upload/,
+    /^Failed to patch local images/,
+  );
 });
 
 describe('enqueueImageUpload', () => {

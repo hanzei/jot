@@ -14,6 +14,7 @@ import { drainQueue, getPendingCount } from '../src/db/syncQueue';
 import { getQueuedImageUploadCount } from '../src/db/imageUploadQueue';
 import { setLocalModeActive } from '../src/store/localMode';
 import * as serverReachability from '../src/api/serverReachability';
+import { silenceConsole } from './helpers/consoleGuard';
 
 // Capture the enqueue listener registered by the provider so tests can fire it.
 let enqueueListener: (() => void) | null = null;
@@ -103,10 +104,19 @@ describe('OfflineProvider queue draining', () => {
     mockGetPendingCount.mockResolvedValue(0);
     mockGetQueuedImageUploadCount.mockResolvedValue(0);
     jest.spyOn(AppState, 'addEventListener');
+    // The provider logs each stalled drain, the give-up and the recovery; the
+    // backoff and failure-cap tests drive exactly those paths.
+    silenceConsole('warn', /^Queue drain stalled/, /^Queue drain failed \d+ times/);
+    silenceConsole('info', /^Queue drain succeeded after/);
   });
 
-  afterEach(() => {
-    jest.runOnlyPendingTimers();
+  afterEach(async () => {
+    // The provider is still mounted here (RNTL unmounts in its own, later
+    // afterEach), so a pending retry/backoff timer that fires now updates its
+    // state — run them inside act().
+    await act(async () => {
+      jest.runOnlyPendingTimers();
+    });
     jest.useRealTimers();
     jest.restoreAllMocks();
     setLocalModeActive(false);

@@ -14,15 +14,12 @@ module.exports = {
     '^@/(.*)$': '<rootDir>/src/$1',
     '^@jot/shared$': '<rootDir>/../shared/src',
   },
-  // forceExit is required because @testing-library/react-native's waitFor uses
-  // setInterval internally, which can outlive tests in the react-native-env.js
-  // environment and otherwise hangs the run. It is global, though, so it also
-  // masks a handle leaked by the app's own code (a sync/SSE/offline timer or
-  // subscription). `npm run test:handles` sets JEST_DETECT_OPEN_HANDLES to drop
-  // forceExit and turn on --detectOpenHandles instead, so those surface. That
-  // run is a diagnostic — deliberately out of CI and `task check` — and will
-  // hang on the known library timer after printing its report; read the report,
-  // then Ctrl-C.
-  forceExit: !process.env.JEST_DETECT_OPEN_HANDLES,
+  // No forceExit: every suite lets its worker exit on its own, so a handle
+  // leaked by app code (a sync/SSE/offline timer or subscription) shows up as
+  // Jest's "worker process has failed to exit gracefully" warning or a hung
+  // run instead of being masked. The TanStack Query GC timers that used to hold
+  // workers open are unref'd in jest.setupAfterEnv.js. To locate a new leak,
+  // `npm run test:handles` sets JEST_DETECT_OPEN_HANDLES to turn on
+  // --detectOpenHandles (a diagnostic, deliberately out of CI and `task check`).
   detectOpenHandles: Boolean(process.env.JEST_DETECT_OPEN_HANDLES),
 };

@@ -10,6 +10,7 @@ import {
 } from './helpers/noteEditorScreenTestSetup';
 import NoteEditorScreen from '../src/screens/NoteEditorScreen';
 import { markServerReachable, markServerUnreachable } from '../src/api/serverReachability';
+import { allowConsoleError } from './helpers/consoleGuard';
 
 type BeforeRemoveEvent = { preventDefault: jest.Mock; data: { action: object } };
 
@@ -47,6 +48,7 @@ describe('NoteEditorScreen exit save behavior', () => {
   });
 
   it('shows Retry/Discard dialog when save fails permanently at exit', async () => {
+    allowConsoleError('Failed to save note:');
     mockCreateMutateAsync.mockRejectedValue(new Error('400 Bad Request'));
 
     const { getByTestId, findByTestId } = await render(<NoteEditorScreen />);
@@ -68,6 +70,7 @@ describe('NoteEditorScreen exit save behavior', () => {
   });
 
   it('does not trigger a retry when the backdrop is tapped', async () => {
+    allowConsoleError('Failed to save note:');
     mockCreateMutateAsync.mockRejectedValue(new Error('400 Bad Request'));
 
     const { getByTestId, findByTestId } = await render(<NoteEditorScreen />);
@@ -90,6 +93,7 @@ describe('NoteEditorScreen exit save behavior', () => {
   });
 
   it('dispatches navigation when Discard & leave is chosen', async () => {
+    allowConsoleError('Failed to save note:');
     mockCreateMutateAsync.mockRejectedValue(new Error('400 Bad Request'));
 
     const { getByTestId, findByTestId } = await render(<NoteEditorScreen />);
@@ -108,6 +112,7 @@ describe('NoteEditorScreen exit save behavior', () => {
   });
 
   it('dispatches navigation when Retry succeeds', async () => {
+    allowConsoleError('Failed to save note:');
     // First save fails permanently, retry succeeds — user exits cleanly.
     mockCreateMutateAsync.mockRejectedValue(new Error('400 Bad Request'));
 
@@ -129,6 +134,7 @@ describe('NoteEditorScreen exit save behavior', () => {
   });
 
   it('shows dialog again when Retry also fails', async () => {
+    allowConsoleError('Failed to save note:');
     mockCreateMutateAsync.mockRejectedValue(new Error('400 Bad Request'));
 
     const { getByTestId, findByTestId } = await render(<NoteEditorScreen />);
@@ -152,6 +158,7 @@ describe('NoteEditorScreen exit save behavior', () => {
   });
 
   it('disables both actions while a retry is in flight and ignores extra taps', async () => {
+    allowConsoleError('Failed to save note:');
     mockCreateMutateAsync.mockRejectedValueOnce(new Error('400 Bad Request'));
 
     const { getByTestId, findByTestId } = await render(<NoteEditorScreen />);
@@ -191,6 +198,7 @@ describe('NoteEditorScreen exit save behavior', () => {
   });
 
   it('shows only the discard action once retries are exhausted', async () => {
+    allowConsoleError('Failed to save note:');
     mockCreateMutateAsync.mockRejectedValue(new Error('400 Bad Request'));
 
     const { getByTestId, findByTestId, queryByTestId } = await render(<NoteEditorScreen />);
@@ -305,6 +313,7 @@ describe('NoteEditorScreen exit save behavior', () => {
   });
 
   it('surfaces a save-error toast when the offline background flush fails', async () => {
+    allowConsoleError('Failed to save note:');
     // Server unreachable so we navigate immediately; if the background flush
     // then genuinely fails, the in-editor banner is suppressed by the unmounting
     // guard, so the failure must surface via a global toast instead.

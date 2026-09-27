@@ -12,6 +12,13 @@ const origError = console.error;
 const origInfo = console.info;
 
 beforeAll(() => {
+  // Every test here writes to the console on purpose — that output is what the
+  // logger captures. Silence the methods initLogger() wraps so it neither floods
+  // the run nor trips the console.error guard (jest.setupAfterEnv.js); the
+  // wrappers still record every call into the buffer under test.
+  console.warn = jest.fn();
+  console.error = jest.fn();
+  console.info = jest.fn();
   initLogger();
 });
 

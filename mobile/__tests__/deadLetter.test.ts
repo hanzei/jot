@@ -17,6 +17,7 @@ import { getFailedNoteIds, saveNote } from '../src/db/noteQueries';
 import api from '../src/api/client';
 import { makeTextNote as buildTextNote, remainingQueueIds, seedQueueEntry } from './helpers/fixtures';
 import type { TestDatabase } from './helpers/testDb';
+import { silenceConsole } from './helpers/consoleGuard';
 
 jest.mock('../src/api/client', () => ({
   __esModule: true,
@@ -39,6 +40,9 @@ let db: TestDatabase;
 beforeEach(() => {
   jest.clearAllMocks();
   db = globalThis.testDb;
+  // drainQueue logs every retry, discard and dead-letter decision; these suites
+  // drive exactly those paths.
+  silenceConsole('warn', /^Discarding queued operation/, /^Dead-lettering queued operation/);
 });
 
 /** Seed a local note at a known optimistic-concurrency version. */
