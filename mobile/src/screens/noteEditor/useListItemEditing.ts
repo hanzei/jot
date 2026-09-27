@@ -13,9 +13,8 @@ import type { TFunction } from 'i18next';
 import {
   VALIDATION,
   generateId,
-  parseTextLineAsListItem,
+  splitPasteIntoItems,
   truncateToCodePoints,
-  type ConvertedListItem,
 } from '@jot/shared';
 import {
   useDeleteCompletedItems,
@@ -508,82 +507,28 @@ export function useListItemEditing({
         return;
       }
 
-      // Multi-line paste: split into separate items
-      const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
-
-      if (lines.length <= 1) {
-        const singleText = truncateToCodePoints(lines[0] ?? '', VALIDATION.ITEM_TEXT_MAX_LENGTH);
-        setItems((prev) => prev.map((item, i) => (i === index ? { ...item, text: singleText } : item)));
-        markDirtyAndScheduleUpdate();
-        return;
-      }
-
-      // Stripping each line's markdown list/checkbox marker (`- `, `1. `,
-      // `[ ]`/`[x]`) and reading its completed state reuses the same line
-      // parser the text-note-to-list-note conversion uses, so pasting a
-      // markdown checklist behaves the same as converting one.
-      const parsedLines = lines
-        .map(parseTextLineAsListItem)
-        .filter((line): line is ConvertedListItem => line !== null);
-
-      const isCompleted = itemsRef.current[index]?.completed ?? false;
-
-      if (isCompleted) {
-        const joinedText = parsedLines.map((line) => line.text).join(' ');
-        setItems((prev) =>
-          prev.map((item, i) =>
-            i === index ? { ...item, text: truncateToCodePoints(joinedText, VALIDATION.ITEM_TEXT_MAX_LENGTH) } : item,
-          ),
-        );
-        markDirtyAndScheduleUpdate();
-        return;
-      }
-
-      // A multi-line paste can still collapse to one usable item once block
-      // markers strip to nothing (e.g. a bare "#" line) — fall back to the
-      // single-item update rather than splitting into an empty remainder.
-      if (parsedLines.length <= 1) {
-        const singleLine = parsedLines[0];
-        const singleText = truncateToCodePoints(singleLine?.text ?? '', VALIDATION.ITEM_TEXT_MAX_LENGTH);
-        setItems((prev) =>
-          prev.map((item, i) =>
-            i === index ? { ...item, text: singleText, completed: singleLine?.completed ?? item.completed } : item,
-          ),
-        );
-        markDirtyAndScheduleUpdate();
-        return;
-      }
-
+      // Multi-line paste: split into separate items. React Native reports the
+      // row's whole new text rather than the pasted fragment, so the text
+      // around the caret is already part of `text` and before/after are empty.
+      // The shared helper does the line parsing, truncation, group inheritance
+      // and the item-count cap, so this matches the webapp's paste exactly.
       const prepasteItems = [...itemsRef.current];
-      const firstLine = parsedLines[0]!;
-      const remainingLines = parsedLines.slice(1);
-      const newIds = remainingLines.map(() => nextTempId());
+      const result = splitPasteIntoItems(prepasteItems, index, text, { before: '', after: '' }, nextTempId);
+      if (!result) return;
+      if ('error' in result) {
+        // Over the cap the server rejects the save with a 422, which the sync
+        // queue treats as permanent and dead-letters. Refuse the paste instead;
+        // leaving items untouched snaps the controlled input back to its text.
+        showToast(t('note.tooManyItems', { max: result.max }), 'error');
+        return;
+      }
 
-      setItems((prev) => {
-        const sourceParentId = prev[index]?.parentId ?? null;
-        const newItems: LocalItem[] = remainingLines.map((line, i) => ({
-          id: newIds[i]!,
-          text: truncateToCodePoints(line.text, VALIDATION.ITEM_TEXT_MAX_LENGTH),
-          completed: line.completed,
-          position: 0,
-          parentId: sourceParentId,
-          assigned_to: '',
-        }));
-        const updated = prev.map((item, i) =>
-          i === index
-            ? {
-                ...item,
-                text: truncateToCodePoints(firstLine.text, VALIDATION.ITEM_TEXT_MAX_LENGTH),
-                completed: firstLine.completed,
-              }
-            : item,
-        );
-        updated.splice(index + 1, 0, ...newItems);
-        return updated.map((item, i) => ({ ...item, position: i }));
-      });
+      setItems(result.items);
       markDirtyAndScheduleUpdate();
 
-      showToast(t('note.itemsPasted', { count: remainingLines.length }), 'info', {
+      if (result.insertedIds.length === 0) return;
+
+      showToast(t('note.itemsPasted', { count: result.insertedIds.length }), 'info', {
         label: t('dashboard.undo'),
         onPress: () => {
           setItems(prepasteItems);
@@ -591,9 +536,7 @@ export function useListItemEditing({
         },
       });
 
-      // lines.length > 1 above, so remainingLines and newIds are non-empty.
-      const lastId = newIds[newIds.length - 1]!;
-      const lastItemRef = getItemRef(lastId);
+      const lastItemRef = getItemRef(result.caretItemId);
       setTimeout(() => lastItemRef.current?.focus(), 50);
     },
     [markDirtyAndScheduleUpdate, getItemRef, itemsRef, setItems, showToast, t],
