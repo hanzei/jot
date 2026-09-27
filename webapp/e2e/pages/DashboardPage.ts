@@ -223,9 +223,14 @@ export class DashboardPage {
     await this.page.getByRole('menuitem', { name: 'Restore' }).click();
   }
 
-  async permanentlyDeleteNoteFromBin(title: string) {
+  /** Opens the "Delete forever" confirmation for a binned note without confirming it. */
+  async requestPermanentDeleteFromBin(title: string) {
     await this.openNoteMenu(title);
     await this.page.getByRole('menuitem', { name: 'Delete forever' }).click();
+  }
+
+  async permanentlyDeleteNoteFromBin(title: string) {
+    await this.requestPermanentDeleteFromBin(title);
     await confirmDialog(this.page, 'Delete forever');
   }
 
