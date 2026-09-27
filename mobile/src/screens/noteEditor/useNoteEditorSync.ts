@@ -4,12 +4,12 @@ import type { TFunction } from 'i18next';
 import {
   DEFAULT_NOTE_COLOR,
   VALIDATION,
+  buildScalarPatch,
+  diffItems,
   type CreateNoteRequest,
   type Note,
-  type PatchNoteItemRequest,
-  type UpdateListNoteRequest,
+  type NoteScalars,
   type UpdateNoteRequest,
-  type UpdateTextNoteRequest,
 } from '@jot/shared';
 import {
   useCreateNote,
@@ -203,7 +203,7 @@ export function useNoteEditorSync({
   // the whole note — so a save here can't overwrite another device's edits.
   const savedItemsRef = useRef<Map<string, ItemSnapshot>>(new Map());
   const savedOrderRef = useRef<string[]>([]);
-  const savedScalarsRef = useRef({ title: '', content: '', pinned: false, archived: false, color: DEFAULT_NOTE_COLOR, checked_items_collapsed: false });
+  const savedScalarsRef = useRef<NoteScalars>({ title: '', content: '', pinned: false, archived: false, color: DEFAULT_NOTE_COLOR, checked_items_collapsed: false });
   const isHydratingRef = useRef(initialNoteId !== null && !existingNote);
   // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   isHydratingRef.current = initialNoteId !== null && !existingNote;
@@ -313,63 +313,39 @@ export function useNoteEditorSync({
     }
   }, [existingNote?.id, noteId, navigation]); // eslint-disable-line react-hooks/exhaustive-deps -- runs only when the adopted server id diverges; doc is a stable ref
 
-  // Persists list-item changes as granular create/patch/delete/reorder ops by
-  // diffing the current items against the saved baseline.
+  // Persists list-item changes as the granular create/patch/delete/reorder ops
+  // diffItems computes against the saved baseline.
   const persistItemDiff = useCallback(async (currentNoteId: string, currentItems: LocalItem[]) => {
     const base = savedItemsRef.current;
-    const curIds = new Set(currentItems.map((it) => it.id));
-
     // Advance the baseline incrementally after each successful op so a later
     // failure does not re-send already-applied ops on the next retry (which
     // would re-create items and get stuck on 409 Conflict).
-    for (const it of currentItems) {
-      const snap = base.get(it.id);
-      if (!snap) {
-        try {
-          await createItemRef.current({
-            noteId: currentNoteId,
-            item: {
-              id: it.id,
-              text: it.text,
-              position: it.position,
-              completed: it.completed,
-              parent_id: it.parentId,
-              assigned_to: it.assigned_to || undefined,
-            },
-          });
-        } catch (err) {
-          // 409 means a prior attempt already created this item; treat as done.
-          const status = (err as { response?: { status?: number } })?.response?.status;
-          if (status !== 409) throw err;
-        }
-        base.set(it.id, itemSnapshot(it));
-        continue;
-      }
-      const data: PatchNoteItemRequest = {};
-      if (it.text !== snap.text) data.text = it.text;
-      if (it.completed !== snap.completed) data.completed = it.completed;
-      if (it.parentId !== snap.parentId) data.parent_id = it.parentId ?? '';
-      if (it.assigned_to !== snap.assigned_to) data.assigned_to = it.assigned_to;
-      if (Object.keys(data).length > 0) {
-        await updateItemRef.current({ noteId: currentNoteId, itemId: it.id, data });
-        base.set(it.id, itemSnapshot(it));
+    for (const op of diffItems(base, savedOrderRef.current, currentItems)) {
+      switch (op.kind) {
+        case 'create':
+          try {
+            await createItemRef.current({ noteId: currentNoteId, item: op.request });
+          } catch (err) {
+            // 409 means a prior attempt already created this item; treat as done.
+            const status = (err as { response?: { status?: number } })?.response?.status;
+            if (status !== 409) throw err;
+          }
+          base.set(op.itemId, op.snapshot);
+          break;
+        case 'patch':
+          await updateItemRef.current({ noteId: currentNoteId, itemId: op.itemId, data: op.patch });
+          base.set(op.itemId, op.snapshot);
+          break;
+        case 'delete':
+          await deleteItemRef.current({ noteId: currentNoteId, itemId: op.itemId });
+          base.delete(op.itemId);
+          break;
+        case 'reorder':
+          await reorderItemsRef.current({ noteId: currentNoteId, itemIds: op.itemIds });
+          break;
       }
     }
-
-    for (const id of [...base.keys()]) {
-      if (!curIds.has(id)) {
-        await deleteItemRef.current({ noteId: currentNoteId, itemId: id });
-        base.delete(id);
-      }
-    }
-
-    const curOrder = currentItems.map((it) => it.id);
-    const orderChanged = curOrder.length !== savedOrderRef.current.length
-      || curOrder.some((id, i) => savedOrderRef.current[i] !== id);
-    if (orderChanged && curOrder.length > 0) {
-      await reorderItemsRef.current({ noteId: currentNoteId, itemIds: curOrder });
-    }
-    savedOrderRef.current = curOrder;
+    savedOrderRef.current = currentItems.map((it) => it.id);
   }, []);
 
   const flushSave = useCallback(async (unmounting = false): Promise<boolean> => {
@@ -454,19 +430,15 @@ export function useNoteEditorSync({
         // Patch only the scalar fields that changed, so a list-item edit never
         // re-sends the title and vice versa, and another device's concurrent
         // changes to untouched fields are preserved.
-        const base = savedScalarsRef.current;
-        const scalarData: UpdateNoteRequest = {};
-        if (currentNoteType === 'list') {
-          if (currentTitle !== base.title) (scalarData as UpdateListNoteRequest).title = currentTitle;
-          if (currentCollapsed !== base.checked_items_collapsed) (scalarData as UpdateListNoteRequest).checked_items_collapsed = currentCollapsed;
-        } else if (currentContent !== base.content) {
-          (scalarData as UpdateTextNoteRequest).content = currentContent;
-        }
-        if (currentPinned !== base.pinned) scalarData.pinned = currentPinned;
-        if (currentArchived !== base.archived) scalarData.archived = currentArchived;
-        if (currentColor !== base.color) scalarData.color = currentColor;
-
-        if (Object.keys(scalarData).length > 0) {
+        const scalarData = buildScalarPatch(currentNoteType, {
+          title: currentTitle,
+          content: currentContent,
+          pinned: currentPinned,
+          archived: currentArchived,
+          color: currentColor,
+          checked_items_collapsed: currentCollapsed,
+        }, savedScalarsRef.current);
+        if (scalarData) {
           await updateMutateRef.current({ id: currentNoteId, data: scalarData });
         }
 

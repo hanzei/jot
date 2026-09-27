@@ -639,7 +639,8 @@ export function useCreateNoteItem() {
         text: itemWithId.text,
         completed: itemWithId.completed ?? false,
         position: itemWithId.position,
-        parent_id: itemWithId.parent_id ?? null,
+        // The wire format sends '' for a top-level item; the local column is NULL.
+        parent_id: itemWithId.parent_id || null,
         assigned_to: itemWithId.assigned_to ?? '',
       };
       // Queue instead of calling online while the note's create is still pending:

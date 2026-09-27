@@ -15,3 +15,4 @@ export * from './noteConversion';
 export * from './noteSort';
 export * from './usernameValidation';
 export * from './imageValidation';
+export * from './itemDiff';

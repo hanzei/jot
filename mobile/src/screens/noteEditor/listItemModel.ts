@@ -47,16 +47,9 @@ export function serializeItems(items: LocalItem[]) {
   }));
 }
 
-// Mergeable fields of a list item, used as the per-item baseline for diffing
-// local edits against the last-saved state.
-export type ItemSnapshot = Pick<LocalItem, 'text' | 'completed' | 'parentId' | 'assigned_to'>;
-
-export const itemSnapshot = (item: LocalItem): ItemSnapshot => ({
-  text: item.text,
-  completed: item.completed,
-  parentId: item.parentId,
-  assigned_to: item.assigned_to,
-});
+// The per-item save baseline lives in @jot/shared (`itemDiff.ts`) with the rest
+// of the diff engine; re-exported so the editor's hooks keep one import site.
+export { itemSnapshot, type ItemSnapshot } from '@jot/shared';
 
 // indentLevelFromDrag maps a horizontal drag distance to a target indent level
 // (0 = top-level, 1 = nested) for the one-level hierarchy, snapping every
