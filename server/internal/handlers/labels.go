@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -11,20 +10,21 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/notify"
 	"github.com/hanzei/jot/server/internal/sse"
 )
 
 type LabelsHandler struct {
 	noteStore  *models.NoteStore
 	labelStore *models.LabelStore
-	hub        *sse.Hub
+	events     *notify.Publisher
 }
 
 func NewLabelsHandler(noteStore *models.NoteStore, labelStore *models.LabelStore, hub *sse.Hub) *LabelsHandler {
 	return &LabelsHandler{
 		noteStore:  noteStore,
 		labelStore: labelStore,
-		hub:        hub,
+		events:     notify.New(hub, noteStore),
 	}
 }
 
@@ -50,27 +50,6 @@ type LabelCount struct {
 // LabelCountsResponse is an extensible envelope wrapping per-label note counts.
 type LabelCountsResponse struct {
 	Counts []LabelCount `json:"counts"`
-}
-
-func (h *LabelsHandler) publishLabelNoteUpdates(ctx context.Context, noteIDs []string, userID string) {
-	if h.hub == nil {
-		return
-	}
-
-	// Labels are per-user: only the acting user's view changes, so we publish only to them.
-	for _, noteID := range noteIDs {
-		note, err := h.noteStore.GetByIDAnyState(ctx, noteID, userID)
-		if err != nil {
-			continue
-		}
-
-		h.hub.Publish(ctx, []string{userID}, sse.Event{
-			Type:         sse.EventNoteUpdated,
-			SourceUserID: userID,
-			ClientID:     clientIDFromContext(ctx),
-			Data:         sse.NoteEventData{NoteID: noteID, Note: note},
-		})
-	}
 }
 
 // GetLabels godoc
@@ -145,6 +124,7 @@ func (h *LabelsHandler) GetLabelCounts(w http.ResponseWriter, r *http.Request) (
 //	@Failure	400		{string}	string			"bad request"
 //	@Failure	401		{string}	string			"unauthorized"
 //	@Failure	409		{string}	string			"label already exists"
+//	@Failure	422		{string}	string			"label name too long"
 //	@Failure	500		{string}	string			"internal server error"
 //	@Router		/labels [post]
 func (h *LabelsHandler) CreateLabel(w http.ResponseWriter, r *http.Request) (int, any, error) {
@@ -161,6 +141,9 @@ func (h *LabelsHandler) CreateLabel(w http.ResponseWriter, r *http.Request) (int
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {
 		return http.StatusBadRequest, nil, errors.New("label name is required")
+	}
+	if err := models.ValidateLabelName(req.Name); err != nil {
+		return http.StatusUnprocessableEntity, nil, err
 	}
 
 	var (
@@ -192,15 +175,8 @@ func (h *LabelsHandler) CreateLabel(w http.ResponseWriter, r *http.Request) (int
 		}
 	}
 
-	if h.hub != nil {
-		// Best-effort realtime update for other sessions of the same user.
-		h.hub.Publish(r.Context(), []string{user.ID}, sse.Event{
-			Type:         sse.EventLabelsChanged,
-			SourceUserID: user.ID,
-			ClientID:     clientIDFromContext(r.Context()),
-			Data:         sse.LabelsEventData{Label: label},
-		})
-	}
+	// Best-effort realtime update for other sessions of the same user.
+	h.events.LabelsChanged(r.Context(), user.ID, label)
 
 	// 201 when a label was inserted, 200 when an existing one was returned
 	// unchanged. Without an ID this endpoint is get-or-create — the webapp and
@@ -226,6 +202,7 @@ func (h *LabelsHandler) CreateLabel(w http.ResponseWriter, r *http.Request) (int
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	404		{string}	string	"label not found"
+//	@Failure	422		{string}	string	"label name too long"
 //	@Failure	500		{string}	string	"internal server error"
 //	@Router		/labels/{id} [patch]
 func (h *LabelsHandler) RenameLabel(w http.ResponseWriter, r *http.Request) (int, any, error) {
@@ -244,6 +221,9 @@ func (h *LabelsHandler) RenameLabel(w http.ResponseWriter, r *http.Request) (int
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {
 		return http.StatusBadRequest, nil, errors.New("label name is required")
+	}
+	if err := models.ValidateLabelName(req.Name); err != nil {
+		return http.StatusUnprocessableEntity, nil, err
 	}
 
 	noteIDs, err := h.labelStore.GetLabelNoteIDs(r.Context(), labelID, user.ID)
@@ -265,7 +245,7 @@ func (h *LabelsHandler) RenameLabel(w http.ResponseWriter, r *http.Request) (int
 		return http.StatusInternalServerError, nil, fmt.Errorf("rename label: %w", err)
 	}
 
-	h.publishLabelNoteUpdates(r.Context(), noteIDs, user.ID)
+	h.events.LabelNoteUpdates(r.Context(), noteIDs, user.ID)
 
 	return http.StatusOK, label, nil
 }
@@ -284,6 +264,7 @@ func (h *LabelsHandler) RenameLabel(w http.ResponseWriter, r *http.Request) (int
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	403		{string}	string	"no access to note"
 //	@Failure	404		{string}	string	"label not found"
+//	@Failure	422		{string}	string	"label name too long"
 //	@Failure	500		{string}	string	"internal server error"
 //	@Router		/notes/{id}/labels [post]
 func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, any, error) {
@@ -302,6 +283,9 @@ func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, a
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {
 		return http.StatusBadRequest, nil, errors.New("label name is required")
+	}
+	if err := models.ValidateLabelName(req.Name); err != nil {
+		return http.StatusUnprocessableEntity, nil, err
 	}
 
 	label, _, err := h.labelStore.GetOrCreateLabel(r.Context(), user.ID, req.Name)
@@ -324,14 +308,8 @@ func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, a
 		return http.StatusInternalServerError, nil, fmt.Errorf("get note: %w", err)
 	}
 
-	if h.hub != nil {
-		h.hub.Publish(r.Context(), []string{user.ID}, sse.Event{
-			Type:         sse.EventNoteUpdated,
-			SourceUserID: user.ID,
-			ClientID:     clientIDFromContext(r.Context()),
-			Data:         sse.NoteEventData{NoteID: noteID, Note: note},
-		})
-	}
+	// Labels are per-user, so only the acting user's view of the note changed.
+	h.events.NoteUpdated(r.Context(), noteID, note, user.ID, false)
 
 	return http.StatusOK, note, nil
 }
@@ -370,14 +348,8 @@ func (h *LabelsHandler) RemoveLabel(w http.ResponseWriter, r *http.Request) (int
 		return http.StatusInternalServerError, nil, fmt.Errorf("get note: %w", err)
 	}
 
-	if h.hub != nil {
-		h.hub.Publish(r.Context(), []string{user.ID}, sse.Event{
-			Type:         sse.EventNoteUpdated,
-			SourceUserID: user.ID,
-			ClientID:     clientIDFromContext(r.Context()),
-			Data:         sse.NoteEventData{NoteID: noteID, Note: note},
-		})
-	}
+	// Labels are per-user, so only the acting user's view of the note changed.
+	h.events.NoteUpdated(r.Context(), noteID, note, user.ID, false)
 
 	return http.StatusOK, note, nil
 }
@@ -414,7 +386,7 @@ func (h *LabelsHandler) DeleteLabel(w http.ResponseWriter, r *http.Request) (int
 		return http.StatusInternalServerError, nil, fmt.Errorf("delete label: %w", err)
 	}
 
-	h.publishLabelNoteUpdates(r.Context(), noteIDs, user.ID)
+	h.events.LabelNoteUpdates(r.Context(), noteIDs, user.ID)
 
 	return http.StatusNoContent, nil, nil
 }

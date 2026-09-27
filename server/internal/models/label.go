@@ -42,7 +42,7 @@ func newLabelStore(db *sql.DB, d *dialect.Dialect) *labelStore {
 
 // GetLabels returns all labels belonging to a user.
 func (s *labelStore) GetLabels(ctx context.Context, userID string) ([]Label, error) {
-	query := s.d.RewritePlaceholders(`SELECT id, user_id, name, created_at, updated_at FROM labels WHERE user_id = ? ORDER BY name ASC`)
+	query := s.d.RewritePlaceholders(`SELECT id, user_id, name, created_at, updated_at FROM labels WHERE user_id = ? ORDER BY ` + s.d.LabelOrder(""))
 	rows, err := s.db.QueryContext(ctx, query, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get labels: %w", err)
@@ -101,11 +101,17 @@ func (s *labelStore) GetLabelCounts(ctx context.Context, userID string) (map[str
 
 // GetOrCreateLabel finds an existing label by name for a user or creates a new one.
 // Uses a select-then-insert strategy with a conflict guard to handle concurrent callers.
+// A name longer than LabelNameMaxLength is rejected with ErrLabelNameTooLong,
+// as it is by CreateLabel and RenameLabel.
 // GetOrCreateLabel returns the caller's label with the given name, inserting it
 // when it does not exist yet. The bool reports whether a row was inserted, so
 // HTTP callers can answer 201 for a create and 200 for a match on an existing
 // label; a caller that only wants the label can discard it.
 func (s *labelStore) GetOrCreateLabel(ctx context.Context, userID, name string) (*Label, bool, error) {
+	if err := ValidateLabelName(name); err != nil {
+		return nil, false, err
+	}
+
 	// Attempt a case-insensitive lookup first. Comparing the stored folded key
 	// against the folded argument is index-backed and identical on both
 	// backends; see internal/labelfold.
@@ -161,6 +167,9 @@ func (s *labelStore) GetOrCreateLabel(ctx context.Context, userID, name string) 
 
 // CreateLabel inserts a new label with the given client-supplied id for idempotent offline replay.
 func (s *labelStore) CreateLabel(ctx context.Context, userID, id, name string) (*Label, error) {
+	if err := ValidateLabelName(name); err != nil {
+		return nil, err
+	}
 	var l Label
 	now := Timestamp(Now())
 	insertQ := s.d.RewritePlaceholders(
@@ -232,6 +241,9 @@ func (s *labelStore) GetLabelNoteIDs(ctx context.Context, labelID, userID string
 
 // RenameLabel renames a user-owned label and returns the updated row.
 func (s *labelStore) RenameLabel(ctx context.Context, labelID, userID, newName string) (*Label, error) {
+	if err := ValidateLabelName(newName); err != nil {
+		return nil, err
+	}
 	var l Label
 	err := s.db.QueryRowContext(ctx,
 		// name_folded is updated alongside name; letting the two drift would

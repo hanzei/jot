@@ -3,7 +3,10 @@ package mcphandler
 import (
 	"context"
 	"encoding/json/v2"
+	"errors"
+	"strings"
 
+	"github.com/hanzei/jot/server/internal/models"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -33,6 +36,19 @@ func (h *Handler) registerLabelTools(srv *mcp.Server, userID string) {
 		Name:        "remove_label_from_note",
 		Description: "Remove a label from a note.",
 	}, h.handleRemoveLabelFromNote(userID))
+}
+
+// normalizeLabelName trims name and applies the label name rules shared with
+// the REST API.
+func normalizeLabelName(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", errors.New("name is required")
+	}
+	if err := models.ValidateLabelName(name); err != nil {
+		return "", err
+	}
+	return name, nil
 }
 
 // -- list_labels --------------------------------------------------------------
@@ -65,13 +81,19 @@ func (h *Handler) handleUpdateLabel(userID string) mcp.ToolHandlerFor[updateLabe
 		if in.ID == "" {
 			return toolError("id is required")
 		}
-		if in.Name == "" {
-			return toolError("name is required")
+		name, err := normalizeLabelName(in.Name)
+		if err != nil {
+			return toolError("%w", err)
 		}
-		label, err := h.labelStore.RenameLabel(ctx, in.ID, userID, in.Name)
+		noteIDs, err := h.labelStore.GetLabelNoteIDs(ctx, in.ID, userID)
 		if err != nil {
 			return toolError("update label: %w", err)
 		}
+		label, err := h.labelStore.RenameLabel(ctx, in.ID, userID, name)
+		if err != nil {
+			return toolError("update label: %w", err)
+		}
+		h.events.LabelNoteUpdates(ctx, noteIDs, userID)
 		data, err := json.Marshal(label)
 		if err != nil {
 			return toolError("marshal label: %w", err)
@@ -91,9 +113,14 @@ func (h *Handler) handleDeleteLabel(userID string) mcp.ToolHandlerFor[deleteLabe
 		if in.ID == "" {
 			return toolError("id is required")
 		}
-		if err := h.labelStore.DeleteLabel(ctx, in.ID, userID); err != nil {
+		noteIDs, err := h.labelStore.GetLabelNoteIDs(ctx, in.ID, userID)
+		if err != nil {
 			return toolError("delete label: %w", err)
 		}
+		if err = h.labelStore.DeleteLabel(ctx, in.ID, userID); err != nil {
+			return toolError("delete label: %w", err)
+		}
+		h.events.LabelNoteUpdates(ctx, noteIDs, userID)
 		return toolDeletedResult(in.ID, nil)
 	}
 }
@@ -110,10 +137,11 @@ func (h *Handler) handleAddLabelToNote(userID string) mcp.ToolHandlerFor[addLabe
 		if in.NoteID == "" {
 			return toolError("note_id is required")
 		}
-		if in.Name == "" {
-			return toolError("name is required")
+		name, err := normalizeLabelName(in.Name)
+		if err != nil {
+			return toolError("%w", err)
 		}
-		label, _, err := h.labelStore.GetOrCreateLabel(ctx, userID, in.Name)
+		label, _, err := h.labelStore.GetOrCreateLabel(ctx, userID, name)
 		if err != nil {
 			return toolError("get or create label: %w", err)
 		}
@@ -124,11 +152,9 @@ func (h *Handler) handleAddLabelToNote(userID string) mcp.ToolHandlerFor[addLabe
 		if err != nil {
 			return toolError("get note after label add: %w", err)
 		}
-		data, err := json.Marshal(note)
-		if err != nil {
-			return toolError("marshal note: %w", err)
-		}
-		return toolTextResult(data), nil, nil
+		// Labels are per-user, so only the caller's view of the note changed.
+		h.events.NoteUpdated(ctx, in.NoteID, note, userID, false)
+		return toolNoteResult(note)
 	}
 }
 
@@ -154,10 +180,7 @@ func (h *Handler) handleRemoveLabelFromNote(userID string) mcp.ToolHandlerFor[re
 		if err != nil {
 			return toolError("get note after label remove: %w", err)
 		}
-		data, err := json.Marshal(note)
-		if err != nil {
-			return toolError("marshal note: %w", err)
-		}
-		return toolTextResult(data), nil, nil
+		h.events.NoteUpdated(ctx, in.NoteID, note, userID, false)
+		return toolNoteResult(note)
 	}
 }

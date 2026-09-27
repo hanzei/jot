@@ -14,7 +14,7 @@ func (s *noteStore) GetNoteLabels(ctx context.Context, noteID string, userID str
 			  FROM labels l
 			  JOIN note_labels nl ON l.id = nl.label_id
 			  WHERE nl.note_id = ? AND nl.user_id = ?
-			  ORDER BY l.name ASC`)
+			  ORDER BY ` + s.d.LabelOrder("l."))
 	rows, err := s.db.QueryContext(ctx, query, noteID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get note labels: %w", err)
@@ -61,7 +61,7 @@ func (s *noteStore) getLabelsByNoteIDs(ctx context.Context, noteIDs []string, us
 				  FROM labels l
 				  JOIN note_labels nl ON l.id = nl.label_id
 				  WHERE nl.note_id IN (` + placeholders + `) AND nl.user_id = ?
-				  ORDER BY nl.note_id, l.name ASC` // #nosec G202 -- only "?" placeholders are joined, no user input
+				  ORDER BY nl.note_id, ` + s.d.LabelOrder("l.") // #nosec G202 -- only "?" placeholders are joined, no user input
 
 		rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(rawQuery), args...)
 		if err != nil {

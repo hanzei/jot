@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -627,5 +628,62 @@ func TestDeleteLabel(t *testing.T) {
 		err = intruder.Client.DeleteLabel(t.Context(), labels[0].ID)
 		require.Error(t, err)
 		assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
+	})
+}
+
+// TestLabelNameMaxLength verifies that every REST path that names a label
+// enforces the length cap with 422, counting code points rather than bytes.
+func TestLabelNameMaxLength(t *testing.T) {
+	t.Parallel()
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "labellength", "password123", false)
+
+	atLimit := strings.Repeat("ä", 100)
+	tooLong := atLimit + "x"
+
+	note, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "labeled"})
+	require.NoError(t, err)
+
+	t.Run("a name at the limit is accepted", func(t *testing.T) {
+		label, err := user.Client.CreateLabel(t.Context(), atLimit)
+		require.NoError(t, err)
+		assert.Equal(t, atLimit, label.Name)
+	})
+
+	t.Run("create", func(t *testing.T) {
+		_, err := user.Client.CreateLabel(t.Context(), tooLong)
+		assert.Equal(t, http.StatusUnprocessableEntity, client.StatusCode(err))
+	})
+
+	t.Run("create with a client ID", func(t *testing.T) {
+		_, err := user.Client.CreateLabelWithID(t.Context(), "labl00000000000toolong", tooLong)
+		assert.Equal(t, http.StatusUnprocessableEntity, client.StatusCode(err))
+	})
+
+	t.Run("rename", func(t *testing.T) {
+		label, err := user.Client.CreateLabel(t.Context(), "short")
+		require.NoError(t, err)
+		_, err = user.Client.RenameLabel(t.Context(), label.ID, tooLong)
+		assert.Equal(t, http.StatusUnprocessableEntity, client.StatusCode(err))
+	})
+
+	t.Run("add to note", func(t *testing.T) {
+		_, err := user.Client.AddLabel(t.Context(), note.ID, tooLong)
+		assert.Equal(t, http.StatusUnprocessableEntity, client.StatusCode(err))
+	})
+
+	t.Run("create a note with labels creates nothing", func(t *testing.T) {
+		before, err := user.Client.ListNotes(t.Context(), nil)
+		require.NoError(t, err)
+
+		_, err = user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
+			Content: "rejected",
+			Labels:  []string{"fine", tooLong},
+		})
+		assert.Equal(t, http.StatusUnprocessableEntity, client.StatusCode(err))
+
+		after, err := user.Client.ListNotes(t.Context(), nil)
+		require.NoError(t, err)
+		assert.Len(t, after, len(before), "a rejected create must not leave a note behind")
 	})
 }

@@ -427,7 +427,7 @@ func (s *Server) setupRoutes() error {
 				r.With(auth.SessionRequired).Post("/auth/oidc/native/link", s.wrapHandler(s.oidcHandler.NativeLink))
 			}
 
-			r.Handle("/mcp", mcphandler.New(s.noteStore, s.labelStore, s.imageStore).NewStreamableHTTPHandler())
+			r.Handle("/mcp", mcphandler.New(s.noteStore, s.labelStore, s.imageStore, s.hub).NewStreamableHTTPHandler())
 		})
 
 		r.Group(func(r chi.Router) {
