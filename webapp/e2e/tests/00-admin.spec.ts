@@ -1,6 +1,7 @@
 import { test, expect, uniqueUsername, E2E_ADMIN_CREDENTIALS } from '../fixtures';
 import type { APIRequestContext, Page } from '@playwright/test';
 import { AdminPage } from '../pages/AdminPage';
+import { confirmDialog } from '../pages/dialogs';
 
 type MeResponse = {
   user?: {
@@ -217,8 +218,7 @@ test.describe('Admin', () => {
     await expect(managedUserRow.getByRole('button', { name: 'Make Admin' })).toBeVisible();
 
     await managedUserRow.getByRole('button', { name: `Delete user ${managedUsername}` }).click();
-    const confirmDialog = page.getByRole('dialog').last();
-    await confirmDialog.getByRole('button', { name: 'Delete' }).click();
+    await confirmDialog(page, 'Delete');
     await expect(usersList.getByTestId(`user-row-${managedUsername}`)).toHaveCount(0);
   });
 
