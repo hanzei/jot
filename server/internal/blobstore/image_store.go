@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"path/filepath"
 )
 
@@ -68,8 +69,10 @@ func thumbRelPath(sha string) (string, error) {
 }
 
 // Put stores the bytes read from r under sha, verifying that they actually
-// hash to sha before committing them. It is a no-op if a blob with that hash
-// already exists.
+// hash to sha before committing them. If a blob with that hash already
+// exists, Put only refreshes its modification time: the caller is about to
+// reference it, and the orphan sweep (Sweep) must not mistake a long-orphaned
+// blob that is being reused for one that is still orphaned.
 func (s *ImageStore) Put(ctx context.Context, sha string, r io.Reader) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -83,7 +86,12 @@ func (s *ImageStore) Put(ctx context.Context, sha string, r io.Reader) error {
 	if ok, err := s.exists(p); err != nil {
 		return err
 	} else if ok {
-		return nil // dedup: a blob with this hash is already stored
+		// dedup: a blob with this hash is already stored. If it vanished
+		// between the check and the touch (a concurrent reclaim), fall
+		// through and write it again rather than hand back a missing blob.
+		if err := s.touch(p); !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
 	}
 
 	return s.writeAtomic(p, r, func(sum [32]byte) error {

@@ -447,6 +447,14 @@ regardless of `JOT_DB_DRIVER`.
   and separately back up `JOT_UPLOAD_DIR` (still local/volume-mounted, since blob
   storage does not follow `JOT_DB_DRIVER`).
 
+Back up (and restore) the two together. At startup and then daily, the server
+deletes blobs that no database row references and logs a warning for every image
+whose blob is missing on disk — so after restoring a database older than the
+upload directory, the newer blobs are reclaimed, and after the reverse, the
+affected images show up in the log. The one exception is a database that
+references no images at all: the sweep then leaves the upload directory alone
+and warns, since that usually means `JOT_DB_DSN` points at the wrong database.
+
 ## API Reference
 
 The full interactive API reference is available via Swagger UI at `http://localhost:8080/api/docs/index.html` when the server is running.

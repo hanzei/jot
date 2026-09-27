@@ -17,17 +17,24 @@ type RefCounter interface {
 // content hash). It is a no-op if the hash is still referenced. Every
 // note/image hard-delete path (single-image delete, upload rollback, and the
 // note/user hard-delete cascades in issue #608) funnels through this, one
-// hash at a time.
+// hash at a time; Sweep is the safety net for anything those paths miss.
 func ReclaimIfOrphaned(ctx context.Context, refCounter RefCounter, store *ImageStore, sha string) error {
+	_, err := reclaimIfOrphaned(ctx, refCounter, store, sha)
+	return err
+}
+
+// reclaimIfOrphaned is ReclaimIfOrphaned, additionally reporting whether it
+// deleted anything, so Sweep can count what it reclaimed.
+func reclaimIfOrphaned(ctx context.Context, refCounter RefCounter, store *ImageStore, sha string) (bool, error) {
 	count, err := refCounter.GetNoteImageRefCount(ctx, sha)
 	if err != nil {
-		return fmt.Errorf("get note image refcount: %w", err)
+		return false, fmt.Errorf("get note image refcount: %w", err)
 	}
 	if count > 0 {
-		return nil
+		return false, nil
 	}
 	if err := store.Delete(ctx, sha); err != nil {
-		return fmt.Errorf("reclaim %s: %w", sha, err)
+		return false, fmt.Errorf("reclaim %s: %w", sha, err)
 	}
-	return nil
+	return true, nil
 }
