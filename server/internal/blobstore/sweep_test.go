@@ -235,3 +235,29 @@ func TestSweepOnEmptyStore(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, SweepReport{}, report)
 }
+
+func TestSweepRestatsBeforeReclaiming(t *testing.T) {
+	// A dedup Put that lands after the walk recorded the blob's old mtime but
+	// before the reclaim loop reaches it, for a row not committed yet.
+	store := newTestImageStore(t)
+	ctx := t.Context()
+	sha := putAged(t, store, "reused mid-sweep")
+
+	sw := &sweeper{
+		refs:    refs(otherRef),
+		store:   store,
+		cutoff:  time.Now().Add(-testGrace),
+		newest:  make(map[string]time.Time),
+		hasBlob: make(map[string]bool),
+	}
+	for _, dir := range sweepDirs {
+		require.NoError(t, sw.walk(ctx, dir))
+	}
+	require.NoError(t, store.Put(ctx, sha, strings.NewReader("reused mid-sweep")))
+
+	require.NoError(t, sw.reclaimUnreferenced(ctx, otherRef))
+
+	assert.Empty(t, sw.errs)
+	assertBlobPresent(t, store, sha)
+	assert.Zero(t, sw.report.Reclaimed)
+}

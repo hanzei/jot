@@ -371,7 +371,8 @@ images (notes still round-trip; images are re-added afterward):
   `Blobstore.Put` and the row commit, a crash after a row delete, or a reclaim
   that failed. It loads every referenced hash in one query, walks `blobs/` and
   `thumb/`, and reclaims each hash no row references (blob and thumbnail
-  together), re-checking its refcount right before deleting. It also removes
+  together), re-stating its files against the grace period and re-checking its
+  refcount right before deleting. It also removes
   temp files an interrupted write left behind.
   - **Grace period.** Only files older than one hour are touched, so an upload
     whose blob is written but whose row has not committed is left alone. `Put`

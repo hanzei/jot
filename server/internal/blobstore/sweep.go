@@ -59,9 +59,10 @@ var sweepDirs = [...]string{"blobs", "thumb"}
 // Only files whose newest modification time is older than grace are touched,
 // so an upload whose blob is written but whose row has not committed yet is
 // left alone (Put refreshes the mtime of a blob it dedups against for the
-// same reason). Each candidate's refcount is re-checked right before it is
-// deleted, and each missing blob's right before it is reported, so a row
-// created or deleted while the sweep runs is not misjudged.
+// same reason). Right before deleting, each candidate's files are re-statted
+// against the grace period and its refcount is re-checked, and each missing
+// blob's refcount is re-checked right before it is reported, so a row created
+// or deleted while the sweep runs is not misjudged.
 //
 // If no row references any image, nothing is deleted: see UnreferencedSkipped.
 //
@@ -192,6 +193,14 @@ func (sw *sweeper) reclaimUnreferenced(ctx context.Context, referenced map[strin
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		// The walk's mtimes can be minutes old by now: a dedup Put may have
+		// touched the blob since, for a row that has not committed yet.
+		if fresh, err := sw.touchedSinceCutoff(sha); err != nil {
+			sw.errs = append(sw.errs, err)
+			continue
+		} else if fresh {
+			continue
+		}
 		reclaimed, err := reclaimIfOrphaned(ctx, sw.refs, sw.store, sha)
 		if err != nil {
 			sw.errs = append(sw.errs, err)
@@ -200,6 +209,32 @@ func (sw *sweeper) reclaimUnreferenced(ctx context.Context, referenced map[strin
 		}
 	}
 	return nil
+}
+
+// touchedSinceCutoff re-stats sha's original and thumbnail and reports
+// whether either was modified at or after the cutoff. A file that no longer
+// exists counts as not fresh.
+func (sw *sweeper) touchedSinceCutoff(sha string) (bool, error) {
+	p, err := relPath(sha)
+	if err != nil {
+		return false, err
+	}
+	tp, err := thumbRelPath(sha)
+	if err != nil {
+		return false, err
+	}
+	for _, path := range []string{p, tp} {
+		info, err := sw.store.root.Stat(path)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		} else if err != nil {
+			return false, fmt.Errorf("stat %s: %w", path, err)
+		}
+		if !info.ModTime().Before(sw.cutoff) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // findMissing reports every referenced hash whose original blob is absent.
