@@ -274,23 +274,6 @@ func TestNoteImageEmbeddedInNote(t *testing.T) {
 // just "every hash that was ever attached."
 func TestNoteHardDeletePathsReturnImageHashes(t *testing.T) {
 	dbtest.ForEachDriver(t, func(t *testing.T, driver string) {
-		t.Run("Delete returns the note's image hashes", func(t *testing.T) {
-			store, userID, noteID := newTestNoteImageStore(t, driver)
-			ctx := t.Context()
-
-			_, err := store.CreateNoteImage(ctx, noteID, userID, "a.png", "image/png", 1, "sha-a", 1, 1, 0)
-			require.NoError(t, err)
-			_, err = store.CreateNoteImage(ctx, noteID, userID, "b.png", "image/png", 1, "sha-b", 1, 1, 0)
-			require.NoError(t, err)
-
-			shas, err := store.Delete(ctx, noteID, userID)
-			require.NoError(t, err)
-			assert.ElementsMatch(t, []string{"sha-a", "sha-b"}, shas)
-
-			_, err = store.GetByIDAnyState(ctx, noteID, userID)
-			require.ErrorIs(t, err, ErrNoteNotFound)
-		})
-
 		t.Run("DeleteFromTrash returns the note's image hashes", func(t *testing.T) {
 			store, userID, noteID := newTestNoteImageStore(t, driver)
 			ctx := t.Context()
