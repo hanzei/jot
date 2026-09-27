@@ -188,11 +188,7 @@ func insertImportedItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, 
 }
 
 func insertImportedLabelsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, userID, noteID string, labels []string, now string) error {
-	for _, rawName := range labels {
-		// An import is lossy rather than all-or-nothing about label names: a
-		// file from Keep or an older Jot may carry names past today's limit, and
-		// failing the whole note over one would be worse than shortening it.
-		labelName := TruncateLabelName(rawName)
+	for _, labelName := range labels {
 		labelID, err := generateID()
 		if err != nil {
 			return fmt.Errorf("generate label ID: %w", err)

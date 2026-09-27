@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"strings"
 	"unicode/utf8"
 
 	"github.com/sirupsen/logrus"
@@ -63,16 +62,6 @@ func ValidateLabelName(name string) error {
 		return ErrLabelNameTooLong
 	}
 	return nil
-}
-
-// TruncateLabelName shortens name to LabelNameMaxLength code points, trimming
-// any whitespace the cut leaves at the end. It is for import paths, which
-// accept what they are given rather than rejecting a whole note over one label.
-func TruncateLabelName(name string) string {
-	if utf8.RuneCountInString(name) <= LabelNameMaxLength {
-		return name
-	}
-	return strings.TrimSpace(string([]rune(name)[:LabelNameMaxLength]))
 }
 
 // ValidateNoteTypeFields rejects values for fields that do not belong to

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -142,9 +143,6 @@ func (h *LabelsHandler) CreateLabel(w http.ResponseWriter, r *http.Request) (int
 	if req.Name == "" {
 		return http.StatusBadRequest, nil, errors.New("label name is required")
 	}
-	if err := models.ValidateLabelName(req.Name); err != nil {
-		return http.StatusUnprocessableEntity, nil, err
-	}
 
 	var (
 		label   *models.Label
@@ -152,25 +150,22 @@ func (h *LabelsHandler) CreateLabel(w http.ResponseWriter, r *http.Request) (int
 		err     error
 	)
 	if req.ID != "" {
-		if !models.IsValidID(req.ID) {
-			return http.StatusBadRequest, nil, errors.New("invalid label ID format")
-		}
-		label, err = h.labelStore.CreateLabel(r.Context(), user.ID, req.ID, req.Name)
+		var status int
+		label, status, err = h.createLabelWithID(r.Context(), user.ID, req.ID, req.Name)
 		if err != nil {
-			if errors.Is(err, models.ErrLabelIDConflict) {
-				return http.StatusConflict, nil, errors.New("label already exists")
-			}
-			if errors.Is(err, models.ErrLabelNameConflict) {
-				return http.StatusConflict, nil, errors.New("label name already exists")
-			}
-			return http.StatusInternalServerError, nil, fmt.Errorf("create label: %w", err)
+			return status, nil, err
 		}
 		// A client-supplied ID means a real create: a name match on an existing
-		// label is a 409 above, never a silent hand-back.
+		// label is a 409, never a silent hand-back.
 		created = true
 	} else {
 		label, created, err = h.labelStore.GetOrCreateLabel(r.Context(), user.ID, req.Name)
 		if err != nil {
+			// An overlong name still matches an existing label; only a new
+			// one is rejected.
+			if errors.Is(err, models.ErrLabelNameTooLong) {
+				return http.StatusUnprocessableEntity, nil, err
+			}
 			return http.StatusInternalServerError, nil, fmt.Errorf("get or create label: %w", err)
 		}
 	}
@@ -187,6 +182,27 @@ func (h *LabelsHandler) CreateLabel(w http.ResponseWriter, r *http.Request) (int
 		return http.StatusCreated, label, nil
 	}
 	return http.StatusOK, label, nil
+}
+
+// createLabelWithID is CreateLabel's strict-create path for a client-supplied
+// ID, returning the HTTP status to surface on failure.
+func (h *LabelsHandler) createLabelWithID(ctx context.Context, userID, id, name string) (*models.Label, int, error) {
+	if !models.IsValidID(id) {
+		return nil, http.StatusBadRequest, errors.New("invalid label ID format")
+	}
+	label, err := h.labelStore.CreateLabel(ctx, userID, id, name)
+	switch {
+	case err == nil:
+		return label, http.StatusCreated, nil
+	case errors.Is(err, models.ErrLabelIDConflict):
+		return nil, http.StatusConflict, errors.New("label already exists")
+	case errors.Is(err, models.ErrLabelNameConflict):
+		return nil, http.StatusConflict, errors.New("label name already exists")
+	case errors.Is(err, models.ErrLabelNameTooLong):
+		return nil, http.StatusUnprocessableEntity, err
+	default:
+		return nil, http.StatusInternalServerError, fmt.Errorf("create label: %w", err)
+	}
 }
 
 // RenameLabel godoc
@@ -284,12 +300,12 @@ func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, a
 	if req.Name == "" {
 		return http.StatusBadRequest, nil, errors.New("label name is required")
 	}
-	if err := models.ValidateLabelName(req.Name); err != nil {
-		return http.StatusUnprocessableEntity, nil, err
-	}
 
 	label, _, err := h.labelStore.GetOrCreateLabel(r.Context(), user.ID, req.Name)
 	if err != nil {
+		if errors.Is(err, models.ErrLabelNameTooLong) {
+			return http.StatusUnprocessableEntity, nil, err
+		}
 		return http.StatusInternalServerError, nil, fmt.Errorf("get or create label: %w", err)
 	}
 

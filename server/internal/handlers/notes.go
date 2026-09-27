@@ -179,12 +179,26 @@ func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
 		return http.StatusBadRequest, err
 	}
 
-	for _, name := range normalizeLabels(req.Labels) {
-		if err := models.ValidateLabelName(name); err != nil {
-			return http.StatusUnprocessableEntity, err
+	return http.StatusOK, nil
+}
+
+// checkNewLabelNames rejects, before the note is created, any label name that
+// is over the length limit and does not match an existing label — the one case
+// createNoteLabels would otherwise fail on after the note already exists.
+func (h *NotesHandler) checkNewLabelNames(ctx context.Context, userID string, rawLabels []string) (int, error) {
+	for _, name := range normalizeLabels(rawLabels) {
+		lengthErr := models.ValidateLabelName(name)
+		if lengthErr == nil {
+			continue
+		}
+		_, err := h.labelStore.GetLabelByName(ctx, userID, name)
+		if errors.Is(err, models.ErrLabelNotFoundOrNotOwned) {
+			return http.StatusUnprocessableEntity, lengthErr
+		}
+		if err != nil {
+			return http.StatusInternalServerError, fmt.Errorf("check label name: %w", err)
 		}
 	}
-
 	return http.StatusOK, nil
 }
 
@@ -338,6 +352,10 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 
 	if req.ID != "" && !models.IsValidID(req.ID) {
 		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
+	}
+
+	if status, err := h.checkNewLabelNames(r.Context(), user.ID, req.Labels); err != nil {
+		return status, nil, err
 	}
 
 	var items []models.NewNoteItem

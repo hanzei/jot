@@ -101,17 +101,14 @@ func (s *labelStore) GetLabelCounts(ctx context.Context, userID string) (map[str
 
 // GetOrCreateLabel finds an existing label by name for a user or creates a new one.
 // Uses a select-then-insert strategy with a conflict guard to handle concurrent callers.
-// A name longer than LabelNameMaxLength is rejected with ErrLabelNameTooLong,
-// as it is by CreateLabel and RenameLabel.
+// A name longer than LabelNameMaxLength still resolves to an existing label —
+// one created before the limit, or by an import — but creating a new one is
+// rejected with ErrLabelNameTooLong, as it is by CreateLabel and RenameLabel.
 // GetOrCreateLabel returns the caller's label with the given name, inserting it
 // when it does not exist yet. The bool reports whether a row was inserted, so
 // HTTP callers can answer 201 for a create and 200 for a match on an existing
 // label; a caller that only wants the label can discard it.
 func (s *labelStore) GetOrCreateLabel(ctx context.Context, userID, name string) (*Label, bool, error) {
-	if err := ValidateLabelName(name); err != nil {
-		return nil, false, err
-	}
-
 	// Attempt a case-insensitive lookup first. Comparing the stored folded key
 	// against the folded argument is index-backed and identical on both
 	// backends; see internal/labelfold.
@@ -131,7 +128,13 @@ func (s *labelStore) GetOrCreateLabel(ctx context.Context, userID, name string) 
 		return nil, false, fmt.Errorf("failed to get or create label: %w", err)
 	}
 
-	// Not found; generate an ID and insert.
+	// Not found. The length limit applies to new labels only, so it is checked
+	// here rather than up front.
+	if err = ValidateLabelName(name); err != nil {
+		return nil, false, err
+	}
+
+	// Generate an ID and insert.
 	id, err := generateID()
 	if err != nil {
 		return nil, false, fmt.Errorf("failed to generate label ID: %w", err)
@@ -163,6 +166,23 @@ func (s *labelStore) GetOrCreateLabel(ctx context.Context, userID, name string) 
 		return nil, false, fmt.Errorf("failed to get or create label after conflict: %w", err)
 	}
 	return &l, false, nil
+}
+
+// GetLabelByName returns the caller's label whose name matches name without
+// regard to case, or ErrLabelNotFoundOrNotOwned.
+func (s *labelStore) GetLabelByName(ctx context.Context, userID, name string) (*Label, error) {
+	var l Label
+	err := s.db.QueryRowContext(ctx,
+		s.d.RewritePlaceholders(`SELECT id, user_id, name, created_at, updated_at FROM labels WHERE user_id = ? AND name_folded = ?`),
+		userID, labelfold.Fold(name),
+	).Scan(&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrLabelNotFoundOrNotOwned
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get label by name: %w", err)
+	}
+	return &l, nil
 }
 
 // CreateLabel inserts a new label with the given client-supplied id for idempotent offline replay.

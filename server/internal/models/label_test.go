@@ -293,22 +293,32 @@ func TestLabelNameMaxLength(t *testing.T) {
 			require.ErrorIs(t, err, ErrLabelNameTooLong)
 		})
 
-		t.Run("import truncates instead of failing", func(t *testing.T) {
+		t.Run("an existing overlong label still resolves", func(t *testing.T) {
 			store, userID := newTestLabelStore(t, driver)
 			ctx := t.Context()
 			notes := newNoteStore(store.db, store.d)
 
+			// Imports write labels directly and keep long names, as do rows
+			// created before the limit existed.
 			require.NoError(t, notes.ImportJotNotes(ctx, userID, []JotImportNote{{
 				Content:  "imported",
 				NoteType: NoteTypeText,
 				Color:    DefaultNoteColor,
 				Labels:   []string{tooLong},
 			}}))
-
 			labels, err := store.GetLabels(ctx, userID)
 			require.NoError(t, err)
 			require.Len(t, labels, 1)
-			assert.Equal(t, atLimit, labels[0].Name)
+			assert.Equal(t, tooLong, labels[0].Name, "the import must keep the name as it is")
+
+			label, created, err := store.GetOrCreateLabel(ctx, userID, strings.ToUpper(tooLong))
+			require.NoError(t, err)
+			assert.False(t, created)
+			assert.Equal(t, labels[0].ID, label.ID)
+
+			byName, err := store.GetLabelByName(ctx, userID, tooLong)
+			require.NoError(t, err)
+			assert.Equal(t, labels[0].ID, byName.ID)
 		})
 	})
 }

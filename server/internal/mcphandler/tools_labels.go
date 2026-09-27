@@ -38,15 +38,11 @@ func (h *Handler) registerLabelTools(srv *mcp.Server, userID string) {
 	}, h.handleRemoveLabelFromNote(userID))
 }
 
-// normalizeLabelName trims name and applies the label name rules shared with
-// the REST API.
+// normalizeLabelName trims name and rejects an empty one, as the REST API does.
 func normalizeLabelName(name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return "", errors.New("name is required")
-	}
-	if err := models.ValidateLabelName(name); err != nil {
-		return "", err
 	}
 	return name, nil
 }
@@ -83,6 +79,9 @@ func (h *Handler) handleUpdateLabel(userID string) mcp.ToolHandlerFor[updateLabe
 		}
 		name, err := normalizeLabelName(in.Name)
 		if err != nil {
+			return toolError("%w", err)
+		}
+		if err = models.ValidateLabelName(name); err != nil {
 			return toolError("%w", err)
 		}
 		noteIDs, err := h.labelStore.GetLabelNoteIDs(ctx, in.ID, userID)

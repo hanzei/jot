@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/hanzei/jot/server/client"
+	"github.com/hanzei/jot/server/internal/labelfold"
 	"github.com/hanzei/jot/server/internal/sse"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -670,6 +671,32 @@ func TestLabelNameMaxLength(t *testing.T) {
 	t.Run("add to note", func(t *testing.T) {
 		_, err := user.Client.AddLabel(t.Context(), note.ID, tooLong)
 		assert.Equal(t, http.StatusUnprocessableEntity, client.StatusCode(err))
+	})
+
+	t.Run("an existing overlong label can still be attached", func(t *testing.T) {
+		// A label created before the limit existed, or by an import.
+		legacy := strings.Repeat("ö", 120)
+		_, err := ts.Server.GetDB().ExecContext(t.Context(),
+			`INSERT INTO labels (id, user_id, name, name_folded, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+			"labl00000000000legacy", user.User.ID, legacy, labelfold.Fold(legacy), "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z")
+		require.NoError(t, err)
+
+		withLabel, err := user.Client.AddLabel(t.Context(), note.ID, legacy)
+		require.NoError(t, err)
+		require.Len(t, withLabel.Labels, 1)
+		assert.Equal(t, "labl00000000000legacy", withLabel.Labels[0].ID)
+
+		label, err := user.Client.CreateLabel(t.Context(), legacy)
+		require.NoError(t, err, "get-or-create must return the existing label")
+		assert.Equal(t, "labl00000000000legacy", label.ID)
+
+		created, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
+			Content: "tagged with the legacy label",
+			Labels:  []string{legacy},
+		})
+		require.NoError(t, err)
+		require.Len(t, created.Labels, 1)
+		assert.Equal(t, "labl00000000000legacy", created.Labels[0].ID)
 	})
 
 	t.Run("create a note with labels creates nothing", func(t *testing.T) {
