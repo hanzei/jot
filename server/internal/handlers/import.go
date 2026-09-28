@@ -470,11 +470,18 @@ func (h *NotesHandler) ImportNotes(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
-	// A bundle can take far longer to upload than the server-wide read
-	// timeout allows for; lift it for this request only.
+	// A bundle can take far longer to upload and process than the server-wide
+	// timeouts allow for; lift both for this request only. The write deadline
+	// matters too: the server starts it when the request headers arrive, so
+	// it would otherwise expire before the response is written.
 	//nolint:gocritic // a connection deadline, not a stored timestamp
-	if err := http.NewResponseController(w).SetReadDeadline(time.Now().Add(jotBundleTransferTimeout)); err != nil {
+	deadline := time.Now().Add(jotBundleTransferTimeout)
+	rc := http.NewResponseController(w)
+	if err := rc.SetReadDeadline(deadline); err != nil {
 		logutil.FromContext(r.Context()).WithError(err).Warn("ImportNotes: could not extend read deadline")
+	}
+	if err := rc.SetWriteDeadline(deadline); err != nil {
+		logutil.FromContext(r.Context()).WithError(err).Warn("ImportNotes: could not extend write deadline")
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, importMaxBytes+multipartOverheadBytes)
