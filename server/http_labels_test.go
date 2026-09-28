@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/hanzei/jot/server/client"
+	"github.com/hanzei/jot/server/internal/labelfold"
 	"github.com/hanzei/jot/server/internal/sse"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -627,5 +629,88 @@ func TestDeleteLabel(t *testing.T) {
 		err = intruder.Client.DeleteLabel(t.Context(), labels[0].ID)
 		require.Error(t, err)
 		assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
+	})
+}
+
+// TestLabelNameMaxLength verifies that every REST path that names a label
+// enforces the length cap with 422, counting code points rather than bytes.
+func TestLabelNameMaxLength(t *testing.T) {
+	t.Parallel()
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "labellength", "password123", false)
+
+	atLimit := strings.Repeat("ä", 100)
+	tooLong := atLimit + "x"
+
+	note, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "labeled"})
+	require.NoError(t, err)
+
+	t.Run("a name at the limit is accepted", func(t *testing.T) {
+		label, err := user.Client.CreateLabel(t.Context(), atLimit)
+		require.NoError(t, err)
+		assert.Equal(t, atLimit, label.Name)
+	})
+
+	t.Run("create", func(t *testing.T) {
+		_, err := user.Client.CreateLabel(t.Context(), tooLong)
+		assert.Equal(t, http.StatusUnprocessableEntity, client.StatusCode(err))
+	})
+
+	t.Run("create with a client ID", func(t *testing.T) {
+		_, err := user.Client.CreateLabelWithID(t.Context(), "labl00000000000toolong", tooLong)
+		assert.Equal(t, http.StatusUnprocessableEntity, client.StatusCode(err))
+	})
+
+	t.Run("rename", func(t *testing.T) {
+		label, err := user.Client.CreateLabel(t.Context(), "short")
+		require.NoError(t, err)
+		_, err = user.Client.RenameLabel(t.Context(), label.ID, tooLong)
+		assert.Equal(t, http.StatusUnprocessableEntity, client.StatusCode(err))
+	})
+
+	t.Run("add to note", func(t *testing.T) {
+		_, err := user.Client.AddLabel(t.Context(), note.ID, tooLong)
+		assert.Equal(t, http.StatusUnprocessableEntity, client.StatusCode(err))
+	})
+
+	t.Run("an existing overlong label can still be attached", func(t *testing.T) {
+		// A label created before the limit existed, or by an import.
+		legacy := strings.Repeat("ö", 120)
+		_, err := ts.Server.GetDB().ExecContext(t.Context(),
+			`INSERT INTO labels (id, user_id, name, name_folded, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+			"labl00000000000legacy", user.User.ID, legacy, labelfold.Fold(legacy), "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z")
+		require.NoError(t, err)
+
+		withLabel, err := user.Client.AddLabel(t.Context(), note.ID, legacy)
+		require.NoError(t, err)
+		require.Len(t, withLabel.Labels, 1)
+		assert.Equal(t, "labl00000000000legacy", withLabel.Labels[0].ID)
+
+		label, err := user.Client.CreateLabel(t.Context(), legacy)
+		require.NoError(t, err, "get-or-create must return the existing label")
+		assert.Equal(t, "labl00000000000legacy", label.ID)
+
+		created, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
+			Content: "tagged with the legacy label",
+			Labels:  []string{legacy},
+		})
+		require.NoError(t, err)
+		require.Len(t, created.Labels, 1)
+		assert.Equal(t, "labl00000000000legacy", created.Labels[0].ID)
+	})
+
+	t.Run("create a note with labels creates nothing", func(t *testing.T) {
+		before, err := user.Client.ListNotes(t.Context(), nil)
+		require.NoError(t, err)
+
+		_, err = user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
+			Content: "rejected",
+			Labels:  []string{"fine", tooLong},
+		})
+		assert.Equal(t, http.StatusUnprocessableEntity, client.StatusCode(err))
+
+		after, err := user.Client.ListNotes(t.Context(), nil)
+		require.NoError(t, err)
+		assert.Len(t, after, len(before), "a rejected create must not leave a note behind")
 	})
 }

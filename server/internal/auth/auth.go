@@ -63,14 +63,6 @@ func (s *SessionService) InvalidateUserSessions(ctx context.Context, userID stri
 	return s.sessionStore.DeleteByUserID(ctx, userID)
 }
 
-func (s *SessionService) GetSessionUser(r *http.Request) (*models.User, error) {
-	_, user, err := s.GetSessionAndUser(r)
-	if err != nil {
-		return nil, err
-	}
-	return user, nil
-}
-
 func (s *SessionService) GetSessionAndUser(r *http.Request) (_ *models.Session, _ *models.User, err error) {
 	ctx, end := startSpan(r.Context(), s.tracer, "SessionService.GetSessionAndUser", &err)
 	defer end()

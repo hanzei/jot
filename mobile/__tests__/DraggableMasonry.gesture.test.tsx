@@ -144,10 +144,13 @@ function collectLayoutNodes(node: TreeNode | string, acc: TreeNode[]): TreeNode[
   return acc;
 }
 
-function fireAllLayouts(root: unknown, width: number, height: number) {
+// RNTL's fireEvent is async and wraps each handler in its own act(), so await
+// every call — firing them unawaited (or inside another act) overlaps the act
+// scopes and React warns.
+async function fireAllLayouts(root: unknown, width: number, height: number) {
   const nodes = collectLayoutNodes(root as TreeNode, []);
   for (const node of nodes) {
-    fireEvent(node as unknown as Parameters<typeof fireEvent>[0], 'layout', {
+    await fireEvent(node as unknown as Parameters<typeof fireEvent>[0], 'layout', {
       nativeEvent: { layout: { x: 0, y: 0, width, height } },
     });
   }
@@ -168,11 +171,9 @@ async function renderMasonry(ids: string[], onSectionReorder = jest.fn()) {
   // Cards render in stages: the content View's onLayout sets the width, then the
   // off-screen height-measurer cards' onLayout commits their heights, which
   // finally renders the positioned, draggable cards. Each stage is a state
-  // update, so flush layouts inside act() and repeat until the gestures appear.
+  // update, so flush the layouts and repeat until the gestures appear.
   for (let pass = 0; pass < 4; pass++) {
-    await act(async () => {
-      fireAllLayouts(utils.root, CONTENT_WIDTH, CARD_HEIGHT);
-    });
+    await fireAllLayouts(utils.root, CONTENT_WIDTH, CARD_HEIGHT);
   }
   return { utils, onSectionReorder };
 }
@@ -182,12 +183,16 @@ async function renderMasonry(ids: string[], onSectionReorder = jest.fn()) {
 // separately (rather than as one fireGestureHandler call, which always appends
 // END/FINALIZE) lets the test keep the gesture ACTIVE and tick auto-scroll
 // frames in between, which is precisely the scroll-without-pan-events case.
-function emitGesture(
+// The handlers run JS callbacks that set React state, so each emit is wrapped
+// in act().
+async function emitGesture(
   handlerTag: number,
   event: Record<string, number> & { state: number; oldState?: number },
 ) {
   const name = event.oldState != null ? 'onGestureHandlerStateChange' : 'onGestureHandlerEvent';
-  DeviceEventEmitter.emit(name, { handlerTag, ...event });
+  await act(() => {
+    DeviceEventEmitter.emit(name, { handlerTag, ...event });
+  });
 }
 
 const PAN = {
@@ -227,12 +232,14 @@ describe('DraggableMasonry gesture pipeline', () => {
     const { onSectionReorder } = await renderMasonry(['a', 'b', 'c', 'd']);
     // Cards (h100, gap12): a[0..100] b[112..212] c[224..324] d[336..436].
     // Lift 'a' (center y50) and drag down onto 'b' (center y162).
-    fireGestureHandler(getByGestureTestId('masonry-card-a'), [
-      { ...PAN, state: State.BEGAN, absoluteX: 100, absoluteY: 50 },
-      { ...PAN, state: State.ACTIVE, absoluteX: 100, absoluteY: 50 },
-      { ...PAN, state: State.ACTIVE, absoluteX: 100, absoluteY: 190, translationY: 140 },
-      { ...PAN, state: State.END, absoluteX: 100, absoluteY: 190 },
-    ]);
+    await act(() => {
+      fireGestureHandler(getByGestureTestId('masonry-card-a'), [
+        { ...PAN, state: State.BEGAN, absoluteX: 100, absoluteY: 50 },
+        { ...PAN, state: State.ACTIVE, absoluteX: 100, absoluteY: 50 },
+        { ...PAN, state: State.ACTIVE, absoluteX: 100, absoluteY: 190, translationY: 140 },
+        { ...PAN, state: State.END, absoluteX: 100, absoluteY: 190 },
+      ]);
+    });
     // 'a' lands after 'b'.
     expect(lastReorder(onSectionReorder)).toEqual(['b', 'a', 'c', 'd']);
   });
@@ -244,10 +251,10 @@ describe('DraggableMasonry gesture pipeline', () => {
     const { onSectionReorder } = await renderMasonry(['a', 'b', 'c', 'd']);
     const tag = getByGestureTestId('masonry-card-a').handlerTag;
     // finger at absoluteY 1250 → content-Y = 1250 - 1200 = 50 (over 'a').
-    emitGesture(tag, { ...PAN, state: State.BEGAN, oldState: State.UNDETERMINED, absoluteX: 100, absoluteY: 1250 });
-    emitGesture(tag, { ...PAN, state: State.ACTIVE, oldState: State.BEGAN, absoluteX: 100, absoluteY: 1250 });
-    emitGesture(tag, { ...PAN, state: State.ACTIVE, absoluteX: 100, absoluteY: 1250 });
-    emitGesture(tag, { ...PAN, state: State.END, oldState: State.ACTIVE, absoluteX: 100, absoluteY: 1250 });
+    await emitGesture(tag, { ...PAN, state: State.BEGAN, oldState: State.UNDETERMINED, absoluteX: 100, absoluteY: 1250 });
+    await emitGesture(tag, { ...PAN, state: State.ACTIVE, oldState: State.BEGAN, absoluteX: 100, absoluteY: 1250 });
+    await emitGesture(tag, { ...PAN, state: State.ACTIVE, absoluteX: 100, absoluteY: 1250 });
+    await emitGesture(tag, { ...PAN, state: State.END, oldState: State.ACTIVE, absoluteX: 100, absoluteY: 1250 });
     expect(lastReorder(onSectionReorder)).toEqual(['a', 'b', 'c', 'd']);
   });
 
@@ -259,16 +266,18 @@ describe('DraggableMasonry gesture pipeline', () => {
     mockSection.top = 1200;
     const { onSectionReorder } = await renderMasonry(['a', 'b', 'c', 'd']);
     const tag = getByGestureTestId('masonry-card-a').handlerTag;
-    emitGesture(tag, { ...PAN, state: State.BEGAN, oldState: State.UNDETERMINED, absoluteX: 100, absoluteY: 1250 });
-    emitGesture(tag, { ...PAN, state: State.ACTIVE, oldState: State.BEGAN, absoluteX: 100, absoluteY: 1250 });
-    emitGesture(tag, { ...PAN, state: State.ACTIVE, absoluteX: 100, absoluteY: 1250 });
+    await emitGesture(tag, { ...PAN, state: State.BEGAN, oldState: State.UNDETERMINED, absoluteX: 100, absoluteY: 1250 });
+    await emitGesture(tag, { ...PAN, state: State.ACTIVE, oldState: State.BEGAN, absoluteX: 100, absoluteY: 1250 });
+    await emitGesture(tag, { ...PAN, state: State.ACTIVE, absoluteX: 100, absoluteY: 1250 });
     // Tick auto-scroll frames with no further pan events. bottomZone = 1334-96
     // = 1238, finger at 1250 → +9/frame. 30 frames → scrollOffset 270, so
     // content-Y under the finger moves 50 → 320 (past 'c', center 274).
     expect(mockFrame.cb).not.toBeNull();
-    for (let i = 0; i < 30; i++) mockFrame.cb!();
+    await act(() => {
+      for (let i = 0; i < 30; i++) mockFrame.cb!();
+    });
     expect(mockScrollOffset.current).toBe(270);
-    emitGesture(tag, { ...PAN, state: State.END, oldState: State.ACTIVE, absoluteX: 100, absoluteY: 1250 });
+    await emitGesture(tag, { ...PAN, state: State.END, oldState: State.ACTIVE, absoluteX: 100, absoluteY: 1250 });
     const order = lastReorder(onSectionReorder);
     expect(order).not.toBeNull();
     // The lifted card is no longer at its original slot — the scroll moved it.

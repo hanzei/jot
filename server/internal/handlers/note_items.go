@@ -541,5 +541,5 @@ func (h *NotesHandler) DeleteNoteItems(w http.ResponseWriter, r *http.Request) (
 // audience member receives their own personalized copy of the note (preserving
 // per-user state).
 func (h *NotesHandler) publishItemChangeEvent(ctx context.Context, noteID, userID string) {
-	h.publishUpdateEvent(ctx, noteID, nil, userID, true)
+	h.events.NoteUpdated(ctx, noteID, nil, userID, true)
 }

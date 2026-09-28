@@ -39,6 +39,15 @@ export const MOCK_IDP_CLIENT_SECRET = 'jot-e2e-secret';
  */
 export const MOCK_IDP_REDIRECT_URI = 'http://localhost:8090/api/v1/auth/oidc/callback';
 export const MOCK_IDP_READY_PATH = '/healthz';
+/**
+ * Test-only: POST a form with `username` here and every authorize page renders
+ * with that username already in its field, until the next POST changes it (an
+ * empty one clears it). The mobile device suite sets it between flows so Maestro
+ * never types into the Chrome Custom Tab, which can drop the first keystroke
+ * (#1037). Global to the process, so the Playwright suite, whose workers share
+ * one IdP, never sets it and fills the field itself.
+ */
+export const MOCK_IDP_PREFILL_PATH = '/prefill-username';
 
 /** The stable subject the IdP issues for an IdP username. */
 export function mockIdpSubject(username: string): string {
@@ -75,6 +84,7 @@ function startMockIdp(): void {
   const kid = base64url(randomBytes(8));
   const jwks = { keys: [{ ...publicKey.export({ format: 'jwk' }), kid, use: 'sig', alg: 'RS256' }] };
   const codes = new Map<string, PendingCode>();
+  let prefillUsername = '';
 
   function signIdToken(claims: Record<string, unknown>): string {
     const header = base64url(JSON.stringify({ alg: 'RS256', typ: 'JWT', kid }));
@@ -164,7 +174,7 @@ function startMockIdp(): void {
     <form method="post" action="/authorize">
       ${hidden}
       <label for="username">Username</label>
-      <input id="username" name="username" autocomplete="off" required>
+      <input id="username" name="username" value="${escapeHtml(prefillUsername)}" autocomplete="off" required>
       <button type="submit" name="decision" value="approve">Approve</button>
       <button type="submit" name="decision" value="deny" formnovalidate>Deny</button>
     </form>
@@ -315,6 +325,10 @@ function startMockIdp(): void {
         return;
       case 'POST /token':
         handleToken(req, res, await readForm(req));
+        return;
+      case `POST ${MOCK_IDP_PREFILL_PATH}`:
+        prefillUsername = ((await readForm(req)).get('username') ?? '').trim();
+        sendText(res, 200, 'ok');
         return;
       default:
         sendText(res, 404, 'not found');

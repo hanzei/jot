@@ -3,10 +3,12 @@ package mcphandler
 import (
 	"context"
 	"encoding/json/v2"
+	"fmt"
 
 	"github.com/hanzei/jot/server/internal/blobstore"
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/sse"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -24,7 +26,7 @@ func (h *Handler) registerNoteTools(srv *mcp.Server, userID string) {
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "create_note",
-		Description: "Create a new note. Omit optional fields to use their defaults (empty text note, white background, not pinned). Supplying items creates a list note; use the note item tools to change them afterwards.",
+		Description: "Create a new note. Omit optional fields to use their defaults (empty text note, white background, not pinned). Text notes have content but no title; list notes have a title and items but no content. Supplying items creates a list note; use the note item tools to change them afterwards.",
 	}, h.handleCreateNote(userID))
 
 	mcp.AddTool(srv, &mcp.Tool{
@@ -53,7 +55,7 @@ func (h *Handler) handleListNotes(userID string) mcp.ToolHandlerFor[listNotesInp
 		if err != nil {
 			return toolError("list notes: %w", err)
 		}
-		data, err := json.Marshal(notes)
+		data, err := json.Marshal(models.SanitizeNotes(notes))
 		if err != nil {
 			return toolError("marshal notes: %w", err)
 		}
@@ -76,11 +78,7 @@ func (h *Handler) handleGetNote(userID string) mcp.ToolHandlerFor[getNoteInput, 
 		if err != nil {
 			return toolError("get note: %w", err)
 		}
-		data, err := json.Marshal(note)
-		if err != nil {
-			return toolError("marshal note: %w", err)
-		}
-		return toolTextResult(data), nil, nil
+		return toolNoteResult(note)
 	}
 }
 
@@ -95,7 +93,7 @@ type createNoteItemSpec struct {
 }
 
 type createNoteInput struct {
-	Title    string          `json:"title,omitempty"     jsonschema:"Note title"`
+	Title    string          `json:"title,omitempty"     jsonschema:"Note title (for list notes)"`
 	Content  string          `json:"content,omitempty"   jsonschema:"Note body text (for text notes)"`
 	NoteType models.NoteType `json:"note_type,omitempty" jsonschema:"Note type: text (default) or list"`
 	Color    string          `json:"color,omitempty"     jsonschema:"Background color as a hex string, e.g. #ffffff"`
@@ -105,16 +103,9 @@ type createNoteInput struct {
 
 func (h *Handler) handleCreateNote(userID string) mcp.ToolHandlerFor[createNoteInput, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in createNoteInput) (*mcp.CallToolResult, any, error) {
-		// Items only exist on list notes, so they imply the type — matching the
-		// REST API, which defaults note_type to list when items are supplied.
-		noteType := in.NoteType
-		switch {
-		case len(in.Items) > 0 && noteType == "":
-			noteType = models.NoteTypeList
-		case len(in.Items) > 0 && noteType != models.NoteTypeList:
-			return toolError("note_type must be %q when items are provided", models.NoteTypeList)
-		case noteType == "":
-			noteType = models.NoteTypeText
+		noteType, color, err := resolveCreateNote(in)
+		if err != nil {
+			return toolError("%w", err)
 		}
 
 		items, err := buildCreateNoteItems(in.Items)
@@ -122,10 +113,6 @@ func (h *Handler) handleCreateNote(userID string) mcp.ToolHandlerFor[createNoteI
 			return toolError("%w", err)
 		}
 
-		color := in.Color
-		if color == "" {
-			color = models.DefaultNoteColor
-		}
 		note, err := h.noteStore.CreateWithItems(ctx, userID, "", in.Title, in.Content, noteType, color, items)
 		if err != nil {
 			return toolError("create note: %w", itemCapError(err))
@@ -141,12 +128,61 @@ func (h *Handler) handleCreateNote(userID string) mcp.ToolHandlerFor[createNoteI
 			}
 		}
 
-		data, err := json.Marshal(note)
-		if err != nil {
-			return toolError("marshal note: %w", err)
-		}
-		return toolTextResult(data), nil, nil
+		h.events.NoteToAudience(ctx, note.ID, sse.EventNoteCreated, models.SanitizeNote(*note), userID)
+		return toolNoteResult(note)
 	}
+}
+
+// resolveCreateNote fills in create_note's defaults (type, color) and applies
+// the field rules shared with the REST API.
+func resolveCreateNote(in createNoteInput) (models.NoteType, string, error) {
+	// Items only exist on list notes, so they imply the type — matching the
+	// REST API, which defaults note_type to list when items are supplied.
+	noteType := in.NoteType
+	switch {
+	case len(in.Items) > 0 && noteType == "":
+		noteType = models.NoteTypeList
+	case len(in.Items) > 0 && noteType != models.NoteTypeList:
+		return "", "", fmt.Errorf("note_type must be %q when items are provided", models.NoteTypeList)
+	case noteType == "":
+		noteType = models.NoteTypeText
+	}
+	if !noteType.Valid() {
+		return "", "", fmt.Errorf("note_type must be %q or %q", models.NoteTypeText, models.NoteTypeList)
+	}
+
+	color := in.Color
+	if color == "" {
+		color = models.DefaultNoteColor
+	}
+	if err := validateNoteFields(&in.Title, &in.Content, &color); err != nil {
+		return "", "", err
+	}
+	if err := models.ValidateNoteTypeFields(noteType, &in.Title, &in.Content, nil); err != nil {
+		return "", "", err
+	}
+	return noteType, color, nil
+}
+
+// validateNoteFields applies the note field limits shared with the REST API.
+// A nil pointer is a field the caller is not setting.
+func validateNoteFields(title, content, color *string) error {
+	if title != nil {
+		if err := models.ValidateNoteTitle(*title); err != nil {
+			return err
+		}
+	}
+	if content != nil {
+		if err := models.ValidateNoteContent(*content); err != nil {
+			return err
+		}
+	}
+	if color != nil {
+		if err := models.ValidateNoteColor(*color); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // -- update_note --------------------------------------------------------------
@@ -166,18 +202,34 @@ func (h *Handler) handleUpdateNote(userID string) mcp.ToolHandlerFor[updateNoteI
 		if in.ID == "" {
 			return toolError("id is required")
 		}
-		if err := h.noteStore.Update(ctx, in.ID, userID, in.Title, in.Content, in.Color, in.Pinned, in.Archived, in.CheckedItemsCollapsed, nil); err != nil {
+		// An empty color resets to the default, as in the REST API.
+		if in.Color != nil && *in.Color == "" {
+			def := models.DefaultNoteColor
+			in.Color = &def
+		}
+		if err := validateNoteFields(in.Title, in.Content, in.Color); err != nil {
+			return toolError("%w", err)
+		}
+		current, err := h.noteStore.GetByID(ctx, in.ID, userID)
+		if err != nil {
+			return toolError("get note: %w", err)
+		}
+		if err = models.ValidateNoteTypeFields(current.NoteType, in.Title, in.Content, in.CheckedItemsCollapsed); err != nil {
+			return toolError("%w", err)
+		}
+
+		if err = h.noteStore.Update(ctx, in.ID, userID, in.Title, in.Content, in.Color, in.Pinned, in.Archived, in.CheckedItemsCollapsed, nil); err != nil {
 			return toolError("update note: %w", err)
 		}
 		note, err := h.noteStore.GetByID(ctx, in.ID, userID)
 		if err != nil {
 			return toolError("get updated note: %w", err)
 		}
-		data, err := json.Marshal(note)
-		if err != nil {
-			return toolError("marshal note: %w", err)
-		}
-		return toolTextResult(data), nil, nil
+
+		// Title and content are shared with collaborators; the other fields
+		// are per-user, so only the caller's own sessions need to hear of them.
+		h.events.NoteUpdated(ctx, in.ID, note, userID, in.Title != nil || in.Content != nil)
+		return toolNoteResult(note)
 	}
 }
 
@@ -193,6 +245,9 @@ func (h *Handler) handleDeleteNote(userID string) mcp.ToolHandlerFor[deleteNoteI
 		if in.ID == "" {
 			return toolError("id is required")
 		}
+		// Resolve the audience before deleting, while the shares still exist.
+		audienceIDs, audienceErr := h.noteStore.GetNoteAudienceIDs(ctx, in.ID)
+
 		if in.Permanent {
 			shas, err := h.noteStore.DeleteFromTrash(ctx, in.ID, userID)
 			if err != nil {
@@ -203,6 +258,9 @@ func (h *Handler) handleDeleteNote(userID string) mcp.ToolHandlerFor[deleteNoteI
 			if err := h.noteStore.MoveToTrash(ctx, in.ID, userID); err != nil {
 				return toolError("delete note: %w", err)
 			}
+		}
+		if audienceErr == nil {
+			h.events.NoteDeleted(ctx, in.ID, audienceIDs, userID)
 		}
 		return toolDeletedResult(in.ID, map[string]any{"permanent": in.Permanent})
 	}

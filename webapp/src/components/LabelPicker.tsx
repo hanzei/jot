@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { Plus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { Label, Note } from '@jot/shared';
+import { VALIDATION, type Label, type Note } from '@jot/shared';
 import { notes as notesApi, labels as labelsApi } from '@/utils/api';
 
 interface LabelPickerProps {
@@ -286,6 +286,9 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
           autoCapitalize="none"
           value={query}
           onChange={e => setQuery(e.target.value)}
+          // maxLength counts UTF-16 units while the server counts code points, so
+          // astral input is cut early — accepted, as for PAT names (issue #772).
+          maxLength={VALIDATION.LABEL_NAME_MAX_LENGTH}
           onKeyDown={handleInputKeyDown}
           placeholder={t('labels.searchPlaceholder')}
           aria-label={t('labels.searchPlaceholder')}
