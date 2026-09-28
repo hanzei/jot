@@ -3,7 +3,7 @@ import { apiErrorParams, parseApiError, type ApiErrorCode } from '@jot/shared';
 import i18n from './index';
 
 export function displayMessage(t: TFunction, message: string): string {
-  return i18n.exists(message) ? t(message, API_ERROR_KEY_PARAMS[message]) : message;
+  return i18n.exists(message) ? t(message, API_ERROR_KEY_PARAMS[message] ?? {}) : message;
 }
 
 export function getCurrentLocale(): string | undefined {

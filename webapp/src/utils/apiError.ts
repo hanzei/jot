@@ -40,7 +40,7 @@ export function apiErrorMessage(err: unknown, t: TFunction, fallbackKey: string)
   const detail = parseApiError(err);
   if (detail) {
     const key = API_ERROR_MESSAGE_KEYS[detail.code];
-    if (key) return t(key, apiErrorParams(detail.code));
+    if (key) return t(key, apiErrorParams(detail.code) ?? {});
     if (detail.code !== 'internal' && detail.message.trim()) return detail.message.trim();
   }
   return t(fallbackKey);
