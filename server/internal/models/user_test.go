@@ -82,7 +82,7 @@ func TestUserSearchExcludesAndLimits(t *testing.T) {
 		store := newTestUserStore(t, driver)
 		ctx := t.Context()
 
-		var ids []string
+		ids := make([]string, 0, 3)
 		for _, name := range []string{"match1", "match2", "match3"} {
 			u, err := store.Create(ctx, name, "password123")
 			require.NoError(t, err)
