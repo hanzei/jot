@@ -225,6 +225,7 @@
     "ssoDisconnect": "Desvincular {{provider}}",
     "ssoDisconnecting": "Desvinculando…",
     "ssoDisconnectFailed": "No se pudo desvincular el SSO.",
+    "ssoUnlinkUnavailable": "No se puede desconectar el SSO en este servidor: el inicio de sesión con contraseña está desactivado, así que el SSO es tu única forma de iniciar sesión.",
     "ssoDisconnected": "SSO desvinculado.",
     "ssoDisconnectConfirmTitle": "¿Desvincular el SSO?",
     "ssoDisconnectConfirmMessage": "Esto desvincula {{provider}} de tu cuenta. Necesitarás tu contraseña para iniciar sesión.",

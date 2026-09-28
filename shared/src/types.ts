@@ -508,7 +508,9 @@ export type ApiErrorCode =
   | 'last_admin'
   | 'cannot_delete_self'
   | 'sso_identity_linked'
-  | 'would_strand_account';
+  | 'would_strand_account'
+  | 'sso_link_unavailable'
+  | 'sso_unlink_unavailable';
 
 export interface ApiErrorDetail {
   code: ApiErrorCode;

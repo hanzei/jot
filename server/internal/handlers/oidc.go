@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzei/jot/server/internal/apierr"
 	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
@@ -57,6 +58,10 @@ const (
 	oidcErrUnavailable    = "temporarily_unavailable" // native only: the code store is at capacity
 	oidcErrServer         = "server_error"            // unexpected internal failure
 )
+
+// errSSOLinkUnavailable refuses a link, web or native, on an SSO-only server:
+// linking proves control of the local account by password, and there is none.
+var errSSOLinkUnavailable = apierr.New(apierr.CodeSSOLinkUnavailable, "account linking is unavailable when local login is disabled")
 
 // OIDCHandler serves the SSO authorization-code + PKCE endpoints. It is only
 // constructed and wired when OIDC is configured; when it is nil the routes are
@@ -143,7 +148,7 @@ func (h *OIDCHandler) Link(w http.ResponseWriter, r *http.Request) (int, any, er
 	// Linking proves control of the local account by password first; with local
 	// login disabled there is no local side to prove, so linking is not offered.
 	if !h.localLoginEnabled {
-		return http.StatusForbidden, nil, errors.New("account linking is unavailable when local login is disabled")
+		return http.StatusForbidden, nil, errSSOLinkUnavailable
 	}
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -407,7 +412,7 @@ func (h *OIDCHandler) Unlink(_ http.ResponseWriter, r *http.Request) (int, any, 
 	// every account's only credential: unlinking would orphan the account (the
 	// next SSO login provisions a fresh one). Checked before touching the store.
 	if !h.localLoginEnabled {
-		return http.StatusForbidden, nil, errors.New("unlinking SSO is unavailable when local login is disabled")
+		return http.StatusForbidden, nil, apierr.New(apierr.CodeSSOUnlinkUnavailable, "unlinking SSO is unavailable when local login is disabled")
 	}
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
