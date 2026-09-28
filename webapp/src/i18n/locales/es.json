@@ -578,5 +578,18 @@
     "admin": "Admin - Jot",
     "settings": "Ajustes - Jot",
     "label": "{{name}} - Jot"
+  },
+  "apiErrors": {
+    "invalidCredentials": "Nombre de usuario o contraseña no válidos.",
+    "registrationDisabled": "El registro está desactivado en este servidor.",
+    "localLoginDisabled": "El inicio de sesión con contraseña está desactivado en este servidor. Usa SSO en su lugar.",
+    "incorrectPassword": "La contraseña actual es incorrecta.",
+    "usernameTaken": "Este nombre de usuario ya está en uso.",
+    "labelNameTaken": "Ya existe una etiqueta con este nombre.",
+    "lastAdmin": "No se puede degradar ni eliminar al último administrador.",
+    "cannotDeleteSelf": "No puedes eliminar tu propia cuenta.",
+    "wouldStrandAccount": "No se puede desvincular el SSO: tu cuenta no tiene contraseña y no podrías iniciar sesión.",
+    "rateLimited": "Demasiadas solicitudes. Espera un momento e inténtalo de nuevo.",
+    "requestTooLarge": "El archivo o la solicitud es demasiado grande."
   }
 }

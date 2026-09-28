@@ -1,8 +1,9 @@
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Label } from '@jot/shared';
-import { labels as labelsApi, isAxiosError } from '@/utils/api';
+import { labels as labelsApi } from '@/utils/api';
 import { useToast } from '@/hooks/useToast';
+import { apiErrorMessage } from '@/utils/apiError';
 
 interface LoadOptions {
   preserveOnError?: boolean;
@@ -74,12 +75,7 @@ export const useSidebarLabelsController = ({
       showToast(t('labels.createSuccess'), 'success');
       return true;
     } catch (err: unknown) {
-      if (isAxiosError(err)) {
-        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
-        showToast(msg || t('labels.createError'), 'error');
-      } else {
-        showToast(t('labels.createError'), 'error');
-      }
+      showToast(apiErrorMessage(err, t, 'labels.createError'), 'error');
       return false;
     }
   }, [loadLabelCounts, loadLabels, onCreateSuccess, showToast, t]);
@@ -102,12 +98,7 @@ export const useSidebarLabelsController = ({
       showToast(t('labels.renameSuccess'), 'success');
       return true;
     } catch (err: unknown) {
-      if (isAxiosError(err)) {
-        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
-        showToast(msg || t('labels.renameError'), 'error');
-      } else {
-        showToast(t('labels.renameError'), 'error');
-      }
+      showToast(apiErrorMessage(err, t, 'labels.renameError'), 'error');
       return false;
     }
   }, [loadLabelCounts, loadLabels, onRenameSuccess, showToast, t]);
@@ -130,12 +121,7 @@ export const useSidebarLabelsController = ({
       showToast(t('labels.deleteSuccess'), 'success');
       return true;
     } catch (err: unknown) {
-      if (isAxiosError(err)) {
-        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
-        showToast(msg || t('labels.deleteError'), 'error');
-      } else {
-        showToast(t('labels.deleteError'), 'error');
-      }
+      showToast(apiErrorMessage(err, t, 'labels.deleteError'), 'error');
       return false;
     }
   }, [loadLabelCounts, loadLabels, onDeleteSuccess, showToast, t]);

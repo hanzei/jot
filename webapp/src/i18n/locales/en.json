@@ -578,5 +578,18 @@
     "bin": "Bin - Jot",
     "admin": "Admin - Jot",
     "settings": "Settings - Jot"
+  },
+  "apiErrors": {
+    "invalidCredentials": "Invalid username or password.",
+    "registrationDisabled": "Registration is disabled on this server.",
+    "localLoginDisabled": "Password sign-in is disabled on this server. Use SSO instead.",
+    "incorrectPassword": "Current password is incorrect.",
+    "usernameTaken": "This username is already taken.",
+    "labelNameTaken": "A label with this name already exists.",
+    "lastAdmin": "The last admin cannot be demoted or deleted.",
+    "cannotDeleteSelf": "You cannot delete your own account.",
+    "wouldStrandAccount": "SSO cannot be disconnected: your account has no password, so you would be unable to sign in.",
+    "rateLimited": "Too many requests. Please wait a moment and try again.",
+    "requestTooLarge": "The file or request is too large."
   }
 }

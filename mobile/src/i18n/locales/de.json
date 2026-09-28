@@ -536,5 +536,15 @@
     "shareDiagnostics": "Diagnosebericht teilen",
     "yes": "Ja",
     "no": "Nein"
+  },
+  "apiErrors": {
+    "invalidCredentials": "Ungültiger Benutzername oder ungültiges Passwort.",
+    "registrationDisabled": "Die Registrierung ist auf diesem Server deaktiviert.",
+    "localLoginDisabled": "Die Anmeldung mit Passwort ist auf diesem Server deaktiviert. Verwende stattdessen SSO.",
+    "incorrectPassword": "Das aktuelle Passwort ist falsch.",
+    "usernameTaken": "Dieser Benutzername ist bereits vergeben.",
+    "labelNameTaken": "Ein Label mit diesem Namen existiert bereits.",
+    "rateLimited": "Zu viele Anfragen. Bitte warte einen Moment und versuche es erneut.",
+    "requestTooLarge": "Die Datei oder Anfrage ist zu groß."
   }
 }

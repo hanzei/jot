@@ -2,7 +2,8 @@ import { useState } from 'react';
 import type { TFunction } from 'i18next';
 import SettingsSectionCard from '@/pages/settings/SettingsSectionCard';
 import ConfirmDialog from '@/components/ConfirmDialog';
-import { sso as ssoApi, SSO_LINK_URL, isAxiosError } from '@/utils/api';
+import { sso as ssoApi, SSO_LINK_URL } from '@/utils/api';
+import { apiErrorMessage } from '@/utils/apiError';
 
 interface SsoSettingsSectionProps {
   t: TFunction;
@@ -45,12 +46,7 @@ export default function SsoSettingsSection({ t, providerName, linked, localLogin
       await ssoApi.unlink();
       onUnlinked();
     } catch (err: unknown) {
-      if (isAxiosError(err)) {
-        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
-        setError(msg || 'settings.ssoDisconnectFailed');
-      } else {
-        setError('settings.ssoDisconnectFailed');
-      }
+      setError(apiErrorMessage(err, t, 'settings.ssoDisconnectFailed'));
     } finally {
       setDisconnecting(false);
     }

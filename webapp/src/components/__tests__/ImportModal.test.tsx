@@ -13,6 +13,7 @@ vi.mock('@/utils/api', () => ({
 }));
 
 import ImportModal from '../ImportModal';
+import { createApiError } from '@/utils/__tests__/test-helpers';
 
 function getFileInput(): HTMLInputElement {
   const input = document.querySelector('input[type="file"]');
@@ -189,10 +190,7 @@ describe('ImportModal', () => {
 
   describe('error handling', () => {
     it('shows an error message when importNotes rejects with a server error', async () => {
-      const axiosError = Object.assign(new Error('Request failed'), {
-        isAxiosError: true,
-        response: { data: 'invalid JSON file' },
-      });
+      const axiosError = Object.assign(new Error('Request failed'), createApiError(400, 'validation_failed', 'invalid JSON file'));
       mockImportNotes.mockRejectedValue(axiosError);
       const user = userEvent.setup();
       render(<ImportModal {...defaultProps} />);
@@ -391,10 +389,9 @@ describe('ImportModal', () => {
 
     it('shows error message when import fails', async () => {
       const user = userEvent.setup();
-      mockImportNotes.mockRejectedValue({
-        isAxiosError: true,
-        response: { data: 'Could not connect to your Memos instance. Check the URL and token.' },
-      });
+      mockImportNotes.mockRejectedValue(
+        createApiError(400, 'validation_failed', 'Could not connect to your Memos instance. Check the URL and token.'),
+      );
       render(<ImportModal {...defaultProps} />);
 
       await user.click(screen.getByRole('radio', { name: /memos/i }));

@@ -536,5 +536,15 @@
     "shareDiagnostics": "Share Diagnostics Report",
     "yes": "Yes",
     "no": "No"
+  },
+  "apiErrors": {
+    "invalidCredentials": "Invalid username or password.",
+    "registrationDisabled": "Registration is disabled on this server.",
+    "localLoginDisabled": "Password sign-in is disabled on this server. Use SSO instead.",
+    "incorrectPassword": "Current password is incorrect.",
+    "usernameTaken": "This username is already taken.",
+    "labelNameTaken": "A label with this name already exists.",
+    "rateLimited": "Too many requests. Please wait a moment and try again.",
+    "requestTooLarge": "The file or request is too large."
   }
 }

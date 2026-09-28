@@ -536,5 +536,15 @@
     "shareDiagnostics": "Partager le rapport de diagnostic",
     "yes": "Oui",
     "no": "Non"
+  },
+  "apiErrors": {
+    "invalidCredentials": "Nom d'utilisateur ou mot de passe incorrect.",
+    "registrationDisabled": "L'inscription est désactivée sur ce serveur.",
+    "localLoginDisabled": "La connexion par mot de passe est désactivée sur ce serveur. Utilisez plutôt le SSO.",
+    "incorrectPassword": "Le mot de passe actuel est incorrect.",
+    "usernameTaken": "Ce nom d'utilisateur est déjà pris.",
+    "labelNameTaken": "Une étiquette portant ce nom existe déjà.",
+    "rateLimited": "Trop de requêtes. Veuillez patienter un instant, puis réessayer.",
+    "requestTooLarge": "Le fichier ou la requête est trop volumineux."
   }
 }

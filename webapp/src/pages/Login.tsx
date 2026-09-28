@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Eye, EyeOff, Info, TriangleAlert } from 'lucide-react';
 import type { SSOConfig } from '@jot/shared';
 import { auth, SSO_LOGIN_URL } from '@/utils/api';
+import { apiErrorMessage } from '@/utils/apiError';
 import { setUser, setSettings } from '@/utils/auth';
 import { REDIRECT_PARAM, authPathWithRedirect } from '@/utils/authRedirect';
 import { ssoLoginErrorMessage, useSsoErrorParam } from '@/utils/ssoError';
@@ -50,8 +51,7 @@ export default function Login({ onLogin, registrationEnabled, sso }: LoginProps)
       setSettings(response.settings);
       onLogin();
     } catch (err: unknown) {
-      const axiosError = err as { response?: { data?: string } };
-      setError(axiosError.response?.data || t('auth.loginFailed'));
+      setError(apiErrorMessage(err, t, 'auth.loginFailed'));
     } finally {
       setLoading(false);
     }

@@ -536,5 +536,15 @@
     "shareDiagnostics": "Compartilhar relatório de diagnóstico",
     "yes": "Sim",
     "no": "Não"
+  },
+  "apiErrors": {
+    "invalidCredentials": "Nome de usuário ou senha inválidos.",
+    "registrationDisabled": "O cadastro está desativado neste servidor.",
+    "localLoginDisabled": "O login com senha está desativado neste servidor. Use o SSO.",
+    "incorrectPassword": "A senha atual está incorreta.",
+    "usernameTaken": "Este nome de usuário já está em uso.",
+    "labelNameTaken": "Já existe uma etiqueta com este nome.",
+    "rateLimited": "Muitas solicitações. Aguarde um momento e tente novamente.",
+    "requestTooLarge": "O arquivo ou a solicitação é grande demais."
   }
 }

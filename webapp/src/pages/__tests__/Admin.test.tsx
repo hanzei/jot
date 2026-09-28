@@ -7,6 +7,7 @@ import { ToastProvider } from '@/components/Toast';
 import { admin, isAxiosError } from '@/utils/api';
 import * as authUtils from '@/utils/auth';
 import { VALIDATION, type User, type AdminStatsResponse } from '@jot/shared';
+import { createApiError } from '@/utils/__tests__/test-helpers';
 
 vi.mock('@/utils/api', () => ({
   admin: {
@@ -323,7 +324,7 @@ describe('Admin', () => {
     it('shows server error message when create user fails', async () => {
       const user = userEvent.setup();
       vi.mocked(isAxiosError).mockReturnValue(true);
-      vi.mocked(admin.createUser).mockRejectedValue({ response: { data: '  username already exists  ' } });
+      vi.mocked(admin.createUser).mockRejectedValue(createApiError(409, 'username_taken', 'username already taken'));
 
       renderAdmin();
 
@@ -337,7 +338,7 @@ describe('Admin', () => {
       await user.click(within(dialog).getByRole('button', { name: 'Create User' }));
 
       await waitFor(() => {
-        expect(within(dialog).getByRole('alert')).toHaveTextContent('username already exists');
+        expect(within(dialog).getByRole('alert')).toHaveTextContent('This username is already taken.');
       });
     });
   });
@@ -391,7 +392,7 @@ describe('Admin', () => {
     it('shows a server error message when the reset fails', async () => {
       const user = userEvent.setup();
       vi.mocked(isAxiosError).mockReturnValue(true);
-      vi.mocked(admin.setUserPassword).mockRejectedValue({ response: { data: '  something went wrong  ' } });
+      vi.mocked(admin.setUserPassword).mockRejectedValue(createApiError(400, 'validation_failed', '  password must be at least 10 characters  '));
 
       renderAdmin();
 
@@ -406,7 +407,7 @@ describe('Admin', () => {
       await user.type(within(dialog).getByLabelText('New password'), 'a-brand-new-password');
       await user.click(within(dialog).getByRole('button', { name: /^Reset password$/ }));
 
-      expect(await within(dialog).findByRole('alert')).toHaveTextContent('something went wrong');
+      expect(await within(dialog).findByRole('alert')).toHaveTextContent('password must be at least 10 characters');
     });
   });
 
@@ -462,9 +463,9 @@ describe('Admin', () => {
   });
 
   describe('Role toggle - failure', () => {
-    it('shows axios error message when role update fails', async () => {
+    it('shows the translated error when role update fails', async () => {
       const user = userEvent.setup();
-      const axiosError = { response: { data: '  cannot demote the last admin  ' } };
+      const axiosError = createApiError(409, 'last_admin', 'cannot demote the last admin');
       vi.mocked(isAxiosError).mockReturnValue(true);
       vi.mocked(admin.updateUserRole).mockRejectedValue(axiosError);
 
@@ -479,7 +480,7 @@ describe('Admin', () => {
       await user.click(toggleButton);
 
       await waitFor(() => {
-        expect(screen.getByRole('alert')).toHaveTextContent('cannot demote the last admin');
+        expect(screen.getByRole('alert')).toHaveTextContent('The last admin cannot be demoted or deleted.');
       });
     });
 

@@ -2,6 +2,7 @@ import { CanceledError } from 'axios';
 import * as WebBrowser from 'expo-web-browser';
 import { getBaseUrl } from '../src/api/client';
 import { computeCodeChallenge } from '../src/utils/pkce';
+import { apiErrorBody } from './helpers/apiError';
 import {
   isOidcFlowPending,
   oidcCallbackErrorMessageKey,
@@ -149,8 +150,8 @@ describe('oidcFlow', () => {
     it('maps exchange failures', () => {
       expect(oidcExchangeErrorMessage(new Error('Network Error'))).toBe('auth.unableToConnect');
       expect(oidcExchangeErrorMessage(new CanceledError('switched'))).toBe('auth.ssoServerChanged');
-      expect(oidcExchangeErrorMessage({ response: { status: 400, data: 'invalid or expired code' } })).toBe('auth.ssoFailed');
-      expect(oidcExchangeErrorMessage({ response: { status: 403, data: 'account disabled' } })).toBe('account disabled');
+      expect(oidcExchangeErrorMessage({ response: { status: 400, data: apiErrorBody('validation_failed', 'invalid or expired code') } })).toBe('auth.ssoFailed');
+      expect(oidcExchangeErrorMessage({ response: { status: 403, data: apiErrorBody('forbidden', 'account disabled') } })).toBe('account disabled');
       expect(oidcExchangeErrorMessage({ response: { status: 500 } })).toBe('auth.ssoFailed');
     });
 
@@ -162,8 +163,11 @@ describe('oidcFlow', () => {
     });
 
     it('maps unlink failures, keeping the strand guard distinct', () => {
-      expect(oidcUnlinkErrorMessage({ response: { status: 422, data: 'cannot unlink SSO' } })).toBe('settings.ssoUnlinkWouldStrand');
-      expect(oidcUnlinkErrorMessage({ response: { status: 500, data: 'boom' } })).toBe('boom');
+      expect(oidcUnlinkErrorMessage({ response: { status: 422, data: apiErrorBody('would_strand_account', 'cannot unlink SSO') } })).toBe('settings.ssoUnlinkWouldStrand');
+      expect(oidcUnlinkErrorMessage({ response: { status: 403, data: apiErrorBody('local_login_disabled', 'unlinking SSO is unavailable') } }))
+        .toBe('apiErrors.localLoginDisabled');
+      expect(oidcUnlinkErrorMessage({ response: { status: 500, data: apiErrorBody('internal', 'internal server error') } }))
+        .toBe('settings.ssoDisconnectFailed');
       expect(oidcUnlinkErrorMessage({ response: { status: 500 } })).toBe('settings.ssoDisconnectFailed');
     });
   });

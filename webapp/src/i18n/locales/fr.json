@@ -578,5 +578,18 @@
     "admin": "Admin - Jot",
     "settings": "Paramètres - Jot",
     "label": "{{name}} - Jot"
+  },
+  "apiErrors": {
+    "invalidCredentials": "Nom d'utilisateur ou mot de passe incorrect.",
+    "registrationDisabled": "L'inscription est désactivée sur ce serveur.",
+    "localLoginDisabled": "La connexion par mot de passe est désactivée sur ce serveur. Utilisez plutôt le SSO.",
+    "incorrectPassword": "Le mot de passe actuel est incorrect.",
+    "usernameTaken": "Ce nom d'utilisateur est déjà pris.",
+    "labelNameTaken": "Une étiquette portant ce nom existe déjà.",
+    "lastAdmin": "Le dernier administrateur ne peut pas être rétrogradé ni supprimé.",
+    "cannotDeleteSelf": "Vous ne pouvez pas supprimer votre propre compte.",
+    "wouldStrandAccount": "Impossible de dissocier le SSO : votre compte n'a pas de mot de passe, vous ne pourriez plus vous connecter.",
+    "rateLimited": "Trop de requêtes. Veuillez patienter un instant, puis réessayer.",
+    "requestTooLarge": "Le fichier ou la requête est trop volumineux."
   }
 }

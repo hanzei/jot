@@ -7,6 +7,7 @@ import { useAuth } from '../src/store/AuthContext';
 import { useServerConfig } from '../src/hooks/useServerConfig';
 import { SsoFlowError } from '../src/store/oidcFlow';
 import type { AuthStackParamList } from '../src/navigation/AuthStack';
+import { apiErrorBody } from './helpers/apiError';
 
 jest.mock('../src/store/AuthContext', () => ({
   useAuth: jest.fn(),
@@ -181,7 +182,7 @@ describe('LoginScreen SSO', () => {
 
   it.each([
     ['a callback error', new SsoFlowError('auth.ssoCancelled'), 'auth.ssoCancelled'],
-    ['an exchange 400', { response: { status: 400, data: 'invalid or expired code' } }, 'auth.ssoFailed'],
+    ['an exchange 400', { response: { status: 400, data: apiErrorBody('validation_failed', 'invalid or expired code') } }, 'auth.ssoFailed'],
     ['a network failure', new Error('Network Error'), 'auth.unableToConnect'],
   ])('shows a terminal error for %s', async (_label, error, message) => {
     mockLoginWithSso.mockRejectedValue(error);

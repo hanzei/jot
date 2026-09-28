@@ -466,3 +466,58 @@ export interface NoteImageSSEEvent {
 }
 
 export type SSEEvent = NoteSSEEvent | LabelsChangedSSEEvent | ProfileIconSSEEvent | NoteImageSSEEvent;
+
+/**
+ * Stable, machine-readable code carried by every API error response. Keep in
+ * sync with the Code constants in server/internal/apierr/apierr.go; the
+ * swagger spec (server/docs/swagger.yaml, `apierr.Code`) documents each one.
+ *
+ * Generic codes (one per status class): validation_failed (400),
+ * unauthorized (401), forbidden (403), not_found (404), method_not_allowed
+ * (405), conflict (409), request_too_large (413), limit_exceeded (422),
+ * rate_limited (429), bad_request (any other 4xx), internal (5xx). The rest
+ * are specific codes for cases a client needs to tell apart.
+ *
+ * A newer server may send a code this list does not know yet; treat an
+ * unrecognized code like the generic code for the response's status.
+ */
+export type ApiErrorCode =
+  | 'validation_failed'
+  | 'unauthorized'
+  | 'forbidden'
+  | 'not_found'
+  | 'method_not_allowed'
+  | 'conflict'
+  | 'request_too_large'
+  | 'limit_exceeded'
+  | 'rate_limited'
+  | 'bad_request'
+  | 'internal'
+  | 'invalid_credentials'
+  | 'session_required'
+  | 'registration_disabled'
+  | 'local_login_disabled'
+  | 'incorrect_password'
+  | 'username_taken'
+  | 'cannot_share_with_self'
+  | 'already_shared'
+  | 'label_name_taken'
+  | 'last_admin'
+  | 'cannot_delete_self'
+  | 'sso_identity_linked'
+  | 'would_strand_account';
+
+export interface ApiErrorDetail {
+  code: ApiErrorCode;
+  /**
+   * Human-readable English from the server, for logs and as a last-resort
+   * fallback. Not stable; switch on `code` instead. Always "internal server
+   * error" for a 5xx.
+   */
+  message: string;
+}
+
+/** Body of every API error response: `{"error":{"code":…,"message":…}}`. */
+export interface ApiErrorResponse {
+  error: ApiErrorDetail;
+}

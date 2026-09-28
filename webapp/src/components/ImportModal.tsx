@@ -2,9 +2,10 @@ import { useState, useRef } from 'react';
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
 import { X, Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { notes, isAxiosError } from '@/utils/api';
+import { notes } from '@/utils/api';
 import { useSizeTransition } from '@/hooks/useSizeTransition';
 import type { ImportResponse } from '@jot/shared';
+import { apiErrorMessage } from '@/utils/apiError';
 
 type ImportType = 'jot_json' | 'google_keep' | 'usememos';
 
@@ -98,12 +99,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
       setResult(response);
       onSuccess();
     } catch (err: unknown) {
-      if (isAxiosError(err)) {
-        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
-        setError(msg || (importType === 'usememos' ? t('import.importFailedUsememos') : t('import.importFailed')));
-      } else {
-        setError(importType === 'usememos' ? t('import.importFailedUsememos') : t('import.importFailed'));
-      }
+      setError(apiErrorMessage(err, t, importType === 'usememos' ? 'import.importFailedUsememos' : 'import.importFailed'));
     } finally {
       setIsLoading(false);
     }
