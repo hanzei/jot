@@ -64,7 +64,7 @@ test.describe('Authentication', () => {
     // Try to register with the same username
     await registerPage.goto();
     await registerPage.register(username, 'password123');
-    await registerPage.expectError('username already taken');
+    await registerPage.expectError('This username is already taken.');
   });
 
   test('logs in with valid credentials and redirects to dashboard', async ({ page, loginPage, registerPage, dashboardPage }) => {
@@ -96,7 +96,7 @@ test.describe('Authentication', () => {
 
     await loginPage.goto();
     await loginPage.login(username, 'wrongpassword');
-    await loginPage.expectError('invalid username or password');
+    await loginPage.expectError('Invalid username or password.');
   });
 
   test('logs out and redirects to login', async ({ page, authenticatedUser, dashboardPage }) => {

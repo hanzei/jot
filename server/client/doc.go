@@ -10,4 +10,8 @@
 //	    log.Fatal(err)
 //	}
 //	notes, err := c.ListNotes(ctx, nil)
+//
+// A failed request returns an [*Error] carrying the HTTP status and the API
+// error envelope's stable code; use [StatusCode] and [ErrorCode] to branch
+// on them.
 package client
