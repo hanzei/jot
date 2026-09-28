@@ -35,6 +35,7 @@ import { subscribeToReconnectResync } from '../store/resyncEvents';
 import { useAuth } from '../store/AuthContext';
 import { isLocalModeActive } from '../store/localMode';
 import { isServerSwitchInProgress } from '../api/client';
+import { LocalizedError } from '../i18n/utils';
 import type { Label } from '@jot/shared';
 import {
   labelCountsQueryKey,
@@ -48,7 +49,7 @@ type LabelSyncScope = { archived?: true; trashed?: true; my_tasks?: true } | und
 
 function assertSwitchWriteAllowed(): void {
   if (isServerSwitchInProgress()) {
-    throw new Error('Server switch in progress; write blocked');
+    throw new LocalizedError('common.serverSwitchInProgress', 'Server switch in progress; write blocked');
   }
 }
 
@@ -209,7 +210,7 @@ export function useCreateLabel() {
     mutationFn: async ({ name }: { name: string }): Promise<Label> => {
       assertSwitchWriteAllowed();
       const trimmed = name.trim();
-      if (!trimmed) throw new Error('Label name must not be empty');
+      if (!trimmed) throw new LocalizedError('labels.nameRequired', 'Label name must not be empty');
       if (isOnlineWriteAllowed(isConnected)) {
         try {
           const serverLabel = await createLabel(trimmed);
@@ -258,7 +259,7 @@ export function useAddLabelToNote() {
     mutationFn: async ({ noteId, name }: { noteId: string; name: string }) => {
       assertSwitchWriteAllowed();
       const trimmed = name.trim();
-      if (!trimmed) throw new Error('Label name must not be empty');
+      if (!trimmed) throw new LocalizedError('labels.nameRequired', 'Label name must not be empty');
       // An offline-created note already carries a server-valid id (#475) and its
       // queued create drains FIFO before this label op, so queue rather than
       // calling online against a note the server doesn't know yet (a 404 would
@@ -381,7 +382,7 @@ export function useRenameLabel() {
     mutationFn: async ({ labelId, name }: { labelId: string; name: string }): Promise<Label> => {
       assertSwitchWriteAllowed();
       const trimmed = name.trim();
-      if (!trimmed) throw new Error('Label name must not be empty');
+      if (!trimmed) throw new LocalizedError('labels.nameRequired', 'Label name must not be empty');
       // A label created offline carries a server-valid id (#546) but its queued
       // createLabel drains FIFO before this rename, so queue rather than calling
       // online against a label the server doesn't know yet — a direct PATCH would

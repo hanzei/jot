@@ -11,7 +11,8 @@
     "unknown": "desconocido",
     "loading": "Cargando...",
     "done": "Listo",
-    "or": "o"
+    "or": "o",
+    "serverSwitchInProgress": "Se está cambiando de servidor. Inténtalo de nuevo en un momento."
   },
   "nav": {
     "settings": "Ajustes",
@@ -385,7 +386,8 @@
     "deleteSuccess": "Etiqueta eliminada",
     "deleteError": "Error al eliminar la etiqueta",
     "deleteConfirmTitle": "Eliminar etiqueta",
-    "deleteConfirmMessage": "¿Eliminar la etiqueta \"{{name}}\"? Se eliminará de todas las notas que la usen."
+    "deleteConfirmMessage": "¿Eliminar la etiqueta \"{{name}}\"? Se eliminará de todas las notas que la usen.",
+    "nameRequired": "El nombre de la etiqueta no puede estar vacío."
   },
   "share": {
     "searchUsersPlaceholder": "Buscar usuarios por nombre...",
@@ -546,6 +548,13 @@
     "usernameTaken": "Este nombre de usuario ya está en uso.",
     "labelNameTaken": "Ya existe una etiqueta con este nombre.",
     "rateLimited": "Demasiadas solicitudes. Espera un momento e inténtalo de nuevo.",
-    "requestTooLarge": "El archivo o la solicitud es demasiado grande."
+    "requestTooLarge": "El archivo o la solicitud es demasiado grande.",
+    "labelNameTooLong": "Los nombres de etiqueta pueden tener como máximo {{max}} caracteres.",
+    "itemLimitReached": "Una nota puede tener como máximo {{max}} elementos.",
+    "imageLimitReached": "Una nota puede tener como máximo {{max}} imágenes.",
+    "patLimitReached": "Puedes tener como máximo {{max}} tokens de acceso personal. Revoca uno para crear uno nuevo.",
+    "unsupportedImageType": "Este tipo de archivo no es compatible. Elige otra imagen.",
+    "invalidImage": "No se pudo leer esta imagen. Puede que esté dañada.",
+    "invalidImportFile": "No se pudo leer este archivo como una exportación del tipo seleccionado."
   }
 }

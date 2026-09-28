@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/hanzei/jot/server/internal/apierr"
 	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/models"
 )
@@ -78,7 +79,7 @@ func (h *PATsHandler) ListPATs(w http.ResponseWriter, r *http.Request) (int, any
 //	@Success	201		{object}	patResponse
 //	@Failure	400		{object}	apierr.ErrorResponse	"bad request"
 //	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
-//	@Failure	422		{object}	apierr.ErrorResponse	"personal access token cap exceeded"
+//	@Failure	422		{object}	apierr.ErrorResponse	"personal access token cap exceeded (pat_limit_reached)"
 //	@Router		/pats [post]
 func (h *PATsHandler) CreatePAT(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -100,7 +101,7 @@ func (h *PATsHandler) CreatePAT(w http.ResponseWriter, r *http.Request) (int, an
 		return http.StatusInternalServerError, nil, err
 	}
 	if len(existing) >= maxPATsPerUser {
-		return http.StatusUnprocessableEntity, nil, fmt.Errorf("maximum number of personal access tokens (%d) reached", maxPATsPerUser)
+		return http.StatusUnprocessableEntity, nil, apierr.New(apierr.CodePATLimitReached, fmt.Sprintf("maximum number of personal access tokens (%d) reached", maxPATsPerUser))
 	}
 
 	pat, rawToken, err := h.patStore.Create(r.Context(), user.ID, req.Name)

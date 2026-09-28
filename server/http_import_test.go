@@ -166,6 +166,7 @@ func TestImportInvalidJSONReturns400(t *testing.T) {
 
 	_, err := user.Client.ImportNotes(t.Context(), "google_keep", "bad.json", bytes.NewReader([]byte("not valid json")))
 	assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+	assert.Equal(t, "invalid_import_file", client.ErrorCode(err))
 }
 
 func TestImportCorruptZIPReturns400(t *testing.T) {
@@ -176,6 +177,7 @@ func TestImportCorruptZIPReturns400(t *testing.T) {
 	corrupt := []byte{'P', 'K', 0x03, 0x04, 0xDE, 0xAD, 0xBE, 0xEF}
 	_, err := user.Client.ImportNotes(t.Context(), "google_keep", "bad.zip", bytes.NewReader(corrupt))
 	assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+	assert.Equal(t, "invalid_import_file", client.ErrorCode(err))
 }
 
 func TestImportUnauthenticatedReturns401(t *testing.T) {
@@ -1171,4 +1173,15 @@ func TestImportPreservesNoteState(t *testing.T) {
 		assert.Equal(t, "garden", note.Items[2].Text)
 		assert.Nil(t, note.Items[2].ParentID)
 	})
+}
+
+func TestImportOversizeReturns413(t *testing.T) {
+	t.Parallel()
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "importoversize", "password123", false)
+
+	oversized := bytes.Repeat([]byte{'x'}, 33<<20)
+	_, err := user.Client.ImportNotes(t.Context(), "google_keep", "big.json", bytes.NewReader(oversized))
+	assert.Equal(t, http.StatusRequestEntityTooLarge, client.StatusCode(err))
+	assert.Equal(t, "request_too_large", client.ErrorCode(err))
 }

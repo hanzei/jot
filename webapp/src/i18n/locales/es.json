@@ -595,6 +595,13 @@
     "cannotDeleteSelf": "No puedes eliminar tu propia cuenta.",
     "wouldStrandAccount": "No se puede desvincular el SSO: tu cuenta no tiene contraseña y no podrías iniciar sesión.",
     "rateLimited": "Demasiadas solicitudes. Espera un momento e inténtalo de nuevo.",
-    "requestTooLarge": "El archivo o la solicitud es demasiado grande."
+    "requestTooLarge": "El archivo o la solicitud es demasiado grande.",
+    "labelNameTooLong": "Los nombres de etiqueta pueden tener como máximo {{max}} caracteres.",
+    "itemLimitReached": "Una nota puede tener como máximo {{max}} elementos.",
+    "imageLimitReached": "Una nota puede tener como máximo {{max}} imágenes.",
+    "patLimitReached": "Puedes tener como máximo {{max}} tokens de acceso personal. Revoca uno para crear uno nuevo.",
+    "unsupportedImageType": "Este tipo de archivo no es compatible. Elige otra imagen.",
+    "invalidImage": "No se pudo leer esta imagen. Puede que esté dañada.",
+    "invalidImportFile": "No se pudo leer este archivo como una exportación del tipo seleccionado."
   }
 }

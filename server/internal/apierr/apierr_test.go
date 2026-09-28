@@ -31,6 +31,7 @@ func TestCodeFor(t *testing.T) {
 		{"status fallback 429", http.StatusTooManyRequests, nil, CodeRateLimited},
 		{"status fallback other 4xx", http.StatusTeapot, nil, CodeBadRequest},
 		{"sentinel", http.StatusConflict, models.ErrUsernameTaken, CodeUsernameTaken},
+		{"limit sentinel", http.StatusUnprocessableEntity, models.ErrLabelNameTooLong, CodeLabelNameTooLong},
 		{"wrapped sentinel", http.StatusConflict, fmt.Errorf("share: %w", models.ErrNoteAlreadyShared), CodeAlreadyShared},
 		{"explicit code", http.StatusBadRequest, New(CodeCannotShareWithSelf, "self"), CodeCannotShareWithSelf},
 		{"explicit code beats sentinel", http.StatusConflict, WithCode(CodeConflict, models.ErrUsernameTaken), CodeConflict},

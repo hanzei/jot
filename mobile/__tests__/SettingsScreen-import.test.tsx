@@ -214,7 +214,7 @@ describe('SettingsScreen import section', () => {
       canceled: false,
       assets: [{ uri: 'file:///tmp/export.json', name: 'export.json', mimeType: 'application/json' }],
     } as DocumentPicker.DocumentPickerResult);
-    mockImportKeepFile.mockRejectedValue({ response: { status: 400, data: apiErrorBody('validation_failed', 'invalid JSON file') } });
+    mockImportKeepFile.mockRejectedValue({ response: { status: 400, data: apiErrorBody('invalid_import_file', 'invalid JSON file') } });
 
     const { getByTestId, getByText } = await render(<SettingsScreen />);
 
@@ -228,7 +228,7 @@ describe('SettingsScreen import section', () => {
     await fireEvent.press(getByTestId('settings-import-submit'));
 
     await waitFor(() => {
-      expect(getByText(/invalid JSON file/i)).toBeTruthy();
+      expect(getByText(/could not be read as an export of the selected type/i)).toBeTruthy();
     });
   });
 

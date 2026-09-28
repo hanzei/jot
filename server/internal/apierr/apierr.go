@@ -60,6 +60,13 @@ const (
 	CodeCannotDeleteSelf     Code = "cannot_delete_self"     // 403 — admins cannot delete their own account.
 	CodeSSOIdentityLinked    Code = "sso_identity_linked"    // 409 — the SSO identity belongs to another account.
 	CodeWouldStrandAccount   Code = "would_strand_account"   // 422 — unlinking SSO would leave the account with no way to sign in.
+	CodeLabelNameTooLong     Code = "label_name_too_long"    // 422 — the label name exceeds the label name length limit.
+	CodeItemLimitReached     Code = "item_limit_reached"     // 422 — the note would exceed the per-note item cap.
+	CodeImageLimitReached    Code = "image_limit_reached"    // 422 — the note would exceed the per-note image cap.
+	CodePATLimitReached      Code = "pat_limit_reached"      // 422 — the user already holds the maximum number of personal access tokens.
+	CodeUnsupportedImageType Code = "unsupported_image_type" // 400 — the uploaded file is not one of the endpoint's accepted image types.
+	CodeInvalidImage         Code = "invalid_image"          // 400 — the uploaded file claims an accepted type but does not decode as an image.
+	CodeInvalidImportFile    Code = "invalid_import_file"    // 400 — the import file is not a readable export of the chosen import type.
 	CodeSSOLinkUnavailable   Code = "sso_link_unavailable"   // 403 — password login is turned off, so there is no local account to link SSO to.
 	CodeSSOUnlinkUnavailable Code = "sso_unlink_unavailable" // 403 — password login is turned off, so SSO is the only way to sign in and cannot be disconnected.
 )
@@ -116,6 +123,9 @@ var sentinelCodes = []struct {
 	{models.ErrCannotDeleteSelf, CodeCannotDeleteSelf},
 	{models.ErrOIDCIdentityLinked, CodeSSOIdentityLinked},
 	{models.ErrWouldStrandAccount, CodeWouldStrandAccount},
+	{models.ErrLabelNameTooLong, CodeLabelNameTooLong},
+	{models.ErrNoteItemCapExceeded, CodeItemLimitReached},
+	{models.ErrNoteImageCapExceeded, CodeImageLimitReached},
 }
 
 // CodeFor picks the code for an error response: always [CodeInternal] for a

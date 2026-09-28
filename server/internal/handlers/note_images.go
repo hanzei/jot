@@ -12,6 +12,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/hanzei/jot/server/internal/apierr"
 	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/blobstore"
 	"github.com/hanzei/jot/server/internal/logutil"
@@ -24,6 +25,8 @@ import (
 // when rendered inline. If SVG is ever allowed, it must be served with
 // Content-Disposition: attachment, never inline like the types below.
 const imageMaxPerNote = 10
+
+var errImageLimitReached = apierr.New(apierr.CodeImageLimitReached, fmt.Sprintf("note cannot have more than %d images", imageMaxPerNote))
 
 // thumbnailMaxDimension bounds the long edge of a generated note-image
 // thumbnail. Grid tiles render this instead of the original to cut
@@ -128,12 +131,12 @@ type inspectedNoteImage struct {
 func inspectNoteImage(data []byte) (inspectedNoteImage, error) {
 	contentType := http.DetectContentType(data)
 	if !allowedNoteImageTypes[contentType] {
-		return inspectedNoteImage{}, errors.New("unsupported file type: must be png, jpeg, webp, or gif")
+		return inspectedNoteImage{}, apierr.New(apierr.CodeUnsupportedImageType, "unsupported file type: must be png, jpeg, webp, or gif")
 	}
 
 	width, height, thumbnail, err := decodeAndThumbnail(data)
 	if err != nil {
-		return inspectedNoteImage{}, fmt.Errorf("unsupported or corrupt image: %w", err)
+		return inspectedNoteImage{}, apierr.WithCode(apierr.CodeInvalidImage, fmt.Errorf("unsupported or corrupt image: %w", err))
 	}
 
 	sum := sha256.Sum256(data)
@@ -184,11 +187,11 @@ func (h *NotesHandler) storeNoteImage(ctx context.Context, img inspectedNoteImag
 //	@Param		id		path		string	true	"Note ID"
 //	@Param		file	formData	file	true	"Image file (PNG, JPEG, WebP, or GIF)"
 //	@Success	201		{object}	models.NoteImage
-//	@Failure	400		{object}	apierr.ErrorResponse	"bad request"
+//	@Failure	400		{object}	apierr.ErrorResponse	"bad request, unsupported_image_type, or invalid_image"
 //	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
 //	@Failure	404		{object}	apierr.ErrorResponse	"not found"
 //	@Failure	413		{object}	apierr.ErrorResponse	"file too large"
-//	@Failure	422		{object}	apierr.ErrorResponse	"note image cap exceeded"
+//	@Failure	422		{object}	apierr.ErrorResponse	"note image cap exceeded (image_limit_reached)"
 //	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes/{id}/images [post]
 func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (int, any, error) {
@@ -220,7 +223,7 @@ func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (
 		return http.StatusInternalServerError, nil, fmt.Errorf("count note images: %w", err)
 	}
 	if existingCount >= imageMaxPerNote {
-		return http.StatusUnprocessableEntity, nil, fmt.Errorf("note cannot have more than %d images", imageMaxPerNote)
+		return http.StatusUnprocessableEntity, nil, errImageLimitReached
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, h.uploadMaxBytes+multipartOverheadBytes)
@@ -263,7 +266,7 @@ func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (
 		// references this hash (dedup).
 		h.reclaimNoteImageBlob(r.Context(), inspected.sha)
 		if errors.Is(err, models.ErrNoteImageCapExceeded) {
-			return http.StatusUnprocessableEntity, nil, fmt.Errorf("note cannot have more than %d images", imageMaxPerNote)
+			return http.StatusUnprocessableEntity, nil, errImageLimitReached
 		}
 		return http.StatusInternalServerError, nil, fmt.Errorf("create note image: %w", err)
 	}

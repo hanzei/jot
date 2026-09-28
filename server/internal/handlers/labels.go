@@ -130,7 +130,7 @@ func (h *LabelsHandler) GetLabelCounts(w http.ResponseWriter, r *http.Request) (
 //	@Failure	400		{object}	apierr.ErrorResponse	"bad request"
 //	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
 //	@Failure	409		{object}	apierr.ErrorResponse	"label already exists"
-//	@Failure	422		{object}	apierr.ErrorResponse	"label name too long"
+//	@Failure	422		{object}	apierr.ErrorResponse	"label name too long (label_name_too_long)"
 //	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/labels [post]
 func (h *LabelsHandler) CreateLabel(w http.ResponseWriter, r *http.Request) (int, any, error) {
@@ -223,7 +223,7 @@ func (h *LabelsHandler) createLabelWithID(ctx context.Context, userID, id, name 
 //	@Failure	400		{object}	apierr.ErrorResponse	"bad request"
 //	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
 //	@Failure	404		{object}	apierr.ErrorResponse	"label not found"
-//	@Failure	422		{object}	apierr.ErrorResponse	"label name too long"
+//	@Failure	422		{object}	apierr.ErrorResponse	"label name too long (label_name_too_long)"
 //	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/labels/{id} [patch]
 func (h *LabelsHandler) RenameLabel(w http.ResponseWriter, r *http.Request) (int, any, error) {
@@ -285,7 +285,7 @@ func (h *LabelsHandler) RenameLabel(w http.ResponseWriter, r *http.Request) (int
 //	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
 //	@Failure	403		{object}	apierr.ErrorResponse	"no access to note"
 //	@Failure	404		{object}	apierr.ErrorResponse	"label not found"
-//	@Failure	422		{object}	apierr.ErrorResponse	"label name too long"
+//	@Failure	422		{object}	apierr.ErrorResponse	"label name too long (label_name_too_long)"
 //	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes/{id}/labels [post]
 func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, any, error) {

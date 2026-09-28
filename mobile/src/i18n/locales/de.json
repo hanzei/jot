@@ -11,7 +11,8 @@
     "unknown": "unbekannt",
     "loading": "Lädt...",
     "done": "Fertig",
-    "or": "oder"
+    "or": "oder",
+    "serverSwitchInProgress": "Der Server wird gerade gewechselt. Versuche es gleich noch einmal."
   },
   "nav": {
     "settings": "Einstellungen",
@@ -362,7 +363,8 @@
     "deleteSuccess": "Label gelöscht",
     "deleteError": "Label konnte nicht gelöscht werden",
     "deleteConfirmTitle": "Label löschen",
-    "deleteConfirmMessage": "Label \"{{name}}\" löschen? Es wird aus allen Notizen entfernt, die es verwenden."
+    "deleteConfirmMessage": "Label \"{{name}}\" löschen? Es wird aus allen Notizen entfernt, die es verwenden.",
+    "nameRequired": "Der Label-Name darf nicht leer sein."
   },
   "share": {
     "searchUsersPlaceholder": "Benutzer nach Namen suchen...",
@@ -546,6 +548,13 @@
     "usernameTaken": "Dieser Benutzername ist bereits vergeben.",
     "labelNameTaken": "Ein Label mit diesem Namen existiert bereits.",
     "rateLimited": "Zu viele Anfragen. Bitte warte einen Moment und versuche es erneut.",
-    "requestTooLarge": "Die Datei oder Anfrage ist zu groß."
+    "requestTooLarge": "Die Datei oder Anfrage ist zu groß.",
+    "labelNameTooLong": "Label-Namen dürfen höchstens {{max}} Zeichen lang sein.",
+    "itemLimitReached": "Eine Notiz kann höchstens {{max}} Einträge haben.",
+    "imageLimitReached": "Eine Notiz kann höchstens {{max}} Bilder haben.",
+    "patLimitReached": "Du kannst höchstens {{max}} persönliche Zugriffstoken haben. Widerrufe eines, um ein neues zu erstellen.",
+    "unsupportedImageType": "Dieser Dateityp wird nicht unterstützt. Wähle ein anderes Bild.",
+    "invalidImage": "Dieses Bild konnte nicht gelesen werden. Möglicherweise ist es beschädigt.",
+    "invalidImportFile": "Diese Datei konnte nicht als Export des gewählten Typs gelesen werden."
   }
 }

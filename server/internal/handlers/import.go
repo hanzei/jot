@@ -16,6 +16,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/hanzei/jot/server/internal/apierr"
 	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
@@ -156,7 +157,7 @@ func openJotBundle(file multipart.File, size int64) (map[string]*zip.File, *jotI
 		if looksLikeJSON(file) {
 			return nil, nil, http.StatusBadRequest, errors.New("this is a JSON export from an older version of Jot, which can no longer be imported: import a .zip export instead")
 		}
-		return nil, nil, http.StatusBadRequest, errors.New("invalid Jot export: not a zip file")
+		return nil, nil, http.StatusBadRequest, apierr.New(apierr.CodeInvalidImportFile, "invalid Jot export: not a zip file")
 	}
 
 	if len(zr.File) > jotBundleMaxEntries {
@@ -176,28 +177,28 @@ func openJotBundle(file multipart.File, size int64) (map[string]*zip.File, *jotI
 
 	manifest, ok := entries[jotBundleManifest]
 	if !ok {
-		return nil, nil, http.StatusBadRequest, fmt.Errorf("invalid Jot export: %s is missing", jotBundleManifest)
+		return nil, nil, http.StatusBadRequest, apierr.WithCode(apierr.CodeInvalidImportFile, fmt.Errorf("invalid Jot export: %s is missing", jotBundleManifest))
 	}
 	data, err := readZipEntry(manifest, jotManifestMaxBytes)
 	if errors.Is(err, errZipEntryTooLarge) {
 		return nil, nil, http.StatusUnprocessableEntity, fmt.Errorf("%s is too large (max %d bytes)", jotBundleManifest, jotManifestMaxBytes)
 	}
 	if err != nil {
-		return nil, nil, http.StatusBadRequest, fmt.Errorf("invalid Jot export: read %s: %w", jotBundleManifest, err)
+		return nil, nil, http.StatusBadRequest, apierr.WithCode(apierr.CodeInvalidImportFile, fmt.Errorf("invalid Jot export: read %s: %w", jotBundleManifest, err))
 	}
 
 	var raw jotImportEnvelope
 	if err := jsonv1.Unmarshal(data, &raw); err != nil {
-		return nil, nil, http.StatusBadRequest, fmt.Errorf("invalid Jot export: %s is not valid JSON", jotBundleManifest)
+		return nil, nil, http.StatusBadRequest, apierr.WithCode(apierr.CodeInvalidImportFile, fmt.Errorf("invalid Jot export: %s is not valid JSON", jotBundleManifest))
 	}
 	if raw.Format != jotExportFormat {
-		return nil, nil, http.StatusBadRequest, fmt.Errorf("invalid format %q: expected jot_export", raw.Format)
+		return nil, nil, http.StatusBadRequest, apierr.WithCode(apierr.CodeInvalidImportFile, fmt.Errorf("invalid format %q: expected jot_export", raw.Format))
 	}
 	if raw.Version != jotExportVersion {
-		return nil, nil, http.StatusBadRequest, fmt.Errorf("unsupported version %d: only version %d is supported", raw.Version, jotExportVersion)
+		return nil, nil, http.StatusBadRequest, apierr.WithCode(apierr.CodeInvalidImportFile, fmt.Errorf("unsupported version %d: only version %d is supported", raw.Version, jotExportVersion))
 	}
 	if raw.Notes == nil {
-		return nil, nil, http.StatusBadRequest, errors.New("notes must be a JSON array")
+		return nil, nil, http.StatusBadRequest, apierr.New(apierr.CodeInvalidImportFile, "notes must be a JSON array")
 	}
 	return entries, &raw, 0, nil
 }
@@ -458,7 +459,7 @@ func validateJotImportItems(noteIdx int, items []jotImportNoteItem) ([]models.Jo
 //	@Param			url			formData	string	false	"Memos instance URL (required when import_type is usememos)"
 //	@Param			token		formData	string	false	"Memos API token (required when import_type is usememos)"
 //	@Success		200			{object}	ImportResponse
-//	@Failure		400			{object}	apierr.ErrorResponse	"bad request"
+//	@Failure		400			{object}	apierr.ErrorResponse	"bad request, or not a readable export (invalid_import_file)"
 //	@Failure		401			{object}	apierr.ErrorResponse	"unauthorized"
 //	@Failure		413			{object}	apierr.ErrorResponse	"file too large"
 //	@Failure		422			{object}	apierr.ErrorResponse	"export exceeds a size or file-count limit"

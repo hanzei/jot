@@ -595,6 +595,13 @@
     "cannotDeleteSelf": "Non puoi eliminare il tuo account.",
     "wouldStrandAccount": "Impossibile scollegare l'SSO: il tuo account non ha una password e non potresti più accedere.",
     "rateLimited": "Troppe richieste. Attendi un momento e riprova.",
-    "requestTooLarge": "Il file o la richiesta è troppo grande."
+    "requestTooLarge": "Il file o la richiesta è troppo grande.",
+    "labelNameTooLong": "I nomi delle etichette possono avere al massimo {{max}} caratteri.",
+    "itemLimitReached": "Una nota può avere al massimo {{max}} elementi.",
+    "imageLimitReached": "Una nota può avere al massimo {{max}} immagini.",
+    "patLimitReached": "Puoi avere al massimo {{max}} token di accesso personali. Revocane uno per crearne uno nuovo.",
+    "unsupportedImageType": "Questo tipo di file non è supportato. Scegli un'altra immagine.",
+    "invalidImage": "Impossibile leggere questa immagine. Potrebbe essere danneggiata.",
+    "invalidImportFile": "Impossibile leggere questo file come esportazione del tipo selezionato."
   }
 }

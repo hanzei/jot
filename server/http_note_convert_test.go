@@ -391,6 +391,7 @@ func TestConvertNoteTypeEndpoint(t *testing.T) {
 		})
 		require.Error(t, err)
 		assert.Equal(t, http.StatusUnprocessableEntity, client.StatusCode(err))
+		assert.Equal(t, "item_limit_reached", client.ErrorCode(err))
 	})
 
 	t.Run("rejects content over the max length when converting to text", func(t *testing.T) {

@@ -1,5 +1,5 @@
 import type { TFunction } from 'i18next';
-import { parseApiError, type ApiErrorCode } from '@jot/shared';
+import { apiErrorParams, parseApiError, type ApiErrorCode } from '@jot/shared';
 
 /**
  * Error codes the webapp shows its own translated message for. Any other code
@@ -23,6 +23,13 @@ const API_ERROR_MESSAGE_KEYS: Partial<Record<ApiErrorCode, string>> = {
   sso_unlink_unavailable: 'settings.ssoUnlinkUnavailable',
   rate_limited: 'apiErrors.rateLimited',
   request_too_large: 'apiErrors.requestTooLarge',
+  label_name_too_long: 'apiErrors.labelNameTooLong',
+  item_limit_reached: 'apiErrors.itemLimitReached',
+  image_limit_reached: 'apiErrors.imageLimitReached',
+  pat_limit_reached: 'apiErrors.patLimitReached',
+  unsupported_image_type: 'apiErrors.unsupportedImageType',
+  invalid_image: 'apiErrors.invalidImage',
+  invalid_import_file: 'apiErrors.invalidImportFile',
 };
 
 /**
@@ -34,7 +41,7 @@ export function apiErrorMessage(err: unknown, t: TFunction, fallbackKey: string)
   const detail = parseApiError(err);
   if (detail) {
     const key = API_ERROR_MESSAGE_KEYS[detail.code];
-    if (key) return t(key);
+    if (key) return t(key, apiErrorParams(detail.code) ?? {});
     if (detail.code !== 'internal' && detail.message.trim()) return detail.message.trim();
   }
   return t(fallbackKey);

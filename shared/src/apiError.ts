@@ -1,3 +1,4 @@
+import { IMAGE_MAX_PER_NOTE, VALIDATION } from './constants';
 import type { ApiErrorCode, ApiErrorDetail } from './types';
 
 /**
@@ -29,4 +30,21 @@ export function parseApiError(err: unknown): ApiErrorDetail | null {
 /** The error envelope's code for a failed API request, or null. */
 export function apiErrorCode(err: unknown): ApiErrorCode | null {
   return parseApiError(err)?.code ?? null;
+}
+
+const API_ERROR_PARAMS: Partial<Record<ApiErrorCode, { max: number }>> = {
+  label_name_too_long: { max: VALIDATION.LABEL_NAME_MAX_LENGTH },
+  item_limit_reached: { max: VALIDATION.ITEM_MAX_COUNT },
+  image_limit_reached: { max: IMAGE_MAX_PER_NOTE },
+  pat_limit_reached: { max: VALIDATION.PAT_MAX_COUNT },
+};
+
+/**
+ * Interpolation values for a client's translation of `code`, or undefined when
+ * it needs none. The limit codes' translations name the limit (`{{max}}`), as
+ * the server's English message does; the value comes from the limits the
+ * clients already mirror, since the envelope carries only code and message.
+ */
+export function apiErrorParams(code: ApiErrorCode): { max: number } | undefined {
+  return API_ERROR_PARAMS[code];
 }

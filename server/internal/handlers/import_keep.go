@@ -5,12 +5,12 @@ import (
 	"bytes"
 	"context"
 	jsonv1 "encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/hanzei/jot/server/internal/apierr"
 	"github.com/hanzei/jot/server/internal/models"
 )
 
@@ -177,17 +177,17 @@ func parseKeepNotesFromData(filename string, data []byte) ([]keepNote, error) {
 	if isZip {
 		zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 		if err != nil {
-			return nil, errors.New("invalid zip file")
+			return nil, apierr.New(apierr.CodeInvalidImportFile, "invalid zip file")
 		}
 		return parseKeepNotesFromZip(zr), nil
 	}
 
 	var kn keepNote
 	if err := jsonv1.Unmarshal(data, &kn); err != nil {
-		return nil, errors.New("invalid JSON file")
+		return nil, apierr.New(apierr.CodeInvalidImportFile, "invalid JSON file")
 	}
 	if kn.isEmpty() {
-		return nil, errors.New("note must have a title, content, or items")
+		return nil, apierr.New(apierr.CodeInvalidImportFile, "note must have a title, content, or items")
 	}
 	return []keepNote{kn}, nil
 }

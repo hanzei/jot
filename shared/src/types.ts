@@ -544,6 +544,13 @@ export type ApiErrorCode =
   | 'cannot_delete_self'
   | 'sso_identity_linked'
   | 'would_strand_account'
+  | 'label_name_too_long'
+  | 'item_limit_reached'
+  | 'image_limit_reached'
+  | 'pat_limit_reached'
+  | 'unsupported_image_type'
+  | 'invalid_image'
+  | 'invalid_import_file'
   | 'sso_link_unavailable'
   | 'sso_unlink_unavailable';
 

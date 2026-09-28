@@ -187,8 +187,8 @@ describe('ImportModal', () => {
   });
 
   describe('error handling', () => {
-    it('shows an error message when importNotes rejects with a server error', async () => {
-      const axiosError = Object.assign(new Error('Request failed'), createApiError(400, 'validation_failed', 'invalid JSON file'));
+    it('shows an error message when importNotes rejects with a coded server error, translated', async () => {
+      const axiosError = Object.assign(new Error('Request failed'), createApiError(400, 'invalid_import_file', 'invalid JSON file'));
       mockImportNotes.mockRejectedValue(axiosError);
       const user = userEvent.setup();
       render(<ImportModal {...defaultProps} />);
@@ -198,7 +198,7 @@ describe('ImportModal', () => {
       await user.click(screen.getByRole('button', { name: /import/i }));
 
       await waitFor(() => {
-        expect(screen.getByText(/invalid JSON file/i)).toBeInTheDocument();
+        expect(screen.getByText(/could not be read as an export of the selected type/i)).toBeInTheDocument();
       });
     });
 

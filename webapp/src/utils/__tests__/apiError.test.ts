@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TFunction } from 'i18next';
+import { VALIDATION } from '@jot/shared';
 import { apiErrorMessage } from '../apiError';
 
 const t = ((key: string) => `t:${key}`) as unknown as TFunction;
@@ -15,6 +16,14 @@ describe('apiErrorMessage', () => {
       .toBe('t:share.cannotShareSelf');
     expect(apiErrorMessage(apiError('label_name_taken', 'label name already exists'), t, 'labels.renameError'))
       .toBe('t:apiErrors.labelNameTaken');
+  });
+
+  it('passes the limit to a limit code\'s translation', () => {
+    const tWithParams = ((key: string, params?: { max?: number }) => `t:${key}:${params?.max ?? ''}`) as unknown as TFunction;
+    expect(apiErrorMessage(apiError('label_name_too_long', 'label name must be 100 characters or fewer'), tWithParams, 'x.fallback'))
+      .toBe(`t:apiErrors.labelNameTooLong:${VALIDATION.LABEL_NAME_MAX_LENGTH}`);
+    expect(apiErrorMessage(apiError('pat_limit_reached', 'maximum number of personal access tokens (50) reached'), tWithParams, 'x.fallback'))
+      .toBe(`t:apiErrors.patLimitReached:${VALIDATION.PAT_MAX_COUNT}`);
   });
 
   it('shows the server message for other codes', () => {

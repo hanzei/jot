@@ -1296,6 +1296,7 @@ func TestUploadProfileIcon(t *testing.T) {
 		corruptData := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00}
 		_, err := user.Client.UploadProfileIcon(t.Context(), "corrupt.png", bytes.NewReader(corruptData))
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+		assert.Equal(t, "invalid_image", client.ErrorCode(err))
 	})
 
 	t.Run("decompression bomb is rejected", func(t *testing.T) {

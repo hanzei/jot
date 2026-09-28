@@ -969,7 +969,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "label name too long",
+                        "description": "label name too long (label_name_too_long)",
                         "schema": {
                             "$ref": "#/definitions/apierr.ErrorResponse"
                         }
@@ -1123,7 +1123,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "label name too long",
+                        "description": "label name too long (label_name_too_long)",
                         "schema": {
                             "$ref": "#/definitions/apierr.ErrorResponse"
                         }
@@ -1380,7 +1380,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "note item cap exceeded or label name too long",
+                        "description": "note item cap exceeded (item_limit_reached) or label name too long (label_name_too_long)",
                         "schema": {
                             "$ref": "#/definitions/apierr.ErrorResponse"
                         }
@@ -1484,7 +1484,7 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "bad request",
+                        "description": "bad request, or not a readable export (invalid_import_file)",
                         "schema": {
                             "$ref": "#/definitions/apierr.ErrorResponse"
                         }
@@ -1860,7 +1860,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "note item cap exceeded",
+                        "description": "note item cap exceeded (item_limit_reached)",
                         "schema": {
                             "$ref": "#/definitions/apierr.ErrorResponse"
                         }
@@ -1989,7 +1989,7 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "bad request",
+                        "description": "bad request, unsupported_image_type, or invalid_image",
                         "schema": {
                             "$ref": "#/definitions/apierr.ErrorResponse"
                         }
@@ -2013,7 +2013,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "note image cap exceeded",
+                        "description": "note image cap exceeded (image_limit_reached)",
                         "schema": {
                             "$ref": "#/definitions/apierr.ErrorResponse"
                         }
@@ -2094,7 +2094,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "note item cap exceeded",
+                        "description": "note item cap exceeded (item_limit_reached)",
                         "schema": {
                             "$ref": "#/definitions/apierr.ErrorResponse"
                         }
@@ -2596,7 +2596,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "label name too long",
+                        "description": "label name too long (label_name_too_long)",
                         "schema": {
                             "$ref": "#/definitions/apierr.ErrorResponse"
                         }
@@ -2998,7 +2998,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "personal access token cap exceeded",
+                        "description": "personal access token cap exceeded (pat_limit_reached)",
                         "schema": {
                             "$ref": "#/definitions/apierr.ErrorResponse"
                         }
@@ -3381,7 +3381,7 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "bad request",
+                        "description": "bad request, unsupported_image_type, or invalid_image",
                         "schema": {
                             "$ref": "#/definitions/apierr.ErrorResponse"
                         }
@@ -3521,6 +3521,13 @@ const docTemplate = `{
                 "cannot_delete_self",
                 "sso_identity_linked",
                 "would_strand_account",
+                "label_name_too_long",
+                "item_limit_reached",
+                "image_limit_reached",
+                "pat_limit_reached",
+                "unsupported_image_type",
+                "invalid_image",
+                "invalid_import_file",
                 "sso_link_unavailable",
                 "sso_unlink_unavailable"
             ],
@@ -3531,15 +3538,21 @@ const docTemplate = `{
                 "CodeCannotShareWithSelf": "400 — a note cannot be shared with its owner.",
                 "CodeConflict": "409 — the request conflicts with current state (duplicate ID, concurrent modification, …).",
                 "CodeForbidden": "403 — authenticated, but not allowed to do this.",
+                "CodeImageLimitReached": "422 — the note would exceed the per-note image cap.",
                 "CodeIncorrectPassword": "403 — the current password given to change a password is wrong.",
                 "CodeInternal": "any 5xx. The message is always masked.",
                 "CodeInvalidCredentials": "401 from login — wrong username or password.",
+                "CodeInvalidImage": "400 — the uploaded file claims an accepted type but does not decode as an image.",
+                "CodeInvalidImportFile": "400 — the import file is not a readable export of the chosen import type.",
+                "CodeItemLimitReached": "422 — the note would exceed the per-note item cap.",
                 "CodeLabelNameTaken": "400 from rename, 409 from a create with a client-supplied ID — the user already has a label with this name.",
+                "CodeLabelNameTooLong": "422 — the label name exceeds the label name length limit.",
                 "CodeLastAdmin": "409 — the change would leave the server without an admin.",
                 "CodeLimitExceeded": "422 — a resource cap or length limit was exceeded.",
                 "CodeLocalLoginDisabled": "403 from register, login, and password change — password login is turned off; use SSO.",
                 "CodeMethodNotAllowed": "405 — the route exists but not for this method.",
                 "CodeNotFound": "404 — the resource or route does not exist (or is not visible to the caller).",
+                "CodePATLimitReached": "422 — the user already holds the maximum number of personal access tokens.",
                 "CodeRateLimited": "429 — too many requests; honor Retry-After.",
                 "CodeRegistrationDisabled": "403 — self-registration is turned off.",
                 "CodeRequestTooLarge": "413 — the request body exceeds the endpoint's limit.",
@@ -3548,6 +3561,7 @@ const docTemplate = `{
                 "CodeSSOUnlinkUnavailable": "403 — password login is turned off, so SSO is the only way to sign in and cannot be disconnected.",
                 "CodeSessionRequired": "403 — the endpoint needs a browser session, and the request authenticated with a personal access token.",
                 "CodeUnauthorized": "401 — missing, invalid, or expired credentials.",
+                "CodeUnsupportedImageType": "400 — the uploaded file is not one of the endpoint's accepted image types.",
                 "CodeUsernameTaken": "409 — another account already has this username.",
                 "CodeValidationFailed": "400 — malformed or invalid request input.",
                 "CodeWouldStrandAccount": "422 — unlinking SSO would leave the account with no way to sign in."
@@ -3577,6 +3591,13 @@ const docTemplate = `{
                 "403 — admins cannot delete their own account.",
                 "409 — the SSO identity belongs to another account.",
                 "422 — unlinking SSO would leave the account with no way to sign in.",
+                "422 — the label name exceeds the label name length limit.",
+                "422 — the note would exceed the per-note item cap.",
+                "422 — the note would exceed the per-note image cap.",
+                "422 — the user already holds the maximum number of personal access tokens.",
+                "400 — the uploaded file is not one of the endpoint's accepted image types.",
+                "400 — the uploaded file claims an accepted type but does not decode as an image.",
+                "400 — the import file is not a readable export of the chosen import type.",
                 "403 — password login is turned off, so there is no local account to link SSO to.",
                 "403 — password login is turned off, so SSO is the only way to sign in and cannot be disconnected."
             ],
@@ -3605,6 +3626,13 @@ const docTemplate = `{
                 "CodeCannotDeleteSelf",
                 "CodeSSOIdentityLinked",
                 "CodeWouldStrandAccount",
+                "CodeLabelNameTooLong",
+                "CodeItemLimitReached",
+                "CodeImageLimitReached",
+                "CodePATLimitReached",
+                "CodeUnsupportedImageType",
+                "CodeInvalidImage",
+                "CodeInvalidImportFile",
                 "CodeSSOLinkUnavailable",
                 "CodeSSOUnlinkUnavailable"
             ]
