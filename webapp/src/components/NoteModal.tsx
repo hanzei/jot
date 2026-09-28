@@ -16,7 +16,7 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
 import { useNoteImages } from '@/hooks/useNoteImages';
 import { useCompletedItems } from '@/hooks/useCompletedItems';
-import { useNoteDraft, NoteConflictError, type AutoSaveDraft } from '@/hooks/useNoteDraft';
+import { useNoteDraft, type AutoSaveDraft } from '@/hooks/useNoteDraft';
 import { useSizeTransition } from '@/hooks/useSizeTransition';
 import { applyTextareaEdit } from '@/utils/textareaEdit';
 import { getCaretLine, getOffsetAtLine } from '@/utils/textareaCaret';
@@ -79,6 +79,10 @@ const OVERFLOW_ITEM_BASE = 'flex items-center w-full px-4 py-2 text-sm data-[foc
 const OVERFLOW_ITEM = `${OVERFLOW_ITEM_BASE} text-gray-700 dark:text-gray-200`;
 const OVERFLOW_ITEM_SPLIT = `${OVERFLOW_ITEM_BASE} justify-between text-gray-700 dark:text-gray-200`;
 const OVERFLOW_ITEM_DANGER = `${OVERFLOW_ITEM_BASE} justify-between text-red-600 dark:text-red-400`;
+
+// The conflict banner's two actions. Amber-on-amber in both themes, so the
+// banner reads the same whatever the note colour behind it.
+const CONFLICT_BUTTON_CLASS = 'rounded-md border border-amber-800 px-2.5 py-1 font-medium text-amber-950 hover:bg-amber-100 disabled:opacity-60 dark:border-amber-200 dark:text-amber-50 dark:hover:bg-amber-900';
 
 // Validation functions
 const validateItemText = (text: string, t: TFunction): string | null => {
@@ -204,7 +208,7 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
     showSaved, flashSaved, markDirty,
     conflict, overwriteConflict,
     setSavedBaseline, markScalarSaved, applyDraftScalars, isDirty, hasUnflushedWork, baseline,
-    autoSaveNote, scheduleAutoSave, cancelPendingSave, flushSave,
+    reportSaveFailure, autoSaveNote, scheduleAutoSave, cancelPendingSave, flushSave,
     beginExclusiveSave, endExclusiveSave, isSaving, requestAnotherSavePass,
   } = useNoteDraft({ note, onRefresh, showError });
 
@@ -1422,11 +1426,7 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
       }
       onSave();
     } catch (error) {
-      // A stale write keeps the modal open behind the conflict banner instead.
-      if (!(error instanceof NoteConflictError)) {
-        console.error('Failed to save note:', error);
-        showError(t('note.failedSaveChanges'));
-      }
+      reportSaveFailure('Failed to save note:', error);
     } finally {
       endExclusiveSave();
       setLoading(false);
@@ -1497,11 +1497,7 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
     try {
       await persistExistingNote();
     } catch (error) {
-      // A stale write is already reported by the conflict banner.
-      if (!(error instanceof NoteConflictError)) {
-        console.error('Failed to save note before conversion:', error);
-        showError(t('note.failedSaveChanges'));
-      }
+      reportSaveFailure('Failed to save note before conversion:', error);
       endExclusiveSave();
       setLoading(false);
       setShowConvertConfirm(false);
@@ -1556,11 +1552,7 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
     try {
       await persistExistingNote();
     } catch (error) {
-      // A stale write is already reported by the conflict banner.
-      if (!(error instanceof NoteConflictError)) {
-        console.error('Failed to save note before duplicate:', error);
-        showError(t('note.failedSaveChanges'));
-      }
+      reportSaveFailure('Failed to save note before duplicate:', error);
       endExclusiveSave();
       setLoading(false);
       return;
@@ -1915,7 +1907,6 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
               role="status"
               aria-live="polite"
               className={conflict ? undefined : 'sr-only'}
-              data-testid="note-conflict-region"
             >
               {conflict && (
                 <div
@@ -1930,8 +1921,7 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
                       onClick={handleConflictReload}
                       disabled={conflictBusy}
                       aria-describedby={conflictDescriptionId}
-                      className="rounded-md border border-amber-800 px-2.5 py-1 font-medium text-amber-950 hover:bg-amber-100 disabled:opacity-60 dark:border-amber-200 dark:text-amber-50 dark:hover:bg-amber-900"
-                      data-testid="note-conflict-reload"
+                      className={CONFLICT_BUTTON_CLASS}
                     >
                       {t('note.conflictReload')}
                     </button>
@@ -1940,8 +1930,7 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
                       onClick={handleConflictOverwrite}
                       disabled={conflictBusy}
                       aria-describedby={conflictDescriptionId}
-                      className="rounded-md border border-amber-800 px-2.5 py-1 font-medium text-amber-950 hover:bg-amber-100 disabled:opacity-60 dark:border-amber-200 dark:text-amber-50 dark:hover:bg-amber-900"
-                      data-testid="note-conflict-overwrite"
+                      className={CONFLICT_BUTTON_CLASS}
                     >
                       {t('note.conflictOverwrite')}
                     </button>

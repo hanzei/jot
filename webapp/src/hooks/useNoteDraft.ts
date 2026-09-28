@@ -219,6 +219,16 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
     [isDirty],
   );
 
+  // Reports a failed save as the generic error toast — except a conflict,
+  // which the banner already shows. After the editor has closed there is no
+  // banner, so a conflict hit by a save pass still running then is reported
+  // too rather than dropping the unsaved edits silently.
+  const reportSaveFailure = useCallback((context: string, error: unknown) => {
+    if (error instanceof NoteConflictError && mountedRef.current) return;
+    console.error(context, error);
+    showError(t('note.failedSaveChanges'));
+  }, [showError, t]);
+
   // Persists item changes as the granular create/patch/delete/reorder
   // operations diffItems computes against the baseline. The baseline is
   // advanced incrementally after each successful op so that if a later op fails
@@ -317,17 +327,11 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
         flashSaved();
       } while (pendingSaveRef.current);
     } catch (error) {
-      // A conflict is reported by its own banner, not the generic error —
-      // unless the editor closed mid-save, when there is no banner left and
-      // the unsaved edits would otherwise be dropped silently.
-      if (!(error instanceof NoteConflictError) || !mountedRef.current) {
-        console.error('Failed to auto-save note:', error);
-        showError(t('note.failedSaveChanges'));
-      }
+      reportSaveFailure('Failed to auto-save note:', error);
     } finally {
       savingRef.current = false;
     }
-  }, [cancelPendingSave, flashSaved, flushSave, markDirty, onRefresh, showError, t]);
+  }, [cancelPendingSave, flashSaved, flushSave, markDirty, onRefresh, reportSaveFailure]);
 
   // The banner's Overwrite action: re-reads the note's current version and
   // re-sends the local edits against it, knowingly replacing the other change.
@@ -424,6 +428,7 @@ export function useNoteDraft({ note, onRefresh, showError }: UseNoteDraftOptions
     // Baseline
     setSavedBaseline, markScalarSaved, applyDraftScalars, isDirty, hasUnflushedWork, baseline,
     // Save pipeline
+    reportSaveFailure,
     autoSaveNote, scheduleAutoSave, cancelPendingSave, flushSave,
     beginExclusiveSave, endExclusiveSave, isSaving, requestAnotherSavePass,
   };

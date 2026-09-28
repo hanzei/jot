@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures';
-import { otherDevice, provokeVersionConflict } from '../fixtures/noteConflict';
+import { openNoteInConflict } from '../fixtures/noteConflict';
 
 /**
  * A stale tab must not silently overwrite a newer edit made elsewhere (#489).
@@ -8,15 +8,11 @@ import { otherDevice, provokeVersionConflict } from '../fixtures/noteConflict';
  * banner offers Reload (take theirs) or Overwrite (keep mine).
  */
 test.describe('Note version conflicts', () => {
-  test('Reload discards the local edit and shows the other device\'s copy', async ({ page, request, authenticatedUser, dashboardPage, noteEditorPage, noteConflictBanner }) => {
-    void authenticatedUser;
-    await dashboardPage.goto();
-    await dashboardPage.createTextNote('Original text');
-    const device = await otherDevice(page, request);
-    const note = await device.findTextNote('Original text');
+  const texts = { original: 'Original text', mine: 'Mine', theirs: 'Theirs' };
 
-    await dashboardPage.openTextNote('Original text');
-    await provokeVersionConflict(page, device, note.id, 'Mine', 'Theirs');
+  test('Reload discards the local edit and shows the other device\'s copy', async ({ page, authenticatedUser, dashboardPage, noteEditorPage, noteConflictBanner }) => {
+    void authenticatedUser;
+    const { device, noteId } = await openNoteInConflict({ page, dashboardPage, noteEditorPage }, texts);
 
     await noteConflictBanner.expectVisible();
     // Nothing is lost silently: the rejected edit is still in the editor.
@@ -26,18 +22,12 @@ test.describe('Note version conflicts', () => {
 
     await noteConflictBanner.expectHidden();
     await noteEditorPage.expectContent('Theirs');
-    expect((await device.getNote(note.id)).content).toBe('Theirs');
+    expect((await device.getNote(noteId)).content).toBe('Theirs');
   });
 
-  test('Overwrite re-sends the local edit against the current version', async ({ page, request, authenticatedUser, dashboardPage, noteEditorPage, noteConflictBanner }) => {
+  test('Overwrite re-sends the local edit against the current version', async ({ page, authenticatedUser, dashboardPage, noteEditorPage, noteConflictBanner }) => {
     void authenticatedUser;
-    await dashboardPage.goto();
-    await dashboardPage.createTextNote('Original text');
-    const device = await otherDevice(page, request);
-    const note = await device.findTextNote('Original text');
-
-    await dashboardPage.openTextNote('Original text');
-    await provokeVersionConflict(page, device, note.id, 'Mine', 'Theirs');
+    const { device, noteId } = await openNoteInConflict({ page, dashboardPage, noteEditorPage }, texts);
     await noteConflictBanner.expectVisible();
 
     await noteConflictBanner.overwrite();
@@ -45,6 +35,6 @@ test.describe('Note version conflicts', () => {
     await noteConflictBanner.expectHidden();
     await noteEditorPage.expectContent('Mine');
     // Overwrite resends against the refetched version, so this write lands.
-    await expect.poll(async () => (await device.getNote(note.id)).content).toBe('Mine');
+    await expect.poll(async () => (await device.getNote(noteId)).content).toBe('Mine');
   });
 });

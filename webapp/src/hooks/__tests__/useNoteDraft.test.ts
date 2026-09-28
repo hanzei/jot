@@ -543,6 +543,21 @@ describe('useNoteDraft', () => {
   describe('version conflicts', () => {
     const conflictError = () => Object.assign(new Error('conflict'), { response: { status: 409 } });
 
+    // Adopts a text note at version 1, edits it, and has the autosave rejected
+    // as stale, leaving the hook with the conflict open and 'mine' unsaved.
+    const renderInConflict = async () => {
+      const note = createMockNote({ id: '1', content: 'hello', version: 1 });
+      const rendered = renderDraft({ note });
+      adopt(rendered.result.current, note);
+      vi.mocked(notes.update).mockRejectedValueOnce(conflictError());
+
+      act(() => rendered.result.current.setContent('mine'));
+      await act(async () => {
+        await rendered.result.current.autoSaveNote();
+      });
+      return rendered;
+    };
+
     it('does not version-guard a per-user-only patch, nor adopt the version it echoes', async () => {
       const note = createMockNote({ id: '1', content: 'hello', version: 1 });
       const { result } = renderDraft({ note });
@@ -564,15 +579,7 @@ describe('useNoteDraft', () => {
     });
 
     it('raises the conflict on a 409, keeps the local edit, and reports no generic error', async () => {
-      const note = createMockNote({ id: '1', content: 'hello', version: 1 });
-      const { result, showError } = renderDraft({ note });
-      adopt(result.current, note);
-      vi.mocked(notes.update).mockRejectedValueOnce(conflictError());
-
-      act(() => result.current.setContent('mine'));
-      await act(async () => {
-        await result.current.autoSaveNote();
-      });
+      const { result, showError } = await renderInConflict();
 
       expect(result.current.conflict).toBe(true);
       expect(result.current.content).toBe('mine');
@@ -581,15 +588,7 @@ describe('useNoteDraft', () => {
     });
 
     it('pauses autosave while the conflict is open', async () => {
-      const note = createMockNote({ id: '1', content: 'hello', version: 1 });
-      const { result } = renderDraft({ note });
-      adopt(result.current, note);
-      vi.mocked(notes.update).mockRejectedValueOnce(conflictError());
-
-      act(() => result.current.setContent('mine'));
-      await act(async () => {
-        await result.current.autoSaveNote();
-      });
+      const { result } = await renderInConflict();
       act(() => {
         result.current.setContent('mine, more');
         result.current.scheduleAutoSave();
@@ -604,16 +603,8 @@ describe('useNoteDraft', () => {
     });
 
     it('overwriteConflict re-sends the local edit against the refetched version', async () => {
-      const note = createMockNote({ id: '1', content: 'hello', version: 1 });
-      const { result } = renderDraft({ note });
-      adopt(result.current, note);
-      vi.mocked(notes.update).mockRejectedValueOnce(conflictError());
+      const { result } = await renderInConflict();
       vi.mocked(notes.getById).mockResolvedValue(createMockNote({ id: '1', content: 'theirs', version: 3 }));
-
-      act(() => result.current.setContent('mine'));
-      await act(async () => {
-        await result.current.autoSaveNote();
-      });
       await act(async () => {
         await result.current.overwriteConflict();
       });
@@ -624,15 +615,7 @@ describe('useNoteDraft', () => {
     });
 
     it('adopting a note (Reload) settles the conflict', async () => {
-      const note = createMockNote({ id: '1', content: 'hello', version: 1 });
-      const { result } = renderDraft({ note });
-      adopt(result.current, note);
-      vi.mocked(notes.update).mockRejectedValueOnce(conflictError());
-
-      act(() => result.current.setContent('mine'));
-      await act(async () => {
-        await result.current.autoSaveNote();
-      });
+      const { result } = await renderInConflict();
       adopt(result.current, createMockNote({ id: '1', content: 'theirs', version: 3 }));
 
       expect(result.current.conflict).toBe(false);

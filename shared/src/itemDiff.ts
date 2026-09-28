@@ -57,7 +57,7 @@ export const createItemRequest = (item: ListItem): CreateNoteItemRequest => ({
 });
 
 /** The fields of `item` that differ from `snap`, as a partial item PATCH. */
-export const itemPatch = (snap: ItemSnapshot, item: ListItem): PatchNoteItemRequest => {
+const itemPatch = (snap: ItemSnapshot, item: ListItem): PatchNoteItemRequest => {
   const patch: PatchNoteItemRequest = {};
   if (item.text !== snap.text) patch.text = item.text;
   if (item.completed !== snap.completed) patch.completed = item.completed;
@@ -115,14 +115,21 @@ export function diffItems(
 /**
  * True when the items differ from the baseline in any way a save would send —
  * or in order alone, which also covers an emptied list whose deletes the
- * baseline has already absorbed.
+ * baseline has already absorbed. Same answer as `diffItems(...).length > 0`
+ * (plus the order check), without building the operations.
  */
 export const itemsDiffer = (
   savedItems: ReadonlyMap<string, ItemSnapshot>,
   savedOrder: readonly string[],
   items: readonly ListItem[],
 ): boolean =>
-  orderChanged(savedOrder, items.map(it => it.id)) || diffItems(savedItems, savedOrder, items).length > 0;
+  orderChanged(savedOrder, items.map(it => it.id))
+  || savedItems.size !== items.length
+  || items.some(it => {
+    const snap = savedItems.get(it.id);
+    return !snap || snap.text !== it.text || snap.completed !== it.completed
+      || snap.parentId !== it.parentId || snap.assigned_to !== it.assigned_to;
+  });
 
 /**
  * The scalar (non-item) fields of a note as an editor holds them. A text note

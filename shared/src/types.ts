@@ -211,12 +211,10 @@ export interface CreateNoteItemRequest {
    */
   indent_level?: number;
   /**
-   * Nests the new item under a top-level item (granular create only). The
-   * server field is a plain string where empty means top-level, so send `''`
-   * (as `createItemRequest` in `itemDiff.ts` does); `null` only works because
-   * Go's JSON decoder leaves a string field empty for it.
+   * Nests the new item under a top-level item (granular create only); `''`
+   * means top-level, matching the server's plain-string field.
    */
-  parent_id?: string | null;
+  parent_id?: string;
   assigned_to?: string | undefined;
 }
 

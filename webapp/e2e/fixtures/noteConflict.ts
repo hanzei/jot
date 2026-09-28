@@ -1,5 +1,7 @@
-import type { APIRequestContext, Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import { expect } from '@playwright/test';
+import type { DashboardPage } from '../pages/DashboardPage';
+import type { NoteEditorPage } from '../pages/NoteEditorPage';
 
 interface ApiNote {
   id: string;
@@ -8,18 +10,13 @@ interface ApiNote {
 }
 
 /**
- * Talks to the API as the page's logged-in user from a separate request
- * context — standing in for the same user's other device.
+ * The same user's other device: API calls outside the tab's own requests
+ * (page.request shares the logged-in session, but not the page's routes).
  */
-export async function otherDevice(page: Page, request: APIRequestContext) {
-  const cookies = await page.context().cookies();
-  const session = cookies.find(cookie => cookie.name === 'jot_session');
-  expect(session, 'session cookie must exist').toBeDefined();
-  const headers = { Cookie: `jot_session=${session!.value}` };
-
+export function otherDevice(page: Page) {
   return {
     async findTextNote(content: string): Promise<ApiNote> {
-      const response = await request.get('/api/v1/notes', { headers });
+      const response = await page.request.get('/api/v1/notes');
       expect(response.ok()).toBeTruthy();
       const notes = (await response.json()) as ApiNote[];
       const note = notes.find(candidate => candidate.content === content);
@@ -27,39 +24,43 @@ export async function otherDevice(page: Page, request: APIRequestContext) {
       return note!;
     },
     async getNote(id: string): Promise<ApiNote> {
-      const response = await request.get(`/api/v1/notes/${id}`, { headers });
+      const response = await page.request.get(`/api/v1/notes/${id}`);
       expect(response.ok()).toBeTruthy();
       return (await response.json()) as ApiNote;
     },
     async setContent(id: string, content: string) {
-      const response = await request.patch(`/api/v1/notes/${id}`, { headers, data: { content } });
+      const response = await page.request.patch(`/api/v1/notes/${id}`, { data: { content } });
       expect(response.ok()).toBeTruthy();
     },
   };
 }
 
 /**
- * Types `localText` into the open note's editor and, while that autosave is
- * held in flight, changes the note to `remoteText` from another device. The
- * held save then goes out based on the version the tab loaded and is rejected
- * as stale.
+ * Creates a text note, opens it, types `mine` into the editor and, while that
+ * autosave is held in flight, changes the note to `theirs` from another device.
+ * The held save then goes out based on the version the tab loaded and is
+ * rejected as stale, which raises the conflict banner.
  *
  * Holding the request (rather than racing the debounce) is what makes this
  * deterministic: the other device's write is guaranteed to land between the
  * tab reading its version and its save reaching the server.
  */
-export async function provokeVersionConflict(
-  page: Page,
-  device: Awaited<ReturnType<typeof otherDevice>>,
-  noteId: string,
-  localText: string,
-  remoteText: string,
+export async function openNoteInConflict(
+  { page, dashboardPage, noteEditorPage }: { page: Page; dashboardPage: DashboardPage; noteEditorPage: NoteEditorPage },
+  { original, mine, theirs }: { original: string; mine: string; theirs: string },
 ) {
+  await dashboardPage.goto();
+  await dashboardPage.createTextNote(original);
+  const device = otherDevice(page);
+  const note = await device.findTextNote(original);
+  await dashboardPage.openTextNote(original);
+
+  const notePath = `**/api/v1/notes/${note.id}`;
   let release!: () => void;
   const released = new Promise<void>(resolve => { release = resolve; });
   let held = false;
   const patchHeld = new Promise<void>(resolve => {
-    void page.route(`**/api/v1/notes/${noteId}`, async route => {
+    void page.route(notePath, async route => {
       if (route.request().method() !== 'PATCH' || held) {
         await route.fallback();
         return;
@@ -71,14 +72,16 @@ export async function provokeVersionConflict(
     });
   });
 
-  await page.getByTestId('note-content-preview').click();
-  await page.getByRole('dialog').locator('textarea').fill(localText);
+  await noteEditorPage.preview().click();
+  await noteEditorPage.setContent(mine);
   await patchHeld;
 
-  await device.setContent(noteId, remoteText);
+  await device.setContent(note.id, theirs);
   const rejected = page.waitForResponse(response =>
-    response.url().endsWith(`/api/v1/notes/${noteId}`) && response.request().method() === 'PATCH');
+    response.url().endsWith(`/api/v1/notes/${note.id}`) && response.request().method() === 'PATCH');
   release();
   expect((await rejected).status()).toBe(409);
-  await page.unroute(`**/api/v1/notes/${noteId}`);
+  await page.unroute(notePath);
+
+  return { device, noteId: note.id };
 }

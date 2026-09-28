@@ -8,21 +8,8 @@ import { expect } from '@playwright/test';
 export class NoteConflictBanner {
   constructor(private page: Page) {}
 
-  /** The always-mounted live region the banner renders into. */
-  region(): Locator {
-    return this.page.getByTestId('note-conflict-region');
-  }
-
   banner(): Locator {
     return this.page.getByTestId('note-conflict-banner');
-  }
-
-  reloadButton(): Locator {
-    return this.banner().getByRole('button', { name: 'Reload' });
-  }
-
-  overwriteButton(): Locator {
-    return this.banner().getByRole('button', { name: 'Overwrite' });
   }
 
   async expectVisible() {
@@ -35,10 +22,10 @@ export class NoteConflictBanner {
   }
 
   async reload() {
-    await this.reloadButton().click();
+    await this.banner().getByRole('button', { name: 'Reload' }).click();
   }
 
   async overwrite() {
-    await this.overwriteButton().click();
+    await this.banner().getByRole('button', { name: 'Overwrite' }).click();
   }
 }

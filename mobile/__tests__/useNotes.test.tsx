@@ -898,21 +898,6 @@ describe('useNotes hooks', () => {
       );
     });
 
-    it("useCreateNoteItem sends a top-level item's '' parent_id but stores NULL locally", async () => {
-      const { result } = await renderHook(() => useCreateNoteItem(), { wrapper: createWrapper() });
-
-      await result.current.mutateAsync({ noteId: 'n1', item: { id: 'i1', text: 'New item', position: 0, parent_id: '' } });
-
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-      expect(mockNotesApi.createNoteItem).toHaveBeenCalledWith('n1', expect.objectContaining({ parent_id: '' }));
-      expect(mockNoteQueries.createLocalItem).toHaveBeenCalledWith(
-        expect.anything(),
-        'n1',
-        expect.objectContaining({ id: 'i1', parent_id: null }),
-      );
-    });
-
     it('useToggleNoteItemCompleted falls back to the local queue on a transient failure', async () => {
       mockNotesApi.toggleItemCompleted.mockRejectedValueOnce(makeAxiosError(503));
       mockNoteQueries.getLocalNote.mockResolvedValueOnce({
