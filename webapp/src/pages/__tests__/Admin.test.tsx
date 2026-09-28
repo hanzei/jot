@@ -468,14 +468,15 @@ describe('Admin', () => {
       renderAdmin();
 
       await waitFor(() => {
-        expect(screen.getByText('regularuser')).toBeInTheDocument();
+        expect(screen.getByText('otheradmin')).toBeInTheDocument();
       });
 
-      const userRow = screen.getByText('regularuser').closest('li')!;
-      const toggleButton = within(userRow).getByRole('button', { name: /Make Admin/i });
+      const userRow = screen.getByText('otheradmin').closest('li')!;
+      const toggleButton = within(userRow).getByRole('button', { name: /Remove Admin/i });
       await user.click(toggleButton);
 
       await waitFor(() => {
+        expect(admin.updateUserRole).toHaveBeenCalledWith('user3', { role: 'user' });
         expect(screen.getByRole('alert')).toHaveTextContent('The last admin cannot be demoted or deleted.');
       });
     });

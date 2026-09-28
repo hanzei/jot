@@ -718,7 +718,8 @@ const docTemplate = `{
         "/images/{id}": {
             "get": {
                 "produces": [
-                    "image/*"
+                    "image/*",
+                    "application/json"
                 ],
                 "tags": [
                     "notes"
@@ -824,7 +825,8 @@ const docTemplate = `{
         "/images/{id}/thumbnail": {
             "get": {
                 "produces": [
-                    "image/jpeg"
+                    "image/jpeg",
+                    "application/json"
                 ],
                 "tags": [
                     "notes"
@@ -3441,7 +3443,8 @@ const docTemplate = `{
         "/users/{id}/profile-icon": {
             "get": {
                 "produces": [
-                    "image/jpeg"
+                    "image/jpeg",
+                    "application/json"
                 ],
                 "tags": [
                     "users"

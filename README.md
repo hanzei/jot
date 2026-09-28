@@ -479,7 +479,16 @@ meaning:
   It is not stable, and for a 5xx it is always `internal server error`.
 
 Treat a code your client does not know like the generic code for the
-response's status. `@jot/shared` provides `parseApiError` for TypeScript
+response's status.
+
+A few `/api` responses are not this envelope, so do not assume every error body
+has a parseable `error.code`; fall back to the status code when it does not:
+
+- the MCP endpoint (`/api/v1/mcp`), which reports JSON-RPC errors;
+- the Swagger UI under `/api/docs/`;
+- errors `net/http` writes itself, such as `416` on an image range request or
+  `431` for oversized request headers;
+- the OIDC browser callback, which redirects with `?sso_error=` instead. `@jot/shared` provides `parseApiError` for TypeScript
 clients, and the Go client exposes the code as `client.Error.Code`.
 
 ## MCP server

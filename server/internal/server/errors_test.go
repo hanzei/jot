@@ -85,6 +85,28 @@ func TestRecoverer(t *testing.T) {
 		assert.Empty(t, rec.Body.String())
 	})
 
+	t.Run("panic after the response started aborts instead of appending an envelope", func(t *testing.T) {
+		partial := recoverer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("partial"))
+			panic("boom")
+		}))
+		rec := httptest.NewRecorder()
+		assert.PanicsWithValue(t, http.ErrAbortHandler, func() {
+			partial.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/images/x", nil))
+		})
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Equal(t, "partial", rec.Body.String())
+	})
+
+	t.Run("wrapped writer still supports flushing", func(t *testing.T) {
+		var flushable bool
+		h := recoverer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, flushable = w.(http.Flusher)
+		}))
+		h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/events", nil))
+		assert.True(t, flushable)
+	})
+
 	t.Run("ErrAbortHandler propagates", func(t *testing.T) {
 		aborting := recoverer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 			panic(http.ErrAbortHandler)

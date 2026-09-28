@@ -230,7 +230,7 @@ func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (
 //	@Summary	Download a note image
 //	@Tags		notes
 //	@Security	CookieAuth
-//	@Produce	image/*
+//	@Produce	image/*,json
 //	@Param		id	path		string					true	"Image ID"
 //	@Success	200	{file}		binary					"Image bytes"
 //	@Failure	400	{object}	apierr.ErrorResponse	"bad request"
@@ -286,7 +286,7 @@ func (h *NotesHandler) GetNoteImage(w http.ResponseWriter, r *http.Request) (int
 //	@Summary	Download a note image's thumbnail
 //	@Tags		notes
 //	@Security	CookieAuth
-//	@Produce	image/jpeg
+//	@Produce	image/jpeg,json
 //	@Param		id	path		string					true	"Image ID"
 //	@Success	200	{file}		binary					"Thumbnail JPEG bytes"
 //	@Failure	400	{object}	apierr.ErrorResponse	"bad request"

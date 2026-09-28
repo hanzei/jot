@@ -724,7 +724,7 @@ func (h *AuthHandler) publishProfileIconEvent(ctx context.Context, user *models.
 //	@Summary	Get a user's profile icon
 //	@Tags		users
 //	@Security	CookieAuth
-//	@Produce	image/jpeg
+//	@Produce	image/jpeg,json
 //	@Param		id	path		string					true	"User ID"
 //	@Success	200	{file}		binary					"JPEG image"
 //	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"

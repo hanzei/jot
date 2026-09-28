@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/hanzei/jot/server/internal/apierr"
 	"github.com/hanzei/jot/server/internal/logutil"
 )
@@ -69,18 +70,20 @@ func apiMethodNotAllowed(w http.ResponseWriter, r *http.Request) {
 
 // recoverer turns a handler panic into a 500 (the JSON envelope under /api)
 // and logs it with its stack, in place of chi's middleware.Recoverer, whose
-// response has no body and whose log bypasses logrus.
+// response has no body and whose log bypasses logrus. chi's wrapper tracks
+// whether the response has started while keeping Flush, Hijack, and ReadFrom.
 func recoverer(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer recoverPanic(w, r)
-		next.ServeHTTP(w, r)
+		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+		defer recoverPanic(ww, r)
+		next.ServeHTTP(ww, r)
 	})
 }
 
 // recoverPanic is recoverer's deferred call; recover() only stops a panic
 // when called directly by the deferred function, so it must stay a function
 // of its own rather than a helper called from a closure.
-func recoverPanic(w http.ResponseWriter, r *http.Request) {
+func recoverPanic(w middleware.WrapResponseWriter, r *http.Request) {
 	rvr := recover()
 	if rvr == nil {
 		return
@@ -95,6 +98,13 @@ func recoverPanic(w http.ResponseWriter, r *http.Request) {
 		Error("Panic while serving request")
 	if r.Header.Get("Connection") == "Upgrade" {
 		return
+	}
+	if w.Status() != 0 {
+		// The status line (and maybe part of the body, e.g. an SSE stream or
+		// an image) is already out, so a 500 can no longer be sent. Abort the
+		// connection instead, so the client sees a failure rather than a
+		// truncated 200 with an error body appended.
+		panic(http.ErrAbortHandler)
 	}
 	if isAPIPath(r.URL.Path) {
 		apierr.Write(w, r, http.StatusInternalServerError, apierr.CodeInternal, apierr.InternalMessage)
