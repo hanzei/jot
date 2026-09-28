@@ -1,5 +1,7 @@
 # Jot - Self-hosted note-taking
 
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/12261/badge)](https://www.bestpractices.dev/projects/12261)
+
 Jot is a self-hosted note-taking app with a Go API, a React web app, and a
 React Native mobile app. A single Go binary can serve both the API and the
 compiled web app, while SQLite keeps the default deployment small and portable.
