@@ -210,8 +210,11 @@ export interface CreateNoteItemRequest {
    * endpoint ignores this and uses `parent_id` instead.
    */
   indent_level?: number;
-  /** Nests the new item under a top-level item (granular create only). */
-  parent_id?: string | null;
+  /**
+   * Nests the new item under a top-level item (granular create only); `''`
+   * means top-level, matching the server's plain-string field.
+   */
+  parent_id?: string;
   assigned_to?: string | undefined;
 }
 

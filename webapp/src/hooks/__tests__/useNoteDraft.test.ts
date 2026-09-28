@@ -13,6 +13,7 @@ vi.mock('@/utils/api', async () => {
     notes: {
       ...actual.notes,
       update: vi.fn(),
+      getById: vi.fn(),
       createItem: vi.fn(),
       updateItem: vi.fn(),
       deleteItem: vi.fn(),
@@ -54,7 +55,7 @@ const adopt = (draft: Draft, note: Note, listItems: ListItem[] = []) => {
       draft.commitItems([]);
       scalars = { title: '', content: note.content, pinned: note.pinned, archived: note.archived, color: note.color, checked_items_collapsed: false };
     }
-    draft.setSavedBaseline(scalars, items);
+    draft.setSavedBaseline(scalars, items, note.version);
   });
 };
 
@@ -70,7 +71,9 @@ describe('useNoteDraft', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
-    vi.mocked(notes.update).mockResolvedValue({} as Note);
+    // The server echoes the note with its version bumped by a content write.
+    vi.mocked(notes.update).mockImplementation((_id, data) =>
+      Promise.resolve({ version: (data.base_version ?? 0) + 1 } as Note));
     vi.mocked(notes.createItem).mockImplementation((_noteId, data) => Promise.resolve({ ...data } as never));
     vi.mocked(notes.updateItem).mockImplementation((_noteId, itemId, data) => Promise.resolve({ id: itemId, ...data } as never));
     vi.mocked(notes.deleteItem).mockResolvedValue(undefined);
@@ -136,7 +139,7 @@ describe('useNoteDraft', () => {
         await result.current.autoSaveNote();
       });
 
-      expect(notes.update).toHaveBeenCalledWith('1', { content: 'changed' });
+      expect(notes.update).toHaveBeenCalledWith('1', { content: 'changed', base_version: 1 });
     });
 
     it('does not autosave when the note has no id (brand-new note)', async () => {
@@ -160,7 +163,7 @@ describe('useNoteDraft', () => {
         await result.current.autoSaveNote();
       });
 
-      expect(notes.update).toHaveBeenCalledWith('1', { title: 'New title' });
+      expect(notes.update).toHaveBeenCalledWith('1', { title: 'New title', base_version: 1 });
     });
 
     it('debounces rapid scheduleAutoSave calls into a single save of the latest value', async () => {
@@ -186,7 +189,7 @@ describe('useNoteDraft', () => {
       });
 
       expect(notes.update).toHaveBeenCalledTimes(1);
-      expect(notes.update).toHaveBeenCalledWith('1', { content: 'abc' });
+      expect(notes.update).toHaveBeenCalledWith('1', { content: 'abc', base_version: 1 });
     });
 
     it('an immediate autoSaveNote cancels a pending debounced save', async () => {
@@ -210,7 +213,7 @@ describe('useNoteDraft', () => {
       // Both changes land in the one immediate save; the debounce never fires
       // a second, duplicate request.
       expect(notes.update).toHaveBeenCalledTimes(1);
-      expect(notes.update).toHaveBeenCalledWith('1', { content: 'debounced', color: '#ff0000' });
+      expect(notes.update).toHaveBeenCalledWith('1', { content: 'debounced', color: '#ff0000', base_version: 1 });
     });
 
     it('flashes the saved indicator after a successful save and clears it after markDirty', async () => {
@@ -376,13 +379,14 @@ describe('useNoteDraft', () => {
 
       // Resolve the first request; the queued second pass should then run.
       await act(async () => {
-        resolveUpdate({} as Note);
+        resolveUpdate({ version: 2 } as Note);
         await savePromise;
       });
 
+      // The second pass is based on the version the first one produced.
       expect(notes.update).toHaveBeenCalledTimes(2);
-      expect(notes.update).toHaveBeenNthCalledWith(1, '1', { content: 'first' });
-      expect(notes.update).toHaveBeenNthCalledWith(2, '1', { content: 'second' });
+      expect(notes.update).toHaveBeenNthCalledWith(1, '1', { content: 'first', base_version: 1 });
+      expect(notes.update).toHaveBeenNthCalledWith(2, '1', { content: 'second', base_version: 2 });
     });
 
     it('requestAnotherSavePass asks a running save loop for one more pass', async () => {
@@ -401,7 +405,7 @@ describe('useNoteDraft', () => {
       act(() => result.current.requestAnotherSavePass());
 
       await act(async () => {
-        resolveUpdate({} as Note);
+        resolveUpdate({ version: 2 } as Note);
         await savePromise;
       });
 
@@ -534,6 +538,108 @@ describe('useNoteDraft', () => {
       // to delete for it — it was already removed from the local model).
       expect(notes.updateItem).not.toHaveBeenCalled();
       expect(notes.deleteItem).not.toHaveBeenCalled();
+    });
+  });
+  describe('version conflicts', () => {
+    const conflictError = () => Object.assign(new Error('conflict'), { response: { status: 409 } });
+
+    // Adopts a text note at version 1, edits it, and has the autosave rejected
+    // as stale, leaving the hook with the conflict open and 'mine' unsaved.
+    const renderInConflict = async () => {
+      const note = createMockNote({ id: '1', content: 'hello', version: 1 });
+      const rendered = renderDraft({ note });
+      adopt(rendered.result.current, note);
+      vi.mocked(notes.update).mockRejectedValueOnce(conflictError());
+
+      act(() => rendered.result.current.setContent('mine'));
+      await act(async () => {
+        await rendered.result.current.autoSaveNote();
+      });
+      return rendered;
+    };
+
+    it('does not version-guard a per-user-only patch, nor adopt the version it echoes', async () => {
+      const note = createMockNote({ id: '1', content: 'hello', version: 1 });
+      const { result } = renderDraft({ note });
+      adopt(result.current, note);
+      // The server is at version 5 because of an edit this tab never saw.
+      vi.mocked(notes.update).mockResolvedValueOnce({ version: 5 } as Note);
+
+      act(() => result.current.setColor('#ff0000'));
+      await act(async () => {
+        await result.current.autoSaveNote();
+      });
+      act(() => result.current.setContent('mine'));
+      await act(async () => {
+        await result.current.autoSaveNote();
+      });
+
+      expect(notes.update).toHaveBeenNthCalledWith(1, '1', { color: '#ff0000' });
+      expect(notes.update).toHaveBeenNthCalledWith(2, '1', { content: 'mine', base_version: 1 });
+    });
+
+    it('raises the conflict on a 409, keeps the local edit, and reports no generic error', async () => {
+      const { result, showError } = await renderInConflict();
+
+      expect(result.current.conflict).toBe(true);
+      expect(result.current.content).toBe('mine');
+      expect(result.current.isDirty()).toBe(true);
+      expect(showError).not.toHaveBeenCalled();
+    });
+
+    it('pauses autosave while the conflict is open', async () => {
+      const { result } = await renderInConflict();
+      act(() => {
+        result.current.setContent('mine, more');
+        result.current.scheduleAutoSave();
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(VALIDATION.AUTO_SAVE_TIMEOUT_MS);
+      });
+
+      expect(notes.update).toHaveBeenCalledTimes(1);
+      await expect(result.current.flushSave()).rejects.toThrow();
+      expect(notes.update).toHaveBeenCalledTimes(1);
+    });
+
+    it('overwriteConflict re-sends the local edit against the refetched version', async () => {
+      const { result } = await renderInConflict();
+      vi.mocked(notes.getById).mockResolvedValue(createMockNote({ id: '1', content: 'theirs', version: 3 }));
+      await act(async () => {
+        await result.current.overwriteConflict();
+      });
+
+      expect(notes.update).toHaveBeenLastCalledWith('1', { content: 'mine', base_version: 3 });
+      expect(result.current.conflict).toBe(false);
+      expect(result.current.isDirty()).toBe(false);
+    });
+
+    it('adopting a note (Reload) settles the conflict', async () => {
+      const { result } = await renderInConflict();
+      adopt(result.current, createMockNote({ id: '1', content: 'theirs', version: 3 }));
+
+      expect(result.current.conflict).toBe(false);
+      expect(result.current.content).toBe('theirs');
+      act(() => result.current.setContent('theirs, edited'));
+      await act(async () => {
+        await result.current.autoSaveNote();
+      });
+      expect(notes.update).toHaveBeenLastCalledWith('1', { content: 'theirs, edited', base_version: 3 });
+    });
+
+    it('treats a 409 on a per-user-only patch as an ordinary failure', async () => {
+      const note = createMockNote({ id: '1', content: 'hello', version: 1 });
+      const { result, showError } = renderDraft({ note });
+      adopt(result.current, note);
+      vi.mocked(notes.update).mockRejectedValueOnce(conflictError());
+
+      act(() => result.current.setPinned(true));
+      await act(async () => {
+        await result.current.autoSaveNote();
+      });
+
+      expect(result.current.conflict).toBe(false);
+      expect(showError).toHaveBeenCalled();
     });
   });
 });

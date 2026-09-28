@@ -946,7 +946,9 @@ export async function createLocalItem(db: SQLiteDatabase, noteId: string, item: 
          assigned_to = excluded.assigned_to,
          created_at = excluded.created_at,
          updated_at = excluded.updated_at`,
-      [item.id, noteId, item.text, item.completed ? 1 : 0, item.position, item.parent_id ?? null, item.assigned_to ?? '', now, now],
+      // '' is the wire format's top-level (see CreateNoteItemRequest); the
+      // column stores NULL, as patchLocalItem does.
+      [item.id, noteId, item.text, item.completed ? 1 : 0, item.position, item.parent_id || null, item.assigned_to ?? '', now, now],
     );
     await touchLocalNote(db, noteId);
   });
