@@ -6,6 +6,7 @@ import (
 	"runtime/debug"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/apierr"
 	"github.com/hanzei/jot/server/internal/logutil"
 )
@@ -26,9 +27,39 @@ func apiNotFound(w http.ResponseWriter, r *http.Request) {
 	apierr.Write(w, r, http.StatusNotFound, apierr.CodeNotFound, "route not found")
 }
 
+// routableMethods are the methods probed to build a 405's Allow header.
+var routableMethods = []string{
+	http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut,
+	http.MethodPatch, http.MethodDelete, http.MethodOptions,
+}
+
+// allowedMethods lists the methods the router serves for r's path. chi only
+// sets the Allow header in its own default 405 handler, which a custom
+// MethodNotAllowed handler replaces, so it is rebuilt here.
+func allowedMethods(r *http.Request) string {
+	rctx := chi.RouteContext(r.Context())
+	if rctx == nil || rctx.Routes == nil {
+		return ""
+	}
+	path := r.URL.RawPath
+	if path == "" {
+		path = r.URL.Path
+	}
+	var allowed []string
+	for _, method := range routableMethods {
+		if rctx.Routes.Match(chi.NewRouteContext(), method, path) {
+			allowed = append(allowed, method)
+		}
+	}
+	return strings.Join(allowed, ", ")
+}
+
 // apiMethodNotAllowed answers a known route requested with a method it does
 // not serve.
 func apiMethodNotAllowed(w http.ResponseWriter, r *http.Request) {
+	if allow := allowedMethods(r); allow != "" {
+		w.Header().Set("Allow", allow)
+	}
 	if !isAPIPath(r.URL.Path) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return

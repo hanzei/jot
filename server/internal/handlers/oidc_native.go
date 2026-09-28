@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/hanzei/jot/server/internal/apierr"
 	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/oidc"
@@ -59,7 +58,7 @@ func (h *OIDCHandler) NativeStart(w http.ResponseWriter, r *http.Request) (int, 
 	// linking is not offered. Refusing here spares the user an IdP round trip
 	// that NativeLink would reject anyway.
 	if intent == oidcIntentLink && !h.localLoginEnabled {
-		return http.StatusForbidden, nil, apierr.New(apierr.CodeLocalLoginDisabled, "account linking is unavailable when local login is disabled")
+		return http.StatusForbidden, nil, errors.New("account linking is unavailable when local login is disabled")
 	}
 	return h.startFlow(w, r, flowState{Intent: intent, Native: true, CodeChallenge: challenge})
 }
@@ -164,7 +163,7 @@ func (h *OIDCHandler) NativeExchange(w http.ResponseWriter, r *http.Request) (in
 func (h *OIDCHandler) NativeLink(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	// Checked before redeeming so a refused request does not consume the code.
 	if !h.localLoginEnabled {
-		return http.StatusForbidden, nil, apierr.New(apierr.CodeLocalLoginDisabled, "account linking is unavailable when local login is disabled")
+		return http.StatusForbidden, nil, errors.New("account linking is unavailable when local login is disabled")
 	}
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {

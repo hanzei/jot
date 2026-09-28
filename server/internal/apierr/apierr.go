@@ -50,7 +50,7 @@ const (
 	CodeInvalidCredentials   Code = "invalid_credentials"    // 401 from login — wrong username or password.
 	CodeSessionRequired      Code = "session_required"       // 403 — the endpoint needs a browser session, and the request authenticated with a personal access token.
 	CodeRegistrationDisabled Code = "registration_disabled"  // 403 — self-registration is turned off.
-	CodeLocalLoginDisabled   Code = "local_login_disabled"   // 403 — password login (and anything needing a password) is turned off; use SSO.
+	CodeLocalLoginDisabled   Code = "local_login_disabled"   // 403 from register, login, and password change — password login is turned off; use SSO.
 	CodeIncorrectPassword    Code = "incorrect_password"     // 403 — the current password given to change a password is wrong.
 	CodeUsernameTaken        Code = "username_taken"         // 409 — another account already has this username.
 	CodeCannotShareWithSelf  Code = "cannot_share_with_self" // 400 — a note cannot be shared with its owner.

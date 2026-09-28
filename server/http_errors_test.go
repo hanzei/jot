@@ -158,6 +158,7 @@ func TestErrorEnvelope(t *testing.T) {
 	t.Run("405 method not allowed", func(t *testing.T) {
 		status, header, body := rawRequest(t, owner.Client.HTTPClient(), http.MethodDelete, api+"/config", nil, nil)
 		requireEnvelope(t, http.StatusMethodNotAllowed, "method_not_allowed", status, header, body)
+		assert.Equal(t, "GET", header.Get("Allow"))
 	})
 
 	t.Run("non-API paths keep the SPA's responses", func(t *testing.T) {
@@ -168,6 +169,7 @@ func TestErrorEnvelope(t *testing.T) {
 		status, header, _ = rawRequest(t, ts.httpClient, http.MethodPost, ts.HTTPServer.URL+"/some/client/route", nil, nil)
 		assert.Equal(t, http.StatusMethodNotAllowed, status)
 		assert.NotEqual(t, "application/json", header.Get("Content-Type"))
+		assert.Equal(t, "GET", header.Get("Allow"))
 	})
 }
 

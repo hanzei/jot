@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzei/jot/server/internal/apierr"
 	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
@@ -144,7 +143,7 @@ func (h *OIDCHandler) Link(w http.ResponseWriter, r *http.Request) (int, any, er
 	// Linking proves control of the local account by password first; with local
 	// login disabled there is no local side to prove, so linking is not offered.
 	if !h.localLoginEnabled {
-		return http.StatusForbidden, nil, apierr.New(apierr.CodeLocalLoginDisabled, "account linking is unavailable when local login is disabled")
+		return http.StatusForbidden, nil, errors.New("account linking is unavailable when local login is disabled")
 	}
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -408,7 +407,7 @@ func (h *OIDCHandler) Unlink(_ http.ResponseWriter, r *http.Request) (int, any, 
 	// every account's only credential: unlinking would orphan the account (the
 	// next SSO login provisions a fresh one). Checked before touching the store.
 	if !h.localLoginEnabled {
-		return http.StatusForbidden, nil, apierr.New(apierr.CodeLocalLoginDisabled, "unlinking SSO is unavailable when local login is disabled")
+		return http.StatusForbidden, nil, errors.New("unlinking SSO is unavailable when local login is disabled")
 	}
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
