@@ -46,8 +46,8 @@ type SweepReport struct {
 // sweepDirs are the store's two trees: originals and their thumbnails.
 var sweepDirs = [...]string{"blobs", "thumb"}
 
-// Sweep is the safety net behind the synchronous ReclaimIfOrphaned path
-// (docs/specs/file-attachments.md §10). It walks the store and:
+// Sweep is the safety net behind the synchronous ReclaimIfOrphaned path. It
+// runs at startup and then daily, and walks the store and:
 //
 //   - deletes every blob and thumbnail no note_images row references, which
 //     covers a crash between Put and the row commit, and a reclaim that
@@ -56,7 +56,9 @@ var sweepDirs = [...]string{"blobs", "thumb"}
 //   - reports referenced hashes whose original blob is missing, e.g. after
 //     restoring a database and upload directory backed up at different times.
 //
-// Only files whose newest modification time is older than grace are touched,
+// Deletion goes through reclaimIfOrphaned, so a hash pinned by an in-flight
+// upload (ImageStore.Pin) is never deleted. As defense in depth, only files
+// whose newest modification time is older than grace are touched,
 // so an upload whose blob is written but whose row has not committed yet is
 // left alone (Put refreshes the mtime of a blob it dedups against for the
 // same reason). Right before deleting, each candidate's files are re-statted

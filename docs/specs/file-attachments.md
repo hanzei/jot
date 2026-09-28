@@ -366,29 +366,9 @@ images (notes still round-trip; images are re-added afterward):
   if no rows reference that `sha256`, `Blobstore.Delete` the blob (and its
   thumbnail). This is the primary reclamation path and runs synchronously with the
   delete.
-- A lightweight periodic **sweep** (`blobstore.Sweep`, startup + daily) is the
-  safety net for everything the synchronous path misses: a crash between
-  `Blobstore.Put` and the row commit, a crash after a row delete, or a reclaim
-  that failed. It loads every referenced hash in one query, walks `blobs/` and
-  `thumb/`, and reclaims each hash no row references (blob and thumbnail
-  together), re-checking its refcount right before deleting. It also removes
-  temp files an interrupted write left behind.
-  - **In-flight uploads.** An upload pins its hash (`ImageStore.Pin`) from `Put`
-    until its row commits or fails, and every reclaim — the sweep and the
-    synchronous path alike — skips pinned hashes, checking the pin, the
-    refcount and deleting under one lock. This also closes the race between a
-    delete's reclaim and a concurrent upload of the same content. Pins are
-    in-process, so this assumes one server process per upload directory.
-  - **Grace period.** As defense in depth (and for anything a pin cannot see),
-    only files older than one hour are touched, re-statted right before
-    deleting. `Put` refreshes the mtime of a blob it dedups against.
-  - **Empty-database guard.** If no row references any image, the sweep deletes
-    nothing and warns instead: that almost always means Jot was started against
-    the wrong or a fresh database next to a real upload directory.
-  - **Missing blobs.** Referenced hashes whose blob is absent are logged as
-    warnings (capped per run, with a total), since they usually mean the
-    database and upload directory were restored from different points in time.
-    Clients see these as a broken tile.
+- A lightweight periodic **sweep** (startup + daily) deletes on-disk blobs with
+  zero referencing rows, as a safety net for crash-after-row-delete races. A row
+  whose blob is missing is logged and surfaced as a broken tile.
 - Removing an image just deletes its row — no markdown references to clean up.
 
 ---
