@@ -1,5 +1,6 @@
 import type { Page, Locator } from '@playwright/test';
 import { expect } from '@playwright/test';
+import { confirmDialog } from './dialogs';
 
 const escapeForRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -232,17 +233,20 @@ export class DashboardPage {
     await this.page.getByRole('menuitem', { name: 'Restore' }).click();
   }
 
-  async permanentlyDeleteNoteFromBin(title: string) {
+  /** Opens the "Delete forever" confirmation for a binned note without confirming it. */
+  async requestPermanentDeleteFromBin(title: string) {
     await this.openNoteMenu(title);
     await this.page.getByRole('menuitem', { name: 'Delete forever' }).click();
-    const confirmDialog = this.page.getByRole('dialog').last();
-    await confirmDialog.getByRole('button', { name: 'Delete forever' }).click();
+  }
+
+  async permanentlyDeleteNoteFromBin(title: string) {
+    await this.requestPermanentDeleteFromBin(title);
+    await confirmDialog(this.page, 'Delete forever');
   }
 
   async emptyTrash() {
     await this.page.getByRole('button', { name: 'Empty Trash' }).click();
-    const confirmDialog = this.page.getByRole('dialog').last();
-    await confirmDialog.getByRole('button', { name: 'Empty Trash' }).click();
+    await confirmDialog(this.page, 'Empty Trash');
   }
 
   async expectEmptyTrashButtonVisible() {
@@ -309,8 +313,7 @@ export class DashboardPage {
   async convertCurrentNoteToText() {
     await this.openModalOverflowMenu();
     await this.page.getByRole('menuitem', { name: 'Convert to text' }).click();
-    const confirmDialog = this.page.getByRole('dialog').last();
-    await confirmDialog.getByRole('button', { name: 'Convert to text' }).click();
+    await confirmDialog(this.page, 'Convert to text');
   }
 
   /** Unchecks all completed items on the open list via the overflow menu. */
@@ -509,8 +512,7 @@ export class DashboardPage {
     await this.page.getByRole('button', { name: 'Profile menu' }).click();
     await this.page.getByRole('menuitem', { name: 'Logout' }).click();
     // Confirm the logout in the confirmation dialog
-    const confirmDialog = this.page.getByRole('dialog');
-    await confirmDialog.getByRole('button', { name: 'Logout' }).click();
+    await confirmDialog(this.page, 'Logout');
   }
 
   async expectProfileMenuTooltip(expected: string) {
@@ -658,8 +660,7 @@ export class DashboardPage {
     } else {
       await this.page.getByRole('button', { name: 'Delete', exact: true }).last().click();
     }
-    const confirmDialog = this.page.getByRole('dialog').last();
-    await confirmDialog.getByRole('button', { name: 'Delete' }).click();
+    await confirmDialog(this.page, 'Delete');
     await this.expectLabelNotInSidebar(labelName);
   }
 

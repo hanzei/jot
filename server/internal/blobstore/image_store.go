@@ -6,7 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"path/filepath"
+	"strings"
+	"sync"
 )
 
 // ImageStore stores note-image bytes on the filesystem: originals, laid out
@@ -16,7 +19,12 @@ import (
 // rather than their own content (a thumbnail is a resized/recompressed
 // derivative, so it has no hash of its own to be addressed by). Both live
 // under one root (see NewImageStore) — a single directory to configure and
-// back up (docs/specs/file-attachments.md §5).
+// back up.
+//
+// Note images live on the filesystem rather than as database BLOBs (the
+// profile-icon approach) because up to ten full-size images per note would
+// bloat the database and its backups; content addressing also gives dedup for
+// free and keys no caller input can turn into a traversal.
 //
 // Put verifies that the bytes it's given actually hash to the claimed key
 // before committing them — that guarantee is what makes it safe for Put to
@@ -33,6 +41,13 @@ import (
 // both in one call rather than requiring a separate DeleteThumbnail.
 type ImageStore struct {
 	blobStore
+
+	// reclaimMu guards pins and is held across reclaimIfOrphaned's pin
+	// check, refcount query and delete, so a Pin either lands before that
+	// sequence (and the reclaim skips the hash) or after the blob is gone
+	// (and the pinning upload's Put writes it again).
+	reclaimMu sync.Mutex
+	pins      map[string]int // hash -> in-flight uploads holding it
 }
 
 // NewImageStore creates an ImageStore rooted at root, creating the
@@ -42,7 +57,7 @@ func NewImageStore(root string) (*ImageStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ImageStore{blobStore: *bs}, nil
+	return &ImageStore{blobStore: *bs, pins: make(map[string]int)}, nil
 }
 
 // relPath returns the path of sha's original blob relative to the store
@@ -67,9 +82,34 @@ func thumbRelPath(sha string) (string, error) {
 	return filepath.Join("thumb", canon[0:2], canon[2:4], canon+".jpg"), nil
 }
 
+// Pin marks sha as held by an in-flight upload: until the returned release
+// is called, no reclaim (ReclaimIfOrphaned or Sweep) deletes it, even while
+// no committed row references it yet. An upload pins before Put and releases
+// once its row has committed or failed — and must release before its own
+// rollback reclaim, which would otherwise skip the hash it still pins.
+// Pins are in-process only. release is idempotent.
+func (s *ImageStore) Pin(sha string) (release func()) {
+	key := strings.ToLower(sha)
+	s.reclaimMu.Lock()
+	s.pins[key]++
+	s.reclaimMu.Unlock()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			s.reclaimMu.Lock()
+			defer s.reclaimMu.Unlock()
+			if s.pins[key]--; s.pins[key] <= 0 {
+				delete(s.pins, key)
+			}
+		})
+	}
+}
+
 // Put stores the bytes read from r under sha, verifying that they actually
-// hash to sha before committing them. It is a no-op if a blob with that hash
-// already exists.
+// hash to sha before committing them. If a blob with that hash already
+// exists, Put only refreshes its modification time: the caller is about to
+// reference it, and the orphan sweep (Sweep) must not mistake a long-orphaned
+// blob that is being reused for one that is still orphaned.
 func (s *ImageStore) Put(ctx context.Context, sha string, r io.Reader) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -83,7 +123,12 @@ func (s *ImageStore) Put(ctx context.Context, sha string, r io.Reader) error {
 	if ok, err := s.exists(p); err != nil {
 		return err
 	} else if ok {
-		return nil // dedup: a blob with this hash is already stored
+		// dedup: a blob with this hash is already stored. If it vanished
+		// between the check and the touch (a concurrent reclaim), fall
+		// through and write it again rather than hand back a missing blob.
+		if err := s.touch(p); !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
 	}
 
 	return s.writeAtomic(p, r, func(sum [32]byte) error {

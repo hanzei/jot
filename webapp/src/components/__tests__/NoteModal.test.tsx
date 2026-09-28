@@ -843,6 +843,43 @@ describe('NoteModal', () => {
       expect(screen.getByTestId('list-item-input')).toHaveValue('Buy milk');
     });
 
+    it('splits a multi-line paste into a completed item and keeps the new items completed', async () => {
+      renderNoteModal(defaultProps);
+
+      fireEvent.click(screen.getByText('List'));
+      fireEvent.click(screen.getByText('Add item'));
+
+      fireEvent.paste(screen.getByTestId('list-item-input'), {
+        clipboardData: { getData: () => '- [x] done' },
+      });
+      expect(screen.getByText('Completed items (1)')).toBeInTheDocument();
+
+      const input = screen.getByTestId('list-item-input') as HTMLTextAreaElement;
+      input.setSelectionRange(input.value.length, input.value.length);
+      fireEvent.paste(input, {
+        clipboardData: { getData: () => 'one\ntwo' },
+      });
+
+      const values = screen.getAllByTestId('list-item-input').map(el => (el as HTMLTextAreaElement).value);
+      expect(values).toEqual(['doneone', 'two']);
+      expect(screen.getByText('Completed items (2)')).toBeInTheDocument();
+    });
+
+    it('rejects a paste that would exceed the item count cap', async () => {
+      renderNoteModal(defaultProps);
+
+      fireEvent.click(screen.getByText('List'));
+      fireEvent.click(screen.getByText('Add item'));
+
+      const lines = Array.from({ length: VALIDATION.ITEM_MAX_COUNT + 1 }, (_, i) => `line ${i}`).join('\n');
+      fireEvent.paste(screen.getByTestId('list-item-input'), {
+        clipboardData: { getData: () => lines },
+      });
+
+      expect(screen.getByText(`A note cannot have more than ${VALIDATION.ITEM_MAX_COUNT} items`)).toBeInTheDocument();
+      expect(screen.getAllByTestId('list-item-input')).toHaveLength(1);
+    });
+
     it('leaves a plain single-line paste to the browser (no markdown to strip)', async () => {
       renderNoteModal(defaultProps);
 

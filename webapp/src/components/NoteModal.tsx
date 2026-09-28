@@ -3,7 +3,7 @@ import { X, Plus, Trash2, ChevronDown, Archive, ArchiveX, UserPlus, Users, Check
 import { Dialog, DialogBackdrop, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type ConvertedListItem, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, NOTE_COLORS, NOTE_COLOR_NAME_KEYS, DEFAULT_NOTE_COLOR, IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES, buildCollaborators, generateId, textToListNote, checkConvertToListCaps, listToText, parseTextLineAsListItem, splitPasteIntoItems, exceedsCodePointLimit, truncateToCodePoints, clampSelection, continueListOnNewline, cycleHeading, toggleBullet, toggleCheckbox, toggleInlineMarker, type EditorText, type Note, type NoteType, type CreateNoteRequest, type ConvertNoteTypeRequest, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
 import { renderMarkdown, inlineMarkdownToText } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
@@ -970,13 +970,35 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
     }
   };
 
+  // handleItemPaste serves both unchecked and checked rows; `index` is the
+  // combined index findTargetItem resolves. The line splitting, truncation,
+  // group inheritance and item-count cap live in splitPasteIntoItems so the
+  // webapp and mobile editors cannot drift apart.
   const handleItemPaste = (index: number, e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const text = e.clipboardData.getData('text');
-    const rawLines = text.split(/\r\n|\r|\n/);
-    const nonBlankRawLines = rawLines.filter(l => l.trim().length > 0);
 
-    const currentItem = uncompletedItems[index];
+    const currentItem = findTargetItem(index);
     if (!currentItem) return;
+
+    if (!/[\r\n]/.test(text)) {
+      // A true single-line paste — the clipboard text contains no newline at
+      // all. (A payload with only a *trailing* newline, e.g. "Buy milk\n",
+      // still counts as multi-line: letting native paste run there would
+      // insert that raw "\n" into the item's text.) Only intercept it when it
+      // actually carried markdown syntax worth stripping — a plain single-line
+      // paste (by far the common case) is left to the browser's native paste
+      // so undo, IME composition, etc. keep working exactly as they did before.
+      const singleLine = parseTextLineAsListItem(text);
+      if (!singleLine || (singleLine.text === text.trim() && !singleLine.completed)) {
+        return;
+      }
+    }
+
+    // Past this point the paste is always intercepted, even if stripping
+    // collapses it down to one (or zero) usable lines — e.g. a bare "# "
+    // heading line contributes nothing — since letting the browser's native
+    // paste run on a multi-line payload would embed a raw newline in the item.
+    e.preventDefault();
 
     const input = e.currentTarget;
     const selStart = input.selectionStart ?? input.value.length;
@@ -984,134 +1006,39 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
     const before = input.value.slice(0, selStart);
     const after = input.value.slice(selEnd);
 
-    // Stripping each line's markdown list/checkbox marker (`- `, `1. `,
-    // `[ ]`/`[x]`) and reading its completed state reuses the same line
-    // parser the text-note-to-list-note conversion uses, so pasting a
-    // markdown checklist behaves the same as converting one.
-    const parsedLines = rawLines
-      .map(parseTextLineAsListItem)
-      .filter((line): line is ConvertedListItem => line !== null);
-
-    if (rawLines.length === 1) {
-      // A true single-line paste — the clipboard text contains no newline at
-      // all. (A payload with only a *trailing* newline, e.g. "Buy milk\n",
-      // still counts as multi-line below: letting native paste run there
-      // would insert that raw "\n" into the item's text.) Only intercept it
-      // when it actually carried markdown syntax worth stripping — a plain
-      // single-line paste (by far the common case) is left to the browser's
-      // native paste so undo, IME composition, etc. keep working exactly as
-      // they did before.
-      const singleLine = parsedLines[0];
-      const rawLine = nonBlankRawLines[0];
-      if (!singleLine || !rawLine || (singleLine.text === rawLine.trim() && !singleLine.completed)) {
-        return;
-      }
-
-      e.preventDefault();
-      const newText = truncateToCodePoints(before + singleLine.text + after, VALIDATION.ITEM_TEXT_MAX_LENGTH);
-      const validationError = validateItemText(newText, t);
-      if (validationError) {
-        showError(validationError);
-        return;
-      }
-
-      commitItems(itemsRef.current.map(item =>
-        item.id === currentItem.id ? { ...item, text: newText, completed: singleLine.completed } : item
-      ));
-      cancelPendingSave();
-      autoSaveNote();
-
-      const cursorPos = before.length + singleLine.text.length;
-      setTimeout(() => {
-        const el = itemInputRefs.current.get(currentItem.id);
-        if (el) {
-          el.focus();
-          el.setSelectionRange(cursorPos, cursorPos);
-        }
-      }, 0);
-      return;
-    }
-
-    // A genuine multi-line paste: always intercept, even if stripping
-    // collapses it down to one (or zero) usable lines — e.g. a bare "#"
-    // heading line contributes nothing — since letting the browser's native
-    // paste run here would embed a raw newline in the item's text instead.
-    e.preventDefault();
-    if (parsedLines.length === 0) {
-      return;
-    }
-
     const currentItems = itemsRef.current;
-    const insertAfterPos = currentItems.findIndex(item => item.id === currentItem.id);
-
-    const firstLine = parsedLines[0]!;
-    const firstLineText = truncateToCodePoints(before + firstLine.text, VALIDATION.ITEM_TEXT_MAX_LENGTH);
-
-    const remainingLines = parsedLines.slice(1);
-
-    // Pasting many lines is the one path that can add items in bulk, so it is
-    // where the server-side cap is realistically hit. Reject up front instead
-    // of letting the save fail with a 422 after the items are already on screen.
-    // Checked before building newItems so a huge clipboard payload does not
-    // allocate an object and a generated ID per line only to be discarded.
-    if (currentItems.length + remainingLines.length > VALIDATION.ITEM_MAX_COUNT) {
-      showError(t('note.tooManyItems', { max: VALIDATION.ITEM_MAX_COUNT }));
+    const targetIndex = currentItems.findIndex(item => item.id === currentItem.id);
+    const result = splitPasteIntoItems(currentItems, targetIndex, text, { before, after }, generateItemId);
+    if (!result) return;
+    if ('error' in result) {
+      // Pasting many lines is the one path that can add items in bulk, so it
+      // is where the server-side cap is realistically hit. Reject up front
+      // instead of letting the save fail with a 422 after the items are
+      // already on screen.
+      showError(t('note.tooManyItems', { max: result.max }));
       return;
     }
 
-    const newItems: ListItem[] = remainingLines.map((line, i) => {
-      const isLast = i === remainingLines.length - 1;
-      const lineText = isLast ? line.text + after : line.text;
-      return {
-        id: generateItemId(),
-        text: truncateToCodePoints(lineText, VALIDATION.ITEM_TEXT_MAX_LENGTH),
-        completed: line.completed,
-        position: 0,
-        // Pasted lines join the same group as the item they split from.
-        parentId: currentItem.parentId,
-        assigned_to: '',
-      };
-    });
-
-    const allLineTexts = [firstLineText, ...newItems.map(item => item.text)];
-    for (const lineText of allLineTexts) {
-      const validationError = validateItemText(lineText, t);
+    const touchedIds = new Set([currentItem.id, ...result.insertedIds]);
+    for (const item of result.items) {
+      if (!touchedIds.has(item.id)) continue;
+      const validationError = validateItemText(item.text, t);
       if (validationError) {
         showError(validationError);
         return;
       }
     }
 
-    const updatedItems = currentItems.map(item =>
-      item.id === currentItem.id ? { ...item, text: firstLineText, completed: firstLine.completed } : item
-    );
-    updatedItems.splice(insertAfterPos + 1, 0, ...newItems);
-
-    commitItems(normalizeItemOrder(updatedItems));
+    commitItems(result.items);
     cancelPendingSave();
     autoSaveNote();
 
-    if (newItems.length === 0) {
-      // Every remaining line stripped to nothing — only the current item's
-      // own text changed, so there is nothing new to focus.
-      const cursorPos = Math.max(0, firstLineText.length - after.length);
-      setTimeout(() => {
-        const el = itemInputRefs.current.get(currentItem.id);
-        if (el) {
-          el.focus();
-          el.setSelectionRange(cursorPos, cursorPos);
-        }
-      }, 0);
-      return;
-    }
-
-    const lastNewItem = newItems[newItems.length - 1]!;
+    const { caretItemId, caretOffset } = result;
     setTimeout(() => {
-      const el = itemInputRefs.current.get(lastNewItem.id);
+      const el = itemInputRefs.current.get(caretItemId);
       if (el) {
         el.focus();
-        const cursorPos = Math.max(0, el.value.length - after.length);
-        el.setSelectionRange(cursorPos, cursorPos);
+        el.setSelectionRange(caretOffset, caretOffset);
       }
     }, 0);
   };
@@ -2302,6 +2229,7 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
                                 isCompleted={true}
                                 readOnly={isReadOnly}
                                 onKeyDown={handleItemKeyDown}
+                                onPaste={handleItemPaste}
                                 inputRef={(el) => {
                                   if (el) itemInputRefs.current.set(item.id, el);
                                   else itemInputRefs.current.delete(item.id);

@@ -37,7 +37,7 @@ export function isAllowedLinkHref(href: string): boolean {
 
 /**
  * The literal source shown in place of an image, which Jot does not render
- * (images are a separate gallery feature — docs/specs/file-attachments.md).
+ * (images are a separate gallery feature, shown above the note body).
  *
  * Both clients reconstruct this from parsed tokens rather than echoing the
  * original source, so the format is pinned here: if one side dropped the title

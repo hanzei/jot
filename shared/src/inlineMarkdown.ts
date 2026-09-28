@@ -361,7 +361,7 @@ export function normalizeInlineTokens(
         break;
 
       case 'image':
-        // Images are a gallery feature, never embedded (docs/specs/file-attachments.md).
+        // Images are a gallery feature, never embedded in note text.
         // Reconstructed rather than echoed, so the span covers the whole token
         // and an offset inside it is approximate — see `inlineSourceOffset`.
         nodes.push(textNode(formatLiteralImage(token.text ?? '', token.href ?? '', token.title), span));

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseTextLineAsListItem, textToListNote, listToText, checkConvertToListCaps } from '../noteConversion';
+import { parseTextLineAsListItem, textToListNote, listToText, listToPlainText, checkConvertToListCaps } from '../noteConversion';
 import { VALIDATION } from '../constants';
 import type { NoteItem } from '../types';
 
@@ -357,6 +357,40 @@ describe('listToText', () => {
       makeItem({ id: '3', text: '# not a heading', position: 2 }),
     ];
     expect(listToText('', items)).toBe('- [ ] 2 * 3 * 4\n- [ ] **already bold**\n- [ ] # not a heading');
+  });
+});
+
+describe('listToPlainText', () => {
+  it('puts the title on its own line, then checkbox lines without a bullet', () => {
+    const items = [
+      makeItem({ id: '1', text: 'Milk', position: 0 }),
+      makeItem({ id: '2', text: 'Eggs', completed: true, position: 1 }),
+    ];
+    expect(listToPlainText('Groceries', items)).toBe('Groceries\n\n[ ] Milk\n[x] Eggs');
+  });
+
+  it('omits a blank title', () => {
+    const items = [makeItem({ id: '1', text: 'Milk', position: 0 })];
+    expect(listToPlainText('   ', items)).toBe('[ ] Milk');
+  });
+
+  it('returns just the title when there are no items, and nothing for an empty note', () => {
+    expect(listToPlainText('Just a title', [])).toBe('Just a title');
+    expect(listToPlainText('', [])).toBe('');
+  });
+
+  it('orders by position and indents children under their parent', () => {
+    const items = [
+      makeItem({ id: 'p2', text: 'Second', position: 1 }),
+      makeItem({ id: 'c1', text: 'Child', completed: true, position: 0, parent_id: 'p1' }),
+      makeItem({ id: 'p1', text: 'First', position: 0 }),
+    ];
+    expect(listToPlainText('', items)).toBe('[ ] First\n  [x] Child\n[ ] Second');
+  });
+
+  it('emits item text verbatim', () => {
+    const items = [makeItem({ id: '1', text: 'rename my_var_name **now**', position: 0 })];
+    expect(listToPlainText('', items)).toBe('[ ] rename my_var_name **now**');
   });
 });
 

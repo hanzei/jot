@@ -447,6 +447,11 @@ regardless of `JOT_DB_DRIVER`.
   and separately back up `JOT_UPLOAD_DIR` (still local/volume-mounted, since blob
   storage does not follow `JOT_DB_DRIVER`).
 
+Back up and restore the two together: the server periodically deletes files in
+`JOT_UPLOAD_DIR` that no database row references, so restoring a database older
+than the upload directory permanently removes the newer images. Images whose
+files are missing are logged as warnings.
+
 ## API Reference
 
 The full interactive API reference is available via Swagger UI at `http://localhost:8080/api/docs/index.html` when the server is running.
@@ -463,8 +468,11 @@ Use a Personal Access Token for machine-to-machine access:
 Authorization: Bearer <personal-access-token>
 ```
 
-The MCP server exposes note and label tools. PATs are created from Settings in
-the web app and are only shown once.
+The MCP server exposes note and label tools. They apply the same validation as
+the REST API (field limits, colors, which fields each note type has), and their
+changes are pushed to open web and mobile clients over server-sent events like
+any other edit. PATs are created from Settings in the web app and are only shown
+once.
 
 ## jotctl admin CLI
 
