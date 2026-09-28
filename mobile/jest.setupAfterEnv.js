@@ -36,7 +36,7 @@ beforeEach(async () => {
 // observer goes away — which RNTL's cleanup does to every rendered query after
 // each test. Those timers are the handles that kept Jest workers alive at the
 // end of the run; they are created after the test body, so
-// `npm run test:handles` cannot attribute them. Unref'ing query-core's timers
+// `npm run test:handles` cannot attribute them. Unref'ing query-core's timeouts
 // lets a worker exit without waiting for them. Globals are resolved per call,
 // so jest.useFakeTimers() still controls query retries and staleness.
 const unref = (id) => {
@@ -46,6 +46,8 @@ const unref = (id) => {
 timeoutManager.setTimeoutProvider({
   setTimeout: (callback, delay) => unref(setTimeout(callback, delay)),
   clearTimeout: (id) => clearTimeout(id),
-  setInterval: (callback, delay) => unref(setInterval(callback, delay)),
+  // Intervals (refetchInterval) stay referenced: one still polling after a
+  // test is a leaked observer that should hold the worker and get reported.
+  setInterval: (callback, delay) => setInterval(callback, delay),
   clearInterval: (id) => clearInterval(id),
 });

@@ -1,5 +1,6 @@
 import type { LogEntry } from '../src/utils/logger';
 import { initLogger, getLogs, getPersistedLogs, clearLogs, flushLogs } from '../src/utils/logger';
+import { allowConsoleError } from './helpers/consoleGuard';
 
 const fs = globalThis.mockFileSystem;
 
@@ -13,11 +14,11 @@ const origInfo = console.info;
 
 beforeAll(() => {
   // Every test here writes to the console on purpose — that output is what the
-  // logger captures. Silence the methods initLogger() wraps so it neither floods
-  // the run nor trips the console.error guard (jest.setupAfterEnv.js); the
-  // wrappers still record every call into the buffer under test.
+  // logger captures. Silence warn/info under initLogger() so they don't flood
+  // the run; the wrappers still record every call into the buffer under test.
+  // console.error stays on the guard (jest.setupAfterEnv.js), so the tests
+  // that log an error declare it with allowConsoleError().
   console.warn = jest.fn();
-  console.error = jest.fn();
   console.info = jest.fn();
   initLogger();
 });
@@ -54,6 +55,7 @@ describe('log capture', () => {
   });
 
   it('captures console.error with level "error"', () => {
+    allowConsoleError('error message');
     console.error('error message');
     const logs = getLogs();
     expect(logs).toHaveLength(1);
@@ -87,6 +89,7 @@ describe('log capture', () => {
   });
 
   it('captures multiple entries in order', () => {
+    allowConsoleError('second');
     console.warn('first');
     console.error('second');
     console.info('third');
@@ -130,6 +133,7 @@ describe('persistence', () => {
   });
 
   it('survives a simulated restart — getPersistedLogs returns entries the ring buffer lost', () => {
+    allowConsoleError('from the previous session');
     console.error('from the previous session');
     flushLogs();
     // Wipe the in-memory buffer only, as a fresh process would start with.
