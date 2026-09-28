@@ -195,7 +195,7 @@ func TestMCPDeleteNotePermanentReclaimsImageBlobs(t *testing.T) {
 	sess := setupMCPSession(t, ts, user)
 
 	var created client.Note
-	callTool(t, sess, "create_note", map[string]any{"title": "MCP cleanup"}, &created)
+	callTool(t, sess, "create_note", map[string]any{"content": "MCP cleanup"}, &created)
 	_, err := user.Client.UploadNoteImage(t.Context(), created.ID, "cat.png", bytes.NewReader(testPNG(t, 4, 4)))
 	require.NoError(t, err)
 	assert.Equal(t, blobCounts{blobs: 1, thumbs: 1}, countBlobs(t, uploadDir))

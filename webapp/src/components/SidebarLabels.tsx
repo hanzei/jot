@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import type { Label } from '@jot/shared';
+import { VALIDATION, type Label } from '@jot/shared';
 import ConfirmDialog from '@/components/ConfirmDialog';
 
 interface SidebarLabelsProps {
@@ -173,6 +173,9 @@ const SidebarLabels = ({
                     autoCapitalize="none"
                     value={draftName}
                     onChange={(event) => setDraftName(event.target.value)}
+                    // maxLength counts UTF-16 units while the server counts code points, so
+                    // astral input is cut early — accepted, as for PAT names (issue #772).
+                    maxLength={VALIDATION.LABEL_NAME_MAX_LENGTH}
                     onClick={(event) => event.stopPropagation()}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter') {
@@ -283,6 +286,9 @@ const SidebarLabels = ({
                 autoCapitalize="none"
                 value={newLabelName}
                 onChange={(event) => setNewLabelName(event.target.value)}
+                // maxLength counts UTF-16 units while the server counts code points, so
+                // astral input is cut early — accepted, as for PAT names (issue #772).
+                maxLength={VALIDATION.LABEL_NAME_MAX_LENGTH}
                 onClick={(event) => event.stopPropagation()}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') {
