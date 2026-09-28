@@ -30,16 +30,14 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, v any) error {
 // Keep in sync with shared/src/usernameValidation.ts, used by both webapp and mobile.
 var usernameRegex = regexp.MustCompile(`^[a-z0-9_-]+$`)
 
-var hexColorRegex = regexp.MustCompile(`^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
-
 // Keep in sync with shared/src/constants.ts VALIDATION for clients.
 // All character limits are measured in Unicode code points (utf8.RuneCountInString).
 // passwordMinLength is configurable via config.Config.PasswordMinLength (env PASSWORD_MIN_LENGTH).
 const (
-	noteTitleMaxLength   = 200
-	noteContentMaxLength = 10000
-	// The item limits are shared with the MCP server, so they are defined once
-	// in models rather than duplicated per write surface.
+	// The note field limits are shared with the MCP server, so they are defined
+	// once in models rather than duplicated per write surface.
+	noteTitleMaxLength    = models.NoteTitleMaxLength
+	noteContentMaxLength  = models.NoteContentMaxLength
 	noteItemTextMaxLength = models.NoteItemTextMaxLength
 	noteItemsMaxCount     = models.NoteItemsMaxCount
 	searchQueryMaxLength  = 500
@@ -94,11 +92,9 @@ func validateSearchQuery(q string) error {
 	return nil
 }
 
+// validateColor is models.ValidateNoteColor, the rule shared with the MCP server.
 func validateColor(color string) error {
-	if !hexColorRegex.MatchString(color) {
-		return errors.New("color must be a valid CSS hex color (e.g. #fff or #ffffff)")
-	}
-	return nil
+	return models.ValidateNoteColor(color)
 }
 
 func validatePATName(name string) error {

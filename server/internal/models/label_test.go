@@ -1,6 +1,7 @@
 package models
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/hanzei/jot/server/internal/database/dbtest"
@@ -210,6 +211,114 @@ func TestLabelNameCaseInsensitivity(t *testing.T) {
 			require.NoError(t, err)
 
 			assert.NotEqual(t, mine.ID, theirs.ID)
+		})
+	})
+}
+
+// TestLabelOrder locks in that labels come back in the same order on every
+// backend. SQLite's labels.name is COLLATE NOCASE while PostgreSQL's follows the
+// database collation, so ordering by name disagreed between them; ordering by
+// the folded key in code-point order (dialect.LabelOrder) does not.
+func TestLabelOrder(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, driver string) {
+		store, userID := newTestLabelStore(t, driver)
+		ctx := t.Context()
+		notes := newNoteStore(store.db, store.d)
+
+		note, err := notes.CreateWithItems(ctx, userID, "", "", "labeled", NoteTypeText, DefaultNoteColor, nil)
+		require.NoError(t, err)
+		// Inserted out of order, and mixing case so a case-sensitive or
+		// locale-dependent sort would give a different answer.
+		for _, name := range []string{"b", "Ä", "C", "A"} {
+			label, _, err := store.GetOrCreateLabel(ctx, userID, name)
+			require.NoError(t, err)
+			require.NoError(t, notes.AddLabelToNote(ctx, note.ID, label.ID, userID))
+		}
+		// Folded keys compare by code point, so "ä" (U+00E4) sorts after "c".
+		want := []string{"A", "b", "C", "Ä"}
+
+		names := func(labels []Label) []string {
+			out := make([]string, 0, len(labels))
+			for _, l := range labels {
+				out = append(out, l.Name)
+			}
+			return out
+		}
+
+		t.Run("GetLabels", func(t *testing.T) {
+			labels, err := store.GetLabels(ctx, userID)
+			require.NoError(t, err)
+			assert.Equal(t, want, names(labels))
+		})
+
+		t.Run("GetNoteLabels", func(t *testing.T) {
+			labels, err := notes.GetNoteLabels(ctx, note.ID, userID)
+			require.NoError(t, err)
+			assert.Equal(t, want, names(labels))
+		})
+
+		t.Run("labels batch-loaded with the note", func(t *testing.T) {
+			got, err := notes.GetByID(ctx, note.ID, userID)
+			require.NoError(t, err)
+			assert.Equal(t, want, names(got.Labels))
+		})
+	})
+}
+
+func TestLabelNameMaxLength(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, driver string) {
+		atLimit := strings.Repeat("ä", LabelNameMaxLength)
+		tooLong := atLimit + "x"
+
+		t.Run("a name at the limit is accepted", func(t *testing.T) {
+			store, userID := newTestLabelStore(t, driver)
+			label, _, err := store.GetOrCreateLabel(t.Context(), userID, atLimit)
+			require.NoError(t, err)
+			assert.Equal(t, atLimit, label.Name)
+		})
+
+		t.Run("every write path rejects a name over the limit", func(t *testing.T) {
+			store, userID := newTestLabelStore(t, driver)
+			ctx := t.Context()
+
+			_, _, err := store.GetOrCreateLabel(ctx, userID, tooLong)
+			require.ErrorIs(t, err, ErrLabelNameTooLong)
+
+			_, err = store.CreateLabel(ctx, userID, "labl0000000000000long", tooLong)
+			require.ErrorIs(t, err, ErrLabelNameTooLong)
+
+			label, _, err := store.GetOrCreateLabel(ctx, userID, "short")
+			require.NoError(t, err)
+			_, err = store.RenameLabel(ctx, label.ID, userID, tooLong)
+			require.ErrorIs(t, err, ErrLabelNameTooLong)
+		})
+
+		t.Run("an existing overlong label still resolves", func(t *testing.T) {
+			store, userID := newTestLabelStore(t, driver)
+			ctx := t.Context()
+			notes := newNoteStore(store.db, store.d)
+
+			// Imports write labels directly and keep long names, as do rows
+			// created before the limit existed.
+			require.NoError(t, notes.ImportJotNotes(ctx, userID, []JotImportNote{{
+				Content:  "imported",
+				NoteType: NoteTypeText,
+				Color:    DefaultNoteColor,
+				Labels:   []string{tooLong},
+			}}))
+			labels, err := store.GetLabels(ctx, userID)
+			require.NoError(t, err)
+			require.Len(t, labels, 1)
+			assert.Equal(t, tooLong, labels[0].Name, "the import must keep the name as it is")
+
+			label, created, err := store.GetOrCreateLabel(ctx, userID, strings.ToUpper(tooLong))
+			require.NoError(t, err)
+			assert.False(t, created)
+			assert.Equal(t, labels[0].ID, label.ID)
+
+			byName, err := store.GetLabelByName(ctx, userID, tooLong)
+			require.NoError(t, err)
+			assert.Equal(t, labels[0].ID, byName.ID)
 		})
 	})
 }

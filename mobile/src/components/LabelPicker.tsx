@@ -16,7 +16,7 @@ import {
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { Plus, Square, SquareCheck } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
-import type { Label } from '@jot/shared';
+import { VALIDATION, type Label } from '@jot/shared';
 import { useTheme } from '../theme/ThemeContext';
 import { useLabels, useAddLabelToNote, useRemoveLabelFromNote } from '../hooks/useLabels';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
@@ -141,6 +141,9 @@ export default function LabelPicker({
                   style={[styles.addInput, { color: colors.text, borderBottomColor: colors.border }]}
                   value={newLabelText}
                   onChangeText={setNewLabelText}
+                  // maxLength counts UTF-16 units while the server counts code points, so
+                  // astral input is cut early — accepted, as for PAT names (issue #772).
+                  maxLength={VALIDATION.LABEL_NAME_MAX_LENGTH}
                   placeholder={t('labels.newLabelPlaceholder')}
                   placeholderTextColor={colors.placeholder}
                   onSubmitEditing={handleAddNewLabel}
