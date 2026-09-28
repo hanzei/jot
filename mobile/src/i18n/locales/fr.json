@@ -379,6 +379,7 @@
     "failedUnshare": "Impossible de retirer le partage",
     "results": "Résultats",
     "searchFailed": "Recherche échouée. Veuillez réessayer.",
+    "searchTruncated": "Seules les 50 premières correspondances sont affichées. Saisissez davantage du nom pour affiner la recherche.",
     "failedLoad": "Impossible de charger les partages",
     "removeAccessFor": "Retirer le partage pour {{username}}",
     "peopleWithAccess": "Personnes ayant accès",

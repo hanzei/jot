@@ -379,6 +379,7 @@
     "failedUnshare": "Nie udało się usunąć udostępnienia",
     "results": "Wyniki",
     "searchFailed": "Wyszukiwanie nie powiodło się. Spróbuj ponownie.",
+    "searchTruncated": "Wyświetlane jest tylko pierwsze 50 wyników. Wpisz więcej znaków nazwy, aby zawęzić wyszukiwanie.",
     "failedLoad": "Nie udało się załadować udostępnień",
     "removeAccessFor": "Usuń udostępnienie dla {{username}}",
     "peopleWithAccess": "Osoby z dostępem",

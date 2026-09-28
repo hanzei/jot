@@ -379,6 +379,7 @@
     "failedUnshare": "Freigabe konnte nicht entfernt werden",
     "results": "Ergebnisse",
     "searchFailed": "Suche fehlgeschlagen. Bitte erneut versuchen.",
+    "searchTruncated": "Es werden nur die ersten 50 Treffer angezeigt. Gib mehr vom Namen ein, um die Suche einzugrenzen.",
     "failedLoad": "Freigaben konnten nicht geladen werden",
     "removeAccessFor": "Freigabe für {{username}} entfernen",
     "peopleWithAccess": "Personen mit Zugriff",
