@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/httprate"
+	"github.com/hanzei/jot/server/internal/apierr"
 	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/config"
 	"github.com/hanzei/jot/server/internal/logutil"
@@ -97,7 +98,7 @@ func (rl *rateLimiter) onLimitExceeded(bucket string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		rl.throttled.Add(r.Context(), 1, metric.WithAttributes(attribute.String("bucket", bucket)))
 		logutil.FromContext(r.Context()).WithField("ratelimit_bucket", bucket).Warn("Rate limit exceeded")
-		http.Error(w, "too many requests", http.StatusTooManyRequests)
+		apierr.Write(w, r, http.StatusTooManyRequests, apierr.CodeRateLimited, "too many requests")
 	}
 }
 
@@ -110,7 +111,7 @@ func (rl *rateLimiter) onLimitExceeded(bucket string) http.HandlerFunc {
 func (rl *rateLimiter) onKeyError(bucket string) func(http.ResponseWriter, *http.Request, error) {
 	return func(w http.ResponseWriter, r *http.Request, err error) {
 		logutil.FromContext(r.Context()).WithError(err).WithField("ratelimit_bucket", bucket).Error("Rate limit key function failed")
-		http.Error(w, "internal server error", http.StatusInternalServerError)
+		apierr.Write(w, r, http.StatusInternalServerError, apierr.CodeInternal, apierr.InternalMessage)
 	}
 }
 

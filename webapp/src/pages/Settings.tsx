@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/i18n';
-import { auth, users, notes as notesApi, sessions as sessionsApi, pats as patsApi, isAxiosError } from '@/utils/api';
+import { auth, users, notes as notesApi, sessions as sessionsApi, pats as patsApi } from '@/utils/api';
 import { getUser, setUser, getSettings, setSettings } from '@/utils/auth';
 import type { LanguagePreference } from '@/utils/language';
 import { getLanguagePreference, resolveLanguage } from '@/utils/language';
@@ -18,6 +18,7 @@ import { IdentitySecurityColumn, PreferencesInfoColumn } from './settings/Settin
 import { passwordFormKeys } from './settings/passwordFormKeys';
 import SsoSettingsSection from './settings/SsoSettingsSection';
 import { ssoLinkErrorMessage, useSsoErrorParam } from '@/utils/ssoError';
+import { apiErrorMessage } from '@/utils/apiError';
 
 interface SettingsProps {
   passwordMinLength: number;
@@ -111,12 +112,7 @@ const Settings = ({ passwordMinLength, sso }: SettingsProps) => {
       setPatsList(prev => [pat, ...prev]);
       setNewlyCreatedPAT(pat);
     } catch (err: unknown) {
-      if (isAxiosError(err)) {
-        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
-        setPatsError(msg || 'settings.patsCreateError');
-      } else {
-        setPatsError('settings.patsCreateError');
-      }
+      setPatsError(apiErrorMessage(err, t, 'settings.patsCreateError'));
     } finally {
       setCreatingPAT(false);
     }
@@ -204,12 +200,7 @@ const Settings = ({ passwordMinLength, sso }: SettingsProps) => {
         if (user) setUser({ ...user, has_password: true });
       }
     } catch (err: unknown) {
-      if (isAxiosError(err)) {
-        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
-        setPasswordError(msg || keys.failed);
-      } else {
-        setPasswordError(keys.failed);
-      }
+      setPasswordError(apiErrorMessage(err, t, keys.failed));
     } finally {
       setPasswordSaving(false);
     }
@@ -230,12 +221,7 @@ const Settings = ({ passwordMinLength, sso }: SettingsProps) => {
       setDraftLastName(updatedUser.last_name ?? '');
       showToast(t('settings.profileUpdated'), 'success');
     } catch (err: unknown) {
-      if (isAxiosError(err)) {
-        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
-        setError(msg || 'settings.failedUpdateUsername');
-      } else {
-        setError('settings.failedUpdateUsername');
-      }
+      setError(apiErrorMessage(err, t, 'settings.failedUpdateUsername'));
     } finally {
       setSaving(false);
     }
@@ -294,12 +280,7 @@ const Settings = ({ passwordMinLength, sso }: SettingsProps) => {
       setHasProfileIcon(true);
       showToast(t('settings.iconUploaded'), 'success');
     } catch (err: unknown) {
-      if (isAxiosError(err)) {
-        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
-        setIconError(msg || t('settings.iconUploadFailed'));
-      } else {
-        setIconError(t('settings.iconUploadFailed'));
-      }
+      setIconError(apiErrorMessage(err, t, 'settings.iconUploadFailed'));
     } finally {
       setIconUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';

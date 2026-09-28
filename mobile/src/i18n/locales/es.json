@@ -536,5 +536,15 @@
     "shareDiagnostics": "Compartir informe de diagnóstico",
     "yes": "Sí",
     "no": "No"
+  },
+  "apiErrors": {
+    "invalidCredentials": "Nombre de usuario o contraseña no válidos.",
+    "registrationDisabled": "El registro está desactivado en este servidor.",
+    "localLoginDisabled": "El inicio de sesión con contraseña está desactivado en este servidor. Usa SSO en su lugar.",
+    "incorrectPassword": "La contraseña actual es incorrecta.",
+    "usernameTaken": "Este nombre de usuario ya está en uso.",
+    "labelNameTaken": "Ya existe una etiqueta con este nombre.",
+    "rateLimited": "Demasiadas solicitudes. Espera un momento e inténtalo de nuevo.",
+    "requestTooLarge": "El archivo o la solicitud es demasiado grande."
   }
 }

@@ -33,6 +33,22 @@ test.describe('Labels on Note Creation', () => {
     await expect(card.getByText('weekly groceries')).toHaveCount(0);
   });
 
+  test('renaming a label to an existing name shows a translated error', async ({ page, dashboardPage, isMobile }) => {
+    test.skip(isMobile, 'Sidebar label management is covered on desktop only.');
+    await dashboardPage.goto();
+    await dashboardPage.createNoteWithLabels('Duplicate Label Note', 'content', ['alpha', 'beta']);
+
+    await dashboardPage.submitSidebarLabelRename('beta', 'alpha');
+
+    // The server answers with the label_name_taken error code, which the
+    // webapp maps to its own message rather than the server's English text.
+    await expect(page.getByTestId('toast').filter({ hasText: 'A label with this name already exists.' })).toBeVisible();
+    // The rename was refused, so the note keeps both labels.
+    const card = dashboardPage.noteCard('Duplicate Label Note');
+    await expect(card.getByText('beta', { exact: true })).toBeVisible();
+    await expect(card.getByText('alpha', { exact: true })).toBeVisible();
+  });
+
   test('note created with label is filterable by that label', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createNote('Plain', 'no label');

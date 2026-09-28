@@ -582,5 +582,18 @@
     "admin": "Admin - Jot",
     "settings": "Impostazioni - Jot",
     "label": "{{name}} - Jot"
+  },
+  "apiErrors": {
+    "invalidCredentials": "Nome utente o password non validi.",
+    "registrationDisabled": "La registrazione è disattivata su questo server.",
+    "localLoginDisabled": "L'accesso con password è disattivato su questo server. Usa invece l'SSO.",
+    "incorrectPassword": "La password attuale non è corretta.",
+    "usernameTaken": "Questo nome utente è già in uso.",
+    "labelNameTaken": "Esiste già un'etichetta con questo nome.",
+    "lastAdmin": "L'ultimo amministratore non può essere declassato né eliminato.",
+    "cannotDeleteSelf": "Non puoi eliminare il tuo account.",
+    "wouldStrandAccount": "Impossibile scollegare l'SSO: il tuo account non ha una password e non potresti più accedere.",
+    "rateLimited": "Troppe richieste. Attendi un momento e riprova.",
+    "requestTooLarge": "Il file o la richiesta è troppo grande."
   }
 }

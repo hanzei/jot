@@ -7,6 +7,7 @@ import { auth } from '@/utils/api';
 import { setUser, setSettings } from '@/utils/auth';
 import i18n from '@/i18n';
 import { VALIDATION } from '@jot/shared';
+import { createApiError } from '@/utils/__tests__/test-helpers';
 
 vi.mock('@/utils/api', () => ({
   auth: {
@@ -119,9 +120,7 @@ describe('Register', () => {
 
   it('shows styled alert when register API fails', async () => {
     const user = userEvent.setup();
-    vi.mocked(auth.register).mockRejectedValue({
-      response: { data: 'Username taken' },
-    });
+    vi.mocked(auth.register).mockRejectedValue(createApiError(409, 'username_taken', 'username already taken'));
     renderRegister();
 
     await user.type(screen.getByLabelText(t('auth.usernamePlaceholder')), 'valid_user');
@@ -130,7 +129,7 @@ describe('Register', () => {
     await user.click(screen.getByRole('button', { name: t('auth.createAccount') }));
 
     const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent('Username taken');
+    expect(alert).toHaveTextContent(t('apiErrors.usernameTaken'));
     expect(alert.querySelector('svg')).toBeTruthy();
   });
 

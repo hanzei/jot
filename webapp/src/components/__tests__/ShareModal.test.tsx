@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { NoteShare, User } from '@jot/shared';
-import { createMockNote } from '@/utils/__tests__/test-helpers';
+import { createMockNote, createApiError } from '@/utils/__tests__/test-helpers';
 
 const mockGetShares = vi.hoisted(() => vi.fn());
 const mockShare = vi.hoisted(() => vi.fn());
@@ -323,7 +323,7 @@ describe('ShareModal', () => {
 
     it('shows error message on 404 (user not found)', async () => {
       mockUsersSearch.mockResolvedValue([mockUser2]);
-      mockShare.mockRejectedValue({ response: { status: 404 } });
+      mockShare.mockRejectedValue(createApiError(404, 'not_found', 'user not found'));
       const user = userEvent.setup();
       render(<ShareModal {...defaultProps} />);
 
@@ -341,7 +341,7 @@ describe('ShareModal', () => {
 
     it('shows error message on 409 (already shared)', async () => {
       mockUsersSearch.mockResolvedValue([mockUser2]);
-      mockShare.mockRejectedValue({ response: { status: 409 } });
+      mockShare.mockRejectedValue(createApiError(409, 'already_shared', 'note already shared with user'));
       const user = userEvent.setup();
       render(<ShareModal {...defaultProps} />);
 
@@ -359,8 +359,7 @@ describe('ShareModal', () => {
 
     it('shows error message on 400 (cannot share with yourself)', async () => {
       mockUsersSearch.mockResolvedValue([mockUser2]);
-      // The source checks status === 400 && data?.includes('yourself')
-      mockShare.mockRejectedValue({ response: { status: 400, data: 'cannot share with self' } });
+      mockShare.mockRejectedValue(createApiError(400, 'cannot_share_with_self', 'cannot share with self'));
       const user = userEvent.setup();
       render(<ShareModal {...defaultProps} />);
 

@@ -582,5 +582,18 @@
     "admin": "Admin - Jot",
     "settings": "Einstellungen - Jot",
     "label": "{{name}} - Jot"
+  },
+  "apiErrors": {
+    "invalidCredentials": "Ungültiger Benutzername oder ungültiges Passwort.",
+    "registrationDisabled": "Die Registrierung ist auf diesem Server deaktiviert.",
+    "localLoginDisabled": "Die Anmeldung mit Passwort ist auf diesem Server deaktiviert. Verwende stattdessen SSO.",
+    "incorrectPassword": "Das aktuelle Passwort ist falsch.",
+    "usernameTaken": "Dieser Benutzername ist bereits vergeben.",
+    "labelNameTaken": "Ein Label mit diesem Namen existiert bereits.",
+    "lastAdmin": "Der letzte Admin kann nicht herabgestuft oder gelöscht werden.",
+    "cannotDeleteSelf": "Du kannst dein eigenes Konto nicht löschen.",
+    "wouldStrandAccount": "SSO kann nicht getrennt werden: Dein Konto hat kein Passwort, du könntest dich sonst nicht mehr anmelden.",
+    "rateLimited": "Zu viele Anfragen. Bitte warte einen Moment und versuche es erneut.",
+    "requestTooLarge": "Die Datei oder Anfrage ist zu groß."
   }
 }

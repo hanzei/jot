@@ -290,9 +290,9 @@ func buildCreateNoteItems(items []CreateNoteItem) ([]models.NewNoteItem, int, er
 //	@Param		label		query		string	false	"Filter by label ID"
 //	@Param		my_tasks	query		boolean	false	"Return only notes with tasks assigned to current user"
 //	@Success	200			{array}		models.Note
-//	@Failure	400			{string}	string	"search query too long"
-//	@Failure	401			{string}	string	"unauthorized"
-//	@Failure	500			{string}	string	"internal server error"
+//	@Failure	400			{object}	apierr.ErrorResponse	"search query too long"
+//	@Failure	401			{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	500			{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes [get]
 func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -328,12 +328,12 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, an
 //	@Produce	json
 //	@Param		body	body		CreateNoteRequest	true	"Note to create"
 //	@Success	201		{object}	models.Note
-//	@Failure	400		{string}	string	"bad request"
-//	@Failure	401		{string}	string	"unauthorized"
-//	@Failure	404		{string}	string	"label not found"
-//	@Failure	409		{string}	string	"note with this ID already exists"
-//	@Failure	422		{string}	string	"note item cap exceeded or label name too long"
-//	@Failure	500		{string}	string	"internal server error"
+//	@Failure	400		{object}	apierr.ErrorResponse	"bad request"
+//	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	404		{object}	apierr.ErrorResponse	"label not found"
+//	@Failure	409		{object}	apierr.ErrorResponse	"note with this ID already exists"
+//	@Failure	422		{object}	apierr.ErrorResponse	"note item cap exceeded or label name too long"
+//	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes [post]
 func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -414,10 +414,10 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 //	@Produce	json
 //	@Param		id	path		string	true	"Note ID"
 //	@Success	200	{object}	models.Note
-//	@Failure	400	{string}	string	"bad request"
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	404	{string}	string	"not found"
-//	@Failure	500	{string}	string	"internal server error"
+//	@Failure	400	{object}	apierr.ErrorResponse	"bad request"
+//	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	404	{object}	apierr.ErrorResponse	"not found"
+//	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes/{id} [get]
 func (h *NotesHandler) GetNote(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -479,11 +479,11 @@ func validateDuplicateItemIDs(itemIDs map[string]string) error {
 //	@Param		id		path		string					true	"Note ID"
 //	@Param		body	body		DuplicateNoteRequest	false	"Optional client-supplied ID for idempotent replay"
 //	@Success	201		{object}	models.Note
-//	@Failure	400		{string}	string	"bad request"
-//	@Failure	401		{string}	string	"unauthorized"
-//	@Failure	404		{string}	string	"not found"
-//	@Failure	409		{string}	string	"conflict — duplicate ID already exists"
-//	@Failure	500		{string}	string	"internal server error"
+//	@Failure	400		{object}	apierr.ErrorResponse	"bad request"
+//	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	404		{object}	apierr.ErrorResponse	"not found"
+//	@Failure	409		{object}	apierr.ErrorResponse	"conflict — duplicate ID already exists"
+//	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes/{id}/duplicate [post]
 func (h *NotesHandler) DuplicateNote(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -613,12 +613,12 @@ func normalizeConvertNoteTypeRequest(req *ConvertNoteTypeRequest) (title, conten
 //	@Param		id		path		string					true	"Note ID"
 //	@Param		body	body		ConvertNoteTypeRequest	true	"Target note type and precomputed content/items"
 //	@Success	200		{object}	models.Note
-//	@Failure	400		{string}	string	"bad request"
-//	@Failure	401		{string}	string	"unauthorized"
-//	@Failure	404		{string}	string	"not found"
-//	@Failure	409		{string}	string	"version conflict: note changed since base_version"
-//	@Failure	422		{string}	string	"note item cap exceeded"
-//	@Failure	500		{string}	string	"internal server error"
+//	@Failure	400		{object}	apierr.ErrorResponse	"bad request"
+//	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	404		{object}	apierr.ErrorResponse	"not found"
+//	@Failure	409		{object}	apierr.ErrorResponse	"version conflict: note changed since base_version"
+//	@Failure	422		{object}	apierr.ErrorResponse	"note item cap exceeded"
+//	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes/{id}/convert [post]
 func (h *NotesHandler) ConvertNoteType(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -742,11 +742,11 @@ func (h *NotesHandler) validateUpdateNoteFields(ctx context.Context, id, userID 
 //	@Param		id		path		string				true	"Note ID"
 //	@Param		body	body		UpdateNoteRequest	true	"Fields to update"
 //	@Success	200		{object}	models.Note
-//	@Failure	400		{string}	string	"bad request"
-//	@Failure	401		{string}	string	"unauthorized"
-//	@Failure	404		{string}	string	"not found"
-//	@Failure	409		{string}	string	"version conflict for title/content update: note changed since base_version"
-//	@Failure	500		{string}	string	"internal server error"
+//	@Failure	400		{object}	apierr.ErrorResponse	"bad request"
+//	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	404		{object}	apierr.ErrorResponse	"not found"
+//	@Failure	409		{object}	apierr.ErrorResponse	"version conflict for title/content update: note changed since base_version"
+//	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes/{id} [patch]
 func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -812,10 +812,10 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 //	@Param		id			path	string	true	"Note ID"
 //	@Param		permanent	query	boolean	false	"Permanently delete from trash instead of soft-deleting"
 //	@Success	204			"no content"
-//	@Failure	400			{string}	string	"bad request"
-//	@Failure	401			{string}	string	"unauthorized"
-//	@Failure	404			{string}	string	"not found"
-//	@Failure	500			{string}	string	"internal server error"
+//	@Failure	400			{object}	apierr.ErrorResponse	"bad request"
+//	@Failure	401			{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	404			{object}	apierr.ErrorResponse	"not found"
+//	@Failure	500			{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes/{id} [delete]
 func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -870,8 +870,8 @@ func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, 
 //	@Security	CookieAuth
 //	@Produce	json
 //	@Success	200	{object}	EmptyTrashResponse
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	500	{string}	string	"internal server error"
+//	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes/trash [delete]
 func (h *NotesHandler) EmptyTrash(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -901,10 +901,10 @@ func (h *NotesHandler) EmptyTrash(w http.ResponseWriter, r *http.Request) (int, 
 //	@Produce	json
 //	@Param		id	path		string	true	"Note ID"
 //	@Success	200	{object}	models.Note
-//	@Failure	400	{string}	string	"bad request"
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	404	{string}	string	"not found"
-//	@Failure	500	{string}	string	"internal server error"
+//	@Failure	400	{object}	apierr.ErrorResponse	"bad request"
+//	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	404	{object}	apierr.ErrorResponse	"not found"
+//	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes/{id}/restore [post]
 func (h *NotesHandler) RestoreNote(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -955,10 +955,10 @@ type ReorderNotesRequest struct {
 //	@Accept		json
 //	@Param		body	body	ReorderNotesRequest	true	"Ordered note IDs"
 //	@Success	204		"no content"
-//	@Failure	400		{string}	string	"bad request"
-//	@Failure	401		{string}	string	"unauthorized"
-//	@Failure	403		{string}	string	"forbidden"
-//	@Failure	500		{string}	string	"internal server error"
+//	@Failure	400		{object}	apierr.ErrorResponse	"bad request"
+//	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	403		{object}	apierr.ErrorResponse	"forbidden"
+//	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes/reorder [post]
 func (h *NotesHandler) ReorderNotes(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())

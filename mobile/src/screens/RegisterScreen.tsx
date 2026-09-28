@@ -16,7 +16,7 @@ import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import type { AuthStackParamList } from '../navigation/AuthStack';
 import { getUsernameValidationError, isPasswordTooShort } from '@jot/shared';
-import { displayMessage } from '../i18n/utils';
+import { displayMessage, extractApiError } from '../i18n/utils';
 import ServerSetupGate from '../components/ServerSetupGate';
 import FadeInView from '../components/FadeInView';
 import { useServerConfig } from '../hooks/useServerConfig';
@@ -67,16 +67,11 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
     try {
       await register(username.trim(), password);
     } catch (err: unknown) {
-      const response = (err as { response?: { status?: number; data?: string } })?.response;
+      const response = (err as { response?: unknown })?.response;
       if (!response) {
         setError(t('auth.unableToConnect'));
       } else {
-        const message = response.data;
-        setError(
-          typeof message === 'string' && message
-            ? displayMessage(t, message)
-            : t('auth.registrationFailed'),
-        );
+        setError(displayMessage(t, extractApiError(err) ?? 'auth.registrationFailed'));
       }
     } finally {
       setLoading(false);

@@ -582,5 +582,18 @@
     "admin": "Admin - Jot",
     "settings": "Instellingen - Jot",
     "label": "{{name}} - Jot"
+  },
+  "apiErrors": {
+    "invalidCredentials": "Ongeldige gebruikersnaam of ongeldig wachtwoord.",
+    "registrationDisabled": "Registratie is uitgeschakeld op deze server.",
+    "localLoginDisabled": "Inloggen met een wachtwoord is uitgeschakeld op deze server. Gebruik in plaats daarvan SSO.",
+    "incorrectPassword": "Het huidige wachtwoord is onjuist.",
+    "usernameTaken": "Deze gebruikersnaam is al in gebruik.",
+    "labelNameTaken": "Er bestaat al een label met deze naam.",
+    "lastAdmin": "De laatste beheerder kan niet worden gedegradeerd of verwijderd.",
+    "cannotDeleteSelf": "Je kunt je eigen account niet verwijderen.",
+    "wouldStrandAccount": "SSO kan niet worden losgekoppeld: je account heeft geen wachtwoord, dus je zou niet meer kunnen inloggen.",
+    "rateLimited": "Te veel verzoeken. Wacht even en probeer het opnieuw.",
+    "requestTooLarge": "Het bestand of verzoek is te groot."
   }
 }

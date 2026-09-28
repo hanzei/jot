@@ -6,6 +6,7 @@ import (
 	jsontext "encoding/json/jsontext"
 	"encoding/json/v2"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 )
@@ -115,8 +116,9 @@ func (c *Client) SubscribeSSE(ctx context.Context) (<-chan SSEEvent, error) {
 		return nil, fmt.Errorf("connect to SSE stream: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 		_ = resp.Body.Close()
-		return nil, &Error{StatusCode: resp.StatusCode}
+		return nil, newError(resp.StatusCode, body)
 	}
 
 	ch := make(chan SSEEvent, 32)

@@ -41,8 +41,8 @@ type NativeExchangeRequest struct {
 //	@Param		intent			query	string	true	"what the resulting code may be redeemed for"	Enums(login, link)
 //	@Param		code_challenge	query	string	true	"BASE64URL(SHA256(code_verifier)), unpadded (S256)"
 //	@Success	302				"redirect to the identity provider"
-//	@Failure	400				{string}	string	"invalid intent or code_challenge"
-//	@Failure	403				{string}	string	"linking unavailable"
+//	@Failure	400				{object}	apierr.ErrorResponse	"invalid intent or code_challenge"
+//	@Failure	403				{object}	apierr.ErrorResponse	"linking unavailable"
 //	@Router		/auth/oidc/native/start [get]
 func (h *OIDCHandler) NativeStart(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	q := r.URL.Query()
@@ -129,9 +129,9 @@ func (h *OIDCHandler) redeemNativeCode(w http.ResponseWriter, r *http.Request, i
 //	@Produce	json
 //	@Param		body	body		NativeExchangeRequest	true	"one-time code and its PKCE verifier"
 //	@Success	200		{object}	AuthResponse
-//	@Failure	400		{string}	string	"invalid or expired code"
-//	@Failure	409		{string}	string	"identity already linked"
-//	@Failure	500		{string}	string	"internal server error"
+//	@Failure	400		{object}	apierr.ErrorResponse	"invalid or expired code"
+//	@Failure	409		{object}	apierr.ErrorResponse	"identity already linked"
+//	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/auth/oidc/native/exchange [post]
 func (h *OIDCHandler) NativeExchange(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	rec, status, err := h.redeemNativeCode(w, r, oidcIntentLogin)
@@ -154,11 +154,11 @@ func (h *OIDCHandler) NativeExchange(w http.ResponseWriter, r *http.Request) (in
 //	@Accept		json
 //	@Param		body	body	NativeExchangeRequest	true	"one-time code and its PKCE verifier"
 //	@Success	204		"no content"
-//	@Failure	400		{string}	string	"invalid or expired code"
-//	@Failure	401		{string}	string	"unauthorized"
-//	@Failure	403		{string}	string	"linking unavailable"
-//	@Failure	409		{string}	string	"identity already linked"
-//	@Failure	500		{string}	string	"internal server error"
+//	@Failure	400		{object}	apierr.ErrorResponse	"invalid or expired code"
+//	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	403		{object}	apierr.ErrorResponse	"linking unavailable"
+//	@Failure	409		{object}	apierr.ErrorResponse	"identity already linked"
+//	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/auth/oidc/native/link [post]
 func (h *OIDCHandler) NativeLink(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	// Checked before redeeming so a refused request does not consume the code.

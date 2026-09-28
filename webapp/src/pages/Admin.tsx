@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react';
 import { ROLES, type User, type AdminStatsResponse } from '@jot/shared';
 import { useTranslation } from 'react-i18next';
-import { admin, isAxiosError } from '@/utils/api';
+import { admin } from '@/utils/api';
 import { getUser } from '@/utils/auth';
 import PageContent from '@/components/PageContent';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import CreateUserModal from '@/components/CreateUserModal';
 import ResetPasswordModal from '@/components/ResetPasswordModal';
+import { apiErrorMessage } from '@/utils/apiError';
 
 interface AdminProps {
   passwordMinLength: number;
@@ -157,12 +158,7 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
       const updated = await admin.updateUserRole(targetUser.id, { role: newRole });
       setUsers(prev => prev.map(u => u.id === updated.id ? updated : u));
     } catch (err: unknown) {
-      if (isAxiosError(err)) {
-        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
-        setError(msg || t('admin.failedUpdateRole'));
-      } else {
-        setError(t('admin.failedUpdateRole'));
-      }
+      setError(apiErrorMessage(err, t, 'admin.failedUpdateRole'));
     } finally {
       setRoleUpdating(prev => {
         const next = new Set(prev);
@@ -188,12 +184,7 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
       setUsers(prev => prev.filter(u => u.id !== targetUser.id));
       refreshStats();
     } catch (err: unknown) {
-      if (isAxiosError(err)) {
-        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
-        setError(msg || t('admin.failedDeleteUser'));
-      } else {
-        setError(t('admin.failedDeleteUser'));
-      }
+      setError(apiErrorMessage(err, t, 'admin.failedDeleteUser'));
     } finally {
       setDeleteLoading(prev => {
         const next = new Set(prev);

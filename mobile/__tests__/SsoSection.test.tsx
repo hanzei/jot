@@ -6,6 +6,7 @@ import { useServerConfig } from '../src/hooks/useServerConfig';
 import { ConfirmContext } from '../src/hooks/useConfirm';
 import { auth } from '../src/api/client';
 import { runOidcBrowserFlow } from '../src/store/oidcFlow';
+import { apiErrorBody } from './helpers/apiError';
 
 jest.mock('../src/store/AuthContext', () => ({
   useAuth: jest.fn(),
@@ -189,7 +190,7 @@ describe('SsoSection', () => {
   });
 
   it('surfaces the strand guard when unlinking would lock the account out', async () => {
-    mockUnlink.mockRejectedValue({ response: { status: 422, data: 'cannot unlink SSO: set a password first' } });
+    mockUnlink.mockRejectedValue({ response: { status: 422, data: apiErrorBody('would_strand_account', 'cannot unlink SSO: set a password first') } });
     const { getByTestId } = await renderSection(mixedMode, { ...baseUser, has_sso_linked: true });
 
     await press(getByTestId('settings-sso-disconnect'));

@@ -6,6 +6,7 @@ import { auth, getStoredSession, setOnUnauthorized, clearStoredSession, cacheAut
 import { getLocalIdentity, enableLocalMode as persistEnableLocalMode, disableLocalMode, updateLocalSettings, updateLocalUser } from '../src/store/localMode';
 
 import { runOidcBrowserFlow, SsoFlowError } from '../src/store/oidcFlow';
+import { apiErrorBody } from './helpers/apiError';
 
 jest.mock('../src/store/oidcFlow', () => ({
   ...jest.requireActual('../src/store/oidcFlow'),
@@ -1087,7 +1088,7 @@ describe('AuthContext loginWithSso', () => {
   });
 
   it('surfaces an exchange 400 without clearing any session', async () => {
-    const badCode = { response: { status: 400, data: 'invalid or expired code' } };
+    const badCode = { response: { status: 400, data: apiErrorBody('validation_failed', 'invalid or expired code') } };
     mockRunOidcBrowserFlow.mockResolvedValue({ type: 'code', code: 'stale', codeVerifier: 'v' });
     mockAuth.oidcNativeExchange.mockRejectedValue(badCode);
     const { getByTestId, unmount } = await renderSso();

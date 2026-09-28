@@ -7,6 +7,7 @@ import { auth } from '@/utils/api';
 import { setUser, setSettings } from '@/utils/auth';
 import type { SSOConfig } from '@jot/shared';
 import i18n from '@/i18n';
+import { createApiError } from '@/utils/__tests__/test-helpers';
 
 vi.mock('@/utils/api', () => ({
   auth: {
@@ -198,9 +199,7 @@ describe('Login', () => {
 
   it('shows styled alert when login fails', async () => {
     const user = userEvent.setup();
-    vi.mocked(auth.login).mockRejectedValue({
-      response: { data: 'Invalid credentials' },
-    });
+    vi.mocked(auth.login).mockRejectedValue(createApiError(401, 'invalid_credentials', 'invalid username or password'));
 
     renderLogin();
 
@@ -209,7 +208,7 @@ describe('Login', () => {
     await user.click(screen.getByRole('button', { name: i18n.t('auth.signIn') }));
 
     const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent('Invalid credentials');
+    expect(alert).toHaveTextContent(i18n.t('apiErrors.invalidCredentials'));
     expect(alert.querySelector('svg')).toBeTruthy();
   });
 });

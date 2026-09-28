@@ -4,6 +4,7 @@ import { X, Trash2, ChevronDown, LogOut } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
   ROLES,
+  apiErrorCode,
   buildShareSuggestions,
   recentShareTargets,
   type Note,
@@ -189,15 +190,18 @@ export default function ShareModal({ note, isOpen, onClose, notesList, currentUs
       setSuccess(t('share.sharedSuccess'));
       await loadShares();
     } catch (error: unknown) {
-      const axiosError = error as { response?: { status?: number; data?: string } };
-      if (axiosError.response?.status === 404) {
-        setError(t('share.userNotFound'));
-      } else if (axiosError.response?.status === 409) {
-        setError(t('share.alreadyShared'));
-      } else if (axiosError.response?.status === 400 && axiosError.response?.data?.includes('self')) {
-        setError(t('share.cannotShareSelf'));
-      } else {
-        setError(t('share.failedShare'));
+      switch (apiErrorCode(error)) {
+        case 'not_found':
+          setError(t('share.userNotFound'));
+          break;
+        case 'already_shared':
+          setError(t('share.alreadyShared'));
+          break;
+        case 'cannot_share_with_self':
+          setError(t('share.cannotShareSelf'));
+          break;
+        default:
+          setError(t('share.failedShare'));
       }
     } finally {
       setIsLoading(false);

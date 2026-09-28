@@ -60,8 +60,8 @@ type LabelCountsResponse struct {
 //	@Security	CookieAuth
 //	@Produce	json
 //	@Success	200	{array}		models.Label
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	500	{string}	string	"internal server error"
+//	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/labels [get]
 func (h *LabelsHandler) GetLabels(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -84,8 +84,8 @@ func (h *LabelsHandler) GetLabels(w http.ResponseWriter, r *http.Request) (int, 
 //	@Security	CookieAuth
 //	@Produce	json
 //	@Success	200	{object}	LabelCountsResponse
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	500	{string}	string	"internal server error"
+//	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/labels/counts [get]
 func (h *LabelsHandler) GetLabelCounts(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -119,14 +119,14 @@ func (h *LabelsHandler) GetLabelCounts(w http.ResponseWriter, r *http.Request) (
 //	@Security	CookieAuth
 //	@Accept		json
 //	@Produce	json
-//	@Param		body	body		AddLabelRequest	true	"Label name and optional client-supplied ID"
-//	@Success	200		{object}	models.Label	"an existing label with that name was returned unchanged"
-//	@Success	201		{object}	models.Label	"a new label was created"
-//	@Failure	400		{string}	string			"bad request"
-//	@Failure	401		{string}	string			"unauthorized"
-//	@Failure	409		{string}	string			"label already exists"
-//	@Failure	422		{string}	string			"label name too long"
-//	@Failure	500		{string}	string			"internal server error"
+//	@Param		body	body		AddLabelRequest			true	"Label name and optional client-supplied ID"
+//	@Success	200		{object}	models.Label			"an existing label with that name was returned unchanged"
+//	@Success	201		{object}	models.Label			"a new label was created"
+//	@Failure	400		{object}	apierr.ErrorResponse	"bad request"
+//	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	409		{object}	apierr.ErrorResponse	"label already exists"
+//	@Failure	422		{object}	apierr.ErrorResponse	"label name too long"
+//	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/labels [post]
 func (h *LabelsHandler) CreateLabel(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -197,7 +197,7 @@ func (h *LabelsHandler) createLabelWithID(ctx context.Context, userID, id, name 
 	case errors.Is(err, models.ErrLabelIDConflict):
 		return nil, http.StatusConflict, errors.New("label already exists")
 	case errors.Is(err, models.ErrLabelNameConflict):
-		return nil, http.StatusConflict, errors.New("label name already exists")
+		return nil, http.StatusConflict, models.ErrLabelNameConflict
 	case errors.Is(err, models.ErrLabelNameTooLong):
 		return nil, http.StatusUnprocessableEntity, err
 	default:
@@ -215,11 +215,11 @@ func (h *LabelsHandler) createLabelWithID(ctx context.Context, userID, id, name 
 //	@Param		id		path		string				true	"Label ID"
 //	@Param		body	body		RenameLabelRequest	true	"New label name"
 //	@Success	200		{object}	models.Label
-//	@Failure	400		{string}	string	"bad request"
-//	@Failure	401		{string}	string	"unauthorized"
-//	@Failure	404		{string}	string	"label not found"
-//	@Failure	422		{string}	string	"label name too long"
-//	@Failure	500		{string}	string	"internal server error"
+//	@Failure	400		{object}	apierr.ErrorResponse	"bad request"
+//	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	404		{object}	apierr.ErrorResponse	"label not found"
+//	@Failure	422		{object}	apierr.ErrorResponse	"label name too long"
+//	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/labels/{id} [patch]
 func (h *LabelsHandler) RenameLabel(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -253,7 +253,7 @@ func (h *LabelsHandler) RenameLabel(w http.ResponseWriter, r *http.Request) (int
 	label, err := h.labelStore.RenameLabel(r.Context(), labelID, user.ID, req.Name)
 	if err != nil {
 		if errors.Is(err, models.ErrLabelNameConflict) {
-			return http.StatusBadRequest, nil, errors.New("label name already exists")
+			return http.StatusBadRequest, nil, models.ErrLabelNameConflict
 		}
 		if errors.Is(err, models.ErrLabelNotFoundOrNotOwned) {
 			return http.StatusNotFound, nil, errors.New("label not found")
@@ -276,12 +276,12 @@ func (h *LabelsHandler) RenameLabel(w http.ResponseWriter, r *http.Request) (int
 //	@Param		id		path		string			true	"Note ID"
 //	@Param		body	body		AddLabelRequest	true	"Label name"
 //	@Success	200		{object}	models.Note
-//	@Failure	400		{string}	string	"bad request"
-//	@Failure	401		{string}	string	"unauthorized"
-//	@Failure	403		{string}	string	"no access to note"
-//	@Failure	404		{string}	string	"label not found"
-//	@Failure	422		{string}	string	"label name too long"
-//	@Failure	500		{string}	string	"internal server error"
+//	@Failure	400		{object}	apierr.ErrorResponse	"bad request"
+//	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	403		{object}	apierr.ErrorResponse	"no access to note"
+//	@Failure	404		{object}	apierr.ErrorResponse	"label not found"
+//	@Failure	422		{object}	apierr.ErrorResponse	"label name too long"
+//	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes/{id}/labels [post]
 func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -339,9 +339,9 @@ func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, a
 //	@Param		id			path		string	true	"Note ID"
 //	@Param		label_id	path		string	true	"Label ID"
 //	@Success	200			{object}	models.Note
-//	@Failure	401			{string}	string	"unauthorized"
-//	@Failure	403			{string}	string	"no access to note"
-//	@Failure	500			{string}	string	"internal server error"
+//	@Failure	401			{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	403			{object}	apierr.ErrorResponse	"no access to note"
+//	@Failure	500			{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes/{id}/labels/{label_id} [delete]
 func (h *LabelsHandler) RemoveLabel(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -377,9 +377,9 @@ func (h *LabelsHandler) RemoveLabel(w http.ResponseWriter, r *http.Request) (int
 //	@Security	CookieAuth
 //	@Param		id	path	string	true	"Label ID"
 //	@Success	204
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	404	{string}	string	"label not found"
-//	@Failure	500	{string}	string	"internal server error"
+//	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	404	{object}	apierr.ErrorResponse	"label not found"
+//	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/labels/{id} [delete]
 func (h *LabelsHandler) DeleteLabel(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
