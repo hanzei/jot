@@ -171,13 +171,8 @@ func Write(w http.ResponseWriter, r *http.Request, status int, code Code, msg st
 	if status >= http.StatusInternalServerError {
 		msg = InternalMessage
 	}
-	h := w.Header()
-	// Drop headers a handler may have set for a success body it never wrote
-	// (an image's Content-Type, a download's Content-Disposition).
-	h.Del("Content-Disposition")
-	h.Del("Content-Length")
-	h.Set("Content-Type", "application/json")
-	h.Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(status)
 	if err := json.MarshalWrite(w, ErrorResponse{Error: ErrorDetail{Code: code, Message: msg}}); err != nil {
 		logutil.FromContext(r.Context()).WithError(err).Error("Failed to encode error response")

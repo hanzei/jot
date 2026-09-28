@@ -62,13 +62,11 @@ func TestWrite(t *testing.T) {
 	t.Run("writes the envelope", func(t *testing.T) {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/notes/x", nil)
-		rec.Header().Set("Content-Disposition", "attachment")
 
 		Write(rec, req, http.StatusNotFound, CodeNotFound, "note not found")
 
 		assert.Equal(t, http.StatusNotFound, rec.Code)
 		assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
-		assert.Empty(t, rec.Header().Get("Content-Disposition"))
 		assert.JSONEq(t, `{"error":{"code":"not_found","message":"note not found"}}`, rec.Body.String())
 	})
 
