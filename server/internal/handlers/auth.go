@@ -460,8 +460,8 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) (int, any, erro
 
 var allowedImageTypes = map[string]bool{
 	mimeTypeJPEG: true,
-	"image/png":  true,
-	"image/webp": true,
+	mimeTypePNG:  true,
+	mimeTypeWebP: true,
 }
 
 const (

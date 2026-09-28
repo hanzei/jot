@@ -1405,16 +1405,20 @@ const docTemplate = `{
         },
         "/notes/export": {
             "get": {
+                "description": "A zip file holding notes.json (the notes, format jot_export version 2) and an images/ folder with every image attached to the exported notes. Covers the notes the user owns, including images collaborators added to them.",
                 "produces": [
-                    "application/json"
+                    "application/zip"
                 ],
                 "tags": [
                     "notes"
                 ],
-                "summary": "Export notes as a Jot JSON backup",
+                "summary": "Export notes as a Jot backup bundle",
                 "responses": {
                     "200": {
-                        "description": "Jot JSON export file attachment"
+                        "description": "Jot export bundle (zip) attachment",
+                        "schema": {
+                            "type": "file"
+                        }
                     },
                     "401": {
                         "description": "unauthorized",
@@ -1438,6 +1442,7 @@ const docTemplate = `{
         },
         "/notes/import": {
             "post": {
+                "description": "jot_json takes a Jot export bundle (.zip, as produced by GET /notes/export) of up to 1 GiB; a bare JSON file from an older export is rejected. Notes are imported all-or-nothing; an image that is missing or invalid is left off its note and listed in errors. google_keep takes a Takeout .zip or a single .json file of up to 32 MiB.",
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -1490,6 +1495,18 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "413": {
+                        "description": "file too large",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "422": {
+                        "description": "export exceeds a size or file-count limit",
                         "schema": {
                             "type": "string"
                         }

@@ -30,13 +30,18 @@ const imageMaxPerNote = 10
 // bandwidth; the lightbox always serves the original at full size.
 const thumbnailMaxDimension = 512
 
-const mimeTypeJPEG = "image/jpeg"
+const (
+	mimeTypeJPEG = "image/jpeg"
+	mimeTypePNG  = "image/png"
+	mimeTypeWebP = "image/webp"
+	mimeTypeGIF  = "image/gif"
+)
 
 var allowedNoteImageTypes = map[string]bool{
-	"image/png":  true,
+	mimeTypePNG:  true,
 	mimeTypeJPEG: true,
-	"image/webp": true,
-	"image/gif":  true,
+	mimeTypeWebP: true,
+	mimeTypeGIF:  true,
 }
 
 // decodeAndThumbnail confirms data is a valid, non-corrupt image (this is
@@ -103,6 +108,70 @@ func reclaimOrphanedImageBlobs(ctx context.Context, noteStore *models.NoteStore,
 // reclaimOrphanedImageBlobs for NotesHandler's own image endpoints.
 func (h *NotesHandler) reclaimNoteImageBlob(ctx context.Context, sha string) {
 	reclaimOrphanedImageBlobs(ctx, h.noteStore, h.imageStore, []string{sha})
+}
+
+// inspectedNoteImage is an uploaded image that passed inspectNoteImage,
+// ready for storeNoteImage.
+type inspectedNoteImage struct {
+	data        []byte
+	contentType string
+	sha         string
+	width       int
+	height      int
+	thumbnail   []byte
+}
+
+// inspectNoteImage runs the checks every new note image goes through —
+// content-type sniffing and a full decode — and derives what storing it
+// needs: its hash, dimensions and thumbnail. Every error it returns is a
+// problem with the bytes themselves, safe to show the client.
+func inspectNoteImage(data []byte) (inspectedNoteImage, error) {
+	contentType := http.DetectContentType(data)
+	if !allowedNoteImageTypes[contentType] {
+		return inspectedNoteImage{}, errors.New("unsupported file type: must be png, jpeg, webp, or gif")
+	}
+
+	width, height, thumbnail, err := decodeAndThumbnail(data)
+	if err != nil {
+		return inspectedNoteImage{}, fmt.Errorf("unsupported or corrupt image: %w", err)
+	}
+
+	sum := sha256.Sum256(data)
+	return inspectedNoteImage{
+		data:        data,
+		contentType: contentType,
+		sha:         hex.EncodeToString(sum[:]),
+		width:       width,
+		height:      height,
+		thumbnail:   thumbnail,
+	}, nil
+}
+
+// storeNoteImage pins img's hash and writes its blob and thumbnail. The pin
+// keeps the orphan sweep and a concurrent delete's reclaim from removing the
+// blob before the caller's note_images row commits (a dedup hit reuses an
+// existing, possibly orphaned, blob), so the caller must hold it until then
+// and call release once the row has committed or failed — before any
+// rollback reclaim of its own, which would otherwise skip the pinned hash.
+// On error nothing is left pinned.
+func (h *NotesHandler) storeNoteImage(ctx context.Context, img inspectedNoteImage) (release func(), err error) {
+	release = h.imageStore.Pin(img.sha)
+
+	if err := h.imageStore.Put(ctx, img.sha, bytes.NewReader(img.data)); err != nil {
+		release()
+		return nil, fmt.Errorf("store image blob: %w", err)
+	}
+
+	// Generated eagerly here (rather than on first thumbnail request) so the
+	// grid never waits on a first-request miss; a no-op if a dedup hit means
+	// this hash's thumbnail already exists.
+	if err := h.imageStore.PutThumbnail(ctx, img.sha, bytes.NewReader(img.thumbnail)); err != nil {
+		release() // the rollback reclaim skips pinned hashes
+		h.reclaimNoteImageBlob(ctx, img.sha)
+		return nil, fmt.Errorf("store thumbnail: %w", err)
+	}
+
+	return release, nil
 }
 
 // UploadNoteImage godoc
@@ -173,47 +242,26 @@ func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (
 		return http.StatusInternalServerError, nil, fmt.Errorf("read uploaded file: %w", err)
 	}
 
-	contentType := http.DetectContentType(data)
-	if !allowedNoteImageTypes[contentType] {
-		return http.StatusBadRequest, nil, errors.New("unsupported file type: must be png, jpeg, webp, or gif")
-	}
-
-	width, height, thumbnail, err := decodeAndThumbnail(data)
+	inspected, err := inspectNoteImage(data)
 	if err != nil {
-		return http.StatusBadRequest, nil, fmt.Errorf("unsupported or corrupt image: %w", err)
+		return http.StatusBadRequest, nil, err
 	}
 
-	sum := sha256.Sum256(data)
-	sha := hex.EncodeToString(sum[:])
-
-	// Pinned from Put until the row commits, so neither the orphan sweep nor
-	// a concurrent delete's reclaim removes a blob this upload is about to
-	// reference (a dedup hit reuses an existing, possibly orphaned, blob).
-	releasePin := h.imageStore.Pin(sha)
+	releasePin, err := h.storeNoteImage(r.Context(), inspected)
+	if err != nil {
+		return http.StatusInternalServerError, nil, err
+	}
 	defer releasePin()
 
-	if putErr := h.imageStore.Put(r.Context(), sha, bytes.NewReader(data)); putErr != nil {
-		return http.StatusInternalServerError, nil, fmt.Errorf("store image blob: %w", putErr)
-	}
-
-	// Generated eagerly here (rather than on first thumbnail request) so the
-	// grid never waits on a first-request miss; a no-op if a dedup hit means
-	// this hash's thumbnail already exists.
-	if putErr := h.imageStore.PutThumbnail(r.Context(), sha, bytes.NewReader(thumbnail)); putErr != nil {
-		releasePin() // the rollback reclaim skips pinned hashes
-		h.reclaimNoteImageBlob(r.Context(), sha)
-		return http.StatusInternalServerError, nil, fmt.Errorf("store thumbnail: %w", putErr)
-	}
-
-	img, err := h.noteStore.CreateNoteImage(r.Context(), noteID, user.ID, header.Filename, contentType, int64(len(data)), sha, width, height, imageMaxPerNote)
+	img, err := h.noteStore.CreateNoteImage(r.Context(), noteID, user.ID, header.Filename, inspected.contentType, int64(len(data)), inspected.sha, inspected.width, inspected.height, imageMaxPerNote)
 	releasePin() // committed or failed: the row, not the pin, decides now
 	if err != nil {
-		// The blob was already written by Put above; if the row never got
+		// The blob was already written by storeNoteImage; if the row never got
 		// created (e.g. the cap-check pre-check above was stale and the
 		// atomic check in CreateNoteImage rejected this one), reclaim it
 		// rather than leaking it — it's a no-op if some other row already
 		// references this hash (dedup).
-		h.reclaimNoteImageBlob(r.Context(), sha)
+		h.reclaimNoteImageBlob(r.Context(), inspected.sha)
 		if errors.Is(err, models.ErrNoteImageCapExceeded) {
 			return http.StatusUnprocessableEntity, nil, fmt.Errorf("note cannot have more than %d images", imageMaxPerNote)
 		}

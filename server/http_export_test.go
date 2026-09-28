@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -33,11 +34,11 @@ func TestExportEmptyAccount(t *testing.T) {
 
 	export, err := user.Client.ExportNotes(t.Context())
 	require.NoError(t, err)
-	assert.Equal(t, "jot_export", export.Format)
-	assert.Equal(t, 1, export.Version)
-	assert.NotZero(t, export.ExportedAt)
-	assert.NotNil(t, export.Notes)
-	assert.Empty(t, export.Notes)
+	assert.Equal(t, "jot_export", export.Manifest.Format)
+	assert.Equal(t, 2, export.Manifest.Version)
+	assert.NotZero(t, export.Manifest.ExportedAt)
+	assert.NotNil(t, export.Manifest.Notes)
+	assert.Empty(t, export.Manifest.Notes)
 }
 
 func TestExportEnvelopeShape(t *testing.T) {
@@ -52,13 +53,13 @@ func TestExportEnvelopeShape(t *testing.T) {
 
 	export, err := user.Client.ExportNotes(t.Context())
 	require.NoError(t, err)
-	assert.Equal(t, "jot_export", export.Format)
-	assert.Equal(t, 1, export.Version)
-	require.Len(t, export.Notes, 1)
-	assert.Empty(t, export.Notes[0].Title)
-	assert.Equal(t, "Some content", export.Notes[0].Content)
-	assert.Equal(t, client.NoteTypeText, export.Notes[0].NoteType)
-	assert.NotNil(t, export.Notes[0].Labels)
+	assert.Equal(t, "jot_export", export.Manifest.Format)
+	assert.Equal(t, 2, export.Manifest.Version)
+	require.Len(t, export.Manifest.Notes, 1)
+	assert.Empty(t, export.Manifest.Notes[0].Title)
+	assert.Equal(t, "Some content", export.Manifest.Notes[0].Content)
+	assert.Equal(t, client.NoteTypeText, export.Manifest.Notes[0].NoteType)
+	assert.NotNil(t, export.Manifest.Notes[0].Labels)
 }
 
 func TestExportOnlyOwnedNotes(t *testing.T) {
@@ -81,8 +82,8 @@ func TestExportOnlyOwnedNotes(t *testing.T) {
 	// other's export should only contain "Other Note", not the shared "Owner Note".
 	export, err := other.Client.ExportNotes(t.Context())
 	require.NoError(t, err)
-	require.Len(t, export.Notes, 1)
-	assert.Equal(t, "Other Note", export.Notes[0].Content)
+	require.Len(t, export.Manifest.Notes, 1)
+	assert.Equal(t, "Other Note", export.Manifest.Notes[0].Content)
 }
 
 func TestExportExcludesTrashedNotes(t *testing.T) {
@@ -99,8 +100,8 @@ func TestExportExcludesTrashedNotes(t *testing.T) {
 
 	export, err := user.Client.ExportNotes(t.Context())
 	require.NoError(t, err)
-	require.Len(t, export.Notes, 1)
-	assert.Equal(t, active.Content, export.Notes[0].Content)
+	require.Len(t, export.Manifest.Notes, 1)
+	assert.Equal(t, active.Content, export.Manifest.Notes[0].Content)
 }
 
 func TestExportIncludesArchivedNotes(t *testing.T) {
@@ -118,7 +119,7 @@ func TestExportIncludesArchivedNotes(t *testing.T) {
 
 	export, err := user.Client.ExportNotes(t.Context())
 	require.NoError(t, err)
-	assert.Len(t, export.Notes, 2)
+	assert.Len(t, export.Manifest.Notes, 2)
 }
 
 func TestExportResponseHeaders(t *testing.T) {
@@ -134,13 +135,22 @@ func TestExportResponseHeaders(t *testing.T) {
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
+	assert.Equal(t, "application/zip", resp.Header.Get("Content-Type"))
 	assert.Contains(t, resp.Header.Get("Content-Disposition"), "attachment")
 	assert.Contains(t, resp.Header.Get("Content-Disposition"), "jot-export-")
-	assert.Contains(t, resp.Header.Get("Content-Disposition"), ".json")
+	assert.Contains(t, resp.Header.Get("Content-Disposition"), ".zip")
 }
 
-// --- Jot JSON import tests ---
+// jotBundle packs manifest (the notes.json text) and images (bundle entry
+// name -> bytes) into a Jot export zip.
+func jotBundle(t *testing.T, manifest string, images map[string][]byte) []byte {
+	t.Helper()
+	files := map[string][]byte{client.JotExportManifest: []byte(manifest)}
+	maps.Copy(files, images)
+	return buildZip(t, files)
+}
+
+// --- Jot import tests ---
 
 func TestImportJotJSONBasic(t *testing.T) {
 	t.Parallel()
@@ -151,7 +161,7 @@ func TestImportJotJSONBasic(t *testing.T) {
 	// on import since text notes do not have titles; only "content" is preserved.
 	payload := `{
 		"format": "jot_export",
-		"version": 1,
+		"version": 2,
 		"exported_at": "2026-01-01T00:00:00Z",
 		"notes": [
 			{
@@ -167,7 +177,7 @@ func TestImportJotJSONBasic(t *testing.T) {
 		]
 	}`
 
-	result, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.json", bytes.NewReader([]byte(payload)))
+	result, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.zip", bytes.NewReader(jotBundle(t, payload, nil)))
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Imported)
 	assert.Equal(t, 0, result.Skipped)
@@ -187,31 +197,31 @@ func TestImportJotJSONInvalidFormat(t *testing.T) {
 	user := ts.createTestUser(t, "jotimport2", "password123", false)
 
 	t.Run("wrong format marker", func(t *testing.T) {
-		payload := `{"format":"google_keep","version":1,"exported_at":"2026-01-01T00:00:00Z","notes":[]}`
-		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.json", bytes.NewReader([]byte(payload)))
+		payload := `{"format":"google_keep","version":2,"exported_at":"2026-01-01T00:00:00Z","notes":[]}`
+		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.zip", bytes.NewReader(jotBundle(t, payload, nil)))
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("unsupported version", func(t *testing.T) {
 		payload := `{"format":"jot_export","version":99,"exported_at":"2026-01-01T00:00:00Z","notes":[]}`
-		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.json", bytes.NewReader([]byte(payload)))
+		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.zip", bytes.NewReader(jotBundle(t, payload, nil)))
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("notes is null", func(t *testing.T) {
-		payload := `{"format":"jot_export","version":1,"exported_at":"2026-01-01T00:00:00Z","notes":null}`
-		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.json", bytes.NewReader([]byte(payload)))
+		payload := `{"format":"jot_export","version":2,"exported_at":"2026-01-01T00:00:00Z","notes":null}`
+		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.zip", bytes.NewReader(jotBundle(t, payload, nil)))
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("not valid JSON", func(t *testing.T) {
-		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.json", bytes.NewReader([]byte("not json")))
+		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.zip", bytes.NewReader(jotBundle(t, "not json", nil)))
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("google keep data with jot_json type", func(t *testing.T) {
 		data := marshalKeepNote(t, keepNoteJSON{Title: "Keep Note", TextContent: "content"})
-		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.json", bytes.NewReader(data))
+		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.zip", bytes.NewReader(jotBundle(t, string(data), nil)))
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 }
@@ -222,51 +232,51 @@ func TestImportJotJSONValidation(t *testing.T) {
 	user := ts.createTestUser(t, "jotimportval", "password123", false)
 
 	makePayload := func(noteJSON string) []byte {
-		return []byte(`{"format":"jot_export","version":1,"exported_at":"2026-01-01T00:00:00Z","notes":[` + noteJSON + `]}`)
+		return []byte(`{"format":"jot_export","version":2,"exported_at":"2026-01-01T00:00:00Z","notes":[` + noteJSON + `]}`)
 	}
 
 	t.Run("unsupported note_type returns 400", func(t *testing.T) {
 		payload := makePayload(`{"title":"X","content":"","note_type":"drawing","color":"#ffffff","pinned":false,"archived":false,"position":0,"labels":[]}`)
-		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.json", bytes.NewReader(payload))
+		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.zip", bytes.NewReader(jotBundle(t, string(payload), nil)))
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("title too long returns 400", func(t *testing.T) {
 		longTitle, _ := json.Marshal(strings.Repeat("a", 201))
 		payload := makePayload(`{"title":` + string(longTitle) + `,"content":"","note_type":"text","color":"#ffffff","pinned":false,"archived":false,"position":0,"labels":[]}`)
-		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.json", bytes.NewReader(payload))
+		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.zip", bytes.NewReader(jotBundle(t, string(payload), nil)))
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("content too long returns 400", func(t *testing.T) {
 		longContent, _ := json.Marshal(strings.Repeat("a", 10001))
 		payload := makePayload(`{"title":"X","content":` + string(longContent) + `,"note_type":"text","color":"#ffffff","pinned":false,"archived":false,"position":0,"labels":[]}`)
-		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.json", bytes.NewReader(payload))
+		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.zip", bytes.NewReader(jotBundle(t, string(payload), nil)))
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("invalid color returns 400", func(t *testing.T) {
 		payload := makePayload(`{"title":"X","content":"","note_type":"text","color":"notacolor","pinned":false,"archived":false,"position":0,"labels":[]}`)
-		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.json", bytes.NewReader(payload))
+		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.zip", bytes.NewReader(jotBundle(t, string(payload), nil)))
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("text note with items returns 400", func(t *testing.T) {
 		payload := makePayload(`{"title":"X","content":"","note_type":"text","color":"#ffffff","pinned":false,"archived":false,"position":0,"labels":[],"items":[{"text":"item","completed":false,"position":0,"indent_level":0}]}`)
-		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.json", bytes.NewReader(payload))
+		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.zip", bytes.NewReader(jotBundle(t, string(payload), nil)))
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("item text too long returns 400", func(t *testing.T) {
 		longItem, _ := json.Marshal(strings.Repeat("a", 501))
 		payload := makePayload(`{"title":"X","content":"","note_type":"list","color":"#ffffff","pinned":false,"archived":false,"position":0,"labels":[],"items":[{"text":` + string(longItem) + `,"completed":false,"position":0,"indent_level":0}]}`)
-		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.json", bytes.NewReader(payload))
+		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.zip", bytes.NewReader(jotBundle(t, string(payload), nil)))
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("invalid indent_level returns 400", func(t *testing.T) {
 		payload := makePayload(`{"title":"X","content":"","note_type":"list","color":"#ffffff","pinned":false,"archived":false,"position":0,"labels":[],"items":[{"text":"item","completed":false,"position":0,"indent_level":5}]}`)
-		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.json", bytes.NewReader(payload))
+		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.zip", bytes.NewReader(jotBundle(t, string(payload), nil)))
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 }
@@ -320,16 +330,12 @@ func TestImportJotJSONRoundTrip(t *testing.T) {
 	// Export source user's notes.
 	export, err := src.Client.ExportNotes(t.Context())
 	require.NoError(t, err)
-	assert.Equal(t, "jot_export", export.Format)
-	assert.Equal(t, 1, export.Version)
-	assert.Len(t, export.Notes, 4)
-
-	// Marshal export for import.
-	exportData, err := json.Marshal(export)
-	require.NoError(t, err)
+	assert.Equal(t, "jot_export", export.Manifest.Format)
+	assert.Equal(t, 2, export.Manifest.Version)
+	assert.Len(t, export.Manifest.Notes, 4)
 
 	// Import into fresh destination user.
-	result, err := dst.Client.ImportNotes(t.Context(), "jot_json", "export.json", bytes.NewReader(exportData))
+	result, err := dst.Client.ImportNotes(t.Context(), "jot_json", "export.zip", bytes.NewReader(export.Data))
 	require.NoError(t, err)
 	assert.Equal(t, 4, result.Imported)
 	assert.Equal(t, 0, result.Skipped)
@@ -394,13 +400,13 @@ func TestImportJotJSONDuplicateImport(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "jotduplicate", "password123", false)
 
-	payload := `{"format":"jot_export","version":1,"exported_at":"2026-01-01T00:00:00Z","notes":[{"title":"Dup","content":"","note_type":"text","color":"#ffffff","pinned":false,"archived":false,"position":0,"labels":[]}]}`
+	payload := `{"format":"jot_export","version":2,"exported_at":"2026-01-01T00:00:00Z","notes":[{"title":"Dup","content":"","note_type":"text","color":"#ffffff","pinned":false,"archived":false,"position":0,"labels":[]}]}`
 
-	result1, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.json", bytes.NewReader([]byte(payload)))
+	result1, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.zip", bytes.NewReader(jotBundle(t, payload, nil)))
 	require.NoError(t, err)
 	assert.Equal(t, 1, result1.Imported)
 
-	result2, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.json", bytes.NewReader([]byte(payload)))
+	result2, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.zip", bytes.NewReader(jotBundle(t, payload, nil)))
 	require.NoError(t, err)
 	assert.Equal(t, 1, result2.Imported)
 
@@ -414,9 +420,9 @@ func TestImportJotJSONLabelsDeduplication(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "jotlabeldedupe", "password123", false)
 
-	payload := `{"format":"jot_export","version":1,"exported_at":"2026-01-01T00:00:00Z","notes":[{"title":"N","content":"","note_type":"text","color":"#ffffff","pinned":false,"archived":false,"position":0,"labels":["work","work","  work  "]}]}`
+	payload := `{"format":"jot_export","version":2,"exported_at":"2026-01-01T00:00:00Z","notes":[{"title":"N","content":"","note_type":"text","color":"#ffffff","pinned":false,"archived":false,"position":0,"labels":["work","work","  work  "]}]}`
 
-	result, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.json", bytes.NewReader([]byte(payload)))
+	result, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.zip", bytes.NewReader(jotBundle(t, payload, nil)))
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Imported)
 
@@ -433,9 +439,9 @@ func TestImportJotJSONEmptyColor(t *testing.T) {
 	user := ts.createTestUser(t, "jotcolordefault", "password123", false)
 
 	// Omitting color field should default to #ffffff.
-	payload := `{"format":"jot_export","version":1,"exported_at":"2026-01-01T00:00:00Z","notes":[{"title":"No Color","content":"","note_type":"text","pinned":false,"archived":false,"position":0,"labels":[]}]}`
+	payload := `{"format":"jot_export","version":2,"exported_at":"2026-01-01T00:00:00Z","notes":[{"title":"No Color","content":"","note_type":"text","pinned":false,"archived":false,"position":0,"labels":[]}]}`
 
-	result, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.json", bytes.NewReader([]byte(payload)))
+	result, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.zip", bytes.NewReader(jotBundle(t, payload, nil)))
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Imported)
 
