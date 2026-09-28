@@ -1,5 +1,6 @@
 import { test, expect, E2E_ADMIN_CREDENTIALS } from '../fixtures';
 import { expectNoViolations } from '../fixtures/axe';
+import { openNoteInConflict } from '../fixtures/noteConflict';
 import type { Page } from '@playwright/test';
 
 /**
@@ -92,6 +93,18 @@ for (const theme of THEMES) {
       await dashboardPage.switchToBin();
       await dashboardPage.openNote('A11y Bin Note');
       await expect(page.locator('[role="dialog"][aria-modal="true"]').getByPlaceholder('Note title...')).toBeVisible();
+      await expectTheme(page, theme);
+
+      await expectNoViolations(page);
+    });
+
+    test('note conflict banner has no WCAG A/AA violations', async ({ page, authenticatedUser, dashboardPage, noteEditorPage, noteConflictBanner }) => {
+      void authenticatedUser;
+      await openNoteInConflict(
+        { page, dashboardPage, noteEditorPage },
+        { original: 'A11y Conflict Note', mine: 'Local edit', theirs: 'Remote edit' },
+      );
+      await noteConflictBanner.expectVisible();
       await expectTheme(page, theme);
 
       await expectNoViolations(page);

@@ -20,7 +20,7 @@ import {
 } from '../api/notes';
 import { shareNote, unshareNote } from '../api/users';
 import { useOfflineNote } from './useOfflineNotes';
-import { DEFAULT_NOTE_COLOR, generateId, textToListNote, listToText, checkConvertToListCaps, applyCompletedCascade, type ListItem } from '@jot/shared';
+import { DEFAULT_NOTE_COLOR, generateId, textToListNote, listToText, checkConvertToListCaps, applyCompletedCascade, patchTouchesSharedContent, type ListItem } from '@jot/shared';
 import type {
   Note,
   NoteItem,
@@ -371,8 +371,7 @@ export function useUpdateNote() {
       const existing = await getLocalNote(db, id);
       // Only content edits (title/content) are version-guarded; per-user fields
       // (color/pinned/archived/collapsed) live in note_user_state and aren't.
-      const fields = data as { title?: string; content?: string };
-      const touchesContent = fields.title !== undefined || fields.content !== undefined;
+      const touchesContent = patchTouchesSharedContent(data);
 
       // Write the edit to SQLite up front, before the request goes out (same
       // reasoning as useToggleNoteItemCompleted / #945): both note reads are
