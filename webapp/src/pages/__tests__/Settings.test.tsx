@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter, useLocation } from 'react-router';
 import Settings from '../Settings';
 import { ToastProvider } from '@/components/Toast';
-import { users, auth, sessions, sso, isAxiosError } from '@/utils/api';
+import { users, auth, sessions, sso } from '@/utils/api';
 import * as authUtils from '@/utils/auth';
 import type { SSOConfig, UserSettings } from '@jot/shared';
 import i18n from '@/i18n';
@@ -34,7 +34,6 @@ vi.mock('@/utils/api', () => ({
     unlink: vi.fn().mockResolvedValue(undefined),
   },
   SSO_LINK_URL: '/api/v1/auth/oidc/link',
-  isAxiosError: vi.fn(),
 }));
 
 vi.mock('@/utils/auth', () => ({
@@ -96,7 +95,6 @@ const renderSettings = (ssoConfig: SSOConfig = SSO_DISABLED, initialEntry = '/se
 describe('Settings', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(isAxiosError).mockReturnValue(false);
     vi.mocked(authUtils.isAdmin).mockReturnValue(false);
     vi.mocked(authUtils.getUser).mockReturnValue(mockUser);
     i18n.changeLanguage('en');
@@ -169,7 +167,6 @@ describe('Settings', () => {
     it('shows a conflict error on 409 response', async () => {
       const user = userEvent.setup();
       const axiosError = createApiError(409, 'username_taken', 'username already taken');
-      vi.mocked(isAxiosError).mockReturnValue(true);
       vi.mocked(users.updateMe).mockRejectedValue(axiosError);
 
       renderSettings();
@@ -183,7 +180,6 @@ describe('Settings', () => {
 
     it('shows a generic error on non-axios failure', async () => {
       const user = userEvent.setup();
-      vi.mocked(isAxiosError).mockReturnValue(false);
       vi.mocked(users.updateMe).mockRejectedValue(new Error('network error'));
 
       renderSettings();
@@ -197,7 +193,6 @@ describe('Settings', () => {
 
     it('clears previous account error message on a new submission', async () => {
       const user = userEvent.setup();
-      vi.mocked(isAxiosError).mockReturnValue(false);
       const mockSettings = { ...defaultSettings };
       vi.mocked(users.updateMe)
         .mockRejectedValueOnce(new Error('first failure'))
@@ -375,7 +370,6 @@ describe('Settings', () => {
     it('shows the translated error when unlink would strand the account', async () => {
       const user = userEvent.setup();
       vi.mocked(authUtils.getUser).mockReturnValue({ ...mockUser, has_sso_linked: true });
-      vi.mocked(isAxiosError).mockReturnValue(true);
       vi.mocked(sso.unlink).mockRejectedValueOnce(
         createApiError(422, 'would_strand_account', 'cannot unlink SSO: set a password first'),
       );

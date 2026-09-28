@@ -358,12 +358,11 @@ func (s *Server) setupRoutes() error {
 	}))
 	// Unknown routes and wrong methods under /api answer with the JSON error
 	// envelope like every other API error; everything else (the SPA) keeps
-	// net/http's plain-text defaults.
+	// net/http's plain-text defaults. Set before Route below, so chi hands
+	// them down to the mounted /api/v1 subrouter.
 	s.router.NotFound(apiNotFound)
 	s.router.MethodNotAllowed(apiMethodNotAllowed)
 	s.router.Route("/api/v1", func(r chi.Router) {
-		r.NotFound(apiNotFound)
-		r.MethodNotAllowed(apiMethodNotAllowed)
 		r.Use(cop.Handler)
 		r.Get("/config", s.wrapHandler(s.handleConfig))
 

@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router';
 import Admin from '../Admin';
 import { ToastProvider } from '@/components/Toast';
-import { admin, isAxiosError } from '@/utils/api';
+import { admin } from '@/utils/api';
 import * as authUtils from '@/utils/auth';
 import { VALIDATION, type User, type AdminStatsResponse } from '@jot/shared';
 import { createApiError } from '@/utils/__tests__/test-helpers';
@@ -18,7 +18,6 @@ vi.mock('@/utils/api', () => ({
     setUserPassword: vi.fn(),
     deleteUser: vi.fn(),
   },
-  isAxiosError: vi.fn(),
 }));
 
 vi.mock('@/utils/auth', () => ({
@@ -323,7 +322,6 @@ describe('Admin', () => {
 
     it('shows server error message when create user fails', async () => {
       const user = userEvent.setup();
-      vi.mocked(isAxiosError).mockReturnValue(true);
       vi.mocked(admin.createUser).mockRejectedValue(createApiError(409, 'username_taken', 'username already taken'));
 
       renderAdmin();
@@ -391,7 +389,6 @@ describe('Admin', () => {
 
     it('shows a server error message when the reset fails', async () => {
       const user = userEvent.setup();
-      vi.mocked(isAxiosError).mockReturnValue(true);
       vi.mocked(admin.setUserPassword).mockRejectedValue(createApiError(400, 'validation_failed', '  password must be at least 10 characters  '));
 
       renderAdmin();
@@ -466,7 +463,6 @@ describe('Admin', () => {
     it('shows the translated error when role update fails', async () => {
       const user = userEvent.setup();
       const axiosError = createApiError(409, 'last_admin', 'cannot demote the last admin');
-      vi.mocked(isAxiosError).mockReturnValue(true);
       vi.mocked(admin.updateUserRole).mockRejectedValue(axiosError);
 
       renderAdmin();
@@ -486,7 +482,6 @@ describe('Admin', () => {
 
     it('shows fallback error for non-axios failures', async () => {
       const user = userEvent.setup();
-      vi.mocked(isAxiosError).mockReturnValue(false);
       vi.mocked(admin.updateUserRole).mockRejectedValue(new Error('network error'));
 
       renderAdmin();

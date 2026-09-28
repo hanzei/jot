@@ -8,8 +8,6 @@ vi.mock('@/utils/api', () => ({
   notes: {
     importNotes: mockImportNotes,
   },
-  isAxiosError: (err: unknown): boolean =>
-    typeof err === 'object' && err !== null && (err as { isAxiosError?: boolean }).isAxiosError === true,
 }));
 
 import ImportModal from '../ImportModal';
