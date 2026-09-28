@@ -141,10 +141,13 @@ literals in the workflow, and those are the ones worth eyeballing against their 
 
 ## 6. Runner labels, permissions, and fork guards
 
-- Most jobs use `ubuntu-latest`; the Docker and release image jobs pin `ubuntu-24.04`
-  with `ubuntu-24.04-arm` for the arm64 leg. There is no `ubuntu-latest-arm` — if you
-  pin one leg of a matrix, pin both to the same Ubuntu release so the two platforms
-  build on the same base.
+- Every job pins an explicit Ubuntu release (`ubuntu-26.04`, with `ubuntu-26.04-arm`
+  for the arm64 leg of the Docker and release image matrices) — never `ubuntu-latest`,
+  whose silent jump to a new release is exactly the kind of unreviewed change the
+  pinning policy exists to prevent. Move to a new release deliberately, across every
+  workflow in one change, once GitHub announces it GA. There is no `ubuntu-latest-arm`;
+  keep both legs of a matrix on the same Ubuntu release so the two platforms build on
+  the same base.
 - Every workflow declares a top-level least-privilege `permissions:` block
   (`contents: read`, plus `packages: write` for the ghcr pushes and `contents: write`
   for the release). Never widen one during a version sweep; if a new action version

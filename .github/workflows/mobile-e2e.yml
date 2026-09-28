@@ -44,7 +44,7 @@ jobs:
   # the broader path set (Taskfile/scripts/other workflows) that does not start
   # this workflow.
   check-flows:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -112,7 +112,7 @@ jobs:
   # and runs on the emulator with NO secrets — which is the property we need,
   # and which a bare debug build does not have.
   build-apk:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: check-flows
     steps:
       # On pull_request GitHub checks out the ephemeral merge commit by default;
@@ -205,7 +205,7 @@ jobs:
           if-no-files-found: error
 
   e2e:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: build-apk
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

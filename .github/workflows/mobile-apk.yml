@@ -40,7 +40,7 @@ on:
 jobs:
   build-apk:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     outputs:
       apk-name: ${{ steps.apk.outputs.name }}
     # On a v* tag build, expose the tag as APP_VERSION so app.config.js stamps
