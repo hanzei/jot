@@ -447,6 +447,11 @@ regardless of `JOT_DB_DRIVER`.
   and separately back up `JOT_UPLOAD_DIR` (still local/volume-mounted, since blob
   storage does not follow `JOT_DB_DRIVER`).
 
+Back up and restore the two together: the server periodically deletes files in
+`JOT_UPLOAD_DIR` that no database row references, so restoring a database older
+than the upload directory permanently removes the newer images. Images whose
+files are missing are logged as warnings.
+
 ## API Reference
 
 The full interactive API reference is available via Swagger UI at `http://localhost:8080/api/docs/index.html` when the server is running.

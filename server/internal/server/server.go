@@ -210,14 +210,19 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (*Server, error) {
 		}
 		return nil
 	}, "purge old trashed notes")
+	s.startPeriodicTask(ctx, "image-orphan-sweep", 24*time.Hour, true, func() error {
+		report, err := blobstore.Sweep(ctx, noteStore, imageStore, imageOrphanSweepGrace)
+		logImageSweepReport(log, report)
+		return err
+	}, "sweep orphaned note image blobs")
 
 	if err := s.setupRoutes(); err != nil {
-		// Unlike the failure paths above, both periodic tasks are already
-		// running by this point, and the second one runs immediately rather
-		// than waiting for its first tick — so it may be inside
-		// PurgeOldTrashedNotes (db) or ReclaimIfOrphaned (imageStore) right
-		// now. cancel() only signals; wait for the goroutines to actually
-		// stop before closing what they are still using.
+		// Unlike the failure paths above, the periodic tasks are already
+		// running by this point, and the trash purge and orphan sweep run
+		// immediately rather than waiting for their first tick — so they may
+		// be using the db or imageStore right now. cancel() only signals;
+		// wait for the goroutines to actually stop before closing what they
+		// are still using.
 		cancel()
 		s.bgWg.Wait()
 		_ = imageStore.Close()
@@ -225,6 +230,47 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (*Server, error) {
 		return nil, fmt.Errorf("setup routes: %w", err)
 	}
 	return s, nil
+}
+
+// imageOrphanSweepGrace is how old a blob must be before the orphan sweep may
+// reclaim it: long enough that no upload is still between writing its blob
+// and committing its note_images row.
+const imageOrphanSweepGrace = time.Hour
+
+// maxLoggedMissingBlobs caps the per-hash lines one sweep logs, so a badly
+// mismatched backup restore does not flood the log; the summary still
+// carries the full count.
+const maxLoggedMissingBlobs = 20
+
+// logImageSweepReport logs what an orphan sweep did. A quiet run logs
+// nothing; missing blobs are warnings, since they surface to users as broken
+// images and usually mean the database and upload directory have diverged.
+func logImageSweepReport(log *logrus.Logger, report blobstore.SweepReport) {
+	if report.Reclaimed > 0 || report.TempFilesRemoved > 0 {
+		log.WithFields(logrus.Fields{
+			"blobs_scanned":      report.BlobsScanned,
+			"reclaimed":          report.Reclaimed,
+			"temp_files_removed": report.TempFilesRemoved,
+		}).Info("Reclaimed orphaned note image files")
+	}
+	if report.UnreferencedSkipped > 0 {
+		log.WithField("unreferenced", report.UnreferencedSkipped).
+			Warn("Upload directory holds note image blobs but the database references none; left them in place. Check that JOT_DB_DSN and JOT_UPLOAD_DIR belong to the same installation")
+	}
+	if len(report.MissingBlobs) == 0 {
+		return
+	}
+	rows := 0
+	for i, m := range report.MissingBlobs {
+		rows += m.Rows
+		if i < maxLoggedMissingBlobs {
+			log.WithFields(logrus.Fields{"sha256": m.SHA256, "rows": m.Rows}).Warn("Note image blob missing on disk")
+		}
+	}
+	log.WithFields(logrus.Fields{
+		"missing_blobs": len(report.MissingBlobs),
+		"affected_rows": rows,
+	}).Warn("Note images reference blobs missing on disk; restore them from a backup of the upload directory or delete the images")
 }
 
 // buildOIDCHandler constructs the OIDC handler when OIDC is configured,

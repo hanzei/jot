@@ -186,6 +186,12 @@ func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (
 	sum := sha256.Sum256(data)
 	sha := hex.EncodeToString(sum[:])
 
+	// Pinned from Put until the row commits, so neither the orphan sweep nor
+	// a concurrent delete's reclaim removes a blob this upload is about to
+	// reference (a dedup hit reuses an existing, possibly orphaned, blob).
+	releasePin := h.imageStore.Pin(sha)
+	defer releasePin()
+
 	if putErr := h.imageStore.Put(r.Context(), sha, bytes.NewReader(data)); putErr != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("store image blob: %w", putErr)
 	}
@@ -194,11 +200,13 @@ func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (
 	// grid never waits on a first-request miss; a no-op if a dedup hit means
 	// this hash's thumbnail already exists.
 	if putErr := h.imageStore.PutThumbnail(r.Context(), sha, bytes.NewReader(thumbnail)); putErr != nil {
+		releasePin() // the rollback reclaim skips pinned hashes
 		h.reclaimNoteImageBlob(r.Context(), sha)
 		return http.StatusInternalServerError, nil, fmt.Errorf("store thumbnail: %w", putErr)
 	}
 
 	img, err := h.noteStore.CreateNoteImage(r.Context(), noteID, user.ID, header.Filename, contentType, int64(len(data)), sha, width, height, imageMaxPerNote)
+	releasePin() // committed or failed: the row, not the pin, decides now
 	if err != nil {
 		// The blob was already written by Put above; if the row never got
 		// created (e.g. the cap-check pre-check above was stale and the
