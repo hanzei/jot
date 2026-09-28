@@ -25,6 +25,8 @@ export const VALIDATION = {
   PAT_NAME_MAX_LENGTH: 100,
   PAT_MAX_COUNT: 50,
   SEARCH_QUERY_MAX_LENGTH: 500,
+  // Keep in sync with server/internal/models/validation.go LabelNameMaxLength.
+  LABEL_NAME_MAX_LENGTH: 100,
 } as const;
 
 // Note image upload limits. Keep in sync with the server-side mirror in

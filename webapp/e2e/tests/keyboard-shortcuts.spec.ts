@@ -1,4 +1,5 @@
 import { test, expect } from '../fixtures';
+import { expectDialogSettled } from '../pages/dialogs';
 
 test.describe('Arrow key card navigation', () => {
   test('navigates between cards with ArrowDown and ArrowUp', async ({ authenticatedUser, page, dashboardPage }) => {
@@ -276,6 +277,7 @@ test.describe('ConfirmDialog keyboard confirm', () => {
 
     const confirmDialog = page.getByRole('dialog').last();
     await expect(confirmDialog.getByRole('button', { name: 'Delete forever', exact: true })).toBeFocused();
+    await expectDialogSettled(confirmDialog);
 
     await page.keyboard.press('Enter');
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Lexer } from 'marked';
-import { normalizeBlockTokens, BLOCK_LEXER_OPTIONS, type BlockNode } from '../blockMarkdown';
+import { normalizeBlockTokens, blockNodesToPlainText, BLOCK_LEXER_OPTIONS, type BlockNode } from '../blockMarkdown';
 import { type InlineNode } from '../inlineMarkdown';
 import { MARKDOWN_CASES } from '../markdownCases';
 
@@ -183,5 +183,67 @@ describe('normalizeBlockTokens', () => {
   it('produces nothing for blank input', () => {
     expect(normalizeBlockTokens(Lexer.lex('', BLOCK_LEXER_OPTIONS))).toEqual([]);
     expect(normalizeBlockTokens(Lexer.lex('   ', BLOCK_LEXER_OPTIONS))).toEqual([]);
+  });
+});
+
+describe('blockNodesToPlainText', () => {
+  const plain = (source: string) => blockNodesToPlainText(normalizeBlockTokens(Lexer.lex(source, BLOCK_LEXER_OPTIONS)));
+
+  it('returns plain content unchanged', () => {
+    expect(plain('Hello world')).toBe('Hello world');
+  });
+
+  it('drops emphasis, strikethrough and code markers', () => {
+    expect(plain('**bold** *it* _also_ ~~gone~~ `code`')).toBe('bold it also gone code');
+  });
+
+  // Regression: the regex stripper this replaced read `_var_` as emphasis.
+  it('leaves intraword underscores alone', () => {
+    expect(plain('rename my_var_name to snake_case_name')).toBe('rename my_var_name to snake_case_name');
+  });
+
+  it('keeps escaped markers as the literal character', () => {
+    expect(plain('a\\_b \\*c\\*')).toBe('a_b *c*');
+  });
+
+  it('keeps line breaks inside a paragraph and separates blocks with a blank line', () => {
+    expect(plain('## Heading\nBody text\nsecond line')).toBe('Heading\n\nBody text\nsecond line');
+  });
+
+  it('keeps list markers and nesting', () => {
+    expect(plain('- one\n- two\n  - nested\n\n3. c\n4. d')).toBe('- one\n- two\n  - nested\n\n3. c\n4. d');
+  });
+
+  it('renders task items with their checkbox', () => {
+    expect(plain('- [ ] todo\n- [x] done')).toBe('- ☐ todo\n- ☑ done');
+  });
+
+  it('indents a loose item\'s later paragraphs under its marker', () => {
+    expect(plain('1. first\n\n   more\n\n2. second')).toBe('1. first\n\n   more\n\n2. second');
+  });
+
+  it('prefixes quotes, keeps rules, and drops code fences', () => {
+    expect(plain('> quote\n>\n> more\n\n---\n\n```js\nconst a = 1;\n```')).toBe(
+      '> quote\n>\n> more\n\n---\n\nconst a = 1;',
+    );
+  });
+
+  it('spells out a link target unless the label already is the target', () => {
+    expect(plain('[docs](https://example.com) https://a.example www.b.example c@d.example')).toBe(
+      'docs (https://example.com) https://a.example www.b.example c@d.example',
+    );
+  });
+
+  it('shows a link Jot will not follow as its label', () => {
+    expect(plain('[label](javascript:alert(1))')).toBe('label');
+  });
+
+  it('keeps tables and raw HTML as source', () => {
+    expect(plain('| a |\n|---|\n| 1 |\n\n<b>hi</b>')).toBe('| a |\n|---|\n| 1 |\n\n<b>hi</b>');
+  });
+
+  it('returns an empty string for blank content', () => {
+    expect(plain('')).toBe('');
+    expect(plain('  \n ')).toBe('');
   });
 });

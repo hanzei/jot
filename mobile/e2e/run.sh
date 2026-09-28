@@ -360,6 +360,20 @@ start_mock_idp() {
   IDP_REVERSED=1
 }
 
+# Have the mock IdP's authorize page open with $1 already in its username field
+# (MOCK_IDP_PREFILL_PATH in mock-idp.ts). Typing it in the Chrome Custom Tab can
+# drop the first keystroke, on every attempt alike on a slow emulator (#1037), so
+# the flows only check the field and approve. Set before each SSO flow that
+# approves, sequenced here for the reason on set_airplane_mode.
+set_idp_username() {
+  echo "==> Prefilling the mock IdP username ($1)"
+  if ! curl "${READY_CURL_OPTS[@]}" --data-urlencode "username=$1" \
+      "${MOCK_IDP_ISSUER}/prefill-username" >/dev/null; then
+    echo "Could not set the mock IdP username." >&2
+    return 1
+  fi
+}
+
 # The SSO sheet is a Chrome Custom Tab, and a fresh emulator's Chrome opens on
 # its first-run screens instead of the page. Chrome reads extra switches from
 # this file on a debuggable build or when it is the debug app, so skip first run
@@ -510,13 +524,16 @@ start_mock_idp
 skip_chrome_first_run
 stop_server
 start_server "${OIDC_ENV[@]}"
+set_idp_username "$MAESTRO_JOT_SSO_LINK_USERNAME"
 maestro_flow 12-sso-connect-settings.yaml "$@"
 assert_sso_linked 1 "$MAESTRO_JOT_USERNAME"
 maestro_flow 13-sso-deny.yaml "$@"
 maestro_flow 14-sso-close-sheet.yaml "$@"
+set_idp_username "$MAESTRO_JOT_SSO_USERNAME"
 maestro_flow 15-sso-login-relogin.yaml "$@"
 assert_sso_linked 2 "$MAESTRO_JOT_USERNAME" "$MAESTRO_JOT_SSO_USERNAME"
 
 stop_server
 start_server "${OIDC_ENV[@]}" JOT_LOCAL_LOGIN_ENABLED=false
+set_idp_username "$MAESTRO_JOT_SSO_USERNAME"
 maestro_flow 16-sso-only-login.yaml "$@"

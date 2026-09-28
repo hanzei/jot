@@ -11,6 +11,7 @@ import { drainQueue, getSyncQueueStats, isTransientHttpStatus, getDeadLetteredOp
 import api from '../src/api/client';
 import { makeLabel, makeListNote, makeNoteItem, makeTextNote, remainingQueueIds, seedQueueEntry } from './helpers/fixtures';
 import type { TestDatabase } from './helpers/testDb';
+import { silenceConsole } from './helpers/consoleGuard';
 
 function makeAxiosError(status: number) {
   return Object.assign(new Error(`Request failed with status code ${status}`), {
@@ -43,6 +44,17 @@ let db: TestDatabase;
 beforeEach(() => {
   jest.clearAllMocks();
   db = globalThis.testDb;
+  // drainQueue logs every retry, discard and dead-letter decision; these suites
+  // drive exactly those paths.
+  silenceConsole(
+    'warn',
+    /^Queue drain stopped at entry/,
+    /^Queue entry id=\S+ landed server-side/,
+    /^Discarding queued operation/,
+    /^Dead-lettering queued operation/,
+    /^Dropping queued operation/,
+    /^Failed to reconcile note/,
+  );
 });
 
 // ── generateClientNoteId / isUnsyncedNoteId ────────────────────────────────

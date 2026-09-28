@@ -2,7 +2,7 @@ import { View, Text, Modal, Pressable, TextInput, TouchableOpacity, ActivityIndi
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../theme/ThemeContext';
 import { styles } from './styles';
-import type { Label } from '@jot/shared';
+import { VALIDATION, type Label } from '@jot/shared';
 
 interface RenameLabelModalProps {
   target: Label | null;
@@ -46,6 +46,9 @@ export default function RenameLabelModal({
             style={[styles.modalInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
             value={value}
             onChangeText={onChange}
+            // maxLength counts UTF-16 units while the server counts code points, so
+            // astral input is cut early — accepted, as for PAT names (issue #772).
+            maxLength={VALIDATION.LABEL_NAME_MAX_LENGTH}
             placeholder={t('labels.renamePlaceholder')}
             placeholderTextColor={colors.placeholder}
             autoFocus

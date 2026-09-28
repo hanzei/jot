@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { test, expect, uniqueUsername } from '../fixtures';
+import { confirmDialog } from '../pages/dialogs';
 
 // created_at/updated_at have 1-second resolution (SQLite/Postgres DATETIME), so
 // two writes in the same second sort ambiguously. Wait for the wall clock to
@@ -136,8 +137,7 @@ test.describe('Notes', () => {
     await dashboardPage.openNote('Delete Forever From Modal');
     await dashboardPage.openModalOverflowMenu();
     await page.getByRole('menuitem', { name: 'Delete forever' }).click();
-    const confirmDialog = page.getByRole('dialog').last();
-    await confirmDialog.getByRole('button', { name: 'Delete forever' }).click();
+    await confirmDialog(page, 'Delete forever');
 
     await dashboardPage.expectNoteNotVisible('Delete Forever From Modal');
     await dashboardPage.switchToNotes();
