@@ -67,6 +67,8 @@ const (
 	CodeUnsupportedImageType Code = "unsupported_image_type" // 400 — the uploaded file is not one of the endpoint's accepted image types.
 	CodeInvalidImage         Code = "invalid_image"          // 400 — the uploaded file claims an accepted type but does not decode as an image.
 	CodeInvalidImportFile    Code = "invalid_import_file"    // 400 — the import file is not a readable export of the chosen import type.
+	CodeSSOLinkUnavailable   Code = "sso_link_unavailable"   // 403 — password login is turned off, so there is no local account to link SSO to.
+	CodeSSOUnlinkUnavailable Code = "sso_unlink_unavailable" // 403 — password login is turned off, so SSO is the only way to sign in and cannot be disconnected.
 )
 
 // ErrorResponse is the body of every API error response.

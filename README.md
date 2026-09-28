@@ -18,8 +18,8 @@ compiled web app, while SQLite keeps the default deployment small and portable.
   shortcuts for common navigation and creation actions.
 - **Pin, archive, duplicate, trash**: Keep active notes focused while retaining
   archived notes and automatically purging trashed notes after seven days.
-- **Import and export**: Import from Jot JSON, Google Keep, or usememos, and
-  export your Jot notes as JSON.
+- **Import and export**: Import from a Jot export, Google Keep, or usememos, and
+  export your Jot notes, with their images, as a `.zip` bundle.
 
 ### Collaboration
 
@@ -406,7 +406,7 @@ reverse-proxy caveat below.)
 | `JOT_RATE_LIMIT_ENABLED` | `true` | Set to `false` to disable rate limiting entirely. |
 | `JOT_RATE_LIMIT_PER_MINUTE` | `300` | Baseline requests/min per authenticated user, across all `/api/v1` routes. |
 | `JOT_RATE_LIMIT_AUTH_PER_MINUTE` | `20` | Requests/min per client IP, shared by `/register`, `/login`, and `/logout` (none of which have an authenticated user to key on yet). |
-| `JOT_RATE_LIMIT_EXPENSIVE_PER_MINUTE` | `20` | Requests/min per user, shared by note search (a full-text index query), import, and image upload (decode/resize/thumbnail) — the costliest operations per request. These also count against the baseline limit above; the expensive limit is an additional, stricter cap on top of it. Plain note listing (no `search` query) is unaffected by this limit and only counts against the baseline. |
+| `JOT_RATE_LIMIT_EXPENSIVE_PER_MINUTE` | `20` | Requests/min per user, shared by note search (a full-text index query), import, export (streams every image), and image upload (decode/resize/thumbnail) — the costliest operations per request. These also count against the baseline limit above; the expensive limit is an additional, stricter cap on top of it. Plain note listing (no `search` query) is unaffected by this limit and only counts against the baseline. |
 
 **Reverse-proxy caveat:** `JOT_RATE_LIMIT_AUTH_PER_MINUTE` is keyed by the direct
 TCP peer address, not a client-supplied header (which would be trivially
@@ -453,6 +453,12 @@ Back up and restore the two together: the server periodically deletes files in
 than the upload directory permanently removes the newer images. Images whose
 files are missing are logged as warnings.
 
+Separately, each user can export their own notes, images included, as a `.zip`
+bundle from Settings and import it into any Jot server. An import of up to
+1 GiB is spooled to the system temp directory (`TMPDIR`, `/tmp` by default)
+while it is processed, so leave room there. Plain `.json` exports from Jot
+versions before image export was added can no longer be imported.
+
 ## API Reference
 
 The full interactive API reference is available via Swagger UI at `http://localhost:8080/api/docs/index.html` when the server is running.
@@ -490,6 +496,17 @@ has a parseable `error.code`; fall back to the status code when it does not:
   `431` for oversized request headers;
 - the OIDC browser callback, which redirects with `?sso_error=` instead. `@jot/shared` provides `parseApiError` for TypeScript
 clients, and the Go client exposes the code as `client.Error.Code`.
+
+### List responses
+
+Endpoints that return a list wrap it in an object keyed by the resource name,
+for example `GET /api/v1/notes` returns `{"notes": [...]}`. An empty list is
+`[]`, never `null`. Other fields may be added beside the array later, so
+clients must ignore fields they do not know.
+
+`GET /api/v1/users?search=` returns at most 50 matches and sets
+`"truncated": true` when there were more; ask the user to refine the term.
+Without `search`, it lists every user and `truncated` is `false`.
 
 ## MCP server
 

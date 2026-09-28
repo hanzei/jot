@@ -33,12 +33,12 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
   const panelRef = useSizeTransition<HTMLDivElement>(sizeTransitionKey);
 
   const isFileType = importType !== 'usememos';
-  const acceptedFileTypes = importType === 'jot_json' ? '.json' : '.json,.zip';
+  const acceptedFileTypes = importType === 'jot_json' ? '.zip' : '.json,.zip';
 
   const isValidFile = (file: File): boolean => {
-    const isJson = file.name.endsWith('.json') || file.type === 'application/json';
-    if (importType === 'jot_json') return isJson;
     const isZip = file.name.endsWith('.zip') || file.type === 'application/zip';
+    if (importType === 'jot_json') return isZip;
+    const isJson = file.name.endsWith('.json') || file.type === 'application/json';
     return isJson || isZip;
   };
 
@@ -68,7 +68,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
     const file = e.dataTransfer.files[0];
     if (file) {
       if (!isValidFile(file)) {
-        setError(importType === 'jot_json' ? t('import.invalidFileTypeJson') : t('import.invalidFileType'));
+        setError(importType === 'jot_json' ? t('import.invalidFileTypeJot') : t('import.invalidFileType'));
         return;
       }
       setSelectedFile(file);
@@ -111,7 +111,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
   };
 
   const description = importType === 'jot_json'
-    ? t('import.descriptionJotJson')
+    ? t('import.descriptionJot')
     : importType === 'usememos'
       ? t('import.descriptionUsememos')
       : t('import.description');
@@ -160,7 +160,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
                     onChange={() => handleFormatChange('jot_json')}
                     className="text-blue-600"
                   />
-                  <span className="text-sm text-gray-700 dark:text-gray-300">{t('import.formatJotJson')}</span>
+                  <span className="text-sm text-gray-700 dark:text-gray-300">{t('import.formatJot')}</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -225,7 +225,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
                       {t('import.dropFile')} <span className="text-blue-600 dark:text-blue-400">{t('import.browse')}</span>
                     </p>
                     <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                      {importType === 'jot_json' ? t('import.fileTypesJson') : t('import.fileTypes')}
+                      {importType === 'jot_json' ? t('import.fileTypesJot') : t('import.fileTypes')}
                     </p>
                   </>
                 )}

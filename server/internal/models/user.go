@@ -233,16 +233,20 @@ func (s *userStore) GetAll(ctx context.Context) ([]*User, error) {
 // but not on PostgreSQL, so the share and assignee pickers would quietly match
 // case-sensitively on a PostgreSQL deployment. Usernames are lower case now, but
 // first and last names are free-form and still need it.
-func (s *userStore) Search(ctx context.Context, term string) ([]*User, error) {
+// Search returns at most limit users other than excludeUserID whose username,
+// first name, or last name contains term (case-insensitive), newest first.
+func (s *userStore) Search(ctx context.Context, term, excludeUserID string, limit int) ([]*User, error) {
 	like := "%" + term + "%"
 	query := `SELECT ` + userSelectColumns + `
 			  FROM users
-			  WHERE ` + s.d.CaseInsensitiveLike("username") +
+			  WHERE (` + s.d.CaseInsensitiveLike("username") +
 		` OR ` + s.d.CaseInsensitiveLike("first_name") +
 		` OR ` + s.d.CaseInsensitiveLike("last_name") +
-		` ORDER BY created_at DESC`
+		`) AND id <> ?
+			  ORDER BY created_at DESC
+			  LIMIT ?`
 
-	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), like, like, like)
+	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), like, like, like, excludeUserID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search users: %w", err)
 	}

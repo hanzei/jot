@@ -43,25 +43,25 @@ describe('ImportModal', () => {
   });
 
   describe('format selection', () => {
-    it('shows Google Keep and Jot JSON format options', () => {
+    it('shows Google Keep and Jot backup format options', () => {
       render(<ImportModal {...defaultProps} />);
       expect(screen.getByRole('radio', { name: /google keep/i })).toBeInTheDocument();
-      expect(screen.getByRole('radio', { name: /jot json/i })).toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: /jot backup/i })).toBeInTheDocument();
     });
 
     it('defaults to Google Keep format', () => {
       render(<ImportModal {...defaultProps} />);
       expect(screen.getByRole('radio', { name: /google keep/i })).toBeChecked();
-      expect(screen.getByRole('radio', { name: /jot json/i })).not.toBeChecked();
+      expect(screen.getByRole('radio', { name: /jot backup/i })).not.toBeChecked();
     });
 
-    it('switches to Jot JSON format when selected', async () => {
+    it('switches to Jot backup format when selected', async () => {
       const user = userEvent.setup();
       render(<ImportModal {...defaultProps} />);
 
-      await user.click(screen.getByRole('radio', { name: /jot json/i }));
+      await user.click(screen.getByRole('radio', { name: /jot backup/i }));
 
-      expect(screen.getByRole('radio', { name: /jot json/i })).toBeChecked();
+      expect(screen.getByRole('radio', { name: /jot backup/i })).toBeChecked();
     });
   });
 
@@ -127,10 +127,10 @@ describe('ImportModal', () => {
       const user = userEvent.setup();
       render(<ImportModal {...defaultProps} />);
 
-      await user.click(screen.getByRole('radio', { name: /jot json/i }));
+      await user.click(screen.getByRole('radio', { name: /jot backup/i }));
 
       const fileInput = getFileInput();
-      const file = new File(['{}'], 'export.json', { type: 'application/json' });
+      const file = new File(['PK'], 'export.zip', { type: 'application/zip' });
       await user.upload(fileInput, file);
       await user.click(screen.getByRole('button', { name: /import/i }));
 
@@ -274,18 +274,31 @@ describe('ImportModal', () => {
       expect(screen.getByRole('button', { name: /import/i })).not.toBeDisabled();
     });
 
-    it('rejects a .zip file when Jot JSON format is selected', async () => {
+    it('rejects a .json file when Jot backup format is selected', async () => {
       const user = userEvent.setup();
       render(<ImportModal {...defaultProps} />);
 
-      await user.click(screen.getByRole('radio', { name: /jot json/i }));
+      await user.click(screen.getByRole('radio', { name: /jot backup/i }));
+
+      const dropZone = getDropZone();
+      const file = new File(['{}'], 'export.json', { type: 'application/json' });
+      act(() => { fireEvent.drop(dropZone, createDragEvent(file)); });
+
+      expect(screen.queryByText('export.json')).not.toBeInTheDocument();
+      expect(screen.getByText(/please select a .zip file/i)).toBeInTheDocument();
+    });
+
+    it('accepts a .zip file when Jot backup format is selected', async () => {
+      const user = userEvent.setup();
+      render(<ImportModal {...defaultProps} />);
+
+      await user.click(screen.getByRole('radio', { name: /jot backup/i }));
 
       const dropZone = getDropZone();
       const file = new File(['PK'], 'export.zip', { type: 'application/zip' });
       act(() => { fireEvent.drop(dropZone, createDragEvent(file)); });
 
-      expect(screen.queryByText('export.zip')).not.toBeInTheDocument();
-      expect(screen.getByText(/please select a .json file/i)).toBeInTheDocument();
+      expect(screen.getByText('export.zip')).toBeInTheDocument();
     });
   });
 

@@ -164,8 +164,10 @@ describe('oidcFlow', () => {
 
     it('maps unlink failures, keeping the strand guard distinct', () => {
       expect(oidcUnlinkErrorMessage({ response: { status: 422, data: apiErrorBody('would_strand_account', 'cannot unlink SSO') } })).toBe('settings.ssoUnlinkWouldStrand');
-      expect(oidcUnlinkErrorMessage({ response: { status: 403, data: apiErrorBody('forbidden', 'unlinking SSO is unavailable') } }))
-        .toBe('unlinking SSO is unavailable');
+      expect(oidcUnlinkErrorMessage({ response: { status: 403, data: apiErrorBody('sso_unlink_unavailable', 'unlinking SSO is unavailable') } }))
+        .toBe('settings.ssoUnlinkUnavailable');
+      expect(oidcUnlinkErrorMessage({ response: { status: 403, data: apiErrorBody('forbidden', 'not allowed') } }))
+        .toBe('not allowed');
       expect(oidcUnlinkErrorMessage({ response: { status: 500, data: apiErrorBody('internal', 'internal server error') } }))
         .toBe('settings.ssoDisconnectFailed');
       expect(oidcUnlinkErrorMessage({ response: { status: 500 } })).toBe('settings.ssoDisconnectFailed');

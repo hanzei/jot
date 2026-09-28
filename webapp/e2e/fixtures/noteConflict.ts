@@ -18,7 +18,7 @@ export function otherDevice(page: Page) {
     async findTextNote(content: string): Promise<ApiNote> {
       const response = await page.request.get('/api/v1/notes');
       expect(response.ok()).toBeTruthy();
-      const notes = (await response.json()) as ApiNote[];
+      const { notes } = (await response.json()) as { notes: ApiNote[] };
       const note = notes.find(candidate => candidate.content === content);
       expect(note, `note "${content}" must exist`).toBeDefined();
       return note!;

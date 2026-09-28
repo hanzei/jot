@@ -100,6 +100,11 @@ export interface LabelCountsResponse {
   counts: LabelCount[];
 }
 
+/** GET /labels */
+export interface LabelListResponse {
+  labels: Label[];
+}
+
 export type NoteType = 'text' | 'list';
 
 export interface NoteItem {
@@ -180,6 +185,16 @@ export interface ListNote extends BaseNote {
 }
 
 export type Note = TextNote | ListNote;
+
+/** GET /notes */
+export interface NoteListResponse {
+  notes: Note[];
+}
+
+/** GET /notes/{id}/shares */
+export interface NoteShareListResponse {
+  shares: NoteShare[];
+}
 
 export interface GetNotesParams {
   archived?: boolean | undefined;
@@ -321,6 +336,16 @@ export interface UserListResponse {
   users: User[];
 }
 
+/**
+ * GET /users. With a `search` term the server returns at most 50 matches and
+ * sets `truncated` when there were more; without one it lists every user and
+ * `truncated` is false.
+ */
+export interface UserSearchResponse {
+  users: User[];
+  truncated: boolean;
+}
+
 export interface AdminUserStats {
   total: number;
   admins: number;
@@ -411,6 +436,11 @@ export interface ActiveSession {
   expires_at: string;
 }
 
+/** GET /sessions */
+export interface SessionListResponse {
+  sessions: ActiveSession[];
+}
+
 export interface NoteSSEEvent {
   type: 'note_created' | 'note_updated' | 'note_deleted' | 'note_shared' | 'note_unshared';
   source_user_id: string;
@@ -437,6 +467,11 @@ export interface PersonalAccessToken {
   created_at: string;
   /** Only present in the create response; never returned by list. */
   token?: string;
+}
+
+/** GET /pats */
+export interface PATListResponse {
+  pats: PersonalAccessToken[];
 }
 
 export interface CreatePATRequest {
@@ -515,7 +550,9 @@ export type ApiErrorCode =
   | 'pat_limit_reached'
   | 'unsupported_image_type'
   | 'invalid_image'
-  | 'invalid_import_file';
+  | 'invalid_import_file'
+  | 'sso_link_unavailable'
+  | 'sso_unlink_unavailable';
 
 export interface ApiErrorDetail {
   code: ApiErrorCode;

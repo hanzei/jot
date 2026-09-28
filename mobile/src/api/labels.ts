@@ -1,9 +1,9 @@
 import api from './client';
-import type { Label, LabelCountsResponse, Note } from '@jot/shared';
+import type { Label, LabelCountsResponse, LabelListResponse, Note } from '@jot/shared';
 
 export async function getLabels(): Promise<Label[]> {
-  const res = await api.get('/labels');
-  return res.data;
+  const res = await api.get<LabelListResponse>('/labels');
+  return res.data.labels;
 }
 
 export async function getLabelCounts(): Promise<Record<string, number>> {

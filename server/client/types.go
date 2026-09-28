@@ -249,7 +249,17 @@ type ImportResponse struct {
 	Errors   []string `json:"errors,omitempty"`
 }
 
-// JotExport is the top-level envelope for the native Jot JSON export format.
+// JotExportManifest is the name of the notes JSON inside a Jot export bundle.
+const JotExportManifest = "notes.json"
+
+// JotExportBundle is a downloaded Jot export: the zip as served, ready to
+// import again, and its parsed manifest.
+type JotExportBundle struct {
+	Data     []byte
+	Manifest JotExport
+}
+
+// JotExport is the notes manifest (notes.json) of a Jot export bundle.
 type JotExport struct {
 	Format     string          `json:"format"`
 	Version    int             `json:"version"`
@@ -257,7 +267,7 @@ type JotExport struct {
 	Notes      []JotExportNote `json:"notes"`
 }
 
-// JotExportNote is a single note in a Jot JSON export.
+// JotExportNote is a single note in a Jot export.
 type JotExportNote struct {
 	Title                 string              `json:"title"`
 	Content               string              `json:"content"`
@@ -270,9 +280,19 @@ type JotExportNote struct {
 	CheckedItemsCollapsed bool                `json:"checked_items_collapsed,omitzero"`
 	Labels                []string            `json:"labels"`
 	Items                 []JotExportNoteItem `json:"items,omitempty"`
+	Images                []JotExportImage    `json:"images,omitempty"`
 }
 
-// JotExportNoteItem is a single list item in a Jot JSON export.
+// JotExportImage references an image of an exported note. File is the zip
+// entry holding its bytes.
+type JotExportImage struct {
+	File        string    `json:"file"`
+	Filename    string    `json:"filename"`
+	ContentType string    `json:"content_type"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+// JotExportNoteItem is a single list item in a Jot export.
 type JotExportNoteItem struct {
 	Text        string `json:"text"`
 	Completed   bool   `json:"completed"`

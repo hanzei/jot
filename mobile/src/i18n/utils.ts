@@ -24,6 +24,8 @@ const API_ERROR_MESSAGE_KEYS: Partial<Record<ApiErrorCode, string>> = {
   label_name_taken: 'apiErrors.labelNameTaken',
   sso_identity_linked: 'settings.ssoLinkConflict',
   would_strand_account: 'settings.ssoUnlinkWouldStrand',
+  sso_link_unavailable: 'settings.ssoLinkUnavailable',
+  sso_unlink_unavailable: 'settings.ssoUnlinkUnavailable',
   rate_limited: 'apiErrors.rateLimited',
   request_too_large: 'apiErrors.requestTooLarge',
   label_name_too_long: 'apiErrors.labelNameTooLong',

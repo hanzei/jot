@@ -1,4 +1,14 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { test, expect, uniqueUsername } from '../fixtures';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const noteImageFile = {
+  name: 'test-icon.png',
+  mimeType: 'image/png',
+  buffer: fs.readFileSync(path.join(__dirname, '../fixtures/test-icon.png')),
+};
 
 test.describe('Settings', () => {
   test('changes username successfully', async ({ authenticatedUser, settingsPage, dashboardPage }) => {
@@ -218,19 +228,19 @@ test.describe('Export & Import', () => {
     await page.getByRole('button', { name: 'Export Notes' }).click();
     const download = await downloadPromise;
 
-    expect(download.suggestedFilename()).toMatch(/^jot-export-.*\.json$/);
+    expect(download.suggestedFilename()).toMatch(/^jot-export-.*\.zip$/);
 
     void authenticatedUser;
   });
 
-  test('import modal shows format selector with Google Keep and Jot JSON options', async ({ authenticatedUser, settingsPage, page }) => {
+  test('import modal shows format selector with Google Keep and Jot backup options', async ({ authenticatedUser, settingsPage, page }) => {
     await settingsPage.goto();
 
     await page.getByRole('button', { name: 'Import Notes' }).click();
 
     await expect(page.getByRole('heading', { name: 'Import Notes' })).toBeVisible();
     await expect(page.getByRole('radio', { name: 'Google Keep' })).toBeVisible();
-    await expect(page.getByRole('radio', { name: 'Jot JSON' })).toBeVisible();
+    await expect(page.getByRole('radio', { name: 'Jot backup' })).toBeVisible();
     await expect(page.getByRole('radio', { name: 'Google Keep' })).toBeChecked();
 
     void authenticatedUser;
@@ -244,28 +254,40 @@ test.describe('Export & Import', () => {
     // Default shows Google Keep description
     await expect(page.getByText(/Google Takeout/i)).toBeVisible();
 
-    // Switch to Jot JSON
-    await page.getByRole('radio', { name: 'Jot JSON' }).click();
-    await expect(page.getByText(/Jot JSON export file/i)).toBeVisible();
+    // Switch to Jot backup
+    await page.getByRole('radio', { name: 'Jot backup' }).click();
+    await expect(page.getByText(/Upload a Jot backup \(\.zip\)/i)).toBeVisible();
 
     void authenticatedUser;
   });
 
-  test('can import a Jot JSON file', async ({ authenticatedUser, settingsPage, dashboardPage, page }) => {
-    // First export notes to get a valid Jot JSON file
+  test('round-trips notes and their images through export and import', async ({ authenticatedUser, settingsPage, dashboardPage, page }) => {
     await dashboardPage.goto();
-    await dashboardPage.createNote('Note to round-trip', 'round-trip content');
+    const title = `Round-trip note ${Date.now()}`;
+    await dashboardPage.createNote(title, 'round-trip content');
+
+    const notesResponse = await page.request.get('/api/v1/notes');
+    const { notes: notesList }: { notes: Array<{ id: string; title?: string }> } = await notesResponse.json();
+    const note = notesList.find((n) => n.title === title);
+    expect(note).toBeTruthy();
+    for (const name of ['first.png', 'second.png']) {
+      const upload = await page.request.post(`/api/v1/notes/${note!.id}/images`, {
+        multipart: { file: { ...noteImageFile, name } },
+      });
+      expect(upload.ok()).toBeTruthy();
+    }
 
     await settingsPage.goto();
-
     const downloadPromise = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Export Notes' }).click();
     const download = await downloadPromise;
     const exportPath = await download.path();
 
-    // Now import the exported file using Jot JSON format
+    // Trash the original so the dashboard shows only the imported copy.
+    expect((await page.request.delete(`/api/v1/notes/${note!.id}`)).ok()).toBeTruthy();
+
     await page.getByRole('button', { name: 'Import Notes' }).click();
-    await page.getByRole('radio', { name: 'Jot JSON' }).click();
+    await page.getByRole('radio', { name: 'Jot backup' }).click();
 
     const fileInput = page.getByTestId('import-dropzone').locator('input[type="file"]');
     await fileInput.setInputFiles(exportPath!);
@@ -278,6 +300,24 @@ test.describe('Export & Import', () => {
     expect(resp.status()).toBe(200);
 
     await expect(page.getByText(/Imported/i)).toBeVisible();
+
+    await dashboardPage.goto();
+    await dashboardPage.openNote(title);
+    const grid = page.getByTestId('note-image-grid');
+    await expect(grid.locator('img')).toHaveCount(2);
+    await expect(grid.locator('img').nth(0)).toHaveAttribute('alt', 'first.png');
+    await expect(grid.locator('img').nth(1)).toHaveAttribute('alt', 'second.png');
+
+    void authenticatedUser;
+  });
+
+  test('only offers .zip files for the Jot backup format', async ({ authenticatedUser, settingsPage, page }) => {
+    await settingsPage.goto();
+
+    await page.getByRole('button', { name: 'Import Notes' }).click();
+    await page.getByRole('radio', { name: 'Jot backup' }).click();
+
+    await expect(page.getByTestId('import-dropzone').locator('input[type="file"]')).toHaveAttribute('accept', '.zip');
 
     void authenticatedUser;
   });

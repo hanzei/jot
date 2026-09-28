@@ -387,6 +387,26 @@ describe('Settings', () => {
       expect(screen.queryByRole('link', { name: 'Connect Keycloak' })).not.toBeInTheDocument();
     });
 
+    it('shows the translated error when the server is SSO-only', async () => {
+      // The button is hidden on an SSO-only server, but the config can change
+      // after the page loaded.
+      const user = userEvent.setup();
+      vi.mocked(authUtils.getUser).mockReturnValue({ ...mockUser, has_sso_linked: true });
+      vi.mocked(sso.unlink).mockRejectedValueOnce(
+        createApiError(403, 'sso_unlink_unavailable', 'unlinking SSO is unavailable when local login is disabled'),
+      );
+
+      renderSettings(ssoEnabled);
+
+      await user.click(screen.getByRole('button', { name: 'Disconnect Keycloak' }));
+      const dialog = screen.getByRole('dialog', { name: i18n.t('settings.ssoDisconnectConfirmTitle') });
+      await user.click(within(dialog).getByRole('button', { name: 'Disconnect Keycloak' }));
+
+      await waitFor(() => {
+        expect(screen.getByRole('alert')).toHaveTextContent(i18n.t('settings.ssoUnlinkUnavailable'));
+      });
+    });
+
     describe('with local login disabled (SSO-only)', () => {
       const ssoOnly: SSOConfig = { ...ssoEnabled, local_login_enabled: false };
 

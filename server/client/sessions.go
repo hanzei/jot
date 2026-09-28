@@ -8,11 +8,13 @@ import (
 
 // ListSessions returns all active sessions for the authenticated user.
 func (c *Client) ListSessions(ctx context.Context) ([]SessionInfo, error) {
-	var sessions []SessionInfo
-	if err := c.doJSON(ctx, http.MethodGet, "/api/v1/sessions", nil, &sessions); err != nil {
+	var resp struct {
+		Sessions []SessionInfo `json:"sessions"`
+	}
+	if err := c.doJSON(ctx, http.MethodGet, "/api/v1/sessions", nil, &resp); err != nil {
 		return nil, err
 	}
-	return sessions, nil
+	return resp.Sessions, nil
 }
 
 // RevokeSession deletes a specific session by its hashed ID.

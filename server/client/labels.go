@@ -10,11 +10,13 @@ const paramName = "name"
 
 // ListLabels returns all labels for the authenticated user.
 func (c *Client) ListLabels(ctx context.Context) ([]Label, error) {
-	var labels []Label
-	if err := c.doJSON(ctx, http.MethodGet, "/api/v1/labels", nil, &labels); err != nil {
+	var resp struct {
+		Labels []Label `json:"labels"`
+	}
+	if err := c.doJSON(ctx, http.MethodGet, "/api/v1/labels", nil, &resp); err != nil {
 		return nil, err
 	}
-	return labels, nil
+	return resp.Labels, nil
 }
 
 // labelCount is the note count for a single label.

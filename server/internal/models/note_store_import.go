@@ -5,13 +5,16 @@ import (
 	"database/sql"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/hanzei/jot/server/internal/database/dialect"
 	"github.com/hanzei/jot/server/internal/labelfold"
 )
 
 // GetOwnedNotesForExport returns all non-trashed notes owned by userID,
-// including their list items and labels, for use in the export endpoint.
+// including their list items, labels and images, for use in the export
+// endpoint. Images are included whoever uploaded them: a collaborator's image
+// on an owned note is part of that note.
 // It filters on notes.user_id (not note_user_state.user_id) so notes merely
 // shared with the current user are never included.
 func (s *noteStore) GetOwnedNotesForExport(ctx context.Context, userID string) ([]*Note, error) {
@@ -48,6 +51,11 @@ func (s *noteStore) GetOwnedNotesForExport(ctx context.Context, userID string) (
 			return nil, fmt.Errorf("get labels for note %s: %w", note.ID, err)
 		}
 		note.Labels = labels
+		images, err := s.GetNoteImagesByNoteID(ctx, note.ID)
+		if err != nil {
+			return nil, fmt.Errorf("get images for note %s: %w", note.ID, err)
+		}
+		note.Images = images
 		note.SharedWith = []NoteShare{}
 		notes = append(notes, note)
 	}
@@ -55,7 +63,7 @@ func (s *noteStore) GetOwnedNotesForExport(ctx context.Context, userID string) (
 	return notes, nil
 }
 
-// JotImportNoteItem is a single list item in a Jot JSON import payload.
+// JotImportNoteItem is a single list item in a Jot import payload.
 type JotImportNoteItem struct {
 	Text        string
 	Completed   bool
@@ -63,7 +71,7 @@ type JotImportNoteItem struct {
 	IndentLevel int
 }
 
-// JotImportNote is a single note in a Jot JSON import payload.
+// JotImportNote is a single note in a Jot import payload.
 type JotImportNote struct {
 	Title                 string
 	Content               string
@@ -76,6 +84,23 @@ type JotImportNote struct {
 	CheckedItemsCollapsed bool
 	Labels                []string
 	Items                 []JotImportNoteItem
+	Images                []JotImportImage
+}
+
+// JotImportImage is an image of an imported note whose blob the caller has
+// already stored (and pinned until ImportJotNotes returns).
+type JotImportImage struct {
+	Filename    string
+	ContentType string
+	SizeBytes   int64
+	SHA256      string
+	Width       int
+	Height      int
+	// CreatedAt is restored from the export rather than set to the import
+	// time: note images are ordered by created_at, so this is what keeps the
+	// gallery in its original order. A zero value falls back to the import
+	// time.
+	CreatedAt time.Time
 }
 
 // importedNote pairs a newly created note ID with its import payload.
@@ -153,6 +178,10 @@ func insertImportedNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, u
 		return "", err
 	}
 
+	if err = insertImportedImagesTx(ctx, tx, d, userID, noteID, n.Images, now); err != nil {
+		return "", err
+	}
+
 	return noteID, nil
 }
 
@@ -182,6 +211,27 @@ func insertImportedItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, 
 			itemID, noteID, item.Text, item.Position, item.Completed, parent, now, now,
 		); err != nil {
 			return fmt.Errorf("create note item: %w", err)
+		}
+	}
+	return nil
+}
+
+func insertImportedImagesTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, userID, noteID string, images []JotImportImage, now string) error {
+	for _, img := range images {
+		imageID, err := generateID()
+		if err != nil {
+			return fmt.Errorf("generate note image ID: %w", err)
+		}
+		createdAt := now
+		if !img.CreatedAt.IsZero() {
+			createdAt = Timestamp(img.CreatedAt)
+		}
+		if _, err = tx.ExecContext(ctx,
+			d.RewritePlaceholders(`INSERT INTO note_images (id, note_id, uploader_id, filename, content_type, size_bytes, sha256, width, height, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+			imageID, noteID, userID, img.Filename, img.ContentType, img.SizeBytes, img.SHA256, img.Width, img.Height, createdAt,
+		); err != nil {
+			return fmt.Errorf("create note image: %w", err)
 		}
 	}
 	return nil

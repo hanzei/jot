@@ -278,6 +278,11 @@ func buildCreateNoteItems(items []CreateNoteItem) ([]models.NewNoteItem, int, er
 	return built, http.StatusOK, nil
 }
 
+// NoteListResponse is the GET /notes body.
+type NoteListResponse struct {
+	Notes []models.Note `json:"notes"`
+}
+
 // GetNotes godoc
 //
 //	@Summary	List notes for the current user
@@ -289,7 +294,7 @@ func buildCreateNoteItems(items []CreateNoteItem) ([]models.NewNoteItem, int, er
 //	@Param		search		query		string	false	"Full-text search query"
 //	@Param		label		query		string	false	"Filter by label ID"
 //	@Param		my_tasks	query		boolean	false	"Return only notes with tasks assigned to current user"
-//	@Success	200			{array}		models.Note
+//	@Success	200			{object}	NoteListResponse
 //	@Failure	400			{object}	apierr.ErrorResponse	"search query too long"
 //	@Failure	401			{object}	apierr.ErrorResponse	"unauthorized"
 //	@Failure	500			{object}	apierr.ErrorResponse	"internal server error"
@@ -316,7 +321,7 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, an
 		return http.StatusInternalServerError, nil, fmt.Errorf("get notes: %w", err)
 	}
 
-	return http.StatusOK, models.SanitizeNotes(notes), nil
+	return http.StatusOK, NoteListResponse{Notes: models.SanitizeNotes(notes)}, nil
 }
 
 // CreateNote godoc

@@ -20,6 +20,7 @@ const API_ERROR_MESSAGE_KEYS: Partial<Record<ApiErrorCode, string>> = {
   cannot_delete_self: 'apiErrors.cannotDeleteSelf',
   sso_identity_linked: 'settings.ssoLinkConflict',
   would_strand_account: 'apiErrors.wouldStrandAccount',
+  sso_unlink_unavailable: 'settings.ssoUnlinkUnavailable',
   rate_limited: 'apiErrors.rateLimited',
   request_too_large: 'apiErrors.requestTooLarge',
   label_name_too_long: 'apiErrors.labelNameTooLong',

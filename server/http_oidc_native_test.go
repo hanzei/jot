@@ -188,7 +188,9 @@ func TestOIDCNativeStartLinkRequiresLocalLogin(t *testing.T) {
 	resp, err := ts.oidcClient(t).Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
-	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	requireEnvelope(t, http.StatusForbidden, "sso_link_unavailable", resp.StatusCode, resp.Header, body)
 }
 
 func TestOIDCNativeCallback(t *testing.T) {
@@ -492,5 +494,9 @@ func TestOIDCNativeLinkRequiresLocalLogin(t *testing.T) {
 	code := ts.driveNativeFlow(t, mock, "login", pkce, map[string]any{"sub": "sub-ssoonly"})
 	app := ts.oidcClient(t)
 	require.Equal(t, http.StatusOK, ts.postNativeStatus(t, app, nativeExchangePath, code, pkce.verifier))
-	assert.Equal(t, http.StatusForbidden, ts.postNativeStatus(t, app, nativeLinkPath, "any-code", pkce.verifier))
+	resp := ts.postNative(t, app, nativeLinkPath, "any-code", pkce.verifier)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	requireEnvelope(t, http.StatusForbidden, "sso_link_unavailable", resp.StatusCode, resp.Header, body)
 }

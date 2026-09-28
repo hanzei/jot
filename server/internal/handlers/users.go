@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/hanzei/jot/server/internal/auth"
@@ -18,18 +19,34 @@ type UserInfo struct {
 	HasProfileIcon bool   `json:"has_profile_icon"`
 }
 
+// userSearchLimit caps GET /users?search=: the pickers that search are
+// typeahead lists, so more rows than this only means the term needs refining.
+// Listing without a term is not capped, since clients use it to resolve
+// user IDs to names and avatars.
+const userSearchLimit = 50
+
+// UserSearchResponse is the GET /users body.
+type UserSearchResponse struct {
+	Users []UserInfo `json:"users"`
+	// Truncated is true when a search matched more than userSearchLimit users
+	// and only the first userSearchLimit are returned. Always false without a
+	// search term.
+	Truncated bool `json:"truncated"`
+}
+
 // SearchUsers godoc
 //
-//	@Summary	Search or list users (excluding current user)
-//	@Tags		users
-//	@Security	CookieAuth
-//	@Produce	json
-//	@Param		search	query		string	false	"Filter by username, first name, or last name (case-insensitive substring match)"
-//	@Success	200		{array}		UserInfo
-//	@Failure	400		{object}	apierr.ErrorResponse	"search query too long"
-//	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
-//	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
-//	@Router		/users [get]
+//	@Summary		Search or list users (excluding current user)
+//	@Description	With `search`, returns at most 50 matches, newest first, and sets `truncated` when there were more. Without it, returns every user.
+//	@Tags			users
+//	@Security		CookieAuth
+//	@Produce		json
+//	@Param			search	query		string	false	"Filter by username, first name, or last name (case-insensitive substring match)"
+//	@Success		200		{object}	UserSearchResponse
+//	@Failure		400		{object}	apierr.ErrorResponse	"search query too long"
+//	@Failure		401		{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure		500		{object}	apierr.ErrorResponse	"internal server error"
+//	@Router			/users [get]
 func (h *NotesHandler) SearchUsers(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -44,13 +61,23 @@ func (h *NotesHandler) SearchUsers(w http.ResponseWriter, r *http.Request) (int,
 
 	var users []*models.User
 	var err error
+	truncated := false
 	if search != "" {
-		users, err = h.userStore.Search(r.Context(), search)
+		// One extra row tells a result of exactly the limit apart from a
+		// truncated one.
+		users, err = h.userStore.Search(r.Context(), search, currentUser.ID, userSearchLimit+1)
+		if err != nil {
+			return http.StatusInternalServerError, nil, fmt.Errorf("search users: %w", err)
+		}
+		if len(users) > userSearchLimit {
+			users = users[:userSearchLimit]
+			truncated = true
+		}
 	} else {
 		users, err = h.userStore.GetAll(r.Context())
-	}
-	if err != nil {
-		return http.StatusInternalServerError, nil, err
+		if err != nil {
+			return http.StatusInternalServerError, nil, fmt.Errorf("get all users: %w", err)
+		}
 	}
 
 	userInfos := []UserInfo{}
@@ -67,5 +94,5 @@ func (h *NotesHandler) SearchUsers(w http.ResponseWriter, r *http.Request) (int,
 		}
 	}
 
-	return http.StatusOK, userInfos, nil
+	return http.StatusOK, UserSearchResponse{Users: userInfos, Truncated: truncated}, nil
 }

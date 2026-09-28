@@ -200,7 +200,7 @@ test.describe('Modal focus management', () => {
     const title = `Lightbox Focus Note ${Date.now()}`;
     await dashboardPage.createNote(title);
 
-    const notes: Array<{ id: string; title?: string }> = await (await page.request.get('/api/v1/notes')).json();
+    const { notes }: { notes: Array<{ id: string; title?: string }> } = await (await page.request.get('/api/v1/notes')).json();
     const note = notes.find((n) => n.title === title);
     expect(note, 'note was not created').toBeTruthy();
     for (let i = 0; i < 2; i++) {

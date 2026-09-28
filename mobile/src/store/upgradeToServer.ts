@@ -197,6 +197,11 @@ export async function checkCapabilityGate(client: UpgradeClient): Promise<Prefli
   }
 }
 
+/** The array under `key` in a list response (`{"notes": [...]}`), or undefined. */
+function listField(data: unknown, key: string): unknown {
+  return typeof data === 'object' && data !== null ? (data as Record<string, unknown>)[key] : undefined;
+}
+
 /**
  * Gate 2: Verify the freshly registered account has no existing notes or labels.
  * Abort if non-empty — no merge support in this iteration.
@@ -206,10 +211,11 @@ export async function checkEmptinessGate(client: UpgradeClient): Promise<Preflig
   if (!notesRes || notesRes.status !== 200) {
     return { ok: false, reason: 'FETCH_FAILED' };
   }
-  if (!Array.isArray(notesRes.data)) {
+  const notes = listField(notesRes.data, 'notes');
+  if (!Array.isArray(notes)) {
     return { ok: false, reason: 'FETCH_FAILED' };
   }
-  if (notesRes.data.length > 0) {
+  if (notes.length > 0) {
     return { ok: false, reason: 'NOTES_NOT_EMPTY' };
   }
 
@@ -217,10 +223,11 @@ export async function checkEmptinessGate(client: UpgradeClient): Promise<Preflig
   if (!labelsRes || labelsRes.status !== 200) {
     return { ok: false, reason: 'FETCH_FAILED' };
   }
-  if (!Array.isArray(labelsRes.data)) {
+  const labels = listField(labelsRes.data, 'labels');
+  if (!Array.isArray(labels)) {
     return { ok: false, reason: 'FETCH_FAILED' };
   }
-  if (labelsRes.data.length > 0) {
+  if (labels.length > 0) {
     return { ok: false, reason: 'LABELS_NOT_EMPTY' };
   }
 

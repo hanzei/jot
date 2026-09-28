@@ -893,10 +893,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/models.Label"
-                            }
+                            "$ref": "#/definitions/handlers.LabelListResponse"
                         }
                     },
                     "401": {
@@ -1301,10 +1298,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/models.Note"
-                            }
+                            "$ref": "#/definitions/handlers.NoteListResponse"
                         }
                     },
                     "400": {
@@ -1407,16 +1401,20 @@ const docTemplate = `{
         },
         "/notes/export": {
             "get": {
+                "description": "A zip file holding notes.json (the notes, format jot_export version 2) and an images/ folder with every image attached to the exported notes. Covers the notes the user owns, including images collaborators added to them.",
                 "produces": [
-                    "application/json"
+                    "application/zip"
                 ],
                 "tags": [
                     "notes"
                 ],
-                "summary": "Export notes as a Jot JSON backup",
+                "summary": "Export notes as a Jot backup bundle",
                 "responses": {
                     "200": {
-                        "description": "Jot JSON export file attachment"
+                        "description": "Jot export bundle (zip) attachment",
+                        "schema": {
+                            "type": "file"
+                        }
                     },
                     "401": {
                         "description": "unauthorized",
@@ -1440,6 +1438,7 @@ const docTemplate = `{
         },
         "/notes/import": {
             "post": {
+                "description": "jot_json takes a Jot export bundle (.zip, as produced by GET /notes/export) of up to 1 GiB; a bare JSON file from an older export is rejected. Notes are imported all-or-nothing; an image that is missing or invalid is left off its note and listed in errors. google_keep takes a Takeout .zip or a single .json file of up to 32 MiB.",
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -1497,7 +1496,13 @@ const docTemplate = `{
                         }
                     },
                     "413": {
-                        "description": "request body too large",
+                        "description": "file too large",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "export exceeds a size or file-count limit",
                         "schema": {
                             "$ref": "#/definitions/apierr.ErrorResponse"
                         }
@@ -2822,10 +2827,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/models.NoteShare"
-                            }
+                            "$ref": "#/definitions/handlers.NoteShareListResponse"
                         }
                     },
                     "400": {
@@ -2938,10 +2940,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/handlers.patResponse"
-                            }
+                            "$ref": "#/definitions/handlers.PATListResponse"
                         }
                     },
                     "401": {
@@ -3121,10 +3120,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/handlers.SessionResponse"
-                            }
+                            "$ref": "#/definitions/handlers.SessionListResponse"
                         }
                     },
                     "401": {
@@ -3188,6 +3184,7 @@ const docTemplate = `{
         },
         "/users": {
             "get": {
+                "description": "With ` + "`" + `search` + "`" + `, returns at most 50 matches, newest first, and sets ` + "`" + `truncated` + "`" + ` when there were more. Without it, returns every user.",
                 "produces": [
                     "application/json"
                 ],
@@ -3207,10 +3204,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/handlers.UserInfo"
-                            }
+                            "$ref": "#/definitions/handlers.UserSearchResponse"
                         }
                     },
                     "400": {
@@ -3533,7 +3527,9 @@ const docTemplate = `{
                 "pat_limit_reached",
                 "unsupported_image_type",
                 "invalid_image",
-                "invalid_import_file"
+                "invalid_import_file",
+                "sso_link_unavailable",
+                "sso_unlink_unavailable"
             ],
             "x-enum-comments": {
                 "CodeAlreadyShared": "409 — the note is already shared with that user.",
@@ -3561,6 +3557,8 @@ const docTemplate = `{
                 "CodeRegistrationDisabled": "403 — self-registration is turned off.",
                 "CodeRequestTooLarge": "413 — the request body exceeds the endpoint's limit.",
                 "CodeSSOIdentityLinked": "409 — the SSO identity belongs to another account.",
+                "CodeSSOLinkUnavailable": "403 — password login is turned off, so there is no local account to link SSO to.",
+                "CodeSSOUnlinkUnavailable": "403 — password login is turned off, so SSO is the only way to sign in and cannot be disconnected.",
                 "CodeSessionRequired": "403 — the endpoint needs a browser session, and the request authenticated with a personal access token.",
                 "CodeUnauthorized": "401 — missing, invalid, or expired credentials.",
                 "CodeUnsupportedImageType": "400 — the uploaded file is not one of the endpoint's accepted image types.",
@@ -3599,7 +3597,9 @@ const docTemplate = `{
                 "422 — the user already holds the maximum number of personal access tokens.",
                 "400 — the uploaded file is not one of the endpoint's accepted image types.",
                 "400 — the uploaded file claims an accepted type but does not decode as an image.",
-                "400 — the import file is not a readable export of the chosen import type."
+                "400 — the import file is not a readable export of the chosen import type.",
+                "403 — password login is turned off, so there is no local account to link SSO to.",
+                "403 — password login is turned off, so SSO is the only way to sign in and cannot be disconnected."
             ],
             "x-enum-varnames": [
                 "CodeValidationFailed",
@@ -3632,7 +3632,9 @@ const docTemplate = `{
                 "CodePATLimitReached",
                 "CodeUnsupportedImageType",
                 "CodeInvalidImage",
-                "CodeInvalidImportFile"
+                "CodeInvalidImportFile",
+                "CodeSSOLinkUnavailable",
+                "CodeSSOUnlinkUnavailable"
             ]
         },
         "apierr.ErrorDetail": {
@@ -3898,6 +3900,17 @@ const docTemplate = `{
                 }
             }
         },
+        "handlers.LabelListResponse": {
+            "type": "object",
+            "properties": {
+                "labels": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.Label"
+                    }
+                }
+            }
+        },
         "handlers.LoginRequest": {
             "type": "object",
             "properties": {
@@ -3917,6 +3930,39 @@ const docTemplate = `{
                 },
                 "code_verifier": {
                     "type": "string"
+                }
+            }
+        },
+        "handlers.NoteListResponse": {
+            "type": "object",
+            "properties": {
+                "notes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.Note"
+                    }
+                }
+            }
+        },
+        "handlers.NoteShareListResponse": {
+            "type": "object",
+            "properties": {
+                "shares": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.NoteShare"
+                    }
+                }
+            }
+        },
+        "handlers.PATListResponse": {
+            "type": "object",
+            "properties": {
+                "pats": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/handlers.patResponse"
+                    }
                 }
             }
         },
@@ -3978,6 +4024,17 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "type": "string"
+                    }
+                }
+            }
+        },
+        "handlers.SessionListResponse": {
+            "type": "object",
+            "properties": {
+                "sessions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/handlers.SessionResponse"
                     }
                 }
             }
@@ -4161,6 +4218,21 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/models.User"
+                    }
+                }
+            }
+        },
+        "handlers.UserSearchResponse": {
+            "type": "object",
+            "properties": {
+                "truncated": {
+                    "description": "Truncated is true when a search matched more than userSearchLimit users\nand only the first userSearchLimit are returned. Always false without a\nsearch term.",
+                    "type": "boolean"
+                },
+                "users": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/handlers.UserInfo"
                     }
                 }
             }

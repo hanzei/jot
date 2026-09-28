@@ -208,6 +208,7 @@
     "ssoDisconnecting": "Dissociation…",
     "ssoDisconnected": "SSO dissocié.",
     "ssoDisconnectFailed": "Échec de la dissociation du SSO.",
+    "ssoUnlinkUnavailable": "Le SSO ne peut pas être déconnecté sur ce serveur : la connexion par mot de passe est désactivée, le SSO est donc votre seul moyen de vous connecter.",
     "ssoDisconnectConfirmTitle": "Dissocier le SSO ?",
     "ssoDisconnectConfirmMessage": "Cela dissocie {{provider}} de votre compte. Vous aurez besoin de votre mot de passe pour vous connecter.",
     "ssoLinkConflict": "Cette identité SSO est déjà liée à un autre compte.",

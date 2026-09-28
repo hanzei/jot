@@ -1,6 +1,7 @@
 package client
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json/v2"
@@ -40,11 +41,13 @@ func (c *Client) ListNotes(ctx context.Context, opts *ListNotesOptions) ([]Note,
 		}
 	}
 
-	var notes []Note
-	if err := c.doJSON(ctx, http.MethodGet, path, nil, &notes); err != nil {
+	var resp struct {
+		Notes []Note `json:"notes"`
+	}
+	if err := c.doJSON(ctx, http.MethodGet, path, nil, &resp); err != nil {
 		return nil, err
 	}
-	return notes, nil
+	return resp.Notes, nil
 }
 
 // createTextNoteBody is the wire format for creating a text note.
@@ -303,7 +306,8 @@ func (c *Client) doImportRequest(ctx context.Context, importType string, writePa
 	return &result, nil
 }
 
-// ImportNotes uploads a note export file. importType must be "jot_json" or "google_keep".
+// ImportNotes uploads a note export file. importType must be "jot_json" (a
+// Jot export bundle, see ExportNotes) or "google_keep".
 func (c *Client) ImportNotes(ctx context.Context, importType string, filename string, data io.Reader) (*ImportResponse, error) {
 	return c.doImportRequest(ctx, importType, func(mw *multipart.Writer) error {
 		part, err := mw.CreateFormFile("file", filename)
@@ -330,11 +334,25 @@ func (c *Client) ImportUsememos(ctx context.Context, rawURL, token string) (*Imp
 	})
 }
 
-// ExportNotes downloads the authenticated user's notes as a Jot JSON export.
-func (c *Client) ExportNotes(ctx context.Context) (*JotExport, error) {
-	var export JotExport
-	if err := c.doJSON(ctx, http.MethodGet, "/api/v1/notes/export", nil, &export); err != nil {
+// ExportNotes downloads the authenticated user's notes as a Jot export
+// bundle: a zip holding notes.json and the images it references.
+func (c *Client) ExportNotes(ctx context.Context) (*JotExportBundle, error) {
+	data, _, err := c.doGetBytes(ctx, "/api/v1/notes/export")
+	if err != nil {
 		return nil, err
 	}
-	return &export, nil
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return nil, fmt.Errorf("open export bundle: %w", err)
+	}
+	f, err := zr.Open(JotExportManifest)
+	if err != nil {
+		return nil, fmt.Errorf("open %s: %w", JotExportManifest, err)
+	}
+	defer func() { _ = f.Close() }()
+	bundle := &JotExportBundle{Data: data}
+	if err := json.UnmarshalRead(f, &bundle.Manifest); err != nil {
+		return nil, fmt.Errorf("unmarshal %s: %w", JotExportManifest, err)
+	}
+	return bundle, nil
 }

@@ -163,6 +163,10 @@ Several rows can share one content-addressed blob, so hard-delete paths must cal
 
 - The generated spec (`server/docs/swagger.{yaml,json}`) is the API reference —
   do not maintain endpoint tables in docs. Regenerate with `task gen-docs`.
+- A list response is an object keyed by the resource name (`{"notes": [...]}`),
+  never a bare array, and an empty list is `[]`, not `null`. The item-action
+  endpoints under `/notes/{id}/items/` that return the note's item list are a
+  deliberate exception: mobile's offline replay reads those bodies raw.
 - Resource caps / limits exceeded → **422**; 400 is for malformed input.
 - Creates return **201**. `POST /labels` is deliberately get-or-create (clients
   add labels by name; mobile offline replay needs idempotency): 201 when it

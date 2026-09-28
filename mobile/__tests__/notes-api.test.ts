@@ -47,7 +47,7 @@ describe('Notes API', () => {
   describe('getNotes', () => {
     it('calls GET /notes with params and returns notes array', async () => {
       const mockNotes = [{ id: '1', title: 'Note 1' }];
-      mockAxiosInstance.get.mockResolvedValueOnce({ data: mockNotes });
+      mockAxiosInstance.get.mockResolvedValueOnce({ data: { notes: mockNotes } });
 
       const result = await getNotes({ archived: false });
 

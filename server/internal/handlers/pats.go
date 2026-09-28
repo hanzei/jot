@@ -31,13 +31,18 @@ type patResponse struct {
 	Token     string    `json:"token,omitempty"`
 }
 
+// PATListResponse is the GET /pats body.
+type PATListResponse struct {
+	PATs []patResponse `json:"pats"`
+}
+
 // ListPATs godoc
 //
 //	@Summary	List personal access tokens for the current user
 //	@Tags		pats
 //	@Security	CookieAuth
 //	@Produce	json
-//	@Success	200	{array}		patResponse
+//	@Success	200	{object}	PATListResponse
 //	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
 //	@Router		/pats [get]
 func (h *PATsHandler) ListPATs(w http.ResponseWriter, r *http.Request) (int, any, error) {
@@ -60,7 +65,7 @@ func (h *PATsHandler) ListPATs(w http.ResponseWriter, r *http.Request) (int, any
 		})
 	}
 
-	return http.StatusOK, responses, nil
+	return http.StatusOK, PATListResponse{PATs: responses}, nil
 }
 
 // CreatePAT godoc
