@@ -195,3 +195,95 @@ export function normalizeBlockTokens(tokens: BlockMarkdownToken[]): BlockNode[] 
   flushRun();
   return nodes;
 }
+
+/**
+ * Renders text-note content, already parsed, as plain text for sharing outside
+ * Jot (the mobile share sheet): the words as a reader of the rendered note sees
+ * them, with no Markdown markers left for a messenger or mail client to show
+ * literally.
+ *
+ * Working from the parsed tree rather than stripping markers from the source is
+ * what keeps text that only looks like Markdown intact — `my_var_name` is not
+ * emphasis to the parser, so it is not rewritten here either.
+ *
+ * Structure a plain-text reader still needs is kept in its plain-text spelling:
+ * blocks are separated by a blank line, list items keep a `-` or `1.` marker
+ * (indented under their parent), task items their ☐ / ☑, quotes a `> ` prefix,
+ * and a rule stays `---`. A link whose label is not its own URL becomes
+ * `label (url)`, since the reader cannot follow a label.
+ */
+export function blockNodesToPlainText(nodes: BlockNode[]): string {
+  return blocksPlainText(nodes, '\n\n').trim();
+}
+
+function blocksPlainText(nodes: BlockNode[], separator: string): string {
+  return nodes.map(blockPlainText).join(separator);
+}
+
+function blockPlainText(node: BlockNode): string {
+  switch (node.type) {
+    case 'paragraph':
+    case 'heading':
+      return inlinePlainText(node.children);
+    case 'code':
+      return node.text;
+    case 'blockquote':
+      return blocksPlainText(node.children, '\n\n')
+        .split('\n')
+        .map((line) => (line ? `> ${line}` : '>'))
+        .join('\n');
+    case 'list': {
+      // A tight item's blocks (its text, then a nested list) sit on
+      // consecutive lines, as they do in the rendered note.
+      const separator = node.loose ? '\n\n' : '\n';
+      return node.items
+        .map((item, index) => {
+          const marker = node.ordered ? `${node.start + index}. ` : '- ';
+          const continuation = ' '.repeat(marker.length);
+          return blocksPlainText(item, separator)
+            .split('\n')
+            .map((line, lineIndex) => {
+              if (lineIndex === 0) return marker + line;
+              return line ? continuation + line : line;
+            })
+            .join('\n');
+        })
+        .join(separator);
+    }
+    case 'hr':
+      return '---';
+  }
+}
+
+function inlinePlainText(nodes: InlineNode[]): string {
+  let out = '';
+  for (const node of nodes) {
+    switch (node.type) {
+      case 'text':
+      case 'code':
+        out += node.value;
+        break;
+      case 'br':
+        out += '\n';
+        break;
+      case 'link': {
+        const label = inlinePlainText(node.children);
+        out += linkLabelIsTarget(label, node.href) ? label : `${label} (${node.href})`;
+        break;
+      }
+      default:
+        out += inlinePlainText(node.children);
+        break;
+    }
+  }
+  return out;
+}
+
+/**
+ * Whether a link's label already spells out where it goes — an autolink, or a
+ * label that is the URL. marked normalizes autolinked `www.example.com` and
+ * `someone@example.com` to `http://` and `mailto:` targets, so those count too.
+ */
+function linkLabelIsTarget(label: string, href: string): boolean {
+  return href === label || href === `http://${label}` || href === `mailto:${label}`;
+}

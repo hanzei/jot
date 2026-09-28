@@ -11,7 +11,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
+
+// tempFilePrefix names writeAtomic's temp files. Its deferred cleanup never
+// runs if the process is killed mid-write, so Sweep removes stale ones.
+const tempFilePrefix = ".upload-"
 
 // shaHexLen is the length of a lowercase hex-encoded SHA-256 hash.
 const shaHexLen = sha256.Size * 2
@@ -75,6 +80,17 @@ func (s *blobStore) exists(path string) (bool, error) {
 	}
 }
 
+// touch sets path's modification time to now. The orphan sweep (Sweep) only
+// reclaims files older than its grace period, so refreshing the mtime of a
+// file a caller is about to reference keeps the sweep off it.
+func (s *blobStore) touch(path string) error {
+	now := time.Now() //nolint:gocritic // a filesystem mtime, not a timestamp column
+	if err := s.root.Chtimes(path, now, now); err != nil {
+		return fmt.Errorf("touch file: %w", err)
+	}
+	return nil
+}
+
 // writeAtomic writes the content of r to path via a randomly-named temp file
 // in the same directory, then renames it into place, so a concurrent reader
 // never observes a partial write. If verify is non-nil, it is called with
@@ -92,7 +108,7 @@ func (s *blobStore) writeAtomic(path string, r io.Reader, verify func(sum [32]by
 	if err != nil {
 		return err
 	}
-	tmpPath := filepath.Join(dir, ".upload-"+suffix)
+	tmpPath := filepath.Join(dir, tempFilePrefix+suffix)
 	tmp, err := s.root.OpenFile(tmpPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o640)
 	if err != nil {
 		return fmt.Errorf("create temp file: %w", err)

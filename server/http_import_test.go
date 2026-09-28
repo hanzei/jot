@@ -20,6 +20,7 @@ type keepNoteJSON struct {
 	Title       string             `json:"title"`
 	TextContent string             `json:"textContent"`
 	ListContent []keepNoteItemJSON `json:"listContent,omitempty"`
+	Labels      []keepLabelJSON    `json:"labels,omitempty"`
 	IsTrashed   bool               `json:"isTrashed"`
 	IsPinned    bool               `json:"isPinned"`
 	IsArchived  bool               `json:"isArchived"`
@@ -28,6 +29,10 @@ type keepNoteJSON struct {
 type keepNoteItemJSON struct {
 	Text      string `json:"text"`
 	IsChecked bool   `json:"isChecked"`
+}
+
+type keepLabelJSON struct {
+	Name string `json:"name"`
 }
 
 func marshalKeepNote(t *testing.T, kn keepNoteJSON) []byte {
@@ -1002,4 +1007,168 @@ func TestImportUsememosArchivedFetchedSeparately(t *testing.T) {
 		}
 	}
 	assert.True(t, foundArchived, "archived memo should be imported with archived=true")
+}
+
+// failNoteItemInserts installs a trigger that aborts any note_items insert whose
+// text is "boom", simulating a database failure partway through a list note.
+func failNoteItemInserts(t *testing.T, ts *TestServer) {
+	t.Helper()
+	_, err := ts.Server.GetDB().ExecContext(t.Context(), `CREATE TRIGGER fail_boom_item BEFORE INSERT ON note_items
+		WHEN NEW.text = 'boom'
+		BEGIN SELECT RAISE(ABORT, 'injected item failure'); END`)
+	require.NoError(t, err)
+}
+
+// allNotes returns the user's active and archived notes.
+func allNotes(t *testing.T, user *TestUser) []client.Note {
+	t.Helper()
+	active, err := user.Client.ListNotes(t.Context(), nil)
+	require.NoError(t, err)
+	archived, err := user.Client.ListNotes(t.Context(), &client.ListNotesOptions{Archived: true})
+	require.NoError(t, err)
+	return append(active, archived...)
+}
+
+func labelNames(labels []client.Label) []string {
+	names := make([]string, 0, len(labels))
+	for _, l := range labels {
+		names = append(names, l.Name)
+	}
+	return names
+}
+
+func TestImportFailureLeavesNoPartialNote(t *testing.T) {
+	t.Parallel()
+
+	t.Run("google keep", func(t *testing.T) {
+		t.Parallel()
+		ts := setupTestServer(t)
+		user := ts.createTestUser(t, "importatomickeep", "password123", false)
+		failNoteItemInserts(t, ts)
+
+		broken := marshalKeepNote(t, keepNoteJSON{
+			Title:       "Broken List",
+			IsPinned:    true,
+			Labels:      []keepLabelJSON{{Name: "Broken"}},
+			ListContent: []keepNoteItemJSON{{Text: "first"}, {Text: "boom"}, {Text: "third"}},
+		})
+		good := marshalKeepNote(t, keepNoteJSON{Title: "Good List", ListContent: []keepNoteItemJSON{{Text: "fine"}}})
+		zipData := buildZip(t, map[string][]byte{"broken.json": broken, "good.json": good})
+
+		result, err := user.Client.ImportNotes(t.Context(), "google_keep", "export.zip", bytes.NewReader(zipData))
+		require.NoError(t, err)
+		assert.Equal(t, 1, result.Imported)
+		require.Len(t, result.Errors, 1)
+		assert.Contains(t, result.Errors[0], "Broken List")
+
+		notes := allNotes(t, user)
+		require.Len(t, notes, 1, "the failed note must not be left behind partially")
+		assert.Equal(t, "Good List", notes[0].Title)
+		assert.Empty(t, notes[0].Labels)
+	})
+
+	t.Run("usememos", func(t *testing.T) {
+		t.Parallel()
+		ts := setupTestServer(t)
+		user := ts.createTestUser(t, "importatomicmemos", "password123", false)
+		failNoteItemInserts(t, ts)
+
+		memos := []map[string]any{
+			{"name": "memos/1", "state": "NORMAL", "pinned": true, "content": "# Broken\n- [ ] first\n- [ ] boom\n- [ ] third #broken"},
+			{"name": "memos/2", "state": "NORMAL", "content": "plain memo"},
+		}
+		mockSrv := buildUsememosServer(t, []usememosPage{{memos: memos}})
+		defer mockSrv.Close()
+
+		result, err := user.Client.ImportUsememos(t.Context(), mockSrv.URL, "testtoken")
+		require.NoError(t, err)
+		assert.Equal(t, 1, result.Imported)
+		assert.Equal(t, 1, result.Skipped)
+		require.Len(t, result.Errors, 1)
+		assert.Contains(t, result.Errors[0], "memo #1")
+
+		notes := allNotes(t, user)
+		require.Len(t, notes, 1, "the failed memo must not be left behind partially")
+		assert.Equal(t, "plain memo", notes[0].Content)
+
+		labels, err := user.Client.ListLabels(t.Context())
+		require.NoError(t, err)
+		assert.Empty(t, labels, "labels of the failed memo must be rolled back")
+	})
+}
+
+func TestImportPreservesNoteState(t *testing.T) {
+	t.Parallel()
+
+	t.Run("google keep", func(t *testing.T) {
+		t.Parallel()
+		ts := setupTestServer(t)
+		user := ts.createTestUser(t, "importstatekeep", "password123", false)
+
+		data := marshalKeepNote(t, keepNoteJSON{
+			Title:       "Stateful List",
+			IsPinned:    true,
+			IsArchived:  true,
+			Labels:      []keepLabelJSON{{Name: "Work"}, {Name: "Errands"}},
+			ListContent: []keepNoteItemJSON{{Text: "one", IsChecked: true}, {Text: "two"}},
+		})
+		result, err := user.Client.ImportNotes(t.Context(), "google_keep", "note.json", bytes.NewReader(data))
+		require.NoError(t, err)
+		assert.Equal(t, 1, result.Imported)
+		assert.Empty(t, result.Errors)
+
+		notes := allNotes(t, user)
+		require.Len(t, notes, 1)
+		assert.True(t, notes[0].Pinned)
+		assert.True(t, notes[0].Archived)
+		assert.ElementsMatch(t, []string{"Work", "Errands"}, labelNames(notes[0].Labels))
+
+		note, err := user.Client.GetNote(t.Context(), notes[0].ID)
+		require.NoError(t, err)
+		require.Len(t, note.Items, 2)
+		assert.Equal(t, "one", note.Items[0].Text)
+		assert.True(t, note.Items[0].Completed)
+		assert.Equal(t, "two", note.Items[1].Text)
+		assert.False(t, note.Items[1].Completed)
+	})
+
+	t.Run("usememos", func(t *testing.T) {
+		t.Parallel()
+		ts := setupTestServer(t)
+		user := ts.createTestUser(t, "importstatememos", "password123", false)
+
+		memos := []map[string]any{{
+			"name":    "memos/1",
+			"state":   "ARCHIVED",
+			"pinned":  true,
+			"tags":    []string{"home"},
+			"content": "# Chores #weekly\n- [ ] kitchen\n  - [x] dishes\n- [ ] garden",
+		}}
+		mockSrv := buildUsememosServer(t, []usememosPage{{memos: memos}})
+		defer mockSrv.Close()
+
+		result, err := user.Client.ImportUsememos(t.Context(), mockSrv.URL, "testtoken")
+		require.NoError(t, err)
+		assert.Equal(t, 1, result.Imported)
+		assert.Empty(t, result.Errors)
+
+		notes := allNotes(t, user)
+		require.Len(t, notes, 1)
+		assert.True(t, notes[0].Pinned)
+		assert.True(t, notes[0].Archived)
+		assert.Equal(t, "Chores", notes[0].Title)
+		assert.ElementsMatch(t, []string{"weekly", "home"}, labelNames(notes[0].Labels))
+
+		note, err := user.Client.GetNote(t.Context(), notes[0].ID)
+		require.NoError(t, err)
+		require.Len(t, note.Items, 3)
+		assert.Equal(t, "kitchen", note.Items[0].Text)
+		assert.Nil(t, note.Items[0].ParentID)
+		assert.Equal(t, "dishes", note.Items[1].Text)
+		assert.True(t, note.Items[1].Completed)
+		require.NotNil(t, note.Items[1].ParentID)
+		assert.Equal(t, note.Items[0].ID, *note.Items[1].ParentID)
+		assert.Equal(t, "garden", note.Items[2].Text)
+		assert.Nil(t, note.Items[2].ParentID)
+	})
 }

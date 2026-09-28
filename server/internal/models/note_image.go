@@ -226,6 +226,32 @@ func (s *noteStore) GetNoteImageRefCount(ctx context.Context, sha256 string) (in
 	return count, nil
 }
 
+// GetNoteImageRefCounts returns, for every content hash referenced by at least
+// one note_images row, how many rows reference it. Used by the periodic orphan
+// sweep (blobstore.Sweep) to classify every on-disk blob with one query rather
+// than one GetNoteImageRefCount call per file.
+func (s *noteStore) GetNoteImageRefCounts(ctx context.Context) (map[string]int, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT sha256, COUNT(*) FROM note_images GROUP BY sha256`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query note image refcounts: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	counts := make(map[string]int)
+	for rows.Next() {
+		var sha string
+		var count int
+		if err := rows.Scan(&sha, &count); err != nil {
+			return nil, fmt.Errorf("failed to scan note image refcount: %w", err)
+		}
+		counts[sha] = count
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate note image refcounts: %w", err)
+	}
+	return counts, nil
+}
+
 // GetNoteImageSHA256sForUserTx returns the distinct sha256 hashes of every
 // image reachable from userID: images attached to notes they own, plus
 // images they uploaded to notes owned by someone else (a shared note).
