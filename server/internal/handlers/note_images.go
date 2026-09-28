@@ -21,13 +21,13 @@ import (
 
 // Keep in sync with shared/src/constants.ts IMAGE_MAX_PER_NOTE / IMAGE_ALLOWED_TYPES.
 // No image/svg+xml: SVG can carry script and would be a stored-XSS vector
-// when rendered inline (see docs/specs/file-attachments.md §7).
+// when rendered inline. If SVG is ever allowed, it must be served with
+// Content-Disposition: attachment, never inline like the types below.
 const imageMaxPerNote = 10
 
 // thumbnailMaxDimension bounds the long edge of a generated note-image
-// thumbnail. Grid tiles render this instead of the original to cut bandwidth
-// (docs/specs/file-attachments.md §5); the lightbox always serves the
-// original at full size.
+// thumbnail. Grid tiles render this instead of the original to cut
+// bandwidth; the lightbox always serves the original at full size.
 const thumbnailMaxDimension = 512
 
 const mimeTypeJPEG = "image/jpeg"
@@ -44,8 +44,8 @@ var allowedNoteImageTypes = map[string]bool{
 // pixel dimensions and a resized JPEG thumbnail. Reuses the bounds-checked
 // decode pipeline shared with the profile-icon upload path. For animated
 // GIFs, image.Decode returns only the first frame, so the thumbnail is
-// naturally a static tile (docs/specs/file-attachments.md §5, §15.2) even
-// though the original (served by GetNoteImage) still animates.
+// naturally a static tile even though the original (served by GetNoteImage,
+// which the lightbox uses) still animates.
 func decodeAndThumbnail(data []byte) (width, height int, thumbnail []byte, err error) {
 	img, cfg, err := decodeImageWithBoundsCheck(data)
 	if err != nil {
@@ -321,7 +321,7 @@ func (h *NotesHandler) GetNoteImageThumbnail(w http.ResponseWriter, r *http.Requ
 		// Thumbnails are a disposable cache (no DB row, no refcount): a miss
 		// just means it was never generated or was reclaimed early, so
 		// regenerate it from the original rather than treating this as an
-		// error (docs/specs/file-attachments.md §5).
+		// error.
 		thumb, err = h.regenerateNoteImageThumbnail(r.Context(), img)
 		if err != nil {
 			if errors.Is(err, blobstore.ErrNotFound) {
@@ -412,6 +412,10 @@ func (h *NotesHandler) loadNoteImageForAccess(ctx context.Context, imageID, user
 }
 
 // DeleteNoteImage godoc
+//
+// A plain hard delete: undo is client-side (clients hide the image behind an
+// undo toast and only send this once it expires), so there is no server-side
+// soft delete or restore for images.
 //
 //	@Summary	Delete a note image
 //	@Tags		notes

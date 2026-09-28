@@ -35,7 +35,7 @@ export const VALIDATION = {
 export const UPLOAD_MAX_BYTES = 25 * 1024 * 1024;
 export const IMAGE_MAX_PER_NOTE = 10;
 // No image/svg+xml: SVG can carry script and would be a stored-XSS vector
-// when rendered inline (see docs/specs/file-attachments.md §7).
+// when rendered inline.
 export const IMAGE_ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const;
 
 export const ROLES = {

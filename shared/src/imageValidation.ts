@@ -2,7 +2,7 @@ import { IMAGE_ALLOWED_TYPES, UPLOAD_MAX_BYTES } from './constants';
 
 export interface ImageValidationInput {
   mimeType: string;
-  /** Bytes, when known — a size check is skipped entirely otherwise (the server is the source of truth regardless, per the file-attachments spec §7). */
+  /** Bytes, when known — a size check is skipped entirely otherwise (the server is the source of truth regardless). */
   sizeBytes?: number | undefined;
 }
 
