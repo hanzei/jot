@@ -14,6 +14,12 @@
 # 14, and only fires while Chrome's url_bar shows, never on Jot's own screen.
 # The attempt counter keeps that check off the first attempt, where it would
 # only cost an optional-lookup wait.
+#
+# Chrome can also expose the page only in part: the heading without the form
+# (#1041). So the page counts as ready only once its Deny button shows — every
+# caller needs the form next, and Deny renders whether or not the field is
+# prefilled. Waiting on the heading alone would return on the first attempt and
+# leave the caller's next step to time out outside this retry.
 appId: com.jot.app
 ---
 - evalScript: ${output.idpPageAttempt = 0}
@@ -54,5 +60,5 @@ appId: com.jot.app
           commands:
             - tapOn: "Use without an account"
       - extendedWaitUntil:
-          visible: "Mock IdP"
+          visible: "Deny"
           timeout: 30000
