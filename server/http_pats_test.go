@@ -298,5 +298,8 @@ func TestPATs(t *testing.T) {
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode)
+		var env errorEnvelope
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&env))
+		assert.Equal(t, "pat_limit_reached", env.Error.Code)
 	})
 }

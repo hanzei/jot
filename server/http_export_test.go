@@ -190,29 +190,34 @@ func TestImportJotJSONInvalidFormat(t *testing.T) {
 		payload := `{"format":"google_keep","version":1,"exported_at":"2026-01-01T00:00:00Z","notes":[]}`
 		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.json", bytes.NewReader([]byte(payload)))
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+		assert.Equal(t, "invalid_import_file", client.ErrorCode(err))
 	})
 
 	t.Run("unsupported version", func(t *testing.T) {
 		payload := `{"format":"jot_export","version":99,"exported_at":"2026-01-01T00:00:00Z","notes":[]}`
 		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.json", bytes.NewReader([]byte(payload)))
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+		assert.Equal(t, "invalid_import_file", client.ErrorCode(err))
 	})
 
 	t.Run("notes is null", func(t *testing.T) {
 		payload := `{"format":"jot_export","version":1,"exported_at":"2026-01-01T00:00:00Z","notes":null}`
 		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.json", bytes.NewReader([]byte(payload)))
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+		assert.Equal(t, "invalid_import_file", client.ErrorCode(err))
 	})
 
 	t.Run("not valid JSON", func(t *testing.T) {
 		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.json", bytes.NewReader([]byte("not json")))
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+		assert.Equal(t, "invalid_import_file", client.ErrorCode(err))
 	})
 
 	t.Run("google keep data with jot_json type", func(t *testing.T) {
 		data := marshalKeepNote(t, keepNoteJSON{Title: "Keep Note", TextContent: "content"})
 		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.json", bytes.NewReader(data))
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+		assert.Equal(t, "invalid_import_file", client.ErrorCode(err))
 	})
 }
 

@@ -247,6 +247,7 @@ func TestNoteValidation(t *testing.T) {
 			}
 			_, err := user.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{Items: items})
 			assert.Equal(t, http.StatusUnprocessableEntity, client.StatusCode(err))
+			assert.Equal(t, "item_limit_reached", client.ErrorCode(err))
 		})
 
 		t.Run("exceeding max via second create batch returns 422", func(t *testing.T) {
@@ -256,6 +257,7 @@ func TestNoteValidation(t *testing.T) {
 			}
 			_, err := user.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{Items: items})
 			assert.Equal(t, http.StatusUnprocessableEntity, client.StatusCode(err))
+			assert.Equal(t, "item_limit_reached", client.ErrorCode(err))
 		})
 	})
 

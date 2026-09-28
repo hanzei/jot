@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/hanzei/jot/server/internal/apierr"
 	"github.com/hanzei/jot/server/internal/models"
 )
 
@@ -51,6 +52,10 @@ const (
 	// rejects anything longer, so surface a clear 400 instead of a 500.
 	passwordMaxBytes = 72
 )
+
+// errItemLimitReached is returned wherever a request would give a note more
+// than noteItemsMaxCount items.
+var errItemLimitReached = apierr.New(apierr.CodeItemLimitReached, fmt.Sprintf("note cannot have more than %d items", noteItemsMaxCount))
 
 func validateUsername(username string) error {
 	n := utf8.RuneCountInString(username)

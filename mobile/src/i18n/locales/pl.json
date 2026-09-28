@@ -11,7 +11,8 @@
     "unknown": "nieznany",
     "loading": "Ładowanie...",
     "done": "Gotowe",
-    "or": "lub"
+    "or": "lub",
+    "serverSwitchInProgress": "Trwa przełączanie serwera. Spróbuj ponownie za chwilę."
   },
   "nav": {
     "settings": "Ustawienia",
@@ -361,7 +362,8 @@
     "deleteSuccess": "Etykieta usunięta",
     "deleteError": "Nie udało się usunąć etykiety",
     "deleteConfirmTitle": "Usuń etykietę",
-    "deleteConfirmMessage": "Usunąć etykietę \"{{name}}\"? Zostanie usunięta ze wszystkich notatek, które jej używają."
+    "deleteConfirmMessage": "Usunąć etykietę \"{{name}}\"? Zostanie usunięta ze wszystkich notatek, które jej używają.",
+    "nameRequired": "Nazwa etykiety nie może być pusta."
   },
   "share": {
     "searchUsersPlaceholder": "Szukaj użytkowników po nazwie...",
@@ -545,6 +547,13 @@
     "usernameTaken": "Ta nazwa użytkownika jest już zajęta.",
     "labelNameTaken": "Etykieta o tej nazwie już istnieje.",
     "rateLimited": "Zbyt wiele żądań. Poczekaj chwilę i spróbuj ponownie.",
-    "requestTooLarge": "Plik lub żądanie jest zbyt duże."
+    "requestTooLarge": "Plik lub żądanie jest zbyt duże.",
+    "labelNameTooLong": "Nazwa etykiety może mieć najwyżej {{max}} znaków.",
+    "itemLimitReached": "Notatka może mieć najwyżej {{max}} elementów.",
+    "imageLimitReached": "Notatka może mieć najwyżej {{max}} obrazów.",
+    "patLimitReached": "Możesz mieć najwyżej {{max}} osobistych tokenów dostępu. Unieważnij jeden, aby utworzyć nowy.",
+    "unsupportedImageType": "Ten typ pliku nie jest obsługiwany. Wybierz inny obraz.",
+    "invalidImage": "Nie można odczytać tego obrazu. Może być uszkodzony.",
+    "invalidImportFile": "Nie można odczytać tego pliku jako eksportu wybranego typu."
   }
 }

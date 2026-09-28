@@ -1,9 +1,9 @@
 import type { TFunction } from 'i18next';
-import { parseApiError, type ApiErrorCode } from '@jot/shared';
+import { apiErrorParams, parseApiError, type ApiErrorCode } from '@jot/shared';
 import i18n from './index';
 
 export function displayMessage(t: TFunction, message: string): string {
-  return i18n.exists(message) ? t(message) : message;
+  return i18n.exists(message) ? t(message, API_ERROR_KEY_PARAMS[message]) : message;
 }
 
 export function getCurrentLocale(): string | undefined {
@@ -26,7 +26,22 @@ const API_ERROR_MESSAGE_KEYS: Partial<Record<ApiErrorCode, string>> = {
   would_strand_account: 'settings.ssoUnlinkWouldStrand',
   rate_limited: 'apiErrors.rateLimited',
   request_too_large: 'apiErrors.requestTooLarge',
+  label_name_too_long: 'apiErrors.labelNameTooLong',
+  item_limit_reached: 'apiErrors.itemLimitReached',
+  image_limit_reached: 'apiErrors.imageLimitReached',
+  pat_limit_reached: 'apiErrors.patLimitReached',
+  unsupported_image_type: 'apiErrors.unsupportedImageType',
+  invalid_image: 'apiErrors.invalidImage',
+  invalid_import_file: 'apiErrors.invalidImportFile',
 };
+
+/**
+ * Interpolation values for the keys above whose translation names a limit, so
+ * {@link displayMessage} can render them from the key alone.
+ */
+const API_ERROR_KEY_PARAMS: Record<string, { max: number } | undefined> = Object.fromEntries(
+  Object.entries(API_ERROR_MESSAGE_KEYS).map((entry) => [entry[1], apiErrorParams(entry[0] as ApiErrorCode)]),
+);
 
 /**
  * The message for a failed API request, for {@link displayMessage}: an i18n
@@ -41,4 +56,29 @@ export function extractApiError(err: unknown): string | undefined {
   const key = API_ERROR_MESSAGE_KEYS[detail.code];
   if (key) return key;
   return detail.message.trim() || undefined;
+}
+
+/**
+ * A local failure with a message worth showing: `messageKey` is the i18n key
+ * the UI displays, while `message` stays English for logs.
+ */
+export class LocalizedError extends Error {
+  readonly messageKey: string;
+
+  constructor(messageKey: string, message: string) {
+    super(message);
+    this.name = 'LocalizedError';
+    this.messageKey = messageKey;
+  }
+}
+
+/**
+ * The message for any failed operation, for {@link displayMessage}: a
+ * {@link LocalizedError}'s key, else {@link extractApiError}'s result. Undefined
+ * when neither applies — an unexpected local error, whose English text is not
+ * meant for the user — so the caller shows its own fallback.
+ */
+export function errorMessageKey(err: unknown): string | undefined {
+  if (err instanceof LocalizedError) return err.messageKey;
+  return extractApiError(err);
 }

@@ -594,6 +594,13 @@
     "cannotDeleteSelf": "You cannot delete your own account.",
     "wouldStrandAccount": "SSO cannot be disconnected: your account has no password, so you would be unable to sign in.",
     "rateLimited": "Too many requests. Please wait a moment and try again.",
-    "requestTooLarge": "The file or request is too large."
+    "requestTooLarge": "The file or request is too large.",
+    "labelNameTooLong": "Label names can be at most {{max}} characters long.",
+    "itemLimitReached": "A note can have at most {{max}} items.",
+    "imageLimitReached": "A note can have at most {{max}} images.",
+    "patLimitReached": "You can have at most {{max}} personal access tokens. Revoke one to create a new one.",
+    "unsupportedImageType": "This file type isn't supported. Choose a different image.",
+    "invalidImage": "This image could not be read. It may be damaged.",
+    "invalidImportFile": "This file could not be read as an export of the selected type."
   }
 }

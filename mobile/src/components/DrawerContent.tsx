@@ -10,7 +10,7 @@ import { useAuth } from '../store/AuthContext';
 import { useCreateLabel, useDeleteLabel, useLabelCounts, useLabels, useRenameLabel } from '../hooks/useLabels';
 import { useTheme } from '../theme/ThemeContext';
 import UserAvatar from './UserAvatar';
-import { extractErrorMessage } from './drawer/utils';
+import { displayMessage, errorMessageKey } from '../i18n/utils';
 import { useConfirm } from '../hooks/useConfirm';
 import { styles } from './drawer/styles';
 import LabelsSection from './drawer/LabelsSection';
@@ -120,7 +120,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
       handleLabelRenameSuccess(updatedLabel.id, updatedLabel.name);
       Alert.alert(t('labels.renameSuccess'));
     } catch (error) {
-      Alert.alert(t('common.error'), extractErrorMessage(error, t('labels.renameError')));
+      Alert.alert(t('common.error'), displayMessage(t, errorMessageKey(error) ?? 'labels.renameError'));
     }
   }, [handleLabelRenameSuccess, renameLabel, renameLabelTarget, renameValue, t]);
 
@@ -144,7 +144,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
       handleDeleteLabelSuccess(label.id);
       Alert.alert(t('labels.deleteSuccess'));
     } catch (error) {
-      Alert.alert(t('common.error'), extractErrorMessage(error, t('labels.deleteError')));
+      Alert.alert(t('common.error'), displayMessage(t, errorMessageKey(error) ?? 'labels.deleteError'));
     } finally {
       setDeletingLabelIds((prev) => {
         const next = new Set(prev);
@@ -167,7 +167,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
       setNewLabelValue('');
       Alert.alert(t('labels.createSuccess'));
     } catch (error) {
-      Alert.alert(t('common.error'), extractErrorMessage(error, t('labels.createError')));
+      Alert.alert(t('common.error'), displayMessage(t, errorMessageKey(error) ?? 'labels.createError'));
     }
   }, [createLabel, newLabelValue, t]);
 

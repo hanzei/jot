@@ -11,7 +11,8 @@
     "unknown": "inconnu",
     "loading": "Chargement...",
     "done": "Terminé",
-    "or": "ou"
+    "or": "ou",
+    "serverSwitchInProgress": "Changement de serveur en cours. Réessayez dans un instant."
   },
   "nav": {
     "settings": "Paramètres",
@@ -361,7 +362,8 @@
     "deleteSuccess": "Étiquette supprimée",
     "deleteError": "Impossible de supprimer l'étiquette",
     "deleteConfirmTitle": "Supprimer l'étiquette",
-    "deleteConfirmMessage": "Supprimer l'étiquette « {{name}} » ? Elle sera retirée de toutes les notes qui l'utilisent."
+    "deleteConfirmMessage": "Supprimer l'étiquette « {{name}} » ? Elle sera retirée de toutes les notes qui l'utilisent.",
+    "nameRequired": "Le nom de l'étiquette ne peut pas être vide."
   },
   "share": {
     "searchUsersPlaceholder": "Rechercher des utilisateurs par nom...",
@@ -545,6 +547,13 @@
     "usernameTaken": "Ce nom d'utilisateur est déjà pris.",
     "labelNameTaken": "Une étiquette portant ce nom existe déjà.",
     "rateLimited": "Trop de requêtes. Veuillez patienter un instant, puis réessayer.",
-    "requestTooLarge": "Le fichier ou la requête est trop volumineux."
+    "requestTooLarge": "Le fichier ou la requête est trop volumineux.",
+    "labelNameTooLong": "Les noms d'étiquette peuvent comporter au maximum {{max}} caractères.",
+    "itemLimitReached": "Une note peut contenir au maximum {{max}} éléments.",
+    "imageLimitReached": "Une note peut contenir au maximum {{max}} images.",
+    "patLimitReached": "Vous pouvez avoir au maximum {{max}} jetons d'accès personnels. Révoquez-en un pour en créer un nouveau.",
+    "unsupportedImageType": "Ce type de fichier n'est pas pris en charge. Choisissez une autre image.",
+    "invalidImage": "Impossible de lire cette image. Elle est peut-être endommagée.",
+    "invalidImportFile": "Impossible de lire ce fichier comme une exportation du type sélectionné."
   }
 }

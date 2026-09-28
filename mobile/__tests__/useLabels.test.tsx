@@ -248,6 +248,7 @@ describe('useLabels write hooks', () => {
       await result.current.mutateAsync({ name: '   ' }).catch(() => {});
 
       await waitFor(() => expect(result.current.isError).toBe(true));
+      expect(result.current.error).toMatchObject({ messageKey: 'labels.nameRequired' });
       expect(mockLabelsApi.createLabel).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
     });

@@ -125,7 +125,7 @@ func validateItemText(text string) (int, error) {
 //	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
 //	@Failure	404		{object}	apierr.ErrorResponse	"not found"
 //	@Failure	409		{object}	apierr.ErrorResponse	"item already exists"
-//	@Failure	422		{object}	apierr.ErrorResponse	"note item cap exceeded"
+//	@Failure	422		{object}	apierr.ErrorResponse	"note item cap exceeded (item_limit_reached)"
 //	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes/{id}/items [post]
 func (h *NotesHandler) CreateNoteItem(w http.ResponseWriter, r *http.Request) (int, any, error) {
@@ -176,7 +176,7 @@ func (h *NotesHandler) CreateNoteItem(w http.ResponseWriter, r *http.Request) (i
 			return http.StatusConflict, nil, err
 		}
 		if errors.Is(err, models.ErrNoteItemCapExceeded) {
-			return http.StatusUnprocessableEntity, nil, fmt.Errorf("note cannot have more than %d items", noteItemsMaxCount)
+			return http.StatusUnprocessableEntity, nil, errItemLimitReached
 		}
 		if errors.Is(err, models.ErrInvalidParentRef) {
 			return http.StatusBadRequest, nil, err

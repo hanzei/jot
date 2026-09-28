@@ -594,6 +594,13 @@
     "cannotDeleteSelf": "Vous ne pouvez pas supprimer votre propre compte.",
     "wouldStrandAccount": "Impossible de dissocier le SSO : votre compte n'a pas de mot de passe, vous ne pourriez plus vous connecter.",
     "rateLimited": "Trop de requêtes. Veuillez patienter un instant, puis réessayer.",
-    "requestTooLarge": "Le fichier ou la requête est trop volumineux."
+    "requestTooLarge": "Le fichier ou la requête est trop volumineux.",
+    "labelNameTooLong": "Les noms d'étiquette peuvent comporter au maximum {{max}} caractères.",
+    "itemLimitReached": "Une note peut contenir au maximum {{max}} éléments.",
+    "imageLimitReached": "Une note peut contenir au maximum {{max}} images.",
+    "patLimitReached": "Vous pouvez avoir au maximum {{max}} jetons d'accès personnels. Révoquez-en un pour en créer un nouveau.",
+    "unsupportedImageType": "Ce type de fichier n'est pas pris en charge. Choisissez une autre image.",
+    "invalidImage": "Impossible de lire cette image. Elle est peut-être endommagée.",
+    "invalidImportFile": "Impossible de lire ce fichier comme une exportation du type sélectionné."
   }
 }

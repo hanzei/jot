@@ -105,6 +105,7 @@ func TestUploadNoteImageNonImageReturns400(t *testing.T) {
 
 	_, err = user.Client.UploadNoteImage(t.Context(), note.ID, "notanimage.txt", bytes.NewReader([]byte("just some plain text, not an image")))
 	assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+	assert.Equal(t, "unsupported_image_type", client.ErrorCode(err))
 }
 
 func TestUploadNoteImageCorruptImageReturns400(t *testing.T) {
@@ -120,6 +121,7 @@ func TestUploadNoteImageCorruptImageReturns400(t *testing.T) {
 	pngSignature := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00}
 	_, err = user.Client.UploadNoteImage(t.Context(), note.ID, "broken.png", bytes.NewReader(pngSignature))
 	assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+	assert.Equal(t, "invalid_image", client.ErrorCode(err))
 }
 
 func TestUploadNoteImageOversizeReturns413(t *testing.T) {
@@ -162,6 +164,7 @@ func TestUploadNoteImageMaxPerNoteEnforced(t *testing.T) {
 	img.Set(0, 0, color.RGBA{R: 255, G: 255, B: 255, A: 255})
 	_, err = user.Client.UploadNoteImage(t.Context(), note.ID, "eleventh.png", bytes.NewReader(encodePNG(t, img)))
 	assert.Equal(t, http.StatusUnprocessableEntity, client.StatusCode(err))
+	assert.Equal(t, "image_limit_reached", client.ErrorCode(err))
 }
 
 func TestGetNoteImage(t *testing.T) {

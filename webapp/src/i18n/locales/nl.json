@@ -594,6 +594,13 @@
     "cannotDeleteSelf": "Je kunt je eigen account niet verwijderen.",
     "wouldStrandAccount": "SSO kan niet worden losgekoppeld: je account heeft geen wachtwoord, dus je zou niet meer kunnen inloggen.",
     "rateLimited": "Te veel verzoeken. Wacht even en probeer het opnieuw.",
-    "requestTooLarge": "Het bestand of verzoek is te groot."
+    "requestTooLarge": "Het bestand of verzoek is te groot.",
+    "labelNameTooLong": "Labelnamen mogen maximaal {{max}} tekens lang zijn.",
+    "itemLimitReached": "Een notitie kan maximaal {{max}} items hebben.",
+    "imageLimitReached": "Een notitie kan maximaal {{max}} afbeeldingen hebben.",
+    "patLimitReached": "Je kunt maximaal {{max}} persoonlijke toegangstokens hebben. Trek er een in om een nieuwe aan te maken.",
+    "unsupportedImageType": "Dit bestandstype wordt niet ondersteund. Kies een andere afbeelding.",
+    "invalidImage": "Deze afbeelding kan niet worden gelezen. Mogelijk is ze beschadigd.",
+    "invalidImportFile": "Dit bestand kan niet worden gelezen als export van het gekozen type."
   }
 }

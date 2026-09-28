@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { apiErrorCode, parseApiError, parseApiErrorBody } from '../apiError';
+import { apiErrorCode, apiErrorParams, parseApiError, parseApiErrorBody } from '../apiError';
+import { IMAGE_MAX_PER_NOTE, VALIDATION } from '../constants';
 
 const envelope = { error: { code: 'not_found', message: 'note not found' } };
 
@@ -39,5 +40,20 @@ describe('apiErrorCode', () => {
   it('returns the code or null', () => {
     expect(apiErrorCode({ response: { data: envelope } })).toBe('not_found');
     expect(apiErrorCode({ response: { data: 'plain' } })).toBeNull();
+  });
+});
+
+describe('apiErrorParams', () => {
+  it.each([
+    ['label_name_too_long', VALIDATION.LABEL_NAME_MAX_LENGTH],
+    ['item_limit_reached', VALIDATION.ITEM_MAX_COUNT],
+    ['image_limit_reached', IMAGE_MAX_PER_NOTE],
+    ['pat_limit_reached', VALIDATION.PAT_MAX_COUNT],
+  ] as const)('names the limit for %s', (code, max) => {
+    expect(apiErrorParams(code)).toEqual({ max });
+  });
+
+  it('returns undefined for a code without parameters', () => {
+    expect(apiErrorParams('label_name_taken')).toBeUndefined();
   });
 });

@@ -654,11 +654,13 @@ func TestLabelNameMaxLength(t *testing.T) {
 	t.Run("create", func(t *testing.T) {
 		_, err := user.Client.CreateLabel(t.Context(), tooLong)
 		assert.Equal(t, http.StatusUnprocessableEntity, client.StatusCode(err))
+		assert.Equal(t, "label_name_too_long", client.ErrorCode(err))
 	})
 
 	t.Run("create with a client ID", func(t *testing.T) {
 		_, err := user.Client.CreateLabelWithID(t.Context(), "labl00000000000toolong", tooLong)
 		assert.Equal(t, http.StatusUnprocessableEntity, client.StatusCode(err))
+		assert.Equal(t, "label_name_too_long", client.ErrorCode(err))
 	})
 
 	t.Run("rename", func(t *testing.T) {
@@ -666,11 +668,13 @@ func TestLabelNameMaxLength(t *testing.T) {
 		require.NoError(t, err)
 		_, err = user.Client.RenameLabel(t.Context(), label.ID, tooLong)
 		assert.Equal(t, http.StatusUnprocessableEntity, client.StatusCode(err))
+		assert.Equal(t, "label_name_too_long", client.ErrorCode(err))
 	})
 
 	t.Run("add to note", func(t *testing.T) {
 		_, err := user.Client.AddLabel(t.Context(), note.ID, tooLong)
 		assert.Equal(t, http.StatusUnprocessableEntity, client.StatusCode(err))
+		assert.Equal(t, "label_name_too_long", client.ErrorCode(err))
 	})
 
 	t.Run("an existing overlong label can still be attached", func(t *testing.T) {
@@ -708,6 +712,7 @@ func TestLabelNameMaxLength(t *testing.T) {
 			Labels:  []string{"fine", tooLong},
 		})
 		assert.Equal(t, http.StatusUnprocessableEntity, client.StatusCode(err))
+		assert.Equal(t, "label_name_too_long", client.ErrorCode(err))
 
 		after, err := user.Client.ListNotes(t.Context(), nil)
 		require.NoError(t, err)

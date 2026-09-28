@@ -610,7 +610,7 @@ func resizeToJPEG(img image.Image, cfg image.Config, maxDim int) ([]byte, error)
 //	@Produce	json
 //	@Param		file	formData	file	true	"Profile icon image (JPEG, PNG or WebP, max 5 MB)"
 //	@Success	200		{object}	models.User
-//	@Failure	400		{object}	apierr.ErrorResponse	"bad request"
+//	@Failure	400		{object}	apierr.ErrorResponse	"bad request, unsupported_image_type, or invalid_image"
 //	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
 //	@Failure	413		{object}	apierr.ErrorResponse	"file too large"
 //	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
@@ -642,12 +642,12 @@ func (h *AuthHandler) UploadProfileIcon(w http.ResponseWriter, r *http.Request) 
 
 	contentType := http.DetectContentType(data)
 	if !allowedImageTypes[contentType] {
-		return http.StatusBadRequest, nil, errors.New("unsupported file type: must be jpeg, png, or webp")
+		return http.StatusBadRequest, nil, apierr.New(apierr.CodeUnsupportedImageType, "unsupported file type: must be jpeg, png, or webp")
 	}
 
 	data, err = resizeImage(data)
 	if err != nil {
-		return http.StatusBadRequest, nil, fmt.Errorf("unsupported or corrupt image: %w", err)
+		return http.StatusBadRequest, nil, apierr.WithCode(apierr.CodeInvalidImage, fmt.Errorf("unsupported or corrupt image: %w", err))
 	}
 	contentType = mimeTypeJPEG
 

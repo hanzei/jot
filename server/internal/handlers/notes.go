@@ -150,7 +150,7 @@ func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
 		return http.StatusBadRequest, err
 	}
 	if len(req.Items) > noteItemsMaxCount {
-		return http.StatusUnprocessableEntity, fmt.Errorf("note cannot have more than %d items", noteItemsMaxCount)
+		return http.StatusUnprocessableEntity, errItemLimitReached
 	}
 
 	if len(req.Items) > 0 {
@@ -332,7 +332,7 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, an
 //	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
 //	@Failure	404		{object}	apierr.ErrorResponse	"label not found"
 //	@Failure	409		{object}	apierr.ErrorResponse	"note with this ID already exists"
-//	@Failure	422		{object}	apierr.ErrorResponse	"note item cap exceeded or label name too long"
+//	@Failure	422		{object}	apierr.ErrorResponse	"note item cap exceeded (item_limit_reached) or label name too long (label_name_too_long)"
 //	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes [post]
 func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, any, error) {
@@ -578,7 +578,7 @@ func normalizeConvertNoteTypeRequest(req *ConvertNoteTypeRequest) (title, conten
 			return "", "", nil, http.StatusBadRequest, err
 		}
 		if len(req.Items) > noteItemsMaxCount {
-			return "", "", nil, http.StatusUnprocessableEntity, fmt.Errorf("note cannot have more than %d items", noteItemsMaxCount)
+			return "", "", nil, http.StatusUnprocessableEntity, errItemLimitReached
 		}
 		built, status, err := buildCreateNoteItems(req.Items)
 		if err != nil {
@@ -617,7 +617,7 @@ func normalizeConvertNoteTypeRequest(req *ConvertNoteTypeRequest) (title, conten
 //	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
 //	@Failure	404		{object}	apierr.ErrorResponse	"not found"
 //	@Failure	409		{object}	apierr.ErrorResponse	"version conflict: note changed since base_version"
-//	@Failure	422		{object}	apierr.ErrorResponse	"note item cap exceeded"
+//	@Failure	422		{object}	apierr.ErrorResponse	"note item cap exceeded (item_limit_reached)"
 //	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes/{id}/convert [post]
 func (h *NotesHandler) ConvertNoteType(w http.ResponseWriter, r *http.Request) (int, any, error) {

@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"unicode/utf8"
 
+	"github.com/hanzei/jot/server/internal/apierr"
 	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/models"
 )
@@ -68,16 +69,16 @@ type jotImportEnvelope struct {
 func (h *NotesHandler) importJotJSON(ctx context.Context, userID string, data []byte) (int, int, error) {
 	var raw jotImportEnvelope
 	if err := jsonv1.Unmarshal(data, &raw); err != nil {
-		return 0, http.StatusBadRequest, errors.New("invalid JSON file")
+		return 0, http.StatusBadRequest, apierr.New(apierr.CodeInvalidImportFile, "invalid JSON file")
 	}
 	if raw.Format != jotExportFormat {
-		return 0, http.StatusBadRequest, fmt.Errorf("invalid format %q: expected jot_export", raw.Format)
+		return 0, http.StatusBadRequest, apierr.WithCode(apierr.CodeInvalidImportFile, fmt.Errorf("invalid format %q: expected jot_export", raw.Format))
 	}
 	if raw.Version != jotExportVersion {
-		return 0, http.StatusBadRequest, fmt.Errorf("unsupported version %d: only version 1 is supported", raw.Version)
+		return 0, http.StatusBadRequest, apierr.WithCode(apierr.CodeInvalidImportFile, fmt.Errorf("unsupported version %d: only version 1 is supported", raw.Version))
 	}
 	if raw.Notes == nil {
-		return 0, http.StatusBadRequest, errors.New("notes must be a JSON array")
+		return 0, http.StatusBadRequest, apierr.New(apierr.CodeInvalidImportFile, "notes must be a JSON array")
 	}
 
 	importNotes := make([]models.JotImportNote, 0, len(raw.Notes))
@@ -196,8 +197,9 @@ func validateJotImportItems(noteIdx int, items []jotImportNoteItem) ([]models.Jo
 //	@Param		url			formData	string	false	"Memos instance URL (required when import_type is usememos)"
 //	@Param		token		formData	string	false	"Memos API token (required when import_type is usememos)"
 //	@Success	200			{object}	ImportResponse
-//	@Failure	400			{object}	apierr.ErrorResponse	"bad request"
+//	@Failure	400			{object}	apierr.ErrorResponse	"bad request, or not a readable export (invalid_import_file)"
 //	@Failure	401			{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	413			{object}	apierr.ErrorResponse	"request body too large"
 //	@Failure	500			{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes/import [post]
 func (h *NotesHandler) ImportNotes(w http.ResponseWriter, r *http.Request) (int, any, error) {
@@ -209,6 +211,9 @@ func (h *NotesHandler) ImportNotes(w http.ResponseWriter, r *http.Request) (int,
 	r.Body = http.MaxBytesReader(w, r.Body, 32<<20)
 	//nolint:gosec // r.Body is already bounded by the MaxBytesReader above
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+			return http.StatusRequestEntityTooLarge, nil, err
+		}
 		return http.StatusBadRequest, nil, errors.New("invalid multipart form")
 	}
 
