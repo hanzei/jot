@@ -468,8 +468,11 @@ Use a Personal Access Token for machine-to-machine access:
 Authorization: Bearer <personal-access-token>
 ```
 
-The MCP server exposes note and label tools. PATs are created from Settings in
-the web app and are only shown once.
+The MCP server exposes note and label tools. They apply the same validation as
+the REST API (field limits, colors, which fields each note type has), and their
+changes are pushed to open web and mobile clients over server-sent events like
+any other edit. PATs are created from Settings in the web app and are only shown
+once.
 
 ## jotctl admin CLI
 

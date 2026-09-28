@@ -84,7 +84,7 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, a
 
 	// Publish personalized events so each recipient sees only their own labels.
 	if audienceIDs, err := h.noteStore.GetNoteAudienceIDs(r.Context(), id); err == nil {
-		h.publishPersonalizedNoteEventWithType(r.Context(), id, audienceIDs, user.ID, sse.EventNoteShared)
+		h.events.PersonalizedNote(r.Context(), id, audienceIDs, user.ID, sse.EventNoteShared)
 	} else {
 		logutil.FromContext(r.Context()).WithError(err).WithField("note_id", id).Error("Failed to get note audience for SSE publish")
 	}

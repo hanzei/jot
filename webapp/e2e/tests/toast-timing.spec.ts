@@ -1,4 +1,5 @@
 import { test, expect } from '../fixtures';
+import { confirmDialog } from '../pages/dialogs';
 
 test.use({ video: 'on' });
 
@@ -22,6 +23,10 @@ const TOAST_EXIT_ANIMATION_MS = 200;
 // relative to each toast's creation, so over-running here does not affect the
 // standard-toast timing checked afterwards.
 const TOAST_EXIT_SETTLE_BUFFER_MS = 500;
+// The confirm dialog's enter transition is driven by animation frames, which
+// the paused fake clock also holds. Run it forward so the dialog finishes
+// opening before it is confirmed (see e2e/pages/dialogs.ts).
+const DIALOG_ENTER_SETTLE_MS = 500;
 
 test.describe('Toast timing', () => {
   test.beforeEach(async ({ authenticatedUser }) => {
@@ -51,7 +56,9 @@ test.describe('Toast timing', () => {
     await expect(page.getByTestId('toast')).toHaveCount(0);
 
     await dashboardPage.switchToBin();
-    await dashboardPage.permanentlyDeleteNoteFromBin('Toast Timing Note');
+    await dashboardPage.requestPermanentDeleteFromBin('Toast Timing Note');
+    await page.clock.runFor(DIALOG_ENTER_SETTLE_MS);
+    await confirmDialog(page, 'Delete forever');
 
     const standardToast = page.getByTestId('toast').last();
     await expect(standardToast).toBeVisible();

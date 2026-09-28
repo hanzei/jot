@@ -95,6 +95,26 @@ func (d *Dialect) CaseInsensitiveLike(col string) string {
 	return d.asciiFold(col) + " LIKE " + d.asciiFold("?")
 }
 
+// LabelOrder returns the ORDER BY terms that sort labels (with the given table
+// alias prefix, e.g. "l." or "") identically on both backends.
+//
+// Labels sort by their case-folded key (labels.name_folded, see
+// internal/labelfold), so "a" and "B" interleave without regard to case, with
+// name and then id as tie-breaks so the order is fully deterministic. Every term
+// is compared by code point: SQLite compares these columns with BINARY (except
+// name, which is NOCASE and so is overridden), and PostgreSQL would otherwise
+// use the database's locale collation, which differs from one installation to
+// the next — so it is pinned to "C", its byte-order collation, which for UTF-8
+// is code-point order. The resulting order is not linguistic ("Ä" sorts after
+// "Z"), but it is the same everywhere.
+func (d *Dialect) LabelOrder(prefix string) string {
+	collate := "BINARY"
+	if d.Driver == DriverPostgres {
+		collate = `"C"`
+	}
+	return fmt.Sprintf("%[1]sname_folded COLLATE %[2]s, %[1]sname COLLATE %[2]s, %[1]sid COLLATE %[2]s", prefix, collate)
+}
+
 // LimitAll returns the dialect-correct expression for "no upper bound" in a
 // LIMIT clause. Use it as: "LIMIT " + d.LimitAll() + " OFFSET ?".
 // SQLite uses -1; PostgreSQL uses ALL.
