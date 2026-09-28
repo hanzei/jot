@@ -13,8 +13,8 @@ import (
 	"github.com/hanzei/jot/server/internal/blobstore"
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/notify"
 	"github.com/hanzei/jot/server/internal/sse"
-	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 )
@@ -32,6 +32,7 @@ type NotesHandler struct {
 	userStore      *models.UserStore
 	labelStore     *models.LabelStore
 	hub            *sse.Hub
+	events         *notify.Publisher
 	imageStore     *blobstore.ImageStore
 	uploadMaxBytes int64
 	notesCreated   metric.Int64Counter
@@ -82,6 +83,7 @@ func NewNotesHandler(noteStore *models.NoteStore, userStore *models.UserStore, l
 		userStore:      userStore,
 		labelStore:     labelStore,
 		hub:            hub,
+		events:         notify.New(hub, noteStore),
 		imageStore:     imageStore,
 		uploadMaxBytes: uploadMaxBytes,
 		notesCreated:   notesCreated,
@@ -89,68 +91,6 @@ func NewNotesHandler(noteStore *models.NoteStore, userStore *models.UserStore, l
 		notesDeleted:   notesDeleted,
 		notesRestored:  notesRestored,
 	}, nil
-}
-
-// publishNoteEvent fetches the note's audience and publishes an SSE event.
-// Errors are logged but never fail the HTTP request.
-func (h *NotesHandler) publishNoteEvent(ctx context.Context, noteID string, eventType sse.EventType, note any, sourceUserID string) {
-	if h.hub == nil {
-		return
-	}
-	audienceIDs, err := h.noteStore.GetNoteAudienceIDs(ctx, noteID)
-	if err != nil {
-		logutil.FromContext(ctx).WithError(err).WithField("note_id", noteID).Error("Failed to get note audience for SSE publish")
-		return
-	}
-	h.hub.Publish(ctx, audienceIDs, sse.Event{
-		Type:         eventType,
-		SourceUserID: sourceUserID,
-		ClientID:     clientIDFromContext(ctx),
-		Data:         sse.NoteEventData{NoteID: noteID, Note: note},
-	})
-}
-
-// publishPersonalizedNoteEvent fetches each audience member's personalized view of a note
-// and sends them an individual SSE event. Used when shared fields (title, content, items)
-// change so every collaborator receives the update with their own per-user state intact.
-// Errors are logged but never fail the HTTP request.
-func (h *NotesHandler) publishPersonalizedNoteEvent(ctx context.Context, noteID string, audienceIDs []string, sourceUserID string) {
-	h.publishPersonalizedNoteEventWithType(ctx, noteID, audienceIDs, sourceUserID, sse.EventNoteUpdated)
-}
-
-// publishPersonalizedNoteEventWithType is like publishPersonalizedNoteEvent but allows the caller to specify the SSE event type.
-func (h *NotesHandler) publishPersonalizedNoteEventWithType(ctx context.Context, noteID string, audienceIDs []string, sourceUserID string, eventType sse.EventType) {
-	if h.hub == nil {
-		return
-	}
-	clientID := clientIDFromContext(ctx)
-	for _, uid := range audienceIDs {
-		n, err := h.noteStore.GetByID(ctx, noteID, uid)
-		if err != nil {
-			logutil.FromContext(ctx).WithError(err).WithField("note_id", noteID).WithField("user_id", uid).Warn("Failed to fetch personalized note for SSE publish")
-			continue
-		}
-		sanitized := sanitizeNote(*n)
-		h.hub.Publish(ctx, []string{uid}, sse.Event{
-			Type:         eventType,
-			SourceUserID: sourceUserID,
-			ClientID:     clientID,
-			Data:         sse.NoteEventData{NoteID: noteID, Note: sanitized},
-		})
-	}
-}
-
-func (h *NotesHandler) publishDeletedNoteEvent(ctx context.Context, noteID string, audienceIDs []string, sourceUserID string) {
-	if h.hub == nil || len(audienceIDs) == 0 {
-		return
-	}
-
-	h.hub.Publish(ctx, audienceIDs, sse.Event{
-		Type:         sse.EventNoteDeleted,
-		SourceUserID: sourceUserID,
-		ClientID:     clientIDFromContext(ctx),
-		Data:         sse.NoteEventData{NoteID: noteID},
-	})
 }
 
 type CreateNoteRequest struct {
@@ -198,33 +138,16 @@ type EmptyTrashResponse struct {
 	Deleted int `json:"deleted"`
 }
 
-// sanitizeNote strips fields that do not belong to the note's type before
-// serializing to a JSON response. The internal models.Note struct is unified
-// (single DB table), so enforcement is done at the handler layer only.
-func sanitizeNote(n models.Note) models.Note {
-	switch n.NoteType {
-	case models.NoteTypeText:
-		n.Title = ""
-		n.Items = nil
-		n.CheckedItemsCollapsed = false
-	case models.NoteTypeList:
-		n.Content = ""
-	default:
-		logrus.Warnf("sanitizeNote: unknown note type %q for note %s", n.NoteType, n.ID)
-	}
-	return n
-}
-
 func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
 	if req.Title == "" && req.Content == "" && len(req.Items) == 0 {
 		return http.StatusBadRequest, errors.New("note must have a title, content, or items")
 	}
 
-	if utf8.RuneCountInString(req.Title) > noteTitleMaxLength {
-		return http.StatusBadRequest, fmt.Errorf("title must be %d characters or fewer", noteTitleMaxLength)
+	if err := models.ValidateNoteTitle(req.Title); err != nil {
+		return http.StatusBadRequest, err
 	}
-	if utf8.RuneCountInString(req.Content) > noteContentMaxLength {
-		return http.StatusBadRequest, fmt.Errorf("content must be %d characters or fewer", noteContentMaxLength)
+	if err := models.ValidateNoteContent(req.Content); err != nil {
+		return http.StatusBadRequest, err
 	}
 	if len(req.Items) > noteItemsMaxCount {
 		return http.StatusUnprocessableEntity, fmt.Errorf("note cannot have more than %d items", noteItemsMaxCount)
@@ -244,21 +167,38 @@ func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
 		return http.StatusBadRequest, fmt.Errorf("note_type must be %q or %q", models.NoteTypeText, models.NoteTypeList)
 	}
 
-	if req.NoteType == models.NoteTypeText && req.Title != "" {
-		return http.StatusBadRequest, errors.New("text notes cannot have a title")
-	}
-	if req.NoteType == models.NoteTypeList && req.Content != "" {
-		return http.StatusBadRequest, errors.New("list notes cannot have content")
+	if err := models.ValidateNoteTypeFields(req.NoteType, &req.Title, &req.Content, nil); err != nil {
+		return http.StatusBadRequest, err
 	}
 
 	if req.Color == "" {
 		req.Color = models.DefaultNoteColor
 	}
 
-	if err := validateColor(req.Color); err != nil {
+	if err := models.ValidateNoteColor(req.Color); err != nil {
 		return http.StatusBadRequest, err
 	}
 
+	return http.StatusOK, nil
+}
+
+// checkNewLabelNames rejects, before the note is created, any label name that
+// is over the length limit and does not match an existing label — the one case
+// createNoteLabels would otherwise fail on after the note already exists.
+func (h *NotesHandler) checkNewLabelNames(ctx context.Context, userID string, rawLabels []string) (int, error) {
+	for _, name := range normalizeLabels(rawLabels) {
+		lengthErr := models.ValidateLabelName(name)
+		if lengthErr == nil {
+			continue
+		}
+		_, err := h.labelStore.GetLabelByName(ctx, userID, name)
+		if errors.Is(err, models.ErrLabelNotFoundOrNotOwned) {
+			return http.StatusUnprocessableEntity, lengthErr
+		}
+		if err != nil {
+			return http.StatusInternalServerError, fmt.Errorf("check label name: %w", err)
+		}
+	}
 	return http.StatusOK, nil
 }
 
@@ -266,6 +206,9 @@ func (h *NotesHandler) createNoteLabels(ctx context.Context, noteID, userID stri
 	for _, name := range normalizeLabels(rawLabels) {
 		label, _, err := h.labelStore.GetOrCreateLabel(ctx, userID, name)
 		if err != nil {
+			if errors.Is(err, models.ErrLabelNameTooLong) {
+				return http.StatusUnprocessableEntity, err
+			}
 			return http.StatusInternalServerError, fmt.Errorf("get or create label: %w", err)
 		}
 		if err = h.noteStore.AddLabelToNote(ctx, noteID, label.ID, userID); err != nil {
@@ -373,11 +316,7 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, an
 		return http.StatusInternalServerError, nil, fmt.Errorf("get notes: %w", err)
 	}
 
-	sanitized := make([]models.Note, len(notes))
-	for i, n := range notes {
-		sanitized[i] = sanitizeNote(*n)
-	}
-	return http.StatusOK, sanitized, nil
+	return http.StatusOK, models.SanitizeNotes(notes), nil
 }
 
 // CreateNote godoc
@@ -393,7 +332,7 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, an
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	404		{string}	string	"label not found"
 //	@Failure	409		{string}	string	"note with this ID already exists"
-//	@Failure	422		{string}	string	"note item cap exceeded"
+//	@Failure	422		{string}	string	"note item cap exceeded or label name too long"
 //	@Failure	500		{string}	string	"internal server error"
 //	@Router		/notes [post]
 func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, any, error) {
@@ -413,6 +352,10 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 
 	if req.ID != "" && !models.IsValidID(req.ID) {
 		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
+	}
+
+	if status, err := h.checkNewLabelNames(r.Context(), user.ID, req.Labels); err != nil {
+		return status, nil, err
 	}
 
 	var items []models.NewNoteItem
@@ -458,8 +401,8 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 	}
 
 	h.notesCreated.Add(r.Context(), 1)
-	sanitized := sanitizeNote(*note)
-	h.publishNoteEvent(r.Context(), note.ID, sse.EventNoteCreated, sanitized, user.ID)
+	sanitized := models.SanitizeNote(*note)
+	h.events.NoteToAudience(r.Context(), note.ID, sse.EventNoteCreated, sanitized, user.ID)
 	return http.StatusCreated, sanitized, nil
 }
 
@@ -498,7 +441,7 @@ func (h *NotesHandler) GetNote(w http.ResponseWriter, r *http.Request) (int, any
 		return http.StatusInternalServerError, nil, fmt.Errorf("get note: %w", err)
 	}
 
-	return http.StatusOK, sanitizeNote(*note), nil
+	return http.StatusOK, models.SanitizeNote(*note), nil
 }
 
 // DuplicateNoteRequest is the optional request body for the duplicate endpoint.
@@ -588,8 +531,8 @@ func (h *NotesHandler) DuplicateNote(w http.ResponseWriter, r *http.Request) (in
 		return http.StatusInternalServerError, nil, fmt.Errorf("duplicate note: %w", err)
 	}
 
-	sanitized := sanitizeNote(*duplicatedNote)
-	h.publishNoteEvent(r.Context(), duplicatedNote.ID, sse.EventNoteCreated, sanitized, user.ID)
+	sanitized := models.SanitizeNote(*duplicatedNote)
+	h.events.NoteToAudience(r.Context(), duplicatedNote.ID, sse.EventNoteCreated, sanitized, user.ID)
 	h.notesCreated.Add(r.Context(), 1)
 	return http.StatusCreated, sanitized, nil
 }
@@ -631,8 +574,8 @@ func normalizeConvertNoteTypeRequest(req *ConvertNoteTypeRequest) (title, conten
 		if req.Title != nil {
 			title = *req.Title
 		}
-		if utf8.RuneCountInString(title) > noteTitleMaxLength {
-			return "", "", nil, http.StatusBadRequest, fmt.Errorf("title must be %d characters or fewer", noteTitleMaxLength)
+		if err := models.ValidateNoteTitle(title); err != nil {
+			return "", "", nil, http.StatusBadRequest, err
 		}
 		if len(req.Items) > noteItemsMaxCount {
 			return "", "", nil, http.StatusUnprocessableEntity, fmt.Errorf("note cannot have more than %d items", noteItemsMaxCount)
@@ -654,8 +597,8 @@ func normalizeConvertNoteTypeRequest(req *ConvertNoteTypeRequest) (title, conten
 	if req.Content != nil {
 		content = *req.Content
 	}
-	if utf8.RuneCountInString(content) > noteContentMaxLength {
-		return "", "", nil, http.StatusBadRequest, fmt.Errorf("content must be %d characters or fewer", noteContentMaxLength)
+	if err := models.ValidateNoteContent(content); err != nil {
+		return "", "", nil, http.StatusBadRequest, err
 	}
 	return "", content, nil, http.StatusOK, nil
 }
@@ -734,8 +677,8 @@ func (h *NotesHandler) ConvertNoteType(w http.ResponseWriter, r *http.Request) (
 		}
 	}
 
-	sanitized := sanitizeNote(*converted)
-	h.publishUpdateEvent(r.Context(), id, &sanitized, user.ID, true)
+	sanitized := models.SanitizeNote(*converted)
+	h.events.NoteUpdated(r.Context(), id, &sanitized, user.ID, true)
 	h.notesUpdated.Add(r.Context(), 1)
 	return http.StatusOK, sanitized, nil
 }
@@ -743,30 +686,28 @@ func (h *NotesHandler) ConvertNoteType(w http.ResponseWriter, r *http.Request) (
 // validateUpdateNoteTypeFields rejects updates that set fields incompatible with
 // the note's type (e.g., title on a text note, content on a list note).
 func validateUpdateNoteTypeFields(noteType models.NoteType, req *UpdateNoteRequest) (int, error) {
-	if noteType == models.NoteTypeText && req.Title != nil && *req.Title != "" {
-		return http.StatusBadRequest, errors.New("text notes cannot have a title")
-	}
-	if noteType == models.NoteTypeList && req.Content != nil && *req.Content != "" {
-		return http.StatusBadRequest, errors.New("list notes cannot have content")
-	}
-	if noteType == models.NoteTypeText && req.CheckedItemsCollapsed != nil {
-		return http.StatusBadRequest, errors.New("text notes cannot have checked_items_collapsed")
+	if err := models.ValidateNoteTypeFields(noteType, req.Title, req.Content, req.CheckedItemsCollapsed); err != nil {
+		return http.StatusBadRequest, err
 	}
 	return http.StatusOK, nil
 }
 
 func normalizeUpdateNoteRequest(req *UpdateNoteRequest) (int, error) {
-	if req.Title != nil && utf8.RuneCountInString(*req.Title) > noteTitleMaxLength {
-		return http.StatusBadRequest, fmt.Errorf("title must be %d characters or fewer", noteTitleMaxLength)
+	if req.Title != nil {
+		if err := models.ValidateNoteTitle(*req.Title); err != nil {
+			return http.StatusBadRequest, err
+		}
 	}
-	if req.Content != nil && utf8.RuneCountInString(*req.Content) > noteContentMaxLength {
-		return http.StatusBadRequest, fmt.Errorf("content must be %d characters or fewer", noteContentMaxLength)
+	if req.Content != nil {
+		if err := models.ValidateNoteContent(*req.Content); err != nil {
+			return http.StatusBadRequest, err
+		}
 	}
 	if req.Color != nil {
 		if *req.Color == "" {
 			*req.Color = models.DefaultNoteColor
 		}
-		if err := validateColor(*req.Color); err != nil {
+		if err := models.ValidateNoteColor(*req.Color); err != nil {
 			return http.StatusBadRequest, err
 		}
 	}
@@ -856,34 +797,11 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 	// only need to be delivered to the acting user. (List items are edited via
 	// the dedicated item endpoints, which publish their own events.)
 	hasSharedFieldChange := req.Title != nil || req.Content != nil
-	sanitized := sanitizeNote(*note)
-	h.publishUpdateEvent(r.Context(), id, &sanitized, user.ID, hasSharedFieldChange)
+	sanitized := models.SanitizeNote(*note)
+	h.events.NoteUpdated(r.Context(), id, &sanitized, user.ID, hasSharedFieldChange)
 
 	h.notesUpdated.Add(r.Context(), 1)
 	return http.StatusOK, sanitized, nil
-}
-
-// publishUpdateEvent sends SSE notifications after a note update. If shared fields
-// changed, every collaborator gets a personalized event; otherwise only the acting
-// user is notified.
-func (h *NotesHandler) publishUpdateEvent(ctx context.Context, noteID string, note *models.Note, userID string, sharedFieldChanged bool) {
-	if sharedFieldChanged {
-		audienceIDs, err := h.noteStore.GetNoteAudienceIDs(ctx, noteID)
-		if err != nil {
-			logutil.FromContext(ctx).WithError(err).WithField("note_id", noteID).Error("Failed to get note audience for SSE publish")
-			return
-		}
-		h.publishPersonalizedNoteEvent(ctx, noteID, audienceIDs, userID)
-		return
-	}
-	if h.hub != nil {
-		h.hub.Publish(ctx, []string{userID}, sse.Event{
-			Type:         sse.EventNoteUpdated,
-			SourceUserID: userID,
-			ClientID:     clientIDFromContext(ctx),
-			Data:         sse.NoteEventData{NoteID: noteID, Note: note},
-		})
-	}
 }
 
 // DeleteNote godoc
@@ -938,7 +856,7 @@ func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, 
 	}
 
 	if audienceErr == nil {
-		h.publishDeletedNoteEvent(r.Context(), id, audienceIDs, user.ID)
+		h.events.NoteDeleted(r.Context(), id, audienceIDs, user.ID)
 	}
 
 	h.notesDeleted.Add(r.Context(), 1)
@@ -968,7 +886,7 @@ func (h *NotesHandler) EmptyTrash(w http.ResponseWriter, r *http.Request) (int, 
 	reclaimOrphanedImageBlobs(r.Context(), h.noteStore, h.imageStore, shas)
 
 	for _, deletedNote := range deletedNotes {
-		h.publishDeletedNoteEvent(r.Context(), deletedNote.NoteID, deletedNote.AudienceIDs, user.ID)
+		h.events.NoteDeleted(r.Context(), deletedNote.NoteID, deletedNote.AudienceIDs, user.ID)
 		h.notesDeleted.Add(r.Context(), 1)
 	}
 
@@ -1016,9 +934,9 @@ func (h *NotesHandler) RestoreNote(w http.ResponseWriter, r *http.Request) (int,
 	}
 
 	h.notesRestored.Add(r.Context(), 1)
-	sanitized := sanitizeNote(*note)
+	sanitized := models.SanitizeNote(*note)
 	if audienceIDs, aErr := h.noteStore.GetNoteAudienceIDs(r.Context(), id); aErr == nil {
-		h.publishPersonalizedNoteEvent(r.Context(), id, audienceIDs, user.ID)
+		h.events.PersonalizedNote(r.Context(), id, audienceIDs, user.ID, sse.EventNoteUpdated)
 	} else {
 		logutil.FromContext(r.Context()).WithError(aErr).WithField("note_id", id).Error("Failed to get note audience for SSE publish")
 	}

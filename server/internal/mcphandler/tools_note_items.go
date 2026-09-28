@@ -149,6 +149,7 @@ func (h *Handler) handleCreateNoteItem(userID string) mcp.ToolHandlerFor[createN
 		if err != nil {
 			return toolError("create note item: %w", itemCapError(err))
 		}
+		h.events.NoteUpdated(ctx, in.NoteID, nil, userID, true)
 		data, err := json.Marshal(item)
 		if err != nil {
 			return toolError("marshal note item: %w", err)
@@ -191,6 +192,7 @@ func (h *Handler) handleUpdateNoteItem(userID string) mcp.ToolHandlerFor[updateN
 		if err != nil {
 			return toolError("update note item: %w", err)
 		}
+		h.events.NoteUpdated(ctx, in.NoteID, nil, userID, true)
 		data, err := json.Marshal(item)
 		if err != nil {
 			return toolError("marshal note item: %w", err)
@@ -217,6 +219,7 @@ func (h *Handler) handleDeleteNoteItem(userID string) mcp.ToolHandlerFor[deleteN
 		if err := h.noteStore.DeleteItemFromNote(ctx, in.NoteID, in.ItemID); err != nil {
 			return toolError("delete note item: %w", err)
 		}
+		h.events.NoteUpdated(ctx, in.NoteID, nil, userID, true)
 		return toolDeletedResult(in.ItemID, map[string]any{"note_id": in.NoteID})
 	}
 }

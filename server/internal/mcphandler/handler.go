@@ -11,6 +11,8 @@ import (
 	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/blobstore"
 	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/notify"
+	"github.com/hanzei/jot/server/internal/sse"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -19,14 +21,19 @@ type Handler struct {
 	noteStore  *models.NoteStore
 	labelStore *models.LabelStore
 	imageStore *blobstore.ImageStore
+	// events publishes the same SSE events the REST handlers do, so a change
+	// made over MCP reaches open webapp and mobile clients.
+	events *notify.Publisher
 }
 
-// New creates a new Handler backed by the provided stores.
-func New(noteStore *models.NoteStore, labelStore *models.LabelStore, imageStore *blobstore.ImageStore) *Handler {
+// New creates a new Handler backed by the provided stores, publishing change
+// events to hub.
+func New(noteStore *models.NoteStore, labelStore *models.LabelStore, imageStore *blobstore.ImageStore, hub *sse.Hub) *Handler {
 	return &Handler{
 		noteStore:  noteStore,
 		labelStore: labelStore,
 		imageStore: imageStore,
+		events:     notify.New(hub, noteStore),
 	}
 }
 
@@ -71,6 +78,16 @@ func toolTextResult(data []byte) *mcp.CallToolResult {
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{&mcp.TextContent{Text: string(data)}},
 	}
+}
+
+// toolNoteResult marshals a note for a tool result, stripping the fields that
+// do not belong to its type exactly as the REST API does.
+func toolNoteResult(note *models.Note) (*mcp.CallToolResult, any, error) {
+	data, err := json.Marshal(models.SanitizeNote(*note))
+	if err != nil {
+		return toolError("marshal note: %w", err)
+	}
+	return toolTextResult(data), nil, nil
 }
 
 // toolDeletedResult builds the confirmation the delete tools return: the ID of
