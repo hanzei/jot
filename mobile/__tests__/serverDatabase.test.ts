@@ -3,6 +3,7 @@ import * as SQLite from 'expo-sqlite';
 import { getDatabaseNameForServer, initializeServerDatabase } from '../src/db/serverDatabase';
 import { MIGRATIONS } from '../src/db/schema';
 import { createTestDb, openNamedTestDb, type TestDatabase } from './helpers/testDb';
+import { silenceConsole } from './helpers/consoleGuard';
 
 describe('server database isolation', () => {
   const mockSecureStore = SecureStore as unknown as {
@@ -19,6 +20,8 @@ describe('server database isolation', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Expected: the legacy-database migration path logs its completion.
+    silenceConsole('info', /^SQLite migration complete/);
     store.clear();
     mockSecureStore.getItemAsync.mockImplementation(async (key: string) => store.get(key) ?? null);
     mockSecureStore.setItemAsync.mockImplementation(async (key: string, value: string) => {

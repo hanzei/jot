@@ -28,6 +28,7 @@ describe('NoteEditorScreen list-item formatting bar', () => {
   });
 
   afterEach(() => {
+    jest.useRealTimers();
     Platform.OS = originalPlatform;
     jest.restoreAllMocks();
   });
@@ -144,13 +145,17 @@ describe('NoteEditorScreen list-item formatting bar', () => {
 
     expect(getByTestId('format-bold-btn')).toBeTruthy();
 
+    // The clear is deferred (ITEM_BLUR_SETTLE_MS, 150 ms) so a tap from one row
+    // to the next does not flash the bar away and back. Fake timers from here on
+    // let the test step past that window instead of sleeping through it.
+    jest.useFakeTimers();
     await act(async () => {
       await fireEvent(row(), 'blur');
     });
-    // The clear is deferred (ITEM_BLUR_SETTLE_MS) so a tap from one row to the
-    // next does not flash the bar away and back. Real timers here, so wait it out.
+    expect(getByTestId('format-bold-btn')).toBeTruthy();
+
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      jest.advanceTimersByTime(150);
     });
 
     expect(queryByTestId('format-bold-btn')).toBeNull();
