@@ -15,6 +15,7 @@ import { enqueueOperation } from '../src/db/syncQueue';
 import { markServerReachable, markServerUnreachable } from '../src/api/serverReachability';
 import i18n from '../src/i18n';
 import type { User } from '@jot/shared';
+import { apiErrorBody } from './helpers/apiError';
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -222,7 +223,7 @@ describe('SettingsScreen offline / queued settings changes', () => {
     it('reverts language and shows error when updateMe fails permanently (4xx)', async () => {
       const { setSettings } = setupAuth();
       mockUpdateMe.mockRejectedValue(
-        Object.assign(makeAxiosError(422), { response: { status: 422, data: 'invalid language' } }),
+        Object.assign(makeAxiosError(422), { response: { status: 422, data: apiErrorBody('limit_exceeded', 'invalid language') } }),
       );
 
       const { getByTestId, getByText } = await render(<SettingsScreen />);
@@ -247,7 +248,7 @@ describe('SettingsScreen offline / queued settings changes', () => {
     it('reverts language and shows error when updateMe fails with 400', async () => {
       setupAuth();
       mockUpdateMe.mockRejectedValue(
-        Object.assign(makeAxiosError(400), { response: { status: 400, data: 'bad request' } }),
+        Object.assign(makeAxiosError(400), { response: { status: 400, data: apiErrorBody('validation_failed', 'bad request') } }),
       );
 
       const { getByTestId, getByText } = await render(<SettingsScreen />);
@@ -369,7 +370,7 @@ describe('SettingsScreen offline / queued settings changes', () => {
     it('reverts theme and shows error when updateMe fails permanently (4xx)', async () => {
       const { setSettings } = setupAuth();
       mockUpdateMe.mockRejectedValue(
-        Object.assign(makeAxiosError(422), { response: { status: 422, data: 'invalid theme' } }),
+        Object.assign(makeAxiosError(422), { response: { status: 422, data: apiErrorBody('limit_exceeded', 'invalid theme') } }),
       );
 
       const { getByTestId, getByText } = await render(<SettingsScreen />);
@@ -392,7 +393,7 @@ describe('SettingsScreen offline / queued settings changes', () => {
     it('reverts theme and shows error when updateMe fails with 403', async () => {
       setupAuth();
       mockUpdateMe.mockRejectedValue(
-        Object.assign(makeAxiosError(403), { response: { status: 403, data: 'forbidden' } }),
+        Object.assign(makeAxiosError(403), { response: { status: 403, data: apiErrorBody('forbidden', 'forbidden') } }),
       );
 
       const { getByTestId, getByText } = await render(<SettingsScreen />);
@@ -519,7 +520,7 @@ describe('SettingsScreen offline / queued settings changes', () => {
     it('applies optimistic update then reverts and shows error when updateMe fails permanently (4xx)', async () => {
       const { setUser } = setupAuth();
       mockUpdateMe.mockRejectedValue(
-        Object.assign(makeAxiosError(422), { response: { status: 422, data: 'username taken' } }),
+        Object.assign(makeAxiosError(422), { response: { status: 422, data: apiErrorBody('limit_exceeded', 'username taken') } }),
       );
 
       const { getByTestId, getByText } = await render(<SettingsScreen />);
@@ -541,7 +542,7 @@ describe('SettingsScreen offline / queued settings changes', () => {
     it('applies optimistic update then reverts and shows error when updateMe fails with 400', async () => {
       const { setUser } = setupAuth();
       mockUpdateMe.mockRejectedValue(
-        Object.assign(makeAxiosError(400), { response: { status: 400, data: 'invalid input' } }),
+        Object.assign(makeAxiosError(400), { response: { status: 400, data: apiErrorBody('validation_failed', 'invalid input') } }),
       );
 
       const { getByTestId, getByText } = await render(<SettingsScreen />);

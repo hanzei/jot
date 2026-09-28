@@ -121,12 +121,12 @@ func validateItemText(text string) (int, error) {
 //	@Param		id		path		string					true	"Note ID"
 //	@Param		body	body		CreateNoteItemRequest	true	"Item to add"
 //	@Success	201		{object}	models.NoteItem
-//	@Failure	400		{string}	string	"bad request"
-//	@Failure	401		{string}	string	"unauthorized"
-//	@Failure	404		{string}	string	"not found"
-//	@Failure	409		{string}	string	"item already exists"
-//	@Failure	422		{string}	string	"note item cap exceeded"
-//	@Failure	500		{string}	string	"internal server error"
+//	@Failure	400		{object}	apierr.ErrorResponse	"bad request"
+//	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	404		{object}	apierr.ErrorResponse	"not found"
+//	@Failure	409		{object}	apierr.ErrorResponse	"item already exists"
+//	@Failure	422		{object}	apierr.ErrorResponse	"note item cap exceeded"
+//	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes/{id}/items [post]
 func (h *NotesHandler) CreateNoteItem(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -199,10 +199,10 @@ func (h *NotesHandler) CreateNoteItem(w http.ResponseWriter, r *http.Request) (i
 //	@Param		item_id	path		string					true	"Item ID"
 //	@Param		body	body		PatchNoteItemRequest	true	"Fields to update"
 //	@Success	200		{object}	models.NoteItem
-//	@Failure	400		{string}	string	"bad request"
-//	@Failure	401		{string}	string	"unauthorized"
-//	@Failure	404		{string}	string	"not found"
-//	@Failure	500		{string}	string	"internal server error"
+//	@Failure	400		{object}	apierr.ErrorResponse	"bad request"
+//	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	404		{object}	apierr.ErrorResponse	"not found"
+//	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes/{id}/items/{item_id} [patch]
 func (h *NotesHandler) UpdateNoteItem(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -266,10 +266,10 @@ func (h *NotesHandler) UpdateNoteItem(w http.ResponseWriter, r *http.Request) (i
 //	@Param		id		path	string	true	"Note ID"
 //	@Param		item_id	path	string	true	"Item ID"
 //	@Success	204		"no content"
-//	@Failure	400		{string}	string	"bad request"
-//	@Failure	401		{string}	string	"unauthorized"
-//	@Failure	404		{string}	string	"not found"
-//	@Failure	500		{string}	string	"internal server error"
+//	@Failure	400		{object}	apierr.ErrorResponse	"bad request"
+//	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	404		{object}	apierr.ErrorResponse	"not found"
+//	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes/{id}/items/{item_id} [delete]
 func (h *NotesHandler) DeleteNoteItem(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -307,10 +307,10 @@ func (h *NotesHandler) DeleteNoteItem(w http.ResponseWriter, r *http.Request) (i
 //	@Param		id		path	string					true	"Note ID"
 //	@Param		body	body	ReorderNoteItemsRequest	true	"Ordered item IDs"
 //	@Success	204		"no content"
-//	@Failure	400		{string}	string	"bad request"
-//	@Failure	401		{string}	string	"unauthorized"
-//	@Failure	404		{string}	string	"not found"
-//	@Failure	500		{string}	string	"internal server error"
+//	@Failure	400		{object}	apierr.ErrorResponse	"bad request"
+//	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	404		{object}	apierr.ErrorResponse	"not found"
+//	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes/{id}/items/reorder [post]
 func (h *NotesHandler) ReorderNoteItems(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -363,10 +363,10 @@ func (h *NotesHandler) ReorderNoteItems(w http.ResponseWriter, r *http.Request) 
 //	@Param			item_id	path		string							true	"Item ID"
 //	@Param			body	body		ToggleNoteItemCompletedRequest	true	"Completed state"
 //	@Success		200		{array}		models.NoteItem
-//	@Failure		400		{string}	string	"bad request"
-//	@Failure		401		{string}	string	"unauthorized"
-//	@Failure		404		{string}	string	"not found"
-//	@Failure		500		{string}	string	"internal server error"
+//	@Failure		400		{object}	apierr.ErrorResponse	"bad request"
+//	@Failure		401		{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure		404		{object}	apierr.ErrorResponse	"not found"
+//	@Failure		500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router			/notes/{id}/items/{item_id}/toggle-completed [post]
 func (h *NotesHandler) ToggleNoteItemCompleted(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -448,10 +448,10 @@ type DeleteNoteItemsRequest struct {
 //	@Param			id		path		string							true	"Note ID"
 //	@Param			body	body		SetNoteItemsCompletedRequest	true	"Item IDs and target completed state"
 //	@Success		200		{array}		models.NoteItem
-//	@Failure		400		{string}	string	"bad request"
-//	@Failure		401		{string}	string	"unauthorized"
-//	@Failure		404		{string}	string	"not found"
-//	@Failure		500		{string}	string	"internal server error"
+//	@Failure		400		{object}	apierr.ErrorResponse	"bad request"
+//	@Failure		401		{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure		404		{object}	apierr.ErrorResponse	"not found"
+//	@Failure		500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router			/notes/{id}/items/set-completed [post]
 func (h *NotesHandler) SetNoteItemsCompleted(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -499,10 +499,10 @@ func (h *NotesHandler) SetNoteItemsCompleted(w http.ResponseWriter, r *http.Requ
 //	@Param			id		path		string					true	"Note ID"
 //	@Param			body	body		DeleteNoteItemsRequest	true	"Item IDs to delete"
 //	@Success		200		{array}		models.NoteItem
-//	@Failure		400		{string}	string	"bad request"
-//	@Failure		401		{string}	string	"unauthorized"
-//	@Failure		404		{string}	string	"not found"
-//	@Failure		500		{string}	string	"internal server error"
+//	@Failure		400		{object}	apierr.ErrorResponse	"bad request"
+//	@Failure		401		{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure		404		{object}	apierr.ErrorResponse	"not found"
+//	@Failure		500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router			/notes/{id}/items/delete [post]
 func (h *NotesHandler) DeleteNoteItems(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())

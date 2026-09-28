@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/hanzei/jot/server/internal/apierr"
 	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
@@ -25,12 +26,12 @@ type ShareNoteRequest struct {
 //	@Param		id		path	string				true	"Note ID"
 //	@Param		body	body	ShareNoteRequest	true	"User ID to share with"
 //	@Success	204
-//	@Failure	400	{string}	string	"bad request"
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	403	{string}	string	"not owner"
-//	@Failure	404	{string}	string	"not found"
-//	@Failure	409	{string}	string	"already shared"
-//	@Failure	500	{string}	string	"internal server error"
+//	@Failure	400	{object}	apierr.ErrorResponse	"bad request"
+//	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	403	{object}	apierr.ErrorResponse	"not owner"
+//	@Failure	404	{object}	apierr.ErrorResponse	"not found"
+//	@Failure	409	{object}	apierr.ErrorResponse	"already shared"
+//	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes/{id}/share [post]
 func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -64,7 +65,7 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, a
 	}
 
 	if req.UserID == user.ID {
-		return http.StatusBadRequest, nil, errors.New("cannot share with self")
+		return http.StatusBadRequest, nil, apierr.New(apierr.CodeCannotShareWithSelf, "cannot share with self")
 	}
 
 	if _, lookupErr := h.userStore.GetByID(r.Context(), req.UserID); lookupErr != nil {
@@ -101,11 +102,11 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, a
 //	@Param			id		path	string	true	"Note ID"
 //	@Param			user_id	path	string	true	"User ID to unshare with"
 //	@Success		204
-//	@Failure		400	{string}	string	"bad request"
-//	@Failure		401	{string}	string	"unauthorized"
-//	@Failure		403	{string}	string	"forbidden"
-//	@Failure		404	{string}	string	"not found"
-//	@Failure		500	{string}	string	"internal server error"
+//	@Failure		400	{object}	apierr.ErrorResponse	"bad request"
+//	@Failure		401	{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure		403	{object}	apierr.ErrorResponse	"forbidden"
+//	@Failure		404	{object}	apierr.ErrorResponse	"not found"
+//	@Failure		500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router			/notes/{id}/shares/{user_id} [delete]
 func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -176,10 +177,10 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 //	@Produce	json
 //	@Param		id	path		string	true	"Note ID"
 //	@Success	200	{array}		models.NoteShare
-//	@Failure	400	{string}	string	"bad request"
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	403	{string}	string	"no access"
-//	@Failure	500	{string}	string	"internal server error"
+//	@Failure	400	{object}	apierr.ErrorResponse	"bad request"
+//	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	403	{object}	apierr.ErrorResponse	"no access"
+//	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes/{id}/shares [get]
 func (h *NotesHandler) GetNoteShares(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())

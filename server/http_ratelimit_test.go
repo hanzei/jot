@@ -55,8 +55,8 @@ func TestRateLimiting(t *testing.T) {
 			assert.Equal(t, http.StatusOK, status)
 		}
 
-		status, header := doGet(t, u.Client.HTTPClient(), ts.HTTPServer.URL+"/api/v1/me")
-		assert.Equal(t, http.StatusTooManyRequests, status)
+		status, header, body := rawRequest(t, u.Client.HTTPClient(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/me", nil, nil)
+		requireEnvelope(t, http.StatusTooManyRequests, "rate_limited", status, header, body)
 		assert.NotEmpty(t, header.Get("Retry-After"))
 	})
 

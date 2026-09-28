@@ -19,14 +19,41 @@ import (
 // and scripts do not hang indefinitely when the server is unreachable.
 const DefaultTimeout = 30 * time.Second
 
-// Error is an API error with the HTTP status code and response body.
+// Error is an API error: the HTTP status code, the raw response body, and —
+// when the body is the API's JSON error envelope — its code and message.
 type Error struct {
 	StatusCode int
 	Body       string
+	// Code is the envelope's stable error code (e.g. "not_found"), or empty
+	// when the body was not an error envelope.
+	Code string
+	// Message is the envelope's human-readable message, or empty when the
+	// body was not an error envelope.
+	Message string
 }
 
 func (e *Error) Error() string {
+	if e.Code != "" {
+		return fmt.Sprintf("jot api returned: %d %s: %s", e.StatusCode, e.Code, e.Message)
+	}
 	return fmt.Sprintf("jot api returned: %d %s", e.StatusCode, strings.TrimSpace(e.Body))
+}
+
+// newError builds an [Error] from a failed response, decoding the error
+// envelope ({"error":{"code":…,"message":…}}) when the body is one.
+func newError(statusCode int, body []byte) *Error {
+	e := &Error{StatusCode: statusCode, Body: string(body)}
+	var envelope struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(body, &envelope) == nil {
+		e.Code = envelope.Error.Code
+		e.Message = envelope.Error.Message
+	}
+	return e
 }
 
 // StatusCode extracts the HTTP status code from an [Error].
@@ -37,6 +64,16 @@ func StatusCode(err error) int {
 		return apiErr.StatusCode
 	}
 	return 0
+}
+
+// ErrorCode extracts the error envelope's code from an [Error].
+// If err is nil, not an *Error, or carried no envelope it returns "".
+func ErrorCode(err error) string {
+	var apiErr *Error
+	if errors.As(err, &apiErr) {
+		return apiErr.Code
+	}
+	return ""
 }
 
 // Client is a typed HTTP client for the Jot API.
@@ -136,7 +173,7 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any, resu
 	}
 
 	if resp.StatusCode >= 400 {
-		return &Error{StatusCode: resp.StatusCode, Body: string(respBody)}
+		return newError(resp.StatusCode, respBody)
 	}
 
 	if result != nil && len(respBody) > 0 {
@@ -191,7 +228,7 @@ func (c *Client) doMultipartUpload(ctx context.Context, path, filename string, d
 		return fmt.Errorf("read response: %w", err)
 	}
 	if resp.StatusCode >= 400 {
-		return &Error{StatusCode: resp.StatusCode, Body: string(respBody)}
+		return newError(resp.StatusCode, respBody)
 	}
 
 	if result != nil && len(respBody) > 0 {
@@ -222,7 +259,7 @@ func (c *Client) doGetBytes(ctx context.Context, path string) ([]byte, string, e
 		return nil, "", fmt.Errorf("read response: %w", err)
 	}
 	if resp.StatusCode >= 400 {
-		return nil, "", &Error{StatusCode: resp.StatusCode, Body: string(body)}
+		return nil, "", newError(resp.StatusCode, body)
 	}
 	return body, resp.Header.Get("Content-Type"), nil
 }

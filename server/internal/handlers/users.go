@@ -26,9 +26,9 @@ type UserInfo struct {
 //	@Produce	json
 //	@Param		search	query		string	false	"Filter by username, first name, or last name (case-insensitive substring match)"
 //	@Success	200		{array}		UserInfo
-//	@Failure	400		{string}	string	"search query too long"
-//	@Failure	401		{string}	string	"unauthorized"
-//	@Failure	500		{string}	string	"internal server error"
+//	@Failure	400		{object}	apierr.ErrorResponse	"search query too long"
+//	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/users [get]
 func (h *NotesHandler) SearchUsers(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())

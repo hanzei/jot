@@ -37,7 +37,7 @@ type patResponse struct {
 //	@Security	CookieAuth
 //	@Produce	json
 //	@Success	200	{array}		patResponse
-//	@Failure	401	{string}	string	"unauthorized"
+//	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
 //	@Router		/pats [get]
 func (h *PATsHandler) ListPATs(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -71,9 +71,9 @@ func (h *PATsHandler) ListPATs(w http.ResponseWriter, r *http.Request) (int, any
 //	@Produce	json
 //	@Param		body	body		createPATRequest	true	"Token name"
 //	@Success	201		{object}	patResponse
-//	@Failure	400		{string}	string	"bad request"
-//	@Failure	401		{string}	string	"unauthorized"
-//	@Failure	422		{string}	string	"personal access token cap exceeded"
+//	@Failure	400		{object}	apierr.ErrorResponse	"bad request"
+//	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	422		{object}	apierr.ErrorResponse	"personal access token cap exceeded"
 //	@Router		/pats [post]
 func (h *PATsHandler) CreatePAT(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -118,8 +118,8 @@ func (h *PATsHandler) CreatePAT(w http.ResponseWriter, r *http.Request) (int, an
 //	@Security	CookieAuth
 //	@Param		id	path	string	true	"PAT ID"
 //	@Success	204	"no content"
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	404	{string}	string	"not found"
+//	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	404	{object}	apierr.ErrorResponse	"not found"
 //	@Router		/pats/{id} [delete]
 func (h *PATsHandler) RevokePAT(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())

@@ -458,11 +458,11 @@ func validateJotImportItems(noteIdx int, items []jotImportNoteItem) ([]models.Jo
 //	@Param			url			formData	string	false	"Memos instance URL (required when import_type is usememos)"
 //	@Param			token		formData	string	false	"Memos API token (required when import_type is usememos)"
 //	@Success		200			{object}	ImportResponse
-//	@Failure		400			{string}	string	"bad request"
-//	@Failure		401			{string}	string	"unauthorized"
-//	@Failure		413			{string}	string	"file too large"
-//	@Failure		422			{string}	string	"export exceeds a size or file-count limit"
-//	@Failure		500			{string}	string	"internal server error"
+//	@Failure		400			{object}	apierr.ErrorResponse	"bad request"
+//	@Failure		401			{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure		413			{object}	apierr.ErrorResponse	"file too large"
+//	@Failure		422			{object}	apierr.ErrorResponse	"export exceeds a size or file-count limit"
+//	@Failure		500			{object}	apierr.ErrorResponse	"internal server error"
 //	@Router			/notes/import [post]
 func (h *NotesHandler) ImportNotes(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())

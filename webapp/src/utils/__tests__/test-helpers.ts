@@ -1,4 +1,4 @@
-import { VALIDATION, type Note, type TextNote, type ListNote } from '@jot/shared';
+import { VALIDATION, type ApiErrorCode, type Note, type TextNote, type ListNote } from '@jot/shared';
 
 const defaultBase = {
   id: '1',
@@ -52,3 +52,9 @@ export const TEST_CONSTANTS = {
   MALICIOUS_HTML: '<img src=x onerror=alert("xss")>',
   SPECIAL_CHARACTERS: '<>&"\'`',
 } as const;
+
+/** An axios-shaped rejection carrying the API's JSON error envelope. */
+export const createApiError = (status: number, code: ApiErrorCode, message: string) => ({
+  isAxiosError: true,
+  response: { status, data: { error: { code, message } } },
+});

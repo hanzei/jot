@@ -15,6 +15,7 @@ import {
 } from '../src/api/client';
 import { getActiveServer, getServerScopedStorageKey } from '../src/store/serverAccounts';
 import { isServerReachable, markServerReachable, markServerUnreachable } from '../src/api/serverReachability';
+import { apiErrorBody } from './helpers/apiError';
 
 jest.mock('axios', () => {
   class MockCanceledError extends Error {
@@ -248,7 +249,7 @@ describe('API Client', () => {
     });
 
     it('propagates a 400 without storing anything', async () => {
-      mockAxiosInstance.post.mockRejectedValueOnce({ response: { status: 400, data: 'invalid or expired code' } });
+      mockAxiosInstance.post.mockRejectedValueOnce({ response: { status: 400, data: apiErrorBody('validation_failed', 'invalid or expired code') } });
 
       await expect(auth.oidcNativeExchange('stale', 'verifier')).rejects.toEqual(
         expect.objectContaining({ response: expect.objectContaining({ status: 400 }) }),

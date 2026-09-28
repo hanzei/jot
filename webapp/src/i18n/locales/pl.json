@@ -582,5 +582,18 @@
     "admin": "Admin - Jot",
     "settings": "Ustawienia - Jot",
     "label": "{{name}} - Jot"
+  },
+  "apiErrors": {
+    "invalidCredentials": "Nieprawidłowa nazwa użytkownika lub hasło.",
+    "registrationDisabled": "Rejestracja jest wyłączona na tym serwerze.",
+    "localLoginDisabled": "Logowanie hasłem jest wyłączone na tym serwerze. Zamiast tego użyj SSO.",
+    "incorrectPassword": "Obecne hasło jest nieprawidłowe.",
+    "usernameTaken": "Ta nazwa użytkownika jest już zajęta.",
+    "labelNameTaken": "Etykieta o tej nazwie już istnieje.",
+    "lastAdmin": "Ostatniego administratora nie można zdegradować ani usunąć.",
+    "cannotDeleteSelf": "Nie możesz usunąć własnego konta.",
+    "wouldStrandAccount": "Nie można odłączyć SSO: Twoje konto nie ma hasła, więc logowanie byłoby niemożliwe.",
+    "rateLimited": "Zbyt wiele żądań. Poczekaj chwilę i spróbuj ponownie.",
+    "requestTooLarge": "Plik lub żądanie jest zbyt duże."
   }
 }

@@ -84,9 +84,9 @@ type jotExportEnvelope struct {
 //	@Tags			notes
 //	@Security		CookieAuth
 //	@Produce		application/zip
-//	@Success		200	{file}		binary	"Jot export bundle (zip) attachment"
-//	@Failure		401	{string}	string	"unauthorized"
-//	@Failure		500	{string}	string	"internal server error"
+//	@Success		200	{file}		binary					"Jot export bundle (zip) attachment"
+//	@Failure		401	{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure		500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router			/notes/export [get]
 func (h *NotesHandler) ExportNotes(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())

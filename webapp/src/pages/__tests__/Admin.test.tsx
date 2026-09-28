@@ -4,9 +4,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router';
 import Admin from '../Admin';
 import { ToastProvider } from '@/components/Toast';
-import { admin, isAxiosError } from '@/utils/api';
+import { admin } from '@/utils/api';
 import * as authUtils from '@/utils/auth';
 import { VALIDATION, type User, type AdminStatsResponse } from '@jot/shared';
+import { createApiError } from '@/utils/__tests__/test-helpers';
 
 vi.mock('@/utils/api', () => ({
   admin: {
@@ -17,7 +18,6 @@ vi.mock('@/utils/api', () => ({
     setUserPassword: vi.fn(),
     deleteUser: vi.fn(),
   },
-  isAxiosError: vi.fn(),
 }));
 
 vi.mock('@/utils/auth', () => ({
@@ -322,8 +322,7 @@ describe('Admin', () => {
 
     it('shows server error message when create user fails', async () => {
       const user = userEvent.setup();
-      vi.mocked(isAxiosError).mockReturnValue(true);
-      vi.mocked(admin.createUser).mockRejectedValue({ response: { data: '  username already exists  ' } });
+      vi.mocked(admin.createUser).mockRejectedValue(createApiError(409, 'username_taken', 'username already taken'));
 
       renderAdmin();
 
@@ -337,7 +336,7 @@ describe('Admin', () => {
       await user.click(within(dialog).getByRole('button', { name: 'Create User' }));
 
       await waitFor(() => {
-        expect(within(dialog).getByRole('alert')).toHaveTextContent('username already exists');
+        expect(within(dialog).getByRole('alert')).toHaveTextContent('This username is already taken.');
       });
     });
   });
@@ -390,8 +389,7 @@ describe('Admin', () => {
 
     it('shows a server error message when the reset fails', async () => {
       const user = userEvent.setup();
-      vi.mocked(isAxiosError).mockReturnValue(true);
-      vi.mocked(admin.setUserPassword).mockRejectedValue({ response: { data: '  something went wrong  ' } });
+      vi.mocked(admin.setUserPassword).mockRejectedValue(createApiError(400, 'validation_failed', '  password must be at least 10 characters  '));
 
       renderAdmin();
 
@@ -406,7 +404,7 @@ describe('Admin', () => {
       await user.type(within(dialog).getByLabelText('New password'), 'a-brand-new-password');
       await user.click(within(dialog).getByRole('button', { name: /^Reset password$/ }));
 
-      expect(await within(dialog).findByRole('alert')).toHaveTextContent('something went wrong');
+      expect(await within(dialog).findByRole('alert')).toHaveTextContent('password must be at least 10 characters');
     });
   });
 
@@ -462,30 +460,29 @@ describe('Admin', () => {
   });
 
   describe('Role toggle - failure', () => {
-    it('shows axios error message when role update fails', async () => {
+    it('shows the translated error when role update fails', async () => {
       const user = userEvent.setup();
-      const axiosError = { response: { data: '  cannot demote the last admin  ' } };
-      vi.mocked(isAxiosError).mockReturnValue(true);
+      const axiosError = createApiError(409, 'last_admin', 'cannot demote the last admin');
       vi.mocked(admin.updateUserRole).mockRejectedValue(axiosError);
 
       renderAdmin();
 
       await waitFor(() => {
-        expect(screen.getByText('regularuser')).toBeInTheDocument();
+        expect(screen.getByText('otheradmin')).toBeInTheDocument();
       });
 
-      const userRow = screen.getByText('regularuser').closest('li')!;
-      const toggleButton = within(userRow).getByRole('button', { name: /Make Admin/i });
+      const userRow = screen.getByText('otheradmin').closest('li')!;
+      const toggleButton = within(userRow).getByRole('button', { name: /Remove Admin/i });
       await user.click(toggleButton);
 
       await waitFor(() => {
-        expect(screen.getByRole('alert')).toHaveTextContent('cannot demote the last admin');
+        expect(admin.updateUserRole).toHaveBeenCalledWith('user3', { role: 'user' });
+        expect(screen.getByRole('alert')).toHaveTextContent('The last admin cannot be demoted or deleted.');
       });
     });
 
     it('shows fallback error for non-axios failures', async () => {
       const user = userEvent.setup();
-      vi.mocked(isAxiosError).mockReturnValue(false);
       vi.mocked(admin.updateUserRole).mockRejectedValue(new Error('network error'));
 
       renderAdmin();

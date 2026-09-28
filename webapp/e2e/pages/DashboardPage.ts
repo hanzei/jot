@@ -635,6 +635,12 @@ export class DashboardPage {
   }
 
   async renameSidebarLabel(currentName: string, nextName: string) {
+    await this.submitSidebarLabelRename(currentName, nextName);
+    await this.expectLabelInSidebar(nextName);
+  }
+
+  /** Submits a sidebar label rename without asserting that it succeeded. */
+  async submitSidebarLabelRename(currentName: string, nextName: string) {
     await this.ensureSidebarOpen();
     const row = this.sidebarLabelRow(currentName);
     await row.getByRole('button', { name: `Label options for ${currentName}` }).click();
@@ -647,7 +653,6 @@ export class DashboardPage {
     const input = this.page.getByPlaceholder('Rename label...');
     await input.fill(nextName);
     await input.press('Enter');
-    await this.expectLabelInSidebar(nextName);
   }
 
   async deleteSidebarLabel(labelName: string) {

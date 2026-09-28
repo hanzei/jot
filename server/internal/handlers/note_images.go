@@ -184,12 +184,12 @@ func (h *NotesHandler) storeNoteImage(ctx context.Context, img inspectedNoteImag
 //	@Param		id		path		string	true	"Note ID"
 //	@Param		file	formData	file	true	"Image file (PNG, JPEG, WebP, or GIF)"
 //	@Success	201		{object}	models.NoteImage
-//	@Failure	400		{string}	string	"bad request"
-//	@Failure	401		{string}	string	"unauthorized"
-//	@Failure	404		{string}	string	"not found"
-//	@Failure	413		{string}	string	"file too large"
-//	@Failure	422		{string}	string	"note image cap exceeded"
-//	@Failure	500		{string}	string	"internal server error"
+//	@Failure	400		{object}	apierr.ErrorResponse	"bad request"
+//	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	404		{object}	apierr.ErrorResponse	"not found"
+//	@Failure	413		{object}	apierr.ErrorResponse	"file too large"
+//	@Failure	422		{object}	apierr.ErrorResponse	"note image cap exceeded"
+//	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/notes/{id}/images [post]
 func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -278,13 +278,13 @@ func (h *NotesHandler) UploadNoteImage(w http.ResponseWriter, r *http.Request) (
 //	@Summary	Download a note image
 //	@Tags		notes
 //	@Security	CookieAuth
-//	@Produce	image/*
-//	@Param		id	path		string	true	"Image ID"
-//	@Success	200	{file}		binary	"Image bytes"
-//	@Failure	400	{string}	string	"bad request"
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	404	{string}	string	"not found"
-//	@Failure	500	{string}	string	"internal server error"
+//	@Produce	image/*,json
+//	@Param		id	path		string					true	"Image ID"
+//	@Success	200	{file}		binary					"Image bytes"
+//	@Failure	400	{object}	apierr.ErrorResponse	"bad request"
+//	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	404	{object}	apierr.ErrorResponse	"not found"
+//	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/images/{id} [get]
 func (h *NotesHandler) GetNoteImage(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -334,13 +334,13 @@ func (h *NotesHandler) GetNoteImage(w http.ResponseWriter, r *http.Request) (int
 //	@Summary	Download a note image's thumbnail
 //	@Tags		notes
 //	@Security	CookieAuth
-//	@Produce	image/jpeg
-//	@Param		id	path		string	true	"Image ID"
-//	@Success	200	{file}		binary	"Thumbnail JPEG bytes"
-//	@Failure	400	{string}	string	"bad request"
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	404	{string}	string	"not found"
-//	@Failure	500	{string}	string	"internal server error"
+//	@Produce	image/jpeg,json
+//	@Param		id	path		string					true	"Image ID"
+//	@Success	200	{file}		binary					"Thumbnail JPEG bytes"
+//	@Failure	400	{object}	apierr.ErrorResponse	"bad request"
+//	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	404	{object}	apierr.ErrorResponse	"not found"
+//	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/images/{id}/thumbnail [get]
 func (h *NotesHandler) GetNoteImageThumbnail(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -470,10 +470,10 @@ func (h *NotesHandler) loadNoteImageForAccess(ctx context.Context, imageID, user
 //	@Security	CookieAuth
 //	@Param		id	path	string	true	"Image ID"
 //	@Success	204	"no content"
-//	@Failure	400	{string}	string	"bad request"
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	404	{string}	string	"not found"
-//	@Failure	500	{string}	string	"internal server error"
+//	@Failure	400	{object}	apierr.ErrorResponse	"bad request"
+//	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	404	{object}	apierr.ErrorResponse	"not found"
+//	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/images/{id} [delete]
 func (h *NotesHandler) DeleteNoteImage(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())

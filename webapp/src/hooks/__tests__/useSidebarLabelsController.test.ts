@@ -3,6 +3,7 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 import type { Label } from '@jot/shared';
 import { useSidebarLabelsController } from '../useSidebarLabelsController';
 import { labels as labelsApi } from '@/utils/api';
+import { createApiError } from '@/utils/__tests__/test-helpers';
 
 vi.mock('@/utils/api', async () => {
   const actual = await vi.importActual<typeof import('@/utils/api')>('@/utils/api');
@@ -226,10 +227,7 @@ describe('useSidebarLabelsController', () => {
     });
 
     it('surfaces the server error message when the request fails', async () => {
-      vi.mocked(labelsApi.rename).mockRejectedValue({
-        isAxiosError: true,
-        response: { data: 'Name already in use' },
-      });
+      vi.mocked(labelsApi.rename).mockRejectedValue(createApiError(400, 'validation_failed', 'Name already in use'));
       const { result } = renderHook(() => useSidebarLabelsController());
 
       let ok = true;

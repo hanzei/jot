@@ -22,7 +22,7 @@ import type { AuthStackParamList } from '../navigation/AuthStack';
 import ServerSetupGate from '../components/ServerSetupGate';
 import ServerPickerModal from '../components/drawer/ServerPickerModal';
 import FadeInView from '../components/FadeInView';
-import { displayMessage } from '../i18n/utils';
+import { displayMessage, extractApiError } from '../i18n/utils';
 import { useServerConfig } from '../hooks/useServerConfig';
 import { oidcExchangeErrorMessage, SsoFlowError } from '../store/oidcFlow';
 
@@ -107,16 +107,11 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
     try {
       await login(username.trim(), password);
     } catch (err: unknown) {
-      const response = (err as { response?: { status?: number; data?: string } })?.response;
+      const response = (err as { response?: unknown })?.response;
       if (!response) {
         setError(t('auth.unableToConnect'));
       } else {
-        const message = response.data;
-        setError(
-          typeof message === 'string' && message
-            ? displayMessage(t, message)
-            : t('auth.loginFailed'),
-        );
+        setError(displayMessage(t, extractApiError(err) ?? 'auth.loginFailed'));
       }
     } finally {
       setLoading(false);

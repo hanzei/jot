@@ -3,7 +3,8 @@ import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/re
 import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ROLES, VALIDATION, getUsernameValidationError, isPasswordTooShort, type User, type CreateUserRequest } from '@jot/shared';
-import { admin, isAxiosError } from '@/utils/api';
+import { admin } from '@/utils/api';
+import { apiErrorMessage } from '@/utils/apiError';
 
 interface CreateUserModalProps {
   passwordMinLength: number;
@@ -76,12 +77,7 @@ export default function CreateUserModal({ passwordMinLength, onClose, onSuccess 
       onSuccess(newUser);
       onClose();
     } catch (err: unknown) {
-      if (isAxiosError(err)) {
-        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
-        setError(msg || t('admin.failedCreateUser'));
-      } else {
-        setError(t('admin.failedCreateUser'));
-      }
+      setError(apiErrorMessage(err, t, 'admin.failedCreateUser'));
     } finally {
       setLoading(false);
     }

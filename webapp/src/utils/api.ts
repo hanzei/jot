@@ -278,6 +278,4 @@ export const admin = {
     api.delete(`/admin/users/${id}`).then(() => undefined),
 };
 
-export { isAxiosError } from 'axios';
-
 export default api;

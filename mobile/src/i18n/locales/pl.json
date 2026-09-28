@@ -536,5 +536,15 @@
     "shareDiagnostics": "Udostępnij raport diagnostyczny",
     "yes": "Tak",
     "no": "Nie"
+  },
+  "apiErrors": {
+    "invalidCredentials": "Nieprawidłowa nazwa użytkownika lub hasło.",
+    "registrationDisabled": "Rejestracja jest wyłączona na tym serwerze.",
+    "localLoginDisabled": "Logowanie hasłem jest wyłączone na tym serwerze. Zamiast tego użyj SSO.",
+    "incorrectPassword": "Obecne hasło jest nieprawidłowe.",
+    "usernameTaken": "Ta nazwa użytkownika jest już zajęta.",
+    "labelNameTaken": "Etykieta o tej nazwie już istnieje.",
+    "rateLimited": "Zbyt wiele żądań. Poczekaj chwilę i spróbuj ponownie.",
+    "requestTooLarge": "Plik lub żądanie jest zbyt duże."
   }
 }

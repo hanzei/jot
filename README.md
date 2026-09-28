@@ -392,7 +392,8 @@ is rate-limited to guard against unintentional internal overload — a
 client-side bug or flaky network turning an offline sync queue or SSE
 reconnect loop into a tight request loop against the server — rather than
 against malicious users (see the threat model in `CLAUDE.md`). A request over
-its limit gets `429 Too Many Requests` with a `Retry-After` header. Defaults
+its limit gets `429 Too Many Requests` (error code `rate_limited`) with a
+`Retry-After` header. Defaults
 are generous enough that normal interactive use (dashboard load, SSE, note
 editing, syncing after a short offline period) should never hit them.
 (`GET /config` is the one unauthenticated, side-effect-free exception: it's
@@ -461,6 +462,40 @@ versions before image export was added can no longer be imported.
 ## API Reference
 
 The full interactive API reference is available via Swagger UI at `http://localhost:8080/api/docs/index.html` when the server is running.
+
+### Error responses
+
+Every error from `/api` — handler errors, authentication and rate-limit
+rejections, unknown routes, and wrong methods — is JSON with
+`Content-Type: application/json`, and the status code carries its usual
+meaning:
+
+```json
+{"error": {"code": "label_name_taken", "message": "label name already exists"}}
+```
+
+- `code` is stable and machine-readable; clients switch on it. Each status has
+  a generic code (`validation_failed` for 400, `not_found` for 404,
+  `rate_limited` for 429, `internal` for any 5xx, …), and a few cases clients
+  need to tell apart have a specific one (`invalid_credentials`,
+  `username_taken`, `cannot_share_with_self`, …). The full list, with the
+  status each is used with, is the `apierr.Code` enum in the Swagger spec;
+  codes are only ever added, never renamed or repurposed.
+- `message` is human-readable English for logs and as a last-resort fallback.
+  It is not stable, and for a 5xx it is always `internal server error`.
+
+Treat a code your client does not know like the generic code for the
+response's status.
+
+A few `/api` responses are not this envelope, so do not assume every error body
+has a parseable `error.code`; fall back to the status code when it does not:
+
+- the MCP endpoint (`/api/v1/mcp`), which reports JSON-RPC errors;
+- the Swagger UI under `/api/docs/`;
+- errors `net/http` writes itself, such as `416` on an image range request or
+  `431` for oversized request headers;
+- the OIDC browser callback, which redirects with `?sso_error=` instead. `@jot/shared` provides `parseApiError` for TypeScript
+clients, and the Go client exposes the code as `client.Error.Code`.
 
 ## MCP server
 

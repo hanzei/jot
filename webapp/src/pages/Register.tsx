@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { Eye, EyeOff, TriangleAlert } from 'lucide-react';
 import { auth } from '@/utils/api';
+import { apiErrorMessage } from '@/utils/apiError';
 import { setUser, setSettings } from '@/utils/auth';
 import { REDIRECT_PARAM, authPathWithRedirect } from '@/utils/authRedirect';
 import { VALIDATION, getUsernameValidationError, isPasswordTooShort } from '@jot/shared';
@@ -74,8 +75,7 @@ export default function Register({ onRegister, passwordMinLength }: RegisterProp
       setSettings(response.settings);
       onRegister();
     } catch (err: unknown) {
-      const axiosError = err as { response?: { data?: string } };
-      setError(axiosError.response?.data || t('auth.registrationFailed'));
+      setError(apiErrorMessage(err, t, 'auth.registrationFailed'));
     } finally {
       setLoading(false);
     }

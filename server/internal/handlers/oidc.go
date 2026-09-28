@@ -136,8 +136,8 @@ func (h *OIDCHandler) Login(w http.ResponseWriter, r *http.Request) (int, any, e
 //	@Tags		auth
 //	@Security	CookieAuth
 //	@Success	302	"redirect to the identity provider"
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	403	{string}	string	"linking unavailable"
+//	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	403	{object}	apierr.ErrorResponse	"linking unavailable"
 //	@Router		/auth/oidc/link [get]
 func (h *OIDCHandler) Link(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	// Linking proves control of the local account by password first; with local
@@ -397,10 +397,10 @@ func (h *OIDCHandler) usernameSeed(identity *oidc.Identity) string {
 //	@Tags		auth
 //	@Security	CookieAuth
 //	@Success	204	"no content"
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	403	{string}	string	"unlinking unavailable"
-//	@Failure	422	{string}	string	"would strand the account"
-//	@Failure	500	{string}	string	"internal server error"
+//	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	403	{object}	apierr.ErrorResponse	"unlinking unavailable"
+//	@Failure	422	{object}	apierr.ErrorResponse	"would strand the account"
+//	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/auth/oidc/unlink [post]
 func (h *OIDCHandler) Unlink(_ http.ResponseWriter, r *http.Request) (int, any, error) {
 	// With local login disabled a password cannot be used to sign in, so SSO is

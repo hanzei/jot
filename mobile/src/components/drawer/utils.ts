@@ -1,27 +1,22 @@
-export function extractErrorMessage(error: unknown, fallback: string): string {
-  if (typeof error === 'object' && error !== null && 'response' in error) {
-    const response = error.response;
-    if (typeof response === 'object' && response !== null && 'data' in response) {
-      const { data } = response as { data?: unknown };
-      if (typeof data === 'string') {
-        const message = data.trim();
-        if (message) {
-          return message;
-        }
-      } else if (typeof data === 'object' && data !== null) {
-        const objectData = data as { message?: unknown; error?: unknown; detail?: unknown };
-        for (const candidate of [objectData.message, objectData.error, objectData.detail]) {
-          if (typeof candidate === 'string' && candidate.trim()) {
-            return candidate.trim();
-          }
-        }
-      }
-    }
-  }
+import { parseApiError } from '@jot/shared';
+import i18n from '../../i18n';
+import { displayMessage, extractApiError } from '../../i18n/utils';
 
-  if (error instanceof Error && error.message) {
+/**
+ * The message to alert for a failed label mutation: the API error's message
+ * (translated where the app knows its code), else a local error's own message
+ * (label mutations are local-first, so most failures never reach the server),
+ * else `fallback`.
+ */
+export function extractErrorMessage(error: unknown, fallback: string): string {
+  const apiMessage = extractApiError(error);
+  if (apiMessage) {
+    return displayMessage(i18n.t, apiMessage);
+  }
+  // An API error with nothing worth showing (a 5xx) gets the fallback rather
+  // than axios' own "Request failed with status code 500".
+  if (parseApiError(error) === null && error instanceof Error && error.message) {
     return error.message;
   }
-
   return fallback;
 }

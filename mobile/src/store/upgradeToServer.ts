@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { generateId, canonicalizeServerOrigin } from '@jot/shared';
+import { generateId, canonicalizeServerOrigin, parseApiErrorBody } from '@jot/shared';
 import type { GetNotesParams } from '@jot/shared';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { getAllLocalNotes } from '../db/noteQueries';
@@ -101,7 +101,7 @@ export async function registerOnServer(
     throw Object.assign(new Error('Username already taken'), { code: 'USERNAME_TAKEN' as const });
   }
   if (res.status < 200 || res.status >= 300) {
-    const msg = typeof res.data === 'string' && res.data ? res.data : 'Registration failed';
+    const msg = parseApiErrorBody(res.data)?.message || 'Registration failed';
     throw Object.assign(new Error(msg), { code: 'REGISTRATION_FAILED' as const });
   }
   const sessionToken = extractSessionCookie(

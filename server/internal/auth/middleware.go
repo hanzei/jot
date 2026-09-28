@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/hanzei/jot/server/internal/apierr"
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
 	"go.opentelemetry.io/otel/attribute"
@@ -28,7 +29,7 @@ func (s *SessionService) AuthMiddleware(next http.Handler) http.Handler {
 		if cookie, err := r.Cookie(SessionCookieName); err == nil {
 			session, user, err := s.GetSessionAndUser(r)
 			if err != nil {
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				apierr.Write(w, r, http.StatusUnauthorized, apierr.CodeUnauthorized, "unauthorized")
 				return
 			}
 			if err := s.RenewSessionIfExpiringSoon(r.Context(), w, session, cookie.Value); err != nil {
@@ -52,7 +53,7 @@ func (s *SessionService) AuthMiddleware(next http.Handler) http.Handler {
 				if !errors.Is(err, models.ErrPATNotFound) {
 					logutil.FromContext(r.Context()).WithError(err).Warn("PAT authentication error")
 				}
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				apierr.Write(w, r, http.StatusUnauthorized, apierr.CodeUnauthorized, "unauthorized")
 				return
 			}
 
@@ -64,7 +65,7 @@ func (s *SessionService) AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		apierr.Write(w, r, http.StatusUnauthorized, apierr.CodeUnauthorized, "unauthorized")
 	})
 }
 
@@ -103,7 +104,7 @@ func SessionRequired(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, ok := GetSessionTokenHashFromContext(r.Context())
 		if !ok {
-			http.Error(w, "session authentication required", http.StatusForbidden)
+			apierr.Write(w, r, http.StatusForbidden, apierr.CodeSessionRequired, "session authentication required")
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -114,12 +115,12 @@ func AdminRequired(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user, ok := GetUserFromContext(r.Context())
 		if !ok {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			apierr.Write(w, r, http.StatusUnauthorized, apierr.CodeUnauthorized, "unauthorized")
 			return
 		}
 
 		if user.Role != models.RoleAdmin {
-			http.Error(w, "Admin required", http.StatusForbidden)
+			apierr.Write(w, r, http.StatusForbidden, apierr.CodeForbidden, "admin required")
 			return
 		}
 

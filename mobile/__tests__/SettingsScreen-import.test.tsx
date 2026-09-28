@@ -7,6 +7,7 @@ import { getLabels } from '../src/api/labels';
 import * as DocumentPicker from 'expo-document-picker';
 import i18n from '../src/i18n';
 import { saveLabels, saveNotes } from '../src/db/noteQueries';
+import { apiErrorBody } from './helpers/apiError';
 
 const mockInvalidateQueries = jest.fn();
 const SETTINGS_IMPORT_TEST_TIMEOUT_MS = 15_000;
@@ -213,7 +214,7 @@ describe('SettingsScreen import section', () => {
       canceled: false,
       assets: [{ uri: 'file:///tmp/export.json', name: 'export.json', mimeType: 'application/json' }],
     } as DocumentPicker.DocumentPickerResult);
-    mockImportKeepFile.mockRejectedValue({ response: { data: 'invalid JSON file' } });
+    mockImportKeepFile.mockRejectedValue({ response: { status: 400, data: apiErrorBody('validation_failed', 'invalid JSON file') } });
 
     const { getByTestId, getByText } = await render(<SettingsScreen />);
 

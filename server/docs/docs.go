@@ -64,19 +64,19 @@ const docTemplate = `{
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "forbidden",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -106,13 +106,13 @@ const docTemplate = `{
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "forbidden",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -154,25 +154,25 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "forbidden",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "username already taken",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -205,25 +205,25 @@ const docTemplate = `{
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "forbidden",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "user not found",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "cannot demote the last admin",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -262,19 +262,19 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -320,25 +320,25 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "forbidden",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "user not found",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -389,31 +389,31 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "forbidden",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "user not found",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "cannot demote the last admin",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -466,13 +466,13 @@ const docTemplate = `{
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "linking unavailable",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -529,19 +529,19 @@ const docTemplate = `{
                     "400": {
                         "description": "invalid or expired code",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "identity already linked",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 }
@@ -574,31 +574,31 @@ const docTemplate = `{
                     "400": {
                         "description": "invalid or expired code",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "linking unavailable",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "identity already linked",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -642,13 +642,13 @@ const docTemplate = `{
                     "400": {
                         "description": "invalid intent or code_challenge",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "linking unavailable",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 }
@@ -667,25 +667,25 @@ const docTemplate = `{
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "unlinking unavailable",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "would strand the account",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -718,7 +718,8 @@ const docTemplate = `{
         "/images/{id}": {
             "get": {
                 "produces": [
-                    "image/*"
+                    "image/*",
+                    "application/json"
                 ],
                 "tags": [
                     "notes"
@@ -743,25 +744,25 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "not found",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -792,25 +793,25 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "not found",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -824,7 +825,8 @@ const docTemplate = `{
         "/images/{id}/thumbnail": {
             "get": {
                 "produces": [
-                    "image/jpeg"
+                    "image/jpeg",
+                    "application/json"
                 ],
                 "tags": [
                     "notes"
@@ -849,25 +851,25 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "not found",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -900,13 +902,13 @@ const docTemplate = `{
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -954,31 +956,31 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "label already exists",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "label name too long",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -1008,13 +1010,13 @@ const docTemplate = `{
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -1047,19 +1049,19 @@ const docTemplate = `{
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "label not found",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -1108,31 +1110,31 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "label not found",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "label name too long",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -1176,19 +1178,19 @@ const docTemplate = `{
                     "400": {
                         "description": "missing username or password",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "invalid username or password",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 }
@@ -1207,7 +1209,7 @@ const docTemplate = `{
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -1237,13 +1239,13 @@ const docTemplate = `{
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -1308,19 +1310,19 @@ const docTemplate = `{
                     "400": {
                         "description": "search query too long",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -1362,37 +1364,37 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "label not found",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "note with this ID already exists",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "note item cap exceeded or label name too long",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -1423,13 +1425,13 @@ const docTemplate = `{
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -1490,31 +1492,31 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "413": {
                         "description": "file too large",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "export exceeds a size or file-count limit",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -1552,25 +1554,25 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "forbidden",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -1600,13 +1602,13 @@ const docTemplate = `{
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -1645,25 +1647,25 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "not found",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -1700,25 +1702,25 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "not found",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -1767,31 +1769,31 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "not found",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "version conflict for title/content update: note changed since base_version",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -1842,37 +1844,37 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "not found",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "version conflict: note changed since base_version",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "note item cap exceeded",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -1922,31 +1924,31 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "not found",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "conflict — duplicate ID already exists",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -1995,37 +1997,37 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "not found",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "413": {
                         "description": "file too large",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "note image cap exceeded",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -2076,37 +2078,37 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "not found",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "item already exists",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "note item cap exceeded",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -2161,25 +2163,25 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "not found",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -2224,25 +2226,25 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "not found",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -2297,25 +2299,25 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "not found",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -2355,25 +2357,25 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "not found",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -2429,25 +2431,25 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "not found",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -2509,25 +2511,25 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "not found",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -2578,37 +2580,37 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "no access to note",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "label not found",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "label name too long",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -2654,19 +2656,19 @@ const docTemplate = `{
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "no access to note",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -2705,25 +2707,25 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "not found",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -2768,37 +2770,37 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "not owner",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "not found",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "already shared",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -2840,25 +2842,25 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "no access",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -2899,31 +2901,31 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "forbidden",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "not found",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -2956,7 +2958,7 @@ const docTemplate = `{
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -2998,19 +3000,19 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "personal access token cap exceeded",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -3043,13 +3045,13 @@ const docTemplate = `{
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "not found",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -3093,25 +3095,25 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "registration is disabled",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "username already taken",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 }
@@ -3139,7 +3141,7 @@ const docTemplate = `{
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -3172,19 +3174,19 @@ const docTemplate = `{
                     "400": {
                         "description": "cannot revoke current session",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "session not found",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -3225,19 +3227,19 @@ const docTemplate = `{
                     "400": {
                         "description": "search query too long",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -3281,25 +3283,25 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "username already taken",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -3338,25 +3340,25 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "current password is incorrect, or local login is disabled",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -3398,25 +3400,25 @@ const docTemplate = `{
                     "400": {
                         "description": "bad request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "413": {
                         "description": "file too large",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -3438,13 +3440,13 @@ const docTemplate = `{
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -3458,7 +3460,8 @@ const docTemplate = `{
         "/users/{id}/profile-icon": {
             "get": {
                 "produces": [
-                    "image/jpeg"
+                    "image/jpeg",
+                    "application/json"
                 ],
                 "tags": [
                     "users"
@@ -3483,19 +3486,19 @@ const docTemplate = `{
                     "401": {
                         "description": "unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "not found",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "internal server error",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/apierr.ErrorResponse"
                         }
                     }
                 },
@@ -3508,6 +3511,140 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "apierr.Code": {
+            "type": "string",
+            "enum": [
+                "validation_failed",
+                "unauthorized",
+                "forbidden",
+                "not_found",
+                "method_not_allowed",
+                "conflict",
+                "request_too_large",
+                "limit_exceeded",
+                "rate_limited",
+                "bad_request",
+                "internal",
+                "invalid_credentials",
+                "session_required",
+                "registration_disabled",
+                "local_login_disabled",
+                "incorrect_password",
+                "username_taken",
+                "cannot_share_with_self",
+                "already_shared",
+                "label_name_taken",
+                "last_admin",
+                "cannot_delete_self",
+                "sso_identity_linked",
+                "would_strand_account"
+            ],
+            "x-enum-comments": {
+                "CodeAlreadyShared": "409 — the note is already shared with that user.",
+                "CodeBadRequest": "any other 4xx.",
+                "CodeCannotDeleteSelf": "403 — admins cannot delete their own account.",
+                "CodeCannotShareWithSelf": "400 — a note cannot be shared with its owner.",
+                "CodeConflict": "409 — the request conflicts with current state (duplicate ID, concurrent modification, …).",
+                "CodeForbidden": "403 — authenticated, but not allowed to do this.",
+                "CodeIncorrectPassword": "403 — the current password given to change a password is wrong.",
+                "CodeInternal": "any 5xx. The message is always masked.",
+                "CodeInvalidCredentials": "401 from login — wrong username or password.",
+                "CodeLabelNameTaken": "400 from rename, 409 from a create with a client-supplied ID — the user already has a label with this name.",
+                "CodeLastAdmin": "409 — the change would leave the server without an admin.",
+                "CodeLimitExceeded": "422 — a resource cap or length limit was exceeded.",
+                "CodeLocalLoginDisabled": "403 from register, login, and password change — password login is turned off; use SSO.",
+                "CodeMethodNotAllowed": "405 — the route exists but not for this method.",
+                "CodeNotFound": "404 — the resource or route does not exist (or is not visible to the caller).",
+                "CodeRateLimited": "429 — too many requests; honor Retry-After.",
+                "CodeRegistrationDisabled": "403 — self-registration is turned off.",
+                "CodeRequestTooLarge": "413 — the request body exceeds the endpoint's limit.",
+                "CodeSSOIdentityLinked": "409 — the SSO identity belongs to another account.",
+                "CodeSessionRequired": "403 — the endpoint needs a browser session, and the request authenticated with a personal access token.",
+                "CodeUnauthorized": "401 — missing, invalid, or expired credentials.",
+                "CodeUsernameTaken": "409 — another account already has this username.",
+                "CodeValidationFailed": "400 — malformed or invalid request input.",
+                "CodeWouldStrandAccount": "422 — unlinking SSO would leave the account with no way to sign in."
+            },
+            "x-enum-descriptions": [
+                "400 — malformed or invalid request input.",
+                "401 — missing, invalid, or expired credentials.",
+                "403 — authenticated, but not allowed to do this.",
+                "404 — the resource or route does not exist (or is not visible to the caller).",
+                "405 — the route exists but not for this method.",
+                "409 — the request conflicts with current state (duplicate ID, concurrent modification, …).",
+                "413 — the request body exceeds the endpoint's limit.",
+                "422 — a resource cap or length limit was exceeded.",
+                "429 — too many requests; honor Retry-After.",
+                "any other 4xx.",
+                "any 5xx. The message is always masked.",
+                "401 from login — wrong username or password.",
+                "403 — the endpoint needs a browser session, and the request authenticated with a personal access token.",
+                "403 — self-registration is turned off.",
+                "403 from register, login, and password change — password login is turned off; use SSO.",
+                "403 — the current password given to change a password is wrong.",
+                "409 — another account already has this username.",
+                "400 — a note cannot be shared with its owner.",
+                "409 — the note is already shared with that user.",
+                "400 from rename, 409 from a create with a client-supplied ID — the user already has a label with this name.",
+                "409 — the change would leave the server without an admin.",
+                "403 — admins cannot delete their own account.",
+                "409 — the SSO identity belongs to another account.",
+                "422 — unlinking SSO would leave the account with no way to sign in."
+            ],
+            "x-enum-varnames": [
+                "CodeValidationFailed",
+                "CodeUnauthorized",
+                "CodeForbidden",
+                "CodeNotFound",
+                "CodeMethodNotAllowed",
+                "CodeConflict",
+                "CodeRequestTooLarge",
+                "CodeLimitExceeded",
+                "CodeRateLimited",
+                "CodeBadRequest",
+                "CodeInternal",
+                "CodeInvalidCredentials",
+                "CodeSessionRequired",
+                "CodeRegistrationDisabled",
+                "CodeLocalLoginDisabled",
+                "CodeIncorrectPassword",
+                "CodeUsernameTaken",
+                "CodeCannotShareWithSelf",
+                "CodeAlreadyShared",
+                "CodeLabelNameTaken",
+                "CodeLastAdmin",
+                "CodeCannotDeleteSelf",
+                "CodeSSOIdentityLinked",
+                "CodeWouldStrandAccount"
+            ]
+        },
+        "apierr.ErrorDetail": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "Code is stable and machine-readable; clients switch on it.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/apierr.Code"
+                        }
+                    ],
+                    "example": "not_found"
+                },
+                "message": {
+                    "description": "Message is human-readable English, for logs and as a fallback. Masked\nto \"internal server error\" for 5xx responses.",
+                    "type": "string",
+                    "example": "note not found"
+                }
+            }
+        },
+        "apierr.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "$ref": "#/definitions/apierr.ErrorDetail"
+                }
+            }
+        },
         "handlers.AddLabelRequest": {
             "type": "object",
             "properties": {
