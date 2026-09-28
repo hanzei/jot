@@ -400,6 +400,7 @@
     "failedUnshare": "Delen verwijderen mislukt",
     "results": "Resultaten",
     "searchFailed": "Zoeken mislukt. Probeer het opnieuw.",
+    "searchTruncated": "Alleen de eerste 50 resultaten worden getoond. Typ meer van de naam om de zoekopdracht te verfijnen.",
     "failedLoad": "Gedeelde items laden mislukt",
     "removeAccessFor": "Delen verwijderen voor {{username}}",
     "peopleWithAccess": "Personen met toegang",

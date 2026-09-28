@@ -7,10 +7,10 @@ export async function getUsers(): Promise<User[]> {
   return res.data.users;
 }
 
-/** At most 50 matches; the server sets `truncated` on the response when there were more. */
-export async function searchUsers(query: string): Promise<User[]> {
+/** At most 50 matches; `truncated` is set when more users matched the query. */
+export async function searchUsers(query: string): Promise<UserSearchResponse> {
   const res = await api.get<UserSearchResponse>('/users', { params: { search: query } });
-  return res.data.users;
+  return res.data;
 }
 
 export async function shareNote(noteId: string, userId: string): Promise<void> {

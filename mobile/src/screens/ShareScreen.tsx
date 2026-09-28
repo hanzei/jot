@@ -48,6 +48,8 @@ export default function ShareScreen() {
   const [searchResults, setSearchResults] = useState<User[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState(false);
+  // The server caps a search at 50 matches; true when it dropped some.
+  const [searchTruncated, setSearchTruncated] = useState(false);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -127,6 +129,7 @@ export default function ShareScreen() {
       setIsSearching(false);
       setSearchResults([]);
       setSearchError(false);
+      setSearchTruncated(false);
       return;
     }
 
@@ -144,16 +147,20 @@ export default function ShareScreen() {
       setIsSearching(false);
       setSearchResults(filterLocalUsers());
       setSearchError(false);
+      setSearchTruncated(false);
       return;
     }
 
     let cancelled = false;
     setIsSearching(true);
     setSearchError(false);
+    setSearchTruncated(false);
 
     searchUsers(debouncedQuery)
-      .then((users) => {
-        if (!cancelled) setSearchResults(users);
+      .then((res) => {
+        if (cancelled) return;
+        setSearchResults(res.users);
+        setSearchTruncated(res.truncated);
       })
       .catch(() => {
         if (cancelled) return;
@@ -419,13 +426,20 @@ export default function ShareScreen() {
             ) : rankedResults.length === 0 ? (
               <Text style={[styles.emptyText, { color: colors.textMuted }]}>{t('share.noUsersFound')}</Text>
             ) : (
-              <FlatList
-                data={rankedResults}
-                keyExtractor={(u) => u.id}
-                renderItem={renderSearchResult}
-                scrollEnabled={false}
-                testID="share-search-results"
-              />
+              <>
+                <FlatList
+                  data={rankedResults}
+                  keyExtractor={(u) => u.id}
+                  renderItem={renderSearchResult}
+                  scrollEnabled={false}
+                  testID="share-search-results"
+                />
+                {searchTruncated && (
+                  <Text style={[styles.emptyText, { color: colors.textMuted }]} testID="share-search-truncated">
+                    {t('share.searchTruncated')}
+                  </Text>
+                )}
+              </>
             )}
           </View>
         ) : (

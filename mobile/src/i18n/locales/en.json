@@ -400,6 +400,7 @@
     "failedUnshare": "Failed to remove share",
     "results": "Results",
     "searchFailed": "Search failed. Please try again.",
+    "searchTruncated": "Only the first 50 matches are shown. Type more of the name to narrow the search.",
     "failedLoad": "Failed to load shares",
     "removeAccessFor": "Remove share for {{username}}",
     "peopleWithAccess": "People with access",

@@ -152,9 +152,10 @@ describe('ShareScreen user search connectivity', () => {
   });
 
   it('searches the server when online and the server is reachable', async () => {
-    mockSearchUsers.mockResolvedValue([
-      { ...localUser, id: 'user-remote', username: 'remotematch' },
-    ]);
+    mockSearchUsers.mockResolvedValue({
+      users: [{ ...localUser, id: 'user-remote', username: 'remotematch' }],
+      truncated: false,
+    });
 
     await renderShareScreen();
     await fireEvent.changeText(screen.getByTestId('share-search-input'), 'remote');
@@ -164,6 +165,41 @@ describe('ShareScreen user search connectivity', () => {
     });
     await waitFor(() => {
       expect(screen.getByText('@remotematch')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('share-search-truncated')).toBeNull();
+  });
+
+  it('asks for a narrower term when the server capped the results', async () => {
+    mockSearchUsers.mockResolvedValue({
+      users: [{ ...localUser, id: 'user-remote', username: 'remotematch' }],
+      truncated: true,
+    });
+
+    await renderShareScreen();
+    await fireEvent.changeText(screen.getByTestId('share-search-input'), 'remote');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('share-search-truncated')).toBeTruthy();
+    });
+    expect(screen.getByText('@remotematch')).toBeTruthy();
+  });
+
+  it('drops the capped-results hint once the query is cleared', async () => {
+    mockSearchUsers.mockResolvedValue({
+      users: [{ ...localUser, id: 'user-remote', username: 'remotematch' }],
+      truncated: true,
+    });
+
+    await renderShareScreen();
+    await fireEvent.changeText(screen.getByTestId('share-search-input'), 'remote');
+    await waitFor(() => {
+      expect(screen.getByTestId('share-search-truncated')).toBeTruthy();
+    });
+
+    await fireEvent.press(screen.getByTestId('clear-share-search'));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('share-search-truncated')).toBeNull();
     });
   });
 
@@ -336,7 +372,7 @@ describe('ShareScreen empty-query suggestions', () => {
       { shared_with: [shareRecord(carol.id, '2026-02-01T00:00:00Z')] },
     ]);
     // Dave sorts first alphabetically ("Dave Adams"), Carol wins on history.
-    mockSearchUsers.mockResolvedValue([dave, carol]);
+    mockSearchUsers.mockResolvedValue({ users: [dave, carol], truncated: false });
 
     await renderShareScreen();
     await waitFor(() => expect(screen.getByTestId('share-recent-suggestions')).toBeTruthy());

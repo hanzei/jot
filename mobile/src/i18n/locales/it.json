@@ -400,6 +400,7 @@
     "failedUnshare": "Impossibile rimuovere il accesso",
     "results": "Risultati",
     "searchFailed": "Ricerca non riuscita. Riprova.",
+    "searchTruncated": "Vengono mostrate solo le prime 50 corrispondenze. Digita più caratteri del nome per restringere la ricerca.",
     "failedLoad": "Impossibile caricare le condivisioni",
     "removeAccessFor": "Rimuovi condivisione per {{username}}",
     "peopleWithAccess": "Persone con accesso",

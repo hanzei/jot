@@ -45,11 +45,11 @@ describe('list endpoints', () => {
     expect(mockAxiosInstance.get).toHaveBeenCalledWith('/users');
   });
 
-  it('searchUsers unwraps users', async () => {
+  it('searchUsers returns the users and the truncated flag', async () => {
     const users = [{ id: 'u1', username: 'alice' }];
     mockAxiosInstance.get.mockResolvedValueOnce({ data: { users, truncated: true } });
 
-    await expect(searchUsers('ali')).resolves.toEqual(users);
+    await expect(searchUsers('ali')).resolves.toEqual({ users, truncated: true });
     expect(mockAxiosInstance.get).toHaveBeenCalledWith('/users', { params: { search: 'ali' } });
   });
 

@@ -400,6 +400,7 @@
     "failedUnshare": "Error al eliminar el acceso compartido",
     "results": "Resultados",
     "searchFailed": "Búsqueda fallida. Inténtalo de nuevo.",
+    "searchTruncated": "Solo se muestran las primeras 50 coincidencias. Escribe más del nombre para acotar la búsqueda.",
     "failedLoad": "Error al cargar los accesos compartidos",
     "removeAccessFor": "Eliminar acceso compartido para {{username}}",
     "peopleWithAccess": "Personas con acceso",
