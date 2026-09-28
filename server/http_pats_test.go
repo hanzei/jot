@@ -51,9 +51,12 @@ func listPATs(t *testing.T, ts *TestServer, tu *TestUser) []patResponse {
 
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var pats []patResponse
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&pats))
-	return pats
+	var body struct {
+		PATs []patResponse `json:"pats"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	require.NotNil(t, body.PATs, `"pats" must be an array, never null`)
+	return body.PATs
 }
 
 func TestPATs(t *testing.T) {

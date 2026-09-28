@@ -1,14 +1,16 @@
 import api from './client';
-import type { User, NoteShare, UserSettings } from '@jot/shared';
+import type { User, NoteShare, UserSettings, UserSearchResponse, NoteShareListResponse } from '@jot/shared';
 
+/** Every user but the caller; the server does not cap a listing without a search term. */
 export async function getUsers(): Promise<User[]> {
-  const res = await api.get('/users');
-  return res.data;
+  const res = await api.get<UserSearchResponse>('/users');
+  return res.data.users;
 }
 
+/** At most 50 matches; the server sets `truncated` on the response when there were more. */
 export async function searchUsers(query: string): Promise<User[]> {
-  const res = await api.get('/users', { params: { search: query } });
-  return res.data;
+  const res = await api.get<UserSearchResponse>('/users', { params: { search: query } });
+  return res.data.users;
 }
 
 export async function shareNote(noteId: string, userId: string): Promise<void> {
@@ -20,8 +22,8 @@ export async function unshareNote(noteId: string, userId: string): Promise<void>
 }
 
 export async function getNoteShares(noteId: string): Promise<NoteShare[]> {
-  const res = await api.get(`/notes/${noteId}/shares`);
-  return res.data;
+  const res = await api.get<NoteShareListResponse>(`/notes/${noteId}/shares`);
+  return res.data.shares;
 }
 
 export async function getSettings(): Promise<UserSettings> {

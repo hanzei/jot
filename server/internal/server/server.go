@@ -333,7 +333,7 @@ func (s *Server) setupRoutes() error {
 	corsOpts := cors.Options{
 		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
 		AllowedHeaders:   []string{"Accept", "Content-Type", "Authorization", "X-Client-Id"},
-		ExposedHeaders:   []string{"Link", "Retry-After"},
+		ExposedHeaders:   []string{"Retry-After"},
 		AllowCredentials: true,
 		MaxAge:           300,
 	}

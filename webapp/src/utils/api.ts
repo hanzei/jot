@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, NoteItem, CreateNoteRequest, UpdateNoteRequest, ConvertNoteTypeRequest, CreateNoteItemRequest, PatchNoteItemRequest, User, CreateUserRequest, UserListResponse, AdminStatsResponse, ShareNoteRequest, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, SetUserPasswordRequest, Label, ActiveSession, EmptyTrashResponse, PersonalAccessToken, CreatePATRequest, NoteImage, LabelCountsResponse } from '@jot/shared';
+import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, NoteItem, CreateNoteRequest, UpdateNoteRequest, ConvertNoteTypeRequest, CreateNoteItemRequest, PatchNoteItemRequest, User, CreateUserRequest, UserListResponse, AdminStatsResponse, ShareNoteRequest, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, SetUserPasswordRequest, Label, ActiveSession, EmptyTrashResponse, PersonalAccessToken, CreatePATRequest, NoteImage, LabelCountsResponse, NoteListResponse, NoteShareListResponse, LabelListResponse, UserSearchResponse, SessionListResponse, PATListResponse } from '@jot/shared';
 import { removeUser } from '@/utils/auth';
 import { authPathWithRedirect, currentRedirectTarget } from '@/utils/authRedirect';
 
@@ -67,7 +67,7 @@ export const auth = {
 
 export const notes = {
   getAll: (archived = false, search = '', trashed = false, labelId = '', myTasks = false): Promise<Note[]> =>
-    api.get('/notes', { params: { archived, search, trashed, ...(labelId ? { label: labelId } : {}), ...(myTasks ? { my_tasks: true } : {}) } }).then(res => res.data),
+    api.get<NoteListResponse>('/notes', { params: { archived, search, trashed, ...(labelId ? { label: labelId } : {}), ...(myTasks ? { my_tasks: true } : {}) } }).then(res => res.data.notes),
 
   getById: (id: string): Promise<Note> =>
     api.get(`/notes/${id}`).then(res => res.data),
@@ -102,7 +102,7 @@ export const notes = {
     api.delete(`/notes/${id}/shares/${userId}`).then(() => undefined),
 
   getShares: (id: string): Promise<NoteShare[]> =>
-    api.get(`/notes/${id}/shares`).then(res => res.data),
+    api.get<NoteShareListResponse>(`/notes/${id}/shares`).then(res => res.data.shares),
 
   reorder: (noteIDs: string[]): Promise<void> =>
     api.post('/notes/reorder', { note_ids: noteIDs }),
@@ -172,7 +172,7 @@ export const notes = {
 
 export const labels = {
   getAll: (): Promise<Label[]> =>
-    api.get('/labels').then(res => res.data),
+    api.get<LabelListResponse>('/labels').then(res => res.data.labels),
 
   getCounts: (): Promise<Record<string, number>> =>
     api.get<LabelCountsResponse>('/labels/counts').then(res =>
@@ -190,8 +190,10 @@ export const labels = {
 };
 
 export const users = {
+  // Every user but the caller. Without a search term the server does not cap
+  // the list, which the share picker and avatar lookups rely on.
   search: (): Promise<User[]> =>
-    api.get('/users').then(res => res.data),
+    api.get<UserSearchResponse>('/users').then(res => res.data.users),
 
   updateMe: (data: UpdateMeRequest): Promise<AuthResponse> =>
     api.patch('/users/me', data).then(res => res.data),
@@ -211,7 +213,7 @@ export const users = {
 
 export const sessions = {
   list: (): Promise<ActiveSession[]> =>
-    api.get('/sessions').then(res => res.data),
+    api.get<SessionListResponse>('/sessions').then(res => res.data.sessions),
 
   revoke: (id: string): Promise<void> =>
     api.delete(`/sessions/${id}`).then(() => undefined),
@@ -219,7 +221,7 @@ export const sessions = {
 
 export const pats = {
   list: (): Promise<PersonalAccessToken[]> =>
-    api.get('/pats').then(res => res.data),
+    api.get<PATListResponse>('/pats').then(res => res.data.pats),
 
   create: (data: CreatePATRequest): Promise<PersonalAccessToken> =>
     api.post('/pats', data).then(res => res.data),

@@ -20,9 +20,11 @@ func (c *Client) UnshareNote(ctx context.Context, noteID, userID string) error {
 
 // GetNoteShares lists users a note is shared with.
 func (c *Client) GetNoteShares(ctx context.Context, noteID string) ([]NoteShare, error) {
-	var shares []NoteShare
-	if err := c.doJSON(ctx, http.MethodGet, fmt.Sprintf("/api/v1/notes/%s/shares", noteID), nil, &shares); err != nil {
+	var resp struct {
+		Shares []NoteShare `json:"shares"`
+	}
+	if err := c.doJSON(ctx, http.MethodGet, fmt.Sprintf("/api/v1/notes/%s/shares", noteID), nil, &resp); err != nil {
 		return nil, err
 	}
-	return shares, nil
+	return resp.Shares, nil
 }

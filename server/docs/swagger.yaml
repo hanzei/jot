@@ -321,6 +321,13 @@ definitions:
           $ref: '#/definitions/handlers.LabelCount'
         type: array
     type: object
+  handlers.LabelListResponse:
+    properties:
+      labels:
+        items:
+          $ref: '#/definitions/models.Label'
+        type: array
+    type: object
   handlers.LoginRequest:
     properties:
       password:
@@ -334,6 +341,27 @@ definitions:
         type: string
       code_verifier:
         type: string
+    type: object
+  handlers.NoteListResponse:
+    properties:
+      notes:
+        items:
+          $ref: '#/definitions/models.Note'
+        type: array
+    type: object
+  handlers.NoteShareListResponse:
+    properties:
+      shares:
+        items:
+          $ref: '#/definitions/models.NoteShare'
+        type: array
+    type: object
+  handlers.PATListResponse:
+    properties:
+      pats:
+        items:
+          $ref: '#/definitions/handlers.patResponse'
+        type: array
     type: object
   handlers.PatchNoteItemRequest:
     properties:
@@ -373,6 +401,13 @@ definitions:
       note_ids:
         items:
           type: string
+        type: array
+    type: object
+  handlers.SessionListResponse:
+    properties:
+      sessions:
+        items:
+          $ref: '#/definitions/handlers.SessionResponse'
         type: array
     type: object
   handlers.SessionResponse:
@@ -507,6 +542,19 @@ definitions:
       users:
         items:
           $ref: '#/definitions/models.User'
+        type: array
+    type: object
+  handlers.UserSearchResponse:
+    properties:
+      truncated:
+        description: |-
+          Truncated is true when a search matched more than userSearchLimit users
+          and only the first userSearchLimit are returned. Always false without a
+          search term.
+        type: boolean
+      users:
+        items:
+          $ref: '#/definitions/handlers.UserInfo'
         type: array
     type: object
   handlers.createPATRequest:
@@ -1367,9 +1415,7 @@ paths:
         "200":
           description: OK
           schema:
-            items:
-              $ref: '#/definitions/models.Label'
-            type: array
+            $ref: '#/definitions/handlers.LabelListResponse'
         "401":
           description: unauthorized
           schema:
@@ -1624,9 +1670,7 @@ paths:
         "200":
           description: OK
           schema:
-            items:
-              $ref: '#/definitions/models.Note'
-            type: array
+            $ref: '#/definitions/handlers.NoteListResponse'
         "400":
           description: search query too long
           schema:
@@ -2476,9 +2520,7 @@ paths:
         "200":
           description: OK
           schema:
-            items:
-              $ref: '#/definitions/models.NoteShare'
-            type: array
+            $ref: '#/definitions/handlers.NoteShareListResponse'
         "400":
           description: bad request
           schema:
@@ -2693,9 +2735,7 @@ paths:
         "200":
           description: OK
           schema:
-            items:
-              $ref: '#/definitions/handlers.patResponse'
-            type: array
+            $ref: '#/definitions/handlers.PATListResponse'
         "401":
           description: unauthorized
           schema:
@@ -2808,9 +2848,7 @@ paths:
         "200":
           description: OK
           schema:
-            items:
-              $ref: '#/definitions/handlers.SessionResponse'
-            type: array
+            $ref: '#/definitions/handlers.SessionListResponse'
         "401":
           description: unauthorized
           schema:
@@ -2850,6 +2888,8 @@ paths:
       - sessions
   /users:
     get:
+      description: With `search`, returns at most 50 matches, newest first, and sets
+        `truncated` when there were more. Without it, returns every user.
       parameters:
       - description: Filter by username, first name, or last name (case-insensitive
           substring match)
@@ -2862,9 +2902,7 @@ paths:
         "200":
           description: OK
           schema:
-            items:
-              $ref: '#/definitions/handlers.UserInfo'
-            type: array
+            $ref: '#/definitions/handlers.UserSearchResponse'
         "400":
           description: search query too long
           schema:

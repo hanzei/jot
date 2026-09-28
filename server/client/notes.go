@@ -41,11 +41,13 @@ func (c *Client) ListNotes(ctx context.Context, opts *ListNotesOptions) ([]Note,
 		}
 	}
 
-	var notes []Note
-	if err := c.doJSON(ctx, http.MethodGet, path, nil, &notes); err != nil {
+	var resp struct {
+		Notes []Note `json:"notes"`
+	}
+	if err := c.doJSON(ctx, http.MethodGet, path, nil, &resp); err != nil {
 		return nil, err
 	}
-	return notes, nil
+	return resp.Notes, nil
 }
 
 // createTextNoteBody is the wire format for creating a text note.

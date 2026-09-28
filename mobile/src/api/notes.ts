@@ -11,6 +11,7 @@ import type {
   PatchNoteItemRequest,
   EmptyTrashResponse,
   ImportResponse,
+  NoteListResponse,
 } from '@jot/shared';
 
 function stripClientOnlyParams(params: GetNotesParams): Omit<GetNotesParams, 'user_id'> {
@@ -19,8 +20,8 @@ function stripClientOnlyParams(params: GetNotesParams): Omit<GetNotesParams, 'us
 }
 
 export async function getNotes(params?: GetNotesParams): Promise<Note[]> {
-  const res = await api.get('/notes', { params: params ? stripClientOnlyParams(params) : undefined });
-  return res.data;
+  const res = await api.get<NoteListResponse>('/notes', { params: params ? stripClientOnlyParams(params) : undefined });
+  return res.data.notes;
 }
 
 export async function getNote(id: string): Promise<Note> {

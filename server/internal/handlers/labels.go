@@ -53,13 +53,18 @@ type LabelCountsResponse struct {
 	Counts []LabelCount `json:"counts"`
 }
 
+// LabelListResponse is the GET /labels body.
+type LabelListResponse struct {
+	Labels []models.Label `json:"labels"`
+}
+
 // GetLabels godoc
 //
 //	@Summary	List all labels for the current user
 //	@Tags		labels
 //	@Security	CookieAuth
 //	@Produce	json
-//	@Success	200	{array}		models.Label
+//	@Success	200	{object}	LabelListResponse
 //	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
 //	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/labels [get]
@@ -74,7 +79,7 @@ func (h *LabelsHandler) GetLabels(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusInternalServerError, nil, fmt.Errorf("get labels: %w", err)
 	}
 
-	return http.StatusOK, labels, nil
+	return http.StatusOK, LabelListResponse{Labels: labels}, nil
 }
 
 // GetLabelCounts godoc

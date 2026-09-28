@@ -267,7 +267,7 @@ test.describe('Export & Import', () => {
     await dashboardPage.createNote(title, 'round-trip content');
 
     const notesResponse = await page.request.get('/api/v1/notes');
-    const notesList: Array<{ id: string; title?: string }> = await notesResponse.json();
+    const { notes: notesList }: { notes: Array<{ id: string; title?: string }> } = await notesResponse.json();
     const note = notesList.find((n) => n.title === title);
     expect(note).toBeTruthy();
     for (const name of ['first.png', 'second.png']) {
