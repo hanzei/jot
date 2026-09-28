@@ -51,11 +51,13 @@ function setReachable(next: boolean): void {
   lastChangedAt = new Date().toISOString();
   // Log the transition (not just the current belief) so a "share diagnostics"
   // report's log trail shows when/how often the server flapped, not just its
-  // current state (#700).
+  // current state (#700). Both directions are info: losing the server is
+  // routine on mobile (sleep, tunnels, a VPN reconnecting) and the app is
+  // built to keep working through it.
   if (next) {
     console.info('Server reachability: server is reachable again.');
   } else {
-    console.warn('Server reachability: server became unreachable.');
+    console.info('Server reachability: server became unreachable.');
   }
   for (const listener of listeners) listener(next);
 }

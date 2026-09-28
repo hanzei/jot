@@ -43,6 +43,7 @@ beforeEach(() => {
   // drainQueue logs every retry, discard and dead-letter decision; these suites
   // drive exactly those paths.
   silenceConsole('warn', /^Discarding queued operation/, /^Dead-lettering queued operation/);
+  silenceConsole('info', /^Dropping queued operation/);
 });
 
 /** Seed a local note at a known optimistic-concurrency version. */

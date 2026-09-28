@@ -106,8 +106,8 @@ describe('OfflineProvider queue draining', () => {
     jest.spyOn(AppState, 'addEventListener');
     // The provider logs each stalled drain, the give-up and the recovery; the
     // backoff and failure-cap tests drive exactly those paths.
-    silenceConsole('warn', /^Queue drain stalled/, /^Queue drain failed \d+ times/);
-    silenceConsole('info', /^Queue drain succeeded after/);
+    silenceConsole('warn', /^Queue drain failed \d+ times/);
+    silenceConsole('info', /^Queue drain stalled/, /^Queue drain succeeded after/);
   });
 
   afterEach(async () => {
@@ -437,7 +437,6 @@ describe('OfflineProvider queue draining', () => {
     await renderProvider();
     await flush();
     expect(infoSpy).not.toHaveBeenCalled();
-    warnSpy.mockClear();
 
     // Every subsequent drain leaves entries behind, so it stalls and logs.
     mockGetPendingCount.mockResolvedValue(1);
@@ -448,8 +447,9 @@ describe('OfflineProvider queue draining', () => {
       jest.advanceTimersByTime(1000);
     });
     await flush();
-    expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(warnSpy.mock.calls[0]![0]).toMatch(/stalled \(attempt 1\/6\)/);
+    // A retry under backoff is expected, so it is info, not a warning.
+    expect(infoSpy).toHaveBeenCalledTimes(1);
+    expect(infoSpy.mock.calls[0]![0]).toMatch(/stalled \(attempt 1\/6\)/);
 
     // Recovering from that failure streak logs a recovery line.
     mockGetPendingCount.mockResolvedValue(0);
@@ -457,8 +457,9 @@ describe('OfflineProvider queue draining', () => {
       jest.advanceTimersByTime(60000);
     });
     await flush();
-    expect(infoSpy).toHaveBeenCalledTimes(1);
-    expect(infoSpy.mock.calls[0]![0]).toMatch(/succeeded after 1 failed attempt/);
+    expect(infoSpy).toHaveBeenCalledTimes(2);
+    expect(infoSpy.mock.calls[1]![0]).toMatch(/succeeded after 1 failed attempt/);
+    expect(warnSpy).not.toHaveBeenCalled();
 
     warnSpy.mockRestore();
     infoSpy.mockRestore();

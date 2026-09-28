@@ -128,6 +128,11 @@ export function isGlobalDrainFailure(err: unknown, status: number | undefined): 
   return status === 401 || status === 408 || status === 429;
 }
 
+/** An error's message without its stack, for log lines where the stack is noise. */
+export function errorSummary(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 /**
  * Operations for which a "target is gone" replay status (404/410) is an
  * idempotent success rather than a failure to preserve. These are destructive /
@@ -816,7 +821,6 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         // bad operation wedge the whole queue indefinitely.
         // Report the effective (id-remapped) endpoint so it agrees with the
         // dead_letter row recorded below.
-        console.warn(`Discarding queued operation id=${entry.id} (HTTP ${status})`);
         discardedOperations.push({ operation: entry.operation, endpoint, status });
 
         // A 409 from a create/duplicate replay is an idempotent already-applied
@@ -884,6 +888,9 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           }
         }
         if (!idempotentConflict) {
+          // The edit is lost server-side (the failed-changes banner surfaces it),
+          // so this one is worth a warning.
+          console.warn(`Discarding queued operation id=${entry.id} ${entry.operation} ${endpoint} (HTTP ${status})`);
           const noteIds = affectedNoteIds(endpoint, body);
           // Only link dead_letter.note_id when there's a single clear note (per the
           // schema contract); a multi-note op like reorder stores NULL. The note(s)
@@ -908,14 +915,24 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           }
         }
 
+        if (idempotentConflict) {
+          // Nothing is lost: the server already holds the desired end state, or
+          // (removeImage) the next sync reconciles it.
+          console.info(
+            `Dropping queued operation id=${entry.id} ${entry.operation} ${endpoint} (HTTP ${status}): no replay needed`,
+          );
+        }
+
         await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
       } else if (isGlobalDrainFailure(err, status)) {
         // No usable server response (network error/timeout) or a status that
         // blocks the whole queue regardless of this entry (401 re-auth, 408,
         // 429 rate-limit). Every entry would fail the same way, so stop the
         // drain without charging this entry's attempt counter and retry the
-        // remainder on the next reconnect (issue #714).
-        console.warn(`Queue drain stopped at entry id=${entry.id} (connectivity):`, err);
+        // remainder on the next reconnect (issue #714). Expected whenever the
+        // server drops away, so info, and the message alone: the stack of a
+        // network error is bundle offsets that say nothing.
+        console.info(`Queue drain stopped at entry id=${entry.id} (connectivity): ${errorSummary(err)}`);
         break;
       } else {
         // Entry-specific transient failure: a 5xx tied to this op's payload, or a
@@ -939,7 +956,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         // endpoint/body so the row agrees with what was actually sent. HTTP 5xx
         // keeps its status; a non-HTTP throw records PROCESSING_ERROR_STATUS (0).
         const deadLetterStatus = status ?? PROCESSING_ERROR_STATUS;
-        const errorMessage = err instanceof Error ? err.message : String(err);
+        const errorMessage = errorSummary(err);
         console.warn(
           `Dead-lettering queued operation id=${entry.id} after ${attempts} failed attempts ` +
             `(${deadLetterStatus === PROCESSING_ERROR_STATUS ? 'processing error' : `HTTP ${deadLetterStatus}`}): ${errorMessage}`,

@@ -63,16 +63,19 @@ describe('serverReachability', () => {
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {});
 
+    // Losing the server is routine on mobile, so neither direction warns.
     markServerUnreachable();
-    expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(infoSpy).not.toHaveBeenCalled();
+    expect(infoSpy).toHaveBeenCalledTimes(1);
+    expect(infoSpy.mock.calls[0]![0]).toMatch(/became unreachable/);
 
     // A redundant call (already unreachable) must not log again.
     markServerUnreachable();
-    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(infoSpy).toHaveBeenCalledTimes(1);
 
     markServerReachable();
-    expect(infoSpy).toHaveBeenCalledTimes(1);
+    expect(infoSpy).toHaveBeenCalledTimes(2);
+    expect(infoSpy.mock.calls[1]![0]).toMatch(/reachable again/);
+    expect(warnSpy).not.toHaveBeenCalled();
 
     warnSpy.mockRestore();
     infoSpy.mockRestore();

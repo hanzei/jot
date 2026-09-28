@@ -96,6 +96,7 @@ beforeEach(() => {
     /^Flagging image upload/,
     /^Failed to patch local images/,
   );
+  silenceConsole('info', /^Image upload queue drain stopped at entry/);
 });
 
 describe('enqueueImageUpload', () => {
