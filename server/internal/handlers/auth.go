@@ -13,6 +13,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/hanzei/jot/server/internal/apierr"
 	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
@@ -48,7 +49,7 @@ func NewAuthHandler(userStore *models.UserStore, noteStore *models.NoteStore, se
 // errLocalLoginDisabled is returned by the password-auth endpoints when the
 // deployment is SSO-only (JOT_LOCAL_LOGIN_ENABLED=false). Hiding the form in the
 // webapp is cosmetic; this is what actually closes the password door on the API.
-var errLocalLoginDisabled = errors.New("local login is disabled; use SSO")
+var errLocalLoginDisabled = apierr.New(apierr.CodeLocalLoginDisabled, "local login is disabled; use SSO")
 
 type RegisterRequest struct {
 	Username string `json:"username"`
@@ -73,17 +74,17 @@ type AuthResponse struct {
 //	@Produce	json
 //	@Param		body	body		RegisterRequest	true	"Registration credentials"
 //	@Success	201		{object}	AuthResponse
-//	@Failure	400		{string}	string	"bad request"
-//	@Failure	403		{string}	string	"registration is disabled"
-//	@Failure	409		{string}	string	"username already taken"
-//	@Failure	500		{string}	string	"internal server error"
+//	@Failure	400		{object}	apierr.ErrorResponse	"bad request"
+//	@Failure	403		{object}	apierr.ErrorResponse	"registration is disabled"
+//	@Failure	409		{object}	apierr.ErrorResponse	"username already taken"
+//	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/register [post]
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	if !h.localLoginEnabled {
 		return http.StatusForbidden, nil, errLocalLoginDisabled
 	}
 	if !h.registrationEnabled {
-		return http.StatusForbidden, nil, errors.New("registration is disabled")
+		return http.StatusForbidden, nil, apierr.New(apierr.CodeRegistrationDisabled, "registration is disabled")
 	}
 
 	var req RegisterRequest
@@ -133,9 +134,9 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, any
 //	@Produce	json
 //	@Param		body	body		LoginRequest	true	"Login credentials"
 //	@Success	200		{object}	AuthResponse
-//	@Failure	400		{string}	string	"missing username or password"
-//	@Failure	401		{string}	string	"invalid username or password"
-//	@Failure	500		{string}	string	"internal server error"
+//	@Failure	400		{object}	apierr.ErrorResponse	"missing username or password"
+//	@Failure	401		{object}	apierr.ErrorResponse	"invalid username or password"
+//	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/login [post]
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	if !h.localLoginEnabled {
@@ -156,11 +157,11 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) (int, any, e
 		// Burn the same bcrypt cost as a real password check so response
 		// timing does not reveal whether the username exists.
 		models.CheckPasswordDummy(req.Password)
-		return http.StatusUnauthorized, nil, errors.New("invalid username or password")
+		return http.StatusUnauthorized, nil, apierr.New(apierr.CodeInvalidCredentials, "invalid username or password")
 	}
 
 	if !user.CheckPassword(req.Password) {
-		return http.StatusUnauthorized, nil, errors.New("invalid username or password")
+		return http.StatusUnauthorized, nil, apierr.New(apierr.CodeInvalidCredentials, "invalid username or password")
 	}
 
 	settings, err := h.userSettingsStore.GetOrCreate(r.Context(), user.ID)
@@ -187,7 +188,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) (int, any, e
 //	@Tags		auth
 //	@Security	CookieAuth
 //	@Success	204	"no content"
-//	@Failure	500	{string}	string	"internal server error"
+//	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/logout [post]
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	if err := h.sessionService.DeleteSession(w, r); err != nil {
@@ -291,10 +292,10 @@ func (h *AuthHandler) applySettingsUpdate(ctx context.Context, userID string, cu
 //	@Produce	json
 //	@Param		body	body		UpdateUserRequest	true	"Fields to update (all optional)"
 //	@Success	200		{object}	AuthResponse
-//	@Failure	400		{string}	string	"bad request"
-//	@Failure	401		{string}	string	"unauthorized"
-//	@Failure	409		{string}	string	"username already taken"
-//	@Failure	500		{string}	string	"internal server error"
+//	@Failure	400		{object}	apierr.ErrorResponse	"bad request"
+//	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	409		{object}	apierr.ErrorResponse	"username already taken"
+//	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/users/me [patch]
 func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
@@ -368,10 +369,10 @@ type ChangePasswordRequest struct {
 //	@Accept			json
 //	@Param			body	body	ChangePasswordRequest	true	"Password change"
 //	@Success		204		"no content"
-//	@Failure		400		{string}	string	"bad request"
-//	@Failure		401		{string}	string	"unauthorized"
-//	@Failure		403		{string}	string	"current password is incorrect, or local login is disabled"
-//	@Failure		500		{string}	string	"internal server error"
+//	@Failure		400		{object}	apierr.ErrorResponse	"bad request"
+//	@Failure		401		{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure		403		{object}	apierr.ErrorResponse	"current password is incorrect, or local login is disabled"
+//	@Failure		500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router			/users/me/password [put]
 func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
@@ -408,7 +409,7 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (in
 	}
 
 	if user.HasPassword && !user.CheckPassword(req.CurrentPassword) {
-		return http.StatusForbidden, nil, errors.New("current password is incorrect")
+		return http.StatusForbidden, nil, apierr.New(apierr.CodeIncorrectPassword, "current password is incorrect")
 	}
 
 	if err := h.userStore.UpdatePassword(r.Context(), currentUser.ID, req.NewPassword); err != nil {
@@ -436,8 +437,8 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (in
 //	@Security	CookieAuth
 //	@Produce	json
 //	@Success	200	{object}	AuthResponse
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	500	{string}	string	"internal server error"
+//	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/me [get]
 func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -609,10 +610,10 @@ func resizeToJPEG(img image.Image, cfg image.Config, maxDim int) ([]byte, error)
 //	@Produce	json
 //	@Param		file	formData	file	true	"Profile icon image (JPEG, PNG or WebP, max 5 MB)"
 //	@Success	200		{object}	models.User
-//	@Failure	400		{string}	string	"bad request"
-//	@Failure	401		{string}	string	"unauthorized"
-//	@Failure	413		{string}	string	"file too large"
-//	@Failure	500		{string}	string	"internal server error"
+//	@Failure	400		{object}	apierr.ErrorResponse	"bad request"
+//	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	413		{object}	apierr.ErrorResponse	"file too large"
+//	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/users/me/profile-icon [post]
 func (h *AuthHandler) UploadProfileIcon(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
@@ -670,8 +671,8 @@ func (h *AuthHandler) UploadProfileIcon(w http.ResponseWriter, r *http.Request) 
 //	@Tags		users
 //	@Security	CookieAuth
 //	@Success	204	"no content"
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	500	{string}	string	"internal server error"
+//	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/users/me/profile-icon [delete]
 func (h *AuthHandler) DeleteProfileIcon(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
@@ -724,11 +725,11 @@ func (h *AuthHandler) publishProfileIconEvent(ctx context.Context, user *models.
 //	@Tags		users
 //	@Security	CookieAuth
 //	@Produce	image/jpeg
-//	@Param		id	path		string	true	"User ID"
-//	@Success	200	{file}		binary	"JPEG image"
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	404	{string}	string	"not found"
-//	@Failure	500	{string}	string	"internal server error"
+//	@Param		id	path		string					true	"User ID"
+//	@Success	200	{file}		binary					"JPEG image"
+//	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	404	{object}	apierr.ErrorResponse	"not found"
+//	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/users/{id}/profile-icon [get]
 func (h *AuthHandler) GetUserProfileIcon(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	id := chi.URLParam(r, "id")

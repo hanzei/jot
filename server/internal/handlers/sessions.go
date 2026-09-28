@@ -56,7 +56,7 @@ func toSessionResponse(s *models.Session, currentTokenHash string) SessionRespon
 //	@Security	CookieAuth
 //	@Produce	json
 //	@Success	200	{array}		SessionResponse
-//	@Failure	401	{string}	string	"unauthorized"
+//	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
 //	@Router		/sessions [get]
 func (h *SessionsHandler) ListSessions(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -86,9 +86,9 @@ func (h *SessionsHandler) ListSessions(w http.ResponseWriter, r *http.Request) (
 //	@Security	CookieAuth
 //	@Param		id	path	string	true	"Session ID (hashed)"
 //	@Success	204	"no content"
-//	@Failure	400	{string}	string	"cannot revoke current session"
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	404	{string}	string	"session not found"
+//	@Failure	400	{object}	apierr.ErrorResponse	"cannot revoke current session"
+//	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	404	{object}	apierr.ErrorResponse	"session not found"
 //	@Router		/sessions/{id} [delete]
 func (h *SessionsHandler) RevokeSession(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/hanzei/jot/server/internal/apierr"
 	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/sse"
@@ -29,20 +30,22 @@ func NewEventsHandler(hub *sse.Hub) *EventsHandler {
 func (h *EventsHandler) ServeSSE(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		apierr.Write(w, r, http.StatusUnauthorized, apierr.CodeUnauthorized, "unauthorized")
 		return
 	}
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
+		logutil.FromContext(r.Context()).Error("SSE response writer does not support flushing")
+		apierr.Write(w, r, http.StatusInternalServerError, apierr.CodeInternal, apierr.InternalMessage)
 		return
 	}
 
 	// Disable the server's write deadline for this long-lived SSE connection only.
 	rc := http.NewResponseController(w)
 	if err := rc.SetWriteDeadline(time.Time{}); err != nil {
-		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
+		logutil.FromContext(r.Context()).WithError(err).Error("Failed to clear SSE write deadline")
+		apierr.Write(w, r, http.StatusInternalServerError, apierr.CodeInternal, apierr.InternalMessage)
 		return
 	}
 

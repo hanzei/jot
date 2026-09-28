@@ -64,9 +64,9 @@ type UserListResponse struct {
 //	@Security	CookieAuth
 //	@Produce	json
 //	@Success	200	{object}	models.AdminStats
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	403	{string}	string	"forbidden"
-//	@Failure	500	{string}	string	"internal server error"
+//	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	403	{object}	apierr.ErrorResponse	"forbidden"
+//	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/admin/stats [get]
 func (h *AdminHandler) GetStats(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	stats, err := h.statsStore.GetStats(r.Context())
@@ -91,8 +91,8 @@ func (h *AdminHandler) GetStats(w http.ResponseWriter, r *http.Request) (int, an
 //	@Security	CookieAuth
 //	@Produce	json
 //	@Success	200	{object}	UserListResponse
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	403	{string}	string	"forbidden"
+//	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	403	{object}	apierr.ErrorResponse	"forbidden"
 //	@Router		/admin/users [get]
 func (h *AdminHandler) GetUsers(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	users, err := h.userStore.GetAll(r.Context())
@@ -116,10 +116,10 @@ func (h *AdminHandler) GetUsers(w http.ResponseWriter, r *http.Request) (int, an
 //	@Produce	json
 //	@Param		body	body		CreateUserRequest	true	"New user details"
 //	@Success	201		{object}	models.User
-//	@Failure	400		{string}	string	"bad request"
-//	@Failure	401		{string}	string	"unauthorized"
-//	@Failure	403		{string}	string	"forbidden"
-//	@Failure	409		{string}	string	"username already taken"
+//	@Failure	400		{object}	apierr.ErrorResponse	"bad request"
+//	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	403		{object}	apierr.ErrorResponse	"forbidden"
+//	@Failure	409		{object}	apierr.ErrorResponse	"username already taken"
 //	@Router		/admin/users [post]
 func (h *AdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	var req CreateUserRequest
@@ -168,11 +168,11 @@ type UpdateUserRoleRequest struct {
 //	@Param		id		path		string					true	"User ID"
 //	@Param		body	body		UpdateUserRoleRequest	true	"New role"
 //	@Success	200		{object}	models.User
-//	@Failure	400		{string}	string	"bad request"
-//	@Failure	401		{string}	string	"unauthorized"
-//	@Failure	403		{string}	string	"forbidden"
-//	@Failure	404		{string}	string	"user not found"
-//	@Failure	409		{string}	string	"cannot demote the last admin"
+//	@Failure	400		{object}	apierr.ErrorResponse	"bad request"
+//	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	403		{object}	apierr.ErrorResponse	"forbidden"
+//	@Failure	404		{object}	apierr.ErrorResponse	"user not found"
+//	@Failure	409		{object}	apierr.ErrorResponse	"cannot demote the last admin"
 //	@Router		/admin/users/{id}/role [put]
 func (h *AdminHandler) UpdateUserRole(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	userID := chi.URLParam(r, "id")
@@ -210,10 +210,10 @@ type SetUserPasswordRequest struct {
 //	@Param			id		path	string					true	"User ID"
 //	@Param			body	body	SetUserPasswordRequest	true	"New password"
 //	@Success		204		"no content"
-//	@Failure		400		{string}	string	"bad request"
-//	@Failure		401		{string}	string	"unauthorized"
-//	@Failure		403		{string}	string	"forbidden"
-//	@Failure		404		{string}	string	"user not found"
+//	@Failure		400		{object}	apierr.ErrorResponse	"bad request"
+//	@Failure		401		{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure		403		{object}	apierr.ErrorResponse	"forbidden"
+//	@Failure		404		{object}	apierr.ErrorResponse	"user not found"
 //	@Router			/admin/users/{id}/password [put]
 func (h *AdminHandler) SetUserPassword(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	requestingUser, ok := auth.GetUserFromContext(r.Context())
@@ -263,10 +263,10 @@ func (h *AdminHandler) SetUserPassword(w http.ResponseWriter, r *http.Request) (
 //	@Security	CookieAuth
 //	@Param		id	path	string	true	"User ID"
 //	@Success	204	"no content"
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	403	{string}	string	"forbidden"
-//	@Failure	404	{string}	string	"user not found"
-//	@Failure	409	{string}	string	"cannot demote the last admin"
+//	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	403	{object}	apierr.ErrorResponse	"forbidden"
+//	@Failure	404	{object}	apierr.ErrorResponse	"user not found"
+//	@Failure	409	{object}	apierr.ErrorResponse	"cannot demote the last admin"
 //	@Router		/admin/users/{id} [delete]
 func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	targetID := chi.URLParam(r, "id")
@@ -326,9 +326,9 @@ type DeleteUserNotesResponse struct {
 //	@Produce	json
 //	@Param		id	path		string	true	"User ID"
 //	@Success	200	{object}	DeleteUserNotesResponse
-//	@Failure	400	{string}	string	"bad request"
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	500	{string}	string	"internal server error"
+//	@Failure	400	{object}	apierr.ErrorResponse	"bad request"
+//	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure	500	{object}	apierr.ErrorResponse	"internal server error"
 //	@Router		/admin/users/{id}/notes [delete]
 func (h *AdminHandler) DeleteUserNotes(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	if _, ok := auth.GetUserFromContext(r.Context()); !ok {

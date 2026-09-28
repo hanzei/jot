@@ -20,6 +20,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/hanzei/jot/server/internal/apierr"
 	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/blobstore"
 	"github.com/hanzei/jot/server/internal/config"
@@ -326,7 +327,7 @@ func (s *Server) setupRoutes() error {
 	// second middleware renames the span after routing is complete.
 	s.router.Use(chiRouteSpanNamer)
 	s.router.Use(s.requestLoggerMiddleware)
-	s.router.Use(middleware.Recoverer)
+	s.router.Use(recoverer)
 	s.router.Use(securityHeaders(s.cfg.CookieSecure))
 
 	corsOpts := cors.Options{
@@ -352,7 +353,17 @@ func (s *Server) setupRoutes() error {
 			return fmt.Errorf("add trusted origin %q: %w", s.cfg.CORSAllowedOrigin, err)
 		}
 	}
+	cop.SetDenyHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		apierr.Write(w, r, http.StatusForbidden, apierr.CodeForbidden, "cross-origin request rejected")
+	}))
+	// Unknown routes and wrong methods under /api answer with the JSON error
+	// envelope like every other API error; everything else (the SPA) keeps
+	// net/http's plain-text defaults.
+	s.router.NotFound(apiNotFound)
+	s.router.MethodNotAllowed(apiMethodNotAllowed)
 	s.router.Route("/api/v1", func(r chi.Router) {
+		r.NotFound(apiNotFound)
+		r.MethodNotAllowed(apiMethodNotAllowed)
 		r.Use(cop.Handler)
 		r.Get("/config", s.wrapHandler(s.handleConfig))
 
@@ -493,12 +504,8 @@ func (s *Server) setupRoutes() error {
 
 	// Swagger UI at /api/docs/
 	s.router.Get("/api/docs/*", httpSwagger.WrapHandler)
-	s.router.Get("/api", func(w http.ResponseWriter, r *http.Request) {
-		http.NotFound(w, r)
-	})
-	s.router.Get("/api/*", func(w http.ResponseWriter, r *http.Request) {
-		http.NotFound(w, r)
-	})
+	s.router.Handle("/api", http.HandlerFunc(apiNotFound))
+	s.router.Handle("/api/*", http.HandlerFunc(apiNotFound))
 
 	safeStaticDir := strings.NewReplacer("\n", "", "\r", "").Replace(s.cfg.StaticDir)
 
@@ -576,7 +583,7 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 			// Promote body-too-large errors to 413 regardless of what the handler returned.
 			var mbe *http.MaxBytesError
 			if errors.As(err, &mbe) {
-				http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+				apierr.Write(w, r, http.StatusRequestEntityTooLarge, apierr.CodeRequestTooLarge, "request body too large")
 				return
 			}
 			log := logutil.FromContext(r.Context()).WithError(err).WithField("status_code", statusCode)
@@ -588,11 +595,7 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 			} else {
 				log.Warn("HTTP handler error")
 			}
-			msg := err.Error()
-			if statusCode >= 500 {
-				msg = "internal server error"
-			}
-			http.Error(w, msg, statusCode)
+			apierr.WriteErr(w, r, statusCode, err)
 			return
 		}
 		if body != nil {

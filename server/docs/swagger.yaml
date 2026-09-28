@@ -1,5 +1,136 @@
 basePath: /api/v1
 definitions:
+  apierr.Code:
+    enum:
+    - validation_failed
+    - unauthorized
+    - forbidden
+    - not_found
+    - method_not_allowed
+    - conflict
+    - request_too_large
+    - limit_exceeded
+    - rate_limited
+    - bad_request
+    - internal
+    - invalid_credentials
+    - session_required
+    - registration_disabled
+    - local_login_disabled
+    - incorrect_password
+    - username_taken
+    - cannot_share_with_self
+    - already_shared
+    - label_name_taken
+    - last_admin
+    - cannot_delete_self
+    - sso_identity_linked
+    - would_strand_account
+    type: string
+    x-enum-comments:
+      CodeAlreadyShared: 409 — the note is already shared with that user.
+      CodeBadRequest: any other 4xx.
+      CodeCannotDeleteSelf: 403 — admins cannot delete their own account.
+      CodeCannotShareWithSelf: 400 — a note cannot be shared with its owner.
+      CodeConflict: 409 — the request conflicts with current state (duplicate ID,
+        concurrent modification, …).
+      CodeForbidden: 403 — authenticated, but not allowed to do this.
+      CodeIncorrectPassword: 403 — the current password given to change a password
+        is wrong.
+      CodeInternal: any 5xx. The message is always masked.
+      CodeInvalidCredentials: 401 from login — wrong username or password.
+      CodeLabelNameTaken: 400 from rename, 409 from a create with a client-supplied
+        ID — the user already has a label with this name.
+      CodeLastAdmin: 409 — the change would leave the server without an admin.
+      CodeLimitExceeded: 422 — a resource cap or length limit was exceeded.
+      CodeLocalLoginDisabled: 403 — password login (and anything needing a password)
+        is turned off; use SSO.
+      CodeMethodNotAllowed: 405 — the route exists but not for this method.
+      CodeNotFound: 404 — the resource or route does not exist (or is not visible
+        to the caller).
+      CodeRateLimited: 429 — too many requests; honor Retry-After.
+      CodeRegistrationDisabled: 403 — self-registration is turned off.
+      CodeRequestTooLarge: 413 — the request body exceeds the endpoint's limit.
+      CodeSSOIdentityLinked: 409 — the SSO identity belongs to another account.
+      CodeSessionRequired: 403 — the endpoint needs a browser session, and the request
+        authenticated with a personal access token.
+      CodeUnauthorized: 401 — missing, invalid, or expired credentials.
+      CodeUsernameTaken: 409 — another account already has this username.
+      CodeValidationFailed: 400 — malformed or invalid request input.
+      CodeWouldStrandAccount: 422 — unlinking SSO would leave the account with no
+        way to sign in.
+    x-enum-descriptions:
+    - 400 — malformed or invalid request input.
+    - 401 — missing, invalid, or expired credentials.
+    - 403 — authenticated, but not allowed to do this.
+    - 404 — the resource or route does not exist (or is not visible to the caller).
+    - 405 — the route exists but not for this method.
+    - 409 — the request conflicts with current state (duplicate ID, concurrent modification,
+      …).
+    - 413 — the request body exceeds the endpoint's limit.
+    - 422 — a resource cap or length limit was exceeded.
+    - 429 — too many requests; honor Retry-After.
+    - any other 4xx.
+    - any 5xx. The message is always masked.
+    - 401 from login — wrong username or password.
+    - 403 — the endpoint needs a browser session, and the request authenticated with
+      a personal access token.
+    - 403 — self-registration is turned off.
+    - 403 — password login (and anything needing a password) is turned off; use SSO.
+    - 403 — the current password given to change a password is wrong.
+    - 409 — another account already has this username.
+    - 400 — a note cannot be shared with its owner.
+    - 409 — the note is already shared with that user.
+    - 400 from rename, 409 from a create with a client-supplied ID — the user already
+      has a label with this name.
+    - 409 — the change would leave the server without an admin.
+    - 403 — admins cannot delete their own account.
+    - 409 — the SSO identity belongs to another account.
+    - 422 — unlinking SSO would leave the account with no way to sign in.
+    x-enum-varnames:
+    - CodeValidationFailed
+    - CodeUnauthorized
+    - CodeForbidden
+    - CodeNotFound
+    - CodeMethodNotAllowed
+    - CodeConflict
+    - CodeRequestTooLarge
+    - CodeLimitExceeded
+    - CodeRateLimited
+    - CodeBadRequest
+    - CodeInternal
+    - CodeInvalidCredentials
+    - CodeSessionRequired
+    - CodeRegistrationDisabled
+    - CodeLocalLoginDisabled
+    - CodeIncorrectPassword
+    - CodeUsernameTaken
+    - CodeCannotShareWithSelf
+    - CodeAlreadyShared
+    - CodeLabelNameTaken
+    - CodeLastAdmin
+    - CodeCannotDeleteSelf
+    - CodeSSOIdentityLinked
+    - CodeWouldStrandAccount
+  apierr.ErrorDetail:
+    properties:
+      code:
+        allOf:
+        - $ref: '#/definitions/apierr.Code'
+        description: Code is stable and machine-readable; clients switch on it.
+        example: not_found
+      message:
+        description: |-
+          Message is human-readable English, for logs and as a fallback. Masked
+          to "internal server error" for 5xx responses.
+        example: note not found
+        type: string
+    type: object
+  apierr.ErrorResponse:
+    properties:
+      error:
+        $ref: '#/definitions/apierr.ErrorDetail'
+    type: object
   handlers.AddLabelRequest:
     properties:
       id:
@@ -694,15 +825,15 @@ paths:
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "403":
           description: forbidden
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Get admin system stats (admin only)
@@ -720,11 +851,11 @@ paths:
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "403":
           description: forbidden
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: List all users (admin only)
@@ -750,19 +881,19 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "403":
           description: forbidden
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "409":
           description: username already taken
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Create a user (admin only)
@@ -782,19 +913,19 @@ paths:
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "403":
           description: forbidden
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "404":
           description: user not found
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "409":
           description: cannot demote the last admin
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Delete a user (admin only)
@@ -818,15 +949,15 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Delete all notes owned by a user (admin only)
@@ -857,19 +988,19 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "403":
           description: forbidden
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "404":
           description: user not found
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Set a user's password (admin only)
@@ -901,23 +1032,23 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "403":
           description: forbidden
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "404":
           description: user not found
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "409":
           description: cannot demote the last admin
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Update a user's role (admin only)
@@ -952,11 +1083,11 @@ paths:
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "403":
           description: linking unavailable
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Begin SSO account linking
@@ -991,15 +1122,15 @@ paths:
         "400":
           description: invalid or expired code
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "409":
           description: identity already linked
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       summary: Complete a mobile SSO login
       tags:
       - auth
@@ -1020,23 +1151,23 @@ paths:
         "400":
           description: invalid or expired code
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "403":
           description: linking unavailable
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "409":
           description: identity already linked
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Complete mobile SSO account linking
@@ -1064,11 +1195,11 @@ paths:
         "400":
           description: invalid intent or code_challenge
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "403":
           description: linking unavailable
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       summary: Begin a mobile SSO hand-off
       tags:
       - auth
@@ -1080,19 +1211,19 @@ paths:
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "403":
           description: unlinking unavailable
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "422":
           description: would strand the account
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Unlink the SSO identity from the current account
@@ -1124,19 +1255,19 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "404":
           description: not found
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Delete a note image
@@ -1159,19 +1290,19 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "404":
           description: not found
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Download a note image
@@ -1195,19 +1326,19 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "404":
           description: not found
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Download a note image's thumbnail
@@ -1227,11 +1358,11 @@ paths:
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: List all labels for the current user
@@ -1261,23 +1392,23 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "409":
           description: label already exists
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "422":
           description: label name too long
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Create a label, or return the existing one when no ID is supplied
@@ -1297,15 +1428,15 @@ paths:
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "404":
           description: label not found
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Delete a label
@@ -1336,23 +1467,23 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "404":
           description: label not found
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "422":
           description: label name too long
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Rename a label
@@ -1370,11 +1501,11 @@ paths:
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Get note counts per label for the current user
@@ -1401,15 +1532,15 @@ paths:
         "400":
           description: missing username or password
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: invalid username or password
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       summary: Authenticate a user
       tags:
       - auth
@@ -1421,7 +1552,7 @@ paths:
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Log out the current user
@@ -1439,11 +1570,11 @@ paths:
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Get the current authenticated user and settings
@@ -1484,15 +1615,15 @@ paths:
         "400":
           description: search query too long
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: List notes for the current user
@@ -1518,27 +1649,27 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "404":
           description: label not found
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "409":
           description: note with this ID already exists
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "422":
           description: note item cap exceeded or label name too long
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Create a new note
@@ -1562,19 +1693,19 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "404":
           description: not found
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Delete a note (move to trash, or permanently delete)
@@ -1597,19 +1728,19 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "404":
           description: not found
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Get a single note by ID
@@ -1640,24 +1771,24 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "404":
           description: not found
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "409":
           description: 'version conflict for title/content update: note changed since
             base_version'
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Update a note
@@ -1689,27 +1820,27 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "404":
           description: not found
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "409":
           description: 'version conflict: note changed since base_version'
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "422":
           description: note item cap exceeded
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Convert a note between text and list type
@@ -1740,23 +1871,23 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "404":
           description: not found
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "409":
           description: conflict — duplicate ID already exists
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Duplicate an existing note
@@ -1787,27 +1918,27 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "404":
           description: not found
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "413":
           description: file too large
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "422":
           description: note image cap exceeded
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Upload an image to a note
@@ -1839,27 +1970,27 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "404":
           description: not found
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "409":
           description: item already exists
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "422":
           description: note item cap exceeded
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Add a single item to a list note
@@ -1884,19 +2015,19 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "404":
           description: not found
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Delete a single list item
@@ -1932,19 +2063,19 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "404":
           description: not found
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Update a single list item
@@ -1986,19 +2117,19 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "404":
           description: not found
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Toggle a list item's completed state, cascading to children
@@ -2035,19 +2166,19 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "404":
           description: not found
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Delete a set of list items
@@ -2075,19 +2206,19 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "404":
           description: not found
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Reorder a list note's items
@@ -2125,19 +2256,19 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "404":
           description: not found
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Set the completed flag on a set of list items
@@ -2169,27 +2300,27 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "403":
           description: no access to note
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "404":
           description: label not found
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "422":
           description: label name too long
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Add a label to a note
@@ -2218,15 +2349,15 @@ paths:
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "403":
           description: no access to note
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Remove a label from a note
@@ -2250,19 +2381,19 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "404":
           description: not found
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Restore a note from trash
@@ -2290,27 +2421,27 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "403":
           description: not owner
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "404":
           description: not found
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "409":
           description: already shared
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Share a note with another user
@@ -2336,19 +2467,19 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "403":
           description: no access
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: List users a note is shared with
@@ -2375,23 +2506,23 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "403":
           description: forbidden
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "404":
           description: not found
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Remove a share from a note
@@ -2407,11 +2538,11 @@ paths:
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Export notes as a Jot JSON backup
@@ -2450,15 +2581,15 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Import notes from a supported export format
@@ -2481,19 +2612,19 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "403":
           description: forbidden
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Reorder notes by providing an ordered list of IDs
@@ -2511,11 +2642,11 @@ paths:
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Permanently delete all notes in the current user's trash
@@ -2535,7 +2666,7 @@ paths:
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: List personal access tokens for the current user
@@ -2561,15 +2692,15 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "422":
           description: personal access token cap exceeded
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Create a new personal access token
@@ -2589,11 +2720,11 @@ paths:
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "404":
           description: not found
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Revoke a personal access token
@@ -2620,19 +2751,19 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "403":
           description: registration is disabled
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "409":
           description: username already taken
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       summary: Register a new user
       tags:
       - auth
@@ -2650,7 +2781,7 @@ paths:
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: List all active sessions for the current user
@@ -2670,15 +2801,15 @@ paths:
         "400":
           description: cannot revoke current session
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "404":
           description: session not found
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Revoke a specific session
@@ -2704,15 +2835,15 @@ paths:
         "400":
           description: search query too long
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Search or list users (excluding current user)
@@ -2736,15 +2867,15 @@ paths:
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "404":
           description: not found
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Get a user's profile icon
@@ -2771,19 +2902,19 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "409":
           description: username already taken
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Update the current user's profile and/or settings
@@ -2810,19 +2941,19 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "403":
           description: current password is incorrect, or local login is disabled
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Change or set the current user's password
@@ -2836,11 +2967,11 @@ paths:
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Delete the current user's profile icon
@@ -2865,19 +2996,19 @@ paths:
         "400":
           description: bad request
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "401":
           description: unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "413":
           description: file too large
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
         "500":
           description: internal server error
           schema:
-            type: string
+            $ref: '#/definitions/apierr.ErrorResponse'
       security:
       - CookieAuth: []
       summary: Upload a profile icon for the current user

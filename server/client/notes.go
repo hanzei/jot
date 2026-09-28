@@ -293,7 +293,7 @@ func (c *Client) doImportRequest(ctx context.Context, importType string, writePa
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 	if resp.StatusCode >= 400 {
-		return nil, &Error{StatusCode: resp.StatusCode, Body: string(respBody)}
+		return nil, newError(resp.StatusCode, respBody)
 	}
 
 	var result ImportResponse
