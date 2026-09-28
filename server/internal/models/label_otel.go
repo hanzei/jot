@@ -42,6 +42,12 @@ func (s *LabelStore) GetOrCreateLabel(ctx context.Context, userID, name string) 
 	return s.inner.GetOrCreateLabel(ctx, userID, name)
 }
 
+func (s *LabelStore) GetLabelByName(ctx context.Context, userID, name string) (_ *Label, err error) {
+	ctx, end := startSpan(ctx, s.tracer, "LabelStore.GetLabelByName", &err)
+	defer end()
+	return s.inner.GetLabelByName(ctx, userID, name)
+}
+
 func (s *LabelStore) CreateLabel(ctx context.Context, userID, id, name string) (_ *Label, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "LabelStore.CreateLabel", &err,
 		attribute.String("label.id", id),

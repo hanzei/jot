@@ -969,6 +969,12 @@ const docTemplate = `{
                             "type": "string"
                         }
                     },
+                    "422": {
+                        "description": "label name too long",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "internal server error",
                         "schema": {
@@ -1113,6 +1119,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "label not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "422": {
+                        "description": "label name too long",
                         "schema": {
                             "type": "string"
                         }
@@ -1372,7 +1384,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "note item cap exceeded",
+                        "description": "note item cap exceeded or label name too long",
                         "schema": {
                             "type": "string"
                         }
@@ -2566,6 +2578,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "label not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "422": {
+                        "description": "label name too long",
                         "schema": {
                             "type": "string"
                         }
