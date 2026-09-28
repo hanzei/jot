@@ -225,6 +225,7 @@
     "ssoDisconnect": "{{provider}} loskoppelen",
     "ssoDisconnecting": "Loskoppelen…",
     "ssoDisconnectFailed": "Loskoppelen van SSO is mislukt.",
+    "ssoUnlinkUnavailable": "SSO kan op deze server niet worden losgekoppeld: inloggen met een wachtwoord is uitgeschakeld, dus SSO is je enige manier om in te loggen.",
     "ssoDisconnected": "SSO losgekoppeld.",
     "ssoDisconnectConfirmTitle": "SSO loskoppelen?",
     "ssoDisconnectConfirmMessage": "Hiermee ontkoppel je {{provider}} van je account. Je hebt je wachtwoord nodig om in te loggen.",

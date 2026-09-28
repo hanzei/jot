@@ -60,6 +60,8 @@ const (
 	CodeCannotDeleteSelf     Code = "cannot_delete_self"     // 403 — admins cannot delete their own account.
 	CodeSSOIdentityLinked    Code = "sso_identity_linked"    // 409 — the SSO identity belongs to another account.
 	CodeWouldStrandAccount   Code = "would_strand_account"   // 422 — unlinking SSO would leave the account with no way to sign in.
+	CodeSSOLinkUnavailable   Code = "sso_link_unavailable"   // 403 — password login is turned off, so there is no local account to link SSO to.
+	CodeSSOUnlinkUnavailable Code = "sso_unlink_unavailable" // 403 — password login is turned off, so SSO is the only way to sign in and cannot be disconnected.
 )
 
 // ErrorResponse is the body of every API error response.

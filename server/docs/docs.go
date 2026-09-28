@@ -3520,7 +3520,9 @@ const docTemplate = `{
                 "last_admin",
                 "cannot_delete_self",
                 "sso_identity_linked",
-                "would_strand_account"
+                "would_strand_account",
+                "sso_link_unavailable",
+                "sso_unlink_unavailable"
             ],
             "x-enum-comments": {
                 "CodeAlreadyShared": "409 — the note is already shared with that user.",
@@ -3542,6 +3544,8 @@ const docTemplate = `{
                 "CodeRegistrationDisabled": "403 — self-registration is turned off.",
                 "CodeRequestTooLarge": "413 — the request body exceeds the endpoint's limit.",
                 "CodeSSOIdentityLinked": "409 — the SSO identity belongs to another account.",
+                "CodeSSOLinkUnavailable": "403 — password login is turned off, so there is no local account to link SSO to.",
+                "CodeSSOUnlinkUnavailable": "403 — password login is turned off, so SSO is the only way to sign in and cannot be disconnected.",
                 "CodeSessionRequired": "403 — the endpoint needs a browser session, and the request authenticated with a personal access token.",
                 "CodeUnauthorized": "401 — missing, invalid, or expired credentials.",
                 "CodeUsernameTaken": "409 — another account already has this username.",
@@ -3572,7 +3576,9 @@ const docTemplate = `{
                 "409 — the change would leave the server without an admin.",
                 "403 — admins cannot delete their own account.",
                 "409 — the SSO identity belongs to another account.",
-                "422 — unlinking SSO would leave the account with no way to sign in."
+                "422 — unlinking SSO would leave the account with no way to sign in.",
+                "403 — password login is turned off, so there is no local account to link SSO to.",
+                "403 — password login is turned off, so SSO is the only way to sign in and cannot be disconnected."
             ],
             "x-enum-varnames": [
                 "CodeValidationFailed",
@@ -3598,7 +3604,9 @@ const docTemplate = `{
                 "CodeLastAdmin",
                 "CodeCannotDeleteSelf",
                 "CodeSSOIdentityLinked",
-                "CodeWouldStrandAccount"
+                "CodeWouldStrandAccount",
+                "CodeSSOLinkUnavailable",
+                "CodeSSOUnlinkUnavailable"
             ]
         },
         "apierr.ErrorDetail": {

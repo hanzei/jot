@@ -225,6 +225,7 @@
     "ssoDisconnect": "Odłącz {{provider}}",
     "ssoDisconnecting": "Odłączanie…",
     "ssoDisconnectFailed": "Nie udało się odłączyć SSO.",
+    "ssoUnlinkUnavailable": "Nie można odłączyć SSO na tym serwerze: logowanie hasłem jest wyłączone, więc SSO jest jedynym sposobem logowania.",
     "ssoDisconnected": "Odłączono SSO.",
     "ssoDisconnectConfirmTitle": "Odłączyć SSO?",
     "ssoDisconnectConfirmMessage": "Spowoduje to odłączenie {{provider}} od Twojego konta. Do zalogowania będzie potrzebne hasło.",

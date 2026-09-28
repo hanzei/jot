@@ -225,6 +225,7 @@
     "ssoDisconnect": "Scollega {{provider}}",
     "ssoDisconnecting": "Scollegamento…",
     "ssoDisconnectFailed": "Impossibile scollegare l'SSO.",
+    "ssoUnlinkUnavailable": "L'SSO non può essere scollegato su questo server: l'accesso con password è disattivato, quindi l'SSO è l'unico modo per accedere.",
     "ssoDisconnected": "SSO scollegato.",
     "ssoDisconnectConfirmTitle": "Scollegare l'SSO?",
     "ssoDisconnectConfirmMessage": "Questo scollega {{provider}} dal tuo account. Ti servirà la password per accedere.",

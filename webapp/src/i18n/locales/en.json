@@ -225,6 +225,7 @@
     "ssoDisconnect": "Disconnect {{provider}}",
     "ssoDisconnecting": "Disconnecting…",
     "ssoDisconnectFailed": "Failed to disconnect SSO.",
+    "ssoUnlinkUnavailable": "SSO can't be disconnected on this server: password sign-in is disabled, so SSO is your only way to sign in.",
     "ssoDisconnected": "Disconnected from SSO.",
     "ssoDisconnectConfirmTitle": "Disconnect SSO?",
     "ssoDisconnectConfirmMessage": "This unlinks {{provider}} from your account. You'll need your password to sign in.",

@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/big"
 	"net/http"
 	"net/http/cookiejar"
@@ -672,8 +673,14 @@ func TestOIDCUnlinkForbiddenWhenLocalLoginDisabled(t *testing.T) {
 	require.NoError(t, err)
 
 	unlinkResp := ts.postForm(t, c, "/api/v1/auth/oidc/unlink")
+	unlinkBody, err := io.ReadAll(unlinkResp.Body)
+	require.NoError(t, err)
 	require.NoError(t, unlinkResp.Body.Close())
-	assert.Equal(t, http.StatusForbidden, unlinkResp.StatusCode)
+	requireEnvelope(t, http.StatusForbidden, "sso_unlink_unavailable", unlinkResp.StatusCode, unlinkResp.Header, unlinkBody)
+
+	// Linking is refused too, with its own code: there is no local side to prove.
+	linkStatus, linkHeader, linkBody := rawRequest(t, c, http.MethodGet, ts.HTTPServer.URL+"/api/v1/auth/oidc/link", nil, nil)
+	requireEnvelope(t, http.StatusForbidden, "sso_link_unavailable", linkStatus, linkHeader, linkBody)
 
 	// The identity is still bound: a fresh SSO login reaches the same account.
 	c2 := ts.oidcClient(t)

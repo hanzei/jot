@@ -207,6 +207,7 @@
     "ssoDisconnecting": "Wird getrennt …",
     "ssoDisconnected": "SSO getrennt.",
     "ssoDisconnectFailed": "SSO konnte nicht getrennt werden.",
+    "ssoUnlinkUnavailable": "SSO kann auf diesem Server nicht getrennt werden: Die Anmeldung mit Passwort ist deaktiviert, daher ist SSO deine einzige Anmeldemöglichkeit.",
     "ssoDisconnectConfirmTitle": "SSO trennen?",
     "ssoDisconnectConfirmMessage": "Dadurch wird {{provider}} von deinem Konto getrennt. Zur Anmeldung benötigst du dein Passwort.",
     "ssoLinkConflict": "Diese SSO-Identität ist bereits mit einem anderen Konto verknüpft.",
