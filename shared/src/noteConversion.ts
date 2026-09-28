@@ -230,6 +230,43 @@ export function listToText(
     lines.push(`# ${trimmedTitle}`, '');
   }
 
+  lines.push(...renderItemLines(items, '- '));
+  return lines.join('\n');
+}
+
+/**
+ * Renders a list note as plain text for sharing outside Jot (the mobile share
+ * sheet). Same walk as `listToText`, different target: the title is a bare
+ * first line rather than an h1, and items are `[ ] text` / `[x] text` without a
+ * `- ` bullet. The receiving end is a messenger or mail client that shows the
+ * text as typed, where a `#` and a bullet in front of a line that already
+ * starts with a checkbox are noise rather than structure — and this is the
+ * format list shares have always had, so it does not change under anyone.
+ *
+ * Item text is emitted verbatim, as in `listToText`.
+ */
+export function listToPlainText(
+  title: string,
+  items: Pick<NoteItem, 'id' | 'text' | 'completed' | 'position' | 'parent_id'>[],
+): string {
+  const parts: string[] = [];
+  const trimmedTitle = title.trim();
+  if (trimmedTitle) parts.push(trimmedTitle);
+  const itemLines = renderItemLines(items, '');
+  if (itemLines.length > 0) parts.push(itemLines.join('\n'));
+  return parts.join('\n\n');
+}
+
+/**
+ * One line per item, top-level items in position order with their children
+ * (one level — the server caps nesting there) indented beneath them. A child
+ * whose parent is not a top-level item in `items` is dropped.
+ */
+function renderItemLines(
+  items: Pick<NoteItem, 'id' | 'text' | 'completed' | 'position' | 'parent_id'>[],
+  bullet: string,
+): string[] {
+  const lines: string[] = [];
   const childrenByParent = new Map<string, typeof items>();
   for (const item of items) {
     if (!item.parent_id) continue;
@@ -241,18 +278,18 @@ export function listToText(
   const topLevel = items.filter((item) => !item.parent_id).sort((a, b) => a.position - b.position);
 
   for (const parent of topLevel) {
-    lines.push(renderItemLine(parent, 0));
+    lines.push(renderItemLine(parent, 0, bullet));
     const children = (childrenByParent.get(parent.id) ?? []).sort((a, b) => a.position - b.position);
     for (const child of children) {
-      lines.push(renderItemLine(child, 1));
+      lines.push(renderItemLine(child, 1, bullet));
     }
   }
 
-  return lines.join('\n');
+  return lines;
 }
 
-function renderItemLine(item: Pick<NoteItem, 'text' | 'completed'>, depth: number): string {
+function renderItemLine(item: Pick<NoteItem, 'text' | 'completed'>, depth: number, bullet: string): string {
   const indent = '  '.repeat(depth);
   const box = item.completed ? '[x]' : '[ ]';
-  return `${indent}- ${box} ${item.text}`;
+  return `${indent}${bullet}${box} ${item.text}`;
 }
