@@ -418,9 +418,9 @@ func (s *Server) setupRoutes() error {
 			r.Get("/users/{id}/profile-icon", s.wrapHandler(s.authHandler.GetUserProfileIcon))
 
 			// Expensive-operation bucket: search does a LIKE scan across notes +
-			// items, import parses/persists a whole file, and image upload
-			// decodes/resizes/thumbnails. All three draw from one shared,
-			// stricter per-user limit rather than three separate ones
+			// items, import parses/persists a whole file, export streams every
+			// image blob, and image upload decodes/resizes/thumbnails. All four
+			// draw from one shared, stricter per-user limit rather than separate ones
 			// (onlyWhenQueryParamSet gates GET /notes so plain listing is
 			// unaffected — it still counts against the baseline limit above).
 			expensiveLimit := s.rateLimiter.limit(bucketExpensive, s.cfg.RateLimitExpensivePerMinute, keyByUserID)
@@ -430,7 +430,7 @@ func (s *Server) setupRoutes() error {
 			r.Delete("/notes/trash", s.wrapHandler(s.notesHandler.EmptyTrash))
 			r.Post("/notes/reorder", s.wrapHandler(s.notesHandler.ReorderNotes))
 			r.With(expensiveLimit).Post("/notes/import", s.wrapHandler(s.notesHandler.ImportNotes))
-			r.Get("/notes/export", s.wrapHandler(s.notesHandler.ExportNotes))
+			r.With(expensiveLimit).Get("/notes/export", s.wrapHandler(s.notesHandler.ExportNotes))
 			r.Get("/notes/{id}", s.wrapHandler(s.notesHandler.GetNote))
 			r.Patch("/notes/{id}", s.wrapHandler(s.notesHandler.UpdateNote))
 			r.Delete("/notes/{id}", s.wrapHandler(s.notesHandler.DeleteNote))

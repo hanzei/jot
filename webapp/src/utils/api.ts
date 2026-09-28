@@ -127,7 +127,7 @@ export const notes = {
     api.get('/notes/export', { responseType: 'blob' }).then(res => {
       const disposition = res.headers['content-disposition'] as string | undefined;
       const match = disposition?.match(/filename="?([^";\r\n]+)"?/);
-      const filename = match?.[1] ?? 'jot-export.json';
+      const filename = match?.[1] ?? 'jot-export.zip';
       return { blob: res.data as Blob, filename };
     }),
 
