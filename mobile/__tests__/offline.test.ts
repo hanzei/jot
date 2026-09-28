@@ -55,6 +55,7 @@ beforeEach(() => {
     /^Dropping queued operation/,
     /^Failed to reconcile note/,
   );
+  silenceConsole('info', /^Queue drain stopped at entry/, /^Dropping queued operation/);
 });
 
 // ── generateClientNoteId / isUnsyncedNoteId ────────────────────────────────

@@ -3,7 +3,7 @@ import axios from 'axios';
 import type { NoteImage } from '@jot/shared';
 import { uploadNoteImage, type ImageUploadFile } from '../api/images';
 import { patchLocalNoteImages, getPendingCreateNoteIds, getFailedNoteIds } from './noteQueries';
-import { isTransientHttpStatus, isGlobalDrainFailure, MAX_ENTRY_DRAIN_ATTEMPTS, notifyEnqueueListeners } from './syncQueue';
+import { errorSummary, isTransientHttpStatus, isGlobalDrainFailure, MAX_ENTRY_DRAIN_ATTEMPTS, notifyEnqueueListeners } from './syncQueue';
 import { copyFile, deleteFileIfExists, documentPath, ensureDirExists } from '../utils/fs';
 
 const PENDING_UPLOADS_DIR = documentPath('pending-image-uploads');
@@ -183,7 +183,7 @@ export async function drainImageUploadQueue(db: SQLiteDatabase): Promise<ImageUp
         // Connectivity failure (network/timeout/401/408/429) — every entry would
         // fail the same way, so stop draining without charging this entry and
         // retry on the next reconnect (issue #714).
-        console.warn(`Image upload queue drain stopped at entry id=${entry.id} (connectivity):`, err);
+        console.info(`Image upload queue drain stopped at entry id=${entry.id} (connectivity): ${errorSummary(err)}`);
         break;
       }
       // Entry-specific transient failure (a 5xx tied to this upload, or a non-HTTP
@@ -200,7 +200,7 @@ export async function drainImageUploadQueue(db: SQLiteDatabase): Promise<ImageUp
         break;
       }
       discardedCount += 1;
-      const message = err instanceof Error ? err.message : String(err);
+      const message = errorSummary(err);
       console.warn(`Flagging image upload id=${entry.id} as failed after ${attempts} attempts:`, err);
       await db.runAsync(
         `UPDATE pending_image_uploads SET status = 'error', error_message = ? WHERE id = ?`,

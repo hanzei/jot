@@ -205,7 +205,8 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     // Logged per attempt (capped at MAX_CONSECUTIVE_DRAIN_FAILURES, so at most
     // a handful of lines) so a "share diagnostics" log trail shows the retry
     // progression, not just the final consecutiveFailureCount snapshot (#700).
-    console.warn(
+    // Info: a retry under backoff is the design working; giving up above warns.
+    console.info(
       `Queue drain stalled (attempt ${failureCountRef.current}/${MAX_CONSECUTIVE_DRAIN_FAILURES}); retrying with backoff.`,
     );
     const delay = Math.min(
@@ -243,15 +244,9 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     isDrainingRef.current = true;
     let stalled = false;
     try {
-      const { idMappings, discardedOperations, syncedSettings } = await drainQueue(db);
+      const { idMappings, syncedSettings } = await drainQueue(db);
       for (const { localId, serverNote } of idMappings) {
         queryClient.setQueryData(noteLocalQueryKey(localId), serverNote);
-      }
-      if (discardedOperations.length > 0) {
-        console.warn(
-          `Sync discarded ${discardedOperations.length} operation(s) that were rejected by the server:`,
-          discardedOperations,
-        );
       }
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
       queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });

@@ -52,10 +52,6 @@ const GLOBAL_ALLOWLIST: Pattern[] = [];
 // console.warn/info lines dropped in every test. Same rules as above.
 const GLOBAL_QUIET: Record<QuietLevel, Pattern[]> = {
   warn: [
-    // src/api/serverReachability logs each reachable <-> unreachable
-    // transition. Many suites flip it as setup (markServerUnreachable() /
-    // markServerReachable()), so the line is expected wherever it appears.
-    /^Server reachability: /,
     // react-native-drawer-layout imports RN's deprecated InteractionManager at
     // module load (via @react-navigation/drawer); RN warns once per process.
     /^InteractionManager has been deprecated/,
@@ -64,7 +60,12 @@ const GLOBAL_QUIET: Record<QuietLevel, Pattern[]> = {
     // do not provide. The probe returns null, as it would on web.
     /^An error occurred while requiring the 'ExpoModulesCoreJSLogger' module/,
   ],
-  info: [/^Server reachability: /],
+  info: [
+    // src/api/serverReachability logs each reachable <-> unreachable
+    // transition. Many suites flip it as setup (markServerUnreachable() /
+    // markServerReachable()), so the line is expected wherever it appears.
+    /^Server reachability: /,
+  ],
 };
 
 function state(): GuardState {
