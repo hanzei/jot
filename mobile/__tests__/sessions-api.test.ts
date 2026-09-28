@@ -39,7 +39,7 @@ describe('Sessions API', () => {
         { id: 'abc123', browser: 'Chrome', os: 'Linux', is_current: true, created_at: '2026-01-01T00:00:00Z', expires_at: '2026-01-31T00:00:00Z' },
         { id: 'def456', browser: 'Safari', os: 'iOS', is_current: false, created_at: '2026-01-02T00:00:00Z', expires_at: '2026-02-01T00:00:00Z' },
       ];
-      mockAxiosInstance.get.mockResolvedValueOnce({ data: mockSessions });
+      mockAxiosInstance.get.mockResolvedValueOnce({ data: { sessions: mockSessions } });
 
       const result = await listSessions();
 

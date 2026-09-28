@@ -137,13 +137,18 @@ function makeCapableClient(overrides?: Partial<{
       }
       return { status: 404, data: '' };
     },
-    async get() {
-      return { status: 200, data: [] };
+    async get(path) {
+      return { status: 200, data: emptyList(path) };
     },
     async delete() {
       return { status: 200 };
     },
   };
+}
+
+/** An empty list response in the server's envelope shape, e.g. `{"notes": []}`. */
+function emptyList(path: string): Record<string, unknown[]> {
+  return { [path.replace(/^\//, '')]: [] };
 }
 
 /** Build an emptiness-gate-passing mock client. */
@@ -157,12 +162,12 @@ function makeEmptyClient(overrides?: {
     async post() { return { status: 201, data: {} }; },
     async get(path) {
       if (path === '/notes') {
-        return { status: overrides?.notesStatus ?? 200, data: overrides?.notesData ?? [] };
+        return { status: overrides?.notesStatus ?? 200, data: overrides?.notesData ?? { notes: [] } };
       }
       if (path === '/labels') {
-        return { status: overrides?.labelsStatus ?? 200, data: overrides?.labelsData ?? [] };
+        return { status: overrides?.labelsStatus ?? 200, data: overrides?.labelsData ?? { labels: [] } };
       }
-      return { status: 200, data: [] };
+      return { status: 200, data: emptyList(path) };
     },
     async delete() { return { status: 200 }; },
   };
@@ -272,14 +277,14 @@ describe('checkEmptinessGate', () => {
 
   it('fails with NOTES_NOT_EMPTY when notes list is non-empty', async () => {
     const result = await checkEmptinessGate(makeEmptyClient({
-      notesData: [{ id: 'note1', content: 'hi' }],
+      notesData: { notes: [{ id: 'note1', content: 'hi' }] },
     }));
     expect(result).toEqual({ ok: false, reason: 'NOTES_NOT_EMPTY' });
   });
 
   it('fails with LABELS_NOT_EMPTY when labels list is non-empty', async () => {
     const result = await checkEmptinessGate(makeEmptyClient({
-      labelsData: [{ id: 'label1', name: 'work' }],
+      labelsData: { labels: [{ id: 'label1', name: 'work' }] },
     }));
     expect(result).toEqual({ ok: false, reason: 'LABELS_NOT_EMPTY' });
   });
@@ -294,13 +299,13 @@ describe('checkEmptinessGate', () => {
     expect(result).toEqual({ ok: false, reason: 'FETCH_FAILED' });
   });
 
-  it('fails with FETCH_FAILED when GET /notes returns a non-array payload', async () => {
-    const result = await checkEmptinessGate(makeEmptyClient({ notesData: { notes: [], total: 0 } }));
+  it('fails with FETCH_FAILED when GET /notes returns a bare array (pre-envelope server)', async () => {
+    const result = await checkEmptinessGate(makeEmptyClient({ notesData: [] }));
     expect(result).toEqual({ ok: false, reason: 'FETCH_FAILED' });
   });
 
-  it('fails with FETCH_FAILED when GET /labels returns a non-array payload', async () => {
-    const result = await checkEmptinessGate(makeEmptyClient({ labelsData: { labels: [], total: 0 } }));
+  it('fails with FETCH_FAILED when GET /labels returns a bare array (pre-envelope server)', async () => {
+    const result = await checkEmptinessGate(makeEmptyClient({ labelsData: [] }));
     expect(result).toEqual({ ok: false, reason: 'FETCH_FAILED' });
   });
 
@@ -310,7 +315,7 @@ describe('checkEmptinessGate', () => {
       settings: { user_id: 'aaaaaaaaaaaaaaaaaaaaaaaa', language: 'en', theme: 'system', note_sort: 'manual', updated_at: '' },
     }));
 
-    await checkEmptinessGate(makeEmptyClient({ notesData: [{ id: 'note1' }] }));
+    await checkEmptinessGate(makeEmptyClient({ notesData: { notes: [{ id: 'note1' }] } }));
 
     expect(await isLocalModeEnabled()).toBe(true);
     expect(mockSecureStore.setItemAsync).not.toHaveBeenCalled();
@@ -359,7 +364,7 @@ describe('runPreflightChecks', () => {
       }
       return { status: 404, data: '', headers: {} };
     });
-    mockAxiosInstance.get.mockResolvedValue({ status: 200, data: [], headers: {} });
+    mockAxiosInstance.get.mockImplementation(async (path: string) => ({ status: 200, data: emptyList(path), headers: {} }));
     mockAxiosInstance.delete.mockResolvedValue({ status: 200, data: '', headers: {} });
 
     const result = await runPreflightChecks(session);

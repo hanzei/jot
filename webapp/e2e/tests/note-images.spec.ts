@@ -18,7 +18,7 @@ test.describe('Note image gallery', () => {
     await dashboardPage.createNote(title);
 
     const notesResponse = await page.request.get('/api/v1/notes');
-    const notesList: Array<{ id: string; title?: string }> = await notesResponse.json();
+    const { notes: notesList }: { notes: Array<{ id: string; title?: string }> } = await notesResponse.json();
     const note = notesList.find((n) => n.title === title);
     expect(note).toBeTruthy();
 
@@ -61,7 +61,7 @@ test.describe('Note image gallery', () => {
     await dashboardPage.createNote(title);
 
     const notesResponse = await page.request.get('/api/v1/notes');
-    const notesList: Array<{ id: string; title?: string }> = await notesResponse.json();
+    const { notes: notesList }: { notes: Array<{ id: string; title?: string }> } = await notesResponse.json();
     const note = notesList.find((n) => n.title === title);
     expect(note).toBeTruthy();
 
@@ -142,7 +142,7 @@ test.describe('Note image gallery', () => {
     await dashboardPage.createNote(title);
 
     const notesResponse = await page.request.get('/api/v1/notes');
-    const notesList: Array<{ id: string; title?: string }> = await notesResponse.json();
+    const { notes: notesList }: { notes: Array<{ id: string; title?: string }> } = await notesResponse.json();
     const note = notesList.find((n) => n.title === title);
     expect(note).toBeTruthy();
 

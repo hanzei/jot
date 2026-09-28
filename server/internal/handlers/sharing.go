@@ -169,6 +169,11 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 	return http.StatusNoContent, nil, nil
 }
 
+// NoteShareListResponse is the GET /notes/{id}/shares body.
+type NoteShareListResponse struct {
+	Shares []models.NoteShare `json:"shares"`
+}
+
 // GetNoteShares godoc
 //
 //	@Summary	List users a note is shared with
@@ -176,7 +181,7 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 //	@Security	CookieAuth
 //	@Produce	json
 //	@Param		id	path		string	true	"Note ID"
-//	@Success	200	{array}		models.NoteShare
+//	@Success	200	{object}	NoteShareListResponse
 //	@Failure	400	{object}	apierr.ErrorResponse	"bad request"
 //	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
 //	@Failure	403	{object}	apierr.ErrorResponse	"no access"
@@ -212,5 +217,5 @@ func (h *NotesHandler) GetNoteShares(w http.ResponseWriter, r *http.Request) (in
 		return http.StatusInternalServerError, nil, fmt.Errorf("get note shares: %w", err)
 	}
 
-	return http.StatusOK, shares, nil
+	return http.StatusOK, NoteShareListResponse{Shares: shares}, nil
 }

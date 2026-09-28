@@ -39,7 +39,7 @@ vi.mock('axios', () => ({
 
 // Import API module after mocking axios
 import axios from 'axios';
-import { auth, notes, users, admin } from '../api';
+import { auth, notes, users, admin, labels, sessions, pats } from '../api';
 import { createMockNote } from './test-helpers';
 
 // Mock localStorage
@@ -273,7 +273,7 @@ describe('API Module', () => {
     describe('getAll', () => {
       it('fetches all notes with default parameters', async () => {
         const mockNotes = [mockNote];
-        mockGet.mockResolvedValue({ data: mockNotes });
+        mockGet.mockResolvedValue({ data: { notes: mockNotes } });
 
         const result = await notes.getAll();
 
@@ -285,7 +285,7 @@ describe('API Module', () => {
 
       it('fetches archived notes when requested', async () => {
         const mockNotes = [{ ...mockNote, archived: true }];
-        mockGet.mockResolvedValue({ data: mockNotes });
+        mockGet.mockResolvedValue({ data: { notes: mockNotes } });
 
         const result = await notes.getAll(true);
 
@@ -297,7 +297,7 @@ describe('API Module', () => {
 
       it('includes search query when provided', async () => {
         const mockNotes = [mockNote];
-        mockGet.mockResolvedValue({ data: mockNotes });
+        mockGet.mockResolvedValue({ data: { notes: mockNotes } });
 
         const result = await notes.getAll(false, 'test query');
 
@@ -308,7 +308,7 @@ describe('API Module', () => {
       });
 
       it('handles empty response', async () => {
-        mockGet.mockResolvedValue({ data: [] });
+        mockGet.mockResolvedValue({ data: { notes: [] } });
 
         const result = await notes.getAll();
 
@@ -322,16 +322,15 @@ describe('API Module', () => {
         await expect(notes.getAll()).rejects.toThrow('Server error');
       });
 
-      it('handles malformed response data', async () => {
+      it('rejects a response without the notes envelope', async () => {
         mockGet.mockResolvedValue({ data: null });
 
-        const result = await notes.getAll();
-        expect(result).toBeNull();
+        await expect(notes.getAll()).rejects.toThrow(TypeError);
       });
 
       it('handles special characters in search query', async () => {
         const specialQuery = '<script>alert("xss")</script>';
-        mockGet.mockResolvedValue({ data: [] });
+        mockGet.mockResolvedValue({ data: { notes: [] } });
 
         await notes.getAll(false, specialQuery);
 
@@ -564,7 +563,7 @@ describe('API Module', () => {
             updated_at: '2023-01-01T00:00:00Z',
           }
         ];
-        mockGet.mockResolvedValue({ data: shares });
+        mockGet.mockResolvedValue({ data: { shares } });
 
         const result = await notes.getShares('1');
 
@@ -630,7 +629,7 @@ describe('API Module', () => {
             has_profile_icon: false,
           }
         ];
-        mockGet.mockResolvedValue({ data: mockUsers });
+        mockGet.mockResolvedValue({ data: { users: mockUsers, truncated: false } });
 
         const result = await users.search();
 
@@ -639,7 +638,7 @@ describe('API Module', () => {
       });
 
       it('handles empty users response', async () => {
-        mockGet.mockResolvedValue({ data: [] });
+        mockGet.mockResolvedValue({ data: { users: [], truncated: false } });
 
         const result = await users.search();
 
@@ -652,6 +651,32 @@ describe('API Module', () => {
 
         await expect(users.search()).rejects.toThrow('Unauthorized');
       });
+    });
+  });
+
+  describe('List envelopes', () => {
+    it('unwraps labels', async () => {
+      const label = { id: 'l1', user_id: 'u1', name: 'work', created_at: '', updated_at: '' };
+      mockGet.mockResolvedValue({ data: { labels: [label] } });
+
+      await expect(labels.getAll()).resolves.toEqual([label]);
+      expect(mockGet).toHaveBeenCalledWith('/labels');
+    });
+
+    it('unwraps sessions', async () => {
+      const session = { id: 's1', browser: 'Firefox', os: 'Linux', is_current: true, created_at: '', expires_at: '' };
+      mockGet.mockResolvedValue({ data: { sessions: [session] } });
+
+      await expect(sessions.list()).resolves.toEqual([session]);
+      expect(mockGet).toHaveBeenCalledWith('/sessions');
+    });
+
+    it('unwraps personal access tokens', async () => {
+      const pat = { id: 'p1', name: 'CI', created_at: '' };
+      mockGet.mockResolvedValue({ data: { pats: [pat] } });
+
+      await expect(pats.list()).resolves.toEqual([pat]);
+      expect(mockGet).toHaveBeenCalledWith('/pats');
     });
   });
 

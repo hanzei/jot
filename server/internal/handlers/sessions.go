@@ -49,13 +49,18 @@ func toSessionResponse(s *models.Session, currentTokenHash string) SessionRespon
 	}
 }
 
+// SessionListResponse is the GET /sessions body.
+type SessionListResponse struct {
+	Sessions []SessionResponse `json:"sessions"`
+}
+
 // ListSessions godoc
 //
 //	@Summary	List all active sessions for the current user
 //	@Tags		sessions
 //	@Security	CookieAuth
 //	@Produce	json
-//	@Success	200	{array}		SessionResponse
+//	@Success	200	{object}	SessionListResponse
 //	@Failure	401	{object}	apierr.ErrorResponse	"unauthorized"
 //	@Router		/sessions [get]
 func (h *SessionsHandler) ListSessions(w http.ResponseWriter, r *http.Request) (int, any, error) {
@@ -76,7 +81,7 @@ func (h *SessionsHandler) ListSessions(w http.ResponseWriter, r *http.Request) (
 		responses = append(responses, toSessionResponse(s, currentTokenHash))
 	}
 
-	return http.StatusOK, responses, nil
+	return http.StatusOK, SessionListResponse{Sessions: responses}, nil
 }
 
 // RevokeSession godoc

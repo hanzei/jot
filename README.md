@@ -497,6 +497,17 @@ has a parseable `error.code`; fall back to the status code when it does not:
 - the OIDC browser callback, which redirects with `?sso_error=` instead. `@jot/shared` provides `parseApiError` for TypeScript
 clients, and the Go client exposes the code as `client.Error.Code`.
 
+### List responses
+
+Endpoints that return a list wrap it in an object keyed by the resource name,
+for example `GET /api/v1/notes` returns `{"notes": [...]}`. An empty list is
+`[]`, never `null`. Other fields may be added beside the array later, so
+clients must ignore fields they do not know.
+
+`GET /api/v1/users?search=` returns at most 50 matches and sets
+`"truncated": true` when there were more; ask the user to refine the term.
+Without `search`, it lists every user and `truncated` is `false`.
+
 ## MCP server
 
 Authenticated MCP clients can connect to `http://<host>/api/v1/mcp` using the

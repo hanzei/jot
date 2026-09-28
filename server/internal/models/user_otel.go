@@ -50,10 +50,10 @@ func (s *UserStore) GetAll(ctx context.Context) (_ []*User, err error) {
 	return s.inner.GetAll(ctx)
 }
 
-func (s *UserStore) Search(ctx context.Context, term string) (_ []*User, err error) {
+func (s *UserStore) Search(ctx context.Context, term, excludeUserID string, limit int) (_ []*User, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "UserStore.Search", &err)
 	defer end()
-	return s.inner.Search(ctx, term)
+	return s.inner.Search(ctx, term, excludeUserID, limit)
 }
 
 func (s *UserStore) UpdateProfileIcon(ctx context.Context, id string, data []byte, contentType string) (err error) {

@@ -893,10 +893,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/models.Label"
-                            }
+                            "$ref": "#/definitions/handlers.LabelListResponse"
                         }
                     },
                     "401": {
@@ -1301,10 +1298,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/models.Note"
-                            }
+                            "$ref": "#/definitions/handlers.NoteListResponse"
                         }
                     },
                     "400": {
@@ -2833,10 +2827,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/models.NoteShare"
-                            }
+                            "$ref": "#/definitions/handlers.NoteShareListResponse"
                         }
                     },
                     "400": {
@@ -2949,10 +2940,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/handlers.patResponse"
-                            }
+                            "$ref": "#/definitions/handlers.PATListResponse"
                         }
                     },
                     "401": {
@@ -3132,10 +3120,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/handlers.SessionResponse"
-                            }
+                            "$ref": "#/definitions/handlers.SessionListResponse"
                         }
                     },
                     "401": {
@@ -3199,6 +3184,7 @@ const docTemplate = `{
         },
         "/users": {
             "get": {
+                "description": "With ` + "`" + `search` + "`" + `, returns at most 50 matches, newest first, and sets ` + "`" + `truncated` + "`" + ` when there were more. Without it, returns every user.",
                 "produces": [
                     "application/json"
                 ],
@@ -3218,10 +3204,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/handlers.UserInfo"
-                            }
+                            "$ref": "#/definitions/handlers.UserSearchResponse"
                         }
                     },
                     "400": {
@@ -3889,6 +3872,17 @@ const docTemplate = `{
                 }
             }
         },
+        "handlers.LabelListResponse": {
+            "type": "object",
+            "properties": {
+                "labels": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.Label"
+                    }
+                }
+            }
+        },
         "handlers.LoginRequest": {
             "type": "object",
             "properties": {
@@ -3908,6 +3902,39 @@ const docTemplate = `{
                 },
                 "code_verifier": {
                     "type": "string"
+                }
+            }
+        },
+        "handlers.NoteListResponse": {
+            "type": "object",
+            "properties": {
+                "notes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.Note"
+                    }
+                }
+            }
+        },
+        "handlers.NoteShareListResponse": {
+            "type": "object",
+            "properties": {
+                "shares": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.NoteShare"
+                    }
+                }
+            }
+        },
+        "handlers.PATListResponse": {
+            "type": "object",
+            "properties": {
+                "pats": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/handlers.patResponse"
+                    }
                 }
             }
         },
@@ -3969,6 +3996,17 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "type": "string"
+                    }
+                }
+            }
+        },
+        "handlers.SessionListResponse": {
+            "type": "object",
+            "properties": {
+                "sessions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/handlers.SessionResponse"
                     }
                 }
             }
@@ -4152,6 +4190,21 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/models.User"
+                    }
+                }
+            }
+        },
+        "handlers.UserSearchResponse": {
+            "type": "object",
+            "properties": {
+                "truncated": {
+                    "description": "Truncated is true when a search matched more than userSearchLimit users\nand only the first userSearchLimit are returned. Always false without a\nsearch term.",
+                    "type": "boolean"
+                },
+                "users": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/handlers.UserInfo"
                     }
                 }
             }

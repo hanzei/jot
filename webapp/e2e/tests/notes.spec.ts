@@ -353,7 +353,7 @@ test.describe('Notes', () => {
     // keeping the final title intact for the sort assertions below.
     await page.evaluate(async () => {
       const response = await fetch('/api/v1/notes', { credentials: 'include' });
-      const notes = await response.json() as Array<{ id: string; title: string }>;
+      const { notes } = await response.json() as { notes: Array<{ id: string; title: string }> };
       const alphaNote = notes.find(note => note.title === 'alpha');
       if (!alphaNote) {
         throw new Error('alpha note not found');
@@ -431,7 +431,7 @@ test.describe('Notes', () => {
     const listNotes = async () => {
       const response = await request.get('/api/v1/notes', { headers: authHeaders });
       expect(response.ok()).toBeTruthy();
-      return response.json();
+      return (await response.json()).notes;
     };
 
     const findNoteByTitle = async (title: string) => {
@@ -641,7 +641,7 @@ test.describe('Notes', () => {
     const listNotesApi = async () => {
       const response = await request.get('/api/v1/notes', { headers: authHeaders });
       expect(response.ok()).toBeTruthy();
-      return response.json();
+      return (await response.json()).notes;
     };
 
     // Seed the source text note via the API — multi-line markdown content is
