@@ -443,9 +443,8 @@ one client only is exactly the kind of drift this spec exists to prevent.
 ## 4. Why
 
 - **Images are not rendered** because they are a separate, first-class feature:
-  they live in a gallery above the note body, not embedded in Markdown. See
-  [`file-attachments.md`](file-attachments.md), which states the no-inline-embedding
-  rule this implements. Rendering `![alt](url)` would additionally have the mobile
+  they live in a gallery above the note body, not embedded in Markdown, and this
+  implements that no-inline-embedding rule. Rendering `![alt](url)` would additionally have the mobile
   app fetch an arbitrary third-party URL out of note content.
 - **Tables are not rendered** because they do not fit a phone note card, and a
   table that renders in the browser but not on mobile is worse than one that

@@ -268,7 +268,7 @@ func (h *Handler) handleDeleteNote(userID string) mcp.ToolHandlerFor[deleteNoteI
 
 // reclaimNoteImageBlobs reclaims the on-disk blob (and derived thumbnail) for
 // each sha whose note_images refcount has hit zero, mirroring the HTTP
-// delete_note handler's blob cleanup (docs/specs/file-attachments.md §10).
+// delete_note handler's blob cleanup.
 // Errors are logged but never fail the tool call — the note delete already
 // succeeded. Uses context.WithoutCancel since the row delete already
 // committed: an MCP client disconnecting must not abort this cleanup and

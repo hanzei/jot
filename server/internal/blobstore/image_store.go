@@ -16,7 +16,12 @@ import (
 // rather than their own content (a thumbnail is a resized/recompressed
 // derivative, so it has no hash of its own to be addressed by). Both live
 // under one root (see NewImageStore) — a single directory to configure and
-// back up (docs/specs/file-attachments.md §5).
+// back up.
+//
+// Note images live on the filesystem rather than as database BLOBs (the
+// profile-icon approach) because up to ten full-size images per note would
+// bloat the database and its backups; content addressing also gives dedup for
+// free and keys no caller input can turn into a traversal.
 //
 // Put verifies that the bytes it's given actually hash to the claimed key
 // before committing them — that guarantee is what makes it safe for Put to

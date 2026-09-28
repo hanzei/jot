@@ -3,9 +3,8 @@
 Jot is a self-hosted note-taking app: a Go API (`server/`) that also serves the
 React SPA (`webapp/`), an Expo app (`mobile/`), and `@jot/shared` (`shared/`),
 which both clients compile from source. `server/`, `webapp/`, and `mobile/` each
-have their own `CLAUDE.md`. Design docs for cross-cutting features (file
-attachments, mobile connectivity, deep linking, Markdown rendering) live in
-`docs/specs/` — read the relevant one before touching those areas.
+have their own `CLAUDE.md`. Design docs for cross-cutting features (mobile
+connectivity, deep linking, Markdown rendering) live in `docs/specs/` — read the relevant one before touching those areas.
 
 ## Development Status Notice
 
@@ -158,7 +157,7 @@ needs an entry in `timestampColumnsByTable` (`timestamp_columns_test.go`).
 
 Several rows can share one content-addressed blob, so hard-delete paths must call
 `blobstore.ReclaimIfOrphaned`, never `ImageStore.Delete` directly. A backup is
-**DB + `JOT_UPLOAD_DIR`**. See `docs/specs/file-attachments.md`.
+**DB + `JOT_UPLOAD_DIR`**.
 
 ### API conventions
 

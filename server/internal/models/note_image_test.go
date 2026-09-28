@@ -268,8 +268,7 @@ func TestNoteImageEmbeddedInNote(t *testing.T) {
 // path's contract with note_images blob reclamation: note_images rows
 // cascade-delete with their note (or, for uploader_id, with the uploading
 // user), so each path must read the distinct sha256 hashes before the delete
-// and hand them back to the caller to reclaim (docs/specs/file-attachments.md
-// §10). Dedup (a hash referenced by a still-live row elsewhere) is exercised
+// and hand them back to the caller to reclaim. Dedup (a hash referenced by a still-live row elsewhere) is exercised
 // per-path so the returned set is exactly what's now safe to reclaim, not
 // just "every hash that was ever attached."
 func TestNoteHardDeletePathsReturnImageHashes(t *testing.T) {
