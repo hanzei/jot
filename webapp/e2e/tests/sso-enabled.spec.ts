@@ -133,7 +133,7 @@ test.describe('SSO enabled (mock IdP)', () => {
     await settingsPage.goto();
     await disconnect().click();
     await confirmDisconnect().click();
-    await expect(ssoSection(page)).toContainText('set a password first');
+    await expect(ssoSection(page)).toContainText('SSO cannot be disconnected: your account has no password');
     expect((await currentUser(page)).has_sso_linked).toBe(true);
 
     // Set Password: no current-password field, since there is none to give.
