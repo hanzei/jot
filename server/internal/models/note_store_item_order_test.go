@@ -139,6 +139,23 @@ func TestItemOrderNormalization(t *testing.T) {
 			assert.Equal(t, 2, item.Position, "the response carries the stored position")
 		})
 
+		t.Run("creating a note with a child ahead of its parent places it under the parent", func(t *testing.T) {
+			store, userID := newTestBulkStore(t, driver)
+			parentID, err := generateID()
+			require.NoError(t, err)
+			items := []NewNoteItem{
+				{ID: parentID, Text: "a", Position: 1},
+				{Text: "a1", Position: 0, ParentID: parentID},
+				{Text: "b", Position: 2},
+			}
+			note, err := store.CreateWithItems(t.Context(), userID, "", "List", "", NoteTypeList, DefaultNoteColor, items)
+			require.NoError(t, err)
+
+			texts, positions := storedItemOrder(t, store, note.ID)
+			assert.Equal(t, []string{"a", "a1", "b"}, texts)
+			assert.Equal(t, []int{0, 1, 2}, positions)
+		})
+
 		t.Run("a well-formed write leaves other positions alone", func(t *testing.T) {
 			store, userID := newTestBulkStore(t, driver)
 			noteID, ids := newNote(t, store, userID)

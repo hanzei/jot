@@ -99,6 +99,13 @@ func (s *noteStore) CreateWithItems(ctx context.Context, userID, noteID, title, 
 			return nil, err
 		}
 	}
+	// Positions and parents are client-supplied here too, so hold the new
+	// note's items to the same grouping invariant as every other item write.
+	if len(items) > 0 {
+		if _, err = normalizeItemOrderTx(ctx, tx, s.d, noteID, now); err != nil {
+			return nil, err
+		}
+	}
 
 	if err = tx.Commit(); err != nil {
 		return nil, fmt.Errorf("failed to commit note creation: %w", err)
