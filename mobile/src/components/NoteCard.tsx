@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef } from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
 import { CircleAlert, CloudOff, Square } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, type Note, type NoteItem, type User } from '@jot/shared';
+import { VALIDATION, groupNoteItems, type Note, type NoteItem, type User } from '@jot/shared';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../store/AuthContext';
 import { useFailedNoteIds } from '../store/OfflineContext';
@@ -114,7 +114,8 @@ function ListPreview({ items, hasColor }: { items: NoteItem[]; hasColor?: boolea
   const { t } = useTranslation();
   const uncompleted: NoteItem[] = [];
   let completedCount = 0;
-  for (const item of items) {
+  // Grouped so a child never renders above its parent.
+  for (const item of groupNoteItems(items)) {
     if (item.completed) {
       completedCount++;
     } else if (uncompleted.length < MAX_PREVIEW_ITEMS) {

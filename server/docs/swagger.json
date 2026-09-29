@@ -2181,6 +2181,7 @@
         },
         "/notes/{id}/items/reorder": {
             "post": {
+                "description": "Sets each item's position to its index in item_ids, then re-sequences the note so every child sorts directly after its parent: an order that separates a child from its parent keeps the group together and the requested order within it.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3756,6 +3757,7 @@
                     "type": "string"
                 },
                 "position": {
+                    "description": "Position is where the item goes in the note's order. The server may\nstore a different one: after the insert it re-sequences the note so\nevery child sorts directly after its parent, so read the stored value\nfrom the response.",
                     "type": "integer"
                 },
                 "text": {
@@ -3973,6 +3975,7 @@
                     "type": "string"
                 },
                 "position": {
+                    "description": "Position, when present, moves the item. As with parent_id, the server\nthen re-sequences the note so every child sorts directly after its\nparent, so the stored position (in the response) may differ.",
                     "type": "integer"
                 },
                 "text": {

@@ -549,3 +549,114 @@ func TestMigration000011UsersRebuildSurvival(t *testing.T) {
 		assert.True(t, d.IsUniqueConstraintError(err), "want a unique violation, got %v", err)
 	})
 }
+
+// TestMigration000012GroupNoteItemPositions seeds notes whose item positions
+// put a child ahead of its parent (and one with a shared position), applies
+// 000012, and asserts those notes are re-sequenced into display order — each
+// parent immediately followed by its children — while a note that is already
+// in order, gaps included, is left untouched.
+func TestMigration000012GroupNoteItemPositions(t *testing.T) {
+	dsntest.ForEachDriver(t, func(t *testing.T, driver string) {
+		db := dsntest.RawDB(t, driver)
+		d := &dialect.Dialect{Driver: driver}
+		ctx := t.Context()
+
+		m := newMigrator(t, db, driver)
+		require.NoError(t, m.Migrate(11))
+
+		_, err := db.ExecContext(ctx, d.RewritePlaceholders(`INSERT INTO users (id, username, password_hash) VALUES ('user000000000000000012', 'carol', 'x')`))
+		require.NoError(t, err)
+		staleTimestamp := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+		for _, noteID := range []string{"noteChildFirst00000012", "noteTied00000000000012", "noteInOrder00000000012"} {
+			_, err = db.ExecContext(ctx, d.RewritePlaceholders(`INSERT INTO notes (id, user_id, note_type, updated_at) VALUES (?, 'user000000000000000012', 'list', ?)`), noteID, staleTimestamp)
+			require.NoError(t, err)
+		}
+
+		// Parents are listed before their children so the parent_id foreign
+		// key is satisfied; the positions are what put a child first.
+		seed := []struct {
+			id       string
+			noteID   string
+			parentID sql.NullString
+			position int
+			minute   int // created_at offset, to make ties deterministic
+		}{
+			// Trockenwaren/Bandnudeln from the bug report: the child sits at a
+			// lower position than its parent. Kaffee is a plain top-level item.
+			{"itemKaffee00000000012", "noteChildFirst00000012", sql.NullString{}, 1, 0},
+			{"itemTrockenwaren00012", "noteChildFirst00000012", sql.NullString{}, 3, 0},
+			{"itemBandnudeln0000012", "noteChildFirst00000012", sql.NullString{String: "itemTrockenwaren00012", Valid: true}, 0, 0},
+			{"itemReis0000000000012", "noteChildFirst00000012", sql.NullString{String: "itemTrockenwaren00012", Valid: true}, 2, 0},
+			// Two top-level items sharing a position: the older one comes first.
+			{"itemTiedNewer00000012", "noteTied00000000000012", sql.NullString{}, 0, 1},
+			{"itemTiedOlder00000012", "noteTied00000000000012", sql.NullString{}, 0, 0},
+			// Already in order, with gaps: must not be touched.
+			{"itemInOrder0000000012", "noteInOrder00000000012", sql.NullString{}, 0, 0},
+			{"itemInOrderChild00012", "noteInOrder00000000012", sql.NullString{String: "itemInOrder0000000012", Valid: true}, 5, 0},
+			{"itemInOrderLast000012", "noteInOrder00000000012", sql.NullString{}, 9, 0},
+		}
+		for _, it := range seed {
+			_, err = db.ExecContext(ctx,
+				d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, position, parent_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`),
+				it.id, it.noteID, it.id, it.position, it.parentID,
+				staleTimestamp.Add(time.Duration(it.minute)*time.Minute), staleTimestamp,
+			)
+			require.NoError(t, err)
+		}
+
+		noteUpdatedAt := func(id string) time.Time {
+			var updatedAt time.Time
+			require.NoError(t, db.QueryRowContext(ctx, d.RewritePlaceholders(`SELECT updated_at FROM notes WHERE id = ?`), id).Scan(&updatedAt))
+			return updatedAt
+		}
+		staleAsStored := noteUpdatedAt("noteInOrder00000000012")
+
+		require.NoError(t, m.Migrate(12))
+
+		type row struct {
+			ID       string
+			Position int
+		}
+		itemsOf := func(noteID string) []row {
+			rows, qErr := db.QueryContext(ctx, d.RewritePlaceholders(`SELECT id, position FROM note_items WHERE note_id = ? ORDER BY position, id`), noteID)
+			require.NoError(t, qErr)
+			defer func() { _ = rows.Close() }()
+			var out []row
+			for rows.Next() {
+				var r row
+				require.NoError(t, rows.Scan(&r.ID, &r.Position))
+				out = append(out, r)
+			}
+			require.NoError(t, rows.Err())
+			return out
+		}
+
+		assert.Equal(t, []row{
+			{"itemKaffee00000000012", 0},
+			{"itemTrockenwaren00012", 1},
+			{"itemBandnudeln0000012", 2},
+			{"itemReis0000000000012", 3},
+		}, itemsOf("noteChildFirst00000012"), "children follow their parent, in their own order")
+		assert.Equal(t, []row{
+			{"itemTiedOlder00000012", 0},
+			{"itemTiedNewer00000012", 1},
+		}, itemsOf("noteTied00000000000012"), "a shared position is broken up by created_at")
+		assert.Equal(t, []row{
+			{"itemInOrder0000000012", 0},
+			{"itemInOrderChild00012", 5},
+			{"itemInOrderLast000012", 9},
+		}, itemsOf("noteInOrder00000000012"), "a note already in order keeps its positions, gaps included")
+
+		assert.NotEqual(t, staleAsStored, noteUpdatedAt("noteChildFirst00000012"), "a repaired note's updated_at is bumped")
+		assert.NotEqual(t, staleAsStored, noteUpdatedAt("noteTied00000000000012"))
+		assert.Equal(t, staleAsStored, noteUpdatedAt("noteInOrder00000000012"), "a note already in order is left untouched")
+
+		var tempTables int
+		if driver == driverSQLite {
+			require.NoError(t, db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_temp_master WHERE name = 'note_item_order_fix'`).Scan(&tempTables))
+		} else {
+			require.NoError(t, db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pg_tables WHERE tablename = 'note_item_order_fix'`).Scan(&tempTables))
+		}
+		assert.Zero(t, tempTables, "the scratch table is dropped")
+	})
+}
