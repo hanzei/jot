@@ -7,6 +7,7 @@ import NoteCard from '../src/components/NoteCard';
 import { enqueueImageUpload } from '../src/db/imageUploadQueue';
 import { saveNote } from '../src/db/noteQueries';
 import { getDefaultTestDb } from './helpers/testDb';
+import { makeNoteItem } from './helpers/fixtures';
 import i18n from '../src/i18n';
 import type { Note } from '@jot/shared';
 
@@ -268,17 +269,8 @@ describe('NoteCard', () => {
   });
 
   it('renders a child under its parent even when its position sorts first', async () => {
-    const listItem = (id: string, position: number, parent_id: string | null) => ({
-      id,
-      note_id: 'note-1',
-      text: id,
-      completed: false,
-      position,
-      parent_id,
-      assigned_to: '',
-      created_at: '2024-01-01T00:00:00Z',
-      updated_at: '2024-01-01T00:00:00Z',
-    });
+    const listItem = (id: string, position: number, parent_id: string | null) =>
+      makeNoteItem({ id, note_id: 'note-1', text: id, position, parent_id });
     const listWithChildFirst: Note = {
       ...baseListNote,
       items: [listItem('bandnudeln', 0, 'trockenwaren'), listItem('trockenwaren', 1, null)],

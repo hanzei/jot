@@ -156,6 +156,24 @@ func TestItemOrderNormalization(t *testing.T) {
 			assert.Equal(t, []int{0, 1, 2}, positions)
 		})
 
+		t.Run("converting to a list with a child ahead of its parent places it under the parent", func(t *testing.T) {
+			store, userID := newTestBulkStore(t, driver)
+			note, err := store.CreateWithItems(t.Context(), userID, "", "", "a\na1", NoteTypeText, DefaultNoteColor, nil)
+			require.NoError(t, err)
+			parentID, err := generateID()
+			require.NoError(t, err)
+
+			_, err = store.ConvertType(t.Context(), note.ID, userID, NoteTypeList, "List", "", []NewNoteItem{
+				{ID: parentID, Text: "a", Position: 1},
+				{Text: "a1", Position: 0, ParentID: parentID},
+			}, nil)
+			require.NoError(t, err)
+
+			texts, positions := storedItemOrder(t, store, note.ID)
+			assert.Equal(t, []string{"a", "a1"}, texts)
+			assert.Equal(t, []int{0, 1}, positions)
+		})
+
 		t.Run("a well-formed write leaves other positions alone", func(t *testing.T) {
 			store, userID := newTestBulkStore(t, driver)
 			noteID, ids := newNote(t, store, userID)

@@ -55,14 +55,12 @@ test.describe('Grouped to-do items', () => {
     await dashboardPage.expectListItemValue(1, 'Socks');
   });
 
-  test('a child nested under a later item shows under it on the card', async ({ page, request, dashboardPage, authenticatedUser }) => {
+  test('a child nested under a later item shows under it on the card', async ({ page, dashboardPage, authenticatedUser }) => {
     void authenticatedUser;
     await dashboardPage.createListNote('Einkaufsliste', ['Kaffee', 'Bandnudeln', 'Trockenwaren']);
 
-    const sessionCookie = (await page.context().cookies()).find((cookie) => cookie.name === 'jot_session');
-    expect(sessionCookie, 'session cookie must exist').toBeDefined();
-    const headers = { Cookie: `jot_session=${sessionCookie!.value}` };
-    const notesResp = await request.get('/api/v1/notes', { headers });
+    // page.request shares the logged-in session.
+    const notesResp = await page.request.get('/api/v1/notes');
     expect(notesResp.ok()).toBeTruthy();
     const note = ((await notesResp.json()).notes as Array<{ id: string; title: string; items: Array<{ id: string; text: string }> }>)
       .find((candidate) => candidate.title === 'Einkaufsliste');
@@ -73,8 +71,7 @@ test.describe('Grouped to-do items', () => {
     // request, as a drag whose follow-up reorder never reached the server.
     // Before the server kept groups together, the card then listed Bandnudeln
     // above its parent.
-    const patchResp = await request.patch(`/api/v1/notes/${note!.id}/items/${itemId('Bandnudeln')}`, {
-      headers,
+    const patchResp = await page.request.patch(`/api/v1/notes/${note!.id}/items/${itemId('Bandnudeln')}`, {
       data: { parent_id: itemId('Trockenwaren') },
     });
     expect(patchResp.ok()).toBeTruthy();

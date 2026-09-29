@@ -94,17 +94,8 @@ func (s *noteStore) CreateWithItems(ctx context.Context, userID, noteID, title, 
 		return nil, fmt.Errorf("failed to create note user state: %w", err)
 	}
 
-	for _, item := range items {
-		if err = insertNewNoteItemTx(ctx, tx, s.d, noteID, item, now); err != nil {
-			return nil, err
-		}
-	}
-	// Positions and parents are client-supplied here too, so hold the new
-	// note's items to the same grouping invariant as every other item write.
-	if len(items) > 0 {
-		if _, err = normalizeItemOrderTx(ctx, tx, s.d, noteID, now); err != nil {
-			return nil, err
-		}
+	if err = insertNewNoteItemsTx(ctx, tx, s.d, noteID, items, now); err != nil {
+		return nil, err
 	}
 
 	if err = tx.Commit(); err != nil {
@@ -124,6 +115,22 @@ func (s *noteStore) CreateWithItems(ctx context.Context, userID, noteID, title, 
 	note.Labels = []Label{}
 
 	return &note, nil
+}
+
+// insertNewNoteItemsTx inserts a new note's items within tx per
+// insertNewNoteItemTx, then normalizes their order (normalizeItemOrderTx):
+// positions and parents are client-supplied here as in every other item write.
+func insertNewNoteItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string, items []NewNoteItem, now string) error {
+	for _, item := range items {
+		if err := insertNewNoteItemTx(ctx, tx, d, noteID, item, now); err != nil {
+			return err
+		}
+	}
+	if len(items) == 0 {
+		return nil
+	}
+	_, err := normalizeItemOrderTx(ctx, tx, d, noteID, now)
+	return err
 }
 
 // insertNewNoteItemTx inserts one list item during note creation within tx. A

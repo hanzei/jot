@@ -172,10 +172,8 @@ func (s *noteStore) ConvertType(ctx context.Context, id, userID string, targetTy
 			return nil, fmt.Errorf("delete note items for conversion: %w", err)
 		}
 		if targetType == NoteTypeList {
-			for _, item := range targetItems {
-				if err = insertNewNoteItemTx(ctx, tx, s.d, id, item, now); err != nil {
-					return nil, fmt.Errorf("insert converted item: %w", err)
-				}
+			if err = insertNewNoteItemsTx(ctx, tx, s.d, id, targetItems, now); err != nil {
+				return nil, fmt.Errorf("insert converted items: %w", err)
 			}
 		}
 	}

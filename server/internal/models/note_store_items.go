@@ -83,13 +83,17 @@ func validateParentRefTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, no
 	return nil
 }
 
+// itemReadOrder is the order a note's items are read in. The tiebreak on
+// created_at, id keeps it deterministic even if two items share a position
+// (which can happen transiently after a partial reorder from a client that did
+// not include every item). normalizeItemOrderTx reads in the same order, so the
+// order it normalizes is the order readers see.
+const itemReadOrder = `ORDER BY position, created_at, id`
+
 func (s *noteStore) getItemsByNoteID(ctx context.Context, noteID string) ([]NoteItem, error) {
-	// Tiebreak on created_at, id so display order is deterministic even if two
-	// items share a position (which can happen transiently after a partial
-	// reorder from a client that did not include every item).
 	query := s.d.RewritePlaceholders(`SELECT id, note_id, text, completed, position, parent_id,
 			  assigned_to, created_at, updated_at
-			  FROM note_items WHERE note_id = ? ORDER BY position, created_at, id`)
+			  FROM note_items WHERE note_id = ? ` + itemReadOrder)
 
 	rows, err := s.db.QueryContext(ctx, query, noteID)
 	if err != nil {
@@ -124,16 +128,18 @@ func groupedItemOrder(rows []itemOrderRow) []itemOrderRow {
 			topLevel[r.id] = true
 		}
 	}
+	grouped := func(r itemOrderRow) bool { return r.parentID.Valid && topLevel[r.parentID.String] }
+
 	childrenByParent := make(map[string][]itemOrderRow)
 	for _, r := range rows {
-		if r.parentID.Valid && topLevel[r.parentID.String] {
+		if grouped(r) {
 			childrenByParent[r.parentID.String] = append(childrenByParent[r.parentID.String], r)
 		}
 	}
 
 	ordered := make([]itemOrderRow, 0, len(rows))
 	for _, r := range rows {
-		if r.parentID.Valid && topLevel[r.parentID.String] {
+		if grouped(r) {
 			continue // emitted under its parent
 		}
 		ordered = append(ordered, r)
@@ -156,10 +162,8 @@ func groupedItemOrder(rows []itemOrderRow) []itemOrderRow {
 // Otherwise every item is re-sequenced to 0..N-1 in grouped order. It returns
 // each item's resulting position.
 func normalizeItemOrderTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, now string) (map[string]int, error) {
-	// Same tiebreak as getItemsByNoteID, so the order normalized here is the
-	// order readers see.
 	rows, err := tx.QueryContext(ctx,
-		d.RewritePlaceholders(`SELECT id, position, parent_id FROM note_items WHERE note_id = ? ORDER BY position, created_at, id`),
+		d.RewritePlaceholders(`SELECT id, position, parent_id FROM note_items WHERE note_id = ? `+itemReadOrder),
 		noteID,
 	)
 	if err != nil {
@@ -175,29 +179,31 @@ func normalizeItemOrderTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, n
 	}
 
 	ordered := groupedItemOrder(current)
-	positions := make(map[string]int, len(ordered))
 	wellFormed := true
-	for i, r := range ordered {
-		positions[r.id] = r.position
-		if i > 0 && r.position <= ordered[i-1].position {
+	for i := 1; i < len(ordered); i++ {
+		if ordered[i].position <= ordered[i-1].position {
 			wellFormed = false
+			break
 		}
 	}
-	if wellFormed {
-		return positions, nil
+	if !wellFormed {
+		for i, r := range ordered {
+			if r.position == i {
+				continue
+			}
+			if _, err = tx.ExecContext(ctx,
+				d.RewritePlaceholders(`UPDATE note_items SET position = ?, updated_at = ? WHERE id = ? AND note_id = ?`),
+				i, now, r.id, noteID,
+			); err != nil {
+				return nil, fmt.Errorf("failed to normalize note item order: %w", err)
+			}
+			ordered[i].position = i
+		}
 	}
 
-	for i, r := range ordered {
-		positions[r.id] = i
-		if r.position == i {
-			continue
-		}
-		if _, err = tx.ExecContext(ctx,
-			d.RewritePlaceholders(`UPDATE note_items SET position = ?, updated_at = ? WHERE id = ? AND note_id = ?`),
-			i, now, r.id, noteID,
-		); err != nil {
-			return nil, fmt.Errorf("failed to normalize note item order: %w", err)
-		}
+	positions := make(map[string]int, len(ordered))
+	for _, r := range ordered {
+		positions[r.id] = r.position
 	}
 	return positions, nil
 }
@@ -373,9 +379,7 @@ func (s *noteStore) PatchItem(ctx context.Context, noteID, itemID string, patch 
 		}
 	}
 
-	// Position is written only when the patch carries one: COALESCE keeps the
-	// stored value otherwise, rather than the one read above, so a reorder
-	// committed in between is not overwritten with a stale position.
+	// COALESCE: position is written only when set (see the doc comment).
 	var item NoteItem
 	if err = tx.QueryRowContext(ctx,
 		s.d.RewritePlaceholders(`UPDATE note_items SET text = ?, completed = ?, position = COALESCE(?, position), parent_id = ?, assigned_to = ?, updated_at = ?
@@ -492,8 +496,6 @@ func (s *noteStore) ReorderItems(ctx context.Context, noteID string, itemIDs []s
 		}
 	}
 
-	// The requested order may split a group (a stale client that has not seen
-	// a re-parent yet); the grouping wins, the order within it is kept.
 	if _, err = normalizeItemOrderTx(ctx, tx, s.d, noteID, now); err != nil {
 		return err
 	}

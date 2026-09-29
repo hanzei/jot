@@ -61,15 +61,11 @@ export const normalizeItemOrder = (items: ListItem[]): ListItem[] => {
 };
 
 // groupNoteItems returns a list note's items (the API's NoteItem shape) in
-// display order: by position, with each top-level item immediately followed by
-// its children. For read-only views such as the note cards, which would
-// otherwise show a child whose position sorts ahead of its parent's above that
-// parent. The server keeps stored positions in this order, so this matters for
-// data it has not normalized yet: a local edit mobile has not synced, or a
-// response from a server that predates the rule. Unlike normalizeItemOrder it
-// neither re-parents nor renumbers: a child whose parent is not a top-level
-// item in the list keeps its own place, matching the server's
-// groupedItemOrder.
+// display order: by position, each top-level item immediately followed by its
+// children. For read-only views such as the note cards. Unlike
+// normalizeItemOrder it neither re-parents nor renumbers: a child whose parent
+// is not a top-level item in the list keeps its own place, matching the
+// server's groupedItemOrder.
 export const groupNoteItems = <T extends { id: string; position: number; parent_id: string | null }>(
   items: readonly T[],
 ): T[] => {
@@ -80,11 +76,12 @@ export const groupNoteItems = <T extends { id: string; position: number; parent_
   for (const it of sorted) {
     if (it.parent_id === null) topLevel.add(it.id);
   }
-  const isGrouped = (it: T): boolean => it.parent_id !== null && topLevel.has(it.parent_id);
+  const isGrouped = (it: T): it is T & { parent_id: string } =>
+    it.parent_id !== null && topLevel.has(it.parent_id);
 
   const childrenByParent = new Map<string, T[]>();
   for (const it of sorted) {
-    if (it.parent_id === null || !isGrouped(it)) continue;
+    if (!isGrouped(it)) continue;
     const siblings = childrenByParent.get(it.parent_id) ?? [];
     siblings.push(it);
     childrenByParent.set(it.parent_id, siblings);
