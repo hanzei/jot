@@ -329,7 +329,9 @@ func (s *noteStore) CreateItemWithID(ctx context.Context, noteID, itemID, text s
 
 // PatchItem applies a partial update to a single item. Unset fields are resolved
 // against the item's current stored value (read inside the transaction), so a
-// concurrent edit to a different column is preserved. A patch that moves the
+// concurrent edit to a different column is preserved; position is not written
+// at all unless the patch carries one, so a concurrent reorder is never
+// reverted to the value read here. A patch that moves the
 // item or changes its parent is followed by normalizeItemOrderTx, so the
 // returned position is the one stored, not necessarily the one requested.
 // Returns the updated item or ErrNoteItemNotFound.
@@ -360,7 +362,6 @@ func (s *noteStore) PatchItem(ctx context.Context, noteID, itemID string, patch 
 
 	resolvedText := deref(patch.Text, current.Text)
 	resolvedCompleted := deref(patch.Completed, current.Completed)
-	resolvedPosition := deref(patch.Position, current.Position)
 	resolvedParent := deref(patch.ParentID, currentParent.String)
 	resolvedAssignedTo := deref(patch.AssignedTo, current.AssignedTo)
 
@@ -372,12 +373,15 @@ func (s *noteStore) PatchItem(ctx context.Context, noteID, itemID string, patch 
 		}
 	}
 
+	// Position is written only when the patch carries one: COALESCE keeps the
+	// stored value otherwise, rather than the one read above, so a reorder
+	// committed in between is not overwritten with a stale position.
 	var item NoteItem
 	if err = tx.QueryRowContext(ctx,
-		s.d.RewritePlaceholders(`UPDATE note_items SET text = ?, completed = ?, position = ?, parent_id = ?, assigned_to = ?, updated_at = ?
-			  WHERE id = ? AND note_id = ? RETURNING created_at, updated_at`),
-		resolvedText, resolvedCompleted, resolvedPosition, nullableParentID(resolvedParent), nullableAssignedTo(resolvedAssignedTo), now, itemID, noteID,
-	).Scan(&item.CreatedAt, &item.UpdatedAt); err != nil {
+		s.d.RewritePlaceholders(`UPDATE note_items SET text = ?, completed = ?, position = COALESCE(?, position), parent_id = ?, assigned_to = ?, updated_at = ?
+			  WHERE id = ? AND note_id = ? RETURNING position, created_at, updated_at`),
+		resolvedText, resolvedCompleted, patch.Position, nullableParentID(resolvedParent), nullableAssignedTo(resolvedAssignedTo), now, itemID, noteID,
+	).Scan(&item.Position, &item.CreatedAt, &item.UpdatedAt); err != nil {
 		return nil, fmt.Errorf("failed to update note item: %w", err)
 	}
 
@@ -404,7 +408,7 @@ func (s *noteStore) PatchItem(ctx context.Context, noteID, itemID string, patch 
 		if normErr != nil {
 			return nil, normErr
 		}
-		resolvedPosition = positions[itemID]
+		item.Position = positions[itemID]
 	}
 
 	if err = touchNoteTx(ctx, tx, s.d, noteID, now); err != nil {
@@ -418,7 +422,6 @@ func (s *noteStore) PatchItem(ctx context.Context, noteID, itemID string, patch 
 	item.NoteID = noteID
 	item.Text = resolvedText
 	item.Completed = resolvedCompleted
-	item.Position = resolvedPosition
 	item.ParentID = parentIDPtr(nullableParentID(resolvedParent))
 	item.AssignedTo = resolvedAssignedTo
 	return &item, nil

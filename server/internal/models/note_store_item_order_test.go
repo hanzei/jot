@@ -158,6 +158,21 @@ func TestItemOrderNormalization(t *testing.T) {
 			assert.Equal(t, 11, item.Position)
 		})
 
+		t.Run("a patch without a position keeps the stored one", func(t *testing.T) {
+			store, userID := newTestBulkStore(t, driver)
+			noteID, ids := newNote(t, store, userID)
+			require.NoError(t, store.ReorderItems(t.Context(), noteID, []string{ids["c"], ids["a"], ids["b"]}))
+
+			text := "a, renamed"
+			item, err := store.PatchItem(t.Context(), noteID, ids["a"], NoteItemPatch{Text: &text})
+			require.NoError(t, err)
+
+			texts, positions := storedItemOrder(t, store, noteID)
+			assert.Equal(t, []string{"c", "a, renamed", "b"}, texts)
+			assert.Equal(t, []int{0, 1, 2}, positions)
+			assert.Equal(t, 1, item.Position, "the response carries the stored position")
+		})
+
 		t.Run("a shared position is broken up", func(t *testing.T) {
 			// Readers that sort by position alone (mobile's local store) would
 			// otherwise be free to show the two in either order.
