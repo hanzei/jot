@@ -113,6 +113,9 @@ type itemOrderRow struct {
 	id       string
 	position int
 	parentID sql.NullString
+	// ref is the caller's index for this row, so a caller that grouped a slice
+	// of richer items can map the grouped rows back to them.
+	ref int
 }
 
 // groupedItemOrder returns rows (already sorted by position, created_at, id)
