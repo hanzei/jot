@@ -62,12 +62,55 @@ report() {
 }
 
 lint_go() {
-  # golangci-lint type-checks the whole package to lint one file in it, so this
-  # is only fast on a warm build cache — which bootstrap.sh now warms.
-  local output
-  if ! output="$(cd "$REPO_ROOT/server" && go tool golangci-lint run "${abs_path}" 2>&1)"; then
-    report "golangci-lint" "$output"
+  # golangci-lint treats a file argument as a package of its own, so every
+  # symbol declared in a sibling file comes back as `undefined (typecheck)`.
+  # Lint the file's whole package instead and keep only the findings for the
+  # edited file: an issue positioned in it, or a compile error — which
+  # golangci-lint pins to the package's first file, with the real positions in
+  # the message — for the lines naming it. That type-checks the package, so it
+  # is only fast on a warm build cache — which bootstrap.sh warms.
+  local server_dir="$REPO_ROOT/server" json_file output status findings
+  json_file="$(mktemp)"
+  output="$(cd "$server_dir" && go tool golangci-lint run \
+    --output.json.path="$json_file" --path-mode=abs \
+    "./$(dirname "${abs_path#"$server_dir"/}")/" 2>&1)"
+  status=$?
+  # 0 is clean and 1 is issues found; anything else is golangci-lint itself
+  # failing (bad config, a package it cannot load), which is worth surfacing.
+  case "$status" in
+    0) rm -f "$json_file"; return ;;
+    1) ;;
+    *) rm -f "$json_file"; report "golangci-lint" "$output" ;;
+  esac
+
+  findings="$(node -e '
+    const fs = require("fs");
+    const path = require("path");
+    const [jsonFile, file, serverDir, relPath] = process.argv.slice(1);
+    const { Issues: issues } = JSON.parse(fs.readFileSync(jsonFile, "utf8"));
+    const out = [];
+    for (const issue of issues ?? []) {
+      const { Filename: name, Line: line, Column: col } = issue.Pos;
+      if (name === file) {
+        out.push(`${relPath}:${line}:${col}: ${issue.Text} (${issue.FromLinter})`);
+        continue;
+      }
+      if (issue.FromLinter !== "typecheck") continue;
+      for (const msg of issue.Text.split("\n")) {
+        const m = /^(.+?\.go):\d+/.exec(msg);
+        if (m && path.resolve(serverDir, m[1]) === file) {
+          out.push(`${relPath}${msg.slice(m[1].length)} (typecheck)`);
+        }
+      }
+    }
+    process.stdout.write(out.join("\n"));
+  ' "$json_file" "$abs_path" "$server_dir" "$rel_path" 2>&1)"
+  status=$?
+  rm -f "$json_file"
+  if [ "$status" -ne 0 ]; then
+    report "golangci-lint" "$output"$'\n'"$findings"
   fi
+  [ -z "$findings" ] || report "golangci-lint" "$findings"
 }
 
 lint_eslint() {
@@ -81,6 +124,9 @@ lint_eslint() {
 case "$rel_path" in
   # Generated — swag owns server/docs, and rewriting it by hand is the bug.
   server/docs/*) exit 0 ;;
+  # ruleguard DSL input, behind a build tag no package build sets — `task
+  # lint-server` never lints it either.
+  server/gorules/*) exit 0 ;;
   server/*.go) lint_go ;;
   webapp/*.ts | webapp/*.tsx | webapp/*.js | webapp/*.jsx) lint_eslint webapp ;;
   mobile/*.ts | mobile/*.tsx | mobile/*.js | mobile/*.jsx) lint_eslint mobile ;;
