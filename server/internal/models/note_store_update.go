@@ -1,11 +1,13 @@
 package models
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 )
 
 // Update applies a partial note update. When baseVersion is non-nil it enables
@@ -172,10 +174,8 @@ func (s *noteStore) ConvertType(ctx context.Context, id, userID string, targetTy
 			return nil, fmt.Errorf("delete note items for conversion: %w", err)
 		}
 		if targetType == NoteTypeList {
-			for _, item := range targetItems {
-				if err = insertNewNoteItemTx(ctx, tx, s.d, id, item, now); err != nil {
-					return nil, fmt.Errorf("insert converted item: %w", err)
-				}
+			if err = insertNewNoteItemsTx(ctx, tx, s.d, id, targetItems, now); err != nil {
+				return nil, fmt.Errorf("insert converted items: %w", err)
 			}
 		}
 	}
@@ -288,19 +288,36 @@ func (s *noteStore) conversionAlreadyAppliedTx(ctx context.Context, tx *sql.Tx, 
 	if len(currentItems) != len(targetItems) {
 		return false, nil
 	}
-	// currentItems came back ORDER BY position; targetItems is whatever order
-	// the caller built it in, so sort a copy the same way before the
-	// index-wise comparison below — otherwise out-of-position-order input
-	// falsely reports a mismatch (or, worse, a spurious match).
-	sortedTargetItems := make([]NewNoteItem, len(targetItems))
-	copy(sortedTargetItems, targetItems)
-	slices.SortStableFunc(sortedTargetItems, func(a, b NewNoteItem) int { return a.Position - b.Position })
-	for i, item := range sortedTargetItems {
+	// currentItems came back ORDER BY position, and were stored grouped
+	// (normalizeItemOrderTx); targetItems is whatever order the caller built it
+	// in, so put a copy in the same order before the index-wise comparison
+	// below — otherwise out-of-order input falsely reports a mismatch (or,
+	// worse, a spurious match).
+	for i, item := range groupedNewNoteItems(targetItems) {
 		if currentItems[i].Text != item.Text || currentItems[i].Completed != item.Completed {
 			return false, nil
 		}
 	}
 	return true, nil
+}
+
+// groupedNewNoteItems returns items in the order they are stored in once
+// inserted: by position, then grouped per groupedItemOrder. Items inserted
+// together share created_at, so itemReadOrder breaks a position tie by ID.
+func groupedNewNoteItems(items []NewNoteItem) []NewNoteItem {
+	rows := make([]itemOrderRow, len(items))
+	for i, item := range items {
+		rows[i] = itemOrderRow{id: item.ID, position: item.Position, parentID: nullableParentID(item.ParentID), ref: i}
+	}
+	slices.SortStableFunc(rows, func(a, b itemOrderRow) int {
+		return cmp.Or(cmp.Compare(a.position, b.position), strings.Compare(a.id, b.id))
+	})
+
+	grouped := make([]NewNoteItem, 0, len(items))
+	for _, r := range groupedItemOrder(rows) {
+		grouped = append(grouped, items[r.ref])
+	}
+	return grouped
 }
 
 // handlePinStatusChangeTx updates note positions when a note is pinned or unpinned within a transaction.

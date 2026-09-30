@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, type Note, type User } from '@jot/shared';
+import { VALIDATION, groupNoteItems, type Note, type User } from '@jot/shared';
 import { notes, images as imagesApi } from '@/utils/api';
 import LetterAvatar from '@/components/LetterAvatar';
 import InlineMarkdown from '@/components/InlineMarkdown';
@@ -452,7 +452,8 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
         ) : (
           <div className="space-y-1">
             {(() => {
-              const uncompletedItems = note.items?.filter(item => !item.completed) || [];
+              // Grouped so a child never renders above its parent.
+              const uncompletedItems = groupNoteItems(note.items ?? []).filter(item => !item.completed);
               const completedItems = note.items?.filter(item => item.completed) || [];
 
               return (

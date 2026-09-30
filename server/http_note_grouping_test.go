@@ -388,6 +388,54 @@ func TestNoteGrouping(t *testing.T) {
 		assert.Nil(t, updated.ParentID)
 	})
 
+	t.Run("a child always sorts directly after its parent", func(t *testing.T) {
+		ts := setupTestServer(t)
+		user := ts.createTestUser(t, "grpuser13", "password123", false)
+
+		note, err := user.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
+			Title: "Einkaufsliste",
+			Items: []client.CreateNoteItem{
+				{Text: "Kaffee", Position: 0},
+				{Text: "Bandnudeln", Position: 1},
+				{Text: "Trockenwaren", Position: 2},
+			},
+		})
+		require.NoError(t, err)
+		coffee := itemByText(t, note.Items, "Kaffee")
+		noodles := itemByText(t, note.Items, "Bandnudeln")
+		dryGoods := itemByText(t, note.Items, "Trockenwaren")
+		wantOrder := []string{"Kaffee", "Trockenwaren", "Bandnudeln"}
+		stored := func() ([]string, []int) {
+			got, getErr := user.Client.GetNote(t.Context(), note.ID)
+			require.NoError(t, getErr)
+			texts := make([]string, 0, len(got.Items))
+			positions := make([]int, 0, len(got.Items))
+			for _, it := range got.Items {
+				texts = append(texts, it.Text)
+				positions = append(positions, it.Position)
+			}
+			return texts, positions
+		}
+
+		// Drag Bandnudeln under the later Trockenwaren, as a client whose
+		// follow-up reorder never arrives.
+		updated, err := user.Client.UpdateNoteItem(t.Context(), note.ID, noodles.ID, &client.PatchNoteItemRequest{
+			ParentID: &dryGoods.ID,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, 2, updated.Position, "the response carries the stored position")
+		texts, positions := stored()
+		assert.Equal(t, wantOrder, texts)
+		assert.Equal(t, []int{0, 1, 2}, positions)
+
+		// A device that has not seen the re-parent reorders with Bandnudeln
+		// back on top: the group holds.
+		require.NoError(t, user.Client.ReorderNoteItems(t.Context(), note.ID, []string{noodles.ID, coffee.ID, dryGoods.ID}))
+		texts, positions = stored()
+		assert.Equal(t, wantOrder, texts)
+		assert.Equal(t, []int{0, 1, 2}, positions)
+	})
+
 	t.Run("toggle on a non-list note is rejected", func(t *testing.T) {
 		ts := setupTestServer(t)
 		user := ts.createTestUser(t, "grpuser12", "password123", false)

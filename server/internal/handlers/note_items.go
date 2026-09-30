@@ -16,10 +16,14 @@ import (
 // supplies the item ID so the new item has a stable identity for subsequent
 // per-item updates and offline replay; if omitted, the server generates one.
 type CreateNoteItemRequest struct {
-	ID        string `json:"id"`
-	Text      string `json:"text"`
-	Position  int    `json:"position"`
-	Completed bool   `json:"completed"`
+	ID   string `json:"id"`
+	Text string `json:"text"`
+	// Position is where the item goes in the note's order. The server may
+	// store a different one: after the insert it re-sequences the note so
+	// every child sorts directly after its parent, so read the stored value
+	// from the response.
+	Position  int  `json:"position"`
+	Completed bool `json:"completed"`
 	// ParentID nests the item under a top-level item in the same note. Empty or
 	// omitted means the item is top-level. Replaces the former indent_level.
 	ParentID   string `json:"parent_id"`
@@ -32,7 +36,10 @@ type CreateNoteItemRequest struct {
 type PatchNoteItemRequest struct {
 	Text      *string `json:"text"`
 	Completed *bool   `json:"completed"`
-	Position  *int    `json:"position"`
+	// Position, when present, moves the item. As with parent_id, the server
+	// then re-sequences the note so every child sorts directly after its
+	// parent, so the stored position (in the response) may differ.
+	Position *int `json:"position"`
 	// ParentID, when present, re-parents the item ("" makes it top-level).
 	ParentID   *string `json:"parent_id"`
 	AssignedTo *string `json:"assigned_to"`
@@ -300,18 +307,19 @@ func (h *NotesHandler) DeleteNoteItem(w http.ResponseWriter, r *http.Request) (i
 
 // ReorderNoteItems godoc
 //
-//	@Summary	Reorder a list note's items
-//	@Tags		notes
-//	@Security	CookieAuth
-//	@Accept		json
-//	@Param		id		path	string					true	"Note ID"
-//	@Param		body	body	ReorderNoteItemsRequest	true	"Ordered item IDs"
-//	@Success	204		"no content"
-//	@Failure	400		{object}	apierr.ErrorResponse	"bad request"
-//	@Failure	401		{object}	apierr.ErrorResponse	"unauthorized"
-//	@Failure	404		{object}	apierr.ErrorResponse	"not found"
-//	@Failure	500		{object}	apierr.ErrorResponse	"internal server error"
-//	@Router		/notes/{id}/items/reorder [post]
+//	@Summary		Reorder a list note's items
+//	@Description	Sets each item's position to its index in item_ids, then re-sequences the note so every child sorts directly after its parent: an order that separates a child from its parent keeps the group together and the requested order within it.
+//	@Tags			notes
+//	@Security		CookieAuth
+//	@Accept			json
+//	@Param			id		path	string					true	"Note ID"
+//	@Param			body	body	ReorderNoteItemsRequest	true	"Ordered item IDs"
+//	@Success		204		"no content"
+//	@Failure		400		{object}	apierr.ErrorResponse	"bad request"
+//	@Failure		401		{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure		404		{object}	apierr.ErrorResponse	"not found"
+//	@Failure		500		{object}	apierr.ErrorResponse	"internal server error"
+//	@Router			/notes/{id}/items/reorder [post]
 func (h *NotesHandler) ReorderNoteItems(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {

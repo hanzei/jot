@@ -20,7 +20,7 @@ import (
 func (h *Handler) registerNoteItemTools(srv *mcp.Server, userID string) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "create_note_item",
-		Description: "Add an item to a list note. The item is appended to the end of the list unless position is given.",
+		Description: "Add an item to a list note. The item is appended to the end of the list (a child with parent_id: to the end of its parent's group) unless position is given; a child always sorts directly after its parent.",
 	}, h.handleCreateNoteItem(userID))
 
 	mcp.AddTool(srv, &mcp.Tool{

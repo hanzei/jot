@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyCompletedCascade, dropTargetParentId, itemHasChildren, normalizeItemOrder, type ListItem } from '../listItems';
+import { applyCompletedCascade, dropTargetParentId, groupNoteItems, itemHasChildren, normalizeItemOrder, type ListItem } from '../listItems';
 
 // Terse builder so each case reads as the structure under test rather than as
 // six fields of boilerplate per item.
@@ -155,5 +155,47 @@ describe('applyCompletedCascade', () => {
   it('returns the input unchanged for an unknown id', () => {
     const items = group();
     expect(applyCompletedCascade(items, 'nope', true)).toBe(items);
+  });
+});
+
+describe('groupNoteItems', () => {
+  const noteItem = (id: string, position: number, parent_id: string | null = null) => ({ id, position, parent_id });
+  const idsOf = (items: { id: string }[]) => items.map(it => it.id);
+
+  it('places a child whose position sorts ahead of its parent under that parent', () => {
+    // The shopping-list report: Bandnudeln (a child of Trockenwaren) had the
+    // lower position and rendered above its parent on the card.
+    const result = groupNoteItems([
+      noteItem('bandnudeln', 0, 'trockenwaren'),
+      noteItem('trockenwaren', 1),
+    ]);
+    expect(idsOf(result)).toEqual(['trockenwaren', 'bandnudeln']);
+  });
+
+  it('orders by position and keeps children in their own position order', () => {
+    const result = groupNoteItems([
+      noteItem('b', 3),
+      noteItem('a2', 4, 'a'),
+      noteItem('a', 1),
+      noteItem('a1', 0, 'a'),
+    ]);
+    expect(idsOf(result)).toEqual(['a', 'a1', 'a2', 'b']);
+  });
+
+  it('keeps items sharing a position in arrival order', () => {
+    expect(idsOf(groupNoteItems([noteItem('x', 0), noteItem('y', 0)]))).toEqual(['x', 'y']);
+  });
+
+  it('leaves a child of a missing parent in its own place without re-parenting it', () => {
+    const orphan = noteItem('orphan', 1, 'gone');
+    const result = groupNoteItems([noteItem('a', 0), orphan, noteItem('b', 2)]);
+    expect(idsOf(result)).toEqual(['a', 'orphan', 'b']);
+    expect(result[1]).toBe(orphan);
+  });
+
+  it('does not mutate its input', () => {
+    const input = [noteItem('a1', 0, 'a'), noteItem('a', 1)];
+    groupNoteItems(input);
+    expect(idsOf(input)).toEqual(['a1', 'a']);
   });
 });

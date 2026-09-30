@@ -7,6 +7,7 @@ import NoteCard from '../src/components/NoteCard';
 import { enqueueImageUpload } from '../src/db/imageUploadQueue';
 import { saveNote } from '../src/db/noteQueries';
 import { getDefaultTestDb } from './helpers/testDb';
+import { makeNoteItem } from './helpers/fixtures';
 import i18n from '../src/i18n';
 import type { Note } from '@jot/shared';
 
@@ -265,6 +266,22 @@ describe('NoteCard', () => {
 
     expect(StyleSheet.flatten(parentRow.props.style)?.marginLeft).toBe(0);
     expect(StyleSheet.flatten(childRow.props.style)?.marginLeft).toBe(1 * VALIDATION.INDENT_PX_PER_LEVEL);
+  });
+
+  it('renders a child under its parent even when its position sorts first', async () => {
+    const listItem = (id: string, position: number, parent_id: string | null) =>
+      makeNoteItem({ id, note_id: 'note-1', text: id, position, parent_id });
+    const listWithChildFirst: Note = {
+      ...baseListNote,
+      items: [listItem('bandnudeln', 0, 'trockenwaren'), listItem('trockenwaren', 1, null)],
+    };
+
+    const { getAllByTestId } = await render(<NoteCard note={listWithChildFirst} onPress={jest.fn()} />);
+
+    expect(getAllByTestId(/^note-card-list-row-/).map((row) => row.props.testID)).toEqual([
+      'note-card-list-row-trockenwaren',
+      'note-card-list-row-bandnudeln',
+    ]);
   });
 
   it('renders top-level list item with zero indentation', async () => {

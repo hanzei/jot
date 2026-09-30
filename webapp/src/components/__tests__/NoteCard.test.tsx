@@ -509,6 +509,30 @@ describe('NoteCard', () => {
       expect(screen.getByText('+1 completed items')).toBeInTheDocument();
     });
 
+    it('renders a child under its parent even when its position sorts first', () => {
+      const listItem = (id: string, position: number, parent_id: string | null): NoteItem => ({
+        id,
+        note_id: '1',
+        text: id,
+        completed: false,
+        position,
+        parent_id,
+        assigned_to: '',
+        created_at: '2023-01-01T00:00:00Z',
+        updated_at: '2023-01-01T00:00:00Z',
+      });
+      const listNote = createMockNote({
+        note_type: 'list',
+        items: [listItem('Bandnudeln', 0, 'Trockenwaren'), listItem('Trockenwaren', 1, null)],
+      });
+
+      renderNoteCard({ ...defaultProps, note: listNote });
+
+      const parent = screen.getByText('Trockenwaren');
+      const child = screen.getByText('Bandnudeln');
+      expect(parent.compareDocumentPosition(child) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
     it('handles empty list', () => {
       const emptyListNote = createMockNote({
         note_type: 'list',

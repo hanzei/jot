@@ -83,13 +83,17 @@ func validateParentRefTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, no
 	return nil
 }
 
+// itemReadOrder is the order a note's items are read in. The tiebreak on
+// created_at, id keeps it deterministic even if two items share a position
+// (which can happen transiently after a partial reorder from a client that did
+// not include every item). normalizeItemOrderTx reads in the same order, so the
+// order it normalizes is the order readers see.
+const itemReadOrder = `ORDER BY position, created_at, id`
+
 func (s *noteStore) getItemsByNoteID(ctx context.Context, noteID string) ([]NoteItem, error) {
-	// Tiebreak on created_at, id so display order is deterministic even if two
-	// items share a position (which can happen transiently after a partial
-	// reorder from a client that did not include every item).
 	query := s.d.RewritePlaceholders(`SELECT id, note_id, text, completed, position, parent_id,
 			  assigned_to, created_at, updated_at
-			  FROM note_items WHERE note_id = ? ORDER BY position, created_at, id`)
+			  FROM note_items WHERE note_id = ? ` + itemReadOrder)
 
 	rows, err := s.db.QueryContext(ctx, query, noteID)
 	if err != nil {
@@ -101,6 +105,110 @@ func (s *noteStore) getItemsByNoteID(ctx context.Context, noteID string) ([]Note
 		return nil, fmt.Errorf("failed to scan note items: %w", err)
 	}
 	return items, nil
+}
+
+// itemOrderRow is the slice of a note_items row that normalizeItemOrderTx
+// orders by.
+type itemOrderRow struct {
+	id       string
+	position int
+	parentID sql.NullString
+	// ref is the caller's index for this row, so a caller that grouped a slice
+	// of richer items can map the grouped rows back to them.
+	ref int
+}
+
+// groupedItemOrder returns rows (already sorted by position, created_at, id)
+// in display order: each top-level item immediately followed by its children,
+// both in their existing relative order. A child whose parent is not a
+// top-level item of the same note — a drifted row the parent-ref validation
+// should never let through — keeps its own place, as if it were top-level. The
+// migration 000012 SQL computes the same order; keep the two in step.
+func groupedItemOrder(rows []itemOrderRow) []itemOrderRow {
+	topLevel := make(map[string]bool, len(rows))
+	for _, r := range rows {
+		if !r.parentID.Valid {
+			topLevel[r.id] = true
+		}
+	}
+	grouped := func(r itemOrderRow) bool { return r.parentID.Valid && topLevel[r.parentID.String] }
+
+	childrenByParent := make(map[string][]itemOrderRow)
+	for _, r := range rows {
+		if grouped(r) {
+			childrenByParent[r.parentID.String] = append(childrenByParent[r.parentID.String], r)
+		}
+	}
+
+	ordered := make([]itemOrderRow, 0, len(rows))
+	for _, r := range rows {
+		if grouped(r) {
+			continue // emitted under its parent
+		}
+		ordered = append(ordered, r)
+		ordered = append(ordered, childrenByParent[r.id]...)
+	}
+	return ordered
+}
+
+// normalizeItemOrderTx keeps a note's item positions consistent with its
+// grouping: after any write that can move an item or change its parent, every
+// child must sort directly after its parent. Positions are client-supplied and
+// a re-parent keeps the item's old position, so without this a drag-to-reparent
+// whose follow-up reorder never lands, or a reorder from a device that has not
+// yet seen a re-parent, leaves a child ordered before its parent — which every
+// reader sorting by position (the note cards, mobile's local store, the
+// export) then shows or writes out wrongly.
+//
+// When the positions already increase strictly along the grouped order the
+// note is left untouched, gaps included, so a well-formed write costs one read.
+// Otherwise every item is re-sequenced to 0..N-1 in grouped order. It returns
+// each item's resulting position.
+func normalizeItemOrderTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, now string) (map[string]int, error) {
+	rows, err := tx.QueryContext(ctx,
+		d.RewritePlaceholders(`SELECT id, position, parent_id FROM note_items WHERE note_id = ? `+itemReadOrder),
+		noteID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load note item order: %w", err)
+	}
+	current, err := collectRows(rows, func(rows *sql.Rows) (itemOrderRow, error) {
+		var r itemOrderRow
+		scanErr := rows.Scan(&r.id, &r.position, &r.parentID)
+		return r, scanErr
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan note item order: %w", err)
+	}
+
+	ordered := groupedItemOrder(current)
+	wellFormed := true
+	for i := 1; i < len(ordered); i++ {
+		if ordered[i].position <= ordered[i-1].position {
+			wellFormed = false
+			break
+		}
+	}
+	if !wellFormed {
+		for i, r := range ordered {
+			if r.position == i {
+				continue
+			}
+			if _, err = tx.ExecContext(ctx,
+				d.RewritePlaceholders(`UPDATE note_items SET position = ?, updated_at = ? WHERE id = ? AND note_id = ?`),
+				i, now, r.id, noteID,
+			); err != nil {
+				return nil, fmt.Errorf("failed to normalize note item order: %w", err)
+			}
+			ordered[i].position = i
+		}
+	}
+
+	positions := make(map[string]int, len(ordered))
+	for _, r := range ordered {
+		positions[r.id] = r.position
+	}
+	return positions, nil
 }
 
 func (s *noteStore) CreateItemWithCompleted(ctx context.Context, noteID string, text string, position int, completed bool, parentID string, assignedTo string) (*NoteItem, error) {
@@ -132,6 +240,10 @@ func (s *noteStore) CreateItemWithCompleted(ctx context.Context, noteID string, 
 		return nil, fmt.Errorf("failed to create note item: %w", err)
 	}
 
+	positions, err := normalizeItemOrderTx(ctx, tx, s.d, noteID, now)
+	if err != nil {
+		return nil, err
+	}
 	if err = touchNoteTx(ctx, tx, s.d, noteID, now); err != nil {
 		return nil, err
 	}
@@ -142,7 +254,7 @@ func (s *noteStore) CreateItemWithCompleted(ctx context.Context, noteID string, 
 	item.ID = itemID
 	item.NoteID = noteID
 	item.Text = text
-	item.Position = position
+	item.Position = positions[itemID]
 	item.Completed = completed
 	item.ParentID = parentIDPtr(nullableParentID(parentID))
 	item.AssignedTo = assignedTo
@@ -155,6 +267,8 @@ func (s *noteStore) CreateItemWithCompleted(ctx context.Context, noteID string, 
 // parent note's updated_at. When maxItems > 0 the note's item count is checked
 // inside the transaction and ErrNoteItemCapExceeded is returned if adding the
 // item would exceed the cap (atomic, so concurrent creates cannot race past it).
+// The note is normalized per normalizeItemOrderTx afterwards, so the returned
+// position is the one stored, not necessarily the one requested.
 func (s *noteStore) CreateItemWithID(ctx context.Context, noteID, itemID, text string, position int, completed bool, parentID string, assignedTo string, maxItems int) (*NoteItem, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -201,6 +315,10 @@ func (s *noteStore) CreateItemWithID(ctx context.Context, noteID, itemID, text s
 		return nil, fmt.Errorf("failed to create note item: %w", err)
 	}
 
+	positions, err := normalizeItemOrderTx(ctx, tx, s.d, noteID, now)
+	if err != nil {
+		return nil, err
+	}
 	if err = touchNoteTx(ctx, tx, s.d, noteID, now); err != nil {
 		return nil, err
 	}
@@ -211,7 +329,7 @@ func (s *noteStore) CreateItemWithID(ctx context.Context, noteID, itemID, text s
 	item.ID = itemID
 	item.NoteID = noteID
 	item.Text = text
-	item.Position = position
+	item.Position = positions[itemID]
 	item.Completed = completed
 	item.ParentID = parentIDPtr(nullableParentID(parentID))
 	item.AssignedTo = assignedTo
@@ -220,8 +338,12 @@ func (s *noteStore) CreateItemWithID(ctx context.Context, noteID, itemID, text s
 
 // PatchItem applies a partial update to a single item. Unset fields are resolved
 // against the item's current stored value (read inside the transaction), so a
-// concurrent edit to a different column is preserved. Returns the updated item
-// or ErrNoteItemNotFound.
+// concurrent edit to a different column is preserved; position is not written
+// at all unless the patch carries one, so a concurrent reorder is never
+// reverted to the value read here. A patch that moves the
+// item or changes its parent is followed by normalizeItemOrderTx, so the
+// returned position is the one stored, not necessarily the one requested.
+// Returns the updated item or ErrNoteItemNotFound.
 func (s *noteStore) PatchItem(ctx context.Context, noteID, itemID string, patch NoteItemPatch) (*NoteItem, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -249,7 +371,6 @@ func (s *noteStore) PatchItem(ctx context.Context, noteID, itemID string, patch 
 
 	resolvedText := deref(patch.Text, current.Text)
 	resolvedCompleted := deref(patch.Completed, current.Completed)
-	resolvedPosition := deref(patch.Position, current.Position)
 	resolvedParent := deref(patch.ParentID, currentParent.String)
 	resolvedAssignedTo := deref(patch.AssignedTo, current.AssignedTo)
 
@@ -261,12 +382,13 @@ func (s *noteStore) PatchItem(ctx context.Context, noteID, itemID string, patch 
 		}
 	}
 
+	// COALESCE: position is written only when set (see the doc comment).
 	var item NoteItem
 	if err = tx.QueryRowContext(ctx,
-		s.d.RewritePlaceholders(`UPDATE note_items SET text = ?, completed = ?, position = ?, parent_id = ?, assigned_to = ?, updated_at = ?
-			  WHERE id = ? AND note_id = ? RETURNING created_at, updated_at`),
-		resolvedText, resolvedCompleted, resolvedPosition, nullableParentID(resolvedParent), nullableAssignedTo(resolvedAssignedTo), now, itemID, noteID,
-	).Scan(&item.CreatedAt, &item.UpdatedAt); err != nil {
+		s.d.RewritePlaceholders(`UPDATE note_items SET text = ?, completed = ?, position = COALESCE(?, position), parent_id = ?, assigned_to = ?, updated_at = ?
+			  WHERE id = ? AND note_id = ? RETURNING position, created_at, updated_at`),
+		resolvedText, resolvedCompleted, patch.Position, nullableParentID(resolvedParent), nullableAssignedTo(resolvedAssignedTo), now, itemID, noteID,
+	).Scan(&item.Position, &item.CreatedAt, &item.UpdatedAt); err != nil {
 		return nil, fmt.Errorf("failed to update note item: %w", err)
 	}
 
@@ -288,6 +410,14 @@ func (s *noteStore) PatchItem(ctx context.Context, noteID, itemID string, patch 
 		}
 	}
 
+	if patch.Position != nil || patch.ParentID != nil {
+		positions, normErr := normalizeItemOrderTx(ctx, tx, s.d, noteID, now)
+		if normErr != nil {
+			return nil, normErr
+		}
+		item.Position = positions[itemID]
+	}
+
 	if err = touchNoteTx(ctx, tx, s.d, noteID, now); err != nil {
 		return nil, err
 	}
@@ -299,7 +429,6 @@ func (s *noteStore) PatchItem(ctx context.Context, noteID, itemID string, patch 
 	item.NoteID = noteID
 	item.Text = resolvedText
 	item.Completed = resolvedCompleted
-	item.Position = resolvedPosition
 	item.ParentID = parentIDPtr(nullableParentID(resolvedParent))
 	item.AssignedTo = resolvedAssignedTo
 	return &item, nil
@@ -340,9 +469,10 @@ func (s *noteStore) DeleteItemFromNote(ctx context.Context, noteID, itemID strin
 	return nil
 }
 
-// ReorderItems sets each item's position to its index in itemIDs. Every ID must
-// belong to the note; otherwise ErrNoteItemNotFound is returned and no change is
-// committed.
+// ReorderItems sets each item's position to its index in itemIDs, then
+// normalizes per normalizeItemOrderTx so every child still directly follows
+// its parent. Every ID must belong to the note; otherwise ErrNoteItemNotFound
+// is returned and no change is committed.
 func (s *noteStore) ReorderItems(ctx context.Context, noteID string, itemIDs []string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -369,6 +499,9 @@ func (s *noteStore) ReorderItems(ctx context.Context, noteID string, itemIDs []s
 		}
 	}
 
+	if _, err = normalizeItemOrderTx(ctx, tx, s.d, noteID, now); err != nil {
+		return err
+	}
 	if err = touchNoteTx(ctx, tx, s.d, noteID, now); err != nil {
 		return err
 	}
