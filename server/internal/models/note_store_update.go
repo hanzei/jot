@@ -1,11 +1,13 @@
 package models
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 )
 
 // Update applies a partial note update. When baseVersion is non-nil it enables
@@ -300,13 +302,16 @@ func (s *noteStore) conversionAlreadyAppliedTx(ctx context.Context, tx *sql.Tx, 
 }
 
 // groupedNewNoteItems returns items in the order they are stored in once
-// inserted: by position, then grouped per groupedItemOrder.
+// inserted: by position, then grouped per groupedItemOrder. Items inserted
+// together share created_at, so itemReadOrder breaks a position tie by ID.
 func groupedNewNoteItems(items []NewNoteItem) []NewNoteItem {
 	rows := make([]itemOrderRow, len(items))
 	for i, item := range items {
 		rows[i] = itemOrderRow{id: item.ID, position: item.Position, parentID: nullableParentID(item.ParentID), ref: i}
 	}
-	slices.SortStableFunc(rows, func(a, b itemOrderRow) int { return a.position - b.position })
+	slices.SortStableFunc(rows, func(a, b itemOrderRow) int {
+		return cmp.Or(cmp.Compare(a.position, b.position), strings.Compare(a.id, b.id))
+	})
 
 	grouped := make([]NewNoteItem, 0, len(items))
 	for _, r := range groupedItemOrder(rows) {

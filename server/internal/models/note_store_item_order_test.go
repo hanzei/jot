@@ -201,6 +201,34 @@ func TestItemOrderNormalization(t *testing.T) {
 			assert.Equal(t, []int{0, 1}, positions)
 		})
 
+		t.Run("replaying a conversion with shared positions is idempotent", func(t *testing.T) {
+			store, userID := newTestBulkStore(t, driver)
+			note, err := store.CreateWithItems(t.Context(), userID, "", "", "x\ny", NoteTypeText, DefaultNoteColor, nil)
+			require.NoError(t, err)
+			// Items sharing a position are stored in ID order (same created_at),
+			// so list them against that order to make the tiebreak matter.
+			lowID, err := generateID()
+			require.NoError(t, err)
+			highID, err := generateID()
+			require.NoError(t, err)
+			if highID < lowID {
+				lowID, highID = highID, lowID
+			}
+			targetItems := []NewNoteItem{
+				{ID: highID, Text: "x", Position: 0},
+				{ID: lowID, Text: "y", Position: 0},
+			}
+			baseVersion := note.Version
+
+			_, err = store.ConvertType(t.Context(), note.ID, userID, NoteTypeList, "List", "", targetItems, &baseVersion)
+			require.NoError(t, err)
+			_, err = store.ConvertType(t.Context(), note.ID, userID, NoteTypeList, "List", "", targetItems, &baseVersion)
+			require.NoError(t, err)
+
+			texts, _ := storedItemOrder(t, store, note.ID)
+			assert.Equal(t, []string{"y", "x"}, texts)
+		})
+
 		t.Run("a well-formed write leaves other positions alone", func(t *testing.T) {
 			store, userID := newTestBulkStore(t, driver)
 			noteID, ids := newNote(t, store, userID)
