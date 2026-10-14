@@ -14,7 +14,7 @@ import {
   getServerReachabilityChangedAt,
   subscribeToServerReachability,
 } from '../src/api/serverReachability';
-import { getSseState } from '../src/api/sseState';
+import { getSseState, subscribeToSseState } from '../src/api/sseState';
 
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ goBack: jest.fn(), navigate: jest.fn() }),
@@ -54,6 +54,7 @@ jest.mock('../src/api/serverReachability', () => ({
 
 jest.mock('../src/api/sseState', () => ({
   getSseState: jest.fn(() => ({ isConnected: true, reconnectAttempts: 0 })),
+  subscribeToSseState: jest.fn(() => () => {}),
 }));
 
 const mockUseOfflineContext = useOfflineContext as jest.MockedFunction<typeof useOfflineContext>;
@@ -63,11 +64,13 @@ const mockGetServerReachabilityChangedAt =
 const mockSubscribeToServerReachability =
   subscribeToServerReachability as jest.MockedFunction<typeof subscribeToServerReachability>;
 const mockGetSseState = getSseState as jest.MockedFunction<typeof getSseState>;
+const mockSubscribeToSseState = subscribeToSseState as jest.MockedFunction<typeof subscribeToSseState>;
 
 describe('DiagnosticsScreen', () => {
   // Captures the listener DiagnosticsScreen registers, so tests can simulate a
   // reachability transition arriving while the screen is mounted.
   let reachabilityListener: ((reachable: boolean) => void) | undefined;
+  let sseListener: (() => void) | undefined;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -76,6 +79,13 @@ describe('DiagnosticsScreen', () => {
     mockIsServerReachable.mockReturnValue(true);
     mockGetServerReachabilityChangedAt.mockReturnValue(null);
     mockGetSseState.mockReturnValue({ isConnected: true, reconnectAttempts: 0 });
+    sseListener = undefined;
+    mockSubscribeToSseState.mockImplementation((listener) => {
+      sseListener = listener;
+      return () => {
+        sseListener = undefined;
+      };
+    });
     mockSubscribeToServerReachability.mockImplementation((listener) => {
       reachabilityListener = listener;
       return () => {
@@ -111,6 +121,19 @@ describe('DiagnosticsScreen', () => {
     const { findByText, queryByText } = await renderScreen();
     expect(await findByText('Reconnecting')).toBeTruthy();
     expect(queryByText('Connecting')).toBeNull();
+  });
+
+  it('updates the event-stream row live when its status changes, without a manual refresh', async () => {
+    mockGetSseState.mockReturnValue({ isConnected: false, reconnectAttempts: 0 });
+    const { findByText } = await renderScreen();
+    expect(await findByText('Connecting')).toBeTruthy();
+
+    mockGetSseState.mockReturnValue({ isConnected: false, reconnectAttempts: 1 });
+    await act(async () => {
+      sseListener?.();
+    });
+
+    expect(await findByText('Reconnecting')).toBeTruthy();
   });
 
   it('shows last-successful-sync time, drain status, consecutive failures, and dead-letter count', async () => {

@@ -22,7 +22,7 @@ import {
   getServerSwitchLifecycleState,
   type ServerSwitchLifecycleState,
 } from '../store/serverSwitchLifecycle';
-import { getSseState, type SseState } from '../api/sseState';
+import { getSseState, subscribeToSseState, type SseState } from '../api/sseState';
 import { getSyncQueueStats, MAX_ENTRY_DRAIN_ATTEMPTS, type SyncQueueStats } from '../db/syncQueue';
 import {
   isServerReachable,
@@ -129,6 +129,14 @@ export default function DiagnosticsScreen() {
         isServerReachable: reachable,
         serverReachabilityChangedAt: getServerReachabilityChangedAt(),
       }));
+    });
+  }, []);
+
+  // Same for the event stream: it connects, fails, and retries on its own
+  // schedule, so a mount-time snapshot goes stale while the screen is open.
+  useEffect(() => {
+    return subscribeToSseState(() => {
+      setSnapshot((prev) => ({ ...prev, sse: getSseState() }));
     });
   }, []);
 

@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useAuth } from '../store/AuthContext';
 import { SSEConnectionManager, type SSEStatus } from '../api/events';
-import { setActiveSseManager } from '../api/sseState';
+import { notifySseStateChange, setActiveSseManager } from '../api/sseState';
 import { CLIENT_ID } from '../api/client';
 import type { SSEEvent } from '@jot/shared';
 import { useNetworkStatus } from './useNetworkStatus';
@@ -259,6 +259,8 @@ export function useSSE(
           hasConnectedOnceRef.current = true;
         }
       }
+      // Lets Diagnostics re-read getSseState() live instead of a mount-time snapshot.
+      notifySseStateChange();
       onStatusChangeRef.current?.(status);
     });
   }, [queryClient]);
