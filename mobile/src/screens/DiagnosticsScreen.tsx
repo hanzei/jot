@@ -22,7 +22,7 @@ import {
   getServerSwitchLifecycleState,
   type ServerSwitchLifecycleState,
 } from '../store/serverSwitchLifecycle';
-import { getSseState, type SseState } from '../api/sseState';
+import { getSseState, subscribeToSseState, type SseState } from '../api/sseState';
 import { getSyncQueueStats, MAX_ENTRY_DRAIN_ATTEMPTS, type SyncQueueStats } from '../db/syncQueue';
 import {
   isServerReachable,
@@ -132,6 +132,14 @@ export default function DiagnosticsScreen() {
     });
   }, []);
 
+  // Same for the event stream: it connects, fails, and retries on its own
+  // schedule, so a mount-time snapshot goes stale while the screen is open.
+  useEffect(() => {
+    return subscribeToSseState(() => {
+      setSnapshot((prev) => ({ ...prev, sse: getSseState() }));
+    });
+  }, []);
+
   const handleClearLogs = useCallback(() => {
     clearLogs();
     setSnapshot((prev) => ({ ...prev, logs: [] }));
@@ -225,7 +233,15 @@ export default function DiagnosticsScreen() {
           <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('diagnostics.sse')}</Text>
           <DiagRow
             label={t('diagnostics.sse')}
-            value={sse.isConnected ? t('diagnostics.sseConnected') : t('diagnostics.sseReconnecting')}
+            value={
+              sse.isConnected
+                ? t('diagnostics.sseConnected')
+                // No failed attempt yet means the first connect is still in
+                // flight (or the stream isn't running), not a reconnect.
+                : sse.reconnectAttempts === 0
+                  ? t('diagnostics.sseConnecting')
+                  : t('diagnostics.sseReconnecting')
+            }
             valueColor={sse.isConnected ? STATUS_GREEN : STATUS_ORANGE}
           />
           <DiagRow

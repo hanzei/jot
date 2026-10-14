@@ -514,6 +514,7 @@
     "sse": "Servergebeurtenissen",
     "sseConnected": "Verbonden",
     "sseReconnecting": "Opnieuw verbinden",
+    "sseConnecting": "Verbinden",
     "reconnectAttempts": "Verbindingspogingen",
     "syncQueue": "Synchronisatiewachtrij",
     "pendingOps": "Uitstaande bewerkingen",
