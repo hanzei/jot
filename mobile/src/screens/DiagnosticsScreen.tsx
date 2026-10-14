@@ -225,7 +225,15 @@ export default function DiagnosticsScreen() {
           <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('diagnostics.sse')}</Text>
           <DiagRow
             label={t('diagnostics.sse')}
-            value={sse.isConnected ? t('diagnostics.sseConnected') : t('diagnostics.sseReconnecting')}
+            value={
+              sse.isConnected
+                ? t('diagnostics.sseConnected')
+                // No failed attempt yet means the first connect is still in
+                // flight (or the stream isn't running), not a reconnect.
+                : sse.reconnectAttempts === 0
+                  ? t('diagnostics.sseConnecting')
+                  : t('diagnostics.sseReconnecting')
+            }
             valueColor={sse.isConnected ? STATUS_GREEN : STATUS_ORANGE}
           />
           <DiagRow

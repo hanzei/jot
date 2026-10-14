@@ -514,6 +514,7 @@
     "sse": "Zdarzenia serwera",
     "sseConnected": "Połączono",
     "sseReconnecting": "Ponowne łączenie",
+    "sseConnecting": "Łączenie",
     "reconnectAttempts": "Próby ponownego połączenia",
     "syncQueue": "Kolejka synchronizacji",
     "pendingOps": "Oczekujące operacje",
