@@ -80,6 +80,9 @@ collect_diagnostics() {
   # logcat distinguishes a native/JS crash (AndroidRuntime/ReactNativeJS FATAL)
   # from a Maestro assertion failure — the two need different fixes.
   adb logcat -d > "$E2E_DIR/logcat.txt" 2>/dev/null || true
+  # Which activities exist and which one is resumed: tells a Custom Tab that
+  # never started from one that started but drew nothing (the SSO flows).
+  adb shell dumpsys activity activities > "$E2E_DIR/activities.txt" 2>/dev/null || true
   cp -r "$HOME/.maestro/tests" "$E2E_DIR/maestro-debug" 2>/dev/null || true
   # The per-command assertion error (which step failed, and why) goes to the
   # JUnit report, not Maestro's stdout, so echo the failing report(s) here — the
@@ -97,6 +100,12 @@ collect_diagnostics() {
   echo "==> logcat highlights:"
   grep -iE 'cleartext|androidruntime|reactnativejs|fatal|econnrefused|failed to connect|jotmobile' \
     "$E2E_DIR/logcat.txt" 2>/dev/null | tail -40 || true
+  echo "==> Resumed activity and task stack:"
+  grep -E 'ResumedActivity|\* Task\{|\* Hist|ActivityRecord\{' \
+    "$E2E_DIR/activities.txt" 2>/dev/null | head -30 || true
+  echo "==> Chrome / Custom Tab logcat:"
+  grep -iE 'com\.android\.chrome|chromium|customtab|cr_' \
+    "$E2E_DIR/logcat.txt" 2>/dev/null | tail -30 || true
   # The on-screen widgets (resource-id | text) show which screen we are stuck on
   # and any error text — e.g. the server-setup input's current value and the
   # login-server-setup-error message when server validation rejects the URL.

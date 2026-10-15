@@ -388,6 +388,34 @@ skip_chrome_first_run() {
   adb shell am set-debug-app --persistent com.android.chrome >/dev/null 2>&1 || true
 }
 
+# Start Chrome once, outside any flow, before flow 12 opens the first Custom Tab.
+# Twice on master (runs 136 and 154) that first tab never appeared: Connect sat
+# on its spinner, Chrome drew nothing, and the server never saw the start URL, so
+# all of mock-idp-page.yaml's retries hit a disabled button. Both were the run's
+# first Chrome launch, right after skip_chrome_first_run changed its switches, so
+# pay that cold start here. Chrome is left running in the background (HOME, not
+# force-stop) so the Custom Tab attaches to a warm process. Best-effort: a Chrome
+# that never takes focus is logged and flow 12 runs anyway.
+warm_up_chrome() {
+  echo "==> Warming up Chrome"
+  timeout 30 adb shell am start -W -a android.intent.action.VIEW \
+    -d "${MOCK_IDP_ISSUER}/healthz" -p com.android.chrome >/dev/null 2>&1 || true
+  local focused=0
+  for _ in $(seq 1 30); do
+    if adb shell dumpsys window 2>/dev/null | grep -E 'mCurrentFocus=' | grep -q 'com.android.chrome'; then
+      focused=1
+      break
+    fi
+    sleep 1
+  done
+  if [ "$focused" -eq 1 ]; then
+    sleep 3
+  else
+    echo "Chrome did not take focus within 30s; continuing." >&2
+  fi
+  adb shell input keyevent KEYCODE_HOME || true
+}
+
 # Check an SSO outcome on the server rather than trusting the UI alone, as
 # assert_note_synced does for sync: the server has exactly $1 accounts, and each
 # username after it exists with an SSO identity linked. Reads GET /admin/users
@@ -522,6 +550,7 @@ maestro_flow 11-sse-resync-catchup.yaml "$@"
 # reused the account the first one provisioned instead of making another.
 start_mock_idp
 skip_chrome_first_run
+warm_up_chrome
 stop_server
 start_server "${OIDC_ENV[@]}"
 set_idp_username "$MAESTRO_JOT_SSO_LINK_USERNAME"
