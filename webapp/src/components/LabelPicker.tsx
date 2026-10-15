@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
-import { Plus } from 'lucide-react';
+import { LoaderCircle, Plus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, type Label, type Note } from '@jot/shared';
+import { VALIDATION, canCreateLabelFromQuery, filterLabelsByQuery, type Label, type Note } from '@jot/shared';
 import { notes as notesApi, labels as labelsApi } from '@/utils/api';
 
 interface LabelPickerProps {
@@ -28,9 +28,12 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  // Guards the remote create path against duplicate submissions while a request
-  // is in flight (rapid Enter presses / repeated create-row clicks).
-  const isCreatingRef = useRef(false);
+  // The remote write in flight, if any: a label row being toggled or the create
+  // row. It drives the row's spinner; the ref is the synchronous guard that
+  // drops further clicks/Enter presses until the write settles, since a second
+  // toggle would race the first and could flip the label back.
+  const [pending, setPending] = useState<{ kind: 'toggle'; labelId: string } | { kind: 'create' } | null>(null);
+  const isMutatingRef = useRef(false);
 
   const isLocalMode = !note;
   const currentLabelIds = new Set(
@@ -46,18 +49,9 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
 
   const trimmedQuery = query.trim();
 
-  // Labels matching the current query (case-insensitive substring match).
-  const filteredLabels = useMemo(() => {
-    const q = trimmedQuery.toLowerCase();
-    if (!q) return allLabels;
-    return allLabels.filter(l => l.name.toLowerCase().includes(q));
-  }, [allLabels, trimmedQuery]);
+  const filteredLabels = useMemo(() => filterLabelsByQuery(allLabels, trimmedQuery), [allLabels, trimmedQuery]);
 
-  // Offer to create only when there's input and no existing label matches it exactly.
-  const showCreate =
-    labelsLoaded &&
-    trimmedQuery.length > 0 &&
-    !allLabels.some(l => l.name.toLowerCase() === trimmedQuery.toLowerCase());
+  const showCreate = labelsLoaded && canCreateLabelFromQuery(allLabels, trimmedQuery);
 
   // Total number of selectable rows (filtered labels + optional create row).
   const optionCount = filteredLabels.length + (showCreate ? 1 : 0);
@@ -186,6 +180,9 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
       return;
     }
 
+    if (isMutatingRef.current) return;
+    isMutatingRef.current = true;
+    setPending({ kind: 'toggle', labelId: label.id });
     try {
       let updatedNote: Note;
       if (currentLabelIds.has(label.id)) {
@@ -197,6 +194,9 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
       onRefresh?.();
     } catch (err) {
       onError?.((err as Error).message);
+    } finally {
+      isMutatingRef.current = false;
+      setPending(null);
     }
   };
 
@@ -229,8 +229,9 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
       return;
     }
 
-    if (isCreatingRef.current) return;
-    isCreatingRef.current = true;
+    if (isMutatingRef.current) return;
+    isMutatingRef.current = true;
+    setPending({ kind: 'create' });
     try {
       const updatedNote = await notesApi.addLabel(note.id, trimmed);
       labelsApi.getAll().then(setAllLabels).catch((err: Error) => onError?.(err.message));
@@ -240,7 +241,8 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
     } catch (err) {
       onError?.((err as Error).message);
     } finally {
-      isCreatingRef.current = false;
+      isMutatingRef.current = false;
+      setPending(null);
     }
   };
 
@@ -301,40 +303,65 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
           <p className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">{t('labels.noLabels')}</p>
         )}
 
-        {filteredLabels.map((label, index) => (
-          <button
-            key={label.id}
-            type="button"
-            role="option"
-            aria-selected={isSelected(label)}
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => { setHighlightIndex(index); toggleLabel(label); }}
-            onMouseEnter={() => setHighlightIndex(index)}
-            className={`flex items-center w-full px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 ${index === effectiveHighlight ? 'bg-gray-100 dark:bg-slate-700' : ''}`}
-          >
-            <input
-              type="checkbox"
-              checked={isSelected(label)}
-              readOnly
-              aria-hidden="true"
-              tabIndex={-1}
-              className="h-3.5 w-3.5 text-blue-600 rounded mr-2 pointer-events-none"
-            />
-            <span className="truncate">{label.name}</span>
-          </button>
-        ))}
+        {filteredLabels.map((label, index) => {
+          const isPending = pending?.kind === 'toggle' && pending.labelId === label.id;
+          return (
+            <button
+              key={label.id}
+              type="button"
+              role="option"
+              aria-selected={isSelected(label)}
+              aria-busy={isPending}
+              aria-disabled={pending !== null && !isPending}
+              data-testid={`label-option-${label.id}`}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { setHighlightIndex(index); toggleLabel(label); }}
+              onMouseEnter={() => setHighlightIndex(index)}
+              className={`flex items-center w-full px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 ${index === effectiveHighlight ? 'bg-gray-100 dark:bg-slate-700' : ''} ${pending !== null && !isPending ? 'opacity-50 cursor-wait' : ''}`}
+            >
+              {isPending ? (
+                <LoaderCircle
+                  className="h-3.5 w-3.5 mr-2 shrink-0 text-blue-600 dark:text-blue-400 animate-spin motion-reduce:animate-none"
+                  aria-hidden="true"
+                  data-testid={`label-option-${label.id}-spinner`}
+                />
+              ) : (
+                <input
+                  type="checkbox"
+                  checked={isSelected(label)}
+                  readOnly
+                  aria-hidden="true"
+                  tabIndex={-1}
+                  className="h-3.5 w-3.5 text-blue-600 rounded mr-2 pointer-events-none"
+                />
+              )}
+              <span className="truncate">{label.name}</span>
+            </button>
+          );
+        })}
 
         {showCreate && (
           <button
             type="button"
             role="option"
             aria-selected={createIndex === effectiveHighlight}
+            aria-busy={pending?.kind === 'create'}
+            aria-disabled={pending?.kind === 'toggle'}
+            data-testid="label-option-create"
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => { setHighlightIndex(createIndex); handleCreate(); }}
             onMouseEnter={() => setHighlightIndex(createIndex)}
-            className={`flex items-center w-full px-3 py-1.5 text-sm text-blue-600 dark:text-blue-400 ${createIndex === effectiveHighlight ? 'bg-gray-100 dark:bg-slate-700' : ''}`}
+            className={`flex items-center w-full px-3 py-1.5 text-sm text-blue-600 dark:text-blue-400 ${createIndex === effectiveHighlight ? 'bg-gray-100 dark:bg-slate-700' : ''} ${pending?.kind === 'toggle' ? 'opacity-50 cursor-wait' : ''}`}
           >
-            <Plus className="h-3.5 w-3.5 mr-2 shrink-0" />
+            {pending?.kind === 'create' ? (
+              <LoaderCircle
+                className="h-3.5 w-3.5 mr-2 shrink-0 animate-spin motion-reduce:animate-none"
+                aria-hidden="true"
+                data-testid="label-option-create-spinner"
+              />
+            ) : (
+              <Plus className="h-3.5 w-3.5 mr-2 shrink-0" />
+            )}
             <span className="truncate">{t('labels.createLabel', { name: trimmedQuery })}</span>
           </button>
         )}

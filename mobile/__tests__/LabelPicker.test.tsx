@@ -60,7 +60,7 @@ jest.mock('../src/theme/ThemeContext', () => ({
 jest.mock('react-i18next', () => ({
   __esModule: true,
   useTranslation: () => ({
-    t: (key: string) => key,
+    t: (key: string, opts?: { name?: string }) => (opts?.name !== undefined ? `${key}:${opts.name}` : key),
   }),
 }));
 
@@ -138,7 +138,7 @@ describe('LabelPicker', () => {
     });
   });
 
-  it('shows a spinner on the add-new-label button while creating a label, instead of a silent freeze', async () => {
+  it('shows a spinner on the create row while creating a label, instead of a silent freeze', async () => {
     const { promise, resolve } = deferred<unknown>();
     mockAddLabelMutateAsync.mockReturnValue(promise);
 
@@ -146,22 +146,92 @@ describe('LabelPicker', () => {
       <LabelPicker visible noteId="note-1" noteLabels={[]} onClose={jest.fn()} />,
     );
 
-    await fireEvent.changeText(getByTestId('new-label-input'), 'Errands');
+    await fireEvent.changeText(getByTestId('label-search-input'), 'Errands');
     // Not awaited: the triggered mutation is deliberately left pending, and
     // awaiting fireEvent would wait for that whole chain to settle.
-    void fireEvent.press(getByTestId('add-label-btn'));
+    void fireEvent.press(getByTestId('label-create-option'));
 
     await waitFor(() => {
-      expect(getByTestId('add-label-btn-spinner')).toBeTruthy();
+      expect(getByTestId('label-create-option-spinner')).toBeTruthy();
     });
+    expect(mockAddLabelMutateAsync).toHaveBeenCalledWith({ noteId: 'note-1', name: 'Errands' });
 
     await act(async () => {
       resolve({});
     });
 
+    // A successful create clears the query, which removes the create row.
     await waitFor(() => {
-      expect(queryByTestId('add-label-btn-spinner')).toBeNull();
+      expect(queryByTestId('label-create-option')).toBeNull();
     });
+    expect(getByTestId('label-search-input').props.value).toBe('');
+  });
+
+  it('filters the list as the user types, case-insensitively', async () => {
+    const { getByTestId, queryByTestId } = await render(
+      <LabelPicker visible noteId="note-1" noteLabels={[]} onClose={jest.fn()} />,
+    );
+
+    await fireEvent.changeText(getByTestId('label-search-input'), 'wor');
+
+    expect(getByTestId('label-item-label-1')).toBeTruthy();
+    expect(queryByTestId('label-item-label-2')).toBeNull();
+  });
+
+  it('offers to create only when no label has the exact name', async () => {
+    const { getByTestId, getByText, queryByTestId } = await render(
+      <LabelPicker visible noteId="note-1" noteLabels={[]} onClose={jest.fn()} />,
+    );
+    expect(queryByTestId('label-create-option')).toBeNull();
+
+    await fireEvent.changeText(getByTestId('label-search-input'), 'Wor');
+    expect(getByText('labels.createLabel:Wor')).toBeTruthy();
+
+    await fireEvent.changeText(getByTestId('label-search-input'), ' work ');
+    expect(queryByTestId('label-create-option')).toBeNull();
+  });
+
+  it('hides the create row while labels are loading', async () => {
+    mockUseLabels.mockReturnValue({ data: undefined, isLoading: true });
+    const { getByTestId, queryByTestId } = await render(
+      <LabelPicker visible noteId="note-1" noteLabels={[]} onClose={jest.fn()} />,
+    );
+
+    await fireEvent.changeText(getByTestId('label-search-input'), 'Errands');
+
+    expect(queryByTestId('label-create-option')).toBeNull();
+  });
+
+  it('creates from the keyboard only when the query matches no label', async () => {
+    mockAddLabelMutateAsync.mockResolvedValue({});
+    const { getByTestId } = await render(
+      <LabelPicker visible noteId="note-1" noteLabels={[]} onClose={jest.fn()} />,
+    );
+    const input = getByTestId('label-search-input');
+
+    // "Wor" partially matches "Work", so Done does nothing.
+    await fireEvent.changeText(input, 'Wor');
+    await fireEvent(input, 'submitEditing');
+    expect(mockAddLabelMutateAsync).not.toHaveBeenCalled();
+
+    await fireEvent.changeText(input, 'Errands');
+    await fireEvent(input, 'submitEditing');
+    await waitFor(() => {
+      expect(mockAddLabelMutateAsync).toHaveBeenCalledWith({ noteId: 'note-1', name: 'Errands' });
+    });
+  });
+
+  it('clears the search when the sheet is closed', async () => {
+    const onClose = jest.fn();
+    const { getByTestId } = await render(
+      <LabelPicker visible noteId="note-1" noteLabels={[]} onClose={onClose} />,
+    );
+
+    await fireEvent.changeText(getByTestId('label-search-input'), 'wor');
+    await fireEvent.press(getByTestId('label-picker-backdrop'));
+
+    expect(onClose).toHaveBeenCalled();
+    expect(getByTestId('label-search-input').props.value).toBe('');
   });
 
   it('surfaces an error and clears the spinner when the toggle mutation fails', async () => {

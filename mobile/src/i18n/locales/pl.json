@@ -342,6 +342,8 @@
   "labels": {
     "title": "Etykiety",
     "noLabels": "Brak etykiet",
+    "searchPlaceholder": "Szukaj lub utwórz etykietę...",
+    "createLabel": "Utwórz \"{{name}}\"",
     "newLabelPlaceholder": "Nowa etykieta",
     "newSidebar": "Nowa etykieta",
     "createInputLabel": "Nazwa nowej etykiety",

@@ -87,6 +87,43 @@ test.describe('Labels on Note Creation', () => {
     await dashboardPage.expectLabelInSidebar('design');
   });
 
+  test('label picker shows the in-flight toggle and ignores other clicks until it settles', async ({ page, dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNoteWithLabels('Seed Note', 'content', ['alpha', 'beta']);
+
+    await dashboardPage.createNote('Busy Target', 'content');
+    await dashboardPage.openNote('Busy Target');
+    await dashboardPage.openLabelPickerFromModal();
+
+    // Hold the add-label request so the in-flight state is observable.
+    let addRequests = 0;
+    let release: () => void = () => {};
+    const released = new Promise<void>(resolve => { release = resolve; });
+    await page.route('**/api/v1/notes/*/labels', async route => {
+      addRequests++;
+      await released;
+      await route.continue();
+    });
+
+    const alpha = page.getByRole('option', { name: 'alpha', exact: true });
+    const beta = page.getByRole('option', { name: 'beta', exact: true });
+    await alpha.click();
+    await expect(alpha).toHaveAttribute('aria-busy', 'true');
+    await expect(beta).toHaveAttribute('aria-disabled', 'true');
+
+    // A second click while the first write is pending is dropped. Playwright's
+    // click() waits for aria-disabled to clear, so dispatch the event directly
+    // to prove the picker itself ignores it.
+    await beta.dispatchEvent('click');
+
+    release();
+    await expect(page.getByRole('option', { name: 'alpha', exact: true, selected: true })).toBeVisible();
+    await expect(alpha).toHaveAttribute('aria-busy', 'false');
+    await expect(beta).toHaveAttribute('aria-disabled', 'false');
+    await expect(page.getByRole('option', { name: 'beta', exact: true, selected: false })).toBeVisible();
+    expect(addRequests).toBe(1);
+  });
+
   test('multiple labels can be added during creation', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createNoteWithLabels('Multi Label', 'content', ['alpha', 'beta']);
