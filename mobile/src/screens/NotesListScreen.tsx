@@ -91,16 +91,19 @@ export default function NotesListScreen({ variant = 'notes', labelId, labelName 
   trashCountRef.current = trashCount;
   const { refreshUsers } = useUsers();
 
-  // Debounce search input by 300ms
+  // Debounce search input by 300ms. Arm no timer when the trimmed text already
+  // matches (e.g. on mount): it would only re-set the same value 300ms later.
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    const next = searchText.trim();
+    if (next === debouncedSearch) return;
     debounceRef.current = setTimeout(() => {
-      setDebouncedSearch(searchText.trim());
+      setDebouncedSearch(next);
     }, SEARCH_DEBOUNCE_MS);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [searchText]);
+  }, [searchText, debouncedSearch]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing, tracked in #777
