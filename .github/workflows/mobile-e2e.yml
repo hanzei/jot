@@ -351,6 +351,7 @@ jobs:
             mobile/e2e/failure-screenshot.png
             mobile/e2e/ui-hierarchy.xml
             mobile/e2e/logcat.txt
+            mobile/e2e/activities.txt
             mobile/e2e/maestro-debug/
           retention-days: 7
           if-no-files-found: warn
