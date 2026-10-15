@@ -51,7 +51,7 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
 
   const filteredLabels = useMemo(() => filterLabelsByQuery(allLabels, trimmedQuery), [allLabels, trimmedQuery]);
 
-  const showCreate = labelsLoaded && canCreateLabelFromQuery(allLabels, trimmedQuery);
+  const showCreate = labelsLoaded && canCreateLabelFromQuery(filteredLabels, trimmedQuery);
 
   // Total number of selectable rows (filtered labels + optional create row).
   const optionCount = filteredLabels.length + (showCreate ? 1 : 0);
@@ -165,6 +165,9 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
     // Re-measure when the rendered height changes (filtered list grows/shrinks
     // or the create row toggles), which affects upward/downward placement.
   }, [updatePosition, filteredLabels.length, showCreate]);
+
+  const isCreatePending = pending?.kind === 'create';
+  const isCreateBlocked = pending?.kind === 'toggle';
 
   const isSelected = (label: Label) =>
     currentLabelIds.has(label.id) || currentLabelNames.has(label.name);
@@ -305,6 +308,7 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
 
         {filteredLabels.map((label, index) => {
           const isPending = pending?.kind === 'toggle' && pending.labelId === label.id;
+          const isBlocked = pending !== null && !isPending;
           return (
             <button
               key={label.id}
@@ -312,12 +316,11 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
               role="option"
               aria-selected={isSelected(label)}
               aria-busy={isPending}
-              aria-disabled={pending !== null && !isPending}
-              data-testid={`label-option-${label.id}`}
+              aria-disabled={isBlocked}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => { setHighlightIndex(index); toggleLabel(label); }}
               onMouseEnter={() => setHighlightIndex(index)}
-              className={`flex items-center w-full px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 ${index === effectiveHighlight ? 'bg-gray-100 dark:bg-slate-700' : ''} ${pending !== null && !isPending ? 'opacity-50 cursor-wait' : ''}`}
+              className={`flex items-center w-full px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 ${index === effectiveHighlight ? 'bg-gray-100 dark:bg-slate-700' : ''} ${isBlocked ? 'opacity-50 cursor-wait' : ''}`}
             >
               {isPending ? (
                 <LoaderCircle
@@ -345,15 +348,14 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
             type="button"
             role="option"
             aria-selected={createIndex === effectiveHighlight}
-            aria-busy={pending?.kind === 'create'}
-            aria-disabled={pending?.kind === 'toggle'}
-            data-testid="label-option-create"
+            aria-busy={isCreatePending}
+            aria-disabled={isCreateBlocked}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => { setHighlightIndex(createIndex); handleCreate(); }}
             onMouseEnter={() => setHighlightIndex(createIndex)}
-            className={`flex items-center w-full px-3 py-1.5 text-sm text-blue-600 dark:text-blue-400 ${createIndex === effectiveHighlight ? 'bg-gray-100 dark:bg-slate-700' : ''} ${pending?.kind === 'toggle' ? 'opacity-50 cursor-wait' : ''}`}
+            className={`flex items-center w-full px-3 py-1.5 text-sm text-blue-600 dark:text-blue-400 ${createIndex === effectiveHighlight ? 'bg-gray-100 dark:bg-slate-700' : ''} ${isCreateBlocked ? 'opacity-50 cursor-wait' : ''}`}
           >
-            {pending?.kind === 'create' ? (
+            {isCreatePending ? (
               <LoaderCircle
                 className="h-3.5 w-3.5 mr-2 shrink-0 animate-spin motion-reduce:animate-none"
                 aria-hidden="true"

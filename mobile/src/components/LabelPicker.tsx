@@ -61,7 +61,7 @@ export default function LabelPicker({
   const filteredLabels = useMemo(() => filterLabelsByQuery(allLabels ?? [], trimmedQuery), [allLabels, trimmedQuery]);
   // Until the label list is loaded we cannot tell whether the query names an
   // existing label, so the create row stays hidden.
-  const showCreate = !isLoading && canCreateLabelFromQuery(allLabels ?? [], trimmedQuery);
+  const showCreate = !isLoading && canCreateLabelFromQuery(filteredLabels, trimmedQuery);
 
   const handleToggleLabel = async (label: Label) => {
     if (isMutating) return;
@@ -81,11 +81,10 @@ export default function LabelPicker({
   };
 
   const handleCreateLabel = async () => {
-    const name = trimmedQuery;
     if (!showCreate || isMutating) return;
     setIsCreatingLabel(true);
     try {
-      await addLabel.mutateAsync({ noteId, name });
+      await addLabel.mutateAsync({ noteId, name: trimmedQuery });
       setQuery('');
       onLabelsChanged?.();
     } catch {
