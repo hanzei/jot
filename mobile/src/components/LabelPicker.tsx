@@ -1,4 +1,4 @@
-import { useContext, useState } from 'react';
+import { useContext, useMemo, useState } from 'react';
 import {
   Modal,
   View,
@@ -16,7 +16,7 @@ import {
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { Plus, Square, SquareCheck } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, type Label } from '@jot/shared';
+import { VALIDATION, canCreateLabelFromQuery, filterLabelsByQuery, type Label } from '@jot/shared';
 import { useTheme } from '../theme/ThemeContext';
 import { useLabels, useAddLabelToNote, useRemoveLabelFromNote } from '../hooks/useLabels';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
@@ -36,7 +36,8 @@ export default function LabelPicker({
   onClose,
   onLabelsChanged,
 }: LabelPickerProps) {
-  const [newLabelText, setNewLabelText] = useState('');
+  // One field both filters the list and names a new label, as on the webapp.
+  const [query, setQuery] = useState('');
   // id of the label row currently being toggled and whether a brand-new label
   // is being created, so the affected row/button can show a spinner instead of
   // silently sitting for up to the ~5s write timeout (#698).
@@ -56,6 +57,11 @@ export default function LabelPicker({
 
   const noteLabelIds = new Set(noteLabels.map((l) => l.id));
   const isMutating = addLabel.isPending || removeLabel.isPending;
+  const trimmedQuery = query.trim();
+  const filteredLabels = useMemo(() => filterLabelsByQuery(allLabels ?? [], trimmedQuery), [allLabels, trimmedQuery]);
+  // Until the label list is loaded we cannot tell whether the query names an
+  // existing label, so the create row stays hidden.
+  const showCreate = !isLoading && canCreateLabelFromQuery(filteredLabels, trimmedQuery);
 
   const handleToggleLabel = async (label: Label) => {
     if (isMutating) return;
@@ -74,13 +80,12 @@ export default function LabelPicker({
     }
   };
 
-  const handleAddNewLabel = async () => {
-    const name = newLabelText.trim();
-    if (!name || isMutating) return;
+  const handleCreateLabel = async () => {
+    if (!showCreate || isMutating) return;
     setIsCreatingLabel(true);
     try {
-      await addLabel.mutateAsync({ noteId, name });
-      setNewLabelText('');
+      await addLabel.mutateAsync({ noteId, name: trimmedQuery });
+      setQuery('');
       onLabelsChanged?.();
     } catch {
       Alert.alert(t('common.error'), t('labels.failedCreate'));
@@ -89,28 +94,54 @@ export default function LabelPicker({
     }
   };
 
+  // The sheet stays mounted between openings, so clear the search on close
+  // rather than reopening on a stale filter.
+  const handleClose = () => {
+    setQuery('');
+    onClose();
+  };
+
   return (
     <Modal
       visible={visible}
       transparent
       animationType="slide"
-      onRequestClose={onClose}
+      onRequestClose={handleClose}
     >
       <KeyboardAvoidingView
         style={styles.overlay}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <Pressable style={[styles.overlay, { backgroundColor: colors.overlay }]} onPress={onClose}>
+        <Pressable style={[styles.overlay, { backgroundColor: colors.overlay }]} onPress={handleClose} testID="label-picker-backdrop">
           <View style={[styles.sheet, { backgroundColor: colors.sheetBackground, paddingBottom: insets.bottom, marginBottom: androidKeyboardInset }]}>
             <Pressable>
               <View style={[styles.handle, { backgroundColor: colors.handleColor }]} />
               <Text style={[styles.title, { color: colors.text }]}>{t('labels.title')}</Text>
 
+              <TextInput
+                style={[styles.searchInput, { color: colors.text, borderBottomColor: colors.border }]}
+                value={query}
+                onChangeText={setQuery}
+                // maxLength counts UTF-16 units while the server counts code points, so
+                // astral input is cut early — accepted, as for PAT names (issue #772).
+                maxLength={VALIDATION.LABEL_NAME_MAX_LENGTH}
+                placeholder={t('labels.searchPlaceholder')}
+                placeholderTextColor={colors.placeholder}
+                accessibilityLabel={t('labels.searchPlaceholder')}
+                // "Done" creates only when the query matches nothing: with
+                // partial matches listed, the user more likely meant one of them.
+                onSubmitEditing={() => {
+                  if (filteredLabels.length === 0) void handleCreateLabel();
+                }}
+                returnKeyType="done"
+                testID="label-search-input"
+              />
+
               {isLoading ? (
                 <ActivityIndicator style={styles.loader} color={colors.primary} />
               ) : (
                 <ScrollView style={styles.labelList} keyboardShouldPersistTaps="handled">
-                  {(allLabels ?? []).map((label) => (
+                  {filteredLabels.map((label) => (
                     <TouchableOpacity
                       key={label.id}
                       style={[styles.labelRow, isMutating && styles.labelRowDisabled]}
@@ -130,43 +161,30 @@ export default function LabelPicker({
                       <Text style={[styles.labelName, { color: colors.text }]}>{label.name}</Text>
                     </TouchableOpacity>
                   ))}
-                  {(allLabels ?? []).length === 0 && (
+                  {showCreate && (
+                    <TouchableOpacity
+                      style={[styles.labelRow, isMutating && !isCreatingLabel && styles.labelRowDisabled]}
+                      onPress={handleCreateLabel}
+                      disabled={isMutating}
+                      testID="label-create-option"
+                      accessibilityRole="button"
+                      accessibilityState={{ disabled: isMutating, busy: isCreatingLabel }}
+                    >
+                      {isCreatingLabel ? (
+                        <ActivityIndicator size="small" color={colors.primary} testID="label-create-option-spinner" />
+                      ) : (
+                        <Plus size={22} color={colors.primary} />
+                      )}
+                      <Text style={[styles.labelName, styles.createLabelText, { color: colors.primary }]} numberOfLines={1}>
+                        {t('labels.createLabel', { name: trimmedQuery })}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                  {filteredLabels.length === 0 && !showCreate && (
                     <Text style={[styles.emptyLabels, { color: colors.textMuted }]}>{t('labels.noLabels')}</Text>
                   )}
                 </ScrollView>
               )}
-
-              <View style={[styles.addRow, { borderTopColor: colors.borderLight }]}>
-                <TextInput
-                  style={[styles.addInput, { color: colors.text, borderBottomColor: colors.border }]}
-                  value={newLabelText}
-                  onChangeText={setNewLabelText}
-                  // maxLength counts UTF-16 units while the server counts code points, so
-                  // astral input is cut early — accepted, as for PAT names (issue #772).
-                  maxLength={VALIDATION.LABEL_NAME_MAX_LENGTH}
-                  placeholder={t('labels.newLabelPlaceholder')}
-                  placeholderTextColor={colors.placeholder}
-                  onSubmitEditing={handleAddNewLabel}
-                  returnKeyType="done"
-                  testID="new-label-input"
-                />
-                <TouchableOpacity
-                  style={[styles.addBtn, !newLabelText.trim() && styles.addBtnDisabled]}
-                  onPress={handleAddNewLabel}
-                  disabled={!newLabelText.trim() || isMutating}
-                  testID="add-label-btn"
-                  accessibilityState={{ disabled: !newLabelText.trim() || isMutating, busy: isCreatingLabel }}
-                >
-                  {isCreatingLabel ? (
-                    <ActivityIndicator size="small" color={colors.primary} testID="add-label-btn-spinner" />
-                  ) : (
-                    <Plus
-                      size={22}
-                      color={newLabelText.trim() ? colors.primary : colors.iconMuted}
-                    />
-                  )}
-                </TouchableOpacity>
-              </View>
             </Pressable>
           </View>
         </Pressable>
@@ -218,25 +236,14 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     textAlign: 'center',
   },
-  addRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    marginTop: 8,
-    paddingTop: 12,
-    gap: 8,
-  },
-  addInput: {
-    flex: 1,
+  searchInput: {
     fontSize: 15,
     paddingVertical: 6,
     borderBottomWidth: 1,
+    marginBottom: 8,
   },
-  addBtn: {
-    padding: 4,
-  },
-  addBtnDisabled: {
-    opacity: 0.5,
+  createLabelText: {
+    flexShrink: 1,
   },
   labelRowDisabled: {
     opacity: 0.5,

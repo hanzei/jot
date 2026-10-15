@@ -365,6 +365,8 @@
   "labels": {
     "title": "Labels",
     "noLabels": "No labels yet",
+    "searchPlaceholder": "Search or create label...",
+    "createLabel": "Create \"{{name}}\"",
     "newSidebar": "New Label",
     "newLabelPlaceholder": "New label",
     "createInputLabel": "New label name",

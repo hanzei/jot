@@ -365,6 +365,8 @@
   "labels": {
     "title": "Etiquetas",
     "noLabels": "Aún no hay etiquetas",
+    "searchPlaceholder": "Buscar o crear etiqueta...",
+    "createLabel": "Crear \"{{name}}\"",
     "newLabelPlaceholder": "Nueva etiqueta",
     "newSidebar": "Nueva etiqueta",
     "createInputLabel": "Nuevo nombre de etiqueta",

@@ -365,6 +365,8 @@
   "labels": {
     "title": "Labels",
     "noLabels": "Nog geen labels",
+    "searchPlaceholder": "Label zoeken of aanmaken...",
+    "createLabel": "\"{{name}}\" aanmaken",
     "newLabelPlaceholder": "Nieuw label",
     "newSidebar": "Nieuw label",
     "createInputLabel": "Nieuwe labelnaam",

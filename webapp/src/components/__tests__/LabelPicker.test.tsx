@@ -142,6 +142,58 @@ describe('LabelPicker', () => {
     expect(mockAddLabel).toHaveBeenCalledTimes(1);
   });
 
+  it('shows a spinner on the toggled row and ignores other toggles until the write settles', async () => {
+    const note = createMockTextNote({ id: 'note1' });
+    let resolveAdd: (n: typeof note) => void = () => {};
+    mockAddLabel.mockReturnValue(new Promise(resolve => { resolveAdd = resolve; }));
+    const onNoteUpdate = vi.fn();
+    render(<LabelPicker note={note} onNoteUpdate={onNoteUpdate} onClose={vi.fn()} />);
+    await screen.findByText('Bar');
+
+    fireEvent.click(screen.getByRole('option', { name: 'Bar' }));
+    expect(await screen.findByTestId('label-option-Bar-spinner')).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Bar' })).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByRole('option', { name: 'Baz' })).toHaveAttribute('aria-disabled', 'true');
+
+    // A second click on the same row or another row is dropped while in flight.
+    fireEvent.click(screen.getByRole('option', { name: 'Bar' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Baz' }));
+    expect(mockAddLabel).toHaveBeenCalledTimes(1);
+    expect(mockRemoveLabel).not.toHaveBeenCalled();
+
+    resolveAdd({ ...note, labels: [makeLabel('Bar')] });
+    await waitFor(() => {
+      expect(screen.queryByTestId('label-option-Bar-spinner')).not.toBeInTheDocument();
+    });
+    expect(onNoteUpdate).toHaveBeenCalled();
+    expect(screen.getByRole('option', { name: 'Baz' })).toHaveAttribute('aria-disabled', 'false');
+  });
+
+  it('clears the row spinner when the toggle fails', async () => {
+    const note = createMockTextNote({ id: 'note1' });
+    mockAddLabel.mockRejectedValue(new Error('boom'));
+    const onError = vi.fn();
+    render(<LabelPicker note={note} onError={onError} onClose={vi.fn()} />);
+    await screen.findByText('Bar');
+
+    fireEvent.click(screen.getByRole('option', { name: 'Bar' }));
+
+    await waitFor(() => expect(onError).toHaveBeenCalledWith('boom'));
+    expect(screen.queryByTestId('label-option-Bar-spinner')).not.toBeInTheDocument();
+  });
+
+  it('shows a spinner on the create row while a create is in flight', async () => {
+    const note = createMockTextNote({ id: 'note1' });
+    mockAddLabel.mockReturnValue(new Promise(() => {}));
+    render(<LabelPicker note={note} onClose={vi.fn()} />);
+    await screen.findByText('Bar');
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Fresh' } });
+    fireEvent.click(screen.getByRole('option', { name: 'Create "Fresh"' }));
+
+    expect(await screen.findByTestId('label-option-create-spinner')).toBeInTheDocument();
+  });
+
   it('moves the highlight with Arrow keys', async () => {
     render(<LabelPicker selectedLabels={[]} onLocalChange={vi.fn()} onClose={vi.fn()} />);
     await screen.findByText('Bar');
