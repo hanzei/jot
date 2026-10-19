@@ -31,8 +31,8 @@ interface NoteEditorMenuProps {
   onShare?: (() => void) | undefined;
   /**
    * When the current user is a collaborator rather than the note's owner, the
-   * share entry opens a read-only view (who has access + leave), so it is
-   * labelled "Sharing" with a neutral icon instead of "Share" / add-person.
+   * share entry opens a read-only view (who has access + leave), so it shows
+   * a neutral icon instead of add-person. The label is "Collaborators" either way.
    */
   shareIsReadOnly?: boolean;
   onDuplicate?: () => void;
@@ -108,18 +108,10 @@ export default function NoteEditorMenu({
       });
     }
   } else {
-    if (onSend) {
-      actions.push({
-        icon: Share2,
-        label: t('note.send'),
-        onPress: run(onSend),
-        testId: 'editor-menu-send',
-      });
-    }
     if (onShare) {
       actions.push({
         icon: shareIsReadOnly ? Users : UserPlus,
-        label: shareIsReadOnly ? t('note.sharing') : t('note.share'),
+        label: t('note.collaborators'),
         onPress: run(onShare),
         testId: 'editor-menu-share',
       });
@@ -130,6 +122,14 @@ export default function NoteEditorMenu({
         label: t('note.duplicate'),
         onPress: run(onDuplicate),
         testId: 'editor-menu-duplicate',
+      });
+    }
+    if (onSend) {
+      actions.push({
+        icon: Share2,
+        label: t('note.send'),
+        onPress: run(onSend),
+        testId: 'editor-menu-send',
       });
     }
     if (onConvert) {

@@ -432,7 +432,7 @@ describe('NoteCard', () => {
       expect(img).toHaveAttribute('src', '/api/v1/users/user2/profile-icon');
     });
 
-    it('shows share button only for note owners', async () => {
+    it('shows the Collaborators entry for note owners', async () => {
       const user = userEvent.setup();
       const onShare = vi.fn();
 
@@ -443,10 +443,10 @@ describe('NoteCard', () => {
       const menuButton = screen.getByRole('button', { name: 'Note options' });
       await user.click(menuButton);
 
-      expect(screen.getByText('Share')).toBeInTheDocument();
+      expect(screen.getByText('Collaborators')).toBeInTheDocument();
     });
 
-    it('does not show share button for non-owners', async () => {
+    it('uses the same Collaborators label for non-owners', async () => {
       const user = userEvent.setup();
       const onShare = vi.fn();
       const notOwnedNote = createMockNote({ user_id: 'other_user' });
@@ -458,7 +458,9 @@ describe('NoteCard', () => {
       const menuButton = screen.getByRole('button', { name: 'Note options' });
       await user.click(menuButton);
 
+      expect(screen.getByText('Collaborators')).toBeInTheDocument();
       expect(screen.queryByText('Share')).not.toBeInTheDocument();
+      expect(screen.queryByText('Sharing')).not.toBeInTheDocument();
     });
   });
 

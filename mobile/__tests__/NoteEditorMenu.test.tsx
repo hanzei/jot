@@ -54,7 +54,7 @@ describe('NoteEditorMenu', () => {
     expect(queryByTestId('editor-menu-delete-permanently')).toBeNull();
   });
 
-  it('shows Share and Labels when their callbacks are provided', async () => {
+  it('shows Collaborators and Labels when their callbacks are provided', async () => {
     const { getByTestId } = await render(
       <NoteEditorMenu
         visible
@@ -69,6 +69,43 @@ describe('NoteEditorMenu', () => {
 
     expect(getByTestId('editor-menu-share')).toBeTruthy();
     expect(getByTestId('editor-menu-label')).toBeTruthy();
+  });
+
+  it('orders Collaborators first and keeps Send apart from it, below Duplicate', async () => {
+    const { getAllByTestId } = await render(
+      <NoteEditorMenu
+        visible
+        onClose={noop}
+        onSend={noop}
+        onShare={noop}
+        onDuplicate={noop}
+        onConvert={noop}
+        onManageLabels={noop}
+        onMoveToTrash={noop}
+      />,
+    );
+
+    expect(getAllByTestId(/^editor-menu-/).map((el) => el.props.testID as string)).toEqual([
+      'editor-menu-share',
+      'editor-menu-duplicate',
+      'editor-menu-send',
+      'editor-menu-convert',
+      'editor-menu-label',
+      'editor-menu-trash',
+    ]);
+  });
+
+  it('labels the collaboration entry "Collaborators" for owners and read-only collaborators alike', async () => {
+    const { getByText, rerender } = await render(
+      <NoteEditorMenu visible onClose={noop} onSend={noop} onShare={noop} onMoveToTrash={noop} />,
+    );
+    expect(getByText('note.collaborators')).toBeTruthy();
+    expect(getByText('note.send')).toBeTruthy();
+
+    await rerender(
+      <NoteEditorMenu visible onClose={noop} onSend={noop} onShare={noop} shareIsReadOnly onMoveToTrash={noop} />,
+    );
+    expect(getByText('note.collaborators')).toBeTruthy();
   });
 
   it('renders only Restore and Delete-forever for a trashed note', async () => {

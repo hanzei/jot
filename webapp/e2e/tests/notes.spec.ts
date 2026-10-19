@@ -109,7 +109,7 @@ test.describe('Notes', () => {
     await dashboardPage.openModalOverflowMenu();
     await expect(page.getByRole('menuitem', { name: 'Restore' })).toBeVisible();
     await expect(page.getByRole('menuitem', { name: 'Delete forever' })).toBeVisible();
-    await expect(page.getByRole('menuitem', { name: 'Share' })).toHaveCount(0);
+    await expect(page.getByRole('menuitem', { name: 'Collaborators' })).toHaveCount(0);
     await expect(page.getByRole('menuitem', { name: 'Duplicate' })).toHaveCount(0);
   });
 

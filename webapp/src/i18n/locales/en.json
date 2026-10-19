@@ -373,7 +373,7 @@
     }
   },
   "note": {
-    "share": "Share",
+    "collaborators": "Collaborators",
     "unpin": "Unpin",
     "pin": "Pin",
     "unarchive": "Unarchive",
@@ -457,8 +457,7 @@
     "removeItem": "Remove item",
     "unassign": "Unassign",
     "assignedTo": "Assigned to {{name}}",
-    "completedSuggestions": "Suggestions from completed items",
-    "sharing": "Sharing"
+    "completedSuggestions": "Suggestions from completed items"
   },
   "labels": {
     "title": "Labels",

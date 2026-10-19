@@ -2331,8 +2331,8 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
                     onClick={() => onShare(note)}
                     onMouseDown={(event) => event.stopPropagation()}
                     className="flex items-center -space-x-1 rounded-full transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                    title={isOwner ? t('note.share') : t('note.sharing')}
-                    aria-label={isOwner ? t('note.share') : t('note.sharing')}
+                    title={t('note.collaborators')}
+                    aria-label={t('note.collaborators')}
                   >
                     {avatarEls}
                   </button>
@@ -2608,7 +2608,7 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
                                     ) : (
                                       <Users className="h-4 w-4 mr-2" />
                                     )}
-                                    {isOwner ? t('note.share') : t('note.sharing')}
+                                    {t('note.collaborators')}
                                   </span>
                                   <MenuKbd>S</MenuKbd>
                                 </button>

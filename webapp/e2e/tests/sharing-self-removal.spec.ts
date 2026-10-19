@@ -31,7 +31,7 @@ test.describe('Leaving a shared note', () => {
     await dashboardPage.openSharingModalFromModal();
 
     // The dialog root is a zero-box wrapper; assert on its content instead.
-    const shareDialog = page.getByRole('dialog', { name: 'Sharing' });
+    const shareDialog = page.getByRole('dialog', { name: 'Collaborators' });
     // Read-only: the access list is shown, but there is no share picker.
     await expect(shareDialog.getByText(/people with access/i)).toBeVisible();
     await expect(shareDialog.getByRole('textbox')).toHaveCount(0);

@@ -256,7 +256,7 @@
     "serverOrigin": "Serveroorsprong"
   },
   "note": {
-    "share": "Delen",
+    "collaborators": "Medewerkers",
     "send": "Versturen",
     "unpin": "Losmaken",
     "pin": "Vastzetten",
@@ -334,8 +334,7 @@
     "uncheckAllItems": "Alle items uitvinken",
     "deleteCheckedItems": "Aangevinkte items verwijderen",
     "deleteCheckedItemsConfirm_one": "{{count}} aangevinkt item verwijderen? Dit kan niet ongedaan worden gemaakt.",
-    "deleteCheckedItemsConfirm_other": "{{count}} aangevinkte items verwijderen? Dit kan niet ongedaan worden gemaakt.",
-    "sharing": "Delen"
+    "deleteCheckedItemsConfirm_other": "{{count}} aangevinkte items verwijderen? Dit kan niet ongedaan worden gemaakt."
   },
   "images": {
     "openLightbox": "{{filename}} bekijken",

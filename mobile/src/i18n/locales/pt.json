@@ -256,7 +256,7 @@
     "serverOrigin": "Origem do servidor"
   },
   "note": {
-    "share": "Compartilhar",
+    "collaborators": "Colaboradores",
     "send": "Enviar",
     "unpin": "Desafixar",
     "pin": "Fixar",
@@ -334,8 +334,7 @@
     "uncheckAllItems": "Desmarcar todos os itens",
     "deleteCheckedItems": "Excluir itens marcados",
     "deleteCheckedItemsConfirm_one": "Excluir {{count}} item marcado? Esta ação não pode ser desfeita.",
-    "deleteCheckedItemsConfirm_other": "Excluir {{count}} itens marcados? Esta ação não pode ser desfeita.",
-    "sharing": "Compartilhamento"
+    "deleteCheckedItemsConfirm_other": "Excluir {{count}} itens marcados? Esta ação não pode ser desfeita."
   },
   "images": {
     "openLightbox": "Ver {{filename}}",

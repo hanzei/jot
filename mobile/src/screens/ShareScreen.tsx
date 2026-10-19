@@ -382,7 +382,7 @@ export default function ShareScreen() {
         >
           <ArrowLeft size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>{isOwner ? t('note.share') : t('note.sharing')}</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>{t('note.collaborators')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 

@@ -182,7 +182,7 @@ test.describe('Modal focus management', () => {
     await dashboardPage.openNote('Share Focus Note');
     await dashboardPage.openShareModalFromModal();
 
-    const shareDialog = page.getByRole('dialog', { name: 'Share' });
+    const shareDialog = page.getByRole('dialog', { name: 'Collaborators' });
     await expect(shareDialog.getByLabel('Share with user')).toBeVisible();
     await expectFocusTrapped(page, shareDialog);
 

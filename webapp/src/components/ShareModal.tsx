@@ -346,7 +346,7 @@ export default function ShareModal({ note, isOpen, onClose, notesList, currentUs
   if (!note) return null;
 
   return (
-    <Dialog open={isOpen} onClose={handleClose} aria-label={isOwner ? t('note.share') : t('note.sharing')} className="relative z-50">
+    <Dialog open={isOpen} onClose={handleClose} aria-label={t('note.collaborators')} className="relative z-50">
       <DialogBackdrop transition className="fixed inset-0 bg-black/25 transition duration-200 ease-out data-[closed]:opacity-0 motion-reduce:transition-none" />
 
       <div className="fixed inset-0 overflow-y-auto">
