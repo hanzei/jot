@@ -89,7 +89,8 @@
     "ssoCancelled": "Sign-in was cancelled.",
     "ssoTryAgainLater": "Single sign-on is busy right now. Try again in a minute.",
     "ssoFailed": "Single sign-on failed. Please try again.",
-    "ssoServerChanged": "The server changed during sign-in. Please try again."
+    "ssoServerChanged": "The server changed during sign-in. Please try again.",
+    "ssoBrowserDidNotOpen": "Couldn't open the browser for sign-in. Please try again."
   },
   "dashboard": {
     "newNote": "New Note",

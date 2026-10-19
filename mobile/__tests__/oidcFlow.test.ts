@@ -1,9 +1,12 @@
 import { CanceledError } from 'axios';
 import * as WebBrowser from 'expo-web-browser';
+import { AppState, Linking, Platform } from 'react-native';
+import type { AppStateStatus, EmitterSubscription, NativeEventSubscription } from 'react-native';
 import { getBaseUrl } from '../src/api/client';
 import { computeCodeChallenge } from '../src/utils/pkce';
 import { apiErrorBody } from './helpers/apiError';
 import {
+  BROWSER_OPEN_TIMEOUT_MS,
   isOidcFlowPending,
   oidcCallbackErrorMessageKey,
   oidcExchangeErrorMessage,
@@ -19,6 +22,7 @@ jest.mock('../src/api/client', () => ({
 }));
 
 const mockOpenAuthSession = WebBrowser.openAuthSessionAsync as jest.Mock;
+const mockOpenBrowser = WebBrowser.openBrowserAsync as jest.Mock;
 const mockGetBaseUrl = getBaseUrl as jest.Mock;
 
 const SERVER = 'https://jot.example.com';
@@ -120,6 +124,118 @@ describe('oidcFlow', () => {
 
       finish({ type: 'success', url: 'jot://oidc-callback?code=first' });
       await expect(first).resolves.toEqual(expect.objectContaining({ type: 'code', code: 'first' }));
+    });
+  });
+
+  describe('runOidcBrowserFlow on Android', () => {
+    let originalOS: typeof Platform.OS;
+    let urlListeners: ((event: { url: string }) => void)[];
+    let appStateListeners: ((state: AppStateStatus) => void)[];
+    let removeUrl: jest.Mock;
+    let removeAppState: jest.Mock;
+
+    function emitUrl(url: string) {
+      for (const listener of urlListeners) listener({ url });
+    }
+
+    function emitAppState(state: AppStateStatus) {
+      for (const listener of appStateListeners) listener(state);
+    }
+
+    // Lets the PKCE setup finish so the tab is open and the listeners are set.
+    async function untilBrowserOpened(calls = 1) {
+      while (mockOpenBrowser.mock.calls.length < calls) {
+        await jest.advanceTimersByTimeAsync(0);
+      }
+    }
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+      originalOS = Platform.OS;
+      (Platform as { OS: typeof Platform.OS }).OS = 'android';
+      urlListeners = [];
+      appStateListeners = [];
+      removeUrl = jest.fn();
+      removeAppState = jest.fn();
+      jest.spyOn(Linking, 'addEventListener').mockImplementation((_type, listener) => {
+        urlListeners.push(listener as (event: { url: string }) => void);
+        return { remove: removeUrl } as unknown as EmitterSubscription;
+      });
+      jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, listener) => {
+        appStateListeners.push(listener);
+        return { remove: removeAppState } as unknown as NativeEventSubscription;
+      });
+    });
+
+    afterEach(() => {
+      (Platform as { OS: typeof Platform.OS }).OS = originalOS;
+      jest.restoreAllMocks();
+      jest.useRealTimers();
+    });
+
+    it('opens the Custom Tab directly and resolves on the callback redirect', async () => {
+      const flow = runOidcBrowserFlow('link');
+      await untilBrowserOpened();
+      emitAppState('background');
+      emitUrl('jot://notes/abc');
+      emitUrl('jot://oidc-callback?code=abc123');
+
+      await expect(flow).resolves.toEqual(expect.objectContaining({ type: 'code', code: 'abc123' }));
+      expect(mockOpenAuthSession).not.toHaveBeenCalled();
+      expect(mockOpenBrowser.mock.calls[0]?.[0]).toContain(`${SERVER}/api/v1/auth/oidc/native/start?intent=link`);
+      expect(removeUrl).toHaveBeenCalled();
+      expect(removeAppState).toHaveBeenCalled();
+      expect(isOidcFlowPending()).toBe(false);
+    });
+
+    it('treats a return to the app without the callback as a quiet cancellation', async () => {
+      const flow = runOidcBrowserFlow('login');
+      await untilBrowserOpened();
+      emitAppState('background');
+      emitAppState('active');
+
+      await expect(flow).resolves.toEqual({ type: 'cancelled' });
+      expect(isOidcFlowPending()).toBe(false);
+    });
+
+    it('gives up with an error when the browser never takes the app out of the foreground', async () => {
+      const flow = runOidcBrowserFlow('link');
+      await untilBrowserOpened();
+      await jest.advanceTimersByTimeAsync(BROWSER_OPEN_TIMEOUT_MS);
+
+      await expect(flow).resolves.toEqual({ type: 'error', messageKey: 'auth.ssoBrowserDidNotOpen' });
+      expect(isOidcFlowPending()).toBe(false);
+      expect(removeUrl).toHaveBeenCalled();
+      expect(removeAppState).toHaveBeenCalled();
+
+      // The next attempt starts a fresh flow instead of resolving as cancelled.
+      const retry = runOidcBrowserFlow('link');
+      await untilBrowserOpened(2);
+      emitAppState('background');
+      emitUrl('jot://oidc-callback?code=retry');
+      await expect(retry).resolves.toEqual(expect.objectContaining({ type: 'code', code: 'retry' }));
+    });
+
+    it('keeps waiting past the timeout once the browser is in front', async () => {
+      const flow = runOidcBrowserFlow('login');
+      await untilBrowserOpened();
+      emitAppState('background');
+      await jest.advanceTimersByTimeAsync(BROWSER_OPEN_TIMEOUT_MS * 10);
+      expect(isOidcFlowPending()).toBe(true);
+
+      emitUrl('jot://oidc-callback?code=slow');
+      await expect(flow).resolves.toEqual(expect.objectContaining({ type: 'code', code: 'slow' }));
+    });
+
+    it('turns a failure to launch the browser into a terminal error', async () => {
+      mockOpenBrowser.mockRejectedValueOnce(new Error('no matching activity'));
+
+      const flow = runOidcBrowserFlow('login');
+      await untilBrowserOpened();
+
+      await expect(flow).resolves.toEqual({ type: 'error', messageKey: 'auth.ssoFailed' });
+      expect(removeUrl).toHaveBeenCalled();
+      expect(isOidcFlowPending()).toBe(false);
     });
   });
 

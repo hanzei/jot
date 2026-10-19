@@ -89,7 +89,8 @@
     "ssoCancelled": "Inloggen is geannuleerd.",
     "ssoTryAgainLater": "Eenmalige aanmelding is momenteel bezet. Probeer het over een minuut opnieuw.",
     "ssoFailed": "Eenmalige aanmelding mislukt. Probeer het opnieuw.",
-    "ssoServerChanged": "De server is tijdens het inloggen gewijzigd. Probeer het opnieuw."
+    "ssoServerChanged": "De server is tijdens het inloggen gewijzigd. Probeer het opnieuw.",
+    "ssoBrowserDidNotOpen": "De browser voor het inloggen kon niet worden geopend. Probeer het opnieuw."
   },
   "dashboard": {
     "newNote": "Nieuwe notitie",

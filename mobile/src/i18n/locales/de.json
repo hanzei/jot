@@ -66,7 +66,8 @@
     "ssoCancelled": "Die Anmeldung wurde abgebrochen.",
     "ssoTryAgainLater": "Single Sign-On ist gerade ausgelastet. Versuche es in einer Minute erneut.",
     "ssoFailed": "Single Sign-On fehlgeschlagen. Bitte versuche es erneut.",
-    "ssoServerChanged": "Der Server hat sich während der Anmeldung geändert. Bitte versuche es erneut."
+    "ssoServerChanged": "Der Server hat sich während der Anmeldung geändert. Bitte versuche es erneut.",
+    "ssoBrowserDidNotOpen": "Der Browser für die Anmeldung konnte nicht geöffnet werden. Bitte versuche es erneut."
   },
   "dashboard": {
     "newNote": "Neue Notiz",

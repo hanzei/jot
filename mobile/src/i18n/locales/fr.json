@@ -66,7 +66,8 @@
     "ssoCancelled": "La connexion a été annulée.",
     "ssoTryAgainLater": "L'authentification unique est momentanément saturée. Réessayez dans une minute.",
     "ssoFailed": "Échec de l'authentification unique. Veuillez réessayer.",
-    "ssoServerChanged": "Le serveur a changé pendant la connexion. Veuillez réessayer."
+    "ssoServerChanged": "Le serveur a changé pendant la connexion. Veuillez réessayer.",
+    "ssoBrowserDidNotOpen": "Impossible d'ouvrir le navigateur pour la connexion. Veuillez réessayer."
   },
   "dashboard": {
     "newNote": "Nouvelle note",

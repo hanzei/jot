@@ -89,7 +89,8 @@
     "ssoCancelled": "Se canceló el inicio de sesión.",
     "ssoTryAgainLater": "El inicio de sesión único está ocupado. Inténtalo de nuevo en un minuto.",
     "ssoFailed": "Error en el inicio de sesión único. Inténtalo de nuevo.",
-    "ssoServerChanged": "El servidor cambió durante el inicio de sesión. Inténtalo de nuevo."
+    "ssoServerChanged": "El servidor cambió durante el inicio de sesión. Inténtalo de nuevo.",
+    "ssoBrowserDidNotOpen": "No se pudo abrir el navegador para iniciar sesión. Inténtalo de nuevo."
   },
   "dashboard": {
     "newNote": "Nueva nota",
