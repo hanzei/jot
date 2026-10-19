@@ -117,9 +117,11 @@ collect_diagnostics() {
 
 # True when the just-collected reports/logcat show a device-driver death rather
 # than an assertion failure. Reads the files collect_diagnostics wrote.
+# grep reads the files itself rather than through a pipe: with pipefail, `cat … |
+# grep -q` returns 141 when grep exits on an early match (in the report) while cat
+# is still writing logcat.txt, so the check failed exactly when it should pass.
 is_infra_failure() {
-  { cat "$E2E_DIR"/report-*.xml 2>/dev/null; cat "$E2E_DIR/logcat.txt" 2>/dev/null; } \
-    | grep -Eq "$INFRA_FAILURE_RE"
+  grep -Eqs "$INFRA_FAILURE_RE" "$E2E_DIR"/report-*.xml "$E2E_DIR/logcat.txt"
 }
 
 # Force a clean slate before a retry. run.sh's own EXIT trap already disables any

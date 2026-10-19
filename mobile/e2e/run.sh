@@ -266,8 +266,11 @@ assert_note_synced() {
     return 1
   fi
   for _ in $(seq 1 30); do
-    if curl "${READY_CURL_OPTS[@]}" -b "$jar" "$api/notes" 2>/dev/null \
-        | grep -qF "$note_text"; then
+    # Capture first: under pipefail, piping into `grep -q` can fail with SIGPIPE
+    # on a match once the body outgrows the pipe buffer.
+    local notes
+    notes="$(curl "${READY_CURL_OPTS[@]}" -b "$jar" "$api/notes" 2>/dev/null)" || notes=""
+    if grep -qF "$note_text" <<<"$notes"; then
       echo "Note synced to the server."
       return 0
     fi
