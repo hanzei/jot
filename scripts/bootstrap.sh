@@ -37,6 +37,9 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly REPO_ROOT
 
 failures=0
+# Best-effort steps that did not complete. They do not fail setup, but they are
+# repeated in the closing summary so they are not lost in the install output.
+warnings=()
 
 log() { printf '[bootstrap] %s\n' "$*"; }
 
@@ -217,8 +220,9 @@ install_npm_deps() {
 # `task test-e2e` itself, as a safety net for JOT_BOOTSTRAP_SKIP_PLAYWRIGHT=1
 # and for anyone who reaches test-e2e without ever running this script.
 #
-# Best-effort by design: a network hiccup here is `task test-e2e`'s problem
-# to report, not a reason for the rest of setup to fail.
+# Best-effort by design: a failed download here is `task test-e2e`'s problem
+# to report, not a reason for the rest of setup to fail. It is still repeated
+# as a warning in the closing summary, naming the host when a proxy blocked it.
 # ---------------------------------------------------------------------------
 
 install_playwright_browser() {
@@ -236,9 +240,23 @@ install_playwright_browser() {
   fi
 
   log "installing the Playwright Chromium build (no-ops if already up to date)"
-  if ! (cd "$REPO_ROOT/webapp" && npx playwright install chromium); then
-    log "Playwright browser install did not complete — 'task test-e2e' will report why"
+  # Output is streamed and kept, so a blocked download host can be named below.
+  local out
+  out="$(mktemp)"
+  if ! (cd "$REPO_ROOT/webapp" && npx playwright install chromium) 2>&1 | tee "$out"; then
+    local host
+    # A sandbox or corporate proxy that blocks the host fails the same way on
+    # every run, unlike a network hiccup, so say what to allow.
+    host="$(sed -nE 's/.*allows host "([^"]+)".*/\1/p' "$out" | head -n1)"
+    if [ -n "$host" ]; then
+      warnings+=("Playwright Chromium not installed: the network policy blocks $host." \
+        "Allow that host, then re-run ./scripts/bootstrap.sh. Until then 'task test-e2e' cannot run.")
+    else
+      warnings+=("Playwright Chromium not installed (see the output above), so 'task test-e2e' cannot run." \
+        "Re-run ./scripts/bootstrap.sh, or: cd webapp && npx playwright install chromium")
+    fi
   fi
+  rm -f "$out"
 }
 
 # ---------------------------------------------------------------------------
@@ -278,4 +296,9 @@ if [ "$failures" -gt 0 ]; then
   exit 1
 fi
 
-log "ready — run 'task --list' to see the available commands"
+if [ "${#warnings[@]}" -gt 0 ]; then
+  warn "${warnings[@]}"
+  log "ready, with warnings (see above) — run 'task --list' to see the available commands"
+else
+  log "ready — run 'task --list' to see the available commands"
+fi

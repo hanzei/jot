@@ -119,7 +119,9 @@ compiled web app, while SQLite keeps the default deployment small and portable.
   is a `file:../shared` dependency of the other two), skipping any package whose
   `node_modules` is already up to date with its `package-lock.json`;
 - installs the Chromium build the pinned `@playwright/test` expects, so
-  `task test-e2e` works without a separate manual step;
+  `task test-e2e` works without a separate manual step. A failed download does
+  not fail setup, but it is repeated as a warning at the end, naming the host
+  if a network policy blocked it;
 - warms the Go build cache, so the first `task lint-server` takes seconds rather
   than the couple of minutes `golangci-lint` needs to type-check every package
   cold;
