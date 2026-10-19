@@ -141,3 +141,8 @@ jobs:
 
       - name: Check Maestro flow syntax
         run: task check-mobile-flows
+
+      # The retry logic in mobile/e2e only runs on a device flake, so test its
+      # failure classification here, on every PR, rather than wait for one.
+      - name: Test e2e harness scripts
+        run: task test-mobile-e2e-scripts

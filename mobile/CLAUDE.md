@@ -64,6 +64,9 @@ integration. **Anything testable in Jest belongs in Jest.**
 - Assert on `testID`, except note cards, whose IDs embed the note id — match
   the title text there.
 - The Maestro version is pinned in `scripts/check-maestro.sh`; do not float it.
+- A driver death before a flow's first step re-runs that flow (`run.sh`); any
+  other driver death re-runs the whole set (`ci-run.sh`). Both classify through
+  `e2e/lib.sh`, so run `task test-mobile-e2e-scripts` after touching it.
 
 ## i18n / Translations
 

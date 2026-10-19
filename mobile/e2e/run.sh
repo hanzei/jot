@@ -15,6 +15,10 @@ E2E_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$E2E_DIR/../.." && pwd)"
 readonly E2E_DIR REPO_ROOT
 
+# is_prestart_driver_death and ci_warning, for maestro_flow's retry.
+# shellcheck source=lib.sh
+. "$E2E_DIR/lib.sh"
+
 # 10.0.2.2 is the emulator's alias for the host loopback, and already what
 # getDefaultBaseUrl() returns on Android — app default and fixture agree.
 JOT_E2E_PORT="${JOT_E2E_PORT:-8080}"
@@ -227,9 +231,32 @@ readonly RUN_ID MAESTRO_JOT_USERNAME MAESTRO_JOT_PASSWORD MAESTRO_JOT_NOTE_TITLE
 # earlier results; the CI artifact glob is report*.xml. Screenshots a flow takes
 # (`takeScreenshot`) land under screenshots/, which CI uploads on every run.
 # `$@` forwards any extra maestro flags (e.g. --debug-output) to every flow.
+#
+# A flow whose driver died while Maestro was still setting it up (run #163:
+# DeviceServerDiedException from deviceInfo, 189ms in) is re-run once on its
+# own: no command ran, so the shared app state is exactly what the next attempt
+# expects. Any other failure, including a driver death mid-flow, is returned as
+# is; ci-run.sh decides whether the whole set is worth another attempt.
 maestro_flow() {
   local flow="$1"
   shift
+  local report
+  report="$E2E_DIR/report-$(basename "$flow" .yaml).xml"
+  local status=0
+  run_maestro_flow "$flow" "$report" "$@" || status=$?
+  if [ "$status" -ne 0 ] && is_prestart_driver_death "$report"; then
+    ci_warning "$flow: the Maestro driver died before the flow started; re-running that flow once."
+    status=0
+    run_maestro_flow "$flow" "$report" "$@" || status=$?
+  fi
+  return "$status"
+}
+
+run_maestro_flow() {
+  local flow="$1" report="$2"
+  shift 2
+  # So maestro_flow never classifies a report left over from an earlier run.
+  rm -f "$report"
   maestro test \
     -e MAESTRO_JOT_SERVER_URL="$SERVER_URL_FROM_EMULATOR" \
     -e MAESTRO_JOT_USERNAME="$MAESTRO_JOT_USERNAME" \
@@ -242,7 +269,7 @@ maestro_flow() {
     -e MAESTRO_JOT_SSO_LINK_USERNAME="$MAESTRO_JOT_SSO_LINK_USERNAME" \
     -e MAESTRO_JOT_SSO_USERNAME="$MAESTRO_JOT_SSO_USERNAME" \
     --format junit \
-    --output "$E2E_DIR/report-$(basename "$flow" .yaml).xml" \
+    --output "$report" \
     --test-output-dir "$E2E_DIR/screenshots" \
     "$@" \
     "$E2E_DIR/flows/$flow"

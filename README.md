@@ -169,6 +169,7 @@ task test-webapp     # Run webapp tests
 task test-e2e        # Run Playwright end-to-end tests
 task test-mobile     # Run mobile app tests
 task test-mobile-e2e # Run mobile device tests on an emulator (needs Maestro)
+task test-mobile-e2e-scripts # Test the e2e harness's retry classification (no emulator)
 task test-shared     # Run shared package tests
 task coverage        # Run server tests with coverage report
 task lint-server     # Run server linting with golangci-lint
