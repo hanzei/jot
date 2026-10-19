@@ -162,6 +162,7 @@ jest.mock('expo-crypto', () => {
 jest.mock('expo-web-browser', () => ({
   __esModule: true,
   openAuthSessionAsync: jest.fn().mockResolvedValue({ type: 'dismiss' }),
+  openBrowserAsync: jest.fn().mockResolvedValue({ type: 'opened' }),
   dismissAuthSession: jest.fn(),
 }));
 

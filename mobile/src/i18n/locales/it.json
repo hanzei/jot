@@ -89,7 +89,8 @@
     "ssoCancelled": "L'accesso è stato annullato.",
     "ssoTryAgainLater": "Il Single Sign-On è occupato al momento. Riprova tra un minuto.",
     "ssoFailed": "Single Sign-On non riuscito. Riprova.",
-    "ssoServerChanged": "Il server è cambiato durante l'accesso. Riprova."
+    "ssoServerChanged": "Il server è cambiato durante l'accesso. Riprova.",
+    "ssoBrowserDidNotOpen": "Impossibile aprire il browser per l'accesso. Riprova."
   },
   "dashboard": {
     "newNote": "Nuova nota",

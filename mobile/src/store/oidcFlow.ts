@@ -1,5 +1,6 @@
 import axios from 'axios';
 import * as WebBrowser from 'expo-web-browser';
+import { AppState, Linking, Platform } from 'react-native';
 import { getBaseUrl } from '../api/client';
 import { createPkcePair } from '../utils/pkce';
 import { OIDC_CALLBACK_URL, isOidcCallbackUrl } from '../utils/deepLink';
@@ -133,8 +134,79 @@ export function resolveOidcCallback(url: string): OidcFlowOutcome | null {
 }
 
 /**
+ * How long the Android Custom Tab has to take the app out of the foreground
+ * before the flow gives up on it (#1064).
+ */
+export const BROWSER_OPEN_TIMEOUT_MS = 5000;
+
+type BrowserSessionResult =
+  | { type: 'success'; url: string }
+  // The sheet closed without the callback.
+  | { type: 'closed' }
+  // The sheet never came up.
+  | { type: 'unopened' };
+
+/**
+ * The Android browser half. expo-web-browser's Android `openAuthSessionAsync`
+ * waits for the app to return to the foreground with no bound, so a Custom
+ * Tab that never opens leaves it pending forever — and while it is pending it
+ * rejects every later call, and Android has no `dismissAuthSession` to end
+ * it. So the flow drives the tab itself: open it, then wait for the callback
+ * or for the app to come back, and give up if the app never left the
+ * foreground.
+ */
+function openAuthSessionAndroid(startUrl: string): Promise<BrowserSessionResult> {
+  return new Promise((resolve, reject) => {
+    let leftForeground = false;
+    let settled = false;
+    const settle = (finish: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      urlSubscription.remove();
+      appStateSubscription.remove();
+      finish();
+    };
+    const urlSubscription = Linking.addEventListener('url', ({ url }) => {
+      if (isOidcCallbackUrl(url)) {
+        settle(() => resolve({ type: 'success', url }));
+      }
+    });
+    const appStateSubscription = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') {
+        leftForeground = true;
+      } else if (leftForeground) {
+        settle(() => resolve({ type: 'closed' }));
+      }
+    });
+    const timer = setTimeout(() => {
+      if (!leftForeground) {
+        settle(() => resolve({ type: 'unopened' }));
+      }
+    }, BROWSER_OPEN_TIMEOUT_MS);
+    WebBrowser.openBrowserAsync(startUrl).then(
+      (result) => {
+        if (result.type !== 'opened') {
+          settle(() => resolve({ type: 'closed' }));
+        }
+      },
+      (error: unknown) => settle(() => reject(error)),
+    );
+  });
+}
+
+async function openAuthSession(startUrl: string): Promise<BrowserSessionResult> {
+  if (Platform.OS === 'android') {
+    return openAuthSessionAndroid(startUrl);
+  }
+  const result = await WebBrowser.openAuthSessionAsync(startUrl, OIDC_CALLBACK_URL);
+  return result.type === 'success' ? { type: 'success', url: result.url } : { type: 'closed' };
+}
+
+/**
  * Runs the browser half of the flow against the active server. Resolves to a
- * code to redeem, a quiet cancellation, or a terminal error; never rejects.
+ * code to redeem, a quiet cancellation, or a terminal error; never rejects,
+ * and never stays pending because the browser failed to open.
  * A second call while a flow is pending resolves as cancelled rather than
  * starting a competing one.
  */
@@ -158,10 +230,13 @@ export async function runOidcBrowserFlow(intent: OidcIntent): Promise<OidcFlowOu
   pendingFlow = flow;
 
   try {
-    const result = await WebBrowser.openAuthSessionAsync(startUrl, OIDC_CALLBACK_URL);
+    const result = await openAuthSession(startUrl);
     if (pendingFlow !== flow) {
       // Consumed or cleared while the sheet was open.
       return { type: 'cancelled' };
+    }
+    if (result.type === 'unopened') {
+      return { type: 'error', messageKey: 'auth.ssoBrowserDidNotOpen' };
     }
     if (result.type !== 'success') {
       return { type: 'cancelled' };
