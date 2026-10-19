@@ -62,6 +62,7 @@ tasks:
     cmds:
       - task: lint-mobile
       - task: test-mobile
+      - task: test-mobile-e2e-scripts
       - task: check-translations
 
   check-shared:
@@ -79,6 +80,7 @@ tasks:
       - task: test-server
       - task: test-webapp
       - task: test-mobile
+      - task: test-mobile-e2e-scripts
 
   # Every test task forwards {{.CLI_ARGS}}, so a scoped run is
   # `task test-server -- -run TestCreateNote` (note the `--`).
@@ -229,6 +231,13 @@ tasks:
     cmds:
       - ./scripts/check-maestro.sh
       - ./mobile/e2e/run.sh {{.CLI_ARGS}}
+
+  # The failure classification the e2e retries rely on (mobile/e2e/lib.sh).
+  # Those retries only run when a device flake happens, so this is what keeps
+  # them honest between flakes. Plain bash, no device or Maestro needed.
+  test-mobile-e2e-scripts:
+    desc: Test the mobile e2e harness's failure classification (no emulator needed)
+    cmd: ./mobile/e2e/lib_test.sh
 
   # No device needed. Catches a mistyped command or property; cannot tell you a
   # selector stopped matching — only a real run finds that.

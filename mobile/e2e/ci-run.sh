@@ -15,7 +15,8 @@
 # relative to the workspace root this runs from).
 #
 # The whole flow set (run.sh) is retried once by default on a transient
-# device-driver death — see the retry loop at the bottom and is_infra_failure.
+# device-driver death — see the retry loop at the bottom and lib.sh. run.sh
+# first retries a single flow whose driver died before any step ran.
 set -uo pipefail
 
 E2E_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -31,15 +32,9 @@ if ! [[ "$MAX_ATTEMPTS" =~ ^[1-9][0-9]*$ ]]; then
 fi
 readonly E2E_DIR APK MAX_ATTEMPTS
 
-# Failure markers that mean the on-device Maestro driver (the uiautomator gRPC
-# server) or the emulator dropped out mid-flow, rather than an assertion failing.
-# Kept in step with the signatures seen failing master (runs #27/#30): a Maestro
-# DeviceServerDiedException, the gRPC "UNAVAILABLE: End of stream" underneath it,
-# the bare "<failure>Unknown error" Maestro writes when it cannot classify a
-# driver death, and adbd's "failed to connect to socket" when the driver port
-# drops. A genuine assertion failure carries none of these and is NOT retried, so
-# a real regression still fails fast and loud.
-readonly INFRA_FAILURE_RE='DeviceServerDied|Device server died|UNAVAILABLE: End of stream|StatusRuntimeException|Unknown error|failed to connect to socket|io\.grpc'
+# INFRA_FAILURE_RE, is_infra_failure, and ci_warning.
+# shellcheck source=lib.sh
+. "$E2E_DIR/lib.sh"
 
 # android-emulator-runner only starts this script once the emulator reports
 # booted, but the window manager and launcher can still be settling, and the
@@ -117,9 +112,8 @@ collect_diagnostics() {
 
 # True when the just-collected reports/logcat show a device-driver death rather
 # than an assertion failure. Reads the files collect_diagnostics wrote.
-is_infra_failure() {
-  { cat "$E2E_DIR"/report-*.xml 2>/dev/null; cat "$E2E_DIR/logcat.txt" 2>/dev/null; } \
-    | grep -Eq "$INFRA_FAILURE_RE"
+attempt_hit_infra_failure() {
+  is_infra_failure "$E2E_DIR"/report-*.xml "$E2E_DIR/logcat.txt"
 }
 
 # Force a clean slate before a retry. run.sh's own EXIT trap already disables any
@@ -163,8 +157,8 @@ while : ; do
 
   collect_diagnostics "$status"
 
-  if [ "$attempt" -lt "$MAX_ATTEMPTS" ] && is_infra_failure; then
-    echo "==> Failure matches a transient device-driver signature; retrying (attempt $((attempt + 1))/$MAX_ATTEMPTS)."
+  if [ "$attempt" -lt "$MAX_ATTEMPTS" ] && attempt_hit_infra_failure; then
+    ci_warning "Attempt $attempt/$MAX_ATTEMPTS hit a device-driver death; re-running the whole flow set."
     reset_device_state
     attempt=$((attempt + 1))
     continue
