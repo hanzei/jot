@@ -33,7 +33,7 @@ import { LinearTransition } from 'react-native-reanimated';
 import { Archive, ArrowLeft, Check, ChevronRight, CircleAlert, EllipsisVertical, FileText, Image, List, Palette, Pin, Plus } from 'lucide-react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
-import { useDeleteNote, useRestoreNote, usePermanentDeleteNote, useDuplicateNote, useConvertNoteType, NoteConversionCapError } from '../hooks/useNotes';
+import { useDeleteNote, useRestoreNote, usePermanentDeleteNote, useDuplicateNote, useConvertNoteType, useMarkNoteViewed, NoteConversionCapError } from '../hooks/useNotes';
 import { useOfflineNote } from '../hooks/useOfflineNotes';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { useFailedNoteIds } from '../store/OfflineContext';
@@ -48,7 +48,7 @@ import AddImageActionSheet from '../components/AddImageActionSheet';
 import { useUploadNoteImage, useDeleteNoteImage } from '../hooks/useNoteImages';
 import { usePendingImageUploads, useRetryPendingImageUpload, useDismissPendingImageUpload } from '../hooks/usePendingImageUploads';
 import type { ImageUploadFile } from '../api/images';
-import { buildCollaborators, generateId, IMAGE_MAX_PER_NOTE, exceedsCodePointLimit, truncateToCodePoints, validateImageFile as validateImageFileRaw, imageMaxMB, type Collaborator, type NoteImage } from '@jot/shared';
+import { buildCollaborators, generateId, IMAGE_MAX_PER_NOTE, exceedsCodePointLimit, truncateToCodePoints, validateImageFile as validateImageFileRaw, imageMaxMB, type Collaborator, type NoteImage, type NoteUnread } from '@jot/shared';
 import { useServerConfig } from '../hooks/useServerConfig';
 import { useAuth } from '../store/AuthContext';
 import { useUsers } from '../store/UsersContext';
@@ -188,6 +188,23 @@ export default function NoteEditorScreen() {
   const isReadOnly = readOnly === true || existingNote?.deleted_at != null;
   const deleteMutation = useDeleteNote();
   const restoreMutation = useRestoreNote();
+  const { mutate: markNoteViewed } = useMarkNoteViewed();
+  // Unread badges: opening an unread note marks it viewed, which clears the
+  // local row. A collaborator's change arriving while it is open (SSE writes it
+  // to SQLite as 'updated') is marked viewed once, on leaving, rather than on
+  // every incoming event.
+  const latestUnreadRef = useRef<NoteUnread | null>(null);
+  const existingNoteUnread = existingNote?.unread ?? null;
+  const existingNoteLoaded = existingNote != null;
+  useEffect(() => {
+    latestUnreadRef.current = existingNoteUnread;
+  }, [existingNoteUnread]);
+  useEffect(() => {
+    if (noteId && existingNoteLoaded && latestUnreadRef.current) markNoteViewed(noteId);
+  }, [noteId, existingNoteLoaded, markNoteViewed]);
+  useEffect(() => () => {
+    if (noteId && latestUnreadRef.current) markNoteViewed(noteId);
+  }, [noteId, markNoteViewed]);
   const permanentDeleteMutation = usePermanentDeleteNote();
   const duplicateMutation = useDuplicateNote();
   const convertMutation = useConvertNoteType();

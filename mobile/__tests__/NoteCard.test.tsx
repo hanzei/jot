@@ -61,6 +61,7 @@ const baseNote: Note = {
   position: 0,
   shared_with: [],
   is_shared: false,
+  unread: null,
   labels: [],
   deleted_at: null,
   created_at: '2024-01-01T00:00:00Z',
@@ -80,6 +81,7 @@ const baseListNote: Note = {
   checked_items_collapsed: false,
   shared_with: [],
   is_shared: false,
+  unread: null,
   labels: [],
   deleted_at: null,
   created_at: '2024-01-01T00:00:00Z',
@@ -121,6 +123,21 @@ describe('NoteCard', () => {
     const { queryByTestId } = await render(<NoteCard note={baseNote} onPress={jest.fn()} />);
 
     expect(queryByTestId('note-failed-badge-note-1')).toBeNull();
+  });
+
+  it.each([
+    ['new', 'New'],
+    ['updated', 'Updated'],
+  ] as const)('shows the %s unread badge', async (unread, label) => {
+    const { getByTestId } = await render(<NoteCard note={{ ...baseNote, unread }} onPress={jest.fn()} />);
+
+    expect(getByTestId('note-unread-badge-note-1')).toHaveTextContent(label);
+  });
+
+  it('shows no unread badge when there is nothing new', async () => {
+    const { queryByTestId } = await render(<NoteCard note={baseNote} onPress={jest.fn()} />);
+
+    expect(queryByTestId('note-unread-badge-note-1')).toBeNull();
   });
 
   it('renders content for text notes', async () => {
@@ -390,6 +407,7 @@ describe('NoteCard', () => {
     const sharedList: Note = {
       ...baseListNote,
       is_shared: true,
+      unread: null,
       items: [
         {
           id: 'item-1',
@@ -419,6 +437,7 @@ describe('NoteCard', () => {
       ...baseNote,
       user_id: 'owner-1',
       is_shared: true,
+      unread: null,
       shared_with: [
         {
           id: 'share-1',

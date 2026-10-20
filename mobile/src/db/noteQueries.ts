@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { deleteFileIfExists } from '../utils/fs';
-import type { Note, NoteItem, GetNotesParams, Label, NoteShare, NoteImage, ShareHistorySource } from '@jot/shared';
+import type { Note, NoteItem, NoteUnread, GetNotesParams, Label, NoteShare, NoteImage, ShareHistorySource } from '@jot/shared';
 import { getStrongRandomBytes } from '../utils/random';
 import { withSerializedTransaction } from './transaction';
 import { isLocalModeActive } from '../store/localMode';
@@ -24,6 +24,7 @@ interface NoteRow {
   labels_json: string;
   shared_with_json: string;
   images_json: string;
+  unread: string | null;
 }
 
 interface NoteItemRow {
@@ -36,6 +37,10 @@ interface NoteItemRow {
   assigned_to: string;
   created_at: string;
   updated_at: string;
+}
+
+function parseUnread(value: string | null): NoteUnread | null {
+  return value === 'new' || value === 'updated' ? value : null;
 }
 
 function rowToNote(row: NoteRow, items: NoteItem[] = []): Note {
@@ -57,6 +62,7 @@ function rowToNote(row: NoteRow, items: NoteItem[] = []): Note {
     archived: row.archived === 1,
     position: row.position,
     is_shared: row.is_shared === 1,
+    unread: parseUnread(row.unread),
     deleted_at: row.deleted_at,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -143,8 +149,8 @@ async function saveNoteInTx(db: SQLiteDatabase, note: Note): Promise<void> {
     `INSERT INTO notes
        (id, user_id, title, content, note_type, version, color, pinned, archived, position,
         checked_items_collapsed, is_shared, deleted_at, created_at, updated_at,
-        labels_json, shared_with_json, images_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        labels_json, shared_with_json, images_json, unread)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        user_id = excluded.user_id,
        title = excluded.title,
@@ -162,7 +168,8 @@ async function saveNoteInTx(db: SQLiteDatabase, note: Note): Promise<void> {
        updated_at = excluded.updated_at,
        labels_json = excluded.labels_json,
        shared_with_json = excluded.shared_with_json,
-       images_json = excluded.images_json`,
+       images_json = excluded.images_json,
+       unread = excluded.unread`,
     [
       note.id,
       note.user_id,
@@ -182,6 +189,7 @@ async function saveNoteInTx(db: SQLiteDatabase, note: Note): Promise<void> {
       JSON.stringify(note.labels ?? []),
       JSON.stringify(note.shared_with ?? []),
       JSON.stringify(note.images ?? []),
+      note.unread ?? null,
     ],
   );
 
@@ -447,6 +455,11 @@ export async function isNotePendingCreate(db: SQLiteDatabase, id: string): Promi
     [id],
   );
   return row?.sync_state === 'pending';
+}
+
+/** Clear a note's unread badge locally once the user has opened it. */
+export async function clearLocalNoteUnread(db: SQLiteDatabase, id: string): Promise<void> {
+  await db.runAsync('UPDATE notes SET unread = NULL WHERE id = ?', [id]);
 }
 
 export async function markLocalNoteRestored(db: SQLiteDatabase, id: string): Promise<void> {

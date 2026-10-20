@@ -457,7 +457,9 @@
     "removeItem": "Item verwijderen",
     "unassign": "Toewijzing opheffen",
     "assignedTo": "Toegewezen aan {{name}}",
-    "completedSuggestions": "Suggesties van voltooide items"
+    "completedSuggestions": "Suggesties van voltooide items",
+    "unreadNew": "Nieuw",
+    "unreadUpdated": "Bijgewerkt"
   },
   "labels": {
     "title": "Labels",

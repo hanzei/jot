@@ -154,7 +154,7 @@ describe('migrateDatabase', () => {
       const db = await freshlyMigratedDb();
 
       expect(await columnNames(db, 'notes')).toEqual(
-        expect.arrayContaining(['version', 'images_json', 'sync_state', 'labels_json', 'shared_with_json']),
+        expect.arrayContaining(['version', 'images_json', 'sync_state', 'labels_json', 'shared_with_json', 'unread']),
       );
       expect(await columnNames(db, 'note_items')).toEqual(
         expect.arrayContaining(['parent_id', 'assigned_to', 'created_at', 'updated_at']),
@@ -256,7 +256,7 @@ describe('migrateDatabase', () => {
       await migrateDatabase(db);
 
       expect(await columnNames(db, 'notes')).toEqual(
-        expect.arrayContaining(['sync_state', 'version', 'images_json']),
+        expect.arrayContaining(['sync_state', 'version', 'images_json', 'unread']),
       );
     });
 

@@ -138,6 +138,7 @@ function makeNote(id: string, position: number): Note {
     archived: false,
     position,
     is_shared: false,
+    unread: null,
     labels: [],
     shared_with: [],
     deleted_at: null,

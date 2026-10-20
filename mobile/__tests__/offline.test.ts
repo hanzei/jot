@@ -334,6 +334,27 @@ describe('drainQueue', () => {
     expect(await remainingQueueIds(db)).toEqual([]);
   });
 
+  it('drops a persistently-failing markViewed at the cap without dead-lettering or flagging the note', async () => {
+    // Marking a note viewed is best-effort: it must never surface as a failed
+    // sync, whether the server rejects it outright or keeps failing.
+    await saveNote(db, makeTextNote({ id: 'viewed' }));
+    await seedQueueEntry(db, {
+      operation: 'markViewed',
+      endpoint: '/notes/viewed/viewed',
+      method: 'POST',
+      attempts: MAX_ENTRY_DRAIN_ATTEMPTS - 1,
+    });
+    mockApi.post.mockRejectedValueOnce(makeAxiosError(503));
+
+    const { discardedOperations } = await drainQueue(db);
+
+    expect(await deadLetterRows()).toEqual([]);
+    expect(discardedOperations).toEqual([]);
+    expect(await remainingQueueIds(db)).toEqual([]);
+    const row = await db.getFirstAsync<{ sync_state: string }>('SELECT sync_state FROM notes WHERE id = ?', ['viewed']);
+    expect(row?.sync_state).toBe('synced');
+  });
+
   it('dead-letters a non-HTTP processing error at the cap and continues past it (#714)', async () => {
     await seedQueueEntry(db, {
       operation: 'update',

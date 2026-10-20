@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"time"
 	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
@@ -896,6 +897,65 @@ func (h *NotesHandler) EmptyTrash(w http.ResponseWriter, r *http.Request) (int, 
 	}
 
 	return http.StatusOK, EmptyTrashResponse{Deleted: len(deletedNotes)}, nil
+}
+
+// MarkNoteViewedRequest is the optional body of POST /notes/{id}/viewed.
+type MarkNoteViewedRequest struct {
+	// ViewedAt is when the user opened the note. Omit it to mean now.
+	ViewedAt *time.Time `json:"viewed_at,omitzero"`
+}
+
+// MarkNoteViewed godoc
+//
+//	@Summary		Mark a note as viewed
+//	@Description	Records that the caller opened the note, clearing its "new"/"updated" unread badge for them. Idempotent. viewed_at is when the note was opened, for a client replaying a view it recorded offline; it defaults to now and is capped at now, and a change made after it stays unread. When the unread state changed, the caller's other sessions receive a note_updated event.
+//	@Tags			notes
+//	@Security		CookieAuth
+//	@Param			id		path	string					true	"Note ID"
+//	@Param			request	body	MarkNoteViewedRequest	false	"When the note was viewed"
+//	@Success		204
+//	@Failure		400	{object}	apierr.ErrorResponse	"bad request"
+//	@Failure		401	{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure		404	{object}	apierr.ErrorResponse	"not found"
+//	@Failure		500	{object}	apierr.ErrorResponse	"internal server error"
+//	@Router			/notes/{id}/viewed [post]
+func (h *NotesHandler) MarkNoteViewed(w http.ResponseWriter, r *http.Request) (int, any, error) {
+	user, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	}
+
+	id := chi.URLParam(r, "id")
+	if !models.IsValidID(id) {
+		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
+	}
+
+	var req MarkNoteViewedRequest
+	if r.ContentLength != 0 {
+		if err := decodeJSONBody(w, r, &req); err != nil {
+			return http.StatusBadRequest, nil, err
+		}
+	}
+	viewedAt := models.Now()
+	if req.ViewedAt != nil && req.ViewedAt.Before(viewedAt) {
+		viewedAt = req.ViewedAt.UTC()
+	}
+
+	changed, err := h.noteStore.MarkViewed(r.Context(), id, user.ID, viewedAt)
+	if err != nil {
+		if errors.Is(err, models.ErrNoteNotFound) {
+			return http.StatusNotFound, nil, err
+		}
+		return http.StatusInternalServerError, nil, fmt.Errorf("mark note viewed: %w", err)
+	}
+
+	// Unread state is per-user, so only the caller's own sessions need to hear
+	// of it, and only when it actually changed.
+	if changed {
+		h.events.PersonalizedNote(r.Context(), id, []string{user.ID}, user.ID, sse.EventNoteUpdated)
+	}
+
+	return http.StatusNoContent, nil, nil
 }
 
 // RestoreNote godoc

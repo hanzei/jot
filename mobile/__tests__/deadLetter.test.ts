@@ -255,6 +255,24 @@ describe('drainQueue dead-letter persistence', () => {
     expect(discardedOperations).toEqual([{ operation: 'removeImage', endpoint: '/images/img1', status: 403 }]);
   });
 
+  it('drops a permanently-rejected markViewed without flagging the note', async () => {
+    // Marking a note viewed is best-effort: a rejection (say the note was
+    // unshared meanwhile) only leaves a badge the next server fetch reconciles.
+    await saveNote(db, buildTextNote({ id: 'n1' }));
+    await seedQueueEntry(db, {
+      operation: 'markViewed',
+      endpoint: '/notes/n1/viewed',
+      method: 'POST',
+    });
+    mockApi.post.mockRejectedValueOnce(makeAxiosError(404));
+
+    await drainQueue(db);
+
+    expect(await deadLetters()).toEqual([]);
+    expect(await failedNoteIds()).toEqual([]);
+    expect(await remainingQueueIds(db)).toEqual([]);
+  });
+
   it('dead-letters an update 409 (version conflict) instead of dropping it silently', async () => {
     // A 409 on an `update` is an optimistic-concurrency conflict: the note
     // changed on another device since base_version (#489). Unlike an idempotent

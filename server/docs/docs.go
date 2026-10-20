@@ -2928,6 +2928,66 @@ const docTemplate = `{
                 ]
             }
         },
+        "/notes/{id}/viewed": {
+            "post": {
+                "description": "Records that the caller opened the note, clearing its \"new\"/\"updated\" unread badge for them. Idempotent. viewed_at is when the note was opened, for a client replaying a view it recorded offline; it defaults to now and is capped at now, and a change made after it stays unread. When the unread state changed, the caller's other sessions receive a note_updated event.",
+                "tags": [
+                    "notes"
+                ],
+                "summary": "Mark a note as viewed",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Note ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "When the note was viewed",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.MarkNoteViewedRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "not found",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ]
+            }
+        },
         "/pats": {
             "get": {
                 "produces": [
@@ -3924,6 +3984,15 @@ const docTemplate = `{
                 }
             }
         },
+        "handlers.MarkNoteViewedRequest": {
+            "type": "object",
+            "properties": {
+                "viewed_at": {
+                    "description": "ViewedAt is when the user opened the note. Omit it to mean now.",
+                    "type": "string"
+                }
+            }
+        },
         "handlers.NativeExchangeRequest": {
             "type": "object",
             "properties": {
@@ -4452,6 +4521,19 @@ const docTemplate = `{
                 "title": {
                     "type": "string"
                 },
+                "unread": {
+                    "description": "Unread is null when there is nothing new for the requesting user.",
+                    "enum": [
+                        "new",
+                        "updated"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.NoteUnread"
+                        }
+                    ],
+                    "x-nullable": true
+                },
                 "updated_at": {
                     "type": "string"
                 },
@@ -4564,6 +4646,17 @@ const docTemplate = `{
             "x-enum-varnames": [
                 "NoteTypeText",
                 "NoteTypeList"
+            ]
+        },
+        "models.NoteUnread": {
+            "type": "string",
+            "enum": [
+                "new",
+                "updated"
+            ],
+            "x-enum-varnames": [
+                "NoteUnreadNew",
+                "NoteUnreadUpdated"
             ]
         },
         "models.User": {

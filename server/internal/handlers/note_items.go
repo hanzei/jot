@@ -177,7 +177,7 @@ func (h *NotesHandler) CreateNoteItem(w http.ResponseWriter, r *http.Request) (i
 	}
 
 	// The item-count cap is enforced atomically inside the create transaction.
-	item, err := h.noteStore.CreateItemWithID(r.Context(), noteID, itemID, req.Text, req.Position, req.Completed, req.ParentID, req.AssignedTo, noteItemsMaxCount)
+	item, err := h.noteStore.CreateItemWithID(r.Context(), noteID, user.ID, itemID, req.Text, req.Position, req.Completed, req.ParentID, req.AssignedTo, noteItemsMaxCount)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteItemExists) {
 			return http.StatusConflict, nil, err
@@ -244,7 +244,7 @@ func (h *NotesHandler) UpdateNoteItem(w http.ResponseWriter, r *http.Request) (i
 		}
 	}
 
-	item, err := h.noteStore.PatchItem(r.Context(), noteID, itemID, models.NoteItemPatch{
+	item, err := h.noteStore.PatchItem(r.Context(), noteID, user.ID, itemID, models.NoteItemPatch{
 		Text:       req.Text,
 		Completed:  req.Completed,
 		Position:   req.Position,
@@ -294,7 +294,7 @@ func (h *NotesHandler) DeleteNoteItem(w http.ResponseWriter, r *http.Request) (i
 		return status, nil, err
 	}
 
-	if err := h.noteStore.DeleteItemFromNote(r.Context(), noteID, itemID); err != nil {
+	if err := h.noteStore.DeleteItemFromNote(r.Context(), noteID, user.ID, itemID); err != nil {
 		if errors.Is(err, models.ErrNoteItemNotFound) {
 			return http.StatusNotFound, nil, err
 		}
@@ -348,7 +348,7 @@ func (h *NotesHandler) ReorderNoteItems(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	if err := h.noteStore.ReorderItems(r.Context(), noteID, req.ItemIDs); err != nil {
+	if err := h.noteStore.ReorderItems(r.Context(), noteID, user.ID, req.ItemIDs); err != nil {
 		if errors.Is(err, models.ErrNoteItemNotFound) {
 			return http.StatusNotFound, nil, err
 		}
@@ -400,7 +400,7 @@ func (h *NotesHandler) ToggleNoteItemCompleted(w http.ResponseWriter, r *http.Re
 		return http.StatusBadRequest, nil, errors.New("completed is required")
 	}
 
-	items, err := h.noteStore.ToggleItemCompleted(r.Context(), noteID, itemID, *req.Completed)
+	items, err := h.noteStore.ToggleItemCompleted(r.Context(), noteID, user.ID, itemID, *req.Completed)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteItemNotFound) {
 			return http.StatusNotFound, nil, err
@@ -487,7 +487,7 @@ func (h *NotesHandler) SetNoteItemsCompleted(w http.ResponseWriter, r *http.Requ
 		return status, nil, err
 	}
 
-	items, err := h.noteStore.SetItemsCompleted(r.Context(), noteID, req.ItemIDs, *req.Completed)
+	items, err := h.noteStore.SetItemsCompleted(r.Context(), noteID, user.ID, req.ItemIDs, *req.Completed)
 	if err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("set items completed: %w", err)
 	}
@@ -535,7 +535,7 @@ func (h *NotesHandler) DeleteNoteItems(w http.ResponseWriter, r *http.Request) (
 		return status, nil, err
 	}
 
-	items, err := h.noteStore.DeleteItems(r.Context(), noteID, req.ItemIDs)
+	items, err := h.noteStore.DeleteItems(r.Context(), noteID, user.ID, req.ItemIDs)
 	if err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("delete items: %w", err)
 	}
@@ -547,7 +547,7 @@ func (h *NotesHandler) DeleteNoteItems(w http.ResponseWriter, r *http.Request) (
 // publishItemChangeEvent broadcasts a personalized note_updated event to every
 // collaborator after an item-level change. Items are shared content, so each
 // audience member receives their own personalized copy of the note (preserving
-// per-user state).
+// per-user state, including their unread badge).
 func (h *NotesHandler) publishItemChangeEvent(ctx context.Context, noteID, userID string) {
 	h.events.NoteUpdated(ctx, noteID, nil, userID, true)
 }

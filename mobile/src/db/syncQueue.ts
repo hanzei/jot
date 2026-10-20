@@ -43,7 +43,8 @@ export type QueueOperation =
   | 'addLabelToNote'
   | 'removeLabelFromNote'
   | 'updateSettings'
-  | 'removeImage';
+  | 'removeImage'
+  | 'markViewed';
 
 interface QueueEntry {
   id: number;
@@ -132,6 +133,17 @@ export function isGlobalDrainFailure(err: unknown, status: number | undefined): 
 export function errorSummary(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
+
+/**
+ * Ops a permanent rejection resolves silently, whatever the status, because
+ * nothing is lost: the next server sync reconciles what they would have done.
+ * `removeImage`: the image just reappears (the image spec's fail-safe design,
+ * §6). `markViewed`: the unread badge just stays.
+ */
+const BEST_EFFORT_OPERATIONS: ReadonlySet<QueueOperation> = new Set([
+  'removeImage',
+  'markViewed',
+]);
 
 /**
  * Operations for which a "target is gone" replay status (404/410) is an
@@ -862,7 +874,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
             && entry.operation !== 'update'
             && entry.operation !== 'convertNoteType'
             && entry.operation !== 'createLabel') ||
-          entry.operation === 'removeImage' ||
+          BEST_EFFORT_OPERATIONS.has(entry.operation) ||
           (targetGone && GONE_IDEMPOTENT_OPERATIONS.has(entry.operation));
         if (status === 409 && entry.operation === 'createLabel') {
           const clientLabelId = body?.id as string | undefined;
@@ -950,6 +962,15 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
             err,
           );
           break;
+        }
+
+        if (entry.operation === 'markViewed') {
+          // Best-effort (see the permanent-failure branch above): a view that
+          // keeps failing only leaves a badge the next server fetch reconciles,
+          // so drop it rather than flag the note as failed to sync.
+          console.info(`Dropping queued operation id=${entry.id} markViewed ${endpoint} after ${attempts} failed attempts`);
+          await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
+          continue;
         }
 
         // Cap reached — dead-letter and continue. Use the effective (id-remapped)

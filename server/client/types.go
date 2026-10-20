@@ -10,6 +10,15 @@ const (
 	NoteTypeList NoteType = "list"
 )
 
+// NoteUnread is a note's unread badge state for the requesting user; a nil
+// *NoteUnread means there is nothing new.
+type NoteUnread string
+
+const (
+	NoteUnreadNew     NoteUnread = "new"
+	NoteUnreadUpdated NoteUnread = "updated"
+)
+
 // Role distinguishes user permission levels.
 type Role string
 
@@ -67,6 +76,7 @@ type Note struct {
 	Items                 []NoteItem  `json:"items,omitempty"`
 	SharedWith            []NoteShare `json:"shared_with,omitempty"`
 	IsShared              bool        `json:"is_shared"`
+	Unread                *NoteUnread `json:"unread"`
 	Labels                []Label     `json:"labels"`
 	Images                []NoteImage `json:"images,omitempty"`
 	DeletedAt             *time.Time  `json:"deleted_at"`

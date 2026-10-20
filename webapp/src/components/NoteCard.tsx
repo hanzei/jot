@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import {
   EllipsisVertical,
   Trash2,
@@ -72,6 +72,7 @@ function MenuKbd({ children }: { children: React.ReactNode }) {
 
 export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare, onRestore, onPermanentlyDelete, currentUserId, usersById, inBin = false, onRefresh, onLabelClick, dragHandle, isActive = true, onCardFocus }: NoteCardProps) {
   const { t } = useTranslation();
+  const unreadBadgeId = useId();
   const { showToast } = useToast();
   const [isUpdating, setIsUpdating] = useState(false);
   const [confirmState, setConfirmState] = useState<{
@@ -273,6 +274,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
         data-note-card="true"
         data-testid="note-card-open"
         aria-label={(note.note_type === 'list' ? note.title : note.content?.slice(0, 50)) || t('share.untitledNote')}
+        aria-describedby={note.unread ? unreadBadgeId : undefined}
         // Roving tabindex (#950): the grid's one Tab stop lives on whichever
         // card's open button is currently active; every other card's is
         // reachable only by `.focus()` (arrow keys, Home/End, a click).
@@ -435,6 +437,20 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
 
       {/* Content */}
       <div>
+        {note.unread && (
+          // Sits on its own background so it stays legible on every note color.
+          <span
+            id={unreadBadgeId}
+            data-testid="note-card-unread"
+            data-unread={note.unread}
+            className="inline-flex items-center gap-1 mb-2 rounded-full px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100"
+          >
+            {note.unread === 'updated' && (
+              <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-blue-600 dark:bg-blue-300" />
+            )}
+            {note.unread === 'new' ? t('note.unreadNew') : t('note.unreadUpdated')}
+          </span>
+        )}
         {note.note_type === 'list' && note.title && (
           <h3 className="font-medium text-gray-900 dark:text-white mb-2 line-clamp-2">
             {note.title}

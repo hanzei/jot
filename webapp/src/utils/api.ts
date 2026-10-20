@@ -89,6 +89,9 @@ export const notes = {
   restore: (id: string): Promise<Note> =>
     api.post(`/notes/${id}/restore`).then(res => res.data),
 
+  markViewed: (id: string): Promise<void> =>
+    api.post(`/notes/${id}/viewed`).then(() => undefined),
+
   duplicate: (id: string): Promise<Note> =>
     api.post(`/notes/${id}/duplicate`).then(res => res.data),
 

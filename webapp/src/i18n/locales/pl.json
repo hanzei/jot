@@ -457,7 +457,9 @@
     "removeItem": "Usuń element",
     "unassign": "Usuń przypisanie",
     "assignedTo": "Przypisano do {{name}}",
-    "completedSuggestions": "Podpowiedzi z ukończonych elementów"
+    "completedSuggestions": "Podpowiedzi z ukończonych elementów",
+    "unreadNew": "Nowa",
+    "unreadUpdated": "Zaktualizowana"
   },
   "labels": {
     "title": "Etykiety",

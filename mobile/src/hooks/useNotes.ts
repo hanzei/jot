@@ -6,6 +6,7 @@ import {
   updateNote,
   deleteNote,
   restoreNote,
+  markNoteViewed,
   duplicateNote,
   convertNoteType,
   permanentDeleteNote,
@@ -41,6 +42,7 @@ import {
   getLocalNote,
   markLocalNoteDeleted,
   markLocalNoteRestored,
+  clearLocalNoteUnread,
   permanentDeleteLocalNote,
   updateLocalNote,
   generateClientNoteId,
@@ -60,7 +62,7 @@ import { enqueueOperation, rethrowIfNotQueueable } from '../db/syncQueue';
 import { isOnlineWriteAllowed } from '../api/serverReachability';
 import { useNetworkStatus } from './useNetworkStatus';
 import { useAuth } from '../store/AuthContext';
-import { assertSwitchWriteAllowed } from '../api/client';
+import { assertSwitchWriteAllowed, isServerSwitchInProgress } from '../api/client';
 import {
   labelCountsQueryKey,
   noteLocalQueryKey,
@@ -263,6 +265,7 @@ export function useCreateNote() {
         archived: false,
         position: 0,
         is_shared: false,
+        unread: null,
         deleted_at: null as string | null,
         created_at: now,
         updated_at: now,
@@ -939,6 +942,52 @@ export function useRestoreNote() {
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
       // Restoring puts the note back into its labels' counts.
       invalidateLabelCounts(queryClient);
+    },
+  });
+}
+
+/**
+ * Record that the user opened a note, clearing its unread badge. The local
+ * clear is authoritative for this device; the server call (queued when offline)
+ * clears it everywhere else. Callers only invoke this for an unread note, so an
+ * ordinary open costs no write.
+ */
+export function useMarkNoteViewed() {
+  const queryClient = useQueryClient();
+  const db = useSQLiteContext();
+  const { isConnected } = useNetworkStatus();
+
+  return useMutation({
+    mutationFn: async (id: string): Promise<void> => {
+      // Best-effort: a view landing mid-switch would mark the wrong server's
+      // note, and the badge it leaves behind is harmless.
+      if (isServerSwitchInProgress()) return;
+      // When the user looked at the note. A queued view replays later, and the
+      // server must not count a collaborator's change made in between as seen.
+      const viewedAt = new Date().toISOString();
+      await clearLocalNoteUnread(db, id);
+      // A note created offline is never unread, so no pending-create check.
+      if (isOnlineWriteAllowed(isConnected)) {
+        try {
+          await markNoteViewed(id);
+          return;
+        } catch (err) {
+          rethrowIfNotQueueable(err);
+        }
+      }
+      await enqueueOperation(db, {
+        operation: 'markViewed',
+        endpoint: `/notes/${id}/viewed`,
+        method: 'POST',
+        body: { viewed_at: viewedAt },
+      });
+    },
+    // Settled, not success: the local clear has already landed when a
+    // permanent rejection throws, and the SQLite-backed queries never refetch
+    // on their own, so the badge would otherwise linger on screen.
+    onSettled: (_data, _error, id) => {
+      queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(id) });
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
     },
   });
 }

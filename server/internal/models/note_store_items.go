@@ -211,7 +211,7 @@ func normalizeItemOrderTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, n
 	return positions, nil
 }
 
-func (s *noteStore) CreateItemWithCompleted(ctx context.Context, noteID string, text string, position int, completed bool, parentID string, assignedTo string) (*NoteItem, error) {
+func (s *noteStore) CreateItemWithCompleted(ctx context.Context, noteID, actorID, text string, position int, completed bool, parentID string, assignedTo string) (*NoteItem, error) {
 	itemID, err := generateID()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate item ID: %w", err)
@@ -244,7 +244,7 @@ func (s *noteStore) CreateItemWithCompleted(ctx context.Context, noteID string, 
 	if err != nil {
 		return nil, err
 	}
-	if err = touchNoteTx(ctx, tx, s.d, noteID, now); err != nil {
+	if err = touchNoteTx(ctx, tx, s.d, noteID, actorID, now); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -269,7 +269,7 @@ func (s *noteStore) CreateItemWithCompleted(ctx context.Context, noteID string, 
 // item would exceed the cap (atomic, so concurrent creates cannot race past it).
 // The note is normalized per normalizeItemOrderTx afterwards, so the returned
 // position is the one stored, not necessarily the one requested.
-func (s *noteStore) CreateItemWithID(ctx context.Context, noteID, itemID, text string, position int, completed bool, parentID string, assignedTo string, maxItems int) (*NoteItem, error) {
+func (s *noteStore) CreateItemWithID(ctx context.Context, noteID, actorID, itemID, text string, position int, completed bool, parentID string, assignedTo string, maxItems int) (*NoteItem, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
@@ -319,7 +319,7 @@ func (s *noteStore) CreateItemWithID(ctx context.Context, noteID, itemID, text s
 	if err != nil {
 		return nil, err
 	}
-	if err = touchNoteTx(ctx, tx, s.d, noteID, now); err != nil {
+	if err = touchNoteTx(ctx, tx, s.d, noteID, actorID, now); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -344,7 +344,7 @@ func (s *noteStore) CreateItemWithID(ctx context.Context, noteID, itemID, text s
 // item or changes its parent is followed by normalizeItemOrderTx, so the
 // returned position is the one stored, not necessarily the one requested.
 // Returns the updated item or ErrNoteItemNotFound.
-func (s *noteStore) PatchItem(ctx context.Context, noteID, itemID string, patch NoteItemPatch) (*NoteItem, error) {
+func (s *noteStore) PatchItem(ctx context.Context, noteID, actorID, itemID string, patch NoteItemPatch) (*NoteItem, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
@@ -404,10 +404,13 @@ func (s *noteStore) PatchItem(ctx context.Context, noteID, itemID string, patch 
 	// both fields in one patch (e.g. a drag-to-reparent that lands before an
 	// in-flight checkbox toggle's own request has advanced the local
 	// baseline).
+	changed := patchChangesItem(&current, currentParent.String, resolvedText, resolvedCompleted, resolvedParent, resolvedAssignedTo, patch.Position)
 	if patch.Completed != nil || patch.ParentID != nil {
-		if err = cascadeItemCompletion(ctx, tx, s.d, noteID, itemID, nullableParentID(resolvedParent), resolvedCompleted, now); err != nil {
-			return nil, err
+		cascadeChanged, cascadeErr := cascadeItemCompletion(ctx, tx, s.d, noteID, itemID, nullableParentID(resolvedParent), resolvedCompleted, now)
+		if cascadeErr != nil {
+			return nil, cascadeErr
 		}
+		changed = changed || cascadeChanged
 	}
 
 	if patch.Position != nil || patch.ParentID != nil {
@@ -418,7 +421,7 @@ func (s *noteStore) PatchItem(ctx context.Context, noteID, itemID string, patch 
 		item.Position = positions[itemID]
 	}
 
-	if err = touchNoteTx(ctx, tx, s.d, noteID, now); err != nil {
+	if err = touchNoteIfChangedTx(ctx, tx, s.d, changed, noteID, actorID, now); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -434,9 +437,17 @@ func (s *noteStore) PatchItem(ctx context.Context, noteID, itemID string, patch 
 	return &item, nil
 }
 
+// patchChangesItem reports whether a patch's resolved values differ from the
+// item as stored, so a replayed no-op patch does not flag the note "updated".
+func patchChangesItem(current *NoteItem, currentParent, text string, completed bool, parent, assignedTo string, position *int) bool {
+	return text != current.Text || completed != current.Completed ||
+		parent != currentParent || assignedTo != current.AssignedTo ||
+		(position != nil && *position != current.Position)
+}
+
 // DeleteItemFromNote deletes a single item scoped to its note and bumps the
 // parent note's updated_at. Returns ErrNoteItemNotFound if no such item exists.
-func (s *noteStore) DeleteItemFromNote(ctx context.Context, noteID, itemID string) error {
+func (s *noteStore) DeleteItemFromNote(ctx context.Context, noteID, actorID, itemID string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -460,7 +471,7 @@ func (s *noteStore) DeleteItemFromNote(ctx context.Context, noteID, itemID strin
 		return ErrNoteItemNotFound
 	}
 
-	if err = touchNoteTx(ctx, tx, s.d, noteID, now); err != nil {
+	if err = touchNoteTx(ctx, tx, s.d, noteID, actorID, now); err != nil {
 		return err
 	}
 	if err = tx.Commit(); err != nil {
@@ -473,7 +484,7 @@ func (s *noteStore) DeleteItemFromNote(ctx context.Context, noteID, itemID strin
 // normalizes per normalizeItemOrderTx so every child still directly follows
 // its parent. Every ID must belong to the note; otherwise ErrNoteItemNotFound
 // is returned and no change is committed.
-func (s *noteStore) ReorderItems(ctx context.Context, noteID string, itemIDs []string) error {
+func (s *noteStore) ReorderItems(ctx context.Context, noteID, actorID string, itemIDs []string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -482,27 +493,36 @@ func (s *noteStore) ReorderItems(ctx context.Context, noteID string, itemIDs []s
 
 	now := Timestamp(Now())
 
+	changed := false
 	for i, itemID := range itemIDs {
-		result, execErr := tx.ExecContext(ctx,
-			s.d.RewritePlaceholders(`UPDATE note_items SET position = ?, updated_at = ? WHERE id = ? AND note_id = ?`),
-			i, now, itemID, noteID,
+		moved, execErr := execChanged(ctx, tx,
+			s.d.RewritePlaceholders(`UPDATE note_items SET position = ?, updated_at = ? WHERE id = ? AND note_id = ? AND position <> ?`),
+			"failed to reorder note item",
+			i, now, itemID, noteID, i,
 		)
 		if execErr != nil {
-			return fmt.Errorf("failed to reorder note item: %w", execErr)
+			return execErr
 		}
-		n, raErr := result.RowsAffected()
-		if raErr != nil {
-			return fmt.Errorf("failed to get rows affected: %w", raErr)
+		if !moved {
+			// Unchanged, or not in this note at all.
+			var exists int
+			if err = tx.QueryRowContext(ctx,
+				s.d.RewritePlaceholders(`SELECT COUNT(*) FROM note_items WHERE id = ? AND note_id = ?`),
+				itemID, noteID,
+			).Scan(&exists); err != nil {
+				return fmt.Errorf("failed to check note item: %w", err)
+			}
+			if exists == 0 {
+				return ErrNoteItemNotFound
+			}
 		}
-		if n == 0 {
-			return ErrNoteItemNotFound
-		}
+		changed = changed || moved
 	}
 
 	if _, err = normalizeItemOrderTx(ctx, tx, s.d, noteID, now); err != nil {
 		return err
 	}
-	if err = touchNoteTx(ctx, tx, s.d, noteID, now); err != nil {
+	if err = touchNoteIfChangedTx(ctx, tx, s.d, changed, noteID, actorID, now); err != nil {
 		return err
 	}
 	if err = tx.Commit(); err != nil {
@@ -520,32 +540,44 @@ func (s *noteStore) ReorderItems(ctx context.Context, noteID string, itemIDs []s
 // checking the parent itself. parentID is the parent the item belongs to
 // after this change, as passed by ToggleItemCompleted (its unchanged parent)
 // and PatchItem (its resolved, post-patch parent).
-func cascadeItemCompletion(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, itemID string, parentID sql.NullString, newCompleted bool, now string) error {
+func cascadeItemCompletion(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, itemID string, parentID sql.NullString, newCompleted bool, now string) (changed bool, err error) {
 	if !parentID.Valid {
-		if _, err := tx.ExecContext(ctx,
-			d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = ? WHERE note_id = ? AND parent_id = ?`),
-			newCompleted, now, noteID, itemID,
-		); err != nil {
-			return fmt.Errorf("failed to cascade completion to children: %w", err)
-		}
-		return nil
+		return execChanged(ctx, tx,
+			d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = ? WHERE note_id = ? AND parent_id = ? AND completed <> ?`),
+			"failed to cascade completion to children",
+			newCompleted, now, noteID, itemID, newCompleted,
+		)
 	}
 	if !newCompleted {
-		if _, err := tx.ExecContext(ctx,
-			d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = ? WHERE id = ? AND note_id = ?`),
-			false, now, parentID.String, noteID,
-		); err != nil {
-			return fmt.Errorf("failed to cascade completion to parent: %w", err)
-		}
+		return execChanged(ctx, tx,
+			d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = ? WHERE id = ? AND note_id = ? AND completed <> ?`),
+			"failed to cascade completion to parent",
+			false, now, parentID.String, noteID, false,
+		)
 	}
-	return nil
+	return false, nil
+}
+
+// execChanged runs an UPDATE and reports whether it changed any row. Item
+// writes use it to call touchNoteTx only for a real change: a replayed no-op
+// must not flag the note "updated" for collaborators.
+func execChanged(ctx context.Context, tx *sql.Tx, query, errMsg string, args ...any) (bool, error) {
+	result, err := tx.ExecContext(ctx, query, args...)
+	if err != nil {
+		return false, fmt.Errorf("%s: %w", errMsg, err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("failed to get rows affected: %w", err)
+	}
+	return n > 0, nil
 }
 
 // ToggleItemCompleted sets an item's completed flag and cascades per
 // cascadeItemCompletion in a single transaction. It returns the note's full
 // item list so callers reconcile every affected item from one response.
 // Returns ErrNoteItemNotFound if the item does not belong to the note.
-func (s *noteStore) ToggleItemCompleted(ctx context.Context, noteID, itemID string, completed bool) ([]NoteItem, error) {
+func (s *noteStore) ToggleItemCompleted(ctx context.Context, noteID, actorID, itemID string, completed bool) ([]NoteItem, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
@@ -566,18 +598,21 @@ func (s *noteStore) ToggleItemCompleted(ctx context.Context, noteID, itemID stri
 		return nil, fmt.Errorf("failed to load note item: %w", err)
 	}
 
-	if _, err = tx.ExecContext(ctx,
-		s.d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = ? WHERE id = ? AND note_id = ?`),
-		completed, now, itemID, noteID,
-	); err != nil {
-		return nil, fmt.Errorf("failed to update note item: %w", err)
-	}
-
-	if err = cascadeItemCompletion(ctx, tx, s.d, noteID, itemID, parentID, completed, now); err != nil {
+	itemChanged, err := execChanged(ctx, tx,
+		s.d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = ? WHERE id = ? AND note_id = ? AND completed <> ?`),
+		"failed to update note item",
+		completed, now, itemID, noteID, completed,
+	)
+	if err != nil {
 		return nil, err
 	}
 
-	if err = touchNoteTx(ctx, tx, s.d, noteID, now); err != nil {
+	cascadeChanged, err := cascadeItemCompletion(ctx, tx, s.d, noteID, itemID, parentID, completed, now)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = touchNoteIfChangedTx(ctx, tx, s.d, itemChanged || cascadeChanged, noteID, actorID, now); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -597,7 +632,7 @@ func (s *noteStore) ToggleItemCompleted(ctx context.Context, noteID, itemID stri
 // snapshot the webapp sends. IDs that do not belong to the note are ignored, so
 // a replay/undo referencing a since-deleted item is a no-op. The note's
 // updated_at is bumped only when at least one item actually changed.
-func (s *noteStore) SetItemsCompleted(ctx context.Context, noteID string, itemIDs []string, completed bool) ([]NoteItem, error) {
+func (s *noteStore) SetItemsCompleted(ctx context.Context, noteID, actorID string, itemIDs []string, completed bool) ([]NoteItem, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
@@ -636,7 +671,7 @@ func (s *noteStore) SetItemsCompleted(ctx context.Context, noteID string, itemID
 		// nothing (and a group already consistent is left alone).
 		if n > 0 {
 			changed += n
-			if err = cascadeItemCompletion(ctx, tx, s.d, noteID, itemID, parentID, completed, now); err != nil {
+			if _, err = cascadeItemCompletion(ctx, tx, s.d, noteID, itemID, parentID, completed, now); err != nil {
 				return nil, err
 			}
 		}
@@ -645,7 +680,7 @@ func (s *noteStore) SetItemsCompleted(ctx context.Context, noteID string, itemID
 	// Only bump the note when something actually changed, so a no-op call does
 	// not spuriously reorder the dashboard or emit an update to collaborators.
 	if changed > 0 {
-		if err = touchNoteTx(ctx, tx, s.d, noteID, now); err != nil {
+		if err = touchNoteTx(ctx, tx, s.d, noteID, actorID, now); err != nil {
 			return nil, err
 		}
 	}
@@ -663,7 +698,7 @@ func (s *noteStore) SetItemsCompleted(ctx context.Context, noteID string, itemID
 // preserve the parent-reference invariant. Positions are left with gaps, matching
 // DeleteItemFromNote. IDs that do not belong to the note are ignored. The note's
 // updated_at is bumped only when at least one row was actually deleted.
-func (s *noteStore) DeleteItems(ctx context.Context, noteID string, itemIDs []string) ([]NoteItem, error) {
+func (s *noteStore) DeleteItems(ctx context.Context, noteID, actorID string, itemIDs []string) ([]NoteItem, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
@@ -700,7 +735,7 @@ func (s *noteStore) DeleteItems(ctx context.Context, noteID string, itemIDs []st
 		}
 
 		// Only bump the note when something was actually deleted.
-		if err = touchNoteTx(ctx, tx, s.d, noteID, now); err != nil {
+		if err = touchNoteTx(ctx, tx, s.d, noteID, actorID, now); err != nil {
 			return nil, err
 		}
 	}

@@ -9,6 +9,7 @@ const BASE_NOTE = {
   archived: false,
   position: 0,
   is_shared: false,
+  unread: null,
   labels: [] as never[],
   shared_with: [] as never[],
   deleted_at: null,

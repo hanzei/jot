@@ -334,7 +334,9 @@
     "uncheckAllItems": "Deseleziona tutti gli elementi",
     "deleteCheckedItems": "Elimina elementi completati",
     "deleteCheckedItemsConfirm_one": "Eliminare {{count}} elemento completato? Questa azione è irreversibile.",
-    "deleteCheckedItemsConfirm_other": "Eliminare {{count}} elementi completati? Questa azione è irreversibile."
+    "deleteCheckedItemsConfirm_other": "Eliminare {{count}} elementi completati? Questa azione è irreversibile.",
+    "unreadNew": "Nuova",
+    "unreadUpdated": "Aggiornata"
   },
   "images": {
     "openLightbox": "Visualizza {{filename}}",

@@ -11,15 +11,27 @@ import (
 )
 
 // touchNoteTx bumps a note's updated_at so item-level changes are reflected in
-// note ordering (updated_at sort) and client freshness checks.
-func touchNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, now string) error {
+// note ordering (updated_at sort) and client freshness checks, and records the
+// change by actorID for unread tracking (see markViewedTx). Callers invoke it
+// only when an item actually changed.
+func touchNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, actorID, now string) error {
 	if _, err := tx.ExecContext(ctx,
-		d.RewritePlaceholders(`UPDATE notes SET updated_at = ? WHERE id = ?`),
-		now, noteID,
+		d.RewritePlaceholders(`UPDATE notes SET updated_at = ?, content_changed_at = ?, content_changed_by = ? WHERE id = ?`),
+		now, now, actorID, noteID,
 	); err != nil {
 		return fmt.Errorf("failed to touch note: %w", err)
 	}
-	return nil
+	return markViewedTx(ctx, tx, d, noteID, actorID, now)
+}
+
+// touchNoteIfChangedTx is touchNoteTx for item writes that may turn out to be
+// no-ops (e.g. an offline replay of an already-applied change): it touches the
+// note only when changed is true.
+func touchNoteIfChangedTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, changed bool, noteID, actorID, now string) error {
+	if !changed {
+		return nil
+	}
+	return touchNoteTx(ctx, tx, d, noteID, actorID, now)
 }
 
 func (s *noteStore) ReorderNotes(ctx context.Context, userID string, noteIDs []string) error {

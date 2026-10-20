@@ -13,6 +13,7 @@ function buildNote(overrides: Partial<TextNote> & { id: string }): TextNote {
     archived: false,
     position: 0,
     is_shared: false,
+    unread: null,
     labels: [],
     shared_with: [],
     deleted_at: null,

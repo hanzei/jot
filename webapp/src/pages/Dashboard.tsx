@@ -417,6 +417,15 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
     setIsModalOpen(true);
   }, [isNewNoteRoute, searchParams]);
 
+  // Records a view of the note, resolving to whether it landed. The reload
+  // after the view lands supersedes any list fetch already in flight, which
+  // could otherwise bring the badge back.
+  const recordNoteViewed = useCallback((noteId: string): Promise<boolean> =>
+    notes.markViewed(noteId).then(() => {
+      loadNotes();
+      return true;
+    }, () => false), [loadNotes]);
+
   const openNoteFromUrl = useCallback((noteId: string) => {
     openNoteIdRef.current = null;
     setEditingNote(null);
@@ -571,6 +580,36 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
       loadLabels();
     }
   }, [editingNote, sharingNote, loadNotes, loadLabels, loadLabelCounts, setSearchParams, user?.id, restoreReturnUrl, updateNotesList]);
+
+  // Unread badges, from whichever path opened the note: opening an unread note
+  // records the view, and closing it records another if a collaborator's
+  // change arrived (over SSE, as a new unread copy of the note) while it was
+  // open. A view covers the copy of the note that was open when it was sent:
+  // it is still pending if it failed, or if a newer unread copy arrived since.
+  // The effect is keyed on the note's id, so in-place refreshes don't re-fire it.
+  const editingNoteId = editingNote?.id ?? null;
+  const openNoteRef = useRef<Note | null>(null);
+  const viewedNoteRef = useRef<Note | null>(null);
+  useEffect(() => {
+    openNoteRef.current = editingNote;
+  }, [editingNote]);
+  useEffect(() => {
+    if (!editingNoteId) return;
+    const viewPending = () => {
+      const note = openNoteRef.current;
+      return !!note?.unread && note !== viewedNoteRef.current;
+    };
+    const recordView = () => {
+      const note = openNoteRef.current;
+      void recordNoteViewed(editingNoteId).then(landed => {
+        if (landed) viewedNoteRef.current = note;
+      });
+    };
+    if (viewPending()) recordView();
+    return () => {
+      if (viewPending()) recordView();
+    };
+  }, [editingNoteId, recordNoteViewed]);
 
   useEffect(() => {
     registerSSECallbacks({ onEvent: handleSSEEvent, onConnected: loadNotes });

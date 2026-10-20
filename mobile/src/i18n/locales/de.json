@@ -311,7 +311,9 @@
     "uncheckAllItems": "Alle Häkchen entfernen",
     "deleteCheckedItems": "Erledigte Einträge löschen",
     "deleteCheckedItemsConfirm_one": "{{count}} erledigten Eintrag löschen? Dies kann nicht rückgängig gemacht werden.",
-    "deleteCheckedItemsConfirm_other": "{{count}} erledigte Einträge löschen? Dies kann nicht rückgängig gemacht werden."
+    "deleteCheckedItemsConfirm_other": "{{count}} erledigte Einträge löschen? Dies kann nicht rückgängig gemacht werden.",
+    "unreadNew": "Neu",
+    "unreadUpdated": "Aktualisiert"
   },
   "images": {
     "openLightbox": "{{filename}} anzeigen",

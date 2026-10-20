@@ -145,7 +145,7 @@ func (h *Handler) handleCreateNoteItem(userID string) mcp.ToolHandlerFor[createN
 
 		// The cap is enforced atomically inside the create transaction, so a
 		// pre-check here would only race.
-		item, err := h.noteStore.CreateItemWithID(ctx, in.NoteID, itemID, in.Text, position, in.Completed, in.ParentID, "", models.NoteItemsMaxCount)
+		item, err := h.noteStore.CreateItemWithID(ctx, in.NoteID, userID, itemID, in.Text, position, in.Completed, in.ParentID, "", models.NoteItemsMaxCount)
 		if err != nil {
 			return toolError("create note item: %w", itemCapError(err))
 		}
@@ -183,7 +183,7 @@ func (h *Handler) handleUpdateNoteItem(userID string) mcp.ToolHandlerFor[updateN
 			}
 		}
 
-		item, err := h.noteStore.PatchItem(ctx, in.NoteID, in.ItemID, models.NoteItemPatch{
+		item, err := h.noteStore.PatchItem(ctx, in.NoteID, userID, in.ItemID, models.NoteItemPatch{
 			Text:      in.Text,
 			Completed: in.Completed,
 			Position:  in.Position,
@@ -216,7 +216,7 @@ func (h *Handler) handleDeleteNoteItem(userID string) mcp.ToolHandlerFor[deleteN
 		if in.ItemID == "" {
 			return toolError("item_id is required")
 		}
-		if err := h.noteStore.DeleteItemFromNote(ctx, in.NoteID, in.ItemID); err != nil {
+		if err := h.noteStore.DeleteItemFromNote(ctx, in.NoteID, userID, in.ItemID); err != nil {
 			return toolError("delete note item: %w", err)
 		}
 		h.events.NoteUpdated(ctx, in.NoteID, nil, userID, true)

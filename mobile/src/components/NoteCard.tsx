@@ -33,6 +33,13 @@ interface NoteCardProps {
 const MAX_PREVIEW_ITEMS = 10;
 const MAX_AVATAR_DISPLAY = 3;
 
+// Fixed light/dark pairs rather than theme tokens: a colored note is always a
+// light pastel, so the unread badge uses the light pair on it in dark mode too.
+const UNREAD_BADGE_COLORS = {
+  light: { background: '#dbeafe', dot: '#2563eb', text: '#1e40af' },
+  dark: { background: '#1e3a5f', dot: '#93c5fd', text: '#bfdbfe' },
+} as const;
+
 interface AvatarData {
   key: string;
   userId: string;
@@ -152,11 +159,12 @@ function ListPreview({ items, hasColor }: { items: NoteItem[]; hasColor?: boolea
 }
 
 function NoteCard({ note, onPress, onLongPress, onLabelPress }: NoteCardProps) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { t } = useTranslation();
   const failedNoteIds = useFailedNoteIds();
   const didNotSync = failedNoteIds.has(note.id);
   const hasColor = !!(note.color && !isWhiteHexColor(note.color));
+  const unreadColors = UNREAD_BADGE_COLORS[isDark && !hasColor ? 'dark' : 'light'];
   const baseUrl = useActiveServerBaseUrl();
   // Images queued offline (or mid-retry) never reach note.images until the
   // sync engine's drain uploads them (see imageUploadQueue.ts), so without
@@ -267,16 +275,30 @@ function NoteCard({ note, onPress, onLongPress, onLabelPress }: NoteCardProps) {
 
       {didNotSync && (
         <View
-          style={[styles.failedBadge, { backgroundColor: hasColor ? 'rgba(0,0,0,0.08)' : colors.warning }]}
+          style={[styles.badge, { backgroundColor: hasColor ? 'rgba(0,0,0,0.08)' : colors.warning }]}
           testID={`note-failed-badge-${note.id}`}
           accessibilityLabel={t('syncFailures.badge')}
         >
           <CircleAlert size={13} color={hasColor ? '#a14b00' : colors.warningText} />
-          <Text style={[styles.failedBadgeText, { color: hasColor ? '#a14b00' : colors.warningText }]}>
+          <Text style={[styles.badgeText, { color: hasColor ? '#a14b00' : colors.warningText }]}>
             {t('syncFailures.badge')}
           </Text>
         </View>
       )}
+
+      {note.unread ? (
+        <View
+          style={[styles.badge, { backgroundColor: unreadColors.background }]}
+          testID={`note-unread-badge-${note.id}`}
+        >
+          {note.unread === 'updated' ? (
+            <View style={[styles.unreadDot, { backgroundColor: unreadColors.dot }]} />
+          ) : null}
+          <Text style={[styles.badgeText, { color: unreadColors.text }]}>
+            {note.unread === 'new' ? t('note.unreadNew') : t('note.unreadUpdated')}
+          </Text>
+        </View>
+      ) : null}
 
       <View style={styles.cardHeader}>
         <View style={styles.cardHeaderContent}>
@@ -387,7 +409,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
   },
-  failedBadge: {
+  badge: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
@@ -397,7 +419,12 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginBottom: 6,
   },
-  failedBadgeText: {
+  unreadDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  badgeText: {
     fontSize: 11,
     fontWeight: '600',
   },

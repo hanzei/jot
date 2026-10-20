@@ -66,6 +66,27 @@ describe('NoteCard', () => {
     mockConsoleError.mockClear();
   });
 
+  describe('Unread badge', () => {
+    it('shows no badge when there is nothing new', () => {
+      renderNoteCard(defaultProps);
+
+      expect(screen.queryByTestId('note-card-unread')).not.toBeInTheDocument();
+      expect(screen.getByTestId('note-card-open')).not.toHaveAttribute('aria-describedby');
+    });
+
+    it.each([
+      ['new', 'New'],
+      ['updated', 'Updated'],
+    ] as const)('shows the %s badge and exposes it on the open button', (unread, label) => {
+      renderNoteCard({ ...defaultProps, note: createMockListNote({ unread }) });
+
+      const badge = screen.getByTestId('note-card-unread');
+      expect(badge).toHaveTextContent(label);
+      expect(badge).toHaveAttribute('data-unread', unread);
+      expect(screen.getByTestId('note-card-open')).toHaveAccessibleDescription(label);
+    });
+  });
+
   describe('Basic Rendering', () => {
     it('renders list note title', () => {
       renderNoteCard(defaultProps);

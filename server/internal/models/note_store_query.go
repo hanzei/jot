@@ -28,11 +28,30 @@ func buildSearchTokens(search string) []string {
 	return tokens
 }
 
+// noteUnreadExpr computes Note.Unread for the user whose note_user_state row
+// (nus) is joined:
+//   - nothing for a trashed note: by design, the bin shows no badges (it is
+//     read-only, and POST /notes/{id}/viewed accepts active notes only). A
+//     restored note shows whatever is still unread.
+//   - "new": a collaborator (not the owner) who has never opened the note.
+//   - "updated": someone else changed shared content after the user last
+//     viewed it. An owner who never reopened their own note falls back to the
+//     row's created_at, i.e. when they created it.
+//
+// Both backends store timestamps in the same fixed-width layout (see
+// timestampLayout), so the comparison is correct on SQLite's text values too.
+const noteUnreadExpr = `CASE
+				    WHEN n.deleted_at IS NOT NULL THEN NULL
+				    WHEN nus.last_viewed_at IS NULL AND n.user_id <> nus.user_id THEN 'new'
+				    WHEN n.content_changed_by IS NOT NULL AND n.content_changed_by <> nus.user_id
+				     AND n.content_changed_at > COALESCE(nus.last_viewed_at, nus.created_at) THEN 'updated'
+				  END`
+
 // noteSelectColumns is the note column list shared by every query that scans
-// its rows with scanNote, in the exact order scanNote expects.
+// its rows with noteScanDest, in the exact order it expects.
 const noteSelectColumns = `n.id, n.user_id, n.title, n.content, n.note_type, n.version,
 				  nus.color, nus.pinned, nus.archived, nus.position, nus.unpinned_position, nus.checked_items_collapsed,
-				  n.deleted_at, n.created_at, n.updated_at`
+				  n.deleted_at, n.created_at, n.updated_at, ` + noteUnreadExpr
 
 func buildGetByUserIDQuery(d *dialect.Dialect, userID string, archived bool, trashed bool, search string, labelID string, myTasks bool) (string, []any) {
 	// No DISTINCT: every join below is one-to-one with a note (the per-user
@@ -106,13 +125,18 @@ func buildGetByUserIDQuery(d *dialect.Dialect, userID string, archived bool, tra
 	return b.String(), args
 }
 
-func scanNote(rows *sql.Rows) (Note, error) {
-	var note Note
-	err := rows.Scan(
+// noteScanDest returns the scan destinations for a noteSelectColumns row.
+func noteScanDest(note *Note) []any {
+	return []any{
 		&note.ID, &note.UserID, &note.Title, &note.Content, &note.NoteType, &note.Version,
 		&note.Color, &note.Pinned, &note.Archived, &note.Position, &note.UnpinnedPosition, &note.CheckedItemsCollapsed,
-		&note.DeletedAt, &note.CreatedAt, &note.UpdatedAt,
-	)
+		&note.DeletedAt, &note.CreatedAt, &note.UpdatedAt, &note.Unread,
+	}
+}
+
+func scanNote(rows *sql.Rows) (Note, error) {
+	var note Note
+	err := rows.Scan(noteScanDest(&note)...)
 	return note, err
 }
 
@@ -216,11 +240,7 @@ func (s *noteStore) GetByID(ctx context.Context, id string, userID string) (*Not
 			  WHERE n.id = ?`
 
 	var note Note
-	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), userID, id).Scan(
-		&note.ID, &note.UserID, &note.Title, &note.Content, &note.NoteType, &note.Version,
-		&note.Color, &note.Pinned, &note.Archived, &note.Position, &note.UnpinnedPosition, &note.CheckedItemsCollapsed,
-		&note.DeletedAt, &note.CreatedAt, &note.UpdatedAt,
-	)
+	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), userID, id).Scan(noteScanDest(&note)...)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNoteNotFound
@@ -258,11 +278,7 @@ func (s *noteStore) GetByIDAnyState(ctx context.Context, id string, userID strin
 			  WHERE n.id = ? AND n.user_id = ?`
 
 	var ownedNote Note
-	err = s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), userID, id, userID).Scan(
-		&ownedNote.ID, &ownedNote.UserID, &ownedNote.Title, &ownedNote.Content, &ownedNote.NoteType, &ownedNote.Version,
-		&ownedNote.Color, &ownedNote.Pinned, &ownedNote.Archived, &ownedNote.Position, &ownedNote.UnpinnedPosition, &ownedNote.CheckedItemsCollapsed,
-		&ownedNote.DeletedAt, &ownedNote.CreatedAt, &ownedNote.UpdatedAt,
-	)
+	err = s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), userID, id, userID).Scan(noteScanDest(&ownedNote)...)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNoteNotFound
