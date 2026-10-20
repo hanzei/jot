@@ -1,4 +1,4 @@
-import { test, expect, uniqueUsername } from '../fixtures';
+import { test, expect, uniqueSuffix, uniqueUsername } from '../fixtures';
 import type { APIRequestContext } from '@playwright/test';
 
 async function registerUsers(request: APIRequestContext, usernames: string[]) {
@@ -59,7 +59,7 @@ test.describe('Share suggestions', () => {
     void authenticatedUser;
     // A shared prefix so both users match the same query, with the stranger
     // sorting first alphabetically — recency has to win.
-    const suffix = `${Date.now()}${Math.floor(Math.random() * 9000 + 1000)}`;
+    const suffix = uniqueSuffix();
     const collaborator = `zmatch${suffix}`;
     const stranger = `amatch${suffix}`;
     await registerUsers(request, [collaborator, stranger]);
