@@ -1609,6 +1609,13 @@ describe('Dashboard', () => {
       }]);
     });
 
+    // Open pushes /notes/shared-1 onto the real window.history, which closing
+    // the modal does not undo under MemoryRouter; reset it so later tests
+    // don't record it as their return path.
+    afterEach(() => {
+      window.history.replaceState(null, '', '/');
+    });
+
     // handleSSEEvent is rebuilt as users load, so read the latest registration.
     const latestSSECallbacks = () => {
       const calls = mockRegisterSSECallbacks.mock.calls;
