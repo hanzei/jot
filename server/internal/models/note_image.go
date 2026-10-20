@@ -74,7 +74,7 @@ func (s *noteStore) CreateNoteImage(ctx context.Context, noteID, uploaderID, fil
 	}
 
 	if err = recordContentChangeTx(ctx, tx, s.d, noteID, uploaderID, now); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create note image: %w", err)
 	}
 
 	if err = tx.Commit(); err != nil {
@@ -222,7 +222,7 @@ func (s *noteStore) DeleteNoteImage(ctx context.Context, imageID, userID string)
 	}
 
 	if err = recordContentChangeTx(ctx, tx, s.d, deleted.NoteID, userID, Timestamp(Now())); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("delete note image: %w", err)
 	}
 
 	if err = tx.Commit(); err != nil {
