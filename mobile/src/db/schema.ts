@@ -237,6 +237,14 @@ const migration5 = async (db: SQLiteDatabase): Promise<void> => {
   }
 };
 
+// Column-probed ALTER for additive migrations on existing installs.
+const addColumnIfMissing = async (db: SQLiteDatabase, table: string, column: string, definition: string): Promise<void> => {
+  const cols = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(${table})`);
+  if (!cols.some((c) => c.name === column)) {
+    await db.runAsync(`ALTER TABLE ${table} ADD COLUMN ${definition}`);
+  }
+};
+
 // Migration 6: give the sync queues a per-entry transient-failure counter so a
 // single reproducibly-failing op can be dead-lettered and skipped instead of
 // wedging the whole queue in strict FIFO order (issue #714). Adds
@@ -245,17 +253,10 @@ const migration5 = async (db: SQLiteDatabase): Promise<void> => {
 // TABLE statements above; these column-probed ALTERs cover existing installs.
 // Additive only, per the project's "preserve existing installations" rule.
 const migration6 = async (db: SQLiteDatabase): Promise<void> => {
-  const addColumnIfMissing = async (table: string, column: string, definition: string): Promise<void> => {
-    const cols = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(${table})`);
-    if (!cols.some((c) => c.name === column)) {
-      await db.runAsync(`ALTER TABLE ${table} ADD COLUMN ${definition}`);
-    }
-  };
-
-  await addColumnIfMissing('sync_queue', 'attempts', 'attempts INTEGER NOT NULL DEFAULT 0');
-  await addColumnIfMissing('pending_image_uploads', 'attempts', 'attempts INTEGER NOT NULL DEFAULT 0');
-  await addColumnIfMissing('dead_letter', 'attempts', 'attempts INTEGER NOT NULL DEFAULT 0');
-  await addColumnIfMissing('dead_letter', 'error_message', 'error_message TEXT');
+  await addColumnIfMissing(db, 'sync_queue', 'attempts', 'attempts INTEGER NOT NULL DEFAULT 0');
+  await addColumnIfMissing(db, 'pending_image_uploads', 'attempts', 'attempts INTEGER NOT NULL DEFAULT 0');
+  await addColumnIfMissing(db, 'dead_letter', 'attempts', 'attempts INTEGER NOT NULL DEFAULT 0');
+  await addColumnIfMissing(db, 'dead_letter', 'error_message', 'error_message TEXT');
 };
 
 // Migration 7: cache the server's per-user unread badge ('new' | 'updated' |
@@ -263,10 +264,7 @@ const migration6 = async (db: SQLiteDatabase): Promise<void> => {
 // column from migration1; this column-probed ALTER covers existing installs,
 // whose rows start with no badge until the next server fetch supplies one.
 const migration7 = async (db: SQLiteDatabase): Promise<void> => {
-  const noteCols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(notes)');
-  if (!noteCols.some((c) => c.name === 'unread')) {
-    await db.runAsync('ALTER TABLE notes ADD COLUMN unread TEXT');
-  }
+  await addColumnIfMissing(db, 'notes', 'unread', 'unread TEXT');
 };
 
 export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4, migration5, migration6, migration7];

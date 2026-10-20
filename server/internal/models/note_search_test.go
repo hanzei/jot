@@ -189,17 +189,17 @@ func TestNoteSearchIndexConsistency(t *testing.T) {
 			n, err := store.Create(ctx, userID, "", "List", "", NoteTypeList, DefaultNoteColor)
 			require.NoError(t, err)
 
-			item, err := store.CreateItemWithCompleted(ctx, n.ID, "artichoke", 0, false, "", "")
+			item, err := store.CreateItemWithCompleted(ctx, n.ID, userID, "artichoke", 0, false, "", "")
 			require.NoError(t, err)
 			assert.ElementsMatch(t, []string{n.ID}, searchIDs(t, store, ctx, userID, "artichoke"))
 
 			newText := "broccoli"
-			_, err = store.PatchItem(ctx, n.ID, item.ID, NoteItemPatch{Text: &newText})
+			_, err = store.PatchItem(ctx, n.ID, userID, item.ID, NoteItemPatch{Text: &newText})
 			require.NoError(t, err)
 			assert.Empty(t, searchIDs(t, store, ctx, userID, "artichoke"))
 			assert.ElementsMatch(t, []string{n.ID}, searchIDs(t, store, ctx, userID, "broccoli"))
 
-			require.NoError(t, store.DeleteItemFromNote(ctx, n.ID, item.ID))
+			require.NoError(t, store.DeleteItemFromNote(ctx, n.ID, userID, item.ID))
 			assert.Empty(t, searchIDs(t, store, ctx, userID, "broccoli"))
 		})
 

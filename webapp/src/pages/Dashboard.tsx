@@ -420,12 +420,14 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   }, [isNewNoteRoute, searchParams]);
 
   // Unread badges, open side: opening an unread note clears its badge in the
-  // list right away and records the view. Ordinary opens cost no request.
+  // list right away and records the view. Ordinary opens cost no request. The
+  // reload after the view lands supersedes any list fetch already in flight,
+  // which could otherwise bring the badge back.
   const markOpenedNoteViewed = useCallback((note: Note) => {
     if (!note.unread) return;
     updateNotesList(prev => prev.map(n => (n.id === note.id ? { ...n, unread: null } : n)));
-    notes.markViewed(note.id).catch(() => {});
-  }, [updateNotesList]);
+    notes.markViewed(note.id).then(() => loadNotes()).catch(() => {});
+  }, [updateNotesList, loadNotes]);
 
   const openNoteFromUrl = useCallback((noteId: string) => {
     openNoteIdRef.current = null;

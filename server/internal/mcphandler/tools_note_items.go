@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"unicode/utf8"
 
-	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -146,11 +145,11 @@ func (h *Handler) handleCreateNoteItem(userID string) mcp.ToolHandlerFor[createN
 
 		// The cap is enforced atomically inside the create transaction, so a
 		// pre-check here would only race.
-		item, err := h.noteStore.CreateItemWithID(ctx, in.NoteID, itemID, in.Text, position, in.Completed, in.ParentID, "", models.NoteItemsMaxCount)
+		item, err := h.noteStore.CreateItemWithID(ctx, in.NoteID, userID, itemID, in.Text, position, in.Completed, in.ParentID, "", models.NoteItemsMaxCount)
 		if err != nil {
 			return toolError("create note item: %w", itemCapError(err))
 		}
-		h.itemsChanged(ctx, in.NoteID, userID)
+		h.events.NoteUpdated(ctx, in.NoteID, nil, userID, true)
 		data, err := json.Marshal(item)
 		if err != nil {
 			return toolError("marshal note item: %w", err)
@@ -184,7 +183,7 @@ func (h *Handler) handleUpdateNoteItem(userID string) mcp.ToolHandlerFor[updateN
 			}
 		}
 
-		item, err := h.noteStore.PatchItem(ctx, in.NoteID, in.ItemID, models.NoteItemPatch{
+		item, err := h.noteStore.PatchItem(ctx, in.NoteID, userID, in.ItemID, models.NoteItemPatch{
 			Text:      in.Text,
 			Completed: in.Completed,
 			Position:  in.Position,
@@ -193,7 +192,7 @@ func (h *Handler) handleUpdateNoteItem(userID string) mcp.ToolHandlerFor[updateN
 		if err != nil {
 			return toolError("update note item: %w", err)
 		}
-		h.itemsChanged(ctx, in.NoteID, userID)
+		h.events.NoteUpdated(ctx, in.NoteID, nil, userID, true)
 		data, err := json.Marshal(item)
 		if err != nil {
 			return toolError("marshal note item: %w", err)
@@ -217,20 +216,10 @@ func (h *Handler) handleDeleteNoteItem(userID string) mcp.ToolHandlerFor[deleteN
 		if in.ItemID == "" {
 			return toolError("item_id is required")
 		}
-		if err := h.noteStore.DeleteItemFromNote(ctx, in.NoteID, in.ItemID); err != nil {
+		if err := h.noteStore.DeleteItemFromNote(ctx, in.NoteID, userID, in.ItemID); err != nil {
 			return toolError("delete note item: %w", err)
 		}
-		h.itemsChanged(ctx, in.NoteID, userID)
+		h.events.NoteUpdated(ctx, in.NoteID, nil, userID, true)
 		return toolDeletedResult(in.ItemID, map[string]any{"note_id": in.NoteID})
 	}
-}
-
-// itemsChanged records an item-level change for unread tracking and publishes
-// the personalized note_updated to every collaborator. The item write has
-// already committed, so a failed record only costs the badge and is logged.
-func (h *Handler) itemsChanged(ctx context.Context, noteID, userID string) {
-	if err := h.noteStore.RecordContentChange(ctx, noteID, userID); err != nil {
-		logutil.FromContext(ctx).WithError(err).WithField("note_id", noteID).Error("Failed to record note content change")
-	}
-	h.events.NoteUpdated(ctx, noteID, nil, userID, true)
 }

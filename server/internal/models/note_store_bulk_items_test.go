@@ -74,7 +74,7 @@ func TestSetItemsCompleted(t *testing.T) {
 				})
 			require.NoError(t, err)
 
-			items, err := store.SetItemsCompleted(ctx, note.ID, []string{doneA, doneC}, false)
+			items, err := store.SetItemsCompleted(ctx, note.ID, userID, []string{doneA, doneC}, false)
 			require.NoError(t, err)
 			require.Len(t, items, 3, "returns the note's full item list")
 			for _, it := range items {
@@ -98,10 +98,10 @@ func TestSetItemsCompleted(t *testing.T) {
 				})
 			require.NoError(t, err)
 
-			_, err = store.SetItemsCompleted(ctx, note.ID, []string{a, b}, false)
+			_, err = store.SetItemsCompleted(ctx, note.ID, userID, []string{a, b}, false)
 			require.NoError(t, err)
 
-			items, err := store.SetItemsCompleted(ctx, note.ID, []string{a, b}, true)
+			items, err := store.SetItemsCompleted(ctx, note.ID, userID, []string{a, b}, true)
 			require.NoError(t, err)
 			for _, it := range items {
 				assert.True(t, it.Completed, "item %q should be re-checked", it.Text)
@@ -116,7 +116,7 @@ func TestSetItemsCompleted(t *testing.T) {
 				[]NewNoteItem{{Text: "done", Position: 0, Completed: true}})
 			require.NoError(t, err)
 
-			items, err := store.SetItemsCompleted(ctx, note.ID, []string{"doesnotexist1234567890"}, false)
+			items, err := store.SetItemsCompleted(ctx, note.ID, userID, []string{"doesnotexist1234567890"}, false)
 			require.NoError(t, err)
 			require.Len(t, items, 1)
 			assert.True(t, items[0].Completed, "unrelated ID must not change anything")
@@ -138,7 +138,7 @@ func TestSetItemsCompleted(t *testing.T) {
 			// Only the parent ID is passed; the invariant requires its child to
 			// complete too, so the store cascades rather than leaving a completed
 			// parent with an incomplete child.
-			items, err := store.SetItemsCompleted(ctx, note.ID, []string{parentID}, true)
+			items, err := store.SetItemsCompleted(ctx, note.ID, userID, []string{parentID}, true)
 			require.NoError(t, err)
 			assert.True(t, bulkItemByText(t, items, "Parent").Completed)
 			assert.True(t, bulkItemByText(t, items, "Child").Completed, "child must cascade to completed")
@@ -161,7 +161,7 @@ func TestSetItemsCompleted(t *testing.T) {
 
 			// Only the child ID is passed; un-completing it must also un-complete
 			// the parent so no completed parent keeps an incomplete child.
-			items, err := store.SetItemsCompleted(ctx, note.ID, []string{childID}, false)
+			items, err := store.SetItemsCompleted(ctx, note.ID, userID, []string{childID}, false)
 			require.NoError(t, err)
 			assert.False(t, bulkItemByText(t, items, "Child").Completed)
 			assert.False(t, bulkItemByText(t, items, "Parent").Completed, "parent must un-complete")
@@ -180,7 +180,7 @@ func TestSetItemsCompleted(t *testing.T) {
 			before := forceNoteUpdatedAtPast(t, store, note.ID, userID)
 
 			// Item is already uncompleted, so setting it uncompleted is a no-op.
-			_, err = store.SetItemsCompleted(ctx, note.ID, []string{a}, false)
+			_, err = store.SetItemsCompleted(ctx, note.ID, userID, []string{a}, false)
 			require.NoError(t, err)
 
 			after, err := store.GetByID(ctx, note.ID, userID)
@@ -209,7 +209,7 @@ func TestDeleteItems(t *testing.T) {
 				})
 			require.NoError(t, err)
 
-			items, err := store.DeleteItems(ctx, note.ID, []string{a, c})
+			items, err := store.DeleteItems(ctx, note.ID, userID, []string{a, c})
 			require.NoError(t, err)
 			require.Len(t, items, 1)
 			assert.Equal(t, "keep b", items[0].Text)
@@ -229,7 +229,7 @@ func TestDeleteItems(t *testing.T) {
 				})
 			require.NoError(t, err)
 
-			items, err := store.DeleteItems(ctx, note.ID, []string{parentID})
+			items, err := store.DeleteItems(ctx, note.ID, userID, []string{parentID})
 			require.NoError(t, err)
 			require.Len(t, items, 1, "only the child remains")
 			child := bulkItemByText(t, items, "Child")
@@ -244,7 +244,7 @@ func TestDeleteItems(t *testing.T) {
 				[]NewNoteItem{{Text: "keep", Position: 0}})
 			require.NoError(t, err)
 
-			items, err := store.DeleteItems(ctx, note.ID, []string{"doesnotexist1234567890"})
+			items, err := store.DeleteItems(ctx, note.ID, userID, []string{"doesnotexist1234567890"})
 			require.NoError(t, err)
 			assert.Len(t, items, 1, "unrelated ID must not delete anything")
 		})
@@ -259,7 +259,7 @@ func TestDeleteItems(t *testing.T) {
 
 			before := forceNoteUpdatedAtPast(t, store, note.ID, userID)
 
-			_, err = store.DeleteItems(ctx, note.ID, []string{"doesnotexist1234567890"})
+			_, err = store.DeleteItems(ctx, note.ID, userID, []string{"doesnotexist1234567890"})
 			require.NoError(t, err)
 
 			after, err := store.GetByID(ctx, note.ID, userID)

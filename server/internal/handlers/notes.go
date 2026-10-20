@@ -931,14 +931,15 @@ func (h *NotesHandler) MarkNoteViewed(w http.ResponseWriter, r *http.Request) (i
 	}
 
 	// Unread state is per-user, so only the caller's own sessions need to hear
-	// of it, and only when it actually changed.
+	// of it, and only when it actually changed. The view is already committed,
+	// so a failed lookup only skips that best-effort push.
 	if wasUnread {
 		note, err := h.noteStore.GetByID(r.Context(), id, user.ID)
 		if err != nil {
-			return http.StatusInternalServerError, nil, fmt.Errorf("get note: %w", err)
+			logutil.FromContext(r.Context()).WithError(err).WithField("note_id", id).Error("Failed to load viewed note for SSE publish")
+		} else {
+			h.events.NoteUpdated(r.Context(), id, note, user.ID, false)
 		}
-		sanitized := models.SanitizeNote(*note)
-		h.events.NoteUpdated(r.Context(), id, &sanitized, user.ID, false)
 	}
 
 	return http.StatusNoContent, nil, nil

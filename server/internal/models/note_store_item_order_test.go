@@ -99,7 +99,7 @@ func TestItemOrderNormalization(t *testing.T) {
 			noteID, ids := newNote(t, store, userID)
 
 			parentID := ids["c"]
-			item, err := store.PatchItem(t.Context(), noteID, ids["a"], NoteItemPatch{ParentID: &parentID})
+			item, err := store.PatchItem(t.Context(), noteID, userID, ids["a"], NoteItemPatch{ParentID: &parentID})
 			require.NoError(t, err)
 
 			texts, positions := storedItemOrder(t, store, noteID)
@@ -114,10 +114,10 @@ func TestItemOrderNormalization(t *testing.T) {
 			store, userID := newTestBulkStore(t, driver)
 			noteID, ids := newNote(t, store, userID)
 			parentID := ids["c"]
-			_, err := store.PatchItem(t.Context(), noteID, ids["a"], NoteItemPatch{ParentID: &parentID})
+			_, err := store.PatchItem(t.Context(), noteID, userID, ids["a"], NoteItemPatch{ParentID: &parentID})
 			require.NoError(t, err)
 
-			require.NoError(t, store.ReorderItems(t.Context(), noteID, []string{ids["a"], ids["c"], ids["b"]}))
+			require.NoError(t, store.ReorderItems(t.Context(), noteID, userID, []string{ids["a"], ids["c"], ids["b"]}))
 
 			texts, positions := storedItemOrder(t, store, noteID)
 			assert.Equal(t, []string{"c", "a", "b"}, texts, "the requested order is kept apart from the group")
@@ -130,7 +130,7 @@ func TestItemOrderNormalization(t *testing.T) {
 
 			childID, err := generateID()
 			require.NoError(t, err)
-			item, err := store.CreateItemWithID(t.Context(), noteID, childID, "b1", 0, false, ids["b"], "", 0)
+			item, err := store.CreateItemWithID(t.Context(), noteID, userID, childID, "b1", 0, false, ids["b"], "", 0)
 			require.NoError(t, err)
 
 			texts, positions := storedItemOrder(t, store, noteID)
@@ -235,11 +235,11 @@ func TestItemOrderNormalization(t *testing.T) {
 
 			// Leave a gap; it is not an ordering problem, so nothing compacts it.
 			position := 10
-			_, err := store.PatchItem(t.Context(), noteID, ids["c"], NoteItemPatch{Position: &position})
+			_, err := store.PatchItem(t.Context(), noteID, userID, ids["c"], NoteItemPatch{Position: &position})
 			require.NoError(t, err)
 			childID, err := generateID()
 			require.NoError(t, err)
-			item, err := store.CreateItemWithID(t.Context(), noteID, childID, "c1", 11, false, ids["c"], "", 0)
+			item, err := store.CreateItemWithID(t.Context(), noteID, userID, childID, "c1", 11, false, ids["c"], "", 0)
 			require.NoError(t, err)
 
 			texts, positions := storedItemOrder(t, store, noteID)
@@ -251,10 +251,10 @@ func TestItemOrderNormalization(t *testing.T) {
 		t.Run("a patch without a position keeps the stored one", func(t *testing.T) {
 			store, userID := newTestBulkStore(t, driver)
 			noteID, ids := newNote(t, store, userID)
-			require.NoError(t, store.ReorderItems(t.Context(), noteID, []string{ids["c"], ids["a"], ids["b"]}))
+			require.NoError(t, store.ReorderItems(t.Context(), noteID, userID, []string{ids["c"], ids["a"], ids["b"]}))
 
 			text := "a, renamed"
-			item, err := store.PatchItem(t.Context(), noteID, ids["a"], NoteItemPatch{Text: &text})
+			item, err := store.PatchItem(t.Context(), noteID, userID, ids["a"], NoteItemPatch{Text: &text})
 			require.NoError(t, err)
 
 			texts, positions := storedItemOrder(t, store, noteID)
@@ -270,7 +270,7 @@ func TestItemOrderNormalization(t *testing.T) {
 			noteID, ids := newNote(t, store, userID)
 
 			position := 0
-			_, err := store.PatchItem(t.Context(), noteID, ids["b"], NoteItemPatch{Position: &position})
+			_, err := store.PatchItem(t.Context(), noteID, userID, ids["b"], NoteItemPatch{Position: &position})
 			require.NoError(t, err)
 
 			// a and b share created_at (one CreateWithItems), so which of the

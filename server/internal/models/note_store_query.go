@@ -30,6 +30,8 @@ func buildSearchTokens(search string) []string {
 
 // noteUnreadExpr computes Note.Unread for the user whose note_user_state row
 // (nus) is joined:
+//   - nothing for a trashed note: it can only be opened read-only from the
+//     bin, where POST /notes/{id}/viewed (active notes only) cannot clear it.
 //   - "new": a collaborator (not the owner) who has never opened the note.
 //   - "updated": someone else changed shared content after the user last
 //     viewed it. An owner who never reopened their own note falls back to the
@@ -38,6 +40,7 @@ func buildSearchTokens(search string) []string {
 // Both backends store timestamps in the same fixed-width layout (see
 // timestampLayout), so the comparison is correct on SQLite's text values too.
 const noteUnreadExpr = `CASE
+				    WHEN n.deleted_at IS NOT NULL THEN NULL
 				    WHEN nus.last_viewed_at IS NULL AND n.user_id <> nus.user_id THEN 'new'
 				    WHEN n.content_changed_by IS NOT NULL AND n.content_changed_by <> nus.user_id
 				     AND n.content_changed_at > COALESCE(nus.last_viewed_at, nus.created_at) THEN 'updated'
