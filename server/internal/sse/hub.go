@@ -56,7 +56,7 @@ type LabelsEventData struct {
 type Event struct {
 	Type         EventType `json:"type"`
 	SourceUserID string    `json:"source_user_id"`           // who triggered the change
-	TargetUserID string    `json:"target_user_id,omitempty"` // user affected (e.g. unshared)
+	TargetUserID string    `json:"target_user_id,omitempty"` // user affected (shared with / unshared)
 	ClientID     string    `json:"client_id,omitempty"`      // tab/device that triggered the mutation
 	Data         any       `json:"data,omitempty"`
 }

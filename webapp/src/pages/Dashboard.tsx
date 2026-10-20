@@ -8,6 +8,9 @@ import {
   NOTE_SORT_OPTIONS,
   normalizeNoteSort,
   sortNotesForDisplay,
+  displayName,
+  isNoteSharedWithUser,
+  noteNoticeTitle,
   type Note,
   type NoteImage,
   type NoteType,
@@ -482,7 +485,24 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
     return () => window.removeEventListener('popstate', handlePopState);
   }, [openNoteFromUrl]);
 
+  // The toast's Open action runs long after the SSE handler, so it reads the
+  // current open path through a ref rather than closing over a stale one.
+  const handleEditNoteRef = useRef<(note: Note) => void>(() => {});
+
   const handleSSEEvent = useCallback((event: SSEEvent) => {
+    if (isNoteSharedWithUser(event, user?.id) && event.type === 'note_shared' && event.data.note) {
+      const sharedNote = event.data.note;
+      const sharer = usersById.get(event.source_user_id);
+      const name = sharer
+        ? displayName({ userId: sharer.id, username: sharer.username, firstName: sharer.first_name, lastName: sharer.last_name })
+        : t('dashboard.someone');
+      showToast(
+        t('dashboard.noteSharedWithYou', { name, title: noteNoticeTitle(sharedNote) || t('share.untitledNote') }),
+        'info',
+        { label: t('dashboard.openNote'), onClick: () => handleEditNoteRef.current(sharedNote) },
+      );
+    }
+
     if (event.type === 'profile_icon_updated') {
       const updatedUser = event.data.user;
       setUsersById(prev => {
@@ -579,7 +599,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
     if (event.type === 'note_created' || event.type === 'note_updated') {
       loadLabels();
     }
-  }, [editingNote, sharingNote, loadNotes, loadLabels, loadLabelCounts, setSearchParams, user?.id, restoreReturnUrl, updateNotesList]);
+  }, [editingNote, sharingNote, loadNotes, loadLabels, loadLabelCounts, setSearchParams, user?.id, restoreReturnUrl, updateNotesList, usersById, showToast, t]);
 
   // Unread badges, from whichever path opened the note: opening an unread note
   // records the view, and closing it records another if a collaborator's
@@ -799,6 +819,10 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
     setIsModalOpen(true);
     window.history.pushState({ returnTo: returnPathRef.current }, '', `/notes/${note.id}`);
   };
+
+  useEffect(() => {
+    handleEditNoteRef.current = handleEditNote;
+  });
 
   const handleNoteUpdate = () => {
     void Promise.all([loadNotes(), loadLabelCounts()]);

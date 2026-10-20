@@ -124,7 +124,10 @@
     "failedDeleteNoteForever": "Notiz konnte nicht dauerhaft gelöscht werden.",
     "failedReorderNotes": "Notizen konnten nicht neu sortiert werden.",
     "failedUpdateSort": "Sortiereinstellung konnte nicht aktualisiert werden.",
-    "undo": "Rückgängig"
+    "undo": "Rückgängig",
+    "noteSharedWithYou": "{{name}} hat „{{title}}“ mit dir geteilt",
+    "someone": "Jemand",
+    "openNote": "Öffnen"
   },
   "settings": {
     "title": "Einstellungen",

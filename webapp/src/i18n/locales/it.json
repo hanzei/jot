@@ -124,7 +124,10 @@
     "failedDeleteNoteForever": "Impossibile eliminare definitivamente la nota.",
     "failedReorderNotes": "Impossibile riordinare le note.",
     "failedUpdateSort": "Impossibile aggiornare la preferenza di ordinamento.",
-    "undo": "Annulla"
+    "undo": "Annulla",
+    "noteSharedWithYou": "{{name}} ha condiviso «{{title}}» con te",
+    "someone": "Qualcuno",
+    "openNote": "Apri"
   },
   "settings": {
     "title": "Impostazioni",

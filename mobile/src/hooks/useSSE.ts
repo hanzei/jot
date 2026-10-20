@@ -7,7 +7,7 @@ import { useAuth } from '../store/AuthContext';
 import { SSEConnectionManager, type SSEStatus } from '../api/events';
 import { notifySseStateChange, setActiveSseManager } from '../api/sseState';
 import { CLIENT_ID } from '../api/client';
-import type { SSEEvent } from '@jot/shared';
+import { isNoteSharedWithUser, type SSEEvent } from '@jot/shared';
 import { useNetworkStatus } from './useNetworkStatus';
 import { markLocalNoteDeleted, permanentDeleteLocalNote, patchLocalNoteImages, upsertLabel } from '../db/noteQueries';
 import { getProtectedNoteIds, saveServerNote } from '../db/syncQueue';
@@ -151,6 +151,12 @@ export function useSSE(
             queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(note_id) });
             queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
             invalidateLabelQueries();
+            // A share that makes the note news to this user (not one adding
+            // someone else to a note they already have) is surfaced as a toast.
+            // Notify after the write so opening it from the toast finds the row.
+            if (isNoteSharedWithUser(event, userIdRef.current)) {
+              onNoteUpdatedRef.current?.(event);
+            }
             break;
           }
           case 'note_unshared': {

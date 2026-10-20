@@ -115,7 +115,11 @@
     "noteDeleted": "Note déplacée vers la corbeille",
     "noteRestored": "Note restaurée",
     "undo": "Annuler",
-    "toastActionHint": "Appuyer pour {{action}}"
+    "toastActionHint": "Appuyer pour {{action}}",
+    "noteSharedWithYou": "{{name}} a partagé « {{title}} » avec vous",
+    "someone": "Quelqu'un",
+    "untitledNote": "Note sans titre",
+    "openNote": "Ouvrir"
   },
   "settings": {
     "title": "Paramètres",

@@ -559,6 +559,50 @@ describe('useSSE', () => {
     expect(onNotify).not.toHaveBeenCalled();
   });
 
+  it('notifies after persisting a note shared with the current user', async () => {
+    const { Wrapper } = createWrapper();
+    const onNotify = jest.fn();
+    const note = makeTextNote({ id: 'shared-note' });
+
+    await renderHook(() => useSSE(onNotify), { wrapper: Wrapper });
+
+    const event: SSEEvent = {
+      type: 'note_shared',
+      source_user_id: 'other-user',
+      target_user_id: 'current-user',
+      data: { note_id: 'shared-note', note },
+    };
+    await act(async () => {
+      capturedCallback?.(event);
+    });
+
+    await waitFor(() => expect(onNotify).toHaveBeenCalledWith(event));
+    // The toast's Open action reads the note from SQLite, so the write lands first.
+    expect(mockSaveServerNote).toHaveBeenCalledWith(expect.anything(), note);
+    expect(mockSaveServerNote.mock.invocationCallOrder[0]).toBeLessThan(onNotify.mock.invocationCallOrder[0]!);
+  });
+
+  it.each([
+    ['someone else was added to the note', { target_user_id: 'someone-else', source_user_id: 'other-user' }],
+    ['the server sends no target', { source_user_id: 'other-user' }],
+  ])('does not notify on note_shared when %s', async (_label, fields) => {
+    const { Wrapper } = createWrapper();
+    const onNotify = jest.fn();
+
+    await renderHook(() => useSSE(onNotify), { wrapper: Wrapper });
+
+    await act(async () => {
+      capturedCallback?.({
+        type: 'note_shared',
+        ...fields,
+        data: { note_id: 'shared-note', note: makeTextNote({ id: 'shared-note' }) },
+      });
+    });
+
+    await waitFor(() => expect(mockSaveServerNote).toHaveBeenCalled());
+    expect(onNotify).not.toHaveBeenCalled();
+  });
+
   it('does not call notification callback for same-user events', async () => {
     const { Wrapper } = createWrapper();
     const onNotify = jest.fn();

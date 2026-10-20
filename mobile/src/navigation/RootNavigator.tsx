@@ -5,6 +5,7 @@ import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { SSEProvider } from '../store/SSEContext';
 import TopBanners from '../components/TopBanners';
+import NoteSharedToast from '../components/NoteSharedToast';
 import { ContentSafeArea } from '../components/ContentSafeArea';
 import AuthStack from './AuthStack';
 import MainDrawer from './MainDrawer';
@@ -81,6 +82,7 @@ export const getNoteScreenId = ({ params }: { params?: { noteId?: string | null;
 function AuthenticatedStack() {
   return (
     <SSEProvider>
+      <NoteSharedToast />
       <View style={styles.flex}>
         <TopBanners />
         {/* Everything below the banners sees a top inset of 0 while a banner is
