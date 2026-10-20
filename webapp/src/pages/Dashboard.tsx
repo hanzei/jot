@@ -417,11 +417,14 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
     setIsModalOpen(true);
   }, [isNewNoteRoute, searchParams]);
 
-  // Records a view of the note. The reload after the view lands supersedes any
-  // list fetch already in flight, which could otherwise bring the badge back.
-  const recordNoteViewed = useCallback((noteId: string) => {
-    notes.markViewed(noteId).then(() => loadNotes()).catch(() => {});
-  }, [loadNotes]);
+  // Records a view of the note, resolving to whether it landed. The reload
+  // after the view lands supersedes any list fetch already in flight, which
+  // could otherwise bring the badge back.
+  const recordNoteViewed = useCallback((noteId: string): Promise<boolean> =>
+    notes.markViewed(noteId).then(() => {
+      loadNotes();
+      return true;
+    }, () => false), [loadNotes]);
 
   const openNoteFromUrl = useCallback((noteId: string) => {
     openNoteIdRef.current = null;
@@ -591,11 +594,14 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   useEffect(() => {
     if (!editingNoteId) return;
     if (openNoteUnreadRef.current) {
-      openNoteUnreadRef.current = null;
-      recordNoteViewed(editingNoteId);
+      // Stays pending until the view lands, so a failed request is retried
+      // when the note closes.
+      void recordNoteViewed(editingNoteId).then(landed => {
+        if (landed && openNoteIdRef.current === editingNoteId) openNoteUnreadRef.current = null;
+      });
     }
     return () => {
-      if (openNoteUnreadRef.current) recordNoteViewed(editingNoteId);
+      if (openNoteUnreadRef.current) void recordNoteViewed(editingNoteId);
     };
   }, [editingNoteId, recordNoteViewed]);
 

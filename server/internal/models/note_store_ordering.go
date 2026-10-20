@@ -24,6 +24,16 @@ func touchNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, ac
 	return markViewedTx(ctx, tx, d, noteID, actorID, now)
 }
 
+// touchNoteIfChangedTx is touchNoteTx for item writes that may turn out to be
+// no-ops (e.g. an offline replay of an already-applied change): it touches the
+// note only when changed is true.
+func touchNoteIfChangedTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, changed bool, noteID, actorID, now string) error {
+	if !changed {
+		return nil
+	}
+	return touchNoteTx(ctx, tx, d, noteID, actorID, now)
+}
+
 func (s *noteStore) ReorderNotes(ctx context.Context, userID string, noteIDs []string) error {
 	if len(noteIDs) == 0 {
 		return nil

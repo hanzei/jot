@@ -404,10 +404,13 @@ func (s *noteStore) PatchItem(ctx context.Context, noteID, actorID, itemID strin
 	// both fields in one patch (e.g. a drag-to-reparent that lands before an
 	// in-flight checkbox toggle's own request has advanced the local
 	// baseline).
+	changed := patchChangesItem(&current, currentParent.String, resolvedText, resolvedCompleted, resolvedParent, resolvedAssignedTo, patch.Position)
 	if patch.Completed != nil || patch.ParentID != nil {
-		if err = cascadeItemCompletion(ctx, tx, s.d, noteID, itemID, nullableParentID(resolvedParent), resolvedCompleted, now); err != nil {
-			return nil, err
+		cascadeChanged, cascadeErr := cascadeItemCompletion(ctx, tx, s.d, noteID, itemID, nullableParentID(resolvedParent), resolvedCompleted, now)
+		if cascadeErr != nil {
+			return nil, cascadeErr
 		}
+		changed = changed || cascadeChanged
 	}
 
 	if patch.Position != nil || patch.ParentID != nil {
@@ -418,7 +421,7 @@ func (s *noteStore) PatchItem(ctx context.Context, noteID, actorID, itemID strin
 		item.Position = positions[itemID]
 	}
 
-	if err = touchNoteTx(ctx, tx, s.d, noteID, actorID, now); err != nil {
+	if err = touchNoteIfChangedTx(ctx, tx, s.d, changed, noteID, actorID, now); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -432,6 +435,14 @@ func (s *noteStore) PatchItem(ctx context.Context, noteID, actorID, itemID strin
 	item.ParentID = parentIDPtr(nullableParentID(resolvedParent))
 	item.AssignedTo = resolvedAssignedTo
 	return &item, nil
+}
+
+// patchChangesItem reports whether a patch's resolved values differ from the
+// item as stored, so a replayed no-op patch does not flag the note "updated".
+func patchChangesItem(current *NoteItem, currentParent, text string, completed bool, parent, assignedTo string, position *int) bool {
+	return text != current.Text || completed != current.Completed ||
+		parent != currentParent || assignedTo != current.AssignedTo ||
+		(position != nil && *position != current.Position)
 }
 
 // DeleteItemFromNote deletes a single item scoped to its note and bumps the
@@ -482,27 +493,36 @@ func (s *noteStore) ReorderItems(ctx context.Context, noteID, actorID string, it
 
 	now := Timestamp(Now())
 
+	changed := false
 	for i, itemID := range itemIDs {
-		result, execErr := tx.ExecContext(ctx,
-			s.d.RewritePlaceholders(`UPDATE note_items SET position = ?, updated_at = ? WHERE id = ? AND note_id = ?`),
-			i, now, itemID, noteID,
+		moved, execErr := execChanged(ctx, tx,
+			s.d.RewritePlaceholders(`UPDATE note_items SET position = ?, updated_at = ? WHERE id = ? AND note_id = ? AND position <> ?`),
+			"failed to reorder note item",
+			i, now, itemID, noteID, i,
 		)
 		if execErr != nil {
-			return fmt.Errorf("failed to reorder note item: %w", execErr)
+			return execErr
 		}
-		n, raErr := result.RowsAffected()
-		if raErr != nil {
-			return fmt.Errorf("failed to get rows affected: %w", raErr)
+		if !moved {
+			// Unchanged, or not in this note at all.
+			var exists int
+			if err = tx.QueryRowContext(ctx,
+				s.d.RewritePlaceholders(`SELECT COUNT(*) FROM note_items WHERE id = ? AND note_id = ?`),
+				itemID, noteID,
+			).Scan(&exists); err != nil {
+				return fmt.Errorf("failed to check note item: %w", err)
+			}
+			if exists == 0 {
+				return ErrNoteItemNotFound
+			}
 		}
-		if n == 0 {
-			return ErrNoteItemNotFound
-		}
+		changed = changed || moved
 	}
 
 	if _, err = normalizeItemOrderTx(ctx, tx, s.d, noteID, now); err != nil {
 		return err
 	}
-	if err = touchNoteTx(ctx, tx, s.d, noteID, actorID, now); err != nil {
+	if err = touchNoteIfChangedTx(ctx, tx, s.d, changed, noteID, actorID, now); err != nil {
 		return err
 	}
 	if err = tx.Commit(); err != nil {
@@ -520,25 +540,37 @@ func (s *noteStore) ReorderItems(ctx context.Context, noteID, actorID string, it
 // checking the parent itself. parentID is the parent the item belongs to
 // after this change, as passed by ToggleItemCompleted (its unchanged parent)
 // and PatchItem (its resolved, post-patch parent).
-func cascadeItemCompletion(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, itemID string, parentID sql.NullString, newCompleted bool, now string) error {
+func cascadeItemCompletion(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, itemID string, parentID sql.NullString, newCompleted bool, now string) (changed bool, err error) {
 	if !parentID.Valid {
-		if _, err := tx.ExecContext(ctx,
-			d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = ? WHERE note_id = ? AND parent_id = ?`),
-			newCompleted, now, noteID, itemID,
-		); err != nil {
-			return fmt.Errorf("failed to cascade completion to children: %w", err)
-		}
-		return nil
+		return execChanged(ctx, tx,
+			d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = ? WHERE note_id = ? AND parent_id = ? AND completed <> ?`),
+			"failed to cascade completion to children",
+			newCompleted, now, noteID, itemID, newCompleted,
+		)
 	}
 	if !newCompleted {
-		if _, err := tx.ExecContext(ctx,
-			d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = ? WHERE id = ? AND note_id = ?`),
-			false, now, parentID.String, noteID,
-		); err != nil {
-			return fmt.Errorf("failed to cascade completion to parent: %w", err)
-		}
+		return execChanged(ctx, tx,
+			d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = ? WHERE id = ? AND note_id = ? AND completed <> ?`),
+			"failed to cascade completion to parent",
+			false, now, parentID.String, noteID, false,
+		)
 	}
-	return nil
+	return false, nil
+}
+
+// execChanged runs an UPDATE and reports whether it changed any row. Item
+// writes use it to call touchNoteTx only for a real change: a replayed no-op
+// must not flag the note "updated" for collaborators.
+func execChanged(ctx context.Context, tx *sql.Tx, query, errMsg string, args ...any) (bool, error) {
+	result, err := tx.ExecContext(ctx, query, args...)
+	if err != nil {
+		return false, fmt.Errorf("%s: %w", errMsg, err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("failed to get rows affected: %w", err)
+	}
+	return n > 0, nil
 }
 
 // ToggleItemCompleted sets an item's completed flag and cascades per
@@ -566,18 +598,21 @@ func (s *noteStore) ToggleItemCompleted(ctx context.Context, noteID, actorID, it
 		return nil, fmt.Errorf("failed to load note item: %w", err)
 	}
 
-	if _, err = tx.ExecContext(ctx,
-		s.d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = ? WHERE id = ? AND note_id = ?`),
-		completed, now, itemID, noteID,
-	); err != nil {
-		return nil, fmt.Errorf("failed to update note item: %w", err)
-	}
-
-	if err = cascadeItemCompletion(ctx, tx, s.d, noteID, itemID, parentID, completed, now); err != nil {
+	itemChanged, err := execChanged(ctx, tx,
+		s.d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = ? WHERE id = ? AND note_id = ? AND completed <> ?`),
+		"failed to update note item",
+		completed, now, itemID, noteID, completed,
+	)
+	if err != nil {
 		return nil, err
 	}
 
-	if err = touchNoteTx(ctx, tx, s.d, noteID, actorID, now); err != nil {
+	cascadeChanged, err := cascadeItemCompletion(ctx, tx, s.d, noteID, itemID, parentID, completed, now)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = touchNoteIfChangedTx(ctx, tx, s.d, itemChanged || cascadeChanged, noteID, actorID, now); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -636,7 +671,7 @@ func (s *noteStore) SetItemsCompleted(ctx context.Context, noteID, actorID strin
 		// nothing (and a group already consistent is left alone).
 		if n > 0 {
 			changed += n
-			if err = cascadeItemCompletion(ctx, tx, s.d, noteID, itemID, parentID, completed, now); err != nil {
+			if _, err = cascadeItemCompletion(ctx, tx, s.d, noteID, itemID, parentID, completed, now); err != nil {
 				return nil, err
 			}
 		}

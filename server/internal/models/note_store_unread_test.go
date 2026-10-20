@@ -80,6 +80,22 @@ func TestNoteUnreadState(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, NoteUnreadUpdated, unreadFor(t, store, note.ID, ownerID))
 
+		// Replayed no-op item writes (an offline client resending a change the
+		// server already applied) change nothing, so they flag nothing.
+		const itemID = "item000000000000000001"
+		_, err = store.MarkViewed(ctx, note.ID, ownerID)
+		require.NoError(t, err)
+		_, err = store.ToggleItemCompleted(ctx, note.ID, collabID, itemID, false)
+		require.NoError(t, err)
+		require.NoError(t, store.ReorderItems(ctx, note.ID, collabID, []string{itemID}))
+		sameText := "x"
+		_, err = store.PatchItem(ctx, note.ID, collabID, itemID, NoteItemPatch{Text: &sameText})
+		require.NoError(t, err)
+		assert.Empty(t, unreadFor(t, store, note.ID, ownerID), "no-op toggle, reorder and patch change nothing")
+		_, err = store.ToggleItemCompleted(ctx, note.ID, collabID, itemID, true)
+		require.NoError(t, err)
+		assert.Equal(t, NoteUnreadUpdated, unreadFor(t, store, note.ID, ownerID))
+
 		// A trashed note never shows a badge: the bin cannot clear one.
 		_, err = store.db.ExecContext(ctx, store.d.RewritePlaceholders(`UPDATE notes SET deleted_at = ? WHERE id = ?`), Timestamp(Now()), note.ID)
 		require.NoError(t, err)
