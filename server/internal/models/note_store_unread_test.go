@@ -96,6 +96,22 @@ func TestNoteUnreadState(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, NoteUnreadUpdated, unreadFor(t, store, note.ID, ownerID))
 
+		// Adding and removing an image are changes to the shared content too.
+		_, err = store.MarkViewed(ctx, note.ID, ownerID, Now())
+		require.NoError(t, err)
+		_, err = store.MarkViewed(ctx, note.ID, collabID, Now())
+		require.NoError(t, err)
+		img, err := store.CreateNoteImage(ctx, note.ID, collabID, "a.png", "image/png", 1, "sha-unread", 1, 1, 0)
+		require.NoError(t, err)
+		assert.Equal(t, NoteUnreadUpdated, unreadFor(t, store, note.ID, ownerID))
+		assert.Empty(t, unreadFor(t, store, note.ID, collabID), "the uploader's own image never flags them")
+		_, err = store.MarkViewed(ctx, note.ID, ownerID, Now())
+		require.NoError(t, err)
+		_, err = store.DeleteNoteImage(ctx, img.ID, collabID)
+		require.NoError(t, err)
+		assert.Equal(t, NoteUnreadUpdated, unreadFor(t, store, note.ID, ownerID))
+		assert.Empty(t, unreadFor(t, store, note.ID, collabID))
+
 		// A view replayed from before a collaborator's change (an offline open)
 		// leaves that change unread, and never moves the view time backward.
 		openedOffline := Now()

@@ -14,7 +14,7 @@ import (
 // never moves it backward, so a late-arriving view (an offline client's
 // replay) cannot undo a newer one.
 //
-// Every write to a note's shared content (title, content, items, type) sets
+// Every write to a note's shared content (title, content, items, type, images) sets
 // notes.content_changed_at/_by in its own UPDATE notes statement, so
 // collaborators who viewed the note earlier see it as "updated", and then calls
 // this for the actor: editing a note means looking at it, so their own edits
@@ -28,6 +28,19 @@ func markViewedTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, u
 		return fmt.Errorf("failed to mark note viewed: %w", err)
 	}
 	return nil
+}
+
+// recordContentChangeTx records a change to the note's shared content by actorID
+// for unread tracking, without touching updated_at, and marks the note viewed by
+// actorID. Used by writes that live outside the notes row, such as images.
+func recordContentChangeTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, actorID, now string) error {
+	if _, err := tx.ExecContext(ctx,
+		d.RewritePlaceholders(`UPDATE notes SET content_changed_at = ?, content_changed_by = ? WHERE id = ?`),
+		now, actorID, noteID,
+	); err != nil {
+		return fmt.Errorf("failed to record note content change: %w", err)
+	}
+	return markViewedTx(ctx, tx, d, noteID, actorID, now)
 }
 
 // MarkViewed records that userID viewed the note at viewedAt, clearing what was

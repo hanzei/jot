@@ -52,6 +52,7 @@ func (s *noteStore) CreateNoteImage(ctx context.Context, noteID, uploaderID, fil
 		}
 	}
 
+	now := Timestamp(Now())
 	img := NoteImage{
 		ID:          imageID,
 		NoteID:      noteID,
@@ -66,10 +67,14 @@ func (s *noteStore) CreateNoteImage(ctx context.Context, noteID, uploaderID, fil
 	err = tx.QueryRowContext(ctx,
 		s.d.RewritePlaceholders(`INSERT INTO note_images (id, note_id, uploader_id, filename, content_type, size_bytes, sha256, width, height, created_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING created_at`),
-		imageID, noteID, uploaderID, filename, contentType, sizeBytes, sha256, width, height, Timestamp(Now()),
+		imageID, noteID, uploaderID, filename, contentType, sizeBytes, sha256, width, height, now,
 	).Scan(&img.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create note image: %w", err)
+	}
+
+	if err = recordContentChangeTx(ctx, tx, s.d, noteID, uploaderID, now); err != nil {
+		return nil, fmt.Errorf("create note image: %w", err)
 	}
 
 	if err = tx.Commit(); err != nil {
@@ -189,16 +194,23 @@ func (s *noteStore) getNoteImagesByNoteIDs(ctx context.Context, noteIDs []string
 // DeleteNoteImage hard-deletes an image row and returns it. Undo lives
 // entirely on the client (a ~10s toast before it ever calls this), so there
 // is no soft-delete/restore step here — by the time this is called the
-// removal is final. The caller needs the returned SHA256 to call
+// removal is final. The removal is recorded as userID's change to the note for
+// unread tracking. The caller needs the returned SHA256 to call
 // GetNoteImageRefCount and decide whether the blob is now orphaned. Returns
 // ErrNoteImageNotFound if the image doesn't exist.
-func (s *noteStore) DeleteNoteImage(ctx context.Context, imageID string) (*NoteImage, error) {
+func (s *noteStore) DeleteNoteImage(ctx context.Context, imageID, userID string) (*NoteImage, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
 	query := `DELETE FROM note_images WHERE id = ?
 			  RETURNING id, note_id, uploader_id, filename, content_type, size_bytes, sha256, width, height, created_at`
 
-	row := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), imageID)
+	row := tx.QueryRowContext(ctx, s.d.RewritePlaceholders(query), imageID)
 	var deleted NoteImage
-	err := row.Scan(
+	err = row.Scan(
 		&deleted.ID, &deleted.NoteID, &deleted.UploaderID, &deleted.Filename, &deleted.ContentType,
 		&deleted.SizeBytes, &deleted.SHA256, &deleted.Width, &deleted.Height, &deleted.CreatedAt,
 	)
@@ -207,6 +219,14 @@ func (s *noteStore) DeleteNoteImage(ctx context.Context, imageID string) (*NoteI
 			return nil, ErrNoteImageNotFound
 		}
 		return nil, fmt.Errorf("failed to delete note image: %w", err)
+	}
+
+	if err = recordContentChangeTx(ctx, tx, s.d, deleted.NoteID, userID, Timestamp(Now())); err != nil {
+		return nil, fmt.Errorf("delete note image: %w", err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit delete note image: %w", err)
 	}
 	return &deleted, nil
 }
