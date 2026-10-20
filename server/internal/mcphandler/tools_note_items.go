@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"unicode/utf8"
 
+	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -149,7 +150,7 @@ func (h *Handler) handleCreateNoteItem(userID string) mcp.ToolHandlerFor[createN
 		if err != nil {
 			return toolError("create note item: %w", itemCapError(err))
 		}
-		h.events.NoteUpdated(ctx, in.NoteID, nil, userID, true)
+		h.itemsChanged(ctx, in.NoteID, userID)
 		data, err := json.Marshal(item)
 		if err != nil {
 			return toolError("marshal note item: %w", err)
@@ -192,7 +193,7 @@ func (h *Handler) handleUpdateNoteItem(userID string) mcp.ToolHandlerFor[updateN
 		if err != nil {
 			return toolError("update note item: %w", err)
 		}
-		h.events.NoteUpdated(ctx, in.NoteID, nil, userID, true)
+		h.itemsChanged(ctx, in.NoteID, userID)
 		data, err := json.Marshal(item)
 		if err != nil {
 			return toolError("marshal note item: %w", err)
@@ -219,7 +220,17 @@ func (h *Handler) handleDeleteNoteItem(userID string) mcp.ToolHandlerFor[deleteN
 		if err := h.noteStore.DeleteItemFromNote(ctx, in.NoteID, in.ItemID); err != nil {
 			return toolError("delete note item: %w", err)
 		}
-		h.events.NoteUpdated(ctx, in.NoteID, nil, userID, true)
+		h.itemsChanged(ctx, in.NoteID, userID)
 		return toolDeletedResult(in.ItemID, map[string]any{"note_id": in.NoteID})
 	}
+}
+
+// itemsChanged records an item-level change for unread tracking and publishes
+// the personalized note_updated to every collaborator. The item write has
+// already committed, so a failed record only costs the badge and is logged.
+func (h *Handler) itemsChanged(ctx context.Context, noteID, userID string) {
+	if err := h.noteStore.RecordContentChange(ctx, noteID, userID); err != nil {
+		logutil.FromContext(ctx).WithError(err).WithField("note_id", noteID).Error("Failed to record note content change")
+	}
+	h.events.NoteUpdated(ctx, noteID, nil, userID, true)
 }

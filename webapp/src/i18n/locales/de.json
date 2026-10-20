@@ -457,7 +457,9 @@
     "removeItem": "Element entfernen",
     "unassign": "Zuweisung aufheben",
     "assignedTo": "Zugewiesen an {{name}}",
-    "completedSuggestions": "Vorschläge aus erledigten Elementen"
+    "completedSuggestions": "Vorschläge aus erledigten Elementen",
+    "unreadNew": "Neu",
+    "unreadUpdated": "Aktualisiert"
   },
   "labels": {
     "title": "Labels",

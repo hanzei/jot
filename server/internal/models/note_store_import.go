@@ -18,9 +18,7 @@ import (
 // It filters on notes.user_id (not note_user_state.user_id) so notes merely
 // shared with the current user are never included.
 func (s *noteStore) GetOwnedNotesForExport(ctx context.Context, userID string) ([]*Note, error) {
-	query := s.d.RewritePlaceholders(`SELECT n.id, n.user_id, n.title, n.content, n.note_type, n.version,
-			  nus.color, nus.pinned, nus.archived, nus.position, nus.unpinned_position, nus.checked_items_collapsed,
-			  n.deleted_at, n.created_at, n.updated_at
+	query := s.d.RewritePlaceholders(`SELECT ` + noteSelectColumns + `
 			  FROM notes n
 			  INNER JOIN note_user_state nus ON n.id = nus.note_id AND nus.user_id = ?
 			  WHERE n.user_id = ? AND n.deleted_at IS NULL

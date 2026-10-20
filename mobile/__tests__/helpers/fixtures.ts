@@ -15,6 +15,7 @@ const baseNote: Omit<TextNote, 'id' | 'note_type' | 'content'> = {
   archived: false,
   position: 0,
   is_shared: false,
+  unread: null,
   labels: [],
   shared_with: [],
   deleted_at: null,

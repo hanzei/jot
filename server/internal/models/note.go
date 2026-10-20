@@ -13,6 +13,19 @@ const (
 	DefaultNoteColor          = "#ffffff"
 )
 
+// NoteUnread is the per-user unread badge state of a note. It is computed on
+// read from note_user_state.last_viewed_at and notes.content_changed_at/_by;
+// see noteUnreadExpr for the exact rule.
+type NoteUnread string
+
+const (
+	// NoteUnreadNew marks a note shared with the user that they never opened.
+	NoteUnreadNew NoteUnread = "new"
+	// NoteUnreadUpdated marks a note whose shared content someone else changed
+	// since the user last opened it.
+	NoteUnreadUpdated NoteUnread = "updated"
+)
+
 // Note item limits, enforced by every write surface (the REST handlers and the
 // MCP server). They live here rather than in one handler package so both can
 // share a single definition.
@@ -92,11 +105,13 @@ type Note struct {
 	Items                 []NoteItem  `json:"items,omitempty"`
 	SharedWith            []NoteShare `json:"shared_with,omitempty"`
 	IsShared              bool        `json:"is_shared"`
-	Labels                []Label     `json:"labels"`
-	Images                []NoteImage `json:"images,omitempty"`
-	DeletedAt             *time.Time  `json:"deleted_at"`
-	CreatedAt             time.Time   `json:"created_at"`
-	UpdatedAt             time.Time   `json:"updated_at"`
+	// Unread is null when there is nothing new for the requesting user.
+	Unread    *NoteUnread `json:"unread" enums:"new,updated" extensions:"x-nullable"`
+	Labels    []Label     `json:"labels"`
+	Images    []NoteImage `json:"images,omitempty"`
+	DeletedAt *time.Time  `json:"deleted_at"`
+	CreatedAt time.Time   `json:"created_at"`
+	UpdatedAt time.Time   `json:"updated_at"`
 }
 
 type NoteItem struct {

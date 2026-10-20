@@ -148,6 +148,8 @@ export interface NoteImage {
   created_at: string;
 }
 
+export type NoteUnread = 'new' | 'updated';
+
 interface BaseNote {
   id: string;
   user_id: string;
@@ -165,6 +167,13 @@ interface BaseNote {
   position: number;
   shared_with?: NoteShare[];
   is_shared: boolean;
+  /**
+   * The requesting user's unread badge: `'new'` for a note shared with them
+   * that they never opened, `'updated'` when someone else changed its shared
+   * content since they last opened it, `null` when there is nothing new.
+   * Cleared by `POST /notes/{id}/viewed`.
+   */
+  unread: NoteUnread | null;
   labels: Label[];
   images?: NoteImage[];
   deleted_at: string | null;

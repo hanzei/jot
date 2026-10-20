@@ -334,7 +334,9 @@
     "uncheckAllItems": "Desmarcar todos los elementos",
     "deleteCheckedItems": "Eliminar elementos marcados",
     "deleteCheckedItemsConfirm_one": "¿Eliminar {{count}} elemento marcado? Esta acción no se puede deshacer.",
-    "deleteCheckedItemsConfirm_other": "¿Eliminar {{count}} elementos marcados? Esta acción no se puede deshacer."
+    "deleteCheckedItemsConfirm_other": "¿Eliminar {{count}} elementos marcados? Esta acción no se puede deshacer.",
+    "unreadNew": "Nueva",
+    "unreadUpdated": "Actualizada"
   },
   "images": {
     "openLightbox": "Ver {{filename}}",

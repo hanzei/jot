@@ -234,6 +234,12 @@ func (c *Client) RestoreNote(ctx context.Context, id string) (*Note, error) {
 	return &note, nil
 }
 
+// MarkNoteViewed records that the authenticated user opened a note, clearing its
+// unread badge for them.
+func (c *Client) MarkNoteViewed(ctx context.Context, id string) error {
+	return c.doNoContent(ctx, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/viewed", id), nil)
+}
+
 // DuplicateNote creates a copy of an existing note for the authenticated user.
 func (c *Client) DuplicateNote(ctx context.Context, id string) (*Note, error) {
 	var note Note

@@ -334,7 +334,9 @@
     "uncheckAllItems": "Uncheck all items",
     "deleteCheckedItems": "Delete checked items",
     "deleteCheckedItemsConfirm_one": "Delete {{count}} checked item? This cannot be undone.",
-    "deleteCheckedItemsConfirm_other": "Delete {{count}} checked items? This cannot be undone."
+    "deleteCheckedItemsConfirm_other": "Delete {{count}} checked items? This cannot be undone.",
+    "unreadNew": "New",
+    "unreadUpdated": "Updated"
   },
   "images": {
     "openLightbox": "View {{filename}}",

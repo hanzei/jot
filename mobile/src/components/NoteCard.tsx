@@ -152,11 +152,12 @@ function ListPreview({ items, hasColor }: { items: NoteItem[]; hasColor?: boolea
 }
 
 function NoteCard({ note, onPress, onLongPress, onLabelPress }: NoteCardProps) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { t } = useTranslation();
   const failedNoteIds = useFailedNoteIds();
   const didNotSync = failedNoteIds.has(note.id);
   const hasColor = !!(note.color && !isWhiteHexColor(note.color));
+  const unreadOnDark = isDark && !hasColor;
   const baseUrl = useActiveServerBaseUrl();
   // Images queued offline (or mid-retry) never reach note.images until the
   // sync engine's drain uploads them (see imageUploadQueue.ts), so without
@@ -278,6 +279,23 @@ function NoteCard({ note, onPress, onLongPress, onLabelPress }: NoteCardProps) {
         </View>
       )}
 
+      {note.unread ? (
+        // Fixed light/dark pairs rather than theme tokens: a colored note is
+        // always a light pastel, so the badge must stay legible on it in dark
+        // mode too.
+        <View
+          style={[styles.unreadBadge, { backgroundColor: unreadOnDark ? '#1e3a5f' : '#dbeafe' }]}
+          testID={`note-unread-badge-${note.id}`}
+        >
+          {note.unread === 'updated' ? (
+            <View style={[styles.unreadDot, { backgroundColor: unreadOnDark ? '#93c5fd' : '#2563eb' }]} />
+          ) : null}
+          <Text style={[styles.unreadBadgeText, { color: unreadOnDark ? '#bfdbfe' : '#1e40af' }]}>
+            {note.unread === 'new' ? t('note.unreadNew') : t('note.unreadUpdated')}
+          </Text>
+        </View>
+      ) : null}
+
       <View style={styles.cardHeader}>
         <View style={styles.cardHeaderContent}>
           {note.note_type === 'list' && note.title ? (
@@ -396,6 +414,25 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 10,
     marginBottom: 6,
+  },
+  unreadBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    marginBottom: 6,
+  },
+  unreadDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  unreadBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
   failedBadgeText: {
     fontSize: 11,

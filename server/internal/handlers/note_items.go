@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/auth"
+	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
 )
 
@@ -544,10 +545,15 @@ func (h *NotesHandler) DeleteNoteItems(w http.ResponseWriter, r *http.Request) (
 	return http.StatusOK, items, nil
 }
 
-// publishItemChangeEvent broadcasts a personalized note_updated event to every
-// collaborator after an item-level change. Items are shared content, so each
-// audience member receives their own personalized copy of the note (preserving
-// per-user state).
+// publishItemChangeEvent records the item-level change for unread tracking and
+// broadcasts a personalized note_updated event to every collaborator. Items are
+// shared content, so each audience member receives their own personalized copy
+// of the note (preserving per-user state, including their unread badge).
 func (h *NotesHandler) publishItemChangeEvent(ctx context.Context, noteID, userID string) {
+	// The item write has already committed; a failure here only costs the
+	// badge, so log it rather than failing the request.
+	if err := h.noteStore.RecordContentChange(ctx, noteID, userID); err != nil {
+		logutil.FromContext(ctx).WithError(err).WithField("note_id", noteID).Error("Failed to record note content change")
+	}
 	h.events.NoteUpdated(ctx, noteID, nil, userID, true)
 }

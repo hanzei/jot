@@ -27,6 +27,9 @@ compiled web app, while SQLite keeps the default deployment small and portable.
 
 - **Sharing**: Share notes with other users while preserving owner/share access
   boundaries.
+- **Unread badges**: Note cards mark a note shared with you as "New" until you
+  open it, and as "Updated" when a collaborator changed it since you last
+  looked.
 - **Live updates**: Server-sent events keep notes, labels, profile icons, and
   image changes in sync across clients.
 - **Collaborator avatars**: Note cards and editors show owner and collaborator

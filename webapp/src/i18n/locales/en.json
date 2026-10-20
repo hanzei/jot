@@ -457,7 +457,9 @@
     "removeItem": "Remove item",
     "unassign": "Unassign",
     "assignedTo": "Assigned to {{name}}",
-    "completedSuggestions": "Suggestions from completed items"
+    "completedSuggestions": "Suggestions from completed items",
+    "unreadNew": "New",
+    "unreadUpdated": "Updated"
   },
   "labels": {
     "title": "Labels",

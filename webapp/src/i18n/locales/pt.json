@@ -457,7 +457,9 @@
     "removeItem": "Remover item",
     "unassign": "Desatribuir",
     "assignedTo": "Atribuído a {{name}}",
-    "completedSuggestions": "Sugestões de itens concluídos"
+    "completedSuggestions": "Sugestões de itens concluídos",
+    "unreadNew": "Nova",
+    "unreadUpdated": "Atualizada"
   },
   "labels": {
     "title": "Etiquetas",

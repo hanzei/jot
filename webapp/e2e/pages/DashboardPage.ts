@@ -482,6 +482,11 @@ export class DashboardPage {
    * container: `noteCard()` is the right locator for asserting on a card's
    * contents, and this is the right one for anything to do with focus.
    */
+  /** The card's "New" / "Updated" unread badge; absent when nothing is new. */
+  noteCardUnreadBadge(title: string): Locator {
+    return this.noteCard(title).getByTestId('note-card-unread');
+  }
+
   noteCardButton(title: string): Locator {
     return this.noteCard(title).locator('[data-note-card="true"]');
   }

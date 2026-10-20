@@ -59,6 +59,9 @@ func (s *noteStore) Update(ctx context.Context, id string, userID string, title,
 		if err = s.updateNoteContentTx(ctx, tx, id, resolvedTitle, resolvedContent, baseVersion, now); err != nil {
 			return err
 		}
+		if err = recordContentChangeTx(ctx, tx, s.d, id, userID, now); err != nil {
+			return err
+		}
 	}
 
 	// Per-user fields live in note_user_state.
@@ -177,6 +180,9 @@ func (s *noteStore) ConvertType(ctx context.Context, id, userID string, targetTy
 			if err = insertNewNoteItemsTx(ctx, tx, s.d, id, targetItems, now); err != nil {
 				return nil, fmt.Errorf("insert converted items: %w", err)
 			}
+		}
+		if err = recordContentChangeTx(ctx, tx, s.d, id, userID, now); err != nil {
+			return nil, err
 		}
 	}
 

@@ -311,7 +311,9 @@
     "uncheckAllItems": "Odznacz wszystkie elementy",
     "deleteCheckedItems": "Usuń zaznaczone elementy",
     "deleteCheckedItemsConfirm_one": "Usunąć {{count}} zaznaczony element? Tej operacji nie można cofnąć.",
-    "deleteCheckedItemsConfirm_other": "Usunąć {{count}} zaznaczone elementy? Tej operacji nie można cofnąć."
+    "deleteCheckedItemsConfirm_other": "Usunąć {{count}} zaznaczone elementy? Tej operacji nie można cofnąć.",
+    "unreadNew": "Nowa",
+    "unreadUpdated": "Zaktualizowana"
   },
   "images": {
     "openLightbox": "Wyświetl {{filename}}",

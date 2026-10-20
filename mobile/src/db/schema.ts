@@ -23,7 +23,8 @@ const migration1 = async (db: SQLiteDatabase): Promise<void> => {
       labels_json TEXT NOT NULL DEFAULT '[]',
       shared_with_json TEXT NOT NULL DEFAULT '[]',
       images_json TEXT NOT NULL DEFAULT '[]',
-      sync_state TEXT NOT NULL DEFAULT 'synced'
+      sync_state TEXT NOT NULL DEFAULT 'synced',
+      unread TEXT
     );
 
     CREATE TABLE IF NOT EXISTS note_items (
@@ -257,7 +258,18 @@ const migration6 = async (db: SQLiteDatabase): Promise<void> => {
   await addColumnIfMissing('dead_letter', 'error_message', 'error_message TEXT');
 };
 
-export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4, migration5, migration6];
+// Migration 7: cache the server's per-user unread badge ('new' | 'updated' |
+// NULL) on each note so the list can show it offline. Fresh installs get the
+// column from migration1; this column-probed ALTER covers existing installs,
+// whose rows start with no badge until the next server fetch supplies one.
+const migration7 = async (db: SQLiteDatabase): Promise<void> => {
+  const noteCols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(notes)');
+  if (!noteCols.some((c) => c.name === 'unread')) {
+    await db.runAsync('ALTER TABLE notes ADD COLUMN unread TEXT');
+  }
+};
+
+export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2, migration3, migration4, migration5, migration6, migration7];
 
 export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   // Run PRAGMAs separately: sqlite3_exec (used by execAsync) stops on the

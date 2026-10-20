@@ -311,7 +311,9 @@
     "uncheckAllItems": "Décocher tous les éléments",
     "deleteCheckedItems": "Supprimer les éléments cochés",
     "deleteCheckedItemsConfirm_one": "Supprimer {{count}} élément coché ? Cette action est irréversible.",
-    "deleteCheckedItemsConfirm_other": "Supprimer {{count}} éléments cochés ? Cette action est irréversible."
+    "deleteCheckedItemsConfirm_other": "Supprimer {{count}} éléments cochés ? Cette action est irréversible.",
+    "unreadNew": "Nouvelle",
+    "unreadUpdated": "Mise à jour"
   },
   "images": {
     "openLightbox": "Voir {{filename}}",

@@ -334,7 +334,9 @@
     "uncheckAllItems": "Desmarcar todos os itens",
     "deleteCheckedItems": "Excluir itens marcados",
     "deleteCheckedItemsConfirm_one": "Excluir {{count}} item marcado? Esta ação não pode ser desfeita.",
-    "deleteCheckedItemsConfirm_other": "Excluir {{count}} itens marcados? Esta ação não pode ser desfeita."
+    "deleteCheckedItemsConfirm_other": "Excluir {{count}} itens marcados? Esta ação não pode ser desfeita.",
+    "unreadNew": "Nova",
+    "unreadUpdated": "Atualizada"
   },
   "images": {
     "openLightbox": "Ver {{filename}}",

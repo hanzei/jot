@@ -1,7 +1,7 @@
 import React from 'react';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useDuplicateNote, useConvertNoteType, useCreateNoteItem, useUpdateNoteItem, useDeleteNoteItem, useReorderNoteItems, useToggleNoteItemCompleted, useUncheckAllItems, useDeleteCompletedItems, useShareNote, useUnshareNote, useLeaveNote, NoteConversionCapError } from '../src/hooks/useNotes';
+import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useDuplicateNote, useConvertNoteType, useCreateNoteItem, useUpdateNoteItem, useDeleteNoteItem, useReorderNoteItems, useToggleNoteItemCompleted, useUncheckAllItems, useDeleteCompletedItems, useShareNote, useUnshareNote, useLeaveNote, useMarkNoteViewed, NoteConversionCapError } from '../src/hooks/useNotes';
 import { VALIDATION } from '@jot/shared';
 import { noteLocalQueryKey, notesLocalQueryKey, notesLocalQueryScopeKey } from '../src/hooks/queryKeys';
 import * as notesApi from '../src/api/notes';
@@ -30,6 +30,7 @@ jest.mock('../src/db/noteQueries', () => ({
   getLocalNote: jest.fn().mockResolvedValue(null),
   markLocalNoteDeleted: jest.fn().mockResolvedValue(undefined),
   markLocalNoteRestored: jest.fn().mockResolvedValue(undefined),
+  clearLocalNoteUnread: jest.fn().mockResolvedValue(undefined),
   permanentDeleteLocalNote: jest.fn().mockResolvedValue(undefined),
   updateLocalNote: jest.fn().mockResolvedValue(undefined),
   generateClientNoteId: jest.fn(() => 'ClientNoteId000000000A'),
@@ -1869,6 +1870,50 @@ describe('useNotes hooks', () => {
 
       await waitFor(() => expect(result.current.isError).toBe(true));
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('useMarkNoteViewed', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+      mockUseNetworkStatus.mockReturnValue({ isConnected: true });
+    });
+
+    it('clears the badge locally and tells the server when online', async () => {
+      mockNotesApi.markNoteViewed.mockResolvedValueOnce(undefined);
+      const { result } = await renderHook(() => useMarkNoteViewed(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync('n1');
+
+      expect(mockNoteQueries.clearLocalNoteUnread).toHaveBeenCalledWith(expect.anything(), 'n1');
+      expect(mockNotesApi.markNoteViewed).toHaveBeenCalledWith('n1');
+      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
+    });
+
+    it('queues the view when offline', async () => {
+      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+      const { result } = await renderHook(() => useMarkNoteViewed(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync('n1');
+
+      expect(mockNoteQueries.clearLocalNoteUnread).toHaveBeenCalledWith(expect.anything(), 'n1');
+      expect(mockNotesApi.markNoteViewed).not.toHaveBeenCalled();
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        { operation: 'markViewed', endpoint: '/notes/n1/viewed', method: 'POST' },
+      );
+    });
+
+    it('queues the view after a transient online failure', async () => {
+      mockNotesApi.markNoteViewed.mockRejectedValueOnce(makeNetworkError());
+      const { result } = await renderHook(() => useMarkNoteViewed(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync('n1');
+
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ operation: 'markViewed' }),
+      );
     });
   });
 });

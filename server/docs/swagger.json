@@ -2921,6 +2921,58 @@
                 ]
             }
         },
+        "/notes/{id}/viewed": {
+            "post": {
+                "description": "Records that the caller opened the note, clearing its \"new\"/\"updated\" unread badge for them. Idempotent. When the note was unread, the caller's other sessions receive a note_updated event with the cleared state.",
+                "tags": [
+                    "notes"
+                ],
+                "summary": "Mark a note as viewed",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Note ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "not found",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ]
+            }
+        },
         "/pats": {
             "get": {
                 "produces": [
@@ -4445,6 +4497,19 @@
                 "title": {
                     "type": "string"
                 },
+                "unread": {
+                    "description": "Unread is null when there is nothing new for the requesting user.",
+                    "enum": [
+                        "new",
+                        "updated"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.NoteUnread"
+                        }
+                    ],
+                    "x-nullable": true
+                },
                 "updated_at": {
                     "type": "string"
                 },
@@ -4557,6 +4622,17 @@
             "x-enum-varnames": [
                 "NoteTypeText",
                 "NoteTypeList"
+            ]
+        },
+        "models.NoteUnread": {
+            "type": "string",
+            "enum": [
+                "new",
+                "updated"
+            ],
+            "x-enum-varnames": [
+                "NoteUnreadNew",
+                "NoteUnreadUpdated"
             ]
         },
         "models.User": {

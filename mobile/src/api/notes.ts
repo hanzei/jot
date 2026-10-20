@@ -85,6 +85,10 @@ export async function deleteCompletedItems(noteId: string, itemIds: string[]): P
   return res.data;
 }
 
+export async function markNoteViewed(id: string): Promise<void> {
+  await api.post(`/notes/${id}/viewed`);
+}
+
 export async function restoreNote(id: string): Promise<void> {
   await api.post(`/notes/${id}/restore`);
 }

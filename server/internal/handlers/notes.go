@@ -898,6 +898,52 @@ func (h *NotesHandler) EmptyTrash(w http.ResponseWriter, r *http.Request) (int, 
 	return http.StatusOK, EmptyTrashResponse{Deleted: len(deletedNotes)}, nil
 }
 
+// MarkNoteViewed godoc
+//
+//	@Summary		Mark a note as viewed
+//	@Description	Records that the caller opened the note, clearing its "new"/"updated" unread badge for them. Idempotent. When the note was unread, the caller's other sessions receive a note_updated event with the cleared state.
+//	@Tags			notes
+//	@Security		CookieAuth
+//	@Param			id	path	string	true	"Note ID"
+//	@Success		204
+//	@Failure		400	{object}	apierr.ErrorResponse	"bad request"
+//	@Failure		401	{object}	apierr.ErrorResponse	"unauthorized"
+//	@Failure		404	{object}	apierr.ErrorResponse	"not found"
+//	@Failure		500	{object}	apierr.ErrorResponse	"internal server error"
+//	@Router			/notes/{id}/viewed [post]
+func (h *NotesHandler) MarkNoteViewed(w http.ResponseWriter, r *http.Request) (int, any, error) {
+	user, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	}
+
+	id := chi.URLParam(r, "id")
+	if !models.IsValidID(id) {
+		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
+	}
+
+	wasUnread, err := h.noteStore.MarkViewed(r.Context(), id, user.ID)
+	if err != nil {
+		if errors.Is(err, models.ErrNoteNotFound) {
+			return http.StatusNotFound, nil, err
+		}
+		return http.StatusInternalServerError, nil, fmt.Errorf("mark note viewed: %w", err)
+	}
+
+	// Unread state is per-user, so only the caller's own sessions need to hear
+	// of it, and only when it actually changed.
+	if wasUnread {
+		note, err := h.noteStore.GetByID(r.Context(), id, user.ID)
+		if err != nil {
+			return http.StatusInternalServerError, nil, fmt.Errorf("get note: %w", err)
+		}
+		sanitized := models.SanitizeNote(*note)
+		h.events.NoteUpdated(r.Context(), id, &sanitized, user.ID, false)
+	}
+
+	return http.StatusNoContent, nil, nil
+}
+
 // RestoreNote godoc
 //
 //	@Summary	Restore a note from trash

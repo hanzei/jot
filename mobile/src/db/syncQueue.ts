@@ -43,7 +43,8 @@ export type QueueOperation =
   | 'addLabelToNote'
   | 'removeLabelFromNote'
   | 'updateSettings'
-  | 'removeImage';
+  | 'removeImage'
+  | 'markViewed';
 
 interface QueueEntry {
   id: number;
@@ -863,6 +864,10 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
             && entry.operation !== 'convertNoteType'
             && entry.operation !== 'createLabel') ||
           entry.operation === 'removeImage' ||
+          // Best-effort like removeImage: a rejected view only leaves a badge
+          // that the next server fetch reconciles, which is no reason to flag
+          // the note as failed.
+          entry.operation === 'markViewed' ||
           (targetGone && GONE_IDEMPOTENT_OPERATIONS.has(entry.operation));
         if (status === 409 && entry.operation === 'createLabel') {
           const clientLabelId = body?.id as string | undefined;

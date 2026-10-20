@@ -33,7 +33,7 @@ import { LinearTransition } from 'react-native-reanimated';
 import { Archive, ArrowLeft, Check, ChevronRight, CircleAlert, EllipsisVertical, FileText, Image, List, Palette, Pin, Plus } from 'lucide-react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
-import { useDeleteNote, useRestoreNote, usePermanentDeleteNote, useDuplicateNote, useConvertNoteType, NoteConversionCapError } from '../hooks/useNotes';
+import { useDeleteNote, useRestoreNote, usePermanentDeleteNote, useDuplicateNote, useConvertNoteType, useMarkNoteViewed, NoteConversionCapError } from '../hooks/useNotes';
 import { useOfflineNote } from '../hooks/useOfflineNotes';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { useFailedNoteIds } from '../store/OfflineContext';
@@ -188,6 +188,26 @@ export default function NoteEditorScreen() {
   const isReadOnly = readOnly === true || existingNote?.deleted_at != null;
   const deleteMutation = useDeleteNote();
   const restoreMutation = useRestoreNote();
+  const { mutate: markNoteViewed } = useMarkNoteViewed();
+  // Unread badges: opening an unread note marks it viewed. A collaborator's
+  // change arriving while it is open (SSE writes it to SQLite as 'updated') is
+  // marked viewed once, on leaving, rather than on every incoming event.
+  const markedViewedOnOpenRef = useRef(false);
+  const unreadWhileOpenRef = useRef(false);
+  const existingNoteUnread = existingNote?.unread ?? null;
+  const existingNoteLoaded = existingNote != null;
+  useEffect(() => {
+    if (!noteId || !existingNoteLoaded) return;
+    if (!markedViewedOnOpenRef.current) {
+      markedViewedOnOpenRef.current = true;
+      if (existingNoteUnread) markNoteViewed(noteId);
+      return;
+    }
+    unreadWhileOpenRef.current = existingNoteUnread !== null;
+  }, [noteId, existingNoteLoaded, existingNoteUnread, markNoteViewed]);
+  useEffect(() => () => {
+    if (noteId && unreadWhileOpenRef.current) markNoteViewed(noteId);
+  }, [noteId, markNoteViewed]);
   const permanentDeleteMutation = usePermanentDeleteNote();
   const duplicateMutation = useDuplicateNote();
   const convertMutation = useConvertNoteType();
