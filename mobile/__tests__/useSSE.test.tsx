@@ -9,6 +9,7 @@ import type { SSEEvent, User } from '@jot/shared';
 import type { TestDatabase } from './helpers/testDb';
 import { makeLabel, makeListNote, makeTextNote } from './helpers/fixtures';
 import { saveNote } from '../src/db/noteQueries';
+import { silenceConsole } from './helpers/consoleGuard';
 import {
   labelCountsQueryKey,
   labelsQueryKey,
@@ -580,6 +581,31 @@ describe('useSSE', () => {
     // The toast's Open action reads the note from SQLite, so the write lands first.
     expect(mockSaveServerNote).toHaveBeenCalledWith(expect.anything(), note);
     expect(mockSaveServerNote.mock.invocationCallOrder[0]).toBeLessThan(onNotify.mock.invocationCallOrder[0]!);
+  });
+
+  it('does not notify on a share whose note could not be persisted', async () => {
+    silenceConsole('warn', /Failed to persist SSE note_shared/);
+    mockSaveServerNote.mockRejectedValueOnce(new Error('disk full'));
+    const { Wrapper } = createWrapper();
+    const onNotify = jest.fn();
+
+    await renderHook(() => useSSE(onNotify), { wrapper: Wrapper });
+
+    await act(async () => {
+      capturedCallback?.({
+        type: 'note_shared',
+        source_user_id: 'other-user',
+        target_user_id: 'current-user',
+        data: { note_id: 'shared-note', note: makeTextNote({ id: 'shared-note' }) },
+      });
+    });
+
+    await waitFor(() => expect(mockSaveServerNote).toHaveBeenCalled());
+    await act(async () => {
+      await flushMicrotasks();
+    });
+    // Open would navigate to a row that is not in SQLite.
+    expect(onNotify).not.toHaveBeenCalled();
   });
 
   it.each([

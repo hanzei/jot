@@ -144,12 +144,14 @@ export function useSSE(
             // created/shared on another device wouldn't appear until the next
             // reconnect or foreground. If the event carries no payload (older
             // server), fall back to a one-shot fetch.
+            let persisted = false;
             try {
               if (note) {
                 await saveServerNote(db, note);
               } else {
                 await saveServerNote(db, await getNote(note_id));
               }
+              persisted = true;
             } catch (err) {
               console.warn(`Failed to persist SSE ${event.type} for note id=${note_id}:`, err);
             }
@@ -158,8 +160,9 @@ export function useSSE(
             invalidateLabelQueries();
             // A share that makes the note news to this user (not one adding
             // someone else to a note they already have) is surfaced as a toast.
-            // Notify after the write so opening it from the toast finds the row.
-            if (isNoteSharedWithUser(event, userIdRef.current)) {
+            // Notify only after the write landed, so opening it from the toast
+            // finds the row.
+            if (persisted && isNoteSharedWithUser(event, userIdRef.current)) {
               onNotifyRef.current?.(event);
             }
             break;
