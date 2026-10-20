@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"net/http"
 	"testing"
 	"time"
@@ -139,6 +140,31 @@ func TestNoteUnread(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, client.NoteUnreadUpdated, unreadOf(t, owner.Client, note.ID))
 		assert.Empty(t, unreadOf(t, collab.Client, note.ID))
+	})
+
+	t.Run("adding and removing an image flags the note for others only", func(t *testing.T) {
+		note, err := owner.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "pictures"})
+		require.NoError(t, err)
+		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab.User.ID))
+		require.NoError(t, collab.Client.MarkNoteViewed(t.Context(), note.ID))
+		require.NoError(t, owner.Client.MarkNoteViewed(t.Context(), note.ID))
+
+		img, err := collab.Client.UploadNoteImage(t.Context(), note.ID, "cat.png", bytes.NewReader(testPNG(t, 4, 4)))
+		require.NoError(t, err)
+		assert.Equal(t, client.NoteUnreadUpdated, unreadOf(t, owner.Client, note.ID))
+		assert.Empty(t, unreadOf(t, collab.Client, note.ID), "own uploads never flag the uploader")
+
+		require.NoError(t, owner.Client.MarkNoteViewed(t.Context(), note.ID))
+		require.NoError(t, collab.Client.DeleteNoteImage(t.Context(), img.ID))
+		assert.Equal(t, client.NoteUnreadUpdated, unreadOf(t, owner.Client, note.ID))
+		assert.Empty(t, unreadOf(t, collab.Client, note.ID))
+
+		require.NoError(t, owner.Client.MarkNoteViewed(t.Context(), note.ID))
+		img, err = owner.Client.UploadNoteImage(t.Context(), note.ID, "dog.png", bytes.NewReader(testPNG(t, 4, 4)))
+		require.NoError(t, err)
+		require.NoError(t, owner.Client.DeleteNoteImage(t.Context(), img.ID))
+		assert.Empty(t, unreadOf(t, owner.Client, note.ID))
+		assert.Equal(t, client.NoteUnreadUpdated, unreadOf(t, collab.Client, note.ID))
 	})
 
 	t.Run("re-sharing after unshare makes the note new again", func(t *testing.T) {

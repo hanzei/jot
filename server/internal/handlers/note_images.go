@@ -83,6 +83,9 @@ func (h *NotesHandler) publishNoteImageEvent(ctx context.Context, noteID string,
 		ClientID:     clientIDFromContext(ctx),
 		Data:         data,
 	})
+	// The image event carries only the image; follow it with each
+	// collaborator's own copy of the note so its unread state is current.
+	h.events.PersonalizedNote(ctx, noteID, audienceIDs, sourceUserID, sse.EventNoteUpdated)
 }
 
 // reclaimOrphanedImageBlobs reclaims the on-disk blob (and derived thumbnail)
@@ -496,7 +499,7 @@ func (h *NotesHandler) DeleteNoteImage(w http.ResponseWriter, r *http.Request) (
 		return http.StatusInternalServerError, nil, err
 	}
 
-	deleted, err := h.noteStore.DeleteNoteImage(r.Context(), imageID)
+	deleted, err := h.noteStore.DeleteNoteImage(r.Context(), imageID, user.ID)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteImageNotFound) {
 			return http.StatusNotFound, nil, err

@@ -291,12 +291,12 @@ func (s *NoteStore) GetNoteImageCountByNoteID(ctx context.Context, noteID string
 	return s.inner.GetNoteImageCountByNoteID(ctx, noteID)
 }
 
-func (s *NoteStore) DeleteNoteImage(ctx context.Context, imageID string) (_ *NoteImage, err error) {
+func (s *NoteStore) DeleteNoteImage(ctx context.Context, imageID, userID string) (_ *NoteImage, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.DeleteNoteImage", &err,
 		attribute.String("image.id", imageID),
 	)
 	defer end()
-	return s.inner.DeleteNoteImage(ctx, imageID)
+	return s.inner.DeleteNoteImage(ctx, imageID, userID)
 }
 
 func (s *NoteStore) GetNoteImageRefCount(ctx context.Context, sha256 string) (_ int, err error) {
