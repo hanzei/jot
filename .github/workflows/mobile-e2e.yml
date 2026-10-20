@@ -133,11 +133,22 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # The ~1 GB NDK download is occasionally cut short, and sdkmanager then
+      # fails unzipping it ("Error reading Zip content from a
+      # SeekableByteChannel"). Retry, clearing the partial download first.
       - name: Pre-install NDK and CMake
         run: |
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
-            "ndk;27.1.12297006" \
-            "cmake;3.22.1"
+          for attempt in 1 2 3; do
+            if $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
+              "ndk;27.1.12297006" \
+              "cmake;3.22.1"; then
+              exit 0
+            fi
+            echo "::warning::sdkmanager failed (attempt $attempt/3)"
+            rm -rf "$ANDROID_HOME/ndk/27.1.12297006" "$ANDROID_HOME/.temp"
+            [ "$attempt" -lt 3 ] && sleep $((attempt * 10))
+          done
+          exit 1
 
       - name: Install dependencies
         run: npm ci
