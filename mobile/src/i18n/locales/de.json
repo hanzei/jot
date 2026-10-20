@@ -115,7 +115,11 @@
     "sortAccessibilityLabel": "Sortieren nach {{sortLabel}}",
     "layoutToggleToGrid": "Zur Rasteransicht wechseln",
     "layoutToggleToList": "Zur Listenansicht wechseln",
-    "sortDisabledNotice": "Manuelles Sortieren ist aus. Notizen sind nach {{sortLabel}} sortiert, daher ist Drag-and-drop deaktiviert."
+    "sortDisabledNotice": "Manuelles Sortieren ist aus. Notizen sind nach {{sortLabel}} sortiert, daher ist Drag-and-drop deaktiviert.",
+    "noteSharedWithYou": "{{name}} hat „{{title}}“ mit dir geteilt",
+    "someone": "Jemand",
+    "untitledNote": "Notiz ohne Titel",
+    "openNote": "Öffnen"
   },
   "settings": {
     "title": "Einstellungen",

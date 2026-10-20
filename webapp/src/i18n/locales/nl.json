@@ -124,7 +124,10 @@
     "failedDeleteNoteForever": "Notitie permanent verwijderen mislukt.",
     "failedReorderNotes": "Notities opnieuw ordenen mislukt.",
     "failedUpdateSort": "Sorteervoorkeur bijwerken mislukt.",
-    "undo": "Ongedaan maken"
+    "undo": "Ongedaan maken",
+    "noteSharedWithYou": "{{name}} heeft ‘{{title}}’ met je gedeeld",
+    "someone": "Iemand",
+    "openNote": "Openen"
   },
   "settings": {
     "title": "Instellingen",

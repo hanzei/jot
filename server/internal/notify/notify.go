@@ -27,9 +27,14 @@ func New(hub *sse.Hub, noteStore *models.NoteStore) *Publisher {
 }
 
 func (p *Publisher) publish(ctx context.Context, userIDs []string, eventType sse.EventType, sourceUserID string, data any) {
+	p.publishTargeted(ctx, userIDs, eventType, sourceUserID, "", data)
+}
+
+func (p *Publisher) publishTargeted(ctx context.Context, userIDs []string, eventType sse.EventType, sourceUserID, targetUserID string, data any) {
 	p.hub.Publish(ctx, userIDs, sse.Event{
 		Type:         eventType,
 		SourceUserID: sourceUserID,
+		TargetUserID: targetUserID,
 		ClientID:     sse.ClientIDFromContext(ctx),
 		Data:         data,
 	})
@@ -54,6 +59,18 @@ func (p *Publisher) NoteToAudience(ctx context.Context, noteID string, eventType
 // items) change so every collaborator receives the update with their own
 // per-user state intact.
 func (p *Publisher) PersonalizedNote(ctx context.Context, noteID string, audienceIDs []string, sourceUserID string, eventType sse.EventType) {
+	p.personalizedNote(ctx, noteID, audienceIDs, sourceUserID, "", eventType)
+}
+
+// NoteShared sends note_shared to the note's whole audience, personalized like
+// PersonalizedNote. targetUserID names the user the note was just shared with,
+// so their clients can tell the share is news to them (and notify) while the
+// owner and existing collaborators only refresh shared_with.
+func (p *Publisher) NoteShared(ctx context.Context, noteID string, audienceIDs []string, sourceUserID, targetUserID string) {
+	p.personalizedNote(ctx, noteID, audienceIDs, sourceUserID, targetUserID, sse.EventNoteShared)
+}
+
+func (p *Publisher) personalizedNote(ctx context.Context, noteID string, audienceIDs []string, sourceUserID, targetUserID string, eventType sse.EventType) {
 	if p.hub == nil {
 		return
 	}
@@ -63,7 +80,7 @@ func (p *Publisher) PersonalizedNote(ctx context.Context, noteID string, audienc
 			logutil.FromContext(ctx).WithError(err).WithField("note_id", noteID).WithField("user_id", uid).Warn("Failed to fetch personalized note for SSE publish")
 			continue
 		}
-		p.publish(ctx, []string{uid}, eventType, sourceUserID, sse.NoteEventData{NoteID: noteID, Note: models.SanitizeNote(*n)})
+		p.publishTargeted(ctx, []string{uid}, eventType, sourceUserID, targetUserID, sse.NoteEventData{NoteID: noteID, Note: models.SanitizeNote(*n)})
 	}
 }
 

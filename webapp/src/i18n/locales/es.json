@@ -124,7 +124,10 @@
     "failedDeleteNoteForever": "Error al eliminar la nota de forma permanente.",
     "failedReorderNotes": "Error al reordenar las notas.",
     "failedUpdateSort": "Error al actualizar la preferencia de orden.",
-    "undo": "Deshacer"
+    "undo": "Deshacer",
+    "noteSharedWithYou": "{{name}} ha compartido «{{title}}» contigo",
+    "someone": "Alguien",
+    "openNote": "Abrir"
   },
   "settings": {
     "title": "Ajustes",

@@ -138,7 +138,11 @@
     "noteDeleted": "Notitie naar prullenbak verplaatst",
     "noteRestored": "Notitie hersteld",
     "undo": "Ongedaan maken",
-    "toastActionHint": "Tik om {{action}} te activeren"
+    "toastActionHint": "Tik om {{action}} te activeren",
+    "noteSharedWithYou": "{{name}} heeft ‘{{title}}’ met je gedeeld",
+    "someone": "Iemand",
+    "untitledNote": "Notitie zonder titel",
+    "openNote": "Openen"
   },
   "settings": {
     "title": "Instellingen",

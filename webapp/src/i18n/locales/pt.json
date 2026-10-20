@@ -124,7 +124,10 @@
     "failedDeleteNoteForever": "Falha ao excluir a nota permanentemente.",
     "failedReorderNotes": "Falha ao reordenar as notas.",
     "failedUpdateSort": "Falha ao atualizar a preferência de ordenação.",
-    "undo": "Desfazer"
+    "undo": "Desfazer",
+    "noteSharedWithYou": "{{name}} compartilhou “{{title}}” com você",
+    "someone": "Alguém",
+    "openNote": "Abrir"
   },
   "settings": {
     "title": "Configurações",

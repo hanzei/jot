@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MemoryRouter, useLocation, useNavigate, Routes, Route } from 'react-router';
@@ -21,6 +21,7 @@ vi.mock('@/utils/api', () => ({
     delete: vi.fn(),
     reorder: vi.fn(),
     restore: vi.fn(),
+    markViewed: vi.fn().mockResolvedValue(undefined),
   },
   auth: {
     logout: vi.fn(),
@@ -1589,6 +1590,77 @@ describe('Dashboard', () => {
       await waitFor(() => {
         expect(screen.getByTestId('location-search').textContent ?? '').not.toContain('label=');
       });
+    });
+  });
+
+  describe('Shared-with-you toast', () => {
+    const sharedNote = () => createMockListNote({ id: 'shared-1', user_id: 'owner1', title: 'Trip plan', unread: 'new' });
+
+    beforeEach(() => {
+      vi.mocked(users.search).mockResolvedValue([{
+        id: 'owner1',
+        username: 'alice',
+        first_name: 'Alice',
+        last_name: 'Smith',
+        role: 'user',
+        created_at: '2023-01-01T00:00:00Z',
+        updated_at: '2023-01-01T00:00:00Z',
+        has_profile_icon: false,
+      }]);
+    });
+
+    // Open pushes /notes/shared-1 onto the real window.history, which closing
+    // the modal does not undo under MemoryRouter; reset it so later tests
+    // don't record it as their return path.
+    afterEach(() => {
+      window.history.replaceState(null, '', '/');
+    });
+
+    // handleSSEEvent is rebuilt as users load, so read the latest registration.
+    const latestSSECallbacks = () => {
+      const calls = mockRegisterSSECallbacks.mock.calls;
+      return calls[calls.length - 1]?.[0];
+    };
+
+    it('tells the recipient who shared which note, and opens it from the toast', async () => {
+      renderDashboard();
+      await waitFor(() => expect(users.search).toHaveBeenCalled());
+      await waitFor(() => expect(latestSSECallbacks()).toBeDefined());
+
+      await act(async () => {
+        latestSSECallbacks()?.onEvent({
+          type: 'note_shared',
+          source_user_id: 'owner1',
+          target_user_id: 'user1',
+          data: { note_id: 'shared-1', note: sharedNote() },
+        });
+      });
+
+      const toast = await screen.findByTestId('toast');
+      expect(toast).toHaveTextContent('Alice Smith shared “Trip plan” with you');
+
+      fireEvent.click(within(toast).getByRole('button', { name: 'Open' }));
+      expect(await screen.findByTestId('note-modal')).toBeInTheDocument();
+      expect(window.location.pathname).toBe('/notes/shared-1');
+      // Opening goes through the normal path, which clears the "New" badge.
+      await waitFor(() => expect(notes.markViewed).toHaveBeenCalledWith('shared-1'));
+    });
+
+    it('stays silent for a share that adds someone else to the note', async () => {
+      renderDashboard();
+      await waitFor(() => expect(latestSSECallbacks()).toBeDefined());
+
+      await act(async () => {
+        latestSSECallbacks()?.onEvent({
+          type: 'note_shared',
+          source_user_id: 'owner1',
+          target_user_id: 'user2',
+          data: { note_id: 'shared-1', note: sharedNote() },
+        });
+      });
+
+      await waitFor(() => expect(notes.getAll).toHaveBeenCalledTimes(2));
+      expect(screen.queryByTestId('toast')).not.toBeInTheDocument();
     });
   });
 

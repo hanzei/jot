@@ -138,7 +138,11 @@
     "sortAccessibilityLabel": "Ordenar por {{sortLabel}}",
     "layoutToggleToGrid": "Cambiar a vista de cuadrícula",
     "layoutToggleToList": "Cambiar a vista de lista",
-    "sortDisabledNotice": "El orden manual está desactivado. Las notas están ordenadas por {{sortLabel}}, por lo que arrastrar y soltar no está disponible."
+    "sortDisabledNotice": "El orden manual está desactivado. Las notas están ordenadas por {{sortLabel}}, por lo que arrastrar y soltar no está disponible.",
+    "noteSharedWithYou": "{{name}} ha compartido «{{title}}» contigo",
+    "someone": "Alguien",
+    "untitledNote": "Nota sin título",
+    "openNote": "Abrir"
   },
   "settings": {
     "title": "Ajustes",

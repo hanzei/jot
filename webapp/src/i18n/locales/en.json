@@ -124,7 +124,10 @@
     "failedDeleteNoteForever": "Failed to permanently delete note.",
     "failedReorderNotes": "Failed to reorder notes.",
     "failedUpdateSort": "Failed to update sort preference.",
-    "undo": "Undo"
+    "undo": "Undo",
+    "noteSharedWithYou": "{{name}} shared “{{title}}” with you",
+    "someone": "Someone",
+    "openNote": "Open"
   },
   "settings": {
     "title": "Settings",

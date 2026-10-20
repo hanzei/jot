@@ -115,7 +115,11 @@
     "noteDeleted": "Notatka przeniesiona do kosza",
     "noteRestored": "Notatka przywrócona",
     "undo": "Cofnij",
-    "toastActionHint": "Dotknij, aby {{action}}"
+    "toastActionHint": "Dotknij, aby {{action}}",
+    "noteSharedWithYou": "{{name}} udostępnia ci „{{title}}”",
+    "someone": "Ktoś",
+    "untitledNote": "Notatka bez tytułu",
+    "openNote": "Otwórz"
   },
   "settings": {
     "title": "Ustawienia",

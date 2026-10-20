@@ -138,7 +138,11 @@
     "noteDeleted": "Nota spostata nel cestino",
     "noteRestored": "Nota ripristinata",
     "undo": "Annulla",
-    "toastActionHint": "Tocca per {{action}}"
+    "toastActionHint": "Tocca per {{action}}",
+    "noteSharedWithYou": "{{name}} ha condiviso «{{title}}» con te",
+    "someone": "Qualcuno",
+    "untitledNote": "Nota senza titolo",
+    "openNote": "Apri"
   },
   "settings": {
     "title": "Impostazioni",

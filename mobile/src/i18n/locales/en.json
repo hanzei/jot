@@ -138,7 +138,11 @@
     "noteDeleted": "Note moved to trash",
     "noteRestored": "Note restored",
     "undo": "Undo",
-    "toastActionHint": "Tap to {{action}}"
+    "toastActionHint": "Tap to {{action}}",
+    "noteSharedWithYou": "{{name}} shared “{{title}}” with you",
+    "someone": "Someone",
+    "untitledNote": "Untitled note",
+    "openNote": "Open"
   },
   "settings": {
     "title": "Settings",

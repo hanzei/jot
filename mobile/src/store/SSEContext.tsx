@@ -53,13 +53,13 @@ export function SSEProvider({ children }: { children: React.ReactNode }) {
     };
   }, [sseStatus]);
 
-  const handleNoteUpdated: SSENotificationCallback = useCallback((event) => {
+  const handleNotify: SSENotificationCallback = useCallback((event) => {
     for (const listener of listenersRef.current) {
       listener(event);
     }
   }, []);
 
-  useSSE(handleNoteUpdated, setSseStatus);
+  useSSE(handleNotify, setSseStatus);
 
   const value = useMemo<SSEContextValue>(() => ({
     subscribe: (listener: (event: SSEEvent) => void) => {

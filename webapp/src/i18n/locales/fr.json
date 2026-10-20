@@ -124,7 +124,10 @@
     "failedDeleteNoteForever": "Impossible de supprimer définitivement la note.",
     "failedReorderNotes": "Impossible de réorganiser les notes.",
     "failedUpdateSort": "Impossible de mettre à jour la préférence de tri.",
-    "undo": "Annuler"
+    "undo": "Annuler",
+    "noteSharedWithYou": "{{name}} a partagé « {{title}} » avec vous",
+    "someone": "Quelqu'un",
+    "openNote": "Ouvrir"
   },
   "settings": {
     "title": "Paramètres",
