@@ -583,25 +583,31 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
 
   // Unread badges, from whichever path opened the note: opening an unread note
   // records the view, and closing it records another if a collaborator's
-  // change arrived (over SSE, as an unread copy of the note) while it was open.
-  // openNoteUnreadRef tracks the open note's latest unread state; the effect
-  // below is keyed on the note's id, so in-place refreshes don't re-fire it.
+  // change arrived (over SSE, as a new unread copy of the note) while it was
+  // open. A view covers the copy of the note that was open when it was sent:
+  // it is still pending if it failed, or if a newer unread copy arrived since.
+  // The effect is keyed on the note's id, so in-place refreshes don't re-fire it.
   const editingNoteId = editingNote?.id ?? null;
-  const openNoteUnreadRef = useRef<Note['unread']>(null);
+  const openNoteRef = useRef<Note | null>(null);
+  const viewedNoteRef = useRef<Note | null>(null);
   useEffect(() => {
-    openNoteUnreadRef.current = editingNote?.unread ?? null;
+    openNoteRef.current = editingNote;
   }, [editingNote]);
   useEffect(() => {
     if (!editingNoteId) return;
-    if (openNoteUnreadRef.current) {
-      // Stays pending until the view lands, so a failed request is retried
-      // when the note closes.
+    const viewPending = () => {
+      const note = openNoteRef.current;
+      return !!note?.unread && note !== viewedNoteRef.current;
+    };
+    const recordView = () => {
+      const note = openNoteRef.current;
       void recordNoteViewed(editingNoteId).then(landed => {
-        if (landed && openNoteIdRef.current === editingNoteId) openNoteUnreadRef.current = null;
+        if (landed) viewedNoteRef.current = note;
       });
-    }
+    };
+    if (viewPending()) recordView();
     return () => {
-      if (openNoteUnreadRef.current) void recordNoteViewed(editingNoteId);
+      if (viewPending()) recordView();
     };
   }, [editingNoteId, recordNoteViewed]);
 

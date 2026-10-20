@@ -1900,7 +1900,14 @@ describe('useNotes hooks', () => {
       expect(mockNotesApi.markNoteViewed).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
-        { operation: 'markViewed', endpoint: '/notes/n1/viewed', method: 'POST' },
+        {
+          operation: 'markViewed',
+          endpoint: '/notes/n1/viewed',
+          method: 'POST',
+          // The open time travels with the queued view, so its replay cannot
+          // count a collaborator's later change as seen.
+          body: { viewed_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/) },
+        },
       );
     });
 

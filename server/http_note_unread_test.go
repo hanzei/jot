@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/hanzei/jot/server/client"
 	"github.com/stretchr/testify/assert"
@@ -149,6 +150,27 @@ func TestNoteUnread(t *testing.T) {
 		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab.User.ID))
 
 		assert.Equal(t, client.NoteUnreadNew, unreadOf(t, collab.Client, note.ID))
+	})
+
+	t.Run("a view replayed from before a change leaves that change unread", func(t *testing.T) {
+		note, err := owner.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "offline"})
+		require.NoError(t, err)
+		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab.User.ID))
+
+		// collab opens the note offline; the owner edits before the view syncs.
+		openedOffline := time.Now().Add(-time.Second)
+		_, err = owner.Client.UpdateTextNote(t.Context(), note.ID, &client.UpdateTextNoteRequest{Content: ptr("owner edit")})
+		require.NoError(t, err)
+
+		require.NoError(t, collab.Client.MarkNoteViewedAt(t.Context(), note.ID, openedOffline))
+		assert.Equal(t, client.NoteUnreadUpdated, unreadOf(t, collab.Client, note.ID))
+
+		// A view time in the future is capped at now.
+		require.NoError(t, collab.Client.MarkNoteViewedAt(t.Context(), note.ID, time.Now().Add(time.Hour)))
+		assert.Empty(t, unreadOf(t, collab.Client, note.ID))
+		_, err = owner.Client.UpdateTextNote(t.Context(), note.ID, &client.UpdateTextNoteRequest{Content: ptr("later edit")})
+		require.NoError(t, err)
+		assert.Equal(t, client.NoteUnreadUpdated, unreadOf(t, collab.Client, note.ID))
 	})
 
 	t.Run("mark viewed requires access", func(t *testing.T) {

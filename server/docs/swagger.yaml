@@ -372,6 +372,12 @@ definitions:
       username:
         type: string
     type: object
+  handlers.MarkNoteViewedRequest:
+    properties:
+      viewed_at:
+        description: ViewedAt is when the user opened the note. Omit it to mean now.
+        type: string
+    type: object
   handlers.NativeExchangeRequest:
     properties:
       code:
@@ -2650,14 +2656,21 @@ paths:
   /notes/{id}/viewed:
     post:
       description: Records that the caller opened the note, clearing its "new"/"updated"
-        unread badge for them. Idempotent. When the note was unread, the caller's
-        other sessions receive a note_updated event with the cleared state.
+        unread badge for them. Idempotent. viewed_at is when the note was opened,
+        for a client replaying a view it recorded offline; it defaults to now and
+        is capped at now, and a change made after it stays unread. When the unread
+        state changed, the caller's other sessions receive a note_updated event.
       parameters:
       - description: Note ID
         in: path
         name: id
         required: true
         type: string
+      - description: When the note was viewed
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/handlers.MarkNoteViewedRequest'
       responses:
         "204":
           description: No Content

@@ -11,6 +11,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"time"
 )
 
 const paramItemIDs = "item_ids"
@@ -238,6 +239,12 @@ func (c *Client) RestoreNote(ctx context.Context, id string) (*Note, error) {
 // unread badge for them.
 func (c *Client) MarkNoteViewed(ctx context.Context, id string) error {
 	return c.doNoContent(ctx, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/viewed", id), nil)
+}
+
+// MarkNoteViewedAt is MarkNoteViewed for a view that happened at viewedAt, such
+// as one recorded offline and replayed later.
+func (c *Client) MarkNoteViewedAt(ctx context.Context, id string, viewedAt time.Time) error {
+	return c.doNoContent(ctx, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/viewed", id), map[string]time.Time{"viewed_at": viewedAt})
 }
 
 // DuplicateNote creates a copy of an existing note for the authenticated user.

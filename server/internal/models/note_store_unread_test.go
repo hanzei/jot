@@ -39,12 +39,12 @@ func TestNoteUnreadState(t *testing.T) {
 		assert.Equal(t, NoteUnreadNew, unreadFor(t, store, note.ID, collabID))
 		assert.Empty(t, unreadFor(t, store, note.ID, ownerID))
 
-		wasUnread, err := store.MarkViewed(ctx, note.ID, collabID)
+		wasUnread, err := store.MarkViewed(ctx, note.ID, collabID, Now())
 		require.NoError(t, err)
 		assert.True(t, wasUnread)
 		assert.Empty(t, unreadFor(t, store, note.ID, collabID))
 
-		wasUnread, err = store.MarkViewed(ctx, note.ID, collabID)
+		wasUnread, err = store.MarkViewed(ctx, note.ID, collabID, Now())
 		require.NoError(t, err)
 		assert.False(t, wasUnread, "a second view changes nothing")
 
@@ -66,12 +66,12 @@ func TestNoteUnreadState(t *testing.T) {
 		require.NotNil(t, notes[0].Unread)
 		assert.Equal(t, NoteUnreadUpdated, *notes[0].Unread)
 
-		_, err = store.MarkViewed(ctx, "abcdefghijklmnopqrstuv", collabID)
+		_, err = store.MarkViewed(ctx, "abcdefghijklmnopqrstuv", collabID, Now())
 		require.ErrorIs(t, err, ErrNoteNotFound)
 
 		// Item changes are recorded in the item write's own transaction, and
 		// only when something actually changed.
-		_, err = store.MarkViewed(ctx, note.ID, ownerID)
+		_, err = store.MarkViewed(ctx, note.ID, ownerID, Now())
 		require.NoError(t, err)
 		_, err = store.SetItemsCompleted(ctx, note.ID, collabID, []string{"doesnotexist1234567890"}, true)
 		require.NoError(t, err)
@@ -83,7 +83,7 @@ func TestNoteUnreadState(t *testing.T) {
 		// Replayed no-op item writes (an offline client resending a change the
 		// server already applied) change nothing, so they flag nothing.
 		const itemID = "item000000000000000001"
-		_, err = store.MarkViewed(ctx, note.ID, ownerID)
+		_, err = store.MarkViewed(ctx, note.ID, ownerID, Now())
 		require.NoError(t, err)
 		_, err = store.ToggleItemCompleted(ctx, note.ID, collabID, itemID, false)
 		require.NoError(t, err)
@@ -95,6 +95,21 @@ func TestNoteUnreadState(t *testing.T) {
 		_, err = store.ToggleItemCompleted(ctx, note.ID, collabID, itemID, true)
 		require.NoError(t, err)
 		assert.Equal(t, NoteUnreadUpdated, unreadFor(t, store, note.ID, ownerID))
+
+		// A view replayed from before a collaborator's change (an offline open)
+		// leaves that change unread, and never moves the view time backward.
+		openedOffline := Now()
+		content = "edited by collab while owner was offline"
+		require.NoError(t, store.Update(ctx, note.ID, collabID, nil, &content, nil, nil, nil, nil, nil))
+		changed, err := store.MarkViewed(ctx, note.ID, ownerID, openedOffline)
+		require.NoError(t, err)
+		assert.False(t, changed)
+		assert.Equal(t, NoteUnreadUpdated, unreadFor(t, store, note.ID, ownerID))
+		_, err = store.MarkViewed(ctx, note.ID, ownerID, Now())
+		require.NoError(t, err)
+		_, err = store.MarkViewed(ctx, note.ID, ownerID, openedOffline)
+		require.NoError(t, err)
+		assert.Empty(t, unreadFor(t, store, note.ID, ownerID), "an older view does not undo a newer one")
 
 		// A trashed note never shows a badge: the bin cannot clear one.
 		_, err = store.db.ExecContext(ctx, store.d.RewritePlaceholders(`UPDATE notes SET deleted_at = ? WHERE id = ?`), Timestamp(Now()), note.ID)

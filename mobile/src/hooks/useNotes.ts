@@ -962,6 +962,9 @@ export function useMarkNoteViewed() {
       // Best-effort: a view landing mid-switch would mark the wrong server's
       // note, and the badge it leaves behind is harmless.
       if (isServerSwitchInProgress()) return;
+      // When the user looked at the note. A queued view replays later, and the
+      // server must not count a collaborator's change made in between as seen.
+      const viewedAt = new Date().toISOString();
       await clearLocalNoteUnread(db, id);
       // A note created offline is never unread, so no pending-create check.
       if (isOnlineWriteAllowed(isConnected)) {
@@ -976,6 +979,7 @@ export function useMarkNoteViewed() {
         operation: 'markViewed',
         endpoint: `/notes/${id}/viewed`,
         method: 'POST',
+        body: { viewed_at: viewedAt },
       });
     },
     // Settled, not success: the local clear has already landed when a
