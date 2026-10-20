@@ -129,7 +129,7 @@ test.describe('Sharing Avatars', () => {
     const noteCard = page.locator('[data-testid="note-card"]').filter({ hasText: 'Shared Note Test' });
     await noteCard.hover();
     await noteCard.getByRole('button', { name: /note options/i }).click();
-    await page.getByRole('menuitem', { name: /share/i }).click();
+    await page.getByRole('menuitem', { name: 'Collaborators' }).click();
 
     // Share modal: search for user and select from dropdown
     await page.getByPlaceholder(/search users/i).fill(user2Name);

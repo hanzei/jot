@@ -373,7 +373,7 @@
     }
   },
   "note": {
-    "share": "Teilen",
+    "collaborators": "Mitwirkende",
     "unpin": "Lösen",
     "pin": "Anheften",
     "unarchive": "Aus Archiv holen",
@@ -457,8 +457,7 @@
     "removeItem": "Element entfernen",
     "unassign": "Zuweisung aufheben",
     "assignedTo": "Zugewiesen an {{name}}",
-    "completedSuggestions": "Vorschläge aus erledigten Elementen",
-    "sharing": "Freigabe"
+    "completedSuggestions": "Vorschläge aus erledigten Elementen"
   },
   "labels": {
     "title": "Labels",

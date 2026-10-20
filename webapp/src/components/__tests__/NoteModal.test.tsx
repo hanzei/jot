@@ -328,7 +328,7 @@ describe('NoteModal', () => {
       renderNoteModal({ ...defaultProps, note, onShare: vi.fn(), isOwner: true });
 
       const mobileLink = screen.getByTestId('note-open-mobile-app-toolbar-link');
-      const shareButton = screen.getByRole('button', { name: 'Share' });
+      const shareButton = screen.getByRole('button', { name: 'Collaborators' });
       expect(mobileLink.compareDocumentPosition(shareButton) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
     });
 
@@ -2593,7 +2593,7 @@ describe('NoteModal', () => {
       expect(screen.getByRole('button', { name: 'Archive note' })).toBeDisabled();
       expect(screen.getByRole('button', { name: 'Select note color' })).toBeDisabled();
       expect(screen.getByRole('button', { name: 'Add image' })).toBeDisabled();
-      expect(screen.queryByRole('button', { name: 'Share' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Collaborators' })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Duplicate' })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Convert to list' })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();

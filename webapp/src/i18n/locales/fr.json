@@ -373,7 +373,7 @@
     }
   },
   "note": {
-    "share": "Partager",
+    "collaborators": "Collaborateurs",
     "unpin": "Désépingler",
     "pin": "Épingler",
     "unarchive": "Désarchiver",
@@ -457,8 +457,7 @@
     "removeItem": "Supprimer l'élément",
     "unassign": "Désassigner",
     "assignedTo": "Assigné à {{name}}",
-    "completedSuggestions": "Suggestions d'éléments terminés",
-    "sharing": "Partage"
+    "completedSuggestions": "Suggestions d'éléments terminés"
   },
   "labels": {
     "title": "Étiquettes",

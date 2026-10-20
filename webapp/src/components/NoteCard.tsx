@@ -359,7 +359,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
                         ) : (
                           <Users className="h-4 w-4 mr-2" />
                         )}
-                        {isOwner ? t('note.share') : t('note.sharing')}
+                        {t('note.collaborators')}
                       </span>
                       <MenuKbd>S</MenuKbd>
                     </button>

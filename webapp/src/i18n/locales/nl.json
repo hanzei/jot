@@ -373,7 +373,7 @@
     }
   },
   "note": {
-    "share": "Delen",
+    "collaborators": "Medewerkers",
     "unpin": "Losmaken",
     "pin": "Vastzetten",
     "unarchive": "Uit archief halen",
@@ -457,8 +457,7 @@
     "removeItem": "Item verwijderen",
     "unassign": "Toewijzing opheffen",
     "assignedTo": "Toegewezen aan {{name}}",
-    "completedSuggestions": "Suggesties van voltooide items",
-    "sharing": "Delen"
+    "completedSuggestions": "Suggesties van voltooide items"
   },
   "labels": {
     "title": "Labels",

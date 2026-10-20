@@ -233,7 +233,7 @@
     "serverOrigin": "Origine du serveur"
   },
   "note": {
-    "share": "Partager",
+    "collaborators": "Collaborateurs",
     "send": "Envoyer",
     "unpin": "Désépingler",
     "pin": "Épingler",
@@ -311,8 +311,7 @@
     "uncheckAllItems": "Décocher tous les éléments",
     "deleteCheckedItems": "Supprimer les éléments cochés",
     "deleteCheckedItemsConfirm_one": "Supprimer {{count}} élément coché ? Cette action est irréversible.",
-    "deleteCheckedItemsConfirm_other": "Supprimer {{count}} éléments cochés ? Cette action est irréversible.",
-    "sharing": "Partage"
+    "deleteCheckedItemsConfirm_other": "Supprimer {{count}} éléments cochés ? Cette action est irréversible."
   },
   "images": {
     "openLightbox": "Voir {{filename}}",

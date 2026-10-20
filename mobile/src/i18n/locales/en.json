@@ -256,7 +256,7 @@
     "failedLoad": "Failed to load server info"
   },
   "note": {
-    "share": "Share",
+    "collaborators": "Collaborators",
     "send": "Send",
     "unpin": "Unpin",
     "pin": "Pin",
@@ -334,8 +334,7 @@
     "uncheckAllItems": "Uncheck all items",
     "deleteCheckedItems": "Delete checked items",
     "deleteCheckedItemsConfirm_one": "Delete {{count}} checked item? This cannot be undone.",
-    "deleteCheckedItemsConfirm_other": "Delete {{count}} checked items? This cannot be undone.",
-    "sharing": "Sharing"
+    "deleteCheckedItemsConfirm_other": "Delete {{count}} checked items? This cannot be undone."
   },
   "images": {
     "openLightbox": "View {{filename}}",

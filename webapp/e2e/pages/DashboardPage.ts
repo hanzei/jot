@@ -560,17 +560,17 @@ export class DashboardPage {
   /** Opens the share modal for the open note via the overflow menu. */
   async openShareModalFromModal() {
     await this.openModalOverflowMenu();
-    await this.page.getByRole('menuitem', { name: 'Share' }).click();
+    await this.page.getByRole('menuitem', { name: 'Collaborators' }).click();
   }
 
   /**
    * Opens the read-only sharing view from the note modal's overflow menu. This
-   * is the entry point a collaborator (non-owner) sees — labelled "Sharing"
-   * rather than "Share".
+   * is the entry point a collaborator (non-owner) sees; it carries the same
+   * "Collaborators" label as the owner's entry.
    */
   async openSharingModalFromModal() {
     await this.openModalOverflowMenu();
-    await this.page.getByRole('menuitem', { name: 'Sharing' }).click();
+    await this.page.getByRole('menuitem', { name: 'Collaborators' }).click();
   }
 
   /** Opens a note and creates a new label, attaching it to the note. */
@@ -740,7 +740,7 @@ export class DashboardPage {
    */
   async shareNoteWithUser(noteTitle: string, username: string) {
     await this.openNoteMenu(noteTitle);
-    await this.page.getByRole('menuitem', { name: /share/i }).click();
+    await this.page.getByRole('menuitem', { name: 'Collaborators' }).click();
     await this.page.getByPlaceholder(/search users/i).fill(username);
     await this.page.getByText(username).click();
     await this.page.keyboard.press('Escape');

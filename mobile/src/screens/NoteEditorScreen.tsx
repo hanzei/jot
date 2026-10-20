@@ -1636,7 +1636,7 @@ export default function NoteEditorScreen() {
                   style={styles.metaAvatars}
                   onPress={openShareScreen}
                   testID="note-meta-collaborators"
-                  accessibilityLabel={ownsNote ? t('note.share') : t('note.sharing')}
+                  accessibilityLabel={t('note.collaborators')}
                 >
                   {avatars}
                 </TouchableOpacity>
