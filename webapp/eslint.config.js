@@ -149,6 +149,14 @@ export default [
       '@typescript-eslint/no-floating-promises': 'error',
       '@typescript-eslint/no-misused-promises': 'error',
       '@typescript-eslint/await-thenable': 'error',
+      // Test data (usernames, passwords) built from Math.random() trips
+      // CodeQL's insecure-randomness query on every PR that adds a caller.
+      // uniqueSuffix()/uniqueUsername() in fixtures use node:crypto instead.
+      'no-restricted-properties': ['error', {
+        object: 'Math',
+        property: 'random',
+        message: 'Use uniqueSuffix() or uniqueUsername() from e2e/fixtures; Math.random() trips CodeQL\'s insecure-randomness query.',
+      }],
       // Enabled individually rather than `flat/recommended`, which also pulls in
       // stylistic rules (`prefer-web-first-assertions`, `no-nested-step`) that
       // would want their own pass through the suite.
