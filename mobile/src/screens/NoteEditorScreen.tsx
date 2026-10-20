@@ -48,7 +48,7 @@ import AddImageActionSheet from '../components/AddImageActionSheet';
 import { useUploadNoteImage, useDeleteNoteImage } from '../hooks/useNoteImages';
 import { usePendingImageUploads, useRetryPendingImageUpload, useDismissPendingImageUpload } from '../hooks/usePendingImageUploads';
 import type { ImageUploadFile } from '../api/images';
-import { buildCollaborators, generateId, IMAGE_MAX_PER_NOTE, exceedsCodePointLimit, truncateToCodePoints, validateImageFile as validateImageFileRaw, imageMaxMB, type Collaborator, type NoteImage } from '@jot/shared';
+import { buildCollaborators, generateId, IMAGE_MAX_PER_NOTE, exceedsCodePointLimit, truncateToCodePoints, validateImageFile as validateImageFileRaw, imageMaxMB, type Collaborator, type NoteImage, type NoteUnread } from '@jot/shared';
 import { useServerConfig } from '../hooks/useServerConfig';
 import { useAuth } from '../store/AuthContext';
 import { useUsers } from '../store/UsersContext';
@@ -189,24 +189,21 @@ export default function NoteEditorScreen() {
   const deleteMutation = useDeleteNote();
   const restoreMutation = useRestoreNote();
   const { mutate: markNoteViewed } = useMarkNoteViewed();
-  // Unread badges: opening an unread note marks it viewed. A collaborator's
-  // change arriving while it is open (SSE writes it to SQLite as 'updated') is
-  // marked viewed once, on leaving, rather than on every incoming event.
-  const markedViewedOnOpenRef = useRef(false);
-  const unreadWhileOpenRef = useRef(false);
+  // Unread badges: opening an unread note marks it viewed, which clears the
+  // local row. A collaborator's change arriving while it is open (SSE writes it
+  // to SQLite as 'updated') is marked viewed once, on leaving, rather than on
+  // every incoming event.
+  const latestUnreadRef = useRef<NoteUnread | null>(null);
   const existingNoteUnread = existingNote?.unread ?? null;
   const existingNoteLoaded = existingNote != null;
   useEffect(() => {
-    if (!noteId || !existingNoteLoaded) return;
-    if (!markedViewedOnOpenRef.current) {
-      markedViewedOnOpenRef.current = true;
-      if (existingNoteUnread) markNoteViewed(noteId);
-      return;
-    }
-    unreadWhileOpenRef.current = existingNoteUnread !== null;
-  }, [noteId, existingNoteLoaded, existingNoteUnread, markNoteViewed]);
+    latestUnreadRef.current = existingNoteUnread;
+  }, [existingNoteUnread]);
+  useEffect(() => {
+    if (noteId && existingNoteLoaded && latestUnreadRef.current) markNoteViewed(noteId);
+  }, [noteId, existingNoteLoaded, markNoteViewed]);
   useEffect(() => () => {
-    if (noteId && unreadWhileOpenRef.current) markNoteViewed(noteId);
+    if (noteId && latestUnreadRef.current) markNoteViewed(noteId);
   }, [noteId, markNoteViewed]);
   const permanentDeleteMutation = usePermanentDeleteNote();
   const duplicateMutation = useDuplicateNote();

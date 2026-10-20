@@ -9,25 +9,13 @@ import (
 	"github.com/hanzei/jot/server/internal/database/dialect"
 )
 
-// recordContentChangeTx marks the note's shared content (title, content, items,
-// type) as changed by actorID at now. Collaborators who last viewed the note
-// earlier then see it as "updated"; the actor's own last_viewed_at moves to the
-// same instant, since editing a note means looking at it, so their own edits
-// never flag it for themselves.
-func recordContentChangeTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, actorID, now string) error {
-	if _, err := tx.ExecContext(ctx,
-		d.RewritePlaceholders(`UPDATE notes SET content_changed_at = ?, content_changed_by = ? WHERE id = ?`),
-		now, actorID, noteID,
-	); err != nil {
-		return fmt.Errorf("failed to record note content change: %w", err)
-	}
-	if err := markViewedTx(ctx, tx, d, noteID, actorID, now); err != nil {
-		return fmt.Errorf("mark note viewed by editor: %w", err)
-	}
-	return nil
-}
-
 // markViewedTx sets userID's last_viewed_at on the note to now.
+//
+// Every write to a note's shared content (title, content, items, type) sets
+// notes.content_changed_at/_by in its own UPDATE notes statement, so
+// collaborators who viewed the note earlier see it as "updated", and then calls
+// this for the actor: editing a note means looking at it, so their own edits
+// never flag it for themselves.
 func markViewedTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, userID, now string) error {
 	if _, err := tx.ExecContext(ctx,
 		d.RewritePlaceholders(`UPDATE note_user_state SET last_viewed_at = ? WHERE note_id = ? AND user_id = ?`),

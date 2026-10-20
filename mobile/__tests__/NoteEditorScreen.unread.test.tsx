@@ -5,27 +5,19 @@ import {
   mockUseOfflineNote,
   mockMarkViewedMutate,
 } from './helpers/noteEditorScreenTestSetup';
+import type { NoteUnread } from '@jot/shared';
 import NoteEditorScreen from '../src/screens/NoteEditorScreen';
+import { makeTextNote } from './helpers/fixtures';
 
-function textNote(unread: 'new' | 'updated' | null, updatedAt = '2026-01-01T00:00:00.000Z') {
-  return {
+function textNote(unread: NoteUnread | null, updatedAt = '2026-01-01T00:00:00.000Z') {
+  return makeTextNote({
     id: 'note-unread',
     user_id: 'owner',
     content: 'Shared with you',
-    note_type: 'text',
-    version: 1,
-    color: '#ffffff',
-    pinned: false,
-    archived: false,
-    position: 0,
     is_shared: true,
     unread,
-    deleted_at: null,
-    created_at: '2026-01-01T00:00:00.000Z',
     updated_at: updatedAt,
-    labels: [],
-    shared_with: [],
-  };
+  });
 }
 
 describe('NoteEditorScreen unread badges', () => {

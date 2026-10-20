@@ -128,8 +128,6 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   const searchInputRef = useRef<HTMLInputElement>(null);
   const lastFocusedElementRef = useRef<Element | null>(null);
   const openNoteIdRef = useRef<string | null>(null);
-  // Set when a collaborator's change to the open note arrives over SSE.
-  const changedWhileOpenRef = useRef(false);
   const returnPathRef = useRef('/');
   const noteSortUpdateRequestIdRef = useRef(0);
   const loadNotesRequestIdRef = useRef(0);
@@ -425,14 +423,6 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
     notes.markViewed(noteId).then(() => loadNotes()).catch(() => {});
   }, [loadNotes]);
 
-  // Unread badges, open side: opening an unread note clears its badge in the
-  // list right away and records the view. Ordinary opens cost no request.
-  const markOpenedNoteViewed = useCallback((note: Note) => {
-    if (!note.unread) return;
-    updateNotesList(prev => prev.map(n => (n.id === note.id ? { ...n, unread: null } : n)));
-    recordNoteViewed(note.id);
-  }, [updateNotesList, recordNoteViewed]);
-
   const openNoteFromUrl = useCallback((noteId: string) => {
     openNoteIdRef.current = null;
     setEditingNote(null);
@@ -445,7 +435,6 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
         if (isMountedRef.current && openNoteIdRef.current === noteId) {
           setEditingNote(note);
           setIsModalOpen(true);
-          markOpenedNoteViewed(note);
         }
       })
       .catch(() => {
@@ -456,7 +445,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
           window.history.replaceState(null, '', '/');
         }
       });
-  }, [markOpenedNoteViewed]);
+  }, []);
 
   useEffect(() => {
     if (!noteIdParam) {
@@ -574,11 +563,6 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
 
     if (editingNote && note_id === editingNote.id) {
       if ((event.type === 'note_updated' || event.type === 'note_shared') && event.data.note?.id === note_id) {
-        // A collaborator changed the note while it is open: the user is looking
-        // at the change, so clear the badge when they close it.
-        if (event.data.note.unread) {
-          changedWhileOpenRef.current = true;
-        }
         setEditingNote(event.data.note);
       } else if (event.type === 'note_unshared' && !currentUserLostAccess) {
         notes.getById(note_id).then(refreshed => {
@@ -594,20 +578,25 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
     }
   }, [editingNote, sharingNote, loadNotes, loadLabels, loadLabelCounts, setSearchParams, user?.id, restoreReturnUrl, updateNotesList]);
 
-  // Unread badges, close side: a note a collaborator changed while it was open
-  // is marked viewed once it closes (the open side is markOpenedNoteViewed).
-  // Keyed on the open note's id, so in-place refreshes of it don't fire this.
+  // Unread badges, from whichever path opened the note: opening an unread note
+  // records the view, and closing it records another if a collaborator's
+  // change arrived (over SSE, as an unread copy of the note) while it was open.
+  // openNoteUnreadRef tracks the open note's latest unread state; the effect
+  // below is keyed on the note's id, so in-place refreshes don't re-fire it.
   const editingNoteId = editingNote?.id ?? null;
-  const viewedNoteIdRef = useRef<string | null>(null);
+  const openNoteUnreadRef = useRef<Note['unread']>(null);
   useEffect(() => {
-    const previousId = viewedNoteIdRef.current;
-    if (previousId === editingNoteId) return;
-    viewedNoteIdRef.current = editingNoteId;
-
-    if (previousId && changedWhileOpenRef.current) {
-      recordNoteViewed(previousId);
+    openNoteUnreadRef.current = editingNote?.unread ?? null;
+  }, [editingNote]);
+  useEffect(() => {
+    if (!editingNoteId) return;
+    if (openNoteUnreadRef.current) {
+      openNoteUnreadRef.current = null;
+      recordNoteViewed(editingNoteId);
     }
-    changedWhileOpenRef.current = false;
+    return () => {
+      if (openNoteUnreadRef.current) recordNoteViewed(editingNoteId);
+    };
   }, [editingNoteId, recordNoteViewed]);
 
   useEffect(() => {
@@ -796,7 +785,6 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
     openNoteIdRef.current = note.id;
     setEditingNote(note);
     setIsModalOpen(true);
-    markOpenedNoteViewed(note);
     window.history.pushState({ returnTo: returnPathRef.current }, '', `/notes/${note.id}`);
   };
 

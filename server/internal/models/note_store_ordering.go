@@ -12,16 +12,16 @@ import (
 
 // touchNoteTx bumps a note's updated_at so item-level changes are reflected in
 // note ordering (updated_at sort) and client freshness checks, and records the
-// change by actorID for unread tracking (see recordContentChangeTx). Callers
-// invoke it only when an item actually changed.
+// change by actorID for unread tracking (see markViewedTx). Callers invoke it
+// only when an item actually changed.
 func touchNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, actorID, now string) error {
 	if _, err := tx.ExecContext(ctx,
-		d.RewritePlaceholders(`UPDATE notes SET updated_at = ? WHERE id = ?`),
-		now, noteID,
+		d.RewritePlaceholders(`UPDATE notes SET updated_at = ?, content_changed_at = ?, content_changed_by = ? WHERE id = ?`),
+		now, now, actorID, noteID,
 	); err != nil {
 		return fmt.Errorf("failed to touch note: %w", err)
 	}
-	return recordContentChangeTx(ctx, tx, d, noteID, actorID, now)
+	return markViewedTx(ctx, tx, d, noteID, actorID, now)
 }
 
 func (s *noteStore) ReorderNotes(ctx context.Context, userID string, noteIDs []string) error {

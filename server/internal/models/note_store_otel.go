@@ -149,7 +149,7 @@ func (s *NoteStore) PatchItem(ctx context.Context, noteID, actorID, itemID strin
 	return s.inner.PatchItem(ctx, noteID, actorID, itemID, patch)
 }
 
-func (s *NoteStore) DeleteItemFromNote(ctx context.Context, noteID, actorID string, itemID string) (err error) {
+func (s *NoteStore) DeleteItemFromNote(ctx context.Context, noteID, actorID, itemID string) (err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.DeleteItemFromNote", &err,
 		attribute.String("note.id", noteID),
 		attribute.String("item.id", itemID),

@@ -90,24 +90,25 @@ func (s *noteStore) Update(ctx context.Context, id string, userID string, title,
 	return nil
 }
 
-// changeNoteContentTx writes userID's title/content change and records it for
-// unread tracking. An idempotent replay wrote nothing, so it is not this user's
-// change to record (mirrors ConvertType's alreadyApplied check).
+// changeNoteContentTx writes userID's title/content change, which records it
+// for unread tracking, and marks the note viewed by userID. An idempotent
+// replay wrote nothing, so it is not this user's change (mirrors ConvertType's
+// alreadyApplied check).
 func (s *noteStore) changeNoteContentTx(ctx context.Context, tx *sql.Tx, id, userID, title, content string, baseVersion *int, now string) error {
-	applied, err := s.updateNoteContentTx(ctx, tx, id, title, content, baseVersion, now)
+	applied, err := s.updateNoteContentTx(ctx, tx, id, userID, title, content, baseVersion, now)
 	if err != nil || !applied {
 		return err
 	}
-	return recordContentChangeTx(ctx, tx, s.d, id, userID, now)
+	return markViewedTx(ctx, tx, s.d, id, userID, now)
 }
 
 // updateNoteContentTx updates title, content, and version inside tx. When baseVersion is non-nil
 // the write is gated on the current version; on a version mismatch (zero rows affected) it re-reads
 // the current title/content: if they already match the requested values it returns nil (idempotent
 // success, reported as applied == false), otherwise ErrNoteVersionConflict.
-func (s *noteStore) updateNoteContentTx(ctx context.Context, tx *sql.Tx, id, title, content string, baseVersion *int, now string) (applied bool, err error) {
-	query := `UPDATE notes SET title = ?, content = ?, version = version + 1, updated_at = ? WHERE id = ?`
-	args := []any{title, content, now, id}
+func (s *noteStore) updateNoteContentTx(ctx context.Context, tx *sql.Tx, id, actorID, title, content string, baseVersion *int, now string) (applied bool, err error) {
+	query := `UPDATE notes SET title = ?, content = ?, version = version + 1, updated_at = ?, content_changed_at = ?, content_changed_by = ? WHERE id = ?`
+	args := []any{title, content, now, now, actorID, id}
 	if baseVersion != nil {
 		query += ` AND version = ?`
 		args = append(args, *baseVersion)
@@ -175,7 +176,7 @@ func (s *noteStore) ConvertType(ctx context.Context, id, userID string, targetTy
 
 	now := Timestamp(Now())
 
-	alreadyApplied, err := s.convertNoteRowTx(ctx, tx, id, targetType, title, content, targetItems, baseVersion, now)
+	alreadyApplied, err := s.convertNoteRowTx(ctx, tx, id, userID, targetType, title, content, targetItems, baseVersion, now)
 	if err != nil {
 		return nil, err
 	}
@@ -189,7 +190,7 @@ func (s *noteStore) ConvertType(ctx context.Context, id, userID string, targetTy
 				return nil, fmt.Errorf("insert converted items: %w", err)
 			}
 		}
-		if err = recordContentChangeTx(ctx, tx, s.d, id, userID, now); err != nil {
+		if err = markViewedTx(ctx, tx, s.d, id, userID, now); err != nil {
 			return nil, err
 		}
 	}
@@ -210,11 +211,11 @@ func (s *noteStore) ConvertType(ctx context.Context, id, userID string, targetTy
 // already committed this exact conversion (detected via the idempotent-replay
 // check below); the caller should then skip re-touching note_items and just
 // commit, since the winning write already did that atomically.
-func (s *noteStore) convertNoteRowTx(ctx context.Context, tx *sql.Tx, id string, targetType NoteType, title, content string, targetItems []NewNoteItem, baseVersion *int, now string) (alreadyApplied bool, err error) {
+func (s *noteStore) convertNoteRowTx(ctx context.Context, tx *sql.Tx, id, actorID string, targetType NoteType, title, content string, targetItems []NewNoteItem, baseVersion *int, now string) (alreadyApplied bool, err error) {
 	// deleted_at IS NULL guards against a concurrent trash landing between the
 	// HasAccess check in ConvertType and this UPDATE.
-	query := `UPDATE notes SET title = ?, content = ?, note_type = ?, version = version + 1, updated_at = ? WHERE id = ? AND deleted_at IS NULL`
-	args := []any{title, content, targetType, now, id}
+	query := `UPDATE notes SET title = ?, content = ?, note_type = ?, version = version + 1, updated_at = ?, content_changed_at = ?, content_changed_by = ? WHERE id = ? AND deleted_at IS NULL`
+	args := []any{title, content, targetType, now, now, actorID, id}
 	if baseVersion != nil {
 		query += ` AND version = ?`
 		args = append(args, *baseVersion)

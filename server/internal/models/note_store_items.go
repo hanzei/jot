@@ -436,7 +436,7 @@ func (s *noteStore) PatchItem(ctx context.Context, noteID, actorID, itemID strin
 
 // DeleteItemFromNote deletes a single item scoped to its note and bumps the
 // parent note's updated_at. Returns ErrNoteItemNotFound if no such item exists.
-func (s *noteStore) DeleteItemFromNote(ctx context.Context, noteID, actorID string, itemID string) error {
+func (s *noteStore) DeleteItemFromNote(ctx context.Context, noteID, actorID, itemID string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)

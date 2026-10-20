@@ -30,8 +30,9 @@ func buildSearchTokens(search string) []string {
 
 // noteUnreadExpr computes Note.Unread for the user whose note_user_state row
 // (nus) is joined:
-//   - nothing for a trashed note: it can only be opened read-only from the
-//     bin, where POST /notes/{id}/viewed (active notes only) cannot clear it.
+//   - nothing for a trashed note: by design, the bin shows no badges (it is
+//     read-only, and POST /notes/{id}/viewed accepts active notes only). A
+//     restored note shows whatever is still unread.
 //   - "new": a collaborator (not the owner) who has never opened the note.
 //   - "updated": someone else changed shared content after the user last
 //     viewed it. An owner who never reopened their own note falls back to the

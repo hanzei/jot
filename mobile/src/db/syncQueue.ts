@@ -135,6 +135,17 @@ export function errorSummary(err: unknown): string {
 }
 
 /**
+ * Ops a permanent rejection resolves silently, whatever the status, because
+ * nothing is lost: the next server sync reconciles what they would have done.
+ * `removeImage`: the image just reappears (the image spec's fail-safe design,
+ * §6). `markViewed`: the unread badge just stays.
+ */
+const BEST_EFFORT_OPERATIONS: ReadonlySet<QueueOperation> = new Set([
+  'removeImage',
+  'markViewed',
+]);
+
+/**
  * Operations for which a "target is gone" replay status (404/410) is an
  * idempotent success rather than a failure to preserve. These are destructive /
  * state-transition ops whose desired end-state (the note/item/share/label is
@@ -863,11 +874,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
             && entry.operation !== 'update'
             && entry.operation !== 'convertNoteType'
             && entry.operation !== 'createLabel') ||
-          entry.operation === 'removeImage' ||
-          // Best-effort like removeImage: a rejected view only leaves a badge
-          // that the next server fetch reconciles, which is no reason to flag
-          // the note as failed.
-          entry.operation === 'markViewed' ||
+          BEST_EFFORT_OPERATIONS.has(entry.operation) ||
           (targetGone && GONE_IDEMPOTENT_OPERATIONS.has(entry.operation));
         if (status === 409 && entry.operation === 'createLabel') {
           const clientLabelId = body?.id as string | undefined;
