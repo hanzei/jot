@@ -56,10 +56,7 @@ func (s *noteStore) Update(ctx context.Context, id string, userID string, title,
 	contentChanged := (title != nil || content != nil) &&
 		(resolvedTitle != currentNote.Title || resolvedContent != currentNote.Content)
 	if contentChanged {
-		if err = s.updateNoteContentTx(ctx, tx, id, resolvedTitle, resolvedContent, baseVersion, now); err != nil {
-			return err
-		}
-		if err = recordContentChangeTx(ctx, tx, s.d, id, userID, now); err != nil {
+		if err = s.changeNoteContentTx(ctx, tx, id, userID, resolvedTitle, resolvedContent, baseVersion, now); err != nil {
 			return err
 		}
 	}
@@ -93,11 +90,22 @@ func (s *noteStore) Update(ctx context.Context, id string, userID string, title,
 	return nil
 }
 
+// changeNoteContentTx writes userID's title/content change and records it for
+// unread tracking. An idempotent replay wrote nothing, so it is not this user's
+// change to record (mirrors ConvertType's alreadyApplied check).
+func (s *noteStore) changeNoteContentTx(ctx context.Context, tx *sql.Tx, id, userID, title, content string, baseVersion *int, now string) error {
+	applied, err := s.updateNoteContentTx(ctx, tx, id, title, content, baseVersion, now)
+	if err != nil || !applied {
+		return err
+	}
+	return recordContentChangeTx(ctx, tx, s.d, id, userID, now)
+}
+
 // updateNoteContentTx updates title, content, and version inside tx. When baseVersion is non-nil
 // the write is gated on the current version; on a version mismatch (zero rows affected) it re-reads
 // the current title/content: if they already match the requested values it returns nil (idempotent
-// success), otherwise ErrNoteVersionConflict.
-func (s *noteStore) updateNoteContentTx(ctx context.Context, tx *sql.Tx, id, title, content string, baseVersion *int, now string) error {
+// success, reported as applied == false), otherwise ErrNoteVersionConflict.
+func (s *noteStore) updateNoteContentTx(ctx context.Context, tx *sql.Tx, id, title, content string, baseVersion *int, now string) (applied bool, err error) {
 	query := `UPDATE notes SET title = ?, content = ?, version = version + 1, updated_at = ? WHERE id = ?`
 	args := []any{title, content, now, id}
 	if baseVersion != nil {
@@ -106,14 +114,14 @@ func (s *noteStore) updateNoteContentTx(ctx context.Context, tx *sql.Tx, id, tit
 	}
 	result, err := tx.ExecContext(ctx, s.d.RewritePlaceholders(query), args...)
 	if err != nil {
-		return fmt.Errorf("failed to update note: %w", err)
+		return false, fmt.Errorf("failed to update note: %w", err)
 	}
 	if baseVersion == nil {
-		return nil
+		return true, nil
 	}
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
+		return false, fmt.Errorf("failed to get rows affected: %w", err)
 	}
 	// Zero rows means the version guard did not match. Re-read to check whether the
 	// winning write already applied the same title/content; if so, treat this as a
@@ -126,16 +134,16 @@ func (s *noteStore) updateNoteContentTx(ctx context.Context, tx *sql.Tx, id, tit
 		).Scan(&currentTitle, &currentContent)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				return ErrNoteNotFound
+				return false, ErrNoteNotFound
 			}
-			return fmt.Errorf("get current note content: %w", err)
+			return false, fmt.Errorf("get current note content: %w", err)
 		}
 		if currentTitle == title && currentContent == content {
-			return nil
+			return false, nil
 		}
-		return ErrNoteVersionConflict
+		return false, ErrNoteVersionConflict
 	}
-	return nil
+	return true, nil
 }
 
 // ConvertType changes a note's type in place, replacing its content

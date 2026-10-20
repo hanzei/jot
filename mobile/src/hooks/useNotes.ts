@@ -978,7 +978,10 @@ export function useMarkNoteViewed() {
         method: 'POST',
       });
     },
-    onSuccess: (_data, id) => {
+    // Settled, not success: the local clear has already landed when a
+    // permanent rejection throws, and the SQLite-backed queries never refetch
+    // on their own, so the badge would otherwise linger on screen.
+    onSettled: (_data, _error, id) => {
       queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(id) });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
     },

@@ -476,17 +476,17 @@ export class DashboardPage {
     return this.page.locator('[data-testid="note-card"]').filter({ hasText: title });
   }
 
+  /** The card's "New" / "Updated" unread badge; absent when nothing is new. */
+  noteCardUnreadBadge(title: string): Locator {
+    return this.noteCard(title).getByTestId('note-card-unread');
+  }
+
   /**
    * The card's own control — the button that opens the note, and the only
    * focusable thing the card itself contributes. The card element is a plain
    * container: `noteCard()` is the right locator for asserting on a card's
    * contents, and this is the right one for anything to do with focus.
    */
-  /** The card's "New" / "Updated" unread badge; absent when nothing is new. */
-  noteCardUnreadBadge(title: string): Locator {
-    return this.noteCard(title).getByTestId('note-card-unread');
-  }
-
   noteCardButton(title: string): Locator {
     return this.noteCard(title).locator('[data-note-card="true"]');
   }

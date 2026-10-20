@@ -419,15 +419,19 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
     setIsModalOpen(true);
   }, [isNewNoteRoute, searchParams]);
 
+  // Records a view of the note. The reload after the view lands supersedes any
+  // list fetch already in flight, which could otherwise bring the badge back.
+  const recordNoteViewed = useCallback((noteId: string) => {
+    notes.markViewed(noteId).then(() => loadNotes()).catch(() => {});
+  }, [loadNotes]);
+
   // Unread badges, open side: opening an unread note clears its badge in the
-  // list right away and records the view. Ordinary opens cost no request. The
-  // reload after the view lands supersedes any list fetch already in flight,
-  // which could otherwise bring the badge back.
+  // list right away and records the view. Ordinary opens cost no request.
   const markOpenedNoteViewed = useCallback((note: Note) => {
     if (!note.unread) return;
     updateNotesList(prev => prev.map(n => (n.id === note.id ? { ...n, unread: null } : n)));
-    notes.markViewed(note.id).then(() => loadNotes()).catch(() => {});
-  }, [updateNotesList, loadNotes]);
+    recordNoteViewed(note.id);
+  }, [updateNotesList, recordNoteViewed]);
 
   const openNoteFromUrl = useCallback((noteId: string) => {
     openNoteIdRef.current = null;
@@ -601,12 +605,10 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
     viewedNoteIdRef.current = editingNoteId;
 
     if (previousId && changedWhileOpenRef.current) {
-      // Reload once the server has the new view time, so the list fetched on
-      // close can't land first and bring the badge back.
-      notes.markViewed(previousId).then(() => loadNotes()).catch(() => {});
+      recordNoteViewed(previousId);
     }
     changedWhileOpenRef.current = false;
-  }, [editingNoteId, loadNotes]);
+  }, [editingNoteId, recordNoteViewed]);
 
   useEffect(() => {
     registerSSECallbacks({ onEvent: handleSSEEvent, onConnected: loadNotes });

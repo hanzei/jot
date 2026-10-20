@@ -957,6 +957,15 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           break;
         }
 
+        if (entry.operation === 'markViewed') {
+          // Best-effort (see the permanent-failure branch above): a view that
+          // keeps failing only leaves a badge the next server fetch reconciles,
+          // so drop it rather than flag the note as failed to sync.
+          console.info(`Dropping queued operation id=${entry.id} markViewed ${endpoint} after ${attempts} failed attempts`);
+          await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
+          continue;
+        }
+
         // Cap reached — dead-letter and continue. Use the effective (id-remapped)
         // endpoint/body so the row agrees with what was actually sent. HTTP 5xx
         // keeps its status; a non-HTTP throw records PROCESSING_ERROR_STATUS (0).
