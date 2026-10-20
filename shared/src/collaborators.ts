@@ -17,6 +17,16 @@ export function displayName(c: Collaborator): string {
   return full || c.username;
 }
 
+/** `displayName` for a full `User` record. */
+export function userDisplayName(user: User): string {
+  return displayName({
+    userId: user.id,
+    username: user.username,
+    firstName: user.first_name,
+    lastName: user.last_name,
+  });
+}
+
 export function buildCollaborators(
   noteUserId: string,
   sharedWith: { shared_with_user_id: string; username?: string; first_name?: string; last_name?: string; has_profile_icon?: boolean }[] | undefined,
@@ -123,12 +133,7 @@ export interface ShareSuggestions {
 }
 
 function suggestionSortName(user: User): string {
-  return displayName({
-    userId: user.id,
-    username: user.username,
-    firstName: user.first_name,
-    lastName: user.last_name,
-  }).toLowerCase();
+  return userDisplayName(user).toLowerCase();
 }
 
 /**

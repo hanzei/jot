@@ -8,9 +8,8 @@ import {
   NOTE_SORT_OPTIONS,
   normalizeNoteSort,
   sortNotesForDisplay,
-  displayName,
   isNoteSharedWithUser,
-  noteNoticeTitle,
+  noteShareNoticeParts,
   type Note,
   type NoteImage,
   type NoteType,
@@ -490,14 +489,11 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
   const handleEditNoteRef = useRef<(note: Note) => void>(() => {});
 
   const handleSSEEvent = useCallback((event: SSEEvent) => {
-    if (isNoteSharedWithUser(event, user?.id) && event.type === 'note_shared' && event.data.note) {
+    if (isNoteSharedWithUser(event, user?.id) && event.data.note) {
       const sharedNote = event.data.note;
-      const sharer = usersById.get(event.source_user_id);
-      const name = sharer
-        ? displayName({ userId: sharer.id, username: sharer.username, firstName: sharer.first_name, lastName: sharer.last_name })
-        : t('dashboard.someone');
+      const { name, title } = noteShareNoticeParts(event, usersById);
       showToast(
-        t('dashboard.noteSharedWithYou', { name, title: noteNoticeTitle(sharedNote) || t('share.untitledNote') }),
+        t('dashboard.noteSharedWithYou', { name: name || t('dashboard.someone'), title: title || t('share.untitledNote') }),
         'info',
         { label: t('dashboard.openNote'), onClick: () => handleEditNoteRef.current(sharedNote) },
       );

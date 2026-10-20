@@ -22,11 +22,16 @@ import {
   notesLocalQueryScopeKey,
 } from './queryKeys';
 
+/**
+ * Receives the events worth surfacing to the user, after they are persisted:
+ * a note_updated from another user, and a note_shared targeting this user.
+ * Listeners filter on `event.type`.
+ */
 export type SSENotificationCallback = (event: SSEEvent) => void;
 export type SSEStatusChangeCallback = (status: SSEStatus) => void;
 
 export function useSSE(
-  onNoteUpdatedByOther?: SSENotificationCallback,
+  onNotify?: SSENotificationCallback,
   onStatusChange?: SSEStatusChangeCallback,
 ): void {
   const { user, isAuthenticated, isLocalMode } = useAuth();
@@ -34,9 +39,9 @@ export function useSSE(
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   const managerRef = useRef<SSEConnectionManager | null>(null);
-  const onNoteUpdatedRef = useRef(onNoteUpdatedByOther);
+  const onNotifyRef = useRef(onNotify);
   // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
-  onNoteUpdatedRef.current = onNoteUpdatedByOther;
+  onNotifyRef.current = onNotify;
   const onStatusChangeRef = useRef(onStatusChange);
   // eslint-disable-next-line react-hooks/refs -- pre-existing, tracked in #777
   onStatusChangeRef.current = onStatusChange;
@@ -103,7 +108,7 @@ export function useSSE(
             // from the same user on another device — query invalidation above is
             // sufficient to sync the state.
             if (event.source_user_id !== userIdRef.current) {
-              onNoteUpdatedRef.current?.(event);
+              onNotifyRef.current?.(event);
             }
             break;
           }
@@ -155,7 +160,7 @@ export function useSSE(
             // someone else to a note they already have) is surfaced as a toast.
             // Notify after the write so opening it from the toast finds the row.
             if (isNoteSharedWithUser(event, userIdRef.current)) {
-              onNoteUpdatedRef.current?.(event);
+              onNotifyRef.current?.(event);
             }
             break;
           }

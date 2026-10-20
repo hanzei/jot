@@ -32,7 +32,8 @@ import type { NoteItem } from './types';
 
 const LIST_MARKER_RE = /^(?:[-*+]|\d+\.)\s+(?:\[([ xX])\]\s*)?/;
 const BLOCKQUOTE_RE = /^(?:>\s*)+/;
-const HEADING_RE = /^#{1,6}\s+/;
+/** A Markdown ATX heading marker (`# ` … `###### `) at the start of a line. */
+export const HEADING_RE = /^#{1,6}\s+/;
 const LEADING_WHITESPACE_RE = /^[ \t]*/;
 
 /** A tab advances to the next 4-column stop, as in CommonMark. */

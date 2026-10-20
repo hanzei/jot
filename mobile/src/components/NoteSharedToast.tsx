@@ -1,8 +1,8 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
-import { displayName, noteNoticeTitle } from '@jot/shared';
+import { noteShareNoticeParts } from '@jot/shared';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { useSSEContext } from '../store/SSEContext';
 import { useUsers } from '../store/UsersContext';
@@ -23,30 +23,20 @@ export default function NoteSharedToast(): null {
   // Mounted outside the stack navigator, this resolves to the root navigation.
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
-  // Read through refs so a users refresh or language change doesn't resubscribe.
-  const usersByIdRef = useRef(usersById);
-  const tRef = useRef(t);
-  useEffect(() => {
-    usersByIdRef.current = usersById;
-    tRef.current = t;
-  }, [usersById, t]);
-
   useEffect(() => {
     return subscribe((event) => {
       if (event.type !== 'note_shared') return;
-      const tr = tRef.current;
       const noteId = event.data.note_id;
-      const sharer = usersByIdRef.current.get(event.source_user_id);
-      const name = sharer
-        ? displayName({ userId: sharer.id, username: sharer.username, firstName: sharer.first_name, lastName: sharer.last_name })
-        : tr('dashboard.someone');
-      const title = (event.data.note ? noteNoticeTitle(event.data.note) : '') || tr('dashboard.untitledNote');
-      showToast(tr('dashboard.noteSharedWithYou', { name, title }), 'info', {
-        label: tr('dashboard.openNote'),
+      const { name, title } = noteShareNoticeParts(event, usersById);
+      showToast(t('dashboard.noteSharedWithYou', {
+        name: name || t('dashboard.someone'),
+        title: title || t('dashboard.untitledNote'),
+      }), 'info', {
+        label: t('dashboard.openNote'),
         onPress: () => navigation.navigate('NoteEditor', { noteId }),
       });
     });
-  }, [subscribe, showToast, navigation]);
+  }, [subscribe, showToast, usersById, t, navigation]);
 
   return null;
 }

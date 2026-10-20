@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { isNoteSharedWithUser, noteNoticeTitle } from '../noteShareNotice';
-import type { Note, NoteSSEEvent } from '../types';
+import { isNoteSharedWithUser, noteNoticeTitle, noteShareNoticeParts } from '../noteShareNotice';
+import type { Note, NoteItem, NoteSSEEvent, User } from '../types';
 
 const base = {
   id: 'n1',
@@ -19,7 +19,23 @@ const base = {
 };
 
 const textNote = (content: string): Note => ({ ...base, note_type: 'text', content });
-const listNote = (title: string): Note => ({ ...base, note_type: 'list', title, checked_items_collapsed: false });
+const listNote = (title: string, itemTexts: string[] = []): Note => ({
+  ...base,
+  note_type: 'list',
+  title,
+  checked_items_collapsed: false,
+  items: itemTexts.map((text, position): NoteItem => ({
+    id: `i${position}`,
+    note_id: 'n1',
+    text,
+    completed: false,
+    position,
+    parent_id: null,
+    assigned_to: '',
+    created_at: '',
+    updated_at: '',
+  })),
+});
 
 function shareEvent(overrides: Partial<NoteSSEEvent> = {}): NoteSSEEvent {
   return {
@@ -65,6 +81,10 @@ describe('noteNoticeTitle', () => {
     expect(noteNoticeTitle(textNote('\n\n## Trip plan\nday one'))).toBe('Trip plan');
   });
 
+  it("falls back to an untitled list's first non-empty item", () => {
+    expect(noteNoticeTitle(listNote('', ['  ', 'Buy milk']))).toBe('Buy milk');
+  });
+
   it('is empty when there is nothing to show', () => {
     expect(noteNoticeTitle(textNote('  \n '))).toBe('');
     expect(noteNoticeTitle(listNote(''))).toBe('');
@@ -73,5 +93,28 @@ describe('noteNoticeTitle', () => {
   it('truncates long titles with an ellipsis', () => {
     expect(noteNoticeTitle(listNote('abcdefghij'), 6)).toBe('abcde…');
     expect(noteNoticeTitle(listNote('abcdef'), 6)).toBe('abcdef');
+  });
+});
+
+describe('noteShareNoticeParts', () => {
+  const alice: User = {
+    id: 'owner',
+    username: 'alice',
+    first_name: 'Alice',
+    last_name: 'Smith',
+    role: 'user',
+    has_profile_icon: false,
+    created_at: '',
+    updated_at: '',
+  };
+
+  it('names the sharer and the note', () => {
+    expect(noteShareNoticeParts(shareEvent({ data: { note_id: 'n1', note: listNote('Trip') } }), new Map([[alice.id, alice]])))
+      .toEqual({ name: 'Alice Smith', title: 'Trip' });
+  });
+
+  it('leaves unknown parts empty for the caller to fill in', () => {
+    expect(noteShareNoticeParts(shareEvent({ data: { note_id: 'n1', note: null } }), new Map()))
+      .toEqual({ name: '', title: '' });
   });
 });
