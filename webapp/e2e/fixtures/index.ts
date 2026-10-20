@@ -1,3 +1,4 @@
+import { randomInt } from 'node:crypto';
 import { test as base, expect } from '@playwright/test';
 import { LoginPage } from '../pages/LoginPage';
 import { RegisterPage } from '../pages/RegisterPage';
@@ -14,9 +15,18 @@ export { expect };
 /** Credentials for the bootstrap admin user (first registered → admin role). */
 export const E2E_ADMIN_CREDENTIALS = { username: 'e2eadmin', password: 'testpass123' };
 
+/**
+ * A suffix unique across concurrent test runs. `randomInt` rather than
+ * `Math.random()`: the value ends up in usernames sent to `/register`, which
+ * CodeQL's insecure-randomness query flags on every PR that touches a caller.
+ */
+export function uniqueSuffix(): string {
+  return `${Date.now()}${randomInt(1000, 10000)}`;
+}
+
 /** Generate a unique username safe for concurrent test runs */
 export function uniqueUsername(prefix = 'user'): string {
-  return `${prefix}${Date.now()}${Math.floor(Math.random() * 9000 + 1000)}`;
+  return `${prefix}${uniqueSuffix()}`;
 }
 
 type Fixtures = {

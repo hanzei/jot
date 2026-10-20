@@ -1,4 +1,4 @@
-import { test, expect, E2E_ADMIN_CREDENTIALS } from '../fixtures';
+import { test, expect, uniqueUsername, E2E_ADMIN_CREDENTIALS } from '../fixtures';
 import { expectNoViolations } from '../fixtures/axe';
 import { openNoteInConflict } from '../fixtures/noteConflict';
 import type { Page } from '@playwright/test';
@@ -67,6 +67,44 @@ for (const theme of THEMES) {
       // and none of them render until a note exists.
       await dashboardPage.createNoteWithLabels('A11y Text Note', '', ['a11y-label']);
       await dashboardPage.createListNote('A11y List Note', ['first item', 'second item']);
+      await expectTheme(page, theme);
+
+      await expectNoViolations(page);
+    });
+
+    test('unread badges have no WCAG A/AA violations', async ({ page, authenticatedUser, dashboardPage, request }) => {
+      // Both badge variants on the owner's dashboard: "Updated" on a note a
+      // collaborator changed, "New" on one the collaborator shared with them.
+      // The collaborator acts through the API on `request`, a separate
+      // context, so the owner's page session is untouched.
+      const collaborator = uniqueUsername('a11ybadge');
+      const ok = (res: Awaited<ReturnType<typeof request.post>>) => {
+        expect(res.ok(), `${res.url()} → ${res.status()}`).toBeTruthy();
+        return res;
+      };
+      ok(await request.post('/api/v1/register', { data: { username: collaborator, password: 'testpass123' } }));
+      ok(await request.post('/api/v1/login', { data: { username: collaborator, password: 'testpass123' } }));
+
+      await dashboardPage.goto();
+      await dashboardPage.createNote('A11y Updated Note');
+      await dashboardPage.shareNoteWithUser('A11y Updated Note', collaborator);
+
+      const shared = (await ok(await request.get('/api/v1/notes')).json()) as { notes: { id: string; title: string }[] };
+      const updatedNote = shared.notes.find(n => n.title === 'A11y Updated Note');
+      expect(updatedNote).toBeDefined();
+      ok(await request.post(`/api/v1/notes/${updatedNote!.id}/items`, { data: { text: 'added by collaborator', position: 0 } }));
+
+      const created = (await ok(await request.post('/api/v1/notes', {
+        data: { note_type: 'list', title: 'A11y New Note', items: [{ text: 'item', position: 0 }] },
+      })).json()) as { id: string };
+      const users = (await ok(await request.get('/api/v1/users')).json()) as { users: { id: string; username: string }[] };
+      const owner = users.users.find(u => u.username === authenticatedUser.username);
+      expect(owner).toBeDefined();
+      ok(await request.post(`/api/v1/notes/${created.id}/share`, { data: { user_id: owner!.id } }));
+
+      await page.reload();
+      await expect(dashboardPage.noteCardUnreadBadge('A11y Updated Note')).toHaveText('Updated');
+      await expect(dashboardPage.noteCardUnreadBadge('A11y New Note')).toHaveText('New');
       await expectTheme(page, theme);
 
       await expectNoViolations(page);
