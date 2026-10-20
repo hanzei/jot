@@ -34,6 +34,8 @@ test.describe('Unread badges', () => {
     // for them, and the cleared "new" state survives a reload.
     await dashboardPage.addListItem('milk');
     await dashboardPage.closeNoteModal();
+    // Reloading while the URL still points at the note would reopen it.
+    await expect(page).toHaveURL('/');
     await page.reload();
     await expect(dashboardPage.noteCard('Badge Me')).toBeVisible();
     await expect(dashboardPage.noteCardUnreadBadge('Badge Me')).toHaveCount(0);
@@ -49,6 +51,7 @@ test.describe('Unread badges', () => {
     await dashboardPage.openNote('Badge Me');
     await dashboardPage.closeNoteModal();
     await expect(updatedBadge).toHaveCount(0);
+    await expect(page).toHaveURL('/');
     await page.reload();
     await expect(dashboardPage.noteCard('Badge Me')).toBeVisible();
     await expect(updatedBadge).toHaveCount(0);
