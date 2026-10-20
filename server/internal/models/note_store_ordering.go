@@ -16,8 +16,8 @@ import (
 // only when an item actually changed.
 func touchNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, actorID, now string) error {
 	if _, err := tx.ExecContext(ctx,
-		d.RewritePlaceholders(`UPDATE notes SET updated_at = ?, content_changed_at = ?, content_changed_by = ? WHERE id = ?`),
-		now, now, actorID, noteID,
+		d.RewritePlaceholders(`UPDATE notes SET updated_at = ?, `+contentChangedSet+` WHERE id = ?`),
+		append(append([]any{now}, contentChangedArgs(now, actorID)...), noteID)...,
 	); err != nil {
 		return fmt.Errorf("failed to touch note: %w", err)
 	}

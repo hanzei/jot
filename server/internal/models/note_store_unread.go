@@ -30,13 +30,33 @@ func markViewedTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, u
 	return nil
 }
 
+// contentChangedSet is the SET fragment every write to a note's shared content
+// uses to record the change for unread tracking; bind contentChangedArgs after
+// the statement's preceding arguments. Each writer captures now at the start of
+// its transaction, so two concurrent writes can commit in the opposite order:
+// the fragment keeps whichever change is later, so content_changed_at never
+// moves backward below a collaborator's view of the later write, and
+// content_changed_by keeps naming that write's actor. A tie keeps the stored
+// value; timestamps are microsecond-precision, so a tie means two writes in the
+// same microsecond and either actor is right.
+//
+// The losing writer's markViewedTx still moves its own last_viewed_at only up
+// to its earlier now, so the later change stays unread for it too.
+const contentChangedSet = `content_changed_at = CASE WHEN content_changed_at IS NULL OR content_changed_at < ? THEN ? ELSE content_changed_at END,
+	content_changed_by = CASE WHEN content_changed_at IS NULL OR content_changed_at < ? THEN ? ELSE content_changed_by END`
+
+// contentChangedArgs returns the arguments for contentChangedSet.
+func contentChangedArgs(now, actorID string) []any {
+	return []any{now, now, now, actorID}
+}
+
 // recordContentChangeTx records a change to the note's shared content by actorID
 // for unread tracking, without touching updated_at, and marks the note viewed by
 // actorID. Used by writes that live outside the notes row, such as images.
 func recordContentChangeTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, actorID, now string) error {
 	if _, err := tx.ExecContext(ctx,
-		d.RewritePlaceholders(`UPDATE notes SET content_changed_at = ?, content_changed_by = ? WHERE id = ?`),
-		now, actorID, noteID,
+		d.RewritePlaceholders(`UPDATE notes SET `+contentChangedSet+` WHERE id = ?`),
+		append(contentChangedArgs(now, actorID), noteID)...,
 	); err != nil {
 		return fmt.Errorf("failed to record note content change: %w", err)
 	}

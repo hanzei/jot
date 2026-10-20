@@ -1,7 +1,10 @@
 package models
 
 import (
+	"context"
+	"database/sql"
 	"testing"
+	"time"
 
 	"github.com/hanzei/jot/server/internal/database/dbtest"
 	"github.com/stretchr/testify/assert"
@@ -17,6 +20,19 @@ func unreadFor(t *testing.T, store *noteStore, noteID, userID string) NoteUnread
 		return ""
 	}
 	return *n.Unread
+}
+
+// inTx runs write in a committed transaction on store.
+func inTx(ctx context.Context, store *noteStore, write func(tx *sql.Tx) error) error {
+	tx, err := store.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err = write(tx); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // TestNoteUnreadState covers the noteUnreadExpr rule and the writers that feed
@@ -126,6 +142,50 @@ func TestNoteUnreadState(t *testing.T) {
 		_, err = store.MarkViewed(ctx, note.ID, ownerID, openedOffline)
 		require.NoError(t, err)
 		assert.Empty(t, unreadFor(t, store, note.ID, ownerID), "an older view does not undo a newer one")
+
+		// A write that captured an older now and commits after a newer one
+		// (two concurrent writes) never moves content_changed_at backward or
+		// takes over content_changed_by, so a collaborator who viewed the note
+		// between the two still sees the newer change.
+		const viewerID = "user00000000000000viewer"
+		_, err = store.db.ExecContext(ctx,
+			store.d.RewritePlaceholders(`INSERT INTO users (id, username, password_hash) VALUES (?, ?, ?)`),
+			viewerID, "viewer", "x")
+		require.NoError(t, err)
+		require.NoError(t, store.ShareNote(ctx, note.ID, ownerID, viewerID))
+		base := Now()
+		stale := Timestamp(base.Add(-2 * time.Minute))
+		_, err = store.MarkViewed(ctx, note.ID, viewerID, base.Add(-time.Minute))
+		require.NoError(t, err)
+		content = "newer edit by collab"
+		require.NoError(t, store.Update(ctx, note.ID, collabID, nil, &content, nil, nil, nil, nil, nil))
+		require.Equal(t, NoteUnreadUpdated, unreadFor(t, store, note.ID, viewerID))
+		current, err := store.GetByID(ctx, note.ID, ownerID)
+		require.NoError(t, err)
+		staleWriters := map[string]func(tx *sql.Tx) error{
+			"touchNoteTx": func(tx *sql.Tx) error {
+				return touchNoteTx(ctx, tx, store.d, note.ID, ownerID, stale)
+			},
+			"changeNoteContentTx": func(tx *sql.Tx) error {
+				return store.changeNoteContentTx(ctx, tx, note.ID, ownerID, "stale title", "stale content", nil, stale)
+			},
+			"convertNoteRowTx": func(tx *sql.Tx) error {
+				_, convErr := store.convertNoteRowTx(ctx, tx, note.ID, ownerID, current.NoteType, "stale title", "stale content", nil, nil, stale)
+				return convErr
+			},
+			"recordContentChangeTx": func(tx *sql.Tx) error {
+				return recordContentChangeTx(ctx, tx, store.d, note.ID, ownerID, stale)
+			},
+		}
+		for name, write := range staleWriters {
+			require.NoError(t, inTx(ctx, store, write), name)
+			var by string
+			require.NoError(t, store.db.QueryRowContext(ctx,
+				store.d.RewritePlaceholders(`SELECT content_changed_by FROM notes WHERE id = ?`), note.ID).Scan(&by), name)
+			assert.Equal(t, collabID, by, "%s: the newer write's actor is kept", name)
+			assert.Equal(t, NoteUnreadUpdated, unreadFor(t, store, note.ID, viewerID), "%s: the newer change stays unread for the viewer", name)
+			assert.Equal(t, NoteUnreadUpdated, unreadFor(t, store, note.ID, ownerID), "%s: the stale writer still sees the newer change", name)
+		}
 
 		// A trashed note never shows a badge: the bin cannot clear one.
 		_, err = store.db.ExecContext(ctx, store.d.RewritePlaceholders(`UPDATE notes SET deleted_at = ? WHERE id = ?`), Timestamp(Now()), note.ID)
