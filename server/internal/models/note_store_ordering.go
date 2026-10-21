@@ -17,7 +17,7 @@ import (
 func touchNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, actorID, now string) error {
 	if _, err := tx.ExecContext(ctx,
 		d.RewritePlaceholders(`UPDATE notes SET updated_at = ?, `+contentChangedSet+` WHERE id = ?`),
-		append(append([]any{now}, contentChangedArgs(now, actorID)...), noteID)...,
+		append(appendContentChangedArgs([]any{now}, now, actorID), noteID)...,
 	); err != nil {
 		return fmt.Errorf("failed to touch note: %w", err)
 	}

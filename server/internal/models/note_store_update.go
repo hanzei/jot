@@ -108,7 +108,7 @@ func (s *noteStore) changeNoteContentTx(ctx context.Context, tx *sql.Tx, id, use
 // success, reported as applied == false), otherwise ErrNoteVersionConflict.
 func (s *noteStore) updateNoteContentTx(ctx context.Context, tx *sql.Tx, id, actorID, title, content string, baseVersion *int, now string) (applied bool, err error) {
 	query := `UPDATE notes SET title = ?, content = ?, version = version + 1, updated_at = ?, ` + contentChangedSet + ` WHERE id = ?`
-	args := append(append([]any{title, content, now}, contentChangedArgs(now, actorID)...), id)
+	args := append(appendContentChangedArgs([]any{title, content, now}, now, actorID), id)
 	if baseVersion != nil {
 		query += ` AND version = ?`
 		args = append(args, *baseVersion)
@@ -215,7 +215,7 @@ func (s *noteStore) convertNoteRowTx(ctx context.Context, tx *sql.Tx, id, actorI
 	// deleted_at IS NULL guards against a concurrent trash landing between the
 	// HasAccess check in ConvertType and this UPDATE.
 	query := `UPDATE notes SET title = ?, content = ?, note_type = ?, version = version + 1, updated_at = ?, ` + contentChangedSet + ` WHERE id = ? AND deleted_at IS NULL`
-	args := append(append([]any{title, content, targetType, now}, contentChangedArgs(now, actorID)...), id)
+	args := append(appendContentChangedArgs([]any{title, content, targetType, now}, now, actorID), id)
 	if baseVersion != nil {
 		query += ` AND version = ?`
 		args = append(args, *baseVersion)
