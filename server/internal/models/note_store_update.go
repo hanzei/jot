@@ -107,8 +107,8 @@ func (s *noteStore) changeNoteContentTx(ctx context.Context, tx *sql.Tx, id, use
 // the current title/content: if they already match the requested values it returns nil (idempotent
 // success, reported as applied == false), otherwise ErrNoteVersionConflict.
 func (s *noteStore) updateNoteContentTx(ctx context.Context, tx *sql.Tx, id, actorID, title, content string, baseVersion *int, now string) (applied bool, err error) {
-	query := `UPDATE notes SET title = ?, content = ?, version = version + 1, updated_at = ?, content_changed_at = ?, content_changed_by = ? WHERE id = ?`
-	args := []any{title, content, now, now, actorID, id}
+	query := `UPDATE notes SET title = ?, content = ?, version = version + 1, updated_at = ?, ` + contentChangedSet + ` WHERE id = ?`
+	args := append(appendContentChangedArgs([]any{title, content, now}, now, actorID), id)
 	if baseVersion != nil {
 		query += ` AND version = ?`
 		args = append(args, *baseVersion)
@@ -214,8 +214,8 @@ func (s *noteStore) ConvertType(ctx context.Context, id, userID string, targetTy
 func (s *noteStore) convertNoteRowTx(ctx context.Context, tx *sql.Tx, id, actorID string, targetType NoteType, title, content string, targetItems []NewNoteItem, baseVersion *int, now string) (alreadyApplied bool, err error) {
 	// deleted_at IS NULL guards against a concurrent trash landing between the
 	// HasAccess check in ConvertType and this UPDATE.
-	query := `UPDATE notes SET title = ?, content = ?, note_type = ?, version = version + 1, updated_at = ?, content_changed_at = ?, content_changed_by = ? WHERE id = ? AND deleted_at IS NULL`
-	args := []any{title, content, targetType, now, now, actorID, id}
+	query := `UPDATE notes SET title = ?, content = ?, note_type = ?, version = version + 1, updated_at = ?, ` + contentChangedSet + ` WHERE id = ? AND deleted_at IS NULL`
+	args := append(appendContentChangedArgs([]any{title, content, targetType, now}, now, actorID), id)
 	if baseVersion != nil {
 		query += ` AND version = ?`
 		args = append(args, *baseVersion)
