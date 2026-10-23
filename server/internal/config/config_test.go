@@ -154,6 +154,52 @@ func TestLoadDBDriver(t *testing.T) {
 	}
 }
 
+func TestLoadLogSettings(t *testing.T) {
+	t.Setenv("JOT_STATIC_DIR", "/tmp/static")
+
+	t.Run("defaults", func(t *testing.T) {
+		t.Setenv("JOT_LOG_LEVEL", "")
+		t.Setenv("JOT_LOG_FORMAT", "")
+		cfg, err := Load()
+		require.NoError(t, err)
+		assert.Equal(t, "info", cfg.LogLevel)
+		assert.Equal(t, "text", cfg.LogFormat)
+	})
+
+	for _, level := range []string{"debug", "info", "warn", "error"} {
+		t.Run("level "+level, func(t *testing.T) {
+			t.Setenv("JOT_LOG_LEVEL", level)
+			cfg, err := Load()
+			require.NoError(t, err)
+			assert.Equal(t, level, cfg.LogLevel)
+		})
+	}
+
+	for _, format := range []string{"text", "json"} {
+		t.Run("format "+format, func(t *testing.T) {
+			t.Setenv("JOT_LOG_FORMAT", format)
+			cfg, err := Load()
+			require.NoError(t, err)
+			assert.Equal(t, format, cfg.LogFormat)
+		})
+	}
+
+	for _, tc := range []struct{ name, value string }{
+		{"JOT_LOG_LEVEL", "trace"},
+		{"JOT_LOG_LEVEL", "warning"},
+		{"JOT_LOG_LEVEL", "DEBUG"},
+		{"JOT_LOG_FORMAT", "logfmt"},
+		{"JOT_LOG_FORMAT", "JSON"},
+	} {
+		t.Run("invalid "+tc.name+"="+tc.value, func(t *testing.T) {
+			t.Setenv(tc.name, tc.value)
+			_, err := Load()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "invalid "+tc.name+" value")
+		})
+	}
+}
+
 func TestLoadStaticDirDefault(t *testing.T) {
 	t.Setenv("JOT_PORT", "")
 	t.Setenv("JOT_DB_DSN", "")
