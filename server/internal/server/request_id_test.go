@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hanzei/jot/server/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,16 +16,7 @@ import (
 func TestRequestIDHeader(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	cfg := &config.Config{
-		DBDriver:          "sqlite",
-		DBDSN:             tmpDir + "/test.db",
-		StaticDir:         tmpDir,
-		UploadDir:         tmpDir + "/uploads",
-		UploadMaxBytes:    25 << 20,
-		PasswordMinLength: 10,
-		LocalLoginEnabled: true,
-	}
+	cfg := newTestConfig(t)
 	log, hook := newCapturingLogger()
 	s, err := NewWithLogger(cfg, log)
 	require.NoError(t, err)
@@ -39,25 +29,24 @@ func TestRequestIDHeader(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		method   string
 		path     string
 		incoming string
 		status   int
 		want     string // "" means a generated ID is expected
 	}{
-		{name: "success", method: http.MethodGet, path: "/api/v1/config", status: http.StatusOK},
-		{name: "api error", method: http.MethodGet, path: "/api/v1/notes", status: http.StatusUnauthorized},
-		{name: "unknown route", method: http.MethodGet, path: "/api/v1/nope", status: http.StatusNotFound},
-		{name: "health probe", method: http.MethodGet, path: "/livez", status: http.StatusOK},
-		{name: "valid incoming id is kept", method: http.MethodGet, path: "/api/v1/config", incoming: "client-abc_1.2", status: http.StatusOK, want: "client-abc_1.2"},
-		{name: "incoming id with bad characters is replaced", method: http.MethodGet, path: "/api/v1/config", incoming: "bad id\tvalue", status: http.StatusOK},
-		{name: "overlong incoming id is replaced", method: http.MethodGet, path: "/api/v1/config", incoming: strings.Repeat("a", maxRequestIDLen+1), status: http.StatusOK},
-		{name: "incoming id at the length cap is kept", method: http.MethodGet, path: "/api/v1/config", incoming: strings.Repeat("a", maxRequestIDLen), status: http.StatusOK, want: strings.Repeat("a", maxRequestIDLen)},
+		{name: "success", path: "/api/v1/config", status: http.StatusOK},
+		{name: "api error", path: "/api/v1/notes", status: http.StatusUnauthorized},
+		{name: "unknown route", path: "/api/v1/nope", status: http.StatusNotFound},
+		{name: "health probe", path: "/livez", status: http.StatusOK},
+		{name: "valid incoming id is kept", path: "/api/v1/config", incoming: "client-abc_1.2", status: http.StatusOK, want: "client-abc_1.2"},
+		{name: "incoming id with bad characters is replaced", path: "/api/v1/config", incoming: "bad id\tvalue", status: http.StatusOK},
+		{name: "overlong incoming id is replaced", path: "/api/v1/config", incoming: strings.Repeat("a", maxRequestIDLen+1), status: http.StatusOK},
+		{name: "incoming id at the length cap is kept", path: "/api/v1/config", incoming: strings.Repeat("a", maxRequestIDLen), status: http.StatusOK, want: strings.Repeat("a", maxRequestIDLen)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			hook.Reset()
-			req := httptest.NewRequestWithContext(t.Context(), tt.method, tt.path, nil)
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, tt.path, nil)
 			if tt.incoming != "" {
 				req.Header.Set(requestIDHeader, tt.incoming)
 			}

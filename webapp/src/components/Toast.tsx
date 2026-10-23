@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { X, CircleCheck, TriangleAlert, Info } from 'lucide-react';
 import { serverErrorRequestId } from '@jot/shared';
 import { useTranslation } from 'react-i18next';
+import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import { ToastContext, type ToastAction, type ToastType } from '@/hooks/useToast';
 import {
   TOAST_ACTION_AUTO_DISMISS_MS,
@@ -23,16 +24,19 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const nextId = useRef(0);
 
-  const showToast = useCallback((message: string, type: ToastType = 'success', action?: ToastAction) => {
+  const addToast = useCallback((toast: Omit<ToastMessage, 'id'>) => {
     const id = nextId.current++;
-    setToasts(prev => [...prev, { id, message, type, ...(action !== undefined && { action }) }]);
+    setToasts(prev => [...prev, { id, ...toast }]);
   }, []);
 
+  const showToast = useCallback((message: string, type: ToastType = 'success', action?: ToastAction) => {
+    addToast({ message, type, ...(action !== undefined && { action }) });
+  }, [addToast]);
+
   const showErrorToast = useCallback((message: string, error: unknown) => {
-    const id = nextId.current++;
     const reference = serverErrorRequestId(error);
-    setToasts(prev => [...prev, { id, message, type: 'error', ...(reference !== null && { reference }) }]);
-  }, []);
+    addToast({ message, type: 'error', ...(reference !== null && { reference }) });
+  }, [addToast]);
 
   const dismiss = useCallback((id: number) => {
     setToasts(prev => prev.filter(t => t.id !== id));
@@ -171,30 +175,12 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
 // paste it into a bug report.
 function ToastReference({ reference }: { reference: string }) {
   const { t } = useTranslation();
-  const [copied, setCopied] = useState(false);
-  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => () => {
-    if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
-  }, []);
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(reference);
-    } catch {
-      // No clipboard access (e.g. an insecure origin); the reference stays
-      // selectable text.
-      return;
-    }
-    setCopied(true);
-    if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
-    resetTimerRef.current = setTimeout(() => setCopied(false), 2000);
-  };
+  const { copied, copy } = useCopyToClipboard();
 
   return (
     <button
       type="button"
-      onClick={() => void handleCopy()}
+      onClick={() => void copy(reference)}
       title={t('toast.copyReference')}
       aria-label={t('toast.copyReferenceLabel', { id: reference })}
       data-testid="toast-reference"

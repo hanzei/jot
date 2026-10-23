@@ -21,14 +21,17 @@ export function parseApiErrorBody(data: unknown): ApiErrorDetail | null {
  * Structural rather than tied to axios, so @jot/shared needs no dependency.
  */
 export function parseApiError(err: unknown): ApiErrorDetail | null {
-  if (typeof err !== 'object' || err === null) return null;
-  const response = (err as { response?: unknown }).response;
-  if (typeof response !== 'object' || response === null) return null;
-  return parseApiErrorBody((response as { data?: unknown }).data);
+  return parseApiErrorBody(responseOf(err)?.data);
 }
 
-/** Response header carrying the server's ID for the request. */
-export const REQUEST_ID_HEADER = 'X-Request-Id';
+const REQUEST_ID_HEADER = 'X-Request-Id';
+
+/** The `response` of an axios-shaped error, or null when it has none. */
+function responseOf(err: unknown): { status?: unknown; headers?: unknown; data?: unknown } | null {
+  if (typeof err !== 'object' || err === null) return null;
+  const response = (err as { response?: unknown }).response;
+  return typeof response === 'object' && response !== null ? response : null;
+}
 
 /**
  * Reads a header from an axios-shaped headers object: an AxiosHeaders instance
@@ -50,10 +53,7 @@ function readHeader(headers: unknown, name: string): string | null {
  * an operator find the matching server log line and trace.
  */
 export function apiRequestId(err: unknown): string | null {
-  if (typeof err !== 'object' || err === null) return null;
-  const response = (err as { response?: unknown }).response;
-  if (typeof response !== 'object' || response === null) return null;
-  return readHeader((response as { headers?: unknown }).headers, REQUEST_ID_HEADER);
+  return readHeader(responseOf(err)?.headers, REQUEST_ID_HEADER);
 }
 
 /**
@@ -62,10 +62,13 @@ export function apiRequestId(err: unknown): string | null {
  * with a reference; a 4xx is the client's own mistake and its message says so.
  */
 export function serverErrorRequestId(err: unknown): string | null {
-  if (typeof err !== 'object' || err === null) return null;
-  const status = (err as { response?: { status?: unknown } }).response?.status;
-  if (typeof status !== 'number' || status < 500) return null;
-  return apiRequestId(err);
+  return isServerError(err) ? apiRequestId(err) : null;
+}
+
+/** Whether a failed API request got a 5xx answer from the server. */
+export function isServerError(err: unknown): boolean {
+  const status = responseOf(err)?.status;
+  return typeof status === 'number' && status >= 500;
 }
 
 /** The error envelope's code for a failed API request, or null. */

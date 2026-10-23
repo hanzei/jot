@@ -337,46 +337,39 @@ describe('API Client', () => {
       return responseUse.mock.calls[0]?.[1] as (error: unknown) => Promise<unknown>;
     };
 
-    it('logs a failed request with the server request ID', async () => {
-      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
-      try {
-        await expect(getResponseErrorHandler()({
-          response: { status: 500, headers: { 'x-request-id': 'abc123' } },
-          config: { method: 'patch', url: '/notes/n1' },
-        })).rejects.toBeDefined();
-
-        expect(warn).toHaveBeenCalledWith('API PATCH /notes/n1 failed with 500 (request ID abc123)');
-      } finally {
-        warn.mockRestore();
-      }
+    let warn: jest.SpyInstance;
+    beforeEach(() => {
+      warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+    afterEach(() => {
+      warn.mockRestore();
     });
 
-    it('logs a failed request without a request ID as none', async () => {
-      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
-      try {
-        await expect(getResponseErrorHandler()({
-          response: { status: 404, headers: {} },
-          config: { method: 'get', url: '/notes/n1' },
-        })).rejects.toBeDefined();
+    it('logs a server error with the server request ID', async () => {
+      await expect(getResponseErrorHandler()({
+        response: { status: 500, headers: { 'x-request-id': 'abc123' } },
+        config: { method: 'patch', url: '/notes/n1' },
+      })).rejects.toBeDefined();
 
-        expect(warn).toHaveBeenCalledWith('API GET /notes/n1 failed with 404 (request ID none)');
-      } finally {
-        warn.mockRestore();
-      }
+      expect(warn).toHaveBeenCalledWith('API PATCH /notes/n1 failed with 500 (request ID abc123)');
     });
 
-    it('does not log a request that got no response', async () => {
-      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
-      try {
-        await expect(getResponseErrorHandler()({
-          message: 'Network Error',
-          config: { method: 'get', url: '/notes' },
-        })).rejects.toBeDefined();
+    it('logs a server error without a request ID as none', async () => {
+      await expect(getResponseErrorHandler()({
+        response: { status: 502, headers: {} },
+        config: { method: 'get', url: '/notes/n1' },
+      })).rejects.toBeDefined();
 
-        expect(warn).not.toHaveBeenCalled();
-      } finally {
-        warn.mockRestore();
-      }
+      expect(warn).toHaveBeenCalledWith('API GET /notes/n1 failed with 502 (request ID none)');
+    });
+
+    it.each([
+      ['a client error', { response: { status: 404, headers: { 'x-request-id': 'abc123' } } }],
+      ['a request that got no response', { message: 'Network Error' }],
+    ])('does not log %s', async (_label, error) => {
+      await expect(getResponseErrorHandler()({ ...error, config: { method: 'get', url: '/notes' } })).rejects.toBeDefined();
+
+      expect(warn).not.toHaveBeenCalled();
     });
   });
 

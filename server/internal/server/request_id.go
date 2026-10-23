@@ -10,7 +10,8 @@ import (
 )
 
 // requestIDHeader carries the request ID on both the request and the response.
-const requestIDHeader = "X-Request-Id"
+// net/http canonicalizes it, so it goes over the wire as "X-Request-Id".
+const requestIDHeader = "X-Request-ID"
 
 // maxRequestIDLen bounds a client-supplied request ID, which ends up in every
 // log line of its request.
