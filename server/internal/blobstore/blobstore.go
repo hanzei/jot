@@ -8,3 +8,7 @@ import "errors"
 
 // ErrNotFound is returned by Open when no file exists for the given key.
 var ErrNotFound = errors.New("blob not found")
+
+// ErrDiskUsageUnsupported is returned by DiskUsage on platforms without
+// statfs.
+var ErrDiskUsageUnsupported = errors.New("disk usage not supported on this platform")

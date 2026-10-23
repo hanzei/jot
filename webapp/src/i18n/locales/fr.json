@@ -378,6 +378,22 @@
         "databaseSize": "Taille de la base de données",
         "imageCount": "Nombre d'images",
         "imagesSize": "Stockage des images"
+      },
+      "runtime": {
+        "title": "Serveur",
+        "uptime": "Disponibilité",
+        "startedAt": "Démarré",
+        "database": "Base de données",
+        "migrationVersion": "Version du schéma",
+        "migrationDirty": "{{version}} (incohérente)",
+        "liveConnections": "Connexions actives",
+        "activeSessions": "Sessions actives",
+        "uploadFree": "Espace libre pour les envois",
+        "uploadTotal": "Taille du volume",
+        "unavailable": "n/d",
+        "uptimeDays": "{{days}} j {{hours}} h",
+        "uptimeHours": "{{hours}} h {{minutes}} min",
+        "uptimeMinutes": "{{minutes}} min"
       }
     }
   },

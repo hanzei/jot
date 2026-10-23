@@ -190,6 +190,37 @@ test.describe('Admin', () => {
     expect(await adminPage.getDatabaseSizeText()).not.toBe('0 B');
   });
 
+  test('admin stats show server runtime info', async ({ page }) => {
+    const adminPage = new AdminPage(page);
+
+    await ensureAdminSession(page);
+
+    const statsResponse = await page.request.get('/api/v1/admin/stats');
+    await expectOk(statsResponse, 'fetch admin stats');
+    const { runtime } = await statsResponse.json() as {
+      runtime: {
+        database_backend: string;
+        migration_version: number;
+        migration_dirty: boolean;
+        active_sessions: number;
+        upload_volume: { free_bytes: number } | null;
+      };
+    };
+    expect(runtime.migration_version).toBeGreaterThan(0);
+    expect(runtime.migration_dirty).toBe(false);
+    expect(runtime.active_sessions).toBeGreaterThan(0);
+    expect(runtime.upload_volume).not.toBeNull();
+
+    await adminPage.goto();
+    await expect(adminPage.runtimeSection()).toBeVisible();
+    await expect(adminPage.runtimeSection().getByRole('heading', { name: 'Server' })).toBeVisible();
+
+    expect(await adminPage.getRuntimeValue('database-backend')).toBe(runtime.database_backend === 'postgres' ? 'PostgreSQL' : 'SQLite');
+    expect(await adminPage.getRuntimeValue('migration-version')).toBe(String(runtime.migration_version));
+    expect(await adminPage.getRuntimeValue('sse-subscribers')).toMatch(/^\d+$/);
+    expect(await adminPage.getRuntimeValue('upload-free')).not.toBe('n/a');
+  });
+
   test('admin can create, update role, and delete a user', async ({ page }) => {
     const adminPage = new AdminPage(page);
     const managedUsername = uniqueUsername('managed');

@@ -654,6 +654,7 @@ func TestAdminDeleteUserNotes(t *testing.T) {
 func TestAdminStatsEndpoint(t *testing.T) {
 	t.Parallel()
 	var dbPath string
+	before := time.Now().UTC().Truncate(time.Second)
 	ts := setupTestServerWithConfig(t, func(cfg *config.Config) {
 		dbPath = cfg.DBDSN
 	})
@@ -763,6 +764,31 @@ func TestAdminStatsEndpoint(t *testing.T) {
 		assert.Equal(t, int64(len(uniqueImageData)+len(dupImageData)), stats.Storage.ImagesSizeBytes)
 	})
 
+	t.Run("returns runtime info", func(t *testing.T) {
+		sseCtx, cancel := context.WithCancel(t.Context())
+		t.Cleanup(cancel)
+		_, err := member1.Client.SubscribeSSE(sseCtx)
+		require.NoError(t, err)
+
+		stats, err := adminUser.Client.AdminGetStats(t.Context())
+		require.NoError(t, err)
+		rt := stats.Runtime
+
+		assert.Equal(t, "sqlite", rt.DatabaseBackend)
+		assert.Positive(t, rt.MigrationVersion)
+		assert.False(t, rt.MigrationDirty)
+		assert.False(t, rt.StartedAt.Before(before), "started_at %s is before the server was created", rt.StartedAt)
+		assert.False(t, rt.StartedAt.After(time.Now()))
+		assert.GreaterOrEqual(t, rt.UptimeSeconds, int64(0))
+		assert.Equal(t, int64(1), rt.SSESubscribers)
+		// One session per registered user.
+		assert.Equal(t, int64(3), rt.ActiveSessions)
+
+		require.NotNil(t, rt.UploadVolume)
+		assert.Positive(t, rt.UploadVolume.TotalBytes)
+		assert.LessOrEqual(t, rt.UploadVolume.FreeBytes, rt.UploadVolume.TotalBytes)
+	})
+
 	t.Run("returns 403 for non-admin users", func(t *testing.T) {
 		_, err := member1.Client.AdminGetStats(t.Context())
 		assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
@@ -772,6 +798,25 @@ func TestAdminStatsEndpoint(t *testing.T) {
 		_, err := ts.newClient().AdminGetStats(t.Context())
 		assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
 	})
+}
+
+// A SQLite DSN may be a file: URI with query options; the reported size must
+// still be the database file's, not zero from stat-ing the raw DSN.
+func TestAdminStatsDatabaseSizeWithURIDSN(t *testing.T) {
+	t.Parallel()
+	var dbPath string
+	ts := setupTestServerWithConfig(t, func(cfg *config.Config) {
+		dbPath = cfg.DBDSN
+		cfg.DBDSN = "file:" + dbPath + "?_pragma=busy_timeout(5000)"
+	})
+	adminUser := ts.createTestUser(t, "adminuridsn", "password123", true)
+
+	stats, err := adminUser.Client.AdminGetStats(t.Context())
+	require.NoError(t, err)
+
+	fileInfo, err := os.Stat(dbPath)
+	require.NoError(t, err)
+	assert.Equal(t, fileInfo.Size(), stats.Storage.DatabaseSizeBytes)
 }
 
 func TestUpdateUserEndpoint(t *testing.T) {

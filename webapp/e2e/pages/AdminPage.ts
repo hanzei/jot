@@ -37,4 +37,12 @@ export class AdminPage {
   async getDatabaseSizeText() {
     return this.page.getByTestId('admin-stats-database-size').innerText();
   }
+
+  runtimeSection() {
+    return this.page.getByTestId('admin-runtime-section');
+  }
+
+  async getRuntimeValue(testId: string) {
+    return this.page.getByTestId(`admin-stats-${testId}`).innerText();
+  }
 }

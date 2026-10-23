@@ -378,6 +378,22 @@
         "databaseSize": "Tamanho do banco de dados",
         "imageCount": "Quantidade de imagens",
         "imagesSize": "Armazenamento de imagens"
+      },
+      "runtime": {
+        "title": "Servidor",
+        "uptime": "Tempo de atividade",
+        "startedAt": "Iniciado",
+        "database": "Banco de dados",
+        "migrationVersion": "Versão do esquema",
+        "migrationDirty": "{{version}} (inconsistente)",
+        "liveConnections": "Conexões ao vivo",
+        "activeSessions": "Sessões ativas",
+        "uploadFree": "Espaço livre para envios",
+        "uploadTotal": "Tamanho do volume",
+        "unavailable": "n/d",
+        "uptimeDays": "{{days}} d {{hours}} h",
+        "uptimeHours": "{{hours}} h {{minutes}} min",
+        "uptimeMinutes": "{{minutes}} min"
       }
     }
   },

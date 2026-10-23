@@ -378,6 +378,22 @@
         "databaseSize": "Dimensione database",
         "imageCount": "Numero di immagini",
         "imagesSize": "Spazio immagini"
+      },
+      "runtime": {
+        "title": "Server",
+        "uptime": "Tempo di attività",
+        "startedAt": "Avviato",
+        "database": "Database",
+        "migrationVersion": "Versione dello schema",
+        "migrationDirty": "{{version}} (incoerente)",
+        "liveConnections": "Connessioni attive",
+        "activeSessions": "Sessioni attive",
+        "uploadFree": "Spazio libero per i caricamenti",
+        "uploadTotal": "Dimensione del volume",
+        "unavailable": "n/d",
+        "uptimeDays": "{{days}} g {{hours}} h",
+        "uptimeHours": "{{hours}} h {{minutes}} min",
+        "uptimeMinutes": "{{minutes}} min"
       }
     }
   },
