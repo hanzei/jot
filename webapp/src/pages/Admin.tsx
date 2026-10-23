@@ -318,10 +318,10 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
               {(users || []).map((user) => (
                 <li key={user.id} data-testid={`user-row-${user.username}`}>
                   <div className="px-4 py-4 sm:px-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center">
-                        <div>
-                          <div className="flex items-center gap-2">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-center min-w-0">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
                             <p className="text-sm font-medium text-gray-900 dark:text-white">
                               {user.first_name || user.last_name
                                 ? `${user.first_name} ${user.last_name}`.trim()
@@ -339,7 +339,7 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center space-x-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         {user.role === ROLES.ADMIN && (
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300">
                             {t('admin.adminBadge')}
