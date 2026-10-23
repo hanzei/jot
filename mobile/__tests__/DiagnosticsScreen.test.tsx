@@ -5,7 +5,7 @@
  * dead-letter count — all mirrored into the "Share diagnostics" report.
  */
 
-import { render, fireEvent, act } from '@testing-library/react-native';
+import { render, fireEvent, act, waitFor } from '@testing-library/react-native';
 import { Share } from 'react-native';
 import DiagnosticsScreen from '../src/screens/DiagnosticsScreen';
 import { useOfflineContext } from '../src/store/OfflineContext';
@@ -15,6 +15,7 @@ import {
   subscribeToServerReachability,
 } from '../src/api/serverReachability';
 import { getSseState, subscribeToSseState } from '../src/api/sseState';
+import { getAboutInfo } from '../src/api/settings';
 
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ goBack: jest.fn(), navigate: jest.fn() }),
@@ -57,6 +58,19 @@ jest.mock('../src/api/sseState', () => ({
   subscribeToSseState: jest.fn(() => () => {}),
 }));
 
+jest.mock('../src/api/settings', () => ({
+  getAboutInfo: jest.fn(),
+}));
+
+jest.mock('../src/utils/appInfo', () => ({
+  getAppBuildInfo: jest.fn(() => ({
+    version: '1.2.3',
+    commit: 'abc1234',
+    buildTime: '2026-10-01T12:00:00Z',
+  })),
+}));
+
+const mockGetAboutInfo = getAboutInfo as jest.MockedFunction<typeof getAboutInfo>;
 const mockUseOfflineContext = useOfflineContext as jest.MockedFunction<typeof useOfflineContext>;
 const mockIsServerReachable = isServerReachable as jest.MockedFunction<typeof isServerReachable>;
 const mockGetServerReachabilityChangedAt =
@@ -93,6 +107,12 @@ describe('DiagnosticsScreen', () => {
       };
     });
     jest.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction' } as never);
+    mockGetAboutInfo.mockResolvedValue({
+      version: '0.9.0',
+      commit: 'def5678',
+      build_time: '2026-09-30T08:00:00Z',
+      go_version: 'go1.25.0',
+    });
   });
 
   it('shows server reachability distinctly from device connectivity', async () => {
@@ -207,7 +227,66 @@ describe('DiagnosticsScreen', () => {
       }),
     );
   });
+
+  it('includes app and server build info in the share report', async () => {
+    const { findByText } = await renderScreen();
+    const report = await shareReport(findByText);
+
+    expect(mockGetAboutInfo).toHaveBeenCalledTimes(1);
+    expect(report.app).toEqual({
+      version: '1.2.3',
+      commit: 'abc1234',
+      buildTime: '2026-10-01T12:00:00Z',
+    });
+    expect(report.server).toEqual(
+      expect.objectContaining({
+        url: 'https://example.com',
+        version: '0.9.0',
+        commit: 'def5678',
+        build_time: '2026-09-30T08:00:00Z',
+        go_version: 'go1.25.0',
+      }),
+    );
+  });
+
+  it('still shares the report with null server build fields when the about fetch fails', async () => {
+    mockGetAboutInfo.mockRejectedValue(new Error('timeout of 15000ms exceeded'));
+    const { findByText } = await renderScreen();
+    const report = await shareReport(findByText);
+
+    expect(mockGetAboutInfo).toHaveBeenCalledTimes(1);
+    expect(report.app.version).toBe('1.2.3');
+    expect(report.server).toEqual(
+      expect.objectContaining({
+        url: 'https://example.com',
+        version: null,
+        commit: null,
+        build_time: null,
+        go_version: null,
+      }),
+    );
+  });
+
+  it('skips the about fetch when the server is known unreachable', async () => {
+    mockIsServerReachable.mockReturnValue(false);
+    const { findByText } = await renderScreen();
+    const report = await shareReport(findByText);
+
+    expect(mockGetAboutInfo).not.toHaveBeenCalled();
+    expect(report.server).toEqual(
+      expect.objectContaining({ version: null, commit: null, build_time: null, go_version: null }),
+    );
+  });
 });
+
+async function shareReport(findByText: (text: string) => Promise<unknown>) {
+  await act(async () => {
+    await fireEvent.press((await findByText('Share Diagnostics Report')) as never);
+  });
+  await waitFor(() => expect(Share.share).toHaveBeenCalledTimes(1));
+  const [{ message }] = (Share.share as jest.Mock).mock.calls[0];
+  return JSON.parse(message);
+}
 
 async function renderScreen() {
   const utils = await render(<DiagnosticsScreen />);

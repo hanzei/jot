@@ -5,6 +5,8 @@ import type { SyncQueueStats } from '../db/syncQueue';
 import { isServerReachable, getServerReachabilityChangedAt } from '../api/serverReachability';
 import { getPersistedLogs } from './logger';
 import { getAppBuildInfo } from './appInfo';
+import { getAboutInfo } from '../api/settings';
+import type { AboutInfo } from '@jot/shared';
 
 /** Cap on log entries embedded in a shared diagnostics report, to keep the payload shareable. */
 const SHARED_REPORT_LOG_LIMIT = 500;
@@ -40,7 +42,7 @@ export interface DiagnosticsReportInput {
  * state (lifecycle, SSE, reachability, logs) is read here, so a caller outside
  * the provider tree only has to supply what it can.
  */
-function buildDiagnosticsReport(input: DiagnosticsReportInput) {
+function buildDiagnosticsReport(input: DiagnosticsReportInput, serverBuild: AboutInfo | null) {
   const lifecycle = getServerSwitchLifecycleState();
   const sse = getSseState();
   const { sync } = input;
@@ -48,12 +50,19 @@ function buildDiagnosticsReport(input: DiagnosticsReportInput) {
   return {
     generatedAt: new Date().toISOString(),
     platform: Platform.OS,
-    appVersion: build.version,
-    appCommit: build.commit ?? null,
+    app: {
+      version: build.version,
+      commit: build.commit ?? null,
+      buildTime: build.buildTime ?? null,
+    },
     ...(input.crash ? { crash: input.crash } : {}),
     server: {
       url: input.serverUrl,
       generationId: lifecycle.generationId,
+      version: serverBuild?.version ?? null,
+      commit: serverBuild?.commit ?? null,
+      build_time: serverBuild?.build_time ?? null,
+      go_version: serverBuild?.go_version ?? null,
     },
     network: {
       isConnected: input.isConnected,
@@ -89,5 +98,18 @@ function buildDiagnosticsReport(input: DiagnosticsReportInput) {
 }
 
 export async function shareDiagnosticsReport(input: DiagnosticsReportInput): Promise<void> {
-  await Share.share({ message: JSON.stringify(buildDiagnosticsReport(input), null, 2) });
+  // Server build info lets a maintainer spot app/server version skew without
+  // asking for it. It is best-effort: the default (finite) read timeout bounds
+  // the wait, a device known offline or a server already believed unreachable
+  // is not tried at all, and any failure just leaves the fields null so the
+  // report still goes out.
+  let serverBuild: AboutInfo | null = null;
+  if (input.isConnected !== false && isServerReachable()) {
+    try {
+      serverBuild = await getAboutInfo();
+    } catch {
+      serverBuild = null;
+    }
+  }
+  await Share.share({ message: JSON.stringify(buildDiagnosticsReport(input, serverBuild), null, 2) });
 }

@@ -5,7 +5,7 @@
  * keeps the rest of the app usable.
  */
 
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { Share } from 'react-native';
 import ErrorBoundary from '../src/components/ErrorBoundary';
 import CrashScreen from '../src/components/CrashScreen';
@@ -19,6 +19,10 @@ const mockCanGoBack = jest.fn(() => true);
 
 jest.mock('../src/theme/ThemeContext', () => ({
   useTheme: () => ({ colors: jest.requireActual('../src/theme/colors').lightColors, isDark: false }),
+}));
+
+jest.mock('../src/api/settings', () => ({
+  getAboutInfo: jest.fn(() => Promise.resolve({ version: '0.9.0', commit: 'def5678', build_time: '2026-09-30T08:00:00Z', go_version: 'go1.25.0' })),
 }));
 
 jest.mock('../src/api/client', () => ({
@@ -92,7 +96,8 @@ describe('root error boundary', () => {
 
     await fireEvent.press(await findByTestId('crash-screen-share-diagnostics'));
 
-    expect(Share.share).toHaveBeenCalledTimes(1);
+    // Sharing waits on the best-effort server build info fetch first.
+    await waitFor(() => expect(Share.share).toHaveBeenCalledTimes(1));
     const [{ message }] = (Share.share as jest.Mock).mock.calls[0];
     const report = JSON.parse(message);
     expect(report.crash.name).toBe('Error');
@@ -100,7 +105,8 @@ describe('root error boundary', () => {
     expect(report.crash.stack).toContain('render exploded');
     expect(report.crash.componentStack).toContain('Thrower');
     expect(report.server.url).toBe('https://jot.example.com');
-    expect(report.appVersion).toEqual(expect.any(String));
+    expect(report.app.version).toEqual(expect.any(String));
+    expect(report.server.version).toBe('0.9.0');
     // No database outside the provider tree, so sync counts are unknown rather than zero.
     expect(report.sync.pendingQueueCount).toBeNull();
     expect(report.sync.headAttempts).toBeNull();
