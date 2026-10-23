@@ -947,19 +947,27 @@ func (s *Server) startPeriodicTask(ctx context.Context, job string, interval tim
 		// Set for the goroutine's whole life, not just around fn: a stuck task
 		// is found parked on the ticker.
 		pprof.SetGoroutineLabels(pprof.WithLabels(ctx, pprof.Labels("job", job)))
-		if runNow {
-			if err := fn(); err != nil {
-				s.log.WithError(err).Errorf("Failed to %s", logMsg)
+		log := s.log.WithField("job", job)
+		run := func() {
+			start := time.Now() //nolint:gocritic // elapsed task time, never persisted; a duration has no time zone
+			log.Debug("Periodic task started")
+			err := fn()
+			done := log.WithField("duration", time.Since(start).String())
+			if err != nil {
+				done.WithError(err).Errorf("Failed to %s", logMsg)
+				return
 			}
+			done.Debug("Periodic task finished")
+		}
+		if runNow {
+			run()
 		}
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
-				if err := fn(); err != nil {
-					s.log.WithError(err).Errorf("Failed to %s", logMsg)
-				}
+				run()
 			case <-ctx.Done():
 				return
 			}

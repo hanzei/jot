@@ -29,6 +29,7 @@ func (s *SessionService) AuthMiddleware(next http.Handler) http.Handler {
 		if cookie, err := r.Cookie(SessionCookieName); err == nil {
 			session, user, err := s.GetSessionAndUser(r)
 			if err != nil {
+				logSessionRejection(r.Context(), err)
 				apierr.Write(w, r, http.StatusUnauthorized, apierr.CodeUnauthorized, "unauthorized")
 				return
 			}
@@ -50,9 +51,7 @@ func (s *SessionService) AuthMiddleware(next http.Handler) http.Handler {
 			rawToken := strings.TrimPrefix(authHeader, "Bearer ")
 			user, err := s.authenticateWithPAT(r.Context(), rawToken)
 			if err != nil {
-				if !errors.Is(err, models.ErrPATNotFound) {
-					logutil.FromContext(r.Context()).WithError(err).Warn("PAT authentication error")
-				}
+				logPATRejection(r.Context(), err)
 				apierr.Write(w, r, http.StatusUnauthorized, apierr.CodeUnauthorized, "unauthorized")
 				return
 			}
@@ -65,8 +64,29 @@ func (s *SessionService) AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
+		logutil.FromContext(r.Context()).Debug("Auth rejected: no session cookie or bearer token")
 		apierr.Write(w, r, http.StatusUnauthorized, apierr.CodeUnauthorized, "unauthorized")
 	})
+}
+
+// logSessionRejection records why a session cookie was rejected. It is a
+// debug line: an expired cookie is routine, not an operator concern.
+func logSessionRejection(ctx context.Context, err error) {
+	reason := "session lookup failed"
+	if errors.Is(err, models.ErrSessionNotFoundOrExpired) {
+		reason = "session not found or expired"
+	}
+	logutil.FromContext(ctx).WithError(err).Debugf("Auth rejected: %s", reason)
+}
+
+// logPATRejection records why a bearer token was rejected. An unknown or
+// revoked token is routine (debug); anything else is a server-side failure.
+func logPATRejection(ctx context.Context, err error) {
+	if errors.Is(err, models.ErrPATNotFound) {
+		logutil.FromContext(ctx).Debug("Auth rejected: personal access token not found or revoked")
+		return
+	}
+	logutil.FromContext(ctx).WithError(err).Warn("PAT authentication error")
 }
 
 func (s *SessionService) authenticateWithPAT(ctx context.Context, rawToken string) (_ *models.User, err error) {
@@ -104,6 +124,7 @@ func SessionRequired(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, ok := GetSessionTokenHashFromContext(r.Context())
 		if !ok {
+			logutil.FromContext(r.Context()).Debug("Auth rejected: endpoint requires a session, not a personal access token")
 			apierr.Write(w, r, http.StatusForbidden, apierr.CodeSessionRequired, "session authentication required")
 			return
 		}
@@ -120,6 +141,7 @@ func AdminRequired(next http.Handler) http.Handler {
 		}
 
 		if user.Role != models.RoleAdmin {
+			logutil.FromContext(r.Context()).WithField("role", user.Role).Debug("Auth rejected: admin role required")
 			apierr.Write(w, r, http.StatusForbidden, apierr.CodeForbidden, "admin required")
 			return
 		}

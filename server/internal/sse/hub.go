@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/hanzei/jot/server/internal/logutil"
+	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -129,6 +130,10 @@ func (h *Hub) Subscribe(ctx context.Context, userID string) (<-chan Event, func(
 	h.mu.Unlock()
 
 	h.subscribersActive.Add(ctx, 1)
+	// Captured now: the request context is already canceled by the time
+	// unsubscribe runs, but its logger (with request_id) is still useful.
+	log := logutil.FromContext(ctx).WithFields(logrus.Fields{"user_id": userID, "client_id": ClientIDFromContext(ctx)})
+	log.Debug("SSE: subscribed")
 
 	unsubscribe := func() { //nolint:contextcheck // request ctx is already canceled when unsubscribe runs
 		h.mu.Lock()
@@ -150,6 +155,7 @@ func (h *Hub) Subscribe(ctx context.Context, userID string) (<-chan Event, func(
 		}
 		close(ch)
 		h.subscribersActive.Add(context.Background(), -1)
+		log.Debug("SSE: unsubscribed")
 	}
 
 	return ch, unsubscribe
@@ -189,6 +195,7 @@ func (h *Hub) Publish(ctx context.Context, userIDs []string, event Event) {
 
 	eventAttr := attribute.String("event.type", string(event.Type))
 
+	delivered := 0
 	seen := make(map[string]struct{}, len(userIDs))
 	for _, uid := range userIDs {
 		if _, ok := seen[uid]; ok {
@@ -198,6 +205,7 @@ func (h *Hub) Publish(ctx context.Context, userIDs []string, event Event) {
 		for _, ch := range h.clients[uid] {
 			select {
 			case ch <- event:
+				delivered++
 				h.eventsPublished.Add(ctx, 1, metric.WithAttributes(eventAttr))
 			default:
 				logutil.FromContext(ctx).WithField("type", string(event.Type)).WithField("user_id", uid).Warn("SSE: dropping event, channel full")
@@ -205,4 +213,9 @@ func (h *Hub) Publish(ctx context.Context, userIDs []string, event Event) {
 			}
 		}
 	}
+	logutil.FromContext(ctx).WithFields(logrus.Fields{
+		"type":       string(event.Type),
+		"users":      len(seen),
+		"recipients": delivered,
+	}).Debug("SSE: published event")
 }

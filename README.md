@@ -429,6 +429,8 @@ accordingly.
 
 | Variable | Default | Description |
 | --- | --- | --- |
+| `JOT_LOG_LEVEL` | `info` | Server log level: `debug`, `info`, `warn`, or `error`. `debug` adds detail on auth rejections, SSE subscriptions and fan-out, image blob reclaim decisions, and periodic background tasks. |
+| `JOT_LOG_FORMAT` | `text` | Server log format: `text` (logrus key=value) or `json` (one JSON object per line, for Loki, ELK and similar). Request lines carry `request_id`, plus `trace_id`/`span_id` when tracing is enabled. |
 | `JOT_METRICS_ENABLED` | `false` | Enables the separate Prometheus metrics HTTP server. |
 | `JOT_METRICS_HOST` | `127.0.0.1` | Bind host for the metrics server. |
 | `JOT_METRICS_PORT` | `8081` | Bind port for the metrics server. |

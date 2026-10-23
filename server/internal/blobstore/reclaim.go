@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	"github.com/hanzei/jot/server/internal/logutil"
 )
 
 // RefCounter reports how many rows still reference a content hash. Satisfied
@@ -31,7 +33,9 @@ func reclaimIfOrphaned(ctx context.Context, refCounter RefCounter, store *ImageS
 	// Held across the pin check, refcount query and delete: see Pin.
 	store.reclaimMu.Lock()
 	defer store.reclaimMu.Unlock()
+	log := logutil.FromContext(ctx).WithField("sha256", sha)
 	if store.pins[strings.ToLower(sha)] > 0 {
+		log.Debug("Blob reclaim: kept, pinned by an in-flight upload")
 		return false, nil // an in-flight upload is about to reference it
 	}
 	count, err := refCounter.GetNoteImageRefCount(ctx, sha)
@@ -39,10 +43,12 @@ func reclaimIfOrphaned(ctx context.Context, refCounter RefCounter, store *ImageS
 		return false, fmt.Errorf("get note image refcount: %w", err)
 	}
 	if count > 0 {
+		log.WithField("refs", count).Debug("Blob reclaim: kept, still referenced")
 		return false, nil
 	}
 	if err := store.Delete(ctx, sha); err != nil {
 		return false, fmt.Errorf("reclaim %s: %w", sha, err)
 	}
+	log.Debug("Blob reclaim: deleted orphaned blob")
 	return true, nil
 }
