@@ -30,10 +30,10 @@ import {
   subscribeToServerReachability,
 } from '../api/serverReachability';
 import { useOfflineContext } from '../store/OfflineContext';
+import { getAboutInfo } from '../api/settings';
 import { getLogs, getPersistedLogs, clearLogs, type LogEntry } from '../utils/logger';
-import appConfig from '../../app.json';
-
-const APP_VERSION: string = appConfig.expo.version;
+import { getAppBuildInfo } from '../utils/appInfo';
+import type { AboutInfo } from '@jot/shared';
 
 /** Cap on log entries embedded in a shared diagnostics report, to keep the payload shareable. */
 const SHARED_REPORT_LOG_LIMIT = 500;
@@ -146,13 +146,34 @@ export default function DiagnosticsScreen() {
   }, []);
 
   const handleShare = useCallback(async () => {
+    const appBuildInfo = getAppBuildInfo();
+    // Server build info lets a maintainer spot app/server version skew without
+    // asking for it. It is best-effort: the default (finite) read timeout bounds
+    // the wait, a server already believed unreachable is not tried at all, and
+    // any failure just leaves the fields null so the report still goes out.
+    let serverBuild: AboutInfo | null = null;
+    if (snapshot.isConnected && isServerReachable()) {
+      try {
+        serverBuild = await getAboutInfo();
+      } catch {
+        serverBuild = null;
+      }
+    }
     const report = {
       generatedAt: new Date().toISOString(),
       platform: Platform.OS,
-      appVersion: APP_VERSION,
+      app: {
+        version: appBuildInfo.version,
+        commit: appBuildInfo.commit ?? null,
+        buildTime: appBuildInfo.buildTime ?? null,
+      },
       server: {
         url: snapshot.serverUrl,
         generationId: snapshot.lifecycle.generationId,
+        version: serverBuild?.version ?? null,
+        commit: serverBuild?.commit ?? null,
+        build_time: serverBuild?.build_time ?? null,
+        go_version: serverBuild?.go_version ?? null,
       },
       network: {
         isConnected: snapshot.isConnected,
