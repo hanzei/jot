@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import i18n from '@/i18n';
 import { buildErrorDetails } from '@/utils/errorDetails';
+import { about } from '@/utils/api';
 import type { ErrorBoundaryFallbackProps } from '@/components/ErrorBoundary';
 
 interface ErrorFallbackProps extends ErrorBoundaryFallbackProps {
@@ -13,21 +14,23 @@ interface ErrorFallbackProps extends ErrorBoundaryFallbackProps {
 
 type CopyStatus = 'idle' | 'copied' | 'failed';
 
+// Fetched at most once per page load, however often a fallback mounts.
+let serverVersion: Promise<string> | null = null;
+
 /**
- * Best-effort server version for the copied details. Plain fetch rather than
- * the api client: its 401 handler navigates to /login, which would replace the
+ * Best-effort server version for the copied details. Fetched on mount rather
+ * than on click: an await before the clipboard write can cost the user
+ * activation it needs. Skips the 401 redirect, which would replace the
  * fallback the user is reading.
  */
-function useAppVersion(): string {
+function useServerVersion(): string {
   const [version, setVersion] = useState('unknown');
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/v1/about', { credentials: 'same-origin' })
-      .then((res) => (res.ok ? res.json() as Promise<{ version?: unknown }> : null))
-      .then((body) => {
-        if (!cancelled && typeof body?.version === 'string') setVersion(body.version);
-      })
-      .catch(() => { /* keep "unknown" */ });
+    serverVersion ??= about.get({ skipAuthRedirect: true })
+      .then((info) => info.version)
+      .catch(() => 'unknown');
+    void serverVersion.then((v) => { if (!cancelled) setVersion(v); });
     return () => { cancelled = true; };
   }, []);
   return version;
@@ -38,7 +41,7 @@ function useAppVersion(): string {
  * directly rather than a hook, so it renders whatever failed below it.
  */
 export default function ErrorFallback({ error, componentStack, reset, variant }: ErrorFallbackProps) {
-  const appVersion = useAppVersion();
+  const serverVersion = useServerVersion();
   const [copyStatus, setCopyStatus] = useState<CopyStatus>('idle');
   const t = i18n.t.bind(i18n);
 
@@ -46,7 +49,7 @@ export default function ErrorFallback({ error, componentStack, reset, variant }:
     const details = buildErrorDetails({
       error,
       componentStack,
-      appVersion,
+      serverVersion,
       route: window.location.pathname,
       userAgent: navigator.userAgent,
       now: new Date(),

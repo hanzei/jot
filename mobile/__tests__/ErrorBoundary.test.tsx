@@ -9,17 +9,13 @@ import { render, fireEvent } from '@testing-library/react-native';
 import { Share } from 'react-native';
 import ErrorBoundary from '../src/components/ErrorBoundary';
 import CrashScreen from '../src/components/CrashScreen';
-import ScreenErrorBoundary from '../src/components/ScreenErrorBoundary';
+import { screenErrorLayout } from '../src/components/ScreenErrorBoundary';
 import { initLogger, clearLogs, getPersistedLogs } from '../src/utils/logger';
 import { lightColors } from '../src/theme/colors';
 import { allowConsoleError } from './helpers/consoleGuard';
 
 const mockGoBack = jest.fn();
 const mockCanGoBack = jest.fn(() => true);
-
-jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ goBack: mockGoBack, canGoBack: mockCanGoBack }),
-}));
 
 jest.mock('../src/theme/ThemeContext', () => ({
   useTheme: () => ({ colors: jest.requireActual('../src/theme/colors').lightColors, isDark: false }),
@@ -104,6 +100,7 @@ describe('root error boundary', () => {
     expect(report.crash.stack).toContain('render exploded');
     expect(report.crash.componentStack).toContain('Thrower');
     expect(report.server.url).toBe('https://jot.example.com');
+    expect(report.appVersion).toEqual(expect.any(String));
     // No database outside the provider tree, so sync counts are unknown rather than zero.
     expect(report.sync.pendingQueueCount).toBeNull();
     expect(report.recentLogs.some((e: { msg: string }) => e.msg.includes('root error boundary'))).toBe(true);
@@ -123,11 +120,11 @@ describe('root error boundary', () => {
 
 describe('screen error boundary', () => {
   function renderScreen() {
-    return render(
-      <ScreenErrorBoundary name="note-editor">
-        <Thrower />
-      </ScreenErrorBoundary>,
-    );
+    return render(screenErrorLayout({
+      route: { name: 'NoteEditor' },
+      navigation: { goBack: mockGoBack, canGoBack: mockCanGoBack },
+      children: <Thrower />,
+    }));
   }
 
   it('shows a themed fallback that can go back', async () => {
@@ -161,10 +158,10 @@ describe('screen error boundary', () => {
     expect(await findByText('recovered')).toBeTruthy();
   });
 
-  it('logs which boundary caught the error', async () => {
+  it('logs which screen caught the error', async () => {
     const { findByTestId } = await renderScreen();
     await findByTestId('screen-error');
 
-    expect(getPersistedLogs().some((e) => e.msg.includes('note-editor error boundary'))).toBe(true);
+    expect(getPersistedLogs().some((e) => e.msg.includes('NoteEditor error boundary'))).toBe(true);
   });
 });

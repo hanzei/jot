@@ -24,6 +24,10 @@ export class ErrorFallbackPage {
       route.fulfill({ json: { labels: [null] } }));
   }
 
+  async unbreakSidebarLabels() {
+    await this.page.unroute('**/api/v1/labels');
+  }
+
   /** Breaks the dashboard's note list, which renders inside the route boundary. */
   async breakNoteList() {
     await this.page.route('**/api/v1/notes?*', (route) =>

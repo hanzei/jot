@@ -1,4 +1,3 @@
-import { useCallback } from 'react';
 import { useColorScheme } from 'react-native';
 import i18n from '../i18n';
 import { getColors } from '../theme/colors';
@@ -16,7 +15,7 @@ import ErrorFallback from './ErrorFallback';
 export default function CrashScreen({ error, componentStack, reset }: ErrorBoundaryFallbackProps) {
   const colors = getColors(useColorScheme());
 
-  const handleShare = useCallback(async () => {
+  const handleShare = async () => {
     try {
       await shareDiagnosticsReport({
         serverUrl: getBaseUrl(),
@@ -32,7 +31,7 @@ export default function CrashScreen({ error, componentStack, reset }: ErrorBound
     } catch (shareError) {
       console.warn('Failed to share diagnostics from crash screen:', shareError);
     }
-  }, [error, componentStack]);
+  };
 
   return (
     <ErrorFallback

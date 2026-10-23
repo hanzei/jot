@@ -3,7 +3,7 @@ import type { RouteProp } from '@react-navigation/native';
 import { useRoute } from '@react-navigation/native';
 import NotesListScreen from '../screens/NotesListScreen';
 import DrawerContent from '../components/DrawerContent';
-import ScreenErrorBoundary from '../components/ScreenErrorBoundary';
+import { screenErrorLayout } from '../components/ScreenErrorBoundary';
 
 export type MainDrawerParamList = {
   Notes: { labelId?: string; labelName?: string } | undefined;
@@ -16,35 +16,19 @@ const Drawer = createDrawerNavigator<MainDrawerParamList>();
 
 function NotesScreen() {
   const route = useRoute<RouteProp<MainDrawerParamList, 'Notes'>>();
-  return (
-    <ScreenErrorBoundary name="notes-list">
-      <NotesListScreen variant="notes" labelId={route.params?.labelId} labelName={route.params?.labelName} />
-    </ScreenErrorBoundary>
-  );
+  return <NotesListScreen variant="notes" labelId={route.params?.labelId} labelName={route.params?.labelName} />;
 }
 
 function MyTasksScreen() {
-  return (
-    <ScreenErrorBoundary name="notes-list">
-      <NotesListScreen variant="my-tasks" />
-    </ScreenErrorBoundary>
-  );
+  return <NotesListScreen variant="my-tasks" />;
 }
 
 function ArchivedScreen() {
-  return (
-    <ScreenErrorBoundary name="notes-list">
-      <NotesListScreen variant="archived" />
-    </ScreenErrorBoundary>
-  );
+  return <NotesListScreen variant="archived" />;
 }
 
 function TrashScreen() {
-  return (
-    <ScreenErrorBoundary name="notes-list">
-      <NotesListScreen variant="trash" />
-    </ScreenErrorBoundary>
-  );
+  return <NotesListScreen variant="trash" />;
 }
 
 export default function MainDrawer() {
@@ -55,6 +39,7 @@ export default function MainDrawer() {
     <Drawer.Navigator
       drawerContent={(props) => <DrawerContent {...props} />}
       screenOptions={{ headerShown: false, drawerType: 'front' }}
+      screenLayout={screenErrorLayout}
     >
       <Drawer.Screen name="Notes" component={NotesScreen} />
       <Drawer.Screen name="MyTasks" component={MyTasksScreen} />

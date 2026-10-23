@@ -33,9 +33,7 @@ import { getLogs, clearLogs, type LogEntry } from '../utils/logger';
 import { shareDiagnosticsReport } from '../utils/diagnosticsReport';
 
 interface DiagnosticsSnapshot {
-  pendingQueueCount: number;
-  syncQueueHead: SyncQueueStats['head'];
-  syncQueueMaxAttempts: number;
+  queue: SyncQueueStats;
   lifecycle: ServerSwitchLifecycleState;
   sse: SseState;
   logs: LogEntry[];
@@ -75,9 +73,7 @@ export default function DiagnosticsScreen() {
   const { syncError, syncFailureCount, lastSyncedAt, consecutiveFailureCount } = useOfflineContext();
 
   const [snapshot, setSnapshot] = useState<DiagnosticsSnapshot>(() => ({
-    pendingQueueCount: 0,
-    syncQueueHead: null,
-    syncQueueMaxAttempts: 0,
+    queue: { pendingCount: 0, head: null, maxAttempts: 0 },
     lifecycle: getServerSwitchLifecycleState(),
     sse: getSseState(),
     logs: getLogs().slice(-50),
@@ -95,9 +91,7 @@ export default function DiagnosticsScreen() {
       // DB read failure — show an empty queue rather than blocking the snapshot update
     }
     setSnapshot({
-      pendingQueueCount: stats.pendingCount,
-      syncQueueHead: stats.head,
-      syncQueueMaxAttempts: stats.maxAttempts,
+      queue: stats,
       lifecycle: getServerSwitchLifecycleState(),
       sse: getSseState(),
       logs: getLogs().slice(-50),
@@ -144,11 +138,7 @@ export default function DiagnosticsScreen() {
       serverUrl: snapshot.serverUrl,
       isConnected: snapshot.isConnected,
       sync: {
-        queue: {
-          pendingCount: snapshot.pendingQueueCount,
-          head: snapshot.syncQueueHead,
-          maxAttempts: snapshot.syncQueueMaxAttempts,
-        },
+        queue: snapshot.queue,
         lastSyncedAt,
         syncError,
         consecutiveFailureCount,
@@ -224,24 +214,24 @@ export default function DiagnosticsScreen() {
           <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('diagnostics.syncQueue')}</Text>
           <DiagRow
             label={t('diagnostics.pendingOps')}
-            value={String(snapshot.pendingQueueCount)}
-            valueColor={snapshot.pendingQueueCount > 0 ? STATUS_ORANGE : undefined}
+            value={String(snapshot.queue.pendingCount)}
+            valueColor={snapshot.queue.pendingCount > 0 ? STATUS_ORANGE : undefined}
           />
-          {snapshot.syncQueueHead && (
+          {snapshot.queue.head && (
             <>
               <DiagRow
                 label={t('diagnostics.headOperation')}
-                value={snapshot.syncQueueHead.operation}
+                value={snapshot.queue.head.operation}
                 mono
               />
               <DiagRow
                 label={t('diagnostics.headWaiting')}
-                value={formatAge(snapshot.syncQueueHead.created_at)}
+                value={formatAge(snapshot.queue.head.created_at)}
               />
               <DiagRow
                 label={t('diagnostics.headAttempts')}
-                value={`${snapshot.syncQueueHead.attempts} / ${MAX_ENTRY_DRAIN_ATTEMPTS}`}
-                valueColor={snapshot.syncQueueHead.attempts > 0 ? STATUS_ORANGE : undefined}
+                value={`${snapshot.queue.head.attempts} / ${MAX_ENTRY_DRAIN_ATTEMPTS}`}
+                valueColor={snapshot.queue.head.attempts > 0 ? STATUS_ORANGE : undefined}
               />
             </>
           )}

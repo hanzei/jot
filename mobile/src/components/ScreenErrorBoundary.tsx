@@ -1,19 +1,22 @@
-import type { ReactNode } from 'react';
-import { useNavigation } from '@react-navigation/native';
+import type { ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import ErrorBoundary, { type ErrorBoundaryFallbackProps } from './ErrorBoundary';
-import ErrorFallback from './ErrorFallback';
+import ErrorFallback, { type ErrorFallbackAction } from './ErrorFallback';
 
-function ScreenErrorFallback({ error, reset }: ErrorBoundaryFallbackProps) {
+interface ScreenNavigation {
+  canGoBack: () => boolean;
+  goBack: () => void;
+}
+
+function ScreenErrorFallback({ error, reset, navigation }: ErrorBoundaryFallbackProps & { navigation: ScreenNavigation }) {
   const { colors } = useTheme();
   const { t } = useTranslation();
-  const navigation = useNavigation();
-  const actions = [
+  const actions: ErrorFallbackAction[] = [
     { label: t('errorBoundary.tryAgain'), onPress: reset, testID: 'screen-error-try-again', primary: true },
   ];
   if (navigation.canGoBack()) {
-    actions.push({ label: t('common.back'), onPress: () => navigation.goBack(), testID: 'screen-error-back', primary: false });
+    actions.push({ label: t('common.back'), onPress: () => navigation.goBack(), testID: 'screen-error-back' });
   }
   return (
     <ErrorFallback
@@ -28,13 +31,18 @@ function ScreenErrorFallback({ error, reset }: ErrorBoundaryFallbackProps) {
 }
 
 /**
- * Screen-level boundary, so one note that fails to render takes down its
- * screen rather than the whole app. Sits inside the providers and navigator,
- * so its fallback can use the theme and offer a way back.
+ * `screenLayout` for a navigator: wraps every screen in its own boundary, so
+ * one note that fails to render takes down its screen rather than the whole
+ * app. It sits inside the providers, so its fallback can use the theme and
+ * offer a way back.
  */
-export default function ScreenErrorBoundary({ name, children }: { name: string; children: ReactNode }) {
+export function screenErrorLayout({ route, navigation, children }: {
+  route: { name: string };
+  navigation: ScreenNavigation;
+  children: ReactElement;
+}) {
   return (
-    <ErrorBoundary name={name} fallback={(props) => <ScreenErrorFallback {...props} />}>
+    <ErrorBoundary name={route.name} fallback={(props) => <ScreenErrorFallback {...props} navigation={navigation} />}>
       {children}
     </ErrorBoundary>
   );

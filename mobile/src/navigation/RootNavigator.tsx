@@ -17,7 +17,7 @@ import SyncFailuresScreen from '../screens/SyncFailuresScreen';
 import DiagnosticsScreen from '../screens/DiagnosticsScreen';
 import LogsFullscreenScreen from '../screens/LogsFullscreenScreen';
 import ConnectToServerScreen from '../screens/ConnectToServerScreen';
-import ScreenErrorBoundary from '../components/ScreenErrorBoundary';
+import { screenErrorLayout } from '../components/ScreenErrorBoundary';
 
 /** A view's position and size in window coordinates (from `measureInWindow`). */
 export interface LayoutRect {
@@ -58,15 +58,6 @@ export type RootStackParamList = {
   ConnectToServer: undefined;
 };
 
-/** One note that fails to render takes down the editor, not the whole app. */
-function GuardedNoteEditorScreen() {
-  return (
-    <ScreenErrorBoundary name="note-editor">
-      <NoteEditorScreen />
-    </ScreenErrorBoundary>
-  );
-}
-
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 // Identify a NoteEditor/Share screen by the note it targets. Without this,
@@ -101,11 +92,11 @@ function AuthenticatedStack() {
             inset. */}
         <ContentSafeArea>
           <CardRectRegistryProvider>
-            <Stack.Navigator>
+            <Stack.Navigator screenLayout={screenErrorLayout}>
               <Stack.Screen name="MainDrawer" component={MainDrawer} options={{ headerShown: false }} />
               <Stack.Screen
                 name="NoteEditor"
-                component={GuardedNoteEditorScreen}
+                component={NoteEditorScreen}
                 getId={getNoteScreenId}
                 options={{
                   headerShown: false,

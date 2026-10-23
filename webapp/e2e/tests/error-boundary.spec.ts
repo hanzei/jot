@@ -21,11 +21,11 @@ test.describe('Error boundaries', () => {
     await expect(fallback.getByText('Error details copied')).toBeVisible();
     const details = await errorFallbackPage.clipboardText();
     expect(details).toContain('Jot error report');
-    expect(details).toMatch(/App version: \S+/);
+    expect(details).toMatch(/Server version: \S+/);
     expect(details).toContain('Route: /');
     expect(details).toContain('Stack:');
 
-    await page.unroute('**/api/v1/labels');
+    await errorFallbackPage.unbreakSidebarLabels();
     await fallback.getByRole('button', { name: 'Reload page' }).click();
     await expect(fallback).toBeHidden();
     await expect(page.getByRole('button', { name: 'New Note' })).toBeVisible();

@@ -1,7 +1,8 @@
 export interface ErrorDetailsInput {
   error: Error;
   componentStack: string | null;
-  appVersion: string;
+  /** The webapp bundle carries no version of its own; this is the server's. */
+  serverVersion: string;
   /** Path only: a query string can carry search terms. */
   route: string;
   userAgent: string;
@@ -12,10 +13,10 @@ export interface ErrorDetailsInput {
  * Plain-text report for the error fallback's "copy error details". Carries the
  * error's message and stacks, never props or state, so note content stays out.
  */
-export function buildErrorDetails({ error, componentStack, appVersion, route, userAgent, now }: ErrorDetailsInput): string {
+export function buildErrorDetails({ error, componentStack, serverVersion, route, userAgent, now }: ErrorDetailsInput): string {
   const lines = [
     'Jot error report',
-    `App version: ${appVersion}`,
+    `Server version: ${serverVersion}`,
     `Route: ${route}`,
     `Time: ${now.toISOString()}`,
     `User agent: ${userAgent}`,

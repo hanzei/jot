@@ -4,9 +4,7 @@ import { getSseState } from '../api/sseState';
 import type { SyncQueueStats } from '../db/syncQueue';
 import { isServerReachable, getServerReachabilityChangedAt } from '../api/serverReachability';
 import { getPersistedLogs } from './logger';
-import appConfig from '../../app.json';
-
-export const APP_VERSION: string = appConfig.expo.version;
+import { getAppBuildInfo } from './appInfo';
 
 /** Cap on log entries embedded in a shared diagnostics report, to keep the payload shareable. */
 const SHARED_REPORT_LOG_LIMIT = 500;
@@ -42,14 +40,16 @@ export interface DiagnosticsReportInput {
  * state (lifecycle, SSE, reachability, logs) is read here, so a caller outside
  * the provider tree only has to supply what it can.
  */
-export function buildDiagnosticsReport(input: DiagnosticsReportInput) {
+function buildDiagnosticsReport(input: DiagnosticsReportInput) {
   const lifecycle = getServerSwitchLifecycleState();
   const sse = getSseState();
   const { sync } = input;
+  const build = getAppBuildInfo();
   return {
     generatedAt: new Date().toISOString(),
     platform: Platform.OS,
-    appVersion: APP_VERSION,
+    appVersion: build.version,
+    appCommit: build.commit ?? null,
     ...(input.crash ? { crash: input.crash } : {}),
     server: {
       url: input.serverUrl,

@@ -2,6 +2,11 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import ErrorBoundary from '../ErrorBoundary';
 import ErrorFallback from '../ErrorFallback';
+import { about } from '@/utils/api';
+
+vi.mock('@/utils/api', () => ({
+  about: { get: vi.fn(() => Promise.resolve({ version: '1.2.3' })) },
+}));
 
 let shouldThrow = true;
 
@@ -27,14 +32,12 @@ describe('ErrorBoundary', () => {
     shouldThrow = true;
     // React and the boundary both report the caught error; both are expected here.
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(JSON.stringify({ version: '1.2.3' }), { status: 200 }))));
     writeText.mockReset().mockResolvedValue();
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
-    vi.unstubAllGlobals();
   });
 
   it('shows the fallback and logs the error', () => {
@@ -42,6 +45,14 @@ describe('ErrorBoundary', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong');
     expect(screen.getByText('render exploded')).toBeInTheDocument();
     expect(console.error).toHaveBeenCalledWith('Render error caught by test error boundary:', expect.any(Error));
+    // The first fallback in this file fetches the version; later ones reuse it.
+    // Never the redirecting 401 path: it would navigate away from the fallback.
+    expect(about.get).toHaveBeenCalledExactlyOnceWith({ skipAuthRedirect: true });
+  });
+
+  it('fetches the server version at most once per page load', () => {
+    renderBoundary();
+    expect(about.get).not.toHaveBeenCalled();
   });
 
   it('re-renders the subtree on "Try again"', () => {
@@ -77,7 +88,7 @@ describe('ErrorBoundary', () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
 
     const details = writeText.mock.lastCall![0];
-    expect(details).toContain('App version: 1.2.3');
+    expect(details).toContain('Server version: 1.2.3');
     expect(details).toContain('Route: /notes/abc');
     expect(details).not.toContain('secret');
     expect(details).toContain('Error: Error: render exploded');

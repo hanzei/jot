@@ -6,6 +6,13 @@ import { authPathWithRedirect, currentRedirectTarget } from '@/utils/authRedirec
 // Unique ID for this browser tab, used to suppress SSE echoes of our own mutations.
 export const CLIENT_ID = crypto.randomUUID();
 
+declare module 'axios' {
+  interface AxiosRequestConfig {
+    /** Reject a 401 without redirecting to /login, for callers that must stay on the page. */
+    skipAuthRedirect?: boolean;
+  }
+}
+
 const api = axios.create({
   baseURL: '/api/v1',
   withCredentials: true,
@@ -20,7 +27,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       const url = error.config?.url || '';
       const isAuthEndpoint = url === '/login' || url === '/register' || url === '/me';
-      if (!isAuthEndpoint) {
+      if (!isAuthEndpoint && !error.config?.skipAuthRedirect) {
         const target = currentRedirectTarget();
         removeUser().finally(() => {
           // Full page load, so the target has to survive in the URL rather
@@ -259,8 +266,8 @@ export const images = {
 };
 
 export const about = {
-  get: (): Promise<AboutInfo> =>
-    api.get('/about').then(res => res.data),
+  get: (options: { skipAuthRedirect?: boolean } = {}): Promise<AboutInfo> =>
+    api.get('/about', options).then(res => res.data),
 };
 
 export const admin = {
