@@ -11,12 +11,15 @@ interface ErrorBoundaryProps {
   fallback: (props: ErrorBoundaryFallbackProps) => React.ReactNode;
   /** Names the boundary in the logged error, so a report says which one caught it. */
   name: string;
+  /** Changing this clears a caught error, e.g. a screen's params, so navigating to other content recovers. */
+  resetKey?: string;
   children: React.ReactNode;
 }
 
 interface ErrorBoundaryState {
   error: Error | null;
   componentStack: string | null;
+  resetKey: string | undefined;
 }
 
 /** Something other than an Error can be thrown; normalize so the fallback always has a message. */
@@ -30,10 +33,17 @@ function toError(value: unknown): Error {
  * it survives a restart and ships in the diagnostics report.
  */
 export default class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  override state: ErrorBoundaryState = { error: null, componentStack: null };
+  override state: ErrorBoundaryState = { error: null, componentStack: null, resetKey: this.props.resetKey };
 
   static getDerivedStateFromError(error: unknown): Partial<ErrorBoundaryState> {
     return { error: toError(error) };
+  }
+
+  static getDerivedStateFromProps(props: ErrorBoundaryProps, state: ErrorBoundaryState): Partial<ErrorBoundaryState> | null {
+    if (props.resetKey !== state.resetKey) {
+      return { error: null, componentStack: null, resetKey: props.resetKey };
+    }
+    return null;
   }
 
   override componentDidCatch(error: unknown, info: React.ErrorInfo) {

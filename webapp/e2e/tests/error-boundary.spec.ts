@@ -1,10 +1,8 @@
 import { test, expect } from '../fixtures';
 
 test.describe('Error boundaries', () => {
-  test.beforeEach(async ({ context, browserName }) => {
-    if (browserName === 'chromium') {
-      await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-    }
+  test.beforeEach(async ({ context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   });
 
   test('a render error in the layout shows the app-wide fallback instead of a blank page', async ({ page, authenticatedUser, errorFallbackPage }) => {

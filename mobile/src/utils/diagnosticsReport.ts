@@ -68,7 +68,7 @@ function buildDiagnosticsReport(input: DiagnosticsReportInput) {
       pendingQueueCount: sync?.queue.pendingCount ?? null,
       headOperation: sync?.queue.head?.operation ?? null,
       headQueuedAt: sync?.queue.head?.created_at ?? null,
-      headAttempts: sync?.queue.head?.attempts ?? 0,
+      headAttempts: sync ? (sync.queue.head?.attempts ?? 0) : null,
       maxAttempts: sync?.queue.maxAttempts ?? null,
       isSyncPaused: lifecycle.isSyncPaused,
       isSseQuiesced: lifecycle.isSseQuiesced,

@@ -45,14 +45,24 @@ describe('ErrorBoundary', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong');
     expect(screen.getByText('render exploded')).toBeInTheDocument();
     expect(console.error).toHaveBeenCalledWith('Render error caught by test error boundary:', expect.any(Error));
-    // The first fallback in this file fetches the version; later ones reuse it.
-    // Never the redirecting 401 path: it would navigate away from the fallback.
-    expect(about.get).toHaveBeenCalledExactlyOnceWith({ skipAuthRedirect: true });
   });
 
-  it('fetches the server version at most once per page load', () => {
-    renderBoundary();
-    expect(about.get).not.toHaveBeenCalled();
+  it('fetches the server version at most once per page load', async () => {
+    vi.mocked(about.get).mockClear();
+    vi.resetModules();
+    // A fresh module instance, so the cached request from earlier tests does not leak in.
+    const { default: FreshFallback } = await import('../ErrorFallback');
+    for (const key of ['a', 'b']) {
+      const { unmount } = render(
+        <ErrorBoundary name="test" resetKey={key} fallback={(props) => <FreshFallback {...props} variant="section" />}>
+          <Thrower />
+        </ErrorBoundary>,
+      );
+      await act(async () => {});
+      unmount();
+    }
+    // Never the redirecting 401 path: it would navigate away from the fallback.
+    expect(about.get).toHaveBeenCalledExactlyOnceWith({ skipAuthRedirect: true });
   });
 
   it('re-renders the subtree on "Try again"', () => {

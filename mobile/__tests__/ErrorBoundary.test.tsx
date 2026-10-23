@@ -103,6 +103,7 @@ describe('root error boundary', () => {
     expect(report.appVersion).toEqual(expect.any(String));
     // No database outside the provider tree, so sync counts are unknown rather than zero.
     expect(report.sync.pendingQueueCount).toBeNull();
+    expect(report.sync.headAttempts).toBeNull();
     expect(report.recentLogs.some((e: { msg: string }) => e.msg.includes('root error boundary'))).toBe(true);
   });
 
@@ -154,6 +155,25 @@ describe('screen error boundary', () => {
 
     shouldThrow = false;
     await fireEvent.press(await findByTestId('screen-error-try-again'));
+
+    expect(await findByText('recovered')).toBeTruthy();
+  });
+
+  it('recovers when the route is reused with new params', async () => {
+    const navigation = { goBack: mockGoBack, canGoBack: mockCanGoBack };
+    const { findByTestId, findByText, rerender } = await render(screenErrorLayout({
+      route: { name: 'Notes', params: { labelId: 'a' } },
+      navigation,
+      children: <Thrower />,
+    }));
+    await findByTestId('screen-error');
+
+    shouldThrow = false;
+    await rerender(screenErrorLayout({
+      route: { name: 'Notes', params: { labelId: 'b' } },
+      navigation,
+      children: <Thrower />,
+    }));
 
     expect(await findByText('recovered')).toBeTruthy();
   });

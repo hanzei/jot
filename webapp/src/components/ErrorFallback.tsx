@@ -14,8 +14,9 @@ interface ErrorFallbackProps extends ErrorBoundaryFallbackProps {
 
 type CopyStatus = 'idle' | 'copied' | 'failed';
 
-// Fetched at most once per page load, however often a fallback mounts.
-let serverVersion: Promise<string> | null = null;
+// Fetched at most once per page load, however often a fallback mounts. A
+// failed fetch is dropped so the next fallback can try again.
+let serverVersionRequest: Promise<string> | null = null;
 
 /**
  * Best-effort server version for the copied details. Fetched on mount rather
@@ -27,10 +28,13 @@ function useServerVersion(): string {
   const [version, setVersion] = useState('unknown');
   useEffect(() => {
     let cancelled = false;
-    serverVersion ??= about.get({ skipAuthRedirect: true })
+    serverVersionRequest ??= about.get({ skipAuthRedirect: true })
       .then((info) => info.version)
-      .catch(() => 'unknown');
-    void serverVersion.then((v) => { if (!cancelled) setVersion(v); });
+      .catch(() => {
+        serverVersionRequest = null;
+        return 'unknown';
+      });
+    void serverVersionRequest.then((v) => { if (!cancelled) setVersion(v); });
     return () => { cancelled = true; };
   }, []);
   return version;

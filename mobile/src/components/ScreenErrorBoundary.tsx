@@ -34,15 +34,20 @@ function ScreenErrorFallback({ error, reset, navigation }: ErrorBoundaryFallback
  * `screenLayout` for a navigator: wraps every screen in its own boundary, so
  * one note that fails to render takes down its screen rather than the whole
  * app. It sits inside the providers, so its fallback can use the theme and
- * offer a way back.
+ * offer a way back. A navigator can reuse a route with new params (the drawer's
+ * Notes screen switching labels), so a params change clears the error too.
  */
 export function screenErrorLayout({ route, navigation, children }: {
-  route: { name: string };
+  route: { name: string; params?: object | undefined };
   navigation: ScreenNavigation;
   children: ReactElement;
 }) {
   return (
-    <ErrorBoundary name={route.name} fallback={(props) => <ScreenErrorFallback {...props} navigation={navigation} />}>
+    <ErrorBoundary
+      name={route.name}
+      resetKey={JSON.stringify(route.params ?? null)}
+      fallback={(props) => <ScreenErrorFallback {...props} navigation={navigation} />}
+    >
       {children}
     </ErrorBoundary>
   );
