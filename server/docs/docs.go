@@ -4784,7 +4784,7 @@ var SwaggerInfo = &swag.Spec{
 	BasePath:         "/api/v1",
 	Schemes:          []string{},
 	Title:            "Jot API",
-	Description:      "Self-hosted note-taking application API. Health probes are available at root paths `/livez` and `/readyz` (outside `/api/v1`).",
+	Description:      "Self-hosted note-taking application API. Health probes are available at root paths `/livez` and `/readyz` (outside `/api/v1`). Every response carries an `X-Request-Id` header identifying the request in the server's logs and traces; quote it when reporting a failure. A request may send its own `X-Request-Id` (at most 64 characters of `[A-Za-z0-9._-]`) to have it used instead; any other value is replaced.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

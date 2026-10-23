@@ -4,6 +4,12 @@
     "done": "Klaar",
     "cancel": "Annuleren"
   },
+  "toast": {
+    "reference": "Ref.: {{id}}",
+    "copyReference": "Referentie kopiëren",
+    "copyReferenceLabel": "Foutreferentie {{id}} kopiëren",
+    "referenceCopied": "Gekopieerd!"
+  },
   "nav": {
     "profileMenu": "Profielmenu",
     "toggleSidebar": "Zijbalk wisselen",

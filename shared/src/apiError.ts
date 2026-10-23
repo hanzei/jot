@@ -27,6 +27,47 @@ export function parseApiError(err: unknown): ApiErrorDetail | null {
   return parseApiErrorBody((response as { data?: unknown }).data);
 }
 
+/** Response header carrying the server's ID for the request. */
+export const REQUEST_ID_HEADER = 'X-Request-Id';
+
+/**
+ * Reads a header from an axios-shaped headers object: an AxiosHeaders instance
+ * (case-insensitive `get`) or a plain object, whose keys XHR lowercases.
+ */
+function readHeader(headers: unknown, name: string): string | null {
+  if (typeof headers !== 'object' || headers === null) return null;
+  const getter = (headers as { get?: unknown }).get;
+  const value = typeof getter === 'function'
+    ? (getter as (this: unknown, n: string) => unknown).call(headers, name)
+    : (headers as Record<string, unknown>)[name.toLowerCase()];
+  return typeof value === 'string' && value !== '' ? value : null;
+}
+
+/**
+ * The server's request ID for a failed API request, read from the
+ * `X-Request-Id` header of an axios-shaped error's response, or null when there
+ * was no response (a network error) or the server sent no ID. Quoting it lets
+ * an operator find the matching server log line and trace.
+ */
+export function apiRequestId(err: unknown): string | null {
+  if (typeof err !== 'object' || err === null) return null;
+  const response = (err as { response?: unknown }).response;
+  if (typeof response !== 'object' || response === null) return null;
+  return readHeader((response as { headers?: unknown }).headers, REQUEST_ID_HEADER);
+}
+
+/**
+ * The request ID of a failed API request that the server answered with a 5xx,
+ * or null for any other failure. A server error is the case worth reporting
+ * with a reference; a 4xx is the client's own mistake and its message says so.
+ */
+export function serverErrorRequestId(err: unknown): string | null {
+  if (typeof err !== 'object' || err === null) return null;
+  const status = (err as { response?: { status?: unknown } }).response?.status;
+  if (typeof status !== 'number' || status < 500) return null;
+  return apiRequestId(err);
+}
+
 /** The error envelope's code for a failed API request, or null. */
 export function apiErrorCode(err: unknown): ApiErrorCode | null {
   return parseApiError(err)?.code ?? null;

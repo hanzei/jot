@@ -331,6 +331,55 @@ describe('API Client', () => {
     });
   });
 
+  describe('failed request logging', () => {
+    const getResponseErrorHandler = () => {
+      const responseUse = mockAxiosInstance.interceptors.response.use;
+      return responseUse.mock.calls[0]?.[1] as (error: unknown) => Promise<unknown>;
+    };
+
+    it('logs a failed request with the server request ID', async () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        await expect(getResponseErrorHandler()({
+          response: { status: 500, headers: { 'x-request-id': 'abc123' } },
+          config: { method: 'patch', url: '/notes/n1' },
+        })).rejects.toBeDefined();
+
+        expect(warn).toHaveBeenCalledWith('API PATCH /notes/n1 failed with 500 (request ID abc123)');
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it('logs a failed request without a request ID as none', async () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        await expect(getResponseErrorHandler()({
+          response: { status: 404, headers: {} },
+          config: { method: 'get', url: '/notes/n1' },
+        })).rejects.toBeDefined();
+
+        expect(warn).toHaveBeenCalledWith('API GET /notes/n1 failed with 404 (request ID none)');
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it('does not log a request that got no response', async () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        await expect(getResponseErrorHandler()({
+          message: 'Network Error',
+          config: { method: 'get', url: '/notes' },
+        })).rejects.toBeDefined();
+
+        expect(warn).not.toHaveBeenCalled();
+      } finally {
+        warn.mockRestore();
+      }
+    });
+  });
+
   describe('auth.logout', () => {
     it('clears stored session and cached profile immediately, without waiting for POST /logout to resolve', async () => {
       await setServerUrl('https://logout-immediate.example.com');

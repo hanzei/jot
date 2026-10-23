@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { X, CircleCheck, TriangleAlert, Info } from 'lucide-react';
+import { serverErrorRequestId } from '@jot/shared';
 import { useTranslation } from 'react-i18next';
 import { ToastContext, type ToastAction, type ToastType } from '@/hooks/useToast';
 import {
@@ -13,6 +14,9 @@ interface ToastMessage {
   message: string;
   type: ToastType;
   action?: ToastAction;
+  // The server's request ID, shown for a failed request so it can be matched
+  // to the server's logs.
+  reference?: string;
 }
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
@@ -24,12 +28,18 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     setToasts(prev => [...prev, { id, message, type, ...(action !== undefined && { action }) }]);
   }, []);
 
+  const showErrorToast = useCallback((message: string, error: unknown) => {
+    const id = nextId.current++;
+    const reference = serverErrorRequestId(error);
+    setToasts(prev => [...prev, { id, message, type: 'error', ...(reference !== null && { reference }) }]);
+  }, []);
+
   const dismiss = useCallback((id: number) => {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
   return (
-    <ToastContext.Provider value={{ showToast }}>
+    <ToastContext.Provider value={{ showToast, showErrorToast }}>
       {children}
       <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-2 pointer-events-none">
         {toasts.map(toast => (
@@ -136,6 +146,7 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
     >
       <Icon className={`h-5 w-5 flex-shrink-0 ${iconColor}`} />
       <span className="min-w-0 break-words">{toast.message}</span>
+      {toast.reference && <ToastReference reference={toast.reference} />}
       {toast.action && (
         <button
           onClick={handleAction}
@@ -153,5 +164,43 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
         <X className="h-4 w-4 text-gray-400" aria-hidden="true" />
       </button>
     </div>
+  );
+}
+
+// The request ID of a failed request, which a click copies so the user can
+// paste it into a bug report.
+function ToastReference({ reference }: { reference: string }) {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+  }, []);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(reference);
+    } catch {
+      // No clipboard access (e.g. an insecure origin); the reference stays
+      // selectable text.
+      return;
+    }
+    setCopied(true);
+    if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+    resetTimerRef.current = setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={() => void handleCopy()}
+      title={t('toast.copyReference')}
+      aria-label={t('toast.copyReferenceLabel', { id: reference })}
+      data-testid="toast-reference"
+      className="ml-1 flex-shrink-0 font-mono text-xs text-gray-500 dark:text-gray-400 select-all hover:underline"
+    >
+      {copied ? t('toast.referenceCopied') : t('toast.reference', { id: reference })}
+    </button>
   );
 }

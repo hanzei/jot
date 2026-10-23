@@ -4,6 +4,12 @@
     "done": "Done",
     "cancel": "Cancel"
   },
+  "toast": {
+    "reference": "Ref: {{id}}",
+    "copyReference": "Copy reference",
+    "copyReferenceLabel": "Copy error reference {{id}}",
+    "referenceCopied": "Copied!"
+  },
   "nav": {
     "profileMenu": "Profile menu",
     "toggleSidebar": "Toggle sidebar",

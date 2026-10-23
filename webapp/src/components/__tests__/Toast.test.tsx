@@ -169,3 +169,48 @@ describe('Toast auto dismiss durations', () => {
     expect(onExpire).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('Error toast reference', () => {
+  const serverError = (status: number) => Object.assign(new Error('Request failed'), {
+    response: { status, headers: { 'x-request-id': 'abc123def4567890' } },
+  });
+
+  function ErrorHarness({ error }: { error: unknown }) {
+    const { showErrorToast } = useToast();
+    return <button onClick={() => showErrorToast('Saving failed', error)}>Fail</button>;
+  }
+
+  it('shows the request ID of a server error and copies it on click', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    render(
+      <ToastProvider>
+        <ErrorHarness error={serverError(500)} />
+      </ToastProvider>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fail' }));
+    const reference = screen.getByTestId('toast-reference');
+    expect(reference).toHaveTextContent('abc123def4567890');
+
+    await act(async () => {
+      fireEvent.click(reference);
+    });
+    expect(writeText).toHaveBeenCalledWith('abc123def4567890');
+  });
+
+  it.each([
+    ['a client error', serverError(404)],
+    ['a network error', new Error('Network Error')],
+  ])('shows no reference for %s', (_label, error) => {
+    render(
+      <ToastProvider>
+        <ErrorHarness error={error} />
+      </ToastProvider>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fail' }));
+    expect(screen.getByText('Saving failed')).toBeInTheDocument();
+    expect(screen.queryByTestId('toast-reference')).not.toBeInTheDocument();
+  });
+});

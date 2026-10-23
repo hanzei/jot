@@ -1,7 +1,7 @@
 import axios, { AxiosHeaders, CanceledError, type InternalAxiosRequestConfig } from 'axios';
 import { Platform } from 'react-native';
 import type { AuthResponse, LoginRequest, RegisterRequest } from '@jot/shared';
-import { canonicalizeServerOrigin } from '@jot/shared';
+import { apiRequestId, canonicalizeServerOrigin } from '@jot/shared';
 import { randomUUID } from '../utils/random';
 import { markServerReachable, markServerUnreachable } from './serverReachability';
 import {
@@ -531,6 +531,11 @@ api.interceptors.response.use(
     // writes skip the doomed network round-trip and queue immediately.
     if (error.response) {
       markServerReachable();
+      // One line per failed request, carrying the server's request ID, so the
+      // persisted logs (and the shared diagnostics report) can be matched to
+      // the server's log line and trace.
+      const requestId = apiRequestId(error) ?? 'none';
+      console.warn(`API ${(config?.method ?? 'get').toUpperCase()} ${config?.url ?? ''} failed with ${error.response.status} (request ID ${requestId})`);
     } else {
       markServerUnreachable();
     }

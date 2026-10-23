@@ -162,7 +162,7 @@ interface NoteModalProps {
 
 export default function NoteModal({ note = null, onClose, onSave, onRefresh, onShare, onDelete, onDuplicate, onConvert, onRestore, onPermanentlyDelete, isOwner = true, usersById, currentUserId, uploadMaxBytes = UPLOAD_MAX_BYTES, initialType, initialContent }: NoteModalProps) {
   const { t, i18n } = useTranslation();
-  const { showToast } = useToast();
+  const { showToast, showErrorToast } = useToast();
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showLabelPicker, setShowLabelPicker] = useState(false);
@@ -1522,7 +1522,7 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
               onRefresh?.();
             } catch (undoError) {
               console.error('Failed to undo pin status update:', undoError);
-              showToast(t('note.failedPin'), 'error');
+              showErrorToast(t('note.failedPin'), undoError);
             }
           },
         }
@@ -1555,7 +1555,7 @@ export default function NoteModal({ note = null, onClose, onSave, onRefresh, onS
               onRefresh?.();
             } catch (undoError) {
               console.error('Failed to undo archive status update:', undoError);
-              showToast(t('note.failedArchive'), 'error');
+              showErrorToast(t('note.failedArchive'), undoError);
             }
           },
         }
