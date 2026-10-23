@@ -155,6 +155,21 @@ func (h *Hub) Subscribe(ctx context.Context, userID string) (<-chan Event, func(
 	return ch, unsubscribe
 }
 
+// SubscriberCount returns the number of currently open SSE subscriptions
+// across all users. It is zero after Close.
+func (h *Hub) SubscriberCount() int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	if h.closed {
+		return 0
+	}
+	n := 0
+	for channels := range maps.Values(h.clients) {
+		n += len(channels)
+	}
+	return n
+}
+
 // Close terminates all active SSE subscriptions by closing their channels,
 // causing any ServeSSE goroutines blocked on channel reads to exit. It is
 // safe to call Close multiple times. After Close, calls to unsubscribe from

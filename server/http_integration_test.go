@@ -654,8 +654,11 @@ func TestAdminDeleteUserNotes(t *testing.T) {
 func TestAdminStatsEndpoint(t *testing.T) {
 	t.Parallel()
 	var dbPath string
+	before := time.Now().UTC().Truncate(time.Second)
 	ts := setupTestServerWithConfig(t, func(cfg *config.Config) {
 		dbPath = cfg.DBDSN
+		cfg.OTelTracesEnabled = true
+		cfg.PprofEnabled = true
 	})
 
 	adminUser := ts.createTestUser(t, "adminstats", "password123", true)
@@ -761,6 +764,37 @@ func TestAdminStatsEndpoint(t *testing.T) {
 
 		assert.Equal(t, int64(2), stats.Storage.ImageCount)
 		assert.Equal(t, int64(len(uniqueImageData)+len(dupImageData)), stats.Storage.ImagesSizeBytes)
+	})
+
+	t.Run("returns runtime info", func(t *testing.T) {
+		sseCtx, cancel := context.WithCancel(t.Context())
+		t.Cleanup(cancel)
+		_, err := member1.Client.SubscribeSSE(sseCtx)
+		require.NoError(t, err)
+
+		stats, err := adminUser.Client.AdminGetStats(t.Context())
+		require.NoError(t, err)
+		rt := stats.Runtime
+
+		assert.Equal(t, "sqlite", rt.DatabaseBackend)
+		assert.Positive(t, rt.MigrationVersion)
+		assert.False(t, rt.MigrationDirty)
+		assert.False(t, rt.StartedAt.Before(before), "started_at %s is before the server was created", rt.StartedAt)
+		assert.False(t, rt.StartedAt.After(time.Now()))
+		assert.GreaterOrEqual(t, rt.UptimeSeconds, int64(0))
+		assert.Equal(t, int64(1), rt.SSESubscribers)
+		// One session per registered user.
+		assert.Equal(t, int64(3), rt.ActiveSessions)
+
+		require.NotNil(t, rt.UploadDirFreeBytes)
+		require.NotNil(t, rt.UploadDirTotalBytes)
+		assert.Positive(t, *rt.UploadDirTotalBytes)
+		assert.LessOrEqual(t, *rt.UploadDirFreeBytes, *rt.UploadDirTotalBytes)
+
+		assert.Equal(t, client.AdminObservabilityStats{
+			TracesEnabled: true,
+			PprofEnabled:  true,
+		}, rt.Observability)
 	})
 
 	t.Run("returns 403 for non-admin users", func(t *testing.T) {

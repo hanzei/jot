@@ -390,6 +390,28 @@ export interface AdminStorageStats {
   images_size_bytes: number;
 }
 
+export interface AdminObservabilityStats {
+  traces_enabled: boolean;
+  metrics_enabled: boolean;
+  logs_enabled: boolean;
+  metrics_endpoint_enabled: boolean;
+  pprof_enabled: boolean;
+}
+
+export interface AdminRuntimeStats {
+  database_backend: 'sqlite' | 'postgres';
+  migration_version: number;
+  migration_dirty: boolean;
+  started_at: string;
+  uptime_seconds: number;
+  sse_subscribers: number;
+  active_sessions: number;
+  /** Null when the server cannot read the upload volume's usage. */
+  upload_dir_free_bytes: number | null;
+  upload_dir_total_bytes: number | null;
+  observability: AdminObservabilityStats;
+}
+
 export interface AdminStatsResponse {
   users: AdminUserStats;
   notes: AdminNoteStats;
@@ -397,6 +419,7 @@ export interface AdminStatsResponse {
   labels: AdminLabelStats;
   list_items: AdminListItemStats;
   storage: AdminStorageStats;
+  runtime: AdminRuntimeStats;
 }
 
 export interface UpdateMeRequest {

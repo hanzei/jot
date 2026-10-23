@@ -333,6 +333,7 @@ type AdminStatsResponse struct {
 	Labels    AdminLabelStats    `json:"labels"`
 	ListItems AdminListItemStats `json:"list_items"`
 	Storage   AdminStorageStats  `json:"storage"`
+	Runtime   AdminRuntimeStats  `json:"runtime"`
 }
 
 type AdminUserStats struct {
@@ -368,6 +369,30 @@ type AdminStorageStats struct {
 	DatabaseSizeBytes int64 `json:"database_size_bytes"`
 	ImageCount        int64 `json:"image_count"`
 	ImagesSizeBytes   int64 `json:"images_size_bytes"`
+}
+
+// AdminRuntimeStats describes the running server. The upload-dir byte
+// counts are nil when the server could not read the volume's usage.
+type AdminRuntimeStats struct {
+	DatabaseBackend     string                  `json:"database_backend"`
+	MigrationVersion    int64                   `json:"migration_version"`
+	MigrationDirty      bool                    `json:"migration_dirty"`
+	StartedAt           time.Time               `json:"started_at"`
+	UptimeSeconds       int64                   `json:"uptime_seconds"`
+	SSESubscribers      int64                   `json:"sse_subscribers"`
+	ActiveSessions      int64                   `json:"active_sessions"`
+	UploadDirFreeBytes  *int64                  `json:"upload_dir_free_bytes"`
+	UploadDirTotalBytes *int64                  `json:"upload_dir_total_bytes"`
+	Observability       AdminObservabilityStats `json:"observability"`
+}
+
+// AdminObservabilityStats reports which observability features are enabled.
+type AdminObservabilityStats struct {
+	TracesEnabled          bool `json:"traces_enabled"`
+	MetricsEnabled         bool `json:"metrics_enabled"`
+	LogsEnabled            bool `json:"logs_enabled"`
+	MetricsEndpointEnabled bool `json:"metrics_endpoint_enabled"`
+	PprofEnabled           bool `json:"pprof_enabled"`
 }
 
 // SessionInfo is a single active session as returned by the sessions API.

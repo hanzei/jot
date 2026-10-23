@@ -378,6 +378,30 @@
         "databaseSize": "Database size",
         "imageCount": "Image count",
         "imagesSize": "Image storage"
+      },
+      "runtime": {
+        "title": "Server",
+        "uptime": "Uptime",
+        "startedAt": "Started",
+        "database": "Database",
+        "migrationVersion": "Schema version",
+        "migrationDirty": "{{version}} (dirty)",
+        "liveConnections": "Live connections",
+        "activeSessions": "Active sessions",
+        "uploadFree": "Upload volume free",
+        "uploadTotal": "Volume size",
+        "observability": "Observability",
+        "traces": "Traces",
+        "metrics": "Metrics",
+        "logs": "Logs",
+        "metricsEndpoint": "Metrics endpoint",
+        "pprof": "Profiling (pprof)",
+        "on": "On",
+        "off": "Off",
+        "unavailable": "n/a",
+        "uptimeDays": "{{days}} d {{hours}} h",
+        "uptimeHours": "{{hours}} h {{minutes}} min",
+        "uptimeMinutes": "{{minutes}} min"
       }
     }
   },

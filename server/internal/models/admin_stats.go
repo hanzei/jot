@@ -3,7 +3,9 @@ package models
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"time"
 
 	"github.com/hanzei/jot/server/internal/database/dialect"
 )
@@ -43,6 +45,33 @@ type AdminStorageStats struct {
 	ImagesSizeBytes   int64 `json:"images_size_bytes"`
 }
 
+// AdminObservabilityStats reports which observability features are switched
+// on. Booleans only: endpoints and credentials are never exposed.
+type AdminObservabilityStats struct {
+	TracesEnabled          bool `json:"traces_enabled"`
+	MetricsEnabled         bool `json:"metrics_enabled"`
+	LogsEnabled            bool `json:"logs_enabled"`
+	MetricsEndpointEnabled bool `json:"metrics_endpoint_enabled"`
+	PprofEnabled           bool `json:"pprof_enabled"`
+}
+
+// AdminRuntimeStats describes the running server rather than the data it
+// holds, for an operator debugging an instance without shell access.
+type AdminRuntimeStats struct {
+	DatabaseBackend  string    `json:"database_backend" enums:"sqlite,postgres"`
+	MigrationVersion int64     `json:"migration_version"`
+	MigrationDirty   bool      `json:"migration_dirty"`
+	StartedAt        time.Time `json:"started_at"`
+	UptimeSeconds    int64     `json:"uptime_seconds"`
+	SSESubscribers   int64     `json:"sse_subscribers"`
+	ActiveSessions   int64     `json:"active_sessions"`
+	// UploadDirFreeBytes and UploadDirTotalBytes are null when the upload
+	// volume's usage cannot be read (unsupported platform or statfs error).
+	UploadDirFreeBytes  *int64                  `json:"upload_dir_free_bytes" extensions:"x-nullable"`
+	UploadDirTotalBytes *int64                  `json:"upload_dir_total_bytes" extensions:"x-nullable"`
+	Observability       AdminObservabilityStats `json:"observability"`
+}
+
 type AdminStats struct {
 	Users     AdminUserStats     `json:"users"`
 	Notes     AdminNoteStats     `json:"notes"`
@@ -50,6 +79,7 @@ type AdminStats struct {
 	Labels    AdminLabelStats    `json:"labels"`
 	ListItems AdminListItemStats `json:"list_items"`
 	Storage   AdminStorageStats  `json:"storage"`
+	Runtime   AdminRuntimeStats  `json:"runtime"`
 }
 
 type adminStatsStore struct {
@@ -128,6 +158,29 @@ func (s *adminStatsStore) GetStats(ctx context.Context) (*AdminStats, error) {
 		FROM (SELECT DISTINCT sha256, size_bytes FROM note_images) dedup_images
 	`)).Scan(&stats.Storage.ImageCount, &stats.Storage.ImagesSizeBytes); err != nil {
 		return nil, fmt.Errorf("count note images: %w", err)
+	}
+
+	stats.Runtime.DatabaseBackend = s.d.Driver
+
+	// The SQLite database size is the file size, which the handler reads; on
+	// PostgreSQL ask the server, since the DSN is not a path.
+	if s.d.Driver == dialect.DriverPostgres {
+		if err := s.db.QueryRowContext(ctx, `SELECT pg_database_size(current_database())`).Scan(&stats.Storage.DatabaseSizeBytes); err != nil {
+			return nil, fmt.Errorf("get database size: %w", err)
+		}
+	}
+
+	// golang-migrate keeps a single row in schema_migrations on both backends.
+	err := s.db.QueryRowContext(ctx, `SELECT version, dirty FROM schema_migrations`).
+		Scan(&stats.Runtime.MigrationVersion, &stats.Runtime.MigrationDirty)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("get migration version: %w", err)
+	}
+
+	if err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(`
+		SELECT COUNT(*) FROM sessions WHERE expires_at > ?
+	`), Timestamp(Now())).Scan(&stats.Runtime.ActiveSessions); err != nil {
+		return nil, fmt.Errorf("count active sessions: %w", err)
 	}
 
 	return stats, nil

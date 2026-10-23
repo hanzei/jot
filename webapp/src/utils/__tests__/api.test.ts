@@ -698,6 +698,24 @@ describe('API Module', () => {
           labels: { total: 2, note_associations: 3 },
           list_items: { total: 3, completed: 1, assigned: 2 },
           storage: { database_size_bytes: 2048, image_count: 2, images_size_bytes: 4096 },
+          runtime: {
+            database_backend: 'sqlite',
+            migration_version: 13,
+            migration_dirty: false,
+            started_at: '2026-10-20T08:00:00Z',
+            uptime_seconds: 60,
+            sse_subscribers: 1,
+            active_sessions: 2,
+            upload_dir_free_bytes: 1024,
+            upload_dir_total_bytes: 4096,
+            observability: {
+              traces_enabled: false,
+              metrics_enabled: false,
+              logs_enabled: false,
+              metrics_endpoint_enabled: false,
+              pprof_enabled: false,
+            },
+          },
         };
         mockGet.mockResolvedValue({ data: mockResponse });
 

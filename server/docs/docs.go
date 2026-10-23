@@ -4379,6 +4379,68 @@ const docTemplate = `{
                 }
             }
         },
+        "models.AdminObservabilityStats": {
+            "type": "object",
+            "properties": {
+                "logs_enabled": {
+                    "type": "boolean"
+                },
+                "metrics_enabled": {
+                    "type": "boolean"
+                },
+                "metrics_endpoint_enabled": {
+                    "type": "boolean"
+                },
+                "pprof_enabled": {
+                    "type": "boolean"
+                },
+                "traces_enabled": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "models.AdminRuntimeStats": {
+            "type": "object",
+            "properties": {
+                "active_sessions": {
+                    "type": "integer"
+                },
+                "database_backend": {
+                    "type": "string",
+                    "enum": [
+                        "sqlite",
+                        "postgres"
+                    ]
+                },
+                "migration_dirty": {
+                    "type": "boolean"
+                },
+                "migration_version": {
+                    "type": "integer"
+                },
+                "observability": {
+                    "$ref": "#/definitions/models.AdminObservabilityStats"
+                },
+                "sse_subscribers": {
+                    "type": "integer"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "upload_dir_free_bytes": {
+                    "description": "UploadDirFreeBytes and UploadDirTotalBytes are null when the upload\nvolume's usage cannot be read (unsupported platform or statfs error).",
+                    "type": "integer",
+                    "x-nullable": true
+                },
+                "upload_dir_total_bytes": {
+                    "type": "integer",
+                    "x-nullable": true
+                },
+                "uptime_seconds": {
+                    "type": "integer"
+                }
+            }
+        },
         "models.AdminSharingStats": {
             "type": "object",
             "properties": {
@@ -4401,6 +4463,9 @@ const docTemplate = `{
                 },
                 "notes": {
                     "$ref": "#/definitions/models.AdminNoteStats"
+                },
+                "runtime": {
+                    "$ref": "#/definitions/models.AdminRuntimeStats"
                 },
                 "sharing": {
                     "$ref": "#/definitions/models.AdminSharingStats"

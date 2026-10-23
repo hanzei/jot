@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react';
-import { ROLES, type User, type AdminStatsResponse } from '@jot/shared';
+import { ROLES, type User, type AdminStatsResponse, type AdminRuntimeStats } from '@jot/shared';
 import { useTranslation } from 'react-i18next';
 import { admin } from '@/utils/api';
 import { getUser } from '@/utils/auth';
@@ -15,7 +15,7 @@ interface AdminProps {
 
 interface StatCardProps {
   title: string;
-  value: string;
+  value?: string;
   valueTestId?: string;
   children?: ReactNode;
 }
@@ -36,10 +36,17 @@ const StatLine = ({ label, value, valueTestId }: StatLineProps) => (
 const StatCard = ({ title, value, valueTestId, children }: StatCardProps) => (
   <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
     <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{title}</p>
-    <p data-testid={valueTestId} className="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">{value}</p>
-    {children ? <div className="mt-4 space-y-2">{children}</div> : null}
+    {value !== undefined ? (
+      <p data-testid={valueTestId} className="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">{value}</p>
+    ) : null}
+    {children ? <div className={value !== undefined ? 'mt-4 space-y-2' : 'mt-3 space-y-2'}>{children}</div> : null}
   </div>
 );
+
+const DATABASE_BACKEND_NAMES: Record<AdminRuntimeStats['database_backend'], string> = {
+  sqlite: 'SQLite',
+  postgres: 'PostgreSQL',
+};
 
 const StatCardSkeleton = () => (
   <div className="animate-pulse rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
@@ -93,6 +100,31 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
     const maximumFractionDigits = size >= 10 || unitIndex === 0 ? 0 : 1;
     return `${new Intl.NumberFormat(i18n.resolvedLanguage, { maximumFractionDigits }).format(size)} ${units[unitIndex]}`;
   }, [i18n.resolvedLanguage]);
+
+  const formatUptime = useCallback((seconds: number) => {
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    if (days > 0) {
+      return t('admin.stats.runtime.uptimeDays', { days, hours });
+    }
+    if (hours > 0) {
+      return t('admin.stats.runtime.uptimeHours', { hours, minutes });
+    }
+    return t('admin.stats.runtime.uptimeMinutes', { minutes });
+  }, [t]);
+
+  const formatDateTime = useCallback((iso: string) => {
+    return new Intl.DateTimeFormat(i18n.resolvedLanguage, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso));
+  }, [i18n.resolvedLanguage]);
+
+  const formatOptionalBytes = useCallback((bytes: number | null) => {
+    return bytes === null ? t('admin.stats.runtime.unavailable') : formatBytes(bytes);
+  }, [formatBytes, t]);
+
+  const formatEnabled = useCallback((enabled: boolean) => {
+    return enabled ? t('admin.stats.runtime.on') : t('admin.stats.runtime.off');
+  }, [t]);
 
   // fetchUsers / fetchStats never flip their loading flags on synchronously:
   // the mount effect below calls them, and a synchronous setState there is a
@@ -295,6 +327,85 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
               </>
             ) : null}
           </div>
+
+          {!statsLoading && stats ? (
+            <div data-testid="admin-runtime-section" className="mt-6">
+              <h3 className="mb-4 text-base font-medium text-gray-900 dark:text-white">{t('admin.stats.runtime.title')}</h3>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <StatCard
+                  title={t('admin.stats.runtime.uptime')}
+                  value={formatUptime(stats.runtime.uptime_seconds)}
+                  valueTestId="admin-stats-uptime"
+                >
+                  <StatLine label={t('admin.stats.runtime.startedAt')} value={formatDateTime(stats.runtime.started_at)} />
+                  <StatLine
+                    label={t('admin.stats.runtime.database')}
+                    value={DATABASE_BACKEND_NAMES[stats.runtime.database_backend]}
+                    valueTestId="admin-stats-database-backend"
+                  />
+                  <StatLine
+                    label={t('admin.stats.runtime.migrationVersion')}
+                    value={stats.runtime.migration_dirty
+                      ? t('admin.stats.runtime.migrationDirty', { version: stats.runtime.migration_version })
+                      : String(stats.runtime.migration_version)}
+                    valueTestId="admin-stats-migration-version"
+                  />
+                </StatCard>
+
+                <StatCard
+                  title={t('admin.stats.runtime.liveConnections')}
+                  value={formatNumber(stats.runtime.sse_subscribers)}
+                  valueTestId="admin-stats-sse-subscribers"
+                >
+                  <StatLine
+                    label={t('admin.stats.runtime.activeSessions')}
+                    value={formatNumber(stats.runtime.active_sessions)}
+                    valueTestId="admin-stats-active-sessions"
+                  />
+                </StatCard>
+
+                <StatCard
+                  title={t('admin.stats.runtime.uploadFree')}
+                  value={formatOptionalBytes(stats.runtime.upload_dir_free_bytes)}
+                  valueTestId="admin-stats-upload-free"
+                >
+                  <StatLine
+                    label={t('admin.stats.runtime.uploadTotal')}
+                    value={formatOptionalBytes(stats.runtime.upload_dir_total_bytes)}
+                    valueTestId="admin-stats-upload-total"
+                  />
+                </StatCard>
+
+                <StatCard title={t('admin.stats.runtime.observability')}>
+                  <StatLine
+                    label={t('admin.stats.runtime.traces')}
+                    value={formatEnabled(stats.runtime.observability.traces_enabled)}
+                    valueTestId="admin-stats-observability-traces"
+                  />
+                  <StatLine
+                    label={t('admin.stats.runtime.metrics')}
+                    value={formatEnabled(stats.runtime.observability.metrics_enabled)}
+                    valueTestId="admin-stats-observability-metrics"
+                  />
+                  <StatLine
+                    label={t('admin.stats.runtime.logs')}
+                    value={formatEnabled(stats.runtime.observability.logs_enabled)}
+                    valueTestId="admin-stats-observability-logs"
+                  />
+                  <StatLine
+                    label={t('admin.stats.runtime.metricsEndpoint')}
+                    value={formatEnabled(stats.runtime.observability.metrics_endpoint_enabled)}
+                    valueTestId="admin-stats-observability-metrics-endpoint"
+                  />
+                  <StatLine
+                    label={t('admin.stats.runtime.pprof')}
+                    value={formatEnabled(stats.runtime.observability.pprof_enabled)}
+                    valueTestId="admin-stats-observability-pprof"
+                  />
+                </StatCard>
+              </div>
+            </div>
+          ) : null}
         </section>
 
         <section className="mb-6">

@@ -378,6 +378,30 @@
         "databaseSize": "Tamaño de la base de datos",
         "imageCount": "Cantidad de imágenes",
         "imagesSize": "Almacenamiento de imágenes"
+      },
+      "runtime": {
+        "title": "Servidor",
+        "uptime": "Tiempo activo",
+        "startedAt": "Iniciado",
+        "database": "Base de datos",
+        "migrationVersion": "Versión del esquema",
+        "migrationDirty": "{{version}} (inconsistente)",
+        "liveConnections": "Conexiones en vivo",
+        "activeSessions": "Sesiones activas",
+        "uploadFree": "Espacio libre para subidas",
+        "uploadTotal": "Tamaño del volumen",
+        "observability": "Observabilidad",
+        "traces": "Trazas",
+        "metrics": "Métricas",
+        "logs": "Registros",
+        "metricsEndpoint": "Endpoint de métricas",
+        "pprof": "Perfilado (pprof)",
+        "on": "Activado",
+        "off": "Desactivado",
+        "unavailable": "n/d",
+        "uptimeDays": "{{days}} d {{hours}} h",
+        "uptimeHours": "{{hours}} h {{minutes}} min",
+        "uptimeMinutes": "{{minutes}} min"
       }
     }
   },

@@ -7,11 +7,15 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/blobstore"
+	"github.com/hanzei/jot/server/internal/database/dialect"
+	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/sse"
 )
 
 type AdminHandler struct {
@@ -21,8 +25,20 @@ type AdminHandler struct {
 	userSettingsStore *models.UserSettingsStore
 	imageStore        *blobstore.ImageStore
 	sessionService    *auth.SessionService
-	dbPath            string
+	hub               *sse.Hub
+	runtime           AdminRuntimeConfig
 	passwordMinLength int
+}
+
+// AdminRuntimeConfig is the startup-time state GET /admin/stats reports
+// alongside its live counts.
+type AdminRuntimeConfig struct {
+	// DBPath is the SQLite database file, whose size is the reported
+	// database size. Unused on PostgreSQL.
+	DBPath        string
+	UploadDir     string
+	StartedAt     time.Time
+	Observability models.AdminObservabilityStats
 }
 
 func NewAdminHandler(
@@ -32,7 +48,8 @@ func NewAdminHandler(
 	userSettingsStore *models.UserSettingsStore,
 	imageStore *blobstore.ImageStore,
 	sessionService *auth.SessionService,
-	dbPath string,
+	hub *sse.Hub,
+	runtime AdminRuntimeConfig,
 	passwordMinLength int,
 ) *AdminHandler {
 	return &AdminHandler{
@@ -42,7 +59,8 @@ func NewAdminHandler(
 		userSettingsStore: userSettingsStore,
 		imageStore:        imageStore,
 		sessionService:    sessionService,
-		dbPath:            dbPath,
+		hub:               hub,
+		runtime:           runtime,
 		passwordMinLength: passwordMinLength,
 	}
 }
@@ -74,11 +92,24 @@ func (h *AdminHandler) GetStats(w http.ResponseWriter, r *http.Request) (int, an
 		return http.StatusInternalServerError, nil, err
 	}
 
-	// DatabaseSizeBytes is only meaningful for SQLite (file-based) installations.
-	// For PostgreSQL (and any driver where dbPath is not a file path), os.Stat
-	// will fail; in that case we leave the field at zero.
-	if fileInfo, statErr := os.Stat(h.dbPath); statErr == nil {
-		stats.Storage.DatabaseSizeBytes = fileInfo.Size()
+	// The store reports the PostgreSQL database size itself; for SQLite it is
+	// the file size. A failed stat leaves the field at zero.
+	if stats.Runtime.DatabaseBackend != dialect.DriverPostgres {
+		if fileInfo, statErr := os.Stat(h.runtime.DBPath); statErr == nil {
+			stats.Storage.DatabaseSizeBytes = fileInfo.Size()
+		}
+	}
+
+	rt := &stats.Runtime
+	rt.StartedAt = h.runtime.StartedAt
+	rt.UptimeSeconds = int64(time.Since(h.runtime.StartedAt).Seconds())
+	rt.SSESubscribers = int64(h.hub.SubscriberCount())
+	rt.Observability = h.runtime.Observability
+	if free, total, diskErr := diskUsage(h.runtime.UploadDir); diskErr == nil {
+		rt.UploadDirFreeBytes = &free
+		rt.UploadDirTotalBytes = &total
+	} else {
+		logutil.FromContext(r.Context()).WithError(diskErr).Warn("Failed to read upload directory disk usage")
 	}
 
 	return http.StatusOK, stats, nil

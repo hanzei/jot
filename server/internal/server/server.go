@@ -149,7 +149,18 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (*Server, error) {
 	}
 	labelsHandler := handlers.NewLabelsHandler(noteStore, labelStore, hub)
 	eventsHandler := handlers.NewEventsHandler(hub)
-	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, userSettingsStore, imageStore, sessionService, cfg.DBDSN, cfg.PasswordMinLength)
+	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, userSettingsStore, imageStore, sessionService, hub, handlers.AdminRuntimeConfig{
+		DBPath:    cfg.DBDSN,
+		UploadDir: cfg.UploadDir,
+		StartedAt: models.Now(),
+		Observability: models.AdminObservabilityStats{
+			TracesEnabled:          cfg.OTelTracesEnabled,
+			MetricsEnabled:         cfg.OTelMetricsEnabled,
+			LogsEnabled:            cfg.OTelLogsEnabled,
+			MetricsEndpointEnabled: cfg.MetricsEnabled,
+			PprofEnabled:           cfg.PprofEnabled,
+		},
+	}, cfg.PasswordMinLength)
 	sessionsHandler := handlers.NewSessionsHandler(sessionStore)
 	patsHandler := handlers.NewPATsHandler(patStore)
 
