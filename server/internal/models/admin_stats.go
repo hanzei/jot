@@ -3,7 +3,10 @@ package models
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"os"
+	"time"
 
 	"github.com/hanzei/jot/server/internal/database/dialect"
 )
@@ -43,6 +46,27 @@ type AdminStorageStats struct {
 	ImagesSizeBytes   int64 `json:"images_size_bytes"`
 }
 
+// AdminUploadVolumeStats is the usage of the filesystem holding JOT_UPLOAD_DIR.
+type AdminUploadVolumeStats struct {
+	FreeBytes  int64 `json:"free_bytes"`
+	TotalBytes int64 `json:"total_bytes"`
+}
+
+// AdminRuntimeStats describes the running server rather than the data it
+// holds, for an operator debugging an instance without shell access.
+type AdminRuntimeStats struct {
+	DatabaseBackend  string    `json:"database_backend" enums:"sqlite,postgres"`
+	MigrationVersion int64     `json:"migration_version"`
+	MigrationDirty   bool      `json:"migration_dirty"`
+	StartedAt        time.Time `json:"started_at"`
+	UptimeSeconds    int64     `json:"uptime_seconds"`
+	SSESubscribers   int64     `json:"sse_subscribers"`
+	ActiveSessions   int64     `json:"active_sessions"`
+	// UploadVolume is null when the upload volume's usage cannot be read
+	// (unsupported platform or statfs error).
+	UploadVolume *AdminUploadVolumeStats `json:"upload_volume" extensions:"x-nullable"`
+}
+
 type AdminStats struct {
 	Users     AdminUserStats     `json:"users"`
 	Notes     AdminNoteStats     `json:"notes"`
@@ -50,6 +74,7 @@ type AdminStats struct {
 	Labels    AdminLabelStats    `json:"labels"`
 	ListItems AdminListItemStats `json:"list_items"`
 	Storage   AdminStorageStats  `json:"storage"`
+	Runtime   AdminRuntimeStats  `json:"runtime"`
 }
 
 type adminStatsStore struct {
@@ -128,6 +153,39 @@ func (s *adminStatsStore) GetStats(ctx context.Context) (*AdminStats, error) {
 		FROM (SELECT DISTINCT sha256, size_bytes FROM note_images) dedup_images
 	`)).Scan(&stats.Storage.ImageCount, &stats.Storage.ImagesSizeBytes); err != nil {
 		return nil, fmt.Errorf("count note images: %w", err)
+	}
+
+	stats.Runtime.DatabaseBackend = s.d.Driver
+
+	// On PostgreSQL ask the server. On SQLite the size is the file's; ask the
+	// connection which file it opened, since the DSN may be a file: URI with
+	// query options rather than a plain path. An in-memory database has no
+	// file, and a failed stat leaves the size at zero.
+	if s.d.Driver == dialect.DriverPostgres {
+		if err := s.db.QueryRowContext(ctx, `SELECT pg_database_size(current_database())`).Scan(&stats.Storage.DatabaseSizeBytes); err != nil {
+			return nil, fmt.Errorf("get database size: %w", err)
+		}
+	} else {
+		var dbFile string
+		if err := s.db.QueryRowContext(ctx, `SELECT file FROM pragma_database_list WHERE name = 'main'`).Scan(&dbFile); err != nil {
+			return nil, fmt.Errorf("get database file: %w", err)
+		}
+		if fileInfo, statErr := os.Stat(dbFile); statErr == nil {
+			stats.Storage.DatabaseSizeBytes = fileInfo.Size()
+		}
+	}
+
+	// golang-migrate keeps a single row in schema_migrations on both backends.
+	err := s.db.QueryRowContext(ctx, `SELECT version, dirty FROM schema_migrations`).
+		Scan(&stats.Runtime.MigrationVersion, &stats.Runtime.MigrationDirty)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("get migration version: %w", err)
+	}
+
+	if err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(`
+		SELECT COUNT(*) FROM sessions WHERE expires_at > ?
+	`), Timestamp(Now())).Scan(&stats.Runtime.ActiveSessions); err != nil {
+		return nil, fmt.Errorf("count active sessions: %w", err)
 	}
 
 	return stats, nil

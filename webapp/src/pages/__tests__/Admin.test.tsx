@@ -65,6 +65,16 @@ const mockStats: AdminStatsResponse = {
   labels: { total: 2, note_associations: 3 },
   list_items: { total: 3, completed: 1, assigned: 2 },
   storage: { database_size_bytes: 4_398_047, image_count: 5, images_size_bytes: 2_097_152 },
+  runtime: {
+    database_backend: 'sqlite',
+    migration_version: 13,
+    migration_dirty: false,
+    started_at: '2026-10-20T08:00:00Z',
+    uptime_seconds: 3 * 86400 + 4 * 3600 + 120,
+    sse_subscribers: 2,
+    active_sessions: 7,
+    upload_volume: { free_bytes: 10 * 1024 ** 3, total_bytes: 50 * 1024 ** 3 },
+  },
 };
 
 const renderAdmin = (passwordMinLength: number = VALIDATION.PASSWORD_MIN_LENGTH) => {
@@ -104,6 +114,49 @@ describe('Admin', () => {
       expect(screen.getByTestId('admin-stats-database-size')).toHaveTextContent('4.2 MB');
       expect(screen.getByTestId('admin-stats-image-count')).toHaveTextContent('5');
       expect(screen.getByTestId('admin-stats-images-size')).toHaveTextContent('2 MB');
+    });
+
+    it('renders server runtime info', async () => {
+      renderAdmin();
+
+      const runtime = await screen.findByTestId('admin-runtime-section');
+      expect(within(runtime).getByRole('heading', { name: 'Server' })).toBeInTheDocument();
+      expect(screen.getByTestId('admin-stats-uptime')).toHaveTextContent('3 d 4 h');
+      expect(screen.getByTestId('admin-stats-database-backend')).toHaveTextContent('SQLite');
+      expect(screen.getByTestId('admin-stats-migration-version')).toHaveTextContent(/^13$/);
+      expect(screen.getByTestId('admin-stats-sse-subscribers')).toHaveTextContent('2');
+      expect(screen.getByTestId('admin-stats-active-sessions')).toHaveTextContent('7');
+      expect(screen.getByTestId('admin-stats-upload-free')).toHaveTextContent('10 GB');
+      expect(screen.getByTestId('admin-stats-upload-total')).toHaveTextContent('50 GB');
+      // Database size sits with the other database facts in the Server section.
+      expect(within(runtime).getByTestId('admin-stats-database-size')).toHaveTextContent('4.2 MB');
+      // Image usage sits with the upload volume it lives on, not the database.
+      expect(within(runtime).getByTestId('admin-stats-images-size')).toHaveTextContent('2 MB');
+      expect(within(runtime).getByTestId('admin-stats-image-count')).toHaveTextContent('5');
+    });
+
+    it('flags a dirty migration and an unreadable upload volume', async () => {
+      vi.mocked(admin.getStats).mockResolvedValue({
+        ...mockStats,
+        runtime: {
+          ...mockStats.runtime,
+          database_backend: 'postgres',
+          migration_dirty: true,
+          uptime_seconds: 125,
+          upload_volume: null,
+        },
+      });
+
+      renderAdmin();
+
+      await screen.findByTestId('admin-runtime-section');
+      expect(screen.getByTestId('admin-stats-uptime')).toHaveTextContent('2 min');
+      expect(screen.getByTestId('admin-stats-database-backend')).toHaveTextContent('PostgreSQL');
+      expect(screen.getByTestId('admin-stats-migration-version')).toHaveTextContent('13 (dirty)');
+      expect(screen.getByTestId('admin-stats-upload-free')).toHaveTextContent('n/a');
+      // Jot's own image usage comes from the database, so it still shows.
+      expect(screen.getByTestId('admin-stats-images-size')).toHaveTextContent('2 MB');
+      expect(screen.queryByTestId('admin-stats-upload-total')).not.toBeInTheDocument();
     });
 
     it('shows loading placeholders while stats are fetching', async () => {

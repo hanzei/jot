@@ -378,6 +378,22 @@
         "databaseSize": "Databasegrootte",
         "imageCount": "Aantal afbeeldingen",
         "imagesSize": "Afbeeldingsopslag"
+      },
+      "runtime": {
+        "title": "Server",
+        "uptime": "Uptime",
+        "startedAt": "Gestart",
+        "database": "Database",
+        "migrationVersion": "Schemaversie",
+        "migrationDirty": "{{version}} (inconsistent)",
+        "liveConnections": "Live verbindingen",
+        "activeSessions": "Actieve sessies",
+        "uploadFree": "Vrije uploadruimte",
+        "uploadTotal": "Volumegrootte",
+        "unavailable": "n.v.t.",
+        "uptimeDays": "{{days}} d {{hours}} u",
+        "uptimeHours": "{{hours}} u {{minutes}} min",
+        "uptimeMinutes": "{{minutes}} min"
       }
     }
   },

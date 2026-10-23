@@ -6,12 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/blobstore"
+	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/sse"
 )
 
 type AdminHandler struct {
@@ -21,7 +23,8 @@ type AdminHandler struct {
 	userSettingsStore *models.UserSettingsStore
 	imageStore        *blobstore.ImageStore
 	sessionService    *auth.SessionService
-	dbPath            string
+	hub               *sse.Hub
+	startedAt         time.Time
 	passwordMinLength int
 }
 
@@ -32,7 +35,10 @@ func NewAdminHandler(
 	userSettingsStore *models.UserSettingsStore,
 	imageStore *blobstore.ImageStore,
 	sessionService *auth.SessionService,
-	dbPath string,
+	hub *sse.Hub,
+	// startedAt must come from time.Now, not models.Now: the uptime is
+	// measured against its monotonic clock reading, which models.Now strips.
+	startedAt time.Time,
 	passwordMinLength int,
 ) *AdminHandler {
 	return &AdminHandler{
@@ -42,7 +48,8 @@ func NewAdminHandler(
 		userSettingsStore: userSettingsStore,
 		imageStore:        imageStore,
 		sessionService:    sessionService,
-		dbPath:            dbPath,
+		hub:               hub,
+		startedAt:         startedAt,
 		passwordMinLength: passwordMinLength,
 	}
 }
@@ -74,11 +81,17 @@ func (h *AdminHandler) GetStats(w http.ResponseWriter, r *http.Request) (int, an
 		return http.StatusInternalServerError, nil, err
 	}
 
-	// DatabaseSizeBytes is only meaningful for SQLite (file-based) installations.
-	// For PostgreSQL (and any driver where dbPath is not a file path), os.Stat
-	// will fail; in that case we leave the field at zero.
-	if fileInfo, statErr := os.Stat(h.dbPath); statErr == nil {
-		stats.Storage.DatabaseSizeBytes = fileInfo.Size()
+	rt := &stats.Runtime
+	rt.StartedAt = h.startedAt.UTC()
+	// StartedAt keeps its monotonic reading, so a wall-clock step (NTP,
+	// VM resume) cannot make the uptime jump or go negative.
+	rt.UptimeSeconds = int64(time.Since(h.startedAt).Seconds())
+	rt.SSESubscribers = int64(h.hub.SubscriberCount())
+	// Unsupported platforms report the volume as unknown without a warning.
+	if free, total, diskErr := h.imageStore.DiskUsage(); diskErr == nil {
+		rt.UploadVolume = &models.AdminUploadVolumeStats{FreeBytes: free, TotalBytes: total}
+	} else if !errors.Is(diskErr, blobstore.ErrDiskUsageUnsupported) {
+		logutil.FromContext(r.Context()).WithError(diskErr).Warn("Failed to read upload directory disk usage")
 	}
 
 	return http.StatusOK, stats, nil

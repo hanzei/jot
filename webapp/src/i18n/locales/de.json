@@ -378,6 +378,22 @@
         "databaseSize": "Datenbankgröße",
         "imageCount": "Bilderanzahl",
         "imagesSize": "Bilderspeicher"
+      },
+      "runtime": {
+        "title": "Server",
+        "uptime": "Laufzeit",
+        "startedAt": "Gestartet",
+        "database": "Datenbank",
+        "migrationVersion": "Schemaversion",
+        "migrationDirty": "{{version}} (inkonsistent)",
+        "liveConnections": "Live-Verbindungen",
+        "activeSessions": "Aktive Sitzungen",
+        "uploadFree": "Freier Upload-Speicher",
+        "uploadTotal": "Speichergröße",
+        "unavailable": "k. A.",
+        "uptimeDays": "{{days}} T. {{hours}} Std.",
+        "uptimeHours": "{{hours}} Std. {{minutes}} Min.",
+        "uptimeMinutes": "{{minutes}} Min."
       }
     }
   },
