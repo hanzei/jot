@@ -566,5 +566,12 @@
     "unsupportedImageType": "Ten typ pliku nie jest obsługiwany. Wybierz inny obraz.",
     "invalidImage": "Nie można odczytać tego obrazu. Może być uszkodzony.",
     "invalidImportFile": "Nie można odczytać tego pliku jako eksportu wybranego typu."
+  },
+  "errorBoundary": {
+    "title": "Coś poszło nie tak",
+    "message": "Jot napotkał nieoczekiwany problem. Spróbuj ponownie lub udostępnij raport diagnostyczny, aby można go było naprawić.",
+    "screenMessage": "Na tym ekranie wystąpił nieoczekiwany problem.",
+    "tryAgain": "Spróbuj ponownie",
+    "shareDiagnostics": "Udostępnij diagnostykę"
   }
 }

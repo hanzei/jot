@@ -4,6 +4,12 @@
     "done": "Listo",
     "cancel": "Cancelar"
   },
+  "toast": {
+    "reference": "Ref.: {{id}}",
+    "copyReference": "Copiar referencia",
+    "copyReferenceLabel": "Copiar referencia del error {{id}}",
+    "referenceCopied": "¡Copiado!"
+  },
   "nav": {
     "profileMenu": "Menú de perfil",
     "toggleSidebar": "Alternar barra lateral",
@@ -607,5 +613,15 @@
     "unsupportedImageType": "Este tipo de archivo no es compatible. Elige otra imagen.",
     "invalidImage": "No se pudo leer esta imagen. Puede que esté dañada.",
     "invalidImportFile": "No se pudo leer este archivo como una exportación del tipo seleccionado."
+  },
+  "errorBoundary": {
+    "title": "Algo salió mal",
+    "message": "Jot encontró un problema inesperado. Recarga la página o copia los detalles del error para informarlo.",
+    "sectionMessage": "Esta página encontró un problema inesperado. El resto de Jot sigue funcionando.",
+    "reload": "Recargar página",
+    "tryAgain": "Intentar de nuevo",
+    "copyDetails": "Copiar detalles del error",
+    "copied": "Detalles del error copiados",
+    "copyFailed": "No se pudieron copiar los detalles del error"
   }
 }

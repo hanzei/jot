@@ -3,6 +3,7 @@ import type { RouteProp } from '@react-navigation/native';
 import { useRoute } from '@react-navigation/native';
 import NotesListScreen from '../screens/NotesListScreen';
 import DrawerContent from '../components/DrawerContent';
+import { screenErrorLayout } from '../components/ScreenErrorBoundary';
 
 export type MainDrawerParamList = {
   Notes: { labelId?: string; labelName?: string } | undefined;
@@ -38,6 +39,7 @@ export default function MainDrawer() {
     <Drawer.Navigator
       drawerContent={(props) => <DrawerContent {...props} />}
       screenOptions={{ headerShown: false, drawerType: 'front' }}
+      screenLayout={screenErrorLayout}
     >
       <Drawer.Screen name="Notes" component={NotesScreen} />
       <Drawer.Screen name="MyTasks" component={MyTasksScreen} />

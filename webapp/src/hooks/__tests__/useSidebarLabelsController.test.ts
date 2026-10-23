@@ -21,8 +21,9 @@ vi.mock('@/utils/api', async () => {
 });
 
 const mockShowToast = vi.fn();
+const mockShowErrorToast = vi.fn();
 vi.mock('@/hooks/useToast', () => ({
-  useToast: () => ({ showToast: mockShowToast }),
+  useToast: () => ({ showToast: mockShowToast, showErrorToast: mockShowErrorToast }),
 }));
 
 const makeLabel = (overrides: Partial<Label> = {}): Label => ({
@@ -203,7 +204,7 @@ describe('useSidebarLabelsController', () => {
       });
 
       expect(ok).toBe(false);
-      expect(mockShowToast).toHaveBeenCalledWith(expect.any(String), 'error');
+      expect(mockShowErrorToast).toHaveBeenCalledWith(expect.any(String), expect.anything());
     });
   });
 
@@ -236,7 +237,7 @@ describe('useSidebarLabelsController', () => {
       });
 
       expect(ok).toBe(false);
-      expect(mockShowToast).toHaveBeenCalledWith('Name already in use', 'error');
+      expect(mockShowErrorToast).toHaveBeenCalledWith('Name already in use', expect.anything());
     });
   });
 
@@ -269,7 +270,7 @@ describe('useSidebarLabelsController', () => {
       });
 
       expect(ok).toBe(false);
-      expect(mockShowToast).toHaveBeenCalledWith(expect.any(String), 'error');
+      expect(mockShowErrorToast).toHaveBeenCalledWith(expect.any(String), expect.anything());
     });
   });
 

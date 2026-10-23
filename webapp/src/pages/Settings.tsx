@@ -27,7 +27,7 @@ interface SettingsProps {
 
 const Settings = ({ passwordMinLength, sso }: SettingsProps) => {
   const { t } = useTranslation();
-  const { showToast } = useToast();
+  const { showToast, showErrorToast } = useToast();
   useEffect(() => { document.title = t('pageTitle.settings'); }, [t]);
   const displayMsg = (msg: string) => (i18n.exists(msg) ? t(msg) : msg);
   const currentUser = getUser();
@@ -123,8 +123,8 @@ const Settings = ({ passwordMinLength, sso }: SettingsProps) => {
     try {
       await patsApi.revoke(id);
       setPatsList(prev => prev.filter(p => p.id !== id));
-    } catch {
-      showToast(t('settings.patsRevokeError'), 'error');
+    } catch (error) {
+      showErrorToast(t('settings.patsRevokeError'), error);
     } finally {
       setRevokingPATIds(prev => {
         const next = new Set(prev);
@@ -342,8 +342,8 @@ const Settings = ({ passwordMinLength, sso }: SettingsProps) => {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    } catch {
-      showToast(t('settings.exportFailed'), 'error');
+    } catch (error) {
+      showErrorToast(t('settings.exportFailed'), error);
     } finally {
       setIsExporting(false);
     }

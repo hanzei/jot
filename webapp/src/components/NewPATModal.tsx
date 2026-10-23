@@ -1,6 +1,6 @@
-import { useState } from 'react';
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
+import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 
 interface NewPATModalProps {
   open: boolean;
@@ -11,29 +11,7 @@ interface NewPATModalProps {
 
 export default function NewPATModal({ open, tokenName, token, onClose }: NewPATModalProps) {
   const { t } = useTranslation();
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(token);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Fallback for browsers where clipboard API is unavailable.
-      const ta = document.createElement('textarea');
-      ta.value = token;
-      ta.style.position = 'fixed';
-      ta.style.opacity = '0';
-      document.body.appendChild(ta);
-      ta.focus();
-      ta.select();
-      if (document.execCommand('copy')) {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      }
-      document.body.removeChild(ta);
-    }
-  };
+  const { copied, copy } = useCopyToClipboard();
 
   return (
     <Dialog open={open} onClose={onClose} className="relative z-[60]">
@@ -61,7 +39,7 @@ export default function NewPATModal({ open, tokenName, token, onClose }: NewPATM
               />
               <button
                 type="button"
-                onClick={handleCopy}
+                onClick={() => void copy(token)}
                 className="flex-shrink-0 px-3 py-2 text-sm font-medium rounded-md bg-blue-600 hover:bg-blue-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-slate-800"
               >
                 {copied ? t('settings.patsNewTokenCopied') : t('settings.patsNewTokenCopy')}

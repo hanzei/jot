@@ -17,6 +17,7 @@ import SyncFailuresScreen from '../screens/SyncFailuresScreen';
 import DiagnosticsScreen from '../screens/DiagnosticsScreen';
 import LogsFullscreenScreen from '../screens/LogsFullscreenScreen';
 import ConnectToServerScreen from '../screens/ConnectToServerScreen';
+import { screenErrorLayout } from '../components/ScreenErrorBoundary';
 
 /** A view's position and size in window coordinates (from `measureInWindow`). */
 export interface LayoutRect {
@@ -91,7 +92,7 @@ function AuthenticatedStack() {
             inset. */}
         <ContentSafeArea>
           <CardRectRegistryProvider>
-            <Stack.Navigator>
+            <Stack.Navigator screenLayout={screenErrorLayout}>
               <Stack.Screen name="MainDrawer" component={MainDrawer} options={{ headerShown: false }} />
               <Stack.Screen
                 name="NoteEditor"

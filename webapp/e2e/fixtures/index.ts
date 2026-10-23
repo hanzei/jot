@@ -9,6 +9,7 @@ import { ToastPage } from '../pages/ToastPage';
 import { MobileAppHandoffPage } from '../pages/MobileAppHandoffPage';
 import { MockIdpPage } from '../pages/MockIdpPage';
 import { NoteConflictBanner } from '../pages/NoteConflictBanner';
+import { ErrorFallbackPage } from '../pages/ErrorFallbackPage';
 
 export { expect };
 
@@ -40,6 +41,7 @@ type Fixtures = {
   /** The mock IdP's authorize page; only reachable from the `sso` project. */
   mockIdpPage: MockIdpPage;
   noteConflictBanner: NoteConflictBanner;
+  errorFallbackPage: ErrorFallbackPage;
   /** Register a fresh user and log them in; resolves to { username, password } */
   authenticatedUser: { username: string; password: string };
 };
@@ -71,6 +73,9 @@ export const test = base.extend<Fixtures>({
   },
   noteConflictBanner: async ({ page }, use) => {
     await use(new NoteConflictBanner(page));
+  },
+  errorFallbackPage: async ({ page }, use) => {
+    await use(new ErrorFallbackPage(page));
   },
   authenticatedUser: async ({ page }, use) => {
     const username = uniqueUsername();

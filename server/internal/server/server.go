@@ -319,7 +319,7 @@ func buildOIDCHandler(
 }
 
 func (s *Server) setupRoutes() error {
-	s.router.Use(middleware.RequestID)
+	s.router.Use(requestID)
 	s.router.Use(otelhttp.NewMiddleware("", otelhttp.WithFilter(func(r *http.Request) bool {
 		return r.URL.Path != "/livez" && r.URL.Path != "/readyz" && r.URL.Path != "/api/v1/events"
 	})))
@@ -333,7 +333,7 @@ func (s *Server) setupRoutes() error {
 	corsOpts := cors.Options{
 		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
 		AllowedHeaders:   []string{"Accept", "Content-Type", "Authorization", "X-Client-Id"},
-		ExposedHeaders:   []string{"Retry-After"},
+		ExposedHeaders:   []string{"Retry-After", requestIDHeader},
 		AllowCredentials: true,
 		MaxAge:           300,
 	}

@@ -35,6 +35,8 @@ import { ShareIntentProvider } from 'expo-share-intent';
 import { useShareIntentNavigation } from './src/hooks/useShareIntentNavigation';
 import { useQuickActionRouting } from './src/hooks/useQuickActionRouting';
 import { useDeepLinkRouting } from './src/hooks/useDeepLinkRouting';
+import ErrorBoundary from './src/components/ErrorBoundary';
+import CrashScreen from './src/components/CrashScreen';
 import './src/i18n';
 
 const queryClient = new QueryClient({
@@ -92,7 +94,7 @@ function NavigationWrapper() {
   );
 }
 
-export default function App() {
+function AppContent() {
   const { t } = useTranslation();
   const [activeServerId, setActiveServerId] = React.useState<string | null>(null);
   const [isServerContextReady, setIsServerContextReady] = React.useState(false);
@@ -231,5 +233,15 @@ export default function App() {
         </ShareIntentProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
+  );
+}
+
+// Outermost, so a render error anywhere — providers included — shows the crash
+// screen instead of a white screen. Its fallback depends on none of them.
+export default function App() {
+  return (
+    <ErrorBoundary name="root" fallback={(props) => <CrashScreen {...props} />}>
+      <AppContent />
+    </ErrorBoundary>
   );
 }

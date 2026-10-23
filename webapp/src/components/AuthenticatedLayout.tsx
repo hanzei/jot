@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo, type ReactNode } from 'react';
 import { useSSE } from '@/hooks/useSSE';
 import type { SSEEvent } from '@/hooks/useSSE';
-import { Outlet, useOutletContext, useMatch, useNavigate, useSearchParams } from 'react-router';
+import { Outlet, useLocation, useOutletContext, useMatch, useNavigate, useSearchParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import {
   FileText,
@@ -10,6 +10,8 @@ import {
   ClipboardCheck,
 } from 'lucide-react';
 import AppLayout from '@/components/AppLayout';
+import ErrorBoundary from '@/components/ErrorBoundary';
+import ErrorFallback from '@/components/ErrorFallback';
 import SidebarLabels from '@/components/SidebarLabels';
 import { useSidebarLabelsController } from '@/hooks/useSidebarLabelsController';
 import { auth } from '@/utils/api';
@@ -49,6 +51,7 @@ interface AuthenticatedLayoutProps {
 const AuthenticatedLayout = ({ onLogout }: AuthenticatedLayoutProps) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
 
   // Track which route we're on for sidebar active states
@@ -219,7 +222,15 @@ const AuthenticatedLayout = ({ onLogout }: AuthenticatedLayoutProps) => {
       searchBar={searchBar}
       sseStatus={sseStatus}
     >
-      <Outlet context={context} />
+      {/* Route-level, so a page that fails to render leaves the header and
+          sidebar usable; navigating elsewhere clears it. */}
+      <ErrorBoundary
+        name="route"
+        resetKey={location.pathname + location.search}
+        fallback={(props) => <ErrorFallback {...props} variant="section" />}
+      >
+        <Outlet context={context} />
+      </ErrorBoundary>
     </AppLayout>
   );
 };

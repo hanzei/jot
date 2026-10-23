@@ -61,7 +61,7 @@ interface DashboardProps {
 
 export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: DashboardProps) {
   const { t } = useTranslation();
-  const { showToast } = useToast();
+  const { showToast, showErrorToast } = useToast();
   const { noteId: noteIdParam } = useParams<{ noteId?: string }>();
   const isNewNoteRoute = !!useMatch('/new');
   const [searchParams, setSearchParams] = useSearchParams();
@@ -315,13 +315,13 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
         // fails must not toast over notes a newer request already rendered.
         if (isMountedRef.current && requestId === loadNotesRequestIdRef.current) {
           console.error('Failed to load notes:', error);
-          showToast(t('dashboard.failedLoadNotes'), 'error');
+          showErrorToast(t('dashboard.failedLoadNotes'), error);
           // A failed reload keeps the view's current notes; a failed first load
           // of a new view shows it empty rather than leaving it pending.
           setLoadedNotes(prev => (prev.listViewKey === listViewKey ? prev : { listViewKey, notes: [] }));
         }
       });
-  }, [listViewKey, showArchived, showBin, debouncedSearchQuery, selectedLabelId, showMyTasks, showToast, t]);
+  }, [listViewKey, showArchived, showBin, debouncedSearchQuery, selectedLabelId, showMyTasks, showErrorToast, t]);
 
   // Refreshes after a mutation or SSE event must load the view that is showing
   // when they fire, not the one captured when the mutation started. Otherwise a
@@ -864,7 +864,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
       });
     } catch (error) {
       console.error('Failed to delete note:', error);
-      showToast(t('dashboard.failedDeleteNote'), 'error');
+      showErrorToast(t('dashboard.failedDeleteNote'), error);
     }
   };
 
@@ -880,13 +880,13 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
             await Promise.all([loadNotes(), loadLabelCounts()]);
           } catch (undoError) {
             console.error('Failed to undo restore:', undoError);
-            showToast(t('dashboard.failedDeleteNote'), 'error');
+            showErrorToast(t('dashboard.failedDeleteNote'), undoError);
           }
         },
       });
     } catch (error) {
       console.error('Failed to restore note:', error);
-      showToast(t('dashboard.failedRestoreNote'), 'error');
+      showErrorToast(t('dashboard.failedRestoreNote'), error);
     }
   };
 
@@ -897,7 +897,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
       showToast(t('dashboard.noteDeletedForever'));
     } catch (error) {
       console.error('Failed to permanently delete note:', error);
-      showToast(t('dashboard.failedDeleteNoteForever'), 'error');
+      showErrorToast(t('dashboard.failedDeleteNoteForever'), error);
     }
   };
 
@@ -917,7 +917,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
       void Promise.all([loadNotes(), loadLabelCounts()]);
     } catch (error) {
       console.error('Failed to empty trash:', error);
-      showToast(t('dashboard.emptyTrashFailed'), 'error');
+      showErrorToast(t('dashboard.emptyTrashFailed'), error);
     } finally {
       setIsEmptyingTrash(false);
     }
@@ -935,7 +935,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
             await Promise.all([loadNotes(), loadLabels(), loadLabelCounts()]);
           } catch (undoError) {
             console.error('Failed to undo duplicate note:', undoError);
-            showToast(t('dashboard.failedDeleteNote'), 'error');
+            showErrorToast(t('dashboard.failedDeleteNote'), undoError);
           }
         },
       });
@@ -943,7 +943,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
       console.error('Failed to duplicate note:', error);
       throw error;
     }
-  }, [loadLabelCounts, loadLabels, loadNotes, showToast, t]);
+  }, [loadLabelCounts, loadLabels, loadNotes, showToast, showErrorToast, t]);
 
   const handleConvertNote = useCallback(async (noteId: string, data: ConvertNoteTypeRequest) => {
     try {
@@ -1033,13 +1033,13 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
         return;
       }
 
-      showToast(t('dashboard.failedUpdateSort'), 'error');
+      showErrorToast(t('dashboard.failedUpdateSort'), error);
       setNoteSort(previousSort);
       if (!restoredSettings && previousSettings) {
         setSettings(previousSettings);
       }
     }
-  }, [noteSort, showToast, t]);
+  }, [noteSort, showErrorToast, t]);
 
   // Dismissal is remembered per sort order, so switching sorts re-reads it.
   // Adjusting during render rather than in an effect avoids showing the warning
@@ -1101,7 +1101,7 @@ export default function Dashboard({ uploadMaxBytes = UPLOAD_MAX_BYTES }: Dashboa
         await notes.reorder(noteIDs);
       } catch (error) {
         console.error('Failed to reorder notes:', error);
-        showToast(t('dashboard.failedReorderNotes'), 'error');
+        showErrorToast(t('dashboard.failedReorderNotes'), error);
         loadNotes();
       }
     }

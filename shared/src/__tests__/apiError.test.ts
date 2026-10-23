@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apiErrorCode, apiErrorParams, parseApiError, parseApiErrorBody } from '../apiError';
+import { apiErrorCode, apiErrorParams, apiRequestId, parseApiError, parseApiErrorBody, serverErrorRequestId } from '../apiError';
 import { IMAGE_MAX_PER_NOTE, VALIDATION } from '../constants';
 
 const envelope = { error: { code: 'not_found', message: 'note not found' } };
@@ -55,5 +55,46 @@ describe('apiErrorParams', () => {
 
   it('returns undefined for a code without parameters', () => {
     expect(apiErrorParams('label_name_taken')).toBeUndefined();
+  });
+});
+
+describe('apiRequestId', () => {
+  it('reads a plain headers object with lowercased keys', () => {
+    const err = { response: { status: 500, headers: { 'x-request-id': 'abc123' } } };
+    expect(apiRequestId(err)).toBe('abc123');
+  });
+
+  it('reads headers through a case-insensitive get, as AxiosHeaders exposes', () => {
+    class Headers {
+      private values = new Map([['x-request-id', 'def456']]);
+      get(name: string) {
+        return this.values.get(name.toLowerCase());
+      }
+    }
+    expect(apiRequestId({ response: { status: 500, headers: new Headers() } })).toBe('def456');
+  });
+
+  it.each([
+    ['a network error', new Error('Network Error')],
+    ['null', null],
+    ['a response without headers', { response: { status: 500 } }],
+    ['a response without the header', { response: { status: 500, headers: {} } }],
+    ['an empty header', { response: { status: 500, headers: { 'x-request-id': '' } } }],
+  ])('returns null for %s', (_label, err) => {
+    expect(apiRequestId(err)).toBeNull();
+  });
+});
+
+describe('serverErrorRequestId', () => {
+  const failed = (status: number) => ({ response: { status, headers: { 'x-request-id': 'abc123' } } });
+
+  it('returns the ID of a 5xx', () => {
+    expect(serverErrorRequestId(failed(500))).toBe('abc123');
+    expect(serverErrorRequestId(failed(503))).toBe('abc123');
+  });
+
+  it('returns null for a 4xx and for a network error', () => {
+    expect(serverErrorRequestId(failed(404))).toBeNull();
+    expect(serverErrorRequestId(new Error('Network Error'))).toBeNull();
   });
 });

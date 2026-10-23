@@ -73,7 +73,7 @@ function MenuKbd({ children }: { children: React.ReactNode }) {
 export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare, onRestore, onPermanentlyDelete, currentUserId, usersById, inBin = false, onRefresh, onLabelClick, dragHandle, isActive = true, onCardFocus }: NoteCardProps) {
   const { t } = useTranslation();
   const unreadBadgeId = useId();
-  const { showToast } = useToast();
+  const { showToast, showErrorToast } = useToast();
   const [isUpdating, setIsUpdating] = useState(false);
   const [confirmState, setConfirmState] = useState<{
     open: boolean;
@@ -145,14 +145,14 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
               onRefresh?.();
             } catch (undoError) {
               console.error('Failed to undo archive toggle:', undoError);
-              showToast(t('note.failedArchive'), 'error');
+              showErrorToast(t('note.failedArchive'), undoError);
             }
           },
         }
       );
     } catch (error) {
       console.error('Failed to toggle archive:', error);
-      showToast(t('note.failedArchive'), 'error');
+      showErrorToast(t('note.failedArchive'), error);
     } finally {
       setIsUpdating(false);
     }
@@ -176,14 +176,14 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
               onRefresh?.();
             } catch (undoError) {
               console.error('Failed to undo pin toggle:', undoError);
-              showToast(t('note.failedPin'), 'error');
+              showErrorToast(t('note.failedPin'), undoError);
             }
           },
         }
       );
     } catch (error) {
       console.error('Failed to toggle pin:', error);
-      showToast(t('note.failedPin'), 'error');
+      showErrorToast(t('note.failedPin'), error);
     } finally {
       setIsUpdating(false);
     }
@@ -205,7 +205,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
       await onDuplicate(note.id);
     } catch (error) {
       console.error('Failed to duplicate note:', error);
-      showToast(t('note.failedDuplicate'), 'error');
+      showErrorToast(t('note.failedDuplicate'), error);
     } finally {
       setIsUpdating(false);
     }

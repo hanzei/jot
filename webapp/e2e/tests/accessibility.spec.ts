@@ -72,6 +72,21 @@ for (const theme of THEMES) {
       await expectNoViolations(page);
     });
 
+    test('error fallbacks have no WCAG A/AA violations', async ({ page, authenticatedUser, errorFallbackPage }) => {
+      void authenticatedUser;
+      await errorFallbackPage.breakNoteList();
+      await page.goto('/');
+      await expect(errorFallbackPage.section()).toBeVisible();
+      await expectTheme(page, theme);
+      await expectNoViolations(page);
+
+      await errorFallbackPage.breakSidebarLabels();
+      await page.reload();
+      await expect(errorFallbackPage.root()).toBeVisible();
+      await expectTheme(page, theme);
+      await expectNoViolations(page);
+    });
+
     test('unread badges have no WCAG A/AA violations', async ({ page, authenticatedUser, dashboardPage, request }) => {
       // Both badge variants on the owner's dashboard: "Updated" on a note a
       // collaborator changed, "New" on one the collaborator shared with them.

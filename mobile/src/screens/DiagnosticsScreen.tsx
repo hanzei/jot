@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   Platform,
   ScrollView,
-  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -30,18 +29,11 @@ import {
   subscribeToServerReachability,
 } from '../api/serverReachability';
 import { useOfflineContext } from '../store/OfflineContext';
-import { getAboutInfo } from '../api/settings';
-import { getLogs, getPersistedLogs, clearLogs, type LogEntry } from '../utils/logger';
-import { getAppBuildInfo } from '../utils/appInfo';
-import type { AboutInfo } from '@jot/shared';
-
-/** Cap on log entries embedded in a shared diagnostics report, to keep the payload shareable. */
-const SHARED_REPORT_LOG_LIMIT = 500;
+import { getLogs, clearLogs, type LogEntry } from '../utils/logger';
+import { shareDiagnosticsReport } from '../utils/diagnosticsReport';
 
 interface DiagnosticsSnapshot {
-  pendingQueueCount: number;
-  syncQueueHead: SyncQueueStats['head'];
-  syncQueueMaxAttempts: number;
+  queue: SyncQueueStats;
   lifecycle: ServerSwitchLifecycleState;
   sse: SseState;
   logs: LogEntry[];
@@ -81,9 +73,7 @@ export default function DiagnosticsScreen() {
   const { syncError, syncFailureCount, lastSyncedAt, consecutiveFailureCount } = useOfflineContext();
 
   const [snapshot, setSnapshot] = useState<DiagnosticsSnapshot>(() => ({
-    pendingQueueCount: 0,
-    syncQueueHead: null,
-    syncQueueMaxAttempts: 0,
+    queue: { pendingCount: 0, head: null, maxAttempts: 0 },
     lifecycle: getServerSwitchLifecycleState(),
     sse: getSseState(),
     logs: getLogs().slice(-50),
@@ -101,9 +91,7 @@ export default function DiagnosticsScreen() {
       // DB read failure — show an empty queue rather than blocking the snapshot update
     }
     setSnapshot({
-      pendingQueueCount: stats.pendingCount,
-      syncQueueHead: stats.head,
-      syncQueueMaxAttempts: stats.maxAttempts,
+      queue: stats,
       lifecycle: getServerSwitchLifecycleState(),
       sse: getSseState(),
       logs: getLogs().slice(-50),
@@ -146,67 +134,17 @@ export default function DiagnosticsScreen() {
   }, []);
 
   const handleShare = useCallback(async () => {
-    const appBuildInfo = getAppBuildInfo();
-    // Server build info lets a maintainer spot app/server version skew without
-    // asking for it. It is best-effort: the default (finite) read timeout bounds
-    // the wait, a server already believed unreachable is not tried at all, and
-    // any failure just leaves the fields null so the report still goes out.
-    let serverBuild: AboutInfo | null = null;
-    if (snapshot.isConnected && isServerReachable()) {
-      try {
-        serverBuild = await getAboutInfo();
-      } catch {
-        serverBuild = null;
-      }
-    }
-    const report = {
-      generatedAt: new Date().toISOString(),
-      platform: Platform.OS,
-      app: {
-        version: appBuildInfo.version,
-        commit: appBuildInfo.commit ?? null,
-        buildTime: appBuildInfo.buildTime ?? null,
-      },
-      server: {
-        url: snapshot.serverUrl,
-        generationId: snapshot.lifecycle.generationId,
-        version: serverBuild?.version ?? null,
-        commit: serverBuild?.commit ?? null,
-        build_time: serverBuild?.build_time ?? null,
-        go_version: serverBuild?.go_version ?? null,
-      },
-      network: {
-        isConnected: snapshot.isConnected,
-        isServerReachable: snapshot.isServerReachable,
-        serverReachabilityChangedAt: snapshot.serverReachabilityChangedAt,
-      },
-      sse: {
-        isConnected: snapshot.sse.isConnected,
-        reconnectAttempts: snapshot.sse.reconnectAttempts,
-      },
+    await shareDiagnosticsReport({
+      serverUrl: snapshot.serverUrl,
+      isConnected: snapshot.isConnected,
       sync: {
-        pendingQueueCount: snapshot.pendingQueueCount,
-        headOperation: snapshot.syncQueueHead?.operation ?? null,
-        headQueuedAt: snapshot.syncQueueHead?.created_at ?? null,
-        headAttempts: snapshot.syncQueueHead?.attempts ?? 0,
-        maxAttempts: snapshot.syncQueueMaxAttempts,
-        isSyncPaused: snapshot.lifecycle.isSyncPaused,
-        isSseQuiesced: snapshot.lifecycle.isSseQuiesced,
+        queue: snapshot.queue,
         lastSyncedAt,
         syncError,
         consecutiveFailureCount,
         deadLetterCount: syncFailureCount,
       },
-      lifecycle: {
-        isSwitching: snapshot.lifecycle.isSwitching,
-        degraded: snapshot.lifecycle.degraded,
-        degradedMessage: snapshot.lifecycle.degradedMessage,
-      },
-      // Persisted rather than in-memory: a report filed after a restart is
-      // exactly the case where the interesting entries predate this session.
-      recentLogs: getPersistedLogs().slice(-SHARED_REPORT_LOG_LIMIT),
-    };
-    await Share.share({ message: JSON.stringify(report, null, 2) });
+    });
   }, [snapshot, lastSyncedAt, syncError, consecutiveFailureCount, syncFailureCount]);
 
   const { lifecycle, sse } = snapshot;
@@ -276,24 +214,24 @@ export default function DiagnosticsScreen() {
           <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('diagnostics.syncQueue')}</Text>
           <DiagRow
             label={t('diagnostics.pendingOps')}
-            value={String(snapshot.pendingQueueCount)}
-            valueColor={snapshot.pendingQueueCount > 0 ? STATUS_ORANGE : undefined}
+            value={String(snapshot.queue.pendingCount)}
+            valueColor={snapshot.queue.pendingCount > 0 ? STATUS_ORANGE : undefined}
           />
-          {snapshot.syncQueueHead && (
+          {snapshot.queue.head && (
             <>
               <DiagRow
                 label={t('diagnostics.headOperation')}
-                value={snapshot.syncQueueHead.operation}
+                value={snapshot.queue.head.operation}
                 mono
               />
               <DiagRow
                 label={t('diagnostics.headWaiting')}
-                value={formatAge(snapshot.syncQueueHead.created_at)}
+                value={formatAge(snapshot.queue.head.created_at)}
               />
               <DiagRow
                 label={t('diagnostics.headAttempts')}
-                value={`${snapshot.syncQueueHead.attempts} / ${MAX_ENTRY_DRAIN_ATTEMPTS}`}
-                valueColor={snapshot.syncQueueHead.attempts > 0 ? STATUS_ORANGE : undefined}
+                value={`${snapshot.queue.head.attempts} / ${MAX_ENTRY_DRAIN_ATTEMPTS}`}
+                valueColor={snapshot.queue.head.attempts > 0 ? STATUS_ORANGE : undefined}
               />
             </>
           )}

@@ -4,6 +4,12 @@
     "done": "Done",
     "cancel": "Cancel"
   },
+  "toast": {
+    "reference": "Ref: {{id}}",
+    "copyReference": "Copy reference",
+    "copyReferenceLabel": "Copy error reference {{id}}",
+    "referenceCopied": "Copied!"
+  },
   "nav": {
     "profileMenu": "Profile menu",
     "toggleSidebar": "Toggle sidebar",
@@ -607,5 +613,15 @@
     "unsupportedImageType": "This file type isn't supported. Choose a different image.",
     "invalidImage": "This image could not be read. It may be damaged.",
     "invalidImportFile": "This file could not be read as an export of the selected type."
+  },
+  "errorBoundary": {
+    "title": "Something went wrong",
+    "message": "Jot ran into an unexpected problem. Reload the page, or copy the error details to report it.",
+    "sectionMessage": "This page ran into an unexpected problem. The rest of Jot still works.",
+    "reload": "Reload page",
+    "tryAgain": "Try again",
+    "copyDetails": "Copy error details",
+    "copied": "Error details copied",
+    "copyFailed": "Could not copy error details"
   }
 }
