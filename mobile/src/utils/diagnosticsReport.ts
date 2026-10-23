@@ -2,6 +2,7 @@ import { Platform, Share } from 'react-native';
 import { getServerSwitchLifecycleState } from '../store/serverSwitchLifecycle';
 import { getSseState } from '../api/sseState';
 import type { SyncQueueStats } from '../db/syncQueue';
+import type { ImageUploadQueueStats } from '../db/imageUploadQueue';
 import { isServerReachable, getServerReachabilityChangedAt } from '../api/serverReachability';
 import { getPersistedLogs } from './logger';
 import { getAppBuildInfo } from './appInfo';
@@ -14,6 +15,7 @@ const SHARED_REPORT_LOG_LIMIT = 500;
 /** Sync state that only the mounted provider tree (database, OfflineContext) can supply. */
 export interface DiagnosticsSyncState {
   queue: SyncQueueStats;
+  imageUploads: ImageUploadQueueStats;
   lastSyncedAt: string | null;
   syncError: boolean;
   consecutiveFailureCount: number;
@@ -85,6 +87,13 @@ function buildDiagnosticsReport(input: DiagnosticsReportInput, serverBuild: Abou
       syncError: sync?.syncError ?? null,
       consecutiveFailureCount: sync?.consecutiveFailureCount ?? null,
       deadLetterCount: sync?.deadLetterCount ?? null,
+    },
+    imageUploads: {
+      queuedCount: sync?.imageUploads.queuedCount ?? null,
+      errorCount: sync?.imageUploads.errorCount ?? null,
+      oldestQueuedAt: sync?.imageUploads.oldest?.created_at ?? null,
+      oldestAttempts: sync ? (sync.imageUploads.oldest?.attempts ?? 0) : null,
+      maxAttempts: sync?.imageUploads.maxAttempts ?? null,
     },
     lifecycle: {
       isSwitching: lifecycle.isSwitching,

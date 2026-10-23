@@ -5,6 +5,8 @@
  */
 import type { Label, ListNote, NoteItem, TextNote } from '@jot/shared';
 import type { EnqueueParams } from '../../src/db/syncQueue';
+import type { PendingImageUploadEntry } from '../../src/db/imageUploadQueue';
+import { saveNote } from '../../src/db/noteQueries';
 import type { TestDatabase } from './testDb';
 
 const baseNote: Omit<TextNote, 'id' | 'note_type' | 'content'> = {
@@ -70,6 +72,45 @@ export async function seedQueueEntry(
     ],
   );
   return result.lastInsertRowId;
+}
+
+/**
+ * Insert a `pending_image_uploads` row (and the note it hangs off, for the FK),
+ * with its stable file copy present in the mock filesystem.
+ */
+export async function seedImageUpload(
+  db: TestDatabase,
+  overrides: Partial<PendingImageUploadEntry> = {},
+): Promise<PendingImageUploadEntry> {
+  const id = overrides.id ?? 'upload-1';
+  const entry: PendingImageUploadEntry = {
+    id,
+    note_id: 'note-1',
+    local_path: `file:///docs/pending-image-uploads/${id}`,
+    filename: 'photo.png',
+    mime_type: 'image/png',
+    size_bytes: 1024,
+    status: 'queued',
+    error_message: null,
+    created_at: '2024-01-01T00:00:00Z',
+    attempts: 0,
+    ...overrides,
+  };
+  const exists = await db.getFirstAsync('SELECT id FROM notes WHERE id = ?', [entry.note_id]);
+  if (!exists) {
+    await saveNote(db, makeTextNote({ id: entry.note_id }));
+  }
+  await db.runAsync(
+    `INSERT INTO pending_image_uploads
+       (id, note_id, local_path, filename, mime_type, size_bytes, status, error_message, created_at, attempts)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      entry.id, entry.note_id, entry.local_path, entry.filename, entry.mime_type,
+      entry.size_bytes, entry.status, entry.error_message, entry.created_at, entry.attempts ?? 0,
+    ],
+  );
+  globalThis.mockFileSystem.files.set(entry.local_path, 'png-bytes');
+  return entry;
 }
 
 /** Ids still in the sync queue, oldest first. */
