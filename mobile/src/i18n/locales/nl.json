@@ -566,5 +566,12 @@
     "unsupportedImageType": "Dit bestandstype wordt niet ondersteund. Kies een andere afbeelding.",
     "invalidImage": "Deze afbeelding kan niet worden gelezen. Mogelijk is ze beschadigd.",
     "invalidImportFile": "Dit bestand kan niet worden gelezen als export van het gekozen type."
+  },
+  "errorBoundary": {
+    "title": "Er is iets misgegaan",
+    "message": "Jot is op een onverwacht probleem gestuit. Probeer het opnieuw of deel een diagnoserapport zodat het kan worden opgelost.",
+    "screenMessage": "Dit scherm is op een onverwacht probleem gestuit.",
+    "tryAgain": "Opnieuw proberen",
+    "shareDiagnostics": "Diagnose delen"
   }
 }

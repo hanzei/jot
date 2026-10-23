@@ -3,6 +3,7 @@ import type { RouteProp } from '@react-navigation/native';
 import { useRoute } from '@react-navigation/native';
 import NotesListScreen from '../screens/NotesListScreen';
 import DrawerContent from '../components/DrawerContent';
+import ScreenErrorBoundary from '../components/ScreenErrorBoundary';
 
 export type MainDrawerParamList = {
   Notes: { labelId?: string; labelName?: string } | undefined;
@@ -15,19 +16,35 @@ const Drawer = createDrawerNavigator<MainDrawerParamList>();
 
 function NotesScreen() {
   const route = useRoute<RouteProp<MainDrawerParamList, 'Notes'>>();
-  return <NotesListScreen variant="notes" labelId={route.params?.labelId} labelName={route.params?.labelName} />;
+  return (
+    <ScreenErrorBoundary name="notes-list">
+      <NotesListScreen variant="notes" labelId={route.params?.labelId} labelName={route.params?.labelName} />
+    </ScreenErrorBoundary>
+  );
 }
 
 function MyTasksScreen() {
-  return <NotesListScreen variant="my-tasks" />;
+  return (
+    <ScreenErrorBoundary name="notes-list">
+      <NotesListScreen variant="my-tasks" />
+    </ScreenErrorBoundary>
+  );
 }
 
 function ArchivedScreen() {
-  return <NotesListScreen variant="archived" />;
+  return (
+    <ScreenErrorBoundary name="notes-list">
+      <NotesListScreen variant="archived" />
+    </ScreenErrorBoundary>
+  );
 }
 
 function TrashScreen() {
-  return <NotesListScreen variant="trash" />;
+  return (
+    <ScreenErrorBoundary name="notes-list">
+      <NotesListScreen variant="trash" />
+    </ScreenErrorBoundary>
+  );
 }
 
 export default function MainDrawer() {

@@ -566,5 +566,12 @@
     "unsupportedImageType": "This file type isn't supported. Choose a different image.",
     "invalidImage": "This image could not be read. It may be damaged.",
     "invalidImportFile": "This file could not be read as an export of the selected type."
+  },
+  "errorBoundary": {
+    "title": "Something went wrong",
+    "message": "Jot ran into an unexpected problem. Try again, or share a diagnostics report so it can be fixed.",
+    "screenMessage": "This screen ran into an unexpected problem.",
+    "tryAgain": "Try again",
+    "shareDiagnostics": "Share diagnostics"
   }
 }

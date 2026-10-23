@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   Platform,
   ScrollView,
-  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -30,13 +29,8 @@ import {
   subscribeToServerReachability,
 } from '../api/serverReachability';
 import { useOfflineContext } from '../store/OfflineContext';
-import { getLogs, getPersistedLogs, clearLogs, type LogEntry } from '../utils/logger';
-import appConfig from '../../app.json';
-
-const APP_VERSION: string = appConfig.expo.version;
-
-/** Cap on log entries embedded in a shared diagnostics report, to keep the payload shareable. */
-const SHARED_REPORT_LOG_LIMIT = 500;
+import { getLogs, clearLogs, type LogEntry } from '../utils/logger';
+import { shareDiagnosticsReport } from '../utils/diagnosticsReport';
 
 interface DiagnosticsSnapshot {
   pendingQueueCount: number;
@@ -146,46 +140,21 @@ export default function DiagnosticsScreen() {
   }, []);
 
   const handleShare = useCallback(async () => {
-    const report = {
-      generatedAt: new Date().toISOString(),
-      platform: Platform.OS,
-      appVersion: APP_VERSION,
-      server: {
-        url: snapshot.serverUrl,
-        generationId: snapshot.lifecycle.generationId,
-      },
-      network: {
-        isConnected: snapshot.isConnected,
-        isServerReachable: snapshot.isServerReachable,
-        serverReachabilityChangedAt: snapshot.serverReachabilityChangedAt,
-      },
-      sse: {
-        isConnected: snapshot.sse.isConnected,
-        reconnectAttempts: snapshot.sse.reconnectAttempts,
-      },
+    await shareDiagnosticsReport({
+      serverUrl: snapshot.serverUrl,
+      isConnected: snapshot.isConnected,
       sync: {
-        pendingQueueCount: snapshot.pendingQueueCount,
-        headOperation: snapshot.syncQueueHead?.operation ?? null,
-        headQueuedAt: snapshot.syncQueueHead?.created_at ?? null,
-        headAttempts: snapshot.syncQueueHead?.attempts ?? 0,
-        maxAttempts: snapshot.syncQueueMaxAttempts,
-        isSyncPaused: snapshot.lifecycle.isSyncPaused,
-        isSseQuiesced: snapshot.lifecycle.isSseQuiesced,
+        queue: {
+          pendingCount: snapshot.pendingQueueCount,
+          head: snapshot.syncQueueHead,
+          maxAttempts: snapshot.syncQueueMaxAttempts,
+        },
         lastSyncedAt,
         syncError,
         consecutiveFailureCount,
         deadLetterCount: syncFailureCount,
       },
-      lifecycle: {
-        isSwitching: snapshot.lifecycle.isSwitching,
-        degraded: snapshot.lifecycle.degraded,
-        degradedMessage: snapshot.lifecycle.degradedMessage,
-      },
-      // Persisted rather than in-memory: a report filed after a restart is
-      // exactly the case where the interesting entries predate this session.
-      recentLogs: getPersistedLogs().slice(-SHARED_REPORT_LOG_LIMIT),
-    };
-    await Share.share({ message: JSON.stringify(report, null, 2) });
+    });
   }, [snapshot, lastSyncedAt, syncError, consecutiveFailureCount, syncFailureCount]);
 
   const { lifecycle, sse } = snapshot;
