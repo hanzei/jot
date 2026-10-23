@@ -305,18 +305,7 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
                   title={t('admin.stats.metrics.databaseSize')}
                   value={formatBytes(stats.storage.database_size_bytes)}
                   valueTestId="admin-stats-database-size"
-                >
-                  <StatLine
-                    label={t('admin.stats.metrics.imageCount')}
-                    value={formatNumber(stats.storage.image_count)}
-                    valueTestId="admin-stats-image-count"
-                  />
-                  <StatLine
-                    label={t('admin.stats.metrics.imagesSize')}
-                    value={formatBytes(stats.storage.images_size_bytes)}
-                    valueTestId="admin-stats-images-size"
-                  />
-                </StatCard>
+                />
               </>
             ) : null}
           </div>
@@ -362,6 +351,16 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
                   value={stats.runtime.upload_volume ? formatBytes(stats.runtime.upload_volume.free_bytes) : t('admin.stats.runtime.unavailable')}
                   valueTestId="admin-stats-upload-free"
                 >
+                  <StatLine
+                    label={t('admin.stats.metrics.imagesSize')}
+                    value={formatBytes(stats.storage.images_size_bytes)}
+                    valueTestId="admin-stats-images-size"
+                  />
+                  <StatLine
+                    label={t('admin.stats.metrics.imageCount')}
+                    value={formatNumber(stats.storage.image_count)}
+                    valueTestId="admin-stats-image-count"
+                  />
                   {stats.runtime.upload_volume ? (
                     <StatLine
                       label={t('admin.stats.runtime.uploadTotal')}

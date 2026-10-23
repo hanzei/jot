@@ -128,6 +128,9 @@ describe('Admin', () => {
       expect(screen.getByTestId('admin-stats-active-sessions')).toHaveTextContent('7');
       expect(screen.getByTestId('admin-stats-upload-free')).toHaveTextContent('10 GB');
       expect(screen.getByTestId('admin-stats-upload-total')).toHaveTextContent('50 GB');
+      // Image usage sits with the upload volume it lives on, not the database.
+      expect(within(runtime).getByTestId('admin-stats-images-size')).toHaveTextContent('2 MB');
+      expect(within(runtime).getByTestId('admin-stats-image-count')).toHaveTextContent('5');
     });
 
     it('flags a dirty migration and an unreadable upload volume', async () => {
@@ -149,6 +152,8 @@ describe('Admin', () => {
       expect(screen.getByTestId('admin-stats-database-backend')).toHaveTextContent('PostgreSQL');
       expect(screen.getByTestId('admin-stats-migration-version')).toHaveTextContent('13 (dirty)');
       expect(screen.getByTestId('admin-stats-upload-free')).toHaveTextContent('n/a');
+      // Jot's own image usage comes from the database, so it still shows.
+      expect(screen.getByTestId('admin-stats-images-size')).toHaveTextContent('2 MB');
       expect(screen.queryByTestId('admin-stats-upload-total')).not.toBeInTheDocument();
     });
 
