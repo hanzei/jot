@@ -22,7 +22,12 @@ import {
   type ServerSwitchLifecycleState,
 } from '../store/serverSwitchLifecycle';
 import { getSseState, subscribeToSseState, type SseState } from '../api/sseState';
-import { getSyncQueueStats, MAX_ENTRY_DRAIN_ATTEMPTS, type SyncQueueStats } from '../db/syncQueue';
+import {
+  EMPTY_SYNC_QUEUE_STATS,
+  getSyncQueueStats,
+  MAX_ENTRY_DRAIN_ATTEMPTS,
+  type SyncQueueStats,
+} from '../db/syncQueue';
 import {
   EMPTY_IMAGE_UPLOAD_QUEUE_STATS,
   getImageUploadQueueStats,
@@ -48,8 +53,6 @@ interface DiagnosticsSnapshot {
   isServerReachable: boolean;
   serverReachabilityChangedAt: string | null;
 }
-
-const EMPTY_SYNC_QUEUE_STATS: SyncQueueStats = { pendingCount: 0, head: null, maxAttempts: 0 };
 
 /** Formats an ISO timestamp for display, or a placeholder if never set. */
 function formatTimestamp(iso: string | null, never: string): string {
