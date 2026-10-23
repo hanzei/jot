@@ -291,6 +291,40 @@ test.describe('Admin', () => {
     );
   });
 
+  // The mobile-chrome project skips this spec, so the phone layout is covered
+  // here by shrinking the viewport. German has the longest action labels; the
+  // bootstrap admin's language preference is "system", so the browser locale
+  // selects it.
+  test.describe('at phone width in German', () => {
+    test.use({ viewport: { width: 375, height: 812 }, locale: 'de-DE' });
+
+    test('admin user row actions stay fully visible', async ({ page, request }) => {
+      const username = uniqueUsername('narrow');
+
+      await ensureAdminSession(page);
+      await expectOk(
+        await request.post('/api/v1/register', { data: { username, password: 'testpass123' } }),
+        'register narrow-layout target',
+      );
+
+      await new AdminPage(page).goto();
+      const userRow = page.getByTestId('users-list').getByTestId(`user-row-${username}`);
+      await expect(userRow).toBeVisible();
+      // Scroll the row, not the buttons: scrolling a clipped button into view
+      // would scroll the overflow-hidden list sideways and hide the bug.
+      await userRow.scrollIntoViewIfNeeded();
+
+      const buttons = [
+        userRow.getByRole('button', { name: `Zum Admin machen für ${username}` }),
+        userRow.getByRole('button', { name: `Passwort für ${username} zurücksetzen` }),
+        userRow.getByRole('button', { name: `Benutzer ${username} löschen` }),
+      ];
+      for (const button of buttons) {
+        await expect(button).toBeInViewport({ ratio: 1 });
+      }
+    });
+  });
+
   test('non-admin users are redirected away from admin page', async ({
     page,
     loginPage,
