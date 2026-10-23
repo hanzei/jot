@@ -59,6 +59,9 @@ func main() {
 	if err != nil {
 		logrus.WithError(err).Fatal("Failed to load configuration")
 	}
+	// Before telemetry.Setup, whose OTel error logger copies the standard
+	// logger's level and formatter.
+	configureLogging(logrus.StandardLogger(), cfg)
 
 	ctx := context.Background()
 	otelShutdown, err := telemetry.Setup(ctx, telemetry.Config{
@@ -123,6 +126,19 @@ func main() {
 		logrus.Info("Server shutdown complete")
 	case <-signalCtx.Done():
 		gracefulShutdown(ctx, signalCtx, s, serverErrCh)
+	}
+}
+
+// configureLogging applies JOT_LOG_LEVEL and JOT_LOG_FORMAT to log.
+// config.Load has already validated both values.
+func configureLogging(log *logrus.Logger, cfg *config.Config) {
+	level, err := logrus.ParseLevel(cfg.LogLevel)
+	if err != nil {
+		log.WithError(err).Fatal("Failed to parse JOT_LOG_LEVEL")
+	}
+	log.SetLevel(level)
+	if cfg.LogFormat == "json" {
+		log.SetFormatter(&logrus.JSONFormatter{})
 	}
 }
 
