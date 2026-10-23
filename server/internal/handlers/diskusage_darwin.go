@@ -1,4 +1,4 @@
-//go:build linux || darwin
+//go:build darwin
 
 package handlers
 
@@ -14,7 +14,7 @@ func diskUsage(path string) (free, total int64, err error) {
 	if err := syscall.Statfs(path, &st); err != nil {
 		return 0, 0, fmt.Errorf("statfs %s: %w", path, err)
 	}
-	// Bsize is int64 on linux and uint32 on darwin; widen both the same way.
-	bsize := int64(st.Bsize)                                       //nolint:unconvert // differs per platform
+	// On darwin f_bsize is the fundamental block size the counts are in.
+	bsize := int64(st.Bsize)
 	return int64(st.Bavail) * bsize, int64(st.Blocks) * bsize, nil //nolint:gosec // block counts fit int64 on any real filesystem
 }

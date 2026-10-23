@@ -30,13 +30,19 @@ type AdminHandler struct {
 	passwordMinLength int
 }
 
+// errDiskUsageUnsupported is what diskUsage returns on platforms without
+// statfs; it is expected there, so GetStats does not log it.
+var errDiskUsageUnsupported = errors.New("disk usage not supported on this platform")
+
 // AdminRuntimeConfig is the startup-time state GET /admin/stats reports
 // alongside its live counts.
 type AdminRuntimeConfig struct {
 	// DBPath is the SQLite database file, whose size is the reported
 	// database size. Unused on PostgreSQL.
-	DBPath        string
-	UploadDir     string
+	DBPath    string
+	UploadDir string
+	// StartedAt must come from time.Now, not models.Now: the uptime is
+	// measured against its monotonic clock reading, which models.Now strips.
 	StartedAt     time.Time
 	Observability models.AdminObservabilityStats
 }
@@ -101,14 +107,16 @@ func (h *AdminHandler) GetStats(w http.ResponseWriter, r *http.Request) (int, an
 	}
 
 	rt := &stats.Runtime
-	rt.StartedAt = h.runtime.StartedAt
+	rt.StartedAt = h.runtime.StartedAt.UTC()
+	// StartedAt keeps its monotonic reading, so a wall-clock step (NTP,
+	// VM resume) cannot make the uptime jump or go negative.
 	rt.UptimeSeconds = int64(time.Since(h.runtime.StartedAt).Seconds())
 	rt.SSESubscribers = int64(h.hub.SubscriberCount())
 	rt.Observability = h.runtime.Observability
 	if free, total, diskErr := diskUsage(h.runtime.UploadDir); diskErr == nil {
 		rt.UploadDirFreeBytes = &free
 		rt.UploadDirTotalBytes = &total
-	} else {
+	} else if !errors.Is(diskErr, errDiskUsageUnsupported) {
 		logutil.FromContext(r.Context()).WithError(diskErr).Warn("Failed to read upload directory disk usage")
 	}
 

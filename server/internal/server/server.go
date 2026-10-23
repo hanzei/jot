@@ -152,7 +152,7 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (*Server, error) {
 	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, userSettingsStore, imageStore, sessionService, hub, handlers.AdminRuntimeConfig{
 		DBPath:    cfg.DBDSN,
 		UploadDir: cfg.UploadDir,
-		StartedAt: models.Now(),
+		StartedAt: time.Now(), //nolint:gocritic // uptime reference; keeps the monotonic clock, never persisted
 		Observability: models.AdminObservabilityStats{
 			TracesEnabled:          cfg.OTelTracesEnabled,
 			MetricsEnabled:         cfg.OTelMetricsEnabled,
