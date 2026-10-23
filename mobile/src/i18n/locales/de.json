@@ -566,5 +566,12 @@
     "unsupportedImageType": "Dieser Dateityp wird nicht unterstützt. Wähle ein anderes Bild.",
     "invalidImage": "Dieses Bild konnte nicht gelesen werden. Möglicherweise ist es beschädigt.",
     "invalidImportFile": "Diese Datei konnte nicht als Export des gewählten Typs gelesen werden."
+  },
+  "errorBoundary": {
+    "title": "Etwas ist schiefgelaufen",
+    "message": "Jot ist auf ein unerwartetes Problem gestoßen. Versuche es erneut oder teile einen Diagnosebericht, damit es behoben werden kann.",
+    "screenMessage": "Auf diesem Bildschirm ist ein unerwartetes Problem aufgetreten.",
+    "tryAgain": "Erneut versuchen",
+    "shareDiagnostics": "Diagnose teilen"
   }
 }

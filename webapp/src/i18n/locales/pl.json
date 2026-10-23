@@ -613,5 +613,15 @@
     "unsupportedImageType": "Ten typ pliku nie jest obsługiwany. Wybierz inny obraz.",
     "invalidImage": "Nie można odczytać tego obrazu. Może być uszkodzony.",
     "invalidImportFile": "Nie można odczytać tego pliku jako eksportu wybranego typu."
+  },
+  "errorBoundary": {
+    "title": "Coś poszło nie tak",
+    "message": "Jot napotkał nieoczekiwany problem. Odśwież stronę lub skopiuj szczegóły błędu, aby go zgłosić.",
+    "sectionMessage": "Na tej stronie wystąpił nieoczekiwany problem. Reszta Jot nadal działa.",
+    "reload": "Odśwież stronę",
+    "tryAgain": "Spróbuj ponownie",
+    "copyDetails": "Kopiuj szczegóły błędu",
+    "copied": "Skopiowano szczegóły błędu",
+    "copyFailed": "Nie udało się skopiować szczegółów błędu"
   }
 }

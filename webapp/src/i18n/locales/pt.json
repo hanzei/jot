@@ -613,5 +613,15 @@
     "unsupportedImageType": "Este tipo de arquivo não é compatível. Escolha outra imagem.",
     "invalidImage": "Não foi possível ler esta imagem. Ela pode estar danificada.",
     "invalidImportFile": "Não foi possível ler este arquivo como uma exportação do tipo selecionado."
+  },
+  "errorBoundary": {
+    "title": "Algo deu errado",
+    "message": "O Jot encontrou um problema inesperado. Recarregue a página ou copie os detalhes do erro para relatá-lo.",
+    "sectionMessage": "Esta página encontrou um problema inesperado. O restante do Jot continua funcionando.",
+    "reload": "Recarregar página",
+    "tryAgain": "Tentar novamente",
+    "copyDetails": "Copiar detalhes do erro",
+    "copied": "Detalhes do erro copiados",
+    "copyFailed": "Não foi possível copiar os detalhes do erro"
   }
 }

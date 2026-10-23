@@ -132,6 +132,14 @@ describe('API Module', () => {
       expect(mockLocation.href).not.toBe('/login');
     });
 
+    it('does not redirect on 401 from a request that opts out', async () => {
+      const error401 = { response: { status: 401 }, config: { url: '/about', skipAuthRedirect: true } };
+      await expect(errorHandler(error401)).rejects.toEqual(error401);
+
+      expect(mockLocalStorage.removeItem).not.toHaveBeenCalled();
+      expect(mockLocation.href).not.toBe('/login');
+    });
+
     it('does not redirect for non-401 errors', async () => {
       const error500 = { response: { status: 500 } };
       await expect(errorHandler(error500)).rejects.toEqual(error500);

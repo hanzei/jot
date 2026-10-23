@@ -566,5 +566,12 @@
     "unsupportedImageType": "Este tipo de arquivo não é compatível. Escolha outra imagem.",
     "invalidImage": "Não foi possível ler esta imagem. Ela pode estar danificada.",
     "invalidImportFile": "Não foi possível ler este arquivo como uma exportação do tipo selecionado."
+  },
+  "errorBoundary": {
+    "title": "Algo deu errado",
+    "message": "O Jot encontrou um problema inesperado. Tente novamente ou compartilhe um relatório de diagnóstico para que ele possa ser corrigido.",
+    "screenMessage": "Esta tela encontrou um problema inesperado.",
+    "tryAgain": "Tentar novamente",
+    "shareDiagnostics": "Compartilhar diagnóstico"
   }
 }
