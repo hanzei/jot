@@ -69,14 +69,15 @@ func (s *SessionService) AuthMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// logSessionRejection records why a session cookie was rejected. It is a
-// debug line: an expired cookie is routine, not an operator concern.
+// logSessionRejection records why a session cookie was rejected. An unknown
+// or expired session is routine (debug); anything else is a server-side
+// failure.
 func logSessionRejection(ctx context.Context, err error) {
-	reason := "session lookup failed"
 	if errors.Is(err, models.ErrSessionNotFoundOrExpired) {
-		reason = "session not found or expired"
+		logutil.FromContext(ctx).Debug("Auth rejected: session not found or expired")
+		return
 	}
-	logutil.FromContext(ctx).WithError(err).Debugf("Auth rejected: %s", reason)
+	logutil.FromContext(ctx).WithError(err).Warn("Session authentication error")
 }
 
 // logPATRejection records why a bearer token was rejected. An unknown or
