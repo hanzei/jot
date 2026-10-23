@@ -104,7 +104,7 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   scrollContentContainer: {
-    paddingBottom: 96,
+    paddingBottom: 24,
   },
   titleInput: {
     fontSize: 22,
