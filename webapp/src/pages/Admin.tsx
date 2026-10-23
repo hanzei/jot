@@ -254,7 +254,7 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {statsLoading ? (
-              Array.from({ length: 6 }, (_, index) => <StatCardSkeleton key={index} />)
+              Array.from({ length: 5 }, (_, index) => <StatCardSkeleton key={index} />)
             ) : stats ? (
               <>
                 <StatCard
@@ -300,12 +300,6 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
                   <StatLine label={t('admin.stats.metrics.completed')} value={formatNumber(stats.list_items.completed)} />
                   <StatLine label={t('admin.stats.metrics.assigned')} value={formatNumber(stats.list_items.assigned)} />
                 </StatCard>
-
-                <StatCard
-                  title={t('admin.stats.metrics.databaseSize')}
-                  value={formatBytes(stats.storage.database_size_bytes)}
-                  valueTestId="admin-stats-database-size"
-                />
               </>
             ) : null}
           </div>
@@ -313,13 +307,20 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
           {!statsLoading && stats ? (
             <div data-testid="admin-runtime-section" className="mt-6">
               <h3 className="mb-4 text-base font-medium text-gray-900 dark:text-white">{t('admin.stats.runtime.title')}</h3>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <StatCard
                   title={t('admin.stats.runtime.uptime')}
                   value={formatUptime(stats.runtime.uptime_seconds)}
                   valueTestId="admin-stats-uptime"
                 >
                   <StatLine label={t('admin.stats.runtime.startedAt')} value={formatDateTime(stats.runtime.started_at)} />
+                </StatCard>
+
+                <StatCard
+                  title={t('admin.stats.metrics.databaseSize')}
+                  value={formatBytes(stats.storage.database_size_bytes)}
+                  valueTestId="admin-stats-database-size"
+                >
                   <StatLine
                     label={t('admin.stats.runtime.database')}
                     value={DATABASE_BACKEND_NAMES[stats.runtime.database_backend]}
@@ -351,6 +352,13 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
                   value={stats.runtime.upload_volume ? formatBytes(stats.runtime.upload_volume.free_bytes) : t('admin.stats.runtime.unavailable')}
                   valueTestId="admin-stats-upload-free"
                 >
+                  {stats.runtime.upload_volume ? (
+                    <StatLine
+                      label={t('admin.stats.runtime.uploadTotal')}
+                      value={formatBytes(stats.runtime.upload_volume.total_bytes)}
+                      valueTestId="admin-stats-upload-total"
+                    />
+                  ) : null}
                   <StatLine
                     label={t('admin.stats.metrics.imagesSize')}
                     value={formatBytes(stats.storage.images_size_bytes)}
@@ -361,13 +369,6 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
                     value={formatNumber(stats.storage.image_count)}
                     valueTestId="admin-stats-image-count"
                   />
-                  {stats.runtime.upload_volume ? (
-                    <StatLine
-                      label={t('admin.stats.runtime.uploadTotal')}
-                      value={formatBytes(stats.runtime.upload_volume.total_bytes)}
-                      valueTestId="admin-stats-upload-total"
-                    />
-                  ) : null}
                 </StatCard>
               </div>
             </div>

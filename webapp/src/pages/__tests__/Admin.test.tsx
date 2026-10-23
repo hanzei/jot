@@ -128,6 +128,8 @@ describe('Admin', () => {
       expect(screen.getByTestId('admin-stats-active-sessions')).toHaveTextContent('7');
       expect(screen.getByTestId('admin-stats-upload-free')).toHaveTextContent('10 GB');
       expect(screen.getByTestId('admin-stats-upload-total')).toHaveTextContent('50 GB');
+      // Database size sits with the other database facts in the Server section.
+      expect(within(runtime).getByTestId('admin-stats-database-size')).toHaveTextContent('4.2 MB');
       // Image usage sits with the upload volume it lives on, not the database.
       expect(within(runtime).getByTestId('admin-stats-images-size')).toHaveTextContent('2 MB');
       expect(within(runtime).getByTestId('admin-stats-image-count')).toHaveTextContent('5');
