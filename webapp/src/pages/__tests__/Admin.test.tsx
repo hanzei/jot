@@ -73,8 +73,7 @@ const mockStats: AdminStatsResponse = {
     uptime_seconds: 3 * 86400 + 4 * 3600 + 120,
     sse_subscribers: 2,
     active_sessions: 7,
-    upload_dir_free_bytes: 10 * 1024 ** 3,
-    upload_dir_total_bytes: 50 * 1024 ** 3,
+    upload_volume: { free_bytes: 10 * 1024 ** 3, total_bytes: 50 * 1024 ** 3 },
     observability: {
       traces_enabled: true,
       metrics_enabled: false,
@@ -149,8 +148,7 @@ describe('Admin', () => {
           database_backend: 'postgres',
           migration_dirty: true,
           uptime_seconds: 125,
-          upload_dir_free_bytes: null,
-          upload_dir_total_bytes: null,
+          upload_volume: null,
         },
       });
 
@@ -161,7 +159,7 @@ describe('Admin', () => {
       expect(screen.getByTestId('admin-stats-database-backend')).toHaveTextContent('PostgreSQL');
       expect(screen.getByTestId('admin-stats-migration-version')).toHaveTextContent('13 (dirty)');
       expect(screen.getByTestId('admin-stats-upload-free')).toHaveTextContent('n/a');
-      expect(screen.getByTestId('admin-stats-upload-total')).toHaveTextContent('n/a');
+      expect(screen.queryByTestId('admin-stats-upload-total')).not.toBeInTheDocument();
     });
 
     it('shows loading placeholders while stats are fetching', async () => {

@@ -6,13 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/blobstore"
-	"github.com/hanzei/jot/server/internal/database/dialect"
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/sse"
@@ -30,17 +28,9 @@ type AdminHandler struct {
 	passwordMinLength int
 }
 
-// errDiskUsageUnsupported is what diskUsage returns on platforms without
-// statfs; it is expected there, so GetStats does not log it.
-var errDiskUsageUnsupported = errors.New("disk usage not supported on this platform")
-
 // AdminRuntimeConfig is the startup-time state GET /admin/stats reports
 // alongside its live counts.
 type AdminRuntimeConfig struct {
-	// DBPath is the SQLite database file, whose size is the reported
-	// database size. Unused on PostgreSQL.
-	DBPath    string
-	UploadDir string
 	// StartedAt must come from time.Now, not models.Now: the uptime is
 	// measured against its monotonic clock reading, which models.Now strips.
 	StartedAt     time.Time
@@ -98,14 +88,6 @@ func (h *AdminHandler) GetStats(w http.ResponseWriter, r *http.Request) (int, an
 		return http.StatusInternalServerError, nil, err
 	}
 
-	// The store reports the PostgreSQL database size itself; for SQLite it is
-	// the file size. A failed stat leaves the field at zero.
-	if stats.Runtime.DatabaseBackend != dialect.DriverPostgres {
-		if fileInfo, statErr := os.Stat(h.runtime.DBPath); statErr == nil {
-			stats.Storage.DatabaseSizeBytes = fileInfo.Size()
-		}
-	}
-
 	rt := &stats.Runtime
 	rt.StartedAt = h.runtime.StartedAt.UTC()
 	// StartedAt keeps its monotonic reading, so a wall-clock step (NTP,
@@ -113,10 +95,10 @@ func (h *AdminHandler) GetStats(w http.ResponseWriter, r *http.Request) (int, an
 	rt.UptimeSeconds = int64(time.Since(h.runtime.StartedAt).Seconds())
 	rt.SSESubscribers = int64(h.hub.SubscriberCount())
 	rt.Observability = h.runtime.Observability
-	if free, total, diskErr := diskUsage(h.runtime.UploadDir); diskErr == nil {
-		rt.UploadDirFreeBytes = &free
-		rt.UploadDirTotalBytes = &total
-	} else if !errors.Is(diskErr, errDiskUsageUnsupported) {
+	// Unsupported platforms report the volume as unknown without a warning.
+	if free, total, diskErr := h.imageStore.DiskUsage(); diskErr == nil {
+		rt.UploadVolume = &models.AdminUploadVolumeStats{FreeBytes: free, TotalBytes: total}
+	} else if !errors.Is(diskErr, blobstore.ErrDiskUsageUnsupported) {
 		logutil.FromContext(r.Context()).WithError(diskErr).Warn("Failed to read upload directory disk usage")
 	}
 

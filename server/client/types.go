@@ -371,19 +371,25 @@ type AdminStorageStats struct {
 	ImagesSizeBytes   int64 `json:"images_size_bytes"`
 }
 
-// AdminRuntimeStats describes the running server. The upload-dir byte
-// counts are nil when the server could not read the volume's usage.
+// AdminUploadVolumeStats is the usage of the filesystem holding the server's
+// upload directory.
+type AdminUploadVolumeStats struct {
+	FreeBytes  int64 `json:"free_bytes"`
+	TotalBytes int64 `json:"total_bytes"`
+}
+
+// AdminRuntimeStats describes the running server. UploadVolume is nil when
+// the server could not read the volume's usage.
 type AdminRuntimeStats struct {
-	DatabaseBackend     string                  `json:"database_backend"`
-	MigrationVersion    int64                   `json:"migration_version"`
-	MigrationDirty      bool                    `json:"migration_dirty"`
-	StartedAt           time.Time               `json:"started_at"`
-	UptimeSeconds       int64                   `json:"uptime_seconds"`
-	SSESubscribers      int64                   `json:"sse_subscribers"`
-	ActiveSessions      int64                   `json:"active_sessions"`
-	UploadDirFreeBytes  *int64                  `json:"upload_dir_free_bytes"`
-	UploadDirTotalBytes *int64                  `json:"upload_dir_total_bytes"`
-	Observability       AdminObservabilityStats `json:"observability"`
+	DatabaseBackend  string                  `json:"database_backend"`
+	MigrationVersion int64                   `json:"migration_version"`
+	MigrationDirty   bool                    `json:"migration_dirty"`
+	StartedAt        time.Time               `json:"started_at"`
+	UptimeSeconds    int64                   `json:"uptime_seconds"`
+	SSESubscribers   int64                   `json:"sse_subscribers"`
+	ActiveSessions   int64                   `json:"active_sessions"`
+	UploadVolume     *AdminUploadVolumeStats `json:"upload_volume"`
+	Observability    AdminObservabilityStats `json:"observability"`
 }
 
 // AdminObservabilityStats reports which observability features are enabled.

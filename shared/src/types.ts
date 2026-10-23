@@ -398,6 +398,11 @@ export interface AdminObservabilityStats {
   pprof_enabled: boolean;
 }
 
+export interface AdminUploadVolumeStats {
+  free_bytes: number;
+  total_bytes: number;
+}
+
 export interface AdminRuntimeStats {
   database_backend: 'sqlite' | 'postgres';
   migration_version: number;
@@ -407,8 +412,7 @@ export interface AdminRuntimeStats {
   sse_subscribers: number;
   active_sessions: number;
   /** Null when the server cannot read the upload volume's usage. */
-  upload_dir_free_bytes: number | null;
-  upload_dir_total_bytes: number | null;
+  upload_volume: AdminUploadVolumeStats | null;
   observability: AdminObservabilityStats;
 }
 

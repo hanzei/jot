@@ -706,8 +706,7 @@ describe('API Module', () => {
             uptime_seconds: 60,
             sse_subscribers: 1,
             active_sessions: 2,
-            upload_dir_free_bytes: 1024,
-            upload_dir_total_bytes: 4096,
+            upload_volume: { free_bytes: 1024, total_bytes: 4096 },
             observability: {
               traces_enabled: false,
               metrics_enabled: false,

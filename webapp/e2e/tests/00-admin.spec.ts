@@ -203,13 +203,13 @@ test.describe('Admin', () => {
         migration_version: number;
         migration_dirty: boolean;
         active_sessions: number;
-        upload_dir_free_bytes: number | null;
+        upload_volume: { free_bytes: number } | null;
       };
     };
     expect(runtime.migration_version).toBeGreaterThan(0);
     expect(runtime.migration_dirty).toBe(false);
     expect(runtime.active_sessions).toBeGreaterThan(0);
-    expect(runtime.upload_dir_free_bytes).not.toBeNull();
+    expect(runtime.upload_volume).not.toBeNull();
 
     await adminPage.goto();
     await expect(adminPage.runtimeSection()).toBeVisible();

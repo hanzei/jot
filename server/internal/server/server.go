@@ -113,7 +113,7 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (*Server, error) {
 	userStore := models.NewUserStore(db, d)
 	noteStore := models.NewNoteStore(db, d)
 	labelStore := models.NewLabelStore(db, d)
-	adminStatsStore := models.NewAdminStatsStore(db, d)
+	adminStatsStore := models.NewAdminStatsStore(db, d, cfg.DBDSN)
 	sessionStore, err := models.NewSessionStore(db, d)
 	if err != nil {
 		cancel()
@@ -150,8 +150,6 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (*Server, error) {
 	labelsHandler := handlers.NewLabelsHandler(noteStore, labelStore, hub)
 	eventsHandler := handlers.NewEventsHandler(hub)
 	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, userSettingsStore, imageStore, sessionService, hub, handlers.AdminRuntimeConfig{
-		DBPath:    cfg.DBDSN,
-		UploadDir: cfg.UploadDir,
 		StartedAt: time.Now(), //nolint:gocritic // uptime reference; keeps the monotonic clock, never persisted
 		Observability: models.AdminObservabilityStats{
 			TracesEnabled:          cfg.OTelTracesEnabled,

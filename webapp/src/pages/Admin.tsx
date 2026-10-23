@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react';
-import { ROLES, type User, type AdminStatsResponse, type AdminRuntimeStats } from '@jot/shared';
+import { ROLES, type User, type AdminStatsResponse, type AdminRuntimeStats, type AdminObservabilityStats } from '@jot/shared';
 import { useTranslation } from 'react-i18next';
 import { admin } from '@/utils/api';
 import { getUser } from '@/utils/auth';
@@ -39,7 +39,7 @@ const StatCard = ({ title, value, valueTestId, children }: StatCardProps) => (
     {value !== undefined ? (
       <p data-testid={valueTestId} className="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">{value}</p>
     ) : null}
-    {children ? <div className={value !== undefined ? 'mt-4 space-y-2' : 'mt-3 space-y-2'}>{children}</div> : null}
+    {children ? <div className="mt-4 space-y-2">{children}</div> : null}
   </div>
 );
 
@@ -47,6 +47,15 @@ const DATABASE_BACKEND_NAMES: Record<AdminRuntimeStats['database_backend'], stri
   sqlite: 'SQLite',
   postgres: 'PostgreSQL',
 };
+
+// Observability flag, i18n key under admin.stats.runtime, and test ID suffix.
+const OBSERVABILITY_FLAGS = [
+  ['traces_enabled', 'traces', 'traces'],
+  ['metrics_enabled', 'metrics', 'metrics'],
+  ['logs_enabled', 'logs', 'logs'],
+  ['metrics_endpoint_enabled', 'metricsEndpoint', 'metrics-endpoint'],
+  ['pprof_enabled', 'pprof', 'pprof'],
+] as const satisfies readonly (readonly [keyof AdminObservabilityStats, string, string])[];
 
 const StatCardSkeleton = () => (
   <div className="animate-pulse rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
@@ -118,13 +127,6 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
     return new Intl.DateTimeFormat(i18n.resolvedLanguage, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso));
   }, [i18n.resolvedLanguage]);
 
-  const formatOptionalBytes = useCallback((bytes: number | null) => {
-    return bytes === null ? t('admin.stats.runtime.unavailable') : formatBytes(bytes);
-  }, [formatBytes, t]);
-
-  const formatEnabled = useCallback((enabled: boolean) => {
-    return enabled ? t('admin.stats.runtime.on') : t('admin.stats.runtime.off');
-  }, [t]);
 
   // fetchUsers / fetchStats never flip their loading flags on synchronously:
   // the mount effect below calls them, and a synchronous setState there is a
@@ -366,42 +368,27 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
 
                 <StatCard
                   title={t('admin.stats.runtime.uploadFree')}
-                  value={formatOptionalBytes(stats.runtime.upload_dir_free_bytes)}
+                  value={stats.runtime.upload_volume ? formatBytes(stats.runtime.upload_volume.free_bytes) : t('admin.stats.runtime.unavailable')}
                   valueTestId="admin-stats-upload-free"
                 >
-                  <StatLine
-                    label={t('admin.stats.runtime.uploadTotal')}
-                    value={formatOptionalBytes(stats.runtime.upload_dir_total_bytes)}
-                    valueTestId="admin-stats-upload-total"
-                  />
+                  {stats.runtime.upload_volume ? (
+                    <StatLine
+                      label={t('admin.stats.runtime.uploadTotal')}
+                      value={formatBytes(stats.runtime.upload_volume.total_bytes)}
+                      valueTestId="admin-stats-upload-total"
+                    />
+                  ) : null}
                 </StatCard>
 
                 <StatCard title={t('admin.stats.runtime.observability')}>
-                  <StatLine
-                    label={t('admin.stats.runtime.traces')}
-                    value={formatEnabled(stats.runtime.observability.traces_enabled)}
-                    valueTestId="admin-stats-observability-traces"
-                  />
-                  <StatLine
-                    label={t('admin.stats.runtime.metrics')}
-                    value={formatEnabled(stats.runtime.observability.metrics_enabled)}
-                    valueTestId="admin-stats-observability-metrics"
-                  />
-                  <StatLine
-                    label={t('admin.stats.runtime.logs')}
-                    value={formatEnabled(stats.runtime.observability.logs_enabled)}
-                    valueTestId="admin-stats-observability-logs"
-                  />
-                  <StatLine
-                    label={t('admin.stats.runtime.metricsEndpoint')}
-                    value={formatEnabled(stats.runtime.observability.metrics_endpoint_enabled)}
-                    valueTestId="admin-stats-observability-metrics-endpoint"
-                  />
-                  <StatLine
-                    label={t('admin.stats.runtime.pprof')}
-                    value={formatEnabled(stats.runtime.observability.pprof_enabled)}
-                    valueTestId="admin-stats-observability-pprof"
-                  />
+                  {OBSERVABILITY_FLAGS.map((flag) => (
+                    <StatLine
+                      key={flag[0]}
+                      label={t(`admin.stats.runtime.${flag[1]}`)}
+                      value={t(stats.runtime.observability[flag[0]] ? 'admin.stats.runtime.on' : 'admin.stats.runtime.off')}
+                      valueTestId={`admin-stats-observability-${flag[2]}`}
+                    />
+                  ))}
                 </StatCard>
               </div>
             </div>

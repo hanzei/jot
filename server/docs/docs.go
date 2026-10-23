@@ -4427,13 +4427,13 @@ const docTemplate = `{
                 "started_at": {
                     "type": "string"
                 },
-                "upload_dir_free_bytes": {
-                    "description": "UploadDirFreeBytes and UploadDirTotalBytes are null when the upload\nvolume's usage cannot be read (unsupported platform or statfs error).",
-                    "type": "integer",
-                    "x-nullable": true
-                },
-                "upload_dir_total_bytes": {
-                    "type": "integer",
+                "upload_volume": {
+                    "description": "UploadVolume is null when the upload volume's usage cannot be read\n(unsupported platform or statfs error).",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.AdminUploadVolumeStats"
+                        }
+                    ],
                     "x-nullable": true
                 },
                 "uptime_seconds": {
@@ -4488,6 +4488,17 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "images_size_bytes": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.AdminUploadVolumeStats": {
+            "type": "object",
+            "properties": {
+                "free_bytes": {
+                    "type": "integer"
+                },
+                "total_bytes": {
                     "type": "integer"
                 }
             }

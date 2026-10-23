@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/hanzei/jot/server/internal/database/dialect"
@@ -55,6 +56,12 @@ type AdminObservabilityStats struct {
 	PprofEnabled           bool `json:"pprof_enabled"`
 }
 
+// AdminUploadVolumeStats is the usage of the filesystem holding JOT_UPLOAD_DIR.
+type AdminUploadVolumeStats struct {
+	FreeBytes  int64 `json:"free_bytes"`
+	TotalBytes int64 `json:"total_bytes"`
+}
+
 // AdminRuntimeStats describes the running server rather than the data it
 // holds, for an operator debugging an instance without shell access.
 type AdminRuntimeStats struct {
@@ -65,11 +72,10 @@ type AdminRuntimeStats struct {
 	UptimeSeconds    int64     `json:"uptime_seconds"`
 	SSESubscribers   int64     `json:"sse_subscribers"`
 	ActiveSessions   int64     `json:"active_sessions"`
-	// UploadDirFreeBytes and UploadDirTotalBytes are null when the upload
-	// volume's usage cannot be read (unsupported platform or statfs error).
-	UploadDirFreeBytes  *int64                  `json:"upload_dir_free_bytes" extensions:"x-nullable"`
-	UploadDirTotalBytes *int64                  `json:"upload_dir_total_bytes" extensions:"x-nullable"`
-	Observability       AdminObservabilityStats `json:"observability"`
+	// UploadVolume is null when the upload volume's usage cannot be read
+	// (unsupported platform or statfs error).
+	UploadVolume  *AdminUploadVolumeStats `json:"upload_volume" extensions:"x-nullable"`
+	Observability AdminObservabilityStats `json:"observability"`
 }
 
 type AdminStats struct {
@@ -85,10 +91,13 @@ type AdminStats struct {
 type adminStatsStore struct {
 	db *sql.DB
 	d  *dialect.Dialect
+	// dbPath is the SQLite database file, whose size is the reported
+	// database size. Unused on PostgreSQL.
+	dbPath string
 }
 
-func newAdminStatsStore(db *sql.DB, d *dialect.Dialect) *adminStatsStore {
-	return &adminStatsStore{db: db, d: d}
+func newAdminStatsStore(db *sql.DB, d *dialect.Dialect, dbPath string) *adminStatsStore {
+	return &adminStatsStore{db: db, d: d, dbPath: dbPath}
 }
 
 func (s *adminStatsStore) GetStats(ctx context.Context) (*AdminStats, error) {
@@ -162,12 +171,14 @@ func (s *adminStatsStore) GetStats(ctx context.Context) (*AdminStats, error) {
 
 	stats.Runtime.DatabaseBackend = s.d.Driver
 
-	// The SQLite database size is the file size, which the handler reads; on
-	// PostgreSQL ask the server, since the DSN is not a path.
+	// On PostgreSQL ask the server, since the DSN is not a path. The SQLite
+	// size is the file size; a failed stat leaves it at zero.
 	if s.d.Driver == dialect.DriverPostgres {
 		if err := s.db.QueryRowContext(ctx, `SELECT pg_database_size(current_database())`).Scan(&stats.Storage.DatabaseSizeBytes); err != nil {
 			return nil, fmt.Errorf("get database size: %w", err)
 		}
+	} else if fileInfo, statErr := os.Stat(s.dbPath); statErr == nil {
+		stats.Storage.DatabaseSizeBytes = fileInfo.Size()
 	}
 
 	// golang-migrate keeps a single row in schema_migrations on both backends.

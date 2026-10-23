@@ -16,9 +16,9 @@ type AdminStatsStore struct {
 }
 
 // NewAdminStatsStore creates an instrumented AdminStatsStore.
-func NewAdminStatsStore(db *sql.DB, d *dialect.Dialect) *AdminStatsStore {
+func NewAdminStatsStore(db *sql.DB, d *dialect.Dialect, dbPath string) *AdminStatsStore {
 	return &AdminStatsStore{
-		inner:  newAdminStatsStore(db, d),
+		inner:  newAdminStatsStore(db, d, dbPath),
 		tracer: otel.Tracer("github.com/hanzei/jot/server"),
 	}
 }

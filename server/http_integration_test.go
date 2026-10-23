@@ -786,10 +786,9 @@ func TestAdminStatsEndpoint(t *testing.T) {
 		// One session per registered user.
 		assert.Equal(t, int64(3), rt.ActiveSessions)
 
-		require.NotNil(t, rt.UploadDirFreeBytes)
-		require.NotNil(t, rt.UploadDirTotalBytes)
-		assert.Positive(t, *rt.UploadDirTotalBytes)
-		assert.LessOrEqual(t, *rt.UploadDirFreeBytes, *rt.UploadDirTotalBytes)
+		require.NotNil(t, rt.UploadVolume)
+		assert.Positive(t, rt.UploadVolume.TotalBytes)
+		assert.LessOrEqual(t, rt.UploadVolume.FreeBytes, rt.UploadVolume.TotalBytes)
 
 		assert.Equal(t, client.AdminObservabilityStats{
 			TracesEnabled: true,

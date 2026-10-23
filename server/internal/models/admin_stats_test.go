@@ -51,7 +51,13 @@ func TestAdminStatsRuntime(t *testing.T) {
 			Timestamp(Now().Add(-time.Minute)), expired.TokenHash)
 		require.NoError(t, err)
 
-		stats, err := newAdminStatsStore(db, d).GetStats(ctx)
+		dbPath := ""
+		if driver != dialect.DriverPostgres {
+			// The SQLite size is the file's; read its path back from the connection.
+			require.NoError(t, db.QueryRowContext(ctx, `SELECT file FROM pragma_database_list WHERE name = 'main'`).Scan(&dbPath))
+		}
+
+		stats, err := newAdminStatsStore(db, d, dbPath).GetStats(ctx)
 		require.NoError(t, err)
 
 		assert.Equal(t, driver, stats.Runtime.DatabaseBackend)
@@ -59,11 +65,6 @@ func TestAdminStatsRuntime(t *testing.T) {
 		assert.False(t, stats.Runtime.MigrationDirty)
 		assert.Equal(t, int64(2), stats.Runtime.ActiveSessions, "expired sessions are not active")
 
-		if driver == dialect.DriverPostgres {
-			assert.Positive(t, stats.Storage.DatabaseSizeBytes)
-		} else {
-			// The handler reads the SQLite file size.
-			assert.Zero(t, stats.Storage.DatabaseSizeBytes)
-		}
+		assert.Positive(t, stats.Storage.DatabaseSizeBytes)
 	})
 }
