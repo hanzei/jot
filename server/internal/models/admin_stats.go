@@ -91,13 +91,10 @@ type AdminStats struct {
 type adminStatsStore struct {
 	db *sql.DB
 	d  *dialect.Dialect
-	// dbPath is the SQLite database file, whose size is the reported
-	// database size. Unused on PostgreSQL.
-	dbPath string
 }
 
-func newAdminStatsStore(db *sql.DB, d *dialect.Dialect, dbPath string) *adminStatsStore {
-	return &adminStatsStore{db: db, d: d, dbPath: dbPath}
+func newAdminStatsStore(db *sql.DB, d *dialect.Dialect) *adminStatsStore {
+	return &adminStatsStore{db: db, d: d}
 }
 
 func (s *adminStatsStore) GetStats(ctx context.Context) (*AdminStats, error) {
@@ -171,14 +168,22 @@ func (s *adminStatsStore) GetStats(ctx context.Context) (*AdminStats, error) {
 
 	stats.Runtime.DatabaseBackend = s.d.Driver
 
-	// On PostgreSQL ask the server, since the DSN is not a path. The SQLite
-	// size is the file size; a failed stat leaves it at zero.
+	// On PostgreSQL ask the server. On SQLite the size is the file's; ask the
+	// connection which file it opened, since the DSN may be a file: URI with
+	// query options rather than a plain path. An in-memory database has no
+	// file, and a failed stat leaves the size at zero.
 	if s.d.Driver == dialect.DriverPostgres {
 		if err := s.db.QueryRowContext(ctx, `SELECT pg_database_size(current_database())`).Scan(&stats.Storage.DatabaseSizeBytes); err != nil {
 			return nil, fmt.Errorf("get database size: %w", err)
 		}
-	} else if fileInfo, statErr := os.Stat(s.dbPath); statErr == nil {
-		stats.Storage.DatabaseSizeBytes = fileInfo.Size()
+	} else {
+		var dbFile string
+		if err := s.db.QueryRowContext(ctx, `SELECT file FROM pragma_database_list WHERE name = 'main'`).Scan(&dbFile); err != nil {
+			return nil, fmt.Errorf("get database file: %w", err)
+		}
+		if fileInfo, statErr := os.Stat(dbFile); statErr == nil {
+			stats.Storage.DatabaseSizeBytes = fileInfo.Size()
+		}
 	}
 
 	// golang-migrate keeps a single row in schema_migrations on both backends.

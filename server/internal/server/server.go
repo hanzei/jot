@@ -113,7 +113,7 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (*Server, error) {
 	userStore := models.NewUserStore(db, d)
 	noteStore := models.NewNoteStore(db, d)
 	labelStore := models.NewLabelStore(db, d)
-	adminStatsStore := models.NewAdminStatsStore(db, d, cfg.DBDSN)
+	adminStatsStore := models.NewAdminStatsStore(db, d)
 	sessionStore, err := models.NewSessionStore(db, d)
 	if err != nil {
 		cancel()

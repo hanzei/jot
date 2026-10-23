@@ -51,13 +51,7 @@ func TestAdminStatsRuntime(t *testing.T) {
 			Timestamp(Now().Add(-time.Minute)), expired.TokenHash)
 		require.NoError(t, err)
 
-		dbPath := ""
-		if driver != dialect.DriverPostgres {
-			// The SQLite size is the file's; read its path back from the connection.
-			require.NoError(t, db.QueryRowContext(ctx, `SELECT file FROM pragma_database_list WHERE name = 'main'`).Scan(&dbPath))
-		}
-
-		stats, err := newAdminStatsStore(db, d, dbPath).GetStats(ctx)
+		stats, err := newAdminStatsStore(db, d).GetStats(ctx)
 		require.NoError(t, err)
 
 		assert.Equal(t, driver, stats.Runtime.DatabaseBackend)
