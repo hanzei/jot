@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import {
@@ -32,6 +33,24 @@ const JOT_TEST_ENV = {
   // back to 127.0.0.1 when it resolves to ::1 first.
   JOT_HOST: '127.0.0.1',
 };
+
+// In CI each webServer writes its stdout and stderr to its own file, which the
+// workflow uploads when the run fails; otherwise the three servers' output is
+// interleaved into the job log. Not under `test-results/`: Playwright empties
+// that at the start of a run, possibly after the servers opened their files.
+// Locally the output stays on the terminal as before.
+const SERVER_LOG_DIR = path.resolve(__dirname, 'e2e-server-logs');
+if (process.env.CI) {
+  fs.mkdirSync(SERVER_LOG_DIR, { recursive: true });
+}
+
+/** Redirects `command`'s output to `<name>.log` in CI. Playwright runs it through a shell. */
+function serverCommand(name: string, command: string): string {
+  if (!process.env.CI) {
+    return command;
+  }
+  return `{ ${command}; } > ${path.join(SERVER_LOG_DIR, `${name}.log`)} 2>&1`;
+}
 
 export default defineConfig({
   testDir: './e2e/tests',
@@ -103,7 +122,7 @@ export default defineConfig({
   // start without it.
   webServer: [
     {
-      command: `npm run --prefix ${path.resolve(__dirname)} build && go run main.go`,
+      command: serverCommand('main', `npm run --prefix ${path.resolve(__dirname)} build && go run main.go`),
       cwd: path.resolve(__dirname, '../server'),
       url: 'http://localhost:8080/readyz',
       reuseExistingServer: false,
@@ -120,7 +139,7 @@ export default defineConfig({
     },
     {
       // Node runs the TypeScript directly (type stripping, Node >= 22.18).
-      command: 'node e2e/fixtures/mock-idp.ts',
+      command: serverCommand('mock-idp', 'node e2e/fixtures/mock-idp.ts'),
       cwd: path.resolve(__dirname),
       url: `${MOCK_IDP_ISSUER}${MOCK_IDP_READY_PATH}`,
       reuseExistingServer: false,
@@ -129,7 +148,7 @@ export default defineConfig({
     {
       // No webapp build here: it serves the `build/` the first server made.
       // The Go build cache is warm by now, so compiling again is quick.
-      command: 'go run main.go',
+      command: serverCommand('sso', 'go run main.go'),
       cwd: path.resolve(__dirname, '../server'),
       url: `${SSO_BASE_URL}/readyz`,
       reuseExistingServer: false,

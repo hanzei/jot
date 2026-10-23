@@ -285,6 +285,8 @@ export interface SyncQueueStats {
   maxAttempts: number;
 }
 
+export const EMPTY_SYNC_QUEUE_STATS: SyncQueueStats = { pendingCount: 0, head: null, maxAttempts: 0 };
+
 /**
  * Summarize the sync queue for the Diagnostics screen so a head-of-line wedge is
  * legible: which op is stuck at the head, how old it is, and how many transient

@@ -108,6 +108,7 @@ release.keystore
 # Playwright test artifacts
 webapp/playwright-report/
 webapp/test-results/
+webapp/e2e-server-logs/
 test-results/
 playwright-report/
 

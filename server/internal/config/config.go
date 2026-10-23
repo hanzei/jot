@@ -34,6 +34,8 @@ type Config struct {
 	OTelTracesEnabled   bool
 	OTelMetricsEnabled  bool
 	OTelLogsEnabled     bool
+	LogLevel            string
+	LogFormat           string
 
 	RateLimitEnabled            bool
 	RateLimitPerMinute          int
@@ -131,8 +133,23 @@ func Load() (*Config, error) {
 		CookieSecure:        true,
 		RegistrationEnabled: true,
 		OTelServiceName:     "jot",
+		LogLevel:            "info",
+		LogFormat:           "text",
 		RateLimitEnabled:    true,
 	}
+
+	// Keep the allowed levels in sync with the logrus.ParseLevel call in main.go.
+	logLevel, err := parseEnumEnv("JOT_LOG_LEVEL", cfg.LogLevel, "debug", "info", "warn", "error")
+	if err != nil {
+		return nil, err
+	}
+	cfg.LogLevel = logLevel
+
+	logFormat, err := parseEnumEnv("JOT_LOG_FORMAT", cfg.LogFormat, "text", "json")
+	if err != nil {
+		return nil, err
+	}
+	cfg.LogFormat = logFormat
 
 	port, err := parseIntRangeEnv("JOT_PORT", 8080, 1, 65535)
 	if err != nil {
