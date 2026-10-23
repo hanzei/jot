@@ -21,7 +21,7 @@ export const useSidebarLabelsController = ({
   onDeleteSuccess,
 }: SidebarLabelsControllerOptions = {}) => {
   const { t } = useTranslation();
-  const { showToast } = useToast();
+  const { showToast, showErrorToast } = useToast();
   const [labels, setLabels] = useState<Label[]>([]);
   const [labelCounts, setLabelCounts] = useState<Record<string, number> | null>(null);
 
@@ -75,10 +75,10 @@ export const useSidebarLabelsController = ({
       showToast(t('labels.createSuccess'), 'success');
       return true;
     } catch (err: unknown) {
-      showToast(apiErrorMessage(err, t, 'labels.createError'), 'error');
+      showErrorToast(apiErrorMessage(err, t, 'labels.createError'), err);
       return false;
     }
-  }, [loadLabelCounts, loadLabels, onCreateSuccess, showToast, t]);
+  }, [loadLabelCounts, loadLabels, onCreateSuccess, showToast, showErrorToast, t]);
 
   const handleRenameLabel = useCallback(async (label: Label, newName: string): Promise<boolean> => {
     try {
@@ -98,10 +98,10 @@ export const useSidebarLabelsController = ({
       showToast(t('labels.renameSuccess'), 'success');
       return true;
     } catch (err: unknown) {
-      showToast(apiErrorMessage(err, t, 'labels.renameError'), 'error');
+      showErrorToast(apiErrorMessage(err, t, 'labels.renameError'), err);
       return false;
     }
-  }, [loadLabelCounts, loadLabels, onRenameSuccess, showToast, t]);
+  }, [loadLabelCounts, loadLabels, onRenameSuccess, showToast, showErrorToast, t]);
 
   const handleDeleteLabel = useCallback(async (label: Label): Promise<boolean> => {
     try {
@@ -121,10 +121,10 @@ export const useSidebarLabelsController = ({
       showToast(t('labels.deleteSuccess'), 'success');
       return true;
     } catch (err: unknown) {
-      showToast(apiErrorMessage(err, t, 'labels.deleteError'), 'error');
+      showErrorToast(apiErrorMessage(err, t, 'labels.deleteError'), err);
       return false;
     }
-  }, [loadLabelCounts, loadLabels, onDeleteSuccess, showToast, t]);
+  }, [loadLabelCounts, loadLabels, onDeleteSuccess, showToast, showErrorToast, t]);
 
   return {
     labels,

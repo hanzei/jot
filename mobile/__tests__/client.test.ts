@@ -331,6 +331,48 @@ describe('API Client', () => {
     });
   });
 
+  describe('failed request logging', () => {
+    const getResponseErrorHandler = () => {
+      const responseUse = mockAxiosInstance.interceptors.response.use;
+      return responseUse.mock.calls[0]?.[1] as (error: unknown) => Promise<unknown>;
+    };
+
+    let warn: jest.SpyInstance;
+    beforeEach(() => {
+      warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+    afterEach(() => {
+      warn.mockRestore();
+    });
+
+    it('logs a server error with the server request ID', async () => {
+      await expect(getResponseErrorHandler()({
+        response: { status: 500, headers: { 'x-request-id': 'abc123' } },
+        config: { method: 'patch', url: '/notes/n1' },
+      })).rejects.toBeDefined();
+
+      expect(warn).toHaveBeenCalledWith('API PATCH /notes/n1 failed with 500 (request ID abc123)');
+    });
+
+    it('logs a server error without a request ID as none', async () => {
+      await expect(getResponseErrorHandler()({
+        response: { status: 502, headers: {} },
+        config: { method: 'get', url: '/notes/n1' },
+      })).rejects.toBeDefined();
+
+      expect(warn).toHaveBeenCalledWith('API GET /notes/n1 failed with 502 (request ID none)');
+    });
+
+    it.each([
+      ['a client error', { response: { status: 404, headers: { 'x-request-id': 'abc123' } } }],
+      ['a request that got no response', { message: 'Network Error' }],
+    ])('does not log %s', async (_label, error) => {
+      await expect(getResponseErrorHandler()({ ...error, config: { method: 'get', url: '/notes' } })).rejects.toBeDefined();
+
+      expect(warn).not.toHaveBeenCalled();
+    });
+  });
+
   describe('auth.logout', () => {
     it('clears stored session and cached profile immediately, without waiting for POST /logout to resolve', async () => {
       await setServerUrl('https://logout-immediate.example.com');

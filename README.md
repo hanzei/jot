@@ -577,6 +577,18 @@ OpenTelemetry SDK setup. When `OTEL_EXPORTER_OTLP_ENDPOINT` is set, enabled
 signals are exported over OTLP gRPC; otherwise enabled traces/logs use stdout
 exporters for local debugging.
 
+### Request IDs
+
+Every response carries an `X-Request-Id` header, and the server's
+`Request completed` log line records the same value as `request_id` (next to
+`trace_id`/`span_id` when tracing is on). The webapp shows it as a copyable
+`Ref:` on error toasts for server errors, and the mobile app writes it into the
+log line for each failed request, which the shared diagnostics report
+includes. To find a reported failure, search the logs for that ID. A request
+may send its own `X-Request-Id` (at most 64 characters of `[A-Za-z0-9._-]`),
+for example from a reverse proxy, and the server uses it; any other value is
+replaced with a generated one.
+
 ### Profiling
 
 Set `JOT_PPROF_ENABLED=true` to serve Go's profiling endpoints at

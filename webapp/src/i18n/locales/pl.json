@@ -4,6 +4,12 @@
     "done": "Gotowe",
     "cancel": "Anuluj"
   },
+  "toast": {
+    "reference": "Nr ref.: {{id}}",
+    "copyReference": "Kopiuj identyfikator",
+    "copyReferenceLabel": "Kopiuj identyfikator błędu {{id}}",
+    "referenceCopied": "Skopiowano!"
+  },
   "nav": {
     "profileMenu": "Menu profilu",
     "toggleSidebar": "Przełącz pasek boczny",

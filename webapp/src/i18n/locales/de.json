@@ -4,6 +4,12 @@
     "done": "Fertig",
     "cancel": "Abbrechen"
   },
+  "toast": {
+    "reference": "Ref.: {{id}}",
+    "copyReference": "Referenz kopieren",
+    "copyReferenceLabel": "Fehlerreferenz {{id}} kopieren",
+    "referenceCopied": "Kopiert!"
+  },
   "nav": {
     "profileMenu": "Profilmenü",
     "toggleSidebar": "Seitenleiste umschalten",

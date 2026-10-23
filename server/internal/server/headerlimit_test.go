@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzei/jot/server/internal/config"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,17 +26,7 @@ func TestMaxHeaderValueCount(t *testing.T) {
 	addr := probe.Addr().String()
 	require.NoError(t, probe.Close())
 
-	tmpDir := t.TempDir()
-	cfg := &config.Config{
-		Port:              0,
-		DBDriver:          "sqlite",
-		DBDSN:             tmpDir + "/test.db",
-		StaticDir:         tmpDir,
-		UploadDir:         tmpDir + "/uploads",
-		UploadMaxBytes:    25 << 20,
-		CookieSecure:      false,
-		PasswordMinLength: 10,
-	}
+	cfg := newTestConfig(t)
 
 	log := logrus.New()
 	log.SetOutput(io.Discard)
