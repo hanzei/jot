@@ -22,7 +22,17 @@ import {
   type ServerSwitchLifecycleState,
 } from '../store/serverSwitchLifecycle';
 import { getSseState, subscribeToSseState, type SseState } from '../api/sseState';
-import { getSyncQueueStats, MAX_ENTRY_DRAIN_ATTEMPTS, type SyncQueueStats } from '../db/syncQueue';
+import {
+  EMPTY_SYNC_QUEUE_STATS,
+  getSyncQueueStats,
+  MAX_ENTRY_DRAIN_ATTEMPTS,
+  type SyncQueueStats,
+} from '../db/syncQueue';
+import {
+  EMPTY_IMAGE_UPLOAD_QUEUE_STATS,
+  getImageUploadQueueStats,
+  type ImageUploadQueueStats,
+} from '../db/imageUploadQueue';
 import {
   isServerReachable,
   getServerReachabilityChangedAt,
@@ -34,6 +44,7 @@ import { shareDiagnosticsReport } from '../utils/diagnosticsReport';
 
 interface DiagnosticsSnapshot {
   queue: SyncQueueStats;
+  imageUploads: ImageUploadQueueStats;
   lifecycle: ServerSwitchLifecycleState;
   sse: SseState;
   logs: LogEntry[];
@@ -73,7 +84,8 @@ export default function DiagnosticsScreen() {
   const { syncError, syncFailureCount, lastSyncedAt, consecutiveFailureCount } = useOfflineContext();
 
   const [snapshot, setSnapshot] = useState<DiagnosticsSnapshot>(() => ({
-    queue: { pendingCount: 0, head: null, maxAttempts: 0 },
+    queue: EMPTY_SYNC_QUEUE_STATS,
+    imageUploads: EMPTY_IMAGE_UPLOAD_QUEUE_STATS,
     lifecycle: getServerSwitchLifecycleState(),
     sse: getSseState(),
     logs: getLogs().slice(-50),
@@ -84,14 +96,14 @@ export default function DiagnosticsScreen() {
   }));
 
   const refresh = useCallback(async () => {
-    let stats: SyncQueueStats = { pendingCount: 0, head: null, maxAttempts: 0 };
-    try {
-      stats = await getSyncQueueStats(db);
-    } catch {
-      // DB read failure — show an empty queue rather than blocking the snapshot update
-    }
+    // A DB read failure shows an empty queue rather than blocking the snapshot update.
+    const [stats, imageUploads] = await Promise.all([
+      getSyncQueueStats(db).catch(() => EMPTY_SYNC_QUEUE_STATS),
+      getImageUploadQueueStats(db).catch(() => EMPTY_IMAGE_UPLOAD_QUEUE_STATS),
+    ]);
     setSnapshot({
       queue: stats,
+      imageUploads,
       lifecycle: getServerSwitchLifecycleState(),
       sse: getSseState(),
       logs: getLogs().slice(-50),
@@ -139,6 +151,7 @@ export default function DiagnosticsScreen() {
       isConnected: snapshot.isConnected,
       sync: {
         queue: snapshot.queue,
+        imageUploads: snapshot.imageUploads,
         lastSyncedAt,
         syncError,
         consecutiveFailureCount,
@@ -264,6 +277,34 @@ export default function DiagnosticsScreen() {
             value={String(syncFailureCount)}
             valueColor={syncFailureCount > 0 ? STATUS_ORANGE : undefined}
           />
+        </View>
+
+        {/* Image Uploads */}
+        <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('diagnostics.imageUploads')}</Text>
+          <DiagRow
+            label={t('diagnostics.imageUploadsQueued')}
+            value={String(snapshot.imageUploads.queuedCount)}
+            valueColor={snapshot.imageUploads.queuedCount > 0 ? STATUS_ORANGE : undefined}
+          />
+          <DiagRow
+            label={t('diagnostics.imageUploadsFailed')}
+            value={String(snapshot.imageUploads.errorCount)}
+            valueColor={snapshot.imageUploads.errorCount > 0 ? STATUS_ORANGE : undefined}
+          />
+          {snapshot.imageUploads.oldest && (
+            <>
+              <DiagRow
+                label={t('diagnostics.imageUploadsOldestWaiting')}
+                value={formatAge(snapshot.imageUploads.oldest.created_at)}
+              />
+              <DiagRow
+                label={t('diagnostics.imageUploadsOldestAttempts')}
+                value={`${snapshot.imageUploads.oldest.attempts} / ${MAX_ENTRY_DRAIN_ATTEMPTS}`}
+                valueColor={snapshot.imageUploads.oldest.attempts > 0 ? STATUS_ORANGE : undefined}
+              />
+            </>
+          )}
         </View>
 
         {/* Server */}
