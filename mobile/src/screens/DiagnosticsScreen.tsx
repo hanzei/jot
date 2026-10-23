@@ -23,7 +23,11 @@ import {
 } from '../store/serverSwitchLifecycle';
 import { getSseState, subscribeToSseState, type SseState } from '../api/sseState';
 import { getSyncQueueStats, MAX_ENTRY_DRAIN_ATTEMPTS, type SyncQueueStats } from '../db/syncQueue';
-import { getImageUploadQueueStats, type ImageUploadQueueStats } from '../db/imageUploadQueue';
+import {
+  EMPTY_IMAGE_UPLOAD_QUEUE_STATS,
+  getImageUploadQueueStats,
+  type ImageUploadQueueStats,
+} from '../db/imageUploadQueue';
 import {
   isServerReachable,
   getServerReachabilityChangedAt,
@@ -44,6 +48,8 @@ interface DiagnosticsSnapshot {
   isServerReachable: boolean;
   serverReachabilityChangedAt: string | null;
 }
+
+const EMPTY_SYNC_QUEUE_STATS: SyncQueueStats = { pendingCount: 0, head: null, maxAttempts: 0 };
 
 /** Formats an ISO timestamp for display, or a placeholder if never set. */
 function formatTimestamp(iso: string | null, never: string): string {
@@ -75,8 +81,8 @@ export default function DiagnosticsScreen() {
   const { syncError, syncFailureCount, lastSyncedAt, consecutiveFailureCount } = useOfflineContext();
 
   const [snapshot, setSnapshot] = useState<DiagnosticsSnapshot>(() => ({
-    queue: { pendingCount: 0, head: null, maxAttempts: 0 },
-    imageUploads: { queuedCount: 0, errorCount: 0, oldest: null },
+    queue: EMPTY_SYNC_QUEUE_STATS,
+    imageUploads: EMPTY_IMAGE_UPLOAD_QUEUE_STATS,
     lifecycle: getServerSwitchLifecycleState(),
     sse: getSseState(),
     logs: getLogs().slice(-50),
@@ -87,18 +93,11 @@ export default function DiagnosticsScreen() {
   }));
 
   const refresh = useCallback(async () => {
-    let stats: SyncQueueStats = { pendingCount: 0, head: null, maxAttempts: 0 };
-    try {
-      stats = await getSyncQueueStats(db);
-    } catch {
-      // DB read failure — show an empty queue rather than blocking the snapshot update
-    }
-    let imageUploads: ImageUploadQueueStats = { queuedCount: 0, errorCount: 0, oldest: null };
-    try {
-      imageUploads = await getImageUploadQueueStats(db);
-    } catch {
-      // Same as above, for the image-upload queue
-    }
+    // A DB read failure shows an empty queue rather than blocking the snapshot update.
+    const [stats, imageUploads] = await Promise.all([
+      getSyncQueueStats(db).catch(() => EMPTY_SYNC_QUEUE_STATS),
+      getImageUploadQueueStats(db).catch(() => EMPTY_IMAGE_UPLOAD_QUEUE_STATS),
+    ]);
     setSnapshot({
       queue: stats,
       imageUploads,

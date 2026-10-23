@@ -93,6 +93,7 @@ function buildDiagnosticsReport(input: DiagnosticsReportInput, serverBuild: Abou
       errorCount: sync?.imageUploads.errorCount ?? null,
       oldestQueuedAt: sync?.imageUploads.oldest?.created_at ?? null,
       oldestAttempts: sync ? (sync.imageUploads.oldest?.attempts ?? 0) : null,
+      maxAttempts: sync?.imageUploads.maxAttempts ?? null,
     },
     lifecycle: {
       isSwitching: lifecycle.isSwitching,

@@ -19,7 +19,7 @@ import {
 import { uploadNoteImage } from '../src/api/images';
 import { getLocalNote, getPendingCreateNoteIds, markNotePendingCreate, markNoteSyncFailed, patchLocalNoteImages, saveNote } from '../src/db/noteQueries';
 import { subscribeToEnqueue, MAX_ENTRY_DRAIN_ATTEMPTS } from '../src/db/syncQueue';
-import { makeListNote, makeNoteItem, makeTextNote } from './helpers/fixtures';
+import { makeListNote, makeNoteItem, makeTextNote, seedImageUpload } from './helpers/fixtures';
 import type { TestDatabase } from './helpers/testDb';
 import { silenceConsole } from './helpers/consoleGuard';
 
@@ -43,39 +43,9 @@ const UPLOAD_PATH = 'file:///docs/pending-image-uploads/upload-1';
 
 let db: TestDatabase;
 
-/** Insert a queued upload row (and the note it hangs off, for the FK). */
-async function seedUpload(
-  overrides: Partial<PendingImageUploadEntry> = {},
-): Promise<PendingImageUploadEntry> {
-  const entry: PendingImageUploadEntry = {
-    id: 'upload-1',
-    note_id: 'note-1',
-    local_path: UPLOAD_PATH,
-    filename: 'photo.png',
-    mime_type: 'image/png',
-    size_bytes: 1024,
-    status: 'queued',
-    error_message: null,
-    created_at: '2024-01-01T00:00:00Z',
-    attempts: 0,
-    ...overrides,
-  };
-  const exists = await db.getFirstAsync('SELECT id FROM notes WHERE id = ?', [entry.note_id]);
-  if (!exists) {
-    await saveNote(db, makeTextNote({ id: entry.note_id }));
-  }
-  await db.runAsync(
-    `INSERT INTO pending_image_uploads
-       (id, note_id, local_path, filename, mime_type, size_bytes, status, error_message, created_at, attempts)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      entry.id, entry.note_id, entry.local_path, entry.filename, entry.mime_type,
-      entry.size_bytes, entry.status, entry.error_message, entry.created_at, entry.attempts ?? 0,
-    ],
-  );
-  fs.files.set(entry.local_path, 'png-bytes');
-  return entry;
-}
+/** Every seeded upload shares UPLOAD_PATH unless a test overrides it. */
+const seedUpload = (overrides: Partial<PendingImageUploadEntry> = {}) =>
+  seedImageUpload(db, { local_path: UPLOAD_PATH, ...overrides });
 
 const uploadRow = (id: string) =>
   db.getFirstAsync<{ status: string; error_message: string | null; attempts: number }>(
@@ -179,11 +149,12 @@ describe('getPendingImageUploads / getQueuedImageUploadCount', () => {
 
 describe('getImageUploadQueueStats', () => {
   it('reports an empty queue', async () => {
-    expect(await getImageUploadQueueStats(db)).toEqual({ queuedCount: 0, errorCount: 0, oldest: null });
+    expect(await getImageUploadQueueStats(db)).toEqual({ queuedCount: 0, errorCount: 0, oldest: null, maxAttempts: 0 });
   });
 
   it('counts queued and errored uploads separately and reports the oldest queued entry', async () => {
-    await seedUpload({ id: 'newer', created_at: '2024-01-03T00:00:00Z', attempts: 0 });
+    // Newer, but the one actually failing: maxAttempts surfaces it.
+    await seedUpload({ id: 'newer', created_at: '2024-01-03T00:00:00Z', attempts: 4 });
     await seedUpload({ id: 'oldest', created_at: '2024-01-02T00:00:00Z', attempts: 2 });
     // Older still, but errored: it waits on the user, not the drain.
     await seedUpload({ id: 'failed', created_at: '2024-01-01T00:00:00Z', status: 'error', error_message: 'too big', attempts: 3 });
@@ -192,13 +163,14 @@ describe('getImageUploadQueueStats', () => {
       queuedCount: 2,
       errorCount: 1,
       oldest: { created_at: '2024-01-02T00:00:00Z', attempts: 2 },
+      maxAttempts: 4,
     });
   });
 
   it('reports no oldest entry when every upload has failed', async () => {
     await seedUpload({ id: 'failed', status: 'error', error_message: 'too big' });
 
-    expect(await getImageUploadQueueStats(db)).toEqual({ queuedCount: 0, errorCount: 1, oldest: null });
+    expect(await getImageUploadQueueStats(db)).toEqual({ queuedCount: 0, errorCount: 1, oldest: null, maxAttempts: 0 });
   });
 });
 

@@ -16,8 +16,8 @@ import {
 } from '../src/api/serverReachability';
 import { getSseState, subscribeToSseState } from '../src/api/sseState';
 import { getAboutInfo } from '../src/api/settings';
-import { saveNote } from '../src/db/noteQueries';
-import { makeTextNote } from './helpers/fixtures';
+import { MAX_ENTRY_DRAIN_ATTEMPTS } from '../src/db/syncQueue';
+import { seedImageUpload } from './helpers/fixtures';
 
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ goBack: jest.fn(), navigate: jest.fn() }),
@@ -283,18 +283,11 @@ describe('DiagnosticsScreen', () => {
   describe('image upload queue', () => {
     beforeEach(async () => {
       const db = globalThis.testDb;
-      await saveNote(db, makeTextNote({ id: 'note-1' }));
-      const insert = (id: string, status: string, createdAt: string, attempts: number) =>
-        db.runAsync(
-          `INSERT INTO pending_image_uploads (id, note_id, local_path, filename, mime_type, status, created_at, attempts)
-           VALUES (?, 'note-1', ?, 'photo.png', 'image/png', ?, ?, ?)`,
-          [id, `file:///docs/pending-image-uploads/${id}`, status, createdAt, attempts],
-        );
-      await insert('q1', 'queued', '2024-01-02T00:00:00Z', 2);
-      await insert('q2', 'queued', '2024-01-03T00:00:00Z', 0);
-      await insert('q3', 'queued', '2024-01-04T00:00:00Z', 0);
+      await seedImageUpload(db, { id: 'q1', created_at: '2024-01-02T00:00:00Z', attempts: 2 });
+      await seedImageUpload(db, { id: 'q2', created_at: '2024-01-03T00:00:00Z' });
+      await seedImageUpload(db, { id: 'q3', created_at: '2024-01-04T00:00:00Z' });
       for (const id of ['e1', 'e2', 'e3', 'e4']) {
-        await insert(id, 'error', '2024-01-01T00:00:00Z', 5);
+        await seedImageUpload(db, { id, status: 'error', attempts: MAX_ENTRY_DRAIN_ATTEMPTS });
       }
     });
 
@@ -307,7 +300,7 @@ describe('DiagnosticsScreen', () => {
       const orange = { color: '#f97316' };
       expect(getByText('3')).toHaveStyle(orange);
       expect(getByText('4')).toHaveStyle(orange);
-      expect(getByText('2 / 5')).toHaveStyle(orange);
+      expect(getByText(`2 / ${MAX_ENTRY_DRAIN_ATTEMPTS}`)).toHaveStyle(orange);
     });
 
     it('includes the image upload queue in the share report, without paths or filenames', async () => {
@@ -320,6 +313,7 @@ describe('DiagnosticsScreen', () => {
         errorCount: 4,
         oldestQueuedAt: '2024-01-02T00:00:00Z',
         oldestAttempts: 2,
+        maxAttempts: 2,
       });
       const serialized = JSON.stringify(report.imageUploads);
       expect(serialized).not.toContain('photo.png');
@@ -328,8 +322,13 @@ describe('DiagnosticsScreen', () => {
   });
 
   it('hides the oldest-upload rows when no image uploads are queued', async () => {
+    // Failed uploads only: their count proves the refresh landed before the
+    // absence assertion, which would otherwise pass against the initial state.
+    for (const id of ['e1', 'e2']) {
+      await seedImageUpload(globalThis.testDb, { id, status: 'error' });
+    }
     const { findByText, queryByText } = await renderScreen();
-    expect(await findByText('Image Uploads')).toBeTruthy();
+    expect(await findByText('2')).toBeTruthy();
     expect(queryByText('Oldest upload waiting')).toBeNull();
   });
 });

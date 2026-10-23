@@ -82,30 +82,45 @@ export interface ImageUploadQueueStats {
   /** Uploads flagged `error`: they wait on a manual retry or dismiss in the gallery. */
   errorCount: number;
   /**
-   * The oldest queued upload — the first one the next drain attempts — or null
-   * when none are queued. `attempts` counts its transient failures against
-   * MAX_ENTRY_DRAIN_ATTEMPTS. Metadata only: no path, filename, or note id.
+   * The oldest queued upload, or null when none are queued. Not necessarily the
+   * one the drain is stuck on: the drain skips uploads whose note still awaits
+   * its create or is dead-lettered, so see `maxAttempts` for a wedged entry.
+   * `attempts` counts its transient failures against MAX_ENTRY_DRAIN_ATTEMPTS.
+   * Metadata only: no path, filename, or note id.
    */
   oldest: { created_at: string; attempts: number } | null;
+  /** Highest `attempts` across queued uploads: non-zero means one is failing transiently. */
+  maxAttempts: number;
 }
+
+export const EMPTY_IMAGE_UPLOAD_QUEUE_STATS: ImageUploadQueueStats = {
+  queuedCount: 0,
+  errorCount: 0,
+  oldest: null,
+  maxAttempts: 0,
+};
 
 /**
  * Summarize the image-upload queue for the Diagnostics screen, so "my image never
  * appeared" can be told apart as still queued, stuck retrying, or failed.
  */
 export async function getImageUploadQueueStats(db: SQLiteDatabase): Promise<ImageUploadQueueStats> {
-  const counts = await db.getFirstAsync<{ queued: number | null; errored: number | null }>(
-    `SELECT SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) as queued,
-            SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) as errored
-     FROM pending_image_uploads`,
-  );
-  const oldest = await db.getFirstAsync<{ created_at: string; attempts: number | null }>(
-    `SELECT created_at, attempts FROM pending_image_uploads WHERE status = 'queued' ORDER BY created_at ASC LIMIT 1`,
-  );
+  const [counts, oldest] = await Promise.all([
+    db.getFirstAsync<{ queued: number | null; errored: number | null; max_attempts: number | null }>(
+      `SELECT SUM(status = 'queued') as queued,
+              SUM(status = 'error') as errored,
+              MAX(CASE WHEN status = 'queued' THEN attempts END) as max_attempts
+       FROM pending_image_uploads`,
+    ),
+    db.getFirstAsync<{ created_at: string; attempts: number | null }>(
+      `SELECT created_at, attempts FROM pending_image_uploads WHERE status = 'queued' ORDER BY created_at ASC LIMIT 1`,
+    ),
+  ]);
   return {
     queuedCount: counts?.queued ?? 0,
     errorCount: counts?.errored ?? 0,
     oldest: oldest ? { created_at: oldest.created_at, attempts: oldest.attempts ?? 0 } : null,
+    maxAttempts: counts?.max_attempts ?? 0,
   };
 }
 
