@@ -649,19 +649,6 @@ definitions:
       trashed:
         type: integer
     type: object
-  models.AdminObservabilityStats:
-    properties:
-      logs_enabled:
-        type: boolean
-      metrics_enabled:
-        type: boolean
-      metrics_endpoint_enabled:
-        type: boolean
-      pprof_enabled:
-        type: boolean
-      traces_enabled:
-        type: boolean
-    type: object
   models.AdminRuntimeStats:
     properties:
       active_sessions:
@@ -675,8 +662,6 @@ definitions:
         type: boolean
       migration_version:
         type: integer
-      observability:
-        $ref: '#/definitions/models.AdminObservabilityStats'
       sse_subscribers:
         type: integer
       started_at:

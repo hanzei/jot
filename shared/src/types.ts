@@ -390,14 +390,6 @@ export interface AdminStorageStats {
   images_size_bytes: number;
 }
 
-export interface AdminObservabilityStats {
-  traces_enabled: boolean;
-  metrics_enabled: boolean;
-  logs_enabled: boolean;
-  metrics_endpoint_enabled: boolean;
-  pprof_enabled: boolean;
-}
-
 export interface AdminUploadVolumeStats {
   free_bytes: number;
   total_bytes: number;
@@ -413,7 +405,6 @@ export interface AdminRuntimeStats {
   active_sessions: number;
   /** Null when the server cannot read the upload volume's usage. */
   upload_volume: AdminUploadVolumeStats | null;
-  observability: AdminObservabilityStats;
 }
 
 export interface AdminStatsResponse {

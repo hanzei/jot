@@ -46,16 +46,6 @@ type AdminStorageStats struct {
 	ImagesSizeBytes   int64 `json:"images_size_bytes"`
 }
 
-// AdminObservabilityStats reports which observability features are switched
-// on. Booleans only: endpoints and credentials are never exposed.
-type AdminObservabilityStats struct {
-	TracesEnabled          bool `json:"traces_enabled"`
-	MetricsEnabled         bool `json:"metrics_enabled"`
-	LogsEnabled            bool `json:"logs_enabled"`
-	MetricsEndpointEnabled bool `json:"metrics_endpoint_enabled"`
-	PprofEnabled           bool `json:"pprof_enabled"`
-}
-
 // AdminUploadVolumeStats is the usage of the filesystem holding JOT_UPLOAD_DIR.
 type AdminUploadVolumeStats struct {
 	FreeBytes  int64 `json:"free_bytes"`
@@ -74,8 +64,7 @@ type AdminRuntimeStats struct {
 	ActiveSessions   int64     `json:"active_sessions"`
 	// UploadVolume is null when the upload volume's usage cannot be read
 	// (unsupported platform or statfs error).
-	UploadVolume  *AdminUploadVolumeStats `json:"upload_volume" extensions:"x-nullable"`
-	Observability AdminObservabilityStats `json:"observability"`
+	UploadVolume *AdminUploadVolumeStats `json:"upload_volume" extensions:"x-nullable"`
 }
 
 type AdminStats struct {

@@ -389,16 +389,6 @@ type AdminRuntimeStats struct {
 	SSESubscribers   int64                   `json:"sse_subscribers"`
 	ActiveSessions   int64                   `json:"active_sessions"`
 	UploadVolume     *AdminUploadVolumeStats `json:"upload_volume"`
-	Observability    AdminObservabilityStats `json:"observability"`
-}
-
-// AdminObservabilityStats reports which observability features are enabled.
-type AdminObservabilityStats struct {
-	TracesEnabled          bool `json:"traces_enabled"`
-	MetricsEnabled         bool `json:"metrics_enabled"`
-	LogsEnabled            bool `json:"logs_enabled"`
-	MetricsEndpointEnabled bool `json:"metrics_endpoint_enabled"`
-	PprofEnabled           bool `json:"pprof_enabled"`
 }
 
 // SessionInfo is a single active session as returned by the sessions API.

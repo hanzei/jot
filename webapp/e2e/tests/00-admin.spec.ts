@@ -219,7 +219,6 @@ test.describe('Admin', () => {
     expect(await adminPage.getRuntimeValue('migration-version')).toBe(String(runtime.migration_version));
     expect(await adminPage.getRuntimeValue('sse-subscribers')).toMatch(/^\d+$/);
     expect(await adminPage.getRuntimeValue('upload-free')).not.toBe('n/a');
-    expect(await adminPage.getRuntimeValue('observability-pprof')).toMatch(/^(On|Off)$/);
   });
 
   test('admin can create, update role, and delete a user', async ({ page }) => {

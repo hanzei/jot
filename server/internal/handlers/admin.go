@@ -24,17 +24,8 @@ type AdminHandler struct {
 	imageStore        *blobstore.ImageStore
 	sessionService    *auth.SessionService
 	hub               *sse.Hub
-	runtime           AdminRuntimeConfig
+	startedAt         time.Time
 	passwordMinLength int
-}
-
-// AdminRuntimeConfig is the startup-time state GET /admin/stats reports
-// alongside its live counts.
-type AdminRuntimeConfig struct {
-	// StartedAt must come from time.Now, not models.Now: the uptime is
-	// measured against its monotonic clock reading, which models.Now strips.
-	StartedAt     time.Time
-	Observability models.AdminObservabilityStats
 }
 
 func NewAdminHandler(
@@ -45,7 +36,9 @@ func NewAdminHandler(
 	imageStore *blobstore.ImageStore,
 	sessionService *auth.SessionService,
 	hub *sse.Hub,
-	runtime AdminRuntimeConfig,
+	// startedAt must come from time.Now, not models.Now: the uptime is
+	// measured against its monotonic clock reading, which models.Now strips.
+	startedAt time.Time,
 	passwordMinLength int,
 ) *AdminHandler {
 	return &AdminHandler{
@@ -56,7 +49,7 @@ func NewAdminHandler(
 		imageStore:        imageStore,
 		sessionService:    sessionService,
 		hub:               hub,
-		runtime:           runtime,
+		startedAt:         startedAt,
 		passwordMinLength: passwordMinLength,
 	}
 }
@@ -89,12 +82,11 @@ func (h *AdminHandler) GetStats(w http.ResponseWriter, r *http.Request) (int, an
 	}
 
 	rt := &stats.Runtime
-	rt.StartedAt = h.runtime.StartedAt.UTC()
+	rt.StartedAt = h.startedAt.UTC()
 	// StartedAt keeps its monotonic reading, so a wall-clock step (NTP,
 	// VM resume) cannot make the uptime jump or go negative.
-	rt.UptimeSeconds = int64(time.Since(h.runtime.StartedAt).Seconds())
+	rt.UptimeSeconds = int64(time.Since(h.startedAt).Seconds())
 	rt.SSESubscribers = int64(h.hub.SubscriberCount())
-	rt.Observability = h.runtime.Observability
 	// Unsupported platforms report the volume as unknown without a warning.
 	if free, total, diskErr := h.imageStore.DiskUsage(); diskErr == nil {
 		rt.UploadVolume = &models.AdminUploadVolumeStats{FreeBytes: free, TotalBytes: total}

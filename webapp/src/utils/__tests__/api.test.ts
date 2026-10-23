@@ -707,13 +707,6 @@ describe('API Module', () => {
             sse_subscribers: 1,
             active_sessions: 2,
             upload_volume: { free_bytes: 1024, total_bytes: 4096 },
-            observability: {
-              traces_enabled: false,
-              metrics_enabled: false,
-              logs_enabled: false,
-              metrics_endpoint_enabled: false,
-              pprof_enabled: false,
-            },
           },
         };
         mockGet.mockResolvedValue({ data: mockResponse });

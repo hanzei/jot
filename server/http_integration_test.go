@@ -657,8 +657,6 @@ func TestAdminStatsEndpoint(t *testing.T) {
 	before := time.Now().UTC().Truncate(time.Second)
 	ts := setupTestServerWithConfig(t, func(cfg *config.Config) {
 		dbPath = cfg.DBDSN
-		cfg.OTelTracesEnabled = true
-		cfg.PprofEnabled = true
 	})
 
 	adminUser := ts.createTestUser(t, "adminstats", "password123", true)
@@ -789,11 +787,6 @@ func TestAdminStatsEndpoint(t *testing.T) {
 		require.NotNil(t, rt.UploadVolume)
 		assert.Positive(t, rt.UploadVolume.TotalBytes)
 		assert.LessOrEqual(t, rt.UploadVolume.FreeBytes, rt.UploadVolume.TotalBytes)
-
-		assert.Equal(t, client.AdminObservabilityStats{
-			TracesEnabled: true,
-			PprofEnabled:  true,
-		}, rt.Observability)
 	})
 
 	t.Run("returns 403 for non-admin users", func(t *testing.T) {

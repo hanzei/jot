@@ -4379,26 +4379,6 @@ const docTemplate = `{
                 }
             }
         },
-        "models.AdminObservabilityStats": {
-            "type": "object",
-            "properties": {
-                "logs_enabled": {
-                    "type": "boolean"
-                },
-                "metrics_enabled": {
-                    "type": "boolean"
-                },
-                "metrics_endpoint_enabled": {
-                    "type": "boolean"
-                },
-                "pprof_enabled": {
-                    "type": "boolean"
-                },
-                "traces_enabled": {
-                    "type": "boolean"
-                }
-            }
-        },
         "models.AdminRuntimeStats": {
             "type": "object",
             "properties": {
@@ -4417,9 +4397,6 @@ const docTemplate = `{
                 },
                 "migration_version": {
                     "type": "integer"
-                },
-                "observability": {
-                    "$ref": "#/definitions/models.AdminObservabilityStats"
                 },
                 "sse_subscribers": {
                     "type": "integer"

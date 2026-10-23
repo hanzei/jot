@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react';
-import { ROLES, type User, type AdminStatsResponse, type AdminRuntimeStats, type AdminObservabilityStats } from '@jot/shared';
+import { ROLES, type User, type AdminStatsResponse, type AdminRuntimeStats } from '@jot/shared';
 import { useTranslation } from 'react-i18next';
 import { admin } from '@/utils/api';
 import { getUser } from '@/utils/auth';
@@ -47,16 +47,6 @@ const DATABASE_BACKEND_NAMES: Record<AdminRuntimeStats['database_backend'], stri
   sqlite: 'SQLite',
   postgres: 'PostgreSQL',
 };
-
-// Observability flag, its label's i18n key, and test ID suffix. Keys stay
-// literal so check-translations can find them.
-const OBSERVABILITY_FLAGS = [
-  ['traces_enabled', 'admin.stats.runtime.traces', 'traces'],
-  ['metrics_enabled', 'admin.stats.runtime.metrics', 'metrics'],
-  ['logs_enabled', 'admin.stats.runtime.logs', 'logs'],
-  ['metrics_endpoint_enabled', 'admin.stats.runtime.metricsEndpoint', 'metrics-endpoint'],
-  ['pprof_enabled', 'admin.stats.runtime.pprof', 'pprof'],
-] as const satisfies readonly (readonly [keyof AdminObservabilityStats, string, string])[];
 
 const StatCardSkeleton = () => (
   <div className="animate-pulse rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
@@ -334,7 +324,7 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
           {!statsLoading && stats ? (
             <div data-testid="admin-runtime-section" className="mt-6">
               <h3 className="mb-4 text-base font-medium text-gray-900 dark:text-white">{t('admin.stats.runtime.title')}</h3>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 <StatCard
                   title={t('admin.stats.runtime.uptime')}
                   value={formatUptime(stats.runtime.uptime_seconds)}
@@ -379,17 +369,6 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
                       valueTestId="admin-stats-upload-total"
                     />
                   ) : null}
-                </StatCard>
-
-                <StatCard title={t('admin.stats.runtime.observability')}>
-                  {OBSERVABILITY_FLAGS.map((flag) => (
-                    <StatLine
-                      key={flag[0]}
-                      label={t(flag[1])}
-                      value={t(stats.runtime.observability[flag[0]] ? 'admin.stats.runtime.on' : 'admin.stats.runtime.off')}
-                      valueTestId={`admin-stats-observability-${flag[2]}`}
-                    />
-                  ))}
                 </StatCard>
               </div>
             </div>

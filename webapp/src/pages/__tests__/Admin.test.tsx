@@ -74,13 +74,6 @@ const mockStats: AdminStatsResponse = {
     sse_subscribers: 2,
     active_sessions: 7,
     upload_volume: { free_bytes: 10 * 1024 ** 3, total_bytes: 50 * 1024 ** 3 },
-    observability: {
-      traces_enabled: true,
-      metrics_enabled: false,
-      logs_enabled: false,
-      metrics_endpoint_enabled: true,
-      pprof_enabled: false,
-    },
   },
 };
 
@@ -135,9 +128,6 @@ describe('Admin', () => {
       expect(screen.getByTestId('admin-stats-active-sessions')).toHaveTextContent('7');
       expect(screen.getByTestId('admin-stats-upload-free')).toHaveTextContent('10 GB');
       expect(screen.getByTestId('admin-stats-upload-total')).toHaveTextContent('50 GB');
-      expect(screen.getByTestId('admin-stats-observability-traces')).toHaveTextContent('On');
-      expect(screen.getByTestId('admin-stats-observability-metrics')).toHaveTextContent('Off');
-      expect(screen.getByTestId('admin-stats-observability-metrics-endpoint')).toHaveTextContent('On');
     });
 
     it('flags a dirty migration and an unreadable upload volume', async () => {

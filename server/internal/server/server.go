@@ -149,16 +149,9 @@ func NewWithLogger(cfg *config.Config, log *logrus.Logger) (*Server, error) {
 	}
 	labelsHandler := handlers.NewLabelsHandler(noteStore, labelStore, hub)
 	eventsHandler := handlers.NewEventsHandler(hub)
-	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, userSettingsStore, imageStore, sessionService, hub, handlers.AdminRuntimeConfig{
-		StartedAt: time.Now(), //nolint:gocritic // uptime reference; keeps the monotonic clock, never persisted
-		Observability: models.AdminObservabilityStats{
-			TracesEnabled:          cfg.OTelTracesEnabled,
-			MetricsEnabled:         cfg.OTelMetricsEnabled,
-			LogsEnabled:            cfg.OTelLogsEnabled,
-			MetricsEndpointEnabled: cfg.MetricsEnabled,
-			PprofEnabled:           cfg.PprofEnabled,
-		},
-	}, cfg.PasswordMinLength)
+	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, userSettingsStore, imageStore, sessionService, hub,
+		time.Now(), //nolint:gocritic // uptime reference; keeps the monotonic clock, never persisted
+		cfg.PasswordMinLength)
 	sessionsHandler := handlers.NewSessionsHandler(sessionStore)
 	patsHandler := handlers.NewPATsHandler(patStore)
 
