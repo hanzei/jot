@@ -16,6 +16,8 @@ import {
 } from '../src/api/serverReachability';
 import { getSseState, subscribeToSseState } from '../src/api/sseState';
 import { getAboutInfo } from '../src/api/settings';
+import { saveNote } from '../src/db/noteQueries';
+import { makeTextNote } from './helpers/fixtures';
 
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ goBack: jest.fn(), navigate: jest.fn() }),
@@ -276,6 +278,59 @@ describe('DiagnosticsScreen', () => {
     expect(report.server).toEqual(
       expect.objectContaining({ version: null, commit: null, build_time: null, go_version: null }),
     );
+  });
+
+  describe('image upload queue', () => {
+    beforeEach(async () => {
+      const db = globalThis.testDb;
+      await saveNote(db, makeTextNote({ id: 'note-1' }));
+      const insert = (id: string, status: string, createdAt: string, attempts: number) =>
+        db.runAsync(
+          `INSERT INTO pending_image_uploads (id, note_id, local_path, filename, mime_type, status, created_at, attempts)
+           VALUES (?, 'note-1', ?, 'photo.png', 'image/png', ?, ?, ?)`,
+          [id, `file:///docs/pending-image-uploads/${id}`, status, createdAt, attempts],
+        );
+      await insert('q1', 'queued', '2024-01-02T00:00:00Z', 2);
+      await insert('q2', 'queued', '2024-01-03T00:00:00Z', 0);
+      await insert('q3', 'queued', '2024-01-04T00:00:00Z', 0);
+      for (const id of ['e1', 'e2', 'e3', 'e4']) {
+        await insert(id, 'error', '2024-01-01T00:00:00Z', 5);
+      }
+    });
+
+    it('shows queued and failed counts and the oldest queued upload\'s attempts, highlighted', async () => {
+      const { findByText, getByText } = await renderScreen();
+
+      expect(await findByText('Image Uploads')).toBeTruthy();
+      expect(await findByText('Oldest upload waiting')).toBeTruthy();
+      // Rows are siblings of their labels; assert on the values' highlight.
+      const orange = { color: '#f97316' };
+      expect(getByText('3')).toHaveStyle(orange);
+      expect(getByText('4')).toHaveStyle(orange);
+      expect(getByText('2 / 5')).toHaveStyle(orange);
+    });
+
+    it('includes the image upload queue in the share report, without paths or filenames', async () => {
+      const { findByText } = await renderScreen();
+      await findByText('Image Uploads');
+      const report = await shareReport(findByText);
+
+      expect(report.imageUploads).toEqual({
+        queuedCount: 3,
+        errorCount: 4,
+        oldestQueuedAt: '2024-01-02T00:00:00Z',
+        oldestAttempts: 2,
+      });
+      const serialized = JSON.stringify(report.imageUploads);
+      expect(serialized).not.toContain('photo.png');
+      expect(serialized).not.toContain('pending-image-uploads');
+    });
+  });
+
+  it('hides the oldest-upload rows when no image uploads are queued', async () => {
+    const { findByText, queryByText } = await renderScreen();
+    expect(await findByText('Image Uploads')).toBeTruthy();
+    expect(queryByText('Oldest upload waiting')).toBeNull();
   });
 });
 

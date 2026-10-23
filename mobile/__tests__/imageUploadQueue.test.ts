@@ -9,6 +9,7 @@ import {
   enqueueImageUpload,
   getPendingImageUploads,
   getQueuedImageUploadCount,
+  getImageUploadQueueStats,
   retryImageUpload,
   dismissImageUpload,
   drainImageUploadQueue,
@@ -173,6 +174,31 @@ describe('getPendingImageUploads / getQueuedImageUploadCount', () => {
 
   it('counts zero when nothing is queued', async () => {
     expect(await getQueuedImageUploadCount(db)).toBe(0);
+  });
+});
+
+describe('getImageUploadQueueStats', () => {
+  it('reports an empty queue', async () => {
+    expect(await getImageUploadQueueStats(db)).toEqual({ queuedCount: 0, errorCount: 0, oldest: null });
+  });
+
+  it('counts queued and errored uploads separately and reports the oldest queued entry', async () => {
+    await seedUpload({ id: 'newer', created_at: '2024-01-03T00:00:00Z', attempts: 0 });
+    await seedUpload({ id: 'oldest', created_at: '2024-01-02T00:00:00Z', attempts: 2 });
+    // Older still, but errored: it waits on the user, not the drain.
+    await seedUpload({ id: 'failed', created_at: '2024-01-01T00:00:00Z', status: 'error', error_message: 'too big', attempts: 3 });
+
+    expect(await getImageUploadQueueStats(db)).toEqual({
+      queuedCount: 2,
+      errorCount: 1,
+      oldest: { created_at: '2024-01-02T00:00:00Z', attempts: 2 },
+    });
+  });
+
+  it('reports no oldest entry when every upload has failed', async () => {
+    await seedUpload({ id: 'failed', status: 'error', error_message: 'too big' });
+
+    expect(await getImageUploadQueueStats(db)).toEqual({ queuedCount: 0, errorCount: 1, oldest: null });
   });
 });
 
