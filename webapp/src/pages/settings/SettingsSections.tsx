@@ -5,6 +5,7 @@ import type { TFunction } from 'i18next';
 import LetterAvatar from '@/components/LetterAvatar';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import MobileAppPreference from '@/components/MobileAppPreference';
+import DiagnosticsSection from '@/pages/settings/DiagnosticsSection';
 import SettingsSectionCard from '@/pages/settings/SettingsSectionCard';
 import { passwordFormKeys } from '@/pages/settings/passwordFormKeys';
 import { SUPPORTED_LANGUAGES, type LanguagePreference } from '@/utils/language';
@@ -573,5 +574,7 @@ export const PreferencesInfoColumn = ({
         {t('settings.aboutButton')}
       </button>
     </SettingsSectionCard>
+
+    <DiagnosticsSection />
   </div>
 );

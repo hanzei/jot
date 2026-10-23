@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { SSEEvent } from '@jot/shared';
 import { CLIENT_ID } from '@/utils/api';
+import { resetSSEDiagnostics, updateSSEDiagnostics } from '@/utils/diagnostics';
 
 export type { SSEEvent };
 
@@ -52,6 +53,8 @@ export function useSSE({ onEvent, onConnected }: UseSSEOptions): SSEStatus {
     // Set on cleanup so a pending reconnect timer doesn't open a new stream
     // after the effect has torn down.
     let cancelled = false;
+    // Mirrored into the diagnostics store for Settings > Diagnostics.
+    let reconnectAttempts = 0;
 
     const scheduleReconnect = () => {
       if (cancelled || reconnectTimer !== undefined) return;
@@ -71,11 +74,14 @@ export function useSSE({ onEvent, onConnected }: UseSSEOptions): SSEStatus {
       es.onopen = () => {
         hasConnectedRef.current = true;
         reconnectDelay = INITIAL_RECONNECT_DELAY_MS;
+        reconnectAttempts = 0;
         setStatus('connected');
+        updateSSEDiagnostics({ status: 'connected', reconnectAttempts });
         onConnectedRef.current?.();
       };
 
       es.onmessage = (e: MessageEvent) => {
+        updateSSEDiagnostics({ lastEventAt: new Date().toISOString() });
         let event: SSEEvent;
         try {
           event = JSON.parse(e.data as string) as SSEEvent;
@@ -94,15 +100,21 @@ export function useSSE({ onEvent, onConnected }: UseSSEOptions): SSEStatus {
       // reconnect. Session expiry is handled by the axios 401 interceptor on
       // the next regular API call, which redirects to /login and tears down
       // this component; the backoff above bounds retries until that happens.
+      // Each error is one failed connection, retried by the browser or by
+      // scheduleReconnect, so it counts as one reconnect attempt.
       es.onerror = () => {
+        reconnectAttempts += 1;
+        let next: SSEStatus;
         if (es?.readyState === EventSource.CLOSED) {
           es.close();
           es = null;
-          setStatus(hasConnectedRef.current ? 'reconnecting' : 'disconnected');
+          next = hasConnectedRef.current ? 'reconnecting' : 'disconnected';
           scheduleReconnect();
         } else {
-          setStatus(hasConnectedRef.current ? 'reconnecting' : 'connecting');
+          next = hasConnectedRef.current ? 'reconnecting' : 'connecting';
         }
+        setStatus(next);
+        updateSSEDiagnostics({ status: next, reconnectAttempts });
       };
     };
 
@@ -112,6 +124,7 @@ export function useSSE({ onEvent, onConnected }: UseSSEOptions): SSEStatus {
       cancelled = true;
       if (reconnectTimer !== undefined) clearTimeout(reconnectTimer);
       es?.close();
+      resetSSEDiagnostics();
     };
   }, []); // empty deps — connect once, stay connected (with manual reconnect)
 

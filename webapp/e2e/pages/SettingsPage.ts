@@ -146,4 +146,46 @@ export class SettingsPage {
     await expect(labelRow).toBeVisible();
     await labelRow.locator('button').first().click();
   }
+
+  /** Answers every token create with a 500 carrying `requestId`, so the attempt lands in Diagnostics. */
+  async failPATCreates(requestId: string) {
+    await this.page.route('**/api/v1/pats', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.continue();
+        return;
+      }
+      await route.fulfill({
+        status: 500,
+        headers: { 'X-Request-Id': requestId },
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { code: 'internal', message: 'internal server error' } }),
+      });
+    });
+  }
+
+  async createPAT(name: string) {
+    await this.page.getByPlaceholder('Token name').fill(name);
+    await this.page.getByRole('button', { name: 'Create', exact: true }).click();
+  }
+
+  diagnosticsSection() {
+    return this.page.getByTestId('diagnostics-section');
+  }
+
+  diagnosticsField(field: 'webapp' | 'server' | 'sse-status' | 'sse-attempts' | 'sse-last-event') {
+    return this.diagnosticsSection().getByTestId(`diagnostics-${field}`);
+  }
+
+  diagnosticsFailedRequests() {
+    return this.diagnosticsSection().getByRole('list', { name: 'Recent failed requests' });
+  }
+
+  async copyDiagnosticsReport() {
+    await this.diagnosticsSection().getByRole('button', { name: 'Copy report' }).click();
+    await expect(this.diagnosticsSection().getByRole('button', { name: 'Report copied' })).toBeVisible();
+  }
+
+  async clipboardText(): Promise<string> {
+    return this.page.evaluate(() => navigator.clipboard.readText());
+  }
 }

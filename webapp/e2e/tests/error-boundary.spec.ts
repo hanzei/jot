@@ -17,11 +17,11 @@ test.describe('Error boundaries', () => {
 
     await errorFallbackPage.copyDetails(fallback);
     await expect(fallback.getByText('Error details copied')).toBeVisible();
-    const details = await errorFallbackPage.clipboardText();
-    expect(details).toContain('Jot error report');
-    expect(details).toMatch(/Server version: \S+/);
-    expect(details).toContain('Route: /');
-    expect(details).toContain('Stack:');
+    const details = JSON.parse(await errorFallbackPage.clipboardText());
+    expect(details.server.version).toEqual(expect.any(String));
+    expect(details.webapp.version).toEqual(expect.any(String));
+    expect(details.route).toBe('/');
+    expect(details.crash.stack).toEqual(expect.any(String));
 
     await errorFallbackPage.unbreakSidebarLabels();
     await fallback.getByRole('button', { name: 'Reload page' }).click();
@@ -41,7 +41,7 @@ test.describe('Error boundaries', () => {
 
     await errorFallbackPage.copyDetails(fallback);
     await expect(fallback.getByText('Error details copied')).toBeVisible();
-    expect(await errorFallbackPage.clipboardText()).toContain('Route: /');
+    expect(JSON.parse(await errorFallbackPage.clipboardText()).route).toBe('/');
 
     // The header still works, and navigating away in-app clears the error.
     await page.getByRole('button', { name: 'Profile menu' }).click();

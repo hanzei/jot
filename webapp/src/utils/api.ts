@@ -2,6 +2,7 @@ import axios from 'axios';
 import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, NoteItem, CreateNoteRequest, UpdateNoteRequest, ConvertNoteTypeRequest, CreateNoteItemRequest, PatchNoteItemRequest, User, CreateUserRequest, UserListResponse, AdminStatsResponse, ShareNoteRequest, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, SetUserPasswordRequest, Label, ActiveSession, EmptyTrashResponse, PersonalAccessToken, CreatePATRequest, NoteImage, LabelCountsResponse, NoteListResponse, NoteShareListResponse, LabelListResponse, UserSearchResponse, SessionListResponse, PATListResponse } from '@jot/shared';
 import { removeUser } from '@/utils/auth';
 import { authPathWithRedirect, currentRedirectTarget } from '@/utils/authRedirect';
+import { recordFailedRequest } from '@/utils/diagnostics';
 
 // Unique ID for this browser tab, used to suppress SSE echoes of our own mutations.
 export const CLIENT_ID = crypto.randomUUID();
@@ -20,10 +21,11 @@ const api = axios.create({
   headers: { 'X-Client-Id': CLIENT_ID },
 });
 
-// Handle auth errors
+// Record failures for Settings > Diagnostics, and handle auth errors
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    recordFailedRequest(error);
     if (error.response?.status === 401) {
       const url = error.config?.url || '';
       const isAuthEndpoint = url === '/login' || url === '/register' || url === '/me';

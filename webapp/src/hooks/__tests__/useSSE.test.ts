@@ -3,6 +3,7 @@ import { renderHook, act } from '@testing-library/react';
 import type { SSEEvent } from '../useSSE';
 import { useSSE } from '../useSSE';
 import { CLIENT_ID } from '@/utils/api';
+import { getDiagnostics, resetDiagnosticsForTest } from '@/utils/diagnostics';
 
 // Controllable mock for EventSource that exposes lifecycle handlers.
 class MockEventSource {
@@ -365,6 +366,34 @@ describe('useSSE', () => {
       }).not.toThrow();
 
       expect(onEvent).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('diagnostics', () => {
+    beforeEach(() => {
+      resetDiagnosticsForTest();
+    });
+
+    it('mirrors status, reconnect attempts and the last event time', () => {
+      const { unmount } = renderHook(() => useSSE({ onEvent: vi.fn() }));
+      const es = MockEventSource.instances[0]!;
+
+      act(() => es.simulateError());
+      expect(getDiagnostics().sse).toEqual({ status: 'connecting', reconnectAttempts: 1, lastEventAt: null });
+
+      act(() => es.simulateOpen());
+      expect(getDiagnostics().sse).toMatchObject({ status: 'connected', reconnectAttempts: 0 });
+
+      // An echo of this tab's own change still shows the stream is alive.
+      act(() => es.simulateMessage({ type: 'note_updated', client_id: CLIENT_ID }));
+      expect(getDiagnostics().sse.lastEventAt).not.toBeNull();
+
+      act(() => es.simulateError());
+      act(() => es.simulateError());
+      expect(getDiagnostics().sse).toMatchObject({ status: 'reconnecting', reconnectAttempts: 2 });
+
+      unmount();
+      expect(getDiagnostics().sse).toMatchObject({ status: 'connecting', reconnectAttempts: 0 });
     });
   });
 

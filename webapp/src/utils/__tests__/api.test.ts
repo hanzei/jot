@@ -41,6 +41,7 @@ vi.mock('axios', () => ({
 import axios from 'axios';
 import { auth, notes, users, admin, labels, sessions, pats } from '../api';
 import { createMockNote } from './test-helpers';
+import { getDiagnostics, resetDiagnosticsForTest } from '../diagnostics';
 
 // Mock localStorage
 const mockLocalStorage = {
@@ -105,6 +106,16 @@ describe('API Module', () => {
   });
 
   describe('Response Interceptor', () => {
+
+    it('records the failure for diagnostics', async () => {
+      resetDiagnosticsForTest();
+      const error500 = { config: { method: 'post', url: '/notes' }, response: { status: 500, headers: { 'x-request-id': 'req123' } } };
+      await expect(errorHandler(error500)).rejects.toEqual(error500);
+
+      expect(getDiagnostics().failedRequests).toEqual([
+        expect.objectContaining({ method: 'POST', route: '/notes', status: 500, requestId: 'req123' }),
+      ]);
+    });
 
     it('clears user and redirects to login on 401 error', async () => {
       const error401 = { response: { status: 401 } };

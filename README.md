@@ -584,12 +584,13 @@ exporters for local debugging.
 Every response carries an `X-Request-Id` header, and the server's
 `Request completed` log line records the same value as `request_id` (next to
 `trace_id`/`span_id` when tracing is on). The webapp shows it as a copyable
-`Ref:` on error toasts for server errors, and the mobile app writes it into the
-log line for each failed request, which the shared diagnostics report
-includes. To find a reported failure, search the logs for that ID. A request
-may send its own `X-Request-Id` (at most 64 characters of `[A-Za-z0-9._-]`),
-for example from a reverse proxy, and the server uses it; any other value is
-replaced with a generated one.
+`Ref:` on error toasts for server errors and lists it for each recent failed
+request under Settings > Diagnostics (whose "Copy report" output includes it);
+the mobile app writes it into the log line for each failed request, which the
+shared diagnostics report includes. To find a reported failure, search the logs
+for that ID. A request may send its own `X-Request-Id` (at most 64 characters
+of `[A-Za-z0-9._-]`), for example from a reverse proxy, and the server uses it;
+any other value is replaced with a generated one.
 
 ### Profiling
 
@@ -705,7 +706,10 @@ docker run -p 8080:8080 -v ./data:/data jot
 ```
 
 The Docker image uses multi-stage build:
-1. **Node.js stage**: Builds the React frontend
+1. **Node.js stage**: Builds the React frontend, stamped with the `VERSION` and
+   `COMMIT_SHA` build args (outside Docker, `JOT_BUILD_VERSION` and
+   `JOT_BUILD_COMMIT`, defaulting to `dev` and the git commit), which
+   Settings > Diagnostics shows next to the server's
 2. **Go stage**: Builds the backend binary
 3. **Alpine stage**: Combines everything in minimal production image
 

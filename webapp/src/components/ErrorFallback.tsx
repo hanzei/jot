@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import i18n from '@/i18n';
-import { buildErrorDetails } from '@/utils/errorDetails';
+import type { AboutInfo } from '@jot/shared';
+import { formatDiagnosticsReport } from '@/utils/diagnosticsReport';
+import { getDiagnostics } from '@/utils/diagnostics';
 import { about } from '@/utils/api';
 import type { ErrorBoundaryFallbackProps } from '@/components/ErrorBoundary';
 
@@ -16,28 +18,27 @@ type CopyStatus = 'idle' | 'copied' | 'failed';
 
 // Fetched at most once per page load, however often a fallback mounts. A
 // failed fetch is dropped so the next fallback can try again.
-let serverVersionRequest: Promise<string> | null = null;
+let serverInfoRequest: Promise<AboutInfo | null> | null = null;
 
 /**
- * Best-effort server version for the copied details. Fetched on mount rather
- * than on click: an await before the clipboard write can cost the user
+ * Best-effort server build info for the copied details. Fetched on mount
+ * rather than on click: an await before the clipboard write can cost the user
  * activation it needs. Skips the 401 redirect, which would replace the
  * fallback the user is reading.
  */
-function useServerVersion(): string {
-  const [version, setVersion] = useState('unknown');
+function useServerInfo(): AboutInfo | null {
+  const [info, setInfo] = useState<AboutInfo | null>(null);
   useEffect(() => {
     let cancelled = false;
-    serverVersionRequest ??= about.get({ skipAuthRedirect: true })
-      .then((info) => info.version)
+    serverInfoRequest ??= about.get({ skipAuthRedirect: true })
       .catch(() => {
-        serverVersionRequest = null;
-        return 'unknown';
+        serverInfoRequest = null;
+        return null;
       });
-    void serverVersionRequest.then((v) => { if (!cancelled) setVersion(v); });
+    void serverInfoRequest.then((v) => { if (!cancelled) setInfo(v); });
     return () => { cancelled = true; };
   }, []);
-  return version;
+  return info;
 }
 
 /**
@@ -45,18 +46,23 @@ function useServerVersion(): string {
  * directly rather than a hook, so it renders whatever failed below it.
  */
 export default function ErrorFallback({ error, componentStack, reset, variant }: ErrorFallbackProps) {
-  const serverVersion = useServerVersion();
+  const serverInfo = useServerInfo();
   const [copyStatus, setCopyStatus] = useState<CopyStatus>('idle');
   const t = i18n.t.bind(i18n);
 
   const handleCopy = async () => {
-    const details = buildErrorDetails({
-      error,
-      componentStack,
-      serverVersion,
+    const details = formatDiagnosticsReport({
+      diagnostics: getDiagnostics(),
+      server: serverInfo,
       route: window.location.pathname,
       userAgent: navigator.userAgent,
       now: new Date(),
+      crash: {
+        name: error.name,
+        message: error.message,
+        stack: error.stack ?? null,
+        componentStack: componentStack?.trim() ?? null,
+      },
     });
     try {
       await navigator.clipboard.writeText(details);

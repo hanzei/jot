@@ -4,8 +4,25 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { fileURLToPath, URL } from 'url';
+import { execSync } from 'child_process';
+
+// The bundle's own build, for Settings > Diagnostics. It can differ from the
+// server's: the service worker keeps serving a cached bundle until the user
+// accepts the update prompt. The Docker build passes both values; elsewhere
+// the commit comes from git when there is a checkout.
+function gitCommit(): string | null {
+  try {
+    return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() || null;
+  } catch {
+    return null;
+  }
+}
 
 export default defineConfig(({ mode }) => ({
+  define: {
+    __JOT_WEBAPP_VERSION__: JSON.stringify(process.env.JOT_BUILD_VERSION || 'dev'),
+    __JOT_WEBAPP_COMMIT__: JSON.stringify(process.env.JOT_BUILD_COMMIT || gitCommit()),
+  },
   plugins: [
     tailwindcss(),
     react(),
