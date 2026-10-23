@@ -48,13 +48,14 @@ const DATABASE_BACKEND_NAMES: Record<AdminRuntimeStats['database_backend'], stri
   postgres: 'PostgreSQL',
 };
 
-// Observability flag, i18n key under admin.stats.runtime, and test ID suffix.
+// Observability flag, its label's i18n key, and test ID suffix. Keys stay
+// literal so check-translations can find them.
 const OBSERVABILITY_FLAGS = [
-  ['traces_enabled', 'traces', 'traces'],
-  ['metrics_enabled', 'metrics', 'metrics'],
-  ['logs_enabled', 'logs', 'logs'],
-  ['metrics_endpoint_enabled', 'metricsEndpoint', 'metrics-endpoint'],
-  ['pprof_enabled', 'pprof', 'pprof'],
+  ['traces_enabled', 'admin.stats.runtime.traces', 'traces'],
+  ['metrics_enabled', 'admin.stats.runtime.metrics', 'metrics'],
+  ['logs_enabled', 'admin.stats.runtime.logs', 'logs'],
+  ['metrics_endpoint_enabled', 'admin.stats.runtime.metricsEndpoint', 'metrics-endpoint'],
+  ['pprof_enabled', 'admin.stats.runtime.pprof', 'pprof'],
 ] as const satisfies readonly (readonly [keyof AdminObservabilityStats, string, string])[];
 
 const StatCardSkeleton = () => (
@@ -384,7 +385,7 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
                   {OBSERVABILITY_FLAGS.map((flag) => (
                     <StatLine
                       key={flag[0]}
-                      label={t(`admin.stats.runtime.${flag[1]}`)}
+                      label={t(flag[1])}
                       value={t(stats.runtime.observability[flag[0]] ? 'admin.stats.runtime.on' : 'admin.stats.runtime.off')}
                       valueTestId={`admin-stats-observability-${flag[2]}`}
                     />
