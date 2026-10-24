@@ -165,7 +165,7 @@ func TestNoteUnreadState(t *testing.T) {
 				return touchNoteTx(ctx, tx, store.d, note.ID, ownerID, stale)
 			},
 			"changeNoteContentTx": func(tx *sql.Tx) error {
-				return store.changeNoteContentTx(ctx, tx, note.ID, ownerID, "stale title", "stale content", nil, stale)
+				return store.changeNoteContentTx(ctx, tx, note.ID, ownerID, new("stale title"), new("stale content"), nil, stale)
 			},
 			"convertNoteRowTx": func(tx *sql.Tx) error {
 				_, convErr := store.convertNoteRowTx(ctx, tx, note.ID, ownerID, note.NoteType, "stale title", "stale content", nil, nil, stale)

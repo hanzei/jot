@@ -1,6 +1,7 @@
 package models
 
 import (
+	"database/sql"
 	"testing"
 
 	"github.com/hanzei/jot/server/internal/database/dbtest"
@@ -99,6 +100,77 @@ func TestUpdateUnpinning(t *testing.T) {
 			require.NoError(t, err)
 			assert.False(t, restored.Pinned)
 			assert.Nil(t, restored.UnpinnedPosition)
+		})
+	})
+}
+
+// TestUpdateStaleSnapshot covers a concurrent update committing between
+// Update's read of the note and its writes: applyUpdateTx is handed the read
+// taken before that update, and must not write any of its values back.
+func TestUpdateStaleSnapshot(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, driver string) {
+		setup := func(t *testing.T) (*noteStore, string, *Note) {
+			t.Helper()
+			store, userID := newTestBulkStore(t, driver)
+			note, err := store.Create(t.Context(), userID, "", "title", "content", NoteTypeText, DefaultNoteColor)
+			require.NoError(t, err)
+			snapshot, err := store.GetByID(t.Context(), note.ID, userID)
+			require.NoError(t, err)
+			return store, userID, snapshot
+		}
+		applyStale := func(t *testing.T, store *noteStore, userID string, snapshot *Note, upd noteUpdate) error {
+			t.Helper()
+			return inTx(t.Context(), store, func(tx *sql.Tx) error {
+				return store.applyUpdateTx(t.Context(), tx, snapshot.ID, userID, snapshot, upd, Timestamp(Now()))
+			})
+		}
+
+		t.Run("a title-only write keeps content changed after the snapshot", func(t *testing.T) {
+			store, userID, snapshot := setup(t)
+			ctx := t.Context()
+			require.NoError(t, store.Update(ctx, snapshot.ID, userID, nil, new("newer content"), nil, nil, nil, nil, nil))
+
+			require.NoError(t, applyStale(t, store, userID, snapshot, noteUpdate{title: new("new title")}))
+
+			got, err := store.GetByID(ctx, snapshot.ID, userID)
+			require.NoError(t, err)
+			assert.Equal(t, "new title", got.Title)
+			assert.Equal(t, "newer content", got.Content)
+		})
+
+		t.Run("a per-user write keeps the other per-user fields changed after the snapshot", func(t *testing.T) {
+			store, userID, snapshot := setup(t)
+			ctx := t.Context()
+			require.NoError(t, store.Update(ctx, snapshot.ID, userID, nil, nil, nil, nil, new(true), new(true), nil))
+
+			require.NoError(t, applyStale(t, store, userID, snapshot, noteUpdate{color: new("#fbbc04")}))
+
+			got, err := store.GetByID(ctx, snapshot.ID, userID)
+			require.NoError(t, err)
+			assert.Equal(t, "#fbbc04", got.Color)
+			assert.True(t, got.Archived)
+			assert.True(t, got.CheckedItemsCollapsed)
+		})
+
+		t.Run("a guarded title-only write conflicts when the title changed since base_version", func(t *testing.T) {
+			store, userID, snapshot := setup(t)
+			ctx := t.Context()
+			require.NoError(t, store.Update(ctx, snapshot.ID, userID, new("other title"), nil, nil, nil, nil, nil, nil))
+
+			err := applyStale(t, store, userID, snapshot, noteUpdate{title: new("new title"), baseVersion: new(snapshot.Version)})
+			require.ErrorIs(t, err, ErrNoteVersionConflict)
+		})
+
+		t.Run("a guarded title-only write is an idempotent no-op when only content changed and the title already matches", func(t *testing.T) {
+			store, userID, snapshot := setup(t)
+			ctx := t.Context()
+			require.NoError(t, store.Update(ctx, snapshot.ID, userID, new("new title"), new("newer content"), nil, nil, nil, nil, nil))
+
+			require.NoError(t, applyStale(t, store, userID, snapshot, noteUpdate{title: new("new title"), baseVersion: new(snapshot.Version)}))
+
+			got, err := store.GetByID(ctx, snapshot.ID, userID)
+			require.NoError(t, err)
+			assert.Equal(t, "newer content", got.Content)
 		})
 	})
 }
