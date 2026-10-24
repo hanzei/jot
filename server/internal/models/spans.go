@@ -34,7 +34,6 @@ var expectedErrors = []error{
 	ErrNoteImageNotFound,
 	ErrNoteImageCapExceeded,
 	ErrNoteTypeUnchanged,
-	ErrInvalidNoteType,
 	ErrPATNotFound,
 	ErrSessionNotFoundOrExpired,
 	ErrUsernameTaken,

@@ -111,6 +111,11 @@ func TestGenerateRejects(t *testing.T) {
 			methods: "func (s *wrapped) Get(ctx context.Context, end string) error { return nil }",
 			wantErr: `parameter "end" collides`,
 		},
+		{
+			name:    "attribute matches no parameter",
+			methods: "func (s *wrapped) Get(ctx context.Context, thingID string) error { return nil }",
+			wantErr: "//otelwrap:attr id matches no parameter of wrapped",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -121,4 +126,37 @@ func TestGenerateRejects(t *testing.T) {
 			assert.Contains(t, err.Error(), tt.wantErr)
 		})
 	}
+}
+
+func TestImportName(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]string{
+		"context":                        "context",
+		"go.opentelemetry.io/otel/trace": "trace",
+		"github.com/golang-jwt/jwt/v5":   "jwt",
+		"gopkg.in/yaml.v3":               "yaml",
+		"example.com/vendor":             "vendor",
+	}
+	for p, want := range tests {
+		assert.Equal(t, want, importName(p), p)
+	}
+}
+
+func TestGenerateSkipsExcludedFiles(t *testing.T) {
+	t.Parallel()
+
+	dir := writeFixture(t, `package store
+
+import "context"
+
+func (s *wrapped) Get(ctx context.Context, id string) error { return nil }
+`)
+	ignored := "//go:build ignore\n\npackage store\n\nimport \"context\"\n\nfunc (s *wrapped) Extra(ctx context.Context) error { return nil }\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "ignored.go"), []byte(ignored), 0o600))
+
+	src, err := generate(dir, "out_gen.go")
+	require.NoError(t, err)
+	assert.Contains(t, string(src), "Wrapped.Get")
+	assert.NotContains(t, string(src), "Extra")
 }

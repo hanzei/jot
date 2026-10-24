@@ -4,3 +4,6 @@
 server/docs/docs.go linguist-generated=true
 server/docs/swagger.json linguist-generated=true
 server/docs/swagger.yaml linguist-generated=true
+
+# Regenerate with: task gen-go
+server/**/*_gen.go linguist-generated=true

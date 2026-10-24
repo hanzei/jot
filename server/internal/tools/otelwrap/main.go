@@ -24,6 +24,7 @@ import (
 	"flag"
 	"fmt"
 	"go/ast"
+	"go/build"
 	"go/format"
 	"go/parser"
 	"go/printer"
@@ -114,8 +115,33 @@ func generate(dir, out string) ([]byte, error) {
 				return nil, fmt.Errorf("%s.%s: %w", w.inner, m.decl.Name.Name, err)
 			}
 		}
+		if unused := unusedAttrs(w, ms); len(unused) > 0 {
+			return nil, fmt.Errorf("%s: %s%s matches no parameter of %s", w.name, attrDirective, strings.Join(unused, ", "), w.inner)
+		}
 	}
 	return g.file(pkg.name)
+}
+
+// unusedAttrs returns the parameter names w has attribute directives for that
+// no method in ms takes, so a typo or a renamed parameter fails generation
+// instead of silently dropping the attribute.
+func unusedAttrs(w wrapper, ms []method) []string {
+	seen := map[string]bool{}
+	for _, m := range ms {
+		for _, field := range m.decl.Type.Params.List {
+			for _, n := range field.Names {
+				seen[n.Name] = true
+			}
+		}
+	}
+	var unused []string
+	for name := range w.attrs {
+		if !seen[name] {
+			unused = append(unused, name)
+		}
+	}
+	slices.Sort(unused)
+	return unused
 }
 
 func parsePackage(fset *token.FileSet, dir, skip string) (*pkgInfo, error) {
@@ -127,6 +153,15 @@ func parsePackage(fset *token.FileSet, dir, skip string) (*pkgInfo, error) {
 	for _, e := range entries {
 		name := e.Name()
 		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") || name == skip {
+			continue
+		}
+		// Skip files the build would (//go:build ignore, _windows.go, ...), so
+		// their methods are not wrapped twice or wrapped when not compiled.
+		match, err := build.Default.MatchFile(dir, name)
+		if err != nil {
+			return nil, fmt.Errorf("match build constraints of %s: %w", name, err)
+		}
+		if !match {
 			continue
 		}
 		f, err := parser.ParseFile(fset, filepath.Join(dir, name), nil, parser.ParseComments)
@@ -171,13 +206,32 @@ func fileImports(f *ast.File) (map[string]string, error) {
 		if err != nil {
 			return nil, fmt.Errorf("unquote import path: %w", err)
 		}
-		n := path.Base(p)
+		n := importName(p)
 		if imp.Name != nil {
 			n = imp.Name.Name
 		}
 		imports[n] = p
 	}
 	return imports, nil
+}
+
+// importName returns the package name an unaliased import of p is referred to
+// by, following the module conventions where that differs from the last path
+// element: a major-version suffix (example.com/jwt/v5 is jwt) and a gopkg.in
+// version (gopkg.in/yaml.v3 is yaml).
+func importName(p string) string {
+	n := path.Base(p)
+	if dir := path.Dir(p); dir != "." && len(n) > 1 && n[0] == 'v' && isDigits(n[1:]) {
+		n = path.Base(dir)
+	}
+	if before, after, ok := strings.Cut(n, ".v"); ok && isDigits(after) {
+		n = before
+	}
+	return n
+}
+
+func isDigits(s string) bool {
+	return s != "" && strings.Trim(s, "0123456789") == ""
 }
 
 // findWrappers returns the wrapper types declared in d, with the attributes
@@ -446,7 +500,7 @@ func (g *generator) file(pkg string) ([]byte, error) {
 		if i > 0 && isStd(paths[i-1]) && !isStd(p) {
 			file.WriteString("\n")
 		}
-		if n := g.imports[p]; n != path.Base(p) {
+		if n := g.imports[p]; n != importName(p) {
 			fmt.Fprintf(&file, "\t%s %q\n", n, p)
 		} else {
 			fmt.Fprintf(&file, "\t%q\n", p)

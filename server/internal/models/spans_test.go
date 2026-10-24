@@ -85,7 +85,11 @@ func TestStartSpan(t *testing.T) {
 // sentinel cannot silently turn its routine 4xx into failed spans.
 func TestExpectedErrorsCoverSentinels(t *testing.T) {
 	t.Parallel()
-	unexpected := map[string]bool{}
+	unexpected := map[string]bool{
+		// Every write surface validates the note type before calling the store,
+		// so reaching the store's guard is a bug that surfaces as a 500.
+		"ErrInvalidNoteType": true,
+	}
 
 	declared := map[string]bool{}
 	listed := map[string]bool{}
