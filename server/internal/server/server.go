@@ -548,9 +548,11 @@ func FileServer(r chi.Router, path string, root *os.Root) {
 			cleanPath = "index.html"
 		}
 
-		file, err := root.Open(cleanPath)
-		if err != nil {
-			// File doesn't exist, serve index.html for SPA routing
+		// A directory is treated like a missing file: http.FileServerFS would
+		// answer it with a listing of its contents.
+		info, err := root.Stat(cleanPath)
+		if err != nil || info.IsDir() {
+			// Not a file: serve index.html for SPA routing
 			indexFile, err := root.Open("index.html")
 			if err != nil {
 				http.NotFound(w, req)
@@ -566,11 +568,6 @@ func FileServer(r chi.Router, path string, root *os.Root) {
 			http.ServeContent(w, req, "index.html", time.Time{}, indexFile)
 			return
 		}
-		defer func(ctx context.Context) {
-			if err := file.Close(); err != nil {
-				logutil.FromContext(ctx).WithError(err).Error("Failed to close file")
-			}
-		}(req.Context())
 
 		// File exists, serve it via the traversal-safe FS
 		fs := http.StripPrefix(pathPrefix, fileServer)
