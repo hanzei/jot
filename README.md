@@ -180,11 +180,13 @@ task lint-webapp     # Run webapp linting
 task lint-mobile     # Run mobile app linting
 task lint-shared     # Run shared package linting
 task check-docs      # Check server/docs/ matches the handler annotations
+task check-generated # Check generated Go code (*_gen.go) matches its sources
 task check-migrations   # Check the sqlite and postgres migration trees match
 task check-translations # Check locale files for missing/extra keys
 task check-mobile-flows # Validate the Maestro flow syntax (no emulator needed)
 task check-mobile-expo  # expo-doctor: Expo SDK/native alignment (run by the dep sweep, not by check)
 task gen-docs        # Regenerate Swagger API docs
+task gen-go          # Regenerate go:generate output (store tracing wrappers)
 task build-webapp    # Build the webapp into webapp/build
 task build-jotctl    # Build the jotctl admin CLI binary
 task clean           # Remove generated files and node packages
@@ -578,6 +580,12 @@ Set `JOT_METRICS_ENABLED=true` to expose Prometheus metrics on
 OpenTelemetry SDK setup. When `OTEL_EXPORTER_OTLP_ENDPOINT` is set, enabled
 signals are exported over OTLP gRPC; otherwise enabled traces/logs use stdout
 exporters for local debugging.
+
+With tracing on, every store method gets a span named `<Store>.<Method>`, for
+example `NoteStore.GetByID`. An expected outcome such as a missing note, a
+version conflict, or a reached limit (the cases that become a 4xx response)
+leaves the span `Ok` and records the message in its `error.expected` attribute.
+Only unexpected errors mark a span as failed.
 
 ### Request IDs
 

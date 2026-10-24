@@ -43,14 +43,14 @@ connectivity, deep linking, Markdown rendering) live in `docs/specs/` — read t
 
 ### Before opening a PR
 
-Run `task check` (lint, all tests, and the `check-docs`, `check-migrations`, and
-`check-translations` gates) **and** `task test-e2e`, which `task check` does not
+Run `task check` (lint, all tests, and the `check-docs`, `check-generated`,
+`check-migrations`, and `check-translations` gates) **and** `task test-e2e`, which `task check` does not
 include. Neither is conditional on what you touched. While iterating, prefer the
 narrowest task (`task check-server`, `task test-server -- -run TestX`; every
 `test-*` task forwards arguments after `--`).
 
-If `check-docs` fails, `task gen-docs` has already regenerated `server/docs/` —
-commit the result.
+If `check-docs` or `check-generated` fails, the regeneration has already run
+(`server/docs/`, or the `*_gen.go` files) — commit the result.
 
 ### Code review loop
 
@@ -152,6 +152,15 @@ store statement, never `time.Now()`. Bind `models.Timestamp(models.Now())`,
 taking one value per logical operation and sharing it across all its statements
 (`internal/models/time.go` explains why). A new table with timestamp columns
 needs an entry in `timestampColumnsByTable` (`timestamp_columns_test.go`).
+
+### Store tracing
+
+Each exported store (`NoteStore`, `UserStore`, ...) wraps an unexported
+implementation with OpenTelemetry spans. The wrapper methods are generated into
+`internal/models/stores_otel_gen.go` — never edit it; change the implementation
+and run `task gen-go`. Span attributes are `//otelwrap:attr` directives on the
+wrapper type in `stores_otel.go`. A new `Err*` sentinel that maps to a 4xx goes in
+`expectedErrors` (`spans.go`) so it does not mark spans as failed.
 
 ### Blob storage
 

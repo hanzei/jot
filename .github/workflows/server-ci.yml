@@ -87,6 +87,9 @@ jobs:
       - name: Check docs are up to date
         run: task check-docs
 
+      - name: Check generated Go code is up to date
+        run: task check-generated
+
   migrations:
     runs-on: ubuntu-26.04
     steps:
