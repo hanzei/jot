@@ -54,6 +54,7 @@ var (
 	ErrNoteAlreadyShared    = errors.New("note already shared with user")
 	ErrNoteExists           = errors.New("note already exists")
 	ErrNoteVersionConflict  = errors.New("note was modified by another write")
+	ErrNoteFieldNotAllowed  = errors.New("field not allowed for this note type")
 	ErrNoteItemNotFound     = errors.New("note item not found")
 	ErrNoteItemExists       = errors.New("note item already exists")
 	ErrNoteItemCapExceeded  = errors.New("note item limit reached")

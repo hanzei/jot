@@ -68,19 +68,28 @@ func ValidateLabelName(name string) error {
 // noteType: a title on a text note, content on a list note, and the
 // checked-items toggle on a text note. A nil pointer means the field is not
 // being set; an empty title or content is always allowed, since it is what the
-// field reads as anyway.
+// field reads as anyway. The returned error matches ErrNoteFieldNotAllowed.
 func ValidateNoteTypeFields(noteType NoteType, title, content *string, checkedItemsCollapsed *bool) error {
 	if noteType == NoteTypeText && title != nil && *title != "" {
-		return errors.New("text notes cannot have a title")
+		return noteTypeFieldError("text notes cannot have a title")
 	}
 	if noteType == NoteTypeList && content != nil && *content != "" {
-		return errors.New("list notes cannot have content")
+		return noteTypeFieldError("list notes cannot have content")
 	}
 	if noteType == NoteTypeText && checkedItemsCollapsed != nil {
-		return errors.New("text notes cannot have checked_items_collapsed")
+		return noteTypeFieldError("text notes cannot have checked_items_collapsed")
 	}
 	return nil
 }
+
+// noteTypeFieldError is what ValidateNoteTypeFields returns: its message names
+// the offending field for the client, and errors.Is matches it to
+// ErrNoteFieldNotAllowed for callers that only need the category.
+type noteTypeFieldError string
+
+func (e noteTypeFieldError) Error() string { return string(e) }
+
+func (noteTypeFieldError) Is(target error) bool { return target == ErrNoteFieldNotAllowed }
 
 // SanitizeNote strips fields that do not belong to the note's type. The Note
 // struct is unified (a single DB table), so a row can carry, say, a title on a
