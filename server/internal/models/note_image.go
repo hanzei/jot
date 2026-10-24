@@ -30,12 +30,12 @@ func scanNoteImage(rows *sql.Rows) (NoteImage, error) {
 func (s *noteStore) CreateNoteImage(ctx context.Context, noteID, uploaderID, filename, contentType string, sizeBytes int64, sha256 string, width, height, maxImages int) (*NoteImage, error) {
 	imageID, err := generateID()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate note image ID: %w", err)
+		return nil, fmt.Errorf("generate note image ID: %w", err)
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -45,7 +45,7 @@ func (s *noteStore) CreateNoteImage(ctx context.Context, noteID, uploaderID, fil
 			s.d.RewritePlaceholders(`SELECT COUNT(*) FROM note_images WHERE note_id = ?`),
 			noteID,
 		).Scan(&count); err != nil {
-			return nil, fmt.Errorf("failed to count note images: %w", err)
+			return nil, fmt.Errorf("count note images: %w", err)
 		}
 		if count >= maxImages {
 			return nil, ErrNoteImageCapExceeded
@@ -70,7 +70,7 @@ func (s *noteStore) CreateNoteImage(ctx context.Context, noteID, uploaderID, fil
 		imageID, noteID, uploaderID, filename, contentType, sizeBytes, sha256, width, height, now,
 	).Scan(&img.CreatedAt)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create note image: %w", err)
+		return nil, fmt.Errorf("create note image: %w", err)
 	}
 
 	if err = recordContentChangeTx(ctx, tx, s.d, noteID, uploaderID, now); err != nil {
@@ -78,7 +78,7 @@ func (s *noteStore) CreateNoteImage(ctx context.Context, noteID, uploaderID, fil
 	}
 
 	if err = tx.Commit(); err != nil {
-		return nil, fmt.Errorf("failed to commit create note image: %w", err)
+		return nil, fmt.Errorf("commit create note image: %w", err)
 	}
 
 	return &img, nil
@@ -103,7 +103,7 @@ func (s *noteStore) GetNoteImageByID(ctx context.Context, imageID string) (*Note
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNoteImageNotFound
 		}
-		return nil, fmt.Errorf("failed to get note image: %w", err)
+		return nil, fmt.Errorf("get note image: %w", err)
 	}
 	return &img, nil
 }
@@ -117,12 +117,12 @@ func (s *noteStore) GetNoteImagesByNoteID(ctx context.Context, noteID string) ([
 
 	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), noteID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get note images: %w", err)
+		return nil, fmt.Errorf("get note images: %w", err)
 	}
 
 	images, err := collectRows(rows, scanNoteImage)
 	if err != nil {
-		return nil, fmt.Errorf("failed to scan note images: %w", err)
+		return nil, fmt.Errorf("scan note images: %w", err)
 	}
 	if images == nil {
 		images = []NoteImage{}
@@ -142,7 +142,7 @@ func (s *noteStore) GetNoteImageCountByNoteID(ctx context.Context, noteID string
 		noteID,
 	).Scan(&count)
 	if err != nil {
-		return 0, fmt.Errorf("failed to count note images: %w", err)
+		return 0, fmt.Errorf("count note images: %w", err)
 	}
 	return count, nil
 }
@@ -173,18 +173,18 @@ func (s *noteStore) getNoteImagesByNoteIDs(ctx context.Context, noteIDs []string
 
 		rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), args...)
 		if err != nil {
-			return nil, fmt.Errorf("failed to batch-get note images: %w", err)
+			return nil, fmt.Errorf("batch-get note images: %w", err)
 		}
 
 		for img, err := range scanRows(rows, scanNoteImage) {
 			if err != nil {
 				_ = rows.Close()
-				return nil, fmt.Errorf("failed to scan note image: %w", err)
+				return nil, fmt.Errorf("scan note image: %w", err)
 			}
 			result[img.NoteID] = append(result[img.NoteID], img)
 		}
 		if err := rows.Close(); err != nil {
-			return nil, fmt.Errorf("failed to close note images rows: %w", err)
+			return nil, fmt.Errorf("close note images rows: %w", err)
 		}
 	}
 
@@ -201,7 +201,7 @@ func (s *noteStore) getNoteImagesByNoteIDs(ctx context.Context, noteIDs []string
 func (s *noteStore) DeleteNoteImage(ctx context.Context, imageID, userID string) (*NoteImage, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -218,7 +218,7 @@ func (s *noteStore) DeleteNoteImage(ctx context.Context, imageID, userID string)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNoteImageNotFound
 		}
-		return nil, fmt.Errorf("failed to delete note image: %w", err)
+		return nil, fmt.Errorf("delete note image: %w", err)
 	}
 
 	if err = recordContentChangeTx(ctx, tx, s.d, deleted.NoteID, userID, Timestamp(Now())); err != nil {
@@ -226,7 +226,7 @@ func (s *noteStore) DeleteNoteImage(ctx context.Context, imageID, userID string)
 	}
 
 	if err = tx.Commit(); err != nil {
-		return nil, fmt.Errorf("failed to commit delete note image: %w", err)
+		return nil, fmt.Errorf("commit delete note image: %w", err)
 	}
 	return &deleted, nil
 }
@@ -241,7 +241,7 @@ func (s *noteStore) GetNoteImageRefCount(ctx context.Context, sha256 string) (in
 		sha256,
 	).Scan(&count)
 	if err != nil {
-		return 0, fmt.Errorf("failed to get note image refcount: %w", err)
+		return 0, fmt.Errorf("get note image refcount: %w", err)
 	}
 	return count, nil
 }
@@ -253,7 +253,7 @@ func (s *noteStore) GetNoteImageRefCount(ctx context.Context, sha256 string) (in
 func (s *noteStore) GetNoteImageRefCounts(ctx context.Context) (map[string]int, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT sha256, COUNT(*) FROM note_images GROUP BY sha256`)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query note image refcounts: %w", err)
+		return nil, fmt.Errorf("query note image refcounts: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -262,12 +262,12 @@ func (s *noteStore) GetNoteImageRefCounts(ctx context.Context) (map[string]int, 
 		var sha string
 		var count int
 		if err := rows.Scan(&sha, &count); err != nil {
-			return nil, fmt.Errorf("failed to scan note image refcount: %w", err)
+			return nil, fmt.Errorf("scan note image refcount: %w", err)
 		}
 		counts[sha] = count
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate note image refcounts: %w", err)
+		return nil, fmt.Errorf("iterate note image refcounts: %w", err)
 	}
 	return counts, nil
 }
@@ -286,14 +286,14 @@ func (s *noteStore) GetNoteImageSHA256sForUserTx(ctx context.Context, tx *sql.Tx
 
 	rows, err := tx.QueryContext(ctx, s.d.RewritePlaceholders(query), userID, userID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query note image hashes for user: %w", err)
+		return nil, fmt.Errorf("query note image hashes for user: %w", err)
 	}
 	shas, err := collectRows(rows, func(rows *sql.Rows) (string, error) {
 		var sha string
 		return sha, rows.Scan(&sha)
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to scan note image hashes for user: %w", err)
+		return nil, fmt.Errorf("scan note image hashes for user: %w", err)
 	}
 	return shas, nil
 }

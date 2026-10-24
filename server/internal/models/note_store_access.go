@@ -22,7 +22,7 @@ func (s *noteStore) getNoteAudiencesTx(ctx context.Context, tx *sql.Tx, noteIDs 
 		 SELECT note_id, shared_with_user_id FROM note_shares WHERE note_id IN (` + placeholders + `)` // #nosec G202 -- only generated "?" placeholders are concatenated
 	rows, err := tx.QueryContext(ctx, s.d.RewritePlaceholders(rawQuery), queryArgs...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query note audiences: %w", err)
+		return nil, fmt.Errorf("query note audiences: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -31,7 +31,7 @@ func (s *noteStore) getNoteAudiencesTx(ctx context.Context, tx *sql.Tx, noteIDs 
 		var noteID string
 		var audienceID string
 		if err = rows.Scan(&noteID, &audienceID); err != nil {
-			return nil, fmt.Errorf("failed to scan note audience: %w", err)
+			return nil, fmt.Errorf("scan note audience: %w", err)
 		}
 		audiences[noteID] = append(audiences[noteID], audienceID)
 	}
@@ -52,7 +52,7 @@ func (s *noteStore) HasAccess(ctx context.Context, noteID string, userID string)
 		noteID, userID,
 	).Scan(&count)
 	if err != nil {
-		return false, fmt.Errorf("failed to check access: %w", err)
+		return false, fmt.Errorf("check access: %w", err)
 	}
 	return count > 0, nil
 }
@@ -63,7 +63,7 @@ func (s *noteStore) IsOwner(ctx context.Context, noteID string, userID string) (
 
 	err := s.db.QueryRowContext(ctx, query, noteID, userID).Scan(&count)
 	if err != nil {
-		return false, fmt.Errorf("failed to check ownership: %w", err)
+		return false, fmt.Errorf("check ownership: %w", err)
 	}
 
 	return count > 0, nil
@@ -77,7 +77,7 @@ func (s *noteStore) GetOwnerID(ctx context.Context, noteID string) (string, erro
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", ErrNoteNotFound
 		}
-		return "", fmt.Errorf("failed to get note owner: %w", err)
+		return "", fmt.Errorf("get note owner: %w", err)
 	}
 	return ownerID, nil
 }
@@ -93,7 +93,7 @@ func (s *noteStore) GetCollaboratorIDs(ctx context.Context, userID string) ([]st
 	`)
 	rows, err := s.db.QueryContext(ctx, query, userID, userID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get collaborator IDs: %w", err)
+		return nil, fmt.Errorf("get collaborator IDs: %w", err)
 	}
 
 	scanString := func(rows *sql.Rows) (string, error) {
@@ -102,7 +102,7 @@ func (s *noteStore) GetCollaboratorIDs(ctx context.Context, userID string) ([]st
 	}
 	ids, err := collectRows(rows, scanString)
 	if err != nil {
-		return nil, fmt.Errorf("failed to scan collaborator IDs: %w", err)
+		return nil, fmt.Errorf("scan collaborator IDs: %w", err)
 	}
 	return ids, nil
 }
@@ -117,7 +117,7 @@ func (s *noteStore) GetNoteAudienceIDs(ctx context.Context, noteID string) ([]st
 	`)
 	rows, err := s.db.QueryContext(ctx, query, noteID, noteID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get note audience: %w", err)
+		return nil, fmt.Errorf("get note audience: %w", err)
 	}
 
 	scanString := func(rows *sql.Rows) (string, error) {
@@ -126,7 +126,7 @@ func (s *noteStore) GetNoteAudienceIDs(ctx context.Context, noteID string) ([]st
 	}
 	ids, err := collectRows(rows, scanString)
 	if err != nil {
-		return nil, fmt.Errorf("failed to scan note audience: %w", err)
+		return nil, fmt.Errorf("scan note audience: %w", err)
 	}
 	return ids, nil
 }

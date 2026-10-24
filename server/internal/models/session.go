@@ -78,7 +78,7 @@ func newSessionStore(db *sql.DB, d *dialect.Dialect) (*sessionStore, error) {
 func generateSessionToken() (string, error) {
 	bytes := make([]byte, 32)
 	if _, err := rand.Read(bytes); err != nil {
-		return "", fmt.Errorf("failed to generate session token: %w", err)
+		return "", fmt.Errorf("generate session token: %w", err)
 	}
 	return hex.EncodeToString(bytes), nil
 }
@@ -109,7 +109,7 @@ func (s *sessionStore) Create(ctx context.Context, userID, userAgent string) (*S
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, "", fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() {
 		if err != nil {
@@ -124,16 +124,16 @@ func (s *sessionStore) Create(ctx context.Context, userID, userAgent string) (*S
 	)`
 	evictResult, err := tx.ExecContext(ctx, s.d.RewritePlaceholders(evictQuery), userID, Timestamp(now), MaxSessionsPerUser-1)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to evict old sessions: %w", err)
+		return nil, "", fmt.Errorf("evict old sessions: %w", err)
 	}
 
 	insertQuery := `INSERT INTO sessions (token_hash, user_id, user_agent, expires_at, created_at) VALUES (?, ?, ?, ?, ?)`
 	if _, err = tx.ExecContext(ctx, s.d.RewritePlaceholders(insertQuery), tokenHash, userID, userAgent, Timestamp(expiresAt), Timestamp(now)); err != nil {
-		return nil, "", fmt.Errorf("failed to create session: %w", err)
+		return nil, "", fmt.Errorf("create session: %w", err)
 	}
 
 	if err = tx.Commit(); err != nil {
-		return nil, "", fmt.Errorf("failed to commit session: %w", err)
+		return nil, "", fmt.Errorf("commit session: %w", err)
 	}
 
 	if n, rowErr := evictResult.RowsAffected(); rowErr == nil && n > 0 {
@@ -162,7 +162,7 @@ func (s *sessionStore) GetByToken(ctx context.Context, rawToken string) (*Sessio
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("get session by token: %w", ErrSessionNotFoundOrExpired)
 		}
-		return nil, fmt.Errorf("failed to get session: %w", err)
+		return nil, fmt.Errorf("get session: %w", err)
 	}
 
 	return &session, nil
@@ -173,7 +173,7 @@ func (s *sessionStore) GetByUserID(ctx context.Context, userID string) (sessions
 
 	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), userID, Timestamp(Now()))
 	if err != nil {
-		return nil, fmt.Errorf("failed to get sessions by user ID: %w", err)
+		return nil, fmt.Errorf("get sessions by user ID: %w", err)
 	}
 	defer func() {
 		if closeErr := rows.Close(); closeErr != nil && err == nil {
@@ -184,12 +184,12 @@ func (s *sessionStore) GetByUserID(ctx context.Context, userID string) (sessions
 	for rows.Next() {
 		var session Session
 		if err := rows.Scan(&session.TokenHash, &session.UserID, &session.UserAgent, &session.CreatedAt, &session.ExpiresAt); err != nil {
-			return nil, fmt.Errorf("failed to scan session: %w", err)
+			return nil, fmt.Errorf("scan session: %w", err)
 		}
 		sessions = append(sessions, &session)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate sessions: %w", err)
+		return nil, fmt.Errorf("iterate sessions: %w", err)
 	}
 
 	return sessions, nil
@@ -199,7 +199,7 @@ func (s *sessionStore) GetByUserID(ctx context.Context, userID string) (sessions
 func (s *sessionStore) Delete(ctx context.Context, rawToken string) error {
 	query := `DELETE FROM sessions WHERE token_hash = ?`
 	if _, err := s.db.ExecContext(ctx, s.d.RewritePlaceholders(query), HashSessionToken(rawToken)); err != nil {
-		return fmt.Errorf("failed to delete session: %w", err)
+		return fmt.Errorf("delete session: %w", err)
 	}
 	return nil
 }
@@ -210,11 +210,11 @@ func (s *sessionStore) DeleteByUserIDAndTokenHash(ctx context.Context, userID, t
 	query := `DELETE FROM sessions WHERE user_id = ? AND token_hash = ?`
 	result, err := s.db.ExecContext(ctx, s.d.RewritePlaceholders(query), userID, tokenHash)
 	if err != nil {
-		return false, fmt.Errorf("failed to delete session: %w", err)
+		return false, fmt.Errorf("delete session: %w", err)
 	}
 	n, err := result.RowsAffected()
 	if err != nil {
-		return false, fmt.Errorf("failed to read rows affected: %w", err)
+		return false, fmt.Errorf("read rows affected: %w", err)
 	}
 	return n > 0, nil
 }
@@ -222,7 +222,7 @@ func (s *sessionStore) DeleteByUserIDAndTokenHash(ctx context.Context, userID, t
 func (s *sessionStore) DeleteByUserID(ctx context.Context, userID string) error {
 	query := `DELETE FROM sessions WHERE user_id = ?`
 	if _, err := s.db.ExecContext(ctx, s.d.RewritePlaceholders(query), userID); err != nil {
-		return fmt.Errorf("failed to delete user sessions: %w", err)
+		return fmt.Errorf("delete user sessions: %w", err)
 	}
 	return nil
 }
@@ -231,7 +231,7 @@ func (s *sessionStore) DeleteExpired(ctx context.Context) error {
 	query := `DELETE FROM sessions WHERE expires_at <= ?`
 	result, err := s.db.ExecContext(ctx, s.d.RewritePlaceholders(query), Timestamp(Now()))
 	if err != nil {
-		return fmt.Errorf("failed to delete expired sessions: %w", err)
+		return fmt.Errorf("delete expired sessions: %w", err)
 	}
 	if n, rowErr := result.RowsAffected(); rowErr == nil && n > 0 {
 		s.expired.Add(ctx, n)
@@ -244,12 +244,12 @@ func (s *sessionStore) UpdateExpiry(ctx context.Context, tokenHash string, expir
 	query := `UPDATE sessions SET expires_at = ? WHERE token_hash = ? AND expires_at > ?`
 	result, err := s.db.ExecContext(ctx, s.d.RewritePlaceholders(query), Timestamp(expiresAt), tokenHash, Timestamp(Now()))
 	if err != nil {
-		return fmt.Errorf("failed to update session expiry: %w", err)
+		return fmt.Errorf("update session expiry: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("failed to read updated sessions: %w", err)
+		return fmt.Errorf("read updated sessions: %w", err)
 	}
 	if rowsAffected == 0 {
 		return fmt.Errorf("update session expiry: %w", ErrSessionNotFoundOrExpired)

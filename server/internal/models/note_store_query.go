@@ -145,12 +145,12 @@ func (s *noteStore) GetByUserID(ctx context.Context, userID string, f NoteFilter
 
 	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get notes: %w", err)
+		return nil, fmt.Errorf("get notes: %w", err)
 	}
 
 	scannedNotes, err := collectRows(rows, scanNote)
 	if err != nil {
-		return nil, fmt.Errorf("failed to scan notes: %w", err)
+		return nil, fmt.Errorf("scan notes: %w", err)
 	}
 
 	notes, err := s.populateNoteItemsAndDefaults(ctx, scannedNotes)
@@ -174,7 +174,7 @@ func (s *noteStore) populateNoteItemsAndDefaults(ctx context.Context, scannedNot
 		if note.NoteType == NoteTypeList {
 			items, err := s.getItemsByNoteID(ctx, note.ID)
 			if err != nil {
-				return nil, fmt.Errorf("failed to get note items: %w", err)
+				return nil, fmt.Errorf("get note items: %w", err)
 			}
 			note.Items = items
 		}
@@ -201,7 +201,7 @@ func (s *noteStore) batchLoadNoteAssociations(ctx context.Context, notes []*Note
 
 	sharesMap, err := s.getSharesByNoteIDs(ctx, noteIDs)
 	if err != nil {
-		return fmt.Errorf("failed to batch-load note shares: %w", err)
+		return fmt.Errorf("batch-load note shares: %w", err)
 	}
 	for _, n := range notes {
 		if shares, ok := sharesMap[n.ID]; ok {
@@ -212,7 +212,7 @@ func (s *noteStore) batchLoadNoteAssociations(ctx context.Context, notes []*Note
 
 	labelsMap, err := s.getLabelsByNoteIDs(ctx, noteIDs, userID)
 	if err != nil {
-		return fmt.Errorf("failed to batch-load note labels: %w", err)
+		return fmt.Errorf("batch-load note labels: %w", err)
 	}
 	for _, n := range notes {
 		if lbls, ok := labelsMap[n.ID]; ok {
@@ -222,7 +222,7 @@ func (s *noteStore) batchLoadNoteAssociations(ctx context.Context, notes []*Note
 
 	imagesMap, err := s.getNoteImagesByNoteIDs(ctx, noteIDs)
 	if err != nil {
-		return fmt.Errorf("failed to batch-load note images: %w", err)
+		return fmt.Errorf("batch-load note images: %w", err)
 	}
 	for _, n := range notes {
 		if imgs, ok := imagesMap[n.ID]; ok {
@@ -245,7 +245,7 @@ func (s *noteStore) GetByID(ctx context.Context, id string, userID string) (*Not
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNoteNotFound
 		}
-		return nil, fmt.Errorf("failed to get note: %w", err)
+		return nil, fmt.Errorf("get note: %w", err)
 	}
 
 	if err := s.populateNoteDetails(ctx, &note, userID); err != nil {
@@ -266,7 +266,7 @@ func (s *noteStore) GetByIDAnyState(ctx context.Context, id string, userID strin
 
 	isOwner, ownerErr := s.IsOwner(ctx, id, userID)
 	if ownerErr != nil {
-		return nil, fmt.Errorf("failed to check ownership: %w", ownerErr)
+		return nil, fmt.Errorf("check ownership: %w", ownerErr)
 	}
 	if !isOwner {
 		return nil, ErrNoteNotFound
@@ -283,7 +283,7 @@ func (s *noteStore) GetByIDAnyState(ctx context.Context, id string, userID strin
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNoteNotFound
 		}
-		return nil, fmt.Errorf("failed to get note in any state: %w", err)
+		return nil, fmt.Errorf("get note in any state: %w", err)
 	}
 
 	if err := s.populateNoteDetails(ctx, &ownedNote, userID); err != nil {
@@ -297,27 +297,27 @@ func (s *noteStore) populateNoteDetails(ctx context.Context, note *Note, userID 
 		var items []NoteItem
 		items, err := s.getItemsByNoteID(ctx, note.ID)
 		if err != nil {
-			return fmt.Errorf("failed to get note items: %w", err)
+			return fmt.Errorf("get note items: %w", err)
 		}
 		note.Items = items
 	}
 
 	shares, err := s.GetNoteShares(ctx, note.ID)
 	if err != nil {
-		return fmt.Errorf("failed to get note shares: %w", err)
+		return fmt.Errorf("get note shares: %w", err)
 	}
 	note.SharedWith = shares
 	note.IsShared = len(shares) > 0
 
 	labels, err := s.GetNoteLabels(ctx, note.ID, userID)
 	if err != nil {
-		return fmt.Errorf("failed to get note labels: %w", err)
+		return fmt.Errorf("get note labels: %w", err)
 	}
 	note.Labels = labels
 
 	images, err := s.GetNoteImagesByNoteID(ctx, note.ID)
 	if err != nil {
-		return fmt.Errorf("failed to get note images: %w", err)
+		return fmt.Errorf("get note images: %w", err)
 	}
 	note.Images = images
 

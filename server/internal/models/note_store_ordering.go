@@ -19,7 +19,7 @@ func touchNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, ac
 		d.RewritePlaceholders(`UPDATE notes SET updated_at = ?, `+contentChangedSet+` WHERE id = ?`),
 		append(appendContentChangedArgs([]any{now}, now, actorID), noteID)...,
 	); err != nil {
-		return fmt.Errorf("failed to touch note: %w", err)
+		return fmt.Errorf("touch note: %w", err)
 	}
 	return markViewedTx(ctx, tx, d, noteID, actorID, now)
 }
@@ -42,7 +42,7 @@ func (s *noteStore) ReorderNotes(ctx context.Context, userID string, noteIDs []s
 	// Start transaction
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() {
 		if rollbackErr := tx.Rollback(); rollbackErr != nil && !errors.Is(rollbackErr, sql.ErrTxDone) {
@@ -58,12 +58,12 @@ func (s *noteStore) ReorderNotes(ctx context.Context, userID string, noteIDs []s
 			i, noteID, userID,
 		)
 		if err != nil {
-			return fmt.Errorf("failed to update position for note %s: %w", noteID, err)
+			return fmt.Errorf("update position for note %s: %w", noteID, err)
 		}
 		var n int64
 		n, err = result.RowsAffected()
 		if err != nil {
-			return fmt.Errorf("failed to check rows affected for note %s: %w", noteID, err)
+			return fmt.Errorf("check rows affected for note %s: %w", noteID, err)
 		}
 		if n == 0 {
 			return fmt.Errorf("no access to note %s: %w", noteID, ErrNoteNoAccess)
@@ -73,7 +73,7 @@ func (s *noteStore) ReorderNotes(ctx context.Context, userID string, noteIDs []s
 	// Commit transaction
 	err = tx.Commit()
 	if err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+		return fmt.Errorf("commit transaction: %w", err)
 	}
 
 	return nil

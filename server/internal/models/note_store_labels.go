@@ -17,12 +17,12 @@ func (s *noteStore) GetNoteLabels(ctx context.Context, noteID string, userID str
 			  ORDER BY ` + s.d.LabelOrder("l."))
 	rows, err := s.db.QueryContext(ctx, query, noteID, userID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get note labels: %w", err)
+		return nil, fmt.Errorf("get note labels: %w", err)
 	}
 
 	labels, err := collectRows(rows, scanLabel)
 	if err != nil {
-		return nil, fmt.Errorf("failed to scan note labels: %w", err)
+		return nil, fmt.Errorf("scan note labels: %w", err)
 	}
 	if labels == nil {
 		labels = []Label{}
@@ -65,18 +65,18 @@ func (s *noteStore) getLabelsByNoteIDs(ctx context.Context, noteIDs []string, us
 
 		rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(rawQuery), args...)
 		if err != nil {
-			return nil, fmt.Errorf("failed to batch-get note labels: %w", err)
+			return nil, fmt.Errorf("batch-get note labels: %w", err)
 		}
 
 		for row, err := range scanRows(rows, scanNoteLabel) {
 			if err != nil {
 				_ = rows.Close()
-				return nil, fmt.Errorf("failed to scan note label: %w", err)
+				return nil, fmt.Errorf("scan note label: %w", err)
 			}
 			result[row.noteID] = append(result[row.noteID], row.label)
 		}
 		if err := rows.Close(); err != nil {
-			return nil, fmt.Errorf("failed to close note labels rows: %w", err)
+			return nil, fmt.Errorf("close note labels rows: %w", err)
 		}
 	}
 	return result, nil
@@ -86,7 +86,7 @@ func (s *noteStore) getLabelsByNoteIDs(ctx context.Context, noteIDs []string, us
 func (s *noteStore) AddLabelToNote(ctx context.Context, noteID, labelID, userID string) error {
 	hasAccess, err := s.HasAccess(ctx, noteID, userID)
 	if err != nil {
-		return fmt.Errorf("failed to check access: %w", err)
+		return fmt.Errorf("check access: %w", err)
 	}
 	if !hasAccess {
 		return ErrNoteNoAccess
@@ -98,7 +98,7 @@ func (s *noteStore) AddLabelToNote(ctx context.Context, noteID, labelID, userID 
 		s.d.RewritePlaceholders(`SELECT COUNT(*) FROM labels WHERE id = ? AND user_id = ?`),
 		labelID, userID,
 	).Scan(&count); err != nil {
-		return fmt.Errorf("failed to verify label ownership: %w", err)
+		return fmt.Errorf("verify label ownership: %w", err)
 	}
 	if count == 0 {
 		return ErrLabelNotFoundOrNotOwned
@@ -106,14 +106,14 @@ func (s *noteStore) AddLabelToNote(ctx context.Context, noteID, labelID, userID 
 
 	id, err := generateID()
 	if err != nil {
-		return fmt.Errorf("failed to generate note_label ID: %w", err)
+		return fmt.Errorf("generate note_label ID: %w", err)
 	}
 	q := s.d.RewritePlaceholders(
 		s.d.InsertIgnore("note_labels", "id, note_id, label_id, user_id, created_at", "?, ?, ?, ?, ?"),
 	)
 	_, err = s.db.ExecContext(ctx, q, id, noteID, labelID, userID, Timestamp(Now()))
 	if err != nil {
-		return fmt.Errorf("failed to add label to note: %w", err)
+		return fmt.Errorf("add label to note: %w", err)
 	}
 	return nil
 }
@@ -122,7 +122,7 @@ func (s *noteStore) AddLabelToNote(ctx context.Context, noteID, labelID, userID 
 func (s *noteStore) RemoveLabelFromNote(ctx context.Context, noteID, labelID, userID string) error {
 	hasAccess, err := s.HasAccess(ctx, noteID, userID)
 	if err != nil {
-		return fmt.Errorf("failed to check access: %w", err)
+		return fmt.Errorf("check access: %w", err)
 	}
 	if !hasAccess {
 		return ErrNoteNoAccess
@@ -133,7 +133,7 @@ func (s *noteStore) RemoveLabelFromNote(ctx context.Context, noteID, labelID, us
 		noteID, labelID, userID,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to remove label from note: %w", err)
+		return fmt.Errorf("remove label from note: %w", err)
 	}
 	return nil
 }

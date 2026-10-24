@@ -97,12 +97,12 @@ func (s *noteStore) getItemsByNoteID(ctx context.Context, noteID string) ([]Note
 
 	rows, err := s.db.QueryContext(ctx, query, noteID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get note items: %w", err)
+		return nil, fmt.Errorf("get note items: %w", err)
 	}
 
 	items, err := collectRows(rows, scanNoteItem)
 	if err != nil {
-		return nil, fmt.Errorf("failed to scan note items: %w", err)
+		return nil, fmt.Errorf("scan note items: %w", err)
 	}
 	return items, nil
 }
@@ -170,7 +170,7 @@ func normalizeItemOrderTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, n
 		noteID,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load note item order: %w", err)
+		return nil, fmt.Errorf("load note item order: %w", err)
 	}
 	current, err := collectRows(rows, func(rows *sql.Rows) (itemOrderRow, error) {
 		var r itemOrderRow
@@ -178,7 +178,7 @@ func normalizeItemOrderTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, n
 		return r, scanErr
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to scan note item order: %w", err)
+		return nil, fmt.Errorf("scan note item order: %w", err)
 	}
 
 	ordered := groupedItemOrder(current)
@@ -198,7 +198,7 @@ func normalizeItemOrderTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, n
 				d.RewritePlaceholders(`UPDATE note_items SET position = ?, updated_at = ? WHERE id = ? AND note_id = ?`),
 				i, now, r.id, noteID,
 			); err != nil {
-				return nil, fmt.Errorf("failed to normalize note item order: %w", err)
+				return nil, fmt.Errorf("normalize note item order: %w", err)
 			}
 			ordered[i].position = i
 		}
@@ -214,12 +214,12 @@ func normalizeItemOrderTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, n
 func (s *noteStore) CreateItemWithCompleted(ctx context.Context, noteID, actorID, text string, position int, completed bool, parentID string, assignedTo string) (*NoteItem, error) {
 	itemID, err := generateID()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate item ID: %w", err)
+		return nil, fmt.Errorf("generate item ID: %w", err)
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -237,7 +237,7 @@ func (s *noteStore) CreateItemWithCompleted(ctx context.Context, noteID, actorID
 	).Scan(
 		&item.CreatedAt, &item.UpdatedAt,
 	); err != nil {
-		return nil, fmt.Errorf("failed to create note item: %w", err)
+		return nil, fmt.Errorf("create note item: %w", err)
 	}
 
 	positions, err := normalizeItemOrderTx(ctx, tx, s.d, noteID, now)
@@ -272,7 +272,7 @@ func (s *noteStore) CreateItemWithCompleted(ctx context.Context, noteID, actorID
 func (s *noteStore) CreateItemWithID(ctx context.Context, noteID, actorID, itemID, text string, position int, completed bool, parentID string, assignedTo string, maxItems int) (*NoteItem, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -283,7 +283,7 @@ func (s *noteStore) CreateItemWithID(ctx context.Context, noteID, actorID, itemI
 		s.d.RewritePlaceholders(`SELECT COUNT(*) FROM note_items WHERE id = ?`),
 		itemID,
 	).Scan(&exists); err != nil {
-		return nil, fmt.Errorf("failed to check item existence: %w", err)
+		return nil, fmt.Errorf("check item existence: %w", err)
 	}
 	if exists > 0 {
 		return nil, ErrNoteItemExists
@@ -295,7 +295,7 @@ func (s *noteStore) CreateItemWithID(ctx context.Context, noteID, actorID, itemI
 			s.d.RewritePlaceholders(`SELECT COUNT(*) FROM note_items WHERE note_id = ?`),
 			noteID,
 		).Scan(&count); err != nil {
-			return nil, fmt.Errorf("failed to count note items: %w", err)
+			return nil, fmt.Errorf("count note items: %w", err)
 		}
 		if count >= maxItems {
 			return nil, ErrNoteItemCapExceeded
@@ -312,7 +312,7 @@ func (s *noteStore) CreateItemWithID(ctx context.Context, noteID, actorID, itemI
 			  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING created_at, updated_at`),
 		itemID, noteID, text, position, completed, nullableParentID(parentID), nullableAssignedTo(assignedTo), now, now,
 	).Scan(&item.CreatedAt, &item.UpdatedAt); err != nil {
-		return nil, fmt.Errorf("failed to create note item: %w", err)
+		return nil, fmt.Errorf("create note item: %w", err)
 	}
 
 	positions, err := normalizeItemOrderTx(ctx, tx, s.d, noteID, now)
@@ -347,7 +347,7 @@ func (s *noteStore) CreateItemWithID(ctx context.Context, noteID, actorID, itemI
 func (s *noteStore) PatchItem(ctx context.Context, noteID, actorID, itemID string, patch NoteItemPatch) (*NoteItem, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -365,7 +365,7 @@ func (s *noteStore) PatchItem(ctx context.Context, noteID, actorID, itemID strin
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNoteItemNotFound
 		}
-		return nil, fmt.Errorf("failed to load note item: %w", err)
+		return nil, fmt.Errorf("load note item: %w", err)
 	}
 	current.AssignedTo = assignedTo.String
 
@@ -389,7 +389,7 @@ func (s *noteStore) PatchItem(ctx context.Context, noteID, actorID, itemID strin
 			  WHERE id = ? AND note_id = ? RETURNING position, created_at, updated_at`),
 		resolvedText, resolvedCompleted, patch.Position, nullableParentID(resolvedParent), nullableAssignedTo(resolvedAssignedTo), now, itemID, noteID,
 	).Scan(&item.Position, &item.CreatedAt, &item.UpdatedAt); err != nil {
-		return nil, fmt.Errorf("failed to update note item: %w", err)
+		return nil, fmt.Errorf("update note item: %w", err)
 	}
 
 	// Keep the same parent/child completion invariant as ToggleItemCompleted.
@@ -450,7 +450,7 @@ func patchChangesItem(current *NoteItem, currentParent, text string, completed b
 func (s *noteStore) DeleteItemFromNote(ctx context.Context, noteID, actorID, itemID string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -461,11 +461,11 @@ func (s *noteStore) DeleteItemFromNote(ctx context.Context, noteID, actorID, ite
 		itemID, noteID,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to delete note item: %w", err)
+		return fmt.Errorf("delete note item: %w", err)
 	}
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
+		return fmt.Errorf("get rows affected: %w", err)
 	}
 	if rowsAffected == 0 {
 		return ErrNoteItemNotFound
@@ -487,7 +487,7 @@ func (s *noteStore) DeleteItemFromNote(ctx context.Context, noteID, actorID, ite
 func (s *noteStore) ReorderItems(ctx context.Context, noteID, actorID string, itemIDs []string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -497,7 +497,7 @@ func (s *noteStore) ReorderItems(ctx context.Context, noteID, actorID string, it
 	for i, itemID := range itemIDs {
 		moved, execErr := execChanged(ctx, tx,
 			s.d.RewritePlaceholders(`UPDATE note_items SET position = ?, updated_at = ? WHERE id = ? AND note_id = ? AND position <> ?`),
-			"failed to reorder note item",
+			"reorder note item",
 			i, now, itemID, noteID, i,
 		)
 		if execErr != nil {
@@ -510,7 +510,7 @@ func (s *noteStore) ReorderItems(ctx context.Context, noteID, actorID string, it
 				s.d.RewritePlaceholders(`SELECT COUNT(*) FROM note_items WHERE id = ? AND note_id = ?`),
 				itemID, noteID,
 			).Scan(&exists); err != nil {
-				return fmt.Errorf("failed to check note item: %w", err)
+				return fmt.Errorf("check note item: %w", err)
 			}
 			if exists == 0 {
 				return ErrNoteItemNotFound
@@ -544,14 +544,14 @@ func cascadeItemCompletion(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, 
 	if !parentID.Valid {
 		return execChanged(ctx, tx,
 			d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = ? WHERE note_id = ? AND parent_id = ? AND completed <> ?`),
-			"failed to cascade completion to children",
+			"cascade completion to children",
 			newCompleted, now, noteID, itemID, newCompleted,
 		)
 	}
 	if !newCompleted {
 		return execChanged(ctx, tx,
 			d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = ? WHERE id = ? AND note_id = ? AND completed <> ?`),
-			"failed to cascade completion to parent",
+			"cascade completion to parent",
 			false, now, parentID.String, noteID, false,
 		)
 	}
@@ -568,7 +568,7 @@ func execChanged(ctx context.Context, tx *sql.Tx, query, errMsg string, args ...
 	}
 	n, err := result.RowsAffected()
 	if err != nil {
-		return false, fmt.Errorf("failed to get rows affected: %w", err)
+		return false, fmt.Errorf("get rows affected: %w", err)
 	}
 	return n > 0, nil
 }
@@ -580,7 +580,7 @@ func execChanged(ctx context.Context, tx *sql.Tx, query, errMsg string, args ...
 func (s *noteStore) ToggleItemCompleted(ctx context.Context, noteID, actorID, itemID string, completed bool) ([]NoteItem, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -595,12 +595,12 @@ func (s *noteStore) ToggleItemCompleted(ctx context.Context, noteID, actorID, it
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNoteItemNotFound
 		}
-		return nil, fmt.Errorf("failed to load note item: %w", err)
+		return nil, fmt.Errorf("load note item: %w", err)
 	}
 
 	itemChanged, err := execChanged(ctx, tx,
 		s.d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = ? WHERE id = ? AND note_id = ? AND completed <> ?`),
-		"failed to update note item",
+		"update note item",
 		completed, now, itemID, noteID, completed,
 	)
 	if err != nil {
@@ -635,7 +635,7 @@ func (s *noteStore) ToggleItemCompleted(ctx context.Context, noteID, actorID, it
 func (s *noteStore) SetItemsCompleted(ctx context.Context, noteID, actorID string, itemIDs []string, completed bool) ([]NoteItem, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -653,7 +653,7 @@ func (s *noteStore) SetItemsCompleted(ctx context.Context, noteID, actorID strin
 				// ID does not belong to the note: ignore it.
 				continue
 			}
-			return nil, fmt.Errorf("failed to load note item: %w", scanErr)
+			return nil, fmt.Errorf("load note item: %w", scanErr)
 		}
 
 		res, execErr := tx.ExecContext(ctx,
@@ -661,11 +661,11 @@ func (s *noteStore) SetItemsCompleted(ctx context.Context, noteID, actorID strin
 			completed, now, noteID, itemID, completed,
 		)
 		if execErr != nil {
-			return nil, fmt.Errorf("failed to set note item completed: %w", execErr)
+			return nil, fmt.Errorf("set note item completed: %w", execErr)
 		}
 		n, raErr := res.RowsAffected()
 		if raErr != nil {
-			return nil, fmt.Errorf("failed to get rows affected: %w", raErr)
+			return nil, fmt.Errorf("get rows affected: %w", raErr)
 		}
 		// Only cascade when this item actually flipped, so a no-op call touches
 		// nothing (and a group already consistent is left alone).
@@ -701,7 +701,7 @@ func (s *noteStore) SetItemsCompleted(ctx context.Context, noteID, actorID strin
 func (s *noteStore) DeleteItems(ctx context.Context, noteID, actorID string, itemIDs []string) ([]NoteItem, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -714,11 +714,11 @@ func (s *noteStore) DeleteItems(ctx context.Context, noteID, actorID string, ite
 			noteID, itemID,
 		)
 		if execErr != nil {
-			return nil, fmt.Errorf("failed to delete note item: %w", execErr)
+			return nil, fmt.Errorf("delete note item: %w", execErr)
 		}
 		n, raErr := res.RowsAffected()
 		if raErr != nil {
-			return nil, fmt.Errorf("failed to get rows affected: %w", raErr)
+			return nil, fmt.Errorf("get rows affected: %w", raErr)
 		}
 		deleted += n
 	}
@@ -731,7 +731,7 @@ func (s *noteStore) DeleteItems(ctx context.Context, noteID, actorID string, ite
 				  AND parent_id NOT IN (SELECT id FROM note_items WHERE note_id = ?)`),
 			now, noteID, noteID,
 		); err != nil {
-			return nil, fmt.Errorf("failed to re-home orphaned note items: %w", err)
+			return nil, fmt.Errorf("re-home orphaned note items: %w", err)
 		}
 
 		// Only bump the note when something was actually deleted.

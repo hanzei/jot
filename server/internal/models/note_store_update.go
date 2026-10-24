@@ -28,7 +28,7 @@ import (
 func (s *noteStore) Update(ctx context.Context, id string, userID string, u NoteUpdate) (*Note, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -71,11 +71,11 @@ func (s *noteStore) Update(ctx context.Context, id string, userID string, u Note
 		resolvedPinned, resolvedArchived, resolvedColor, resolvedCheckedItemsCollapsed, now, id, userID,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to update note user state: %w", err)
+		return nil, fmt.Errorf("update note user state: %w", err)
 	}
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get rows affected: %w", err)
+		return nil, fmt.Errorf("get rows affected: %w", err)
 	}
 	if rowsAffected == 0 {
 		return nil, ErrNoteNotFound
@@ -93,7 +93,7 @@ func (s *noteStore) Update(ctx context.Context, id string, userID string, u Note
 
 	updated, err := s.GetByID(ctx, id, userID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load updated note: %w", err)
+		return nil, fmt.Errorf("load updated note: %w", err)
 	}
 	return updated, nil
 }
@@ -144,14 +144,14 @@ func (s *noteStore) updateNoteContentTx(ctx context.Context, tx *sql.Tx, id, act
 	}
 	result, err := tx.ExecContext(ctx, s.d.RewritePlaceholders(query), args...)
 	if err != nil {
-		return false, fmt.Errorf("failed to update note: %w", err)
+		return false, fmt.Errorf("update note: %w", err)
 	}
 	if baseVersion == nil {
 		return true, nil
 	}
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return false, fmt.Errorf("failed to get rows affected: %w", err)
+		return false, fmt.Errorf("get rows affected: %w", err)
 	}
 	// Zero rows means the version guard did not match. Re-read to check whether the
 	// winning write already applied the same title/content; if so, treat this as a
@@ -191,7 +191,7 @@ func (s *noteStore) ConvertType(ctx context.Context, id, userID string, targetTy
 
 	hasAccess, err := s.HasAccess(ctx, id, userID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to check access: %w", err)
+		return nil, fmt.Errorf("check access: %w", err)
 	}
 	if !hasAccess {
 		return nil, ErrNoteNoAccess
@@ -199,7 +199,7 @@ func (s *noteStore) ConvertType(ctx context.Context, id, userID string, targetTy
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -225,12 +225,12 @@ func (s *noteStore) ConvertType(ctx context.Context, id, userID string, targetTy
 	}
 
 	if err = tx.Commit(); err != nil {
-		return nil, fmt.Errorf("failed to commit note conversion: %w", err)
+		return nil, fmt.Errorf("commit note conversion: %w", err)
 	}
 
 	converted, err := s.GetByID(ctx, id, userID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load converted note: %w", err)
+		return nil, fmt.Errorf("load converted note: %w", err)
 	}
 	return converted, nil
 }
@@ -251,11 +251,11 @@ func (s *noteStore) convertNoteRowTx(ctx context.Context, tx *sql.Tx, id, actorI
 	}
 	result, err := tx.ExecContext(ctx, s.d.RewritePlaceholders(query), args...)
 	if err != nil {
-		return false, fmt.Errorf("failed to update note for conversion: %w", err)
+		return false, fmt.Errorf("update note for conversion: %w", err)
 	}
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return false, fmt.Errorf("failed to get rows affected: %w", err)
+		return false, fmt.Errorf("get rows affected: %w", err)
 	}
 	if rows > 0 {
 		return false, nil
@@ -380,14 +380,14 @@ func (s *noteStore) handlePinningTx(ctx context.Context, tx *sql.Tx, id, userID 
 	             INNER JOIN notes n ON nus.note_id = n.id AND n.deleted_at IS NULL
 	             WHERE nus.user_id = ? AND nus.pinned = TRUE AND nus.archived = FALSE AND nus.note_id != ?`)
 	if err := tx.QueryRowContext(ctx, posQuery, userID, id).Scan(&maxPosition); err != nil {
-		return fmt.Errorf("failed to get max position: %w", err)
+		return fmt.Errorf("get max position: %w", err)
 	}
 
 	if _, err := tx.ExecContext(ctx,
 		s.d.RewritePlaceholders(`UPDATE note_user_state SET position = ?, unpinned_position = ? WHERE note_id = ? AND user_id = ?`),
 		maxPosition+1, currentNote.Position, id, userID,
 	); err != nil {
-		return fmt.Errorf("failed to update position: %w", err)
+		return fmt.Errorf("update position: %w", err)
 	}
 	return nil
 }
@@ -407,7 +407,7 @@ func (s *noteStore) handleUnpinningTx(ctx context.Context, tx *sql.Tx, id, userI
 			 AND note_id != ? AND position >= ?`),
 			userID, id, targetPosition,
 		); err != nil {
-			return fmt.Errorf("failed to shift notes: %w", err)
+			return fmt.Errorf("shift notes: %w", err)
 		}
 	} else {
 		// No saved position, add to end
@@ -417,7 +417,7 @@ func (s *noteStore) handleUnpinningTx(ctx context.Context, tx *sql.Tx, id, userI
 		             INNER JOIN notes n ON nus.note_id = n.id AND n.deleted_at IS NULL
 		             WHERE nus.user_id = ? AND nus.pinned = FALSE AND nus.archived = FALSE AND nus.note_id != ?`)
 		if err := tx.QueryRowContext(ctx, posQuery, userID, id).Scan(&maxPosition); err != nil {
-			return fmt.Errorf("failed to get max position: %w", err)
+			return fmt.Errorf("get max position: %w", err)
 		}
 		targetPosition = maxPosition + 1
 	}
@@ -426,7 +426,7 @@ func (s *noteStore) handleUnpinningTx(ctx context.Context, tx *sql.Tx, id, userI
 		s.d.RewritePlaceholders(`UPDATE note_user_state SET position = ?, unpinned_position = NULL WHERE note_id = ? AND user_id = ?`),
 		targetPosition, id, userID,
 	); err != nil {
-		return fmt.Errorf("failed to update position: %w", err)
+		return fmt.Errorf("update position: %w", err)
 	}
 	return nil
 }

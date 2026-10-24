@@ -32,3 +32,12 @@ func dbTimeNow(m dsl.Matcher) {
 		Where(!m.File().Name.Matches(`_test\.go$`)).
 		Report(`use models.Now() for any value persisted to or compared against a timestamp column (CLAUDE.md); //nolint:gocritic if this measures elapsed time`)
 }
+
+// Wrap messages name the failed operation ("get note: …"), not "failed to get
+// note: …" — chained wraps otherwise read "update note: failed to …: failed
+// to …" (server/CLAUDE.md, #1106).
+func failedToErrorWrap(m dsl.Matcher) {
+	m.Match(`fmt.Errorf($msg, $*_)`).
+		Where(m["msg"].Text.Matches(`^"[Ff]ailed to `)).
+		Report(`drop the "failed to" prefix: describe the operation, e.g. "get note: %w" (server/CLAUDE.md)`)
+}

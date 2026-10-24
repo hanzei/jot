@@ -30,12 +30,12 @@ func (s *noteStore) GetNoteShares(ctx context.Context, noteID string) ([]NoteSha
 
 	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), noteID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get note shares: %w", err)
+		return nil, fmt.Errorf("get note shares: %w", err)
 	}
 
 	shares, err := collectRows(rows, scanNoteShare)
 	if err != nil {
-		return nil, fmt.Errorf("failed to scan note shares: %w", err)
+		return nil, fmt.Errorf("scan note shares: %w", err)
 	}
 	if shares == nil {
 		shares = []NoteShare{}
@@ -46,13 +46,13 @@ func (s *noteStore) GetNoteShares(ctx context.Context, noteID string) ([]NoteSha
 func (s *noteStore) ShareNote(ctx context.Context, noteID string, sharedByUserID, sharedWithUserID string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	shareID, err := generateID()
 	if err != nil {
-		return fmt.Errorf("failed to generate share ID: %w", err)
+		return fmt.Errorf("generate share ID: %w", err)
 	}
 
 	now := Timestamp(Now())
@@ -66,7 +66,7 @@ func (s *noteStore) ShareNote(ctx context.Context, noteID string, sharedByUserID
 		if s.d.IsUniqueConstraintError(err) {
 			return ErrNoteAlreadyShared
 		}
-		return fmt.Errorf("failed to share note: %w", err)
+		return fmt.Errorf("share note: %w", err)
 	}
 
 	// Ensure the collaborator has a per-user state row for this note. Only create
@@ -81,7 +81,7 @@ func (s *noteStore) ShareNote(ctx context.Context, noteID string, sharedByUserID
 		s.d.RewritePlaceholders(`SELECT COUNT(*) FROM note_user_state WHERE note_id = ? AND user_id = ?`),
 		noteID, sharedWithUserID,
 	).Scan(&stateExists); err != nil {
-		return fmt.Errorf("failed to check collaborator note state: %w", err)
+		return fmt.Errorf("check collaborator note state: %w", err)
 	}
 	if stateExists == 0 {
 		if _, err = tx.ExecContext(ctx,
@@ -90,14 +90,14 @@ func (s *noteStore) ShareNote(ctx context.Context, noteID string, sharedByUserID
 			 AND note_id IN (SELECT id FROM notes WHERE deleted_at IS NULL)`),
 			sharedWithUserID,
 		); err != nil {
-			return fmt.Errorf("failed to shift collaborator notes: %w", err)
+			return fmt.Errorf("shift collaborator notes: %w", err)
 		}
 		if _, err = tx.ExecContext(ctx,
 			s.d.RewritePlaceholders(`INSERT INTO note_user_state (note_id, user_id, position, unpinned_position, created_at, updated_at)
 			 VALUES (?, ?, 0, 0, ?, ?)`),
 			noteID, sharedWithUserID, now, now,
 		); err != nil {
-			return fmt.Errorf("failed to create note user state for collaborator: %w", err)
+			return fmt.Errorf("create note user state for collaborator: %w", err)
 		}
 	}
 
@@ -107,18 +107,18 @@ func (s *noteStore) ShareNote(ctx context.Context, noteID string, sharedByUserID
 func (s *noteStore) UnshareNote(ctx context.Context, noteID string, sharedWithUserID string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	result, err := tx.ExecContext(ctx, s.d.RewritePlaceholders(`DELETE FROM note_shares WHERE note_id = ? AND shared_with_user_id = ?`), noteID, sharedWithUserID)
 	if err != nil {
-		return fmt.Errorf("failed to unshare note: %w", err)
+		return fmt.Errorf("unshare note: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
+		return fmt.Errorf("get rows affected: %w", err)
 	}
 
 	if rowsAffected == 0 {
@@ -129,12 +129,12 @@ func (s *noteStore) UnshareNote(ctx context.Context, noteID string, sharedWithUs
 		s.d.RewritePlaceholders(`UPDATE note_items SET assigned_to = NULL WHERE note_id = ? AND assigned_to = ?`),
 		noteID, sharedWithUserID,
 	); err != nil {
-		return fmt.Errorf("failed to clear assignments for unshared user: %w", err)
+		return fmt.Errorf("clear assignments for unshared user: %w", err)
 	}
 
 	var remainingShares int
 	if err = tx.QueryRowContext(ctx, s.d.RewritePlaceholders(`SELECT COUNT(*) FROM note_shares WHERE note_id = ?`), noteID).Scan(&remainingShares); err != nil {
-		return fmt.Errorf("failed to count remaining shares: %w", err)
+		return fmt.Errorf("count remaining shares: %w", err)
 	}
 
 	if remainingShares == 0 {
@@ -142,7 +142,7 @@ func (s *noteStore) UnshareNote(ctx context.Context, noteID string, sharedWithUs
 			s.d.RewritePlaceholders(`UPDATE note_items SET assigned_to = NULL WHERE note_id = ? AND assigned_to IS NOT NULL`),
 			noteID,
 		); err != nil {
-			return fmt.Errorf("failed to clear all assignments: %w", err)
+			return fmt.Errorf("clear all assignments: %w", err)
 		}
 	}
 
@@ -151,18 +151,18 @@ func (s *noteStore) UnshareNote(ctx context.Context, noteID string, sharedWithUs
 		s.d.RewritePlaceholders(`DELETE FROM note_user_state WHERE note_id = ? AND user_id = ?`),
 		noteID, sharedWithUserID,
 	); err != nil {
-		return fmt.Errorf("failed to delete note user state for unshared user: %w", err)
+		return fmt.Errorf("delete note user state for unshared user: %w", err)
 	}
 
 	if _, err = tx.ExecContext(ctx,
 		s.d.RewritePlaceholders(`DELETE FROM note_labels WHERE note_id = ? AND user_id = ?`),
 		noteID, sharedWithUserID,
 	); err != nil {
-		return fmt.Errorf("failed to delete note labels for unshared user: %w", err)
+		return fmt.Errorf("delete note labels for unshared user: %w", err)
 	}
 
 	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit unshare transaction: %w", err)
+		return fmt.Errorf("commit unshare transaction: %w", err)
 	}
 
 	return nil
@@ -183,7 +183,7 @@ func (s *noteStore) ClearUserAssignmentsTx(ctx context.Context, tx *sql.Tx, user
 		s.d.RewritePlaceholders(`DELETE FROM note_shares WHERE shared_with_user_id = ?`),
 		userID,
 	); err != nil {
-		return fmt.Errorf("failed to remove deleted user shares: %w", err)
+		return fmt.Errorf("remove deleted user shares: %w", err)
 	}
 
 	if _, err := tx.ExecContext(
@@ -191,7 +191,7 @@ func (s *noteStore) ClearUserAssignmentsTx(ctx context.Context, tx *sql.Tx, user
 		s.d.RewritePlaceholders(`DELETE FROM note_shares WHERE shared_by_user_id = ?`),
 		userID,
 	); err != nil {
-		return fmt.Errorf("failed to remove shares created by deleted user: %w", err)
+		return fmt.Errorf("remove shares created by deleted user: %w", err)
 	}
 
 	if _, err := tx.ExecContext(
@@ -200,7 +200,7 @@ func (s *noteStore) ClearUserAssignmentsTx(ctx context.Context, tx *sql.Tx, user
 		 WHERE assigned_to IS NOT NULL
 		   AND note_id NOT IN (SELECT DISTINCT note_id FROM note_shares)`),
 	); err != nil {
-		return fmt.Errorf("failed to clear assignments on unshared notes: %w", err)
+		return fmt.Errorf("clear assignments on unshared notes: %w", err)
 	}
 
 	// Both deletes below are safety nets: note_user_state.user_id and
@@ -212,14 +212,14 @@ func (s *noteStore) ClearUserAssignmentsTx(ctx context.Context, tx *sql.Tx, user
 		s.d.RewritePlaceholders(`DELETE FROM note_user_state WHERE user_id = ?`),
 		userID,
 	); err != nil {
-		return fmt.Errorf("failed to delete note user state for deleted user: %w", err)
+		return fmt.Errorf("delete note user state for deleted user: %w", err)
 	}
 
 	if _, err := tx.ExecContext(ctx,
 		s.d.RewritePlaceholders(`DELETE FROM note_labels WHERE user_id = ?`),
 		userID,
 	); err != nil {
-		return fmt.Errorf("failed to delete note labels for deleted user: %w", err)
+		return fmt.Errorf("delete note labels for deleted user: %w", err)
 	}
 
 	return nil
@@ -256,18 +256,18 @@ func (s *noteStore) getSharesByNoteIDs(ctx context.Context, noteIDs []string) (m
 
 		rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), args...)
 		if err != nil {
-			return nil, fmt.Errorf("failed to batch-get note shares: %w", err)
+			return nil, fmt.Errorf("batch-get note shares: %w", err)
 		}
 
 		for share, err := range scanRows(rows, scanNoteShare) {
 			if err != nil {
 				_ = rows.Close()
-				return nil, fmt.Errorf("failed to scan note share: %w", err)
+				return nil, fmt.Errorf("scan note share: %w", err)
 			}
 			result[share.NoteID] = append(result[share.NoteID], share)
 		}
 		if err := rows.Close(); err != nil {
-			return nil, fmt.Errorf("failed to close note shares rows: %w", err)
+			return nil, fmt.Errorf("close note shares rows: %w", err)
 		}
 	}
 

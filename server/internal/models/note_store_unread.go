@@ -25,7 +25,7 @@ func markViewedTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, u
 		 WHERE note_id = ? AND user_id = ? AND (last_viewed_at IS NULL OR last_viewed_at < ?)`),
 		now, noteID, userID, now,
 	); err != nil {
-		return fmt.Errorf("failed to mark note viewed: %w", err)
+		return fmt.Errorf("mark note viewed: %w", err)
 	}
 	return nil
 }
@@ -57,7 +57,7 @@ func recordContentChangeTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, 
 		d.RewritePlaceholders(`UPDATE notes SET `+contentChangedSet+` WHERE id = ?`),
 		append(appendContentChangedArgs(nil, now, actorID), noteID)...,
 	); err != nil {
-		return fmt.Errorf("failed to record note content change: %w", err)
+		return fmt.Errorf("record note content change: %w", err)
 	}
 	return markViewedTx(ctx, tx, d, noteID, actorID, now)
 }
@@ -71,7 +71,7 @@ func recordContentChangeTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, 
 func (s *noteStore) MarkViewed(ctx context.Context, noteID, userID string, viewedAt time.Time) (changed bool, err error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return false, fmt.Errorf("failed to begin transaction: %w", err)
+		return false, fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -94,7 +94,7 @@ func (s *noteStore) MarkViewed(ctx context.Context, noteID, userID string, viewe
 	}
 
 	if err = tx.Commit(); err != nil {
-		return false, fmt.Errorf("failed to commit: %w", err)
+		return false, fmt.Errorf("commit: %w", err)
 	}
 	return after == nil || *after != *before, nil
 }
@@ -114,7 +114,7 @@ func (s *noteStore) unreadTx(ctx context.Context, tx *sql.Tx, noteID, userID str
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNoteNotFound
 		}
-		return nil, fmt.Errorf("failed to read note unread state: %w", err)
+		return nil, fmt.Errorf("read note unread state: %w", err)
 	}
 	return unread, nil
 }

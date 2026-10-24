@@ -45,12 +45,12 @@ func (s *labelStore) GetLabels(ctx context.Context, userID string) ([]Label, err
 	query := s.d.RewritePlaceholders(`SELECT id, user_id, name, created_at, updated_at FROM labels WHERE user_id = ? ORDER BY ` + s.d.LabelOrder(""))
 	rows, err := s.db.QueryContext(ctx, query, userID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get labels: %w", err)
+		return nil, fmt.Errorf("get labels: %w", err)
 	}
 
 	labels, err := collectRows(rows, scanLabel)
 	if err != nil {
-		return nil, fmt.Errorf("failed to scan labels: %w", err)
+		return nil, fmt.Errorf("scan labels: %w", err)
 	}
 	if labels == nil {
 		labels = []Label{}
@@ -77,7 +77,7 @@ func (s *labelStore) GetLabelCounts(ctx context.Context, userID string) (map[str
 		GROUP BY l.id
 	`), userID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get label counts: %w", err)
+		return nil, fmt.Errorf("get label counts: %w", err)
 	}
 	defer func() {
 		_ = rows.Close()
@@ -125,7 +125,7 @@ func (s *labelStore) GetOrCreateLabel(ctx context.Context, userID, name string) 
 		return &l, false, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
-		return nil, false, fmt.Errorf("failed to get or create label: %w", err)
+		return nil, false, fmt.Errorf("get or create label: %w", err)
 	}
 
 	// Not found. The length limit applies to new labels only, so it is checked
@@ -137,7 +137,7 @@ func (s *labelStore) GetOrCreateLabel(ctx context.Context, userID, name string) 
 	// Generate an ID and insert.
 	id, err := generateID()
 	if err != nil {
-		return nil, false, fmt.Errorf("failed to generate label ID: %w", err)
+		return nil, false, fmt.Errorf("generate label ID: %w", err)
 	}
 
 	// ON CONFLICT DO NOTHING handles the rare case where a concurrent request
@@ -155,7 +155,7 @@ func (s *labelStore) GetOrCreateLabel(ctx context.Context, userID, name string) 
 		return &l, true, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
-		return nil, false, fmt.Errorf("failed to get or create label: %w", err)
+		return nil, false, fmt.Errorf("get or create label: %w", err)
 	}
 
 	// A concurrent insert won the race; retry the SELECT to get the existing row.
@@ -163,7 +163,7 @@ func (s *labelStore) GetOrCreateLabel(ctx context.Context, userID, name string) 
 		&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt,
 	)
 	if err != nil {
-		return nil, false, fmt.Errorf("failed to get or create label after conflict: %w", err)
+		return nil, false, fmt.Errorf("get or create label after conflict: %w", err)
 	}
 	return &l, false, nil
 }
@@ -281,7 +281,7 @@ func (s *labelStore) RenameLabel(ctx context.Context, labelID, userID, newName s
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrLabelNotFoundOrNotOwned
 		}
-		return nil, fmt.Errorf("failed to rename label: %w", err)
+		return nil, fmt.Errorf("rename label: %w", err)
 	}
 	return &l, nil
 }

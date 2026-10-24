@@ -84,7 +84,7 @@ func (h *NotesHandler) validateItemAssignee(ctx context.Context, noteID, assigne
 
 	shares, err := h.noteStore.GetNoteShares(ctx, noteID)
 	if err != nil {
-		return http.StatusInternalServerError, fmt.Errorf("failed to check note shares: %w", err)
+		return http.StatusInternalServerError, fmt.Errorf("check note shares: %w", err)
 	}
 	if len(shares) == 0 {
 		return http.StatusBadRequest, errors.New("cannot assign items on an unshared note")
@@ -92,7 +92,7 @@ func (h *NotesHandler) validateItemAssignee(ctx context.Context, noteID, assigne
 
 	ownerID, err := h.noteStore.GetOwnerID(ctx, noteID)
 	if err != nil {
-		return http.StatusInternalServerError, fmt.Errorf("failed to get note owner: %w", err)
+		return http.StatusInternalServerError, fmt.Errorf("get note owner: %w", err)
 	}
 
 	if assignedTo == ownerID {

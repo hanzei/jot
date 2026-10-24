@@ -44,7 +44,7 @@ func (s *userSettingsStore) GetOrCreate(ctx context.Context, userID string) (*Us
 		return settings, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("failed to get or create user settings: %w", err)
+		return nil, fmt.Errorf("get or create user settings: %w", err)
 	}
 	// Row already existed; read it.
 	err = s.db.QueryRowContext(ctx,
@@ -52,7 +52,7 @@ func (s *userSettingsStore) GetOrCreate(ctx context.Context, userID string) (*Us
 		userID,
 	).Scan(&settings.Language, &settings.Theme, &settings.NoteSort, &settings.UpdatedAt)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get or create user settings: %w", err)
+		return nil, fmt.Errorf("get or create user settings: %w", err)
 	}
 	return settings, nil
 }
@@ -70,7 +70,7 @@ func (s *userSettingsStore) Update(ctx context.Context, userID, language, theme,
 		userID, language, theme, noteSort, now, now,
 	).Scan(&settings.Language, &settings.Theme, &settings.NoteSort, &settings.UpdatedAt)
 	if err != nil {
-		return nil, fmt.Errorf("failed to update user settings: %w", err)
+		return nil, fmt.Errorf("update user settings: %w", err)
 	}
 	return settings, nil
 }

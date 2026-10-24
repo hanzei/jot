@@ -36,13 +36,13 @@ func (s *noteStore) CreateWithItems(ctx context.Context, userID string, n NewNot
 		var err error
 		noteID, err = generateID()
 		if err != nil {
-			return nil, fmt.Errorf("failed to generate note ID: %w", err)
+			return nil, fmt.Errorf("generate note ID: %w", err)
 		}
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -53,7 +53,7 @@ func (s *noteStore) CreateWithItems(ctx context.Context, userID string, n NewNot
 		s.d.RewritePlaceholders(`SELECT COUNT(*) FROM notes WHERE id = ?`),
 		noteID,
 	).Scan(&exists); err != nil {
-		return nil, fmt.Errorf("failed to check note existence: %w", err)
+		return nil, fmt.Errorf("check note existence: %w", err)
 	}
 	if exists > 0 {
 		return nil, ErrNoteExists
@@ -66,7 +66,7 @@ func (s *noteStore) CreateWithItems(ctx context.Context, userID string, n NewNot
 		 AND note_id IN (SELECT id FROM notes WHERE deleted_at IS NULL)`),
 		userID,
 	); err != nil {
-		return nil, fmt.Errorf("failed to shift existing notes: %w", err)
+		return nil, fmt.Errorf("shift existing notes: %w", err)
 	}
 
 	nextPosition := 0
@@ -84,7 +84,7 @@ func (s *noteStore) CreateWithItems(ctx context.Context, userID string, n NewNot
 		if s.d.IsUniqueConstraintError(err) {
 			return nil, ErrNoteExists
 		}
-		return nil, fmt.Errorf("failed to create note: %w", err)
+		return nil, fmt.Errorf("create note: %w", err)
 	}
 
 	if _, err = tx.ExecContext(ctx,
@@ -92,7 +92,7 @@ func (s *noteStore) CreateWithItems(ctx context.Context, userID string, n NewNot
 		 VALUES (?, ?, ?, FALSE, FALSE, ?, ?, FALSE, ?, ?)`),
 		noteID, userID, n.Color, nextPosition, nextPosition, now, now,
 	); err != nil {
-		return nil, fmt.Errorf("failed to create note user state: %w", err)
+		return nil, fmt.Errorf("create note user state: %w", err)
 	}
 
 	if err = insertNewNoteItemsTx(ctx, tx, s.d, noteID, items, now); err != nil {
@@ -100,7 +100,7 @@ func (s *noteStore) CreateWithItems(ctx context.Context, userID string, n NewNot
 	}
 
 	if err = tx.Commit(); err != nil {
-		return nil, fmt.Errorf("failed to commit note creation: %w", err)
+		return nil, fmt.Errorf("commit note creation: %w", err)
 	}
 
 	note.ID = noteID
@@ -144,7 +144,7 @@ func insertNewNoteItemTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, no
 		var err error
 		itemID, err = generateID()
 		if err != nil {
-			return fmt.Errorf("failed to generate item ID: %w", err)
+			return fmt.Errorf("generate item ID: %w", err)
 		}
 	} else {
 		var exists int
@@ -152,7 +152,7 @@ func insertNewNoteItemTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, no
 			d.RewritePlaceholders(`SELECT COUNT(*) FROM note_items WHERE id = ?`),
 			itemID,
 		).Scan(&exists); err != nil {
-			return fmt.Errorf("failed to check item existence: %w", err)
+			return fmt.Errorf("check item existence: %w", err)
 		}
 		if exists > 0 {
 			return ErrNoteItemExists
@@ -173,7 +173,7 @@ func insertNewNoteItemTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, no
 		if item.ID != "" && d.IsUniqueConstraintError(err) {
 			return ErrNoteItemExists
 		}
-		return fmt.Errorf("failed to create note item: %w", err)
+		return fmt.Errorf("create note item: %w", err)
 	}
 	return nil
 }
@@ -191,7 +191,7 @@ func duplicateNoteTitle(title string) string {
 func (s *noteStore) Duplicate(ctx context.Context, source *Note, userID, clientID string, itemIDs map[string]string) (*Note, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -199,7 +199,7 @@ func (s *noteStore) Duplicate(ctx context.Context, source *Note, userID, clientI
 	if noteID == "" {
 		noteID, err = generateID()
 		if err != nil {
-			return nil, fmt.Errorf("failed to generate note ID: %w", err)
+			return nil, fmt.Errorf("generate note ID: %w", err)
 		}
 	} else {
 		// Reject a duplicate caller-supplied ID up front so a replayed duplicate
@@ -209,7 +209,7 @@ func (s *noteStore) Duplicate(ctx context.Context, source *Note, userID, clientI
 			s.d.RewritePlaceholders(`SELECT COUNT(*) FROM notes WHERE id = ?`),
 			noteID,
 		).Scan(&exists); err != nil {
-			return nil, fmt.Errorf("failed to check note existence: %w", err)
+			return nil, fmt.Errorf("check note existence: %w", err)
 		}
 		if exists > 0 {
 			return nil, ErrNoteExists
@@ -222,7 +222,7 @@ func (s *noteStore) Duplicate(ctx context.Context, source *Note, userID, clientI
 		 AND note_id IN (SELECT id FROM notes WHERE deleted_at IS NULL)`),
 		userID,
 	); err != nil {
-		return nil, fmt.Errorf("failed to shift existing notes: %w", err)
+		return nil, fmt.Errorf("shift existing notes: %w", err)
 	}
 
 	const nextPosition = 0
@@ -242,7 +242,7 @@ func (s *noteStore) Duplicate(ctx context.Context, source *Note, userID, clientI
 		if clientID != "" && s.d.IsUniqueConstraintError(err) {
 			return nil, ErrNoteExists
 		}
-		return nil, fmt.Errorf("failed to create duplicated note: %w", err)
+		return nil, fmt.Errorf("create duplicated note: %w", err)
 	}
 
 	if _, err = tx.ExecContext(ctx,
@@ -250,7 +250,7 @@ func (s *noteStore) Duplicate(ctx context.Context, source *Note, userID, clientI
 		 VALUES (?, ?, ?, FALSE, FALSE, ?, ?, ?, ?, ?)`),
 		noteID, userID, source.Color, nextPosition, nextPosition, source.CheckedItemsCollapsed, now, now,
 	); err != nil {
-		return nil, fmt.Errorf("failed to create duplicated note user state: %w", err)
+		return nil, fmt.Errorf("create duplicated note user state: %w", err)
 	}
 
 	if err = duplicateItemsTx(ctx, tx, s.d, noteID, source.Items, itemIDs, now); err != nil {
@@ -262,12 +262,12 @@ func (s *noteStore) Duplicate(ctx context.Context, source *Note, userID, clientI
 	}
 
 	if err = tx.Commit(); err != nil {
-		return nil, fmt.Errorf("failed to commit duplicate note transaction: %w", err)
+		return nil, fmt.Errorf("commit duplicate note transaction: %w", err)
 	}
 
 	duplicated, err := s.GetByID(ctx, noteID, userID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load duplicated note: %w", err)
+		return nil, fmt.Errorf("load duplicated note: %w", err)
 	}
 
 	return duplicated, nil
@@ -294,7 +294,7 @@ func duplicateItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteI
 			if itemIDs[item.ID] != "" && d.IsUniqueConstraintError(err) {
 				return ErrNoteItemExists
 			}
-			return fmt.Errorf("failed to duplicate note item: %w", err)
+			return fmt.Errorf("duplicate note item: %w", err)
 		}
 	}
 	return nil
@@ -354,7 +354,7 @@ func resolveItemIDTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, suppli
 		d.RewritePlaceholders(`SELECT COUNT(*) FROM note_items WHERE id = ?`),
 		supplied,
 	).Scan(&exists); err != nil {
-		return "", fmt.Errorf("failed to check item existence: %w", err)
+		return "", fmt.Errorf("check item existence: %w", err)
 	}
 	if exists > 0 {
 		return "", ErrNoteItemExists
@@ -383,7 +383,7 @@ func duplicateLabelsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, note
 	for _, label := range labels {
 		labelID, err := generateID()
 		if err != nil {
-			return fmt.Errorf("failed to generate label ID: %w", err)
+			return fmt.Errorf("generate label ID: %w", err)
 		}
 		var resolvedLabelID string
 		if err = tx.QueryRowContext(ctx,
@@ -398,17 +398,17 @@ func duplicateLabelsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, note
 			 RETURNING id`),
 			labelID, userID, label.Name, labelfold.Fold(label.Name), now, now,
 		).Scan(&resolvedLabelID); err != nil {
-			return fmt.Errorf("failed to get or create duplicated label: %w", err)
+			return fmt.Errorf("get or create duplicated label: %w", err)
 		}
 		noteLabelID, err := generateID()
 		if err != nil {
-			return fmt.Errorf("failed to generate note label ID: %w", err)
+			return fmt.Errorf("generate note label ID: %w", err)
 		}
 		q := d.RewritePlaceholders(
 			d.InsertIgnore("note_labels", "id, note_id, label_id, user_id, created_at", "?, ?, ?, ?, ?"),
 		)
 		if _, err = tx.ExecContext(ctx, q, noteLabelID, noteID, resolvedLabelID, userID, now); err != nil {
-			return fmt.Errorf("failed to attach duplicated label to note: %w", err)
+			return fmt.Errorf("attach duplicated label to note: %w", err)
 		}
 	}
 	return nil

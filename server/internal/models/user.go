@@ -83,19 +83,19 @@ func newUserStore(db *sql.DB, d *dialect.Dialect) *userStore {
 func (s *userStore) Create(ctx context.Context, username, password string) (*User, error) {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), passwordHashCost)
 	if err != nil {
-		return nil, fmt.Errorf("failed to hash password: %w", err)
+		return nil, fmt.Errorf("hash password: %w", err)
 	}
 
 	userID, err := generateID()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate user ID: %w", err)
+		return nil, fmt.Errorf("generate user ID: %w", err)
 	}
 
 	var isFirstUser bool
 	var count int
 	err = s.db.QueryRowContext(ctx, s.d.RewritePlaceholders("SELECT COUNT(*) FROM users")).Scan(&count)
 	if err != nil {
-		return nil, fmt.Errorf("failed to count users: %w", err)
+		return nil, fmt.Errorf("count users: %w", err)
 	}
 	isFirstUser = count == 0
 
@@ -116,7 +116,7 @@ func (s *userStore) Create(ctx context.Context, username, password string) (*Use
 		if s.d.IsUniqueConstraintError(err) {
 			return nil, ErrUsernameTaken
 		}
-		return nil, fmt.Errorf("failed to create user: %w", err)
+		return nil, fmt.Errorf("create user: %w", err)
 	}
 
 	user.ID = userID
@@ -148,7 +148,7 @@ func (s *userStore) GetByUsername(ctx context.Context, username string) (*User, 
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrUserNotFound
 		}
-		return nil, fmt.Errorf("failed to get user: %w", err)
+		return nil, fmt.Errorf("get user: %w", err)
 	}
 	return &user, nil
 }
@@ -166,7 +166,7 @@ func (s *userStore) GetByID(ctx context.Context, id string) (*User, error) {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrUserNotFound
 		}
-		return nil, fmt.Errorf("failed to get user: %w", err)
+		return nil, fmt.Errorf("get user: %w", err)
 	}
 
 	return &user, nil
@@ -210,12 +210,12 @@ func (s *userStore) GetAll(ctx context.Context) ([]*User, error) {
 
 	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query))
 	if err != nil {
-		return nil, fmt.Errorf("failed to query users: %w", err)
+		return nil, fmt.Errorf("query users: %w", err)
 	}
 
 	users, err := collectRows(rows, scanUser)
 	if err != nil {
-		return nil, fmt.Errorf("failed to scan users: %w", err)
+		return nil, fmt.Errorf("scan users: %w", err)
 	}
 
 	ptrs := make([]*User, len(users))
@@ -248,12 +248,12 @@ func (s *userStore) Search(ctx context.Context, term, excludeUserID string, limi
 
 	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), like, like, like, excludeUserID, limit)
 	if err != nil {
-		return nil, fmt.Errorf("failed to search users: %w", err)
+		return nil, fmt.Errorf("search users: %w", err)
 	}
 
 	users, err := collectRows(rows, scanUser)
 	if err != nil {
-		return nil, fmt.Errorf("failed to scan users: %w", err)
+		return nil, fmt.Errorf("scan users: %w", err)
 	}
 
 	ptrs := make([]*User, len(users))
@@ -275,11 +275,11 @@ func (s *userStore) UpdateProfileIcon(ctx context.Context, id string, data []byt
 		data, contentType, Timestamp(Now()), id,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to update profile icon: %w", err)
+		return fmt.Errorf("update profile icon: %w", err)
 	}
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("failed to check rows affected: %w", err)
+		return fmt.Errorf("check rows affected: %w", err)
 	}
 	if rows == 0 {
 		return ErrUserNotFound
@@ -297,7 +297,7 @@ func (s *userStore) GetProfileIcon(ctx context.Context, id string) ([]byte, stri
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, "", ErrUserNotFound
 		}
-		return nil, "", fmt.Errorf("failed to get profile icon: %w", err)
+		return nil, "", fmt.Errorf("get profile icon: %w", err)
 	}
 	if len(data) == 0 {
 		return nil, "", nil
@@ -311,11 +311,11 @@ func (s *userStore) DeleteProfileIcon(ctx context.Context, id string) error {
 		Timestamp(Now()), id,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to delete profile icon: %w", err)
+		return fmt.Errorf("delete profile icon: %w", err)
 	}
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("failed to check rows affected: %w", err)
+		return fmt.Errorf("check rows affected: %w", err)
 	}
 	if rows == 0 {
 		return ErrUserNotFound
@@ -326,7 +326,7 @@ func (s *userStore) DeleteProfileIcon(ctx context.Context, id string) error {
 func (s *userStore) UpdatePassword(ctx context.Context, id, newPassword string) error {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), passwordHashCost)
 	if err != nil {
-		return fmt.Errorf("failed to hash password: %w", err)
+		return fmt.Errorf("hash password: %w", err)
 	}
 
 	result, err := s.db.ExecContext(ctx,
@@ -334,12 +334,12 @@ func (s *userStore) UpdatePassword(ctx context.Context, id, newPassword string) 
 		string(hashedPassword), Timestamp(Now()), id,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to update password: %w", err)
+		return fmt.Errorf("update password: %w", err)
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("failed to check rows affected: %w", err)
+		return fmt.Errorf("check rows affected: %w", err)
 	}
 	if rows == 0 {
 		return ErrUserNotFound
@@ -355,7 +355,7 @@ func (s *userStore) UpdatePassword(ctx context.Context, id, newPassword string) 
 func (s *userStore) UpdateProfile(ctx context.Context, id, username, firstName, lastName string) (*User, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -376,11 +376,11 @@ func (s *userStore) UpdateProfile(ctx context.Context, id, username, firstName, 
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrUserNotFound
 		}
-		return nil, fmt.Errorf("failed to update profile: %w", err)
+		return nil, fmt.Errorf("update profile: %w", err)
 	}
 
 	if err = tx.Commit(); err != nil {
-		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+		return nil, fmt.Errorf("commit transaction: %w", err)
 	}
 	return &user, nil
 }
@@ -392,7 +392,7 @@ func (s *userStore) UpdateRole(ctx context.Context, id, role string) (*User, err
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -404,12 +404,12 @@ func (s *userStore) UpdateRole(ctx context.Context, id, role string) (*User, err
 			return nil, ErrUserNotFound
 		}
 		if err != nil {
-			return nil, fmt.Errorf("failed to query current role: %w", err)
+			return nil, fmt.Errorf("query current role: %w", err)
 		}
 		if currentRole == RoleAdmin {
 			var adminCount int
 			if err = tx.QueryRowContext(ctx, s.d.RewritePlaceholders(`SELECT COUNT(*) FROM users WHERE role = 'admin'`)).Scan(&adminCount); err != nil {
-				return nil, fmt.Errorf("failed to count admins: %w", err)
+				return nil, fmt.Errorf("count admins: %w", err)
 			}
 			if adminCount <= 1 {
 				return nil, ErrLastAdmin
@@ -431,11 +431,11 @@ func (s *userStore) UpdateRole(ctx context.Context, id, role string) (*User, err
 		return nil, ErrUserNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to update role: %w", err)
+		return nil, fmt.Errorf("update role: %w", err)
 	}
 
 	if err = tx.Commit(); err != nil {
-		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+		return nil, fmt.Errorf("commit transaction: %w", err)
 	}
 	return &user, nil
 }
@@ -456,7 +456,7 @@ func (s *userStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID 
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -466,13 +466,13 @@ func (s *userStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID 
 		return ErrUserNotFound
 	}
 	if err != nil {
-		return fmt.Errorf("failed to query user role: %w", err)
+		return fmt.Errorf("query user role: %w", err)
 	}
 
 	if role == RoleAdmin {
 		var adminCount int
 		if err = tx.QueryRowContext(ctx, s.d.RewritePlaceholders(`SELECT COUNT(*) FROM users WHERE role = 'admin'`)).Scan(&adminCount); err != nil {
-			return fmt.Errorf("failed to count admins: %w", err)
+			return fmt.Errorf("count admins: %w", err)
 		}
 		if adminCount <= 1 {
 			return ErrLastAdmin
@@ -487,11 +487,11 @@ func (s *userStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID 
 
 	result, err := tx.ExecContext(ctx, s.d.RewritePlaceholders(`DELETE FROM users WHERE id = ?`), id)
 	if err != nil {
-		return fmt.Errorf("failed to delete user: %w", err)
+		return fmt.Errorf("delete user: %w", err)
 	}
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("failed to check rows affected: %w", err)
+		return fmt.Errorf("check rows affected: %w", err)
 	}
 	if rows == 0 {
 		return ErrUserNotFound
@@ -504,7 +504,7 @@ func (s *userStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID 
 	}
 
 	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+		return fmt.Errorf("commit transaction: %w", err)
 	}
 	return nil
 }
@@ -512,12 +512,12 @@ func (s *userStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID 
 func (s *userStore) CreateByAdmin(ctx context.Context, username, password string, role string) (*User, error) {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), passwordHashCost)
 	if err != nil {
-		return nil, fmt.Errorf("failed to hash password: %w", err)
+		return nil, fmt.Errorf("hash password: %w", err)
 	}
 
 	userID, err := generateID()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate user ID: %w", err)
+		return nil, fmt.Errorf("generate user ID: %w", err)
 	}
 
 	now := Timestamp(Now())
@@ -532,7 +532,7 @@ func (s *userStore) CreateByAdmin(ctx context.Context, username, password string
 		if s.d.IsUniqueConstraintError(err) {
 			return nil, ErrUsernameTaken
 		}
-		return nil, fmt.Errorf("failed to create user: %w", err)
+		return nil, fmt.Errorf("create user: %w", err)
 	}
 
 	user.ID = userID
@@ -566,7 +566,7 @@ func (s *userStore) GetByOIDCIdentity(ctx context.Context, issuer, subject strin
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrUserNotFound
 		}
-		return nil, fmt.Errorf("failed to get user by OIDC identity: %w", err)
+		return nil, fmt.Errorf("get user by OIDC identity: %w", err)
 	}
 	return &user, nil
 }
@@ -591,12 +591,12 @@ func (s *userStore) ProvisionSSOUser(ctx context.Context, issuer, subject, usern
 
 	userID, err := generateID()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate user ID: %w", err)
+		return nil, fmt.Errorf("generate user ID: %w", err)
 	}
 
 	var count int
 	if err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders("SELECT COUNT(*) FROM users")).Scan(&count); err != nil {
-		return nil, fmt.Errorf("failed to count users: %w", err)
+		return nil, fmt.Errorf("count users: %w", err)
 	}
 	role := RoleUser
 	if count == 0 && grantAdminIfFirst {
@@ -631,7 +631,7 @@ func (s *userStore) ProvisionSSOUser(ctx context.Context, issuer, subject, usern
 			return &user, nil
 		}
 		if !s.d.IsUniqueConstraintError(err) {
-			return nil, fmt.Errorf("failed to provision SSO user: %w", err)
+			return nil, fmt.Errorf("provision SSO user: %w", err)
 		}
 		// A unique violation is either the username (retry with a suffix) or the
 		// OIDC identity (already linked — do not retry). Distinguish by checking
@@ -641,7 +641,7 @@ func (s *userStore) ProvisionSSOUser(ctx context.Context, issuer, subject, usern
 		}
 		// Otherwise it was a username collision; loop to try the next suffix.
 	}
-	return nil, fmt.Errorf("failed to provision SSO user: exhausted username candidates for %q", base)
+	return nil, fmt.Errorf("provision SSO user: exhausted username candidates for %q", base)
 }
 
 // LinkOIDCIdentity binds an (issuer, subject) pair to an existing user. Returns
@@ -656,11 +656,11 @@ func (s *userStore) LinkOIDCIdentity(ctx context.Context, userID, issuer, subjec
 		if s.d.IsUniqueConstraintError(err) {
 			return ErrOIDCIdentityLinked
 		}
-		return fmt.Errorf("failed to link OIDC identity: %w", err)
+		return fmt.Errorf("link OIDC identity: %w", err)
 	}
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("failed to check rows affected: %w", err)
+		return fmt.Errorf("check rows affected: %w", err)
 	}
 	if rows == 0 {
 		return ErrUserNotFound
@@ -675,7 +675,7 @@ func (s *userStore) LinkOIDCIdentity(ctx context.Context, userID, issuer, subjec
 func (s *userStore) UnlinkOIDCIdentity(ctx context.Context, userID string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -685,7 +685,7 @@ func (s *userStore) UnlinkOIDCIdentity(ctx context.Context, userID string) error
 		return ErrUserNotFound
 	}
 	if err != nil {
-		return fmt.Errorf("failed to read user for unlink: %w", err)
+		return fmt.Errorf("read user for unlink: %w", err)
 	}
 	if !passwordHash.Valid || passwordHash.V == "" {
 		return ErrWouldStrandAccount
@@ -695,11 +695,11 @@ func (s *userStore) UnlinkOIDCIdentity(ctx context.Context, userID string) error
 		s.d.RewritePlaceholders(`UPDATE users SET oidc_issuer = NULL, oidc_subject = NULL, updated_at = ? WHERE id = ?`),
 		Timestamp(Now()), userID,
 	); err != nil {
-		return fmt.Errorf("failed to unlink OIDC identity: %w", err)
+		return fmt.Errorf("unlink OIDC identity: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+		return fmt.Errorf("commit transaction: %w", err)
 	}
 	return nil
 }
