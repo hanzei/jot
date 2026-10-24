@@ -6,14 +6,12 @@ import LetterAvatar from '@/components/LetterAvatar';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import MobileAppPreference from '@/components/MobileAppPreference';
 import DiagnosticsSection from '@/pages/settings/DiagnosticsSection';
-import SettingsSectionCard from '@/pages/settings/SettingsSectionCard';
+import SettingsSectionCard, { SETTINGS_BTN_CLASSES } from '@/pages/settings/SettingsSectionCard';
 import { passwordFormKeys } from '@/pages/settings/passwordFormKeys';
 import { SUPPORTED_LANGUAGES, type LanguagePreference } from '@/utils/language';
 import type { ThemePreference } from '@/utils/theme';
 import { VALIDATION } from '@jot/shared';
 import type { ActiveSession, PersonalAccessToken, User } from '@jot/shared';
-
-const SETTINGS_BTN_CLASSES = 'inline-flex items-center px-4 py-2 border border-gray-300 dark:border-slate-600 text-sm font-medium rounded-md shadow-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-gray-50 dark:focus:ring-offset-slate-900';
 
 type Translate = TFunction;
 

@@ -172,7 +172,7 @@ export class SettingsPage {
     return this.page.getByTestId('diagnostics-section');
   }
 
-  diagnosticsField(field: 'sse-status' | 'sse-attempts' | 'sse-last-event') {
+  diagnosticsField(field: 'sse-status' | 'sse-attempts') {
     return this.diagnosticsSection().getByTestId(`diagnostics-${field}`);
   }
 

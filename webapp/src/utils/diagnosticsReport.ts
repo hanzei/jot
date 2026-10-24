@@ -1,5 +1,5 @@
 import type { AboutInfo } from '@jot/shared';
-import type { DiagnosticsState } from '@/utils/diagnostics';
+import { getDiagnostics, type DiagnosticsState } from '@/utils/diagnostics';
 import { WEBAPP_BUILD } from '@/utils/buildInfo';
 
 /** A render error caught by an error boundary. Name, message and stacks only — never props or state. */
@@ -47,4 +47,16 @@ export function buildDiagnosticsReport({ diagnostics, server, route, userAgent, 
 
 export function formatDiagnosticsReport(input: DiagnosticsReportInput): string {
   return JSON.stringify(buildDiagnosticsReport(input), null, 2);
+}
+
+/** The report for this page right now: the live diagnostics store, path, browser and time. */
+export function pageDiagnosticsReport(server: AboutInfo | null, crash?: DiagnosticsCrash): string {
+  return formatDiagnosticsReport({
+    diagnostics: getDiagnostics(),
+    server,
+    route: window.location.pathname,
+    userAgent: navigator.userAgent,
+    now: new Date(),
+    ...(crash ? { crash } : {}),
+  });
 }

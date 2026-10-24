@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import i18n from '@/i18n';
-import { formatDiagnosticsReport } from '@/utils/diagnosticsReport';
-import { getDiagnostics } from '@/utils/diagnostics';
+import { pageDiagnosticsReport } from '@/utils/diagnosticsReport';
 import { useServerInfo } from '@/hooks/useServerInfo';
 import type { ErrorBoundaryFallbackProps } from '@/components/ErrorBoundary';
 
@@ -25,18 +24,11 @@ export default function ErrorFallback({ error, componentStack, reset, variant }:
   const t = i18n.t.bind(i18n);
 
   const handleCopy = async () => {
-    const details = formatDiagnosticsReport({
-      diagnostics: getDiagnostics(),
-      server: serverInfo,
-      route: window.location.pathname,
-      userAgent: navigator.userAgent,
-      now: new Date(),
-      crash: {
-        name: error.name,
-        message: error.message,
-        stack: error.stack ?? null,
-        componentStack: componentStack?.trim() ?? null,
-      },
+    const details = pageDiagnosticsReport(serverInfo, {
+      name: error.name,
+      message: error.message,
+      stack: error.stack ?? null,
+      componentStack: componentStack?.trim() ?? null,
     });
     try {
       await navigator.clipboard.writeText(details);

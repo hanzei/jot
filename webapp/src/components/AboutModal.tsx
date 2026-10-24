@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { about } from '@/utils/api';
 import { getUser } from '@/utils/auth';
 import { WEBAPP_BUILD } from '@/utils/buildInfo';
+import InfoRow from '@/components/InfoRow';
 import type { AboutInfo } from '@jot/shared';
 
 interface AboutModalProps {
@@ -82,14 +83,8 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
                   </div>
                   {/* This bundle's own build. It can trail the server's below
                       while the service worker still serves a cached bundle. */}
-                  <div className="flex justify-between text-sm min-w-0 gap-2">
-                    <dt className="shrink-0 text-gray-500 dark:text-gray-400">{t('about.appVersion')}</dt>
-                    <dd data-testid="about-webapp-version" className="truncate text-gray-900 dark:text-white font-mono">{WEBAPP_BUILD.version}</dd>
-                  </div>
-                  <div className="flex justify-between text-sm min-w-0 gap-2">
-                    <dt className="shrink-0 text-gray-500 dark:text-gray-400">{t('about.commit')}</dt>
-                    <dd data-testid="about-webapp-commit" className="truncate text-gray-900 dark:text-white font-mono">{WEBAPP_BUILD.commit ?? '—'}</dd>
-                  </div>
+                  <InfoRow label={t('about.appVersion')} value={WEBAPP_BUILD.version} testId="about-webapp-version" />
+                  <InfoRow label={t('about.commit')} value={WEBAPP_BUILD.commit ?? '—'} testId="about-webapp-commit" />
                 </dl>
               </div>
 

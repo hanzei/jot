@@ -1,5 +1,4 @@
-import { apiErrorCode, apiRequestId } from '@jot/shared';
-import type { SSEStatus } from '@/hooks/useSSE';
+import { apiErrorCode, apiRequestId, isValidId } from '@jot/shared';
 
 // In-memory state behind Settings > Diagnostics and the reports built from it.
 // Nothing here is persisted or sent anywhere, and nothing carries a request or
@@ -20,6 +19,17 @@ export interface FailedRequest {
   code: string | null;
   requestId: string | null;
 }
+
+// Connection lifecycle exposed to the UI:
+// - 'connecting'   — establishing the very first connection (never opened yet).
+// - 'connected'    — the stream is open and receiving events.
+// - 'reconnecting' — the connection dropped after having been open and we are
+//                    retrying (browser auto-reconnect, or our own manual retry
+//                    after the browser gave up).
+// - 'disconnected' — the browser gave up reconnecting (EventSource CLOSED) and
+//                    we have not yet re-established the stream. This is a
+//                    transient state: a manual reconnect is always scheduled.
+export type SSEStatus = 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
 
 export interface SSEDiagnostics {
   status: SSEStatus;
@@ -57,13 +67,10 @@ export function subscribeToDiagnostics(listener: () => void): () => void {
   };
 }
 
-// Server IDs are 22 alphanumeric characters (server/internal/models/id.go).
-const ID_SEGMENT = /^[0-9A-Za-z]{22}$/;
-
 /** `/notes/<id>/items/<id>?x=1` → `/notes/{id}/items/{id}`. */
 export function routePattern(url: string): string {
   const path = url.split('?')[0] ?? '';
-  return path.split('/').map((segment) => (ID_SEGMENT.test(segment) ? '{id}' : segment)).join('/');
+  return path.split('/').map((segment) => (isValidId(segment) ? '{id}' : segment)).join('/');
 }
 
 interface AxiosLikeError {
